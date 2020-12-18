@@ -1,8 +1,8 @@
 /*
- *	console.h
- *	console output functions (6x6 kernel text mode)
+ *  console.h
+ *  console output functions (6x6 kernel text mode)
  *
- *	tomaz stih wed aug 26 2015
+ *  tomaz stih wed aug 26 2015
  */
 #ifndef _CONSOLE_H
 #define _CONSOLE_H

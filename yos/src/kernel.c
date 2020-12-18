@@ -1,8 +1,8 @@
 /*
- *	kernel.c
- *	yos kernel (main!)
+ *  kernel.c
+ *  yos kernel (main!)
  *
- *	tomaz stih dec 18 2020
+ *  tomaz stih dec 18 2020
  */
 #include "console.h"
 

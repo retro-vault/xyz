@@ -1,13 +1,13 @@
 /*
- *	types.h
- *	common types used in code (do not include stdint.h!)
+ *  types.h
+ *  common types used in code (do not include stdint.h!)
  *
- *	tomaz stih may 25 2012
+ *  tomaz stih may 25 2012
  */
 #ifndef _TYPES_H
 #define _TYPES_H
 
-#define	NULL    ( (word)0 )
+#define NULL    ( (word)0 )
 #define TRUE    ( (byte)1 )
 #define FALSE   ( (byte)0 )
 

@@ -25,7 +25,7 @@ to build yos.
 ## deliverables
 
 ### makezxbin
-makezxbin is a pc utility that fixes sdcc bug 
+makezxbin is a pc utility that fixes sdcc bug
 and modifies generated binary. it is a precondition
 for further compilation so it is build first.
 
