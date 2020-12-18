@@ -1,6 +1,6 @@
 /*
  *	console.h
- *	console
+ *	console output functions (6x6 kernel text mode)
  *
  *	tomaz stih wed aug 26 2015
  */
