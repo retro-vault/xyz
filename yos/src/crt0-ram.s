@@ -8,6 +8,7 @@
         .globl  _sys_stack
         .globl  _sys_heap
         .globl  _sys_tarpit
+        .globl  ___sdcc_call_hl
 
         .area   _HEADER (ABS)
         di                              ; disable interrupts
@@ -31,6 +32,10 @@ init:
 _sys_tarpit::
         halt                            ; halt
         jr      _sys_tarpit             ; loop to eternity
+
+        ;; SDCC glue.
+___sdcc_call_hl::
+	jp	(hl)
 
         ;; TODO: rewire temporary handlers
 syscall:

@@ -8,6 +8,7 @@
         .globl  _sys_stack
         .globl  _sys_heap
         .globl  _sys_tarpit
+        .globl  ___sdcc_call_hl
 
         .area   _HEADER (ABS)
         .org    0x0000
@@ -77,6 +78,10 @@ init:
 _sys_tarpit::
         halt                            ; halt
         jr      _sys_tarpit
+
+        ;; SDCC glue.
+___sdcc_call_hl::
+	jp	(hl)
 
 start_vectors:
         jp      rst8ret
