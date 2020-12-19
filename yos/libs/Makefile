@@ -5,6 +5,8 @@ export AS		= sdasz80
 export ASFLAGS	= -xlos -g
 export LD		= sdcc
 export LDFLAGS	= -mz80 --no-std-crt0 --nostdlib
+export AR		= sdar
+export ARFLAGS	= -rc
 
 # Targets are subdirs.
 SUBDIRS = graphics

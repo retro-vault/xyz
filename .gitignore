@@ -6,6 +6,7 @@
 *.ko
 *.obj
 *.elf
+*.rel
 
 # Linker output
 *.ilk
@@ -18,35 +19,23 @@
 
 # Libraries
 *.lib
-*.a
-*.la
-*.lo
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+# Object files
+*.rel
+*.o
 
 # Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
 *.hex
+*.ihx
+*.lk
+*.noi
+*.map
 
 # Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+*.lst
+*.sym
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Service files (IDE, folders...)
+.vscode
+bin
+build
