@@ -22,7 +22,7 @@ export AR		=	ar
 export ARFLAGS	=	-crs
 
 # Subfolders for make.
-SUBDIRS =  src
+SUBDIRS =  src test
 
 # Rules.
 .PHONY: all
