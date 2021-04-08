@@ -1,5 +1,5 @@
 CXX			=	g++
-CXXFLAGS	=	-lgtest_main -lgtest
+CXXFLAGS	=	-L $(BUILD_DIR) -lgtest_main -lgtest -lgpx
 
 all: $(BUILD_DIR)/test-gpx
 

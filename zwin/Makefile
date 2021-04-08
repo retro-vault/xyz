@@ -17,12 +17,12 @@ export SCR_DIR	=	$(ROOT)/scripts
 
 # Globa settings: tools.
 export CC		=	gcc
-export CFLAGS	=	-w -lSDL2 -g -std=c99
+export CFLAGS	=	-w -lSDL2 -g -std=c89 -I$(INC_DIR)
 export AR		=	ar 
-export ARFLAGS	=	-crs
+export ARFLAGS	=	-crs 
 
 # Subfolders for make.
-SUBDIRS =  src test
+SUBDIRS =  lib src test
 
 # Rules.
 .PHONY: all

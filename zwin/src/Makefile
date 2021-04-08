@@ -16,7 +16,3 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 
 $(BUILD_DIR)/%.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
-	
-.PHONY: install
-install: all
-	cp $(BUILD_DIR)/$(TARGET) $(BIN_DIR)/$(TARGET)

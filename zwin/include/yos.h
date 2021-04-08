@@ -9,9 +9,18 @@
 #ifndef _YOS_H
 #define _YOS_H
 
+/* yos types */
+typedef signed char         byte;
+typedef byte                boolean;
+typedef byte                result;
+typedef void*				addr;
+typedef addr                handle;
+typedef char*        		string;
+typedef int                 coord;
+
 /* yos definitions */
 #ifndef NULL
-#define NULL    ( (word)0 )
+#define NULL    ( (addr)0 )
 #endif
 
 #ifndef TRUE
@@ -22,31 +31,9 @@
 #define FALSE   ( (byte)0 )
 #endif
 
-/* yos types */
-typedef signed char         byte;
-typedef byte                boolean;
-typedef byte                result;
-typedef void*				addr;
-typedef addr                handle;
-typedef char*        		string;
-
 /* API */
 typedef struct yos_s yos_t;
 struct yos_s {
-
-    /* system lists */
-    void* (*lappend)(void **first, void *el);
-    void* (*linsert)(void **first, void *el);
-    void* (*lremove)(void **first, void *el);
-    void* (*lremfirst)(void **first);
-
-    /* memory management */
-    void* (*allocate)(word size);
-    void (*free)(void *p);
-    void (*copy)(byte *src, byte *dst, word count);
-
-    /* tasks, events */
-    void (*sleep)(word _50);
 };
 
 /* call this to obtain the yos interface
