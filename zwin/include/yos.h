@@ -1,35 +1,34 @@
 /*
  *  yos.h
- *  the complete yos API
- *  include this to write code for yos
+ *  the yos API
+ *  include this into programs that use the yos system calls.
  *
- *  tomaz stih jul 26 2015
+ *  tomaz stih apr 7 2021
  *
  */
 #ifndef _YOS_H
 #define _YOS_H
 
 /* yos definitions */
+#ifndef NULL
 #define NULL    ( (word)0 )
+#endif
+
+#ifndef TRUE
 #define TRUE    ( (byte)1 )
+#endif
+
+#ifndef FALSE
 #define FALSE   ( (byte)0 )
+#endif
 
 /* yos types */
-#ifdef _ZX_SPECTRUM
 typedef signed char         byte;
 typedef byte                boolean;
 typedef byte                result;
-typedef unsigned short int  word;
-typedef word                handle;
-typedef byte*               string;
-#elif _SDL
-typedef signed char         byte;
-typedef byte                boolean;
-typedef byte                result;
-typedef void* 				word;
-typedef word                handle;
-typedef signed char*        string;
-#endif
+typedef void*				addr;
+typedef addr                handle;
+typedef char*        		string;
 
 /* API */
 typedef struct yos_s yos_t;
@@ -59,6 +58,5 @@ extern void *query_api(char *api);
 
 /* register your own api so that it can be accessed from yos api */
 extern void register_api(char *api, void *name);
-
 
 #endif /* _YOS_H */

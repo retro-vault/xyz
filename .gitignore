@@ -39,3 +39,6 @@
 .vscode
 bin
 build
+
+# Project related
+project

@@ -1,10 +1,10 @@
 # Toolchain is sdcc!
 export CC 		= sdcc
-export CFLAGS	= -mz80 --no-std-crt0
+export CFLAGS	= -mz80 --no-std-crt0 --debug
 export AS		= sdasz80
 export ASFLAGS	= -xlos -g
 export LD		= sdcc
-export LDFLAGS	= -o $(BUILD_DIR)/ -mz80 --no-std-crt0 --nostdlib -L $(BUILD_DIR) -l graphics
+export LDFLAGS	= -o $(BUILD_DIR)/ -mz80 --no-std-crt0 --nostdlib -L $(BUILD_DIR) -l graphics -Wl -y 
 export AR		= sdar
 export ARFLAGS	= -rc
 
