@@ -17,7 +17,7 @@ export SCR_DIR	=	$(ROOT)/scripts
 
 # Globa settings: tools.
 export CC		=	gcc
-export CFLAGS	=	-w -lSDL2 -g -std=c89 -I$(INC_DIR)
+export CFLAGS	=	-w -lSDL2 -g -std=c89 -I$(INC_DIR) -D__LINUX_SDL2__
 export AR		=	ar 
 export ARFLAGS	=	-crs 
 

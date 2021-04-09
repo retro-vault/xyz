@@ -1,6 +1,6 @@
 # Special tools.
 LD		= gcc
-LDFLAGS	= -lSDL2 -lc
+LDFLAGS	= -L$(BUILD_DIR) -lSDL2 -lc -lgpx -lm
 
 # Source files.
 SRCS	=	$(wildcard *.c)
@@ -15,4 +15,4 @@ $(BUILD_DIR)/$(TARGET): $(OBJS)
 	$(LD) -o $(BUILD_DIR)/$(TARGET) $(OBJS) $(LDFLAGS) 
 
 $(BUILD_DIR)/%.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< $(CFLAGS) -I $(INC_DIR)

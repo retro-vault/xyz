@@ -1,5 +1,5 @@
 # Folders
-SUBDIRS = gpx
+SUBDIRS = gpx yos
 
 # Rules.
 .PHONY: all

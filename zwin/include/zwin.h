@@ -11,11 +11,6 @@
 
 /* zwin api */
 struct zwin_s {
-
-    /* memory management functions */
-    void * (*malloc)();
-    void (*free)();
-
 } zwin_t;
 
 #endif /* _ZWIN_H */
