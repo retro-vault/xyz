@@ -10,15 +10,21 @@
 #define _YOS_H
 
 /* yos types */
-typedef signed char byte_t;
-typedef int         word_t;
+#if __LINUX_SDL2__
+#include <stdint.h>
+typedef uint8_t     byte_t;
+typedef uint16_t    word_t;
 typedef byte_t      boolean_t;
-typedef char *      string_t;
+typedef uint8_t *   string_t;
 typedef byte_t      result_t;
 typedef void *      addr_t;
 typedef int         addr_size_t;
 typedef addr_t      handle_t;
+#elif __ID_PARTNER__
 
+#elif __ZX_SPECTRUM__
+
+#endif
 
 /* yos definitions */
 #ifndef NULL

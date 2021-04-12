@@ -13,10 +13,44 @@
 
 #include "gpx.h"
 
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 400;
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 600;
 
-extern line_hdraw(display_t *d, coord_t y, coord_t x0, coord_t x1, byte_t pattern, byte_t mode);
+typedef struct glyph_header_s {
+    byte_t generation;
+    byte_t reserved;
+    word_t width;
+    word_t height;
+    byte_t frames;
+} glyph_header_t;
+
+typedef struct frame_header_s {
+    byte_t index;
+    byte_t delay;
+    word_t lines;
+} frame_header_t;
+
+typedef struct line_s {
+    word_t x0;
+    word_t y0;
+    word_t x1;
+    word_t y1;
+} line_t;
+
+extern byte_t charlie[];
+
+void animate(display_t *d) {
+
+    glyph_header_t* gh=(glyph_header_t*)&charlie;
+    frame_header_t* fh=(frame_header_t*)&(charlie[7]);
+
+    int i;
+    line_t *pline=(line_t *)&(charlie[11]);
+    for(i=0;i<fh->lines;i++) {
+        draw_line(d,pline->x0,pline->y0,pline->x1,pline->y1,0,0xaa);
+        pline++;
+    }
+}
 
 int main(int argc, char *args[])
 {
@@ -66,16 +100,6 @@ int main(int argc, char *args[])
     /* Event handler */
     SDL_Event e;
 
-    /*
-    draw_hline(d, 100, 50, 200, 0, 0xaa);
-    draw_vline(d, 100, 50, 200, 0, 0xaa);
-    draw_circle(d, 200,200,100,0, 0xaa);
-    draw_line(d,300,300,400,350,0,0xaa);
-    */
-
-    draw_ellipse(d, d->xmin, d->ymin, d->xmax, d->ymax, 0, 0xaa);
-    draw_rectangle(d,  d->xmin, d->ymin, d->xmax, d->ymax, 0, 0xaa);
-
     /*While application is running */
     while (!quit)
     {
@@ -88,6 +112,8 @@ int main(int argc, char *args[])
                 quit = true;
             }
         }
+
+        animate(d);
 
         SDL_Rect r;
         r.x = 0;
