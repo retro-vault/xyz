@@ -7,14 +7,7 @@
 #ifndef _RECT_H
 #define _RECT_H
 
-#include "yos.h"
-
-typedef struct rect_s {
-	coord_t x0;
-	coord_t y0;
-	coord_t x1;
-	coord_t y1;
-} rect_t;
+#include "gpx.h"
 
 extern boolean_t rect_contains(rect_t *r, coord_t x, coord_t y);
 extern boolean_t rect_overlap(rect_t *a, rect_t *b);

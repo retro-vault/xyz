@@ -21,14 +21,6 @@
 #define YMAX    191
 #endif
 
-typedef struct display_s {
-    coord_t xmin;
-    coord_t ymin;
-    coord_t xmax;
-    coord_t ymax;
-    void *display_info;
-} display_t;
-
 /* current global variable */
 extern display_t display;
 
