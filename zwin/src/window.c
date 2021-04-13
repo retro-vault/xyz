@@ -9,5 +9,8 @@
 window_t *window_desktop;
 
 void window_init() {
+
+    /* initialize gpx system */
+
 	/* create desktop window */
 }

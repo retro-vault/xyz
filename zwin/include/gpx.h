@@ -10,8 +10,22 @@
 
 #include "yos.h"
 
+/* consts */
+#if __LINUX_SDL2__
+#define SCREEN_WIDTH    800
+#define SCREEN_HEIGHT   600
+#elif __ID_PARTNER__
+#define SCREEN_WIDTH    1024
+#define SCREEN_HEIGHT   512
+#elif __ZX_SPECTRUM__
+#define SCREEN_WIDTH    256
+#define SCREEN_HEIGHT   192
+#endif
+
+
 /* gpx types */
 typedef int         coord_t;
+
 
 /* basic structures */
 
