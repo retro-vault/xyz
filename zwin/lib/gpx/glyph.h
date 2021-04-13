@@ -18,9 +18,26 @@
 #define GCLS_ANIMATION      3
 
 /* glyph drawing mode bits 4-3 of the generation flag */
-#define GDWM_TINY            0
-#define GDWM_RASTER          1
-#define GDWM_LINES           2
+#define GDWM_TINY           0x00
+#define GDWM_RASTER         0x08
+#define GDWM_LINES          0x10
+
+/* tiny glyph directions bits 2-0 */
+#define TDR_RIGHT           0
+#define TDR_RIGHT_UP        1
+#define TDR_UP              2
+#define TDR_LEFT_UP         3
+#define TDR_DOWN            4
+#define TDR_RIGHT_DOWN      5
+#define TDR_LEFT            6
+#define TDR_LEFT_DOWN       7
+
+/* tiny move values bits 4-3 */
+#define TPV_MASK            0x18        /* bits 4 and 3 */
+#define TPV_SET             0x00        /* set pixel */
+#define TPV_RESET           0x08        /* reset pixel */
+#define TPV_MOVE            0x10        /* just move */
+
 
 typedef struct gpy_generation_s {
     unsigned int gcls:3;        /* glyph class */
@@ -48,7 +65,7 @@ typedef struct gpy_line_s {
     word_t x0;
     word_t y0;
     word_t x1;
-    word_t x1;
+    word_t y1;
 } gpy_line_t;
 
 /* lines glyph */
@@ -56,5 +73,13 @@ typedef struct gpy_lines_s {
     byte_t lcount;              /* number of lines */
     gpy_line_t lines[];         /* array of lines */
 } gpy_lines_t;
+
+/* tiny glyph*/
+typedef struct gpy_tiny_glyph_s {
+    byte_t originx;             /* x origin */
+    byte_t originy;             /* y origin */
+    byte_t mcount;              /* number of moves */
+    byte_t moves[];             /* followed by moves */
+} gpy_tiny_glyph_t;   
 
 #endif /* _GLYPH_H */

@@ -9,15 +9,16 @@
 
 #include "yos.h"
 #include "display.h"
+#include "glyph.h"
 
 #if __LINUX_SDL2__
 #include <SDL2/SDL.h> 
 #endif
 
 /* line mode can be XOR or COPY */
-#define MODE_XOR
-#define MODE_SET
-#define MODE_CLR
+#define MODE_XOR    1
+#define MODE_SET    2
+#define MODE_CLR    3
 
 /* special line type (horizontal) */
 extern void draw_hline(display_t* d, coord_t y, coord_t x0, coord_t x1, byte_t mode, byte_t pattern);

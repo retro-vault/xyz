@@ -13,6 +13,8 @@
 
 #include "gpx.h"
 
+extern byte_t cur_arrow[];
+
 int main(int argc, char *args[])
 {
     /* The window we'll be rendering to */
@@ -69,6 +71,20 @@ int main(int argc, char *args[])
                 quit = true;
             }
         }
+
+        /* init display */
+        display_t* d=display_init((void *)g);
+
+        /* fill it */
+        
+        int y;
+        for (y=0;y<SCREEN_HEIGHT;y++)
+            draw_hline(d,y, y%2, SCREEN_WIDTH-1-y%2,DWM_SET,0xaa);
+        
+
+
+        byte_t *ptr=&cur_arrow[0];
+        draw_tiny(d,&(ptr[7]), 400, 300); 
 
         /* Blit to the surface. */
         SDL_Rect r;

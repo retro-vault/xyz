@@ -60,10 +60,15 @@ void draw_vline(display_t *d, coord_t x, coord_t y0, coord_t y1, byte_t mode, by
 
 void draw_pixel(display_t *d, coord_t x0, coord_t y0, byte_t mode)
 {
+    byte_t value;
+    if (mode==MODE_SET) 
+        value=0xff;
+    else 
+        value=0x00;
     SDL_Surface *surface = (SDL_Surface *)d->display_info;
     SDL_LockSurface(surface);
     uint8_t *pixels = (uint8_t *)surface->pixels;
-    pixels[surface->pitch * y0 + 4 * x0 + 1] = 255;
+    pixels[surface->pitch * y0 + 4 * x0 + 1] = value;
     SDL_UnlockSurface(surface);
 }
 
@@ -181,4 +186,76 @@ void draw_rectangle(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1
     draw_hline(d,y1,x0,x1,mode,pattern);
     draw_vline(d,x0,y0,y1,mode,pattern);
     draw_vline(d,x1,y0,y1,mode,pattern);
+}
+
+void draw_glyph(display_t *d, gpy_envelope_t* gpy, byte_t index, coord_t x0, coord_t y0) {
+
+    /* decode glyph generation */
+    switch(gpy->generation.gcls) {
+        case GCLS_BITMMAP:
+        break;
+        case GCLS_MOUSE_CURSOR:
+        break;
+        case GCLS_FONT:
+        break;
+        case GCLS_ANIMATION:
+        break;
+    }
+
+}
+
+void draw_tiny(display_t *d, gpy_tiny_glyph_t *tiny, coord_t x, coord_t y) {
+    
+    /* move drawing position to origin */
+    x+=tiny->originx; y+=tiny->originy;
+
+    int i; /* move index */
+    byte_t move; /* last move */
+
+    for(i=0;i<tiny->mcount;i++) {
+        
+        move=tiny->moves[i];
+
+        /* TODO: check clipping */
+        
+        /* draw pixel */
+        if ( (move & TPV_MASK ) == TPV_SET)
+            draw_pixel(d, x, y, MODE_SET);
+        else 
+            draw_pixel(d, x, y, MODE_CLR);
+
+        /* to the next position */
+        switch (move & 0x07) {
+            case TDR_UP:
+                y--;
+                break;
+            case TDR_DOWN:
+                y++;
+                break;
+            case TDR_LEFT:
+                x--;
+                break;
+            case TDR_RIGHT:
+                x++;
+                break;
+            case TDR_RIGHT_UP:
+                x++; y--;
+                break;
+            case TDR_RIGHT_DOWN:
+                x++; y++;
+                break;
+            case TDR_LEFT_UP:
+                x--; y--;
+                break;
+            case TDR_LEFT_DOWN:
+                x--; y++;
+                break;
+        }
+    }
+
+    /* handle last move! */
+    if ( (move & TPV_MASK ) == TPV_SET)
+        draw_pixel(d, x, y, MODE_SET);
+    else 
+        draw_pixel(d, x, y, MODE_CLR);
 }

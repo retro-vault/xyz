@@ -46,10 +46,45 @@ typedef struct display_s {
     void *display_info;
 } display_t;
 
+/* glyphs */
+
+/* glyph class, bits 2-0 of the generation flag */
+#define GCLS_BITMMAP        0
+#define GCLS_MOUSE_CURSOR   1
+#define GCLS_FONT           2
+#define GCLS_ANIMATION      3
+
+/* glyph drawing mode bits 4-3 of the generation flag */
+#define GDWM_TINY           0x00
+#define GDWM_RASTER         0x08
+#define GDWM_LINES          0x10
+
+/* tiny glyph directions bits 2-0 */
+#define TDR_RIGHT           0
+#define TDR_RIGHT_UP        1
+#define TDR_UP              2
+#define TDR_LEFT_UP         3
+#define TDR_DOWN            4
+#define TDR_RIGHT_DOWN      5
+#define TDR_LEFT            6
+#define TDR_LEFT_DOWN       7
+
+/* tiny move values bits 4-3 */
+#define TPV_SET             0x00        /* set pixel */
+#define TPV_RESET           0x08        /* reset pixel */
+#define TPV_MOVE            0x10        /* just move */
+
+/* tiny escape */
+#define TINY_END            0x20        /* bitmask */
+
+
 extern display_t* display_init(void *display_info);
 
 
 /* basic drawing functions */
+
+#define DWM_SET             0x00
+#define DWM_RESET           0x00
 
 /* special line type (horizontal) */
 extern void draw_hline(display_t* d, coord_t y, coord_t x0, coord_t x1, byte_t mode, byte_t pattern);
