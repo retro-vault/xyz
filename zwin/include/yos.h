@@ -32,11 +32,11 @@ typedef addr_t      handle_t;
 #endif
 
 #ifndef TRUE
-#define TRUE ((byte)1)
+#define TRUE ((byte_t)1)
 #endif
 
 #ifndef FALSE
-#define FALSE ((byte)0)
+#define FALSE ((byte_t)0)
 #endif
 
 /* API */

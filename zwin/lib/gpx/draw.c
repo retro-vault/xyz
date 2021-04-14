@@ -58,9 +58,9 @@ void draw_vline(display_t *d, coord_t x, coord_t y0, coord_t y1, byte_t mode, by
     SDL_UnlockSurface(surface);
 }
 
-void draw_pixel(display_t *d, coord_t x0, coord_t y0, byte_t mode)
+byte_t draw_pixel(display_t *d, coord_t x0, coord_t y0, byte_t mode)
 {
-    byte_t value;
+    byte_t value, retvalue;
     if (mode==MODE_SET) 
         value=0xff;
     else 
@@ -68,8 +68,11 @@ void draw_pixel(display_t *d, coord_t x0, coord_t y0, byte_t mode)
     SDL_Surface *surface = (SDL_Surface *)d->display_info;
     SDL_LockSurface(surface);
     uint8_t *pixels = (uint8_t *)surface->pixels;
-    pixels[surface->pitch * y0 + 4 * x0 + 1] = value;
+    byte_t *pos=&(pixels[surface->pitch * y0 + 4 * x0 + 1] );
+    retvalue=(*pos==0)?0:1;
+    *pos = value;
     SDL_UnlockSurface(surface);
+    return retvalue;
 }
 
 void draw_line(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern)
@@ -204,13 +207,26 @@ void draw_glyph(display_t *d, gpy_envelope_t* gpy, byte_t index, coord_t x0, coo
 
 }
 
-void draw_tiny(display_t *d, gpy_tiny_glyph_t *tiny, coord_t x, coord_t y) {
-    
+void draw_tiny(
+    display_t *d, 
+    gpy_tiny_glyph_t *tiny, 
+    coord_t x, 
+    coord_t y,
+    gpy_tiny_glyph_t *back_tiny) {
+
+    /* store back tiny */
+    if (back_tiny!=NULL) {
+        back_tiny->originx=tiny->originx;
+        back_tiny->originy=tiny->originy;
+        back_tiny->mcount=tiny->mcount;
+    }
+
     /* move drawing position to origin */
     x+=tiny->originx; y+=tiny->originy;
 
     int i; /* move index */
     byte_t move; /* last move */
+    byte_t prev; /* previous pixel value */
 
     for(i=0;i<tiny->mcount;i++) {
         
@@ -218,44 +234,27 @@ void draw_tiny(display_t *d, gpy_tiny_glyph_t *tiny, coord_t x, coord_t y) {
 
         /* TODO: check clipping */
         
-        /* draw pixel */
-        if ( (move & TPV_MASK ) == TPV_SET)
-            draw_pixel(d, x, y, MODE_SET);
-        else 
-            draw_pixel(d, x, y, MODE_CLR);
+        /* TODO: unify TPV_SET and MODE_SET to avoid if */
 
-        /* to the next position */
+        /* draw pixel or do nothing */
+        if ( (move & TPV_MASK ) == TPV_SET)
+            prev=draw_pixel(d, x, y, MODE_SET);
+        else if ( (move & TPV_MASK ) == TPV_RESET)
+            prev=draw_pixel(d, x, y, MODE_CLR);
+
+        if (back_tiny!=NULL) 
+            back_tiny->moves[i]=prev?TPV_SET|(move&0x07):TPV_RESET|(move&0x07);
+
+        /* move to the next position */
         switch (move & 0x07) {
-            case TDR_UP:
-                y--;
-                break;
-            case TDR_DOWN:
-                y++;
-                break;
-            case TDR_LEFT:
-                x--;
-                break;
-            case TDR_RIGHT:
-                x++;
-                break;
-            case TDR_RIGHT_UP:
-                x++; y--;
-                break;
-            case TDR_RIGHT_DOWN:
-                x++; y++;
-                break;
-            case TDR_LEFT_UP:
-                x--; y--;
-                break;
-            case TDR_LEFT_DOWN:
-                x--; y++;
-                break;
+            case TDR_UP: y--; break;
+            case TDR_DOWN: y++; break;
+            case TDR_LEFT: x--; break;
+            case TDR_RIGHT: x++; break;
+            case TDR_RIGHT_UP: x++; y--; break;
+            case TDR_RIGHT_DOWN: x++; y++; break;
+            case TDR_LEFT_UP: x--; y--; break;
+            case TDR_LEFT_DOWN: x--; y++; break;
         }
     }
-
-    /* handle last move! */
-    if ( (move & TPV_MASK ) == TPV_SET)
-        draw_pixel(d, x, y, MODE_SET);
-    else 
-        draw_pixel(d, x, y, MODE_CLR);
 }

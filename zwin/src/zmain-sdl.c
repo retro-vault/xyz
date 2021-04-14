@@ -14,6 +14,11 @@
 #include "gpx.h"
 
 extern byte_t cur_arrow[];
+extern byte_t cur_text[];
+extern byte_t cur_hourglass[];
+byte_t back[128]; /* should be enough for any cursor */
+word_t x=400, y=300, prevx, prevy;
+byte_t first=TRUE;
 
 int main(int argc, char *args[])
 {
@@ -59,6 +64,14 @@ int main(int argc, char *args[])
     /* Event handler */
     SDL_Event e;
 
+    /* init display */
+    display_t* d=display_init((void *)g);
+
+    /* fill the display */
+    int y;
+    for (y=0;y<SCREEN_HEIGHT;y++)
+        draw_hline(d,y, y%2, SCREEN_WIDTH-1-y%2,DWM_SET,0xaa);
+
     /*While application is running */
     while (!quit)
     {
@@ -72,19 +85,23 @@ int main(int argc, char *args[])
             }
         }
 
-        /* init display */
-        display_t* d=display_init((void *)g);
+        SDL_GetMouseState(&x, &y);
 
-        /* fill it */
-        
-        int y;
-        for (y=0;y<SCREEN_HEIGHT;y++)
-            draw_hline(d,y, y%2, SCREEN_WIDTH-1-y%2,DWM_SET,0xaa);
-        
-
-
-        byte_t *ptr=&cur_arrow[0];
-        draw_tiny(d,&(ptr[7]), 400, 300); 
+        byte_t *ptr, *ptrback;
+        if (first) {
+            first=FALSE;
+        } else {
+            if (x!=prevx || y!=prevy) {
+                /* restore background */
+                ptr=&back[0];
+                draw_tiny(d,&(ptr[0]), prevx, prevy, NULL);
+            } 
+        }
+        if (x!=prevx || y!=prevy) {
+            ptr=&cur_arrow[0];
+            draw_tiny(d,&(ptr[7]), x, y, back); 
+            prevx=x; prevy=y;
+        }
 
         /* Blit to the surface. */
         SDL_Rect r;

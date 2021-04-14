@@ -27,7 +27,7 @@ extern void draw_hline(display_t* d, coord_t y, coord_t x0, coord_t x1, byte_t m
 extern void draw_vline(display_t* d, coord_t x, coord_t y0, coord_t y1, byte_t mode, byte_t pattern);
 
 /* draw individual pixel */
-extern void draw_pixel(display_t* d, coord_t x0, coord_t y0, byte_t mode);
+extern byte_t draw_pixel(display_t* d, coord_t x0, coord_t y0, byte_t mode);
 
 /* draw line */
 extern void draw_line(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern);
