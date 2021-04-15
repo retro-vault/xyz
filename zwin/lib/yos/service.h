@@ -1,10 +1,15 @@
 /*
- *	service.h
- *	in yos every api is a service, even yos itself. you obtain a pointer to
- *  a service by calling service_query and then you call service functions
- *  through it.
+ * service.h
  *
- *	tomaz stih thu apr 9 2021
+ * in yos every api is a service, even yos itself. you obtain a pointer to
+ * a service by calling service_query and then you call service functions
+ * through it.
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 09.04.2021   tstih
+ *
  */
 #ifndef _SERVICE_H
 #define _SERVICE_H

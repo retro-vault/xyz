@@ -1,5 +1,17 @@
 /*
  * zwin.h
+ *
+ * z windows header file
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 23.03.2021   tstih
+ *
+ */
+
+/*
+ * zwin.h
  * z windows single header file.  
  *
  * tomaz stih tue mar 23 2021

@@ -1,8 +1,13 @@
 /*
- *	glyph.h
- *	glyph related structures
+ * glyph.h
  *
- *	tomaz stih apr 8 2021
+ * glyph related consts and structures.
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 08.04.2021   tstih
+ *
  */
 #ifndef _GLYPH_H
 #define _GLYPH_H

@@ -1,21 +1,18 @@
 /*
- *	draw.c
- *	drawing routines.
+ * draw.c
  *
- *  notes:
- *      bresenhamm implementations: https://gist.github.com/bert/1085538
- * 
- *  todo:
- *      handle drawing modes and patterns.
- * 
- *	tomaz stih apr 8 2021
+ * drawing routines.
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 08.04.2021   tstih
+ *
  */
 #include "draw.h"
 
-void draw_hline(display_t *d, coord_t y, coord_t x0, coord_t x1, byte_t mode, byte_t pattern)
+void draw_hline(graphics_t *d, coord_t y, coord_t x0, coord_t x1, byte_t mode, byte_t pattern)
 {
-
-    SDL_Surface *surface = (SDL_Surface *)d->display_info;
     SDL_LockSurface(surface);
 
     uint8_t *pixels = (uint8_t *)surface->pixels;
@@ -36,10 +33,8 @@ void draw_hline(display_t *d, coord_t y, coord_t x0, coord_t x1, byte_t mode, by
     SDL_UnlockSurface(surface);
 }
 
-void draw_vline(display_t *d, coord_t x, coord_t y0, coord_t y1, byte_t mode, byte_t pattern)
+void draw_vline(graphics_t *d, coord_t x, coord_t y0, coord_t y1, byte_t mode, byte_t pattern)
 {
-
-    SDL_Surface *surface = (SDL_Surface *)d->display_info;
     SDL_LockSurface(surface);
 
     uint8_t *pixels = (uint8_t *)surface->pixels;
@@ -58,14 +53,14 @@ void draw_vline(display_t *d, coord_t x, coord_t y0, coord_t y1, byte_t mode, by
     SDL_UnlockSurface(surface);
 }
 
-byte_t draw_pixel(display_t *d, coord_t x0, coord_t y0, byte_t mode)
+byte_t draw_pixel(graphics_t *d, coord_t x0, coord_t y0, byte_t mode)
 {
     byte_t value, retvalue;
     if (mode==MODE_SET) 
         value=0xff;
     else 
         value=0x00;
-    SDL_Surface *surface = (SDL_Surface *)d->display_info;
+
     SDL_LockSurface(surface);
     uint8_t *pixels = (uint8_t *)surface->pixels;
     byte_t *pos=&(pixels[surface->pitch * y0 + 4 * x0 + 1] );
@@ -75,7 +70,7 @@ byte_t draw_pixel(display_t *d, coord_t x0, coord_t y0, byte_t mode)
     return retvalue;
 }
 
-void draw_line(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern)
+void draw_line(graphics_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern)
 {
     int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
     int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
@@ -100,7 +95,7 @@ void draw_line(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byt
     }
 }
 
-void draw_circle(display_t *d, coord_t x0, coord_t y0, coord_t radius, byte_t mode, byte_t pattern)
+void draw_circle(graphics_t *d, coord_t x0, coord_t y0, coord_t radius, byte_t mode, byte_t pattern)
 {
     int f = 1 - radius;
     int ddF_x = 1;
@@ -138,7 +133,7 @@ void draw_circle(display_t *d, coord_t x0, coord_t y0, coord_t radius, byte_t mo
     }
 }
 
-void draw_ellipse(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern)
+void draw_ellipse(graphics_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern)
 {
     int a = abs(x1 - x0), b = abs(y1 - y0), b1 = b & 1;       /* values of diameter */
     long dx = 4 * (1 - a) * b * b, dy = 4 * (b1 + 1) * a * a; /* error increment */
@@ -184,14 +179,14 @@ void draw_ellipse(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, 
     }
 }
 
-void draw_rectangle(display_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern) {
+void draw_rectangle(graphics_t *d, coord_t x0, coord_t y0, coord_t x1, coord_t y1, byte_t mode, byte_t pattern) {
     draw_hline(d,y0,x0,x1,mode,pattern);
     draw_hline(d,y1,x0,x1,mode,pattern);
     draw_vline(d,x0,y0,y1,mode,pattern);
     draw_vline(d,x1,y0,y1,mode,pattern);
 }
 
-void draw_glyph(display_t *d, gpy_envelope_t* gpy, byte_t index, coord_t x0, coord_t y0) {
+void draw_glyph(graphics_t *d, gpy_envelope_t* gpy, byte_t index, coord_t x0, coord_t y0) {
 
     /* decode glyph generation */
     switch(gpy->generation.gcls) {
@@ -208,7 +203,7 @@ void draw_glyph(display_t *d, gpy_envelope_t* gpy, byte_t index, coord_t x0, coo
 }
 
 void draw_tiny(
-    display_t *d, 
+    graphics_t *d, 
     gpy_tiny_glyph_t *tiny, 
     coord_t x, 
     coord_t y,

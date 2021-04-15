@@ -1,9 +1,12 @@
 /*
- *  yos.h
- *  the yos API
- *  include this into programs that use the yos system calls.
+ * yos.h
  *
- *  tomaz stih apr 7 2021
+ * the yos api. include this into programs that use the yos system calls.
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 07.04.2021   tstih
  *
  */
 #ifndef _YOS_H

@@ -1,8 +1,13 @@
 /*
- *	memory.h
- *	memory management (mem_allocate, mem_free)
+ * memory.h
  *
- *	tomaz stih fri may 25 2012
+ * memory management (mem_allocate, mem_free)
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 25.05.2012   tstih
+ *
  */
 #ifndef _MEMORY_H
 #define _MEMORY_H

@@ -1,8 +1,13 @@
 /*
- *	rect.h
- *	rectangle type
+ * rect.h
  *
- *	tomaz stih mon oct 7 2013
+ * rectangle arith. functions
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 07.10.2013   tstih
+ *
  */
 #ifndef _RECT_H
 #define _RECT_H

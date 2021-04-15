@@ -1,8 +1,13 @@
 /*
- *	window.h
- *	basic window
+ * window.h
  *
- *	tomaz stih mon oct 7 2013
+ * window functions
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 13.04.2021   tstih
+ *
  */
 #ifndef _WINDOW_H
 #define _WINDOW_H

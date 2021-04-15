@@ -1,8 +1,13 @@
 /*
- *	list.c
- *	linked list
+ * list.c
  *
- *	tomaz stih tue jun 5 2012
+ * linked list management
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 25.05.2012   tstih
+ *
  */
 #include "list.h"
 

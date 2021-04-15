@@ -1,4 +1,4 @@
-# zwiu
+# zwin
 
 zwin is a GUI for the yos operating system. 
 

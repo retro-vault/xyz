@@ -1,18 +1,28 @@
 /*
- *	mouse.h
- *	mouse header
+ * mouse.h
  *
- *	13.04.2021  tstih
+ * basic mouse functions (just control, no drawing!)
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 13.04.2021   tstih
+ *
  */
 #ifndef _MOUSE_H
 #define _MOUSE_H
 
 #include "yos.h"
 #include "gpx.h"
+#include "cursors.h"
 
+#if __LINUX_SDL2__
+#include <SDL2/SDL.h>
+#endif
+
+/* at present, we only support 2 button mouse */
 #define	MOUSE_RBUTTON	0x01 /* bit 0 */
 #define MOUSE_LBUTTON	0x02 /* bit 1 */
-#define MOUSE_MBUTTON	0x04 /* bit 2 */
 
 /* mouse info */
 typedef struct mouse_info_s {

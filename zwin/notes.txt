@@ -1,0 +1,18 @@
+Handling mouse (snippet)
+---
+byte_t *ptr, *ptrback;
+if (first) {
+    first=FALSE;
+} else {
+    if (x!=prevx || y!=prevy) {
+
+        ptr=&back[0];
+        draw_tiny(graphics, &(ptr[0]), prevx, prevy, NULL);
+    } 
+}
+if (x!=prevx || y!=prevy) {
+    ptr=&cur_arrow[0];
+    draw_tiny(graphics, &(ptr[7]), x, y, back); 
+    prevx=x; prevy=y;
+}
+

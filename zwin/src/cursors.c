@@ -1,16 +1,15 @@
 /*
  * cursors.c
  *
- * Mouse cursors, tiny drawing mode.
+ * mouse cursors, tiny drawing mode.
  *
  * MIT License (see: LICENSE)
- * Copyright (c) 2021 Tomaz Stih
+ * copyright (c) 2021 tomaz stih
  *
  * 12.04.2021   tstih
  *
  */
-#include "yos.h"
-#include "gpx.h"
+#include "cursors.h"
 
 byte_t cur_arrow[] = {
     

@@ -1,10 +1,10 @@
 /*
  * charlie.c
  *
- * Outline animmation.
+ * outline animmation.
  *
  * MIT License (see: LICENSE)
- * Copyright (c) 2021 Tomaz Stih
+ * copyright (c) 2021 tomaz stih
  *
  * 12.04.2021   tstih
  *

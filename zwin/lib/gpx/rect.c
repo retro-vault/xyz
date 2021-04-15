@@ -1,12 +1,17 @@
 /*
- *	rect.c
- *	rectangle type implementation
+ * rect.c
  *
- *  notes:
- * 		this is pure "C" implementation and it might be a bit non-optimal for
- * 		8-bit machines. consider writing parts of it in assembly.
+ * rectangle arith. functions
+ *
+ * NOTES:
+ *  this is pure "C" implementation and it might be a bit non-optimal for
+ *  8-bit machines. consider writing parts of it in assembly.
  * 
- *	tomaz stih apr 8 2021
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 07.10.2013   tstih
+ *
  */
 #include "rect.h"
 

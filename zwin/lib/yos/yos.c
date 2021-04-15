@@ -1,8 +1,13 @@
 /*
- *	yos.c
- *	core yos functions.
+ * yos.c
  *
- *	tomaz stih thu apr 9 2021
+ * yos core functions
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 13.04.2021   tstih
+ *
  */
 #include "yos.h"
 

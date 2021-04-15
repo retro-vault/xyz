@@ -1,8 +1,13 @@
 /*
- *	memory.c
- *	memory management (mem_allocate, mem_free)
+ * memory.c
  *
- *	tomaz stih fri may 25 2012
+ * memory management (mem_allocate, mem_free)
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 25.05.2012   tstih
+ *
  */
 #include "yos.h"
 #include "list.h"

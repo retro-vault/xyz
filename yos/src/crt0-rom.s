@@ -56,6 +56,7 @@ rst30ret:
         jp      rst38
 rst38ret:
         reti
+        ;; 41 bytes of free space for cofiguration.
         .dw     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         .db     0
 
@@ -83,6 +84,7 @@ _sys_tarpit::
 ___sdcc_call_hl::
 	jp	(hl)
 
+        ;; this are in ROM, but will be copied to an area in RAM!
 start_vectors:
         jp      rst8ret
         jp      rst10ret

@@ -1,8 +1,13 @@
 /*
- *	message.c
- *	message
+ * message.c
  *
- *	tomaz stih sun oct 27 2013
+ * window message queue
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 15.04.2021   tstih
+ *
  */
 #include "window.h"
 #include "message.h"

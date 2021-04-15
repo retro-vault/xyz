@@ -1,7 +1,7 @@
 /*
- * test-gpx.h
+ * test-yos.h
  *
- * google tests for libgpx
+ * google tests for libyos
  *
  * MIT License (see: LICENSE)
  * copyright (c) 2021 tomaz stih
@@ -11,7 +11,7 @@
  */
 #include "gtest/gtest.h"
 
-TEST(gpx,allocate_memory)
+TEST(yos,allocate_memory)
 {
   ASSERT_EQ(5,5);
 }

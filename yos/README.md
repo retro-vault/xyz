@@ -41,3 +41,13 @@ this is a rom version of yos.
 ### yos.bin
 this is a ram version of yos. you can run it
 as standard zx spectum application.
+
+# yos internals
+
+## memory layout
+
+yos occupies lower 16kb of zx spectrum memory i.e. the ROM. it has modular
+architecture. the lower 1KB of ROM is reserved for the Z80 initialization,
+vectors, and the BIOS.
+
+the BIOS can 

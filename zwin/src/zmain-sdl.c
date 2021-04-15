@@ -1,8 +1,13 @@
 /*
- *	zmain-sdl.c
- *	z windows main() function (for the SDL).
+ * zmain-sdl.c
  *
- *	tomaz stih apr 8 2021
+ * SDL specific parts of zmain
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 13.04.2021   tstih
+ *
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -12,114 +17,63 @@
 #include <SDL2/SDL.h>
 
 #include "gpx.h"
+#include "zmain-sdl.h"
 
-extern byte_t cur_arrow[];
-extern byte_t cur_text[];
-extern byte_t cur_hourglass[];
-byte_t back[128]; /* should be enough for any cursor */
-word_t x=400, y=300, prevx, prevy;
-byte_t first=TRUE;
+SDL_Window *w;
+SDL_Surface *w_surface = NULL;
 
-int main(int argc, char *args[])
-{
-    /* The window we'll be rendering to */
-    SDL_Window *window = NULL;
+boolean_t zmain_sdl_start() {
 
-    /* The surface contained by the window */
-    SDL_Surface *wgpx = NULL;
+    /* assume error */
+    boolean_t success = FALSE;
 
-    /* drawing surface */
-    SDL_Surface *g;
-
-    /* Initialize SDL */
+    /* initialize sdl */
     if (SDL_Init(SDL_INIT_VIDEO) < 0)
-        printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+        printf("sdl could not initialize: %s\n", SDL_GetError());
     else
     {
-        g = SDL_CreateRGBSurface(0, SCREEN_WIDTH, SCREEN_HEIGHT, 32, 0, 0, 0, 0);
-
+        /* hide mouse cursor, we'll draw our own */
         SDL_ShowCursor(SDL_DISABLE);
-        /* SDL_WarpMouse( x, y ); */
-
-        window = SDL_CreateWindow("zwin simulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_HIDDEN);
-        if (window == NULL)
-            printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        w = SDL_CreateWindow("zwin simulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_HIDDEN);
+        if (w == NULL)
+            printf("window could not be created: %s\n", SDL_GetError());
         else
         {
-            SDL_SetWindowSize(window, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-            SDL_ShowWindow(window);
-
-            /*Get window surface */
-            wgpx = SDL_GetWindowSurface(window);
-
-            /*Update the surface */
-            SDL_UpdateWindowSurface(window);
+            SDL_SetWindowSize(w, SCREEN_WIDTH, SCREEN_HEIGHT);
+            SDL_ShowWindow(w);
+            /* create drawing surface */
+            w_surface = SDL_GetWindowSurface(w);
+            /* reset the error */
+            success = TRUE;
         }
     }
+    
+    return success;
+}
 
-    /* Main loop flag */
-    bool quit = false;
+void zmain_sdl_end() {
+    /* free the internal surface (created by graphics_init() */
+    SDL_FreeSurface(surface);
 
-    /* Event handler */
-    SDL_Event e;
-
-    /* init display */
-    display_t* d=display_init((void *)g);
-
-    /* fill the display */
-    int y;
-    for (y=0;y<SCREEN_HEIGHT;y++)
-        draw_hline(d,y, y%2, SCREEN_WIDTH-1-y%2,DWM_SET,0xaa);
-
-    /*While application is running */
-    while (!quit)
-    {
-        /* Handle events on queue */
-        while (SDL_PollEvent(&e) != 0)
-        {
-            /* User requests quit */
-            if (e.type == SDL_QUIT)
-            {
-                quit = true;
-            }
-        }
-
-        SDL_GetMouseState(&x, &y);
-
-        byte_t *ptr, *ptrback;
-        if (first) {
-            first=FALSE;
-        } else {
-            if (x!=prevx || y!=prevy) {
-                /* restore background */
-                ptr=&back[0];
-                draw_tiny(d,&(ptr[0]), prevx, prevy, NULL);
-            } 
-        }
-        if (x!=prevx || y!=prevy) {
-            ptr=&cur_arrow[0];
-            draw_tiny(d,&(ptr[7]), x, y, back); 
-            prevx=x; prevy=y;
-        }
-
-        /* Blit to the surface. */
-        SDL_Rect r;
-        r.x = 0; r.y = 0; r.w = SCREEN_WIDTH; r.h = SCREEN_HEIGHT;
-        SDL_BlitSurface(g, &r, wgpx, &r);
-
-        /* Update the surface */
-        SDL_UpdateWindowSurface(window);
-    }
-
-    /* Free the surface */
-    SDL_FreeSurface(g);
-
-    /* Destroy window */
-    SDL_DestroyWindow(window);
-
-    /* Quit SDL subsystems */
+    SDL_DestroyWindow(w);
     SDL_Quit();
+}
 
-    return 0;
+boolean_t zmain_sdl_loop() {
+
+    /* first blit surface to the screen */
+    SDL_Rect r;
+    r.x = 0; r.y = 0; r.w = SCREEN_WIDTH; r.h = SCREEN_HEIGHT;
+    SDL_BlitSurface(surface, &r, w_surface, &r);
+    SDL_UpdateWindowSurface(w);
+
+    boolean_t success=TRUE;
+    SDL_Event e;
+    /* clean the sdl event queue */
+    while (SDL_PollEvent(&e) != 0)
+        /* User requests quit */
+        if (e.type == SDL_QUIT)
+            success = FALSE;
+    /* return quit status */
+    return success;
 }

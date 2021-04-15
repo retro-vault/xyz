@@ -1,8 +1,13 @@
 /*
- *	message.h
- *	message header
+ * message.h
  *
- *	tomaz stih sun oct 27 2013
+ * window message queue
+ *
+ * MIT License (see: LICENSE)
+ * copyright (c) 2021 tomaz stih
+ *
+ * 15.04.2021   tstih
+ *
  */
 #ifndef _MESSAGE_H
 #define _MESSAGE_H
