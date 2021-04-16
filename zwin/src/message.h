@@ -38,16 +38,34 @@
 #define WND_HIT_CLOSE	2
 #define WND_HIT_RESIZE	3
 
-typedef struct message_s message_t;
 typedef struct message_s {
-	message_t* next;
+	struct message_s* next;
 	word_t reserved;
 	window_t *window;
 	byte_t id;
 	word_t param1;
 	word_t param2;	
-};
+} message_t;
 
+/* first message in a linked list */
 extern message_t *message_first;
+
+/* functions */
+extern void message_init();
+extern void message_destroy(message_t *m);
+extern result_t message_send(
+    window_t *wnd, 
+    byte_t id, 
+    word_t param1, 
+    word_t param2);
+extern result_t message_post(
+    window_t *wnd, 
+    byte_t id, 
+    word_t param1, 
+    word_t param2);
+extern void message_dispatch();
+
+/* os api */
+extern yos_t *yos;
 
 #endif /* _MESSAGE_H */

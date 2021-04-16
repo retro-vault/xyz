@@ -16,6 +16,12 @@
 
 #include "yos.h"
 #include "list.h"
+#include "memory.h"
+#include "string.h"
+
+/* pointers to heaps */
+extern addr_t yos_heap;
+extern addr_t usr_heap;
 
 typedef struct service_s {
     list_header_t list; 
@@ -27,7 +33,7 @@ typedef struct service_s {
 extern void *service_query(char *name);
 
 /* register your own api so that it can be accessed from yos api */
-extern void service_register(void *name, addr_t api);
+extern void service_register(void *name, addr_t api, handle_t owner);
 
 /* unregister your service */
 extern void service_unregister(void *name);

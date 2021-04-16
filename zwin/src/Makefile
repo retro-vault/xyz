@@ -1,6 +1,6 @@
 # Special tools.
 LD		= gcc
-LDFLAGS	= -L$(BUILD_DIR) -lSDL2 -lc -lgpx -lm
+LDFLAGS	= -L$(BUILD_DIR) -lSDL2 -lc -lgpx -lyos -lm
 
 # Source files.
 SRCS	=	$(wildcard *.c)

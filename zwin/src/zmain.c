@@ -11,6 +11,8 @@
  */
 #include "zmain.h"
 
+yos_t *yos;
+
 boolean_t zmain_start() {
 
 #if __LINUX_SDL2__
@@ -75,7 +77,14 @@ void zmain_loop() {
  * dispatches them to correct windows' message queues.
  */
 int main(int argc, char *args[]) {
-    if (zmain_start()) {
+
+    /* TODO: not the right place for OS initialization */
+    yos_init();
+
+    yos=query_api(YOS_API);
+
+    /* we need the api and we need sdl init */
+    if (yos!=NULL && zmain_start()) {
         zmain_loop();
         zmain_end();
     }

@@ -13,6 +13,7 @@
 #define _MEMORY_H
 
 #include "yos.h"
+#include "list.h"
 
 #ifndef NONE
 #define NONE 0
@@ -39,5 +40,7 @@ extern void mem_init(void *heap, addr_size_t size);
 extern void *mem_allocate(void *heap, addr_size_t size, handle_t owner);
 extern void *mem_free(void *heap, void *p);
 extern void mem_copy(byte_t *src, byte_t *dest, addr_size_t count);
+
+
 
 #endif

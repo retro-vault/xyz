@@ -45,12 +45,32 @@ typedef addr_t      handle_t;
 /* API */
 #define YOS_API "yos"
 
-typedef struct yos_s yos_t;
-struct yos_s
+typedef struct yos_s
 {
+    /* memory allocation */
     void *(*malloc)(addr_size_t size);
     void (*free)(void *);
-};
+
+    /* string */
+    addr_size_t (*strlen)(char *str);
+    char *(*strcpy)(char *dest, const char *src);
+    int (*strcmp)(char *s1, char *s2);
+
+    /* system lists */
+	void* (*lappend)(void **first, void *el);
+	void* (*linsert)(void **first, void *el);
+	void* (*lremove)(void **first, void *el);
+	void* (*lremfirst)(void **first);
+
+    /* system wide errors */
+    result_t (*geterr)();
+    result_t (*seterr)(result_t err);
+
+} yos_t;
+
+/* error codes */
+#define SUCCESS         0
+#define OUT_OF_MEMORY   1
 
 /* call this to obtain the yos interface
  *   yos_t* api=(yos*)query_api("yo00"); // 2 letters + 2 dig. version
