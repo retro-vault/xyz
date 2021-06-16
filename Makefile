@@ -12,27 +12,28 @@ K := $(foreach exec,$(REQUIRED),\
 ROOT = $(realpath .)
 export BUILD_DIR	=	$(ROOT)/build
 export BIN_DIR		=	$(ROOT)/bin
-export INC_DIR		=	$(ROOT)/include 
+export INC_DIR		=	$(ROOT)/include
+export STD_INC_DIR	=	$(ROOT)/include/libc
 export LIB_DIR		=	$(ROOT)/lib
 
 # Globa settings: tools.
 export CC			=	sdcc
-export CFLAGS		=	--std-c11 -mz80 --no-std-crt0 --nostdinc --nostdlib --debug -I. -I$(INC_DIR) 
+export CFLAGS		=	--std-c11 -mz80 --debug \
+						--no-std-crt0 --nostdinc --nostdlib \
+						-I. -I$(STD_INC_DIR) -I$(INC_DIR) 
 export AS			=	sdasz80
 export ASFLAGS		=	-xlos -g
 export AR			=	sdar
 export ARFLAGS		=	-rc
 export LD			=	sdcc
-export LDFLAGS_ROM	=	-mz80 -Wl -y --code-loc 0x0000 --data-loc 0x5b00 \
+export LDFLAGS		=	-mz80 -Wl -y --code-loc 0x00b4 --data-loc 0x5b00 \
 						--no-std-crt0 --nostdlib --nostdinc \
 						-L$(BUILD_DIR) -llibsdcc -p
+export OBJCOPY		=	sdobjcopy
+export TRUNC 		=	truncate
 
 # Subfolders for make.
 SUBDIRS = lib src
-
-# IHX (deliverables)
-IHX		=	$(wildcard $(BUILD_DIR)/*.ihx)
-BIN		=	$(patsubst %.ihx,%.bin,$(IHX))
 
 # Rules.
 .PHONY: rom
@@ -49,17 +50,6 @@ mkdirs:
 $(SUBDIRS):
 	$(MAKE) -C $@
 
-# Make .BIN files (from ihx).
-.PHONY: bin
-bin:
-	#$(BUILD_DIR)/load $(basename $@)
-	#cpmcp -f idpfdd $(BUILD_DIR)/fddb.img $@ 0:$(@F)
-	#cp $(BUILD_DIR)/crt0cpm.rel $(BIN_DIR)
-	#cp $(BUILD_DIR)/*.lib $(BIN_DIR)
-	#cp $(BUILD_DIR)/*.com $(BIN_DIR)
-	#cp $(BUILD_DIR)/fddb.img $(BIN_DIR)
-
-	
 .PHONY: clean
 clean:
 	rm -f -r $(BIN_DIR)
