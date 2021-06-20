@@ -26,7 +26,7 @@ export ASFLAGS		=	-xlos -g
 export AR			=	sdar
 export ARFLAGS		=	-rc
 export LD			=	sdcc
-export LDFLAGS		=	-mz80 -Wl -y --code-loc 0x00b4 --data-loc 0x5b00 \
+export LDFLAGS		=	-mz80 -Wl -y --code-loc 0x00ff --data-loc 0x5b00 \
 						--no-std-crt0 --nostdlib --nostdinc \
 						-L$(BUILD_DIR) -llibsdcc -p
 export OBJCOPY		=	sdobjcopy

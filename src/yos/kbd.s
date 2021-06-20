@@ -20,7 +20,7 @@
 
 
 		.area	_CODE
-_kbd_scan::		
+_kbd_scan::	
 		ld		hl,#kbd_prev_scan
 		ld		d,#0					; scan lines counter 
 		ld		bc,#0xf7fe				; first scan line
@@ -156,4 +156,3 @@ init_kbd_prev_scan:
 		.byte	0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f
 init_kbd_buff:
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-		.area 	_CABS (ABS)

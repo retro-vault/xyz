@@ -8,6 +8,8 @@
 		;; 2021-06-16   tstih
         .module crt0rom
 
+		.globl	_ir_enable
+		.globl	_ir_disable
         .globl  _sys_vec_tbl
         .globl  _sys_vec_set
         .globl  _sys_vec_get
@@ -90,7 +92,8 @@ tarpit:
 		;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
 		;; ------------------------------------------------------------
         ;; affects: bc, de, hl
-_sys_vec_set::	
+_sys_vec_set::
+        call    _ir_disable
 		pop		hl						; ret address / ignore
 		pop		bc						; bc = handler
 		pop		de						; d = undefined, e = vector number
@@ -109,6 +112,7 @@ _sys_vec_set::
 		ld		(hl),c
 		inc		hl
 		ld		(hl),b
+        call    _ir_enable
 		ret
 
 
@@ -117,6 +121,7 @@ _sys_vec_set::
 		;; ------------------------------------------
         ;; affects: hl, de
 _sys_vec_get::
+        call    _ir_disable
         pop     de                      ; d = undefied, e = #vector
         ld      d,#0                    ; de = 16bit vector number
         ld      hl,#_sys_vec_tbl        ; vector table to hl
@@ -128,7 +133,40 @@ _sys_vec_get::
         inc     hl
         ld      d,(hl)
         ex      de,hl                   ; and into hl
+        call    _ir_enable
         ret
+
+
+		;; -------------------------
+		;; extern void ir_disable();
+		;; -------------------------
+        ;; executes di with ref count.
+        ;; affects: hl
+_ir_disable::		
+		di
+		ld		hl,#ir_refcount
+		inc		(hl)
+		ret
+
+
+		;; ------------------------
+		;; extern void ir_enable();
+		;; ------------------------
+        ;; executes ei with ref count.
+        ;; affects: af
+_ir_enable::		
+		ld		a,(#ir_refcount)
+		or		a
+		jr		z,do_ei					; if a==0 then just ei		
+		dec		a						; if a<>0 then dec a
+		ld		(#ir_refcount),a	    ; write back to counter
+		or		a						; and check for ei
+		jr		nz,dont_ei				; not yet...
+do_ei:		
+		ei
+dont_ei:	
+		ret
+
 
         ;; this are in ROM, but will be copied to an area in RAM!
 start_vectors:
@@ -196,8 +234,20 @@ nmi:    .ds     3
         ;; 512 bytes of operating system stack
         .ds     512
 _sys_stack::
+
+
         .area   _HEAP
 _sys_heap::
         ;; 1KB of system heap
         .ds     1024
 _heap::
+
+
+		.area	_INITIALIZED
+ir_refcount:
+		.ds		1
+
+
+		.area	_INITIALIZER
+init_ir_refcount:
+		.byte	0
