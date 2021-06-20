@@ -74,12 +74,12 @@ init:
         ld      sp,#_sys_stack          ; now sp to OS stack (on bss)
         call    gsinit                  ; init static vars
 
-        ;; start the os
-        call    _main
-
-        ;; start the scheduler
+        ;; start interrupts
         im      1                       ; im 1, 50Hz interrupt on ZX Spectrum
         ei                              ; enable interrupts
+
+        ;; call the main!
+        call    _main
 
 tarpit:
         halt                            ; halt

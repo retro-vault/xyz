@@ -1,12 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <title>xyz os</title>
-        <link rel="stylesheet" href="style.css">
-        <script src="script.js"></script>
-    </head>
-    <body>
-        <!-- page content -->
-    </body>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The xyz Operating System</title>
+
+    <meta name="description"
+        content="The xyz operating system landing page." />
+    <meta name="keywords" content="xyz os zx spectrum sinclair rom" />
+    <meta property="og:title" content="xyz" />
+    <meta property="og:description"
+        content="The xyz operating system landing page." />
+    <meta property="og:type" content="website" />
+
+    <link rel="stylesheet" href="latex.css" />
+    <link rel="stylesheet" href="prism/prism.css" />
+    <link rel="stylesheet" href="menu.css" />
+</head>
+
+<body id="top">
+
+    <header>
+        <h1><span class="latex">The xyz</h1>
+        <p class="author">
+            Tomaz Stih <br/>
+            June 2021
+        </p>
+    </header>
+
+    <div class="abstract">
+        <h2>Abstract</h2>
+        <p>
+            This is the documentation for the xyz - <br/>a preemptive 
+            multitasking operating system for Sinclair ZX Spectrum 48K.<br/> 
+            The source code can be found on GitHub at
+            <a href="https://github.com/tstih/xyz">https://github.com/tstih/xyz</a>.
+        </p>
+    </div>
+
+    <nav role="navigation" class="toc">
+        <h2>Contents</h2>
+        <ol>
+            <li><a href="#getting-started">Getting Started</a></li>
+            <li><a href="#language-support">Language Support</a></li>
+        </ol>
+    </nav>
+
+    <main>
+        <article>
+            <h2 id="getting-started">Getting Started</h2>
+            <p>
+            How to compile and install xyz.
+            </p>
+        </article>
+    </main>
+
+    <script>
+        MathJax = {
+            tex: {
+            inlineMath: [['$', '$'],],
+            },
+        }
+        const toggle = document.getElementById('typeface-toggle')
+        const typeface = document.getElementById('typeface')
+        toggle.addEventListener('click', () => {
+            document.body.classList.toggle('libertinus')
+            typeface.textContent = document.body.classList.contains('libertinus') ? 'Libertinus' : 'Latin Modern'
+        })
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script async src="prism/prism.js"></script>
+
+</body>
+
 </html>
