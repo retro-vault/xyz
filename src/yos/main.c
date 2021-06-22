@@ -14,28 +14,49 @@
 #include <kbd.h>
 #include <tty.h>
 
-void main() {
-    /* TODO: Install keyboard scanner.
-       sys_vec_set(handler,RST38); */
+/* must be naked, returns with reti */
+void kbd_handler() __naked {
+    __asm
+        call    _ir_disable
+        ;; store all registers
+        push    af
+        push    bc
+        push    de
+        push    hl 
+        ;; scan keyboard
+        call    _kbd_scan
+        ;; restore regs and allow interrupt again
+        pop     hl
+        pop     de
+        pop     bc
+        pop     af
+        call    _ir_enable
+        reti
+    __endasm;
+}
 
-    /* Clear screen and set border and paper. */
+void main() {
+    /* install keyboard scanner */
+    sys_vec_set(kbd_handler,RST38); 
+
+    /* clear screen and set border and paper */
     tty_cls();
 
-    /* Fill the screen with letters. */
+    /* fill the screen with letters */
     for(int x=0;x<42;x++)
         for(int y=0;y<32;y++) {
             tty_xy(x,y);
             tty_putc('A'+y);
         }
 
-    /* let's try to scan keyboard without a vector */
-    bool kbhit=false;
-    while (!kbhit) {
-        kbd_scan();
-        kbhit=kbd_read();
-    }
+    /* wait for keyboard */
+    while (!kbd_read());
 
-     /* Scroll them all off the screen. */
+     /* scroll them all off the screen */
     for (int y=0;y<32;y++)
         tty_scroll();
+
+    /* goto 0,0 */
+    tty_xy(0,31);
+    tty_puts("XYZ OS 0.1\n(c) 2021 TOMAZ STIH\n\nREADY?");
 }

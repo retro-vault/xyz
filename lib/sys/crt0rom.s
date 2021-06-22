@@ -141,11 +141,13 @@ _sys_vec_get::
 		;; extern void ir_disable();
 		;; -------------------------
         ;; executes di with ref count.
-        ;; affects: hl
-_ir_disable::		
+        ;; affects: -
+_ir_disable::	
 		di
+        push    hl
 		ld		hl,#ir_refcount
 		inc		(hl)
+        pop     hl
 		ret
 
 
@@ -153,8 +155,9 @@ _ir_disable::
 		;; extern void ir_enable();
 		;; ------------------------
         ;; executes ei with ref count.
-        ;; affects: af
-_ir_enable::		
+        ;; affects: -
+_ir_enable::
+        push    af
 		ld		a,(#ir_refcount)
 		or		a
 		jr		z,do_ei					; if a==0 then just ei		
@@ -165,6 +168,7 @@ _ir_enable::
 do_ei:		
 		ei
 dont_ei:	
+        pop     af
 		ret
 
 

@@ -15,6 +15,8 @@
         .globl  _tty_cls
         .globl  _tty_scroll
         .globl  _tty_xy
+        .globl  _tty_putc
+        .globl  _tty_puts
 
         ;; variables
         .globl  _tty_x
@@ -26,8 +28,8 @@
 
         CWIDTH  =   0x06
         CHEIGHT =   0x06
-        XMAX    =   246
-        YMAX    =   186
+        CXMAX   =   41
+        CYMAX   =   31
 
         BDRPORT =   0xfe
         VMEMBEG =   0x4000
@@ -37,6 +39,8 @@
         BYTSROW =   32                  ; bytes per screen row
 
         FASCII  =   32
+        LF      =   0x0A
+        CR      =   0x0D
 
         .area   _CODE
 
@@ -63,7 +67,7 @@ _tty_scroll::
         ld      hl,#SCRROW6             ; scan line 6
         ld      bc,#BYTSROW             ; bytes to transfer
         ;; move 186 lines (192 - 6)
-        ld      a,#YMAX
+        ld      a,#186
 ls_loop:
         push    af
         push    bc
@@ -135,6 +139,7 @@ _tty_putc::
         ;; restore stack after obtaining parameters
         push    de
         push    hl
+putc_raw:
         ;; make hl point to correct character
         ld      a,e                     ; char ascii to a
         sub     #FASCII                 ; minus first ascii
@@ -294,6 +299,58 @@ pch_no_alt:
         ret
 
 
+        ;; -------------------------------
+        ;; extern void tty_puts(string s);
+        ;; -------------------------------
+        ;; draws a string, this function updates 
+        ;; cursor position and respects escape sequences:
+        ;; \n, \r
+_tty_puts::
+        ;; get ptr to string to hl
+        pop     de                      ; ret address
+        pop     hl                      ; ptr to string
+        ;; restore stack
+        push    hl
+        push    de
+puts_loop:
+        ld      a,(hl)                  ; a = ascii
+        cp      #0                      ; end of string?
+        ret     z                       ; return if done...
+        push    hl                      ; store current ptr.
+        cp      #LF                     ; line feed?
+        jr      z, linefeed
+        ld      e,a                     ; ascii to e
+        call    putc_raw                ; to screen
+        ld      a,(#_tty_x)             ; a=x
+        cp      #CXMAX                  ; x==max x?
+        jr      z,linefeed              ; linefeed
+        inc     a                       ; increase x
+        ld      (#_tty_x),a             ; and store it
+nextch:
+        pop     hl                      ; pointer to next char
+        inc     hl                      ; prepare for next char
+        jr      puts_loop               ; and next
+linefeed:
+        call    newline
+        jr      nextch
+newline:
+        ld      a,(#_tty_y)             ; get y coord.
+        cp      #CYMAX                  ; last row?
+        jr      nz,nl_add
+        ;; we need to scroll
+        push    af                      ; store y
+        call    _tty_scroll
+        pop     af
+        jr      nl_update
+nl_add:
+        inc     a                       ; y++
+nl_update:
+        ld      (#_tty_y),a             ; store new y
+        xor     a                       ; a=0
+        ld      (#_tty_x),a             ; and new x
+        ret
+
+
         .area _INITIALIZED
 _tty_x:: 
         .ds     1
@@ -306,5 +363,3 @@ init_tty_x:
         .byte   0
 init_tty_y:
         .byte   0
-
-        

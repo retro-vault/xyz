@@ -19,6 +19,17 @@
 		BUFSIZE	= 0x20					; 32 bytes of keyb. buffer
 
 
+        ;; -----------------------
+        ;; extern void kbc_scan();
+        ;; -----------------------
+        ;; scans the keyboard and puts all new
+        ;; key down / key up events into the
+        ;; keyboard buffer
+        ;; NOTES:
+        ;;  if you use this inside interrupt call,
+        ;;  make sure you store registers and disable
+        ;;  interrupts first.
+        ;; affects: af, hl, de, bc
 		.area	_CODE
 _kbd_scan::	
 		ld		hl,#kbd_prev_scan
@@ -112,11 +123,12 @@ qkey_end:
 		pop		bc
 		ret
 
-		;; -----------------------
-		;; extern byte kbd_read();
-		;; -----------------------
+		;; --------------------------
+		;; extern uint8_t kbd_read();
+		;; --------------------------
+        ;; reads next key event from the keyboard
+        ;; buffer. 
 _kbd_read::
-		call	_ir_disable			    ; could be interrupted by _kbd_scan
 		ld		a,(#_kbd_buff+2)		; a=count
 		cp		#0						; is it zero?
 		jr		z,kr_empty				; no data in buffer
@@ -139,9 +151,8 @@ kr_proceed:
 		ld		l,b						; return char
 		jr		kr_end					; game over
 kr_empty:
-		ld		l,#0x00					; key not found
+		ld		hl,#0					; key not found
 kr_end:	
-		call	_ir_enable			    ; enable (again)
 		ret
 
 		.area	_INITIALIZED

@@ -39,4 +39,7 @@ extern int tty_getc(bool block);
 /* scroll up 1 row */
 extern void tty_scroll();
 
+/* print string */
+extern void tty_puts(const char* s);
+
 #endif /* __TTY_H__ */
