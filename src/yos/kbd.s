@@ -16,7 +16,7 @@
         .globl  _kbd_buff
 
 	
-		BUFSIZE	= 0x20					; 32 bytes of keyb. buffer
+		.equ    BUFSIZE, 0x20           ; 32 bytes of keyb. buffer
 
 
         ;; -----------------------
@@ -94,7 +94,7 @@ next_key:
 		pop		de		
 		ret
 		;; queue key in a 
-queue_key::
+queue_key:
 		push	bc
 		push	de
 		push	hl
@@ -149,6 +149,9 @@ _kbd_read::
 kr_proceed:
 		ld		(#_kbd_buff),a			; ...and store
 		ld		l,b						; return char
+        ;; return code 0 means no key so key code has
+        ;; to be 1 based (i.e. start with 1)
+        inc     l
 		jr		kr_end					; game over
 kr_empty:
 		ld		hl,#0					; key not found

@@ -59,4 +59,14 @@ void main() {
     /* goto 0,0 */
     tty_xy(0,31);
     tty_puts("XYZ OS 0.1\n(c) 2021 TOMAZ STIH\n\nREADY?");
+
+    /* we'll print this */
+    char c, s[]={0,0};
+    while (true) {
+        c=tty_getc();
+        if (c) {
+            s[0]=c;
+            tty_puts(s);
+        }
+    }
 }

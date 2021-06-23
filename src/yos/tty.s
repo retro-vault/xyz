@@ -16,6 +16,7 @@
         .globl  _tty_scroll
         .globl  _tty_xy
         .globl  _tty_putc
+        .globl  _tty_getc
         .globl  _tty_puts
 
         ;; variables
@@ -23,24 +24,29 @@
         .globl  _tty_y
         
         ;; constants
-        BLACK   =   0x00
-        GREEN   =   0x04
+        .equ    BLACK, 0x00
+        .equ    GREEN, 0x04
 
-        CWIDTH  =   0x06
-        CHEIGHT =   0x06
-        CXMAX   =   41
-        CYMAX   =   31
+        .equ    CWIDTH, 0x06
+        .equ    CHEIGHT, 0x06
+        .equ    CXMAX, 41
+        .equ    CYMAX, 31
 
-        BDRPORT =   0xfe
-        VMEMBEG =   0x4000
-        ATTRSZE =   0x02ff
-        VMEMSZE =   0x1800
-        SCRROW6 =   0x4600              ; screen row 6
-        BYTSROW =   32                  ; bytes per screen row
+        .equ    BDRPORT, 0xfe
+        .equ    VMEMBEG, 0x4000
+        .equ    ATTRSZE, 0x02ff
+        .equ    VMEMSZE, 0x1800
+        .equ    SCRROW6, 0x4600         ; screen row 6
+        .equ    BYTSROW, 32             ; bytes per screen row
 
-        FASCII  =   32
-        LF      =   0x0A
-        CR      =   0x0D
+        .equ    FASCII, 32
+        .equ    LF, 0x0A
+        .equ    CR, 0x0D
+
+        .equ    KEY_DOWN_BIT, 0b01000000
+        .equ    KEY_CODE,     0b00111111
+        .equ    KEY_CAPS,     0x1d
+        .equ    KEY_SYMB,     0x17
 
         .area   _CODE
 
@@ -155,7 +161,7 @@ putc_raw:
         add     hl,de                   ; hl points to correct char
         ex      de,hl                   ; de=start of char
         ;; calculate correct row
-        ld      a,(#_tty_y)             ; get y, low res.
+        ld      a,(_tty_y)              ; get y, low res.
         sla     a                       ; *2
         ld      b,a                     ; store
         sla     a                       ; *4
@@ -166,7 +172,7 @@ putc_raw:
         ;; we need to multiply by 6, add 2 (offset)
         ;; and then divide by 8 to get the correct
         ;; byte
-        ld      a,(#_tty_x)             ; x into a
+        ld      a,(_tty_x)              ; x into a
         sla     a                       ; a=a*2
         ld      b,a
         sla     a                       ; a=a*4
@@ -321,11 +327,11 @@ puts_loop:
         jr      z, linefeed
         ld      e,a                     ; ascii to e
         call    putc_raw                ; to screen
-        ld      a,(#_tty_x)             ; a=x
+        ld      a,(_tty_x)              ; a=x
         cp      #CXMAX                  ; x==max x?
         jr      z,linefeed              ; linefeed
         inc     a                       ; increase x
-        ld      (#_tty_x),a             ; and store it
+        ld      (_tty_x),a              ; and store it
 nextch:
         pop     hl                      ; pointer to next char
         inc     hl                      ; prepare for next char
@@ -334,7 +340,7 @@ linefeed:
         call    newline
         jr      nextch
 newline:
-        ld      a,(#_tty_y)             ; get y coord.
+        ld      a,(_tty_y)              ; get y coord.
         cp      #CYMAX                  ; last row?
         jr      nz,nl_add
         ;; we need to scroll
@@ -345,10 +351,141 @@ newline:
 nl_add:
         inc     a                       ; y++
 nl_update:
-        ld      (#_tty_y),a             ; store new y
+        ld      (_tty_y),a              ; store new y
         xor     a                       ; a=0
-        ld      (#_tty_x),a             ; and new x
+        ld      (_tty_x),a              ; and new x
         ret
+
+
+        ;; ----------------------------
+        ;; extern int tty_putc();
+        ;; ----------------------------
+        ;; gets next character from keyb. buffer,
+        ;; returns 0 if buffer empty.
+        ;; affects: af, bc, de, hl
+_tty_getc::
+        call    _kbd_read               ; key waiting?
+        ld      h,#0
+        ld      a,l                     ; key to l
+        or      a                       ; is zero?
+        ret     z                       ; no key...
+        dec     l                       ; make key code 0 based
+        ld      a,l                     ; back o a
+        and     #KEY_DOWN_BIT           ; is key down or up?
+        jr      nz, tgc_key_down        ; key is down
+        ;; key up means you need to select 
+        ;; correct key map and map the key code.
+        ld      a,l                     ; key back into a...
+        call    tgc_check_ctl           ; check symb. and caps
+        or      a                       ; a=0=>normal char
+        jr      z, _tty_getc            ; ignore
+        ld      b,a                     ; store ctrl to b
+        ld      a,(_tty_ctl_key)        ; current ctl keys
+        ld      c,a                     ; store to c
+        ld      a,b                     ; control key back
+        cpl                             ; complement it
+        and     c                       ; delete in a
+        ld      (_tty_ctl_key),a        ; write into mem.
+        jr      _tty_getc               ; next queued key...
+tgc_key_down::
+        ld      a,l                     ; key code to a
+        call    tgc_check_ctl           ; check symb. and caps
+        or      a                       ; is a 0?
+        jr      z,tgc_char_down         ; if char down get it!
+        ;; if we are here then it is symbol or caps
+        ld      b,a                     ; store ctrl to b
+        ld      a,(_tty_ctl_key)        ; current ctl keys
+        or      b                       ; set correct bit
+        ld      (_tty_ctl_key),a        ; write into mem.
+        jr      _tty_getc               ; next queued key...
+tgc_char_down:
+        ld      a,(_tty_ctl_key)        ; get control key
+        ld      b,l                     ; store l
+        ld      hl,#key_map             ; basic key map (no control keys)
+        ld      de,#40                  ; map size (...to next map)
+tgc_next_map:        
+        or      a                       ; test a
+        jr      z, tgc_map_sel
+        add     hl,de                   ; next map
+        dec     a
+        jr      tgc_next_map            ; and loop
+tgc_map_sel:
+        ;; map is in hl, key is in b
+        ld      d,#0
+        ld      a,b         
+        and     #~KEY_DOWN_BIT          ; remove key down bit
+        ld      e,a                     ; to e
+        add     hl,de                   ; add key to hl
+        ld      a,(hl)                  ; get mapped key
+        ;; store to hl and return
+        ld      h,#0
+        ld      l,a
+        ret        
+        ;; checks if key in a is control
+        ;; return a=0...normal key,
+        ;; a=1/2 symb/caps
+tgc_check_ctl:
+        and     #~KEY_DOWN_BIT          ; remove key down bit
+        cp      #KEY_CAPS 
+        jr      nz,tgc_check_symb
+        ld      a,#2                    ; caps on
+        ret
+tgc_check_symb:
+        cp      #KEY_SYMB
+        jr      nz,tgc_normal_key
+        ld      a,#1
+        ret
+tgc_normal_key:
+        xor     a
+        ret
+
+
+		;; key maps	
+        ;; from keyboard scan codes to
+        ;; ascii characters (respects
+        ;; control keys)	
+		;; 0x0d ... enter
+		;; 0x20 ... space
+		;; 0x01 ... symbol shift
+		;; 0x02 ... caps shift
+		;; 0x03 ... symbol + undefined
+		;; 0x04 ... caps + undefined
+		;; 0x08 ... backspace
+		;; 0x09 ... left
+		;; 0x0a ... down
+		;; 0x0b ... up
+		;; 0x0c ... right
+		;; 0x61 ... pound symbol
+		;; 0x21 ... single quote
+key_map:	
+		.byte '5',   '4',   '3',   '2',   '1'
+		.byte '6',   '7',   '8',   '9',   '0'
+		.byte 'y',   'u',   'i',   'o',   'p'
+		.byte 'h',   'j',   'k',   'l',   0x0d 	
+		.byte 'b',   'n',   'm',    0x01, 0x20
+		.byte 'v',   'c',   'x',   'z',   0x02
+		.byte 'g',   'f',   'd',   's',   'a'
+		.byte 't',   'r',   'e',   'w',   'q'
+
+key_map_sym:	
+		.byte '%',   '$',   '#',   '@',   '!'
+		.byte '&',   0x27,  '(',   ')',   '_'
+		.byte '[',   ']',   0x80,  ';',   '"'
+		.byte 0x5e,  '-',   '+',   '=',   0x0d 
+		.byte '*',   ',',   '.',   0x01,  0x20	
+		.byte '/',   '?',   0x61,  ':',   0x02
+		.byte '}',   '{',   0x5d,  '|',   '~'
+		.byte '>',   '<',   0x60,  0x03,  0x03
+
+key_map_shf:	
+		.byte 0x09,  '4',   '3',   '2',   '1'
+		.byte 0x0a,  0x0b,  0x0c,  '9',   0x08
+		.byte 'Y',   'U',   'I',   'O',   'P'
+		.byte 'H',   'J',   'K',   'L',   0x04 
+		.byte 'B',   'N',   'M',   0x01,  0x20
+		.byte 'V',   'C',   'X',   'Z',   0x02
+		.byte 'G',   'F',   'D',   'S',   'A'
+		.byte 'T',   'R',   'E',   'W',   'Q'
 
 
         .area _INITIALIZED
@@ -356,10 +493,13 @@ _tty_x::
         .ds     1
 _tty_y:: 
         .ds     1
-
+_tty_ctl_key::
+        .ds     1
 
         .area _INITIALIZER
 init_tty_x:
         .byte   0
 init_tty_y:
+        .byte   0
+init_tty_ctl_key::
         .byte   0

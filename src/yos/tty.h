@@ -7,6 +7,8 @@
  *  - scroll in all directions
  *  - cursor handling
  *  - special character codes handling i.e. \n \r
+ *  - speccy keybord E mode (caps+sym)
+ *  - speccy keyboard auto repeat
  * 
  * MIT License (see: LICENSE)
  * copyright (C) 2021 tomaz stih
@@ -33,13 +35,13 @@ extern void tty_xy(uint8_t x, uint8_t y);
 /* print char */
 extern void tty_putc(int c);
 
-/* read keyboard (blocking/non-blocking) */
-extern int tty_getc(bool block);
+/* read keyboard (blocking!) */
+extern int tty_getc();
 
 /* scroll up 1 row */
 extern void tty_scroll();
 
-/* print string */
+/* print string  */
 extern void tty_puts(const char* s);
 
 #endif /* __TTY_H__ */
