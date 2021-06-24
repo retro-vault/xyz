@@ -18,7 +18,7 @@
 #include <tty_print.h>
 
 /* prints the string of width with flags */
-void prints(const char *string, int width, int flags)
+void _prints(const char *string, int width, int flags)
 {
 	int padchar = ' ';
 
@@ -45,7 +45,7 @@ void prints(const char *string, int width, int flags)
 }
 
 /* print the integer */
-void printi(int i, int base, int sign, int width, int flags, int letbase)
+void _printi(int i, int base, int sign, int width, int flags, int letbase)
 {
 	char print_buf[PRINT_BUF_LEN];
 	char *s;
@@ -54,7 +54,7 @@ void printi(int i, int base, int sign, int width, int flags, int letbase)
 	if (i == 0) {
 		print_buf[0] = '0';
 		print_buf[1] = '\0';
-		prints(print_buf, width, flags);
+		_prints(print_buf, width, flags);
         return;
 	}
 	if (sign && base == 10 && i < 0) {
@@ -80,10 +80,10 @@ void printi(int i, int base, int sign, int width, int flags, int letbase)
 			*--s = '-';
 		}
 	}
-	prints(s, width, flags);
+	_prints(s, width, flags);
 }
 
-void printf(const char *format, ...)
+void tty_printf(const char *format, ...)
 {
     /* handle variable args */
     va_list ap;
@@ -130,35 +130,35 @@ void printf(const char *format, ...)
 			switch (*format) {
 				case('d'):              /* decimal! */
 					u.i = va_arg(ap, int);
-					printi(u.i, 10, 1, width, flags, 'a');
+					_printi(u.i, 10, 1, width, flags, 'a');
 					break;
 
 				case('u'):              /* unsigned */
 					u.u = va_arg(ap, unsigned int);
-					printi(u.u, 10, 0, width, flags, 'a');
+					_printi(u.u, 10, 0, width, flags, 'a');
 					break;
 
 				case('x'):              /* hex */
 					u.u = va_arg(ap, unsigned int);
-					printi(u.u, 16, 0, width, flags, 'a');
+					_printi(u.u, 16, 0, width, flags, 'a');
 					break;
 
 				case('X'):              /* hex, capital */
 					u.u = va_arg(ap, unsigned int);
-					printi(u.u, 16, 0, width, flags, 'A');
+					_printi(u.u, 16, 0, width, flags, 'A');
 					break;
 
 				case('c'):              /* char */
 					u.c = va_arg(ap, int);
 					scr[0] = u.c;
 					scr[1] = '\0';
-					prints(scr, width, flags);
+					_prints(scr, width, flags);
 					break;
 
 				case('s'):              /* string */
 					u.s = va_arg(ap, char *);
                     #pragma disable_warning 196
-					prints(u.s ? u.s : "(null)", width, flags);
+					_prints(u.s ? u.s : "(null)", width, flags);
 					break;
 
 				default:

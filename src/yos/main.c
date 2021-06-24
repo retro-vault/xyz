@@ -54,8 +54,8 @@ void main() {
 
     /* goto 0,0 */
     tty_xy(0,31);
-    printf("XYZ OS 0.1 (c) 2021 TOMAZ STIH\n\n");
-    printf(
+    tty_printf("XYZ OS 0.1 (c) 2021 TOMAZ STIH\n\n");
+    tty_printf(
         "SYS HEAP: %04x  USR HEAP: %04x  FREE: %02dKB\n\nREADY?", 
         &sys_heap, 
         &heap,
@@ -66,5 +66,4 @@ void main() {
     char c;
     while (true) 
         if (c=tty_getc()) tty_putc(c);
-        
 }

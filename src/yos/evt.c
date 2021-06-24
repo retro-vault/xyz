@@ -36,7 +36,6 @@ event_t *evt_set(event_t *e, event_state_t newstate) {
         (list_item_t *)evt_first, 
         &prev, 
         list_match_eq, 
-        (uint16_t)e) ) 
-		e->state=newstate;
+        (uint16_t)e) ) e->state=newstate;
 	return e;
 }

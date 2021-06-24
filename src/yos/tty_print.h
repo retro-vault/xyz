@@ -26,6 +26,6 @@ enum flags {
 };
 
 /* THE printf */
-extern void printf(const char *format, ...);
+extern void tty_printf(const char *format, ...);
 
 #endif /* __TTY_PRINT_H__ */
