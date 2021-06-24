@@ -32,10 +32,13 @@ extern void tty_cls();
 /* move cursor to x,y */
 extern void tty_xy(uint8_t x, uint8_t y);
 
-/* print char */
+/* draw char */
+extern void tty_outc(int c);
+
+/* print char, respect \n */
 extern void tty_putc(int c);
 
-/* read keyboard (blocking!) */
+/* read keyboard (non-blocking!) */
 extern int tty_getc();
 
 /* scroll up 1 row */

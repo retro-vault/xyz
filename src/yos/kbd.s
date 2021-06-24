@@ -4,6 +4,7 @@
         ;;
         ;; NOTES:
         ;;  kbd_scan must be wired to 50Hz interrupt
+        ;;  kbd_scan should give priority to ctl keys!
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih

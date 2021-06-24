@@ -10,9 +10,12 @@
  *
  */
 #include <stdbool.h>
+
+#include <mem.h>
 #include <vectors.h>
 #include <kbd.h>
 #include <tty.h>
+#include <tty_print.h>
 
 /* must be naked, returns with reti */
 void kbd_handler() __naked {
@@ -36,37 +39,32 @@ void kbd_handler() __naked {
 }
 
 void main() {
-    /* install keyboard scanner */
+
+    /* create system and user heap  */
+    mem_init((void *)&sys_heap,1024);
+    mem_init((void *)&heap,0xffff-&sys_heap);
+
+    /* install timer */
+    
+    /* keyboard scanner is a timmer */
     sys_vec_set(kbd_handler,RST38); 
 
     /* clear screen and set border and paper */
     tty_cls();
 
-    /* fill the screen with letters */
-    for(int x=0;x<42;x++)
-        for(int y=0;y<32;y++) {
-            tty_xy(x,y);
-            tty_putc('A'+y);
-        }
-
-    /* wait for keyboard */
-    while (!kbd_read());
-
-     /* scroll them all off the screen */
-    for (int y=0;y<32;y++)
-        tty_scroll();
-
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_puts("XYZ OS 0.1\n(c) 2021 TOMAZ STIH\n\nREADY?");
+    printf("XYZ OS 0.1 (c) 2021 TOMAZ STIH\n\n");
+    printf(
+        "SYS HEAP: %04x  USR HEAP: %04x  FREE: %02dKB\n\nREADY?", 
+        &sys_heap, 
+        &heap,
+        ((0xffff-&heap)/1024)
+    );
 
     /* we'll print this */
-    char c, s[]={0,0};
-    while (true) {
-        c=tty_getc();
-        if (c) {
-            s[0]=c;
-            tty_puts(s);
-        }
-    }
+    char c;
+    while (true) 
+        if (c=tty_getc()) tty_putc(c);
+        
 }

@@ -2,9 +2,6 @@
         ;;
         ;; core tty functions
         ;;
-        ;; TODO:
-        ;;  tty_putc and tty_getc
-        ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
@@ -15,6 +12,7 @@
         .globl  _tty_cls
         .globl  _tty_scroll
         .globl  _tty_xy
+        .globl  _tty_outc
         .globl  _tty_putc
         .globl  _tty_getc
         .globl  _tty_puts
@@ -132,20 +130,20 @@ _tty_xy::
 
 
         ;; ----------------------------
-        ;; extern void tty_putc(int c);
+        ;; extern void tty_outc(int c);
         ;; ----------------------------
         ;; draw a character at current x,y
         ;; this function does not manage location i.e.
         ;; it leaves x,y untouched. it just draws the
         ;; character.
         ;; affects: af, bc, de, hl
-_tty_putc::
+_tty_outc::
         pop     hl                      ; get return address
         pop     de                      ; get char
         ;; restore stack after obtaining parameters
         push    de
         push    hl
-putc_raw:
+outc_raw:
         ;; make hl point to correct character
         ld      a,e                     ; char ascii to a
         sub     #FASCII                 ; minus first ascii
@@ -305,40 +303,39 @@ pch_no_alt:
         ret
 
 
-        ;; -------------------------------
-        ;; extern void tty_puts(string s);
-        ;; -------------------------------
-        ;; draws a string, this function updates 
-        ;; cursor position and respects escape sequences:
-        ;; \n, \r
-_tty_puts::
-        ;; get ptr to string to hl
-        pop     de                      ; ret address
-        pop     hl                      ; ptr to string
-        ;; restore stack
-        push    hl
+
+        ;; ----------------------------
+        ;; extern void tty_putc(int c);
+        ;; ----------------------------
+        ;; puts a character at current x,y
+        ;; updates x and y, scrolls if needed
+        ;; and interprets special
+        ;; symbols: \n, \r
+        ;; affects: af, bc, de, hl
+_tty_putc::
+        pop     hl                      ; get return address
+        pop     de                      ; get char
+        ;; restore stack after obtaining parameters
         push    de
-puts_loop:
-        ld      a,(hl)                  ; a = ascii
-        cp      #0                      ; end of string?
-        ret     z                       ; return if done...
-        push    hl                      ; store current ptr.
+        push    hl
+putc_raw:
+        ;; check for new line...
+        ld      a,e                     ; to a
         cp      #LF                     ; line feed?
         jr      z, linefeed
-        ld      e,a                     ; ascii to e
-        call    putc_raw                ; to screen
+        ;; TODO: check for any other control char
+        ;; print char
+        call    outc_raw
+        ;; are we at line end?
         ld      a,(_tty_x)              ; a=x
         cp      #CXMAX                  ; x==max x?
         jr      z,linefeed              ; linefeed
         inc     a                       ; increase x
         ld      (_tty_x),a              ; and store it
-nextch:
-        pop     hl                      ; pointer to next char
-        inc     hl                      ; prepare for next char
-        jr      puts_loop               ; and next
+        ret        
 linefeed:
         call    newline
-        jr      nextch
+        ret
 newline:
         ld      a,(_tty_y)              ; get y coord.
         cp      #CYMAX                  ; last row?
@@ -357,8 +354,35 @@ nl_update:
         ret
 
 
+        ;; -------------------------------
+        ;; extern void tty_puts(string s);
+        ;; -------------------------------
+        ;; draws a string, this function updates 
+        ;; cursor position and respects escape sequences:
+        ;; \n, \r
+_tty_puts::
+        ;; get ptr to string to hl
+        pop     de                      ; ret address
+        pop     hl                      ; ptr to string
+        ;; restore stack
+        push    hl
+        push    de
+puts_loop:
+        ld      a,(hl)                  ; a = ascii
+        cp      #0                      ; end of string?
+        ret     z                       ; return if done...
+        push    hl                      ; store current ptr.
+        ld      e,a                     ; ascii to e
+        call    putc_raw                ; to screen
+nextch:
+        pop     hl                      ; pointer to next char
+        inc     hl                      ; prepare for next char
+        jr      puts_loop               ; and next
+
+
+
         ;; ----------------------------
-        ;; extern int tty_putc();
+        ;; extern int tty_getc();
         ;; ----------------------------
         ;; gets next character from keyb. buffer,
         ;; returns 0 if buffer empty.
