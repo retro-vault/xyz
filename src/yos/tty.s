@@ -37,7 +37,8 @@
         .equ    SCRROW6, 0x4600         ; screen row 6
         .equ    BYTSROW, 32             ; bytes per screen row
 
-        .equ    FASCII, 32
+        .equ    FASCII, 32              ; incl.
+        .equ    LASCII, 128             ; not incl.
         .equ    LF, 0x0A
         .equ    CR, 0x0D
 
@@ -323,7 +324,11 @@ putc_raw:
         ld      a,e                     ; to a
         cp      #LF                     ; line feed?
         jr      z, linefeed
-        ;; TODO: check for any other control char
+        ;; check for any other control char
+        cp      #FASCII                 ; first ascii
+        ret     c                       ; < 32
+        cp      #LASCII                 ; >127
+        ret     nc
         ;; print char
         call    outc_raw
         ;; are we at line end?
@@ -399,6 +404,7 @@ _tty_getc::
         jr      nz, tgc_key_down        ; key is down
         ;; key up means you need to select 
         ;; correct key map and map the key code.
+tgc_key_up:
         ld      a,l                     ; key back into a...
         call    tgc_check_ctl           ; check symb. and caps
         or      a                       ; a=0=>normal char
@@ -411,7 +417,7 @@ _tty_getc::
         and     c                       ; delete in a
         ld      (_tty_ctl_key),a        ; write into mem.
         jr      _tty_getc               ; next queued key...
-tgc_key_down::
+tgc_key_down:
         ld      a,l                     ; key code to a
         call    tgc_check_ctl           ; check symb. and caps
         or      a                       ; is a 0?
@@ -517,7 +523,7 @@ _tty_x::
         .ds     1
 _tty_y:: 
         .ds     1
-_tty_ctl_key::
+_tty_ctl_key:
         .ds     1
 
         .area _INITIALIZER
@@ -525,5 +531,5 @@ init_tty_x:
         .byte   0
 init_tty_y:
         .byte   0
-init_tty_ctl_key::
+init_tty_ctl_key:
         .byte   0

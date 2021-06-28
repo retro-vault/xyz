@@ -18,6 +18,10 @@
 
 	
 		.equ    BUFSIZE, 0x20           ; 32 bytes of keyb. buffer
+        .equ    KEY_CAPS, 0x1d          ; caps code
+        .equ    KEY_SYMB, 0x17          ; symbol code
+        .equ    KEY_CODE, 0b00111111    ; bits for keys
+        .equ    KEY_DWN_BIT, 0b01000000 ; key down/up bit
 
 
         ;; -----------------------
@@ -33,6 +37,64 @@
         ;; affects: af, hl, de, bc
 		.area	_CODE
 _kbd_scan::	
+        ;; first handle special cases - caps and symbol shift
+        ;; they must be processed first to give meaning
+        ;; to keys after them (especially in emulators and
+        ;; custom keyboards that send two key codes at exactly
+        ;; the same time). 
+check_caps:
+        ld      bc,#0xfefe              ; shift row
+        in      a,(c)                   ; scan line
+        cpl                             ; if 0 then 1
+        and     #1                      ; isolate shift bit
+        ld      b,a                     ; store key state
+        ld      hl,#kbd_caps            ; get prev. state
+        xor     (hl)                    ; if the same no change
+        jr      z, kbs_check_symbol
+        ;; we have caps up or down here
+        ld      a,b                     ; get status back
+        or      a                       ; compare to itself
+        jr      nz,kbs_caps_down
+kbs_caps_up:
+        ld      a,#KEY_CAPS             ; caps
+        call    queue_key               ; queue
+        xor     a                       ; a=0
+        ld      (hl),a                  ; to previous state
+        jr      kbs_check_symbol
+kbs_caps_down:
+        ld      a,#KEY_CAPS             ; caps
+        or      #KEY_DWN_BIT            ; ...add down bit
+        call    queue_key               ; queue
+        ld      a,#1                    ; 1...
+        ld      (hl),a                  ; ...to previous state
+kbs_check_symbol:
+        ld      bc,#0x7ffe              ; shift row
+        in      a,(c)                   ; scan line
+        srl     a                       ; bit 1(symol) to bit 0
+        cpl                             ; if 0 then 1
+        and     #1                      ; isolate shift bit
+        ld      b,a                     ; store key state
+        ld      hl,#kbd_symbol          ; get prev. state
+        xor     (hl)                    ; if the same no change
+        jr      z, kbd_lines
+        ;; we have symbol up or down here
+        ld      a,b                     ; get status back
+        or      a                       ; compare to itself
+        jr      nz,kbs_sym_down
+kbs_sym_up:
+        ld      a,#KEY_SYMB             ; symbol shift
+        call    queue_key               ; queue
+        xor     a                       ; a=0
+        ld      (hl),a                  ; to previous state
+        jr      kbd_lines
+kbs_sym_down:
+        ld      a,#KEY_SYMB             ; caps
+        or      #KEY_DWN_BIT            ; ...add down bit
+        call    queue_key               ; queue
+        ld      a,#1                    ; 1...
+        ld      (hl),a                  ; ...to previous state
+kbd_lines:
+        ;; now do normal scan
 		ld		hl,#kbd_prev_scan
 		ld		d,#0					; scan lines counter 
 		ld		bc,#0xf7fe				; first scan line
@@ -85,9 +147,16 @@ rotate_keymsk:
 		push	af
 		add		d						; a=correct key code
 		dec		a
-		or		b	
+        ;; skip special cases: CAPS and SYMBOL!
+        ;; they were already handled.
+        cp      #KEY_SYMB               ; don't queue sym. shift
+        jr      z,skip_queue            ; because we already incl. it.
+        cp      #KEY_CAPS               ; and same for
+        jr      z,skip_queue            ; caps shift
+		or		b	                    ; add key down bit
 		call	queue_key
-		pop		af
+skip_queue:
+        pop		af
 		sub		d						; back to a
 next_key:
 		dec		a
@@ -99,7 +168,7 @@ queue_key:
 		push	bc
 		push	de
 		push	hl
-		ld		c,a						; store a to c
+        ld      c,a                     ; store a
 		ld		a,(#_kbd_buff+2)		; a=count
 		cp		#BUFSIZE				; is full?
 		jr		z,qkey_end				; unfortunately we lost the key...
@@ -123,6 +192,7 @@ qkey_end:
 		pop		de
 		pop		bc
 		ret
+
 
 		;; --------------------------
 		;; extern uint8_t kbd_read();
@@ -159,15 +229,24 @@ kr_empty:
 kr_end:	
 		ret
 
+
 		.area	_INITIALIZED
 kbd_prev_scan:
 		.ds		8
-_kbd_buff::
+kbd_caps:                               ; caps is down
+        .ds     1
+kbd_symbol:                             ; symbol is down
+        .ds     1
+_kbd_buff:
 		.ds		3 + BUFSIZE
 
 
 		.area 	_INITIALIZER
 init_kbd_prev_scan:
 		.byte	0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f
+init_kbd_caps:
+        .byte   0x00
+init_kbd_symbol:
+        .byte   0x00
 init_kbd_buff:
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
