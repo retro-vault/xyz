@@ -12,9 +12,9 @@
 		;; 2014-09-17   tstih
 		.module kbd
 		
-		.globl  _kbd_scan
+		.globl  __kbd_scan
+        .globl  __kbd_buff
 		.globl  _kbd_read
-        .globl  _kbd_buff
 
 	
 		.equ    BUFSIZE, 0x20           ; 32 bytes of keyb. buffer
@@ -36,7 +36,7 @@
         ;;  interrupts first.
         ;; affects: af, hl, de, bc
 		.area	_CODE
-_kbd_scan::	
+__kbd_scan::	
         ;; first handle special cases - caps and symbol shift
         ;; they must be processed first to give meaning
         ;; to keys after them (especially in emulators and
@@ -165,28 +165,28 @@ next_key:
 		ret
 		;; queue key in a 
 queue_key:
-		push	bc
-		push	de
-		push	hl
+		push    bc
+		push    de
+		push    hl
         ld      c,a                     ; store a
-		ld		a,(#_kbd_buff+2)		; a=count
-		cp		#BUFSIZE				; is full?
-		jr		z,qkey_end				; unfortunately we lost the key...
-		ld		hl,(#_kbd_buff)			; l=start, h=end
-		ld		de,#_kbd_buff+3			; de is start of kbd buffer
-		ld		l,h						; l=end
-		ld		h,#0					; hl=end
-		add		hl,de					; hl=buffer address
-		ld		(hl),c					; key to buffer
-		inc		a						; count++
-		ld		(#_kbd_buff+2),a		; store count
-		ld		a,(#_kbd_buff+1)		; a=end
-		inc		a						; end++
-		cp		#BUFSIZE				; beyond the edge?
-		jr		nz,qk_proceed
-		xor		a						; a=0
+		ld      a,(#__kbd_buff+2)       ; a=count
+		cp      #BUFSIZE                ; is full?
+		jr      z,qkey_end              ; unfortunately we lost the key...
+		ld      hl,(#__kbd_buff)        ; l=start, h=end
+		ld      de,#__kbd_buff+3        ; de is start of kbd buffer
+		ld      l,h                     ; l=end
+		ld      h,#0                    ; hl=end
+		add     hl,de                   ; hl=buffer address
+		ld      (hl),c                  ; key to buffer
+		inc     a                       ; count++
+		ld      (#__kbd_buff+2),a       ; store count
+		ld      a,(#__kbd_buff+1)       ; a=end
+		inc     a                       ; end++
+		cp      #BUFSIZE                ; beyond the edge?
+		jr      nz,qk_proceed
+		xor     a                       ; a=0
 qk_proceed:
-		ld		(#_kbd_buff+1),a		; store end
+		ld      (#__kbd_buff+1),a       ; store end
 qkey_end:
 		pop		hl
 		pop		de
@@ -200,25 +200,25 @@ qkey_end:
         ;; reads next key event from the keyboard
         ;; buffer. 
 _kbd_read::
-		ld		a,(#_kbd_buff+2)		; a=count
+		ld		a,(#__kbd_buff+2)		; a=count
 		cp		#0						; is it zero?
 		jr		z,kr_empty				; no data in buffer
 		; get the char
-		ld		hl,(#_kbd_buff)			; l=start, h=end
-		ld		de,#_kbd_buff+3			; de is start of kbd buffer
+		ld		hl,(#__kbd_buff)        ; l=start, h=end
+		ld		de,#__kbd_buff+3        ; de is start of kbd buffer
 		ld		h,#0x00					; l=start, h=0
 		add		hl,de					; hl points to correct place
 		ld		b,(hl)					; get char to b
 		; decrease counter, increase start
 		dec		a
-		ld		(#_kbd_buff+2),a
-		ld		a,(#_kbd_buff)			; a=start
+		ld		(#__kbd_buff+2),a
+		ld		a,(#__kbd_buff)			; a=start
 		inc		a
 		cp 		#BUFSIZE				; end of buffer?
 		jr		nz,kr_proceed
 		xor		a						; reset start
 kr_proceed:
-		ld		(#_kbd_buff),a			; ...and store
+		ld		(#__kbd_buff),a			; ...and store
 		ld		l,b						; return char
         ;; return code 0 means no key so key code has
         ;; to be 1 based (i.e. start with 1)
@@ -237,7 +237,7 @@ kbd_caps:                               ; caps is down
         .ds     1
 kbd_symbol:                             ; symbol is down
         .ds     1
-_kbd_buff:
+__kbd_buff:
 		.ds		3 + BUFSIZE
 
 

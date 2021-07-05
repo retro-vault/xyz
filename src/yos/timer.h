@@ -30,7 +30,7 @@ typedef struct timer_s
 } timer_t;
 
 /* first timer in a linked list */
-extern timer_t *tmr_first;
+extern timer_t *_tmr_first;
 
 /* install timer */
 extern timer_t *tmr_install(void (*hook)(), uint16_t ticks, void *owner);
@@ -40,6 +40,6 @@ extern timer_t *tmr_uninstall(timer_t *t);
 
 /* call this function inside your interrupt to 
    execute all times that are due */
-extern void tmr_chain();
+extern void _tmr_chain();
 
 #endif /* __TIMER_H__ */

@@ -16,7 +16,7 @@
 #include <list.h>
 
 /* good lord (=the operating system) will provide */
-extern void *sys_heap;
+extern void *_sys_heap;
 
 /* sysobject is binary compatible with list header */
 typedef struct sysobj_s {

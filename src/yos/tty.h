@@ -5,8 +5,7 @@
  * 
  * TODO:
  *  - scroll in all directions
- *  - cursor handling
- *  - special character codes handling i.e. \n \r
+ *  - special character codes handling i.e. \t \r
  *  - speccy keybord E mode (caps+sym)
  *  - speccy keyboard auto repeat
  * 
@@ -22,15 +21,19 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-extern void * tty_font;
-extern uint8_t * tty_x;
-extern uint8_t * tty_y;
+/* attributes for tty_attr */
+#define AT_NONE         0x00
+#define AT_UNDERLINE    0x01
+#define AT_INVERSE      0x02
 
 /* clear screen */
 extern void tty_cls();
 
 /* move cursor to x,y */
 extern void tty_xy(uint8_t x, uint8_t y);
+
+/* set attributes */
+extern void tty_attr(uint8_t attr);
 
 /* draw char */
 extern void tty_outc(int c);
@@ -46,5 +49,14 @@ extern void tty_scroll();
 
 /* print string  */
 extern void tty_puts(const char* s);
+
+/* internal cursor function to xor cursor on screen */
+extern void _tty_tick_cursor();
+
+/* hide (unconditionally) cursor */
+extern void tty_hide_cursor();
+
+/* show cursor if enabled */
+extern void tty_show_cursor();
 
 #endif /* __TTY_H__ */

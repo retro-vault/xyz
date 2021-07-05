@@ -12,14 +12,15 @@
         .globl  _tty_cls
         .globl  _tty_scroll
         .globl  _tty_xy
+        .globl  _tty_attr
         .globl  _tty_outc
         .globl  _tty_putc
         .globl  _tty_getc
         .globl  _tty_puts
 
-        ;; variables
-        .globl  _tty_x
-        .globl  _tty_y
+        .globl  __tty_tick_cursor
+        .globl  _tty_show_cursor
+        .globl  _tty_hide_cursor
         
         ;; constants
         .equ    BLACK, 0x00
@@ -41,6 +42,11 @@
         .equ    LASCII, 128             ; not incl.
         .equ    LF, 0x0A
         .equ    CR, 0x0D
+        .equ    UNDERLINE, 0x01         ; first bit is underline
+        .equ    INVERSE, 0x02           ; second bit is inverse
+
+        .equ    CURSOR_ENABLED, 0x01    ; is cursor enabled? 
+        .equ    CURSOR_VISIBLE, 0x02    ; is cursor visible?
 
         .equ    KEY_DOWN_BIT, 0b01000000
         .equ    KEY_CODE,     0b00111111
@@ -130,6 +136,24 @@ _tty_xy::
         ret
 
 
+        ;; -----------------------------------
+        ;; extern void tty_attr(uint8_t attr);
+        ;; -----------------------------------
+        ;; set attribute
+        ;; affects: af, bc, de, hl
+_tty_attr::
+        ;; grab parameters from stack
+        pop     de                      ; ret address
+        pop     bc                      ; c=attr
+        ;; restore stack
+        push    bc
+        push    de
+        ;; write to memory
+        ld      a,c
+        ld      (#_tty_at),a
+        ret
+
+
         ;; ----------------------------
         ;; extern void tty_outc(int c);
         ;; ----------------------------
@@ -144,8 +168,8 @@ _tty_outc::
         ;; restore stack after obtaining parameters
         push    de
         push    hl
-outc_raw:
-        ;; make hl point to correct character
+outc_ascii:
+        ;; make de point to correct character
         ld      a,e                     ; char ascii to a
         sub     #FASCII                 ; minus first ascii
         ld      h,#0                    ; high=0
@@ -159,6 +183,9 @@ outc_raw:
         ld      hl,#_tty_font           ; font start
         add     hl,de                   ; hl points to correct char
         ex      de,hl                   ; de=start of char
+        ;; draws char pointed by de at x,y
+        ;; d' has attribute
+outc_raw:
         ;; calculate correct row
         ld      a,(_tty_y)              ; get y, low res.
         sla     a                       ; *2
@@ -238,6 +265,9 @@ no_clip:
         ld      a,(hl)                  ; data
         call    pch_to_screen
         ;; scan line 5
+        ld      a,(_tty_at)             ; get attribute
+        and     #UNDERLINE              ; is it underline?
+        jr      nz, oc_ul
         ld      a,(hl)                  ; data
         inc     hl
         ld      b,(hl)                  ; data byte 2
@@ -246,6 +276,11 @@ no_clip:
         srl     a
         rr      b
         ld      a,b                     ; a=data
+        jr      oc_ul_chk_end
+        ;; underline!
+oc_ul:
+        ld      a,#0xfc 
+oc_ul_chk_end:
         call    pch_to_screen
         pop     bc
         ret
@@ -280,6 +315,7 @@ pch_shift:
 pch_sh_done:
         ld      a,d                     ; first mask to a
         and     (hl)                    ; mask AND screen
+        call    oc_chk_inverse
         or      b                       ; OR data
         ld      (hl),a                  ; back to screen
         ;; TODO: we only need second byte
@@ -289,9 +325,12 @@ pch_sh_done:
         jr      nz, pch_skip2           ; skip 2nd byte
         ex      af,af'
         inc     hl                      ; next byte
-        ld      a,e                     ; second mask
+        ld      d,e                     ; mask to d (again)
+        ld      a,d                     ; second mask
         and     (hl)                    ; mask AND screen
-        or      c                       ; and data
+        ld      b,c                     ; c to b
+        call    oc_chk_inverse
+        or      b                       ; and data
         ld      (hl),a                  ; to screen
         dec     hl                      ; vmem pointer back
         jr      pch_no_alt
@@ -301,6 +340,93 @@ pch_no_alt:
         call    vid_nextrow             ; next row
         pop     de                      ; restore de
         ex      de,hl                   ; toggle de and hl
+        ret
+        ;; value is in b, if inv is on 
+        ;; then it will cpl it
+oc_chk_inverse:
+        push    bc                      ; store b=value
+        push    de                      ; store mask
+        exx
+        pop     de                      ; restore mask
+        pop     bc                      ; restore b as b'
+        ld      l,a                     ; store a to l'
+        ld      a,(_tty_at)             ; get attribute
+        and     #INVERSE                ; inverse?
+        jr      z, oc_inv_chk_end
+        ;; inverse!
+        ld      a,b                     ; value to a
+        cpl
+        xor     d                       ; complement d
+        ld      b,a                     ; to b
+oc_inv_chk_end:
+        ld      a,l                     ; restore a
+        push    bc
+        push    de
+        exx
+        pop     de
+        pop     bc
+        ret
+
+
+        ;; ------------------------------
+        ;; extern void tty_tick_cursor();
+        ;; ------------------------------
+        ;; blink cursor at x,y
+        ;; if shown then it is hiddena and
+        ;; vice versa
+__tty_tick_cursor::
+        call    _ir_disable             ; no interrupts
+        ld      a,(_tty_cur_sts)        ; get cursor status
+        and     #CURSOR_ENABLED         ; is it enabled?
+        jr      z, ttc_done             ; disabled...finish
+
+        
+
+ttc_done:
+        call    _ir_enable              ; interrupts
+        ret
+
+
+        ;; ------------------------------
+        ;; extern void tty_hide_cursor();
+        ;; ------------------------------
+        ;; hides cursor, unconditionally
+_tty_hide_cursor::
+        call    _ir_disable             ; no interrupts
+        ld      a,(_tty_cur_sts)        ; current status
+        and     #CURSOR_VISIBLE         ; is it visible?
+        jr      z, thc_done             ; cursor not on screen
+        ;; calling tick will hide (xor) it
+        call    __tty_tick_cursor
+thc_done:
+        xor     a                       ; cursor invisible & disabled
+        ld      (_tty_cur_sts),a        ; set cursor status
+        call    _ir_enable              ; enable interrupts (again!)
+        ret
+
+
+        ;; ------------------------------
+        ;; extern void tty_show_cursor();
+        ;; ------------------------------
+        ;; shows cursor, set blink state
+_tty_show_cursor::
+        call    _ir_disable             ; no interrupts
+        ld      a,(_tty_cur_sts)        ; are we visible?
+        and     #CURSOR_ENABLED         ; is it enabled?
+        jr      z,tsc_just_flag         ; just the flag
+        ;; if we are here it's enabled...
+        ;; check if we are already visible
+        ld      a,(_tty_cur_sts)        ; get status again
+        and     #CURSOR_VISIBLE         ; are we visible
+        jr      nz,tsc_just_flag        ; exit
+        ;; if we are here, it's enabled and invisible
+        ;; so do a tick...
+        call    __tty_tick_cursor
+tsc_just_flag:
+        ld      a,(_tty_cur_sts)        ; get status
+        or      #CURSOR_VISIBLE         ; or it
+        ld      (_tty_cur_sts),a        ; and write it ack
+        call    _ir_enable
         ret
 
 
@@ -330,7 +456,7 @@ putc_raw:
         cp      #LASCII                 ; >127
         ret     nc
         ;; print char
-        call    outc_raw
+        call    outc_ascii
         ;; are we at line end?
         ld      a,(_tty_x)              ; a=x
         cp      #CXMAX                  ; x==max x?
@@ -519,9 +645,13 @@ key_map_shf:
 
 
         .area _INITIALIZED
-_tty_x:: 
+_tty_x: 
         .ds     1
-_tty_y:: 
+_tty_y:
+        .ds     1
+_tty_at:
+        .ds     1
+_tty_cur_sts:
         .ds     1
 _tty_ctl_key:
         .ds     1
@@ -531,5 +661,9 @@ init_tty_x:
         .byte   0
 init_tty_y:
         .byte   0
+init_tty_at:
+        .byte   0
+init_tty_cur_sts:
+        .byte   0x01
 init_tty_ctl_key:
         .byte   0

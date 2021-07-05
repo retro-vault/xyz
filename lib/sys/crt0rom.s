@@ -10,12 +10,12 @@
 
 		.globl	_ir_enable
 		.globl	_ir_disable
-        .globl  _sys_vec_tbl
+        .globl  __sys_vec_tbl
         .globl  _sys_vec_set
         .globl  _sys_vec_get
-        .globl  _sys_stack
-        .globl  _sys_heap
-        .globl  _heap
+        .globl  __sys_stack
+        .globl  __sys_heap
+        .globl  __heap
 
         .area   _HEADER (ABS)
         .org    0x0000
@@ -73,7 +73,7 @@ nmiret:
         retn
 
 init:
-        ld      sp,#_sys_stack          ; now sp to OS stack (on bss)
+        ld      sp,#__sys_stack         ; now sp to OS stack (on bss)
         call    gsinit                  ; init static vars
 
         ;; start interrupts
@@ -94,15 +94,15 @@ tarpit:
         ;; affects: bc, de, hl
 _sys_vec_set::
         call    _ir_disable
-		pop		hl						; ret address / ignore
-		pop		bc						; bc = handler
-		pop		de						; d = undefined, e = vector number
+		pop		hl                      ; ret address / ignore
+		pop		bc                      ; bc = handler
+		pop		de                      ; d = undefined, e = vector number
 		;; restore stack
 		push	de
 		push	bc
 		push	hl
-		ld		d,#0x00					; de = 16 bit vector number
-		ld		hl,#_sys_vec_tbl		; vector table start
+		ld		d,#0x00                 ; de = 16 bit vector number
+		ld		hl,#__sys_vec_tbl       ; vector table start
 		add		hl,de
 		add		hl,de
 		add		hl,de
@@ -124,11 +124,11 @@ _sys_vec_get::
         call    _ir_disable
         pop     de                      ; d = undefied, e = #vector
         ld      d,#0                    ; de = 16bit vector number
-        ld      hl,#_sys_vec_tbl        ; vector table to hl
+        ld      hl,#__sys_vec_tbl       ; vector table to hl
         add		hl,de
 		add		hl,de
 		add		hl,de
-		inc		hl						; hl = hl + 3 * de + 1
+		inc		hl                      ; hl = hl + 3 * de + 1
         ld      e,(hl)                  ; vector into de
         inc     hl
         ld      d,(hl)
@@ -205,7 +205,7 @@ end_vectors:
 gsinit:
         ;; move vector table to RAM
         ld      hl,#start_vectors
-        ld      de,#_sys_vec_tbl
+        ld      de,#__sys_vec_tbl
         ld      bc,#end_vectors - #start_vectors
         ldir
 
@@ -223,7 +223,7 @@ gsinit_none:
 
         .area   _DATA
         ;; vector jump table in ram
-_sys_vec_tbl::
+__sys_vec_tbl::
 rst8:   .ds     3
 rst10:  .ds     3
 rst18:  .ds     3
@@ -237,14 +237,14 @@ nmi:    .ds     3
         .area   _BSS
         ;; 512 bytes of operating system stack
         .ds     512
-_sys_stack::
+__sys_stack::
 
 
         .area   _HEAP
-_sys_heap::
+__sys_heap::
         ;; 1KB of system heap
         .ds     1024
-_heap::
+__heap::
 
 
 		.area	_INITIALIZED

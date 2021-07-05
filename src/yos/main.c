@@ -27,7 +27,7 @@ void kbd_handler() __naked {
         push    de
         push    hl 
         ;; scan keyboard
-        call    _kbd_scan
+        call    __kbd_scan
         ;; restore regs and allow interrupt again
         pop     hl
         pop     de
@@ -41,8 +41,8 @@ void kbd_handler() __naked {
 void main() {
 
     /* create system and user heap  */
-    mem_init((void *)&sys_heap,1024);
-    mem_init((void *)&heap,0xffff-&sys_heap);
+    mem_init((void *)&_sys_heap,1024);
+    mem_init((void *)&_heap,0xffff-&_sys_heap);
 
     /* install timer */
     
@@ -52,14 +52,21 @@ void main() {
     /* clear screen and set border and paper */
     tty_cls();
 
+    tty_attr(AT_INVERSE);
+    tty_xy(10,10);
+    tty_printf("TEST");
+
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_printf("XYZ OS 0.1 (c) 2021 TOMAZ STIH\n\n");
+    tty_attr(AT_UNDERLINE);
+    tty_printf("XYZ OS");
+    tty_attr(AT_NONE);
+    tty_printf(" 0.1 (c) 2021 TOMAZ STIH\n\n");
     tty_printf(
-        "SYS HEAP: %04x  USR HEAP: %04x  FREE: %02dKB\n\nREADY?", 
-        &sys_heap, 
-        &heap,
-        ((0xffff-&heap)/1024)
+        "SYS HEAP: %04X  USR HEAP: %04X  FREE: %02dKB\n\nREADY?", 
+        &_sys_heap, 
+        &_heap,
+        ((0xffff-&_heap)/1024)
     );
 
     /* we'll print this */

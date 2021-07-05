@@ -13,7 +13,7 @@
  */
 #include <timer.h>
 
-timer_t *tmr_first=NULL;
+timer_t *_tmr_first=NULL;
 
 /* 
  * install timer hook 
@@ -21,7 +21,7 @@ timer_t *tmr_first=NULL;
 timer_t *tmr_install(void (*hook)(), uint16_t ticks, void *owner) {
 	timer_t *t;
 	if ( t = (timer_t *)so_create(
-            (void **)&tmr_first, sizeof(timer_t), owner
+            (void **)&_tmr_first, sizeof(timer_t), owner
         ) 
     ) {
 		t->hook=hook;
@@ -34,7 +34,7 @@ timer_t *tmr_install(void (*hook)(), uint16_t ticks, void *owner) {
  * remove timer hook
  */
 timer_t *tmr_uninstall(timer_t *t) {
-	return (timer_t *)so_destroy((void **)&tmr_first, (void *)t);
+	return (timer_t *)so_destroy((void **)&_tmr_first, (void *)t);
 }
 
 /*
@@ -42,8 +42,8 @@ timer_t *tmr_uninstall(timer_t *t) {
  * note: this code is called inside (already!) guarded 
  * 50 hz interrupt so no extra di/ei calls are needed.
  */
-void tmr_chain() {
-	timer_t *t=tmr_first;
+void _tmr_chain() {
+	timer_t *t=_tmr_first;
 	while(t) {
 		if (t->_tick_count==0) { /* trig it */
 			t->_tick_count=t->ticks;			

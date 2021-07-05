@@ -33,8 +33,8 @@ typedef struct block_s
     uint8_t data[1];
 } block_t;
 
-extern void *sys_heap;
-extern void *heap;
+extern void *_sys_heap;
+extern void *_heap;
 
 extern void mem_init(void *heap, uint16_t size);
 extern void *mem_allocate(void *heap, uint16_t size, void *owner);

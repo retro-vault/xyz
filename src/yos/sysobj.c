@@ -15,7 +15,7 @@
 
 void *so_create(void **first, uint16_t size, void *owner) {
 	sysobj_t *p;
-	if( p = (sysobj_t *)mem_allocate(&sys_heap, size, owner) ) {
+	if( p = (sysobj_t *)mem_allocate(&_sys_heap, size, owner) ) {
 		list_insert((list_item_t**)first, (list_item_t *)p);
 		p->owner=owner;
 	}
@@ -24,7 +24,7 @@ void *so_create(void **first, uint16_t size, void *owner) {
 
 void *so_destroy(void **first, void *e) {
 	if ( e = list_remove( (list_item_t **)first, (list_item_t *)e) ) {
-		e = mem_free(&sys_heap, e);
+		e = mem_free(&_sys_heap, e);
 	}
 	return e;
 }

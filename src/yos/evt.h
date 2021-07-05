@@ -29,7 +29,8 @@ typedef struct event_s {
 	event_state_t state;
 } event_t;
 
-extern event_t *evt_first;
+extern event_t *_evt_first;
+
 extern event_t *evt_create(void *owner);
 extern event_t *evt_destroy(event_t *e);
 extern event_t *evt_set(event_t *e, event_state_t newstate);

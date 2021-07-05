@@ -24,10 +24,10 @@ typedef struct kbd_buff_s {
 } kbd_buff_t;
 
 /* keyboard buffer */
-extern kbd_buff_t* kbd_buff;
+extern kbd_buff_t* _kbd_buff;
 
-/* call this function 50 times per second */
-extern void kbd_scan();
+/* call this service function 50 times per second */
+extern void _kbd_scan();
 
 /* checks kbd. buffer, 0 for no key available 
    otherwise internal key code 
