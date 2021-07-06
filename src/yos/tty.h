@@ -50,13 +50,13 @@ extern void tty_scroll();
 /* print string  */
 extern void tty_puts(const char* s);
 
+/* get string, max allowed chars are SSIZE_MAX */
+extern void tty_gets(const char *s);
+
 /* internal cursor function to xor cursor on screen */
-extern void _tty_tick_cursor();
+extern void _tty_cur_tick();
 
-/* hide (unconditionally) cursor */
-extern void tty_hide_cursor();
-
-/* show cursor if enabled */
-extern void tty_show_cursor();
+/* enable/disable cursor */
+extern void tty_cur_enable(bool enable);
 
 #endif /* __TTY_H__ */

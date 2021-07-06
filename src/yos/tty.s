@@ -2,6 +2,10 @@
         ;;
         ;; core tty functions
         ;;
+        ;; TODO:
+        ;;  bug when using inverse and underline together
+        ;;  finish tty_gets
+        ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
@@ -17,10 +21,10 @@
         .globl  _tty_putc
         .globl  _tty_getc
         .globl  _tty_puts
+        .globl  _tty_gets
 
-        .globl  __tty_tick_cursor
-        .globl  _tty_show_cursor
-        .globl  _tty_hide_cursor
+        .globl  __tty_cur_tick
+        .globl  _tty_cur_enable
         
         ;; constants
         .equ    BLACK, 0x00
@@ -52,6 +56,10 @@
         .equ    KEY_CODE,     0b00111111
         .equ    KEY_CAPS,     0x1d
         .equ    KEY_SYMB,     0x17
+        .equ    KEY_ENTER,    0x0d
+        .equ    KEY_DEL,      0x08
+
+        .equ    MAX_GETS_LEN, 5
 
         .area   _CODE
 
@@ -74,6 +82,11 @@ _tty_cls::
         ;; scrolls up one row
         ;; affects: af, bc, de, hl
 _tty_scroll::
+        ;; no interrupts and no cursor while scrolling
+        call    _ir_disable
+        ;; hide cursor
+        call    __tty_cur_hide
+        ;; mem addresses.
         ld      de,#VMEMBEG             ; scan line 1
         ld      hl,#SCRROW6             ; scan line 6
         ld      bc,#BYTSROW             ; bytes to transfer
@@ -112,6 +125,8 @@ ls_clrlne_loop:
         pop     af
         dec     a
         jr      nz,ls_clr_loop
+        ;; enable interrupts and return
+        call    _ir_enable
         ret
 
 
@@ -121,6 +136,8 @@ ls_clrlne_loop:
         ;; go to xy
         ;; affects: af, bc, de, hl
 _tty_xy::
+        call    _ir_disable
+        call    __tty_cur_hide
         ;; grab parameters from stack
         pop     de                      ; ret address
         pop     bc                      ; c=x, b=y
@@ -133,6 +150,7 @@ _tty_xy::
         ld      a,c
         ld      (#_tty_x),a
         ;; and done
+        call    _ir_enable
         ret
 
 
@@ -318,7 +336,7 @@ pch_sh_done:
         call    oc_chk_inverse
         or      b                       ; OR data
         ld      (hl),a                  ; back to screen
-        ;; TODO: we only need second byte
+        ;; we only need second byte
         ;; if shifts > 2
         ex      af,af'
         or      a                       ; clip?
@@ -374,61 +392,180 @@ oc_inv_chk_end:
         ;; blink cursor at x,y
         ;; if shown then it is hiddena and
         ;; vice versa
-__tty_tick_cursor::
-        call    _ir_disable             ; no interrupts
+        ;; NOTES:
+        ;;  we don't do DI/EI because it is
+        ;;  assumed that this service function
+        ;;  is called within a DI/EI guarded block!
+__tty_cur_tick::
         ld      a,(_tty_cur_sts)        ; get cursor status
         and     #CURSOR_ENABLED         ; is it enabled?
-        jr      z, ttc_done             ; disabled...finish
-
-        
-
-ttc_done:
-        call    _ir_enable              ; interrupts
+        ret     z                       ; disabled...finish
+        ;; calculate correct row
+        ld      a,(_tty_y)              ; get y, low res.
+        sla     a                       ; *2
+        ld      b,a                     ; store
+        sla     a                       ; *4
+        add     b                       ; *6
+        ld      b,a                     ; hires y to b
+        call    vid_rowaddr             ; hl=vmem addr.
+        ;; calculate required shifts
+        ;; we need to multiply by 6, add 2 (offset)
+        ;; and then divide by 8 to get the correct
+        ;; byte
+        ld      a,(_tty_x)              ; x into a
+        sla     a                       ; a=a*2
+        ld      b,a
+        sla     a                       ; a=a*4
+        add     b                       ; a=a*6
+        add     #2                      ; add offset
+        ;; now get the correct byte and shifts
+        ld      c,a                     ; store a
+        and     #0x07                   ; shifts to a
+        srl     c                       ; /2
+        srl     c                       ; /4
+        srl     c                       ; /8 
+        ld      b,#0                    ; bc=byte
+        add     hl,bc                   ; add to vmem...
+        ;; at this point
+        ;; hl=vmem start
+        ;; a=shifts
+        ;; if shifts <=2 we'll clip second byte
+        ex      af,af'
+        xor     a                       ; assume no clip
+        ex      af,af'
+        cp      #3                      ; a-3
+        jr      nc,ttc_no_clip          ; a<=2...
+        ex      af,af'
+        inc     a                       ; a=1, clip!
+        ex      af,af'
+ttc_no_clip:
+        ld      c,a                     ; num shift
+        push    bc                      ; to stack
+        ;; scan line 0
+        ld      a,(ttc_cursor)
+        call    ttc_xor
+        ld      a,(ttc_cursor+1)
+        call    ttc_xor
+        ld      a,(ttc_cursor+2)
+        call    ttc_xor
+        ld      a,(ttc_cursor+3)
+        call    ttc_xor
+        ld      a,(ttc_cursor+4)
+        call    ttc_xor
+        ld      a,(ttc_cursor+5)
+        call    ttc_xor
+        pop     bc                      ; clear stack
+        ;; finally, set cursor status
+        ld      a,(_tty_cur_sts) 
+        xor     #CURSOR_VISIBLE         ; second bit
+        ld      (_tty_cur_sts),a        ; back to status
         ret
+        ;; a=data
+        ;; hl=vmem address
+        ;; a'=clip flag
+        ;; (stack)=ret addr, shifts
+ttc_xor:
+        pop     de                      ; get ret addr
+        pop     bc                      ; get shifts (c)
+        push    bc                      ; back to stack
+        push    de                      ; and return address
+        push    hl                      ; store vmem addr
+        ld      b,a                     ; store data to b
+        ld      a,c                     ; a=num shifts
+        cp      #0                      ; no shifts?
+        jr      z,ttc_shifted           ; shift is done
+        ld      c,#0x00                 ; c=0
+ttc_shift:
+        srl     b                       ; shift data
+        rr      c                       ; 16 bits
+        dec     a                       ; a=a-1
+        jr      nz,ttc_shift            ; shift on
+ttc_shifted:
+        ;; data is shifted inside b and c
+        ld      a,b                     ; first byte to a
+        xor     (hl)                    ; xor with screen
+        ld      (hl),a                  ; back to screen
+        ;; second byte?
+        ex      af,af'
+        or      a                       ; clip?
+        jr      nz, ttc_skip2           ; skip 2nd byte
+        ex      af,af'
+        inc     hl                      ; next byte
+        ld      a,c
+        xor     (hl)                    ; XOR screen
+        ld      (hl),a                  ; to screen
+        jr      ttc_xor_done
+ttc_skip2:
+        ex      af,af'
+ttc_xor_done:
+        pop     hl                      ; restore vmem addr.
+        call    vid_nextrow             ; next row
+        ret
+ttc_cursor:
+        .byte   0xfc, 0xfc, 0xfc, 0xfc, 0xfc, 0xfc
 
 
-        ;; ------------------------------
-        ;; extern void tty_hide_cursor();
-        ;; ------------------------------
-        ;; hides cursor, unconditionally
-_tty_hide_cursor::
+        ;; hides cursor unconditionally
+__tty_cur_hide:
         call    _ir_disable             ; no interrupts
         ld      a,(_tty_cur_sts)        ; current status
         and     #CURSOR_VISIBLE         ; is it visible?
         jr      z, thc_done             ; cursor not on screen
         ;; calling tick will hide (xor) it
-        call    __tty_tick_cursor
+        call    __tty_cur_tick
 thc_done:
-        xor     a                       ; cursor invisible & disabled
+        ld      a,(_tty_cur_sts)
+        and     #CURSOR_ENABLED         ; clear other flags
         ld      (_tty_cur_sts),a        ; set cursor status
         call    _ir_enable              ; enable interrupts (again!)
         ret
 
 
-        ;; ------------------------------
-        ;; extern void tty_show_cursor();
-        ;; ------------------------------
-        ;; shows cursor, set blink state
-_tty_show_cursor::
+        ;; shows cursor unconditionally
+__tty_cur_show:
         call    _ir_disable             ; no interrupts
-        ld      a,(_tty_cur_sts)        ; are we visible?
-        and     #CURSOR_ENABLED         ; is it enabled?
-        jr      z,tsc_just_flag         ; just the flag
-        ;; if we are here it's enabled...
-        ;; check if we are already visible
+        ;; already visible?
         ld      a,(_tty_cur_sts)        ; get status again
         and     #CURSOR_VISIBLE         ; are we visible
-        jr      nz,tsc_just_flag        ; exit
+        jr      nz,tsc_done             ; exit
         ;; if we are here, it's enabled and invisible
         ;; so do a tick...
-        call    __tty_tick_cursor
-tsc_just_flag:
+        call    __tty_cur_tick
+tsc_done:
         ld      a,(_tty_cur_sts)        ; get status
         or      #CURSOR_VISIBLE         ; or it
         ld      (_tty_cur_sts),a        ; and write it ack
         call    _ir_enable
         ret
 
+
+        ;; -------------------------------------------
+        ;; extern void tty_enable_cursor(bool enable);
+        ;; -------------------------------------------
+        ;; enables/disables cursor.
+_tty_cur_enable::
+        call    _ir_disable             ; no interrupts
+        ;; grab stack arguments and restore stack
+        pop     hl                      ; ret address
+        pop     de                      ; enable flag into e
+        push    de
+        push    hl
+        ;; enable flag is in e
+        ld      a,e
+        or      a
+        jr      z, tce_disable
+        ;; enable it!
+        ld      a,(_tty_cur_sts)
+        or      #CURSOR_ENABLED         ; set enabled
+        jr      tce_theend
+tce_disable:
+        ;; hide if visible
+        call    __tty_cur_hide
+        xor     a                       ; disable and hide
+tce_theend:
+        ld      (_tty_cur_sts),a
+        call    _ir_enable
+        ret
 
 
         ;; ----------------------------
@@ -440,6 +577,8 @@ tsc_just_flag:
         ;; symbols: \n, \r
         ;; affects: af, bc, de, hl
 _tty_putc::
+        call    _ir_disable
+        call    __tty_cur_hide
         pop     hl                      ; get return address
         pop     de                      ; get char
         ;; restore stack after obtaining parameters
@@ -452,9 +591,9 @@ putc_raw:
         jr      z, linefeed
         ;; check for any other control char
         cp      #FASCII                 ; first ascii
-        ret     c                       ; < 32
+        jr      c, tpc_theend           ; < 32
         cp      #LASCII                 ; >127
-        ret     nc
+        jr      nc, tpc_theend
         ;; print char
         call    outc_ascii
         ;; are we at line end?
@@ -463,9 +602,12 @@ putc_raw:
         jr      z,linefeed              ; linefeed
         inc     a                       ; increase x
         ld      (_tty_x),a              ; and store it
+tpc_theend:
+        call    _ir_enable
         ret        
 linefeed:
         call    newline
+        call    _ir_enable
         ret
 newline:
         ld      a,(_tty_y)              ; get y coord.
@@ -510,6 +652,58 @@ nextch:
         inc     hl                      ; prepare for next char
         jr      puts_loop               ; and next
 
+
+
+        ;; -------------------------------
+        ;; extern void tty_gets(string s);
+        ;; -------------------------------
+        ;; reads a string from console until enter is pressed 
+_tty_gets::
+        ;; get ptr to string to de
+        pop     hl                      ; ret address
+        pop     de                      ; ptr to string
+        ;; restore stack
+        push    de
+        push    hl
+        ;; counter
+        ld      b,#0                    ; 0 chars
+tgs_loop:
+        push    bc                      ; store counter
+        push    de                      ; and current string address
+        call    _tty_getc               ; read char from kbd
+        pop     de                      ; restore current string addr.
+        pop     bc                      ; restore counter
+        ld      a,l                     ; char into l
+        or      a                       ; or it
+        jr      z,tgs_loop              ; no char available?
+test::
+        cp      #KEY_ENTER              ; is it enter?
+        jr      z,tgs_theend
+        cp      #KEY_DEL
+        jr      z,tgs_del
+        ;; if it's not enter and del then...
+        ;; ...check max len
+        ld      a,b                     ; len to a
+        cp      #MAX_GETS_LEN           ; compare to max len
+        jr      nc, tgs_loop            ; don't allow processing
+        ;; here we are, it's a valid key
+        ld      a,l                     ; ascii to a
+        inc     b                       ; inc char count
+        ld      (de),a                  ; to memory
+        inc     de                      ; next memory location
+        push    bc                      ; store regs
+        push    de                      
+        ld      e,a                     ; ascii to e
+        call    putc_raw                ; to screen
+        pop     de                      ; restore regs
+        pop     bc
+        jr      tgs_loop                ; and loop
+tgs_del:
+
+tgs_theend:
+        xor     a                       ; zero terminate string
+        ld      (de),a
+        ret
 
 
         ;; ----------------------------

@@ -16,9 +16,10 @@
 #include <kbd.h>
 #include <tty.h>
 #include <tty_print.h>
+#include <timer.h>
 
 /* must be naked, returns with reti */
-void kbd_handler() __naked {
+void rst38_handler() __naked {
     __asm
         call    _ir_disable
         ;; store all registers
@@ -28,6 +29,8 @@ void kbd_handler() __naked {
         push    hl 
         ;; scan keyboard
         call    __kbd_scan
+        ;; run timers
+        call    __tmr_chain
         ;; restore regs and allow interrupt again
         pop     hl
         pop     de
@@ -44,33 +47,26 @@ void main() {
     mem_init((void *)&_sys_heap,1024);
     mem_init((void *)&_heap,0xffff-&_sys_heap);
 
-    /* install timer */
+    /* install cursor timer */
+    tmr_install(_tty_cur_tick, 15, NONE);
     
     /* keyboard scanner is a timmer */
-    sys_vec_set(kbd_handler,RST38); 
+    sys_vec_set(rst38_handler,RST38); 
 
     /* clear screen and set border and paper */
     tty_cls();
 
-    tty_attr(AT_INVERSE);
-    tty_xy(10,10);
-    tty_printf("TEST");
-
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_attr(AT_UNDERLINE);
-    tty_printf("XYZ OS");
-    tty_attr(AT_NONE);
-    tty_printf(" 0.1 (c) 2021 TOMAZ STIH\n\n");
+    tty_printf("XYZ OS 0.1 (c) 2021 TOMAZ STIH\n\n");
     tty_printf(
-        "SYS HEAP: %04X  USR HEAP: %04X  FREE: %02dKB\n\nREADY?", 
+        "SYS HEAP: %04X  USR HEAP: %04X  FREE: %02dKB\n\nREADY? ", 
         &_sys_heap, 
         &_heap,
         ((0xffff-&_heap)/1024)
     );
 
-    /* we'll print this */
-    char c;
-    while (true) 
-        if (c=tty_getc()) tty_putc(c);
+    char text[0xff];
+    tty_gets(text);
+    
 }
