@@ -26,12 +26,32 @@ void rst38_handler() __naked {
         push    af
         push    bc
         push    de
-        push    hl 
+        push    hl
+        push    ix
+        push    iy
+        ex      af,af'
+        push    af
+        ex      af,af'
+        exx
+        push    bc
+        push    de
+        push    hl
+        exx 
         ;; scan keyboard
         call    __kbd_scan
         ;; run timers
         call    __tmr_chain
         ;; restore regs and allow interrupt again
+        exx
+        pop     hl 
+        pop     de
+        pop     bc
+        exx
+        ex      af,af'
+        pop     af
+        ex      af,af'
+        pop     iy
+        pop     ix
         pop     hl
         pop     de
         pop     bc
@@ -48,7 +68,7 @@ void main() {
     mem_init((void *)&_heap,0xffff-&_sys_heap);
 
     /* install cursor timer */
-    tmr_install(_tty_cur_tick, 15, NONE);
+    tmr_install(_tty_cur_tick, 10, NONE);
     
     /* keyboard scanner is a timmer */
     sys_vec_set(rst38_handler,RST38); 
@@ -66,7 +86,11 @@ void main() {
         ((0xffff-&_heap)/1024)
     );
 
+
+    /* read line */
     char text[0xff];
-    tty_gets(text);
-    
+    while(TRUE) {
+        tty_gets(text);
+        tty_printf("\n%s\n",text);
+    }
 }

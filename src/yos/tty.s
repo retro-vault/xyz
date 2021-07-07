@@ -4,7 +4,7 @@
         ;;
         ;; TODO:
         ;;  bug when using inverse and underline together
-        ;;  finish tty_gets
+        ;;  gets delete
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
@@ -59,7 +59,7 @@
         .equ    KEY_ENTER,    0x0d
         .equ    KEY_DEL,      0x08
 
-        .equ    MAX_GETS_LEN, 5
+        .equ    MAX_GETS_LEN, 30
 
         .area   _CODE
 
@@ -584,7 +584,6 @@ _tty_putc::
         ;; restore stack after obtaining parameters
         push    de
         push    hl
-putc_raw:
         ;; check for new line...
         ld      a,e                     ; to a
         cp      #LF                     ; line feed?
@@ -646,12 +645,13 @@ puts_loop:
         ret     z                       ; return if done...
         push    hl                      ; store current ptr.
         ld      e,a                     ; ascii to e
-        call    putc_raw                ; to screen
+        push    de                      ; parameter on stack
+        call    _tty_putc               ; to screen
+        pop     de                      ; clear stack
 nextch:
         pop     hl                      ; pointer to next char
         inc     hl                      ; prepare for next char
         jr      puts_loop               ; and next
-
 
 
         ;; -------------------------------
@@ -669,42 +669,43 @@ _tty_gets::
         ld      b,#0                    ; 0 chars
 tgs_loop:
         push    bc                      ; store counter
-        push    de                      ; and current string address
-        call    _tty_getc               ; read char from kbd
-        pop     de                      ; restore current string addr.
+        push    de                      ; store address
+        call    _tty_getc               ; get char
+        pop     de                      ; restore address
         pop     bc                      ; restore counter
-        ld      a,l                     ; char into l
-        or      a                       ; or it
-        jr      z,tgs_loop              ; no char available?
+        ld      a,l                     ; into a
+        or      a                       ; char avail?
+        jr      z,tgs_loop              ; no char. loop
+        ;; if we are here, char is in l
 test::
+        ld      a,l                     ; char to a
         cp      #KEY_ENTER              ; is it enter?
-        jr      z,tgs_theend
+        jr      z,tgs_theend            ; if enter...
         cp      #KEY_DEL
         jr      z,tgs_del
-        ;; if it's not enter and del then...
-        ;; ...check max len
+        ;; check max length
         ld      a,b                     ; len to a
         cp      #MAX_GETS_LEN           ; compare to max len
         jr      nc, tgs_loop            ; don't allow processing
-        ;; here we are, it's a valid key
+        ;; now add char
         ld      a,l                     ; ascii to a
         inc     b                       ; inc char count
         ld      (de),a                  ; to memory
         inc     de                      ; next memory location
-        push    bc                      ; store regs
-        push    de                      
-        ld      e,a                     ; ascii to e
-        call    putc_raw                ; to screen
-        pop     de                      ; restore regs
+        push    bc
+        push    de
+        push    hl      
+        call    _tty_putc
+        pop     hl
+        pop     de
         pop     bc
-        jr      tgs_loop                ; and loop
+        jr      tgs_loop
 tgs_del:
-
+        ;; TODO
 tgs_theend:
         xor     a                       ; zero terminate string
         ld      (de),a
         ret
-
 
         ;; ----------------------------
         ;; extern int tty_getc();

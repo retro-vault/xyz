@@ -69,3 +69,59 @@ entire row, and single semicolon for comments at column 41.
         ;;
 		;; 2021-06-16   tstih
 ~~~
+
+
+
+
+
+_ttyx_gets::
+        ;; get ptr to string to de
+        pop     hl                      ; ret address
+        pop     de                      ; ptr to string
+        ;; restore stack
+        push    de
+        push    hl
+        ;; counter
+        ld      b,#0                    ; 0 chars
+tgs_loop:
+        push    bc                      ; store counter
+        push    de                      ; and current string address
+        call    _tty_getc               ; read char from kbd
+        pop     de                      ; restore current string addr.
+        pop     bc                      ; restore counter
+        ld      a,l                     ; char into l
+        or      a                       ; or it
+        jr      z,tgs_loop              ; no char available?
+        ;; we have a key
+        ld      e,l                     ; ascii to e
+        call    _tty_putc               ; to screen
+        jr      tgs_loop
+
+
+        cp      #KEY_ENTER              ; is it enter?
+        jr      z,tgs_theend
+        cp      #KEY_DEL
+        jr      z,tgs_del
+        ;; if it's not enter and del then...
+        ;; ...check max len
+        ld      a,b                     ; len to a
+        cp      #MAX_GETS_LEN           ; compare to max len
+        jr      nc, tgs_loop            ; don't allow processing
+        ;; here we are, it's a valid key
+        ld      a,l                     ; ascii to a
+        inc     b                       ; inc char count
+        ld      (de),a                  ; to memory
+        inc     de                      ; next memory location
+        push    bc                      ; store regs
+        push    de                      
+        ld      e,a                     ; ascii to e
+        call    _tty_putc               ; to screen
+        pop     de                      ; restore regs
+        pop     bc
+        jr      tgs_loop                ; and loop
+tgs_del:
+
+tgs_theend:
+        xor     a                       ; zero terminate string
+        ld      (de),a
+        ret

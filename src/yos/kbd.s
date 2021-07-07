@@ -200,6 +200,7 @@ qkey_end:
         ;; reads next key event from the keyboard
         ;; buffer. 
 _kbd_read::
+        call    _ir_disable             ; no conflicts
 		ld		a,(#__kbd_buff+2)		; a=count
 		cp		#0						; is it zero?
 		jr		z,kr_empty				; no data in buffer
@@ -227,6 +228,7 @@ kr_proceed:
 kr_empty:
 		ld		hl,#0					; key not found
 kr_end:	
+        call    _ir_enable
 		ret
 
 
