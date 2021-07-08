@@ -59,7 +59,7 @@
         .equ    KEY_ENTER,    0x0d
         .equ    KEY_DEL,      0x08
 
-        .equ    MAX_GETS_LEN, 30
+        .equ    MAX_GETS_LEN, 128
 
         .area   _CODE
 
@@ -677,12 +677,13 @@ tgs_loop:
         or      a                       ; char avail?
         jr      z,tgs_loop              ; no char. loop
         ;; if we are here, char is in l
-test::
         ld      a,l                     ; char to a
         cp      #KEY_ENTER              ; is it enter?
         jr      z,tgs_theend            ; if enter...
         cp      #KEY_DEL
         jr      z,tgs_del
+        cp      #FASCII
+        jr      c,tgs_loop              ; smaller then first ascii?
         ;; check max length
         ld      a,b                     ; len to a
         cp      #MAX_GETS_LEN           ; compare to max len
@@ -701,7 +702,50 @@ test::
         pop     bc
         jr      tgs_loop
 tgs_del:
-        ;; TODO
+        ;; first check fi we are at position 0?
+        ld      a,b
+        or      a
+        jr      z, tgs_loop
+        ;; now check if we are at row start
+        ld      a,(_tty_x)
+        or      a
+        jr      z, tgs_row_up
+        ;; just decrease x and remove char
+        dec     de                      ; dec pointer to string
+        dec     b                       ; 1 char back
+        push    bc
+        push    de
+        call    __tty_cur_hide          ; hide cursor
+        ld      a,(_tty_x)
+        dec     a
+        ld      (_tty_x),a
+        ld      hl,#32                  ; space
+        push    hl
+        call    _tty_outc               ; draw space
+        pop     hl
+        call    __tty_cur_show
+        pop     de
+        pop     bc
+        jr      tgs_loop
+tgs_row_up:
+        dec     de                      ; decrease pointr to string
+        dec     b                       ; decrease char count
+        push    bc                      ; store both
+        push    de
+        call    __tty_cur_hide          ; hide cursor
+        ld      a,#CXMAX                ; max x to a
+        ld      (_tty_x),a              ; x to max x
+        ld      a,(_tty_y)              ; get y
+        dec     a                       ; y--
+        ld      (_tty_y),a              ; store
+        ld      hl,#32                  ; space
+        push    hl
+        call    _tty_outc               ; draw space
+        pop     hl
+        call    __tty_cur_show
+        pop     de
+        pop     bc
+        jr      tgs_loop
 tgs_theend:
         xor     a                       ; zero terminate string
         ld      (de),a
