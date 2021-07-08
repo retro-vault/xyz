@@ -1,4 +1,4 @@
-        ;; tty-font.s
+        ;; tty_font.s
         ;;
         ;; system (tty) font 6x6
         ;;

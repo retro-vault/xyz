@@ -3,8 +3,7 @@
         ;; core tty functions
         ;;
         ;; TODO:
-        ;;  bug when using inverse and underline together
-        ;;  gets delete
+        ;;  bug when using inverse and underline together?
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
