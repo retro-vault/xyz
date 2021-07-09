@@ -50,5 +50,6 @@ void *_svc_query(const char *name) {
         &prev,
         _svc_match_eq,
         (uint16_t) name);
-    return s->fntable;
+    if (s!=NULL) return s->fntable;
+    else return NULL;
 }

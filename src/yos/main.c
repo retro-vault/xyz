@@ -17,6 +17,8 @@
 #include <tty.h>
 #include <tty_print.h>
 #include <timer.h>
+#include <service.h>
+#include <ctype.h>
 
 /* must be naked, returns with reti */
 void rst38_handler() __naked {
@@ -61,6 +63,25 @@ void rst38_handler() __naked {
     __endasm;
 }
 
+void mem_command() {
+    /* memory test */
+    tty_printf(
+        "SYS HEAP: %04X  USR HEAP: %04X  FREE: %02dKB", 
+        &_sys_heap, 
+        &_heap,
+        ((0xffff-&_heap)/1024)
+    );
+}
+
+void cmd(const char *text) {
+    if (strcmp(text,"mem")==0)
+        mem_command();
+    else if (strlen(text)==0) /* tolerate empty string */
+        tty_printf("\n");
+    else
+        tty_printf("UNKNOWN COMMAND: %s\n", text);
+}
+
 void main() {
 
     /* create system and user heap  */
@@ -79,18 +100,18 @@ void main() {
     /* goto 0,0 */
     tty_xy(0,31);
     tty_printf("XYZ OS 0.1 (c) 2021 TOMAZ STIH\n\n");
-    tty_printf(
-        "SYS HEAP: %04X  USR HEAP: %04X  FREE: %02dKB\n\nREADY? ", 
-        &_sys_heap, 
-        &_heap,
-        ((0xffff-&_heap)/1024)
-    );
+    
+    /* service tests */
+    service_t *s1=svc_register("yos",1234);
+    service_t *s2=svc_register("zwin",5678);
 
-
-    /* read line */
-    char text[0xff];
+    /* mini shell */
+    char text[128];
     while(TRUE) {
+        tty_printf("\nREADY? ");
         tty_gets(text);
-        tty_printf("\n%s\n",text);
+        for (int i=0;i<strlen(text);i++) text[i]=tolower(text[i]);
+        tty_printf("\n"); /* goto next line for results */
+        cmd(text);
     }
 }
