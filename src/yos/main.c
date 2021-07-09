@@ -103,7 +103,6 @@ void main() {
     
     /* service tests */
     service_t *s1=svc_register("yos",1234);
-    service_t *s2=svc_register("zwin",5678);
 
     /* mini shell */
     char text[128];

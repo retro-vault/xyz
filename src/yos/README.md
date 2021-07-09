@@ -66,6 +66,20 @@ you can call it like this:
     yos: .ascii "yos"
 ~~~
 
+### partial standard c library implementation
+
+operating systems usually expose mminimal set of system functions. 
+
+yos is a bit different.
+
+parts of it require functions from the standard c library, such as
+`strlen()` or `malloc()`. so to save precious memory and avoid 
+duplication, yos exposes its guts to the world and lets you use
+those functions instead of reimplementing them.
+
+you get a partial implementation of `time.h`, `string.h`, `ctype.h`,
+`stdio.h`... as part of the operating system.
+
 ## bookkeeping the system resources
 
 everything yos allocates (a memory block, an event, 

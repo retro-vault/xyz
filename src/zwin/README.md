@@ -1,4 +1,4 @@
 # zwin
 
-the z windows gui
+the z windows gui build on top of yos
  
