@@ -18,7 +18,7 @@
 #include <stdarg.h>
 #include <tty.h>
 
-#define PRINT_BUF_LEN 64
+#define PRINT_BUF_LEN 128
 
 enum flags {
 	PAD_ZERO	= 1,

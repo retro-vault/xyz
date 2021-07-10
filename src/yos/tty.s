@@ -70,9 +70,15 @@
         ;; color and green foreground color
         ;; affects: af, hl, de, bc
 _tty_cls::
+        ;; first clear screen
         ld      a,#BLACK
         ld      b,#GREEN
         call    vid_cls
+        ;; now go to 0,0
+        ld      hl,#0
+        push    hl
+        call    _tty_xy
+        pop     hl
         ret
 
         ;; ------------------------

@@ -41,6 +41,7 @@ typedef struct yos_s {
     /* standard library - stdio.h */
     void (*printf)(const char *format, ...);
     void (*puts)(const char *s);
+    void (*gets)(char *s);
     
     /* standard library - conio.h */
     void (*clrscr)();                   /* clear screen */
@@ -48,10 +49,19 @@ typedef struct yos_s {
 
     /* standard library - mem.h */
 
+    /* standard library - string.h */
+    size_t (*strlen)(const char *s);
+    char* (*strcpy)(char *d, const char *s);
+    int (*strcmp)(const char *s1, const char *s2);
+
+    /* standard library - ctype.h */
+    bool (*isalpha)(int c);
+    bool (*isspace)(int c);
+    int (*tolower)(int c);
+
 } yos_t;
 
 /* get the api by name, for syscalls use "yos" */
-#define YOS "yos"
-void *query_interface(char *name);
+extern void *query_interface(char *name);
 
 #endif /* __YOS_H__ */
