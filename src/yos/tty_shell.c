@@ -9,10 +9,8 @@
  * 2021-07-09   tstih
  *
  */
-#include <tty_print.h>
+//#include <tty_print.h>
 #include <mem.h>
-#include <string.h>
-#include <ctype.h>
 #include <stdbool.h>
 #include <service.h>
 #include <yos.h>

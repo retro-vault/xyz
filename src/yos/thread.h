@@ -13,34 +13,52 @@
 #define __THREAD_H__
 
 #include <stdint.h>
-
+#include <stdbool.h>
 #include <list.h>
 #include <sysobj.h>
 #include <evt.h>
+#include <mem.h>
+#include <util.h>
+#include <interrupts.h>
+#include <timer.h>
 
 #define THREAD_STATE_SUSPENDED      0
 #define THREAD_STATE_RUNNING        1
 #define THREAD_STATE_WAITING        2
 #define THREAD_STATE_JOINED         3
+#define THREAD_STATE_TERMINATED     4
 
-#define CONTEXT_SIZE			22
+/* context size is the size of all register + return address 
+   af+bc+hl+de+ix+iy+af'+bc'+de+hl+ret addr = 22 bytes
+   sp is stored to sp member of the thread_s structure */
+#define CONTEXT_SIZE			    22
 
 typedef struct thread_s {
     /* thread is a sys. object */
 	sysobj_t hdr;
+    uint16_t sp;                        /* stack pointer. task context is stored on stack. */
 	/* thread properties */
-	uint16_t sp;                        /* stack pointer. task context is stored on stack. */
+    uint8_t startup[10];                /* startup code: CALL+JP */
 	event_t **wait;                     /* event list or null */
 	uint8_t num_events;                 /* number of events in event list */
 	uint8_t state;                      /* thread state (bits 0-1), bits 2-7 are reserved */
+    struct thread_s **joined;           /* joined threads */
 } thread_t;
 
-extern thread_t *thread_current;
+extern thread_t *thread_current;        /* current runnnig thread */
+extern thread_t *thread_first_suspended;
 extern thread_t *thread_first_running;
 extern thread_t *thread_first_waiting;
+extern thread_t *thread_first_terminated;
+
+/* exit is called at end of thread */
+extern void thread_exit(thread_t *t);
+
+/* select next thread to run */
+extern thread_t* _thread_select_next();
 
 /* context switch */
-extern void _thread_switch();
+extern void _thread_robin() __naked;
 
 /* create new thread */
 extern thread_t * thread_create(void (*entry_point)(), uint16_t stack_size);
