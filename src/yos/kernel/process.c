@@ -28,7 +28,7 @@ process_t *process_start(
 		strcpy(p->pname,pname);
         p->pflags=0;
         /* create main thread and...*/
-        p->main_thread=thread_create(entry_point,stack_size);
+        p->main_thread=thread_create(entry_point,stack_size, (void *)p);
         p->main_thread->process=p;
         /* ...start it! */
         thread_resume(p->main_thread);

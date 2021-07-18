@@ -23,7 +23,7 @@
 
 yos_t _yos;
 
-int yos_version() { return 0x02; }
+int yos_version() { return YOS_VERSION; }
 
 /* populate function list */
 yos_t* _yos_init() {
@@ -42,6 +42,7 @@ yos_t* _yos_init() {
     _yos.clrscr=tty_cls;
     _yos.kbhit=tty_getc;
     _yos.setcur=tty_cur_enable;
+    _yos.setattr=tty_attr;
     
     /* string.h */
     _yos.strlen=strlen;

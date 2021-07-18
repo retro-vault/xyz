@@ -12,6 +12,8 @@
 #ifndef __YOS_H__
 #define __YOS_H__
 
+#define YOS_VERSION 0x03
+
 #define	RST08   0
 #define	RST10   1
 #define	RST18   2
@@ -20,6 +22,10 @@
 #define	RST30   5
 #define	RST38   6
 #define NMI	    7
+
+#define AT_NONE         0x00
+#define AT_UNDERLINE    0x01
+#define AT_INVERSE      0x02
 
 typedef void * handle;
 
@@ -49,6 +55,7 @@ typedef struct yos_s {
     void (*clrscr)();                   /* clear screen */
     int (*kbhit)();                     /* check for key, no blocking */
     void (*setcur)(int enable);         /* enable/disable cursor */
+    void (*setattr)(unsigned char attr);
 
     /* TODO: standard library - mem.h */
     void *(*malloc)(unsigned int size);

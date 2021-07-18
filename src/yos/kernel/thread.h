@@ -62,7 +62,10 @@ extern thread_t* _thread_select_next();
 extern void _thread_robin() __naked;
 
 /* create new thread */
-extern thread_t * thread_create(void (*entry_point)(), uint16_t stack_size);
+extern thread_t * thread_create(
+    void (*entry_point)(), 
+    uint16_t stack_size,
+    void *process);
 
 /* kill (forcefully abort!) a thread */
 extern void thread_kill(thread_t *t);

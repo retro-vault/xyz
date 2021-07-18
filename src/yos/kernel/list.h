@@ -16,8 +16,9 @@
 #include <stddef.h>
 
 /* each linked list must start with list_header */
-typedef struct list_item_s {
-	void *next;                         /* next list el. */
+typedef struct list_item_s
+{
+    void *next; /* next list el. */
 } list_item_t;
 
 /* match functions */
@@ -25,15 +26,19 @@ extern uint8_t list_match_eq(list_item_t *p, uint16_t arg);
 
 /* functions */
 extern list_item_t *list_find(
-        list_item_t *first,
-        list_item_t **prev,
-        uint8_t (*match)(list_item_t *p, uint16_t arg),
-        uint16_t the_arg);
+    list_item_t *first,
+    list_item_t **prev,
+    uint8_t (*match)(list_item_t *p, uint16_t arg),
+    uint16_t the_arg);
+extern void list_iterate(
+    list_item_t *first,
+    void((*fn)(list_item_t *p, uint16_t arg)),
+    uint16_t the_arg);
 
 /* core functions */
-extern list_item_t *list_insert(list_item_t** first, list_item_t *el);
-extern list_item_t *list_append(list_item_t** first, list_item_t *el);
-extern list_item_t *list_remove(list_item_t** first, list_item_t *el);
-extern list_item_t *list_remove_first(list_item_t** first);
+extern list_item_t *list_insert(list_item_t **first, list_item_t *el);
+extern list_item_t *list_append(list_item_t **first, list_item_t *el);
+extern list_item_t *list_remove(list_item_t **first, list_item_t *el);
+extern list_item_t *list_remove_first(list_item_t **first);
 
 #endif /* __LIST_H__ */

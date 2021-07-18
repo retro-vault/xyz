@@ -24,7 +24,8 @@ extern uint8_t hib(uint16_t w) __naked;
 /* TODO: add parent process */
 thread_t *thread_create(
     void (*entry_point)(),
-    uint16_t stack_size)
+    uint16_t stack_size,
+    void *process)
 {
     thread_t *t;
     void *stack;
@@ -47,6 +48,7 @@ thread_t *thread_create(
         {
             t->wait = NULL;
             t->state = THREAD_STATE_SUSPENDED;
+            t->process = process; /* parent */
             /* prepare stack */
             t->sp = (uint16_t)stack + stack_size - CONTEXT_SIZE;
             /* emit startup code: */

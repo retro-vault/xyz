@@ -35,7 +35,7 @@ void main() {
 
     /* create system and user heap  */
     mem_init((void *)&_sys_heap,1024);
-    mem_init((void *)&_heap,0xffff-&_sys_heap);
+    mem_init((void *)&_heap,0xffff-&_heap);
 
     /* install cursor, keyboard, and
        real time clock timers*/
@@ -48,7 +48,7 @@ void main() {
 
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_printf("XYZ OS 0.2 (c) 2021 TOMAZ STIH\n\n");
+    tty_printf("XYZ OS (c) 2021 TOMAZ STIH\n\n");
 
     /* register syscalls (api) service */
     yos_t* y=_yos_init();

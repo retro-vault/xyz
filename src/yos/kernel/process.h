@@ -19,7 +19,7 @@
 #include <kernel/thread.h>
 
 /* max. process name length including trailing 0 */
-#define MAX_PNAME_LEN 16
+#define MAX_PNAME_LEN 8
 
 /* process flags */
 #define PROCESS_INTERNAL  0x01
