@@ -9,7 +9,7 @@
  * 2021-06-23   tstih
  *
  */
-#include <list.h>
+#include <kernel/list.h>
 
 /*
  * check if arg and pointer are equal

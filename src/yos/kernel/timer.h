@@ -14,7 +14,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <sysobj.h>
+
+#include <kernel/sysobj.h>
 
 #define EVERYTIME 0
 

@@ -15,7 +15,7 @@
  * 02.05.2021   tstih
  *
  */
-#include <tty_print.h>
+#include <tty/tty_print.h>
 
 /* prints the string of width with flags */
 void _prints(const char *string, int width, int flags)

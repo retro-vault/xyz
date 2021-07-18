@@ -4,9 +4,9 @@
 
 the operating system for sinclair zx spectrum
 
- * [x compiler suite](src/xc/README.md)
+ * x compiler suite
  * [y operating system](src/yos/README.md)
- * [z windows](src/zwin/README.md)
+ * z windows
  
 [language.url]:   https://isocpp.org/
 [language.badge]: https://img.shields.io/badge/language-c-blue.svg

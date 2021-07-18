@@ -9,12 +9,7 @@
  * 2021-06-23   tstih
  *
  */
-#include <mem.h>
-
-
-/*
- * ---------- private (helpers) ----------
- */
+#include <kernel/mem.h>
 
 uint8_t match_free_block(list_item_t *p, uint16_t size)
 {
@@ -43,9 +38,6 @@ void split(block_t *b, uint16_t size)
     b->hdr.next = nw;
 }
 
-/*
- * ---------- public ----------
- */
 
 /*
  * initialize memory management

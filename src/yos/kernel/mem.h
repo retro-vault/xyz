@@ -12,7 +12,7 @@
 #ifndef __MEM_H__
 #define __MEM_H__
 
-#include <sysobj.h>
+#include <kernel/sysobj.h>
 
 #ifndef NONE
 #define NONE 0

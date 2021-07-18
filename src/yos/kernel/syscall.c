@@ -13,14 +13,17 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
-#include <interrupts.h>
-#include <tty.h>
-#include <tty_print.h>
+
+#include <kernel/interrupts.h>
+
+#include <tty/tty.h>
+#include <tty/tty_print.h>
+
 #include <yos.h>
 
 yos_t _yos;
 
-int yos_version() { return 0x10; }
+int yos_version() { return 0x02; }
 
 /* populate function list */
 yos_t* _yos_init() {
@@ -38,6 +41,7 @@ yos_t* _yos_init() {
     /* conio.h */
     _yos.clrscr=tty_cls;
     _yos.kbhit=tty_getc;
+    _yos.setcur=tty_cur_enable;
     
     /* string.h */
     _yos.strlen=strlen;
@@ -48,7 +52,6 @@ yos_t* _yos_init() {
     _yos.isalpha=isalpha;
     _yos.isspace=isspace;
     _yos.tolower=tolower;
-
 
     /* and return fntable */
     return &_yos;

@@ -1,5 +1,7 @@
 # xc
 
-the x compiler suite is about extending sdcc suite to support yos
+the x compiler suite 
+
+...not started yet...
 
 

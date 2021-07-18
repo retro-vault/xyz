@@ -17,9 +17,10 @@
 #ifndef __SERVICE_H__
 #define __SERVICE_H__
 
-#include <sysobj.h>
-#include <mem.h>
 #include <string.h>
+
+#include <kernel/sysobj.h>
+#include <kernel/mem.h>
 
 #define MAX_SVC_NAME_LEN    16
 

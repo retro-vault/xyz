@@ -11,7 +11,7 @@
  * 2021-06-23   tstih
  *
  */
-#include <evt.h>
+#include <kernel/evt.h>
 
 event_t *_evt_first=NULL;
 

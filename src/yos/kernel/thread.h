@@ -14,13 +14,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <list.h>
-#include <sysobj.h>
-#include <evt.h>
-#include <mem.h>
-#include <util.h>
-#include <interrupts.h>
-#include <timer.h>
+
+#include <kernel/list.h>
+#include <kernel/sysobj.h>
+#include <kernel/evt.h>
+#include <kernel/mem.h>
+#include <kernel/interrupts.h>
+#include <kernel/timer.h>
 
 #define THREAD_STATE_SUSPENDED      0
 #define THREAD_STATE_RUNNING        1
@@ -43,6 +43,7 @@ typedef struct thread_s {
 	uint8_t num_events;                 /* number of events in event list */
 	uint8_t state;                      /* thread state (bits 0-1), bits 2-7 are reserved */
     struct thread_s **joined;           /* joined threads */
+    void *process;                      /* parent procsss */
 } thread_t;
 
 extern thread_t *thread_current;        /* current runnnig thread */

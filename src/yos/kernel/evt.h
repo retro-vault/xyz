@@ -15,7 +15,7 @@
 #define __EVT_H__
 
 #include <stdint.h>
-#include <sysobj.h>
+#include <kernel/sysobj.h>
 
 typedef enum event_state_e {
 	nonsignaled,

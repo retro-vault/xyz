@@ -12,8 +12,6 @@
 #ifndef __YOS_H__
 #define __YOS_H__
 
-#include <stdint.h>
-
 #define	RST08   0
 #define	RST10   1
 #define	RST18   2
@@ -22,6 +20,8 @@
 #define	RST30   5
 #define	RST38   6
 #define NMI	    7
+
+typedef void * handle;
 
 typedef struct yos_s {
 
@@ -32,7 +32,9 @@ typedef struct yos_s {
     void (*di)();                       /* di with ref counting */
     void (*ei)();                       /* ei with ref counting */
 
-    /* timers */
+    /* TODO: timers */
+    handle (*install_timer)(void (*handler)(), int ticks);
+    void (*uninstall_timer)(handle timer);
 
     /* events */
 
@@ -46,17 +48,23 @@ typedef struct yos_s {
     /* standard library - conio.h */
     void (*clrscr)();                   /* clear screen */
     int (*kbhit)();                     /* check for key, no blocking */
+    void (*setcur)(int enable);         /* enable/disable cursor */
 
-    /* standard library - mem.h */
+    /* TODO: standard library - mem.h */
+    void *(*malloc)(unsigned int size);
+    void (*free)(void *p);
+
+    /* standard library - time.h */
+    unsigned int (*clock)();
 
     /* standard library - string.h */
-    size_t (*strlen)(const char *s);
+    unsigned int (*strlen)(const char *s);
     char* (*strcpy)(char *d, const char *s);
     int (*strcmp)(const char *s1, const char *s2);
 
     /* standard library - ctype.h */
-    bool (*isalpha)(int c);
-    bool (*isspace)(int c);
+    int (*isalpha)(int c);
+    int (*isspace)(int c);
     int (*tolower)(int c);
 
 } yos_t;

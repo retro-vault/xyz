@@ -11,7 +11,7 @@
  * 2021-06-23   tstih
  *
  */
-#include <timer.h>
+#include <kernel/timer.h>
 
 timer_t *_tmr_first=NULL;
 

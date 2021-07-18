@@ -16,7 +16,8 @@
 #define __TTY_PRINT_H__
 
 #include <stdarg.h>
-#include <tty.h>
+
+#include <tty/tty.h>
 
 #define PRINT_BUF_LEN 128
 

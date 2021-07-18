@@ -10,8 +10,8 @@
  * 2021-06-23   tstih
  *
  */
-#include <sysobj.h>
-#include <mem.h>
+#include <kernel/sysobj.h>
+#include <kernel/mem.h>
 
 void *so_create(void **first, uint16_t size, void *owner) {
 	sysobj_t *p;

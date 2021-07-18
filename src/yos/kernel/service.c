@@ -17,7 +17,7 @@
  * 2021-07-08   tstih
  *
  */
-#include <service.h>
+#include <kernel/service.h>
 
 service_t *_svc_first=NULL;
 

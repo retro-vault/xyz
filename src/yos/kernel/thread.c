@@ -2,6 +2,7 @@
  * thread.c
  *
  * threading logic
+ * TODO: guard ops with di/ei
  * 
  * MIT License (see: LICENSE)
  * copyright (C) 2021 tomaz stih
@@ -9,13 +10,16 @@
  * 2021-06-23   tstih
  *
  */
-#include <thread.h>
+#include <kernel/thread.h>
 
 thread_t *thread_current = NULL;
 thread_t *thread_first_suspended = NULL;
 thread_t *thread_first_running = NULL;
 thread_t *thread_first_waiting = NULL;
 thread_t *thread_first_terminated = NULL;
+
+extern uint8_t lob(uint16_t w) __naked;
+extern uint8_t hib(uint16_t w) __naked;
 
 /* TODO: add parent process */
 thread_t *thread_create(
@@ -25,11 +29,14 @@ thread_t *thread_create(
     thread_t *t;
     void *stack;
 
+    /* we can't be bothered while creating new thread */
+    ir_disable();
+
     if (t = (thread_t *)so_create((void **)&thread_first_suspended,
                                   sizeof(thread_t), NONE))
-    { /* TODO: owner is process */
-        /* allocate stack for the task */
-        stack = mem_allocate((void *)&_sys_heap, stack_size, (void *)t);
+    { 
+        /* TODO: owner is process so allocate stack from the process */
+        stack = mem_allocate((void *)&_heap, stack_size, (void *)t);
         if (!stack)
         {
             /* was allocated - so free it */
@@ -68,6 +75,10 @@ thread_t *thread_create(
                which will jump to startup code */
         }
     }
+
+    /* we're done */
+    ir_enable();
+
     return t;
 }
 
@@ -75,22 +86,33 @@ void _thread_lswitch(
     thread_t **src, 
     thread_t **dst, 
     thread_t *t,
-    uint8_t state)
+    uint8_t state,
+    bool immediate) 
 {
-    /* first disable inteerupts unconditionally! */
     __asm
         di
     __endasm;
+
     /* move thread from suspended queue to running queue */
 	if (list_remove(
-        (list_item_t**)&src, 
-        (list_item_t *)t)!=NULL)
-	    list_insert(
-            (list_item_t**)&dst, 
-            (list_item_t *)t);
-        t->state=state;
-    /* and switch thread */
-    _thread_robin();
+        (list_item_t**)src, 
+        (list_item_t *)t)!=NULL) {
+            list_insert(
+                (list_item_t**)dst, 
+                (list_item_t *)t);
+            t->state=state;
+        }
+
+    if (immediate) {
+    __asm
+        pop     hl                      ; remove return address
+        jp      __thread_robin
+    __endasm;
+    } else {
+    __asm
+        ei
+    __endasm;
+    }
 }
 
 void thread_resume(thread_t *t) {
@@ -98,7 +120,8 @@ void thread_resume(thread_t *t) {
         &thread_first_suspended,
         &thread_first_running,
         t,
-        THREAD_STATE_RUNNING
+        THREAD_STATE_RUNNING,
+        false
     );
 }
 
@@ -107,7 +130,8 @@ void thread_suspend(thread_t *t) {
         &thread_first_running,
         &thread_first_suspended,
         t,
-        THREAD_STATE_SUSPENDED
+        THREAD_STATE_SUSPENDED,
+        true
     );
 }
 
@@ -117,7 +141,8 @@ void thread_exit(thread_t *t)
         &thread_first_running,
         &thread_first_terminated,
         t,
-        THREAD_STATE_TERMINATED
+        THREAD_STATE_TERMINATED,
+        true
     );
 }
 
@@ -247,4 +272,29 @@ trb_no_next_thread:
         ei
         reti
     __endasm;
+}
+
+/* low byte service function */
+uint8_t lob(uint16_t w) __naked {
+    __asm 
+        pop     de                      ; get ret address
+        pop     hl                      ; get word
+        ld      h,#0                    ; hi byte to 0
+        push    hl                      ; restore...
+        push    de                      ; ...stack
+        ret
+    __endasm; 
+}
+
+/* high byte service function */
+uint8_t hib(uint16_t w) __naked {
+    __asm 
+        pop     de                      ; get ret address
+        pop     hl                      ; get word
+        ld      l,h                     ; high to low
+        ld      h,#0                    ; hi byte to 0
+        push    hl                      ; restore...
+        push    de                      ; ...stack
+        ret
+    __endasm; 
 }

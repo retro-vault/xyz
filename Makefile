@@ -9,11 +9,11 @@ K := $(foreach exec,$(REQUIRED),\
     $(if $(shell which $(exec)),,$(error "$(exec) not found. Please install or add to path.")))
 
 # Global settings: folders.
-ROOT = $(realpath .)
+export ROOT = $(realpath .)
 export BUILD_DIR	=	$(ROOT)/build
 export BIN_DIR		=	$(ROOT)/bin
 export INC_DIR		=	$(ROOT)/include
-export STD_INC_DIR	=	$(ROOT)/include/libc
+export STD_INC_DIR	=	$(ROOT)/lib/libc/include
 export LIB_DIR		=	$(ROOT)/lib
 
 # Globa settings: tools.
@@ -28,7 +28,7 @@ export ARFLAGS		=	-rc
 export LD			=	sdcc
 export LDFLAGS		=	-mz80 -Wl -y --code-loc 0x00ff --data-loc 0x5b00 \
 						--no-std-crt0 --nostdlib --nostdinc \
-						-L$(BUILD_DIR) -llibsdcc -p
+						-L$(BUILD_DIR) -llibsdcc -llibc -p
 export OBJCOPY		=	sdobjcopy
 export TRUNC 		=	truncate
 
@@ -54,4 +54,3 @@ $(SUBDIRS):
 clean:
 	rm -f -r $(BIN_DIR)
 	rm -f -r $(BUILD_DIR)
-

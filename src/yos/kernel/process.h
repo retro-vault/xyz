@@ -13,8 +13,10 @@
 #define __PROCESS_H__
 
 #include <stdint.h>
-#include <sysobj.h>
-#include <thread.h>
+#include <string.h>
+
+#include <kernel/sysobj.h>
+#include <kernel/thread.h>
 
 /* max. process name length including trailing 0 */
 #define MAX_PNAME_LEN 16

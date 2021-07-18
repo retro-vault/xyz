@@ -13,7 +13,7 @@
 #ifndef __SYSOBJ_H__
 #define __SYSOBJ_H__
 
-#include <list.h>
+#include <kernel/list.h>
 
 /* good lord (=the operating system) will provide */
 extern void *_sys_heap;

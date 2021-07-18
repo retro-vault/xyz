@@ -1,5 +1,5 @@
 # Folders
-SUBDIRS = libsdcc libc
+SUBDIRS = src
 
 # Rules.
 .PHONY: all
