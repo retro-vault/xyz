@@ -22,6 +22,9 @@
 
 extern yos_t *y;
 
+thread_t *t1;
+thread_t *t2;
+
 void tower(int column) {
     __asm
     ;; get column to de
@@ -48,9 +51,9 @@ void thread2() {
 }
 
 void test_thread() {
-    thread_t *t1=thread_create(thread1, 512, thread_current->process);
+    t1=thread_create(thread1, 512, thread_current->process);
     thread_resume(t1);
-    thread_t *t2=thread_create(thread2, 512, thread_current->process);
+    t2=thread_create(thread2, 512, thread_current->process);
     thread_resume(t2);
 }
 
@@ -65,4 +68,7 @@ void _test() {
     /* and wait */
     while (!y->kbhit());
     y->setcur(true);
+    /* suspend one thread */
+    thread_exit(t1);
+    thread_suspend(t2);
 }

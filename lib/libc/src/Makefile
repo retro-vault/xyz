@@ -11,12 +11,12 @@ TARGET = libc
 all:	$(BUILD_DIR)/$(TARGET).lib 
 
 $(BUILD_DIR)/$(TARGET).lib: $(OBJS)
-	$(AR) $(ARFLAGS) $@ $^
+	$(AR8) $(AR8FLAGS) $@ $^
 
 $(BUILD_DIR)/%.rel:	%.s
-	$(AS) $(ASFLAGS) $(BUILD_DIR)/$(basename $*).rel $*.s
+	$(AS8) $(AS8FLAGS) $(BUILD_DIR)/$(basename $*).rel $*.s
 
 $(BUILD_DIR)/%.rel: %.c
-	$(CC) -c -o $@ $< $(CFLAGS)
+	$(C8C) -c -o $@ $< $(C8FLAGS)
 
 $(BUILD_DIR)/%.rel: %.h

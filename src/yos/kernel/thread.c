@@ -91,9 +91,9 @@ void _thread_lswitch(
     uint8_t state,
     bool immediate) 
 {
-    __asm
-        di
-    __endasm;
+    /* make sure we are not bothered while moving
+       threads around */
+    __asm__("di");
 
     /* move thread from suspended queue to running queue */
 	if (list_remove(
@@ -105,16 +105,12 @@ void _thread_lswitch(
             t->state=state;
         }
 
-    if (immediate) {
-    __asm
-        pop     hl                      ; remove return address
-        jp      __thread_robin
-    __endasm;
-    } else {
-    __asm
-        ei
-    __endasm;
-    }
+    /* enable interrupts, we're done! */
+    __asm__("ei");
+
+    /* if switch should be immediate, then simply halt the
+       current process, interrupt will release it! */
+    if (immediate) __asm__("halt");
 }
 
 void thread_resume(thread_t *t) {

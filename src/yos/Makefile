@@ -15,7 +15,7 @@ S_SRCS	=	$(wildcard *.s) $(wildcard */*.s)
 OBJS	=	$(addprefix $(BUILD_DIR)/,$(notdir $(CRT0).rel \
 				$(patsubst %.c,%.rel,$(C_SRCS)) \
 				$(patsubst %.s,%.rel,$(S_SRCS)) ) )
-CFLAGS	+=	-I$(ROOT)/src/yos
+C8FLAGS	+=	-I$(ROOT)/src/yos
 TARGET	=	yos
 
 # Rules.
@@ -27,15 +27,15 @@ $(BIN_DIR)/$(TARGET).rom: $(BUILD_DIR)/$(TARGET).ihx
 	$(TRUNC) --size 16K $(basename $@).rom
 
 $(BUILD_DIR)/$(TARGET).ihx: $(OBJS)
-	$(LD) $(LDFLAGS) -o $(BUILD_DIR)/$(TARGET).ihx $(OBJS)
+	$(LD8) $(LD8FLAGS) -o $(BUILD_DIR)/$(TARGET).ihx $(OBJS)
 
 $(BUILD_DIR)/$(CRT0).rel: startup/$(CRT0).s0
-	$(AS) $(ASFLAGS) -o $(BUILD_DIR)/$(CRT0).rel startup/$(CRT0).s0
+	$(AS8) $(AS8FLAGS) -o $(BUILD_DIR)/$(CRT0).rel startup/$(CRT0).s0
 
 $(BUILD_DIR)/%.rel:	%.s
-	$(AS) $(ASFLAGS) $(BUILD_DIR)/$(@F) $<
+	$(AS8) $(AS8FLAGS) $(BUILD_DIR)/$(@F) $<
 
 $(BUILD_DIR)/%.rel: %.c
-	$(CC) -c -o $(BUILD_DIR)/$(@F) $< $(CFLAGS)
+	$(C8C) -c -o $(BUILD_DIR)/$(@F) $< $(C8FLAGS)
 
 $(BUILD_DIR)/%.rel: %.h

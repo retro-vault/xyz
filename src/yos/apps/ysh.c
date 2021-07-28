@@ -122,6 +122,16 @@ void print_process(list_item_t *li, uint16_t arg) {
         (list_item_t*)thread_first_suspended,
         print_thread,
         (uint16_t)p);
+    /* terminated threads */
+    list_iterate(
+        (list_item_t*)thread_first_terminated,
+        print_thread,
+        (uint16_t)p);
+    /* waiting threads */
+    list_iterate(
+        (list_item_t*)thread_first_waiting,
+        print_thread,
+        (uint16_t)p);
 }
 
 void pstat() {

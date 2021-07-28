@@ -1,9 +1,9 @@
 # Folders
-SUBDIRS = yos
+SUBDIRS = xlink
 
 # Rules.
-.PHONY: rom
-rom:	$(SUBDIRS) 
+.PHONY: tools
+tools:	$(SUBDIRS) 
 
 .PHONY: $(SUBDIRS)
 $(SUBDIRS):
