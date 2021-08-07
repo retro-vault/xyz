@@ -42,7 +42,7 @@ extern process_t *process_first;
    if required. */
 extern process_t *process_start(
     char *pname,
-    void *entry_point,
+    void (*entry_point)(),
     size_t stack_size
 );
 

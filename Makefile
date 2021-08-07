@@ -12,29 +12,29 @@ K := $(foreach exec,$(REQUIRED),\
 export ROOT 		= $(realpath .)
 export BUILD_DIR	=	$(ROOT)/build
 export BIN_DIR		=	$(ROOT)/bin
-export INC_DIR		=	$(ROOT)/include
-export STD_INC_DIR	=	$(ROOT)/lib/libc/include
+export INC_DIR		=	$(ROOT)/include \
+						$(ROOT)/lib/libc/include \
+						$(ROOT)/lib/libgpx/include
 export LIB_DIR		=	$(ROOT)/lib
 
 # Globa settings: 8 bit tools.
 export C8C			=	sdcc
 export C8FLAGS		=	--std-c11 -mz80 --debug \
-						--no-std-crt0 --nostdinc --nostdlib \
-						-I. -I$(STD_INC_DIR) -I$(INC_DIR) 
+						--nostdinc $(addprefix -I,$(INC_DIR))
 export AS8			=	sdasz80
 export AS8FLAGS		=	-xlos -g
 export AR8			=	sdar
 export AR8FLAGS		=	-rc
 export LD8			=	sdcc
 export LD8FLAGS		=	-mz80 -Wl -y --code-loc 0x00ff --data-loc 0x5b00 \
-						--no-std-crt0 --nostdlib --nostdinc \
-						-L$(BUILD_DIR) -llibsdcc -llibc -p
+						--no-std-crt0 --nostdlib \
+						-L$(BUILD_DIR) -llibgpx -llibsdcc-z80 -llibc -p
 export OBJCOPY		=	sdobjcopy
 export TRUNC 		=	truncate
 
 # Global settings: host tools.
 export CXX			=	g++
-export CXXFLAGS		=	-std=c++2a -I$(INC_DIR) -I$(LIB_DIR) -g
+export CXXFLAGS		=	-std=c++2a -I$(LIB_DIR) -g
 
 # Subfolders for make.
 SUBDIRS8			=	lib src/yos

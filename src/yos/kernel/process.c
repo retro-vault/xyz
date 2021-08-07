@@ -15,7 +15,7 @@ process_t *process_first;
 
 process_t *process_start(
     char *pname,
-    void *entry_point,
+    void (*entry_point)(),
     size_t stack_size
 ) {
     /* first create new process */
@@ -28,7 +28,10 @@ process_t *process_start(
 		strcpy(p->pname,pname);
         p->pflags=0;
         /* create main thread and...*/
-        p->main_thread=thread_create(entry_point,stack_size, (void *)p);
+        p->main_thread=thread_create(
+            entry_point,
+            stack_size, 
+            (void *)p);
         p->main_thread->process=p;
         /* ...start it! */
         thread_resume(p->main_thread);
@@ -37,6 +40,7 @@ process_t *process_start(
 }
 
 void _process_cleanup(process_t *p) {
+    p;
 }
 
 void process_exit() {

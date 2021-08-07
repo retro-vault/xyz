@@ -1,4 +1,4 @@
-        ;; video.s
+        ;; tv.s
         ;; 
         ;; vram calculations
 		;;
@@ -6,7 +6,7 @@
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
 		;; 2021-06-16   tstih
-        .module video
+        .module tv
 
         .area   _CODE
 
@@ -20,7 +20,7 @@
         ;; input:   b=y
         ;; output:  hl=vmem address, a=l
         ;; affects: flags, a, hl
-vid_rowaddr::
+tv_rowaddr::
         ld      a,b                     ; get y0-y2 to acc.
         and     #0x07                   ; mask out 00000111
         or      #0x40                   ; vmem addr
@@ -44,7 +44,7 @@ vid_rowaddr::
         ;; input:   hl=address
         ;; output:  hl=next row address
         ;; affects: flags, a, hl
-vid_nextrow::
+tv_nextrow::
         inc     h
         ld      a,h
         and     #7
@@ -65,7 +65,7 @@ nextrow_done:
         ;; input:   a=background color
         ;;          b=foreground color
         ;; affects: af, hl, de, bc
-vid_cls::
+tv_cls::
         out     (#BDRPORT),a            ; set border
         ;; prepare attr
         rlca                            ; bits 3-5

@@ -73,7 +73,7 @@ _tty_cls::
         ;; first clear screen
         ld      a,#BLACK
         ld      b,#GREEN
-        call    vid_cls
+        call    tv_cls
         ;; now go to 0,0
         ld      hl,#0
         push    hl
@@ -105,9 +105,9 @@ ls_loop:
         ldir                            ; move scan line
         pop     hl
         pop     de
-        call    vid_nextrow
+        call    tv_nextrow
         ex      de,hl
-        call    vid_nextrow
+        call    tv_nextrow
         ex      de,hl
         pop     bc
         pop     af
@@ -126,7 +126,7 @@ ls_clrlne_loop:
         djnz    ls_clrlne_loop
         pop     hl
         push    af
-        call    vid_nextrow
+        call    tv_nextrow
         pop     af
         dec     a
         jr      nz,ls_clr_loop
@@ -216,7 +216,7 @@ outc_raw:
         sla     a                       ; *4
         add     b                       ; *6
         ld      b,a                     ; hires y to b
-        call    vid_rowaddr             ; hl=vmem addr.
+        call    tv_rowaddr             ; hl=vmem addr.
         ;; calculate required shifts
         ;; we need to multiply by 6, add 2 (offset)
         ;; and then divide by 8 to get the correct
@@ -360,7 +360,7 @@ pch_sh_done:
 pch_skip2:
         ex      af,af'
 pch_no_alt:
-        call    vid_nextrow             ; next row
+        call    tv_nextrow             ; next row
         pop     de                      ; restore de
         ex      de,hl                   ; toggle de and hl
         ret
@@ -412,7 +412,7 @@ __tty_cur_tick::
         sla     a                       ; *4
         add     b                       ; *6
         ld      b,a                     ; hires y to b
-        call    vid_rowaddr             ; hl=vmem addr.
+        call    tv_rowaddr             ; hl=vmem addr.
         ;; calculate required shifts
         ;; we need to multiply by 6, add 2 (offset)
         ;; and then divide by 8 to get the correct
@@ -504,7 +504,7 @@ ttc_skip2:
         ex      af,af'
 ttc_xor_done:
         pop     hl                      ; restore vmem addr.
-        call    vid_nextrow             ; next row
+        call    tv_nextrow             ; next row
         ret
 ttc_cursor:
         .byte   0xfc, 0xfc, 0xfc, 0xfc, 0xfc, 0xfc

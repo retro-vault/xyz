@@ -51,6 +51,7 @@ void print_header(char *c) {
 }
 
 void mem_block(list_item_t *p, uint16_t arg) {
+    arg;
     block_t *b=(block_t *)p;
     y->printf("%s %04X %04X %04X %5u\n", 
         b->stat==NEW?"F":"A",
@@ -107,6 +108,7 @@ void print_thread(list_item_t *li, uint16_t arg) {
 }
 
 void print_process(list_item_t *li, uint16_t arg) {
+    arg;
     process_t *p=(process_t *)li;
     y->printf("%-8s %04X %04X\n",
         p->pname,
@@ -144,7 +146,7 @@ void pstat() {
         0);
 }
 
-void exec(const char *text) {
+void exec(char *text) {
     lcase(text);
     if (y->strcmp(text,"mem")==0)
         mem(); 
