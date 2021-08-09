@@ -77,32 +77,31 @@ void test_threads() {
 
 void test_gpx() {
 
-    printf("\n\n");
-
     /* enter graphics */
     gpx_t *g=gpx_init();
 
-    /* query graphics capabilities */
-    gpx_cap_t *cap=gpx_cap(g);
-    printf("GRAPHICS PROPERTIES\n\n");
-    printf("No. colors %d\nBack color %d\nFore color %d\n",
-        cap->num_colors,
-        cap->back_color,
-        cap->fore_color);
-    printf("Sup. pages %d\n", cap->num_pages);
-    for(int p=0; p<cap->num_pages; p++)
-        for (int r=0; r<cap->pages[p].num_resolutions; r++)
-            printf(" P%d Resol. %dx%d\n",
-                p,
-                cap->pages[p].resolutions[r].width,
-                cap->pages[p].resolutions[r].height);
+    /* clear screen */
+    gpx_cls(g);
 
+    /* query graphics capabilities
+       NOTE: this is only possible because initial page
+             and initial resolution are both 0. */
+    gpx_cap_t *cap=gpx_cap(g);
+    coord centerx = cap->pages[0].resolutions[0].width/2;
+    coord centery = cap->pages[0].resolutions[0].height/2;
+
+    printf("Center is at %d,%d\n",centerx, centery);
+
+    /* draw line */
+    for (coord x=centerx-20; x<centerx+20;x++)
+        gpx_draw_pixel(g,x,centery);
+
+    /* draw circle */
+    gpx_draw_circle(g,centerx,centery,20);
 
     /* leave graphics */
     gpx_exit(NULL);
 
-
-    printf("\n\n");
 }
 
 #undef printf
