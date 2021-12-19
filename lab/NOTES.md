@@ -1,3 +1,10 @@
+# notes from 2021-12-19
+
+## tikz libs to draw memory objects
+
+ * https://ctan.math.washington.edu/tex-archive/graphics/pgf/contrib/memorygraphs/memorygraphs.pdf
+ * https://texdoc.org/serve/bytefield.pdf/0
+
 # notes from 2021-06-16
 
 ## support for depencency .d files
