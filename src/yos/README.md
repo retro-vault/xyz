@@ -1,3 +1,5 @@
+![status.badge] [![language.badge]][language.url] [![standard.badge]][standard.url] 
+
 The YOS
 =======
 
@@ -13,6 +15,7 @@ The YOS
     -   [Derivation of system object from list
         item](#derivation-of-system-object-from-list-item)
 -   [Cleaning up resources](#cleaning-up-resources)
+-   [Memory Management](#memory-management)
 -   [System Calls and Services](#system-calls-and-services)
     -   [services](#services)
         -   [implementing syscalls in
@@ -22,6 +25,7 @@ The YOS
         -   [partial standard c library
             implementation](#partial-standard-c-library-implementation)
         -   [resident processes](#resident-processes)
+    -   [the clock](#the-clock)
 
 The Boot Process
 ================
@@ -316,6 +320,17 @@ function calls them all in correct order.
 
 …to be continued…
 
+Memory Management
+=================
+
+xyz provides functions for allocating and freeing memory blocks, and an
+ability to use multiple heaps.
+
+> xyz uses one heap for operating system and the other for user
+> programs.
+
+…to be continued…
+
 System Calls and Services
 =========================
 
@@ -380,7 +395,12 @@ you get a partial implementation of `time.h`, `string.h`, `ctype.h`,
 ### resident processes
 
 resident processes are loaded to fixed addresses at the end of physical
-memory. \#\# the clock
+memory.
+
+…to be continued…
+
+the clock
+---------
 
 yos provides standard C function `clock()` and also internally maintains
 the `time_t` structure.
@@ -388,3 +408,13 @@ the `time_t` structure.
 > the clock depends on screen blank interval and can be affected by
 > disabling interrupts for a longer periods. hence periodical update of
 > the clock over the serial net is recommended.
+
+…to be continued…
+
+[language.url]:   https://isocpp.org/
+[language.badge]: https://img.shields.io/badge/language-c-blue.svg
+
+[standard.url]:   https://en.wikipedia.org/wiki/C_(programming_language)
+[standard.badge]: https://img.shields.io/badge/standard-c11-blue.svg
+
+[status.badge]:  https://img.shields.io/badge/status-development-red.svg
