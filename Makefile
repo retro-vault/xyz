@@ -44,7 +44,6 @@ SUBDIRS_HOST		=	src/xc
 .PHONY: all
 all:	tools rom
 
-
 .PHONY: mkdirs
 mkdirs:
 	# Create build dir.
@@ -52,20 +51,17 @@ mkdirs:
 	# And bin dir.
 	mkdir -p $(BIN_DIR)
 
-
 .PHONY: rom
 rom:	mkdirs $(SUBDIRS8)
 .PHONY: $(SUBDIRS8)
 $(SUBDIRS8):
 	$(MAKE) -C $@
 
-
 .PHONY: tools
 tools:	mkdirs $(SUBDIRS_HOST)
 .PHONY: $(SUBDIRS_HOST)
 $(SUBDIRS_HOST):
 	$(MAKE) -C $@
-
 
 .PHONY: clean
 clean:

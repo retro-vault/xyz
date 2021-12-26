@@ -18,7 +18,8 @@
 /* each linked list must start with list_header */
 typedef struct list_item_s
 {
-    void *next; /* next list el. */
+    void *next;         /* next list el. */
+    uint8_t data[0];    /* list item data from here... */
 } list_item_t;
 
 /* match functions */

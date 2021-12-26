@@ -20,7 +20,7 @@ TARGET	=	yos
 
 # Rules.
 .PHONY: rom
-rom: $(BIN_DIR)/$(TARGET).rom
+rom: $(BIN_DIR)/$(TARGET).rom md
 
 $(BIN_DIR)/$(TARGET).rom: $(BUILD_DIR)/$(TARGET).ihx
 	$(OBJCOPY) -I ihex -O binary $(basename $<).ihx $(basename $@).rom
@@ -39,3 +39,7 @@ $(BUILD_DIR)/%.rel: %.c
 	$(C8C) -c -o $(BUILD_DIR)/$(@F) $< $(C8FLAGS)
 
 $(BUILD_DIR)/%.rel: %.h
+
+.PHONY: md
+md: 
+	pandoc -t gfm --template docs/00_template.gfm --toc -s --toc-depth=3 docs/*.md > README.md
