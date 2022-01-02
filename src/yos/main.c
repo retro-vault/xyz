@@ -48,7 +48,7 @@ void main() {
 
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_printf("XYZ OS (c) 2021 TOMAZ STIH\n\n");
+    tty_printf("XYZ OS (c) 2022 TOMAZ STIH\n\n");
 
     /* register syscalls (api) service */
     yos_t* y=_yos_init();
@@ -60,4 +60,3 @@ void main() {
     /* and yield control to the scheduler */
     sys_vec_set(_thread_robin,RST38); 
 }
-
