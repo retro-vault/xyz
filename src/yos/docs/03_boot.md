@@ -12,7 +12,7 @@ For RST calls to work, some sort of handler code must be located at target addre
 
 When the Z80 microprocesssor is powered up, it starts executing program at location zero. This also happens to be the target location of a RST 0x00 call. Here is the xyz os code at location 0x0000.
 
-~~~asm
+~~~
         .org    0x0000
         di                              ; disable interrupts
         jp      init                    ; init
@@ -21,7 +21,7 @@ When the Z80 microprocesssor is powered up, it starts executing program at locat
 
 The program at address zero disables interrupts and jumps to the init section. At the end 4 bytes are added so that next available address ix 0x08 i.e. the target address for the RST 0x08 call. This pattern is used for all restart call handlers. This is how the code following the above code looks.
 
-~~~asm
+~~~
         ;; rst 0x08 at address 0x0008
 		jp      rst8
 rst8ret:

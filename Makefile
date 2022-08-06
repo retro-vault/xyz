@@ -4,12 +4,12 @@ $(error OS must be Linux!)
 endif
 
 # Check if all required tools are on the system.
-REQUIRED = sdcc sdar sdasz80 sdldz80 sdobjcopy fuse sed truncate
+REQUIRED = sdcc sdar sdasz80 sdldz80 sdobjcopy fuse sed truncate pandoc
 K := $(foreach exec,$(REQUIRED),\
     $(if $(shell which $(exec)),,$(error "$(exec) not found. Please install or add to path.")))
 
 # Global settings: folders.
-export ROOT 		= $(realpath .)
+export ROOT 		=	$(realpath .)
 export BUILD_DIR	=	$(ROOT)/build
 export BIN_DIR		=	$(ROOT)/bin
 export INC_DIR		=	$(ROOT)/include \

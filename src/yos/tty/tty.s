@@ -85,6 +85,7 @@ _tty_cls::
         ;; extern void tty_scroll()
         ;; ------------------------
         ;; scrolls up one row
+        ;; TODO: what about showing cursor afterwards?
         ;; affects: af, bc, de, hl
 _tty_scroll::
         ;; no interrupts and no cursor while scrolling
@@ -138,6 +139,7 @@ ls_clrlne_loop:
         ;; -----------------------------------------
         ;; extern void tty_xy(uint8_t x, uint8_t y);
         ;; -----------------------------------------
+        ;; TODO: what about showing cursor afterwards?
         ;; go to xy
         ;; affects: af, bc, de, hl
 _tty_xy::
