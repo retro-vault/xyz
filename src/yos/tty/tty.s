@@ -8,7 +8,7 @@
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
-		;; 2021-06-16   tstih
+        ;; 2021-06-16   tstih
         .module tty
 
         ;; functions
@@ -842,52 +842,52 @@ tgc_normal_key:
         ret
 
 
-		;; key maps	
+        ;; key maps	
         ;; from keyboard scan codes to
         ;; ascii characters (respects
         ;; control keys)	
-		;; 0x0d ... enter
-		;; 0x20 ... space
-		;; 0x01 ... symbol shift
-		;; 0x02 ... caps shift
-		;; 0x03 ... symbol + undefined
-		;; 0x04 ... caps + undefined
-		;; 0x08 ... backspace
-		;; 0x09 ... left
-		;; 0x0a ... down
-		;; 0x0b ... up
-		;; 0x0c ... right
-		;; 0x61 ... pound symbol
-		;; 0x21 ... single quote
+        ;; 0x0d ... enter
+        ;; 0x20 ... space
+        ;; 0x01 ... symbol shift
+        ;; 0x02 ... caps shift
+        ;; 0x03 ... symbol + undefined
+        ;; 0x04 ... caps + undefined
+        ;; 0x08 ... backspace
+        ;; 0x09 ... left
+        ;; 0x0a ... down
+        ;; 0x0b ... up
+        ;; 0x0c ... right
+        ;; 0x61 ... pound symbol
+        ;; 0x21 ... single quote
 key_map:	
-		.byte '5',   '4',   '3',   '2',   '1'
-		.byte '6',   '7',   '8',   '9',   '0'
-		.byte 'y',   'u',   'i',   'o',   'p'
-		.byte 'h',   'j',   'k',   'l',   0x0d 	
-		.byte 'b',   'n',   'm',    0x01, 0x20
-		.byte 'v',   'c',   'x',   'z',   0x02
-		.byte 'g',   'f',   'd',   's',   'a'
-		.byte 't',   'r',   'e',   'w',   'q'
+        .byte '5',   '4',   '3',   '2',   '1'
+        .byte '6',   '7',   '8',   '9',   '0'
+        .byte 'y',   'u',   'i',   'o',   'p'
+        .byte 'h',   'j',   'k',   'l',   0x0d 	
+        .byte 'b',   'n',   'm',    0x01, 0x20
+        .byte 'v',   'c',   'x',   'z',   0x02
+        .byte 'g',   'f',   'd',   's',   'a'
+        .byte 't',   'r',   'e',   'w',   'q'
 
 key_map_sym:	
-		.byte '%',   '$',   '#',   '@',   '!'
-		.byte '&',   0x27,  '(',   ')',   '_'
-		.byte '[',   ']',   0x80,  ';',   '"'
-		.byte 0x5e,  '-',   '+',   '=',   0x0d 
-		.byte '*',   ',',   '.',   0x01,  0x20	
-		.byte '/',   '?',   0x61,  ':',   0x02
-		.byte '}',   '{',   0x5d,  '|',   '~'
-		.byte '>',   '<',   0x60,  0x03,  0x03
+        .byte '%',   '$',   '#',   '@',   '!'
+        .byte '&',   0x27,  '(',   ')',   '_'
+        .byte '[',   ']',   0x80,  ';',   '"'
+        .byte 0x5e,  '-',   '+',   '=',   0x0d 
+        .byte '*',   ',',   '.',   0x01,  0x20	
+        .byte '/',   '?',   0x61,  ':',   0x02
+        .byte '}',   '{',   0x5d,  '|',   '~'
+        .byte '>',   '<',   0x60,  0x03,  0x03
 
 key_map_shf:	
-		.byte 0x09,  '4',   '3',   '2',   '1'
-		.byte 0x0a,  0x0b,  0x0c,  '9',   0x08
-		.byte 'Y',   'U',   'I',   'O',   'P'
-		.byte 'H',   'J',   'K',   'L',   0x04 
-		.byte 'B',   'N',   'M',   0x01,  0x20
-		.byte 'V',   'C',   'X',   'Z',   0x02
-		.byte 'G',   'F',   'D',   'S',   'A'
-		.byte 'T',   'R',   'E',   'W',   'Q'
+        .byte 0x09,  '4',   '3',   '2',   '1'
+        .byte 0x0a,  0x0b,  0x0c,  '9',   0x08
+        .byte 'Y',   'U',   'I',   'O',   'P'
+        .byte 'H',   'J',   'K',   'L',   0x04 
+        .byte 'B',   'N',   'M',   0x01,  0x20
+        .byte 'V',   'C',   'X',   'Z',   0x02
+        .byte 'G',   'F',   'D',   'S',   'A'
+        .byte 'T',   'R',   'E',   'W',   'Q'
 
 
         .area _INITIALIZED

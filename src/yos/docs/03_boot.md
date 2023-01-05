@@ -2,7 +2,7 @@
 
 ## Z80 RST calls
 
-Z80 has eight single byte restart commands: RST 0x00, RST 0x08, RST 0x10, RST 0x18, RST 0x20, RST 0x28, RST 0x30, and RST 0x38. Each command pushes current address to the stack, and jumps to the location that follows the command. Since RST command only has 8 bits it can't store full 16 bit address for the jump so it is assummed that the address is in page zero of memory. If you execute RST 0x18 it will call address 0x0018 (decimal: 24). 
+Z80 has eight single byte *restart* commands: RST 0x00, RST 0x08, RST 0x10, RST 0x18, RST 0x20, RST 0x28, RST 0x30, and RST 0x38. Each command pushes current address to the stack, and jumps to the location that follows the command. Since RST command only has 8 bits it can't store full 16 bit address for the jump so it is assummed that the address is in page zero of memory. If you execute RST 0x18 it will call address 0x0018 (decimal: 24). 
 
 *By convention memory pages in Z80 are 256 bytes long. This way the high byte of 16 byte address can be viewed as the page and the lower byte as offset within the page.*
 
@@ -12,7 +12,7 @@ For RST calls to work, some sort of handler code must be located at target addre
 
 When the Z80 microprocesssor is powered up, it starts executing program at location zero. This also happens to be the target location of a RST 0x00 call. Here is the xyz os code at location 0x0000.
 
-~~~
+~~~asm
         .org    0x0000
         di                              ; disable interrupts
         jp      init                    ; init
@@ -21,9 +21,9 @@ When the Z80 microprocesssor is powered up, it starts executing program at locat
 
 The program at address zero disables interrupts and jumps to the init section. At the end 4 bytes are added so that next available address ix 0x08 i.e. the target address for the RST 0x08 call. This pattern is used for all restart call handlers. This is how the code following the above code looks.
 
-~~~
+~~~asm
         ;; rst 0x08 at address 0x0008
-		jp      rst8
+        jp      rst8
 rst8ret:
         reti
         .db     0,0,0
@@ -46,14 +46,14 @@ And here's the code in RAM.
 
 ~~~asm
 __sys_vec_tbl::
-rst8:   .ds     3
-rst10:  .ds     3
-rst18:  .ds     3
-rst20:  .ds     3
-rst28:  .ds     3
-rst30:  .ds     3
-rst38:  .ds     3
-nmi:    .ds     3
+        rst8:   .ds     3
+        rst10:  .ds     3
+        rst18:  .ds     3
+        rst20:  .ds     3
+        rst28:  .ds     3
+        rst30:  .ds     3
+        rst38:  .ds     3
+        nmi:    .ds     3
 ~~~
 
 As you see thse are undefined labels. Which is logical since xzy is a ROM program. It is not loaded in RAM. So it uses a trick. At start up it copies following code to the `__sys_vec_tbl` address.
@@ -112,8 +112,8 @@ To protect our code against this we must do reference counting. Following two fu
 		;; -------------------------
 		;; extern void ir_disable();
 		;; -------------------------
-        ;; executes di with ref count.
-        ;; affects: -
+                ;; executes di with ref count.
+                ;; affects: -
 _ir_disable::	
 		di
         push    hl
@@ -125,8 +125,8 @@ _ir_disable::
 		;; ------------------------
 		;; extern void ir_enable();
 		;; ------------------------
-        ;; executes ei with ref count.
-        ;; affects: -
+                ;; executes ei with ref count.
+                ;; affects: -
 _ir_enable::
         push    af
 		ld		a,(#ir_refcount)
@@ -151,9 +151,9 @@ ir_refcount:
 Finally we can write routines that enable you to hook vectors. When changing vectors we are going to disable interrupts. These routines will simply write new address to RAM after the jump opcode.
 
 ~~~asm
-		;; ------------------------------------------------------------
-		;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
-		;; ------------------------------------------------------------
+	;; -----------------------------------------------------------
+	;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
+	;; ------------------------------------------------------------
         ;; affects: bc, de, hl
 _sys_vec_set::
         call    _ir_disable
@@ -179,8 +179,8 @@ _sys_vec_set::
 		ret
 
         ;; ------------------------------------------
-		;; extern void *sys_vec_get(uint8_t vec_num);
-		;; ------------------------------------------
+	;; extern void *sys_vec_get(uint8_t vec_num);
+	;; ------------------------------------------
         ;; affects: hl, de
 _sys_vec_get::
         call    _ir_disable

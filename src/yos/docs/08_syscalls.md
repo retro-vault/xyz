@@ -41,13 +41,13 @@ by default accessible from any C program. from assembler,
 you can call it like this:
 
 ~~~asm
-    ;; put pointer to service name on the stack
-    ld hl, #yos
-    push hl
-    ;; call reset vector 10
-    rst 0x10
-    ;; hl now contains pointer to table of functions
-    yos: .ascii "yos"
+        ;; put pointer to service name on the stack
+        ld hl, #yos
+        push hl
+        ;; call reset vector 10
+        rst 0x10
+        ;; hl now contains pointer to table of functions
+        yos: .ascii "yos"
 ~~~
 
 ### partial standard c library implementation

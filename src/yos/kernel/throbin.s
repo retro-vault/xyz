@@ -1,11 +1,11 @@
-		;; throbin.s
+        ;; throbin.s
         ;; 
         ;; zx spectrum threar round robin algorithm
-		;;
+        ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
-		;; 2021-08-07   tstih
+        ;; 2021-08-07   tstih
         .module throbin
 
         .globl __thread_robin

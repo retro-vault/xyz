@@ -1,15 +1,15 @@
-		;; crt0rom.s
+        ;; crt0rom.s
         ;; 
         ;; zx spectrum 48K rom startup code
-		;;
+        ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
-		;; 2021-06-16   tstih
+        ;; 2021-06-16   tstih
         .module crt0rom
 
-		.globl	_ir_enable
-		.globl	_ir_disable
+        .globl	_ir_enable
+        .globl	_ir_disable
         .globl  __sys_vec_tbl
         .globl  _sys_vec_set
         .globl  _sys_vec_get
@@ -24,7 +24,7 @@
         .db     0,0,0,0
 
         ;; rst 0x08
-		jp      rst8
+        jp      rst8
 rst8ret:
         reti
         .db     0,0,0
@@ -88,37 +88,37 @@ tarpit:
         jr      tarpit
 
 
-		;; ------------------------------------------------------------
-		;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
-		;; ------------------------------------------------------------
+        ;; ------------------------------------------------------------
+        ;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
+        ;; ------------------------------------------------------------
         ;; affects: bc, de, hl
 _sys_vec_set::
         call    _ir_disable
-		pop		hl                      ; ret address / ignore
-		pop		bc                      ; bc = handler
-		pop		de                      ; d = undefined, e = vector number
-		;; restore stack
-		push	de
-		push	bc
-		push	hl
-		ld		d,#0x00                 ; de = 16 bit vector number
-		ld		hl,#__sys_vec_tbl       ; vector table start
-		add		hl,de
-		add		hl,de
-		add		hl,de
-		inc		hl						; hl = hl + 3 * de + 1
-		;; hl now points to vector address in RAM		
-		;; so set it to handler value in bc
-		ld		(hl),c
-		inc		hl
-		ld		(hl),b
+        pop		hl                      ; ret address / ignore
+        pop		bc                      ; bc = handler
+        pop		de                      ; d = undefined, e = vector number
+        ;; restore stack
+        push	de
+        push	bc
+        push	hl
+        ld		d,#0x00                 ; de = 16 bit vector number
+        ld		hl,#__sys_vec_tbl       ; vector table start
+        add		hl,de
+        add		hl,de
+        add		hl,de
+        inc		hl						; hl = hl + 3 * de + 1
+        ;; hl now points to vector address in RAM		
+        ;; so set it to handler value in bc
+        ld		(hl),c
+        inc		hl
+        ld		(hl),b
         call    _ir_enable
-		ret
+        ret
 
 
         ;; ------------------------------------------
-		;; extern void *sys_vec_get(uint8_t vec_num);
-		;; ------------------------------------------
+        ;; extern void *sys_vec_get(uint8_t vec_num);
+        ;; ------------------------------------------
         ;; affects: hl, de
 _sys_vec_get::
         call    _ir_disable
@@ -126,9 +126,9 @@ _sys_vec_get::
         ld      d,#0                    ; de = 16bit vector number
         ld      hl,#__sys_vec_tbl       ; vector table to hl
         add		hl,de
-		add		hl,de
-		add		hl,de
-		inc		hl                      ; hl = hl + 3 * de + 1
+        add		hl,de
+        add		hl,de
+        inc		hl                      ; hl = hl + 3 * de + 1
         ld      e,(hl)                  ; vector into de
         inc     hl
         ld      d,(hl)
@@ -137,39 +137,39 @@ _sys_vec_get::
         ret
 
 
-		;; -------------------------
-		;; extern void ir_disable();
-		;; -------------------------
+        ;; -------------------------
+        ;; extern void ir_disable();
+        ;; -------------------------
         ;; executes di with ref count.
         ;; affects: -
 _ir_disable::	
-		di
+        di
         push    hl
-		ld		hl,#ir_refcount
-		inc		(hl)
+        ld		hl,#ir_refcount
+        inc		(hl)
         pop     hl
-		ret
+        ret
 
 
-		;; ------------------------
-		;; extern void ir_enable();
-		;; ------------------------
+        ;; ------------------------
+        ;; extern void ir_enable();
+        ;; ------------------------
         ;; executes ei with ref count.
         ;; affects: -
 _ir_enable::
         push    af
-		ld		a,(#ir_refcount)
-		or		a
-		jr		z,do_ei					; if a==0 then just ei		
-		dec		a						; if a<>0 then dec a
-		ld		(#ir_refcount),a	    ; write back to counter
-		or		a						; and check for ei
-		jr		nz,dont_ei				; not yet...
+        ld		a,(#ir_refcount)
+        or		a
+        jr		z,do_ei					; if a==0 then just ei		
+        dec		a						; if a<>0 then dec a
+        ld		(#ir_refcount),a	    ; write back to counter
+        or		a						; and check for ei
+        jr		nz,dont_ei				; not yet...
 do_ei:		
-		ei
+        ei
 dont_ei:	
         pop     af
-		ret
+        ret
 
 
         ;; this are in ROM, but will be copied to an area in RAM!
@@ -247,11 +247,11 @@ __sys_heap::
 __heap::
 
 
-		.area	_INITIALIZED
+        .area	_INITIALIZED
 ir_refcount:
-		.ds		1
+        .ds		1
 
 
-		.area	_INITIALIZER
+        .area	_INITIALIZER
 init_ir_refcount:
-		.byte	0
+        .byte	0

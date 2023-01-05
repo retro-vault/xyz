@@ -3,13 +3,13 @@
         ;; kempston mouse driver
         ;;
         ;; NOTES:
-		;;  based on Andrey Rachkin code
-		;;  http://8bit.yarek.pl/hardware/zx.mouse/kmouse.html
+	    ;;  based on Andrey Rachkin code
+	    ;;  http://8bit.yarek.pl/hardware/zx.mouse/kmouse.html
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
-		;; 2015-04-20   tstih
+	    ;; 2015-04-20   tstih
         .module	kempston
 
         .globl  _mouse_calibrate
