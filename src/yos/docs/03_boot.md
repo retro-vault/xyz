@@ -117,8 +117,8 @@ To protect our code against this we must do reference counting. Following two fu
 _ir_disable::	
         di
         push    hl
-        ld		hl,#ir_refcount
-        inc		(hl)
+        ld      hl,#ir_refcount
+        inc     (hl)
         pop     hl
         ret
 
@@ -129,13 +129,13 @@ _ir_disable::
         ;; affects: -
 _ir_enable::
         push    af
-        ld		a,(#ir_refcount)
-        or		a
-        jr		z,do_ei					; if a==0 then just ei		
-        dec		a						; if a<>0 then dec a
-        ld		(#ir_refcount),a	    ; write back to counter
-        or		a						; and check for ei
-        jr		nz,dont_ei				; not yet...
+        ld      a,(#ir_refcount)
+        or      a
+        jr      z,do_ei			        ; if a==0 then just ei		
+        dec     a			            ; if a<>0 then dec a
+        ld      (#ir_refcount),a	    ; write back to counter
+        or      a			            ; and check for ei
+        jr      nz,dont_ei		        ; not yet...
 do_ei:		
         ei
 dont_ei:	
@@ -157,24 +157,24 @@ Finally we can write routines that enable you to hook vectors. When changing vec
         ;; affects: bc, de, hl
 _sys_vec_set::
         call    _ir_disable
-        pop		hl                      ; ret address / ignore
-        pop		bc                      ; bc = handler
-        pop		de                      ; d = undefined, e = vector number
+        pop     hl                      ; ret address / ignore
+        pop     bc                      ; bc = handler
+        pop     de                      ; d = undefined, e = vector number
         ;; restore stack
         push	de
         push	bc
         push	hl
-        ld		d,#0x00                 ; de = 16 bit vector number
-        ld		hl,#__sys_vec_tbl       ; vector table start
-        add		hl,de
-        add		hl,de
-        add		hl,de
-        inc		hl						; hl = hl + 3 * de + 1
+        ld      d,#0x00                 ; de = 16 bit vector number
+        ld      hl,#__sys_vec_tbl       ; vector table start
+        add     hl,de
+        add     hl,de
+        add     hl,de
+        inc     hl                      ; hl = hl + 3 * de + 1
         ;; hl now points to vector address in RAM		
         ;; so set it to handler value in bc
-        ld		(hl),c
-        inc		hl
-        ld		(hl),b
+        ld      (hl),c
+        inc     hl
+        ld      (hl),b
         call    _ir_enable
         ret
 
@@ -187,10 +187,10 @@ _sys_vec_get::
         pop     de                      ; d = undefied, e = #vector
         ld      d,#0                    ; de = 16bit vector number
         ld      hl,#__sys_vec_tbl       ; vector table to hl
-        add		hl,de
-        add		hl,de
-        add		hl,de
-        inc		hl                      ; hl = hl + 3 * de + 1
+        add     hl,de
+        add     hl,de
+        add     hl,de
+        inc     hl                      ; hl = hl + 3 * de + 1
         ld      e,(hl)                  ; vector into de
         inc     hl
         ld      d,(hl)
