@@ -132,10 +132,10 @@ _ir_enable::
         ld      a,(#ir_refcount)
         or      a
         jr      z,do_ei			        ; if a==0 then just ei		
-        dec     a			            ; if a<>0 then dec a
-        ld      (#ir_refcount),a	    ; write back to counter
-        or      a			            ; and check for ei
-        jr      nz,dont_ei		        ; not yet...
+        dec     a                       ; if a<>0 then dec a
+        ld      (#ir_refcount),a        ; write back to counter
+        or      a                       ; and check for ei
+        jr      nz,dont_ei              ; not yet...
 do_ei:		
         ei
 dont_ei:	
