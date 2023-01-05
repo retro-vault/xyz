@@ -109,41 +109,41 @@ subroutine_b:
 To protect our code against this we must do reference counting. Following two functions do exactly that. 
 
 ~~~asm
-		;; -------------------------
-		;; extern void ir_disable();
-		;; -------------------------
-                ;; executes di with ref count.
-                ;; affects: -
+        ;; -------------------------
+        ;; extern void ir_disable();
+        ;; -------------------------
+        ;; executes di with ref count.
+        ;; affects: -
 _ir_disable::	
-		di
+        di
         push    hl
-		ld		hl,#ir_refcount
-		inc		(hl)
+        ld		hl,#ir_refcount
+        inc		(hl)
         pop     hl
-		ret
+        ret
 
-		;; ------------------------
-		;; extern void ir_enable();
-		;; ------------------------
-                ;; executes ei with ref count.
-                ;; affects: -
+        ;; ------------------------
+        ;; extern void ir_enable();
+        ;; ------------------------
+        ;; executes ei with ref count.
+        ;; affects: -
 _ir_enable::
         push    af
-		ld		a,(#ir_refcount)
-		or		a
-		jr		z,do_ei					; if a==0 then just ei		
-		dec		a						; if a<>0 then dec a
-		ld		(#ir_refcount),a	    ; write back to counter
-		or		a						; and check for ei
-		jr		nz,dont_ei				; not yet...
+        ld		a,(#ir_refcount)
+        or		a
+        jr		z,do_ei					; if a==0 then just ei		
+        dec		a						; if a<>0 then dec a
+        ld		(#ir_refcount),a	    ; write back to counter
+        or		a						; and check for ei
+        jr		nz,dont_ei				; not yet...
 do_ei:		
-		ei
+        ei
 dont_ei:	
         pop     af
-		ret
+        ret
 
 ir_refcount:
-		.ds		1
+        .ds		1
 ~~~
 
 # Hook RST vectors
@@ -151,36 +151,36 @@ ir_refcount:
 Finally we can write routines that enable you to hook vectors. When changing vectors we are going to disable interrupts. These routines will simply write new address to RAM after the jump opcode.
 
 ~~~asm
-	;; -----------------------------------------------------------
-	;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
-	;; ------------------------------------------------------------
+        ;; -----------------------------------------------------------
+        ;; extern void sys_vec_set(void (*handler)(), uint8_t vec_num);
+        ;; ------------------------------------------------------------
         ;; affects: bc, de, hl
 _sys_vec_set::
         call    _ir_disable
-		pop		hl                      ; ret address / ignore
-		pop		bc                      ; bc = handler
-		pop		de                      ; d = undefined, e = vector number
-		;; restore stack
-		push	de
-		push	bc
-		push	hl
-		ld		d,#0x00                 ; de = 16 bit vector number
-		ld		hl,#__sys_vec_tbl       ; vector table start
-		add		hl,de
-		add		hl,de
-		add		hl,de
-		inc		hl						; hl = hl + 3 * de + 1
-		;; hl now points to vector address in RAM		
-		;; so set it to handler value in bc
-		ld		(hl),c
-		inc		hl
-		ld		(hl),b
+        pop		hl                      ; ret address / ignore
+        pop		bc                      ; bc = handler
+        pop		de                      ; d = undefined, e = vector number
+        ;; restore stack
+        push	de
+        push	bc
+        push	hl
+        ld		d,#0x00                 ; de = 16 bit vector number
+        ld		hl,#__sys_vec_tbl       ; vector table start
+        add		hl,de
+        add		hl,de
+        add		hl,de
+        inc		hl						; hl = hl + 3 * de + 1
+        ;; hl now points to vector address in RAM		
+        ;; so set it to handler value in bc
+        ld		(hl),c
+        inc		hl
+        ld		(hl),b
         call    _ir_enable
-		ret
+        ret
 
         ;; ------------------------------------------
-	;; extern void *sys_vec_get(uint8_t vec_num);
-	;; ------------------------------------------
+        ;; extern void *sys_vec_get(uint8_t vec_num);
+        ;; ------------------------------------------
         ;; affects: hl, de
 _sys_vec_get::
         call    _ir_disable
@@ -188,9 +188,9 @@ _sys_vec_get::
         ld      d,#0                    ; de = 16bit vector number
         ld      hl,#__sys_vec_tbl       ; vector table to hl
         add		hl,de
-		add		hl,de
-		add		hl,de
-		inc		hl                      ; hl = hl + 3 * de + 1
+        add		hl,de
+        add		hl,de
+        inc		hl                      ; hl = hl + 3 * de + 1
         ld      e,(hl)                  ; vector into de
         inc     hl
         ld      d,(hl)
