@@ -131,7 +131,7 @@ _ir_enable::
         push    af
         ld      a,(#ir_refcount)
         or      a
-        jr      z,do_ei			        ; if a==0 then just ei		
+        jr      z,do_ei                 ; if a==0 then just ei		
         dec     a                       ; if a<>0 then dec a
         ld      (#ir_refcount),a        ; write back to counter
         or      a                       ; and check for ei
