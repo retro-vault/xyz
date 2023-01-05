@@ -6,10 +6,10 @@
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
-		;; 2021-07-11   tstih
-		.module time
-		
-		.globl  _clock
+        ;; 2021-07-11   tstih
+        .module time
+        
+        .globl  _clock
         .globl  __clock_tick
 
 
@@ -18,7 +18,7 @@
         ;; -----------------------
         ;; return ticks
         ;; affects: hl
-		.area	_CODE
+        .area	_CODE
 _clock::
         ld      hl,(_clock_ticks)
         ret
@@ -68,18 +68,18 @@ ctk_sec_elapsed:
 
 
 
-		.area	_INITIALIZED
+        .area	_INITIALIZED
 _clock_ticks:
-		.ds		4
+        .ds		4
 _clock_time:
         .ds     4
 _clock_sec_countdown:
         .ds     1
 
 
-		.area 	_INITIALIZER
+        .area 	_INITIALIZER
 init_clock_ticks:
-		.byte   0, 0, 0, 0
+        .byte   0, 0, 0, 0
 init_clock_time:
         .byte   0, 0, 0, 0
 init_clock_sec_countdown:
