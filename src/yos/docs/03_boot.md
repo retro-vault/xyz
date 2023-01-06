@@ -1,25 +1,21 @@
 # The Boot Process
 
-## Z80 RST calls
-
-Z80 has eight single byte *restart* commands: RST 0x00, RST 0x08, RST 0x10, RST 0x18, RST 0x20, RST 0x28, RST 0x30, and RST 0x38. Each command pushes current address to the stack, and jumps to the location that follows the command. Since RST command only has 8 bits it can't store full 16 bit address for the jump so it is assummed that the address is in page zero of memory. If you execute RST 0x18 it will call address 0x0018 (decimal: 24). 
-
-*By convention memory pages in Z80 are 256 bytes long. This way the high byte of 16 byte address can be viewed as the page and the lower byte as offset within the page.*
-
-For RST calls to work, some sort of handler code must be located at target addresses.
-
 ## Z80 Power Up 
 
-When the Z80 microprocesssor is powered up, it starts executing program at location zero. This also happens to be the target location of a RST 0x00 call. Here is the xyz os code at location 0x0000.
+When the *Z80* microprocessor is powered up, it starts executing program at location `0x0000`. In *yos* this is the location of the [crt0rom.s](https://github.com/tstih/xyz/blob/main/src/yos/startup/crt0rom.s) file. Let's take a look at its code.
+
+The first instruction disables interrupts and the second jumps to the `init` subroutine. The jump is followed by 4 bytes holding the *yos* version. These three parts are exactly 8 bytes long.
 
 ~~~asm
         .org    0x0000
         di                              ; disable interrupts
         jp      init                    ; init
-        .db     0,0,0,0                 ; 4 reserved bytes for version
+        .db     1,0,0,0                 ; the version is 1.0.0.0
 ~~~
 
-The program at address zero disables interrupts and jumps to the init section. At the end 4 bytes are added so that next available address ix 0x08 i.e. the target address for the RST 0x08 call. This pattern is used for all restart call handlers. This is how the code following the above code looks.
+Z80 has eight single byte calls: `RST 0x00`, `RST 0x08`, `RST 0x10`, `RST 0x18`, `RST 0x20`, `RST 0x28`, `RST 0x30`, and `RST 0x38`. Each call pushes current address to the stack, and jumps to the predefined location. Since RST command only has 8 bits it can't store full 16-bit address for the jump, so it is assumed that high byte for the jump is always 0. Consequently, if you execute RST 0x18 it will call address 0x0018 (decimal: 24). 
+
+As mentioned, initial code is exactly 8 bytes long. It is followed by the `RST 0x08` handler below i.e. the target address for the `RST 0x08` call. 
 
 ~~~asm
         ;; rst 0x08 at address 0x0008
@@ -32,15 +28,26 @@ rst8ret:
 rst10ret:
         reti
         .db     0,0,0
+        ;; rst 0x18
+        jp      rst18
+rst18ret:
+        reti
+        .db     0,0,0
+        ;; rst 0x20
+        jp      rst20
+rst20ret:
+        reti
+        .db     0,0,0
+        ;; ... the pattern repeats ...
 ~~~
 
-This two vectors are exactly 8 bytes apart. The `jp` command has 3 bytes, the `reti` adds two more, and three padding bytes are added at the end. 
+Each two restart handlers are exactly 8 bytes apart. Observe the code above. The `jp` command has 3 bytes, the `reti` adds 2 more, and 3 padding bytes are added at the end with the `.db` directive. All together exactly 8 bytes, followed by the next restart vector.
 
-As we see each rst vector starts with a jump to a label (called rst8, rst10, etc...) So where do these labels point to?
+Each restart handler starts with a jump to a label (called `rst8`, `rst10`, etc...) So where do these labels point to? 
 
-## Why RST calls to RAM?
+## RST jumps to RAM?!
 
-The answer to previous question is: these labels point to RAM. The reason for this is simple: we want to be able to change them. And we can't change the code in ROM. So our code in ROM needs to jump to addresses in RAM which can be changes. 
+The answer to previous question is: these labels point to *RAM*. The reason for this is simple: we want to be able to change them. And we can't change the code in *ROM*. So our code in ROM needs to jump to addresses in RAM which can be changes. 
 
 And here's the code in RAM.
 
@@ -56,7 +63,7 @@ __sys_vec_tbl::
         nmi:    .ds     3
 ~~~
 
-As you see thse are undefined labels. Which is logical since xzy is a ROM program. It is not loaded in RAM. So it uses a trick. At start up it copies following code to the `__sys_vec_tbl` address.
+These are undefined labels. The *yos* is a ROM program. It is not loaded into the RAM. So it uses a trick. At start up it copies following code to the RAM location with label `__sys_vec_tbl` address.
 
 ~~~asm
 start_vectors:
@@ -71,7 +78,7 @@ start_vectors:
 end_vectors:
 ~~~
 
-This is the piece of code that copies the vectors.
+And this is the piece of code that copies the vectors.
 
 ~~~asm
         ;; move vector table to RAM
@@ -81,11 +88,78 @@ This is the piece of code that copies the vectors.
         ldir
 ~~~
 
-Now addresses in RAM are defined. So what happens when the RST 0x08 instruction is detected? The system first executes instruction at 0x0008 which is `jp rst8`. The label `rst8` points to initialized RAM. At that address there is another jump `jp rst8ret`. This one jumps back to ROM, and continues by executing instruction `reti`. But now you can change the jump at label `rst8` hence you can create a hook that executes when `rst 0x08` is called.
+So what happens when the `RST 0x08` instruction is executed? The system first jumps to the address 0x0008 and executes instruction `jp rst8`. The label `rst8` points to initialized RAM. At that address in RAM there is another jump `jp rst8ret`. This one jumps back to ROM, and continues by executing instruction `reti`. 
 
-# Safely Disabling and Enabling Interrupts
+Because it jumps to *RAM* first you can change the jump at label `rst8` hence you can install a hook that executes when `rst 0x08` is called.
 
-Instructions `di` and `ei` can be quite harmful if not used correctly. Imagine two subroutines: `subroutine_a` and `subroutine_b` both disabling interrupts at start and enabling it when they return. What happens if we call the later from the first?
+## Special interrupts 
+
+### The 50Hz Screen Refresh
+
+Every 1/50th of a second - the ZX Spectrum refreshes the screen. If it is operating in the interrupt mode 1, it executes the `RST 0x38`. Hence, the code at location `0x0038` is normally called 50 times per seconds. 
+
+ > The *yos* already heavily utilizes this interrupt (for timers, drivers, and threads), so unless you know what you are doing, don't hook into it. If your program needs to be notified every 1/50th of a second, use the *timer API* instead.
+
+### The NMI interrupts
+
+The non-maskable interrupt behaves in the same way as any other interrupt. It is located at location `0x0066`, but instead of returning with the `reti`, this interrupt returns with the `retn`.
+
+The *ZX Spectrum* does not use *NMI* interrupt, but some hardware does.
+
+## The Init Subroutine
+
+The operating systems' `init` subroutine sets up the stack, copies reset vectors and global variables from *ROM* to *RAM*, enters the interrupt mode 1, enables interrupts, and calls the C `main()` function.
+
+~~~asm
+init:
+        ld      sp,#__sys_stack         ; now sp to OS stack (on bss)
+        call    gsinit                  ; init static vars
+
+        ;; start interrupts
+        im      1                       ; im 1, 50Hz interrupt on ZX Spectrum
+        ei                              ; enable interrupts
+
+        ;; call the main!
+        call    _main
+
+tarpit:
+        halt                            ; halt
+        jr      tarpit
+~~~
+
+## RAM initialization
+
+Since the operating system runs in *ROM*, all the global *C* variables must be copied to *RAM* at start up; otherwise, they would be constants. In addition, our reset vectors must be initialized.
+
+The code to do that is by convention placed into the `_GSINIT` segment, which must end with `_GSFINAL`. Also, by convention the *SDCC* places additional initialization code into this segment. 
+
+All initialization values for the global variables will be placed into the *SDCC* segment `s_INITIALIZER` in *ROM*, and copied by our code to the `s__INITIALIZED` segment in *RAM*.
+
+~~~asm
+        .area   _GSINIT
+gsinit:
+        ;; move vector table to RAM
+        ld      hl,#start_vectors
+        ld      de,#__sys_vec_tbl
+        ld      bc,#end_vectors - #start_vectors
+        ldir
+
+        ;; initialize vars from initializer
+        ld      de, #s__INITIALIZED
+        ld      hl, #s__INITIALIZER
+        ld      bc, #l__INITIALIZER
+        ld      a, b
+        or      a, c
+        jr      z, gsinit_none
+        ldir
+gsinit_none:
+        .area   _GSFINAL
+        ret
+~~~
+
+## Safely Disabling and Enabling Interrupts
+
+Instructions `di` and `ei` can be quite harmful if not used correctly. Imagine two subroutines: `subroutine_a` and `subroutine_b` both disabling interrupts at start and enabling it when they return. What happens if we call the latter from the first?
 
 ~~~asm
 subroutine_a:
@@ -106,7 +180,7 @@ subroutine_b:
 
 `subroutine_b` does not know internals of `subroutine_a`. It simply enables interrupts upon completion. Unfortunately that happens when `subroutine_a` is still executing. So code after the call to `subroutine_b` will not be guarded by a `di` anymore.
 
-To protect our code against this we must do reference counting. Following two functions do exactly that. 
+To protect our code against this we must do reference counting. These are the two subroutines that do that.
 
 ~~~asm
         ;; -------------------------
@@ -146,9 +220,9 @@ ir_refcount:
         .ds		1
 ~~~
 
-# Hook RST vectors
+## Hook RST vectors
 
-Finally we can write routines that enable you to hook vectors. When changing vectors we are going to disable interrupts. These routines will simply write new address to RAM after the jump opcode.
+Finally, we can write routines that enable you to hook vectors. When changing vectors we are going to disable interrupts. These routines will simply write new vector to *RAM*.
 
 ~~~asm
         ;; -----------------------------------------------------------
@@ -199,6 +273,22 @@ _sys_vec_get::
         ret
 ~~~
 
+## The Stack and the Heap
 
-...to be continued...
+*Yos* maintains 512 bytes of separate operating system stack and 1024 bytes of operating system heap, which are both placed to the *BSS* (in *RAM*) segment at the end of the [crt0rom.s](https://github.com/tstih/xyz/blob/main/src/yos/startup/crt0rom.s) file. 
 
+The common user heap (label `__heap`) starts immediately after the system heap. Since each user process is assigned a separate stack, there is no common user stack.
+
+~~~asm
+        .area   _BSS
+        ;; 512 bytes of operating system stack
+        .ds     512
+__sys_stack::
+
+
+        .area   _HEAP
+__sys_heap::
+        ;; 1KB of system heap
+        .ds     1024
+__heap::
+~~~
