@@ -1,0 +1,6 @@
+# CMake
+
+## 3rd Party Libraries
+
+### Tutorial: Preparing libraries for CMake FetchContent
+https://www.foonathan.net/2022/06/cmake-fetchcontent/

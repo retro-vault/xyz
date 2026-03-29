@@ -1,0 +1,182 @@
+<program> ::= <statement_list>
+
+<statement_list> ::= <statement>
+                   | <statement_list> <statement>
+
+<statement> ::= <label_statement>
+              | <instruction_statement>
+              | <directive_statement>
+              | <comment>
+
+<label_statement> ::= <label> ":"
+
+<instruction_statement> ::= <instruction> <operand_list> <comment>
+
+<directive_statement> ::= <directive> <operand_list> <comment>
+
+<comment> ::= ";" <comment_text>
+
+<label> ::= <identifier>
+
+<instruction> ::= "NOP"
+                | "LD" <register> "," <operand>
+                | "INC" <register>
+                | "DEC" <register>
+                | "RLCA"
+                | "RRCA"
+                | "RLA"
+                | "RRA"
+                | "DAA"
+                | "CPL"
+                | "SCF"
+                | "CCF"
+                | "HALT"
+                | "ADC" <register> "," <operand>
+                | "SBC" <register> "," <operand>
+                | "ADD" <register> "," <operand>
+                | "SUB" <operand>
+                | "AND" <operand>
+                | "XOR" <operand>
+                | "OR" <operand>
+                | "CP" <operand>
+                | "RET"
+                | "JP" <condition> "," <address>
+                | "JR" <condition> "," <offset>
+                | "CALL" <condition> "," <address>
+                | "RST" <vector>
+                | "PUSH" <register>
+                | "POP" <register>
+                | "EX" <register> "," <register>
+                | "DI"
+                | "EI"
+                | "IM" <mode>
+                | "IN" <register> "," <port>
+                | "OUT" <port> "," <register>
+                | <extended_instruction>
+
+<extended_instruction> ::= "BIT" <bit> "," <register>
+                         | "RES" <bit> "," <register>
+                         | "SET" <bit> "," <register>
+                         | "SLA" <register>
+                         | "SRA" <register>
+                         | "SRL" <register>
+                         | "RLC" <register>
+                         | "RL" <register>
+                         | "RRC" <register>
+                         | "RR" <register>
+                         | "LDI"
+                         | "CPI"
+                         | "INI"
+                         | "OUTI"
+                         | "LDD"
+                         | "CPD"
+                         | "IND"
+                         | "OUTD"
+                         | "LDIR"
+                         | "CPIR"
+                         | "INIR"
+                         | "OTIR"
+                         | "LDDR"
+                         | "CPDR"
+                         | "INDR"
+                         | "OTDR"
+
+<operand_list> ::= <operand>
+                 | <operand> "," <operand>
+                 | /* empty */
+
+<operand> ::= <register>
+            | <immediate_value>
+            | <address>
+            | <offset>
+            | <port>
+
+<register> ::= "A"
+             | "B"
+             | "C"
+             | "D"
+             | "E"
+             | "H"
+             | "L"
+             | "AF"
+             | "BC"
+             | "DE"
+             | "HL"
+             | "IX"
+             | "IY"
+             | "SP"
+             | "(" "HL" ")"
+             | "(" "IX" "+" <offset> ")"
+             | "(" "IY" "+" <offset> ")"
+             | "I"
+             | "R"
+
+<immediate_value> ::= "#" <hex_number>
+                    | <decimal_number>
+
+<address> ::= "#" <hex_number>
+            | <identifier>
+
+<offset> ::= <decimal_number>
+
+<port> ::= <immediate_value>
+         | <register>
+
+<condition> ::= "NZ"
+              | "Z"
+              | "NC"
+              | "C"
+              | "PO"
+              | "PE"
+              | "P"
+              | "M"
+
+<vector> ::= "0"
+           | "8"
+           | "10"
+           | "18"
+           | "20"
+           | "28"
+           | "30"
+           | "38"
+
+<mode> ::= "0"
+         | "1"
+         | "2"
+
+<bit> ::= "0"
+        | "1"
+        | "2"
+        | "3"
+        | "4"
+        | "5"
+        | "6"
+        | "7"
+
+<directive> ::= "DB"
+              | "DW"
+              | "ORG"
+              | "EQU"
+              | "INCLUDE"
+              | "DEFINE"
+
+<identifier> ::= <letter> { <letter> | <digit> }*
+
+<comment_text> ::= <any_character>*
+
+<letter> ::= "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M"
+           | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+           | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m"
+           | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z"
+
+<digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+
+<hex_number> ::= <hex_digit> { <hex_digit> }*
+
+<hex_digit> ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+              | "A" | "B" | "C" | "D" | "E" | "F"
+              | "a" | "b" | "c" | "d" | "e" | "f"
+
+<decimal_number> ::= <digit> { <digit> }*
+
+<any_character> ::= /* any valid ASCII character */

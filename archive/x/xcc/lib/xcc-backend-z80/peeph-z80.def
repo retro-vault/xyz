@@ -1,0 +1,17 @@
+# peeph-z80.def - Z80 peephole rules
+#
+# Some of these peepholes could be moved to peeph.def,
+# but a GBZ80 expert should review them first.
+#
+# (C) Philipp Klaus Krause, 2006–2020 <philipp@colecovision.eu>
+#
+# Released under the GNU General Public License v2 or later.
+
+
+replace restart {
+	xor	a, a
+	ld	%1 (%2), a
+} by {
+	ld	%1 (%2), #0
+	; peephole 178 direct load zero constant to memory addressed by index register
+} if notUsed('a'), canAssign(%1 %2 '#0')

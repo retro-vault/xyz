@@ -1,0 +1,52 @@
+<file> ::= <format_specifier> <header_line> <module_line>? <lines> 
+
+<format_specifier> ::= ("XD" | "XQ" | "XH" | "XL") ; specifies the file format
+
+<header_line> ::= "H" <number_of_areas> <number_of_symbols>
+<number_of_areas> ::= <integer> ; specifies the number of areas (aa)
+<number_of_symbols> ::= <integer> ; specifies the number of global symbols (gg)
+
+<module_line> ::= "M" <name> ; module name line, optional
+
+<lines> ::= <line>* ; zero or more lines of various types
+<line> ::= <symbol_line> | <area_line> | <t_line> | <r_line> | <p_line>
+
+<symbol_line> ::= "S" <string> ("Def" | "Ref") <value>
+<string> ::= <quoted_string> ; symbol string
+<value> ::= <hex_value> ; 4-digit hexadecimal value
+
+<area_line> ::= "A" <label> <size> <flags>
+<label> ::= <string> ; area label
+<size> ::= <hex_value> ; size of the area in bytes
+<flags> ::= <flag_set> ; area flags in hexadecimal
+
+<t_line> ::= "T" <offset_address> <data_bytes>
+<offset_address> ::= <hex_value> ; offset address from current area base
+<data_bytes> ::= <byte>* ; assembled instructions and data bytes
+
+<r_line> ::= "R" "0" "0" <area_index> <relocation_groups>
+<area_index> ::= <hex_value> ; current area index
+<relocation_groups> ::= <relocation_group>*
+<relocation_group> ::= <relocation_mode> <data_index> <reference_index>
+<relocation_mode> ::= <relocation_byte> (<relocation_escape>)?
+<relocation_byte> ::= <byte> ; describes the relocation mode and object format
+<relocation_escape> ::= <byte> ; optional escape byte when high nibble of n1 is 0xF
+<data_index> ::= <byte> ; byte index into the preceding T line data
+<reference_index> ::= <hex_value> ; index of the area or symbol being referenced
+
+<p_line> ::= "P" "0" "0" <area_index> <paging_info>
+<paging_info> ::= <paging_mode> <page_index> <page_reference>
+<paging_mode> ::= <relocation_byte> <byte> <hex_value> ; similar format to relocation mode
+<page_index> ::= <byte> ; byte index into the T line data
+<page_reference> ::= <hex_value> ; page and base address of the page area
+
+<name> ::= <string> ; module name string
+<quoted_string> ::= '"' <char>* '"' ; string enclosed in quotes
+<integer> ::= <digit>+
+<hex_value> ::= <hex_digit>+ ; hexadecimal value
+<byte> ::= <hex_digit> <hex_digit> ; single byte value
+<hex_digit> ::= [0-9A-Fa-f] ; hexadecimal digit
+<digit> ::= [0-9] ; numeric digit
+<char> ::= [a-zA-Z0-9_-.] ; valid characters in strings
+
+<flag_set> ::= "0x" <hex_digit>+ ; hexadecimal representation of flags

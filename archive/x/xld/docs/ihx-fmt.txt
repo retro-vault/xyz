@@ -1,0 +1,54 @@
+        THE LINKER                                             Page 2-11
+        INTEL HEX OUTPUT FORMAT
+
+
+        2.7  INTEL HEX OUTPUT FORMAT
+
+        Record Mark Field    -  This  field  signifies  the  start  of a
+                                record, and consists of an  ascii  colon
+                                (:).
+
+        Record Length Field  -  This   field   consists   of  two  ascii
+                                characters which indicate the number  of
+                                data   bytes   in   this   record.   The
+                                characters are the result of  converting
+                                the  number  of  bytes  in binary to two
+                                ascii characters, high digit first.   An
+                                End  of  File  record contains two ascii
+                                zeros in this field.
+
+        Load Address Field   -  This  field  consists  of the four ascii
+                                characters which result from  converting
+                                the  the  binary value of the address in
+                                which to begin loading this record.  The
+                                order is as follows:
+
+                                    High digit of high byte of address.
+                                    Low digit of high byte of address.
+                                    High digit of low byte of address.
+                                    Low digit of low byte of address.
+
+                                In an End of File record this field con-
+                                sists of either four ascii zeros or  the
+                                program  entry  address.   Currently the
+                                entry address option is not supported.
+
+        Record Type Field    -  This  field  identifies the record type,
+                                which is either 0 for data records or  1
+                                for  an End of File record.  It consists
+                                of two ascii characters, with  the  high
+                                digit of the record type first, followed
+                                by the low digit of the record type.
+
+        Data Field           -  This  field consists of the actual data,
+                                converted to two ascii characters,  high
+                                digit first.  There are no data bytes in
+                                the End of File record.
+
+        Checksum Field       -  The  checksum  field is the 8 bit binary
+                                sum of the record length field, the load
+                                address  field,  the  record type field,
+                                and the data field.  This  sum  is  then
+                                negated  (2's  complement) and converted
+                                to  two  ascii  characters,  high  digit
+                                first.

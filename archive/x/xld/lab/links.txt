@@ -1,0 +1,13 @@
+# CMake
+
+## Z80 Syntax
+
+### Writing a Z80 assembler - lexing ASM and building a parse tree using composition
+
+https://stackoverflow.com/questions/1305091/writing-a-z80-assembler-lexing-asm-and-building-a-parse-tree-using-composition
+
+## 3rd Party Libraries
+
+### Tutorial: Preparing libraries for CMake fetchcontent
+
+https://www.foonathan.net/2022/06/cmake-fetchcontent/
