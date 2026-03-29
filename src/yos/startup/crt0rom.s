@@ -1,11 +1,11 @@
-        ;;; crt0rom.s
-        ;;;
-        ;;; ZX Spectrum 48K ROM startup code
-        ;;;
-        ;;; MIT License (see: LICENSE)
-        ;;; Copyright (C) 2021 Tomaz Stih
-        ;;;
-        ;;; 2021-06-16   tstih
+        ;; crt0rom.s
+        ;;
+        ;; ZX Spectrum 48K ROM startup code
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2021 Tomaz Stih
+        ;;
+        ;; 2021-06-16   tstih
         .module crt0rom
 
         .globl	_ir_enable
@@ -88,9 +88,9 @@
         jr      .tarpit
 
 
-        ;;; extern void sys_vec_set(void (*handler)(void), uint8_t vec_num);
-        ;;; return:       (none)
-        ;;; affects:      BC, DE, HL
+        ;; extern void sys_vec_set(void (*handler)(void), uint8_t vec_num);
+        ;; return:       (none)
+        ;; affects:      BC, DE, HL
 _sys_vec_set::
         call    _ir_disable
         ;; hl = handler, e = vec_num
@@ -111,9 +111,9 @@ _sys_vec_set::
         ret
 
 
-        ;;; extern void *sys_vec_get(uint8_t vec_num);
-        ;;; return:       HL = handler code address
-        ;;; affects:      HL, DE
+        ;; extern void *sys_vec_get(uint8_t vec_num);
+        ;; return:       HL = handler code address
+        ;; affects:      HL, DE
 _sys_vec_get::
         call    _ir_disable
         ;; e = vec_num (already in E from SDCC 4.5 calling convention)
@@ -131,10 +131,10 @@ _sys_vec_get::
         ret
 
 
-        ;;; extern void ir_disable(void);
-        ;;; return:       (none)
-        ;;; affects:      (none)
-        ;;; notes:        executes di with ref count
+        ;; extern void ir_disable(void);
+        ;; return:       (none)
+        ;; affects:      (none)
+        ;; notes:        executes di with ref count
 _ir_disable::
         di
         push    hl
@@ -144,10 +144,10 @@ _ir_disable::
         ret
 
 
-        ;;; extern void ir_enable(void);
-        ;;; return:       (none)
-        ;;; affects:      AF
-        ;;; notes:        executes ei with ref count
+        ;; extern void ir_enable(void);
+        ;; return:       (none)
+        ;; affects:      AF
+        ;; notes:        executes ei with ref count
 _ir_enable::
         push    af
         ld		a,(#.ir_refcount)

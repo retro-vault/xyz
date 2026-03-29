@@ -1,21 +1,21 @@
-        ;;; throbin.s
-        ;;;
-        ;;; ZX Spectrum thread round-robin scheduler
-        ;;;
-        ;;; MIT License (see: LICENSE)
-        ;;; Copyright (C) 2021 Tomaz Stih
-        ;;;
-        ;;; 2021-08-07   tstih
+        ;; throbin.s
+        ;;
+        ;; ZX Spectrum thread round-robin scheduler
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2021 Tomaz Stih
+        ;;
+        ;; 2021-08-07   tstih
         .module throbin
 
         .globl  __thread_robin
 
         .area   _CODE
 
-;;; extern void thread_robin(void);
-;;; return:       (none)
-;;; affects:      (all registers are saved/restored as part of context switch)
-;;; notes:        round-robin scheduler, saves current thread context and restores next
+        ;; extern void thread_robin(void);
+        ;; return:       (none)
+        ;; affects:      (all registers are saved/restored as part of context switch)
+        ;; notes:        round-robin scheduler, saves current thread context and restores next
 __thread_robin::
         ;; no interrupts
         di

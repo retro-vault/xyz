@@ -1,11 +1,11 @@
-        ;;; kbd.s
-        ;;;
-        ;;; Keyboard matrix scanning for ZX Spectrum
-        ;;;
-        ;;; MIT License (see: LICENSE)
-        ;;; Copyright (C) 2021 Tomaz Stih
-        ;;;
-        ;;; 2014-09-17   tstih
+        ;; kbd.s
+        ;;
+        ;; Keyboard matrix scanning for ZX Spectrum
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2021 Tomaz Stih
+        ;;
+        ;; 2014-09-17   tstih
 
         .module kbd
 
@@ -23,11 +23,11 @@
 
         .area	_CODE
 
-;;; extern void kbd_scan(void);
-;;; return:       (none)
-;;; affects:      AF, HL, DE, BC
-;;; notes:        scans keyboard for key changes, queues events to ring buffer
-;;;               must be wired to 50Hz interrupt, priority to shift keys
+        ;; extern void kbd_scan(void);
+        ;; return:       (none)
+        ;; affects:      AF, HL, DE, BC
+        ;; notes:        scans keyboard for key changes, queues events to ring buffer
+        ;;               must be wired to 50Hz interrupt, priority to shift keys
 __kbd_scan::
         ;; first handle special cases - caps and symbol shift
         ;; they must be processed first to give meaning
@@ -156,10 +156,10 @@ __kbd_scan::
         pop		de
         ret
 
-;;; .queue_key
-;;; param:  A = key code to queue
-;;; return: (none)
-;;; affects: BC, DE, HL
+        ;; .queue_key
+        ;; param:  A = key code to queue
+        ;; return: (none)
+        ;; affects: BC, DE, HL
 .queue_key:
         push    bc
         push    de
@@ -190,10 +190,10 @@ __kbd_scan::
         ret
 
 
-;;; extern uint8_t kbd_read(void);
-;;; return:       L = key code (0 if no key available), H = 0
-;;; affects:      AF, BC, DE, HL
-;;; notes:        reads next key from ring buffer, returns 1-based code
+        ;; extern uint8_t kbd_read(void);
+        ;; return:       L = key code (0 if no key available), H = 0
+        ;; affects:      AF, BC, DE, HL
+        ;; notes:        reads next key from ring buffer, returns 1-based code
 _kbd_read::
         ld		a,(#__kbd_buff+2)		; a=count
         cp		#0						; is it zero?

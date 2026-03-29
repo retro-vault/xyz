@@ -1,11 +1,11 @@
-        ;;; tty.s
-        ;;;
-        ;;; Core text terminal (TTY) functions for ZX Spectrum
-        ;;;
-        ;;; MIT License (see: LICENSE)
-        ;;; Copyright (C) 2021 Tomaz Stih
-        ;;;
-        ;;; 2021-06-16   tstih
+        ;; tty.s
+        ;;
+        ;; Core text terminal (TTY) functions for ZX Spectrum
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2021 Tomaz Stih
+        ;;
+        ;; 2021-06-16   tstih
         .module tty
 
         ;; functions
@@ -60,9 +60,9 @@
         .area   _CODE
 
 
-        ;;; extern void tty_cls(void);
-        ;;; return:       (none)
-        ;;; affects:      AF, HL, DE, BC
+        ;; extern void tty_cls(void);
+        ;; return:       (none)
+        ;; affects:      AF, HL, DE, BC
 _tty_cls::
         ;; first clear screen
         ld      a,#BLACK
@@ -75,10 +75,10 @@ _tty_cls::
         pop     hl
         ret
 
-        ;;; extern void tty_scroll(void);
-        ;;; return:       (none)
-        ;;; affects:      AF, BC, DE, HL
-        ;;; notes:        scrolls screen up one row
+        ;; extern void tty_scroll(void);
+        ;; return:       (none)
+        ;; affects:      AF, BC, DE, HL
+        ;; notes:        scrolls screen up one row
 _tty_scroll::
         ;; no interrupts and no cursor while scrolling
         call    _ir_disable
@@ -128,11 +128,11 @@ _tty_scroll::
         ret
 
 
-        ;;; extern void tty_xy(uint8_t x, uint8_t y);
-        ;;; param:  HL = x (low byte), DE = y (D)
-        ;;; return: (none)
-        ;;; affects: AF, BC, DE, HL
-        ;;; notes:   sets cursor position
+        ;; extern void tty_xy(uint8_t x, uint8_t y);
+        ;; param:  HL = x (low byte), DE = y (D)
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
+        ;; notes:   sets cursor position
 _tty_xy::
         call    _ir_disable
         call    __tty_cur_hide
@@ -146,11 +146,11 @@ _tty_xy::
         ret
 
 
-        ;;; extern void tty_attr(uint8_t attr);
-        ;;; param:  E = attribute byte
-        ;;; return: (none)
-        ;;; affects: AF
-        ;;; notes:   sets text attribute (color/inverse/underline)
+        ;; extern void tty_attr(uint8_t attr);
+        ;; param:  E = attribute byte
+        ;; return: (none)
+        ;; affects: AF
+        ;; notes:   sets text attribute (color/inverse/underline)
 _tty_attr::
         ;; attr in E (SDCC 4.5 calling convention)
         ld      a,e
@@ -158,11 +158,11 @@ _tty_attr::
         ret
 
 
-        ;;; extern void tty_outc(int c);
-        ;;; param:  (stack) = character code
-        ;;; return: (none)
-        ;;; affects: AF, BC, DE, HL
-        ;;; notes:   draws character at current x,y without updating position
+        ;; extern void tty_outc(int c);
+        ;; param:  (stack) = character code
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
+        ;; notes:   draws character at current x,y without updating position
 _tty_outc::
         pop     hl                      ; get return address
         pop     de                      ; get char
@@ -522,10 +522,10 @@ __tty_cur_show:
         ret
 
 
-        ;;; extern void tty_enable_cursor(bool enable);
-        ;;; param:  E = enable flag (non-zero = enable)
-        ;;; return: (none)
-        ;;; affects: AF, BC, DE, HL
+        ;; extern void tty_enable_cursor(bool enable);
+        ;; param:  E = enable flag (non-zero = enable)
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
 _tty_cur_enable::
         call    _ir_disable             ; no interrupts
         ;; grab stack arguments and restore stack
@@ -551,11 +551,11 @@ _tty_cur_enable::
         ret
 
 
-        ;;; extern void tty_putc(int c);
-        ;;; param:  (stack) = character code
-        ;;; return: (none)
-        ;;; affects: AF, BC, DE, HL
-        ;;; notes:   puts character with auto-advance and linefeed processing
+        ;; extern void tty_putc(int c);
+        ;; param:  (stack) = character code
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
+        ;; notes:   puts character with auto-advance and linefeed processing
 _tty_putc::
         call    _ir_disable
         call    __tty_cur_hide
@@ -606,11 +606,11 @@ _tty_putc::
         ret
 
 
-        ;;; extern void tty_puts(char *s);
-        ;;; param:  HL = pointer to null-terminated string
-        ;;; return: (none)
-        ;;; affects: AF, BC, DE, HL
-        ;;; notes:   outputs string respecting escape sequences
+        ;; extern void tty_puts(char *s);
+        ;; param:  HL = pointer to null-terminated string
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
+        ;; notes:   outputs string respecting escape sequences
 _tty_puts::
         ;; hl = ptr to string (SDCC 4.5 calling convention)
 .puts_loop:
@@ -628,11 +628,11 @@ _tty_puts::
         jr      .puts_loop              ; and next
 
 
-        ;;; extern void tty_gets(char *s);
-        ;;; param:  HL = pointer to input buffer
-        ;;; return: (none)
-        ;;; affects: AF, BC, DE, HL
-        ;;; notes:   reads line from keyboard into buffer
+        ;; extern void tty_gets(char *s);
+        ;; param:  HL = pointer to input buffer
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
+        ;; notes:   reads line from keyboard into buffer
 _tty_gets::
         ;; hl = ptr to string (SDCC 4.5 calling convention)
         ;; counter
@@ -723,10 +723,10 @@ _tty_gets::
         ret
 
 
-        ;;; extern int tty_getc(void);
-        ;;; return:       L = key code (0 if buffer empty)
-        ;;; affects:      AF, BC, DE, HL
-        ;;; notes:        reads from keyboard buffer, interprets modifiers
+        ;; extern int tty_getc(void);
+        ;; return:       L = key code (0 if buffer empty)
+        ;; affects:      AF, BC, DE, HL
+        ;; notes:        reads from keyboard buffer, interprets modifiers
 _tty_getc::
         call    _kbd_read               ; key waiting?
         ld      h,#0
