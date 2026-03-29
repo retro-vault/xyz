@@ -5,7 +5,7 @@
 
 ROOT ?= $(realpath ..)
 
-SUBDIRS := serial
+SUBDIRS := serial microdrive
 
 .PHONY: all
 all:

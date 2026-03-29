@@ -1,4 +1,8 @@
-BUILD_DIR       = build
+ROOT ?= ../../..
+BUILD_DIR ?= $(ROOT)/build
+BIN_DIR ?= $(ROOT)/bin
+CXX ?= g++
+CXXFLAGS ?= -std=c++2a -g
 
 SOURCES         = $(wildcard src/*.cpp)
 HEADERS         = $(wildcard include/xlink/*.hpp)
@@ -9,19 +13,25 @@ TEST_MAIN       = tests/test_main.cpp
 TEST_FILTER     = $(filter-out src/main.cpp,$(SOURCES))
 TEST_TARGET     = xlink_tests
 
-.PHONY: all tools test clean
-all: tools
+OUTPUT_DIR      = $(BUILD_DIR)/xc/xlink
+BIN_OUTPUT      = $(BIN_DIR)/xc/xlink
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+.PHONY: all test clean
 
-tools: $(BUILD_DIR) $(SOURCES) $(HEADERS)
-	$(CXX) -o $(BUILD_DIR)/$(TARGET) $(SOURCES) $(CXXFLAGS) $(INCLUDE)
+all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(SOURCES) $(HEADERS)
+	$(CXX) -o $(BIN_OUTPUT)/$(TARGET) $(SOURCES) $(CXXFLAGS) $(INCLUDE)
 
-test: $(BUILD_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
-	$(CXX) -o $(BUILD_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
+$(OUTPUT_DIR):
+	mkdir -p $(OUTPUT_DIR)
+
+$(BIN_OUTPUT):
+	mkdir -p $(BIN_OUTPUT)
+
+test: $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
+	$(CXX) -o $(OUTPUT_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
 		$(CXXFLAGS) $(INCLUDE) -Itests
-	$(BUILD_DIR)/$(TEST_TARGET)
+	$(OUTPUT_DIR)/$(TEST_TARGET)
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(OUTPUT_DIR)
+	rm -f $(BIN_OUTPUT)/$(TARGET)

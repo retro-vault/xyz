@@ -418,7 +418,7 @@ __tty_cur_tick::
         xor     a                       ; assume no clip
         ex      af,af'
         cp      #3                      ; a-3
-        jr      nc,ttc_no_clip          ; a<=2...
+        jr      nc,.ttc_no_clip         ; a<=2...
         ex      af,af'
         inc     a                       ; a=1, clip!
         ex      af,af'
