@@ -1,8 +1,12 @@
 # Assembly Style Guide for yos
 
+## 0. Whitespace Rules
+
+**CRITICAL**: All indentation must use SPACES, never TABS. Assembly files must not contain any tab characters.
+
 ## 1. File Header Format
 
-All header comments **must be indented** to align with code directives (using two semicolons `;;`):
+All header comments and directives **must be indented** (8 spaces) to align with code:
 
 ```asm
         ;; filename.s
@@ -15,11 +19,21 @@ All header comments **must be indented** to align with code directives (using tw
         ;; YYYY-MM-DD   [INITIALS]
 
         .module filename
+
+        .globl  function_one
+        .globl  function_two
+
+        .equ    CONSTANT1, 0x42
+        .equ    CONSTANT2, 0xff
+
+        .area   _CODE
 ```
+
+**All directives must be indented**: `.module`, `.globl`, `.equ`, `.area`, `.ds`, `.byte`, `.dw`, etc.
 
 ## 2. Global Routine Comments
 
-**Must be indented** with two semicolons `;;`:
+**Must be indented** (8 spaces) with two semicolons `;;`:
 
 ```asm
         ;; extern [return_type] routine_name([params]);
@@ -34,11 +48,12 @@ function_name::
 
 ## 3. Local Label Naming
 - All local labels must be prefixed with dot: `.label_name`
+- Local labels are NOT indented (start at column 1)
 - Exception: labels that are part of public named areas (e.g., `key_map`)
 
 ## 4. Local Subroutine Documentation
 
-For local subroutines (prefixed with dot), if complex, use **indented** two semicolons `;;`:
+For local subroutines (prefixed with dot), if complex, use **indented** (8 spaces) two semicolons `;;`:
 
 ```asm
         ;; .subroutine_name

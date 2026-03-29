@@ -9,19 +9,19 @@
 
         .module kbd
 
-        .globl  __kbd_scan
-        .globl  __kbd_buff
-        .globl  _kbd_read
+        .globl   __kbd_scan
+        .globl   __kbd_buff
+        .globl   _kbd_read
 
 
-        .equ    BUFSIZE, 0x20           ; 32 bytes of keyb. buffer
-        .equ    KEY_CAPS, 0x1d          ; caps code
-        .equ    KEY_SYMB, 0x17          ; symbol code
-        .equ    KEY_CODE, 0b00111111    ; bits for keys
-        .equ    KEY_DWN_BIT, 0b01000000 ; key down/up bit
+        .equ   BUFSIZE, 0x20           ; 32 bytes of keyb. buffer
+        .equ   KEY_CAPS, 0x1d          ; caps code
+        .equ   KEY_SYMB, 0x17          ; symbol code
+        .equ   KEY_CODE, 0b00111111    ; bits for keys
+        .equ   KEY_DWN_BIT, 0b01000000 ; key down/up bit
 
 
-        .area	_CODE
+        .area   _CODE
 
         ;; extern void kbd_scan(void);
         ;; return:       (none)
@@ -87,73 +87,73 @@ __kbd_scan::
         ld      (hl),a                  ; ...to previous state
 .kbd_lines:
         ;; now do normal scan
-        ld		hl,#kbd_prev_scan
-        ld		d,#0					; scan lines counter
-        ld		bc,#0xf7fe				; first scan line
+        ld                hl,#kbd_prev_scan
+        ld                d,#0                                        ; scan lines counter
+        ld                bc,#0xf7fe                                ; first scan line
 .scan_line:
-        in		a,(c)					; get it in
-        push	bc						; store b and c
-        and		#0b00011111				; just interested in bits 0-4
-        cp		(hl)					; compare to previous scan
-        jr		z,.next_line			; nothing has changed
+        in                a,(c)                                        ; get it in
+        push        bc                                                ; store b and c
+        and                #0b00011111                                ; just interested in bits 0-4
+        cp                (hl)                                        ; compare to previous scan
+        jr                z,.next_line                        ; nothing has changed
         ;; ah-ha...we have a change!
         ;; d=byte counter
-        ld		e,a						; store curr state
-        xor		(hl)					; xor prev state
-        push	af						; store a
-        ld		b,#0b00000000			; bit 6 is 0
-        and		e						; a...released buttons
-        call	nz, .key_change
-        pop		af						; back a
-        ld		b,#0b01000000			; bit 6 is 1
-        and		(hl)					; a...pressed buttons
-        call	nz, .key_change
-        ld		(hl),e					; update prev scan
+        ld                e,a                                                ; store curr state
+        xor                (hl)                                        ; xor prev state
+        push        af                                                ; store a
+        ld                b,#0b00000000                        ; bit 6 is 0
+        and                e                                                ; a...released buttons
+        call        nz, .key_change
+        pop                af                                                ; back a
+        ld                b,#0b01000000                        ; bit 6 is 1
+        and                (hl)                                        ; a...pressed buttons
+        call        nz, .key_change
+        ld                (hl),e                                        ; update prev scan
 .next_line:
         ;; next scan line addr to b
-        pop		bc						; restore b and c
-        rlc		b
-        inc		d
-        ld		a,d						; get counter to a
-        cp		#8						; max scan lines reached?
-        jr		z,.end_scan				; no more lines to scan?
-        inc		hl						; inc prev scan line pointer
-        jr		.scan_line				; scan another one
+        pop                bc                                                ; restore b and c
+        rlc                b
+        inc                d
+        ld                a,d                                                ; get counter to a
+        cp                #8                                                ; max scan lines reached?
+        jr                z,.end_scan                                ; no more lines to scan?
+        inc                hl                                                ; inc prev scan line pointer
+        jr                .scan_line                                ; scan another one
 .end_scan:
         ret
         ;; d is line number 0-7
         ;; a holds bits 0..4 (5 bits), bit 6 is 1...pressed, 0...not pressed
         ;; formula for key number is d*5 + set_bit(a)
 .key_change:
-        push	de						; store D,E
-        ld		e,a						; store a
-        ld		a,d						; get d into a
-        rlc		d						; d=d*2
-        rlc		d						; d=d*4
-        add		d						; a=a+d*4=5*d
-        ld		d,a						; d=d*5
-        ld		a,#5					; 5 bits
+        push        de                                                ; store D,E
+        ld                e,a                                                ; store a
+        ld                a,d                                                ; get d into a
+        rlc                d                                                ; d=d*2
+        rlc                d                                                ; d=d*4
+        add                d                                                ; a=a+d*4=5*d
+        ld                d,a                                                ; d=d*5
+        ld                a,#5                                        ; 5 bits
 .rotate_keymsk:
-        sra		e						; bit into carry
-        jr		nc,.next_key
-        push	af
-        add		d						; a=correct key code
-        dec		a
+        sra                e                                                ; bit into carry
+        jr                nc,.next_key
+        push        af
+        add                d                                                ; a=correct key code
+        dec                a
         ;; skip special cases: CAPS and SYMBOL!
         ;; they were already handled.
         cp      #KEY_SYMB               ; don't queue sym. shift
         jr      z,.skip_queue           ; because we already incl. it.
         cp      #KEY_CAPS               ; and same for
         jr      z,.skip_queue           ; caps shift
-        or		b	                    ; add key down bit
-        call	.queue_key
+        or                b                            ; add key down bit
+        call        .queue_key
 .skip_queue:
-        pop		af
-        sub		d						; back to a
+        pop                af
+        sub                d                                                ; back to a
 .next_key:
-        dec		a
-        jr 		nz,.rotate_keymsk
-        pop		de
+        dec                a
+        jr                 nz,.rotate_keymsk
+        pop                de
         ret
 
         ;; .queue_key
@@ -184,9 +184,9 @@ __kbd_scan::
 .qk_proceed:
         ld      (#__kbd_buff+1),a       ; store end
 .qkey_end:
-        pop		hl
-        pop		de
-        pop		bc
+        pop                hl
+        pop                de
+        pop                bc
         ret
 
 
@@ -195,53 +195,53 @@ __kbd_scan::
         ;; affects:      AF, BC, DE, HL
         ;; notes:        reads next key from ring buffer, returns 1-based code
 _kbd_read::
-        ld		a,(#__kbd_buff+2)		; a=count
-        cp		#0						; is it zero?
-        jr		z,.kr_empty				; no data in buffer
+        ld                a,(#__kbd_buff+2)                ; a=count
+        cp                #0                                                ; is it zero?
+        jr                z,.kr_empty                                ; no data in buffer
         ; get the char
-        ld		hl,(#__kbd_buff)        ; l=start, h=end
-        ld		de,#__kbd_buff+3        ; de is start of kbd buffer
-        ld		h,#0x00					; l=start, h=0
-        add		hl,de					; hl points to correct place
-        ld		b,(hl)					; get char to b
+        ld                hl,(#__kbd_buff)        ; l=start, h=end
+        ld                de,#__kbd_buff+3        ; de is start of kbd buffer
+        ld                h,#0x00                                        ; l=start, h=0
+        add                hl,de                                        ; hl points to correct place
+        ld                b,(hl)                                        ; get char to b
         ; decrease counter, increase start
-        dec		a
-        ld		(#__kbd_buff+2),a
-        ld		a,(#__kbd_buff)			; a=start
-        inc		a
-        cp 		#BUFSIZE				; end of buffer?
-        jr		nz,.kr_proceed
-        xor		a						; reset start
+        dec                a
+        ld                (#__kbd_buff+2),a
+        ld                a,(#__kbd_buff)                        ; a=start
+        inc                a
+        cp                 #BUFSIZE                                ; end of buffer?
+        jr                nz,.kr_proceed
+        xor                a                                                ; reset start
 .kr_proceed:
-        ld		(#__kbd_buff),a			; ...and store
-        ld		l,b						; return char
+        ld                (#__kbd_buff),a                        ; ...and store
+        ld                l,b                                                ; return char
         ;; return code 0 means no key so key code has
         ;; to be 1 based (i.e. start with 1)
         inc     l
-        jr		.kr_end					; game over
+        jr                .kr_end                                        ; game over
 .kr_empty:
-        ld		hl,#0					; key not found
+        ld                hl,#0                                        ; key not found
 .kr_end:
         ret
 
 
-        .area	_INITIALIZED
+        .area   _INITIALIZED
 kbd_prev_scan:
-        .ds		8
+        .ds   8
 kbd_caps:                               ; caps is down
-        .ds     1
+        .ds   1
 kbd_symbol:                             ; symbol is down
-        .ds     1
+        .ds   1
 __kbd_buff:
-        .ds		3 + BUFSIZE
+        .ds   3 + BUFSIZE
 
 
-        .area 	_INITIALIZER
+        .area   _INITIALIZER
 init_kbd_prev_scan:
-        .byte	0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f
+        .byte   0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x1f
 init_kbd_caps:
         .byte   0x00
 init_kbd_symbol:
         .byte   0x00
 init_kbd_buff:
-        .byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        .byte   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0

@@ -6,56 +6,57 @@
         ;; Copyright (C) 2021 Tomaz Stih
         ;;
         ;; 2021-06-16   tstih
+
         .module tty
 
         ;; functions
-        .globl  _tty_cls
-        .globl  _tty_scroll
-        .globl  _tty_xy
-        .globl  _tty_attr
-        .globl  _tty_outc
-        .globl  _tty_putc
-        .globl  _tty_getc
-        .globl  _tty_puts
-        .globl  _tty_gets
+        .globl   _tty_cls
+        .globl   _tty_scroll
+        .globl   _tty_xy
+        .globl   _tty_attr
+        .globl   _tty_outc
+        .globl   _tty_putc
+        .globl   _tty_getc
+        .globl   _tty_puts
+        .globl   _tty_gets
 
-        .globl  __tty_cur_tick
-        .globl  _tty_cur_enable
+        .globl   __tty_cur_tick
+        .globl   _tty_cur_enable
         
         ;; constants
-        .equ    BLACK, 0x00
-        .equ    GREEN, 0x04
+        .equ   BLACK, 0x00
+        .equ   GREEN, 0x04
 
-        .equ    CWIDTH, 0x06
-        .equ    CHEIGHT, 0x06
-        .equ    CXMAX, 41
-        .equ    CYMAX, 31
+        .equ   CWIDTH, 0x06
+        .equ   CHEIGHT, 0x06
+        .equ   CXMAX, 41
+        .equ   CYMAX, 31
 
-        .equ    BDRPORT, 0xfe
-        .equ    VMEMBEG, 0x4000
-        .equ    ATTRSZE, 0x02ff
-        .equ    VMEMSZE, 0x1800
-        .equ    SCRROW6, 0x4600         ; screen row 6
-        .equ    BYTSROW, 32             ; bytes per screen row
+        .equ   BDRPORT, 0xfe
+        .equ   VMEMBEG, 0x4000
+        .equ   ATTRSZE, 0x02ff
+        .equ   VMEMSZE, 0x1800
+        .equ   SCRROW6, 0x4600         ; screen row 6
+        .equ   BYTSROW, 32             ; bytes per screen row
 
-        .equ    FASCII, 32              ; incl.
-        .equ    LASCII, 128             ; not incl.
-        .equ    LF, 0x0A
-        .equ    CR, 0x0D
-        .equ    UNDERLINE, 0x01         ; first bit is underline
-        .equ    INVERSE, 0x02           ; second bit is inverse
+        .equ   FASCII, 32              ; incl.
+        .equ   LASCII, 128             ; not incl.
+        .equ   LF, 0x0A
+        .equ   CR, 0x0D
+        .equ   UNDERLINE, 0x01         ; first bit is underline
+        .equ   INVERSE, 0x02           ; second bit is inverse
 
-        .equ    CURSOR_ENABLED, 0x01    ; is cursor enabled? 
-        .equ    CURSOR_VISIBLE, 0x02    ; is cursor visible?
+        .equ   CURSOR_ENABLED, 0x01    ; is cursor enabled? 
+        .equ   CURSOR_VISIBLE, 0x02    ; is cursor visible?
 
-        .equ    KEY_DOWN_BIT, 0b01000000
-        .equ    KEY_CODE,     0b00111111
-        .equ    KEY_CAPS,     0x1d
-        .equ    KEY_SYMB,     0x17
-        .equ    KEY_ENTER,    0x0d
-        .equ    KEY_DEL,      0x08
+        .equ   KEY_DOWN_BIT, 0b01000000
+        .equ   KEY_CODE,     0b00111111
+        .equ   KEY_CAPS,     0x1d
+        .equ   KEY_SYMB,     0x17
+        .equ   KEY_ENTER,    0x0d
+        .equ   KEY_DEL,      0x08
 
-        .equ    MAX_GETS_LEN, 128
+        .equ   MAX_GETS_LEN, 128
 
         .area   _CODE
 
@@ -822,27 +823,27 @@ _tty_getc::
         ;; 0x0c ... right
         ;; 0x61 ... pound symbol
         ;; 0x21 ... single quote
-.key_map:	
+.key_map:        
         .byte '5',   '4',   '3',   '2',   '1'
         .byte '6',   '7',   '8',   '9',   '0'
         .byte 'y',   'u',   'i',   'o',   'p'
-        .byte 'h',   'j',   'k',   'l',   0x0d 	
+        .byte 'h',   'j',   'k',   'l',   0x0d         
         .byte 'b',   'n',   'm',    0x01, 0x20
         .byte 'v',   'c',   'x',   'z',   0x02
         .byte 'g',   'f',   'd',   's',   'a'
         .byte 't',   'r',   'e',   'w',   'q'
 
-key_map_sym:	
+key_map_sym:        
         .byte '%',   '$',   '#',   '@',   '!'
         .byte '&',   0x27,  '(',   ')',   '_'
         .byte '[',   ']',   0x80,  ';',   '"'
         .byte 0x5e,  '-',   '+',   '=',   0x0d 
-        .byte '*',   ',',   '.',   0x01,  0x20	
+        .byte '*',   ',',   '.',   0x01,  0x20        
         .byte '/',   '?',   0x61,  ':',   0x02
         .byte '}',   '{',   0x5d,  '|',   '~'
         .byte '>',   '<',   0x60,  0x03,  0x03
 
-key_map_shf:	
+key_map_shf:        
         .byte 0x09,  '4',   '3',   '2',   '1'
         .byte 0x0a,  0x0b,  0x0c,  '9',   0x08
         .byte 'Y',   'U',   'I',   'O',   'P'
@@ -853,19 +854,19 @@ key_map_shf:
         .byte 'T',   'R',   'E',   'W',   'Q'
 
 
-        .area _INITIALIZED
-_tty_x: 
-        .ds     1
+        .area   _INITIALIZED
+_tty_x:
+        .ds   1
 _tty_y:
-        .ds     1
+        .ds   1
 _tty_at:
-        .ds     1
+        .ds   1
 _tty_cur_sts:
-        .ds     1
+        .ds   1
 _tty_ctl_key:
-        .ds     1
+        .ds   1
 
-        .area _INITIALIZER
+        .area   _INITIALIZER
 init_tty_x:
         .byte   0
 init_tty_y:

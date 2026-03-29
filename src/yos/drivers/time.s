@@ -8,12 +8,12 @@
         ;;
         ;; 2021-07-11   tstih
 
-.module time
+        .module time
 
-.globl  __clock
-.globl  __clock_tick
+        .globl  __clock
+        .globl  __clock_tick
 
-.area   _CODE
+        .area   _CODE
 
         ;; extern unsigned int clock(void);
         ;; return:  HL = current tick count
@@ -60,7 +60,8 @@ __clock_tick::
         ld      (_clock_sec_countdown+2),hl
         ret
 
-.area   _INITIALIZED
+
+        .area   _INITIALIZED
 _clock_ticks:
         .ds     4
 _clock_time:
@@ -68,7 +69,7 @@ _clock_time:
 _clock_sec_countdown:
         .ds     1
 
-.area   _INITIALIZER
+        .area   _INITIALIZER
 init_clock_ticks:
         .byte   0, 0, 0, 0
 init_clock_time:
