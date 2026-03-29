@@ -1,13 +1,13 @@
-;;; kbd.s
-;;;
-;;; Keyboard matrix scanning for ZX Spectrum
-;;;
-;;; MIT License (see: LICENSE)
-;;; Copyright (C) 2021 Tomaz Stih
-;;;
-;;; 2014-09-17   tstih
+        ;;; kbd.s
+        ;;;
+        ;;; Keyboard matrix scanning for ZX Spectrum
+        ;;;
+        ;;; MIT License (see: LICENSE)
+        ;;; Copyright (C) 2021 Tomaz Stih
+        ;;;
+        ;;; 2014-09-17   tstih
 
-.module kbd
+        .module kbd
 
         .globl  __kbd_scan
         .globl  __kbd_buff
