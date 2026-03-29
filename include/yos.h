@@ -32,14 +32,14 @@ typedef void * handle;
 typedef struct yos_s {
 
     /* convention */
-    int (*ver)();                       /* api version */
+    int (*ver)(void);                   /* api version */
     
     /* interrupts */
-    void (*di)();                       /* di with ref counting */
-    void (*ei)();                       /* ei with ref counting */
+    void (*di)(void);                   /* di with ref counting */
+    void (*ei)(void);                   /* ei with ref counting */
 
     /* TODO: timers */
-    handle (*install_timer)(void (*handler)(), int ticks);
+    handle (*install_timer)(void (*handler)(void), int ticks);
     void (*uninstall_timer)(handle timer);
 
     /* events */
@@ -52,8 +52,8 @@ typedef struct yos_s {
     void (*gets)(char *s);
     
     /* standard library - conio.h */
-    void (*clrscr)();                   /* clear screen */
-    int (*kbhit)();                     /* check for key, no blocking */
+    void (*clrscr)(void);               /* clear screen */
+    int (*kbhit)(void);                 /* check for key, no blocking */
     void (*setcur)(int enable);         /* enable/disable cursor */
     void (*setattr)(unsigned char attr);
 
@@ -62,7 +62,7 @@ typedef struct yos_s {
     void (*free)(void *p);
 
     /* standard library - time.h */
-    unsigned int (*clock)();
+    unsigned int (*clock)(void);
 
     /* standard library - string.h */
     unsigned int (*strlen)(const char *s);

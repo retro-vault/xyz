@@ -27,11 +27,11 @@
 
 #include <yos.h>
 
-extern yos_t* _yos_init();
-extern void _clock_tick();
-extern void ysh(); /* yos shell */
+extern yos_t* _yos_init(void);
+extern void _clock_tick(void);
+extern void ysh(void); /* yos shell */
 
-void main() {
+void main(void) {
 
     /* create system and user heap  */
     mem_init((void *)&_sys_heap,1024);

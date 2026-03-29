@@ -27,7 +27,7 @@
 #define AT_INVERSE      0x02
 
 /* clear screen */
-extern void tty_cls();
+extern void tty_cls(void);
 
 /* move cursor to x,y */
 extern void tty_xy(uint8_t x, uint8_t y);
@@ -42,10 +42,10 @@ extern void tty_outc(int c);
 extern void tty_putc(int c);
 
 /* read keyboard (non-blocking!) */
-extern int tty_getc();
+extern int tty_getc(void);
 
 /* scroll up 1 row */
-extern void tty_scroll();
+extern void tty_scroll(void);
 
 /* print string  */
 extern void tty_puts(const char* s);
@@ -54,7 +54,7 @@ extern void tty_puts(const char* s);
 extern void tty_gets(const char *s);
 
 /* internal cursor function to xor cursor on screen */
-extern void _tty_cur_tick();
+extern void _tty_cur_tick(void);
 
 /* enable/disable cursor */
 extern void tty_cur_enable(bool enable);

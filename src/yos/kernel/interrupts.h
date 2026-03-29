@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 /* interrupt enable and disable with refcounting */
-extern void ir_enable();
-extern void ir_disable();
+extern void ir_enable(void);
+extern void ir_disable(void);
 
 #endif /* __INTERRUPTS_H__ */

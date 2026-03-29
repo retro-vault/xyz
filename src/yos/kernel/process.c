@@ -15,7 +15,7 @@ process_t *process_first;
 
 process_t *process_start(
     char *pname,
-    void (*entry_point)(),
+    void (*entry_point)(void),
     size_t stack_size
 ) {
     /* first create new process */
@@ -43,7 +43,7 @@ void _process_cleanup(process_t *p) {
     p;
 }
 
-void process_exit() {
+void process_exit(void) {
     /* get current process */
     process_t *proc=thread_current->process;
     /* clean up all resources */

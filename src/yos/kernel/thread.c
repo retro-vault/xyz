@@ -23,7 +23,7 @@ extern uint8_t hib(uint16_t w) __naked;
 
 /* TODO: add parent process */
 thread_t *thread_create(
-    void (*entry_point)(),
+    void (*entry_point)(void),
     uint16_t stack_size,
     void *process)
 {
@@ -145,7 +145,7 @@ void thread_exit(thread_t *t)
 }
 
 /* select next thread to run */
-thread_t* _thread_select_next() {
+thread_t* _thread_select_next(void) {
 
     thread_t *curr, *t;
 	/* release any waiting task */
@@ -189,26 +189,22 @@ thread_t* _thread_select_next() {
 /* low byte service function */
 uint8_t lob(uint16_t w) __naked {
     w;
-    __asm 
-        pop     de                      ; get ret address
-        pop     hl                      ; get word
+    __asm
+        ;; w is in HL (SDCC 4.5 calling convention)
+        ;; extract low byte (L) -> return in L
         ld      h,#0                    ; hi byte to 0
-        push    hl                      ; restore...
-        push    de                      ; ...stack
         ret
-    __endasm; 
+    __endasm;
 }
 
 /* high byte service function */
 uint8_t hib(uint16_t w) __naked {
     w;
-    __asm 
-        pop     de                      ; get ret address
-        pop     hl                      ; get word
+    __asm
+        ;; w is in HL (SDCC 4.5 calling convention)
+        ;; extract high byte (H) -> return in L
         ld      l,h                     ; high to low
         ld      h,#0                    ; hi byte to 0
-        push    hl                      ; restore...
-        push    de                      ; ...stack
         ret
-    __endasm; 
+    __endasm;
 }

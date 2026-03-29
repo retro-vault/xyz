@@ -24,14 +24,14 @@ yos_t *y;
 char cmd[128];
 
 /* testing */
-extern void _test();
+extern void _test(void);
 
 /* change to lowercase */
 void lcase(char *s) {
     for (int i=0;i<y->strlen(s);i++) s[i]=y->tolower(s[i]);
 }
 
-void help() {
+void help(void) {
     y->printf("\nAVAILABLE COMMANDS\n\n");
     y->printf("    help  ... display help\n");
     y->printf("    mem   ... memory usage\n");
@@ -76,7 +76,7 @@ void mem_dump(char *title, void *first) {
         0);
 }
 
-void mem() {
+void mem(void) {
     y->printf("\nTOTAL %u bytes\n\n", 0xffff-&_heap);
     mem_dump( "SYSTEM HEAP", &_sys_heap);
     y->printf("\n");
@@ -85,7 +85,7 @@ void mem() {
     
 }
 
-void ver() {
+void ver(void) {
     int v=y->ver();
     int minor=v&0x0f,major=(v&0xf0)>>4;
     y->printf("\nYOS VERSION %d.%d\n",major,minor);
@@ -136,7 +136,7 @@ void print_process(list_item_t *li, uint16_t arg) {
         (uint16_t)p);
 }
 
-void pstat() {
+void pstat(void) {
     y->printf("\nPROCESSES AND THREADS\n\n");
     /* and iterate process list */
     print_header("NAME     ADDR NEXT FLAGS");
@@ -166,7 +166,7 @@ void exec(char *text) {
         y->printf("UNKNOWN COMMAND: %s\n", text);
 }
 
-void ysh() {
+void ysh(void) {
 
     /* get syscall table */
     y=_svc_query("yos");

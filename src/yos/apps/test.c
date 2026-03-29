@@ -2,9 +2,9 @@
  * test.c
  *
  * test (from yos shell)
- * 
+ *
  * this executes current test (not part of the OS)
- * 
+ *
  * MIT License (see: LICENSE)
  * copyright (C) 2021 tomaz stih
  *
@@ -19,7 +19,10 @@
 #include <kernel/thread.h>
 
 #include <yos.h>
+
+#ifdef HAVE_GPX
 #include <gpx.h>
+#endif
 
 extern yos_t *y;
 
@@ -44,68 +47,63 @@ tow_loop:
     __endasm;
 }
 
-void thread1() {
+void thread1(void) {
     tower(26);
 }
 
-void thread2() {
+void thread2(void) {
     tower(30);
 }
 
-void test_threads() {
+void test_threads(void) {
 
-     /* welcome msg */
     y->setcur(false);
     y->clrscr();
     y->printf("\nCREATED TWO THREADS\n\n");
     y->printf("Press enter to abort...\n");
-    /* create threads */
+
     t1=thread_create(thread1, 512, thread_current->process);
     thread_resume(t1);
     t2=thread_create(thread2, 512, thread_current->process);
     thread_resume(t2);
-    /* and wait */
+
     while (!y->kbhit());
     y->setcur(true);
-    /* suspend one thread */
+
     thread_exit(t1);
     thread_suspend(t2);
-
 }
+
+#ifdef HAVE_GPX
 
 #define printf y->printf
 
-void test_gpx() {
+void test_gpx(void) {
 
-    /* enter graphics */
     gpx_t *g=gpx_init();
-
-    /* clear screen */
     gpx_cls(g);
 
-    /* query graphics capabilities
-       NOTE: this is only possible because initial page
-             and initial resolution are both 0. */
     gpx_cap_t *cap=gpx_cap(g);
     coord centerx = cap->pages[0].resolutions[0].width/2;
     coord centery = cap->pages[0].resolutions[0].height/2;
 
     printf("Center is at %d,%d\n",centerx, centery);
 
-    /* draw line */
     for (coord x=centerx-20; x<centerx+20;x++)
         gpx_draw_pixel(g,x,centery);
 
-    /* draw circle */
     gpx_draw_circle(g,centerx,centery,20);
-
-    /* leave graphics */
     gpx_exit(NULL);
-
 }
 
 #undef printf
 
-void _test() {
+#endif /* HAVE_GPX */
+
+void _test(void) {
+#ifdef HAVE_GPX
     test_gpx();
+#else
+    test_threads();
+#endif
 }

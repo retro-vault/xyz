@@ -56,14 +56,14 @@ extern thread_t *thread_first_terminated;
 extern void thread_exit(thread_t *t);
 
 /* select next thread to run */
-extern thread_t* _thread_select_next();
+extern thread_t* _thread_select_next(void);
 
 /* context switch */
-extern void _thread_robin() __naked;
+extern void _thread_robin(void) __naked;
 
 /* create new thread */
 extern thread_t * thread_create(
-    void (*entry_point)(), 
+    void (*entry_point)(void),
     uint16_t stack_size,
     void *process);
 

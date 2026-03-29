@@ -1,14 +1,11 @@
-        ;; tty.s
-        ;;
-        ;; core tty functions
-        ;;
-        ;; TODO:
-        ;;  bug when using inverse and underline together?
-        ;;
-        ;; MIT License (see: LICENSE)
-        ;; Copyright (C) 2021 Tomaz Stih
-        ;;
-        ;; 2021-06-16   tstih
+        ;;; tty.s
+        ;;;
+        ;;; Core text terminal (TTY) functions for ZX Spectrum
+        ;;;
+        ;;; MIT License (see: LICENSE)
+        ;;; Copyright (C) 2021 Tomaz Stih
+        ;;;
+        ;;; 2021-06-16   tstih
         .module tty
 
         ;; functions
@@ -63,12 +60,9 @@
         .area   _CODE
 
 
-        ;; ----------------------
-        ;; extern void tty_cls();
-        ;; ----------------------
-        ;; clears the screen using black background 
-        ;; color and green foreground color
-        ;; affects: af, hl, de, bc
+        ;;; extern void tty_cls(void);
+        ;;; return:       (none)
+        ;;; affects:      AF, HL, DE, BC
 _tty_cls::
         ;; first clear screen
         ld      a,#BLACK
@@ -81,12 +75,10 @@ _tty_cls::
         pop     hl
         ret
 
-        ;; ------------------------
-        ;; extern void tty_scroll()
-        ;; ------------------------
-        ;; scrolls up one row
-        ;; TODO: what about showing cursor afterwards?
-        ;; affects: af, bc, de, hl
+        ;;; extern void tty_scroll(void);
+        ;;; return:       (none)
+        ;;; affects:      AF, BC, DE, HL
+        ;;; notes:        scrolls screen up one row
 _tty_scroll::
         ;; no interrupts and no cursor while scrolling
         call    _ir_disable
@@ -98,7 +90,7 @@ _tty_scroll::
         ld      bc,#BYTSROW             ; bytes to transfer
         ;; move 186 lines (192 - 6)
         ld      a,#186
-ls_loop:
+.ls_loop:
         push    af
         push    bc
         push    de
@@ -113,87 +105,71 @@ ls_loop:
         pop     bc
         pop     af
         dec     a
-        jr      nz,ls_loop
+        jr      nz,.ls_loop
         ;; fill last line with zeroes
         ;; note: de already points to correct line
         ld      a,#CHEIGHT              ; 6 lines
         ex      de,hl                   ; correct line to hl
-ls_clr_loop:
+.ls_clr_loop:
         push    hl                      ; store hl
         ld      b,#BYTSROW              ; bytes
-ls_clrlne_loop:
+.ls_clrlne_loop:
         ld      (hl),#0
         inc     hl
-        djnz    ls_clrlne_loop
+        djnz    .ls_clrlne_loop
         pop     hl
         push    af
         call    tv_nextrow
         pop     af
         dec     a
-        jr      nz,ls_clr_loop
+        jr      nz,.ls_clr_loop
         ;; enable interrupts and return
         call    _ir_enable
         ret
 
 
-        ;; -----------------------------------------
-        ;; extern void tty_xy(uint8_t x, uint8_t y);
-        ;; -----------------------------------------
-        ;; TODO: what about showing cursor afterwards?
-        ;; go to xy
-        ;; affects: af, bc, de, hl
+        ;;; extern void tty_xy(uint8_t x, uint8_t y);
+        ;;; param:  HL = x (low byte), DE = y (D)
+        ;;; return: (none)
+        ;;; affects: AF, BC, DE, HL
+        ;;; notes:   sets cursor position
 _tty_xy::
         call    _ir_disable
         call    __tty_cur_hide
-        ;; grab parameters from stack
-        pop     de                      ; ret address
-        pop     bc                      ; c=x, b=y
-        ;; restore stack
-        push    bc
-        push    de
-        ;; write to memory
-        ld      a,b
+        ;; x in HL, y in DE (SDCC 4.5 calling convention)
+        ld      a,d                     ; d = y
         ld      (#_tty_y),a
-        ld      a,c
+        ld      a,l                     ; l = x
         ld      (#_tty_x),a
         ;; and done
         call    _ir_enable
         ret
 
 
-        ;; -----------------------------------
-        ;; extern void tty_attr(uint8_t attr);
-        ;; -----------------------------------
-        ;; set attribute
-        ;; affects: af, bc, de, hl
+        ;;; extern void tty_attr(uint8_t attr);
+        ;;; param:  E = attribute byte
+        ;;; return: (none)
+        ;;; affects: AF
+        ;;; notes:   sets text attribute (color/inverse/underline)
 _tty_attr::
-        ;; grab parameters from stack
-        pop     de                      ; ret address
-        pop     bc                      ; c=attr
-        ;; restore stack
-        push    bc
-        push    de
-        ;; write to memory
-        ld      a,c
+        ;; attr in E (SDCC 4.5 calling convention)
+        ld      a,e
         ld      (#_tty_at),a
         ret
 
 
-        ;; ----------------------------
-        ;; extern void tty_outc(int c);
-        ;; ----------------------------
-        ;; draw a character at current x,y
-        ;; this function does not manage location i.e.
-        ;; it leaves x,y untouched. it just draws the
-        ;; character.
-        ;; affects: af, bc, de, hl
+        ;;; extern void tty_outc(int c);
+        ;;; param:  (stack) = character code
+        ;;; return: (none)
+        ;;; affects: AF, BC, DE, HL
+        ;;; notes:   draws character at current x,y without updating position
 _tty_outc::
         pop     hl                      ; get return address
         pop     de                      ; get char
         ;; restore stack after obtaining parameters
         push    de
         push    hl
-outc_ascii:
+.outc_ascii:
         ;; make de point to correct character
         ld      a,e                     ; char ascii to a
         sub     #FASCII                 ; minus first ascii
@@ -210,7 +186,7 @@ outc_ascii:
         ex      de,hl                   ; de=start of char
         ;; draws char pointed by de at x,y
         ;; d' has attribute
-outc_raw:
+.outc_raw:
         ;; calculate correct row
         ld      a,(_tty_y)              ; get y, low res.
         sla     a                       ; *2
@@ -218,7 +194,7 @@ outc_raw:
         sla     a                       ; *4
         add     b                       ; *6
         ld      b,a                     ; hires y to b
-        call    tv_rowaddr             ; hl=vmem addr.
+        call    tv_rowaddr              ; hl=vmem addr.
         ;; calculate required shifts
         ;; we need to multiply by 6, add 2 (offset)
         ;; and then divide by 8 to get the correct
@@ -234,7 +210,7 @@ outc_raw:
         and     #0x07                   ; shifts to a
         srl     c                       ; /2
         srl     c                       ; /4
-        srl     c                       ; /8 
+        srl     c                       ; /8
         ld      b,#0                    ; bc=byte
         add     hl,bc                   ; add to vmem...
         ;; at this point
@@ -246,17 +222,17 @@ outc_raw:
         xor     a                       ; assume no clip
         ex      af,af'
         cp      #3                      ; a-3
-        jr      nc,no_clip              ; a<=2...
+        jr      nc,.no_clip             ; a<=2...
         ex      af,af'
         inc     a                       ; a=1, clip!
         ex      af,af'
-no_clip:
+.no_clip:
         ld      c,a                     ; num shift
         push    bc
         ex      de,hl                   ; easier to calculate
         ;; scan line 0
         ld      a,(hl)                  ; data
-        call    pch_to_screen
+        call    .pch_to_screen
         ;; scan line 1
         ld      a,(hl)                  ; data
         inc     hl
@@ -266,7 +242,7 @@ no_clip:
         srl     a
         rr      b
         ld      a,b                     ; a=data
-        call    pch_to_screen
+        call    .pch_to_screen
         ;; scan line 2
         ld      a,(hl)                  ; data
         inc     hl
@@ -279,20 +255,20 @@ no_clip:
         rl      a
         sla     b
         rl      a                       ; a=data
-        call    pch_to_screen
+        call    .pch_to_screen
         ;; scan line 3
         ld      a,(hl)                  ; data
         inc     hl                      ; next char byte
         sla     a                       ; 2x left
         sla     a                       ; a=data
-        call    pch_to_screen
+        call    .pch_to_screen
         ;; scan line 4
         ld      a,(hl)                  ; data
-        call    pch_to_screen
+        call    .pch_to_screen
         ;; scan line 5
         ld      a,(_tty_at)             ; get attribute
         and     #UNDERLINE              ; is it underline?
-        jr      nz, oc_ul
+        jr      nz, .oc_ul
         ld      a,(hl)                  ; data
         inc     hl
         ld      b,(hl)                  ; data byte 2
@@ -301,15 +277,15 @@ no_clip:
         srl     a
         rr      b
         ld      a,b                     ; a=data
-        jr      oc_ul_chk_end
+        jr      .oc_ul_chk_end
         ;; underline!
-oc_ul:
-        ld      a,#0xfc 
-oc_ul_chk_end:
-        call    pch_to_screen
+.oc_ul:
+        ld      a,#0xfc
+.oc_ul_chk_end:
+        call    .pch_to_screen
         pop     bc
         ret
-pch_to_screen:
+.pch_to_screen:
         ;; a=data
         ;; de=vmem address
         exx                             ; temp
@@ -327,48 +303,48 @@ pch_to_screen:
         ld      b,a                     ; store data to b
         ld      a,c                     ; a=num shifts
         cp      #0                      ; no shifts?
-        jr      z,pch_sh_done           ; shift is done
+        jr      z,.pch_sh_done          ; shift is done
         ld      c,#0x00                 ; c=0
-pch_shift:
+.pch_shift:
         srl     b                       ; shift data
         rr      c                       ; 16 bits
         scf                             ; carry
         rr      d                       ; shift mask
         rr      e                       ; and data
         dec     a                       ; a=a-1
-        jr      nz,pch_shift            ; shift on
-pch_sh_done:
+        jr      nz,.pch_shift           ; shift on
+.pch_sh_done:
         ld      a,d                     ; first mask to a
         and     (hl)                    ; mask AND screen
-        call    oc_chk_inverse
+        call    .oc_chk_inverse
         or      b                       ; OR data
         ld      (hl),a                  ; back to screen
         ;; we only need second byte
         ;; if shifts > 2
         ex      af,af'
         or      a                       ; clip?
-        jr      nz, pch_skip2           ; skip 2nd byte
+        jr      nz, .pch_skip2          ; skip 2nd byte
         ex      af,af'
         inc     hl                      ; next byte
         ld      d,e                     ; mask to d (again)
         ld      a,d                     ; second mask
         and     (hl)                    ; mask AND screen
         ld      b,c                     ; c to b
-        call    oc_chk_inverse
+        call    .oc_chk_inverse
         or      b                       ; and data
         ld      (hl),a                  ; to screen
         dec     hl                      ; vmem pointer back
-        jr      pch_no_alt
-pch_skip2:
+        jr      .pch_no_alt
+.pch_skip2:
         ex      af,af'
-pch_no_alt:
-        call    tv_nextrow             ; next row
+.pch_no_alt:
+        call    tv_nextrow              ; next row
         pop     de                      ; restore de
         ex      de,hl                   ; toggle de and hl
         ret
-        ;; value is in b, if inv is on 
+        ;; value is in b, if inv is on
         ;; then it will cpl it
-oc_chk_inverse:
+.oc_chk_inverse:
         push    bc                      ; store b=value
         push    de                      ; store mask
         exx
@@ -377,13 +353,13 @@ oc_chk_inverse:
         ld      l,a                     ; store a to l'
         ld      a,(_tty_at)             ; get attribute
         and     #INVERSE                ; inverse?
-        jr      z, oc_inv_chk_end
+        jr      z, .oc_inv_chk_end
         ;; inverse!
         ld      a,b                     ; value to a
         cpl
         xor     d                       ; complement d
         ld      b,a                     ; to b
-oc_inv_chk_end:
+.oc_inv_chk_end:
         ld      a,l                     ; restore a
         push    bc
         push    de
@@ -445,25 +421,25 @@ __tty_cur_tick::
         ex      af,af'
         inc     a                       ; a=1, clip!
         ex      af,af'
-ttc_no_clip:
+.ttc_no_clip:
         ld      c,a                     ; num shift
         push    bc                      ; to stack
         ;; scan line 0
-        ld      a,(ttc_cursor)
-        call    ttc_xor
-        ld      a,(ttc_cursor+1)
-        call    ttc_xor
-        ld      a,(ttc_cursor+2)
-        call    ttc_xor
-        ld      a,(ttc_cursor+3)
-        call    ttc_xor
-        ld      a,(ttc_cursor+4)
-        call    ttc_xor
-        ld      a,(ttc_cursor+5)
-        call    ttc_xor
+        ld      a,(.ttc_cursor)
+        call    .ttc_xor
+        ld      a,(.ttc_cursor+1)
+        call    .ttc_xor
+        ld      a,(.ttc_cursor+2)
+        call    .ttc_xor
+        ld      a,(.ttc_cursor+3)
+        call    .ttc_xor
+        ld      a,(.ttc_cursor+4)
+        call    .ttc_xor
+        ld      a,(.ttc_cursor+5)
+        call    .ttc_xor
         pop     bc                      ; clear stack
         ;; finally, set cursor status
-        ld      a,(_tty_cur_sts) 
+        ld      a,(_tty_cur_sts)
         xor     #CURSOR_VISIBLE         ; second bit
         ld      (_tty_cur_sts),a        ; back to status
         ret
@@ -471,7 +447,7 @@ ttc_no_clip:
         ;; hl=vmem address
         ;; a'=clip flag
         ;; (stack)=ret addr, shifts
-ttc_xor:
+.ttc_xor:
         pop     de                      ; get ret addr
         pop     bc                      ; get shifts (c)
         push    bc                      ; back to stack
@@ -480,14 +456,14 @@ ttc_xor:
         ld      b,a                     ; store data to b
         ld      a,c                     ; a=num shifts
         cp      #0                      ; no shifts?
-        jr      z,ttc_shifted           ; shift is done
+        jr      z,.ttc_shifted          ; shift is done
         ld      c,#0x00                 ; c=0
-ttc_shift:
+.ttc_shift:
         srl     b                       ; shift data
         rr      c                       ; 16 bits
         dec     a                       ; a=a-1
-        jr      nz,ttc_shift            ; shift on
-ttc_shifted:
+        jr      nz,.ttc_shift           ; shift on
+.ttc_shifted:
         ;; data is shifted inside b and c
         ld      a,b                     ; first byte to a
         xor     (hl)                    ; xor with screen
@@ -495,20 +471,20 @@ ttc_shifted:
         ;; second byte?
         ex      af,af'
         or      a                       ; clip?
-        jr      nz, ttc_skip2           ; skip 2nd byte
+        jr      nz, .ttc_skip2          ; skip 2nd byte
         ex      af,af'
         inc     hl                      ; next byte
         ld      a,c
         xor     (hl)                    ; XOR screen
         ld      (hl),a                  ; to screen
-        jr      ttc_xor_done
-ttc_skip2:
+        jr      .ttc_xor_done
+.ttc_skip2:
         ex      af,af'
-ttc_xor_done:
+.ttc_xor_done:
         pop     hl                      ; restore vmem addr.
-        call    tv_nextrow             ; next row
+        call    tv_nextrow              ; next row
         ret
-ttc_cursor:
+.ttc_cursor:
         .byte   0xfc, 0xfc, 0xfc, 0xfc, 0xfc, 0xfc
 
 
@@ -517,10 +493,10 @@ __tty_cur_hide:
         call    _ir_disable             ; no interrupts
         ld      a,(_tty_cur_sts)        ; current status
         and     #CURSOR_VISIBLE         ; is it visible?
-        jr      z, thc_done             ; cursor not on screen
+        jr      z, .thc_done            ; cursor not on screen
         ;; calling tick will hide (xor) it
         call    __tty_cur_tick
-thc_done:
+.thc_done:
         ld      a,(_tty_cur_sts)
         and     #CURSOR_ENABLED         ; clear other flags
         ld      (_tty_cur_sts),a        ; set cursor status
@@ -534,11 +510,11 @@ __tty_cur_show:
         ;; already visible?
         ld      a,(_tty_cur_sts)        ; get status again
         and     #CURSOR_VISIBLE         ; are we visible
-        jr      nz,tsc_done             ; exit
+        jr      nz,.tsc_done            ; exit
         ;; if we are here, it's enabled and invisible
         ;; so do a tick...
         call    __tty_cur_tick
-tsc_done:
+.tsc_done:
         ld      a,(_tty_cur_sts)        ; get status
         or      #CURSOR_VISIBLE         ; or it
         ld      (_tty_cur_sts),a        ; and write it ack
@@ -546,10 +522,10 @@ tsc_done:
         ret
 
 
-        ;; -------------------------------------------
-        ;; extern void tty_enable_cursor(bool enable);
-        ;; -------------------------------------------
-        ;; enables/disables cursor.
+        ;;; extern void tty_enable_cursor(bool enable);
+        ;;; param:  E = enable flag (non-zero = enable)
+        ;;; return: (none)
+        ;;; affects: AF, BC, DE, HL
 _tty_cur_enable::
         call    _ir_disable             ; no interrupts
         ;; grab stack arguments and restore stack
@@ -560,29 +536,26 @@ _tty_cur_enable::
         ;; enable flag is in e
         ld      a,e
         or      a
-        jr      z, tce_disable
+        jr      z, .tce_disable
         ;; enable it!
         ld      a,(_tty_cur_sts)
         or      #CURSOR_ENABLED         ; set enabled
-        jr      tce_theend
-tce_disable:
+        jr      .tce_theend
+.tce_disable:
         ;; hide if visible
         call    __tty_cur_hide
         xor     a                       ; disable and hide
-tce_theend:
+.tce_theend:
         ld      (_tty_cur_sts),a
         call    _ir_enable
         ret
 
 
-        ;; ----------------------------
-        ;; extern void tty_putc(int c);
-        ;; ----------------------------
-        ;; puts a character at current x,y
-        ;; updates x and y, scrolls if needed
-        ;; and interprets special
-        ;; symbols: \n, \r
-        ;; affects: af, bc, de, hl
+        ;;; extern void tty_putc(int c);
+        ;;; param:  (stack) = character code
+        ;;; return: (none)
+        ;;; affects: AF, BC, DE, HL
+        ;;; notes:   puts character with auto-advance and linefeed processing
 _tty_putc::
         call    _ir_disable
         call    __tty_cur_hide
@@ -594,87 +567,78 @@ _tty_putc::
         ;; check for new line...
         ld      a,e                     ; to a
         cp      #LF                     ; line feed?
-        jr      z, linefeed
+        jr      z, .linefeed
         ;; check for any other control char
         cp      #FASCII                 ; first ascii
-        jr      c, tpc_theend           ; < 32
+        jr      c, .tpc_theend          ; < 32
         cp      #LASCII                 ; >127
-        jr      nc, tpc_theend
+        jr      nc, .tpc_theend
         ;; print char
-        call    outc_ascii
+        call    .outc_ascii
         ;; are we at line end?
         ld      a,(_tty_x)              ; a=x
         cp      #CXMAX                  ; x==max x?
-        jr      z,linefeed              ; linefeed
+        jr      z,.linefeed             ; linefeed
         inc     a                       ; increase x
         ld      (_tty_x),a              ; and store it
-tpc_theend:
-        call    _ir_enable
-        ret        
-linefeed:
-        call    newline
+.tpc_theend:
         call    _ir_enable
         ret
-newline:
+.linefeed:
+        call    .newline
+        call    _ir_enable
+        ret
+.newline:
         ld      a,(_tty_y)              ; get y coord.
         cp      #CYMAX                  ; last row?
-        jr      nz,nl_add
+        jr      nz,.nl_add
         ;; we need to scroll
         push    af                      ; store y
         call    _tty_scroll
         pop     af
-        jr      nl_update
-nl_add:
+        jr      .nl_update
+.nl_add:
         inc     a                       ; y++
-nl_update:
+.nl_update:
         ld      (_tty_y),a              ; store new y
         xor     a                       ; a=0
         ld      (_tty_x),a              ; and new x
         ret
 
 
-        ;; -------------------------------
-        ;; extern void tty_puts(string s);
-        ;; -------------------------------
-        ;; draws a string, this function updates 
-        ;; cursor position and respects escape sequences:
-        ;; \n, \r
+        ;;; extern void tty_puts(char *s);
+        ;;; param:  HL = pointer to null-terminated string
+        ;;; return: (none)
+        ;;; affects: AF, BC, DE, HL
+        ;;; notes:   outputs string respecting escape sequences
 _tty_puts::
-        ;; get ptr to string to hl
-        pop     de                      ; ret address
-        pop     hl                      ; ptr to string
-        ;; restore stack
-        push    hl
-        push    de
-puts_loop:
+        ;; hl = ptr to string (SDCC 4.5 calling convention)
+.puts_loop:
         ld      a,(hl)                  ; a = ascii
         cp      #0                      ; end of string?
         ret     z                       ; return if done...
         push    hl                      ; store current ptr.
         ld      e,a                     ; ascii to e
-        push    de                      ; parameter on stack
+        push    de                      ; parameter on stack for _tty_putc
         call    _tty_putc               ; to screen
         pop     de                      ; clear stack
-nextch:
+.nextch:
         pop     hl                      ; pointer to next char
         inc     hl                      ; prepare for next char
-        jr      puts_loop               ; and next
+        jr      .puts_loop              ; and next
 
 
-        ;; -------------------------------
-        ;; extern void tty_gets(string s);
-        ;; -------------------------------
-        ;; reads a string from console until enter is pressed 
+        ;;; extern void tty_gets(char *s);
+        ;;; param:  HL = pointer to input buffer
+        ;;; return: (none)
+        ;;; affects: AF, BC, DE, HL
+        ;;; notes:   reads line from keyboard into buffer
 _tty_gets::
-        ;; get ptr to string to de
-        pop     hl                      ; ret address
-        pop     de                      ; ptr to string
-        ;; restore stack
-        push    de
-        push    hl
+        ;; hl = ptr to string (SDCC 4.5 calling convention)
         ;; counter
         ld      b,#0                    ; 0 chars
-tgs_loop:
+        ex      de,hl                   ; de = string ptr, hl = scratch
+.tgs_loop:
         push    bc                      ; store counter
         push    de                      ; store address
         call    _tty_getc               ; get char
@@ -682,19 +646,19 @@ tgs_loop:
         pop     bc                      ; restore counter
         ld      a,l                     ; into a
         or      a                       ; char avail?
-        jr      z,tgs_loop              ; no char. loop
+        jr      z,.tgs_loop             ; no char. loop
         ;; if we are here, char is in l
         ld      a,l                     ; char to a
         cp      #KEY_ENTER              ; is it enter?
-        jr      z,tgs_theend            ; if enter...
+        jr      z,.tgs_theend           ; if enter...
         cp      #KEY_DEL
-        jr      z,tgs_del
+        jr      z,.tgs_del
         cp      #FASCII
-        jr      c,tgs_loop              ; smaller then first ascii?
+        jr      c,.tgs_loop             ; smaller then first ascii?
         ;; check max length
         ld      a,b                     ; len to a
         cp      #MAX_GETS_LEN           ; compare to max len
-        jr      nc, tgs_loop            ; don't allow processing
+        jr      nc, .tgs_loop           ; don't allow processing
         ;; now add char
         ld      a,l                     ; ascii to a
         inc     b                       ; inc char count
@@ -702,21 +666,21 @@ tgs_loop:
         inc     de                      ; next memory location
         push    bc
         push    de
-        push    hl      
+        push    hl
         call    _tty_putc
         pop     hl
         pop     de
         pop     bc
-        jr      tgs_loop
-tgs_del:
+        jr      .tgs_loop
+.tgs_del:
         ;; first check fi we are at position 0?
         ld      a,b
         or      a
-        jr      z, tgs_loop
+        jr      z, .tgs_loop
         ;; now check if we are at row start
         ld      a,(_tty_x)
         or      a
-        jr      z, tgs_row_up
+        jr      z, .tgs_row_up
         ;; just decrease x and remove char
         dec     de                      ; dec pointer to string
         dec     b                       ; 1 char back
@@ -733,8 +697,8 @@ tgs_del:
         call    __tty_cur_show
         pop     de
         pop     bc
-        jr      tgs_loop
-tgs_row_up:
+        jr      .tgs_loop
+.tgs_row_up:
         dec     de                      ; decrease pointr to string
         dec     b                       ; decrease char count
         push    bc                      ; store both
@@ -752,18 +716,17 @@ tgs_row_up:
         call    __tty_cur_show
         pop     de
         pop     bc
-        jr      tgs_loop
-tgs_theend:
+        jr      .tgs_loop
+.tgs_theend:
         xor     a                       ; zero terminate string
         ld      (de),a
         ret
 
-        ;; ----------------------------
-        ;; extern int tty_getc();
-        ;; ----------------------------
-        ;; gets next character from keyb. buffer,
-        ;; returns 0 if buffer empty.
-        ;; affects: af, bc, de, hl
+
+        ;;; extern int tty_getc(void);
+        ;;; return:       L = key code (0 if buffer empty)
+        ;;; affects:      AF, BC, DE, HL
+        ;;; notes:        reads from keyboard buffer, interprets modifiers
 _tty_getc::
         call    _kbd_read               ; key waiting?
         ld      h,#0
@@ -773,12 +736,12 @@ _tty_getc::
         dec     l                       ; make key code 0 based
         ld      a,l                     ; back o a
         and     #KEY_DOWN_BIT           ; is key down or up?
-        jr      nz, tgc_key_down        ; key is down
-        ;; key up means you need to select 
+        jr      nz, .tgc_key_down       ; key is down
+        ;; key up means you need to select
         ;; correct key map and map the key code.
-tgc_key_up:
+.tgc_key_up:
         ld      a,l                     ; key back into a...
-        call    tgc_check_ctl           ; check symb. and caps
+        call    .tgc_check_ctl          ; check symb. and caps
         or      a                       ; a=0=>normal char
         jr      z, _tty_getc            ; ignore
         ld      b,a                     ; store ctrl to b
@@ -789,32 +752,32 @@ tgc_key_up:
         and     c                       ; delete in a
         ld      (_tty_ctl_key),a        ; write into mem.
         jr      _tty_getc               ; next queued key...
-tgc_key_down:
+.tgc_key_down:
         ld      a,l                     ; key code to a
-        call    tgc_check_ctl           ; check symb. and caps
+        call    .tgc_check_ctl          ; check symb. and caps
         or      a                       ; is a 0?
-        jr      z,tgc_char_down         ; if char down get it!
+        jr      z,.tgc_char_down        ; if char down get it!
         ;; if we are here then it is symbol or caps
         ld      b,a                     ; store ctrl to b
         ld      a,(_tty_ctl_key)        ; current ctl keys
         or      b                       ; set correct bit
         ld      (_tty_ctl_key),a        ; write into mem.
         jr      _tty_getc               ; next queued key...
-tgc_char_down:
+.tgc_char_down:
         ld      a,(_tty_ctl_key)        ; get control key
         ld      b,l                     ; store l
-        ld      hl,#key_map             ; basic key map (no control keys)
+        ld      hl,#.key_map            ; basic key map (no control keys)
         ld      de,#40                  ; map size (...to next map)
-tgc_next_map:        
+.tgc_next_map:
         or      a                       ; test a
-        jr      z, tgc_map_sel
+        jr      z, .tgc_map_sel
         add     hl,de                   ; next map
         dec     a
-        jr      tgc_next_map            ; and loop
-tgc_map_sel:
+        jr      .tgc_next_map           ; and loop
+.tgc_map_sel:
         ;; map is in hl, key is in b
         ld      d,#0
-        ld      a,b         
+        ld      a,b
         and     #~KEY_DOWN_BIT          ; remove key down bit
         ld      e,a                     ; to e
         add     hl,de                   ; add key to hl
@@ -822,30 +785,30 @@ tgc_map_sel:
         ;; store to hl and return
         ld      h,#0
         ld      l,a
-        ret        
+        ret
         ;; checks if key in a is control
         ;; return a=0...normal key,
         ;; a=1/2 symb/caps
-tgc_check_ctl:
+.tgc_check_ctl:
         and     #~KEY_DOWN_BIT          ; remove key down bit
-        cp      #KEY_CAPS 
-        jr      nz,tgc_check_symb
+        cp      #KEY_CAPS
+        jr      nz,.tgc_check_symb
         ld      a,#2                    ; caps on
         ret
-tgc_check_symb:
+.tgc_check_symb:
         cp      #KEY_SYMB
-        jr      nz,tgc_normal_key
+        jr      nz,.tgc_normal_key
         ld      a,#1
         ret
-tgc_normal_key:
+.tgc_normal_key:
         xor     a
         ret
 
 
-        ;; key maps	
+        ;; key maps
         ;; from keyboard scan codes to
         ;; ascii characters (respects
-        ;; control keys)	
+        ;; control keys)
         ;; 0x0d ... enter
         ;; 0x20 ... space
         ;; 0x01 ... symbol shift
@@ -859,7 +822,7 @@ tgc_normal_key:
         ;; 0x0c ... right
         ;; 0x61 ... pound symbol
         ;; 0x21 ... single quote
-key_map:	
+.key_map:	
         .byte '5',   '4',   '3',   '2',   '1'
         .byte '6',   '7',   '8',   '9',   '0'
         .byte 'y',   'u',   'i',   'o',   'p'

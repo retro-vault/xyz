@@ -42,11 +42,11 @@ extern process_t *process_first;
    if required. */
 extern process_t *process_start(
     char *pname,
-    void (*entry_point)(),
+    void (*entry_point)(void),
     size_t stack_size
 );
 
 /* exit function */
-extern void process_exit();
+extern void process_exit(void);
 
 #endif /* __PROCESS_H__ */

@@ -23,10 +23,10 @@
 
 yos_t _yos;
 
-int yos_version() { return YOS_VERSION; }
+int yos_version(void) { return YOS_VERSION; }
 
 /* populate function list */
-yos_t* _yos_init() {
+yos_t* _yos_init(void) {
 
     /* core */
     _yos.ver=yos_version;

@@ -27,7 +27,7 @@ typedef struct kbd_buff_s {
 extern kbd_buff_t* _kbd_buff;
 
 /* call this service function 50 times per second */
-extern void _kbd_scan();
+extern void _kbd_scan(void);
 
 /* checks kbd. buffer, 0 for no key available 
    otherwise internal key code 
@@ -47,6 +47,6 @@ extern void _kbd_scan();
    the tty should keep track of shift up/down
    events and them convert the key into correct
    ascii code based on it! */
-extern uint8_t kbd_read();
+extern uint8_t kbd_read(void);
 
 #endif /* __KEYBOARD_H__ */

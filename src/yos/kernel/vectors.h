@@ -24,7 +24,7 @@
 #define NMI	    7
 
 /* set vector */
-extern void sys_vec_set(void (*handler)(), uint8_t vec_num); 
+extern void sys_vec_set(void (*handler)(void), uint8_t vec_num);
 
 /* get vector */
 extern void *sys_vec_get(uint8_t vec_num);

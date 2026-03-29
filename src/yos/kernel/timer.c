@@ -18,7 +18,7 @@ timer_t *_tmr_first=NULL;
 /* 
  * install timer hook 
  */
-timer_t *tmr_install(void (*hook)(), uint16_t ticks, void *owner) {
+timer_t *tmr_install(void (*hook)(void), uint16_t ticks, void *owner) {
 	timer_t *t;
 	if ( t = (timer_t *)so_create(
             (void **)&_tmr_first, sizeof(timer_t), owner
@@ -42,7 +42,7 @@ timer_t *tmr_uninstall(timer_t *t) {
  * note: this code is called inside (already!) guarded 
  * 50 hz interrupt so no extra di/ei calls are needed.
  */
-void _tmr_chain() {
+void _tmr_chain(void) {
 	timer_t *t=_tmr_first;
 	while(t) {
 		if (t->_tick_count==0) { /* trig it */
