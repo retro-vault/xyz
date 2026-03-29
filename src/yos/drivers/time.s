@@ -1,12 +1,12 @@
-;;; time.s
-;;;
-;;; ZX Spectrum real time clock functions
-;;; A simple 2 byte 50Hz tick counter
-;;;
-;;; MIT License (see: LICENSE)
-;;; Copyright (C) 2021 Tomaz Stih
-;;;
-;;; 2021-07-11   tstih
+        ;; time.s
+        ;;
+        ;; ZX Spectrum real time clock functions
+        ;; A simple 2 byte 50Hz tick counter
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2021 Tomaz Stih
+        ;;
+        ;; 2021-07-11   tstih
 
 .module time
 
@@ -15,17 +15,17 @@
 
 .area   _CODE
 
-;;; extern unsigned int clock(void);
-;;; return:  HL = current tick count
-;;; affects: HL
+        ;; extern unsigned int clock(void);
+        ;; return:  HL = current tick count
+        ;; affects: HL
 __clock::
         ld      hl,(_clock_ticks)
         ret
 
-;;; extern void _clock_tick(void);
-;;; return:  (none)
-;;; affects: AF, HL
-;;; notes:   called from 50Hz interrupt, updates 32-bit counter
+        ;; extern void _clock_tick(void);
+        ;; return:  (none)
+        ;; affects: AF, HL
+        ;; notes:   called from 50Hz interrupt, updates 32-bit counter
 __clock_tick::
         ;; first update clock
         ld      hl,(_clock_ticks)
