@@ -1,74 +1,144 @@
 # System Calls and Services
 
-## services
+Traditional operating systems use a privileged trap instruction (a software interrupt or `syscall` instruction) to transition from user space to kernel space. The ZX Spectrum has no memory protection and no privilege levels, so *yos* uses a lighter-weight mechanism: **services**.
 
-### implementing syscalls in yos
+## What Is a Service?
 
-every operating system provides a mechanism for system calls. 
-to access the yos operating system api, you have to obtain
-pointer to the yos services. a service is a table of functions. 
-the yos operating system service is called (surprise, surprise!) 
-yos. 
+A service is a named table of function pointers. Any piece of code that wants to expose a public API registers itself as a service with a name. Any other code that wants to use that API queries the service by name to get the function table, then calls functions through it.
 
-you acquire the service pointer and call a function like this.
+```
+┌──────────────────┐         ┌────────────────────────────┐
+│  user program    │ ──────► │  svc_query("yos")          │
+│                  │         │  returns yos_t *           │
+│  y->printf(...)  │ ──────► │  yos_t.printf(...)         │
+└──────────────────┘         └────────────────────────────┘
+```
 
-~~~cpp
+This is the *yos* equivalent of a system call table. The OS itself registers a service called `"yos"` that exposes its public API.
+
+## Querying the OS API
+
+The fastest way to get the OS service pointer in C is through the `query_service` function, which is wired to `RST 0x10` (see below):
+
+```c
 #include <yos.h>
-/* get the yos operating system service */
-yos_t *y=(yos_t*)query_service("yos");
-y->printf("Hello world!\n");
-~~~
 
-### custom services
+/* Obtain the OS service table */
+yos_t *y = (yos_t *)query_service("yos");
 
-good news is you can register your own services, and provide your
-own table of functions. as long as the process that registers 
-the service is running, other processes can obtain the pointer
-to it and call its api. 
+/* Use it */
+y->printf("Hello, world!\n");
+y->clrscr();
+y->setcur(true);
+```
 
-this is venerated as one of the coolest features of yos! 
-you can use it to implement a plethora of hacks: from shared 
-resources, and dynamic linking, to interprocess communication.
-simply create a process that register a service, and call its 
-functions from other processes.
+You only need to call `query_service` once per process. Store the pointer and reuse it — the lookup walks a linked list, so it is not free.
 
- > max name len for the service is 16 chars, together with 0 terminator.
+## The `RST 0x10` Mechanism
 
-### the query_service() function
+`query_service` is made available to *every* program — including assembly programs — through `RST 0x10`. The OS installs `_svc_query` as the handler for that vector during initialisation.
 
-the query_service() function is implemented in crt0 file and
-by default accessible from any C program. from assembler,
-you can call it like this:
+From assembly:
 
-~~~asm
-        ;; put pointer to service name on the stack
-        ld hl, #yos
-        push hl
-        ;; call reset vector 10
-        rst 0x10
-        ;; hl now contains pointer to table of functions
-        yos: .ascii "yos"
-~~~
+```asm
+        ;; Push address of the service name string
+        ld      hl, #service_name
+        push    hl
+        ;; RST 0x10 calls _svc_query(name)
+        ;; Return value: HL = pointer to function table, or 0 if not found
+        rst     0x10
+        ;; HL now holds the function table pointer
 
-### partial standard c library implementation
+service_name:
+        .asciz  "yos"           ; null-terminated service name
+```
 
-operating systems usually expose mminimal set of system functions. 
+This works because `RST 0x10` is a single-byte instruction — cheap in both code size and execution time — and the vector is hooked in RAM so it can be changed if needed.
 
-yos is a bit different.
+## Registering a Custom Service
 
-parts of it require functions from the standard c library, such as
-`strlen()` or `malloc()`. so to save precious memory and avoid 
-duplication, yos exposes its guts to the world and lets you use
-those functions instead of reimplementing them.
+Any process can register its own service:
 
-you get a partial implementation of `time.h`, `string.h`, `ctype.h`,
-`stdio.h`... as part of the operating system.
+```c
+#include <kernel/service.h>
 
-### resident processes
+/* Define your API */
+typedef struct {
+    void (*draw_pixel)(int x, int y);
+    void (*clear_screen)();
+} gpx_t;
 
-resident processes are loaded to fixed addresses at 
-the end of physical memory.
+/* Implement it */
+static void my_draw_pixel(int x, int y) { /* ... */ }
+static void my_clear_screen()           { /* ... */ }
 
+static gpx_t gpx_api = {
+    .draw_pixel    = my_draw_pixel,
+    .clear_screen  = my_clear_screen,
+};
 
-...to be continued...
+/* Register it under the name "gpx" */
+service_t *s = svc_register("gpx", &gpx_api);
+```
 
+Once registered, any other process can use it:
+
+```c
+gpx_t *g = (gpx_t *)query_service("gpx");
+g->draw_pixel(10, 20);
+```
+
+### Important: service lifetime
+
+A service is only valid while the process that registered it is running. If that process exits without calling `svc_unregister`, the entry remains in the service list but its function table points to freed memory — calling through it will crash. Always unregister before exiting:
+
+```c
+svc_unregister(s);
+```
+
+### Service name limit
+
+Service names are stored in a fixed 16-byte field (`MAX_SVC_NAME_LEN = 16`), including the null terminator. Names longer than 15 characters will be silently truncated by `strcpy`.
+
+## The Service Structure
+
+Internally, each service is a `service_t` system object:
+
+```c
+typedef struct service_s {
+    sysobj_t hdr;                   /* list link + owner */
+    char     name[MAX_SVC_NAME_LEN];/* "yos", "gpx", etc. */
+    void    *fntable;               /* pointer to your struct of fn ptrs */
+} service_t;
+```
+
+All registered services are kept in the `_svc_first` linked list. `_svc_query` does a linear search by name using `strcmp`.
+
+## Uses for Custom Services
+
+Custom services are a flexible building block. Some ideas:
+
+**Shared hardware access.** Register a service that owns a resource (e.g., the serial port) and serialises access to it. All threads that need the port go through the service instead of accessing the hardware directly.
+
+**Plug-in APIs.** A graphics driver, a sound driver, or a file system can be loaded as a process and register a service. Other programs discover it at runtime without needing to be linked against it.
+
+**Inter-process communication.** A service can expose a message queue or shared buffer with functions like `send(msg)` and `recv()`. This is a lightweight substitute for OS-level IPC.
+
+**Dynamic linking.** Because a function table is just a struct of pointers, a "library" process can register its exported functions as a service. The dynamic linker is just `query_service`.
+
+## Partial Standard C Library
+
+*Yos* includes a subset of the standard C library built into the ROM image, covering parts of `<string.h>`, `<ctype.h>`, `<stdio.h>`, and `<time.h>`. Programs linked against *yos* can use these functions without reimplementing them.
+
+Functions available include (but are not limited to):
+
+- `strlen`, `strcpy`, `strcmp`, `strncmp`, `memset`, `memcpy`
+- `isdigit`, `isalpha`, `toupper`, `tolower`
+- `printf` (subset — via the `yos` service as `y->printf`)
+- `clock` (via `<time.h>`)
+
+This matters on a machine with 48 KB of RAM: duplicating the standard library in every program would be wasteful. Sharing one copy from ROM saves precious user memory.
+
+## Resident Processes
+
+Some services need to be available from the moment the OS starts. These are implemented as **resident processes** — they are loaded at fixed addresses near the top of physical memory and started before any user program runs. Because they live at fixed addresses, relocation is not needed and other programs can call them directly if they know the address. Resident processes are an advanced feature intended for OS extensions such as filesystem drivers.

@@ -63,7 +63,7 @@ thread_t *thread_create(
             /*  push hl */
             (t->startup)[6] = 0xe5;     /* push hl opcode */
             /*  jp __thread_exit */
-            (t->startup)[7] = 0xc3;     /* jp opcode */
+            (t->startup)[7] = 0xcd;     /* call opcode */
             (t->startup)[8] = lob((uint16_t)&thread_exit);
             (t->startup)[9] = hib((uint16_t)&thread_exit);
 
