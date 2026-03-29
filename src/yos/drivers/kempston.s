@@ -1,34 +1,34 @@
-;;; kempston.s
-;;;
-;;; Kempston mouse driver for ZX Spectrum
-;;;
-;;; Based on Andrey Rachkin code:
-;;; http://8bit.yarek.pl/hardware/zx.mouse/kmouse.html
-;;;
-;;; MIT License (see: LICENSE)
-;;; Copyright (C) 2021 Tomaz Stih
-;;;
-;;; 2015-04-20   tstih
+        ;; kempston.s
+        ;;
+        ;; Kempston mouse driver for ZX Spectrum
+        ;;
+        ;; Based on Andrey Rachkin code:
+        ;; http://8bit.yarek.pl/hardware/zx.mouse/kmouse.html
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2021 Tomaz Stih
+        ;;
+        ;; 2015-04-20   tstih
 
-.module kempston
+        .module kempston
 
-.globl  __mouse_calibrate
-.globl  __mouse_scan
+        .globl  __mouse_calibrate
+        .globl  __mouse_scan
 
-.globl  .kmp_scan_raw
-.globl  .kmp_calib_raw
+        .globl  .kmp_scan_raw
+        .globl  .kmp_calib_raw
 
-.equ    KMP_BTN_PORT, 0xfadf
-.equ    KMP_X_PORT, 0xfbdf
-.equ    KMP_Y_PORT, 0xffdf
+        .equ    KMP_BTN_PORT, 0xfadf
+        .equ    KMP_X_PORT, 0xfbdf
+        .equ    KMP_Y_PORT, 0xffdf
 
-.area   _CODE
+        .area   _CODE
 
-;;; extern void mouse_calibrate(uint8_t x, uint8_t y);
-;;; param:  X in HL, Y in DE
-;;; return: (none)
-;;; affects: A, FLAGS, HL, BC
-;;; notes:   sets initial mouse position (typically center)
+        ;; extern void mouse_calibrate(uint8_t x, uint8_t y);
+        ;; param:  X in HL, Y in DE
+        ;; return: (none)
+        ;; affects: A, FLAGS, HL, BC
+        ;; notes:   sets initial mouse position (typically center)
 __mouse_calibrate::
         ld      c,l                     ; c = x
         ld      b,d                     ; b = y
@@ -52,11 +52,11 @@ __mouse_calibrate::
         ld      (hl),a                  ; to high hw pos
         ret
 
-;;; extern void mouse_scan(mouse_info_t *mi);
-;;; param:  HL = pointer to mouse_info_t
-;;; return: (none)
-;;; affects: AF, BC, DE, HL
-;;; notes:   scans mouse and updates info structure
+        ;; extern void mouse_scan(mouse_info_t *mi);
+        ;; param:  HL = pointer to mouse_info_t
+        ;; return: (none)
+        ;; affects: AF, BC, DE, HL
+        ;; notes:   scans mouse and updates info structure
 __mouse_scan:
         call    .kmp_scan_raw           ; scan it
         ex      af,af'
@@ -78,13 +78,13 @@ __mouse_scan:
         ld      (hl),d
         ret
 
-;;; .kmp_scan_raw
-;;; return: A = mouse buttons
-;;;         B = Y delta
-;;;         C = X delta
-;;;         D = button change flags (1=change, 0=no change)
-;;; affects: FLAGS, A, BC, HL, DE
-;;; notes:   reads hardware and computes delta since last scan
+        ;; .kmp_scan_raw
+        ;; return: A = mouse buttons
+        ;;         B = Y delta
+        ;;         C = X delta
+        ;;         D = button change flags (1=change, 0=no change)
+        ;; affects: FLAGS, A, BC, HL, DE
+        ;; notes:   reads hardware and computes delta since last scan
 .kmp_scan_raw::
         ;; first scan buttons for changes
         ld      bc,#KMP_BTN_PORT
@@ -156,7 +156,7 @@ __mouse_scan:
         ld      a,(.kmp_mhwbtn)         ; button state to a
         ret
 
-.area   _DATA
+        .area   _DATA
 
 .kmp_mcurxy:    .word 0                 ; last cursor coords
 .kmp_mhwxy:     .word 0                 ; last mouse hardware read
