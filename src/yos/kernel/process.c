@@ -11,7 +11,7 @@
  */
 #include <kernel/process.h>
 
-process_t *process_first;
+process_t *process_first = NULL;
 
 process_t *process_start(
     char *pname,
@@ -32,6 +32,10 @@ process_t *process_start(
             entry_point,
             stack_size, 
             (void *)p);
+        if (!p->main_thread) {
+            so_destroy((void **)&process_first, (void *)p);
+            return NULL;
+        }
         p->main_thread->process=p;
         /* ...start it! */
         thread_resume(p->main_thread);

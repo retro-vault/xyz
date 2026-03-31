@@ -191,8 +191,8 @@ uint8_t lob(uint16_t w) __naked {
     w;
     __asm
         ;; w is in HL (SDCC 4.5 calling convention)
-        ;; extract low byte (L) -> return in L
-        ld      h,#0                    ; hi byte to 0
+        ;; uint8_t return value must be in A
+        ld      a,l
         ret
     __endasm;
 }
@@ -202,9 +202,8 @@ uint8_t hib(uint16_t w) __naked {
     w;
     __asm
         ;; w is in HL (SDCC 4.5 calling convention)
-        ;; extract high byte (H) -> return in L
-        ld      l,h                     ; high to low
-        ld      h,#0                    ; hi byte to 0
+        ;; uint8_t return value must be in A
+        ld      a,h
         ret
     __endasm;
 }

@@ -74,36 +74,7 @@ void test_threads(void) {
     thread_suspend(t2);
 }
 
-#ifdef HAVE_GPX
-
-#define printf y->printf
-
-void test_gpx(void) {
-
-    gpx_t *g=gpx_init();
-    gpx_cls(g);
-
-    gpx_cap_t *cap=gpx_cap(g);
-    coord centerx = cap->pages[0].resolutions[0].width/2;
-    coord centery = cap->pages[0].resolutions[0].height/2;
-
-    printf("Center is at %d,%d\n",centerx, centery);
-
-    for (coord x=centerx-20; x<centerx+20;x++)
-        gpx_draw_pixel(g,x,centery);
-
-    gpx_draw_circle(g,centerx,centery,20);
-    gpx_exit(NULL);
-}
-
-#undef printf
-
-#endif /* HAVE_GPX */
 
 void _test(void) {
-#ifdef HAVE_GPX
-    test_gpx();
-#else
     test_threads();
-#endif
 }

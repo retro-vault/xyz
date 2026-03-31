@@ -70,7 +70,7 @@ ASFLAGS :=  -xlos -g
 SDCC_Z80_LIB :=  /opt/sdcc/share/sdcc/lib/z80/z80.lib
 
 LDFLAGS :=  -mz80 -Wl -y \
-            --code-loc 0x0000 \
+            --code-loc 0x0100 \
             --data-loc 0x5b00 \
             --no-std-crt0 \
             --nostdlib \

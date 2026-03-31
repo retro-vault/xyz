@@ -38,7 +38,7 @@ void main(void) {
     mem_init((void *)&_heap,0xffff-&_heap);
 
     /* install cursor, keyboard, and
-       real time clock timers*/
+       real time clock timers */
     tmr_install(_tty_cur_tick, 10, NONE);
     tmr_install(_kbd_scan, 0, NONE);
     tmr_install(_clock_tick, 0, NONE);
@@ -48,7 +48,7 @@ void main(void) {
 
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_printf("XYZ OS (c) 2022 TOMAZ STIH\n\n");
+    tty_printf("XYZ OS (c) 2022-2026 TOMAZ STIH\n\n");
 
     /* register syscalls (api) service */
     yos_t* y=_yos_init();
@@ -56,7 +56,11 @@ void main(void) {
 
     /* create shell process */
     process_t *p=process_start("ysh", ysh, 1024);
+    if (!p) {
+        tty_printf("ERR: PROCESS START FAILED\n");
+        return;
+    }
 
-    /* and yield control to the scheduler */
-    sys_vec_set(_thread_robin,RST38); 
+    /* and yield control to the scheduler */ 
+    sys_vec_set(_thread_robin, RST38);
 }

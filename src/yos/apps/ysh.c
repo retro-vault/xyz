@@ -22,6 +22,9 @@
 /* syscalls */
 yos_t *y;
 char cmd[128];
+#define DIR_MAX_FILES 32
+mdr_file_t dir_files[DIR_MAX_FILES];
+#define MDR_TST_SIZE 2048
 
 /* testing */
 extern void _test(void);
@@ -38,6 +41,9 @@ void help(void) {
     y->printf("    clear ... clear screen\n");
     y->printf("    ver   ... yos version\n");
     y->printf("    ps    ... list processes and threads\n");
+    y->printf("    dir   ... list microdrive #1 directory\n");
+    //y->printf("    mdrdbg... dump microdrive debug counters\n");
+    //y->printf("    mdrtst... save/load edge-size files\n");
 }
 
 void print_header(char *c) {
@@ -146,6 +152,138 @@ void pstat(void) {
         0);
 }
 
+void dir(void) {
+    uint8_t drive = 1;
+    uint8_t drives = y->mdr_detect_drives();
+    if (drives == 0) {
+        y->printf("\nNO MICRODRIVE DETECTED\n");
+        return;
+    }
+    y->printf("\n%u DRIVES DETECTED\n", drives);
+    if (drive > drives) {
+        y->printf("\nDRIVE %u NOT PRESENT\n", drive);
+        return;
+    }
+
+    uint8_t count = y->mdr_dir(drive, dir_files, DIR_MAX_FILES);
+    if (count > DIR_MAX_FILES) count = DIR_MAX_FILES; /* defensive clamp */
+    y->printf("\nDRIVE %u DIRECTORY\n\n", drive);
+    if (count == 0) {
+        y->printf("EMPTY\n");
+        return;
+    }
+
+    print_header("NAME       SECTORS SIZE");
+    for (uint8_t i = 0; i < count; i++) {
+        y->printf("%-10s %7u %4u\n",
+            dir_files[i].name,
+            dir_files[i].sectors,
+            dir_files[i].size);
+    }
+}
+
+void mdrdbg(void) {
+    mdr_debug_t d;
+    y->mdr_dbg(1, &d);
+    y->printf("\nMDR DEBUG (LAST OP)\n\n");
+    y->printf("op=%u drive=%u result=%u\n", d.op, d.drive, d.result);
+    y->printf("scanned=%u aligned=%u align_fail=%u\n",
+        d.sectors_scanned, d.sectors_aligned, d.align_failures);
+    y->printf("used=%u blank=%u\n", d.records_used, d.records_blank);
+    y->printf("gap_to=%u byte_to=%u\n", d.gap_timeouts, d.byte_timeouts);
+}
+
+void mdr_mkname(char *name, char tag, uint16_t stamp) {
+    const char hex[] = "0123456789ABCDEF";
+    name[0] = 'T';
+    name[1] = tag;
+    name[2] = hex[(stamp >> 12) & 0x0f];
+    name[3] = hex[(stamp >> 8) & 0x0f];
+    name[4] = hex[(stamp >> 4) & 0x0f];
+    name[5] = hex[stamp & 0x0f];
+    name[6] = 'Y';
+    name[7] = 'O';
+    name[8] = 'S';
+    name[9] = ' ';
+}
+
+void mdrtst(void) {
+    uint8_t drives = y->mdr_detect_drives();
+    const uint16_t sizes[] = { 511, 512, 513, 1025, 1739 };
+    const uint8_t test_count = sizeof(sizes) / sizeof(sizes[0]);
+    uint16_t stamp = y->clock();
+    uint8_t t;
+    uint16_t size;
+    uint8_t *src;
+    uint8_t *dst;
+    char name[10];
+    uint16_t i;
+
+    if (drives == 0) {
+        y->printf("\nNO MICRODRIVE DETECTED\n");
+        return;
+    }
+
+    y->printf("\nMDRTST: edge-size suite\n");
+    for (t = 0; t < test_count; t++) {
+        uint16_t err = 0;
+        uint16_t first = 0;
+
+        size = sizes[t];
+        mdr_mkname(name, (char)('0' + t), (uint16_t)(stamp + t));
+
+        src = (uint8_t *)y->malloc(size);
+        dst = (uint8_t *)y->malloc(size);
+        if (src == NULL || dst == NULL) {
+            y->printf("MDRTST FAIL[%u]: out of memory\n", t);
+            if (src != NULL) y->free(src);
+            if (dst != NULL) y->free(dst);
+            return;
+        }
+
+        for (i = 0; i < size; i++) {
+            src[i] = (uint8_t)((i * 37u) ^ (i >> 3) ^ (size & 0xff) ^ t);
+            dst[i] = 0;
+        }
+
+        y->printf("  [%u] save/load %u bytes...\n", t, size);
+        if (y->mdr_save(1, name, src, size) != 0) {
+            y->printf("MDRTST FAIL[%u]: save failed\n", t);
+            y->free(src);
+            y->free(dst);
+            return;
+        }
+        if (y->mdr_load(1, name, dst) != 0) {
+            y->printf("MDRTST FAIL[%u]: load failed\n", t);
+            y->free(src);
+            y->free(dst);
+            return;
+        }
+
+        for (i = 0; i < size; i++) {
+            if (src[i] != dst[i]) {
+                if (err == 0) first = i;
+                err++;
+            }
+        }
+
+        if (err == 0) {
+            y->printf("  [%u] PASS\n", t);
+        } else {
+            y->printf("MDRTST FAIL[%u]: %u mismatches, first=%u\n", t, err, first);
+            y->printf("src=%u dst=%u\n", src[first], dst[first]);
+            y->free(src);
+            y->free(dst);
+            return;
+        }
+
+        y->free(src);
+        y->free(dst);
+    }
+
+    y->printf("MDRTST PASS: all edge sizes verified\n");
+}
+
 void exec(char *text) {
     lcase(text);
     if (y->strcmp(text,"mem")==0)
@@ -158,6 +296,12 @@ void exec(char *text) {
         help();
     else if (y->strcmp(text,"ps")==0)
         pstat();
+    else if (y->strcmp(text,"dir")==0)
+        dir();
+    else if (y->strcmp(text,"mdrdbg")==0)
+        mdrdbg();
+    else if (y->strcmp(text,"mdrtst")==0)
+        mdrtst();
     else if (y->strcmp(text,"test")==0)
         _test();
     else if (y->strlen(text)==0) /* tolerate empty string */
@@ -179,4 +323,3 @@ void ysh(void) {
         exec(cmd);
     }
 }
-

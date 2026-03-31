@@ -15,15 +15,30 @@
 #include <ctype.h>
 
 #include <kernel/interrupts.h>
+#include <kernel/mem.h>
 
 #include <tty/tty.h>
 #include <tty/tty_print.h>
+#include <drivers/mdr.h>
 
 #include <yos.h>
 
 yos_t _yos;
 
 int yos_version(void) { return YOS_VERSION; }
+extern unsigned int _clock(void);
+
+static void *yos_malloc(unsigned int size) {
+    return mem_allocate((void *)&_heap, (uint16_t)size, NONE);
+}
+
+static void yos_free(void *p) {
+    (void)mem_free((void *)&_heap, p);
+}
+
+static unsigned int yos_clock(void) {
+    return (unsigned int)_clock();
+}
 
 /* populate function list */
 yos_t* _yos_init(void) {
@@ -43,6 +58,18 @@ yos_t* _yos_init(void) {
     _yos.kbhit=tty_getc;
     _yos.setcur=tty_cur_enable;
     _yos.setattr=tty_attr;
+
+    /* stdlib memory/time */
+    _yos.malloc=yos_malloc;
+    _yos.free=yos_free;
+    _yos.clock=yos_clock;
+
+    /* microdrive */
+    _yos.mdr_detect_drives=mdr_detect_drives;
+    _yos.mdr_dir=mdr_dir;
+    _yos.mdr_load=mdr_load;
+    _yos.mdr_save=mdr_save;
+    _yos.mdr_dbg=mdr_dbg;
     
     /* string.h */
     _yos.strlen=strlen;
