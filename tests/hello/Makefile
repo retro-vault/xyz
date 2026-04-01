@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# Makefile for hello — xlink integration test.
+#
+# Two modes:
+#   Outside Docker (default): runs a single container to compile .c/.s
+#                             files, then runs xlink on the host.
+#   Inside  Docker (IN_DOCKER=1): compiles and assembles only.
+#
+# Usage:
+#   make          — full build (compile inside Docker, link on host)
+#   make clean    — remove build artifacts
+# ---------------------------------------------------------------------------
+
+ROOT      ?= $(realpath ../..)
+THIS_DIR  := $(realpath .)
+BUILD_DIR := $(ROOT)/build/hello
+BIN_DIR   := $(ROOT)/bin/hello
+XLINK     := $(ROOT)/bin/xc/xlink/xlink
+
+DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
+
+.DEFAULT_GOAL := all
+
+.PHONY: clean
+clean:
+	rm -rf $(BUILD_DIR) $(BIN_DIR)
+
+ifndef IN_DOCKER
+# ---------------------------------------------------------------------------
+# Host entry point: Docker for SDCC compilation, then xlink on host.
+# ---------------------------------------------------------------------------
+.PHONY: all
+all:
+	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
+	docker run --rm \
+	    -u $(shell id -u):$(shell id -g) \
+	    -v $(ROOT):$(ROOT) \
+	    -w $(THIS_DIR) \
+	    $(DOCKER_IMAGE) \
+	    make IN_DOCKER=1 ROOT=$(ROOT)
+	$(XLINK) -v -m -e _entry \
+	    -o $(BIN_DIR)/hello.xl \
+	    $(BUILD_DIR)/crt0.rel \
+	    $(BUILD_DIR)/hello.rel
+
+else
+# ---------------------------------------------------------------------------
+# Inside Docker: compile C and assemble S only.
+# ---------------------------------------------------------------------------
+
+CC      := sdcc
+AS      := sdasz80
+
+CFLAGS  := --std-c11 -mz80 --nostdinc
+ASFLAGS := -xlos -g
+
+.PHONY: all
+all: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/hello.rel
+
+$(BUILD_DIR)/crt0.rel: crt0.s
+	$(AS) $(ASFLAGS) -o $@ $<
+
+$(BUILD_DIR)/hello.rel: hello.c
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+endif

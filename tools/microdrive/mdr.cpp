@@ -166,7 +166,7 @@ void cmd_create(const fs::path& mdr_path, std::string_view cart_name) {
         uint8_t* sec = img.data() + i * SECTOR_SIZE;
 
         auto* hdr        = reinterpret_cast<md_header*>(sec + OFF_HEADER);
-        hdr->flag        = 0;
+        hdr->flag        = 0x0f; // IF1-formatted header marker (Fuse-compatible)
         hdr->sector_num  = static_cast<uint8_t>(NUM_SECTORS - i);
         hdr->unused[0]   = hdr->unused[1] = 0;
         std::copy(padded.begin(), padded.end(), hdr->cart_name);
@@ -252,12 +252,11 @@ void cmd_put(const fs::path& mdr_path, const fs::path& host_file) {
     for (int i = 0; i < needed; i++) {
         int s       = free_sectors[i];
         auto& rec   = img.record(s);
-        rec.flag    = 1;
-        rec.rec_num = static_cast<uint8_t>(i);
-        std::copy(mdr_name.begin(), mdr_name.end(), rec.filename);
-
         std::size_t chunk = std::min(static_cast<std::size_t>(DATA_SIZE),
                                      payload.size() - offset);
+        rec.flag    = (chunk < static_cast<std::size_t>(DATA_SIZE)) ? 0x06 : 0x04;
+        rec.rec_num = static_cast<uint8_t>(i);
+        std::copy(mdr_name.begin(), mdr_name.end(), rec.filename);
         rec.length = static_cast<uint16_t>(chunk);
         std::memcpy(img.sector_data(s), payload.data() + offset, chunk);
         if (chunk < DATA_SIZE)

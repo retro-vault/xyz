@@ -130,15 +130,23 @@ namespace xlink {
                 auto& sym = mod->symbols()[i];
                 if (!sym.is_def()) continue;
 
-                auto it = ctx.global_symbols.find(sym.name());
+                // Skip SDCC internal pseudo-symbols (e.g. .__.ABS.).
+                // These are defined in every module and must not enter
+                // the global table.
+                const auto& sname = sym.name();
+                if (sname.size() > 3 && sname[0] == '.' &&
+                    sname[1] == '_' && sname[2] == '_')
+                    continue;
+
+                auto it = ctx.global_symbols.find(sname);
                 if (it != ctx.global_symbols.end()) {
                     throw symbol_error(
-                        "duplicate symbol '" + sym.name()
+                        "duplicate symbol '" + sname
                         + "' defined in modules '"
                         + it->second.first->name() + "' and '"
                         + mod->name() + "'");
                 }
-                ctx.global_symbols[sym.name()] = {mod.get(), i};
+                ctx.global_symbols[sname] = {mod.get(), i};
             }
         }
 

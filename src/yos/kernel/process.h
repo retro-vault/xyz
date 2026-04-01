@@ -46,6 +46,19 @@ extern process_t *process_start(
     size_t stack_size
 );
 
+/* load process image from microdrive, relocate it, and start it */
+extern process_t *process_load(
+    uint8_t drive,
+    char *fname,
+    size_t stack_size
+);
+
+/* reap a terminated process and release all owned resources */
+extern void process_reap(process_t *p);
+
+/* detach a finished process from scheduler/process lists without freeing it */
+extern void process_detach(process_t *p);
+
 /* exit function */
 extern void process_exit(void);
 

@@ -53,6 +53,7 @@ void main(void) {
     /* register syscalls (api) service */
     yos_t* y=_yos_init();
     svc_register("yos",y);
+    sys_vec_set(svc_query_rst10, RST10);
 
     /* create shell process */
     process_t *p=process_start("ysh", ysh, 1024);

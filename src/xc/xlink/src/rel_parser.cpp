@@ -54,6 +54,7 @@ namespace xlink {
         std::string line;
         int line_num = 0;
         text_record* current_text = nullptr;
+        bool is_v4 = false; // SDCC XL4 extended format flag
 
         while (std::getline(file, line)) {
             line_num++;
@@ -65,12 +66,15 @@ namespace xlink {
 
             switch (record_type) {
             case 'X': {
-                // XH or XL: set byte order.
+                // XL / XL4: little-endian (version 4 = extended 32-bit format)
+                // XH: big-endian
                 if (line.size() >= 2) {
-                    if (line[1] == 'L')
+                    if (line[1] == 'L') {
                         mod->set_endian(byte_order::little_endian);
-                    else if (line[1] == 'H')
+                        is_v4 = (line.size() >= 3 && line[2] == '4');
+                    } else if (line[1] == 'H') {
                         mod->set_endian(byte_order::big_endian);
+                    }
                 }
                 break;
             }
@@ -145,27 +149,27 @@ namespace xlink {
                 break;
             }
             case 'T': {
-                // T <area_offset_hex> <byte> <byte> ...
-                // Format: T AA AA BB BB BB ...
-                // First two hex bytes = offset (little-endian: lo hi)
+                // T record: code/data bytes for an area at a given offset.
+                //
+                // v1 format: T <off_lo> <off_hi> <byte> ...  (2-byte offset)
+                // v4 format: T <b0> <b1> <b2> <b3> <byte> ... (4-byte offset,
+                //            only low 16 bits used for Z80)
                 auto tokens = split(rest);
-                if (tokens.size() < 2)
+                size_t off_bytes = is_v4 ? 4 : 2;
+                if (tokens.size() < off_bytes)
                     throw parse_error(path.string(), line_num,
                         "malformed T record");
 
                 text_record tr;
-                // The offset is two hex bytes: lo hi.
                 uint8_t lo = parse_hex8(tokens[0]);
                 uint8_t hi = parse_hex8(tokens[1]);
                 tr.offset = static_cast<uint16_t>(lo | (hi << 8));
+                // high bytes (v4 tokens[2][3]) are zero for any Z80 code
 
-                // Remaining tokens are data bytes.
-                for (size_t i = 2; i < tokens.size(); ++i)
+                for (size_t i = off_bytes; i < tokens.size(); ++i)
                     tr.data.push_back(parse_hex8(tokens[i]));
 
-                // area_index is set by preceding R record or defaults
-                // to most recently defined area. We'll fix this below.
-                tr.area_index = -1; // will be patched by R record
+                tr.area_index = -1; // patched by following R record
                 mod->texts().push_back(tr);
                 current_text = &mod->texts().back();
                 break;
@@ -188,34 +192,38 @@ namespace xlink {
                     current_text->area_index = area_idx;
                 }
 
-                // Parse relocation entries (groups of 4 bytes after header).
+                // Parse relocation entries (4 bytes per entry after header).
+                //
+                // v1 entry: [mode(1)][off_lo(1)][off_hi(1)][ref(1)]
+                //   offset is relative to T data start; ref is 1 byte.
+                //   mode bit 0 = word (1) / byte (0).
+                //
+                // v4 entry: [mode(1)][offset_from_T_start(1)][ref_lo(1)][ref_hi(1)]
+                //   offset includes the 4-byte T record prefix → subtract 4 for
+                //   data-relative offset. ref is 2 bytes. mode bit 0 inverted:
+                //   0 = word, 1 = byte (normalize by XOR 0x01 to match v1).
                 size_t i = 4;
                 while (i + 3 < tokens.size()) {
                     reloc_entry re;
                     uint8_t mode_byte = parse_hex8(tokens[i]);
-                    re.mode = static_cast<reloc_mode>(mode_byte);
 
-                    // Offset into T data (2 bytes, little-endian).
-                    uint8_t off_lo = parse_hex8(tokens[i + 1]);
-                    uint8_t off_hi = parse_hex8(tokens[i + 2]);
-                    re.offset_in_t = static_cast<uint16_t>(
-                        off_lo | (off_hi << 8));
-
-                    // Reference index (2 bytes, little-endian).
-                    // But SDCC only uses 1 byte for small indices.
-                    // We'll read the full pair.
-                    uint8_t ref_lo = parse_hex8(tokens[i + 3]);
-                    // Check if there's a high byte.
-                    uint8_t ref_hi = 0;
-                    if (i + 4 < tokens.size()) {
-                        // In SDCC format, the ref index is encoded as
-                        // a single byte for area refs, but we need to
-                        // check the next group boundary.
-                        // Actually R entries in SDCC are: mode, byte1, byte2, index
-                        // where byte1/byte2 are the offset and index is one byte.
-                        // Total = 4 bytes per entry.
+                    if (is_v4) {
+                        uint8_t from_start = parse_hex8(tokens[i + 1]);
+                        uint8_t ref_lo    = parse_hex8(tokens[i + 2]);
+                        uint8_t ref_hi    = parse_hex8(tokens[i + 3]);
+                        re.mode       = static_cast<reloc_mode>(mode_byte ^ 0x01);
+                        re.offset_in_t = static_cast<uint16_t>(
+                            from_start >= 4 ? from_start - 4 : 0);
+                        re.ref_index  = ref_lo | (ref_hi << 8);
+                    } else {
+                        uint8_t off_lo = parse_hex8(tokens[i + 1]);
+                        uint8_t off_hi = parse_hex8(tokens[i + 2]);
+                        uint8_t ref    = parse_hex8(tokens[i + 3]);
+                        re.mode        = static_cast<reloc_mode>(mode_byte);
+                        re.offset_in_t = static_cast<uint16_t>(
+                            off_lo | (off_hi << 8));
+                        re.ref_index   = ref;
                     }
-                    re.ref_index = ref_lo;
 
                     if (current_text)
                         current_text->relocs.push_back(re);

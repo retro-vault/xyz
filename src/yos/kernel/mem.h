@@ -39,5 +39,6 @@ extern void *_heap;
 extern void mem_init(void *heap, uint16_t size);
 extern void *mem_allocate(void *heap, uint16_t size, void *owner);
 extern void *mem_free(void *heap, void *p);
+extern uint8_t mem_free_owner(void *heap, void *owner);
 
 #endif /* __MEM_H__ */

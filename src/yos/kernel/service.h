@@ -35,6 +35,7 @@ typedef struct service_s {
    registers this service under RST10 call, it returns
    a pointer to the OS api */
 extern void *_svc_query(const char *name);
+extern void svc_query_rst10(void);
 
 /* register a service */
 extern service_t* svc_register(const char *name, void *fntable);

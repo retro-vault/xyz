@@ -22,16 +22,27 @@
 /* syscalls */
 yos_t *y;
 char cmd[128];
+uint8_t current_drive = 1; /* 1..8 mapped to A:..H: */
 #define DIR_MAX_FILES 32
 mdr_file_t dir_files[DIR_MAX_FILES];
-#define MDR_TST_SIZE 2048
-
-/* testing */
-extern void _test(void);
 
 /* change to lowercase */
 void lcase(char *s) {
     for (int i=0;i<y->strlen(s);i++) s[i]=y->tolower(s[i]);
+}
+
+/* compare microdrive names as fixed 10-char, space-padded, case-insensitive */
+bool mdr_name_match10(const char *file_name11, const char *want) {
+    uint8_t i;
+    for (i = 0; i < 10; i++) {
+        char a = file_name11[i];
+        char b = want[i];
+        if (b == '\0') b = ' ';
+        a = y->tolower(a);
+        b = y->tolower(b);
+        if (a != b) return FALSE;
+    }
+    return TRUE;
 }
 
 void help(void) {
@@ -41,9 +52,36 @@ void help(void) {
     y->printf("    clear ... clear screen\n");
     y->printf("    ver   ... yos version\n");
     y->printf("    ps    ... list processes and threads\n");
-    y->printf("    dir   ... list microdrive #1 directory\n");
-    //y->printf("    mdrdbg... dump microdrive debug counters\n");
-    //y->printf("    mdrtst... save/load edge-size files\n");
+    y->printf("    dir   ... list current directory\n");
+}
+
+bool run_app(char *name) {
+    char app[12];
+    uint8_t i = 0;
+    process_t *p;
+
+    if (y->strlen(name) == 0 || y->strlen(name) > 6) return FALSE;
+
+    while (name[i] && i < 6) {
+        app[i] = name[i];
+        i++;
+    }
+    app[i++] = '.';
+    app[i++] = 'a';
+    app[i++] = 'p';
+    app[i++] = 'p';
+    app[i] = '\0';
+
+    p = process_load(current_drive, app, 1024);
+    if (!p) return FALSE;
+
+    while (p->main_thread &&
+           p->main_thread->state != THREAD_STATE_TERMINATED) {
+        __asm__("halt");
+    }
+
+    y->printf("\n");
+    return TRUE;
 }
 
 void print_header(char *c) {
@@ -153,8 +191,10 @@ void pstat(void) {
 }
 
 void dir(void) {
-    uint8_t drive = 1;
+    uint8_t drive = current_drive;
     uint8_t drives = y->mdr_detect_drives();
+    mdr_debug_t dbg;
+    bool unformatted;
     if (drives == 0) {
         y->printf("\nNO MICRODRIVE DETECTED\n");
         return;
@@ -166,8 +206,10 @@ void dir(void) {
     }
 
     uint8_t count = y->mdr_dir(drive, dir_files, DIR_MAX_FILES);
+    y->mdr_dbg(drive, &dbg);
+    unformatted = (dbg.sectors_aligned == 0);
     if (count > DIR_MAX_FILES) count = DIR_MAX_FILES; /* defensive clamp */
-    y->printf("\nDRIVE %u DIRECTORY\n\n", drive);
+    y->printf("\nDRIVE %u DIRECTORY%s\n\n", drive, unformatted ? " [u]" : "");
     if (count == 0) {
         y->printf("EMPTY\n");
         return;
@@ -182,110 +224,13 @@ void dir(void) {
     }
 }
 
-void mdrdbg(void) {
-    mdr_debug_t d;
-    y->mdr_dbg(1, &d);
-    y->printf("\nMDR DEBUG (LAST OP)\n\n");
-    y->printf("op=%u drive=%u result=%u\n", d.op, d.drive, d.result);
-    y->printf("scanned=%u aligned=%u align_fail=%u\n",
-        d.sectors_scanned, d.sectors_aligned, d.align_failures);
-    y->printf("used=%u blank=%u\n", d.records_used, d.records_blank);
-    y->printf("gap_to=%u byte_to=%u\n", d.gap_timeouts, d.byte_timeouts);
-}
-
-void mdr_mkname(char *name, char tag, uint16_t stamp) {
-    const char hex[] = "0123456789ABCDEF";
-    name[0] = 'T';
-    name[1] = tag;
-    name[2] = hex[(stamp >> 12) & 0x0f];
-    name[3] = hex[(stamp >> 8) & 0x0f];
-    name[4] = hex[(stamp >> 4) & 0x0f];
-    name[5] = hex[stamp & 0x0f];
-    name[6] = 'Y';
-    name[7] = 'O';
-    name[8] = 'S';
-    name[9] = ' ';
-}
-
-void mdrtst(void) {
-    uint8_t drives = y->mdr_detect_drives();
-    const uint16_t sizes[] = { 511, 512, 513, 1025, 1739 };
-    const uint8_t test_count = sizeof(sizes) / sizeof(sizes[0]);
-    uint16_t stamp = y->clock();
-    uint8_t t;
-    uint16_t size;
-    uint8_t *src;
-    uint8_t *dst;
-    char name[10];
-    uint16_t i;
-
-    if (drives == 0) {
-        y->printf("\nNO MICRODRIVE DETECTED\n");
-        return;
-    }
-
-    y->printf("\nMDRTST: edge-size suite\n");
-    for (t = 0; t < test_count; t++) {
-        uint16_t err = 0;
-        uint16_t first = 0;
-
-        size = sizes[t];
-        mdr_mkname(name, (char)('0' + t), (uint16_t)(stamp + t));
-
-        src = (uint8_t *)y->malloc(size);
-        dst = (uint8_t *)y->malloc(size);
-        if (src == NULL || dst == NULL) {
-            y->printf("MDRTST FAIL[%u]: out of memory\n", t);
-            if (src != NULL) y->free(src);
-            if (dst != NULL) y->free(dst);
-            return;
-        }
-
-        for (i = 0; i < size; i++) {
-            src[i] = (uint8_t)((i * 37u) ^ (i >> 3) ^ (size & 0xff) ^ t);
-            dst[i] = 0;
-        }
-
-        y->printf("  [%u] save/load %u bytes...\n", t, size);
-        if (y->mdr_save(1, name, src, size) != 0) {
-            y->printf("MDRTST FAIL[%u]: save failed\n", t);
-            y->free(src);
-            y->free(dst);
-            return;
-        }
-        if (y->mdr_load(1, name, dst) != 0) {
-            y->printf("MDRTST FAIL[%u]: load failed\n", t);
-            y->free(src);
-            y->free(dst);
-            return;
-        }
-
-        for (i = 0; i < size; i++) {
-            if (src[i] != dst[i]) {
-                if (err == 0) first = i;
-                err++;
-            }
-        }
-
-        if (err == 0) {
-            y->printf("  [%u] PASS\n", t);
-        } else {
-            y->printf("MDRTST FAIL[%u]: %u mismatches, first=%u\n", t, err, first);
-            y->printf("src=%u dst=%u\n", src[first], dst[first]);
-            y->free(src);
-            y->free(dst);
-            return;
-        }
-
-        y->free(src);
-        y->free(dst);
-    }
-
-    y->printf("MDRTST PASS: all edge sizes verified\n");
-}
-
 void exec(char *text) {
     lcase(text);
+    if (y->strlen(text) == 2 && text[1] == ':' &&
+        text[0] >= 'a' && text[0] <= 'h') {
+        current_drive = (uint8_t)(text[0] - 'a' + 1);
+    }
+    else
     if (y->strcmp(text,"mem")==0)
         mem(); 
     else if (y->strcmp(text,"clear")==0)
@@ -298,14 +243,10 @@ void exec(char *text) {
         pstat();
     else if (y->strcmp(text,"dir")==0)
         dir();
-    else if (y->strcmp(text,"mdrdbg")==0)
-        mdrdbg();
-    else if (y->strcmp(text,"mdrtst")==0)
-        mdrtst();
-    else if (y->strcmp(text,"test")==0)
-        _test();
     else if (y->strlen(text)==0) /* tolerate empty string */
         y->printf("\n");
+    else if (run_app(text))
+        ;
     else
         y->printf("UNKNOWN COMMAND: %s\n", text);
 }
@@ -317,7 +258,7 @@ void ysh(void) {
 
     /* mini shell */
     while(TRUE) {
-        y->printf("\nREADY? ");
+        y->printf("\n%c:\\", (char)('A' + current_drive - 1));
         y->gets(cmd);
         y->printf("\n"); 
         exec(cmd);

@@ -17,6 +17,12 @@ uint8_t match_free_block(list_item_t *p, uint16_t size)
     return !(b->stat & ALLOCATED) && b->size >= size;
 }
 
+static uint8_t match_owner_block(list_item_t *p, uint16_t owner)
+{
+    block_t *b = (block_t *)p;
+    return (b->stat & ALLOCATED) && b->hdr.owner == (void *)owner;
+}
+
 void merge_with_next(block_t *b)
 {
     block_t *bnext = b->hdr.next;
@@ -109,4 +115,28 @@ void *mem_free(void *heap, void *p)
     }
     else
         return NULL;
+}
+
+/*
+ * free all blocks owned by owner
+ */
+uint8_t mem_free_owner(void *heap, void *owner)
+{
+    block_t *prev;
+    block_t *b;
+    uint8_t count = 0;
+
+    while (1)
+    {
+        b = (block_t *)list_find(
+            (list_item_t *)heap,
+            (list_item_t **)&prev,
+            match_owner_block,
+            (uint16_t)owner);
+        if (!b) break;
+        mem_free(heap, b->data);
+        count++;
+    }
+
+    return count;
 }
