@@ -7,6 +7,7 @@
 
         .module mdr_common
 
+
         .equ    MD_DATA, 0xe7           ; microdrive data port
         .equ    MD_CTRL, 0xef           ; microdrive control/status port
         .equ    MD_SEL, 0xf7            ; drive select data port
@@ -31,30 +32,11 @@
         .equ    MD_W_ERASE, 0x08        ; bit 3: erase (active)
 
         ;; md_record_t field offsets within rec_buf
+        .equ    REC_LEN, 2
+        .equ    REC_FNAME, 4
         .equ    REC_CHK, 14             ; uint8_t checksum of bytes 0..13
-        .equ    MDR_DBG_SZ, 10          ; sizeof(mdr_debug_t)
 
         .area   _CODE
-        ;; ------------------------------------------------------------
-        ;; __mdr_dbg_reset
-        ;; Dispatch strategy:
-        ;;   clear the fixed-size debug snapshot buffer in one pass.
-        ;;
-        ;; Signature:
-        ;;   void __mdr_dbg_reset(void)
-        ;;
-        ;; Arguments:
-        ;;   (none)
-__mdr_dbg_reset::
-        ld	hl,#dbg_op
-        ld	b,#MDR_DBG_SZ
-        xor	a
-.dbg_reset:
-        ld	(hl),a
-        inc	hl
-        djnz	.dbg_reset
-        ret
-
         ;; ------------------------------------------------------------
         ;; __mdr_read_hdr_rec
         ;; Dispatch strategy:
@@ -114,6 +96,81 @@ __mdr_read_hdr_rec::
         ret
 
         ;; ------------------------------------------------------------
+        ;; __mdr_rec_len_valid
+        ;; Dispatch strategy:
+        ;;   validate rec_buf length field is within 1..512.
+        ;;
+        ;; Signature:
+        ;;   carry = __mdr_rec_len_valid(void)
+        ;;
+        ;; Arguments:
+        ;;   (none)
+__mdr_rec_len_valid::
+        ld	a,(rec_buf + REC_LEN + 1) ; high byte
+        cp	#2
+        jr	c,.rlv_lochk
+        jr	nz,.rlv_bad
+        ld	a,(rec_buf + REC_LEN)    ; hi==2 => only 0x0200 is valid
+        or	a
+        jr	nz,.rlv_bad
+        or	a                       ; valid, clear carry
+        ret
+.rlv_lochk:
+        ld	a,(rec_buf + REC_LEN + 1)
+        or	a
+        jr	nz,.rlv_ok
+        ld	a,(rec_buf + REC_LEN)    ; reject zero length
+        or	a
+        jr	z,.rlv_bad
+.rlv_ok:
+        or	a                       ; valid, clear carry
+        ret
+.rlv_bad:
+        scf
+        ret
+
+        ;; ------------------------------------------------------------
+        ;; __mdr_name_match10
+        ;; Dispatch strategy:
+        ;;   compare 10-char record field with either padded or C-string name.
+        ;;
+        ;; Signature:
+        ;;   carry = __mdr_name_match10(const char *rec10, const char *name)
+        ;;
+        ;; Arguments:
+        ;;   HL = record filename field (10 bytes)
+        ;;   DE = user filename pointer (C string or 10-char padded)
+__mdr_name_match10::
+        ld	c,#10
+        ld	b,#0                    ; b=1 once trailing-space compare mode starts
+.nm_cmp:
+        ld	a,b
+        or	a
+        jr	nz,.nm_space
+        ld	a,(de)
+        or	a
+        jr	nz,.nm_have
+        ld	b,#1
+.nm_space:
+        ld	a,#' '
+.nm_have:
+        cp	(hl)
+        jr	nz,.nm_miss
+        inc	hl
+        ld	a,b
+        or	a
+        jr	nz,.nm_noinc
+        inc	de
+.nm_noinc:
+        dec	c
+        jr	nz,.nm_cmp
+        or	a                       ; clear carry
+        ret
+.nm_miss:
+        scf
+        ret
+
+        ;; ------------------------------------------------------------
         ;; __mdr_get_m_hd
         ;; Dispatch strategy:
         ;;   wait for GAP transition, sync to byte stream, read 15 bytes.
@@ -164,10 +221,9 @@ __mdr_get_m_hd::
         jr	nz,.gm_chk_ag2
         jr	.gm_timeout
 .gm_read:
-        ld	c,#MD_DATA
         ld	b,#15
 .gm_read_lp:
-        in	a,(c)
+        in	a,(#MD_DATA)
         ld	(hl),a
         inc	hl
         djnz	.gm_read_lp
@@ -175,6 +231,28 @@ __mdr_get_m_hd::
         ret
 .gm_timeout:
         scf
+        ret
+
+        ;; ------------------------------------------------------------
+        ;; __mdr_skip_payload
+        ;; Dispatch strategy:
+        ;;   discard the 512-byte data block plus trailing checksum byte.
+        ;;
+        ;; Signature:
+        ;;   void __mdr_skip_payload(void)
+        ;;
+        ;; Arguments:
+        ;;   (none)
+__mdr_skip_payload::
+        ld	b,#0                    ; first 256 bytes
+.sp_loop1:
+        call	__mdr_read_byte
+        djnz	.sp_loop1
+        ld	b,#0                    ; second 256 bytes
+.sp_loop2:
+        call	__mdr_read_byte
+        djnz	.sp_loop2
+        call	__mdr_read_byte         ; checksum byte
         ret
 
         ;; ------------------------------------------------------------
@@ -188,9 +266,6 @@ __mdr_get_m_hd::
         ;; Arguments:
         ;;   (none)
 __mdr_write_hdr::
-        ld	a,#MD_W_ERASE           ; write mode + erase
-        out	(#MD_CTRL),a
-        call	__mdr_delay_10us
         ld	hl,#header_buf
         ld	b,#15
 .wh_loop:
@@ -211,10 +286,19 @@ __mdr_write_hdr::
         ;; Arguments:
         ;;   (none)
 __mdr_write_rec::
-        ld	a,#MD_W_ERASE           ; write mode + erase
-        out	(#MD_CTRL),a
         ld	hl,#rec_buf
-        ld	(hl),#1                 ; flag: sector in use
+        ld	bc,(save_len)
+        ld	a,b
+        cp	#2
+        jr	nz,.wr_flag_last
+        ld	a,c
+        or	a
+        ld	a,#0x04                 ; full 512-byte record
+        jr	z,.wr_flag_set
+.wr_flag_last:
+        ld	a,#0x06                 ; final short record
+.wr_flag_set:
+        ld	(hl),a
         inc	hl
         ld	a,(save_rec_num)
         ld	(hl),a                  ; record number
@@ -224,13 +308,25 @@ __mdr_write_rec::
         inc	hl
         ld	(hl),b                  ; length high
         inc	hl
-        ld	de,(save_name)          ; copy 10-char padded filename
+        ld	de,(save_name)          ; copy/pad filename to 10 chars
         ld	b,#10
+        ld	c,#0                    ; trailing-space padding mode
 .wr_name:
+        ld	a,c
+        or	a
+        jr	nz,.wr_name_pad
         ld	a,(de)
+        or	a
+        jr	nz,.wr_name_have
+        inc	c
+.wr_name_pad:
+        ld	a,#' '
+        jr	.wr_name_store
+.wr_name_have:
+        inc	de
+.wr_name_store:
         ld	(hl),a
         inc	hl
-        inc	de
         djnz	.wr_name
         ld	hl,#rec_buf
         ld	b,#14
@@ -256,8 +352,6 @@ __mdr_write_rec::
         ;; Arguments:
         ;;   (none)
 __mdr_write_data::
-        ld	a,#MD_W_ERASE           ; write mode + erase
-        out	(#MD_CTRL),a
         ld	hl,(save_src)
         ld	bc,(save_len)
         ld	e,#0                    ; running checksum accumulator
@@ -302,11 +396,7 @@ __mdr_write_data::
         ;; Arguments:
         ;;   A = byte to write
 __mdr_write_byte::
-        push	bc
-        ld	c,#MD_DATA
-        out	(c),a
-        call	__mdr_delay_short
-        pop	bc
+        out	(#MD_DATA),a
         ret
 
         ;; ------------------------------------------------------------
@@ -320,7 +410,7 @@ __mdr_write_byte::
         ;; Arguments:
         ;;   A = drive number (0-8), 0 = all off
 __mdr_select_drive::
-        call	_ir_disable
+        call	_enter_critical_section
         push	bc
         push	de
         push	af
@@ -364,7 +454,7 @@ __mdr_select_drive::
 .sel_done:
         pop	de
         pop	bc
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 
         ;; ------------------------------------------------------------
@@ -385,7 +475,7 @@ __mdr_start_motor::
         ;; ------------------------------------------------------------
         ;; __mdr_stop_motor
         ;; Dispatch strategy:
-        ;;   write zero to control port to stop motor and deselect drives.
+        ;;   deselect drives, settle control lines, then return to read mode.
         ;;
         ;; Signature:
         ;;   void __mdr_stop_motor(void)
@@ -393,8 +483,18 @@ __mdr_start_motor::
         ;; Arguments:
         ;;   (none)
 __mdr_stop_motor::
-        xor	a                       ; all motors off
+        push	bc
+        xor	a
+        out	(#MD_SEL),a             ; clear select latch first
+        ld	a,#0xEF                 ; stop pulse (clock high)
         out	(#MD_CTRL),a
+        call	__mdr_delay_1ms
+        ld	a,#0xED                 ; stop pulse (clock low)
+        out	(#MD_CTRL),a
+        call	__mdr_delay_1ms
+        ld	a,#MD_CTL_READ          ; leave IF1 in safe read state
+        out	(#MD_CTRL),a
+        pop	bc
         ret
 
         ;; ------------------------------------------------------------
@@ -411,6 +511,7 @@ __mdr_wait_gap_sync::
         push	de
         ld	bc,#MD_CTRL
         ld	de,#0x0400              ; timeout budget
+.wgs_poll_entry:
 .wgs_poll:
         in	a,(c)
         ld	b,a
@@ -426,10 +527,6 @@ __mdr_wait_gap_sync::
         ld	a,d
         or	e
         jr	nz,.wgs_poll
-        push	hl
-        ld	hl,#dbg_gap_timeouts
-        inc	(hl)
-        pop	hl
         scf                             ; timed out
         pop	de
         ret
@@ -437,6 +534,23 @@ __mdr_wait_gap_sync::
         or	a                       ; clear carry on success
         pop	de
         ret
+
+        ;; ------------------------------------------------------------
+        ;; __mdr_wait_gap_sync_long
+        ;; Dispatch strategy:
+        ;;   same as __mdr_wait_gap_sync, but with a longer timeout so save
+        ;;   can wait across a whole data block for the next sector header.
+        ;;
+        ;; Signature:
+        ;;   carry = __mdr_wait_gap_sync_long(void)
+        ;;
+        ;; Arguments:
+        ;;   (none)
+__mdr_wait_gap_sync_long::
+        push	de
+        ld	bc,#MD_CTRL
+        ld	de,#0x6000              ; long timeout for post-record scan
+        jr	.wgs_poll_entry
 
         ;; ------------------------------------------------------------
         ;; __mdr_read_byte
@@ -449,15 +563,8 @@ __mdr_wait_gap_sync::
         ;; Arguments:
         ;;   (none)
 __mdr_read_byte::
-        push	bc
-        ld	c,#MD_DATA
-        in	a,(c)
-        pop	bc
+        in	a,(#MD_DATA)
         or	a                       ; clear carry
-        ret
-.rb_timeout:
-        xor	a                       ; timeout => deterministic filler
-        scf
         ret
 
         ;; ------------------------------------------------------------
@@ -486,10 +593,6 @@ __mdr_wait_sync::
         ld	a,d
         or	e
         jr	nz,.ws_wait
-        push	hl
-        ld	hl,#dbg_byte_timeouts
-        inc	(hl)
-        pop	hl
         scf                             ; timed out
         pop	de
         ret
@@ -510,8 +613,6 @@ __mdr_wait_sync::
         ;;   HL = pointer to data block
         ;;   B  = byte count
 __mdr_calc_checksum::
-        push	bc
-        push	hl
         xor	a                       ; accumulator = 0 (remainder mod 255)
 .cs_loop:
         ld	c,(hl)                   ; next byte
@@ -525,8 +626,6 @@ __mdr_calc_checksum::
 .cs_next:
         inc	hl
         djnz	.cs_loop
-        pop	hl
-        pop	bc
         ret
 
         ;; ------------------------------------------------------------
@@ -550,64 +649,7 @@ __mdr_delay_1ms::
         pop	bc
         ret
 
-        ;; ------------------------------------------------------------
-        ;; __mdr_delay_10us
-        ;; Dispatch strategy:
-        ;;   fixed short loop for approximately 10 us.
-        ;;
-        ;; Signature:
-        ;;   void __mdr_delay_10us(void)
-        ;;
-        ;; Arguments:
-        ;;   (none)
-__mdr_delay_10us::
-        push	bc
-        ld	b,#6                    ; ~10us at 3.5MHz
-.d10us:
-        djnz	.d10us
-        pop	bc
-        ret
-
-        ;; ------------------------------------------------------------
-        ;; __mdr_delay_short
-        ;; Dispatch strategy:
-        ;;   fixed tiny loop for write-settle timing.
-        ;;
-        ;; Signature:
-        ;;   void __mdr_delay_short(void)
-        ;;
-        ;; Arguments:
-        ;;   (none)
-__mdr_delay_short::
-        push	bc
-        ld	b,#12                   ; short settling delay
-.dshrt:
-        djnz	.dshrt
-        pop	bc
-        ret
-
         .area	_BSS
-
-dbg_op::
-        .ds	1                       ; last operation (1=dir)
-dbg_drive::
-        .ds	1                       ; last selected drive
-dbg_scanned::
-        .ds	1                       ; sectors scanned
-dbg_aligned::
-        .ds	1                       ; sectors with valid hdr+rec checksums
-dbg_used::
-        .ds	1                       ; used records with non-blank filename
-dbg_blank::
-        .ds	1                       ; used records with blank filename
-dbg_align_fail::
-        .ds	1                       ; checksum alignment failures
-dbg_gap_timeouts::
-        .ds	1                       ; sync wait timeouts (sector boundary)
-dbg_byte_timeouts::
-        .ds	1                       ; byte SYNC wait timeouts
-dbg_result::
-        .ds	1                       ; op result (dir count)
 
 load_fname::
         .ds	2                       ; saved filename pointer (mdr_load)
@@ -617,18 +659,12 @@ load_found::
         .ds	1                       ; at least one matching record loaded
 dir_buf_ptr::
         .ds	2                       ; result buffer pointer (mdr_dir)
-dir_buf_max::
-        .ds	1                       ; max entries (mdr_dir)
 dir_file_cnt::
         .ds	1                       ; entries filled (mdr_dir)
-scan_ptr::
-        .ds	2                       ; candidate header pointer in scan window
-scan_buf::
-        .ds	96                      ; stream window for auto-alignment
-load_sec_buf::
-        .ds	512                     ; captured payload block (mdr_load)
 header_buf::
         .ds	15                      ; sector header scratch buffer
+save_hdr_buf::
+        .ds	15                      ; preserved target header for mdr_save
 rec_buf::
         .ds	15                      ; record descriptor scratch buffer
 save_name::
@@ -641,3 +677,5 @@ save_rem::
         .ds	2                       ; remaining byte length (mdr_save)
 save_rec_num::
         .ds	1                       ; current record number (mdr_save)
+save_sec_num::
+        .ds	1                       ; selected free sector number (mdr_save)

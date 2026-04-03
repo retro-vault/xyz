@@ -21,11 +21,16 @@
 
 namespace xlink {
 
+    static bool is_linker_generated_symbol(const std::string& name) {
+        return (name.rfind("s__", 0) == 0 || name.rfind("l__", 0) == 0);
+    }
+
     void linker::link(link_context& ctx, const cli_options& opts) {
         load_inputs(ctx, opts);
         resolve_libraries(ctx, opts);
         resolve_symbols(ctx);
         place_areas(ctx);
+        define_linker_symbols(ctx);
         relocate(ctx);
         find_entry_point(ctx);
     }
@@ -155,7 +160,8 @@ namespace xlink {
             for (auto& sym : mod->symbols()) {
                 if (!sym.is_ref()) continue;
                 if (ctx.global_symbols.find(sym.name()) ==
-                    ctx.global_symbols.end()) {
+                        ctx.global_symbols.end()
+                    && !is_linker_generated_symbol(sym.name())) {
                     throw symbol_error(
                         "unresolved symbol '" + sym.name()
                         + "' referenced in module '" + mod->name() + "'");
@@ -175,6 +181,46 @@ namespace xlink {
         if (ctx.verbose) {
             std::cout << "Code size: 0x" << std::hex << ctx.code_size
                       << std::dec << " (" << ctx.code_size << " bytes)\n";
+        }
+    }
+
+    void linker::define_linker_symbols(link_context& ctx) {
+        struct area_span {
+            uint16_t start = 0xFFFF;
+            uint16_t end = 0;
+            bool has_data = false;
+        };
+
+        std::map<std::string, area_span> spans;
+        for (auto& mod : ctx.modules) {
+            for (auto& area : mod->areas()) {
+                if (!area.placed_addr().has_value())
+                    continue;
+                if (!area.name().empty() && area.name()[0] == '.')
+                    continue; // skip pseudo/internal areas (.ABS.)
+
+                auto& span = spans[area.name()];
+                uint16_t start = area.placed_addr().value();
+                uint16_t end = static_cast<uint16_t>(start + area.size());
+                if (!span.has_data || start < span.start) span.start = start;
+                if (!span.has_data || end > span.end) span.end = end;
+                span.has_data = true;
+            }
+        }
+
+        for (const auto& [area_name, span] : spans) {
+            if (!span.has_data)
+                continue;
+
+            std::string suffix = area_name;
+            if (!suffix.empty() && suffix[0] == '_')
+                suffix.erase(0, 1);
+
+            std::string s_name = "s__" + suffix;
+            std::string l_name = "l__" + suffix;
+            ctx.linker_symbols[s_name] = span.start;
+            ctx.linker_symbols[l_name] =
+                static_cast<uint16_t>(span.end - span.start);
         }
     }
 
@@ -198,9 +244,15 @@ namespace xlink {
         auto& sym = mod->symbol_by_index(idx);
         ctx.entry_point = sym.value();
 
-        // Add the placed address of the symbol's area.
-        if (!mod->areas().empty() &&
-            mod->areas()[0].placed_addr().has_value()) {
+        int entry_area_idx = sym.area_index();
+        if (entry_area_idx >= 0
+            && entry_area_idx < static_cast<int>(mod->areas().size())) {
+            auto& area = mod->area_by_index(entry_area_idx);
+            if (area.placed_addr().has_value())
+                ctx.entry_point += area.placed_addr().value();
+        } else if (!mod->areas().empty()
+            && mod->areas()[0].placed_addr().has_value()) {
+            // Fallback for objects without symbol->area metadata.
             ctx.entry_point += mod->areas()[0].placed_addr().value();
         }
 

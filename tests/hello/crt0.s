@@ -1,7 +1,8 @@
         ;; crt0.s
         ;;
         ;; Vanilla Z80 startup code for relocatable user programs.
-        ;; Sets stack pointer, calls _main, halts on return.
+        ;; Under YOS the kernel/thread startup already owns SP, so we only
+        ;; call _main and return to the thread shim.
         ;;
         ;; This is intentionally minimal: no BSS clearing, no
         ;; initialized-data copy. Suitable only for programs with
@@ -25,7 +26,6 @@
         ;; The OS loader uses the XL header entry_point to jump here.
         .area     _CODE
 _entry::
-        ld        sp,#__stack_top         ; set up stack
         call      _main                   ; call C main
         ret                               ; return to thread startup shim
 
@@ -74,10 +74,8 @@ ___sdcc_call_iy::
         .area     _DATA
         .area     _INITIALIZED
 
-        ;; Stack lives at the top of _BSS.
+        ;; No private stack here: YOS thread runtime provides the stack.
         .area     _BSS
-        .ds       128                     ; 128 bytes of stack space
-__stack_top::
 
         .area     _HEAP
         .area     _INITIALIZER

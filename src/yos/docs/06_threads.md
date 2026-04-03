@@ -242,12 +242,12 @@ void my_app() {
 
 **Stack overflow.** If a thread uses more stack than was allocated, it silently overwrites adjacent heap blocks. There are no guard pages. Symptoms: corrupted data in seemingly unrelated variables, random crashes. Increase `stack_size` if in doubt.
 
-**Shared data.** Multiple threads accessing the same global variable without protection will race. Use `ir_disable()` / `ir_enable()` to create a critical section:
+**Shared data.** Multiple threads accessing the same global variable without protection will race. Use `enter_critical_section()` / `leave_critical_section()` to create a critical section:
 
 ```c
-ir_disable();
+enter_critical_section();
 shared_counter++;   /* protected from interrupt-driven context switch */
-ir_enable();
+leave_critical_section();
 ```
 
 **Long interrupt latency.** Holding interrupts disabled for more than a few microseconds will starve the scheduler and all timer callbacks. Keep critical sections as short as possible.

@@ -1,0 +1,184 @@
+        .module @MODULE@
+
+        .globl  _main
+        .globl  _query_service
+        .globl  ___sdcc_call_hl
+        .globl  ___sdcc_call_iy
+
+        .equ    YOS_PUTS,          12
+        .equ    YOS_MALLOC,        24
+        .equ    YOS_FREE,          26
+        .equ    YOS_MDR_DETECT,    30
+        .equ    YOS_MDR_SAVE,      36
+        .equ    BUF_LEN,           777
+        .equ    SAVE_LEN,          @LEN@
+
+        .area   _CODE
+_main::
+        ld      hl,#str_yos
+        call    _query_service
+        ld      a,d
+        or      e
+        ret     z
+        ld      (yos_ptr),de
+
+        call    detect_drives
+        ld      a,l
+        or      a
+        jr      nz,.alloc
+        ld      hl,#msg_nomdr
+        call    call_puts
+        ret
+
+.alloc:
+        ld      hl,#BUF_LEN
+        call    call_malloc
+        ld      a,d
+        or      e
+        jr      nz,.have_buf
+        ld      hl,#msg_oom
+        call    call_puts
+        ret
+
+.have_buf:
+        ld      (buf_ptr),de
+        ex      de,hl
+        call    fill_pattern
+        ld      hl,#name_file
+        ld      de,(buf_ptr)
+        ld      bc,#SAVE_LEN
+        call    call_save
+        push    hl
+        ld      hl,(buf_ptr)
+        call    call_free
+        pop     hl
+        ld      a,l
+        or      a
+        jr      z,.ok
+        ld      hl,#msg_fail
+        call    call_puts
+        ret
+.ok:
+        ld      hl,#msg_ok
+        call    call_puts
+        ret
+
+call_puts:
+        push    hl
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_PUTS
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        pop     hl
+        push    de
+        pop     iy
+        call    ___sdcc_call_iy
+        ret
+
+detect_drives:
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_MDR_DETECT
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        ex      de,hl
+        call    ___sdcc_call_hl
+        ret
+
+call_malloc:
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_MALLOC
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        push    de
+        pop     iy
+        jp      (iy)
+
+call_free:
+        push    hl
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_FREE
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        pop     hl
+        push    de
+        pop     iy
+        jp      (iy)
+
+call_save:
+        ld      (tmp_name),hl
+        ld      (tmp_ptr),de
+        ld      (tmp_len),bc
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_MDR_SAVE
+        add     hl,de
+        ld      c,(hl)
+        inc     hl
+        ld      b,(hl)
+        ld      hl,(tmp_len)
+        push    hl
+        ld      hl,(tmp_ptr)
+        push    hl
+        ld      de,(tmp_name)
+        ld      a,#1
+        ld      l,c
+        ld      h,b
+        call    ___sdcc_call_hl
+        ret
+
+fill_pattern:
+        ld      de,#BUF_LEN
+        ld      c,#1
+.fp_loop:
+        ld      a,c
+        ld      (hl),a
+        inc     hl
+        inc     c
+        ld      a,c
+        cp      #12
+        jr      nz,.fp_next
+        ld      c,#1
+.fp_next:
+        dec     de
+        ld      a,d
+        or      e
+        jr      nz,.fp_loop
+        ret
+
+str_yos:
+        .ascii  "yos"
+        .db     0
+name_file:
+        .ascii  "@NAME@"
+        .db     0
+msg_nomdr:
+        .ascii  "NO MDR"
+        .db     0
+msg_oom:
+        .ascii  "NO MEM"
+        .db     0
+msg_fail:
+        .ascii  "FAIL"
+        .db     0
+msg_ok:
+        .ascii  "OK"
+        .db     0
+
+        .area   _BSS
+yos_ptr:
+        .ds     2
+buf_ptr:
+        .ds     2
+tmp_name:
+        .ds     2
+tmp_ptr:
+        .ds     2
+tmp_len:
+        .ds     2

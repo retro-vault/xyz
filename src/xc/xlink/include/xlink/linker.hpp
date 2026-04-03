@@ -25,6 +25,7 @@ namespace xlink {
                                       const cli_options& opts);
         static void resolve_symbols(link_context& ctx);
         static void place_areas(link_context& ctx);
+        static void define_linker_symbols(link_context& ctx);
         static void relocate(link_context& ctx);
         static void find_entry_point(link_context& ctx);
     };

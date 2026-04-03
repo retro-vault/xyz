@@ -22,11 +22,13 @@ namespace xlink {
 
     // Area flags from SDCC .rel format.
     // Bit 0: OVR (1) vs CON (0)
-    // Bit 2: ABS (1) vs REL (0)
+    // Bit 3: ABS (1) vs REL (0) in SDCC 4.x.
+    // Bit 2 was used in older object variants.
     enum class area_flags : uint8_t {
         none    = 0x00,
         ovr     = 0x01,     // overlay mode (vs concatenate)
-        abs     = 0x04      // absolute area (vs relocatable)
+        abs_legacy = 0x04,  // absolute area (legacy bit)
+        abs     = 0x08      // absolute area (SDCC 4.x bit)
     };
 
     inline area_flags operator|(area_flags a, area_flags b) {
@@ -80,6 +82,11 @@ namespace xlink {
     struct address_range {
         uint16_t start;
         uint16_t end;       // inclusive
+    };
+
+    enum class output_format {
+        xl,
+        bin
     };
 
 } // namespace xlink

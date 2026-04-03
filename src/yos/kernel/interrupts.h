@@ -14,8 +14,8 @@
 
 #include <stdint.h>
 
-/* interrupt enable and disable with refcounting */
-extern void ir_enable(void);
-extern void ir_disable(void);
+/* refcounted critical sections */
+extern void enter_critical_section(void);
+extern void leave_critical_section(void);
 
 #endif /* __INTERRUPTS_H__ */

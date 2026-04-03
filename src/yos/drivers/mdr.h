@@ -16,6 +16,18 @@
 #include <stdint.h>
 
 #define MDR_NAME_LEN    10
+#define MDR_OK          0
+
+/* mdr_format return codes */
+#define MDR_FORMAT_ERR_IO            1
+
+/* mdr_load return codes */
+#define MDR_LOAD_ERR_NOT_FOUND       1
+
+/* mdr_save return codes */
+#define MDR_SAVE_ERR_NO_SECTOR       1
+#define MDR_SAVE_ERR_EXISTS          2
+#define MDR_SAVE_ERR_BAD_LENGTH      3
 
 /* one entry returned by mdr_dir; sizeof = 14, no padding */
 typedef struct {
@@ -24,21 +36,11 @@ typedef struct {
     uint16_t    size;                   /* total file size in bytes    */
 } mdr_file_t;
 
-typedef struct {
-    uint8_t op;                         /* 1=dir */
-    uint8_t drive;                      /* selected drive */
-    uint8_t sectors_scanned;            /* sectors attempted */
-    uint8_t sectors_aligned;            /* sectors with valid hdr+rec checksum */
-    uint8_t records_used;               /* non-free records seen */
-    uint8_t records_blank;              /* used records with blank filename */
-    uint8_t align_failures;             /* hdr/rec alignment failures */
-    uint8_t gap_timeouts;               /* sector GAP+SYNC wait timeouts */
-    uint8_t byte_timeouts;              /* per-byte SYNC wait timeouts */
-    uint8_t result;                     /* operation result (e.g. dir count) */
-} mdr_debug_t;
-
 /* detect how many drives are connected (0-8) */
 extern uint8_t mdr_detect_drives(void);
+
+/* format cartridge in drive with a 10-char cart name; 0=ok, 1=io fail */
+extern uint8_t mdr_format(uint8_t drive, char *cart_name);
 
 /* fill 'files' array with up to 'max' unique files; returns count found */
 extern uint8_t mdr_dir(uint8_t drive, mdr_file_t *files, uint8_t max);
@@ -46,10 +48,11 @@ extern uint8_t mdr_dir(uint8_t drive, mdr_file_t *files, uint8_t max);
 /* load a file into memory; returns 0 on success, 1 if not found */
 extern uint8_t mdr_load(uint8_t drive, char *name, uint8_t *dest);
 
-/* save a file from memory; returns 0 on success, 1 if no free sector */
+/* save a file from memory:
+ *   0 = success
+ *   1 = no free sector
+ *   2 = name already exists
+ *   3 = invalid length (len==0) */
 extern uint8_t mdr_save(uint8_t drive, char *name, uint8_t *src, uint16_t len);
-
-/* copy last microdrive debug counters into out; returns 0 */
-extern uint8_t mdr_dbg(uint8_t drive, mdr_debug_t *out);
 
 #endif /* __MDR_H__ */

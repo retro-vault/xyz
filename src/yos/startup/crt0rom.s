@@ -9,8 +9,8 @@
 
         .module	crt0rom
 
-        .globl	_ir_enable
-        .globl	_ir_disable
+        .globl	_leave_critical_section
+        .globl	_enter_critical_section
         .globl	__sys_vec_tbl
         .globl	_sys_vec_set
         .globl	_sys_vec_get
@@ -92,7 +92,7 @@
         ;; return:       (none)
         ;; affects:      AF, BC, DE, HL
 _sys_vec_set::
-        call	_ir_disable
+        call	_enter_critical_section
         ;; hl = handler
         ;; vec_num is the 2nd arg (1 byte) on stack.
         ;; preserve IY before using it as stack index.
@@ -115,7 +115,7 @@ _sys_vec_set::
         ld	(hl),c
         inc	hl
         ld	(hl),b
-        call	_ir_enable
+        call	_leave_critical_section
         pop	iy                      ; restore IY
         ;; sdcccall(1): caller pushed 1-byte 2nd arg and expects callee to drop it.
         pop	bc                      ; return address
@@ -128,7 +128,7 @@ _sys_vec_set::
         ;; return:       DE = handler code address
         ;; affects:      AF, HL, DE
 _sys_vec_get::
-        call	_ir_disable
+        call	_enter_critical_section
         ;; 1-byte arg in A for sdcccall(1)
         ld	e,a
         ld	d,#0                    ; de = 16bit vector number
@@ -140,15 +140,15 @@ _sys_vec_get::
         ld	e,(hl)                  ; vector into de
         inc	hl
         ld	d,(hl)
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 
 
-        ;; extern void ir_disable(void);
+        ;; extern void enter_critical_section(void);
         ;; return:       (none)
         ;; affects:      (none)
         ;; notes:        executes di with ref count
-_ir_disable::
+_enter_critical_section::
         di
         push	hl
         ld	hl,#.ir_refcount
@@ -157,11 +157,11 @@ _ir_disable::
         ret
 
 
-        ;; extern void ir_enable(void);
+        ;; extern void leave_critical_section(void);
         ;; return:       (none)
         ;; affects:      AF
         ;; notes:        executes ei with ref count
-_ir_enable::
+_leave_critical_section::
         push	af
         ld	a,(#.ir_refcount)
         or	a

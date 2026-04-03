@@ -169,7 +169,7 @@ gsinit_none:
         ret
 ```
 
-## Reference-Counted Interrupt Enable/Disable
+## Reference-Counted Critical Sections
 
 The Z80 `di` and `ei` instructions are a blunt instrument. A common pitfall arises when subroutines call each other:
 
@@ -190,10 +190,10 @@ subroutine_b:
 
 `subroutine_b` does not know it was called from inside a `di` block. When it executes `ei` on return, the code in `subroutine_a` that follows the call is no longer protected.
 
-*Yos* solves this with a reference counter. `ir_disable()` increments the counter and executes `di`. `ir_enable()` decrements the counter, and only executes `ei` when the counter reaches zero:
+*Yos* solves this with a reference counter. `enter_critical_section()` increments the counter and executes `di`. `leave_critical_section()` decrements the counter, and only executes `ei` when the counter reaches zero:
 
 ```asm
-_ir_disable::
+_enter_critical_section::
         di
         push    hl
         ld      hl,#ir_refcount
@@ -201,7 +201,7 @@ _ir_disable::
         pop     hl
         ret
 
-_ir_enable::
+_leave_critical_section::
         push    af
         ld      a,(#ir_refcount)
         or      a
@@ -220,14 +220,14 @@ dont_ei:
 With this scheme, the earlier example becomes safe:
 
 ```c
-ir_disable();           // refcount = 1, di executed
-ir_disable();           // refcount = 2, di again (no-op)
+enter_critical_section();   // refcount = 1, di executed
+enter_critical_section();   // refcount = 2, di again (no-op)
 // ... protected code ...
-ir_enable();            // refcount = 1, still disabled
-ir_enable();            // refcount = 0, ei executed
+leave_critical_section();   // refcount = 1, still disabled
+leave_critical_section();   // refcount = 0, ei executed
 ```
 
-The exported C prototypes are `void ir_disable()` and `void ir_enable()`.
+The exported C prototypes are `void enter_critical_section()` and `void leave_critical_section()`.
 
 ## Installing and Reading RST Vector Handlers
 
@@ -247,7 +247,7 @@ Internally, each entry in `__sys_vec_tbl` is a 3-byte `jp nn` instruction. `sys_
 
 ```asm
 _sys_vec_set::
-        call    _ir_disable
+        call    _enter_critical_section
         ;; ... pop handler address into BC, vector number into E ...
         ld      d,#0x00
         ld      hl,#__sys_vec_tbl
@@ -258,7 +258,7 @@ _sys_vec_set::
         ld      (hl),c                  ; write low byte of handler
         inc     hl
         ld      (hl),b                  ; write high byte of handler
-        call    _ir_enable
+        call    _leave_critical_section
         ret
 ```
 

@@ -23,13 +23,15 @@ namespace xlink {
         symbol() = default;
 
         symbol(const std::string& name, symbol_type type,
-               uint16_t value, int index)
-            : name_(name), type_(type), value_(value), index_(index) {}
+               uint16_t value, int index, int area_index = -1)
+            : name_(name), type_(type), value_(value), index_(index),
+              area_index_(area_index) {}
 
         const std::string& name() const { return name_; }
         symbol_type type() const { return type_; }
         uint16_t value() const { return value_; }
         int index() const { return index_; }
+        int area_index() const { return area_index_; }
 
         module* owner() const { return owner_; }
         void set_owner(module* m) { owner_ = m; }
@@ -42,6 +44,7 @@ namespace xlink {
         symbol_type type_ = symbol_type::ref;
         uint16_t value_ = 0;
         int index_ = 0;
+        int area_index_ = -1;
         module* owner_ = nullptr;
     };
 

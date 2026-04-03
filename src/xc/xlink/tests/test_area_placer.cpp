@@ -84,3 +84,22 @@ TEST(area_placer_con_with_hole) {
     // 16 bytes starting at 0: [0, 15] overlaps [4, 15], so skip to 0x10.
     ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x10);
 }
+
+TEST(area_placer_area_base_override) {
+    xlink::link_context ctx;
+    ctx.area_bases["_CODE"] = 0x0100;
+    ctx.area_bases["_DATA"] = 0x5B00;
+
+    auto mod = std::make_shared<xlink::module>("test", "test.rel");
+    mod->areas().emplace_back("_HEADER", 0x20, xlink::area_flags::abs, 0, 0x0000);
+    mod->areas().emplace_back("_CODE", 0x10, xlink::area_flags::none, 1);
+    mod->areas().emplace_back("_DATA", 0x08, xlink::area_flags::none, 2);
+    ctx.modules.push_back(mod);
+
+    xlink::area_placer::place(ctx);
+
+    ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x0000);
+    ASSERT_EQ(mod->areas()[1].placed_addr().value(), 0x0100);
+    ASSERT_EQ(mod->areas()[2].placed_addr().value(), 0x5B00);
+    ASSERT_EQ(ctx.code_size, 0x5B08);
+}

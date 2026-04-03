@@ -45,8 +45,8 @@ yos_t* _yos_init(void) {
 
     /* core */
     _yos.ver=yos_version;
-    _yos.ei=ir_enable;
-    _yos.di=ir_disable;
+    _yos.enter_critical_section=enter_critical_section;
+    _yos.leave_critical_section=leave_critical_section;
     
     /* stdio.h */
     _yos.printf=tty_printf;
@@ -66,10 +66,10 @@ yos_t* _yos_init(void) {
 
     /* microdrive */
     _yos.mdr_detect_drives=mdr_detect_drives;
+    _yos.mdr_format=mdr_format;
     _yos.mdr_dir=mdr_dir;
     _yos.mdr_load=mdr_load;
     _yos.mdr_save=mdr_save;
-    _yos.mdr_dbg=mdr_dbg;
     
     /* string.h */
     _yos.strlen=strlen;

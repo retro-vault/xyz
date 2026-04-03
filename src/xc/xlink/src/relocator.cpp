@@ -61,38 +61,56 @@ namespace xlink {
                         if (sym.is_ref()) {
                             // Look up in global table.
                             auto it = ctx.global_symbols.find(sym.name());
-                            if (it == ctx.global_symbols.end())
-                                throw reloc_error(
-                                    "unresolved symbol: " + sym.name());
-
-                            auto [def_mod, def_idx] = it->second;
-                            auto& def_sym =
-                                def_mod->symbol_by_index(def_idx);
-                            // Symbol value is relative to its area.
-                            // We need to find which area it belongs to
-                            // and add the placed address.
-                            // In SDCC, symbol values are area-relative.
-                            // The area is typically determined by context.
-                            // For simplicity, use area 0's placed address
-                            // if the symbol value looks like an offset,
-                            // or just use the value directly if it's
-                            // already absolute.
-                            target = def_sym.value();
-                            // Find the area for this def symbol.
-                            // SDCC symbols are relative to _CODE area
-                            // (area 0 in most cases). We need to find the
-                            // first code area in the defining module.
-                            if (!def_mod->areas().empty()) {
-                                auto& def_area = def_mod->areas()[0];
-                                if (def_area.placed_addr().has_value())
+                            if (it == ctx.global_symbols.end()) {
+                                auto lit = ctx.linker_symbols.find(sym.name());
+                                if (lit == ctx.linker_symbols.end())
+                                    throw reloc_error(
+                                        "unresolved symbol: " + sym.name());
+                                target = lit->second;
+                            } else {
+                                auto [def_mod, def_idx] = it->second;
+                                auto& def_sym =
+                                    def_mod->symbol_by_index(def_idx);
+                                // Symbol value is relative to its area.
+                                // We need to find which area it belongs to
+                                // and add the placed address.
+                                // In SDCC, symbol values are area-relative.
+                                // The area is typically determined by context.
+                                // For simplicity, use area 0's placed address
+                                // if the symbol value looks like an offset,
+                                // or just use the value directly if it's
+                                // already absolute.
+                                target = def_sym.value();
+                                int def_area_idx = def_sym.area_index();
+                                if (def_area_idx >= 0
+                                    && def_area_idx < static_cast<int>(
+                                        def_mod->areas().size())) {
+                                    auto& def_area =
+                                        def_mod->area_by_index(def_area_idx);
+                                    if (!def_area.placed_addr().has_value())
+                                        throw reloc_error("def area not placed");
                                     target += def_area.placed_addr().value();
+                                } else if (!def_mod->areas().empty()) {
+                                    auto& def_area = def_mod->areas()[0];
+                                    if (def_area.placed_addr().has_value())
+                                        target += def_area.placed_addr().value();
+                                }
                             }
                         } else {
                             // Direct def in same module.
                             target = sym.value();
-                            if (!mod->areas().empty() &&
-                                mod->areas()[0].placed_addr().has_value())
+                            int def_area_idx = sym.area_index();
+                            if (def_area_idx >= 0
+                                && def_area_idx < static_cast<int>(
+                                    mod->areas().size())) {
+                                auto& def_area = mod->area_by_index(def_area_idx);
+                                if (!def_area.placed_addr().has_value())
+                                    throw reloc_error("def area not placed");
+                                target += def_area.placed_addr().value();
+                            } else if (!mod->areas().empty()
+                                && mod->areas()[0].placed_addr().has_value()) {
                                 target += mod->areas()[0].placed_addr().value();
+                            }
                         }
                     } else {
                         // Area reference.

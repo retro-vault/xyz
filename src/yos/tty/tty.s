@@ -55,6 +55,7 @@
         .equ	KEY_SYMB,     0x17
         .equ	KEY_ENTER,    0x0d
         .equ	KEY_DEL,      0x08
+        .equ	KEY_DEL_ASCII,0x7f
 
         .equ	MAX_GETS_LEN, 128
 
@@ -81,7 +82,7 @@ _tty_cls::
         ;; notes:        scrolls screen up one row
 _tty_scroll::
         ;; no interrupts and no cursor while scrolling
-        call	_ir_disable
+        call	_enter_critical_section
         ;; hide cursor
         call	__tty_cur_hide
         ;; mem addresses.
@@ -124,7 +125,7 @@ _tty_scroll::
         dec	a
         jr	nz,.ls_clr_loop
         ;; enable interrupts and return
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 
 
@@ -136,7 +137,7 @@ _tty_scroll::
 _tty_xy::
         push	af                      ; preserve x in A
         push	hl                      ; preserve y in L
-        call	_ir_disable
+        call	_enter_critical_section
         call	__tty_cur_hide
         pop	hl                      ; restore y
         pop	af                      ; restore x
@@ -145,7 +146,7 @@ _tty_xy::
         ld	a,l
         ld	(#_tty_y),a
         ;; and done
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 
 
@@ -488,7 +489,7 @@ __tty_cur_tick::
 
         ;; hides cursor unconditionally
 __tty_cur_hide:
-        call	_ir_disable             ; no interrupts
+        call	_enter_critical_section ; no interrupts
         ld	a,(_tty_cur_sts)        ; current status
         and	#CURSOR_VISIBLE         ; is it visible?
         jr	z, .thc_done            ; cursor not on screen
@@ -498,13 +499,13 @@ __tty_cur_hide:
         ld	a,(_tty_cur_sts)
         and	#CURSOR_ENABLED         ; clear other flags
         ld	(_tty_cur_sts),a        ; set cursor status
-        call	_ir_enable              ; enable interrupts (again!)
+        call	_leave_critical_section ; enable interrupts (again!)
         ret
 
 
         ;; shows cursor unconditionally
 __tty_cur_show:
-        call	_ir_disable             ; no interrupts
+        call	_enter_critical_section ; no interrupts
         ;; already visible?
         ld	a,(_tty_cur_sts)        ; get status again
         and	#CURSOR_VISIBLE         ; are we visible
@@ -516,7 +517,7 @@ __tty_cur_show:
         ld	a,(_tty_cur_sts)        ; get status
         or	#CURSOR_VISIBLE         ; or it
         ld	(_tty_cur_sts),a        ; and write it ack
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 
 
@@ -525,7 +526,7 @@ __tty_cur_show:
         ;; return: (none)
         ;; affects: AF, HL
 _tty_cur_enable::
-        call	_ir_disable             ; no interrupts
+        call	_enter_critical_section ; no interrupts
         ;; enable flag is in HL
         ld	a,h
         or	l
@@ -540,7 +541,7 @@ _tty_cur_enable::
         xor	a                       ; disable and hide
 .tce_theend:
         ld	(_tty_cur_sts),a
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 
 
@@ -551,7 +552,7 @@ _tty_cur_enable::
         ;; notes:   puts character with auto-advance and linefeed processing
 _tty_putc::
         push	hl                      ; preserve char in L
-        call	_ir_disable
+        call	_enter_critical_section
         call	__tty_cur_hide
         pop	hl                      ; restore char
         ld	e,l                     ; char low byte
@@ -573,11 +574,11 @@ _tty_putc::
         inc	a                       ; increase x
         ld	(_tty_x),a              ; and store it
 .tpc_theend:
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 .linefeed:
         call	.newline
-        call	_ir_enable
+        call	_leave_critical_section
         ret
 .newline:
         ld	a,(_tty_y)              ; get y coord.
@@ -642,6 +643,8 @@ _tty_gets::
         cp	#KEY_ENTER              ; is it enter?
         jr	z,.tgs_theend           ; if enter...
         cp	#KEY_DEL
+        jr	z,.tgs_del
+        cp	#KEY_DEL_ASCII
         jr	z,.tgs_del
         cp	#FASCII
         jr	c,.tgs_loop             ; smaller then first ascii?
@@ -821,7 +824,7 @@ _tty_getc::
 key_map_sym:
         .byte	'%',   '$',   '#',   '@',   '!'
         .byte	'&',   0x27,  '(',   ')',   '_'
-        .byte	'[',   ']',   0x80,  ' ;',   '"'
+        .byte	'[',   ']',   0x80,  ';',   '"'
         .byte	0x5e,  '-',   '+',   '=',   0x0d
         .byte	'*',   ',',   '.',   0x01,  0x20
         .byte	'/',   '?',   0x61,  ':',   0x02

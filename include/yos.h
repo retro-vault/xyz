@@ -36,9 +36,9 @@ typedef struct yos_s {
     /* convention */
     int (*ver)(void);                   /* api version */
     
-    /* interrupts */
-    void (*di)(void);                   /* di with ref counting */
-    void (*ei)(void);                   /* ei with ref counting */
+    /* critical sections (refcounted) */
+    void (*enter_critical_section)(void);
+    void (*leave_critical_section)(void);
 
     /* TODO: timers */
     handle (*install_timer)(void (*handler)(void), int ticks);
@@ -68,10 +68,10 @@ typedef struct yos_s {
 
     /* storage - microdrive */
     uint8_t (*mdr_detect_drives)(void);
+    uint8_t (*mdr_format)(uint8_t drive, char *cart_name);
     uint8_t (*mdr_dir)(uint8_t drive, mdr_file_t *files, uint8_t max);
     uint8_t (*mdr_load)(uint8_t drive, char *name, uint8_t *dest);
     uint8_t (*mdr_save)(uint8_t drive, char *name, uint8_t *src, uint16_t len);
-    uint8_t (*mdr_dbg)(uint8_t drive, mdr_debug_t *out);
 
     /* standard library - string.h */
     unsigned int (*strlen)(const char *s);

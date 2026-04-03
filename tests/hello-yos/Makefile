@@ -10,6 +10,8 @@ THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/hello-yos
 BIN_DIR   := $(ROOT)/bin/hello-yos
 XLINK     := $(ROOT)/bin/xc/xlink/xlink
+MDR_TOOL  := $(ROOT)/bin/tools/microdrive/mdr
+IMAGE     := $(ROOT)/tests/microdrives/hello.mdr
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
@@ -33,6 +35,13 @@ all:
 	    -o $(BIN_DIR)/hello-yos.xl \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/hello-yos.rel
+
+.PHONY: image
+image: all
+	cp $(BIN_DIR)/hello-yos.xl $(BIN_DIR)/hello.app
+	$(MDR_TOOL) create $(IMAGE) HELLO
+	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/hello.app
+	$(MDR_TOOL) dir $(IMAGE)
 
 else
 

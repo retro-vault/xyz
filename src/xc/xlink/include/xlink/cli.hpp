@@ -10,6 +10,8 @@
 #define XLINK_CLI_HPP
 
 #include <filesystem>
+#include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,8 +22,12 @@ namespace xlink {
     struct cli_options {
         std::vector<std::filesystem::path> input_files;
         std::filesystem::path output_file = "a.out";
+        std::optional<std::filesystem::path> symbol_file;
         std::string entry_symbol = "_main";
         std::vector<address_range> reserved_ranges;
+        std::map<std::string, uint16_t> area_bases;
+        std::optional<address_range> output_range;
+        output_format format = output_format::xl;
         bool verbose = false;
         bool print_map = false;
         bool show_help = false;

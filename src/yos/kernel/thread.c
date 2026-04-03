@@ -2,7 +2,7 @@
  * thread.c
  *
  * threading logic
- * TODO: guard ops with di/ei
+ * TODO: guard ops with critical-section helpers
  * 
  * MIT License (see: LICENSE)
  * copyright (C) 2021 tomaz stih
@@ -31,7 +31,7 @@ thread_t *thread_create(
     void *stack;
 
     /* we can't be bothered while creating new thread */
-    ir_disable();
+    enter_critical_section();
 
     if (t = (thread_t *)so_create((void **)&thread_first_suspended,
                                   sizeof(thread_t), NONE))
@@ -60,12 +60,13 @@ thread_t *thread_create(
             (t->startup)[3] = 0x21;     /* ld hl, opcode */
             (t->startup)[4] = lob((uint16_t)t);
             (t->startup)[5] = hib((uint16_t)t);
-            /*  push hl */
-            (t->startup)[6] = 0xe5;     /* push hl opcode */
-            /*  jp __thread_exit */
-            (t->startup)[7] = 0xcd;     /* call opcode */
-            (t->startup)[8] = lob((uint16_t)&thread_exit);
-            (t->startup)[9] = hib((uint16_t)&thread_exit);
+            /*  jp thread_exit(t) */
+            /*  thread_exit expects t in HL under sdcccall(1) */
+            (t->startup)[6] = 0xc3;     /* jp opcode */
+            (t->startup)[7] = lob((uint16_t)&thread_exit);
+            (t->startup)[8] = hib((uint16_t)&thread_exit);
+            /* guard byte (padding) */
+            (t->startup)[9] = 0x00;     /* nop */
 
             /* top two bytes are the return address,
                make them point to startup code */
@@ -79,7 +80,7 @@ thread_t *thread_create(
     }
 
     /* we're done */
-    ir_enable();
+    leave_critical_section();
 
     return t;
 }
@@ -93,7 +94,7 @@ void _thread_lswitch(
 {
     /* make sure we are not bothered while moving
        threads around */
-    __asm__("di");
+    enter_critical_section();
 
     /* move thread from suspended queue to running queue */
 	if (list_remove(
@@ -105,8 +106,8 @@ void _thread_lswitch(
             t->state=state;
         }
 
-    /* enable interrupts, we're done! */
-    __asm__("ei");
+    /* leave critical section, we're done! */
+    leave_critical_section();
 
     /* if switch should be immediate, then simply halt the
        current process, interrupt will release it! */
@@ -142,6 +143,8 @@ void thread_exit(thread_t *t)
         THREAD_STATE_TERMINATED,
         true
     );
+    /* safety net: terminated thread must never run arbitrary fall-through. */
+    while (1) __asm__("halt");
 }
 
 /* select next thread to run */

@@ -55,6 +55,7 @@ namespace xlink {
         int line_num = 0;
         text_record* current_text = nullptr;
         bool is_v4 = false; // SDCC XL4 extended format flag
+        int current_area_idx = -1;
 
         while (std::getline(file, line)) {
             line_num++;
@@ -116,6 +117,7 @@ namespace xlink {
 
                 int idx = static_cast<int>(mod->areas().size());
                 mod->areas().emplace_back(name, size, flags, idx, org_addr);
+                current_area_idx = idx;
                 break;
             }
             case 'S': {
@@ -143,7 +145,10 @@ namespace xlink {
                 }
 
                 int idx = static_cast<int>(mod->symbols().size());
-                symbol sym(name, stype, value, idx);
+                int sym_area_idx = (stype == symbol_type::def)
+                    ? current_area_idx
+                    : -1;
+                symbol sym(name, stype, value, idx, sym_area_idx);
                 sym.set_owner(mod.get());
                 mod->symbols().push_back(sym);
                 break;

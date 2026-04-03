@@ -49,9 +49,7 @@ else
 
 CC      :=  sdcc
 AS      :=  sdasz80
-LD      :=  sdcc
-OBJCOPY :=  sdobjcopy
-TRUNC   :=  truncate
+CXX     :=  g++
 
 # --nostdinc: use only our own headers, not SDCC's built-ins.
 # Include paths:
@@ -65,17 +63,22 @@ CFLAGS  :=  --std-c11 -mz80 --debug --nostdinc \
 
 ASFLAGS :=  -xlos -g
 
-# Link against SDCC's Z80 runtime inside the Docker image.
+XLINK   :=  $(BUILD_DIR)/xlink
+XLINK_SOURCES := $(wildcard $(ROOT)/src/xc/xlink/src/*.cpp)
+XLINK_HEADERS := $(wildcard $(ROOT)/src/xc/xlink/include/xlink/*.hpp)
+XLINK_CXXFLAGS := -std=c++2a -O2 -I$(ROOT)/src/xc/xlink/include
+
+# SDCC Z80 runtime library used by xlink for unresolved helper routines.
 # Provides: __divuint, __moduint, ___sdcc_call_hl, ___sdcc_call_iy, etc.
 SDCC_Z80_LIB :=  /opt/sdcc/share/sdcc/lib/z80/z80.lib
+SDCC_XLINK_LIB_DIR := $(BUILD_DIR)/sdcc-z80-lib
+SDCC_XLINK_LIB := $(SDCC_XLINK_LIB_DIR)/z80.lib
 
-LDFLAGS :=  -mz80 -Wl -y \
-            --code-loc 0x0100 \
-            --data-loc 0x5b00 \
-            --no-std-crt0 \
-            --nostdlib \
-            -p \
-            $(SDCC_Z80_LIB)
+XLINKFLAGS := -f bin \
+              -x 0000-3FFF \
+              -b _CODE=0100 \
+              -b _DATA=5b00 \
+              -r 1700-170F
 
 # Source search paths.
 vpath %.c kernel
@@ -101,12 +104,17 @@ TARGET :=  yos
 .PHONY: all
 all: $(BIN_DIR)/$(TARGET).rom
 
-$(BIN_DIR)/$(TARGET).rom: $(BUILD_DIR)/$(TARGET).ihx
-	$(OBJCOPY) -I ihex -O binary $(BUILD_DIR)/$(TARGET).ihx $(BIN_DIR)/$(TARGET).rom
-	$(TRUNC) -s 16K $(BIN_DIR)/$(TARGET).rom
+$(BIN_DIR)/$(TARGET).rom: $(OBJS) $(XLINK) $(SDCC_XLINK_LIB)
+	$(XLINK) $(XLINKFLAGS) -n $(BUILD_DIR)/$(TARGET).noi -o $@ $(OBJS) $(SDCC_XLINK_LIB)
 
-$(BUILD_DIR)/$(TARGET).ihx: $(OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+$(XLINK): $(XLINK_SOURCES) $(XLINK_HEADERS)
+	$(CXX) -o $@ $(XLINK_SOURCES) $(XLINK_CXXFLAGS)
+
+$(SDCC_XLINK_LIB): $(SDCC_Z80_LIB)
+	rm -rf $(SDCC_XLINK_LIB_DIR)
+	mkdir -p $(SDCC_XLINK_LIB_DIR)
+	cd $(SDCC_XLINK_LIB_DIR) && ar x $(SDCC_Z80_LIB)
+	cd $(SDCC_XLINK_LIB_DIR) && ls -1 *.rel > $(SDCC_XLINK_LIB)
 
 $(BUILD_DIR)/$(CRT0).rel: startup/$(CRT0).s
 	$(AS) $(ASFLAGS) -o $@ $<

@@ -2,9 +2,10 @@
 
 `xlink` is the XYZ toolchain linker for Z80 targets. It reads SDCC-style
 textual `.rel` object modules and `.lib` library archives, resolves symbols,
-places areas in memory, applies relocations, and emits a relocatable binary
-in the custom **XL format** — a compact image with an embedded relocation
-table that an OS loader can fix up at any load address.
+places areas in memory, applies relocations, and emits either:
+
+- relocatable **XL format** output (default), or
+- flat absolute **BIN** output for ROM images.
 
 ---
 
@@ -97,8 +98,12 @@ xlink [options] <file.rel|file.lib> ...
 | Option | Description |
 |--------|-------------|
 | `-o <file>` | Output file path. Default: `a.out`. |
+| `-n <file>` | Write symbols as `DEF name 0xADDR` lines. |
 | `-e <symbol>` | Entry point symbol name. Default: `_main`. |
 | `-r <start>-<end>` | Reserve an address range (hex, inclusive). Placement skips this range. Repeatable. |
+| `-b <area>=<addr>` | Force base address for an area group (hex). Repeatable. |
+| `-f <xl|bin>` | Output format. Default: `xl`. |
+| `-x <start>-<end>` | Output range for `-f bin` (hex, inclusive). |
 | `-m` | Print a memory map after linking (area names, placed addresses, sizes, flags). |
 | `-v` | Verbose output: log each file loaded, symbol counts, code size, entry point. |
 | `-h`, `--help` | Show usage summary and exit. |
@@ -112,6 +117,7 @@ For `crt0`-style startup code, always list the CRT0 module first.
 ```bash
 xlink -v -m -e _entry \
       -r 0000-003F \
+      -b _CODE=0100 \
       -o prog.xl \
       build/crt0.rel build/main.rel build/runtime.lib
 ```
@@ -150,7 +156,8 @@ format (`XL4`) produced by SDCC 4.x.
 | Bit | Meaning |
 |-----|---------|
 | 0 (`0x01`) | `OVR` — overlay mode; all same-named areas share one address. |
-| 2 (`0x04`) | `ABS` — absolute; placed at the address given in `addr`. |
+| 3 (`0x08`) | `ABS` — absolute; placed at the address given in `addr` (SDCC 4.x). |
+| 2 (`0x04`) | `ABS` legacy bit, still accepted for compatibility. |
 
 All other combinations are treated as `CON REL` (concatenate, relocatable).
 
@@ -206,7 +213,11 @@ Lines starting with `#` and blank lines are ignored.
 
 ---
 
-## Output File Format (XL)
+## Output File Formats
+
+### XL (default)
+
+All multi-byte fields are little-endian.
 
 All multi-byte fields are little-endian.
 
@@ -238,6 +249,12 @@ PC-relative relocations (e.g. `JR`, `DJNZ`) are fully resolved at link
 time and need no run-time adjustment.
 
 ### Code/data payload — `code_size` bytes
+
+### BIN (`-f bin`)
+
+Flat absolute binary without an XL header. Bytes are emitted directly from
+the linked address space. If `-x` is provided, xlink emits exactly that
+address interval and fills missing bytes with `0x00`.
 
 The raw, pre-relocated binary image. All internal cross-references have
 already been resolved; the only thing remaining for the loader is to add

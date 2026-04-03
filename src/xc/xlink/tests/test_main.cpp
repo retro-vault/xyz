@@ -78,6 +78,7 @@ auto printable(T v) {
 // Include all test files.
 #include "test_rel_parser.cpp"
 #include "test_area_placer.cpp"
+#include "test_binary_emitter.cpp"
 #include "test_relocator.cpp"
 #include "test_linker.cpp"
 

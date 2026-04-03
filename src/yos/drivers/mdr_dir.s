@@ -7,10 +7,10 @@
 
         .module mdr_dir
 
-        .globl  __mdr_dbg_reset
         .globl  __mdr_select_drive
         .globl  __mdr_start_motor
         .globl  __mdr_read_hdr_rec
+        .globl  __mdr_rec_len_valid
         .globl  __mdr_stop_motor
 
         .equ    MDR_FILE_SECS, 11
@@ -37,24 +37,11 @@ _mdr_dir::
         ;; fixed max (ysh buffer): avoid stack-arg ABI ambiguity here
         ld	b,#32
         ex	de,hl                   ; HL = files
-        call	_ir_disable
-        push	hl                      ; __mdr_dbg_reset clobbers HL
-        push	bc                      ; __mdr_dbg_reset clobbers B (max)
-        call	__mdr_dbg_reset
-        pop	bc
-        pop	hl
-        ld	a,c                     ; restore drive
-        ld	(dbg_drive),a
-        ld	a,#1
-        ld	(dbg_op),a
-        push	af                      ; save drive (A used below)
+        call	_enter_critical_section
         ld	(dir_buf_ptr),hl        ; save result buffer pointer
-        ld	a,b
-        ld	(dir_buf_max),a         ; save max entries
-        ld	(dbg_gap_timeouts),a    ; debug: requested max entries
         xor	a
         ld	(dir_file_cnt),a        ; file count = 0
-        pop	af                      ; A = drive
+        ld	a,c                     ; restore drive
         call	__mdr_select_drive
         call	__mdr_start_motor
         ld	b,#0                    ; sector counter
@@ -62,73 +49,19 @@ _mdr_dir::
         push	bc
         ;; read header+record from current stream position
         call	__mdr_read_hdr_rec
-        jr	nc,.dir_ok_rec
-        ld	hl,#dbg_align_fail
-        inc	(hl)
-        jp	.dir_next
+        jp	c,.dir_next
 .dir_ok_rec:
-        ld	hl,#dbg_aligned
-        inc	(hl)
         ;; skip free sectors (flag = 0)
         ld	a,(rec_buf + REC_FLAG)
         or	a
-        jp	z,.dir_next
+        jr	z,.dir_next
         ;; reject impossible record lengths (valid: 1..512)
-        ld	a,(rec_buf + REC_LEN + 1) ; high byte
-        cp	#2
-        jr	c,.dir_len_lochk
-        jp	nz,.dir_next
-        ld	a,(rec_buf + REC_LEN)    ; hi==2 => only 0x0200 allowed
-        or	a
-        jp	nz,.dir_next
-        jr	.dir_len_ok
-.dir_len_lochk:
-        ld	a,(rec_buf + REC_LEN + 1)
-        or	a
-        jr	nz,.dir_len_ok
-        ld	a,(rec_buf + REC_LEN)    ; reject zero length
-        or	a
-        jp	z,.dir_next
-.dir_len_ok:
-        ;; reject non-printable filenames (garbage/false positives)
-        ld	hl,#rec_buf + REC_FNAME
-        ld	c,#10
-.dir_fname_chk:
-        ld	a,(hl)
-        cp	#' '
-        jr	z,.dir_fname_okc
-        cp	#'-'
-        jr	z,.dir_fname_okc
-        cp	#'_'
-        jr	z,.dir_fname_okc
-        cp	#'.'
-        jr	z,.dir_fname_okc
-        cp	#'0'
-        jp	c,.dir_next
-        cp	#('9' + 1)
-        jr	c,.dir_fname_okc
-        cp	#'A'
-        jp	c,.dir_next
-        cp	#('Z' + 1)
-        jr	c,.dir_fname_okc
-        cp	#'a'
-        jp	c,.dir_next
-        cp	#('z' + 1)
-        jp	nc,.dir_next
-.dir_fname_okc:
-        inc	hl
-        dec	c
-        jr	nz,.dir_fname_chk
+        call	__mdr_rec_len_valid
+        jr	c,.dir_next
         ;; skip blank filenames (space in first char)
         ld	a,(rec_buf + REC_FNAME)
         cp	#' '
-        jr	nz,.dir_named
-        ld	hl,#dbg_blank
-        inc	(hl)
-        jp	.dir_next
-.dir_named:
-        ld	hl,#dbg_used
-        inc	(hl)
+        jr	z,.dir_next
         ;; search result array for a matching filename
         ld	hl,(dir_buf_ptr)        ; HL = first entry
         ld	a,(dir_file_cnt)
@@ -176,13 +109,8 @@ _mdr_dir::
         ;; hard safety cap: never emit beyond 32 entries
         ld	a,(dir_file_cnt)
         cp	#32
-        jp	nc,.dir_next
+        jr	nc,.dir_next
         ld	b,a                     ; B = current count
-        ;; caller-specified max can be smaller than 32
-        ld	a,(dir_buf_max)
-        cp	b
-        jp	z,.dir_next             ; full
-        jp	c,.dir_next             ; overflow guard
         ;; recompute slot pointer from base + count * sizeof(mdr_file_t)
         ;; (do not trust HL from search walk)
         ld	hl,(dir_buf_ptr)
@@ -222,8 +150,6 @@ _mdr_dir::
         jr	c,.dir_next
         ld	(hl),#32                ; clamp in case of corruption
 .dir_next:
-        ld	hl,#dbg_scanned
-        inc	(hl)
         pop	bc                      ; restore sector counter
         inc	b
         ld	a,b
@@ -231,29 +157,11 @@ _mdr_dir::
         jp	nz,.dir_scan
         call	__mdr_stop_motor
 .dir_done:
-        ;; hard-cap final count to 32 first (defensive)
         ld	a,(dir_file_cnt)
-        cp	#33
-        jr	c,.dir_cnt_cap32_ok
-        ld	a,#32
-        ld	(dir_file_cnt),a
-.dir_cnt_cap32_ok:
-        ;; and then to caller max (if lower)
-        ld	a,(dir_file_cnt)
-        ld	b,a
-        ld	a,(dir_buf_max)
-        cp	b
-        jr	nc,.dir_cnt_ok
-        ld	a,(dir_buf_max)
-        ld	(dir_file_cnt),a
-.dir_cnt_ok:
-        ld	a,(dir_file_cnt)
-        ld	(dbg_byte_timeouts),a   ; debug: final clamped count
-        ld	(dbg_result),a
         ld	l,a                     ; return count in L
         ;; sdcccall(1): drop stacked max (1 byte)
         pop	bc                      ; return address
         inc	sp
         push	bc
-        call	_ir_enable
+        call	_leave_critical_section
         ret

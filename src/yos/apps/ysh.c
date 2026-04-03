@@ -22,9 +22,10 @@
 /* syscalls */
 yos_t *y;
 char cmd[128];
-uint8_t current_drive = 1; /* 1..8 mapped to A:..H: */
+uint8_t current_drive = 0; /* 0 = RAM (-:), 1..8 = A:..H: */
 #define DIR_MAX_FILES 32
 mdr_file_t dir_files[DIR_MAX_FILES];
+static char default_cart_name[] = "xyz os";
 
 /* change to lowercase */
 void lcase(char *s) {
@@ -45,14 +46,30 @@ bool mdr_name_match10(const char *file_name11, const char *want) {
     return TRUE;
 }
 
+bool starts_with(const char *s, const char *prefix) {
+    while (*prefix) {
+        if (*s != *prefix) return FALSE;
+        s++;
+        prefix++;
+    }
+    return TRUE;
+}
+
+char *skip_spaces(char *s) {
+    while (*s && y->isspace(*s)) s++;
+    return s;
+}
+
 void help(void) {
     y->printf("\nAVAILABLE COMMANDS\n\n");
-    y->printf("    help  ... display help\n");
-    y->printf("    mem   ... memory usage\n");
-    y->printf("    clear ... clear screen\n");
-    y->printf("    ver   ... yos version\n");
-    y->printf("    ps    ... list processes and threads\n");
-    y->printf("    dir   ... list current directory\n");
+    y->printf("    help   ... display help\n");
+    y->printf("    mem    ... memory usage\n");
+    y->printf("    clear  ... clear screen\n");
+    y->printf("    ver    ... yos version\n");
+    y->printf("    ps     ... list processes and threads\n");
+    y->printf("    dir    ... list current directory\n");
+    y->printf("    format ... format cartridge\n");
+    y->printf("    a:..h: ... switch current drive\n");
 }
 
 bool run_app(char *name) {
@@ -61,6 +78,10 @@ bool run_app(char *name) {
     process_t *p;
 
     if (y->strlen(name) == 0 || y->strlen(name) > 6) return FALSE;
+    if (current_drive == 0) {
+        y->printf("RAM DISK NOT IMPLEMENTED\n");
+        return TRUE;
+    }
 
     while (name[i] && i < 6) {
         app[i] = name[i];
@@ -192,24 +213,14 @@ void pstat(void) {
 
 void dir(void) {
     uint8_t drive = current_drive;
-    uint8_t drives = y->mdr_detect_drives();
-    mdr_debug_t dbg;
-    bool unformatted;
-    if (drives == 0) {
-        y->printf("\nNO MICRODRIVE DETECTED\n");
-        return;
-    }
-    y->printf("\n%u DRIVES DETECTED\n", drives);
-    if (drive > drives) {
-        y->printf("\nDRIVE %u NOT PRESENT\n", drive);
+    if (drive == 0) {
+        y->printf("\nRAM DISK NOT IMPLEMENTED\n");
         return;
     }
 
     uint8_t count = y->mdr_dir(drive, dir_files, DIR_MAX_FILES);
-    y->mdr_dbg(drive, &dbg);
-    unformatted = (dbg.sectors_aligned == 0);
     if (count > DIR_MAX_FILES) count = DIR_MAX_FILES; /* defensive clamp */
-    y->printf("\nDRIVE %u DIRECTORY%s\n\n", drive, unformatted ? " [u]" : "");
+    y->printf("\nDRIVE %u DIRECTORY\n\n", drive);
     if (count == 0) {
         y->printf("EMPTY\n");
         return;
@@ -224,11 +235,62 @@ void dir(void) {
     }
 }
 
+void format_drive(char *args) {
+    uint8_t drive;
+    uint8_t drives;
+    uint8_t fmt_rc;
+    char *cart_name;
+    char answer[8];
+
+    args = skip_spaces(args);
+    if (!(args[0] >= 'a' && args[0] <= 'h' &&
+          args[1] == ':' &&
+          (args[2] == '\0' || y->isspace(args[2])))) {
+        y->printf("\nUSAGE: FORMAT <A:..H:> [CART_NAME]\n");
+        return;
+    }
+    drive = (uint8_t)(args[0] - 'a' + 1);
+    args += 2;
+    args = skip_spaces(args);
+
+    cart_name = (*args) ? args : default_cart_name;
+
+    y->printf("\nERASE ALL FILES ON %c: ? (Y/N)\n", (char)('A' + drive - 1));
+    answer[0] = '\0';
+    y->gets(answer);
+    if (answer[0] != 'y' && answer[0] != 'Y') {
+        y->printf("\nFORMAT CANCELLED\n");
+        return;
+    }
+
+    y->printf("\nFORMATTING DRIVE %u\n", drive);
+    fmt_rc = y->mdr_format(drive, cart_name);
+    drives = y->mdr_detect_drives();
+    if (fmt_rc == 0 && drive <= drives)
+        y->printf("FORMAT OK\n");
+    else
+        y->printf("FORMAT FAIL\n");
+}
+
 void exec(char *text) {
     lcase(text);
+    if (y->strlen(text) == 2 && text[0] == '-' && text[1] == ':') {
+        current_drive = 0;
+    }
+    else
     if (y->strlen(text) == 2 && text[1] == ':' &&
         text[0] >= 'a' && text[0] <= 'h') {
-        current_drive = (uint8_t)(text[0] - 'a' + 1);
+        uint8_t target = (uint8_t)(text[0] - 'a' + 1);
+        uint8_t drives = y->mdr_detect_drives();
+        if (drives == 0) {
+            y->printf("NO MICRODRIVE DETECTED\n");
+            return;
+        }
+        if (target > drives) {
+            y->printf("DRIVE %u NOT PRESENT\n", target);
+            return;
+        }
+        current_drive = target;
     }
     else
     if (y->strcmp(text,"mem")==0)
@@ -243,6 +305,9 @@ void exec(char *text) {
         pstat();
     else if (y->strcmp(text,"dir")==0)
         dir();
+    else if (starts_with(text, "format") &&
+             (text[6] == '\0' || y->isspace(text[6])))
+        format_drive(&text[6]);
     else if (y->strlen(text)==0) /* tolerate empty string */
         y->printf("\n");
     else if (run_app(text))
@@ -258,7 +323,10 @@ void ysh(void) {
 
     /* mini shell */
     while(TRUE) {
-        y->printf("\n%c:\\", (char)('A' + current_drive - 1));
+        if (current_drive == 0)
+            y->printf("\n-:\\");
+        else
+            y->printf("\n%c:\\", (char)('A' + current_drive - 1));
         y->gets(cmd);
         y->printf("\n"); 
         exec(cmd);

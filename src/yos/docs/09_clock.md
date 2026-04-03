@@ -116,7 +116,7 @@ A timer with `ticks = 0` fires on every tick because its `_tick_count` is always
 `_tmr_chain()` is called from inside the 50 Hz interrupt handler, which runs while interrupts are disabled. This has important consequences for callbacks:
 
 - Keep callbacks **very short**. Every microsecond spent in a callback is a microsecond stolen from the thread scheduler and from other timer callbacks.
-- Do **not** call `ir_disable()` inside a callback — interrupts are already disabled.
+- Do **not** call `enter_critical_section()` inside a callback — interrupts are already disabled.
 - Do **not** call functions that re-enable interrupts (like `ei` directly) inside a callback.
 - Do **not** allocate or free memory inside a callback — the allocator is not interrupt-safe.
 - To communicate a result back to a thread, set a flag or signal an event; let the thread process the result in its own context.
@@ -140,7 +140,7 @@ tick_flag = 0;
 
 The clock derives entirely from the 50 Hz screen-blank interrupt. The accuracy of the clock therefore depends on:
 
-1. **Interrupt latency.** Holding `di` for more than a fraction of a millisecond can cause a tick to be missed. Each missed tick loses 20 ms from the clock permanently.
+1. **Interrupt latency.** Holding a critical section for more than a fraction of a millisecond can cause a tick to be missed. Each missed tick loses 20 ms from the clock permanently.
 2. **Display timing accuracy.** The ULA generates the interrupt slightly differently depending on whether the machine is a 48K or 128K model and on the state of the TV border. On standard hardware the frequency is very close to exactly 50 Hz (UK/Europe) or 60 Hz (some clones for NTSC regions).
 3. **No real-time clock chip.** The ZX Spectrum has no battery-backed RTC. The clock starts at zero on power-up and cannot be automatically synchronised. For applications that need wall-clock time, the value should be set by the user or synchronised over a network connection.
 

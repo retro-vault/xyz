@@ -72,6 +72,16 @@ namespace xlink {
         for (auto& group : groups) {
             if (group.members.empty()) continue;
 
+            auto base_it = ctx.area_bases.find(group.name);
+            if (base_it != ctx.area_bases.end()) {
+                if (base_it->second < cursor) {
+                    throw placement_error(
+                        "area base for '" + group.name
+                        + "' overlaps previous placement");
+                }
+                cursor = base_it->second;
+            }
+
             // Check the first member to determine area type.
             auto& first_area = group.members[0].first->area_by_index(
                 group.members[0].second);

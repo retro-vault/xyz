@@ -38,7 +38,7 @@ typedef struct thread_s {
 	sysobj_t hdr;
     uint16_t sp;                        /* stack pointer. task context is stored on stack. */
 	/* thread properties */
-    uint8_t startup[10];                /* startup code: CALL+JP */
+    uint8_t startup[10];                /* startup code: call entry, call exit, halt */
 	event_t **wait;                     /* event list or null */
 	uint8_t num_events;                 /* number of events in event list */
 	uint8_t state;                      /* thread state (bits 0-1), bits 2-7 are reserved */

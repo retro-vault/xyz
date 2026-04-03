@@ -36,7 +36,10 @@ namespace xlink {
         std::optional<uint16_t> placed_addr() const { return placed_addr_; }
         void set_placed_addr(uint16_t addr) { placed_addr_ = addr; }
 
-        bool is_abs() const { return has_flag(flags_, area_flags::abs); }
+        bool is_abs() const {
+            return has_flag(flags_, area_flags::abs)
+                || has_flag(flags_, area_flags::abs_legacy);
+        }
         bool is_ovr() const { return has_flag(flags_, area_flags::ovr); }
         bool is_con() const { return !is_ovr(); }
 

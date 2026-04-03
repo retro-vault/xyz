@@ -34,7 +34,7 @@
         ;; Arguments:
         ;;   (none)
 _mdr_detect_drives::
-        call	_ir_disable
+        call	_enter_critical_section
         ld	e,#0                    ; e = detected drive count
         ld	d,#1                    ; d = current drive under test
 .det_loop:
@@ -113,5 +113,5 @@ _mdr_detect_drives::
         ld	a,e                     ; return count in A
 .det_ret:
         ld	l,a                     ; also in L for C return value
-        call	_ir_enable
+        call	_leave_critical_section
         ret

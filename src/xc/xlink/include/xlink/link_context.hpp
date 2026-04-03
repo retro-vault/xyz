@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,12 +35,16 @@ namespace xlink {
 
         // Reserved address ranges (holes).
         std::vector<address_range> holes;
+        std::map<std::string, uint16_t> area_bases;
+        std::optional<address_range> output_range;
+        output_format format = output_format::xl;
 
         // Entry point symbol name.
         std::string entry_name = "_main";
 
         // Global symbol table: name -> (module, symbol index).
         std::map<std::string, std::pair<module*, int>> global_symbols;
+        std::map<std::string, uint16_t> linker_symbols;
 
         // Output data.
         std::vector<uint8_t> code_buffer;

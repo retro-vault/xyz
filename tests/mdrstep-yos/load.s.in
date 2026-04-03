@@ -1,0 +1,194 @@
+        .module @MODULE@
+
+        .globl  _main
+        .globl  _query_service
+        .globl  ___sdcc_call_hl
+        .globl  ___sdcc_call_iy
+
+        .equ    YOS_PUTS,          12
+        .equ    YOS_MALLOC,        24
+        .equ    YOS_FREE,          26
+        .equ    YOS_MDR_DETECT,    30
+        .equ    YOS_MDR_LOAD,      34
+        .equ    BUF_LEN,           777
+        .equ    LOAD_LEN,          @LEN@
+
+        .area   _CODE
+_main::
+        ld      hl,#str_yos
+        call    _query_service
+        ld      a,d
+        or      e
+        ret     z
+        ld      (yos_ptr),de
+
+        call    detect_drives
+        ld      a,l
+        or      a
+        jr      nz,.alloc
+        ld      hl,#msg_nomdr
+        call    call_puts
+        ret
+
+.alloc:
+        ld      hl,#BUF_LEN
+        call    call_malloc
+        ld      a,d
+        or      e
+        jr      nz,.have_buf
+        ld      hl,#msg_oom
+        call    call_puts
+        ret
+
+.have_buf:
+        ld      (buf_ptr),de
+        ld      hl,#name_file
+        ld      de,(buf_ptr)
+        call    call_load
+        ld      a,l
+        or      a
+        jr      z,.cmp
+        ld      hl,(buf_ptr)
+        call    call_free
+        ld      hl,#msg_load
+        call    call_puts
+        ret
+
+.cmp:
+        ld      hl,(buf_ptr)
+        ld      bc,#LOAD_LEN
+        call    compare_pattern
+        push    af
+        ld      hl,(buf_ptr)
+        call    call_free
+        pop     af
+        jr      nc,.ok
+        ld      hl,#msg_cmp
+        call    call_puts
+        ret
+.ok:
+        ld      hl,#msg_ok
+        call    call_puts
+        ret
+
+call_puts:
+        push    hl
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_PUTS
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        pop     hl
+        push    de
+        pop     iy
+        call    ___sdcc_call_iy
+        ret
+
+detect_drives:
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_MDR_DETECT
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        ex      de,hl
+        call    ___sdcc_call_hl
+        ret
+
+call_malloc:
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_MALLOC
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        push    de
+        pop     iy
+        jp      (iy)
+
+call_free:
+        push    hl
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_FREE
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        pop     hl
+        push    de
+        pop     iy
+        jp      (iy)
+
+call_load:
+        ld      (tmp_name),hl
+        ld      (tmp_ptr),de
+        ld      de,(yos_ptr)
+        ld      hl,#YOS_MDR_LOAD
+        add     hl,de
+        ld      c,(hl)
+        inc     hl
+        ld      b,(hl)
+        ld      hl,(tmp_ptr)
+        push    hl
+        ld      de,(tmp_name)
+        ld      a,#1
+        ld      l,c
+        ld      h,b
+        call    ___sdcc_call_hl
+        ret
+
+compare_pattern:
+        ld      d,#1
+.cmp_loop:
+        ld      a,(hl)
+        cp      d
+        jr      nz,.cmp_fail
+        inc     hl
+        inc     d
+        ld      a,d
+        cp      #12
+        jr      nz,.cmp_next
+        ld      d,#1
+.cmp_next:
+        dec     bc
+        ld      a,b
+        or      c
+        jr      nz,.cmp_loop
+        or      a
+        ret
+.cmp_fail:
+        scf
+        ret
+
+str_yos:
+        .ascii  "yos"
+        .db     0
+name_file:
+        .ascii  "@NAME@"
+        .db     0
+msg_nomdr:
+        .ascii  "NO MDR"
+        .db     0
+msg_oom:
+        .ascii  "NO MEM"
+        .db     0
+msg_load:
+        .ascii  "LOAD"
+        .db     0
+msg_cmp:
+        .ascii  "CMP"
+        .db     0
+msg_ok:
+        .ascii  "OK"
+        .db     0
+
+        .area   _BSS
+yos_ptr:
+        .ds     2
+buf_ptr:
+        .ds     2
+tmp_name:
+        .ds     2
+tmp_ptr:
+        .ds     2

@@ -221,7 +221,7 @@ void process_reap(process_t *p) {
 
     if (!p) return;
 
-    ir_disable();
+    enter_critical_section();
 
     t = p->main_thread;
     if (t) {
@@ -242,7 +242,7 @@ void process_reap(process_t *p) {
     /* remove process object from process list */
     so_destroy((void **)&process_first, (void *)p);
 
-    ir_enable();
+    leave_critical_section();
 }
 
 void process_exit(void) {

@@ -77,6 +77,8 @@ TEST(linker_simple_link) {
 
     ASSERT(ctx.code_size > 0);
     ASSERT(!ctx.code_buffer.empty());
+    ASSERT(ctx.linker_symbols.find("s__CODE") != ctx.linker_symbols.end());
+    ASSERT(ctx.linker_symbols.find("l__CODE") != ctx.linker_symbols.end());
 }
 
 TEST(linker_binary_output) {
