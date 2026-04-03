@@ -11,6 +11,10 @@
  */
 #include <kernel/process.h>
 #include <drivers/mdr.h>
+#include <kernel/evt.h>
+#include <kernel/timer.h>
+#include <kernel/service.h>
+#include <kernel/list.h>
 
 #define PROCESS_DIR_MAX 32
 
@@ -139,6 +143,43 @@ static uint8_t _process_relocate_xl(uint8_t *img, uint16_t img_size, void (**ent
 
 process_t *process_first = NULL;
 
+static uint8_t _process_match_owner(list_item_t *p, uint16_t owner)
+{
+    sysobj_t *o = (sysobj_t *)p;
+    return o->owner == (void *)owner;
+}
+
+static uint8_t _process_has_threads(process_t *p)
+{
+    thread_t *t;
+
+    t = thread_first_running;
+    while (t) {
+        if (t->process == (void *)p) return 1;
+        t = t->hdr.next;
+    }
+
+    t = thread_first_suspended;
+    while (t) {
+        if (t->process == (void *)p) return 1;
+        t = t->hdr.next;
+    }
+
+    t = thread_first_waiting;
+    while (t) {
+        if (t->process == (void *)p) return 1;
+        t = t->hdr.next;
+    }
+
+    t = thread_first_terminated;
+    while (t) {
+        if (t->process == (void *)p) return 1;
+        t = t->hdr.next;
+    }
+
+    return 0;
+}
+
 process_t *process_start(
     char *pname,
     void (*entry_point)(void),
@@ -216,40 +257,59 @@ void _process_cleanup(process_t *p) {
     p;
 }
 
-void process_reap(process_t *p) {
-    thread_t *t;
+void process_release_owner_resources(void *owner)
+{
+    list_item_t *prev;
+    event_t *e;
+    timer_t *t;
+    service_t *s;
 
+    while ((e = (event_t *)list_find(
+        (list_item_t *)_evt_first,
+        &prev,
+        _process_match_owner,
+        (uint16_t)owner))) {
+        evt_destroy(e);
+    }
+
+    while ((t = (timer_t *)list_find(
+        (list_item_t *)_tmr_first,
+        &prev,
+        _process_match_owner,
+        (uint16_t)owner))) {
+        tmr_uninstall(t);
+    }
+
+    while ((s = (service_t *)list_find(
+        (list_item_t *)_svc_first,
+        &prev,
+        _process_match_owner,
+        (uint16_t)owner))) {
+        svc_unregister(s);
+    }
+
+    mem_free_owner((void *)&_heap, owner);
+}
+
+void process_cleanup_if_empty(process_t *p)
+{
+    if (!p) return;
+    if (_process_has_threads(p)) return;
+
+    p->main_thread = NULL;
+    process_release_owner_resources((void *)p);
+    so_destroy((void **)&process_first, (void *)p);
+}
+
+void process_reap(process_t *p) {
     if (!p) return;
 
     enter_critical_section();
-
-    t = p->main_thread;
-    if (t) {
-        /* free thread-owned user heap blocks (its stack) */
-        mem_free_owner((void *)&_heap, (void *)t);
-
-        /* remove thread object from whichever queue it currently belongs to */
-        if (!so_destroy((void **)&thread_first_terminated, (void *)t))
-            if (!so_destroy((void **)&thread_first_suspended, (void *)t))
-                if (!so_destroy((void **)&thread_first_running, (void *)t))
-                    so_destroy((void **)&thread_first_waiting, (void *)t);
-        p->main_thread = NULL;
-    }
-
-    /* free process-owned user heap blocks (loaded image, etc.) */
-    mem_free_owner((void *)&_heap, (void *)p);
-
-    /* remove process object from process list */
-    so_destroy((void **)&process_first, (void *)p);
-
+    process_cleanup_if_empty(p);
     leave_critical_section();
 }
 
 void process_exit(void) {
-    /* get current process */
-    process_t *proc=thread_current->process;
-    /* clean up all resources */
-    _process_cleanup(proc);
-    /* finally, remove from process list */
-    so_destroy((void **)&process_first, (void *)proc);
+    if (!thread_current) return;
+    thread_exit(thread_current);
 }

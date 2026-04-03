@@ -11,6 +11,8 @@
  *
  */
 #include <kernel/thread.h>
+#include <kernel/process.h>
+#include <kernel/list.h>
 
 thread_t *thread_current = NULL;
 thread_t *thread_first_suspended = NULL;
@@ -20,6 +22,28 @@ thread_t *thread_first_terminated = NULL;
 
 extern uint8_t lob(uint16_t w) __naked;
 extern uint8_t hib(uint16_t w) __naked;
+
+static void _thread_cleanup_terminated(void)
+{
+    thread_t *t = thread_first_terminated;
+
+    while (t) {
+        thread_t *next = t->hdr.next;
+        void *proc = t->process;
+
+        /* cannot reclaim the stack currently used by the interrupt/scheduler */
+        if (t == thread_current) {
+            t = next;
+            continue;
+        }
+
+        process_release_owner_resources((void *)t);
+        so_destroy((void **)&thread_first_terminated, (void *)t);
+        process_cleanup_if_empty((process_t *)proc);
+
+        t = next;
+    }
+}
 
 /* TODO: add parent process */
 thread_t *thread_create(
@@ -151,6 +175,10 @@ void thread_exit(thread_t *t)
 thread_t* _thread_select_next(void) {
 
     thread_t *curr, *t;
+
+    /* periodic reap of terminated threads and their owned resources */
+    _thread_cleanup_terminated();
+
 	/* release any waiting task */
 	curr=thread_first_waiting;
 	while (curr) {

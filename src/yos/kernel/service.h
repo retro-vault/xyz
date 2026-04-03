@@ -31,6 +31,8 @@ typedef struct service_s {
     void *fntable;                      /* function table */
 } service_t;
 
+extern service_t *_svc_first;
+
 /* function to query a service. the operating system
    registers this service under RST10 call, it returns
    a pointer to the OS api */

@@ -53,6 +53,12 @@ extern process_t *process_load(
     size_t stack_size
 );
 
+/* release resources owned by owner (events/timers/services/user heap) */
+extern void process_release_owner_resources(void *owner);
+
+/* destroy process when it has no threads left */
+extern void process_cleanup_if_empty(process_t *p);
+
 /* reap a terminated process and release all owned resources */
 extern void process_reap(process_t *p);
 

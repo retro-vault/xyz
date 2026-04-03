@@ -76,6 +76,7 @@ bool run_app(char *name) {
     char app[12];
     uint8_t i = 0;
     process_t *p;
+    list_item_t *prev;
 
     if (y->strlen(name) == 0 || y->strlen(name) > 6) return FALSE;
     if (current_drive == 0) {
@@ -96,8 +97,11 @@ bool run_app(char *name) {
     p = process_load(current_drive, app, 1024);
     if (!p) return FALSE;
 
-    while (p->main_thread &&
-           p->main_thread->state != THREAD_STATE_TERMINATED) {
+    while (list_find(
+        (list_item_t *)process_first,
+        &prev,
+        list_match_eq,
+        (uint16_t)p) != NULL) {
         __asm__("halt");
     }
 
@@ -126,6 +130,23 @@ void mem_block(list_item_t *p, uint16_t arg) {
         b->size);
 }
 
+static uint16_t mem_free_accum = 0;
+
+void mem_count_free_block(list_item_t *p, uint16_t arg) {
+    arg;
+    block_t *b = (block_t *)p;
+    if (b->stat == NEW) mem_free_accum += b->size;
+}
+
+uint16_t mem_free_total(void *first) {
+    mem_free_accum = 0;
+    list_iterate(
+        (list_item_t *)first,
+        mem_count_free_block,
+        0);
+    return mem_free_accum;
+}
+
 void mem_dump(char *title, void *first) {
     
     /* title */
@@ -142,11 +163,20 @@ void mem_dump(char *title, void *first) {
 }
 
 void mem(void) {
+    uint16_t free_sys;
+    uint16_t free_user;
+    uint16_t free_total;
+
     y->printf("\nTOTAL %u bytes\n\n", 0xffff-&_heap);
     mem_dump( "SYSTEM HEAP", &_sys_heap);
     y->printf("\n");
     mem_dump( "USER HEAP", &_heap);
     y->printf("\n");
+
+    free_sys = mem_free_total(&_sys_heap);
+    free_user = mem_free_total(&_heap);
+    free_total = free_sys + free_user;
+    y->printf("FREE %u bytes (SYS %u, USER %u)\n", free_total, free_sys, free_user);
     
 }
 
