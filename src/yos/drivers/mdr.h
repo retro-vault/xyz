@@ -45,6 +45,15 @@ extern uint8_t mdr_format(uint8_t drive, char *cart_name);
 /* fill 'files' array with up to 'max' unique files; returns count found */
 extern uint8_t mdr_dir(uint8_t drive, mdr_file_t *files, uint8_t max);
 
+/* compare 10-char name fields (case-insensitive, C-string name is space padded) */
+extern uint8_t mdr_name_match10(const char *rec10, const char *name);
+
+/* convert C string to 10-char microdrive filename (space padded) */
+extern void mdr_make_name10(const char *src, char out[MDR_NAME_LEN]);
+
+/* find file size by 10-char microdrive filename; 0 means not found */
+extern uint16_t mdr_find_file_size(uint8_t drive, const char *name10);
+
 /* load a file into memory; returns 0 on success, 1 if not found */
 extern uint8_t mdr_load(uint8_t drive, char *name, uint8_t *dest);
 

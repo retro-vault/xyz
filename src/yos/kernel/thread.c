@@ -37,9 +37,9 @@ static void _thread_cleanup_terminated(void)
             continue;
         }
 
-        process_release_owner_resources((void *)t);
+        mem_free_owner((void *)&_heap, (void *)t);
         so_destroy((void **)&thread_first_terminated, (void *)t);
-        process_cleanup_if_empty((process_t *)proc);
+        process_reap((process_t *)proc);
 
         t = next;
     }

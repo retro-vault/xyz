@@ -7,6 +7,10 @@
 
         .module mdr_common
 
+        .globl  _mdr_name_match10
+        .globl  _mdr_make_name10
+        .globl  _mdr_find_file_size
+        .globl  _mdr_dir
 
         .equ    MD_DATA, 0xe7           ; microdrive data port
         .equ    MD_CTRL, 0xef           ; microdrive control/status port
@@ -168,6 +172,131 @@ __mdr_name_match10::
         ret
 .nm_miss:
         scf
+        ret
+
+        ;; ------------------------------------------------------------
+        ;; _mdr_name_match10
+        ;; C-callable wrapper around __mdr_name_match10.
+        ;;
+        ;; Signature:
+        ;;   uint8_t mdr_name_match10(const char *rec10, const char *name)
+        ;;
+        ;; Arguments:
+        ;;   HL = record filename field (10 bytes)
+        ;;   DE = user filename pointer (C string or 10-char padded)
+        ;;
+        ;; Returns:
+        ;;   A/L = 1 when names match, 0 otherwise
+_mdr_name_match10::
+        call    __mdr_name_match10
+        jr      c,.nmw_miss
+        ld      a,#1
+        ld      l,a
+        ret
+.nmw_miss:
+        xor     a
+        ld      l,a
+        ret
+
+        ;; ------------------------------------------------------------
+        ;; _mdr_make_name10
+        ;; C-callable filename normalizer.
+        ;;
+        ;; Signature:
+        ;;   void mdr_make_name10(const char *src, char out[10])
+        ;;
+        ;; Arguments:
+        ;;   HL = src C string
+        ;;   DE = output buffer (10 bytes)
+_mdr_make_name10::
+        push    de
+        ld      b,#10
+        ld      a,#' '
+.mk_fill:
+        ld      (de),a
+        inc     de
+        djnz    .mk_fill
+        pop     de
+        ld      b,#10
+.mk_copy:
+        ld      a,(hl)
+        or      a
+        ret     z
+        ld      (de),a
+        inc     hl
+        inc     de
+        djnz    .mk_copy
+        ret
+
+        ;; ------------------------------------------------------------
+        ;; _mdr_find_file_size
+        ;; C-callable directory scan helper.
+        ;;
+        ;; Signature:
+        ;;   uint16_t mdr_find_file_size(uint8_t drive, const char *name10)
+        ;;
+        ;; Arguments:
+        ;;   A  = drive number (1-8)
+        ;;   DE = pointer to 10-char name
+        ;;
+        ;; Returns:
+        ;;   DE = file size in bytes, 0 when not found
+_mdr_find_file_size::
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        push    de                      ; save name pointer
+        dec     sp
+        ld      hl,#0
+        add     hl,sp
+        ld      (hl),a                  ; save drive byte
+        ld      hl,#-448                ; local files[32]
+        add     hl,sp
+        ld      sp,hl
+        ld      hl,#0
+        add     hl,sp
+        ex      de,hl                   ; DE = files buffer
+        dec     sp
+        ld      a,#32
+        ld      hl,#0
+        add     hl,sp
+        ld      (hl),a                  ; max entries for mdr_dir
+        ld      a,-3(ix)                ; drive
+        call    _mdr_dir
+        ld      b,a                     ; count
+        ld      hl,#0
+        add     hl,sp                   ; HL = files base
+.ffs_loop:
+        ld      a,b
+        or      a
+        jr      z,.ffs_not_found
+        ld      e,-2(ix)                ; name pointer
+        ld      d,-1(ix)
+        push    hl
+        call    _mdr_name_match10
+        pop     hl
+        or      a
+        jr      nz,.ffs_found
+        ld      de,#14
+        add     hl,de                   ; next file entry
+        djnz    .ffs_loop
+.ffs_not_found:
+        ld      de,#0
+        ld      hl,#451                 ; drop files + saved name + drive
+        add     hl,sp
+        ld      sp,hl
+        pop     ix
+        ret
+.ffs_found:
+        ld      de,#12
+        add     hl,de                   ; size offset
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        ld      hl,#451                 ; drop files + saved name + drive
+        add     hl,sp
+        ld      sp,hl
+        pop     ix
         ret
 
         ;; ------------------------------------------------------------

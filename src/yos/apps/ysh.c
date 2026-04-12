@@ -32,20 +32,6 @@ void lcase(char *s) {
     for (int i=0;i<y->strlen(s);i++) s[i]=y->tolower(s[i]);
 }
 
-/* compare microdrive names as fixed 10-char, space-padded, case-insensitive */
-bool mdr_name_match10(const char *file_name11, const char *want) {
-    uint8_t i;
-    for (i = 0; i < 10; i++) {
-        char a = file_name11[i];
-        char b = want[i];
-        if (b == '\0') b = ' ';
-        a = y->tolower(a);
-        b = y->tolower(b);
-        if (a != b) return FALSE;
-    }
-    return TRUE;
-}
-
 bool starts_with(const char *s, const char *prefix) {
     while (*prefix) {
         if (*s != *prefix) return FALSE;
