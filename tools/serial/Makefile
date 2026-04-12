@@ -3,7 +3,7 @@
 # Invoked by tools/Makefile or standalone: make (from this directory).
 # ---------------------------------------------------------------------------
 
-ROOT      ?= $(realpath ../../..)
+ROOT      ?= $(realpath ../..)
 
 BUILD_DIR :=  $(ROOT)/build/tools/serial
 BIN_DIR   :=  $(ROOT)/bin/tools/serial
