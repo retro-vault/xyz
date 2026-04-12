@@ -657,6 +657,12 @@ load_dest::
         .ds	2                       ; destination base pointer (mdr_load)
 load_found::
         .ds	1                       ; at least one matching record loaded
+slice_off::
+        .ds	2                       ; requested file offset (mdr_load_slice)
+slice_end::
+        .ds	2                       ; requested end offset (mdr_load_slice)
+slice_cur::
+        .ds	2                       ; current file offset (mdr_load_slice)
 dir_buf_ptr::
         .ds	2                       ; result buffer pointer (mdr_dir)
 dir_file_cnt::

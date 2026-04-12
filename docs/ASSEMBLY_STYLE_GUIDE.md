@@ -36,14 +36,50 @@ All header comments and directives **must be indented** (8 spaces) to align with
 **Must be indented** (8 spaces) with two semicolons `;;`:
 
 ```asm
-        ;; extern [return_type] routine_name([params]);
-        ;; param:  [param location/description]
-        ;; return: [where return value goes]
-        ;; affects: [list of registers modified]
-        ;; notes:   [optional: important implementation notes]
+        ;; ------------------------------------------------------------
+        ;; _routine_name
+        ;; routine description, can be multiline and incldue hyphens
+        ;;
+        ;; Signature: (only if exposed to C)
+        ;;   uint8_t mdr_detect_drives(void)
+        ;;
+        ;; Arguments: (only if it has them)
+        ;;
+        ;; Return: what it retuns and where
+        ;;
+        ;; Clobbers: which registers it clobbers
+        ;;
+        ;; References: 
+        ;;    which other routine or global symbols it references
 function_name::
-        ; code here
+        code here
         ;; continuation of notes if multi-line
+```
+
+Example of global routine comment:
+```asm
+        ;; ------------------------------------------------------------
+        ;; _mdr_format
+        ;; Dispatch strategy:
+        ;;   stream-write 254 free sectors with regenerated headers.
+        ;;
+        ;; Signature:
+        ;;   uint8_t mdr_format(uint8_t drive, char *cart_name)
+        ;;
+        ;; Arguments:
+        ;;   A  = drive number (1-8)
+        ;;   DE = cartridge name (C string, padded to 10 chars)
+        ;;   stack: dest
+        ;;
+        ;; Returns:
+        ;;   A  = 0 for success, 1 for failure
+        ;; 
+        ;; Clobbers:
+        ;;   A, HL, DE
+        ;;
+        ;; References:
+        ;;   __mdr_motor_on
+        ;;   __mdr_detect_gap
 ```
 
 ## 3. Local Label Naming
@@ -59,9 +95,9 @@ For local subroutines (prefixed with dot), if complex, use **indented** (8 space
         ;; .subroutine_name
         ;; param:  [description]
         ;; return: [where result goes]
-        ;; affects: [registers used]
+        ;; clobbers: [registers used]
 .subroutine_name:
-        ; code here
+        code here
 ```
 
 ## 5. End-of-Line Comments
@@ -82,9 +118,22 @@ For local subroutines (prefixed with dot), if complex, use **indented** (8 space
 All utility/helper functions: `__function_name` (double underscore)
 Examples: `__kbd_scan`, `__clock_tick`, `__mouse_calibrate`
 
+Utility/helper functions should be placed in a separate file with the same name as the original, but prefixed with an underscore (_).
+Example: windows.c → helper functions go in _windows.c
+
 ## 7. Register Aliases
 
 Use consistent naming:
 - Pairs: `bc`, `de`, `hl`
 - Individual bytes: `a`, `b`, `c`, `d`, `e`, `h`, `l`
 - Alternate: `af`, `af'`, `bc'`, `de'`, `hl'`, `ix`, `iy`
+
+## 8. Coding Rules for Limited Environment (Z80)
+
+1. Severe memory constraint: We are running on a machine with only a few kilobytes of RAM. Code size must be kept as small as possible.
+2. Reusability: Reuse existing routines whenever possible.
+3. Optimization priority: Size optimization comes first. Speed optimization is secondary, but no major speed penalties are allowed (especially when drawing to the screen).
+4. Register usage: When possible, use the Z80 alternate register set (EXX, EX AF,AF') to reduce memory usage.
+5. Index registers: If IX or IY are used, they must be saved and restored.
+6. No global context: Routines must be stateless and independent (except for configurable global settings). They must work correctly in a context-switching environment.
+7. Hand-written assembly only: All code must be hand-written Z80 assembly. Do not use C compilers or generated assembly.

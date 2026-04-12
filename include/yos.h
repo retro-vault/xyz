@@ -14,7 +14,7 @@
 
 #include <drivers/mdr.h>
 
-#define YOS_VERSION 0x03
+#define YOS_VERSION 0x04
 
 #define	RST08   0
 #define	RST10   1

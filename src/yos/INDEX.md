@@ -43,6 +43,10 @@ The docs are split by subsystem so each chapter can evolve with the code.
 8. [Clock and Timers](docs/09_clock.md)
    - 50 Hz tick-driven clock
    - timer chain behavior and callback constraints
+9. [Application Images](docs/11_app_format.md)
+   - current raw `XL` app loading path
+   - new legacy ZX Spectrum `.app` container
+   - tape-code and trimmed-snapshot variants
 
 ## Source Map
 

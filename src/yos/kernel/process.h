@@ -24,6 +24,14 @@
 /* process flags */
 #define PROCESS_INTERNAL  0x01
 
+/* process loader status */
+#define PROCESS_LOAD_OK                 0
+#define PROCESS_LOAD_ERR_NOT_FOUND      1
+#define PROCESS_LOAD_ERR_ALLOC          2
+#define PROCESS_LOAD_ERR_READ           3
+#define PROCESS_LOAD_ERR_XL_INVALID     4
+#define PROCESS_LOAD_ERR_XL_START       5
+
 typedef struct process_s {
     /* process is a sys. object */
 	sysobj_t hdr;
@@ -37,6 +45,7 @@ typedef struct process_s {
 
 /* first process (for sysobj tracking) */
 extern process_t *process_first;
+extern uint8_t process_last_error;
 
 /* load process (from file) and relocate it 
    if required. */
@@ -52,6 +61,8 @@ extern process_t *process_load(
     char *fname,
     size_t stack_size
 );
+
+extern const char *process_last_error_text(void);
 
 /* release resources owned by owner (events/timers/services/user heap) */
 extern void process_release_owner_resources(void *owner);

@@ -142,6 +142,13 @@ static uint8_t _process_relocate_xl(uint8_t *img, uint16_t img_size, void (**ent
 }
 
 process_t *process_first = NULL;
+uint8_t process_last_error = PROCESS_LOAD_OK;
+
+const char *process_last_error_text(void)
+{
+    process_last_error;
+    return "fail";
+}
 
 static uint8_t _process_match_owner(list_item_t *p, uint16_t owner)
 {
@@ -225,25 +232,35 @@ process_t *process_load(
 
     _process_pad_mdr_name(fname, mdr_name);
     _process_make_pname(fname, pname);
+    process_last_error = PROCESS_LOAD_OK;
 
     img_size = _process_find_mdr_file_size(drive, mdr_name);
-    if (img_size < XL_HDR_SIZE) return NULL;
+    if (img_size < XL_HDR_SIZE) {
+        process_last_error = PROCESS_LOAD_ERR_NOT_FOUND;
+        return NULL;
+    }
 
     img = (uint8_t *)mem_allocate((void *)&_heap, img_size, NONE);
-    if (!img) return NULL;
+    if (!img) {
+        process_last_error = PROCESS_LOAD_ERR_ALLOC;
+        return NULL;
+    }
 
     if (mdr_load(drive, mdr_name, img) != 0) {
+        process_last_error = PROCESS_LOAD_ERR_READ;
         mem_free((void *)&_heap, img);
         return NULL;
     }
 
     if (_process_relocate_xl(img, img_size, &entry) != 0) {
+        process_last_error = PROCESS_LOAD_ERR_XL_INVALID;
         mem_free((void *)&_heap, img);
         return NULL;
     }
 
     p = process_start(pname, entry, (uint16_t)stack_size);
     if (!p) {
+        process_last_error = PROCESS_LOAD_ERR_XL_START;
         mem_free((void *)&_heap, img);
         return NULL;
     }

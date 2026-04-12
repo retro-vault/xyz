@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# tools/appmake/Makefile — builds the legacy ZX Spectrum app converter.
+# Invoked by tools/Makefile or standalone: make (from this directory).
+# ---------------------------------------------------------------------------
+
+ROOT      ?= $(realpath ../..)
+
+BUILD_DIR := $(ROOT)/build/tools/appmake
+BIN_DIR   := $(ROOT)/bin/tools/appmake
+
+CXX       := g++
+CXXFLAGS  := -std=c++20 -O2 -Wall -Wextra -Iinclude -I../microdrive
+
+TARGET    := $(BIN_DIR)/appmake
+SRC       := main.cpp util.cpp tape.cpp basic.cpp analysis.cpp app_image.cpp cli.cpp zx_reference.cpp ../microdrive/libmicrodrive.cpp
+OBJ       := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRC))
+
+.PHONY: all
+all: mkdirs $(TARGET)
+
+.PHONY: mkdirs
+mkdirs:
+	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
+
+$(TARGET): $(OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJ)
+
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+.PHONY: clean
+clean:
+	rm -rf $(BUILD_DIR) $(BIN_DIR)

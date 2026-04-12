@@ -1,0 +1,63 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build xlink
+        run: make -C src/xc
+
+      - name: Build tools
+        run: make -C tools
+
+      - name: Build yos ROM
+        run: make -C src/yos
+
+      - name: Build hello microdrive image
+        run: make -C tests/hello-yos image
+
+      - name: Stage release tree
+        run: |
+          rm -rf dist
+          mkdir -p dist/rom dist/tools/xlink dist/tools/microdrive dist/tools/serial dist/tools/appmake
+
+          cp bin/yos/yos.rom dist/rom/yos.rom
+          cp tests/microdrives/hello.mdr dist/rom/hello.mdr
+          cp src/yos/README.md dist/rom/README.md
+
+          cp bin/xc/xlink/xlink dist/tools/xlink/
+          cp src/xc/xlink/README.md dist/tools/xlink/README.md
+
+          cp -a bin/tools/microdrive/microdrive dist/tools/microdrive/
+          cp -a bin/tools/microdrive/mdr dist/tools/microdrive/
+          cp tools/microdrive/README.md dist/tools/microdrive/README.md
+
+          cp bin/tools/serial/serial dist/tools/serial/
+          cp tools/serial/README.md dist/tools/serial/README.md
+
+          cp bin/tools/appmake/appmake dist/tools/appmake/
+          cp tools/appmake/README.md dist/tools/appmake/README.md
+
+      - name: Archive release payload
+        run: tar -czf xyz-release.tar.gz -C dist .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xyz-release
+          path: xyz-release.tar.gz
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: xyz-release.tar.gz

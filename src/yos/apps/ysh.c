@@ -95,8 +95,15 @@ bool run_app(char *name) {
     app[i] = '\0';
 
     p = process_load(current_drive, app, 1024);
-    if (!p) return FALSE;
+    if (!p) {
+        if (process_last_error == PROCESS_LOAD_ERR_NOT_FOUND) {
+            return FALSE;
+        }
+        y->printf("LOAD FAILED\n");
+        return TRUE;
+    }
 
+wait_loop:
     while (list_find(
         (list_item_t *)process_first,
         &prev,
@@ -108,6 +115,7 @@ bool run_app(char *name) {
     y->printf("\n");
     return TRUE;
 }
+
 
 void print_header(char *c) {
     while(*c) {
@@ -148,36 +156,30 @@ uint16_t mem_free_total(void *first) {
 }
 
 void mem_dump(char *title, void *first) {
-    
-    /* title */
     y->printf("%s\n\n", title);
-
-    /* header */
     print_header("S ADDR NEXT DATA  SIZE");
-
-    /* and iterate list */
     list_iterate(
-        (list_item_t*)first,
+        (list_item_t *)first,
         mem_block,
         0);
 }
 
-void mem(void) {
+uint16_t mem(void) {
     uint16_t free_sys;
     uint16_t free_user;
     uint16_t free_total;
 
-    y->printf("\nTOTAL %u bytes\n\n", 0xffff-&_heap);
-    mem_dump( "SYSTEM HEAP", &_sys_heap);
+    y->printf("\nTOTAL %u bytes\n\n", (uint16_t)(0xffff - (uint16_t)&_heap));
+    mem_dump("SYSTEM HEAP", &_sys_heap);
     y->printf("\n");
-    mem_dump( "USER HEAP", &_heap);
+    mem_dump("USER HEAP", &_heap);
     y->printf("\n");
 
     free_sys = mem_free_total(&_sys_heap);
     free_user = mem_free_total(&_heap);
-    free_total = free_sys + free_user;
+    free_total = (uint16_t)(free_sys + free_user);
     y->printf("FREE %u bytes (SYS %u, USER %u)\n", free_total, free_sys, free_user);
-    
+    return 0;
 }
 
 void ver(void) {
@@ -186,19 +188,19 @@ void ver(void) {
     y->printf("\nYOS VERSION %d.%d\n",major,minor);
 }
 
+static uint8_t pstat_thread_count = 0;
+
 void print_thread(list_item_t *li, uint16_t arg) {
-    
     process_t *proc=(process_t *)arg;
-    void *vp=(void *)proc; /* parent process */
-    thread_t *t=(thread_t *)li; /* and thread */
+    thread_t *t=(thread_t *)li;
     thread_t *main=proc->main_thread;
 
-    if (t->process==vp) { /* do we own this thread? */
-        y->printf(" [%c]     %04X %04X %4d\n",
+    if (t->process == (void *)proc) {
+        y->printf("  %c      %04X %04X\n",
             t==main?'M':'-',
-            t, 
-            t->hdr.next,
-            t->state);
+            t,
+            t->hdr.next);
+        pstat_thread_count++;
     }
 }
 
@@ -209,32 +211,32 @@ void print_process(list_item_t *li, uint16_t arg) {
         p->pname,
         p,
         p->hdr.next);
-    /* running threads */
+
+    pstat_thread_count = 0;
     list_iterate(
         (list_item_t*)thread_first_running,
         print_thread,
         (uint16_t)p);
-    /* suspended threads */
     list_iterate(
         (list_item_t*)thread_first_suspended,
         print_thread,
         (uint16_t)p);
-    /* terminated threads */
     list_iterate(
         (list_item_t*)thread_first_terminated,
         print_thread,
         (uint16_t)p);
-    /* waiting threads */
     list_iterate(
         (list_item_t*)thread_first_waiting,
         print_thread,
         (uint16_t)p);
+    if (pstat_thread_count == 0) {
+        y->printf("  (no threads)\n");
+    }
 }
 
 void pstat(void) {
     y->printf("\nPROCESSES AND THREADS\n\n");
-    /* and iterate process list */
-    print_header("NAME     ADDR NEXT FLAGS");
+    print_header("NAME     ADDR NEXT");
     list_iterate(
         (list_item_t*)process_first,
         print_process,
@@ -265,42 +267,11 @@ void dir(void) {
     }
 }
 
+#if 0
 void format_drive(char *args) {
-    uint8_t drive;
-    uint8_t drives;
-    uint8_t fmt_rc;
-    char *cart_name;
-    char answer[8];
-
-    args = skip_spaces(args);
-    if (!(args[0] >= 'a' && args[0] <= 'h' &&
-          args[1] == ':' &&
-          (args[2] == '\0' || y->isspace(args[2])))) {
-        y->printf("\nUSAGE: FORMAT <A:..H:> [CART_NAME]\n");
-        return;
-    }
-    drive = (uint8_t)(args[0] - 'a' + 1);
-    args += 2;
-    args = skip_spaces(args);
-
-    cart_name = (*args) ? args : default_cart_name;
-
-    y->printf("\nERASE ALL FILES ON %c: ? (Y/N)\n", (char)('A' + drive - 1));
-    answer[0] = '\0';
-    y->gets(answer);
-    if (answer[0] != 'y' && answer[0] != 'Y') {
-        y->printf("\nFORMAT CANCELLED\n");
-        return;
-    }
-
-    y->printf("\nFORMATTING DRIVE %u\n", drive);
-    fmt_rc = y->mdr_format(drive, cart_name);
-    drives = y->mdr_detect_drives();
-    if (fmt_rc == 0 && drive <= drives)
-        y->printf("FORMAT OK\n");
-    else
-        y->printf("FORMAT FAIL\n");
+    args;
 }
+#endif
 
 void exec(char *text) {
     lcase(text);
@@ -323,21 +294,18 @@ void exec(char *text) {
         current_drive = target;
     }
     else
-    if (y->strcmp(text,"mem")==0)
-        mem(); 
-    else if (y->strcmp(text,"clear")==0)
+    if (y->strcmp(text,"clear")==0)
         y->clrscr();
-    else if (y->strcmp(text,"ver")==0)
-        ver();
     else if (y->strcmp(text,"help")==0)
         help();
-    else if (y->strcmp(text,"ps")==0)
-        pstat();
     else if (y->strcmp(text,"dir")==0)
         dir();
-    else if (starts_with(text, "format") &&
-             (text[6] == '\0' || y->isspace(text[6])))
-        format_drive(&text[6]);
+    else if (y->strcmp(text,"mem")==0)
+        mem();
+    else if (y->strcmp(text,"ver")==0)
+        ver();
+    else if (y->strcmp(text,"ps")==0)
+        pstat();
     else if (y->strlen(text)==0) /* tolerate empty string */
         y->printf("\n");
     else if (run_app(text))

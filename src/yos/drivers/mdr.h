@@ -48,6 +48,9 @@ extern uint8_t mdr_dir(uint8_t drive, mdr_file_t *files, uint8_t max);
 /* load a file into memory; returns 0 on success, 1 if not found */
 extern uint8_t mdr_load(uint8_t drive, char *name, uint8_t *dest);
 
+/* load a byte window from a file into memory; returns 0 on success, 1 if not found */
+extern uint8_t mdr_load_slice(uint8_t drive, char *name, uint8_t *dest, uint16_t offset, uint16_t len);
+
 /* save a file from memory:
  *   0 = success
  *   1 = no free sector

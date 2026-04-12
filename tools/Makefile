@@ -5,7 +5,7 @@
 
 ROOT ?= $(realpath ..)
 
-SUBDIRS := serial microdrive
+SUBDIRS := serial microdrive appmake
 
 .PHONY: all
 all:

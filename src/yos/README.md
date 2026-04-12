@@ -55,6 +55,12 @@ Nothing was removed from documentation:
 Use the chapter index:
 
 - [`INDEX.md`](INDEX.md)
+- [`docs/11_app_format.md`](docs/11_app_format.md)
+
+Application image note:
+
+- current process loading still consumes raw relocatable `XL` images
+- the new `.app` chapter defines the upcoming legacy ZX Spectrum container used by the host-side converter
 
 [language.url]:   https://isocpp.org/
 [language.badge]: https://img.shields.io/badge/language-c-blue.svg

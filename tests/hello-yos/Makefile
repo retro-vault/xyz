@@ -11,6 +11,7 @@ BUILD_DIR := $(ROOT)/build/hello-yos
 BIN_DIR   := $(ROOT)/bin/hello-yos
 XLINK     := $(ROOT)/bin/xc/xlink/xlink
 MDR_TOOL  := $(ROOT)/bin/tools/microdrive/mdr
+APPMAKE   := $(ROOT)/bin/tools/appmake/appmake
 IMAGE     := $(ROOT)/tests/microdrives/hello.mdr
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
