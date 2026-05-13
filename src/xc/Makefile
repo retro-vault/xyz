@@ -5,7 +5,7 @@
 # xlink: XYZ linker (custom Z80 linker)
 # ---------------------------------------------------------------------------
 
-SUBDIRS := xlink
+SUBDIRS := xlink xdbg
 
 .PHONY: all
 all:

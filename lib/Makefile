@@ -1,5 +1,5 @@
-# Folders
-SUBDIRS = libsdcc-z80 libc libgpx
+# Host-side debug libraries.
+SUBDIRS = xdbg xdbgstub
 
 # Rules.
 .PHONY: all
@@ -7,4 +7,4 @@ all:	$(SUBDIRS)
 
 .PHONY: $(SUBDIRS)
 $(SUBDIRS):
-	$(MAKE) -C $@ BUILD_DIR=$(BUILD_DIR) BIN_DIR=$(BIN_DIR) PLATFORM=zxspec48
+	$(MAKE) -C $@

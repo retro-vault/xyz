@@ -103,3 +103,17 @@ TEST(area_placer_area_base_override) {
     ASSERT_EQ(mod->areas()[2].placed_addr().value(), 0x5B00);
     ASSERT_EQ(ctx.code_size, 0x5B08);
 }
+
+TEST(area_placer_abs_overlap_error) {
+    xlink::link_context ctx;
+
+    auto mod1 = std::make_shared<xlink::module>("m1", "m1.rel");
+    mod1->areas().emplace_back("_CODE", 0x04, xlink::area_flags::none, 0);
+    ctx.modules.push_back(mod1);
+
+    auto mod2 = std::make_shared<xlink::module>("m2", "m2.rel");
+    mod2->areas().emplace_back("_ABSX", 0x02, xlink::area_flags::abs, 0, 0x0001);
+    ctx.modules.push_back(mod2);
+
+    ASSERT_THROWS(xlink::area_placer::place(ctx), xlink::placement_error);
+}

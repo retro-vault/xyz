@@ -1,0 +1,142 @@
+{
+  "name": "xdbg-vsix",
+  "displayName": "xdbg",
+  "description": "Visual Studio Code debugger integration for xdbg over DAP.",
+  "version": "0.0.1",
+  "publisher": "xdbg",
+  "license": "MIT",
+  "keywords": [
+    "debugger",
+    "dap",
+    "z80",
+    "xdbg"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/retro-vault/xyz.git"
+  },
+  "bugs": {
+    "url": "https://github.com/retro-vault/xyz/issues"
+  },
+  "homepage": "https://github.com/retro-vault/xyz",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onDebug"
+  ],
+  "main": "extension.js",
+  "contributes": {
+    "debuggers": [
+      {
+        "type": "xdbg",
+        "label": "xdbg",
+        "languages": [
+          "c",
+          "cpp",
+          "asm"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program",
+              "symbols",
+              "remoteTarget"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "default": "xdbg launch"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "xdbg"
+                ]
+              },
+              "request": {
+                "type": "string",
+                "enum": [
+                  "launch",
+                  "attach"
+                ],
+                "default": "launch"
+              },
+              "program": {
+                "type": "string",
+                "description": "Target program image passed to xdbg."
+              },
+              "symbols": {
+                "type": "string",
+                "description": "Companion .xdbg symbols file."
+              },
+              "remoteTarget": {
+                "type": "string",
+                "description": "Remote target in host:port form."
+              },
+              "debuggerPath": {
+                "type": "string",
+                "default": "xdbg",
+                "description": "Path to the xdbg executable."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory used when launching xdbg."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": true
+              },
+              "preLaunchTask": {
+                "type": "string",
+                "description": "Task to start the remote debug target."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "name": "xdbg sieve (dap)",
+            "type": "xdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../../bin/debug/sieve.bin",
+            "symbols": "${workspaceFolder}/../../bin/debug/sieve.xdbg",
+            "remoteTarget": "127.0.0.1:9000",
+            "debuggerPath": "${workspaceFolder}/../../bin/xc/xdbg/xdbg",
+            "cwd": "${workspaceFolder}",
+            "stopOnEntry": true,
+            "preLaunchTask": "run xdbg-z80 sieve target"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "xdbg DAP",
+            "description": "Launch xdbg as a DAP debugger for a remote target.",
+            "body": {
+              "name": "^\"xdbg launch\"",
+              "type": "xdbg",
+              "request": "launch",
+              "program": "^\"${workspaceFolder}/program.bin\"",
+              "symbols": "^\"${workspaceFolder}/program.xdbg\"",
+              "remoteTarget": "^\"127.0.0.1:9000\"",
+              "debuggerPath": "^\"xdbg\"",
+              "cwd": "^\"${workspaceFolder}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "check": "node --check extension.js",
+    "package": "npm run check && npx vsce package --no-dependencies",
+    "package:ci": "npm run check && npx vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.1"
+  }
+}

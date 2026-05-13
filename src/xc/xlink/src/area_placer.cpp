@@ -17,6 +17,12 @@
 
 namespace xlink {
 
+    static bool ranges_overlap(uint16_t start_a, uint16_t end_a,
+                               uint16_t start_b, uint16_t end_b)
+    {
+        return start_a <= end_b && end_a >= start_b;
+    }
+
     uint16_t area_placer::next_free_address(
         uint16_t cursor, uint16_t size,
         const std::vector<address_range>& holes)
@@ -130,7 +136,53 @@ namespace xlink {
             }
         }
 
-        ctx.code_size = cursor;
+        struct placed_area_ref {
+            const area* area_ptr;
+            const module* mod_ptr;
+        };
+
+        std::vector<placed_area_ref> placed_areas;
+        uint32_t max_end = 0;
+
+        for (const auto& mod : ctx.modules) {
+            for (const auto& a : mod->areas()) {
+                if (!a.placed_addr().has_value() || a.size() == 0)
+                    continue;
+
+                const uint16_t start = a.placed_addr().value();
+                const uint16_t end = static_cast<uint16_t>(start + a.size() - 1);
+
+                for (const auto& hole : ctx.holes) {
+                    if (ranges_overlap(start, end, hole.start, hole.end)) {
+                        throw placement_error(
+                            "area '" + a.name()
+                            + "' overlaps reserved range");
+                    }
+                }
+
+                for (const auto& placed : placed_areas) {
+                    const auto& other = *placed.area_ptr;
+                    const uint16_t other_start = other.placed_addr().value();
+                    const uint16_t other_end = static_cast<uint16_t>(
+                        other_start + other.size() - 1);
+
+                    const bool same_overlay_group =
+                        a.is_ovr() && other.is_ovr() && a.name() == other.name();
+                    if (!same_overlay_group
+                        && ranges_overlap(start, end, other_start, other_end)) {
+                        throw placement_error(
+                            "area '" + a.name() + "' overlaps area '"
+                            + other.name() + "'");
+                    }
+                }
+
+                placed_areas.push_back({&a, mod.get()});
+                max_end = std::max<uint32_t>(max_end,
+                    static_cast<uint32_t>(start) + a.size());
+            }
+        }
+
+        ctx.code_size = static_cast<uint16_t>(max_end);
 
         // Print memory map if requested.
         if (ctx.print_map) {

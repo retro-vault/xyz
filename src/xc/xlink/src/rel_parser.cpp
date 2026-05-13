@@ -16,6 +16,12 @@
 
 namespace xlink {
 
+    enum class rel_format {
+        xl1,
+        xl2,
+        xl4
+    };
+
     // Helper: parse hex string to uint16_t.
     static uint16_t parse_hex16(const std::string& s) {
         return static_cast<uint16_t>(std::stoul(s, nullptr, 16));
@@ -54,7 +60,7 @@ namespace xlink {
         std::string line;
         int line_num = 0;
         text_record* current_text = nullptr;
-        bool is_v4 = false; // SDCC XL4 extended format flag
+        rel_format format = rel_format::xl1;
         int current_area_idx = -1;
 
         while (std::getline(file, line)) {
@@ -72,7 +78,13 @@ namespace xlink {
                 if (line.size() >= 2) {
                     if (line[1] == 'L') {
                         mod->set_endian(byte_order::little_endian);
-                        is_v4 = (line.size() >= 3 && line[2] == '4');
+                        if (line.size() >= 3 && line[2] == '4') {
+                            format = rel_format::xl4;
+                        } else if (line.size() >= 3 && line[2] == '2') {
+                            format = rel_format::xl2;
+                        } else {
+                            format = rel_format::xl1;
+                        }
                     } else if (line[1] == 'H') {
                         mod->set_endian(byte_order::big_endian);
                     }
@@ -160,7 +172,7 @@ namespace xlink {
                 // v4 format: T <b0> <b1> <b2> <b3> <byte> ... (4-byte offset,
                 //            only low 16 bits used for Z80)
                 auto tokens = split(rest);
-                size_t off_bytes = is_v4 ? 4 : 2;
+                size_t off_bytes = (format == rel_format::xl4) ? 4 : 2;
                 if (tokens.size() < off_bytes)
                     throw parse_error(path.string(), line_num,
                         "malformed T record");
@@ -199,11 +211,15 @@ namespace xlink {
 
                 // Parse relocation entries (4 bytes per entry after header).
                 //
-                // v1 entry: [mode(1)][off_lo(1)][off_hi(1)][ref(1)]
+                // xl1 entry: [mode(1)][off_lo(1)][off_hi(1)][ref(1)]
                 //   offset is relative to T data start; ref is 1 byte.
                 //   mode bit 0 = word (1) / byte (0).
                 //
-                // v4 entry: [mode(1)][offset_from_T_start(1)][ref_lo(1)][ref_hi(1)]
+                // xl2 entry: [mode(1)][offset_in_t(1)][ref_lo(1)][ref_hi(1)]
+                //   offset is a 1-byte index into T data; ref is 2 bytes.
+                //
+                // v4 entry: [mode(1)][offset_from_T_start(1)]
+                //           [ref_lo(1)][ref_hi(1)]
                 //   offset includes the 4-byte T record prefix → subtract 4 for
                 //   data-relative offset. ref is 2 bytes. mode bit 0 inverted:
                 //   0 = word, 1 = byte (normalize by XOR 0x01 to match v1).
@@ -212,7 +228,7 @@ namespace xlink {
                     reloc_entry re;
                     uint8_t mode_byte = parse_hex8(tokens[i]);
 
-                    if (is_v4) {
+                    if (format == rel_format::xl4) {
                         uint8_t from_start = parse_hex8(tokens[i + 1]);
                         uint8_t ref_lo    = parse_hex8(tokens[i + 2]);
                         uint8_t ref_hi    = parse_hex8(tokens[i + 3]);
@@ -220,6 +236,13 @@ namespace xlink {
                         re.offset_in_t = static_cast<uint16_t>(
                             from_start >= 4 ? from_start - 4 : 0);
                         re.ref_index  = ref_lo | (ref_hi << 8);
+                    } else if (format == rel_format::xl2) {
+                        uint8_t offset = parse_hex8(tokens[i + 1]);
+                        uint8_t ref_lo = parse_hex8(tokens[i + 2]);
+                        uint8_t ref_hi = parse_hex8(tokens[i + 3]);
+                        re.mode        = static_cast<reloc_mode>(mode_byte);
+                        re.offset_in_t = offset;
+                        re.ref_index   = ref_lo | (ref_hi << 8);
                     } else {
                         uint8_t off_lo = parse_hex8(tokens[i + 1]);
                         uint8_t off_hi = parse_hex8(tokens[i + 2]);

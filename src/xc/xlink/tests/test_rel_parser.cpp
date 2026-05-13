@@ -6,6 +6,7 @@
 // copyright (C) 2021 tomaz stih
 //
 // 2021-07-28   tstih
+#include <fstream>
 #include <xlink/rel_parser.hpp>
 #include <xlink/errors.hpp>
 
@@ -67,4 +68,30 @@ TEST(rel_parser_nonexistent_file) {
     ASSERT_THROWS(
         xlink::rel_parser::parse("nonexistent.rel"),
         xlink::parse_error);
+}
+
+TEST(rel_parser_xl2_reloc_entry_layout) {
+    auto dir = std::filesystem::temp_directory_path();
+    auto path = dir / "xlink_test_xl2.rel";
+
+    {
+        std::ofstream out(path);
+        out << "XL2\n"
+            << "H 1 areas 3 global symbols\n"
+            << "M xl2\n"
+            << "S .__.ABS. Def0000\n"
+            << "S _ext Ref0000\n"
+            << "A _CODE size 0003 flags 0 addr 0\n"
+            << "S _main Def0000\n"
+            << "T 00 00 C3 00 00\n"
+            << "R 00 00 00 00 02 01 01 00\n";
+    }
+
+    auto mod = xlink::rel_parser::parse(path);
+    ASSERT_EQ(static_cast<int>(mod->texts().size()), 1);
+    ASSERT_EQ(static_cast<int>(mod->texts()[0].relocs.size()), 1);
+    ASSERT_EQ(mod->texts()[0].relocs[0].offset_in_t, 1);
+    ASSERT_EQ(mod->texts()[0].relocs[0].ref_index, 1);
+
+    std::filesystem::remove(path);
 }
