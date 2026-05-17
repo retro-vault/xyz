@@ -107,8 +107,7 @@
             "remoteTarget": "127.0.0.1:9000",
             "debuggerPath": "${workspaceFolder}/../../bin/bin/xdbg",
             "cwd": "${workspaceFolder}",
-            "stopOnEntry": true,
-            "preLaunchTask": "run xdbg-z80 sieve target"
+            "stopOnEntry": true
           }
         ],
         "configurationSnippets": [

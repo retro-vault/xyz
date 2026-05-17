@@ -47,6 +47,7 @@ $(PKG_OUTPUT): $(DIST_DIR)/README.md $(DIST_DIR)/bin/xlink $(DIST_DIR)/bin/xdbg 
 	cp $(DIST_DIR)/lib/libxdbg_mi.a $(PKG_STAGING_DIR)/usr/lib/
 	cp $(DIST_DIR)/lib/libxdbgstub.a $(PKG_STAGING_DIR)/usr/lib/
 	cp $(DIST_DIR)/README.md $(PKG_STAGING_DIR)/usr/share/doc/$(PACKAGE_NAME)/README.md
+	if [ -d "$(DIST_DIR)/docs" ]; then cp -R $(DIST_DIR)/docs/. $(PKG_STAGING_DIR)/usr/share/doc/$(PACKAGE_NAME)/; fi
 	if [ -d "$(DIST_DIR)/extensions" ]; then cp -R $(DIST_DIR)/extensions $(PKG_STAGING_DIR)/usr/share/$(PACKAGE_NAME)/; fi
 	mkdir -p $(PKG_OUTPUT_DIR)
 	dpkg-deb --build $(PKG_STAGING_DIR) $(PKG_OUTPUT)

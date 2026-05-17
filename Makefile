@@ -32,7 +32,7 @@ export ROOT               := $(realpath .)
 export BUILD_DIR          := $(ROOT)/build
 export DIST_DIR           := $(ROOT)/bin
 export HOST_BIN_DIR       := $(DIST_DIR)/bin
-export DOC_DIR            := $(DIST_DIR)/doc
+export DOCS_DIR           := $(DIST_DIR)/docs
 export PUBLIC_INCLUDE_DIR := $(DIST_DIR)/include
 export PUBLIC_LIB_DIR     := $(DIST_DIR)/lib
 export VSCODE_EXT_DIR     := $(DIST_DIR)/extensions/vscode
@@ -74,13 +74,15 @@ stage-target-assets:
 .PHONY: stage-dist-docs
 stage-dist-docs:
 	mkdir -p $(DIST_DIR)
-	mkdir -p $(DOC_DIR)
+	rm -rf $(DIST_DIR)/doc $(DOCS_DIR)
+	mkdir -p $(DOCS_DIR)
 	cp $(ROOT)/docs/dist/README.md $(DIST_DIR)/README.md
-	cp $(ROOT)/tools/appmake/README.md $(DOC_DIR)/APPMAKE.md
-	cp $(ROOT)/tools/microdrive/README.md $(DOC_DIR)/MICRODRIVE.md
-	cp $(ROOT)/tools/serial/README.md $(DOC_DIR)/SERIAL.md
-	cp $(ROOT)/src/xc/xlink/README.md $(DOC_DIR)/XLINK.md
-	cp $(ROOT)/src/yos/README.md $(DOC_DIR)/YOS.md
+	cp $(ROOT)/tools/appmake/README.md $(DOCS_DIR)/APPMAKE.md
+	cp $(ROOT)/tools/microdrive/README.md $(DOCS_DIR)/MICRODRIVE.md
+	cp $(ROOT)/tools/serial/README.md $(DOCS_DIR)/SERIAL.md
+	cp $(ROOT)/src/xc/xlink/README.md $(DOCS_DIR)/XLINK.md
+	cp $(ROOT)/src/yos/README.md $(DOCS_DIR)/YOS.md
+	cp $(ROOT)/docs/DEBUGGER_INTEGRATION.md $(DOCS_DIR)/DEBUGGER_INTEGRATION.md
 
 .PHONY: clean
 clean:

@@ -201,9 +201,7 @@ now also contains:
   "remoteTarget": "127.0.0.1:9000",
   "debuggerPath": "${workspaceFolder}/../../bin/bin/xc/xdbg/xdbg",
   "cwd": "${workspaceFolder}",
-  "stopOnEntry": true,
-  "preLaunchTask": "run xdbg-z80 sieve target",
-  "postDebugTask": "stop xdbg-z80 sieve target"
+  "stopOnEntry": true
 }
 ```
 
@@ -211,9 +209,11 @@ To test it:
 
 1. Open `tools/xdbg-vsix` in VS Code.
 2. Run the `Run xdbg VSIX on sieve` launch configuration.
-3. In the Extension Development Host window that opens, select
+3. Start your target separately so it is already listening on
+   `127.0.0.1:9000`.
+4. In the Extension Development Host window that opens, select
    `xdbg sieve (dap)` and press `F5`.
-4. Open [sieve.c](/home/tstih/data/retro-vault/xyz/tests/debug/sieve.c),
+5. Open [sieve.c](/home/tstih/data/retro-vault/xyz/tests/debug/sieve.c),
    set breakpoints, then step and inspect state through the standard VS Code
    debug UI.
 
@@ -262,9 +262,9 @@ This is the target-only half of the workflow. Pair it with the DAP
 launch configuration described above, or connect manually from another
 terminal if you want to use raw `xdbg`.
 
-When the DAP debug session ends, VS Code now runs the
-`stop xdbg-z80 sieve target` task automatically so the background target
-task does not keep spinning in the task panel.
+The DAP launch configuration does not start or stop the target for you.
+Use the provided tasks only if you want a manual convenience wrapper
+around the reference `xdbg-z80` target.
 
 ### Included `launch.json`
 
@@ -283,9 +283,7 @@ The included `launch.json` is the native `xdbg` DAP configuration:
       "remoteTarget": "127.0.0.1:9000",
       "debuggerPath": "${workspaceFolder}/../../bin/bin/xc/xdbg/xdbg",
       "cwd": "${workspaceFolder}",
-      "stopOnEntry": true,
-      "preLaunchTask": "run xdbg-z80 sieve target",
-      "postDebugTask": "stop xdbg-z80 sieve target"
+      "stopOnEntry": true
     }
   ]
 }
@@ -303,10 +301,9 @@ Inside VS Code:
 
 VS Code should then:
 
-1. build the sample
-2. start `xdbg-z80`
-3. launch `xdbg` in DAP mode
-4. drive the session through the native VS Code debug UI
+1. launch `xdbg` in DAP mode
+2. connect to the already-running remote target
+3. drive the session through the native VS Code debug UI
 
 ### What To Expect From The F5 Path
 

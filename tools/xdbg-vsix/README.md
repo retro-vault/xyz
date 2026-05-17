@@ -27,6 +27,9 @@ and lets VS Code speak DAP directly with `xdbg` over stdio.
 - `cwd`: Working directory used to launch `xdbg`.
 - `stopOnEntry`: Stop immediately after launch or attach.
 
+The extension does not start an emulator or target process for you.
+Your configured `remoteTarget` is expected to already be listening.
+
 ## Local Validation
 
 Syntax-check the extension:
