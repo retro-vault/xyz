@@ -14,7 +14,9 @@
 ROOT     ?= $(realpath ../..)
 THIS_DIR := $(realpath .)
 BUILD_DIR := $(ROOT)/build/yos
-BIN_DIR   := $(ROOT)/bin/yos
+DIST_DIR ?= $(ROOT)/bin
+ZX_ROMS_DIR ?= $(DIST_DIR)/targets/zxspectrum/roms
+BIN_DIR   := $(ZX_ROMS_DIR)
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 

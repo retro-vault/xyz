@@ -4,9 +4,11 @@
 # ---------------------------------------------------------------------------
 
 ROOT      ?= $(realpath ../..)
+DIST_DIR  ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 BUILD_DIR :=  $(ROOT)/build/tools/serial
-BIN_DIR   :=  $(ROOT)/bin/tools/serial
+BIN_DIR   :=  $(HOST_BIN_DIR)
 
 CXX       :=  g++
 CXXFLAGS  :=  -std=c++20 -O2 -Wall -Wextra

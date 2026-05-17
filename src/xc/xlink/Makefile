@@ -1,6 +1,7 @@
 ROOT ?= ../../..
 BUILD_DIR ?= $(ROOT)/build
-BIN_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 CXXFLAGS ?= -std=c++2a -g
 
@@ -14,7 +15,7 @@ TEST_FILTER     = $(filter-out src/main.cpp,$(SOURCES))
 TEST_TARGET     = xlink_tests
 
 OUTPUT_DIR      = $(BUILD_DIR)/xc/xlink
-BIN_OUTPUT      = $(BIN_DIR)/xc/xlink
+BIN_OUTPUT      = $(HOST_BIN_DIR)
 
 .PHONY: all test clean
 

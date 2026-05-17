@@ -4,7 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "libmicrodrive.h"
+#include <microdrive/microdrive.h>
 #include "appmake/analysis.h"
 #include "appmake/app_image.h"
 #include "appmake/basic.h"

@@ -16,44 +16,42 @@
 
 namespace xdbg {
 
-    /*
-     * Read an xdbg document from a character stream.
-     *
-     * Parameters:
-     *      input       - Stream containing serialized xdbg data.
-     *
-     * Returns:
-     *      Parsed xdbg document.
-     */
+    // Read an xdbg document from a character stream.
+    //
+    // Parameters:
+    //      input       - Stream containing serialized xdbg data.
+    //
+    // Returns:
+    //      Parsed xdbg document.
     document read(std::istream& input);
 
-    /*
-     * Read an xdbg document from a file on disk.
-     *
-     * Parameters:
-     *      path        - Path to the xdbg document file.
-     *
-     * Returns:
-     *      Parsed xdbg document.
-     */
+    // Read an xdbg document from a file on disk.
+    //
+    // Parameters:
+    //      path        - Path to the xdbg document file.
+    //
+    // Returns:
+    //      Parsed xdbg document.
     document read_file(const std::filesystem::path& path);
 
-    /*
-     * Write an xdbg document to a character stream.
-     *
-     * Parameters:
-     *      output      - Destination stream.
-     *      doc         - Document to serialize.
-     */
+    // Write an xdbg document to a character stream.
+    //
+    // Parameters:
+    //      output      - Destination stream.
+    //      doc         - Document to serialize.
+    //
+    // Returns:
+    //      Nothing.
     void write(std::ostream& output, const document& doc);
 
-    /*
-     * Write an xdbg document to a file on disk.
-     *
-     * Parameters:
-     *      path        - Output file path.
-     *      doc         - Document to serialize.
-     */
+    // Write an xdbg document to a file on disk.
+    //
+    // Parameters:
+    //      path        - Output file path.
+    //      doc         - Document to serialize.
+    //
+    // Returns:
+    //      Nothing.
     void write_file(const std::filesystem::path& path, const document& doc);
 
 } // namespace xdbg

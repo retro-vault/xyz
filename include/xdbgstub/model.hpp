@@ -17,26 +17,22 @@
 
 namespace xdbgstub {
 
-    /*
-     * High-level execution state reported by a debug target.
-     */
+    // High-level execution state reported by a debug target.
     enum class execution_state {
-        stopped,     /* Target is stopped and available for inspection. */
-        running,     /* Target is currently running. */
-        terminated   /* Target has terminated and will not execute further. */
+        stopped,     // Target is stopped and available for inspection.
+        running,     // Target is currently running.
+        terminated   // Target has terminated and will not execute further.
     };
 
-    /*
-     * Reason why target execution stopped.
-     */
+    // Reason why target execution stopped.
     enum class stop_reason {
-        none,         /* No specific stop reason is available. */
-        breakpoint,   /* Execution stopped at a breakpoint. */
-        step,         /* Execution stopped after a step request. */
-        pause,        /* Execution stopped because a pause was requested. */
-        halted,       /* Execution stopped because the CPU entered a halted state. */
-        exited,       /* Execution stopped because the target program exited. */
-        signal        /* Execution stopped because of a signal or external trap. */
+        none,         // No specific stop reason is available.
+        breakpoint,   // Execution stopped at a breakpoint.
+        step,         // Execution stopped after a step request.
+        pause,        // Execution stopped because a pause was requested.
+        halted,       // Execution stopped because the CPU entered a halted state.
+        exited,       // Execution stopped because the target program exited.
+        signal        // Execution stopped because of a signal or external trap.
     };
 
     /*

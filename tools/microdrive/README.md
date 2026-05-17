@@ -13,8 +13,7 @@ make -C tools/microdrive
 
 The binaries are placed at:
 
-- `bin/tools/microdrive/microdrive`
-- `bin/tools/microdrive/mdr` (compatibility alias)
+- `bin/bin/tools/microdrive/microdrive`
 
 ## Usage
 

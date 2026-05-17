@@ -16,19 +16,25 @@
 
 namespace xdbgstub {
 
-    /*
-     * Debugger protocol server for a single hosted target endpoint.
-     */
+    // Debugger protocol server for a single hosted target endpoint.
     class server {
     public:
-        /*
-         * Construct a server in the closed state.
-         */
+        // Construct a server in the closed state.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      New server object.
         server() = default;
 
-        /*
-         * Close the listening socket and release server resources.
-         */
+        // Close the listening socket and release server resources.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      Nothing.
         ~server();
 
         /*
@@ -41,23 +47,22 @@ namespace xdbgstub {
          */
         server& operator=(const server&) = delete;
 
-        /*
-         * Transfer ownership of an existing listening socket.
-         *
-         * Parameters:
-         *      other       - Server instance to move from.
-         */
+        // Transfer ownership of an existing listening socket.
+        //
+        // Parameters:
+        //      other       - Server instance to move from.
+        //
+        // Returns:
+        //      New server object.
         server(server&& other) noexcept;
 
-        /*
-         * Replace this server with another server's listening state.
-         *
-         * Parameters:
-         *      other       - Server instance to move from.
-         *
-         * Returns:
-         *      Reference to this server.
-         */
+        // Replace this server with another server's listening state.
+        //
+        // Parameters:
+        //      other       - Server instance to move from.
+        //
+        // Returns:
+        //      Reference to this server.
         server& operator=(server&& other) noexcept;
 
         /*
@@ -69,17 +74,22 @@ namespace xdbgstub {
          */
         void listen(const std::string& bind_host, uint16_t port);
 
-        /*
-         * Close the listening socket.
-         */
+        // Close the listening socket.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      Nothing.
         void close();
 
-        /*
-         * Check whether the server is currently listening.
-         *
-         * Returns:
-         *      True when a listening socket is open, otherwise false.
-         */
+        // Check whether the server is currently listening.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      True when a listening socket is open, otherwise false.
         bool is_listening() const;
 
         /*
@@ -91,7 +101,7 @@ namespace xdbgstub {
         void serve(target& debug_target);
 
     private:
-        int listen_fd_ = -1;
+        int listen_fd_ = -1; // Listening socket file descriptor, or `-1`.
     };
 
 } // namespace xdbgstub

@@ -90,3 +90,55 @@ TEST(relocator_builds_reloc_table) {
     ASSERT_EQ(ctx.reloc_table[0].offset, 1);
     ASSERT_EQ(ctx.reloc_table[0].size, 2);
 }
+
+TEST(relocator_word_relocation_writes_last_buffer_byte) {
+    xlink::link_context ctx;
+    auto mod = std::make_shared<xlink::module>("test", "test.rel");
+    mod->areas().emplace_back("_CODE", 2, xlink::area_flags::none, 0);
+    mod->areas()[0].set_placed_addr(0x1234);
+
+    xlink::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0x00, 0x00};
+
+    xlink::reloc_entry re;
+    re.mode = xlink::reloc_mode::word;
+    re.offset_in_t = 0;
+    re.ref_index = 0;
+    tr.relocs.push_back(re);
+    mod->texts().push_back(tr);
+
+    ctx.modules.push_back(mod);
+    ctx.code_size = 2;
+
+    xlink::relocator::relocate(ctx);
+
+    ASSERT_EQ(static_cast<int>(ctx.code_buffer.size()), 0x1236);
+    ASSERT_EQ(ctx.code_buffer[0x1234], 0x34);
+    ASSERT_EQ(ctx.code_buffer[0x1235], 0x12);
+}
+
+TEST(relocator_word_relocation_rejects_final_byte_start) {
+    xlink::link_context ctx;
+    auto mod = std::make_shared<xlink::module>("test", "test.rel");
+    mod->areas().emplace_back("_CODE", 2, xlink::area_flags::none, 0);
+    mod->areas()[0].set_placed_addr(0x1234);
+
+    xlink::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0xAA, 0x00};
+
+    xlink::reloc_entry re;
+    re.mode = xlink::reloc_mode::word;
+    re.offset_in_t = 1;
+    re.ref_index = 0;
+    tr.relocs.push_back(re);
+    mod->texts().push_back(tr);
+
+    ctx.modules.push_back(mod);
+    ctx.code_size = 2;
+
+    ASSERT_THROWS(xlink::relocator::relocate(ctx), xlink::reloc_error);
+}

@@ -45,7 +45,7 @@ npm run package
 
 That produces:
 
-- `tools/xdbg-vsix/xdbg-vsix-0.0.1.vsix`
+- `bin/extensions/vscode/xdbg-vsix-0.0.1.vsix`
 
 You can still run the extension directly in VS Code using the included
 Extension Development Host launch config.

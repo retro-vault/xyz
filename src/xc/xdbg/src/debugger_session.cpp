@@ -170,7 +170,7 @@ void debugger_session::detach() {
 }
 
 uint32_t debugger_session::resolve_address_expression(
-    const std::string& expression) const
+    const std::string& expression)
 {
     if (expression.empty()) {
         throw std::runtime_error("missing address expression");
@@ -185,7 +185,7 @@ uint32_t debugger_session::resolve_address_expression(
     }
 
     if (expression.find(':') != std::string::npos) {
-        const auto line_info = const_cast<debugger_session*>(this)->info_line_argument(expression);
+        const auto line_info = info_line_argument(expression);
         return line_info.location.address;
     }
 

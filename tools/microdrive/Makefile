@@ -4,16 +4,19 @@
 # ---------------------------------------------------------------------------
 
 ROOT      ?= $(realpath ../..)
+DIST_DIR  ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
+PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 
 BUILD_DIR :=  $(ROOT)/build/tools/microdrive
-BIN_DIR   :=  $(ROOT)/bin/tools/microdrive
+BIN_DIR   :=  $(HOST_BIN_DIR)
+LIB_DIR   :=  $(PUBLIC_LIB_DIR)
 
 CXX       :=  g++
-CXXFLAGS  :=  -std=c++20 -O2 -Wall -Wextra
+CXXFLAGS  :=  -std=c++20 -O2 -Wall -Wextra -I$(ROOT)/include
 
-LIB_TARGET    := $(BUILD_DIR)/libmicrodrive.a
+LIB_TARGET    := $(LIB_DIR)/libmicrodrive.a
 CLI_TARGET    := $(BIN_DIR)/microdrive
-COMPAT_TARGET := $(BIN_DIR)/mdr
 
 LIB_SRC := libmicrodrive.cpp
 CLI_SRC := microdrive.cpp
@@ -21,16 +24,16 @@ LIB_OBJ := $(BUILD_DIR)/libmicrodrive.o
 CLI_OBJ := $(BUILD_DIR)/microdrive.o
 
 .PHONY: all
-all: mkdirs $(LIB_TARGET) $(CLI_TARGET) $(COMPAT_TARGET)
+all: mkdirs $(LIB_TARGET) $(CLI_TARGET)
 
 .PHONY: mkdirs
 mkdirs:
-	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
+	@mkdir -p $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR)
 
-$(LIB_OBJ): $(LIB_SRC) libmicrodrive.h
+$(LIB_OBJ): $(LIB_SRC) $(ROOT)/include/microdrive/microdrive.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(CLI_OBJ): $(CLI_SRC) libmicrodrive.h
+$(CLI_OBJ): $(CLI_SRC) $(ROOT)/include/microdrive/microdrive.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(LIB_TARGET): $(LIB_OBJ)
@@ -39,9 +42,6 @@ $(LIB_TARGET): $(LIB_OBJ)
 $(CLI_TARGET): $(CLI_OBJ) $(LIB_TARGET)
 	$(CXX) $(CXXFLAGS) -o $@ $(CLI_OBJ) $(LIB_TARGET)
 
-$(COMPAT_TARGET): $(CLI_TARGET)
-	ln -sf microdrive $@
-
 .PHONY: clean
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -rf $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR)

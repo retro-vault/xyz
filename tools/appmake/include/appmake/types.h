@@ -1,3 +1,9 @@
+// Declares the shared value types, constants, and report structures used by
+// the `appmake` host-side tape and app-image tooling.
+//
+// MIT License (see: LICENSE)
+// Copyright (C) 2026 tomaz stih
+
 #pragma once
 
 #include <cstddef>
@@ -10,22 +16,35 @@
 
 namespace appmake {
 
+// Current xyz application image format version.
 constexpr uint8_t k_app_version = 0x01;
+// Serialized app header length in bytes.
 constexpr uint8_t k_header_size = 24;
 
+// Payload kind for tape-derived code blocks.
 constexpr uint8_t k_kind_tape_code = 0x01;
+// Payload kind for 48K snapshot-derived applications.
 constexpr uint8_t k_kind_snapshot_48 = 0x02;
 
+// Flag that marks a legacy ZX-compatible payload.
 constexpr uint8_t k_flag_legacy_zx = 0x02;
+// Flag that marks an app image with serialized machine state.
 constexpr uint8_t k_flag_has_state = 0x04;
+// Flag that marks an app image with an absolute load address.
 constexpr uint8_t k_flag_absolute_load = 0x08;
 
+// ROM upper boundary used by the analyzer.
 constexpr uint16_t k_rom_top = 0x4000;
+// Beginning of the ZX Spectrum system-variable area.
 constexpr uint16_t k_sysvar_begin = 0x5c00;
+// End of the ZX Spectrum system-variable area.
 constexpr uint16_t k_sysvar_end = 0x5d00;
+// Maximum number of abstract execution states kept during analysis.
 constexpr std::size_t k_analysis_state_limit = 200000;
+// Instruction budget spent per abstract execution state.
 constexpr std::size_t k_analysis_steps_per_state = 2000;
 
+// Serialized xyz application header.
 struct app_header {
     uint8_t kind = 0;
     uint8_t flags = 0;
@@ -38,12 +57,14 @@ struct app_header {
     uint8_t tape_checksum = 0;
 };
 
+// Extracted tape code payload with optional source name.
 struct tap_code_block {
     std::string name;
     uint16_t load_addr = 0;
     std::vector<uint8_t> data;
 };
 
+// Normalized 48K snapshot register and RAM state.
 struct snapshot_48 {
     uint16_t af = 0;
     uint16_t bc = 0;
@@ -65,6 +86,7 @@ struct snapshot_48 {
     std::vector<uint8_t> ram;
 };
 
+// Decoded ZX Spectrum tape header block.
 struct zx_header_block {
     uint8_t type = 0;
     std::string name;
@@ -73,6 +95,7 @@ struct zx_header_block {
     uint16_t param2 = 0;
 };
 
+// Logical file reconstructed from paired header and data blocks.
 struct tap_file {
     zx_header_block header;
     std::vector<uint8_t> data;
@@ -80,6 +103,7 @@ struct tap_file {
     uint8_t tape_checksum = 0;
 };
 
+// Human-readable listing entry produced from a tape image.
 struct tape_list_entry {
     std::size_t index = 0;
     std::string source;
@@ -90,6 +114,7 @@ struct tape_list_entry {
     std::string details;
 };
 
+// Parsed command-line options for one `appmake` subcommand.
 struct cli_options {
     std::optional<std::string> name;
     std::optional<std::string> app_name;
@@ -99,23 +124,27 @@ struct cli_options {
     std::optional<uint16_t> stack_ptr;
 };
 
+// One BASIC source line with decoded text.
 struct basic_line {
     uint16_t number = 0;
     std::vector<uint8_t> bytes;
     std::string text;
 };
 
+// Parsed BASIC program plus loader-derived metadata.
 struct basic_program {
     std::vector<basic_line> lines;
     std::optional<uint16_t> clear_addr;
     std::optional<uint16_t> usr_addr;
 };
 
+// Half-open address range used by analyzer reports.
 struct address_range {
     uint32_t begin = 0;
     uint32_t end = 0;
 };
 
+// Reference to one ROM dependency discovered during analysis.
 struct rom_dependency {
     uint16_t from = 0;
     uint16_t target = 0;

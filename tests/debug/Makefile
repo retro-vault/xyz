@@ -1,8 +1,11 @@
 ROOT      ?= $(realpath ../..)
 THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/debug
-BIN_DIR   := $(ROOT)/bin/debug
-XLINK     := $(ROOT)/bin/xc/xlink/xlink
+DIST_DIR  ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
+Z80_APPS_DIR ?= $(DIST_DIR)/targets/z80/apps
+BIN_DIR   := $(Z80_APPS_DIR)/debug
+XLINK     := $(HOST_BIN_DIR)/xlink
 XDBG_GEN  := $(THIS_DIR)/mkxdbg.sh
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest

@@ -1,3 +1,9 @@
+// Declares the CLI, MI, and DAP frontend adapters that expose the shared
+// debugger core through different user and editor protocols.
+//
+// MIT License (see: LICENSE)
+// Copyright (C) 2026 tomaz stih
+
 #ifndef XDBG_FRONTENDS_HPP
 #define XDBG_FRONTENDS_HPP
 
@@ -15,8 +21,10 @@
 #include "debugger.hpp"
 #include "dap_json.hpp"
 
+// Command-line interactive frontend for the debugger core.
 class cli_frontend final : public debug_protocol, public debugger_event_sink {
 public:
+    // Construct a CLI frontend over explicit IO streams.
     cli_frontend(
         debugger_host& host,
         std::istream& input,
@@ -25,8 +33,11 @@ public:
         bool quiet,
         bool show_prompt = true);
 
+    // Queue commands to execute before entering the interactive loop.
     void set_execute_commands(std::vector<std::string> commands);
+    // Run the frontend until quit or EOF.
     int run() override;
+    // Execute one CLI command line.
     bool execute_command(const std::string& line);
 
 private:
@@ -40,82 +51,124 @@ private:
     bool should_quit_ = false;
 };
 
+// Minimal machine-interface style frontend.
 class mi_frontend final : public debug_protocol, public debugger_event_sink {
 public:
+    // Construct an MI frontend over one debugger host.
     explicit mi_frontend(debugger_host& host);
+    // Run the MI request loop.
     int run() override;
 
 private:
     debugger debugger_;
+    // Handle one MI command line.
     bool handle_line(const std::string& line);
 };
 
+// Debug Adapter Protocol frontend used by the VS Code extension.
 class dap_frontend final : public debug_protocol, public debugger_event_sink {
 public:
+    // Construct a DAP frontend over one debugger host.
     explicit dap_frontend(debugger_host& host);
+    // Run the DAP message loop.
     int run() override;
+    // Publish a stop event to the DAP client.
     void on_stop(const stop_snapshot& stop) override;
+    // Publish a connection event to the DAP client.
     void on_remote_connected(const std::string& target) override;
+    // Publish a detach event to the DAP client.
     void on_detached() override;
 
 private:
     debugger debugger_;
+    // Stored mapping from DAP variable references to debugger-side scopes.
     struct variable_reference {
+        // Kind of variable scope represented by the DAP handle.
         enum class kind {
-            locals,
-            globals,
-            registers
+            locals,     // Local variables for the current stop point.
+            globals,    // Global symbols or variables.
+            registers   // CPU register snapshot.
         };
 
         kind type = kind::locals;
         uint32_t pc = 0;
     };
 
+    // Parsed DAP request envelope.
     struct request_envelope {
         int seq = 0;
         std::string command;
         json_value arguments = json_value(json_value::object_type{});
     };
 
+    // Read one framed DAP JSON message.
     bool read_message(json_value& body);
+    // Write one framed DAP JSON message.
     void write_json_message(const json_value& body);
+    // Send a DAP response message.
     void send_response(
         int seq,
         const std::string& command,
         bool success,
         json_value body = json_value(json_value::object_type{}),
         const std::string& message = "");
+    // Send a DAP event message.
     void send_event(
         const std::string& event,
         json_value body = json_value(json_value::object_type{}));
+    // Parse one request envelope from decoded JSON.
     request_envelope parse_request(const json_value& body) const;
+    // Dispatch one decoded DAP request.
     void handle_request(const json_value& body);
+    // Handle the DAP initialize request.
     void handle_initialize(int seq);
+    // Handle launch and attach requests.
     void handle_launch_or_attach(
         int seq, const std::string& command, const json_value& arguments);
+    // Handle source-address breakpoint updates.
     void handle_set_breakpoints(int seq, const json_value& arguments);
+    // Handle function breakpoint updates.
     void handle_set_function_breakpoints(int seq, const json_value& arguments);
+    // Handle exception breakpoint configuration.
     void handle_set_exception_breakpoints(int seq);
+    // Handle the threads request.
     void handle_threads(int seq);
+    // Handle the stackTrace request.
     void handle_stack_trace(int seq, const json_value& arguments);
+    // Handle the scopes request.
     void handle_scopes(int seq, const json_value& arguments);
+    // Handle the variables request.
     void handle_variables(int seq, const json_value& arguments);
+    // Handle the continue request.
     void handle_continue(int seq);
+    // Handle next and stepIn style requests.
     void handle_next(int seq, const std::string& command);
+    // Handle the pause request.
     void handle_pause(int seq);
+    // Handle the disconnect request.
     void handle_disconnect(int seq);
+    // Handle the configurationDone request.
     void handle_configuration_done(int seq);
+    // Handle source content retrieval.
     void handle_source(int seq, const json_value& arguments);
+    // Handle evaluate expressions.
     void handle_evaluate(int seq, const json_value& arguments);
+    // Handle loadedSources enumeration.
     void handle_loaded_sources(int seq);
 
+    // Extract and validate a required string field.
     std::string require_string(const json_value& object, const std::string& key) const;
+    // Extract and validate a required integer field.
     int require_int(const json_value& object, const std::string& key) const;
+    // Extract and validate a required boolean field.
     bool require_bool(const json_value& object, const std::string& key) const;
+    // Extract an optional string field.
     std::optional<std::string> optional_string(
         const json_value& object, const std::string& key) const;
+    // Extract an optional integer field.
     std::optional<int> optional_int(
         const json_value& object, const std::string& key) const;
+    // Extract an optional object field.
     const json_value* optional_object(
         const json_value& object, const std::string& key) const;
     const json_value::array_type* optional_array(

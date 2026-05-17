@@ -45,8 +45,8 @@ make -C tests/debug all
 
 That produces:
 
-- `bin/debug/sieve.bin`
-- `bin/debug/sieve.xdbg`
+- `bin/targets/zxspectrum/apps/debug/sieve.bin`
+- `bin/targets/zxspectrum/apps/debug/sieve.xdbg`
 
 The build path is:
 
@@ -60,9 +60,9 @@ The build path is:
 In one terminal:
 
 ```sh
-bin/xc/xdbg/xdbg-z80 \
+bin/bin/xc/xdbg/xdbg-z80 \
     --listen 127.0.0.1:9000 \
-    --load-bin bin/debug/sieve.bin \
+    --load-bin bin/targets/zxspectrum/apps/debug/sieve.bin \
     --origin 0x0100 \
     --pc 0x0100 \
     --sp 0xFFFE
@@ -76,9 +76,9 @@ provides a remote debug target on TCP port `9000`.
 In a second terminal:
 
 ```sh
-bin/xc/xdbg/xdbg \
-    --exec bin/debug/sieve.bin \
-    --symbols bin/debug/sieve.xdbg \
+bin/bin/xc/xdbg/xdbg \
+    --exec bin/targets/zxspectrum/apps/debug/sieve.bin \
+    --symbols bin/targets/zxspectrum/apps/debug/sieve.xdbg \
     --remote 127.0.0.1:9000
 ```
 
@@ -89,9 +89,9 @@ You can also point GNU DDD at `xdbg` as a custom debugger command.
 Start `xdbg-z80` first:
 
 ```sh
-bin/xc/xdbg/xdbg-z80 \
+bin/bin/xc/xdbg/xdbg-z80 \
     --listen 127.0.0.1:9000 \
-    --load-bin bin/debug/sieve.bin \
+    --load-bin bin/targets/zxspectrum/apps/debug/sieve.bin \
     --origin 0x0100 \
     --pc 0x0100 \
     --sp 0xFFFE
@@ -100,7 +100,7 @@ bin/xc/xdbg/xdbg-z80 \
 Then, from the repo root, launch DDD like this:
 
 ```sh
-ddd --debugger "bin/xc/xdbg/xdbg --quiet --exec bin/debug/sieve.bin --symbols bin/debug/sieve.xdbg --remote 127.0.0.1:9000"
+ddd --debugger "bin/bin/xc/xdbg/xdbg --quiet --exec bin/targets/zxspectrum/apps/debug/sieve.bin --symbols bin/targets/zxspectrum/apps/debug/sieve.xdbg --remote 127.0.0.1:9000"
 ```
 
 Once DDD opens:
@@ -196,10 +196,10 @@ now also contains:
   "name": "xdbg sieve (dap)",
   "type": "xdbg",
   "request": "launch",
-  "program": "${workspaceFolder}/../../bin/debug/sieve.bin",
-  "symbols": "${workspaceFolder}/../../bin/debug/sieve.xdbg",
+  "program": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.bin",
+  "symbols": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.xdbg",
   "remoteTarget": "127.0.0.1:9000",
-  "debuggerPath": "${workspaceFolder}/../../bin/xc/xdbg/xdbg",
+  "debuggerPath": "${workspaceFolder}/../../bin/bin/xc/xdbg/xdbg",
   "cwd": "${workspaceFolder}",
   "stopOnEntry": true,
   "preLaunchTask": "run xdbg-z80 sieve target",
@@ -278,10 +278,10 @@ The included `launch.json` is the native `xdbg` DAP configuration:
       "name": "xdbg sieve (dap)",
       "type": "xdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/../../bin/debug/sieve.bin",
-      "symbols": "${workspaceFolder}/../../bin/debug/sieve.xdbg",
+      "program": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.bin",
+      "symbols": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.xdbg",
       "remoteTarget": "127.0.0.1:9000",
-      "debuggerPath": "${workspaceFolder}/../../bin/xc/xdbg/xdbg",
+      "debuggerPath": "${workspaceFolder}/../../bin/bin/xc/xdbg/xdbg",
       "cwd": "${workspaceFolder}",
       "stopOnEntry": true,
       "preLaunchTask": "run xdbg-z80 sieve target",

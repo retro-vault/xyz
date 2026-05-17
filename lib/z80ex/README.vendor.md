@@ -25,10 +25,10 @@ The current build uses:
 ## Provenance
 
 The original upstream license text is preserved in
-[COPYING](/home/tstih/data/retro-vault/xyz/third_party/z80ex/COPYING).
+[COPYING](/home/tstih/data/retro-vault/xyz/lib/z80ex/COPYING).
 
 The upstream project README is preserved in
-[README](/home/tstih/data/retro-vault/xyz/third_party/z80ex/README).
+[README](/home/tstih/data/retro-vault/xyz/lib/z80ex/README).
 
 ## Notes
 

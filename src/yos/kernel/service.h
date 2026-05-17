@@ -1,18 +1,9 @@
 /*
- * service.h
+ * Declares the service registry used by YOS to expose function tables by
+ * name, including the main `"yos"` kernel service.
  *
- * a service is a table of function pointers
- * accessible via service name.
- * yos syscalls are implemented as functions
- * of a service. each process can register its
- * own service(s). operating system calls are
- * available via the "yos" service.
- * 
  * MIT License (see: LICENSE)
- * copyright (C) 2021 tomaz stih
- *
- * 2021-07-08   tstih
- *
+ * Copyright (C) 2021 tomaz stih
  */
 #ifndef __SERVICE_H__
 #define __SERVICE_H__
@@ -22,27 +13,42 @@
 #include <kernel/sysobj.h>
 #include <kernel/mem.h>
 
+/*
+ * Maximum service-name length including the terminating NUL.
+ */
 #define MAX_SVC_NAME_LEN    16
 
-/* the service structure */
+/*
+ * Registered named service entry.
+ */
 typedef struct service_s {
     sysobj_t hdr;                       /* timer is a sysobj */
     char name[MAX_SVC_NAME_LEN];        /* service name */
     void *fntable;                      /* function table */
 } service_t;
 
+/*
+ * Head of the global service list.
+ */
 extern service_t *_svc_first;
 
-/* function to query a service. the operating system
-   registers this service under RST10 call, it returns
-   a pointer to the OS api */
+/*
+ * Look up a registered service table by name.
+ */
 extern void *_svc_query(const char *name);
+/*
+ * RST10 entry point wrapper around `_svc_query()`.
+ */
 extern void svc_query_rst10(void);
 
-/* register a service */
+/*
+ * Register one service name and function table.
+ */
 extern service_t* svc_register(const char *name, void *fntable);
 
-/* unregister a service */
+/*
+ * Unregister and destroy one service entry.
+ */
 extern void svc_unregister(service_t *s);
 
 #endif /* __SERVICE_H__ */

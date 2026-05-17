@@ -30,7 +30,7 @@ From the repository root:
 make
 ```
 
-The binary is placed at `bin/tools/serial/serial`.
+The binary is placed at `bin/bin/tools/serial/serial`.
 
 ## Usage
 

@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "libmicrodrive.h"
+#include <microdrive/microdrive.h>
 
 extern "C" {
 #include "vendor/superzazu-z80/z80.h"
@@ -641,7 +641,7 @@ int count_invalid_used_records(const microdrive::image_t& image) {
 int run_detect_no_drive(const fs::path& root,
                         const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
 
     const CallResult result = call_detect_drives(machine, symbols);
     if (result.l != 0) {
@@ -660,7 +660,7 @@ int run_detect_no_drive(const fs::path& root,
 int run_detect_one_drive(const fs::path& root,
                          const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "TEST");
 
     const CallResult result = call_detect_drives(machine, symbols);
@@ -685,7 +685,7 @@ int run_dir_hello(const fs::path& root,
         static_cast<uint8_t>((expected.size() + microdrive::k_data_size - 1) / microdrive::k_data_size);
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_drive(machine, 0, image);
     const CallResult result = call_dir(machine, symbols, 1);
 
@@ -719,7 +719,7 @@ int run_load_hello(const fs::path& root,
     const auto expected = image.get("hello.app");
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_drive(machine, 0, image);
 
     std::fill(machine.mem.begin() + kLoadAddr,
@@ -748,7 +748,7 @@ int run_save_roundtrip(const fs::path& root,
                        std::string_view name,
                        std::size_t size) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "TEST");
 
     const auto payload = make_pattern(size);
@@ -810,7 +810,7 @@ int run_format_roundtrip(const fs::path& root,
     image.put("f123", make_pattern(123));
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_drive(machine, 0, std::move(image));
 
     const CallResult format_result = call_format(machine, symbols, 1, "FMT");
@@ -859,7 +859,7 @@ int run_format_roundtrip(const fs::path& root,
 int run_format_drive3_roundtrip(const fs::path& root,
                                 const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "D1");
     attach_blank_drive(machine, 1, "D2");
     attach_blank_drive(machine, 2, "D3");
@@ -920,7 +920,7 @@ int run_format_drive3_roundtrip(const fs::path& root,
 int run_save_duplicate(const fs::path& root,
                        const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "TEST");
 
     const auto payload = make_pattern(123);
@@ -952,7 +952,7 @@ int run_save_duplicate(const fs::path& root,
 int run_save_full(const fs::path& root,
                   const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
 
     auto full = microdrive::image_t::create_blank("FULL");
     const auto payload =
@@ -988,7 +988,7 @@ int run_save_sequence(const fs::path& root,
     }};
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "SEQ");
 
     for (const auto& tc : cases) {
@@ -1062,7 +1062,7 @@ int run_save_sequence(const fs::path& root,
 int run_load_missing(const fs::path& root,
                      const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "MISS");
 
     std::fill(machine.mem.begin() + kLoadAddr, machine.mem.begin() + kLoadAddr + 256, 0xA5);
@@ -1081,7 +1081,7 @@ int run_load_missing(const fs::path& root,
 int run_save_zero_length(const fs::path& root,
                          const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_blank_drive(machine, 0, "ZERO");
 
     const std::vector<uint8_t> payload;
@@ -1112,7 +1112,7 @@ int run_save_fragmented(const fs::path& root,
     image.remove("b222");
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_drive(machine, 0, std::move(image));
 
     const auto payload = make_pattern(777);
@@ -1151,7 +1151,7 @@ int run_dir_capacity(const fs::path& root,
     }
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_drive(machine, 0, std::move(image));
 
     const CallResult result = call_dir(machine, symbols, 1);
@@ -1184,7 +1184,7 @@ int run_corrupt_checksum(const fs::path& root,
     image.set_raw_byte(chk_index, static_cast<uint8_t>(image.raw_byte(chk_index) ^ 0x5A));
 
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     attach_drive(machine, 0, std::move(image));
 
     const CallResult dir_result = call_dir(machine, symbols, 1);
@@ -1209,7 +1209,7 @@ int run_corrupt_checksum(const fs::path& root,
 int run_repro_strict(const fs::path& root,
                      const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
-    load_rom(machine, root / "bin/yos/yos.rom");
+    load_rom(machine, root / "bin/targets/zxspectrum/roms/yos.rom");
     auto base_image = microdrive::image_t::load(root / "tests/microdrives/mdrstep.mdr");
     (void)base_image.remove("t123");
     std::vector<uint8_t> before;
@@ -1339,7 +1339,7 @@ int run_size_report(const fs::path& root) {
         {"mdr_dir.rel", root / "build/yos/mdr_dir.rel"},
         {"mdr_load.rel", root / "build/yos/mdr_load.rel"},
         {"mdr_save.rel", root / "build/yos/mdr_save.rel"},
-        {"yos.rom", root / "bin/yos/yos.rom"},
+        {"yos.rom", root / "bin/targets/zxspectrum/roms/yos.rom"},
     }};
 
     std::uintmax_t total_rel = 0;

@@ -5,8 +5,8 @@ reference remote target.
 
 Built binaries:
 
-- `bin/xc/xdbg/xdbg`
-- `bin/xc/xdbg/xdbg-z80`
+- `bin/bin/xc/xdbg/xdbg`
+- `bin/bin/xc/xdbg/xdbg-z80`
 
 ## Components
 
@@ -37,7 +37,7 @@ make -C src/xc/xdbg all
 Basic form:
 
 ```sh
-bin/xc/xdbg/xdbg --exec yos.rom --symbols yos.xdbg --remote 127.0.0.1:9000
+bin/bin/xc/xdbg/xdbg --exec yos.rom --symbols yos.xdbg --remote 127.0.0.1:9000
 ```
 
 Supported startup switches:
@@ -101,13 +101,13 @@ Address expressions currently supported by `break`, `disassemble`, and
 Start the reference target:
 
 ```sh
-bin/xc/xdbg/xdbg-z80 --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
+bin/bin/xc/xdbg/xdbg-z80 --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
 ```
 
 Connect with the debugger:
 
 ```sh
-bin/xc/xdbg/xdbg --exec yos.rom --symbols yos.xdbg --remote 127.0.0.1:9000
+bin/bin/xc/xdbg/xdbg --exec yos.rom --symbols yos.xdbg --remote 127.0.0.1:9000
 ```
 
 Then inside `xdbg`:
@@ -146,7 +146,7 @@ ld	-2(ix), a
 Basic form:
 
 ```sh
-bin/xc/xdbg/xdbg-z80 --listen 127.0.0.1:9000 --load-bin test.bin --origin 0x0000 --pc 0x0000 --sp 0xFFFF
+bin/bin/xc/xdbg/xdbg-z80 --listen 127.0.0.1:9000 --load-bin test.bin --origin 0x0000 --pc 0x0000 --sp 0xFFFF
 ```
 
 Supported switches:

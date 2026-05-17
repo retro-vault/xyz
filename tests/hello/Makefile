@@ -14,8 +14,11 @@
 ROOT      ?= $(realpath ../..)
 THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/hello
-BIN_DIR   := $(ROOT)/bin/hello
-XLINK     := $(ROOT)/bin/xc/xlink/xlink
+DIST_DIR  ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
+ZX_APPS_DIR ?= $(DIST_DIR)/targets/zxspectrum/apps
+BIN_DIR   := $(ZX_APPS_DIR)/hello
+XLINK     := $(HOST_BIN_DIR)/xlink
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 

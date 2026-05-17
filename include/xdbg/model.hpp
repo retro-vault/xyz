@@ -16,67 +16,57 @@
 
 namespace xdbg {
 
-    /*
-     * Source language associated with a symbol or source file entry.
-     */
+    // Source language associated with a symbol or source file entry.
     enum class language_kind {
-        unknown,    /* Language is unknown or not specified. */
-        c,          /* C source language. */
-        cxx,        /* C++ source language. */
-        assembly    /* Assembly language source. */
+        unknown,    // Language is unknown or not specified.
+        c,          // C source language.
+        cxx,        // C++ source language.
+        assembly    // Assembly language source.
     };
 
-    /*
-     * High-level kind of symbol stored in the document.
-     */
+    // High-level kind of symbol stored in the document.
     enum class symbol_kind {
-        unknown,     /* Symbol kind is unknown. */
-        function,    /* Function or procedure symbol. */
-        global,      /* Global-scope symbol. */
-        local,       /* Local-scope symbol. */
-        parameter,   /* Function parameter symbol. */
-        label,       /* Code or data label. */
-        section,     /* Section or segment symbol. */
-        type,        /* Type symbol. */
-        constant,    /* Constant value symbol. */
-        object       /* Data object symbol. */
+        unknown,     // Symbol kind is unknown.
+        function,    // Function or procedure symbol.
+        global,      // Global-scope symbol.
+        local,       // Local-scope symbol.
+        parameter,   // Function parameter symbol.
+        label,       // Code or data label.
+        section,     // Section or segment symbol.
+        type,        // Type symbol.
+        constant,    // Constant value symbol.
+        object       // Data object symbol.
     };
 
-    /*
-     * Physical storage location used for a variable.
-     */
+    // Physical storage location used for a variable.
     enum class storage_kind {
-        unknown,         /* Storage location is unknown. */
-        address,         /* Variable lives at an absolute address. */
-        stack,           /* Variable lives on the stack. */
-        register_name,   /* Variable lives in a named register. */
-        register_pair,   /* Variable lives in a register pair. */
-        frame_relative   /* Variable lives at a frame-relative offset. */
+        unknown,         // Storage location is unknown.
+        address,         // Variable lives at an absolute address.
+        stack,           // Variable lives on the stack.
+        register_name,   // Variable lives in a named register.
+        register_pair,   // Variable lives in a register pair.
+        frame_relative   // Variable lives at a frame-relative offset.
     };
 
-    /*
-     * Source file record referenced by symbols and line mappings.
-     */
+    // Source file record referenced by symbols and line mappings.
     struct source_file {
-        uint32_t id = 0;                               /* Stable file identifier within the document. */
-        std::string path;                              /* Source path string as stored by the producer. */
-        language_kind language = language_kind::unknown; /* Source language of the file. */
+        uint32_t id = 0;                                 // Stable file identifier within the document.
+        std::string path;                                // Source path string as stored by the producer.
+        language_kind language = language_kind::unknown; // Source language of the file.
     };
 
-    /*
-     * Named symbol with optional source and type metadata.
-     */
+    // Named symbol with optional source and type metadata.
     struct symbol {
-        std::string name;                              /* Symbol name. */
-        symbol_kind kind = symbol_kind::unknown;       /* Symbol classification. */
-        uint32_t address = 0;                          /* Symbol address in the image. */
-        std::optional<uint32_t> size;                  /* Optional symbol size in bytes. */
-        std::optional<uint32_t> file_id;               /* Optional source file identifier. */
-        std::optional<uint32_t> line;                  /* Optional source line number. */
-        std::optional<uint32_t> column;                /* Optional source column number. */
-        std::optional<std::string> type_name;          /* Optional type name string. */
-        std::optional<std::string> parent_name;        /* Optional parent symbol or scope name. */
-        language_kind language = language_kind::unknown; /* Source language associated with the symbol. */
+        std::string name;                                // Symbol name.
+        symbol_kind kind = symbol_kind::unknown;         // Symbol classification.
+        uint32_t address = 0;                            // Symbol address in the image.
+        std::optional<uint32_t> size;                    // Optional symbol size in bytes.
+        std::optional<uint32_t> file_id;                 // Optional source file identifier.
+        std::optional<uint32_t> line;                    // Optional source line number.
+        std::optional<uint32_t> column;                  // Optional source column number.
+        std::optional<std::string> type_name;            // Optional type name string.
+        std::optional<std::string> parent_name;          // Optional parent symbol or scope name.
+        language_kind language = language_kind::unknown; // Source language associated with the symbol.
     };
 
     /*

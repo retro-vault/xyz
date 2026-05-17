@@ -309,7 +309,7 @@ If loaded at address `0x8000`:
 
 ```bash
 # From the xlink directory (or via the repo root make):
-make          # builds bin/xc/xlink/xlink
+make          # builds bin/bin/xc/xlink/xlink
 make test     # runs 20 unit + integration tests
 make clean    # removes build artifacts
 ```

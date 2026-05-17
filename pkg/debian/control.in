@@ -1,0 +1,10 @@
+Package: @PACKAGE_NAME@
+Version: @PACKAGE_VERSION@
+Section: devel
+Priority: optional
+Architecture: @DEB_ARCH@
+Maintainer: xyz project <tomaz.stih@wischner.co.uk>
+Depends: libc6, libgcc-s1, libstdc++6
+Description: XYZ host-side development tools and debugger assets
+ xlink, xdbg, xdbg-z80, staged headers, static libraries, and related
+ extension/target assets for Ubuntu deployments.

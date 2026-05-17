@@ -1,21 +1,22 @@
 /*
- * interrupts.h
+ * Declares the refcounted critical-section helpers used to guard shared
+ * kernel data from interrupt-time mutation.
  *
- * interrupt handling
- * 
  * MIT License (see: LICENSE)
- * copyright (C) 2021 tomaz stih
- *
- * 2021-06-16   tstih
- *
+ * Copyright (C) 2021 tomaz stih
  */
 #ifndef __INTERRUPTS_H__
 #define __INTERRUPTS_H__
 
 #include <stdint.h>
 
-/* refcounted critical sections */
+/*
+ * Enter a refcounted critical section.
+ */
 extern void enter_critical_section(void);
+/*
+ * Leave a previously entered refcounted critical section.
+ */
 extern void leave_critical_section(void);
 
 #endif /* __INTERRUPTS_H__ */

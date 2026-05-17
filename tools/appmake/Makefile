@@ -4,12 +4,14 @@
 # ---------------------------------------------------------------------------
 
 ROOT      ?= $(realpath ../..)
+DIST_DIR  ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 BUILD_DIR := $(ROOT)/build/tools/appmake
-BIN_DIR   := $(ROOT)/bin/tools/appmake
+BIN_DIR   := $(HOST_BIN_DIR)
 
 CXX       := g++
-CXXFLAGS  := -std=c++20 -O2 -Wall -Wextra -Iinclude -I../microdrive
+CXXFLAGS  := -std=c++20 -O2 -Wall -Wextra -Iinclude -I$(ROOT)/include
 
 TARGET    := $(BIN_DIR)/appmake
 SRC       := main.cpp util.cpp tape.cpp basic.cpp analysis.cpp app_image.cpp cli.cpp zx_reference.cpp ../microdrive/libmicrodrive.cpp

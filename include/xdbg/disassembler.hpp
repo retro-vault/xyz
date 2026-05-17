@@ -16,26 +16,22 @@
 
 namespace xdbg {
 
-    /*
-     * Processor family supported by a disassembler instance.
-     */
+    // Processor family supported by a disassembler instance.
     enum class cpu_kind {
-        unknown,   /* Unknown or unspecified CPU family. */
-        z80        /* Zilog Z80 family disassembly. */
+        unknown,   // Unknown or unspecified CPU family.
+        z80        // Zilog Z80 family disassembly.
     };
 
-    /*
-     * Result of decoding a single instruction from memory.
-     */
+    // Result of decoding a single instruction from memory.
     struct disassembled_instruction {
-        cpu_kind cpu = cpu_kind::unknown;    /* CPU family that produced this decode. */
-        uint32_t address = 0;                /* Address of the decoded instruction. */
-        std::vector<uint8_t> bytes;          /* Raw instruction bytes. */
-        std::string text;                    /* Human-readable instruction text. */
-        std::string mnemonic;                /* Decoded mnemonic token. */
-        std::vector<std::string> operands;   /* Decoded operand list. */
-        int t_states = 0;                    /* Primary timing in T-states. */
-        int t_states_alt = 0;                /* Alternate timing in T-states, when applicable. */
+        cpu_kind cpu = cpu_kind::unknown;    // CPU family that produced this decode.
+        uint32_t address = 0;                // Address of the decoded instruction.
+        std::vector<uint8_t> bytes;          // Raw instruction bytes.
+        std::string text;                    // Human-readable instruction text.
+        std::string mnemonic;                // Decoded mnemonic token.
+        std::vector<std::string> operands;   // Decoded operand list.
+        int t_states = 0;                    // Primary timing in T-states.
+        int t_states_alt = 0;                // Alternate timing in T-states, when applicable.
     };
 
     /*
@@ -43,9 +39,13 @@ namespace xdbg {
      */
     class memory_reader {
     public:
-        /*
-         * Destroy the reader through the interface.
-         */
+        // Destroy the reader through the interface.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      Nothing.
         virtual ~memory_reader() = default;
 
         /*
@@ -96,9 +96,13 @@ namespace xdbg {
      */
     class syntax_formatter {
     public:
-        /*
-         * Destroy the formatter through the interface.
-         */
+        // Destroy the formatter through the interface.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      Nothing.
         virtual ~syntax_formatter() = default;
 
         /*
@@ -118,9 +122,13 @@ namespace xdbg {
      */
     class disassembler {
     public:
-        /*
-         * Destroy the disassembler through the interface.
-         */
+        // Destroy the disassembler through the interface.
+        //
+        // Parameters:
+        //      None.
+        //
+        // Returns:
+        //      Nothing.
         virtual ~disassembler() = default;
 
         /*

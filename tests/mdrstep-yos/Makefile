@@ -1,10 +1,14 @@
 ROOT      ?= $(realpath ../..)
 THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/mdrstep-yos
-BIN_DIR   := $(ROOT)/bin/mdrstep-yos
-XLINK     := $(ROOT)/bin/xc/xlink/xlink
-MDR_TOOL  := $(ROOT)/bin/tools/microdrive/mdr
-IMAGE     := $(ROOT)/tests/microdrives/mdrstep.mdr
+DIST_DIR  ?= $(ROOT)/bin
+HOST_BIN_DIR ?= $(DIST_DIR)/bin
+ZX_APPS_DIR ?= $(DIST_DIR)/targets/zxspectrum/apps
+ZX_MDR_DIR ?= $(DIST_DIR)/targets/zxspectrum/mdr
+BIN_DIR   := $(ZX_APPS_DIR)/mdrstep-yos
+XLINK     := $(HOST_BIN_DIR)/xlink
+MDR_TOOL  := $(HOST_BIN_DIR)/microdrive
+IMAGE     := $(ZX_MDR_DIR)/mdrstep.mdr
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
@@ -36,6 +40,7 @@ $(BIN_DIR)/%.app:
 
 .PHONY: image
 image: all
+	@mkdir -p $(ZX_MDR_DIR)
 	$(MDR_TOOL) create $(IMAGE) MDRSTEP
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/s123.app
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/s512.app

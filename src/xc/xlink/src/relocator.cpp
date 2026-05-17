@@ -128,16 +128,17 @@ namespace xlink {
 
                     // Calculate the patch address in the code buffer.
                     uint16_t patch_offset = dest + re.offset_in_t;
-                    if (patch_offset >= ctx.code_buffer.size())
-                        throw reloc_error("relocation offset out of bounds");
-
                     bool is_word = has_flag(re.mode, reloc_mode::word);
                     bool is_pc_rel = has_flag(re.mode, reloc_mode::pc_rel);
                     bool is_msb = has_flag(re.mode, reloc_mode::msb);
 
+                    if (patch_offset >= ctx.code_buffer.size() ||
+                        (is_word && patch_offset + 1 >= ctx.code_buffer.size()))
+                        throw reloc_error("relocation offset out of bounds");
+
                     // Read existing value from buffer.
                     uint16_t existing = 0;
-                    if (is_word && patch_offset + 1 < ctx.code_buffer.size()) {
+                    if (is_word) {
                         existing = ctx.code_buffer[patch_offset]
                                  | (ctx.code_buffer[patch_offset + 1] << 8);
                     } else {
@@ -158,9 +159,8 @@ namespace xlink {
                     if (is_word) {
                         ctx.code_buffer[patch_offset] =
                             static_cast<uint8_t>(value & 0xFF);
-                        if (patch_offset + 1 < ctx.code_buffer.size())
-                            ctx.code_buffer[patch_offset + 1] =
-                                static_cast<uint8_t>((value >> 8) & 0xFF);
+                        ctx.code_buffer[patch_offset + 1] =
+                            static_cast<uint8_t>((value >> 8) & 0xFF);
                     } else if (is_msb) {
                         ctx.code_buffer[patch_offset] =
                             static_cast<uint8_t>((value >> 8) & 0xFF);

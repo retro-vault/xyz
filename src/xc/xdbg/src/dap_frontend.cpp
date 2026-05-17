@@ -209,20 +209,6 @@ namespace {
         return nullptr;
     }
 
-    std::string describe_global_symbol(const xdbg::symbol& symbol) {
-        const std::string display_name = normalize_c_symbol_name(symbol.name);
-        if (symbol.size.has_value() && symbol.size.value() > 4) {
-            std::ostringstream out;
-            out << "array[" << symbol.size.value() << "] @ " << hex_u32(symbol.address);
-            return out.str();
-        }
-
-        const std::size_t size = symbol.size.has_value()
-            ? static_cast<std::size_t>(symbol.size.value())
-            : 1;
-        return format_scalar_value(symbol.address, size);
-    }
-
     std::optional<std::string> read_global_symbol_value(
         debugger_host& host,
         const xdbg::symbol& symbol)

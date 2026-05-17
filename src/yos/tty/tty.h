@@ -1,19 +1,9 @@
 /*
- * tty.h
+ * Declares the text console and keyboard-facing tty helpers exposed by
+ * the YOS terminal subsystem.
  *
- * tty functions
- * 
- * TODO:
- *  - scroll in all directions
- *  - special character codes handling i.e. \t \r
- *  - speccy keybord E mode (caps+sym)
- *  - speccy keyboard auto repeat
- * 
  * MIT License (see: LICENSE)
- * copyright (C) 2021 tomaz stih
- *
- * 2016-08-26   tstih
- *
+ * Copyright (C) 2021 tomaz stih
  */
 #ifndef __TTY_H__
 #define __TTY_H__
@@ -21,42 +11,72 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* attributes for tty_attr */
+/*
+ * Default text attribute with no extra styling.
+ */
 #define AT_NONE         0x00
+/*
+ * Attribute bit that enables underline rendering.
+ */
 #define AT_UNDERLINE    0x01
+/*
+ * Attribute bit that enables inverse video rendering.
+ */
 #define AT_INVERSE      0x02
 
-/* clear screen */
+/*
+ * Clear the text screen.
+ */
 extern void tty_cls(void);
 
-/* move cursor to x,y */
+/*
+ * Move the text cursor to the supplied column and row.
+ */
 extern void tty_xy(uint8_t x, uint8_t y);
 
-/* set attributes */
+/*
+ * Set the active text attribute bits.
+ */
 extern void tty_attr(uint8_t attr);
 
-/* draw char */
+/*
+ * Draw one character without applying tty newline behavior.
+ */
 extern void tty_outc(int c);
 
-/* print char, respect \n */
+/*
+ * Print one character and honor tty control handling such as newline.
+ */
 extern void tty_putc(int c);
 
-/* read keyboard (non-blocking!) */
+/*
+ * Read one queued keyboard character without blocking.
+ */
 extern int tty_getc(void);
 
-/* scroll up 1 row */
+/*
+ * Scroll the screen up by one row.
+ */
 extern void tty_scroll(void);
 
-/* print string  */
+/*
+ * Print a zero-terminated string.
+ */
 extern void tty_puts(const char* s);
 
-/* get string, max allowed chars are SSIZE_MAX */
+/*
+ * Read one line of input into the supplied buffer.
+ */
 extern void tty_gets(const char *s);
 
-/* internal cursor function to xor cursor on screen */
+/*
+ * Timer-driven internal cursor blink hook.
+ */
 extern void _tty_cur_tick(void);
 
-/* enable/disable cursor */
+/*
+ * Enable or disable the visible text cursor.
+ */
 extern void tty_cur_enable(bool enable);
 
 #endif /* __TTY_H__ */

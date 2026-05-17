@@ -14,25 +14,17 @@
 
 namespace xdbgstub {
 
-    /*
-     * Base exception for xdbgstub runtime failures.
-     */
+    // Base exception for xdbgstub runtime failures.
     class error : public std::runtime_error {
     public:
-        /*
-         * Inherit the standard runtime error constructors.
-         */
+        // Inherit the standard runtime error constructors.
         using std::runtime_error::runtime_error;
     };
 
-    /*
-     * Exception thrown when a protocol message is malformed or invalid.
-     */
+    // Exception thrown when a protocol message is malformed or invalid.
     class protocol_error : public error {
     public:
-        /*
-         * Inherit the base xdbgstub error constructors.
-         */
+        // Inherit the base xdbgstub error constructors.
         using error::error;
     };
 

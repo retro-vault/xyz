@@ -29,21 +29,21 @@ The exact format is documented in:
 ### List tape contents
 
 ```bash
-bin/tools/appmake/appmake list tests/tapes/manic.tap
-bin/tools/appmake/appmake list tests/tapes/fist.tzx
+bin/bin/tools/appmake/appmake list tests/tapes/manic.tap
+bin/bin/tools/appmake/appmake list tests/tapes/fist.tzx
 ```
 
 ### Analyze program start and dependencies
 
 ```bash
-bin/tools/appmake/appmake analyze tests/tapes/manic.tap
+bin/bin/tools/appmake/appmake analyze tests/tapes/manic.tap
 ```
 
 ### Build and write a runnable `.app` to microdrive
 
 ```bash
-bin/tools/appmake/appmake make tests/tapes/manic.tap tests/microdrives/hello.mdr --app manic.app
-bin/tools/appmake/appmake make tests/tapes/fist.tzx tests/microdrives/hello.mdr --app fist.app
+bin/bin/tools/appmake/appmake make tests/tapes/manic.tap tests/microdrives/hello.mdr --app manic.app
+bin/bin/tools/appmake/appmake make tests/tapes/fist.tzx tests/microdrives/hello.mdr --app fist.app
 ```
 
 Defaults:
@@ -57,9 +57,9 @@ Defaults:
 ### Convert tape CODE block
 
 ```bash
-bin/tools/appmake/appmake tap input.tap output.app
-bin/tools/appmake/appmake tap input.tap output.app --name LOADER
-bin/tools/appmake/appmake tap input.tap output.app --load 0x8000 --start 0x8000
+bin/bin/tools/appmake/appmake tap input.tap output.app
+bin/bin/tools/appmake/appmake tap input.tap output.app --name LOADER
+bin/bin/tools/appmake/appmake tap input.tap output.app --load 0x8000 --start 0x8000
 ```
 
 Defaults:
@@ -70,8 +70,8 @@ Defaults:
 ### Convert 48K snapshot
 
 ```bash
-bin/tools/appmake/appmake sna input.sna output.app --load 0x8000
-bin/tools/appmake/appmake sna input.sna output.app --load 0x9000 --start 0x9200
+bin/bin/tools/appmake/appmake sna input.sna output.app --load 0x8000
+bin/bin/tools/appmake/appmake sna input.sna output.app --load 0x9000 --start 0x9200
 ```
 
 For `.sna`:

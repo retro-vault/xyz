@@ -102,10 +102,10 @@
             "name": "xdbg sieve (dap)",
             "type": "xdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../../bin/debug/sieve.bin",
-            "symbols": "${workspaceFolder}/../../bin/debug/sieve.xdbg",
+            "program": "${workspaceFolder}/../../bin/targets/z80/apps/debug/sieve.bin",
+            "symbols": "${workspaceFolder}/../../bin/targets/z80/apps/debug/sieve.xdbg",
             "remoteTarget": "127.0.0.1:9000",
-            "debuggerPath": "${workspaceFolder}/../../bin/xc/xdbg/xdbg",
+            "debuggerPath": "${workspaceFolder}/../../bin/bin/xdbg",
             "cwd": "${workspaceFolder}",
             "stopOnEntry": true,
             "preLaunchTask": "run xdbg-z80 sieve target"
@@ -133,8 +133,8 @@
   },
   "scripts": {
     "check": "node --check extension.js",
-    "package": "npm run check && npx vsce package --no-dependencies",
-    "package:ci": "npm run check && npx vsce package --no-dependencies"
+    "package": "npm run check && mkdir -p ../../bin/extensions/vscode && npx vsce package --no-dependencies -o ../../bin/extensions/vscode/xdbg-vsix-0.0.1.vsix",
+    "package:ci": "npm run check && mkdir -p ../../bin/extensions/vscode && npx vsce package --no-dependencies -o ../../bin/extensions/vscode/xdbg-vsix-0.0.1.vsix"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.9.1"

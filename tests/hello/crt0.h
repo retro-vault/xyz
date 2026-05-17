@@ -1,6 +1,6 @@
-/* crt0.h
- *
- * Minimal runtime API exported by tests/hello/crt0.s
+/*
+ * Declares the tiny runtime symbols exported by the standalone
+ * `tests/hello` startup code.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 Tomaz Stih
@@ -8,7 +8,13 @@
 #ifndef TESTS_HELLO_CRT0_H
 #define TESTS_HELLO_CRT0_H
 
+/*
+ * Query a named runtime service table.
+ */
 extern void *query_service(char *name);
-extern void *query_interface(char *name); /* compatibility alias */
+/*
+ * Compatibility alias for `query_service()`.
+ */
+extern void *query_interface(char *name);
 
 #endif /* TESTS_HELLO_CRT0_H */
