@@ -19,6 +19,8 @@ result rs232_getb(byte *b) {
 	if (rs232_ib_beg==rs232_ib_end) {
 		rs232_ib_beg = 0;
 		rs232_ib_end = rs232_buffered_input(rs232_ibuff);
+		if (rs232_ib_end > RS232_IBUFF_SIZE)
+			rs232_ib_end = RS232_IBUFF_SIZE;
 	}
 	
 	if (!rs232_ib_end)	
