@@ -6,6 +6,7 @@ It is arranged so selected subdirectories can be copied directly into a
 system prefix such as `/usr`:
 
 - `bin/` for host-side executables
+- `doc/` for packaged component documentation
 - `include/` for public headers
 - `lib/` for static libraries
 
@@ -39,6 +40,16 @@ Current public headers include:
 - `microdrive/` for the microdrive library API
 - `xdbg/` for the debugger library API
 - `xdbgstub/` for the debug stub library API
+
+### `bin/doc`
+
+Packaged component documentation staged with stable filenames:
+
+- `APPMAKE.md`
+- `MICRODRIVE.md`
+- `SERIAL.md`
+- `XLINK.md`
+- `YOS.md`
 
 ### `bin/lib`
 

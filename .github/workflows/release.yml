@@ -53,19 +53,24 @@ jobs:
           cp bin/yos/yos.rom dist/rom/yos.rom
           cp tests/microdrives/hello.mdr dist/rom/hello.mdr
           cp src/yos/README.md dist/rom/README.md
+          cp src/yos/README.md dist/YOS.md
 
           cp bin/xc/xlink/xlink dist/tools/xlink/
           cp src/xc/xlink/README.md dist/tools/xlink/README.md
+          cp src/xc/xlink/README.md dist/XLINK.md
 
           cp -a bin/tools/microdrive/microdrive dist/tools/microdrive/
           cp -a bin/tools/microdrive/mdr dist/tools/microdrive/
           cp tools/microdrive/README.md dist/tools/microdrive/README.md
+          cp tools/microdrive/README.md dist/MICRODRIVE.md
 
           cp bin/tools/serial/serial dist/tools/serial/
           cp tools/serial/README.md dist/tools/serial/README.md
+          cp tools/serial/README.md dist/SERIAL.md
 
           cp bin/tools/appmake/appmake dist/tools/appmake/
           cp tools/appmake/README.md dist/tools/appmake/README.md
+          cp tools/appmake/README.md dist/APPMAKE.md
 
       - name: Archive release payload
         run: tar -czf xyz-release.tar.gz -C dist .
