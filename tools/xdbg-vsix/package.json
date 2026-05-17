@@ -133,8 +133,8 @@
   },
   "scripts": {
     "check": "node --check extension.js",
-    "package": "npm run check && mkdir -p ../../bin/extensions/vscode && npx vsce package --no-dependencies -o ../../bin/extensions/vscode/xdbg-vsix-0.0.1.vsix",
-    "package:ci": "npm run check && mkdir -p ../../bin/extensions/vscode && npx vsce package --no-dependencies -o ../../bin/extensions/vscode/xdbg-vsix-0.0.1.vsix"
+    "package": "make all",
+    "package:ci": "make all"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.9.1"

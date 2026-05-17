@@ -43,9 +43,16 @@ Package the extension from this directory with the local packager:
 npm run package
 ```
 
-That produces:
+That produces an intermediate build artifact under:
 
-- `bin/extensions/vscode/xdbg-vsix-0.0.1.vsix`
+- `build/tools/xdbg-vsix/xdbg-vsix-<version>.vsix`
+
+and stages the final package at:
+
+- `bin/pkg/vsix/xdbg-vsix-<version>.vsix`
+
+The VSIX version comes from `VSIX_VERSION` in the repository root
+`Makefile`, which defaults to `PACKAGE_VERSION`.
 
 You can still run the extension directly in VS Code using the included
 Extension Development Host launch config.

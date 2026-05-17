@@ -42,3 +42,10 @@ build
 
 # Project related
 project
+
+# Agents
+.agents
+.codex
+
+# Packaged editor extensions
+bin/pkg/vsix/*.vsix

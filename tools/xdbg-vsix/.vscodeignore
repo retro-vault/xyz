@@ -1,5 +1,6 @@
 .gitignore
 .npm-cache/**
 .vscode/**
+Makefile
 node_modules/**
 package-lock.json

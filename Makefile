@@ -16,10 +16,18 @@ endif
 $(if $(shell which docker),,$(error "docker not found. Please install Docker."))
 $(if $(shell which gcc),,$(error "gcc not found. Please install gcc."))
 
+# If HEAD is tagged as vX.Y.Z, use X.Y.Z as the default package version.
+GIT_EXACT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || true)
+
 # Repository root and shared output directories (exported for sub-makes).
 export PACKAGE_NAME       ?= xtools
+ifneq ($(filter v%,$(GIT_EXACT_TAG)),)
+export PACKAGE_VERSION    ?= $(patsubst v%,%,$(GIT_EXACT_TAG))
+else
 export PACKAGE_VERSION    ?= 0.1.0
+endif
 export PACKAGE_RELEASE    ?= 1
+export VSIX_VERSION       ?= $(PACKAGE_VERSION)
 export ROOT               := $(realpath .)
 export BUILD_DIR          := $(ROOT)/build
 export DIST_DIR           := $(ROOT)/bin
