@@ -37,7 +37,7 @@ jobs:
         run: make all
 
       - name: Archive release payload
-        run: tar -czf xyz-release.tar.gz bin
+        run: tar -czf xyz-release.tar.gz -C bin .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
