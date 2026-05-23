@@ -55,15 +55,20 @@ namespace xlink {
         std::ifstream file(path);
         if (!file.is_open())
             throw parse_error("cannot open file: " + path.string());
+        return parse(path.string(), file);
+    }
 
-        auto mod = std::make_shared<module>("", path);
+    std::shared_ptr<module> rel_parser::parse(const std::string& source_name,
+                                              std::istream& input)
+    {
+        auto mod = std::make_shared<module>("", std::filesystem::path(source_name));
         std::string line;
         int line_num = 0;
         text_record* current_text = nullptr;
         rel_format format = rel_format::xl1;
         int current_area_idx = -1;
 
-        while (std::getline(file, line)) {
+        while (std::getline(input, line)) {
             line_num++;
             line = trim(line);
             if (line.empty()) continue;
@@ -111,7 +116,7 @@ namespace xlink {
                 // A <name> size <hex> flags <hex> [addr <hex>]
                 auto tokens = split(rest);
                 if (tokens.size() < 5)
-                    throw parse_error(path.string(), line_num,
+                    throw parse_error(source_name, line_num,
                         "malformed A record");
 
                 std::string name = tokens[0];
@@ -136,7 +141,7 @@ namespace xlink {
                 // S <name> Def<hex> or S <name> Ref<hex>
                 auto tokens = split(rest);
                 if (tokens.size() < 2)
-                    throw parse_error(path.string(), line_num,
+                    throw parse_error(source_name, line_num,
                         "malformed S record");
 
                 std::string name = tokens[0];
@@ -152,7 +157,7 @@ namespace xlink {
                     stype = symbol_type::ref;
                     value = parse_hex16(type_val.substr(3));
                 } else {
-                    throw parse_error(path.string(), line_num,
+                    throw parse_error(source_name, line_num,
                         "unknown symbol type in S record");
                 }
 
@@ -174,7 +179,7 @@ namespace xlink {
                 auto tokens = split(rest);
                 size_t off_bytes = (format == rel_format::xl4) ? 4 : 2;
                 if (tokens.size() < off_bytes)
-                    throw parse_error(path.string(), line_num,
+                    throw parse_error(source_name, line_num,
                         "malformed T record");
 
                 text_record tr;
@@ -196,7 +201,7 @@ namespace xlink {
                 //   [<mode> <offset_lo> <offset_hi> <ref_lo> <ref_hi>] ...
                 auto tokens = split(rest);
                 if (tokens.size() < 4)
-                    throw parse_error(path.string(), line_num,
+                    throw parse_error(source_name, line_num,
                         "malformed R record");
 
                 // First 4 bytes: 00 00 area_lo area_hi
@@ -278,12 +283,19 @@ namespace xlink {
     std::vector<std::string> rel_parser::scan_defs(
         const std::filesystem::path& path)
     {
-        std::vector<std::string> defs;
         std::ifstream file(path);
-        if (!file.is_open()) return defs;
+        if (!file.is_open())
+            return {};
+        return scan_defs(path.string(), file);
+    }
 
+    std::vector<std::string> rel_parser::scan_defs(
+        const std::string&,
+        std::istream& input)
+    {
+        std::vector<std::string> defs;
         std::string line;
-        while (std::getline(file, line)) {
+        while (std::getline(input, line)) {
             line = trim(line);
             if (line.empty() || line[0] != 'S') continue;
 

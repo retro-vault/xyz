@@ -85,6 +85,44 @@ TEST(area_placer_con_with_hole) {
     ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x10);
 }
 
+TEST(area_placer_bin_pre_hole_jr_bytes_are_reserved_too) {
+    xlink::link_context ctx;
+    ctx.format = xlink::output_format::bin;
+    ctx.output_range = xlink::address_range{0x0000, 0x001F};
+    ctx.holes.push_back({0x0004, 0x000F});
+
+    auto mod = std::make_shared<xlink::module>("test", "test.rel");
+    mod->areas().emplace_back("_A", 0x02, xlink::area_flags::none, 0);
+    mod->areas().emplace_back("_B", 0x02, xlink::area_flags::none, 1);
+    ctx.modules.push_back(mod);
+
+    xlink::area_placer::place(ctx);
+
+    ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x0000);
+    // _B would normally fit at 0x0002, but those two bytes are reserved
+    // for the pre-hole JR, so it moves after the hole.
+    ASSERT_EQ(mod->areas()[1].placed_addr().value(), 0x0010);
+}
+
+TEST(area_placer_bin_pre_hole_jp_bytes_are_reserved_too) {
+    xlink::link_context ctx;
+    ctx.format = xlink::output_format::bin;
+    ctx.output_range = xlink::address_range{0x0000, 0x01FF};
+    ctx.holes.push_back({0x0080, 0x0100}); // hole size > JR range
+
+    auto mod = std::make_shared<xlink::module>("test", "test.rel");
+    mod->areas().emplace_back("_A", 0x7D, xlink::area_flags::none, 0);
+    mod->areas().emplace_back("_B", 0x02, xlink::area_flags::none, 1);
+    ctx.modules.push_back(mod);
+
+    xlink::area_placer::place(ctx);
+
+    ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x0000);
+    // _B would normally start at 0x007D, but those three bytes are reserved
+    // for the pre-hole JP, so it moves after the hole.
+    ASSERT_EQ(mod->areas()[1].placed_addr().value(), 0x0101);
+}
+
 TEST(area_placer_area_base_override) {
     xlink::link_context ctx;
     ctx.area_bases["_CODE"] = 0x0100;

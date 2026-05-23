@@ -23,6 +23,9 @@ namespace xlink {
         std::vector<std::filesystem::path> input_files;
         std::filesystem::path output_file = "a.out";
         std::optional<std::filesystem::path> symbol_file;
+        std::optional<std::filesystem::path> xdbg_file;
+        std::optional<std::filesystem::path> cdb_file;
+        std::optional<std::filesystem::path> sdcc_runtime_dir;
         std::string entry_symbol = "_main";
         std::vector<address_range> reserved_ranges;
         std::map<std::string, uint16_t> area_bases;

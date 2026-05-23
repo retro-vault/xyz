@@ -10,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 
 #include <xlink/linker.hpp>
@@ -56,6 +57,7 @@ namespace xlink {
         // Collect library .rel paths and pre-scan their defs.
         struct lib_module_info {
             std::filesystem::path path;
+            std::optional<std::string> contents;
             std::vector<std::string> defs;
             bool loaded = false;
         };
@@ -69,11 +71,18 @@ namespace xlink {
             if (ext == ".lib") {
                 if (ctx.verbose)
                     std::cout << "Scanning library " << path << "\n";
-                auto rel_paths = lib_parser::parse(path);
-                for (auto& rp : rel_paths) {
+                auto members = lib_parser::parse(path);
+                for (auto& member : members) {
                     lib_module_info info;
-                    info.path = rp;
-                    info.defs = rel_parser::scan_defs(rp);
+                    info.path = member.path;
+                    info.contents = member.contents;
+                    if (info.contents.has_value()) {
+                        std::istringstream input(info.contents.value());
+                        info.defs = rel_parser::scan_defs(
+                            info.path.string(), input);
+                    } else {
+                        info.defs = rel_parser::scan_defs(info.path);
+                    }
                     lib_modules.push_back(info);
                 }
             }
@@ -116,7 +125,13 @@ namespace xlink {
                             std::cout << "Including library module "
                                       << lm.path << " (provides "
                                       << def_name << ")\n";
-                        auto mod = rel_parser::parse(lm.path);
+                        std::shared_ptr<module> mod;
+                        if (lm.contents.has_value()) {
+                            std::istringstream input(lm.contents.value());
+                            mod = rel_parser::parse(lm.path.string(), input);
+                        } else {
+                            mod = rel_parser::parse(lm.path);
+                        }
                         ctx.modules.push_back(mod);
                         lm.loaded = true;
                         changed = true;

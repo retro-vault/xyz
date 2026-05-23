@@ -23,6 +23,47 @@ namespace xlink {
         return start_a <= end_b && end_a >= start_b;
     }
 
+    static std::vector<address_range> effective_holes_for_placement(
+        const link_context& ctx)
+    {
+        std::vector<address_range> holes = ctx.holes;
+        if (ctx.format != output_format::bin)
+            return holes;
+
+        const uint16_t emit_start = ctx.output_range.has_value()
+            ? ctx.output_range->start
+            : 0x0000;
+        const uint16_t emit_end = ctx.output_range.has_value()
+            ? ctx.output_range->end
+            : 0xFFFF;
+
+        for (const auto& hole : ctx.holes) {
+            uint16_t hs = std::max<uint16_t>(hole.start, emit_start);
+            uint16_t he = std::min<uint16_t>(hole.end, emit_end);
+            if (hs > he)
+                continue;
+
+            uint32_t hole_size = static_cast<uint32_t>(he) - hs + 1u;
+            if (static_cast<uint32_t>(hs) >= static_cast<uint32_t>(emit_start) + 2u
+                && hole_size <= 0x7Fu
+                && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
+                holes.push_back({
+                    static_cast<uint16_t>(hs - 2u),
+                    static_cast<uint16_t>(hs - 1u)
+                });
+            } else if (static_cast<uint32_t>(hs)
+                           >= static_cast<uint32_t>(emit_start) + 3u
+                       && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
+                holes.push_back({
+                    static_cast<uint16_t>(hs - 3u),
+                    static_cast<uint16_t>(hs - 1u)
+                });
+            }
+        }
+
+        return holes;
+    }
+
     uint16_t area_placer::next_free_address(
         uint16_t cursor, uint16_t size,
         const std::vector<address_range>& holes)
@@ -46,6 +87,8 @@ namespace xlink {
     }
 
     void area_placer::place(link_context& ctx) {
+        const auto placement_holes = effective_holes_for_placement(ctx);
+
         // Group areas by name across all modules.
         // Maintain insertion order by first occurrence.
         struct area_group {
@@ -112,7 +155,7 @@ namespace xlink {
                     if (a.size() > max_size) max_size = a.size();
                 }
 
-                cursor = next_free_address(cursor, max_size, ctx.holes);
+                cursor = next_free_address(cursor, max_size, placement_holes);
 
                 for (auto& [mod, idx] : group.members) {
                     auto& a = mod->area_by_index(idx);
@@ -129,7 +172,7 @@ namespace xlink {
                         continue;
                     }
 
-                    cursor = next_free_address(cursor, a.size(), ctx.holes);
+                    cursor = next_free_address(cursor, a.size(), placement_holes);
                     a.set_placed_addr(cursor);
                     cursor += a.size();
                 }
@@ -152,7 +195,7 @@ namespace xlink {
                 const uint16_t start = a.placed_addr().value();
                 const uint16_t end = static_cast<uint16_t>(start + a.size() - 1);
 
-                for (const auto& hole : ctx.holes) {
+                for (const auto& hole : placement_holes) {
                     if (ranges_overlap(start, end, hole.start, hole.end)) {
                         throw placement_error(
                             "area '" + a.name()

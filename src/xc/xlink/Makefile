@@ -8,7 +8,8 @@ CXXFLAGS ?= -std=c++2a -g
 SOURCES         = $(wildcard src/*.cpp)
 HEADERS         = $(wildcard include/xlink/*.hpp)
 TARGET          = xlink
-INCLUDE         = -Iinclude
+INCLUDE         = -Iinclude -I$(ROOT)/include
+XDBG_SOURCE     = $(ROOT)/lib/xdbg/src/xdbg.cpp
 
 TEST_MAIN       = tests/test_main.cpp
 TEST_FILTER     = $(filter-out src/main.cpp,$(SOURCES))
@@ -20,7 +21,8 @@ BIN_OUTPUT      = $(HOST_BIN_DIR)
 .PHONY: all test clean
 
 all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(SOURCES) $(HEADERS)
-	$(CXX) -o $(BIN_OUTPUT)/$(TARGET) $(SOURCES) $(CXXFLAGS) $(INCLUDE)
+	$(CXX) -o $(BIN_OUTPUT)/$(TARGET) $(SOURCES) $(XDBG_SOURCE) \
+		$(CXXFLAGS) $(INCLUDE)
 
 $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
@@ -30,7 +32,7 @@ $(BIN_OUTPUT):
 
 test: $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
 	$(CXX) -o $(OUTPUT_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
-		$(CXXFLAGS) $(INCLUDE) -Itests
+		$(XDBG_SOURCE) $(CXXFLAGS) $(INCLUDE) -Itests
 	$(OUTPUT_DIR)/$(TEST_TARGET)
 
 clean:

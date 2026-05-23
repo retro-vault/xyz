@@ -12,13 +12,14 @@
 #include <filesystem>
 #include <vector>
 
+#include <xlink/library_reader.hpp>
+
 namespace xlink {
 
     class lib_parser {
     public:
-        // Parse a .lib index file, returning paths to .rel modules.
-        // Paths are resolved relative to the .lib file's directory.
-        static std::vector<std::filesystem::path> parse(
+        // Parse either an xlink text-index .lib or an ar-style SDCC archive.
+        static std::vector<lib_member> parse(
             const std::filesystem::path& path);
     };
 

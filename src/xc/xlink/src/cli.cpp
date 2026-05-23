@@ -28,6 +28,18 @@ namespace xlink {
             if (arg == "-h" || arg == "--help") {
                 opts.show_help = true;
                 return opts;
+            } else if (arg == "-c" || arg == "--cdb") {
+                if (++i >= argc)
+                    throw xlink_error(std::string(arg) + " requires an argument");
+                opts.cdb_file = std::filesystem::path(argv[i]);
+            } else if (arg == "-g" || arg == "--xdbg") {
+                if (++i >= argc)
+                    throw xlink_error(std::string(arg) + " requires an argument");
+                opts.xdbg_file = std::filesystem::path(argv[i]);
+            } else if (arg == "--sdcc-runtime") {
+                if (++i >= argc)
+                    throw xlink_error("--sdcc-runtime requires an argument");
+                opts.sdcc_runtime_dir = std::filesystem::path(argv[i]);
             } else if (arg == "-o") {
                 if (++i >= argc)
                     throw xlink_error("-o requires an argument");
@@ -110,8 +122,11 @@ namespace xlink {
             << "xlink - Z80 linker for xyz\n"
             << "usage: xlink [options] <file.rel|file.lib> ...\n\n"
             << "options:\n"
+            << "  -c, --cdb <file>  emit linked SDCC cdb debug sidecar\n"
+            << "  -g, --xdbg <file> emit linked xdbg debug sidecar\n"
+            << "  --sdcc-runtime <dir> use crt0/lib defaults from runtime dir\n"
             << "  -o <file>         output file (default: a.out)\n"
-            << "  -n <file>         write DEF symbol file\n"
+            << "  -n <file>         write NoICE .noi symbol/debug file\n"
             << "  -e <symbol>       entry point symbol (default: _main)\n"
             << "  -r <start>-<end>  reserve address range (hex), repeatable\n"
             << "  -b <area>=<addr>  set base address for area group (hex)\n"

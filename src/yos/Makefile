@@ -68,7 +68,10 @@ ASFLAGS :=  -xlos -g
 XLINK   :=  $(BUILD_DIR)/xlink
 XLINK_SOURCES := $(wildcard $(ROOT)/src/xc/xlink/src/*.cpp)
 XLINK_HEADERS := $(wildcard $(ROOT)/src/xc/xlink/include/xlink/*.hpp)
-XLINK_CXXFLAGS := -std=c++2a -O2 -I$(ROOT)/src/xc/xlink/include
+XLINK_XDBG_SOURCE := $(ROOT)/lib/xdbg/src/xdbg.cpp
+XLINK_CXXFLAGS := -std=c++2a -O2 \
+                  -I$(ROOT)/src/xc/xlink/include \
+                  -I$(ROOT)/include
 
 # SDCC Z80 runtime library used by xlink for unresolved helper routines.
 # Provides: __divuint, __moduint, ___sdcc_call_hl, ___sdcc_call_iy, etc.
@@ -76,11 +79,12 @@ SDCC_Z80_LIB :=  /opt/sdcc/share/sdcc/lib/z80/z80.lib
 SDCC_XLINK_LIB_DIR := $(BUILD_DIR)/sdcc-z80-lib
 SDCC_XLINK_LIB := $(SDCC_XLINK_LIB_DIR)/z80.lib
 
+# Protect the ZX Spectrum Interface 1 ROM paging trigger at 0x1708.
 XLINKFLAGS := -f bin \
               -x 0000-3FFF \
               -b _CODE=0100 \
               -b _DATA=5b00 \
-              -r 1700-170F
+              -r 1708-1708
 
 # Source search paths.
 vpath %.c kernel
@@ -110,7 +114,7 @@ $(BIN_DIR)/$(TARGET).rom: $(OBJS) $(XLINK) $(SDCC_XLINK_LIB)
 	$(XLINK) $(XLINKFLAGS) -n $(BUILD_DIR)/$(TARGET).noi -o $@ $(OBJS) $(SDCC_XLINK_LIB)
 
 $(XLINK): $(XLINK_SOURCES) $(XLINK_HEADERS)
-	$(CXX) -o $@ $(XLINK_SOURCES) $(XLINK_CXXFLAGS)
+	$(CXX) -o $@ $(XLINK_SOURCES) $(XLINK_XDBG_SOURCE) $(XLINK_CXXFLAGS)
 
 $(SDCC_XLINK_LIB): $(SDCC_Z80_LIB)
 	rm -rf $(SDCC_XLINK_LIB_DIR)

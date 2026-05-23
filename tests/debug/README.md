@@ -17,7 +17,7 @@ The sample is intentionally simple:
 It builds into:
 
 - a flat binary linked by `xlink`
-- a small companion `.xdbg` sidecar used by `xdbg`
+- a linked `.xdbg` sidecar emitted by `xlink`
 
 ## Files
 
@@ -30,10 +30,6 @@ It builds into:
 - tiny startup stub
 - calls `_main`
 - halts forever after `main` returns
-
-[mkxdbg.sh](/home/tstih/data/retro-vault/xyz/tests/debug/mkxdbg.sh)
-
-- generates a minimal `.xdbg` file from `xlink`’s `DEF` symbol output
 
 ## Build
 
@@ -52,8 +48,7 @@ The build path is:
 
 1. `sdcc` compiles `sieve.c` to `sieve.rel`
 2. `sdasz80` assembles `crt0.s` to `crt0.rel`
-3. `xlink` links both objects into `sieve.bin`
-4. `mkxdbg.sh` creates `sieve.xdbg`
+3. `xlink -g` links both objects into `sieve.bin` and `sieve.xdbg`
 
 ## Run The Reference Emulator
 

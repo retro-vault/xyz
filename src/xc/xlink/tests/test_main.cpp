@@ -77,10 +77,15 @@ auto printable(T v) {
 
 // Include all test files.
 #include "test_rel_parser.cpp"
+#include "test_lib_parser.cpp"
 #include "test_area_placer.cpp"
 #include "test_binary_emitter.cpp"
 #include "test_relocator.cpp"
 #include "test_linker.cpp"
+#include "test_runtime.cpp"
+#include "test_noice_emitter.cpp"
+#include "test_cdb_emitter.cpp"
+#include "test_xdbg_emitter.cpp"
 
 int main() {
     int passed = 0, failed = 0;

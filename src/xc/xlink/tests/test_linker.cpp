@@ -52,9 +52,12 @@ TEST(linker_unresolved_symbol_error) {
 }
 
 TEST(linker_library_selective_inclusion) {
-    auto lib_paths = xlink::lib_parser::parse(fixture_path("library.lib"));
+    auto lib_members = xlink::lib_parser::parse(fixture_path("library.lib"));
     // Library should list 2 modules.
-    ASSERT_EQ(static_cast<int>(lib_paths.size()), 2);
+    ASSERT_EQ(static_cast<int>(lib_members.size()), 2);
+    ASSERT_EQ(lib_members[0].path.filename(),
+              std::filesystem::path("lib_mod1.rel"));
+    ASSERT(!lib_members[0].contents.has_value());
 
     // Scan defs from lib_mod1.
     auto defs = xlink::rel_parser::scan_defs(fixture_path("lib_mod1.rel"));

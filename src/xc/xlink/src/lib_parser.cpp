@@ -1,49 +1,40 @@
-// lib_parser.cpp
 //
-// SDCC .lib file parser
+// SDCC .lib parser/dispatcher
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2021 tomaz stih
 //
-// 2021-07-28   tstih
 #include <fstream>
-#include <string>
+#include <iterator>
+#include <vector>
 
 #include <xlink/lib_parser.hpp>
 #include <xlink/errors.hpp>
 
 namespace xlink {
 
-    // Helper: trim whitespace.
-    static std::string trim(const std::string& s) {
-        auto start = s.find_first_not_of(" \t\r\n");
-        if (start == std::string::npos) return "";
-        auto end = s.find_last_not_of(" \t\r\n");
-        return s.substr(start, end - start + 1);
-    }
-
-    std::vector<std::filesystem::path> lib_parser::parse(
-        const std::filesystem::path& path)
+    std::vector<lib_member> lib_parser::parse(const std::filesystem::path& path)
     {
-        std::ifstream file(path);
+        std::ifstream file(path, std::ios::binary);
         if (!file.is_open())
             throw parse_error("cannot open library file: " + path.string());
 
-        auto lib_dir = path.parent_path();
-        std::vector<std::filesystem::path> result;
-        std::string line;
+        std::string data((std::istreambuf_iterator<char>(file)),
+                         std::istreambuf_iterator<char>());
 
-        while (std::getline(file, line)) {
-            line = trim(line);
-            if (line.empty()) continue;
+        ar_library_reader ar_reader;
+        text_index_library_reader text_reader;
+        std::vector<const library_reader*> readers = {
+            &ar_reader,
+            &text_reader,
+        };
 
-            // .lib files contain relative paths to .rel files,
-            // one per line.
-            std::filesystem::path rel_path = lib_dir / line;
-            result.push_back(rel_path);
+        for (const auto* reader : readers) {
+            if (reader->can_read(path, data))
+                return reader->read(path, data);
         }
 
-        return result;
+        throw parse_error("unsupported library format: " + path.string());
     }
 
 } // namespace xlink

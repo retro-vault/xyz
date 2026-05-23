@@ -118,12 +118,17 @@ std::unordered_map<std::string, uint16_t> load_symbols(const fs::path& noi_path)
     }
 
     std::unordered_map<std::string, uint16_t> symbols;
-    std::string def;
-    std::string name;
-    std::string value;
-    while (in >> def >> name >> value) {
+    std::string line;
+    while (std::getline(in, line)) {
+        std::istringstream iss(line);
+        std::string def;
+        std::string name;
+        std::string value;
+        if (!(iss >> def >> name >> value))
+            continue;
         if (def == "DEF" && value.starts_with("0x")) {
-            symbols[name] = static_cast<uint16_t>(std::stoul(value, nullptr, 16));
+            symbols[name] = static_cast<uint16_t>(
+                std::stoul(value, nullptr, 16));
         }
     }
     return symbols;

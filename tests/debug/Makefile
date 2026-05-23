@@ -6,7 +6,6 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 Z80_APPS_DIR ?= $(DIST_DIR)/targets/z80/apps
 BIN_DIR   := $(Z80_APPS_DIR)/debug
 XLINK     := $(HOST_BIN_DIR)/xlink
-XDBG_GEN  := $(THIS_DIR)/mkxdbg.sh
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
@@ -29,16 +28,10 @@ all:
 	    $(DOCKER_IMAGE) \
 	    make IN_DOCKER=1 ROOT=$(ROOT)
 	$(XLINK) -f bin -e _entry -b _CODE=0100 -x 0100-02FF \
-	    -n $(BUILD_DIR)/sieve.noi \
+	    -g $(BIN_DIR)/sieve.xdbg \
 	    -o $(BIN_DIR)/sieve.bin \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/sieve.rel
-	sh $(XDBG_GEN) \
-	    $(BUILD_DIR)/sieve.noi \
-	    $(BIN_DIR)/sieve.bin \
-	    $(BIN_DIR)/sieve.xdbg \
-	    $(THIS_DIR)/sieve.c \
-	    $(THIS_DIR)/crt0.s
 
 else
 

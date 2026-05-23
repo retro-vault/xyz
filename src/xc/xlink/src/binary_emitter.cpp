@@ -52,30 +52,38 @@ namespace xlink {
                 }
             }
 
-            // For protected ranges, emit jump trampolines that skip
-            // the full protected region. Place one at the range start,
-            // then every 8 bytes inside the same protected range.
+            // For protected ranges, keep the reserved bytes zero-filled and,
+            // when it fits, place a JR or JP immediately before the hole.
             for (const auto& hole : ctx.holes) {
                 uint16_t hs = std::max<uint16_t>(hole.start, start);
                 uint16_t he = std::min<uint16_t>(hole.end, end);
                 if (hs > he)
                     continue;
-                if (static_cast<uint32_t>(he) + 1 > 0xFFFF)
-                    continue;
-                uint16_t target = static_cast<uint16_t>(he + 1);
+                uint32_t hole_size = static_cast<uint32_t>(he) - hs + 1u;
 
-                for (uint16_t guard = hs; static_cast<uint32_t>(guard) + 2 <= he; ) {
+                // Reserved bytes remain untouched in the final BIN image.
+                for (uint32_t addr = hs; addr <= he; ++addr)
+                    image[addr - start] = 0x00;
+
+                // If there are enough bytes before the hole inside the
+                // emitted range, place a JR for short skips or a JP for
+                // longer ones.
+                if (static_cast<uint32_t>(hs) >= static_cast<uint32_t>(start) + 2u
+                    && hole_size <= 0x7Fu
+                    && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
+                    uint16_t guard = static_cast<uint16_t>(hs - 2u);
+                    const uint32_t idx = static_cast<uint32_t>(guard - start);
+                    image[idx + 0] = 0x18;  // jr +disp
+                    image[idx + 1] = static_cast<uint8_t>(hole_size);
+                } else if (static_cast<uint32_t>(hs)
+                               >= static_cast<uint32_t>(start) + 3u
+                           && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
+                    uint16_t guard = static_cast<uint16_t>(hs - 3u);
+                    uint16_t target = static_cast<uint16_t>(he + 1u);
                     const uint32_t idx = static_cast<uint32_t>(guard - start);
                     image[idx + 0] = 0xC3;  // jp nn
                     image[idx + 1] = static_cast<uint8_t>(target & 0xFF);
                     image[idx + 2] = static_cast<uint8_t>((target >> 8) & 0xFF);
-
-                    if (static_cast<uint32_t>(guard) + 8 > 0xFFFF)
-                        break;
-                    uint16_t next = static_cast<uint16_t>(guard + 8);
-                    if (next <= guard)
-                        break;
-                    guard = next;
                 }
             }
 

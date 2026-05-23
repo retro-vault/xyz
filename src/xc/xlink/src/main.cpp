@@ -10,51 +10,17 @@
 #include <fstream>
 #include <iomanip>
 
+#include <xlink/cdb_emitter.hpp>
 #include <xlink/cli.hpp>
 #include <xlink/linker.hpp>
 #include <xlink/binary_emitter.hpp>
+#include <xlink/debug_emitter.hpp>
 #include <xlink/errors.hpp>
+#include <xlink/noice_emitter.hpp>
+#include <xlink/runtime.hpp>
+#include <xlink/xdbg_emitter.hpp>
 
 #define XLINK_VERSION "1.0.0"
-
-static uint16_t symbol_absolute_addr(const xlink::module* mod,
-                                     const xlink::symbol& sym) {
-    uint16_t addr = sym.value();
-    int area_idx = sym.area_index();
-    if (area_idx >= 0 && area_idx < static_cast<int>(mod->areas().size())) {
-        auto& area = mod->areas()[area_idx];
-        if (area.placed_addr().has_value())
-            addr = static_cast<uint16_t>(addr + area.placed_addr().value());
-    } else if (!mod->areas().empty() && mod->areas()[0].placed_addr().has_value()) {
-        addr = static_cast<uint16_t>(addr + mod->areas()[0].placed_addr().value());
-    }
-    return addr;
-}
-
-static void emit_symbol_file(const std::filesystem::path& path,
-                             const xlink::link_context& ctx) {
-    std::ofstream out(path);
-    if (!out.is_open())
-        throw xlink::xlink_error("cannot open symbol output file: "
-                                 + path.string());
-
-    for (const auto& [name, where] : ctx.global_symbols) {
-        const auto* mod = where.first;
-        int idx = where.second;
-        const auto& sym = mod->symbol_by_index(idx);
-        uint16_t addr = symbol_absolute_addr(mod, sym);
-        out << "DEF " << name << " 0x"
-            << std::uppercase << std::hex
-            << std::setw(4) << std::setfill('0') << addr
-            << std::nouppercase << std::dec << "\n";
-    }
-    for (const auto& [name, addr] : ctx.linker_symbols) {
-        out << "DEF " << name << " 0x"
-            << std::uppercase << std::hex
-            << std::setw(4) << std::setfill('0') << addr
-            << std::nouppercase << std::dec << "\n";
-    }
-}
 
 int main(int argc, char* argv[]) {
     try {
@@ -64,6 +30,8 @@ int main(int argc, char* argv[]) {
             xlink::cli::print_usage();
             return 0;
         }
+
+        xlink::runtime::apply_sdcc_runtime(opts);
 
         xlink::link_context ctx;
         ctx.entry_name = opts.entry_symbol;
@@ -79,8 +47,21 @@ int main(int argc, char* argv[]) {
 
         xlink::linker::link(ctx, opts);
         xlink::binary_emitter::emit(opts.output_file, ctx);
-        if (opts.symbol_file.has_value())
-            emit_symbol_file(opts.symbol_file.value(), ctx);
+        if (opts.symbol_file.has_value()) {
+            xlink::noice_emitter emitter;
+            const xlink::debug_emitter& debug = emitter;
+            debug.emit(opts.symbol_file.value(), opts.output_file, ctx);
+        }
+        if (opts.xdbg_file.has_value()) {
+            xlink::xdbg_emitter emitter;
+            const xlink::debug_emitter& debug = emitter;
+            debug.emit(opts.xdbg_file.value(), opts.output_file, ctx);
+        }
+        if (opts.cdb_file.has_value()) {
+            xlink::cdb_emitter emitter;
+            const xlink::debug_emitter& debug = emitter;
+            debug.emit(opts.cdb_file.value(), opts.output_file, ctx);
+        }
 
         if (ctx.verbose) {
             uint32_t output_size = 0;

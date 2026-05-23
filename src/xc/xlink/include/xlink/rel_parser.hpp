@@ -10,6 +10,7 @@
 #define XLINK_REL_PARSER_HPP
 
 #include <filesystem>
+#include <istream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,10 +23,15 @@ namespace xlink {
     public:
         // Parse a .rel file into a module.
         static std::shared_ptr<module> parse(const std::filesystem::path& path);
+        static std::shared_ptr<module> parse(const std::string& source_name,
+                                             std::istream& input);
 
         // Quick scan: extract defined symbol names without full parse.
         static std::vector<std::string> scan_defs(
             const std::filesystem::path& path);
+        static std::vector<std::string> scan_defs(
+            const std::string& source_name,
+            std::istream& input);
     };
 
 } // namespace xlink

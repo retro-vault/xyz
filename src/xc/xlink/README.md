@@ -1,130 +1,646 @@
 # xlink — Z80 Relocatable Linker
 
-`xlink` is the XYZ toolchain linker for Z80 targets. It reads SDCC-style
-textual `.rel` object modules and `.lib` library archives, resolves symbols,
-places areas in memory, applies relocations, and emits either:
+`xlink` is the XYZ toolchain linker for Z80 targets.
 
-- relocatable **XL format** output (default), or
-- flat absolute **BIN** output for ROM images.
+In plain words, it does four main jobs:
+
+1. read SDCC-style `.rel` object files and `.lib` libraries
+2. resolve symbols and pull in only the library modules that are needed
+3. place areas in memory while respecting base addresses and reserved holes
+4. write one or more output files for loading, ROM building, symbols, and debugging
+
+What `xlink` can do today:
+
+- link `.rel` files produced from both C and assembly
+- read two `.lib` styles:
+  - xlink text-index libraries
+  - native `ar`-style SDCC archives that contain `.rel` members
+- place relocatable, absolute, and overlay areas
+- skip reserved address ranges during placement
+- emit relocatable `XL` output
+- emit flat absolute `BIN` output
+- emit a NoICE `.noi` command file
+- emit a linked SDCC `.cdb` debug file
+- emit a linked `.xdbg` debug sidecar
+- optionally prepend a runtime `crt0` and append a runtime library from `--sdcc-runtime <dir>`
+
+Current limits that are worth knowing up front:
+
+- there is no real banked-memory output format yet
+- `OVR` is only shared-address placement inside one final image
+- `OVR` does not produce separate overlay payload files
+- if two overlaid modules write bytes to the same addresses, later copied bytes overwrite earlier ones in the final image
 
 ---
 
-## How It Works
+## What Files xlink Reads
 
-### Pipeline
+| File | Purpose | Required |
+|------|---------|----------|
+| `.rel` | Main object format. Contains areas, symbols, code bytes, and relocations. | Yes |
+| `.lib` | Library of `.rel` modules. Can be either xlink text-index format or a native SDCC `ar` archive. xlink loads only members that satisfy unresolved symbols. | Optional |
+| `.adb` | SDCC C debug sidecar. Used by `.xdbg`, and as a fallback source for compiler records when emitting `.cdb`. | Optional |
+| `.cdb` | SDCC compiler debug sidecar. Preferred compiler-record source when emitting a linked `.cdb`. | Optional |
+| `.lst` | Assembler listing. Used when emitting `.xdbg`, `.noi`, or `.cdb` for assembly modules. | Optional |
 
+### Notes
+
+- `.rel` is the real linker input.
+- Both C and assembly reach xlink as `.rel`; the difference matters only when optional debug sidecars are collected.
+- `.adb`, `.cdb`, and `.lst` are not linked themselves; they are sidecars used only to enrich debug outputs.
+- `.adb` is usually present for SDCC C compilation with debug enabled.
+- `.cdb` is usually present for SDCC C compilation with `--debug`.
+- `.lst` is usually present for assembler output with listing/debug enabled.
+
+---
+
+## What Files xlink Writes
+
+| File | How You Ask For It | What It Is |
+|------|---------------------|------------|
+| primary output, default `a.out` | always, via `-o <file>` | Either relocatable `XL` or flat `BIN`, depending on `-f` |
+| `.xl` | default `-f xl` | Relocatable XYZ loader image with header and relocation table |
+| `.bin` | `-f bin` | Flat absolute binary image |
+| `.noi` | `-n <file>` | NoICE command file with `DEF`, `FILE`, `LINE`, and scope records |
+| `.cdb` | `-c <file>` or `--cdb <file>` | Linked SDCC CDB debug file |
+| `.xdbg` | `-g <file>` or `--xdbg <file>` | Linked debug database for `xdbg` |
+
+### Which one should I use?
+
+- Use `XL` when a loader will relocate the program at load time.
+- Use `BIN` when you want a fixed-address ROM or raw memory image.
+- Use `-n` when you want NoICE-compatible symbols and source lines.
+- Use `-c` when you want a linked SDCC-native debug file.
+- Use `-g` when you want source-level debugging metadata.
+
+---
+
+## Quick Start
+
+### 1. Produce a relocatable XL file
+
+```bash
+xlink -o hello.xl \
+      build/crt0.rel build/hello.rel
 ```
-.rel / .lib  →  load  →  library resolve  →  symbol resolve
-                                                     ↓
-              emit XL  ←  relocate  ←  place areas
+
+This writes relocatable `XL` output and uses `_main` as the entry symbol.
+
+### 2. Produce a pure flat binary
+
+```bash
+xlink -f bin -e _entry \
+      -b _CODE=0100 \
+      -x 0100-02FF \
+      -o hello.bin \
+      build/crt0.rel build/hello.rel
 ```
 
-#### 1. Load inputs
+This links `_CODE` at `0x0100` and emits only the inclusive range
+`0x0100..0x02FF` into `hello.bin`.
 
-Each `.rel` file on the command line is parsed immediately into a `module`
-object. `.lib` files are scanned but not yet loaded — their member modules
-are catalogued for the next stage.
+### 3. Produce a binary plus a NoICE file
 
-#### 2. Library resolution
+```bash
+xlink -f bin -e _entry \
+      -b _CODE=0100 \
+      -x 0100-02FF \
+      -n build/hello.noi \
+      -o hello.bin \
+      build/crt0.rel build/hello.rel
+```
 
-xlink performs demand-driven linking: it collects all undefined symbol
-references from already-loaded modules and then scans library modules for
-definitions that satisfy them. Any satisfying module is loaded, which may
-introduce new undefined symbols, so the process repeats until a fixpoint is
-reached. Only modules actually needed end up in the link.
+The `.noi` file now contains NoICE commands. The exact contents depend on
+which sidecars exist, but the linked symbol section still looks familiar:
 
-#### 3. Symbol resolution
+```text
+LASTFILELOADED
+CLEARLINEINFO Y
+DEF _entry 0x0100
+DEF _main 0x0134
+DEF s__CODE 0x0100
+DEF l__CODE 0x01A4
+```
 
-All `Def` symbols from every loaded module are collected into a global
-symbol table. Errors are reported for:
+If C and assembly sidecars are present, xlink also adds `FILE`, `LINE`,
+`FUNCTION`, and `DEFSCOPE` commands.
 
-- **duplicate definitions** — the same name defined in two different modules.
-- **unresolved references** — a `Ref` symbol that has no matching `Def`.
+### 4. Produce a binary plus a linked SDCC CDB file
 
-SDCC internal pseudo-symbols (names beginning with `.__.`) are silently
-ignored; they exist in every module but carry no inter-module meaning.
+```bash
+xlink -f bin -e _entry \
+      -b _CODE=0100 \
+      -x 0100-02FF \
+      -c build/hello.cdb \
+      -o hello.bin \
+      build/crt0.rel build/hello.rel
+```
 
-#### 4. Area placement
+For the `.cdb` file to be rich:
 
-Areas with the same name across modules are grouped. Within each group:
+- C modules should have sibling `.cdb` files from SDCC `--debug`
+- if a sibling `.cdb` is missing, xlink falls back to sibling `.adb`
+- assembly modules should have sibling `.lst` files if you want `L:A...` line records
 
-- **ABS** areas are placed at their declared `org` address.
-- **OVR** (overlay) areas all start at the same address; the group occupies
-  the size of the largest member.
-- **CON** (concatenate, the default) areas are packed sequentially, one
-  after another, in the order their modules appear on the command line.
+### 5. Produce a binary plus an xdbg file
 
-Placement starts at address `0` and advances a cursor. Reserved ranges
-supplied via `-r` are skipped: the cursor jumps past any hole that would
-overlap the area being placed.
+```bash
+xlink -f bin -e _entry \
+      -b _CODE=0100 \
+      -x 0100-02FF \
+      -g build/hello.xdbg \
+      -o hello.bin \
+      build/crt0.rel build/hello.rel
+```
 
-The total span of all placed areas becomes `code_size` in the output header.
+For the `.xdbg` file to be rich:
 
-#### 5. Relocation
+- C modules should have sibling `.adb` files
+- assembly modules should have sibling `.lst` files
 
-Each T record's bytes are copied to the code buffer at the area's placed
-address. Relocation entries in the accompanying R records are then applied:
+### 6. Use an SDCC runtime directory only when you want it
 
-| Mode bits | Meaning |
-|-----------|---------|
-| `word` (bit 0) | patch 2 bytes (little-endian 16-bit) |
-| `sym` (bit 1) | reference is a symbol index; otherwise an area index |
-| `pc_rel` (bit 2) | subtract the address of the byte after the field (relative branch) |
-| `msb` (bit 7) | patch only the high byte of the 16-bit value |
+```bash
+xlink --sdcc-runtime /path/to/runtime/z80 \
+      -f bin -e _entry \
+      -b _CODE=0100 \
+      -x 0100-02FF \
+      -o hello.bin \
+      build/hello.rel
+```
 
-For each non-`pc_rel` word relocation, an entry is added to the output
-relocation table so the OS loader knows which bytes to fix up when the
-binary is loaded at a non-zero address.
+If `--sdcc-runtime` is not given, xlink does not inject any startup object
+or library on its own.
 
-#### 6. Entry point
+### 7. Reserve holes and print a memory map
 
-The symbol named by `-e` (default `_main`) is looked up in the global
-symbol table. Its area-relative value is added to the placed address of
-the defining module's first area to yield the absolute entry point written
-into the XL header.
+```bash
+xlink -v -m -f bin -x 0000-3FFF -e _entry \
+      -r 0000-003F \
+      -r 1708-1708 \
+      -b _CODE=0100 \
+      -b _DATA=5B00 \
+      -o prog.bin \
+      build/crt0.rel build/main.rel build/runtime.lib
+```
 
-#### 7. Emit
+This:
 
-The XL binary is written: header, relocation table, code buffer.
+- reserves the bottom 64 bytes
+- reserves the single protected byte at `0x1708`
+- pins `_CODE` to `0x0100`
+- pins `_DATA` to `0x5B00`
+- writes a flat ROM-style `BIN`
+- if the emitted BIN window includes `0x1708`, keeps that byte `0x00` and, when possible, inserts a `JR` or `JP` immediately before it
+- prints the final placement map
+
+If you want the same placement rules but relocatable `XL` output, omit
+`-f bin -x ...` and choose an `.xl` output path instead.
 
 ---
 
 ## Command-Line Usage
 
-```
+```text
 xlink [options] <file.rel|file.lib> ...
 ```
 
-| Option | Description |
-|--------|-------------|
-| `-o <file>` | Output file path. Default: `a.out`. |
-| `-n <file>` | Write symbols as `DEF name 0xADDR` lines. |
-| `-e <symbol>` | Entry point symbol name. Default: `_main`. |
-| `-r <start>-<end>` | Reserve an address range (hex, inclusive). Placement skips this range. Repeatable. |
-| `-b <area>=<addr>` | Force base address for an area group (hex). Repeatable. |
-| `-f <xl|bin>` | Output format. Default: `xl`. |
-| `-x <start>-<end>` | Output range for `-f bin` (hex, inclusive). |
-| `-m` | Print a memory map after linking (area names, placed addresses, sizes, flags). |
-| `-v` | Verbose output: log each file loaded, symbol counts, code size, entry point. |
-| `-h`, `--help` | Show usage summary and exit. |
+There are thirteen switches in total today.
 
-Input files are processed in command-line order. The order determines
-CON area packing: the first module's `_CODE` comes first, and so on.
-For `crt0`-style startup code, always list the CRT0 module first.
+| Option | Short meaning |
+|--------|---------------|
+| `-c`, `--cdb <file>` | Write linked SDCC `.cdb` debug output |
+| `-g`, `--xdbg <file>` | Write linked `.xdbg` debug output |
+| `--sdcc-runtime <dir>` | Auto-inject runtime `crt0` and default library from a directory |
+| `-o <file>` | Set primary output filename |
+| `-n <file>` | Write NoICE `.noi` output |
+| `-e <symbol>` | Set entry symbol |
+| `-r <start>-<end>` | Reserve an address range |
+| `-b <area>=<addr>` | Force base address for an area group |
+| `-f <xl\|bin>` | Choose output format |
+| `-x <start>-<end>` | Restrict emitted BIN range |
+| `-m` | Print memory map |
+| `-v` | Verbose output |
+| `-h`, `--help` | Show usage |
 
-### Example
+Input files are processed in command-line order. That matters for:
 
-```bash
-xlink -v -m -e _entry \
-      -r 0000-003F \
-      -b _CODE=0100 \
-      -o prog.xl \
-      build/crt0.rel build/main.rel build/runtime.lib
+- normal `CON` area packing
+- the order in which `.rel` modules are loaded
+- the order in which overlaid bytes are copied into the final image
+
+For `crt0`-style startup code, place the startup object first.
+
+---
+
+## Switch Reference
+
+### `-c`, `--cdb <file>`
+
+Write a linked SDCC `.cdb` sidecar.
+
+What xlink writes into it:
+
+- compiler records copied from sibling module `.cdb` files when available
+- fallback `M:`, `F:`, and `S:` compiler records synthesized from sibling `.adb` files when `.cdb` is missing
+- linker `L:` records generated from the final linked addresses
+- assembly `L:A...` line records from sibling `.lst` files
+
+This is the closest output to SDCC's native linked debug format.
+
+### `-g`, `--xdbg <file>`
+
+Write a linked `.xdbg` sidecar.
+
+What it contains:
+
+- image path
+- entry address
+- source file table
+- linked symbols
+- function ranges
+- line mappings
+- local variable metadata when available
+
+Where the data comes from:
+
+- `.rel` symbols and linked addresses
+- `.adb` for SDCC C debug information
+- `.lst` for assembly source line mappings
+
+If the sidecars are missing, xlink still writes `.xdbg`, but it can only
+include what it knows from the linked objects themselves.
+
+### `--sdcc-runtime <dir>`
+
+If present, xlink modifies the input list before linking:
+
+- it prepends the runtime `crt0`
+- it appends the runtime default library
+
+It prefers:
+
+- `crt0.rel`
+- `z80.lib`
+
+If those exact names do not exist, it falls back to the only matching
+`crt0*.rel` or `.lib` found in the directory.
+
+If the switch is omitted, xlink does nothing runtime-related.
+
+### `-o <file>`
+
+Sets the primary output path.
+
+- with `-f xl`, this is the `XL` file
+- with `-f bin`, this is the flat binary
+
+It does not control the names of:
+
+- the NoICE file from `-n`
+- the CDB file from `-c`
+- the debug file from `-g`
+
+Those must be given explicitly.
+
+### `-n <file>`
+
+Writes a NoICE command file.
+
+The file always includes linked `DEF` commands such as:
+
+```text
+DEF _symbol 0x1234
 ```
 
-This reserves the bottom 64 bytes (e.g. a Z80 interrupt vector table),
-uses `_entry` as the jump target for the OS loader, and prints a full
-memory map.
+If sidecars are available, it also includes:
+
+- `FILE` / `ENDFILE`
+- `LINE`
+- `FUNCTION` / `STATICFUNCTION` / `ENDFUNCTION`
+- `DEFSCOPE` for file-local and local symbols when xlink can recover them
+
+This is useful for:
+
+- NoICE source-level debugging
+- external scripts that only care about the `DEF` lines
+- quick inspection of final linked symbols
+
+### `-e <symbol>`
+
+Sets the entry symbol.
+
+Default:
+
+```text
+_main
+```
+
+Common ROM/startup case:
+
+```text
+_entry
+```
+
+The entry symbol must exist after linking or xlink stops with an error.
+
+### `-r <start>-<end>`
+
+Reserves an inclusive address range and prevents normal area placement
+from using it.
+
+This affects placement, not just file emission.
+
+Example:
+
+```bash
+-r 4000-47FF
+```
+
+means that no normally placed area may occupy any byte between `0x4000`
+and `0x47FF`.
+
+Single-byte ranges are valid too:
+
+```bash
+-r 1708-1708
+```
+
+That reserves exactly one address.
+
+#### How hole skipping works
+
+When xlink tries to place an area, it starts with a cursor and checks
+whether the candidate interval overlaps any reserved hole. If it does,
+the cursor jumps to `hole.end + 1` and the check repeats.
+
+This is the actual algorithm in simplified form:
+
+```cpp
+uint16_t next_free_address(uint16_t cursor,
+                           uint16_t size,
+                           const std::vector<address_range>& holes) {
+    while (true) {
+        bool moved = false;
+        uint16_t end = cursor + size - 1;
+
+        for (const auto& hole : holes) {
+            if (cursor <= hole.end && end >= hole.start) {
+                cursor = hole.end + 1;
+                moved = true;
+                break;
+            }
+        }
+
+        if (!moved)
+            return cursor;
+    }
+}
+```
+
+Concrete example:
+
+- area size = `0x20`
+- current cursor = `0x0000`
+- reserved hole = `0x0010..0x001F`
+
+First candidate:
+
+```text
+0x0000..0x001F
+```
+
+That overlaps the hole, so xlink jumps the cursor to:
+
+```text
+0x0020
+```
+
+Second candidate:
+
+```text
+0x0020..0x003F
+```
+
+That no longer overlaps, so the area is placed at `0x0020`.
+
+#### Extra BIN behavior for reserved holes
+
+For `-f xl`, reserved ranges only affect placement.
+
+For `-f bin`, if a reserved hole lies inside the emitted BIN range, xlink keeps the
+reserved bytes zero-filled and, when possible, writes a jump immediately
+before the hole:
+
+- `JR` when the hole is small enough for an 8-bit relative skip
+- `JP` when the hole is larger, if there are three bytes available before
+  the hole
+
+Important: when xlink does this, it also treats the pre-hole jump bytes as
+reserved during area placement:
+
+- 2 bytes for `JR`
+- 3 bytes for `JP`
+
+That means later linked code is placed after them and relocated normally,
+instead of being overwritten at BIN emit time.
+
+That jump targets:
+
+```text
+hole_end + 1
+```
+
+So for a protected hole `0x0100..0x010F`, xlink writes:
+
+- `JR 0x0110` at `0x00FE..0x00FF`
+- `0x00` bytes from `0x0100` through `0x010F`
+
+For a single-byte protected address such as `0x1708..0x1708`, xlink writes:
+
+- `JR 0x1709` at `0x1706..0x1707`
+- `0x00` at `0x1708`
+
+If the hole begins too close to the start of the emitted BIN range, xlink
+skips that pre-hole jump because there is no room for it.
+
+If the hole is too large for `JR`, xlink uses `JP` instead when it can.
+If there is not enough room for either form, xlink leaves the entire
+reserved range zero-filled and emits no pre-hole jump.
+
+### `-b <area>=<addr>`
+
+Pins the base address for an area group.
+
+Example:
+
+```bash
+-b _CODE=0100
+-b _DATA=5B00
+```
+
+This is applied at group placement time. If the requested base would move
+backwards over already placed content, xlink reports an error.
+
+### `-f <xl|bin>`
+
+Chooses the primary output format.
+
+- `xl` is the default
+- `bin` is for fixed-address raw images
+
+Use:
+
+- `xl` for loader-relocated programs
+- `bin` for ROMs, memory images, or fixed-address executables
+
+### `-x <start>-<end>`
+
+Restricts the emitted file window for `-f bin`.
+
+Important: in the normal case, `-x` only changes which address interval is
+written to the output file.
+
+Exception: with `-f bin` plus `-r`, xlink uses the emitted BIN range to
+decide whether it must reserve pre-hole bytes for a synthesized `JR` or
+`JP`. So in that specific case, changing `-x` can indirectly affect
+placement around reserved holes.
+
+Without `-x`:
+
+- BIN output starts at `0x0000`
+- BIN output ends at the highest linked byte
+
+That means non-zero origins can produce leading zero fill unless you crop
+the output range with `-x`.
+
+### `-m`
+
+Prints the final memory map after linking.
+
+The map shows:
+
+- area name
+- linked address
+- size
+- flags such as `ABS`, `REL`, `OVR`, `CON`
+
+### `-v`
+
+Turns on verbose output.
+
+Today this includes:
+
+- version banner
+- file loading messages
+- library inclusion messages
+- resolved symbol count
+- code size
+- relocation count
+- entry point
+- final output size
+
+### `-h`, `--help`
+
+Prints the built-in help summary and exits.
+
+---
+
+## How Linking Works
+
+### Pipeline
+
+```text
+.rel / .lib
+    -> load objects
+    -> resolve libraries on demand
+    -> resolve global symbols
+    -> place areas
+    -> relocate bytes
+    -> find entry point
+    -> emit output files
+```
+
+### 1. Load inputs
+
+Each `.rel` file is parsed into a module object.
+
+Each `.lib` file is scanned, but its members are not loaded immediately.
+
+### 2. Resolve libraries
+
+xlink performs demand-driven library linking:
+
+- collect unresolved symbol references from already loaded modules
+- scan library members for matching definitions
+- load only the members that satisfy current unresolved symbols
+- repeat until no more symbols can be satisfied
+
+### 3. Resolve symbols
+
+All `Def` symbols from loaded modules are inserted into the global table.
+
+Errors:
+
+- duplicate definition
+- unresolved reference
+
+Pseudo-symbols beginning with `.__.` are ignored for cross-module linking.
+
+### 4. Place areas
+
+Areas are grouped by name across all modules.
+
+Within a name-group, xlink uses the first area it sees to decide how the
+group behaves:
+
+- `ABS`: every member is placed at its own declared `org` address
+- `OVR`: every member gets the same linked address; the group consumes the size of the largest member
+- `CON`: members are packed one after another
+
+#### Important note about `OVR`
+
+`OVR` does **not** mean that xlink writes separate overlay files.
+
+It means only this:
+
+- the same-named areas share one linked address
+- relocation copies all their bytes into one final code buffer
+- later copied bytes overwrite earlier copied bytes where they overlap
+
+So the current `OVR` behavior is shared placement inside one output image,
+not a separate overlay packaging system.
+
+### 5. Relocate bytes
+
+Each text record is copied to its placed address, then each relocation
+entry patches the referenced byte or word.
+
+Relocation modes include:
+
+| Mode bit | Meaning |
+|----------|---------|
+| bit 0 | word vs byte relocation |
+| bit 1 | symbol reference vs area reference |
+| bit 2 | PC-relative relocation |
+| bit 7 | high-byte-only patch |
+
+For non-PC-relative relocations, xlink also records the patch in the `XL`
+relocation table.
+
+### 6. Find the entry point
+
+The symbol named by `-e` is looked up in the final global symbol table.
+
+Its area-relative value is combined with the linked area address to produce
+the linked entry address stored in the output.
+
+### 7. Emit output files
+
+- primary output: `XL` or `BIN`
+- optional NoICE file: `-n`
+- optional CDB file: `-c`
+- optional debug database: `-g`
 
 ---
 
@@ -132,8 +648,8 @@ memory map.
 
 ### SDCC `.rel` object module
 
-xlink understands both the classic SDCC v1 format and the extended v4
-format (`XL4`) produced by SDCC 4.x.
+xlink understands both the classic SDCC v1 format and the extended `XL4`
+format produced by SDCC 4.x.
 
 #### Record types
 
@@ -141,193 +657,282 @@ format (`XL4`) produced by SDCC 4.x.
 |--------|---------|
 | `XL` | Little-endian byte order (v1). |
 | `XL4` | Little-endian, extended 32-bit format (v4, SDCC 4.x). |
-| `XH` | Big-endian byte order (unsupported target, parsed only). |
-| `H <n> areas <n> global symbols` | Informational header line; counts are not enforced. |
+| `XH` | Big-endian byte order (parsed, but not a normal Z80 target case). |
+| `H <n> areas <n> global symbols` | Informational header. Counts are not enforced. |
 | `M <name>` | Module name. |
-| `O <flags>` | Compiler/assembler flags (ignored). |
+| `O <flags>` | Compiler or assembler flags. Ignored by xlink. |
 | `A <name> size <hex> flags <hex> [addr <hex>]` | Area declaration. |
-| `S <name> Def<hex>` | Symbol definition (area-relative value). |
-| `S <name> Ref<hex>` | Symbol reference (value unused). |
-| `T ...` | Text record: code/data bytes. |
-| `R ...` | Relocation record for the preceding T record. |
+| `S <name> Def<hex>` | Symbol definition. |
+| `S <name> Ref<hex>` | Symbol reference. |
+| `T ...` | Text bytes for an area. |
+| `R ...` | Relocations for the preceding `T` record. |
 
 #### Area flags
 
 | Bit | Meaning |
 |-----|---------|
-| 0 (`0x01`) | `OVR` — overlay mode; all same-named areas share one address. |
-| 3 (`0x08`) | `ABS` — absolute; placed at the address given in `addr` (SDCC 4.x). |
-| 2 (`0x04`) | `ABS` legacy bit, still accepted for compatibility. |
+| `0x01` | `OVR` overlay bit |
+| `0x08` | `ABS` absolute bit in SDCC 4.x |
+| `0x04` | legacy `ABS` bit |
 
-All other combinations are treated as `CON REL` (concatenate, relocatable).
+Anything else is treated as normal relocatable concatenated placement.
 
-#### T / R record formats
+#### T / R record layouts
 
-**v1 (XL):**
+**v1 (`XL`):**
 
-```
+```text
 T <off_lo> <off_hi> <byte> ...
 R <b0> <b1> <area_lo> <area_hi> [<mode> <off_lo> <off_hi> <ref>] ...
 ```
 
-- T offset: 2-byte little-endian, relative to the start of the area.
-- R header: 4 bytes; area index in bytes 2–3 (little-endian).
-- R reloc entry: 4 bytes `[mode][off_lo][off_hi][ref]`.
-  - `off` is 2-byte little-endian, relative to the start of T data.
-  - `ref` is a 1-byte area or symbol index.
-  - mode bit 0 = 1 → word (16-bit) relocation.
+**v4 (`XL4`):**
 
-**v4 (XL4, SDCC 4.x):**
-
-```
+```text
 T <b0> <b1> <b2> <b3> <byte> ...
 R <b0> <b1> <area_lo> <area_hi> [<mode> <from_T_start> <ref_lo> <ref_hi>] ...
 ```
 
-- T offset: 4-byte little-endian (high 2 bytes are always zero for Z80).
-- R header: unchanged — area index is still bytes 2–3.
-- R reloc entry: 4 bytes `[mode][from_T_start][ref_lo][ref_hi]`.
-  - `from_T_start` is the byte offset measured from the **start of the T
-    record** (including the 4-byte offset field); subtract 4 to get the
-    offset into the data payload.
-  - `ref` is 2-byte little-endian area or symbol index.
-  - mode bit 0 = **0** → word (16-bit) relocation (inverted vs. v1).
+For Z80, only the low 16 bits matter for addresses.
 
-Symbol values in S records are 8 hex digits in v4 (truncated to 16 bits
-for Z80).
+### `.lib` libraries
 
-### SDCC `.lib` library archive
+xlink understands two library layouts:
 
-A plain text file with one relative path per line, each pointing to a
-`.rel` member module. Paths are resolved relative to the directory
-containing the `.lib` file.
+1. xlink text-index library
+2. native `ar`-style SDCC library archive
 
-```
-# example library index
+#### Text-index `.lib`
+
+One relative `.rel` path per line:
+
+```text
+# example
 modules/printf.rel
 modules/memcpy.rel
 modules/divuint.rel
 ```
 
-Lines starting with `#` and blank lines are ignored.
+Blank lines and lines starting with `#` are ignored.
+
+#### Native SDCC archive `.lib`
+
+This is a normal `ar` archive that contains `.rel` members.
+
+xlink extracts the `.rel` members logically and considers them for
+demand-driven resolution the same way as text-index libraries.
+
+### `.adb` debug sidecars
+
+Used by `-g`, and as a fallback compiler-record source for `-c` if no
+matching sibling `.cdb` exists.
+
+They provide SDCC debug metadata such as:
+
+- function names
+- return types
+- globals
+- locals
+- register or frame-relative storage
+
+### `.cdb` debug sidecars
+
+Used by `-c`.
+
+When present, xlink copies the compiler-generated `M:`, `F:`, `S:`, and
+`T:` records from these files and then appends new linker `L:` records for
+the final linked addresses.
+
+### `.lst` assembler listings
+
+Used by `-g`, `-n`, and `-c`.
+
+They provide line mapping for assembly modules, so `xdbg` can show source
+locations for assembly code, NoICE can get `LINE` commands, and linked
+`.cdb` output can get `L:A...` line records.
 
 ---
 
 ## Output File Formats
 
-### XL (default)
+### NoICE `.noi` output (`-n`)
+
+The `.noi` file is a NoICE command file.
+
+It always includes linked `DEF` commands such as:
+
+```text
+LASTFILELOADED
+CLEARLINEINFO Y
+DEF _entry 0x0100
+DEF _main 0x0134
+DEF s__CODE 0x0100
+DEF l__CODE 0x01A4
+```
+
+If source sidecars are available, xlink also writes:
+
+- `FILE` / `ENDFILE`
+- `LINE`
+- `FUNCTION` / `ENDFUNCTION`
+- `DEFSCOPE`
+
+The `DEF` lines are kept in the file specifically so simple in-repo tools
+can still load final symbol addresses from it without understanding the
+rest of the NoICE command language.
+
+### Linked SDCC `.cdb` output (`-c`)
+
+This is a linked SDCC CDB file.
+
+At a high level it contains:
+
+- compiler `M:`, `F:`, `S:`, and `T:` records from sibling module `.cdb` files
+- fallback `M:`, `F:`, and `S:` records normalized from sibling `.adb` files when a module `.cdb` is missing
+- linker `L:` address records for linked symbols and functions
+- linker `L:C...` source line records from C line symbols in `.rel`
+- linker `L:A...` assembly line records from sibling `.lst` files
+
+### `.xdbg` debug sidecar (`-g`)
+
+This is the linked debug database consumed by `xdbg`.
+
+At a high level it contains:
+
+- the linked image path
+- the linked entry address
+- source files
+- symbols
+- function ranges
+- line mappings
+- local variable metadata
+
+Typical sources for that data:
+
+- `.rel` for final linked addresses
+- `.adb` for SDCC C debug details
+- `.lst` for assembly line mappings
+
+### `XL` relocatable output (`-f xl`, default)
 
 All multi-byte fields are little-endian.
 
-All multi-byte fields are little-endian.
-
-### Header — 12 bytes
-
-| Offset | Size | Field | Value |
-|--------|------|-------|-------|
-| 0 | 2 | Magic | `0x58 0x4C` (`'X' 'L'`) |
-| 2 | 1 | Version | `0x01` |
-| 3 | 1 | Flags | `0x00` (reserved) |
-| 4 | 2 | `entry_point` | Offset of the entry symbol within the code payload |
-| 6 | 2 | `code_size` | Total size of the code/data payload in bytes |
-| 8 | 2 | `reloc_count` | Number of relocation entries that follow the header |
-| 10 | 2 | Reserved | `0x0000` |
-
-### Relocation table — `reloc_count × 4` bytes
-
-Each entry describes one word or byte in the payload that must be adjusted
-when the binary is loaded at a non-zero base address.
+#### Header — 12 bytes
 
 | Offset | Size | Field | Meaning |
 |--------|------|-------|---------|
-| 0 | 2 | `offset` | Byte offset into the code payload |
-| 2 | 1 | `size` | `1` = byte patch, `2` = word patch (16-bit little-endian) |
-| 3 | 1 | `pad` | `0x00` (reserved) |
+| 0 | 2 | Magic | `'X' 'L'` |
+| 2 | 1 | Version | currently `0x01` |
+| 3 | 1 | Flags | reserved, currently `0x00` |
+| 4 | 2 | `entry_point` | linked entry address inside the emitted image |
+| 6 | 2 | `code_size` | total emitted code/data span |
+| 8 | 2 | `reloc_count` | number of relocation entries |
+| 10 | 2 | Reserved | `0x0000` |
 
-Only non-PC-relative absolute relocations appear in this table.
-PC-relative relocations (e.g. `JR`, `DJNZ`) are fully resolved at link
-time and need no run-time adjustment.
+#### Relocation table
 
-### Code/data payload — `code_size` bytes
+Each relocation entry is 4 bytes:
 
-### BIN (`-f bin`)
+| Offset | Size | Field | Meaning |
+|--------|------|-------|---------|
+| 0 | 2 | `offset` | byte offset into payload |
+| 2 | 1 | `size` | `1` = byte, `2` = word |
+| 3 | 1 | `pad` | reserved |
 
-Flat absolute binary without an XL header. Bytes are emitted directly from
-the linked address space. If `-x` is provided, xlink emits exactly that
-address interval and fills missing bytes with `0x00`.
+Only non-PC-relative absolute relocations appear here.
 
-The raw, pre-relocated binary image. All internal cross-references have
-already been resolved; the only thing remaining for the loader is to add
-the load address to each field listed in the relocation table.
+#### Code/data payload
 
-### Loading algorithm
+The payload is the linked image bytes.
 
-```
-base = load_address_chosen_by_OS
+If your linked code starts at a non-zero address, bytes below that address
+still exist in the emitted payload as zero-filled space, because the image
+represents the linked address space from `0x0000` up to `code_size - 1`.
 
-for each entry in reloc_table:
-    if entry.size == 2:
-        patch_u16(payload + entry.offset, read_u16(payload + entry.offset) + base)
-    else:
-        patch_u8 (payload + entry.offset, read_u8 (payload + entry.offset) + base)
+#### Load-time idea
 
-jump to (base + header.entry_point)
-```
-
-### Example: `hello.xl`
-
-Produced by linking `crt0.rel` + `hello.rel`, loaded at address 0 (base 0):
-
-```
-Header:
-  magic      = 'XL'
-  version    = 0x01
-  entry      = 0x0000
-  code_size  = 0x008D  (141 bytes)
-  reloc_cnt  = 2
-
-Reloc table:
-  [offset=0x0001, size=2]   ← LD SP, nn  (SP target)
-  [offset=0x0004, size=2]   ← CALL nn    (main address)
-
-Code payload (first 13 bytes = _CODE):
-  31 8D 00   LD SP, 0x008D   ; __stack_top
-  CD 09 00   CALL 0x0009     ; _main
-  76         HALT
-  18 FD      JR -3           ; loop
-  11 00 00   LD DE, #0       ; hello's return 0
-  C9         RET
+```text
+read XL header
+read relocation table
+load payload at chosen base
+patch each relocation by adding that base
+jump to base + entry_point
 ```
 
-If loaded at address `0x8000`:
-- `LD SP` gets `0x8000 + 0x008D = 0x808D`
-- `CALL` gets `0x8000 + 0x0009 = 0x8009`
+### `BIN` flat absolute output (`-f bin`)
+
+This is a raw byte image with no `XL` header and no relocation table.
+
+The bytes are already linked for the addresses you chose at link time.
+
+Important:
+
+- xlink does not relocate a BIN at load time
+- your loader or ROM builder must place the BIN exactly where you linked it for
+
+If `-x` is given, xlink emits exactly that inclusive address interval.
+
+If the emitted BIN range contains reserved holes from `-r`, the reserved
+bytes stay zero-filled. When possible, xlink also synthesizes a `JR` or `JP`
+immediately before each hole so execution can skip over it without touching
+the reserved bytes themselves.
+
+If `-x` is omitted:
+
+- BIN starts at `0x0000`
+- BIN ends at the highest linked byte
+
+That means non-zero origins can create leading zero-fill unless you crop
+the file with `-x`.
 
 ---
 
 ## Build and Test
 
+From `src/xc/xlink`:
+
 ```bash
-# From the xlink directory (or via the repo root make):
-make          # builds bin/bin/xc/xlink/xlink
-make test     # runs 20 unit + integration tests
-make clean    # removes build artifacts
+make
+make test
+make clean
 ```
 
-The test suite covers: `.rel` parsing (v1 format), area placement (CON/OVR/ABS,
-holes), relocation, symbol resolution, library selective inclusion, and
-full binary output.
+This builds:
+
+```text
+bin/bin/xlink
+```
+
+The test suite covers:
+
+- `.rel` parsing
+- `.lib` parsing
+- area placement
+- reserved holes
+- relocation
+- symbol resolution
+- BIN emission
+- runtime injection
+- `.noi` emission
+- `.cdb` emission
+- `.xdbg` emission
 
 ---
 
-## Compatibility Notes
+## Practical Summary
 
-- **SDCC v4 (XL4)** support was added for the T/R extended record format used
-  by SDCC 4.x toolchains. v1 (`XL`) format remains fully supported.
-- Cross-module symbol placement assumes the defining symbol's value is
-  relative to the defining module's **first area** (`areas()[0]`). This
-  matches standard `_CODE`-first layouts; unusual area ordering could
-  produce incorrect entry-point calculations.
-- `.lib` parsing treats each non-blank, non-comment line as a `.rel` path.
-  The format used in this project's `z80.lib` (SDCC's runtime library) is
-  compatible with this scheme.
+If you just want the shortest mental model:
+
+- `.rel` and `.lib` go in
+- xlink resolves symbols and places areas
+- `-f xl` gives you a relocatable loader image
+- `-f bin` gives you a fixed-address raw image
+- `-n` gives you a NoICE command file
+- `-c` gives you a linked SDCC `.cdb` file
+- `-g` gives you a linked `.xdbg` debugger sidecar
+- `-r` blocks placement in reserved holes and, for `BIN`, can synthesize a pre-hole `JR` or `JP`
+- `-x` crops the BIN file window
+- `-b` pins area groups to known addresses
+- `--sdcc-runtime` auto-injects a runtime `crt0` and default library only when you ask for it
+
+That is the core of xlink.
