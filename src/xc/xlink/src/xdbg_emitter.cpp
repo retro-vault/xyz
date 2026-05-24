@@ -79,6 +79,16 @@ namespace xlink {
             return std::nullopt;
         }
 
+        static bool has_accessible_source_file(
+            const std::filesystem::path& path)
+        {
+            if (path.empty())
+                return false;
+
+            std::error_code ec;
+            return std::filesystem::exists(path, ec) && !ec;
+        }
+
         static xdbg::storage_kind to_xdbg_storage(adb_storage_class storage) {
             switch (storage) {
             case adb_storage_class::address:
@@ -176,7 +186,8 @@ namespace xlink {
             const auto& info = debug.modules[module_index];
             auto language = to_xdbg_language(info.language);
             if (language == xdbg::language_kind::unknown
-                || info.line_by_address.empty()) {
+                || info.line_by_address.empty()
+                || !has_accessible_source_file(info.source_path)) {
                 continue;
             }
 

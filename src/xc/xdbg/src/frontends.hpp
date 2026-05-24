@@ -151,6 +151,8 @@ private:
     void handle_configuration_done(int seq);
     // Handle source content retrieval.
     void handle_source(int seq, const json_value& arguments);
+    // Handle disassembly retrieval.
+    void handle_disassemble(int seq, const json_value& arguments);
     // Handle evaluate expressions.
     void handle_evaluate(int seq, const json_value& arguments);
     // Handle loadedSources enumeration.
@@ -190,6 +192,8 @@ private:
         const std::string& name,
         const std::string& value,
         const std::optional<std::string>& type_name = std::nullopt) const;
+    std::optional<uint32_t> stack_return_address(uint32_t sp);
+    stop_snapshot continue_to_temporary_breakpoint(uint32_t address);
     bool has_breakpoint_at(uint32_t pc) const;
     stop_snapshot step_to_next_source_stop(const std::string& command);
     std::string stop_reason(const stop_snapshot& stop) const;

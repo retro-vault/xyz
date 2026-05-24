@@ -356,6 +356,24 @@ namespace xdbgstub {
             }
         }
 
+        void shutdown_and_close_fd(int fd) {
+            if (fd >= 0) {
+                ::shutdown(fd, SHUT_RDWR);
+                ::close(fd);
+            }
+        }
+
+        void close_atomic_fd(std::atomic<int>& fd) {
+            shutdown_and_close_fd(fd.exchange(-1));
+        }
+
+        void close_owned_fd(std::atomic<int>& slot, int fd) {
+            int expected = fd;
+            if (slot.compare_exchange_strong(expected, -1)) {
+                shutdown_and_close_fd(fd);
+            }
+        }
+
         void throw_errno(const std::string& prefix) {
             throw error(prefix + ": " + std::strerror(errno));
         }
@@ -687,45 +705,57 @@ namespace xdbgstub {
     }
 
     server::server(server&& other) noexcept
-        : listen_fd_(other.listen_fd_) {
-        other.listen_fd_ = -1;
+        : listen_fd_(other.listen_fd_.exchange(-1)),
+          client_fd_(other.client_fd_.exchange(-1)),
+          stop_requested_(other.stop_requested_.load()) {
+        other.stop_requested_ = false;
     }
 
     server& server::operator=(server&& other) noexcept {
         if (this != &other) {
             close();
-            listen_fd_ = other.listen_fd_;
-            other.listen_fd_ = -1;
+            listen_fd_ = other.listen_fd_.exchange(-1);
+            client_fd_ = other.client_fd_.exchange(-1);
+            stop_requested_ = other.stop_requested_.load();
+            other.stop_requested_ = false;
         }
         return *this;
     }
 
     void server::listen(const std::string& bind_host, uint16_t port) {
         close();
+        stop_requested_ = false;
         listen_fd_ = create_listen_socket(bind_host, port);
     }
 
     void server::close() {
-        close_fd(listen_fd_);
+        stop_requested_ = true;
+        close_atomic_fd(client_fd_);
+        close_atomic_fd(listen_fd_);
     }
 
     bool server::is_listening() const {
-        return listen_fd_ >= 0;
+        return listen_fd_.load() >= 0;
     }
 
     void server::serve(target& debug_target) {
-        if (listen_fd_ < 0) {
+        const int listen_fd = listen_fd_.load();
+        if (listen_fd < 0) {
             throw error("server is not listening");
         }
 
         struct sockaddr_storage client_addr {};
         socklen_t client_len = sizeof(client_addr);
-        int client_fd = ::accept(listen_fd_,
+        int client_fd = ::accept(listen_fd,
                                  reinterpret_cast<struct sockaddr*>(&client_addr),
                                  &client_len);
         if (client_fd < 0) {
+            if (stop_requested_.load()) {
+                return;
+            }
             throw_errno("accept failed");
         }
+        client_fd_ = client_fd;
 
         try {
             while (true) {
@@ -788,11 +818,14 @@ namespace xdbgstub {
                 send_all(client_fd, format_message("response", response_fields));
             }
         } catch (...) {
-            close_fd(client_fd);
+            close_owned_fd(client_fd_, client_fd);
+            if (stop_requested_.load()) {
+                return;
+            }
             throw;
         }
 
-        close_fd(client_fd);
+        close_owned_fd(client_fd_, client_fd);
     }
 
 } // namespace xdbgstub

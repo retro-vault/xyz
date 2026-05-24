@@ -199,3 +199,118 @@ TEST(xdbg_emitter_emits_c_and_assembly_debug_info) {
     ASSERT(saw_asm_line);
     ASSERT(saw_c_line);
 }
+
+TEST(xdbg_emitter_skips_missing_library_source_files) {
+    scoped_temp_dir temp;
+
+    const std::string missing_library_source =
+        "xlink_missing_library_source_314159265358979.c";
+
+    auto main_source = temp.path / "xlink_lib_entry.s";
+    auto main_rel = temp.path / "xlink_lib_entry.rel";
+    auto main_lst = temp.path / "xlink_lib_entry.lst";
+    auto helper_rel = temp.path / "xlink_missing_lib.rel";
+    auto lib_path = temp.path / "helpers.lib";
+    auto bin_path = temp.path / "prog.bin";
+    auto xdbg_path = temp.path / "prog.xdbg";
+
+    write_text(main_source,
+        "        .module xlink_lib_entry\n"
+        "        .globl _entry\n"
+        "        .globl _helper\n"
+        "        .area _CODE\n"
+        "_entry::\n"
+        "        call _helper\n"
+        "        ret\n");
+
+    write_text(main_rel,
+        "XL4\n"
+        "H 1 areas 3 global symbols\n"
+        "M xlink_lib_entry\n"
+        "S _helper Ref00000000\n"
+        "S .__.ABS. Def00000000\n"
+        "A _CODE size 0004 flags 0 addr 0\n"
+        "S _entry Def00000000\n"
+        "T 00 00 00 00 CD 00 00 C9\n"
+        "R 00 00 00 00 02 05 00 00\n");
+
+    write_text(main_lst,
+        "                                      1         .module xlink_lib_entry\n"
+        "                                      2         .globl _entry\n"
+        "                                      3         .globl _helper\n"
+        "                                      4         .area _CODE\n"
+        "    00000000                         5 _entry::\n"
+        "    00000000 CD 00 00         [17]   6         call _helper\n"
+        "    00000003 C9               [10]   7         ret\n");
+
+    write_text(helper_rel,
+        ";!FILE xlink_missing_lib.asm\n"
+        "XL4\n"
+        "H 1 areas 5 global symbols\n"
+        "M xlink_missing_lib\n"
+        "O -mz80 sdcccall(1)\n"
+        "S .__.ABS. Def00000000\n"
+        "A _CODE size 0001 flags 0 addr 0\n"
+        "S _helper Def00000000\n"
+        "S C$" + missing_library_source + "$7$0_0$0 Def00000000\n"
+        "S G$helper$0$0 Def00000000\n"
+        "S XG$helper$0$0 Def00000001\n"
+        "T 00 00 00 00 C9\n"
+        "R 00 00 00 00\n");
+
+    write_text(lib_path, helper_rel.filename().string() + "\n");
+
+    xlink::cli_options opts;
+    opts.input_files = {main_rel, lib_path};
+    opts.output_file = bin_path;
+    opts.entry_symbol = "_entry";
+    opts.area_bases["_CODE"] = 0x0200;
+    opts.format = xlink::output_format::bin;
+    opts.output_range = xlink::address_range{0x0200, 0x0204};
+
+    xlink::link_context ctx;
+    ctx.entry_name = opts.entry_symbol;
+    ctx.area_bases = opts.area_bases;
+    ctx.output_range = opts.output_range;
+    ctx.format = opts.format;
+
+    xlink::linker::link(ctx, opts);
+    xlink::binary_emitter::emit(bin_path, ctx);
+    xlink::xdbg_emitter emitter;
+    emitter.emit(xdbg_path, bin_path, ctx);
+
+    auto doc = xdbg::read_file(xdbg_path);
+
+    ASSERT_EQ(doc.files.size(), 1u);
+
+    bool saw_entry = false;
+    bool saw_helper = false;
+    bool saw_missing_file = false;
+    bool saw_helper_line = false;
+
+    for (const auto& file : doc.files) {
+        if (std::filesystem::path(file.path).filename() == missing_library_source)
+            saw_missing_file = true;
+    }
+
+    for (const auto& function : doc.functions) {
+        if (function.name == "_entry") {
+            saw_entry = true;
+            ASSERT(function.file_id.has_value());
+        } else if (function.name == "_helper") {
+            saw_helper = true;
+            ASSERT(!function.file_id.has_value());
+            ASSERT(!function.line.has_value());
+        }
+    }
+
+    for (const auto& line : doc.lines) {
+        if (line.address == 0x0204u)
+            saw_helper_line = true;
+    }
+
+    ASSERT(saw_entry);
+    ASSERT(saw_helper);
+    ASSERT(!saw_missing_file);
+    ASSERT(!saw_helper_line);
+}

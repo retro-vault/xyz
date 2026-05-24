@@ -207,7 +207,10 @@ std::optional<source_location> debugger_session::current_source_location() {
 std::optional<source_location> debugger_session::source_location_for_address(
     uint32_t address) const
 {
-    const auto* line = find_line_for_pc(address);
+    const auto* function = find_function_for_pc(address);
+    const auto* line = function != nullptr
+        ? find_line_for_pc_in_function(*function, address)
+        : find_line_for_pc(address);
     if (line == nullptr) {
         return std::nullopt;
     }
@@ -222,7 +225,7 @@ std::optional<source_location> debugger_session::source_location_for_address(
     location.file_path = file->path;
     location.line = line->line;
     location.column = line->column;
-    if (const auto* function = find_function_for_pc(address)) {
+    if (function != nullptr) {
         location.function_name = function->name;
     }
     return location;
@@ -268,8 +271,10 @@ line_info_result debugger_session::info_line_argument(const std::string& argumen
 
     if (!argument.empty() && argument[0] == '*') {
         address = resolve_address_expression(argument);
-        line = find_line_for_pc(address);
         function = find_function_for_pc(address);
+        line = function != nullptr
+            ? find_line_for_pc_in_function(*function, address)
+            : find_line_for_pc(address);
     } else if (const auto* found_function = find_function_by_name(argument)) {
         function = found_function;
         line = find_line_for_function(*found_function);
@@ -343,7 +348,10 @@ std::vector<source_line_view> debugger_session::list_source(
 
     if (!argument.has_value()) {
         const auto registers = read_registers();
-        const auto* line = find_line_for_pc(registers.pc);
+        const auto* function = find_function_for_pc(registers.pc);
+        const auto* line = function != nullptr
+            ? find_line_for_pc_in_function(*function, registers.pc)
+            : find_line_for_pc(registers.pc);
         if (line == nullptr) {
             throw std::runtime_error("no source line for current pc");
         }
@@ -557,6 +565,30 @@ const xdbg::function* debugger_session::find_function_for_pc(uint32_t pc) const 
     return nullptr;
 }
 
+const xdbg::line_entry* debugger_session::find_line_for_pc_in_function(
+    const xdbg::function& function,
+    uint32_t pc) const
+{
+    if (!symbols_.has_value() || !function.file_id.has_value()) {
+        return nullptr;
+    }
+
+    const xdbg::line_entry* best = nullptr;
+    for (const auto& line : symbols_->lines) {
+        if (line.file_id != function.file_id.value() ||
+            line.address < function.start_address ||
+            line.address >= function.end_address ||
+            line.address > pc) {
+            continue;
+        }
+
+        if (best == nullptr || line.address > best->address) {
+            best = &line;
+        }
+    }
+    return best;
+}
+
 const xdbg::line_entry* debugger_session::find_line_for_pc(uint32_t pc) const {
     if (!symbols_.has_value()) {
         return nullptr;
@@ -576,10 +608,11 @@ const xdbg::line_entry* debugger_session::find_line_for_pc(uint32_t pc) const {
 const xdbg::line_entry* debugger_session::find_line_for_function(
     const xdbg::function& function) const
 {
-    if (!symbols_.has_value()) {
+    if (!symbols_.has_value() || !function.file_id.has_value()) {
         return nullptr;
     }
 
+    const xdbg::line_entry* best = nullptr;
     if (function.file_id.has_value() && function.line.has_value()) {
         for (const auto& line : symbols_->lines) {
             if (line.file_id == function.file_id.value() &&
@@ -588,7 +621,19 @@ const xdbg::line_entry* debugger_session::find_line_for_function(
             }
         }
     }
-    return find_line_for_pc(function.start_address);
+
+    for (const auto& line : symbols_->lines) {
+        if (line.file_id != function.file_id.value() ||
+            line.address < function.start_address ||
+            line.address >= function.end_address) {
+            continue;
+        }
+
+        if (best == nullptr || line.address < best->address) {
+            best = &line;
+        }
+    }
+    return best;
 }
 
 const xdbg::line_entry* debugger_session::find_line_by_file_and_line(

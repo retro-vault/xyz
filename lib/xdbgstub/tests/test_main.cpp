@@ -190,6 +190,56 @@ TEST(client_server_round_trip) {
     ASSERT(target.detached());
 }
 
+TEST(server_close_unblocks_accept) {
+    fake_target target;
+    xdbgstub::server server;
+    server.listen("127.0.0.1", 40124);
+
+    std::exception_ptr worker_failure;
+    std::thread worker([&]() {
+        try {
+            server.serve(target);
+        } catch (...) {
+            worker_failure = std::current_exception();
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    server.close();
+    worker.join();
+
+    ASSERT(!server.is_listening());
+    ASSERT(worker_failure == nullptr);
+}
+
+TEST(server_close_unblocks_idle_client) {
+    fake_target target;
+    xdbgstub::server server;
+    server.listen("127.0.0.1", 40125);
+
+    std::exception_ptr worker_failure;
+    std::thread worker([&]() {
+        try {
+            server.serve(target);
+        } catch (...) {
+            worker_failure = std::current_exception();
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    xdbgstub::client client;
+    client.connect("127.0.0.1", 40125);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    server.close();
+    worker.join();
+    client.close();
+
+    ASSERT(!server.is_listening());
+    ASSERT(worker_failure == nullptr);
+}
+
 int main() {
     int passed = 0;
     int failed = 0;

@@ -120,6 +120,10 @@ private:
     const xdbg::symbol* find_symbol_by_name(const std::string& name) const;
     // Find the function that covers the supplied program counter.
     const xdbg::function* find_function_for_pc(uint32_t pc) const;
+    // Find the best line entry for one pc within a specific function's source file.
+    const xdbg::line_entry* find_line_for_pc_in_function(
+        const xdbg::function& function,
+        uint32_t pc) const;
     // Find the best line entry for the supplied program counter.
     const xdbg::line_entry* find_line_for_pc(uint32_t pc) const;
     // Find the first line entry that belongs to a function.

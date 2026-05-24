@@ -44,6 +44,17 @@ namespace {
         return out.str();
     }
 
+    std::string bytes_to_hex(const std::vector<uint8_t>& data) {
+        static const char* digits = "0123456789ABCDEF";
+        std::string result;
+        result.reserve(data.size() * 2);
+        for (uint8_t byte : data) {
+            result.push_back(digits[(byte >> 4) & 0x0F]);
+            result.push_back(digits[byte & 0x0F]);
+        }
+        return result;
+    }
+
     std::optional<std::string> stringify_storage(const xdbg::variable& variable) {
         switch (variable.storage) {
         case xdbg::storage_kind::address:
@@ -465,6 +476,8 @@ void dap_frontend::handle_request(const json_value& body) {
         handle_disconnect(request.seq);
     } else if (request.command == "source") {
         handle_source(request.seq, request.arguments);
+    } else if (request.command == "disassemble") {
+        handle_disassemble(request.seq, request.arguments);
     } else if (request.command == "evaluate") {
         handle_evaluate(request.seq, request.arguments);
     } else if (request.command == "loadedSources") {
@@ -485,7 +498,7 @@ void dap_frontend::handle_initialize(int seq) {
         {"supportsLoadedSourcesRequest", true},
         {"supportsPauseRequest", true},
         {"supportsStepBack", false},
-        {"supportsDisassembleRequest", false},
+        {"supportsDisassembleRequest", true},
         {"exceptionBreakpointFilters", json_value(json_value::array_type{})}
     }));
     send_event("initialized");
@@ -722,6 +735,59 @@ void dap_frontend::handle_source(int seq, const json_value& arguments) {
     }));
 }
 
+void dap_frontend::handle_disassemble(int seq, const json_value& arguments) {
+    const auto memory_reference = require_string(arguments, "memoryReference");
+    const int instruction_count = require_int(arguments, "instructionCount");
+    if (instruction_count < 0) {
+        throw std::runtime_error("instructionCount must be non-negative");
+    }
+
+    int64_t address = debugger_.session().resolve_address_expression(memory_reference);
+    address += static_cast<int64_t>(optional_int(arguments, "offset").value_or(0));
+    if (address < 0) {
+        throw std::runtime_error("disassemble address underflow");
+    }
+
+    const int instruction_offset = optional_int(arguments, "instructionOffset").value_or(0);
+    const int total_count = instruction_count > 0
+        ? instruction_count + std::max(instruction_offset, 0)
+        : 0;
+    const auto disassembly = debugger_.session().disassemble(
+        static_cast<uint32_t>(address),
+        static_cast<std::size_t>(total_count));
+
+    json_value::array_type instructions;
+    int emitted = 0;
+    for (std::size_t index = instruction_offset > 0
+             ? static_cast<std::size_t>(instruction_offset)
+             : 0;
+         index < disassembly.size() && emitted < instruction_count;
+         ++index, ++emitted) {
+        const auto& line = disassembly[index];
+        json_value::object_type item = {
+            {"address", hex_u32(line.address)},
+            {"instruction", line.text},
+            {"instructionBytes", bytes_to_hex(line.bytes)}
+        };
+
+        if (const auto source = debugger_.session().source_location_for_address(line.address);
+            source.has_value()) {
+            item["location"] = make_source_object(source.value());
+            item["line"] = int64_t{source->line};
+            item["column"] = int64_t{source->column};
+            if (source->function_name.has_value()) {
+                item["symbol"] = source->function_name.value();
+            }
+        }
+
+        instructions.push_back(json_value(std::move(item)));
+    }
+
+    send_response(seq, "disassemble", true, json_value(json_value::object_type{
+        {"instructions", json_value(std::move(instructions))}
+    }));
+}
+
 void dap_frontend::handle_evaluate(int seq, const json_value& arguments) {
     const auto expr = require_string(arguments, "expression");
     if (const auto value = evaluate_simple_expression(debugger_.session(), expr);
@@ -897,6 +963,43 @@ json_value dap_frontend::make_variable_object(
     return json_value(std::move(object));
 }
 
+std::optional<uint32_t> dap_frontend::stack_return_address(uint32_t sp) {
+    const auto bytes = debugger_.session().read_memory(sp, 2);
+    if (bytes.size() < 2) {
+        return std::nullopt;
+    }
+    return static_cast<uint32_t>(bytes[0])
+        | (static_cast<uint32_t>(bytes[1]) << 8);
+}
+
+stop_snapshot dap_frontend::continue_to_temporary_breakpoint(uint32_t address) {
+    const bool had_breakpoint = has_breakpoint_at(address);
+    std::optional<int> temp_breakpoint_id;
+    if (!had_breakpoint) {
+        temp_breakpoint_id = debugger_.add_breakpoint("*" + hex_u32(address)).id;
+    }
+
+    try {
+        auto stop = debugger_.continue_execution();
+        if (temp_breakpoint_id.has_value()) {
+            debugger_.delete_breakpoint(temp_breakpoint_id.value());
+            if (stop.reason == xdbgstub::stop_reason::breakpoint &&
+                stop.pc == address) {
+                stop.reason = xdbgstub::stop_reason::step;
+            }
+        }
+        return stop;
+    } catch (...) {
+        if (temp_breakpoint_id.has_value()) {
+            try {
+                debugger_.delete_breakpoint(temp_breakpoint_id.value());
+            } catch (...) {
+            }
+        }
+        throw;
+    }
+}
+
 stop_snapshot dap_frontend::step_to_next_source_stop(const std::string& command) {
     const auto start = debugger_.session().status();
     const auto start_regs = debugger_.session().read_registers();
@@ -925,6 +1028,13 @@ stop_snapshot dap_frontend::step_to_next_source_stop(const std::string& command)
         return debugger_.step_instruction();
     }
 
+    if (command == "stepOut") {
+        if (const auto return_address = stack_return_address(start_regs.sp);
+            return_address.has_value()) {
+            return continue_to_temporary_breakpoint(return_address.value());
+        }
+    }
+
     stop_snapshot stop = start;
     for (int i = 0; i < max_instruction_steps; ++i) {
         stop = debugger_.step_instruction();
@@ -951,6 +1061,10 @@ stop_snapshot dap_frontend::step_to_next_source_stop(const std::string& command)
         }
 
         if (command == "next" && regs.sp < start_regs.sp) {
+            if (const auto return_address = stack_return_address(regs.sp);
+                return_address.has_value()) {
+                return continue_to_temporary_breakpoint(return_address.value());
+            }
             continue;
         }
 

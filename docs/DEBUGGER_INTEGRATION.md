@@ -26,6 +26,16 @@ So there are two APIs:
 - `xdbg` frontend API: CLI / MI / DAP
 - `xdbgstub` target API: remote emulator integration
 
+One important consequence:
+
+- source lookup and source-vs-disassembly presentation live on the
+  `xdbg` side
+- your emulator-side stub does not send source files or formatted
+  assembly listings
+- it only needs to provide correct memory, register, breakpoint, and
+  execution state behavior so `xdbg` can build source or disassembly
+  views on top
+
 ## What To Implement In Your Emulator
 
 Your emulator should:
@@ -160,9 +170,15 @@ int main() {
     emulator_target target;
     xdbgstub::server server;
     server.listen("127.0.0.1", 9000);
-    server.serve(target);
+    while (server.is_listening()) {
+        server.serve(target);
+    }
 }
 ```
+
+If your emulator needs to shut the stub down from another thread, call
+`server.close()`. That will wake a blocking `serve()` call even if it is
+waiting in `accept()` or on an already connected client.
 
 ## What The Emulator Must Keep Updated
 

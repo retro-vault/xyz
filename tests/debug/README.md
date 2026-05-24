@@ -212,6 +212,14 @@ To test it:
    set breakpoints, then step and inspect state through the standard VS Code
    debug UI.
 
+If you step into or over a linked library function that has symbols but
+no source file:
+
+- VS Code may not have a C source editor location to show for that stop
+- `xdbg` now reports that honestly instead of pointing at a fake file
+- the DAP frontend now supports disassembly fallback, so the session can
+  continue in assembly instead of freezing on an attempted source step
+
 ### Included `tasks.json`
 
 The included `tasks.json` provides:
@@ -299,6 +307,14 @@ VS Code should then:
 1. launch `xdbg` in DAP mode
 2. connect to the already-running remote target
 3. drive the session through the native VS Code debug UI
+
+Stepping behavior worth knowing:
+
+- `F10` / `next` now uses a temporary return breakpoint when it has
+  stepped into a callee with no source, instead of trying to single-step
+  the entire function one instruction at a time
+- if no source exists for the current function, use the disassembly view
+  or the terminal `disassemble` command to inspect progress
 
 ### What To Expect From The F5 Path
 

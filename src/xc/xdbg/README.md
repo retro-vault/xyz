@@ -15,6 +15,8 @@ Built binaries:
 - a reasonably minimal GDB-like command-line debugger
 - loads linked `.xdbg` symbol files through `libxdbg`
 - talks to remote targets through `libxdbgstub`
+- falls back cleanly to symbol/disassembly-only debugging when a linked
+  function has no source file
 
 `xdbg-z80`
 
@@ -51,6 +53,14 @@ Supported startup switches:
 
 If `--symbols` is not given and `--exec foo.bin` is set, `xdbg` also
 tries `foo.bin.xdbg`.
+
+For VS Code integration, `xdbg` also supports:
+
+- `--interpreter=dap`
+
+That mode now advertises and serves DAP disassembly requests, so editor
+clients can show assembly when no source file exists for the current
+function.
 
 ## xdbg Commands
 
@@ -141,6 +151,16 @@ ld	a, 5(ix)
 ld	-2(ix), a
 ```
 
+If a function exists in symbols but has no source file entry, `xdbg`
+still knows its address range and can debug it through:
+
+- `disassemble`
+- `x/Ni ADDR`
+- DAP disassembly requests from VS Code
+
+The debugger will no longer pretend that such functions belong to a
+previous source file just to keep source stepping alive.
+
 ## xdbg-z80 Usage
 
 Basic form:
@@ -166,6 +186,16 @@ Behavior today:
 - Z80 register access through `z80ex`
 - software-side breakpoint list checked before instruction execution
 - `continue`, `step_instruction`, `pause`, `read/write memory`, `read/write registers`
+
+When embedding the same transport in a real emulator, the intended
+shutdown pattern is:
+
+- run `serve()` inside a loop like `while (server.is_listening())`
+- call `server.close()` from another thread when the emulator is
+  shutting down
+
+That now wakes a blocking `serve()` call even if it is waiting in
+`accept()` or on an already connected client.
 
 ## What This Is And Is Not
 

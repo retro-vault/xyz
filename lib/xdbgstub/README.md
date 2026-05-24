@@ -53,6 +53,12 @@ operations.
 `xdbgstub::server` accepts a TCP client and dispatches requests to a
 `target`.
 
+This layer does not carry source files or pre-rendered assembly text.
+Those views are built on the debugger side by `xdbg`, using:
+
+- `.xdbg` symbol data for source mappings when available
+- live target memory from `xdbgstub` for disassembly
+
 ## Data Types
 
 The central state types are:
@@ -134,9 +140,15 @@ int main() {
     toy_target target;
     xdbgstub::server server;
     server.listen("127.0.0.1", 9000);
-    server.serve(target);
+    while (server.is_listening()) {
+        server.serve(target);
+    }
 }
 ```
+
+To stop a running server from another thread during emulator shutdown,
+call `server.close()`. That now closes both the listening socket and any
+active client connection so a blocking `serve()` call can return cleanly.
 
 ## Protocol Shape
 

@@ -30,6 +30,15 @@ and lets VS Code speak DAP directly with `xdbg` over stdio.
 The extension does not start an emulator or target process for you.
 Your configured `remoteTarget` is expected to already be listening.
 
+Current debugger-side behavior worth knowing:
+
+- if the linked `.xdbg` file has no real source file for a library
+  function, `xdbg` will not invent one
+- in that case VS Code may switch to disassembly-oriented navigation for
+  that frame
+- `xdbg` now supports the DAP `disassemble` request, so assembly fallback
+  is available instead of failing source lookup outright
+
 ## Local Validation
 
 Syntax-check the extension:

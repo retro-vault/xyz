@@ -361,10 +361,13 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        while (true) {
+        while (server.is_listening()) {
             try {
                 server.serve(target);
             } catch (const xdbgstub::error& e) {
+                if (!server.is_listening()) {
+                    break;
+                }
                 if (std::string(e.what()) == "connection closed") {
                     if (!opts.quiet) {
                         std::cout << "xdbg-z80 client disconnected, waiting for reconnect\n";

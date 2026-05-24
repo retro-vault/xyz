@@ -271,6 +271,16 @@ Where the data comes from:
 If the sidecars are missing, xlink still writes `.xdbg`, but it can only
 include what it knows from the linked objects themselves.
 
+Important detail for library modules:
+
+- if a linked library function has symbol information but no real source
+  file can be resolved on disk, xlink still emits the function and symbol
+  metadata
+- in that case it intentionally omits bogus source file and line records
+  instead of inventing a fake local file entry
+- that lets debuggers fall back to symbol-level stepping and
+  disassembly instead of trying to open a non-existent source file
+
 ### `--sdcc-runtime <dir>`
 
 If present, xlink modifies the input list before linking:

@@ -9,6 +9,7 @@
 #ifndef XDBGSTUB_SERVER_HPP
 #define XDBGSTUB_SERVER_HPP
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -101,7 +102,9 @@ namespace xdbgstub {
         void serve(target& debug_target);
 
     private:
-        int listen_fd_ = -1; // Listening socket file descriptor, or `-1`.
+        std::atomic<int> listen_fd_ {-1};   // Listening socket file descriptor, or `-1`.
+        std::atomic<int> client_fd_ {-1};   // Active client socket, or `-1`.
+        std::atomic<bool> stop_requested_ {false}; // True after `close()` requests shutdown.
     };
 
 } // namespace xdbgstub
