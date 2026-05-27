@@ -9,6 +9,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <string>
 
 #include <xlink/cdb_emitter.hpp>
 #include <xlink/cli.hpp>
@@ -22,13 +23,30 @@
 
 #define XLINK_VERSION "1.0.0"
 
+static std::filesystem::path replace_extension(const std::filesystem::path& path,
+                                               const std::string& ext)
+{
+    auto out = path;
+    out.replace_extension(ext);
+    return out;
+}
+
 int main(int argc, char* argv[]) {
     try {
         auto opts = xlink::cli::parse(argc, argv);
 
         if (opts.show_help) {
-            xlink::cli::print_usage();
+            xlink::cli::print_usage(argv[0]);
             return 0;
+        }
+        if (opts.show_version) {
+            std::cout << "xlink " << XLINK_VERSION
+                      << " (X Linker for Z80)\n";
+            return 0;
+        }
+
+        if (opts.mode == xlink::link_mode::gnu) {
+            throw xlink::xlink_error("GNU mode is not implemented yet");
         }
 
         xlink::runtime::apply_sdcc_runtime(opts);
@@ -47,6 +65,13 @@ int main(int argc, char* argv[]) {
 
         xlink::linker::link(ctx, opts);
         xlink::binary_emitter::emit(opts.output_file, ctx);
+
+        if (opts.debug_info) {
+            opts.symbol_file = replace_extension(opts.output_file, ".noi");
+            opts.xdbg_file = replace_extension(opts.output_file, ".xdbg");
+            opts.cdb_file = replace_extension(opts.output_file, ".cdb");
+        }
+
         if (opts.symbol_file.has_value()) {
             xlink::noice_emitter emitter;
             const xlink::debug_emitter& debug = emitter;

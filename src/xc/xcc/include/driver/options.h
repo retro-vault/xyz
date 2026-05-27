@@ -34,7 +34,7 @@ enum class opt_level {
 };
 
 //
-// Target assembler dialect.  Selected with -masm=<name>.
+// Target assembler dialect.  Selected with --mode=<name>.
 //
 enum class asm_dialect {
     SDASZ80, // SDCC sdasz80 (default)

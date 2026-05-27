@@ -97,11 +97,15 @@ namespace xlink {
                               + runtime_dir.string());
         }
 
-        auto crt0 = resolve_crt0(runtime_dir);
-        auto lib = resolve_runtime_lib(runtime_dir);
+        if (!opts.no_stdlib && !opts.no_startfiles) {
+            auto crt0 = resolve_crt0(runtime_dir);
+            opts.input_files.insert(opts.input_files.begin(), crt0);
+        }
 
-        opts.input_files.insert(opts.input_files.begin(), crt0);
-        opts.input_files.push_back(lib);
+        if (!opts.no_stdlib) {
+            auto lib = resolve_runtime_lib(runtime_dir);
+            opts.input_files.push_back(lib);
+        }
     }
 
 } // namespace xlink

@@ -16,6 +16,18 @@
 
 namespace xcc {
 
+static bool apply_mode_option(options& opts, const char *mode) {
+    if (strcmp(mode, "gnu") == 0) {
+        opts.dialect = asm_dialect::GNUAS;
+        return true;
+    }
+    if (strcmp(mode, "sdcc") == 0) {
+        opts.dialect = asm_dialect::SDASZ80;
+        return true;
+    }
+    return false;
+}
+
 void options::usage(const char *argv0) {
     fprintf(stderr,
         "Usage: %s [options] <input.c> [-o <output>]\n"
@@ -32,8 +44,8 @@ void options::usage(const char *argv0) {
         "  -D<macro>[=val]   Define preprocessor macro\n"
         "  -std=c11          Language standard (only c11 supported)\n"
         "  -g                Emit debug info\n"
-        "  -masm=sdasz80     Output for SDCC sdasz80 assembler (default)\n"
-        "  -masm=gnuas       Output for GNU binutils assembler\n"
+        "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
+        "  --mode=gnu        Output for GNU binutils assembler\n"
         "  -v                Verbose output\n"
         "  --version         Print version\n"
         "  --help            Print this help\n",
@@ -82,14 +94,10 @@ options options::parse(int argc, char **argv) {
             opts.defines.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
         } else if (strncmp(a, "-std=", 5) == 0) {
             // We only support c11; silently accept c99/c11/gnu11 etc.
-        } else if (strncmp(a, "-masm=", 6) == 0) {
-            const char *dialect = a + 6;
-            if (strcmp(dialect, "gnuas") == 0)
-                opts.dialect = asm_dialect::GNUAS;
-            else if (strcmp(dialect, "sdasz80") == 0)
-                opts.dialect = asm_dialect::SDASZ80;
-            else
-                fprintf(stderr, "xcc: warning: unknown assembler dialect '%s'\n", dialect);
+        } else if (strncmp(a, "--mode=", 7) == 0) {
+            const char *mode = a + 7;
+            if (!apply_mode_option(opts, mode))
+                fprintf(stderr, "xcc: warning: unknown mode '%s'\n", mode);
         } else if (strcmp(a, "-g") == 0) {
             opts.debug = true;
         } else if (strcmp(a, "-v") == 0) {

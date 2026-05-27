@@ -19,8 +19,50 @@ namespace xlink {
         return static_cast<uint16_t>(std::stoul(s, nullptr, 16));
     }
 
+    static address_range parse_range_arg(const std::string& arg_name,
+                                         const std::string& range_str)
+    {
+        auto dash = range_str.find('-');
+        if (dash == std::string::npos) {
+            throw xlink_error(arg_name
+                              + " format: start-end (hex), e.g. 4000-7FFF");
+        }
+
+        address_range r;
+        r.start = parse_hex16(range_str.substr(0, dash));
+        r.end = parse_hex16(range_str.substr(dash + 1));
+        return r;
+    }
+
+    static std::pair<std::string, uint16_t> parse_area_base_arg(
+        const std::string& arg_name,
+        const std::string& value)
+    {
+        auto eq = value.find('=');
+        if (eq == std::string::npos || eq == 0 || eq == value.size() - 1) {
+            throw xlink_error(arg_name
+                              + " format: AREA=ADDR (hex), e.g. _CODE=0100");
+        }
+
+        return {value.substr(0, eq), parse_hex16(value.substr(eq + 1))};
+    }
+
+    static std::string require_arg(int argc, char* argv[], int& i,
+                                   const std::string& arg_name)
+    {
+        if (++i >= argc)
+            throw xlink_error(arg_name + " requires an argument");
+        return argv[i];
+    }
+
     cli_options cli::parse(int argc, char* argv[]) {
         cli_options opts;
+        bool entry_explicit = false;
+
+        if (argc < 2) {
+            opts.show_help = true;
+            return opts;
+        }
 
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
@@ -28,81 +70,104 @@ namespace xlink {
             if (arg == "-h" || arg == "--help") {
                 opts.show_help = true;
                 return opts;
-            } else if (arg == "-c" || arg == "--cdb") {
-                if (++i >= argc)
-                    throw xlink_error(std::string(arg) + " requires an argument");
-                opts.cdb_file = std::filesystem::path(argv[i]);
-            } else if (arg == "-g" || arg == "--xdbg") {
-                if (++i >= argc)
-                    throw xlink_error(std::string(arg) + " requires an argument");
-                opts.xdbg_file = std::filesystem::path(argv[i]);
-            } else if (arg == "--sdcc-runtime") {
-                if (++i >= argc)
-                    throw xlink_error("--sdcc-runtime requires an argument");
-                opts.sdcc_runtime_dir = std::filesystem::path(argv[i]);
+            } else if (arg == "--version") {
+                opts.show_version = true;
+                return opts;
+            } else if (arg == "--mode=sdcc") {
+                opts.mode = link_mode::sdcc;
+            } else if (arg == "--mode=gnu") {
+                opts.mode = link_mode::gnu;
+            } else if (arg == "-g") {
+                opts.debug_info = true;
+            } else if (arg == "-c" || arg == "-n" || arg == "--cdb"
+                       || arg == "--xdbg" || arg == "--noi") {
+                throw xlink_error(
+                    "separate debug output switches are not supported; use -g");
+            } else if (arg == "--sdcc-runtime" || arg == "-B") {
+                opts.sdcc_runtime_dir = std::filesystem::path(
+                    require_arg(argc, argv, i, arg));
+            } else if (arg.rfind("-B", 0) == 0 && arg.size() > 2) {
+                opts.sdcc_runtime_dir = std::filesystem::path(arg.substr(2));
+            } else if (arg == "-nostartfiles") {
+                opts.no_startfiles = true;
+            } else if (arg == "-nostdlib") {
+                opts.no_stdlib = true;
+            } else if (arg == "-L" || arg.rfind("-L", 0) == 0) {
+                throw xlink_error("-L is not implemented yet");
+            } else if (arg == "-l" || arg.rfind("-l", 0) == 0) {
+                throw xlink_error("-l is not implemented yet");
+            } else if (arg == "-T" || (arg.rfind("-T", 0) == 0
+                       && arg.rfind("-Ttext=", 0) != 0
+                       && arg.rfind("-Tdata=", 0) != 0
+                       && arg.rfind("-Tbss=", 0) != 0)) {
+                throw xlink_error("linker scripts are not implemented yet");
+            } else if (arg.rfind("-Map=", 0) == 0) {
+                throw xlink_error("-Map is not implemented yet");
             } else if (arg == "-o") {
-                if (++i >= argc)
-                    throw xlink_error("-o requires an argument");
-                opts.output_file = argv[i];
+                opts.output_file = require_arg(argc, argv, i, arg);
+            } else if (arg.rfind("-o", 0) == 0 && arg.size() > 2) {
+                opts.output_file = arg.substr(2);
             } else if (arg == "-e") {
-                if (++i >= argc)
-                    throw xlink_error("-e requires an argument");
-                opts.entry_symbol = argv[i];
-            } else if (arg == "-n") {
-                if (++i >= argc)
-                    throw xlink_error("-n requires an argument");
-                opts.symbol_file = std::filesystem::path(argv[i]);
+                opts.entry_symbol = require_arg(argc, argv, i, arg);
+                entry_explicit = true;
             } else if (arg == "-r") {
-                if (++i >= argc)
-                    throw xlink_error("-r requires an argument");
-                // Parse "start-end" in hex.
-                std::string range_str = argv[i];
-                auto dash = range_str.find('-');
-                if (dash == std::string::npos)
-                    throw xlink_error(
-                        "-r format: start-end (hex), e.g. 4000-7FFF");
-                address_range r;
-                r.start = parse_hex16(range_str.substr(0, dash));
-                r.end = parse_hex16(range_str.substr(dash + 1));
-                opts.reserved_ranges.push_back(r);
+                opts.reserved_ranges.push_back(parse_range_arg(
+                    arg, require_arg(argc, argv, i, arg)));
+            } else if (arg.rfind("--reserve=", 0) == 0) {
+                opts.reserved_ranges.push_back(parse_range_arg(
+                    "--reserve", arg.substr(std::string("--reserve=").size())));
             } else if (arg == "-b") {
-                if (++i >= argc)
-                    throw xlink_error("-b requires an argument");
-                std::string base_str = argv[i];
-                auto eq = base_str.find('=');
-                if (eq == std::string::npos || eq == 0
-                    || eq == base_str.size() - 1)
-                    throw xlink_error(
-                        "-b format: AREA=ADDR (hex), e.g. _CODE=0100");
-                std::string area_name = base_str.substr(0, eq);
-                uint16_t base = parse_hex16(base_str.substr(eq + 1));
+                auto [area_name, base] = parse_area_base_arg(
+                    arg, require_arg(argc, argv, i, arg));
                 opts.area_bases[area_name] = base;
+            } else if (arg.rfind("--section-start=", 0) == 0) {
+                auto [area_name, base] = parse_area_base_arg(
+                    "--section-start",
+                    arg.substr(std::string("--section-start=").size()));
+                opts.area_bases[area_name] = base;
+            } else if (arg.rfind("-Ttext=", 0) == 0) {
+                opts.area_bases["_CODE"] =
+                    parse_hex16(arg.substr(std::string("-Ttext=").size()));
+            } else if (arg.rfind("-Tdata=", 0) == 0) {
+                opts.area_bases["_DATA"] =
+                    parse_hex16(arg.substr(std::string("-Tdata=").size()));
+            } else if (arg.rfind("-Tbss=", 0) == 0) {
+                opts.area_bases["_BSS"] =
+                    parse_hex16(arg.substr(std::string("-Tbss=").size()));
             } else if (arg == "-f") {
-                if (++i >= argc)
-                    throw xlink_error("-f requires an argument");
-                std::string format = argv[i];
+                std::string format = require_arg(argc, argv, i, arg);
                 if (format == "xl") {
                     opts.format = output_format::xl;
-                } else if (format == "bin") {
+                } else if (format == "bin" || format == "binary") {
                     opts.format = output_format::bin;
+                } else if (format == "elf" || format == "ihx") {
+                    throw xlink_error("output format '" + format
+                                      + "' is not implemented yet");
+                } else {
+                    throw xlink_error("unsupported output format: " + format);
+                }
+            } else if (arg.rfind("--oformat=", 0) == 0) {
+                std::string format = arg.substr(std::string("--oformat=").size());
+                if (format == "xl") {
+                    opts.format = output_format::xl;
+                } else if (format == "binary") {
+                    opts.format = output_format::bin;
+                } else if (format == "elf" || format == "ihx") {
+                    throw xlink_error("output format '" + format
+                                      + "' is not implemented yet");
                 } else {
                     throw xlink_error("unsupported output format: " + format);
                 }
             } else if (arg == "-x") {
-                if (++i >= argc)
-                    throw xlink_error("-x requires an argument");
-                std::string range_str = argv[i];
-                auto dash = range_str.find('-');
-                if (dash == std::string::npos)
-                    throw xlink_error(
-                        "-x format: start-end (hex), e.g. 0000-3FFF");
-                address_range r;
-                r.start = parse_hex16(range_str.substr(0, dash));
-                r.end = parse_hex16(range_str.substr(dash + 1));
-                opts.output_range = r;
-            } else if (arg == "-m") {
+                opts.output_range = parse_range_arg(
+                    arg, require_arg(argc, argv, i, arg));
+            } else if (arg.rfind("--binary-range=", 0) == 0) {
+                opts.output_range = parse_range_arg(
+                    "--binary-range",
+                    arg.substr(std::string("--binary-range=").size()));
+            } else if (arg == "-m" || arg == "-M" || arg == "--print-map") {
                 opts.print_map = true;
-            } else if (arg == "-v") {
+            } else if (arg == "-v" || arg == "--verbose") {
                 opts.verbose = true;
             } else if (arg[0] == '-') {
                 throw xlink_error("unknown option: " + arg);
@@ -111,30 +176,51 @@ namespace xlink {
             }
         }
 
-        if (!opts.show_help && opts.input_files.empty())
+        if (!entry_explicit && opts.mode == link_mode::gnu)
+            opts.entry_symbol = "_start";
+
+        if (!opts.show_help && !opts.show_version && opts.input_files.empty())
             throw xlink_error("no input files");
 
         return opts;
     }
 
-    void cli::print_usage() {
-        std::cout
-            << "xlink - Z80 linker for xyz\n"
-            << "usage: xlink [options] <file.rel|file.lib> ...\n\n"
+    void cli::print_usage(const char* argv0) {
+        std::cerr
+            << "Usage: " << argv0 << " [options] <input> ...\n"
+            << "\n"
+            << "X Linker (xlink) - linker for Z80\n"
+            << "\n"
             << "options:\n"
-            << "  -c, --cdb <file>  emit linked SDCC cdb debug sidecar\n"
-            << "  -g, --xdbg <file> emit linked xdbg debug sidecar\n"
-            << "  --sdcc-runtime <dir> use crt0/lib defaults from runtime dir\n"
-            << "  -o <file>         output file (default: a.out)\n"
-            << "  -n <file>         write NoICE .noi symbol/debug file\n"
-            << "  -e <symbol>       entry point symbol (default: _main)\n"
-            << "  -r <start>-<end>  reserve address range (hex), repeatable\n"
-            << "  -b <area>=<addr>  set base address for area group (hex)\n"
-            << "  -f <xl|bin>       output format (default: xl)\n"
-            << "  -x <start>-<end>  output range for -f bin (hex, inclusive)\n"
-            << "  -m                print memory map after linking\n"
-            << "  -v                verbose output\n"
-            << "  -h, --help        show this help\n";
+            << "  -o <file>                  Output file (default: a.out)\n"
+            << "  -e <symbol>                Entry symbol\n"
+            << "                             (default: _main with --mode=sdcc,\n"
+            << "                                       _start with --mode=gnu)\n"
+            << "  --mode=sdcc                Accept SDCC/ASxxxx inputs (default)\n"
+            << "  --mode=gnu                 Accept GNU inputs\n"
+            << "  -B <prefix>                Add startup/runtime/toolchain search prefix\n"
+            << "  -L<dir>                    Add library search directory\n"
+            << "  -l<name>                   Link against library\n"
+            << "  -nostartfiles              Do not use implicit startup files\n"
+            << "  -nostdlib                  Do not use implicit startup files or default libs\n"
+            << "  --oformat=xl               Emit XL relocatable image (default)\n"
+            << "  --oformat=binary           Emit flat binary image\n"
+            << "  --oformat=elf              Emit ELF image\n"
+            << "  --oformat=ihx              Emit Intel HEX image\n"
+            << "  -T <file>                  Use linker script\n"
+            << "  --section-start=<name>=<addr>\n"
+            << "                             Set base address for named section/area\n"
+            << "  -Ttext=<addr>              Alias for text/code base address\n"
+            << "  -Tdata=<addr>              Alias for data base address\n"
+            << "  -Tbss=<addr>               Alias for bss base address\n"
+            << "  --binary-range=<lo>-<hi>   Limit emitted range for --oformat=binary\n"
+            << "  --reserve=<lo>-<hi>        Reserve address range (repeatable)\n"
+            << "  -g                         Emit debug outputs for the selected mode\n"
+            << "  -M, --print-map            Print memory map to stdout\n"
+            << "  -Map=<file>                Write memory map to file\n"
+            << "  -v, --verbose              Verbose output\n"
+            << "  --version                  Print version\n"
+            << "  -h, --help                 Show this help\n";
     }
 
 } // namespace xlink

@@ -65,3 +65,50 @@ TEST(runtime_apply_sdcc_runtime_requires_runtime_dir_to_exist) {
 
     ASSERT_THROWS(xlink::runtime::apply_sdcc_runtime(opts), xlink::xlink_error);
 }
+
+TEST(runtime_apply_sdcc_runtime_honors_nostartfiles) {
+    auto dir = make_temp_dir("/tmp/xlink-runtime-XXXXXX");
+    auto crt0 = dir / "crt0.rel";
+    auto lib = dir / "z80.lib";
+
+    {
+        std::ofstream(crt0) << "XL\nM crt0\n";
+        std::ofstream(lib) << "# runtime library index\nhelper.rel\n";
+    }
+
+    xlink::cli_options opts;
+    opts.sdcc_runtime_dir = dir;
+    opts.no_startfiles = true;
+    opts.input_files = {"main.rel"};
+
+    xlink::runtime::apply_sdcc_runtime(opts);
+
+    ASSERT_EQ(static_cast<int>(opts.input_files.size()), 2);
+    ASSERT_EQ(opts.input_files[0], std::filesystem::path("main.rel"));
+    ASSERT_EQ(opts.input_files[1], lib);
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(runtime_apply_sdcc_runtime_honors_nostdlib) {
+    auto dir = make_temp_dir("/tmp/xlink-runtime-XXXXXX");
+    auto crt0 = dir / "crt0.rel";
+    auto lib = dir / "z80.lib";
+
+    {
+        std::ofstream(crt0) << "XL\nM crt0\n";
+        std::ofstream(lib) << "# runtime library index\nhelper.rel\n";
+    }
+
+    xlink::cli_options opts;
+    opts.sdcc_runtime_dir = dir;
+    opts.no_stdlib = true;
+    opts.input_files = {"main.rel"};
+
+    xlink::runtime::apply_sdcc_runtime(opts);
+
+    ASSERT_EQ(static_cast<int>(opts.input_files.size()), 1);
+    ASSERT_EQ(opts.input_files[0], std::filesystem::path("main.rel"));
+
+    std::filesystem::remove_all(dir);
+}
