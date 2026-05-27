@@ -1,0 +1,24 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_f
+_f:
+	; prologue: f (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param x at 4(ix)
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __cmp_t_89383
+	ld	hl, #0
+	jp	__cmp_e_30886
+__cmp_t_89383:
+	ld	hl, #1
+__cmp_e_30886:
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

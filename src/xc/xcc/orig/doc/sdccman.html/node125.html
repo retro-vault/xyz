@@ -1,0 +1,189 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.1.3 Bankswitching</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node126.html">
+<LINK REL="previous" HREF="node124.html">
+<LINK REL="next" HREF="node126.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node126.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node124.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1710"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1712"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node126.html">4.1.4 MCS51/DS390 Startup Code</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node124.html">4.1.2 Other Features available by</A>
+ &nbsp; <B>  <A ID="tex2html1711"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1713"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1714"
+  HREF="node125.html#SECTION00513100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Hardware</A>
+<LI><A ID="tex2html1715"
+  HREF="node125.html#SECTION00513200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Software</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00513000000000000000"></A><A ID="subsec:Bankswitching"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> Bankswitching
+</H2>
+
+<P>
+Bankswitching<A ID="2666"></A> (a.k.a. code banking<A ID="2667"></A>)
+is a technique to increase the code space above the 64k limit of the
+8051.
+
+<P>
+
+<H3><A ID="SECTION00513100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Hardware</A>
+</H3>
+
+<P>
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER" COLSPAN=1><SPAN>8000-FFFF</SPAN></TD>
+<TD CLASS="CENTER">bank1</TD>
+<TD CLASS="CENTER">bank2</TD>
+<TD CLASS="CENTER" COLSPAN=1><SPAN>bank3</SPAN></TD>
+</TR>
+<TR><TD CLASS="CENTER" COLSPAN=1><SPAN>0000-7FFF</SPAN></TD>
+<TD CLASS="CENTER">common</TD>
+<TD CLASS="CENTER" COLSPAN=2></TD>
+</TR>
+<TR><TD CLASS="CENTER" COLSPAN=4><SPAN>SiLabs C8051F120 example</SPAN></TD>
+</TR>
+</TABLE>
+<BR>
+<BR>
+Usually the hardware uses some sfr (an output port or an internal
+sfr) to select a bank and put it in the banked area of the memory
+map. The selected bank usually becomes active immediately upon assignment
+to this sfr and when running inside a bank it will switch out this
+code it is currently running. Therefor you cannot jump or call directly
+from one bank to another and need to use a so-called trampoline in
+the common area. For SDCC an example trampoline is in crtbank.asm
+and you may need to change it to your 8051 derivative or schematic.
+The presented code is written for the C8051F120.
+<BR>
+<BR>
+When calling a banked function SDCC will put the LSB of the functions
+address in register R0, the MSB in R1 and the bank in R2 and then
+call this trampoline <SPAN  CLASS="textit">__sdcc_banked_call</SPAN>. The current selected
+bank is saved on the stack, the new bank is selected and an indirect
+jump is made. When the banked function returns it jumps to <SPAN  CLASS="textit">__sdcc_banked_ret</SPAN>
+which restores the previous bank and returns to the caller.
+
+<P>
+
+<H3><A ID="SECTION00513200000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Software</A>
+</H3>
+
+<P>
+When writing banked software using SDCC you need to use some special
+keywords and options. You also need to take over a bit of work from
+the linker.
+<BR>
+<BR>
+To create a function that can be called from another bank it requires
+the keyword <SPAN  CLASS="textit">__banked</SPAN><A ID="2694"></A>. The caller must see
+this in the prototype of the callee and the callee needs it for a
+proper return. Called functions within the same bank as the caller
+do not need the <SPAN  CLASS="textit">__banked</SPAN> keyword nor do functions in the
+common area. Beware: SDCC does not know or check if functions are
+in the same bank. This is your responsibility!
+<BR>
+<BR>
+Normally all functions you write end up in the segment CSEG. If you
+want a function explicitly to reside in the common area put it in
+segment HOME. This applies for instance to interrupt service routines
+as they should not be banked.
+
+<P>
+Functions that need to be in a switched bank must be put in a named
+segment. The name can be mostly anything up to eight characters (e.g.
+BANK1). To do this you either use &mdash;codeseg BANK1 (See <A HREF="node57.html#lyx:-codeseg">3.3.4</A>)
+on the command line when compiling or #pragma codeseg BANK1 (See
+<A HREF="node119.html#sec:Pragmas">3.16</A>) at the top of the C source file. The segment name
+always applies to the whole source file and generated object so functions
+for different banks need to be defined in different source files.
+<BR>
+<BR>
+When linking your objects you need to tell the linker where to put
+your segments. To do this you use the following command line option
+to SDCC: -Wl-b BANK1=0x18000 (See <A HREF="node58.html#lyx:-Wl_option">3.3.5</A>). This sets
+the virtual start address of this segment. It sets the banknumber
+to 0x01 and maps the bank to 0x8000 and up. The linker will not check
+for overflows, again this is your responsibility.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node126.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node124.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1710"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1712"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node126.html">4.1.4 MCS51/DS390 Startup Code</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node124.html">4.1.2 Other Features available by</A>
+ &nbsp; <B>  <A ID="tex2html1711"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1713"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

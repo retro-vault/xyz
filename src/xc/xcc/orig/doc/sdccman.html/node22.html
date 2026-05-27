@@ -1,0 +1,102 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>2.4.8 VPATH feature</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node21.html">
+<LINK REL="next" HREF="node23.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node23.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node14.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node21.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html859"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html861"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node23.html">2.5 Building the Documentation</A>
+<B> Up:</B> <A
+ HREF="node14.html">2.4 Building SDCC</A>
+<B> Previous:</B> <A
+ HREF="node21.html">2.4.7 Windows Install Using the</A>
+ &nbsp; <B>  <A ID="tex2html860"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html862"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00348000000000000000"></A><A ID="516"></A>
+<BR>
+<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN> VPATH feature
+</H2>
+
+<P>
+SDCC supports the VPATH feature provided by configure and make. It
+allows to separate the source and build trees. Here's an example:
+
+<P>
+<SPAN  CLASS="texttt">cd ~&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#
+cd $HOME</SPAN>
+
+<P>
+<SPAN  CLASS="texttt">tar -xjf sdcc-src-yyyymmdd-rrrr.tar.bz2&nbsp;# extract source
+to directory sdcc</SPAN>
+
+<P>
+<SPAN  CLASS="texttt">mkdir sdcc.build&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#
+put output in sdcc.build</SPAN>
+
+<P>
+<SPAN  CLASS="texttt">cd sdcc.build</SPAN>
+
+<P>
+<SPAN  CLASS="texttt">../sdcc/configure&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#
+configure is doing all the magic!</SPAN>
+
+<P>
+<SPAN  CLASS="texttt">make</SPAN>
+
+<P>
+That's it! <SPAN  CLASS="textbf">configure</SPAN> will create the directory
+tree will all the necessary Makefiles in ~/sdcc.build.
+It automagically computes the variables srcdir, top_srcdir and top_buildir
+for each directory. After running <SPAN  CLASS="textbf">make</SPAN> the generated files
+will be in ~/sdcc.build, while the source files stay
+in ~/sdcc.
+<BR>
+This is not only usefull for building different binaries, e.g. when
+cross compiling. It also gives you a much better overview in the source
+tree when all the generated files are not scattered between the source
+files. And the best thing is: if you want to change a file you can
+leave the original file untouched in the source directory. Simply
+copy it to the build directory, edit it, enter `make clean', `rm Makefile.dep'
+and `make'. <SPAN  CLASS="textbf">make</SPAN> will do the rest for you!
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

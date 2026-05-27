@@ -1,0 +1,665 @@
+2026-05-16 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-04-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-03-28 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-03-25 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-03-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-03-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/dhrystone-r4k/dhry_1.c:
+	  Increase number of Dhrystone runs for r4k to avoid timeout.
+
+2026-03-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-02-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2026-02-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/stdcbench-0.8-*.patch,
+	  historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update infrastructure for current Coremark 1.01 and stdcbench 0.8.
+
+2026-01-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/*:
+	  Add r4k Coremark graphs.
+
+2025-12-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/README,
+	  historygraphs/*.svg:
+	  Add r4k Whetstone and Dhrystone score graphs.
+
+2025-12-16 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/*:
+	  Add r4k Whetstone and Dhrystone size graphs.
+
+2025-12-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-12-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-11-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-10-28 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-10-15 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  stdcbench-z80-sizetable.p,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-09-12 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Parametrize tty used for test boards. Compile with gcc --std=gnu17, to work around C23 non-compliant code in sdas (GCC 15 defaults to C23).
+
+2025-08-15 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-08-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg,
+	  historygraphs/*.p:
+	  Update graphs.
+
+2025-06-18 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg,
+	  historygraphs/*.p:
+	  Update graphs.
+	* historygraphs/hello-r3ka/hello.c,
+	  historygraphs/hello-r3ka/hello.ihx,
+	  sdcc-extra/historygraphs/Makefile,
+	  sdcc-extra/historygraphs/README:
+	  r3ka graph infrastructure update.
+
+2025-05-25 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-04-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Introduction.pdf,
+	  developer meeting/2/Introduction.tex,
+	  developer meeting/2/Rabbits.pdf,
+	  developer meeting/2/Rabbits.tex:
+	  Last changes before the talk today.
+
+2025-04-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Introduction.pdf,
+	  developer meeting/2/Introduction.tex,
+	  developer meeting/2/Rabbits.pdf,
+	  developer meeting/2/Rabbits.tex:
+	  Fix date on slides, since we now know that these talks will be on the first day of the meeting.
+
+2025-04-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Rabbits.pdf,
+	  developer meeting/2/Rabbits.tex:
+	  Mention 78K and RL78.
+
+2025-03-31 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Poster.pdf,
+	  developer meeting/2/Poster.sla:
+	  Fix developer meeting room number.
+
+2025-03-29 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Poster.pdf,
+	  developer meeting/2/Poster.sla:
+	  Fix developer meeting date.
+
+2025-03-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Poster.pdf,
+	  developer meeting/2/Poster.sla:
+	  Add treedec talk to poster.
+
+2025-03-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Poster.pdf,
+	  developer meeting/2/Poster.sla:
+	  SDCC developer meeting 2 details on poster.
+
+2025-03-16 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Introduction.pdf,
+	  developer meeting/2/Introduction.tex,
+	  developer meeting/2/Rabbits.pdf,
+	  developer meeting/2/Rabbits.tex:
+	  Update SDCC developer meeting 2 slides.
+
+2025-03-15 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Rabbits.pdf,
+	  developer meeting/2/Rabbits.tex:
+	  Update TLCS slides.
+
+2025-03-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Introduction.pdf,
+	  developer meeting/2/Introduction.tex,
+	  developer meeting/2/scores-2024.png,
+	  developer meeting/2/sizes-2024.png,
+	  developer meeting/2/Rabbits.pdf,
+	  developer meeting/2/Rabbits.tex:
+	  SDCC developer meeting 2 slides.
+
+2025-03-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting/2/Poster.pdf,
+	  developer meeting/2/Poster.sla:
+	  SDCC developer meeting 2 location change.
+
+2025-03-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2025-02-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* developer meeting:
+	  Poster for SDCC developer meeting 2, slides from SDCC developer meeting 1.
+
+2025-02-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2024-12-20 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/hello-r3ka/hello.c,
+	  historygraphs/hello-r3ka/hello.ihx,
+	  historygraphs/dhrystone-r3ka/portme.c,
+	  historygraphs/portme.c.stdcbench-SDCC-R3KA,
+	  historygraphs/whetstone-r3ka/portme.c:
+	  Fix for new r3ka __sdcc_external_startup ABI.
+	* historygraphs/Makefile:
+	  Update infrastructure.
+	* historygraphs/*.svg:
+	  Update graphs.
+	
+2024-11-03 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2024-10-10 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2024-09-15 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2024-06-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2024-01-29 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2023-12-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2023-11-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2023-08-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2023-07-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2023-07-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+	* historygraphs/dhrystone-mcs51/portme.c,
+	  historygraphs/whetstone-mcs51/portme.c,
+	  historygraphs/stdcbench-0.7-mcs51.patch:
+	  Update for new __sdcc_external_startup name.
+
+2022-01-01 Philipp Klaus Krause <krauseph@informatik.uni-freiburg.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2022-09-15 Philipp Klaus Krause <krauseph@informatik.uni-freiburg.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2022-05-12 Philipp Klaus Krause <krauseph@informatik.uni-freiburg.de>
+
+	* historygraphs/execute_benchmark-r3ka:
+	  Mark r3ka benchmark execution script as executable.
+
+2022-03-08 Philipp Klaus Krause <krauseph@informatik.uni-freiburg.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2022-02-03 Philipp Klaus Krause <krauseph@informatik.uni-freiburg.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2021-12-11 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2021-07-05 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile.coremark-z80,
+	  historygraphs/coremark-1.0-z80.patch,
+	  historygraphs/crt.0.s.coremark-SDCC-Z80,
+	  historygraphs/Makefile:
+	  Infrastructure for Coremark for z80.
+
+2021-06-28 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/dhrystone-z80-size.svg,
+	  historygraphs/Makefile:
+	  Update code size graphs.
+
+2021-06-20 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/whetstone-z80*
+	  historygraphs/execute_benchmark-z80,
+	  historygraphs/Makefile,
+	  historygraphs/dhrystone-z80-size.svg,
+	  historygraphs/stdcbench-z80-sizetable.p,
+	  historygraphs/stdcbench-z80-size.svg:
+	  Size graphs for z80.
+
+2021-06-15 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/dhrystone-mcs51/stm8l.h,
+	  historygraphs/dhrystone-r3ka/stm8l.h,
+	  historygraphs/dhrystone-z80/stm8l.h:
+	  Remove leftover stm8 file.
+
+2021-06-14 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/dhrystone-z80,
+	  historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Add Dhrystone size graph for z80.
+
+2021-05-07 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2021-05-02 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/*
+	  stdcbench and Coremark graphs for r3ka.
+
+2021-04-24 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  coremark-1.0-r3ka.patch,
+	  coremark-1.0-stm8.patch,
+	  coremark-r3ka-scoretable.p,
+	  coremark-r3ka-sizetable.p:
+	  Infrastructure for r3ka Coremark graphs.
+
+2021-04-20 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/*:
+	  r3ka Whetstone and Dhrystone graphs.
+
+2021-04-10 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2020-05-30 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2020-01-30 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2019-12-30 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2019-06-09 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.p,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2019-04-06 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/stdcbench-mcs51-scoretable.p,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2019-03-18 Philipp Klaus Krause <krauseph AT informatik.uni-freiburg.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.svg:
+	  Update graphs.
+
+2018-11-15 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/coremark-stm8-score.svg,
+	  historygraphs/stdcbench-0.6-mcs51.patch,
+	  historygraphs/stdcbench-0.6-stm8.patch,
+	  historygraphs/stdcbench-mcs51-size.svg,
+	  historygraphs/stdcbench-mcs51-sizetable.p,
+	  historygraphs/Makefile,
+	  historygraphs/coremark-stm8-scoretable.p:
+	  Support for using stdcbench for mcs51.
+	* historygraphs/*.svg:
+	  Update graphs.
+
+2018-11-08 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/execute_benchmark-stm8,
+	  historygraphs/execute_benchmark-mcs51,
+	  historygraphs/stdcbench-0.6.patch,
+	  coremark-stm8-sizetable.p,
+	  stdcbench-stm8-sizetable.p,
+	  stdcbench-stm8-scoretable.p,
+	  historygraphs/*.svg:
+	  Improve handling of parallel make, some Coremark and stdcbench support, update graphs.
+
+2018-10-18 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/README,
+	  historygraphs/whetstone-mcs51-sizetable.p:
+	  Minor fixes.
+	* historygraphs/*-size.svg:
+	  Update graphs.
+
+2018-10-02 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/*:
+	  Update graphs to show progress around the 3.8.0 release.
+
+2018-09-19 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*-stm8-*.svg
+	  historygraphs/*-stm8-*table.p:
+	  Update graphs to illustrate progress since 3.7.0.
+
+2018-06-17 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/dhrystone-*-size.svg:
+	  Update graphs to illustrate RFE #574.
+
+2018-04-04 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/*.p,
+	  historygraphs/*.svg,
+	  Add mcs51 Whetstone graphs, update other graphs.
+
+2018-03-23 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/whetstone-mcs51,
+	  historygraphs/whetstone-mcs51-sizetable.p,
+	  historygraphs/Makefile:
+	  Infrastructure for generating mcs51 Whetstone graphs.
+
+2018-03-22 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/execute_benchmark-mcs51,
+	  historygraphs/hello-mcs51,
+	  historygraphs/Makefile:
+	  Infrastructure for generating mcs51 Dhrystone speed graphs.
+
+2018-03-21 Philipp Klaus Krause <krauseph AT informatik.uni-freiburg.de>
+
+	* Makefile,
+	  dhrystone-mcs51,
+	  dhrystone-mcs51-sizetable.p,
+	  dhrystone-mcs51-size.svg:
+	  Support for mcs51 Dhrystone code size graphs.
+
+2018-02-26 Philipp Klaus Krause <pkk AT spth.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/README:
+	  Update for 3.7.0, document conflict with installed sdcc.
+
+2018-01-31 Philipp Klaus Krause <philipp AT informatik.uni-frankfurt.de>
+
+	* historygraphs/Makefile,
+	  historygraphs/Makefile.coremark,
+	  historygraphs/coremark-1.0.patch:
+	  Infrastructure for Coremark code size and speed history graphs.
+	* historygraphs/*.svg:
+	  Bring graphs into svn, since they take substantial effort to recreate.
+
+2018-01-22 Philipp Klaus Krause <philipp AT informatik.uni-frankfurt.de>
+
+	* historygraphs:
+	  Infrastructure for generating SDCC code size and speed history graphs.
+
+2014-04-14 Philipp Klaus Krause <philipp AT informatik.uni-frankfurt.de>
+
+	* emu/rrgb/main.c:
+	  Fix error handling, bug #2261, patch by Robert Baruch.
+
+2012-10-02 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrz80/disasm.cc: fixed warning
+	* emu/rrgb/Makefile.in: link libreries after object files
+
+2011-06-12 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* emu/rrgb/debugger.c,
+	* emu/rrgb/main.c,
+	* emu/rrz80/disasm.cc: fixed warnings
+	* Makefile.rules.in: fixed bug 3144100 parallel make
+
+2010-04-13 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/csock.c, emu/rrgb/z80.c, emu/rrgb/debugger.c,
+	  emu/rrgb/main.c, emu/rrgb/disgb.c:
+	  fixed SunPro C warnings
+
+2010-04-08 Borut Razem <borut.razem AT siol.net>
+
+	* sdcc-extra/emu/rrz80/disasm.cc: removed comma after the last enum
+	  element since SunPro C compiler comlains
+
+2010-04-04 Borut Razem <borut.razem AT siol.net>
+
+	* configure, Makefile.in, configure.in, emu/Makefile.in,
+	  emu/rrz80/Makefile.in, emu/rrz80/cpu/Makefile.in,
+	  emu/rrgb/Makefile.in, Makefile.rules.in:
+	  fixed for Solaris SunPro compiler
+
+2010-02-21 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/parse_map.c: fixed bug #2956037:
+	  rrgb crashes if wrong map file format is supplied
+
+2010-02-09 Borut Razem <borut.razem AT siol.net>
+	* emu/rrgb/z80ops.c: enabled opcode 0xfb - instruction ei
+	* emu/rrgb/z80.c: report the exact address and value of invalid opcode
+	* emu/rrgb/debugger.c: fixed dump command - displaying ASCII values
+
+2008-02-22 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/main.c: fixed main.c:194: warning: pointer targets in passing
+	  argument 3 of 'accept' differ in signedness
+
+2008-02-21 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/Makefile.in, Makefile.rules.in: added LDFLAGS
+	* emu/rrgb/csock.c: include unistd.h id Mac OS X (__APPLE__),
+	  fixed csock.c:113: warning: pointer targets in passing argument 3 of
+	  'accept' differ in signedness
+
+2006-07-09 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/debugger.c, emu/rrgb/main.c, emu/rrgb/parse_map.c, emu/rrgb/z80.c:
+	  fixed compiler warnings
+
+2006-07-06 Borut Razem <borut.razem AT siol.net>
+
+	* configure.in, configure, emu/rrgb/Makefile.in: define STRIP at
+	  configure time
+
+2006-07-04 Borut Razem <borut.razem AT siol.net>
+
+	* configure.in, configure, Makefile.in, Makefile.rules.in,
+	  emu/Makefile.in, emu/rrgb/Makefile.in, emu/rrz80/Makefile.in,
+	  emu/rrz80/cpu/Makefile.in: configurable CC, CXX, CPPFLAGS,
+	  CFLAGS and CXXFLAGS
+
+2006-07-03 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrz80/cpu/z80.h: detect __BIG_ENDIAN__ if defined by preprocessor
+
+2006-05-18 Bernhard Held <bernhard AT bernhardheld.de>
+
+	* ChangeLog: added Revision
+
+2006-05-09 Bernhard Held <bernhard AT bernhardheld.de>
+
+	* configure,
+	* configure.in: added to enable VPATH feature
+	* Makefile,
+	* emu/Makefile,
+	* emu/rrgb/Makefile,
+	* emu/rrz80/Makefile,
+	* emu/rrz80/cpu/Makefile: renamed to Makefile.in, added VPATH and top_srcdir
+	variables
+	* Makefile.rules: added distclean to remove files created by configure
+
+2006-04-24 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/csock.c: replaced $Header$ with $Id: ChangeLog 16533 2026-05-16 14:37:29Z spth $ svn keyword
+
+2005-08-27 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/main.c: don't include getopt.h if __sun__ (sparc-solaris) or
+	  __APPLE__ (ppc-osx)
+
+2005-08-26 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/Makefile: install --strip changed to 2 steps:
+	  install and strip, since the strip at /usr/ccs/bin should be used
+	  on solaris
+
+2005-08-20 Borut Razem <borut.razem AT siol.net>
+
+	* emu/rrgb/Makefile: link with libsocket in case of sparc-solaris
+	* emu/rrgb/main.c: don't include getopt.h if __sun__ (sparc-solaris)
+
+$Revision: 16533 $

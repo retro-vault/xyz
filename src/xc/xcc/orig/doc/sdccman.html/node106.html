@@ -1,0 +1,99 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.11.4 Use of Labels within Inline Assembler</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node105.html">
+<LINK REL="next" HREF="node107.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node107.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node102.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node105.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1502"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1504"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node107.html">3.12 Support routines for integer</A>
+<B> Up:</B> <A
+ HREF="node102.html">3.11 Inline Assembler Code</A>
+<B> Previous:</B> <A
+ HREF="node105.html">3.11.3 Naked Functions</A>
+ &nbsp; <B>  <A ID="tex2html1503"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1505"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION004114000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">4</SPAN> Use of Labels within Inline Assembler</A>
+</H2>
+
+<P>
+SDCC allows the use of in-line assembler with a few restrictions regarding
+labels. All labels defined within inline assembler code have to be
+of the form <SPAN  CLASS="textit">nnnnn$</SPAN> where nnnnn is a number less than 100 (which
+implies a limit of utmost 100 inline assembler labels <SPAN  CLASS="textit">per function</SPAN>).<A ID="tex2html52"
+  HREF="footnode.html#foot2202"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">6</SPAN></SUP></A> 
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__asm<A ID="2204"></A></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b,#10</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">00001$:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;djnz&nbsp;&nbsp;&nbsp;&nbsp;b,00001$</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__endasm<A ID="2208"></A> ;</SPAN>
+
+</BLOCKQUOTE>
+Inline assembler code cannot reference any C-labels, however it can
+reference labels<A ID="2210"></A> defined by the inline assembler, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">foo() {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;/* some c code */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;__asm</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;; some assembler code</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ljmp 0003$</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;__endasm;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;/* some more c code */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">clabel:&nbsp;&nbsp;/* inline assembler cannot reference this label
+*/ </SPAN><TT><A ID="tex2html53"
+  HREF="footnode.html#foot6093"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">7</SPAN></SUP></A></TT><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;__asm</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;0003$: ;label (can be referenced by inline assembler
+only)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;__endasm<A ID="2227"></A> ;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;/* some more c code */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+In other words inline assembly code can access labels defined in inline
+assembly within the scope of the function. The same goes the other
+way, i.e. labels defines in inline assembly can not be accessed by
+C statements.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

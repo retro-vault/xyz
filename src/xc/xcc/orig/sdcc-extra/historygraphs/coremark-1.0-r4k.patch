@@ -1,0 +1,463 @@
+diff -ur coremark_v1.0/core_main.c coremark-r4k/core_main.c
+--- coremark_v1.0/core_main.c	2009-08-25 20:11:26.000000000 +0200
++++ coremark-r4k/core_main.c	2025-05-29 11:45:06.215101990 +0200
+@@ -210,7 +210,7 @@
+ 		if (divisor==0) /* some machines cast float to int as 0 since this conversion is not defined by ANSI, but we know at least one second passed */
+ 			divisor=1;
+ 		results[0].iterations*=1+10/divisor;
+-	}
++	}results[0].iterations = 60;
+ 	/* perform actual benchmark */
+ 	start_time();
+ #if (MULTITHREAD>1)
+@@ -291,9 +291,9 @@
+ 	if (time_in_secs(total_time) > 0)
+ 		ee_printf("Iterations/Sec   : %f\n",default_num_contexts*results[0].iterations/time_in_secs(total_time));
+ #else 
+-	ee_printf("Total time (secs): %d\n",time_in_secs(total_time));
++	ee_printf("Total time (secs): %lu\n",time_in_secs(total_time));
+ 	if (time_in_secs(total_time) > 0)
+-		ee_printf("Iterations/Sec   : %d\n",default_num_contexts*results[0].iterations/time_in_secs(total_time));
++		ee_printf("Iterations/Sec   : %lu\n",default_num_contexts*results[0].iterations/time_in_secs(total_time));
+ #endif
+ 	if (time_in_secs(total_time) < 10) {
+ 		ee_printf("ERROR! Must execute for at least 10 secs for a valid result!\n");
+@@ -349,6 +349,8 @@
+ #endif
+ 	/* And last call any target specific code for finalizing */
+ 	portable_fini(&(results[0].port));
++	
++	ee_printf ("\x04"); // Signal end to OpenRabbit.
+ 
+ 	return MAIN_RETURN_VAL;	
+ }
+diff -ur coremark_v1.0/core_portme.c coremark-r4k/core_portme.c
+--- coremark_v1.0/core_portme.c	2025-05-29 11:52:11.214459507 +0200
++++ coremark-r4k/core_portme.c	2025-05-29 11:51:23.009609645 +0200
+@@ -5,8 +5,11 @@
+ 	Author : Shay Gal-On, EEMBC
+ 	Legal : TODO!
+ */ 
++#include <stdio.h>
++#include <stdlib.h>
+ #include "coremark.h"
+-#include "core_portme.h"
++
++#define ITERATIONS 100
+ 
+ #if VALIDATION_RUN
+ 	volatile ee_s32 seed1_volatile=0x3415;
+@@ -30,20 +33,22 @@
+ 	e.g. Read value from on board RTC, read value from cpu clock cycles performance counter etc. 
+ 	Sample implementation for standard time.h and windows.h definitions included.
+ */
+-CORETIMETYPE barebones_clock() {
+-	#error "You must implement a method to measure time in barebones_clock()! This function should return current time.\n"
+-}
+ /* Define : TIMER_RES_DIVIDER
+ 	Divider to trade off timer resolution and total time that can be measured.
+ 
+ 	Use lower values to increase resolution, but make sure that overflow does not occur.
+ 	If there are issues with the return value overflowing, increase this value.
+ 	*/
+-#define GETMYTIME(_t) (*_t=barebones_clock())
++#define CLOCKS_PER_SEC 32768
++#define NSECS_PER_SEC CLOCKS_PER_SEC
++unsigned long clock(void);
++//#define CORETIMETYPE clock_t 
++#define CORETIMETYPE unsigned long
++#define GETMYTIME(_t) (*_t=clock())
+ #define MYTIMEDIFF(fin,ini) ((fin)-(ini))
+ #define TIMER_RES_DIVIDER 1
+ #define SAMPLE_TIME_IMPLEMENTATION 1
+-#define EE_TICKS_PER_SEC (CLOCKS_PER_SEC / TIMER_RES_DIVIDER)
++#define EE_TICKS_PER_SEC (NSECS_PER_SEC / TIMER_RES_DIVIDER)
+ 
+ /** Define Host specific (POSIX), or target specific global time variables. */
+ static CORETIMETYPE start_time_val, stop_time_val;
+@@ -92,13 +97,16 @@
+ 
+ ee_u32 default_num_contexts=1;
+ 
++void init(void);
++
+ /* Function : portable_init
+ 	Target specific initialization code 
+ 	Test for some common mistakes.
+ */
+ void portable_init(core_portable *p, int *argc, char *argv[])
+ {
+-	#error "Call board initialization routines in portable init (if needed), in particular initialize UART!\n"
++	init();
++
+ 	if (sizeof(ee_ptr_int) != sizeof(ee_u8 *)) {
+ 		ee_printf("ERROR! Please define ee_ptr_int to a type that holds a pointer!\n");
+ 	}
+@@ -115,4 +123,93 @@
+ 	p->portable_id=0;
+ }
+ 
++#include <stdio.h>
++#include <stdint.h>
++
++#define REG(addr, reg)	__sfr __at(addr) reg
++
++REG(0x00, GCSR);  // global control / status register
++REG(0x01, RTCCR); // Real Time Clock Control Register
++REG(0x02, RTC0R); // Real Time Clock Data Register 0
++REG(0x03, RTC1R); // Real Time Clock Data Register 1
++REG(0x04, RTC2R); // Real Time Clock Data Register 2
++REG(0x05, RTC3R); // Real Time Clock Data Register 3
++REG(0x06, RTC4R); // Real Time Clock Data Register 4
++REG(0x07, RTC5R); // Real Time Clock Data Register 5
++REG(0x08, WDTCR); // watch-dog timer control register
++REG(0x09, WDTTR); // watch-dog timer test register
++REG(0x0E, GOCR);  // Global Output Control Register
++REG(0x0F, GCDR);  // global clock double register
++REG(0x14, MB0CR); // Memory Bank 0 Control Register
++REG(0x16, MB2CR); // Memory Bank 2 Control Register
++REG(0x55, PCFR);  // Port C Function Register
++REG(0xA0, TACSR); // Timer A Control/Status Register
++REG(0xA9, TAT4R); // Timer A Time Constant 4 Register
++REG(0xC0, SADR);  // Serial Port A Data Register
++REG(0xC3, SASR);  // Serial Port A Status Register
++REG(0xC4, SACR);  // Serial Port A Control Register
++
++#if __SDCC_REVISION >= 13762
++unsigned char __sdcc_external_startup(void)
++#else
++unsigned char _sdcc_external_startup(void)
++#endif
++{
++	// Disable watchdog
++	WDTTR = 0x51;
++	WDTTR = 0x54;
++
++	// normal oscillator, processor and peripheral from main clock, no periodic interrupt
++	GCSR = 0x08;
++
++	GCDR = 0x00; // Crystal runs at full system frequency
++
++	// Configure memory wait states
++	MB0CR = 0xc8; // Flash - 0 wait states with write-protection
++	MB2CR = 0xc5; // RAM - 0 wait statess
++
++	return(0);
++}
++
++unsigned long clock(void)
++{
++	unsigned long clock0, clock1;
++	do
++	{
++		RTC0R = 0;
++		clock0 = ((unsigned long)(RTC0R) << 0) | ((unsigned long)(RTC1R) << 8) | ((unsigned long)(RTC2R) << 16) | ((unsigned long)(RTC3R) << 24);
++		clock1 = ((unsigned long)(RTC0R) << 0) | ((unsigned long)(RTC1R) << 8) | ((unsigned long)(RTC2R) << 16) | ((unsigned long)(RTC3R) << 24);
++	} while (clock0 != clock1);
++	return(clock1);
++}
++
++void init(void)
++{
++	PCFR = 0x40;    // Use pin PC6 as TXA
++	TAT4R = 24 - 1; // Use divider for 38400 baud - value in register is one less than the divider used (e.g. a value of 0 will result in clock division by 1).
++	TACSR = 0x01;   // Enable timer A
++	SACR = 0x00;    // No interrupts, 8-bit async mode
++
++	GOCR = 0x30;	// STATUS/DTR high signals to OpenRabbit that user program is running and will send data.
++	// Give OpenRabbit and host some time (100 ms) to reconfigure baud rate
++	{
++		unsigned long c = clock();
++		while (clock() - c < 32 * 100);
++	}
++}
++
++#if defined(__SDCC) && __SDCC_REVISION < 9624 // Old SDCC weirdness
++void putchar(char c)
++{
++  	while (SASR & 0x04);	// Wait for empty transmitter data register
++	SADR = c;
++}
++#else // Standard C
++int putchar(int c)
++{
++	while (SASR & 0x04);	// Wait for empty transmitter data register
++	SADR = c;
++	return c;
++}
++#endif
+ 
+diff -ur coremark_v1.0/core_portme.h coremark-r4k/core_portme.h
+--- coremark_v1.0/core_portme.h	2025-05-29 11:52:11.214459507 +0200
++++ coremark-r4k/core_portme.h	2025-05-29 11:45:06.215101990 +0200
+@@ -16,21 +16,21 @@
+ 	Define to 1 if the platform supports floating point.
+ */
+ #ifndef HAS_FLOAT 
+-#define HAS_FLOAT 1
++#define HAS_FLOAT 0
+ #endif
+ /* Configuration : HAS_TIME_H
+ 	Define to 1 if platform has the time.h header file,
+ 	and implementation of functions thereof.
+ */
+ #ifndef HAS_TIME_H
+-#define HAS_TIME_H 1
++#define HAS_TIME_H 0
+ #endif
+ /* Configuration : USE_CLOCK
+ 	Define to 1 if platform has the time.h header file,
+ 	and implementation of functions thereof.
+ */
+ #ifndef USE_CLOCK
+-#define USE_CLOCK 1
++#define USE_CLOCK 0
+ #endif
+ /* Configuration : HAS_STDIO
+ 	Define to 1 if the platform has stdio.h.
+@@ -42,10 +42,16 @@
+ 	Define to 1 if the platform has stdio.h and implements the printf function.
+ */
+ #ifndef HAS_PRINTF
+-#define HAS_PRINTF 0
++#define HAS_PRINTF 1
+ #endif
+ 
+-
++/* Configuration : CORE_TICKS
++	Define type of return from the timing functions.
++ */
++//#include <time.h>
++//typedef clock_t CORE_TICKS;
++unsigned long clock(void);
++typedef unsigned long CORE_TICKS;
+ /* Definitions : COMPILER_VERSION, COMPILER_FLAGS, MEM_LOCATION
+ 	Initialize these strings per platform
+ */
+@@ -57,7 +63,7 @@
+  #endif
+ #endif
+ #ifndef COMPILER_FLAGS 
+- #define COMPILER_FLAGS FLAGS_STR /* "Please put compiler flags here (e.g. -o3)" */
++ #define COMPILER_FLAGS "Please put compiler flags here (e.g. -o3)"
+ #endif
+ #ifndef MEM_LOCATION 
+  #define MEM_LOCATION "STACK"
+@@ -69,26 +75,23 @@
+ 	*Imprtant* :
+ 	ee_ptr_int needs to be the data type used to hold pointers, otherwise coremark may fail!!!
+ */
+-typedef signed short ee_s16;
+-typedef unsigned short ee_u16;
+-typedef signed int ee_s32;
+-typedef double ee_f32;
+-typedef unsigned char ee_u8;
+-typedef unsigned int ee_u32;
+-typedef ee_u32 ee_ptr_int;
++#include <stdio.h>
++#include <stddef.h>
++#include <stdint.h>
++
++typedef int16_t ee_s16;
++typedef uint16_t ee_u16;
++typedef int32_t ee_s32;
++typedef float ee_f32;
++typedef uint8_t ee_u8;
++typedef uint32_t ee_u32;
++typedef uintptr_t ee_ptr_int;
+ typedef size_t ee_size_t;
+-#define NULL ((void *)0)
+ /* align_mem :
+ 	This macro is used to align an offset to point to a 32b value. It is used in the Matrix algorithm to initialize the input memory blocks.
+ */
+ #define align_mem(x) (void *)(4 + (((ee_ptr_int)(x) - 1) & ~3))
+ 
+-/* Configuration : CORE_TICKS
+-	Define type of return from the timing functions.
+- */
+-#define CORETIMETYPE ee_u32 
+-typedef ee_u32 CORE_TICKS;
+-
+ /* Configuration : SEED_METHOD
+ 	Defines method to get seed values that cannot be computed at compile time.
+ 	
+@@ -146,7 +149,7 @@
+ 	This flag only matters if MULTITHREAD has been defined to a value greater then 1.
+ */
+ #ifndef MAIN_HAS_NOARGC 
+-#define MAIN_HAS_NOARGC 0
++#define MAIN_HAS_NOARGC 1
+ #endif
+ 
+ /* Configuration : MAIN_HAS_NORETURN
+@@ -157,7 +160,7 @@
+ 	1 - platform does not support returning a value from main
+ */
+ #ifndef MAIN_HAS_NORETURN
+-#define MAIN_HAS_NORETURN 0
++#define MAIN_HAS_NORETURN 1
+ #endif
+ 
+ /* Variable : default_num_contexts
+@@ -183,6 +186,4 @@
+ #endif
+ #endif
+ 
+-int ee_printf(const char *fmt, ...);
+-
+ #endif /* CORE_PORTME_H */
+diff -ur coremark_v1.0/Makefile coremark-r4k/Makefile
+--- coremark_v1.0/Makefile	2009-07-10 19:48:43.000000000 +0200
++++ coremark-r4k/Makefile	2025-05-29 11:45:06.219102058 +0200
+@@ -1,141 +1,15 @@
+-#Author : Shay Gal-On, EEMBC
+-#
+-#This file is part of  EEMBC(R) and CoreMark(TM), which are Copyright (C) 2009 
+-#All rights reserved.                            
+-#
+-#EEMBC CoreMark Software is a product of EEMBC and is provided under the terms of the
+-#CoreMark License that is distributed with the official EEMBC COREMARK Software release. 
+-#If you received this EEMBC CoreMark Software without the accompanying CoreMark License, 
+-#you must discontinue use and download the official release from www.coremark.org.  
+-#
+-#Also, if you are publicly displaying scores generated from the EEMBC CoreMark software, 
+-#make sure that you are in compliance with Run and Reporting rules specified in the accompanying readme.txt file.
+-#
+-#EEMBC 
+-#4354 Town Center Blvd. Suite 114-200
+-#El Dorado Hills, CA, 95762 
++SOURCES = core_list_join.c core_main.c core_matrix.c core_state.c core_util.c core_portme.c
++OBJ = $(SOURCES:.c=.rel)
++SDCC = sdcc
+ 
++all: coremark
+ 
+-# Make sure the default target is to simply build and run the benchmark.
+-RSTAMP = v1.0
+-
+-.PHONY: run score
+-run: $(OUTFILE) rerun score
+-
+-score:
+-	@echo "Check run1.log and run2.log for results."
+-	@echo "See readme.txt for run and reporting rules." 
+-	
+-ifndef PORT_DIR
+-# Ports for a couple of common self hosted platforms
+-UNAME=$(shell if [[ `uname 2> /dev/null` ]] ; then uname ; fi)
+-ifneq (,$(findstring CYGWIN,$(UNAME)))
+-PORT_DIR=cygwin
+-endif
+-ifneq (,$(findstring Linux,$(UNAME)))
+-MACHINE=$(shell uname -m)
+-ifneq (,$(findstring 64,$(MACHINE)))
+-PORT_DIR=linux64
+-else
+-PORT_DIR=linux
+-endif
+-endif
+-endif
+-ifndef PORT_DIR
+-$(error PLEASE define PORT_DIR! (e.g. make PORT_DIR=simple)) 
+-endif
+-vpath %.c $(PORT_DIR)
+-vpath %.h $(PORT_DIR)
+-vpath %.mak $(PORT_DIR)
+-include $(PORT_DIR)/core_portme.mak
+-
+-ifndef $(ITERATIONS)
+-ITERATIONS=0
+-endif
+-ifdef REBUILD
+-FORCE_REBUILD=force_rebuild
+-endif
+-
+-CFLAGS += -DITERATIONS=$(ITERATIONS)
+-
+-CORE_FILES = core_list_join core_main core_matrix core_state core_util
+-ORIG_SRCS = $(addsuffix .c,$(CORE_FILES))
+-SRCS = $(ORIG_SRCS) $(PORT_SRCS)
+-OBJS = $(addprefix $(OPATH),$(addsuffix $(OEXT),$(CORE_FILES)) $(PORT_OBJS))
+-OUTNAME = coremark$(EXE)
+-OUTFILE = $(OPATH)$(OUTNAME)
+-LOUTCMD = $(OFLAG) $(OUTFILE) $(LFLAGS_END)
+-OUTCMD = $(OUTFLAG) $(OUTFILE) $(LFLAGS_END)
+-
+-HEADERS = coremark.h 
+-CHECK_FILES = $(ORIG_SRCS) $(HEADERS)
+-
+-$(OPATH):
+-	$(MKDIR) $(OPATH)
+-
+-.PHONY: compile link
+-ifdef SEPARATE_COMPILE
+-$(OPATH)$(PORT_DIR):
+-	$(MKDIR) $(OPATH)$(PORT_DIR)
+-
+-compile: $(OPATH) $(OPATH)$(PORT_DIR) $(OBJS) $(HEADERS) 
+-link: compile 
+-	$(LD) $(LFLAGS) $(XLFLAGS) $(OBJS) $(LOUTCMD)
+-	
+-else
+-
+-compile: $(OPATH) $(SRCS) $(HEADERS) 
+-	$(CC) $(CFLAGS) $(XCFLAGS) $(SRCS) $(OUTCMD)
+-link: compile 
+-	@echo "Link performed along with compile"
+-
+-endif
+-
+-$(OUTFILE): $(SRCS) $(HEADERS) Makefile core_portme.mak $(FORCE_REBUILD)
+-	$(MAKE) port_prebuild
+-	$(MAKE) link
+-	$(MAKE) port_postbuild
+-
+-.PHONY: rerun
+-rerun: 
+-	$(MAKE) XCFLAGS="$(XCFLAGS) -DPERFORMANCE_RUN=1" load run1.log
+-	$(MAKE) XCFLAGS="$(XCFLAGS) -DVALIDATION_RUN=1" load run2.log
+-
+-PARAM1=$(PORT_PARAMS) 0x0 0x0 0x66 $(ITERATIONS)
+-PARAM2=$(PORT_PARAMS) 0x3415 0x3415 0x66 $(ITERATIONS)
+-PARAM3=$(PORT_PARAMS) 8 8 8 $(ITERATIONS)
+-
+-run1.log-PARAM=$(PARAM1) 7 1 2000
+-run2.log-PARAM=$(PARAM2) 7 1 2000 
+-run3.log-PARAM=$(PARAM3) 7 1 1200
+-
+-run1.log run2.log run3.log: load
+-	$(MAKE) port_prerun
+-	$(RUN) $(OUTFILE) $($(@)-PARAM) > $(OPATH)$@
+-	$(MAKE) port_postrun
+-	
+-.PHONY: gen_pgo_data
+-gen_pgo_data: run3.log
+-
+-.PHONY: load
+-load: $(OUTFILE)
+-	$(MAKE) port_preload
+-	$(LOAD) $(OUTFILE)
+-	$(MAKE) port_postload
+-
+-.PHONY: clean
+ clean:
+-	rm -f $(OUTFILE) $(OPATH)*.log *.info $(OPATH)index.html $(PORT_CLEAN)
++	rm -f *.ihx *.lnk *.lst *.noi *.rel *.sym *.size *.dot *.lk *.rst *.asm
++
++%.rel: %.c
++	$(SDCC) -c --std-c99 --fverbose-asm $(SDCCFLAGS) --fverbose-asm $< ||:
+ 
+-.PHONY: force_rebuild
+-force_rebuild:
+-	echo "Forcing Rebuild"
+-	
+-.PHONY: check
+-check:
+-	md5sum -c coremark.md5 
++coremark: $(OBJ)
++	$(SDCC) $(SDCCFLAGS) *.rel -o image.ihx
+ 
+-ifdef ETC
+-# Targets related to testing and releasing CoreMark. Not part of the general release!
+-include Makefile.internal
+-endif	

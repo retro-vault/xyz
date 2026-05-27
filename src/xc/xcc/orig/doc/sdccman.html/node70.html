@@ -1,0 +1,470 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.5.1 MCS51/DS390 intrinsic named address spaces</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node71.html">
+<LINK REL="previous" HREF="node69.html">
+<LINK REL="next" HREF="node71.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node71.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1310"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1312"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node71.html">3.5.2 Z80/Z180/eZ80 intrinsic named address</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+ &nbsp; <B>  <A ID="tex2html1311"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1313"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1314"
+  HREF="node70.html#SECTION00451100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> __data
+/ __near</A>
+<LI><A ID="tex2html1315"
+  HREF="node70.html#SECTION00451200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata
+/ __far</A>
+<LI><A ID="tex2html1316"
+  HREF="node70.html#SECTION00451300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> __idata</A>
+<LI><A ID="tex2html1317"
+  HREF="node70.html#SECTION00451400000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> __pdata</A>
+<LI><A ID="tex2html1318"
+  HREF="node70.html#SECTION00451500000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> __code</A>
+<LI><A ID="tex2html1319"
+  HREF="node70.html#SECTION00451600000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">6</SPAN> __bit</A>
+<LI><A ID="tex2html1320"
+  HREF="node70.html#SECTION00451700000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">7</SPAN> __sfr / __sfr16 /
+__sfr32 / __sbit</A>
+<LI><A ID="tex2html1321"
+  HREF="node70.html#SECTION00451800000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN> Pointers to MCS51/DS390 intrinsic named address spaces</A>
+<LI><A ID="tex2html1322"
+  HREF="node70.html#SECTION00451900000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">9</SPAN> Notes on MCS51 memory layout</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00451000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> MCS51/DS390 intrinsic named address spaces</A>
+</H2>
+
+<P>
+SDCC supports the following MCS51-specific intrinsic address spaces:
+
+<P>
+2#2
+
+<P>
+
+<H3><A ID="SECTION00451100000000000000"></A><A ID="1363"></A><A ID="1364"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> __data
+/ __near
+</H3>
+
+<P>
+This is the <SPAN  CLASS="textbf">default</SPAN> (generic) address space for the Small
+Memory model. Variables in this address space will be allocated in
+the directly addressable portion of the internal RAM of a 8051, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__data unsigned char test_data;</SPAN>
+
+</BLOCKQUOTE>
+Writing 0x01 to this variable generates the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">75*00 01&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;_test_data,#0x01</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+
+<H3><A ID="SECTION00451200000000000000"></A><A ID="1372"></A><A ID="1373"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata
+/ __far
+</H3>
+
+<P>
+Variables in this address space will be placed in the external RAM.
+This is the <SPAN  CLASS="textbf">default</SPAN> (generic) address space for the Large
+Memory model, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__xdata unsigned char test_xdata;</SPAN>
+
+</BLOCKQUOTE>
+Writing 0x01 to this variable generates the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">90s00r00&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;dptr,#_test_xdata</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">74&nbsp;01&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;a,#0x01</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">F0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;movx&nbsp;@dptr,a </SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+
+<H3><A ID="SECTION00451300000000000000"></A><A ID="1383"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> __idata
+</H3>
+
+<P>
+Variables in this address space will be allocated into the indirectly
+addressable portion of the internal ram of a 8051, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__idata unsigned char test_idata;</SPAN>
+
+</BLOCKQUOTE>
+Writing 0x01 to this variable generates the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">78r00&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;r0,#_test_idata</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">76&nbsp;01&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;@r0,#0x01</SPAN>
+
+</BLOCKQUOTE>
+Please note, the first 128 byte of idata physically access the same
+RAM as the data memory. The original 8051 had 128 byte idata memory,
+nowadays most devices have 256 byte idata memory. The stack<A ID="1391"></A>
+is located in idata memory (unless <SPAN  CLASS="texttt">--xstack</SPAN> is specified).
+
+<P>
+
+<H3><A ID="SECTION00451400000000000000"></A><A ID="1393"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> __pdata
+</H3>
+
+<P>
+Paged xdata access is just as straightforward as using the other addressing
+modes of a 8051. It is typically located at the start of xdata and
+has a maximum size of 256 bytes. The following example writes 0x01
+to the pdata variable. Please note, pdata access physically accesses
+xdata memory. The high byte of the address is determined by port P2
+<A ID="1394"></A>(or in case of some 8051 variants by a separate
+Special Function Register, see section <A HREF="node122.html#subsec:MCS51-variants">4.1</A>).
+This is the <SPAN  CLASS="textbf">default</SPAN> (generic) address space for the Medium
+Memory model, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__pdata unsigned char test_pdata;</SPAN>
+
+</BLOCKQUOTE>
+Writing 0x01 to this variable generates the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">78r00&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r0,#_test_pdata</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">74 01&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov a,#0x01</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">F2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;movx @r0,a</SPAN>
+
+</BLOCKQUOTE>
+If the &mdash;xstack<A ID="1405"></A> option is used the
+pdata memory area is followed by the xstack memory area and the sum
+of their sizes is limited to 256 bytes.
+
+<P>
+
+<H3><A ID="SECTION00451500000000000000"></A><A ID="1406"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> __code
+</H3>
+
+<P>
+'Variables' in this address space will be placed in the code memory:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__code unsigned char test_code;</SPAN>
+
+</BLOCKQUOTE>
+Read access to this variable generates the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">90s00r6F&nbsp;&nbsp;&nbsp;mov dptr,#_test_code</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">E4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;clr a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">93&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;movc a,@a+dptr </SPAN>
+
+</BLOCKQUOTE>
+<SPAN  CLASS="texttt">char</SPAN> indexed arrays of characters in code memory can be accessed
+efficiently:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__code char test_array[] = {'c','h','e','a','p'}; </SPAN>
+
+</BLOCKQUOTE>
+Read access to this array using an 8-bit unsigned index generates
+the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">E5*00&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov a,_index </SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">90s00r41&nbsp;&nbsp;&nbsp;mov dptr,#_test_array</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">93&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;movc a,@a+dptr </SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+
+<H3><A ID="SECTION00451600000000000000"></A><A ID="1425"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">6</SPAN> __bit
+</H3>
+
+<P>
+This is a data-type and an address space. When a variable is declared
+as a bit, it is allocated into the bit addressable memory of 8051,
+e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__bit test_bit;</SPAN>
+
+</BLOCKQUOTE>
+Writing 1 to this variable generates the assembly code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">D2*00&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setb&nbsp;_test_bit</SPAN>
+
+</BLOCKQUOTE>
+The bit addressable memory consists of 128 bits which are located
+from 0x20 to 0x2f in data memory.
+<BR>
+Apart from this 8051 specific intrinsic named address space most architectures
+support ANSI-C bit-fields<A ID="1432"></A><A ID="tex2html47"
+  HREF="footnode.html#foot1433"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN></SUP></A>. In accordance with ISO/IEC 9899 bits and bitfields without an explicit
+signed modifier are implemented as unsigned.
+
+<P>
+
+<H3><A ID="SECTION00451700000000000000"></A><A ID="1434"></A><A ID="1435"></A><A ID="1436"></A><A ID="1437"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">7</SPAN> __sfr / __sfr16 /
+__sfr32 / __sbit
+</H3>
+
+<P>
+Like the __bit keyword, <SPAN  CLASS="textit">__sfr / __sfr16 / __sfr32 /
+__sbit</SPAN> signify both a data-type and named address space, they are
+used to describe the <SPAN  CLASS="textit">s</SPAN>pecial <SPAN  CLASS="textit">f</SPAN>unction <SPAN  CLASS="textit">r</SPAN>egisters
+and special <SPAN  CLASS="textit">__bit</SPAN> variables of a 8051, eg:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__sfr __at<A ID="1444"></A> (0x80) P0;&nbsp; /* special
+function register P0 at location 0x80 */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* 16 bit special function register combination for timer
+0</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp; with the high byte at location 0x8C and the low byte
+at location 0x8A */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__sfr16 __at (0x8C8A) TMR0;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__sbit __at<A ID="1452"></A> (0xd7) CY;&nbsp; /* CY (Carry
+Flag<A ID="1454"></A><A ID="1455"></A>) */</SPAN>
+
+</BLOCKQUOTE>
+Special function registers which are located on an address dividable
+by 8 are bit-addressable, an <SPAN  CLASS="textit">__sbit</SPAN> addresses a specific
+bit within these sfr.
+<BR>
+16 Bit and 32 bit special function register combinations which require
+a certain access order are better not declared using <SPAN  CLASS="textit">__sfr16</SPAN>
+or <SPAN  CLASS="textit">__sfr32.</SPAN> Although SDCC usually accesses them Least Significant
+Byte (LSB) first, this is not guaranteed.
+<BR>
+<P>
+Please note, if you use a header file which was written for another
+compiler then the __sfr / __sfr16 / __sfr32 / __sbit intrinsic
+named address spaces will most likely be <SPAN  CLASS="textit">not</SPAN> compatible. Specifically
+the syntax <SPAN  CLASS="texttt">&nbsp;sfr P0 = 0x80;&nbsp;</SPAN> is compiled <SPAN  CLASS="textit">without warning</SPAN>
+by SDCC to an assignment of 0x80 to a variable called P0<SPAN  CLASS="texttt">.</SPAN>
+<SPAN  CLASS="textbf">Nevertheless with the file </SPAN><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">compiler.h<A ID="1466"></A></SPAN></SPAN><SPAN  CLASS="textbf">
+it is possible to write header files<A ID="1467"></A><A ID="1468"></A>
+which can be shared among different compilers (see section <A HREF="node193.html#sec:Porting-code-to-other-compilers">6.1</A>). </SPAN>
+
+<P>
+
+<H3><A ID="SECTION00451800000000000000"></A><A ID="1470"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN> Pointers to MCS51/DS390 intrinsic named address spaces
+</H3>
+
+<P>
+SDCC allows (via language extensions) pointers to explicitly point
+to any of the named address spaces<A ID="1471"></A> of the 8051.
+In addition to the explicit pointers, the compiler uses (by default)
+generic pointers which can be used to point to any of the memory spaces.
+<BR>
+<BR>
+Pointer declaration examples:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">/* pointer physically in internal ram pointing to object
+in external ram */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__xdata unsigned char * __data p;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* pointer physically in external ram pointing to object
+in internal ram */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__data unsigned char * __xdata p;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* pointer physically in code rom pointing to data in xdata
+space */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__xdata unsigned char * __code p;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* pointer physically in code space pointing to data in
+code space */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__code unsigned char * __code p;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* generic pointer physically located in xdata space */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">unsigned char * __xdata p;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* generic pointer physically located in default memory
+space */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">unsigned char * p;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* the following is a function pointer<A ID="1498"></A>
+physically located in data space */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">char (* __data fp)(void);</SPAN>
+
+</BLOCKQUOTE>
+Well you get the idea.
+<BR>
+<BR>
+All unqualified pointers are treated as 3-byte (4-byte for the ds390)
+<SPAN  CLASS="textit">generic</SPAN> pointers.<SPAN CLASS="SMALL"></SPAN>
+<BR><SPAN CLASS="SMALL"></SPAN>
+<BR>
+The highest order byte of the <SPAN  CLASS="textit">generic</SPAN> pointers contains the
+data space information. Assembler support routines are called whenever
+data is stored or retrieved using <SPAN  CLASS="textit">generic</SPAN> pointers. These are
+useful for developing reusable library<A ID="1507"></A> routines.
+Explicitly specifying the pointer<A ID="1508"></A> type will generate
+the most efficient code.
+
+<P>
+
+<H3><A ID="SECTION00451900000000000000"></A><A ID="1509"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">9</SPAN> Notes on MCS51 memory layout
+</H3>
+
+<P>
+The 8051 family of microcontrollers have a minimum of 128 bytes of
+internal RAM memory <SPAN  CLASS="textit">__data</SPAN><A ID="1511"></A>
+which is structured as follows:
+<BR>
+<BR>- Bytes 00-1F - 32 bytes to hold up to 4 banks of the registers R0
+to R7,
+<BR>- Bytes 20-2F - 16 bytes to hold 128 bit<A ID="1512"></A> variables and,
+<BR>- Bytes 30-7F - 80 bytes for general purpose use.
+<BR>
+<P>
+Additionally some members of the MCS-51 family may have up to 128
+bytes of additional, indirectly addressable, internal RAM memory (<SPAN  CLASS="textit">__idata</SPAN><A ID="1514"></A>).
+Furthermore, some chips may have some built in external memory (<SPAN  CLASS="textit">__xdata</SPAN><A ID="1516"></A>)
+which should not be confused with the internal, directly addressable
+RAM memory (<SPAN  CLASS="textit">__data</SPAN><A ID="1518"></A>).
+Sometimes this built in <SPAN  CLASS="textit">__xdata</SPAN> memory has to be activated
+before using it (you can probably find this information on the datasheet
+of the microcontroller your are using, see also section <A HREF="node126.html#subsec:MCS51-Startup-Code">4.1.4</A>&nbsp;Startup-Code).
+
+<P>
+Normally SDCC will only use the first bank<A ID="1521"></A>
+of registers (register bank 0), but it is possible to specify that
+other banks of registers (keyword <SPAN  CLASS="textit">__using</SPAN> <SPAN  CLASS="textit"><A ID="1523"></A></SPAN>)
+should be used for example in interrupt<A ID="1524"></A><A ID="1525"></A>
+routines. By default, the compiler will place the stack after the
+last byte of allocated memory for variables. For example, if the first
+2 banks of registers are used, and only four bytes are used for <SPAN  CLASS="textit">__data</SPAN>
+variables, it will position the base of the internal stack at address
+20 (0x14). This implies that as the stack<A ID="1527"></A> grows, it
+will use up the remaining register banks, and the 16 bytes used by
+the 128 bit variables, and 80 bytes for general purpose use. If any
+bit variables are used, the <SPAN  CLASS="textit">__data</SPAN> variables will be placed
+in unused register banks and after the byte holding the last __bit
+variable. For example, if register banks 0 and 1 are used, and there
+are 9 bit variables (two bytes used), <SPAN  CLASS="textit">__data</SPAN> variables will
+be placed starting from address 0x10 to 0x20 and continue at address
+0x22. You can also use &mdash;data-loc<A ID="1530"></A>
+to specify the start address of the <SPAN  CLASS="textit">__data</SPAN> and &mdash;iram-size<A ID="1532"></A>
+to specify the size of the total internal RAM (<SPAN  CLASS="textit">__idata</SPAN>).
+
+<BR>
+<P>
+By default the 8051 linker will place the stack after the last byte
+of __(i)data variables. Option &mdash;stack-loc<A ID="1534"></A>
+allows you to specify the start of the stack, i.e. you could start
+it after any data in the general purpose area. If your microcontroller
+has additional indirectly addressable internal RAM (<SPAN  CLASS="textit">idata</SPAN>)
+you can place the stack on it. You may also need to use &mdash;xdata-loc<A ID="1536"></A>
+to set the start address of the external RAM (<SPAN  CLASS="textit">xdata</SPAN>) and &mdash;xram-size<A ID="1538"></A>
+to specify its size. Same goes for the code memory, using &mdash;code-loc<A ID="1539"></A>
+and &mdash;code-size<A ID="1540"></A>.
+If in doubt, don't specify any options and see if the resulting memory
+layout is appropriate, then you can adjust it.
+
+<P>
+The linker generates two files with memory allocation information.
+The first, with extension .map<A ID="1541"></A> shows all the variables
+and segments. The second with extension .mem<A ID="1542"></A> shows
+the final memory layout. The linker will complain either if memory
+segments overlap, there is not enough memory, or there is not enough
+space for stack. If you get any linking warnings and/or errors related
+to stack or segments allocation, take a look at either the .map or
+.mem files to find out what the problem is. The .mem file may even
+suggest a solution to the problem.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node71.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1310"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1312"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node71.html">3.5.2 Z80/Z180/eZ80 intrinsic named address</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+ &nbsp; <B>  <A ID="tex2html1311"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1313"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

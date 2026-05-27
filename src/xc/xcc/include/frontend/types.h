@@ -1,0 +1,313 @@
+//
+// types.h — C11 type system for the Z80 target.
+//
+// Defines type_kind (the classification of a C type), the type struct
+// that represents any C11 type, and the type_ptr alias
+// (shared_ptr<type>) used throughout the compiler.
+//
+// Type sizes for the xcc Z80 target:
+//   char / unsigned char     1 byte
+//   short / int              2 bytes
+//   long                     4 bytes
+//   long long                8 bytes
+//   float / double           4 bytes  (IEEE 754 single; double == float)
+//   pointer                  2 bytes  (16-bit near)
+//
+// Factory functions (type::make_int(), type::make_pointer(), …) are the
+// normal way to create type nodes.  Direct construction is allowed only
+// inside types.cpp for the factories themselves.
+//
+// Qualifier methods (is_const, is_volatile, is_restrict) are stored on
+// the type node and are inherited by pointers and arrays in the usual
+// C way.  unqual() returns a copy with all qualifiers cleared.
+//
+// MIT License (see: LICENSE)
+// Copyright (C) 2026 tomaz stih
+//
+
+#pragma once
+#include <cassert>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace xcc {
+
+// ----- type_kind -----------------------------------------------------
+
+enum class type_kind : uint8_t {
+    VOID,
+    BOOL,           // _Bool
+    CHAR,           // signed char
+    UCHAR,          // unsigned char
+    SHORT,
+    USHORT,
+    INT,
+    UINT,
+    LONG,
+    ULONG,
+    LLONG,
+    ULLONG,
+    FLOAT,
+    DOUBLE,
+    POINTER,        // base = pointee type
+    ARRAY,          // base = element type, array_size set
+    FUNCTION,       // ret = return type, params set
+    STRUCT,
+    UNION,
+    ENUM,           // treated as int
+    COMPLEX,        // float _Complex / double _Complex: 8 bytes (re+im as soft-floats)
+};
+
+struct type;
+using type_ptr = std::shared_ptr<type>;
+
+// ----- struct_field --------------------------------------------------
+
+struct struct_field {
+    std::string name;
+    type_ptr    type;
+    int         offset     = 0;  // byte offset of the storage unit
+    int         bit_width  = -1; // -1 = not a bit-field; ≥0 = width in bits
+    int         bit_offset = 0;  // bit position within the storage unit at offset
+};
+
+// ----- type ----------------------------------------------------------
+
+struct type {
+    type_kind kind;
+
+    bool is_const    = false;
+    bool is_volatile = false;
+    bool is_restrict = false;
+    bool is_vla      = false; // true for VLA array types (int a[n])
+
+    // POINTER and ARRAY: pointee / element type
+    type_ptr base;
+    // ARRAY: element count (0 = incomplete / unsized)
+    int array_size = 0;
+
+    // FUNCTION: return type, parameter types, and variadic flag
+    type_ptr              ret;
+    std::vector<type_ptr> params;
+    bool                  variadic = false;
+
+    // STRUCT / UNION: tag name, field list, and completeness flag
+    std::string                tag;
+    std::vector<struct_field>  fields;
+    bool                       complete = false;
+
+    // ----- factories -------------------------------------------------
+
+    //
+    // Return a new void type.
+    //
+    static type_ptr make_void()   { return std::make_shared<type>(type_kind::VOID);   }
+
+    //
+    // Return a new _Bool type.
+    //
+    static type_ptr make_bool()   { return std::make_shared<type>(type_kind::BOOL);   }
+
+    //
+    // Return a new signed char type.
+    //
+    static type_ptr make_char()   { return std::make_shared<type>(type_kind::CHAR);   }
+
+    //
+    // Return a new unsigned char type.
+    //
+    static type_ptr make_uchar()  { return std::make_shared<type>(type_kind::UCHAR);  }
+
+    //
+    // Return a new short type.
+    //
+    static type_ptr make_short()  { return std::make_shared<type>(type_kind::SHORT);  }
+
+    //
+    // Return a new unsigned short type.
+    //
+    static type_ptr make_ushort() { return std::make_shared<type>(type_kind::USHORT); }
+
+    //
+    // Return a new int type.
+    //
+    static type_ptr make_int()    { return std::make_shared<type>(type_kind::INT);    }
+
+    //
+    // Return a new unsigned int type.
+    //
+    static type_ptr make_uint()   { return std::make_shared<type>(type_kind::UINT);   }
+
+    //
+    // Return a new long type (4 bytes on Z80).
+    //
+    static type_ptr make_long()   { return std::make_shared<type>(type_kind::LONG);   }
+
+    //
+    // Return a new unsigned long type.
+    //
+    static type_ptr make_ulong()  { return std::make_shared<type>(type_kind::ULONG);  }
+
+    //
+    // Return a new long long type (8 bytes on Z80).
+    //
+    static type_ptr make_llong()  { return std::make_shared<type>(type_kind::LLONG);  }
+
+    //
+    // Return a new unsigned long long type.
+    //
+    static type_ptr make_ullong() { return std::make_shared<type>(type_kind::ULLONG); }
+
+    //
+    // Return a new float type (4-byte IEEE 754 single).
+    //
+    static type_ptr make_float()  { return std::make_shared<type>(type_kind::FLOAT);  }
+
+    //
+    // Return a new double type (same as float on Z80: 4 bytes).
+    //
+    static type_ptr make_double() { return std::make_shared<type>(type_kind::DOUBLE); }
+
+    //
+    // Return a pointer type whose pointee is base.
+    //
+    static type_ptr make_pointer(type_ptr base) {
+        auto t = std::make_shared<type>(type_kind::POINTER);
+        t->base = std::move(base);
+        return t;
+    }
+
+    //
+    // Return an array type with element type elem and element count sz.
+    // Pass sz=0 for an incomplete (unsized) array.
+    //
+    static type_ptr make_array(type_ptr elem, int sz) {
+        auto t = std::make_shared<type>(type_kind::ARRAY);
+        t->base = std::move(elem);
+        t->array_size = sz;
+        return t;
+    }
+
+    //
+    // Return a function type with the given return type, parameter
+    // type list, and variadic flag.
+    //
+    static type_ptr make_function(type_ptr ret,
+                                  std::vector<type_ptr> params,
+                                  bool variadic = false) {
+        auto t = std::make_shared<type>(type_kind::FUNCTION);
+        t->ret      = std::move(ret);
+        t->params   = std::move(params);
+        t->variadic = variadic;
+        return t;
+    }
+
+    //
+    // Return a new incomplete struct type with optional tag.
+    // Call type::complete = true and populate type::fields after
+    // all members have been parsed.
+    //
+    static type_ptr make_struct(std::string tag = "") {
+        auto t = std::make_shared<type>(type_kind::STRUCT);
+        t->tag = std::move(tag);
+        return t;
+    }
+
+    //
+    // Return a new incomplete union type with optional tag.
+    //
+    static type_ptr make_union(std::string tag = "") {
+        auto t = std::make_shared<type>(type_kind::UNION);
+        t->tag = std::move(tag);
+        return t;
+    }
+
+    //
+    // Return a new enum type (underlying integer type is int).
+    //
+    static type_ptr make_enum() {
+        return std::make_shared<type>(type_kind::ENUM);
+    }
+
+    //
+    // Return a float _Complex type (8 bytes: real+imaginary as two soft-floats).
+    //
+    static type_ptr make_complex() {
+        return std::make_shared<type>(type_kind::COMPLEX);
+    }
+
+    // ----- predicates ------------------------------------------------
+
+    //
+    // Return true if this is any integer kind including _Bool and enum.
+    //
+    bool is_integer()  const;
+
+    //
+    // Return true if this is an unsigned integer kind.
+    //
+    bool is_unsigned() const;
+
+    //
+    // Return true if this is any arithmetic type (integer or float/double).
+    //
+    bool is_arith()    const;
+
+    //
+    // Return true if this is a scalar type (arithmetic or pointer).
+    //
+    bool is_scalar()   const;
+
+    bool is_ptr()     const { return kind == type_kind::POINTER;  }
+    bool is_array()   const { return kind == type_kind::ARRAY;    }
+    bool is_func()    const { return kind == type_kind::FUNCTION; }
+    bool is_complex() const { return kind == type_kind::COMPLEX;  }
+
+    // ----- size and alignment ----------------------------------------
+
+    //
+    // Return the byte size of this type on the Z80 target.
+    // Returns 0 for void and incomplete struct/union.
+    //
+    int size()  const;
+
+    //
+    // Return the alignment requirement in bytes.
+    // On Z80, all types align to 1; 2+ byte types use 2 for performance.
+    //
+    int align() const;
+
+    //
+    // Return a human-readable C-style spelling of this type.
+    // Used in error messages and IR dumps.
+    //
+    std::string to_string() const;
+
+    //
+    // Return a copy of this type with all CV-qualifiers stripped.
+    //
+    type_ptr unqual() const {
+        auto t = std::make_shared<type>(*this);
+        t->is_const = t->is_volatile = t->is_restrict = false;
+        return t;
+    }
+
+    explicit type(type_kind k) : kind(k) {}
+};
+
+// ----- arithmetic conversion helpers ---------------------------------
+
+//
+// Apply the usual arithmetic conversions (C11 §6.3.1.8) to a and b and
+// return the common result type.  Both operands must be arithmetic.
+//
+type_ptr usual_arith_conv(type_ptr a, type_ptr b);
+
+//
+// Apply integer promotions (C11 §6.3.1.1) to t.
+// Returns t unchanged if it already has at least int rank.
+//
+type_ptr integer_promote(type_ptr t);
+
+} // namespace xcc

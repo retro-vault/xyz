@@ -1,0 +1,88 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.1.9 Bit-rotation</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node223.html">
+<LINK REL="previous" HREF="node221.html">
+<LINK REL="next" HREF="node223.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node223.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node221.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2333"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2335"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node223.html">8.1.10 Nibble and Byte Swapping</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node221.html">8.1.8 Bit-shifting Operations.</A>
+ &nbsp; <B>  <A ID="tex2html2334"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2336"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00919000000000000000"></A><A ID="4414"></A>
+<BR>
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">9</SPAN> Bit-rotation
+</H2>
+
+<P>
+A special case of the bit-shift operation is bit rotation<A ID="4415"></A>,
+SDCC recognizes the following expression to be a left bit-rotation:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt"><SPAN  CLASS="textbf">unsigned</SPAN></SPAN><SPAN  CLASS="texttt">&nbsp;&nbsp;char i;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/*
+unsigned is needed for rotation */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">i = ((i « 1) | (i »
+7));</SPAN>
+<BR><SPAN  CLASS="texttt">...</SPAN>
+
+</BLOCKQUOTE>
+will generate the following code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">mov&nbsp;&nbsp;a,_i</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">rl&nbsp;&nbsp;&nbsp;a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">mov&nbsp;&nbsp;_i,a</SPAN>
+
+</BLOCKQUOTE>
+SDCC uses pattern matching on the parse tree to determine this operation.Variations
+of this case will also be recognized as bit-rotation, i.e.: 
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">i = ((i » 7) | (i «
+1)); /* left-bit rotation */</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

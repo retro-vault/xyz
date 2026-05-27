@@ -1,0 +1,144 @@
+//
+// irgen_lvalue.cpp — lvalue read/write and member access for the xcc IR pass.
+//
+// Covers: gen_lvalue_write, visit(index_expr), gen_member_ptr,
+// visit(member_expr), and the find_member helper.
+//
+// MIT License (see: LICENSE)
+// Copyright (C) 2026 tomaz stih
+//
+#include "ir/irgen.h"
+
+namespace xcc {
+
+static const struct_field *find_member(const member_expr &e) {
+    type_ptr st = e.object->type;
+    if (e.is_arrow && st && st->is_ptr()) st = st->base;
+    if (!st) return nullptr;
+    for (auto &f : st->fields)
+        if (f.name == e.member) return &f;
+    return nullptr;
+}
+
+operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
+    if (auto *id = dynamic_cast<ident_expr*>(&lhs)) {
+        if (id->sym) {
+            operand dst = sym_to_operand(*id->sym, id->type);
+            emit_assign(dst, src);
+            return dst;
+        }
+    }
+    if (auto *deref = dynamic_cast<unary_expr*>(&lhs)) {
+        if (deref->op == unary_op::DEREF) {
+            operand ptr = gen_expr(*deref->operand);
+            icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);
+            return src;
+        }
+    }
+    if (auto *mem = dynamic_cast<member_expr*>(&lhs)) {
+        const struct_field *fld = find_member(*mem);
+        operand ptr = gen_member_ptr(*mem);
+        if (fld && fld->bit_width >= 0) {
+            type_ptr unit_type = fld->type ? fld->type : type::make_int();
+            int64_t  mask      = (1LL << fld->bit_width) - 1;
+            operand m_src = emit_binop(icode_op::BAND, src,
+                                       operand::make_int(mask, type::make_int()), unit_type);
+            operand s_src = m_src;
+            if (fld->bit_offset > 0)
+                s_src = emit_binop(icode_op::SHL, m_src,
+                                   operand::make_int(fld->bit_offset, type::make_int()), unit_type);
+            operand cur     = emit_unop(icode_op::GET_VALUE_AT, ptr, unit_type);
+            int64_t clr_mask = ~(mask << fld->bit_offset);
+            operand cleared  = emit_binop(icode_op::BAND, cur,
+                                          operand::make_int(clr_mask, type::make_int()), unit_type);
+            operand combined = emit_binop(icode_op::BOR, cleared, s_src, unit_type);
+            icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = combined; emit(ic);
+        } else {
+            icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);
+        }
+        return src;
+    }
+    if (auto *idx = dynamic_cast<index_expr*>(&lhs)) {
+        operand base  = gen_expr(*idx->base);
+        operand index = gen_expr(*idx->index);
+        type_ptr elem_type = idx->type ? idx->type : type::make_int();
+        int elem_sz = elem_type->size();
+        if (elem_sz > 1) {
+            operand scale = operand::make_int(elem_sz, type::make_int());
+            index = emit_binop(icode_op::MUL, index, scale, index.type);
+        }
+        operand addr = emit_binop(icode_op::ADD, base, index, type::make_pointer(elem_type));
+        icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = addr; ic.left = src; emit(ic);
+        return src;
+    }
+    return src;
+}
+
+void ir_gen::visit(index_expr &e) {
+    operand base  = gen_expr(*e.base);
+    operand index = gen_expr(*e.index);
+
+    type_ptr elem_type = e.type ? e.type : type::make_int();
+    int elem_sz = elem_type->size();
+    if (elem_sz > 1) {
+        operand scale = operand::make_int(elem_sz, type::make_int());
+        index = emit_binop(icode_op::MUL, index, scale, index.type);
+    }
+
+    operand ptr = emit_binop(icode_op::ADD, base, index, type::make_pointer(elem_type));
+    expr_result_ = emit_unop(icode_op::GET_VALUE_AT, ptr, elem_type);
+}
+
+operand ir_gen::gen_member_ptr(member_expr &e) {
+    operand obj = gen_expr(*e.object);
+
+    type_ptr struct_type = e.object->type;
+    if (e.is_arrow && struct_type && struct_type->is_ptr())
+        struct_type = struct_type->base;
+
+    int      field_offset = 0;
+    type_ptr field_type   = e.type ? e.type : type::make_int();
+    if (struct_type) {
+        for (auto &f : struct_type->fields) {
+            if (f.name == e.member) {
+                field_offset = f.offset;
+                field_type   = f.type;
+                break;
+            }
+        }
+    }
+
+    type_ptr ptr_type = type::make_pointer(field_type);
+    operand ptr;
+    if (e.is_arrow) {
+        ptr = obj;
+    } else {
+        ptr = emit_unop(icode_op::ADDRESS_OF, obj, ptr_type);
+    }
+
+    if (field_offset != 0) {
+        operand off = operand::make_int(field_offset, type::make_int());
+        ptr = emit_binop(icode_op::ADD, ptr, off, ptr_type);
+    }
+    return ptr;
+}
+
+void ir_gen::visit(member_expr &e) {
+    const struct_field *fld = find_member(e);
+    operand ptr      = gen_member_ptr(e);
+    type_ptr fld_type = e.type ? e.type : type::make_int();
+    operand loaded   = emit_unop(icode_op::GET_VALUE_AT, ptr, fld_type);
+
+    if (fld && fld->bit_width >= 0) {
+        if (fld->bit_offset > 0) {
+            operand off_op = operand::make_int(fld->bit_offset, type::make_int());
+            loaded = emit_binop(icode_op::SHR, loaded, off_op, fld_type);
+        }
+        int64_t mask    = (1LL << fld->bit_width) - 1;
+        operand mask_op = operand::make_int(mask, type::make_int());
+        loaded = emit_binop(icode_op::BAND, loaded, mask_op, fld_type);
+    }
+    expr_result_ = loaded;
+}
+
+} // namespace xcc

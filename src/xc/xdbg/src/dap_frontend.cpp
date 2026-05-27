@@ -518,11 +518,9 @@ void dap_frontend::handle_launch_or_attach(
     if (const auto remote = optional_string(arguments, "remoteTarget"); remote.has_value()) {
         debugger_.connect_remote(remote.value());
     }
+    stop_on_entry_requested_ =
+        json_get_boolean(arguments, "stopOnEntry").value_or(false);
     send_response(seq, command, true);
-
-    if (json_get_boolean(arguments, "stopOnEntry").value_or(false) && connected_) {
-        on_stop(debugger_.session().status());
-    }
 }
 
 void dap_frontend::handle_set_breakpoints(int seq, const json_value& arguments) {
@@ -712,7 +710,7 @@ void dap_frontend::handle_disconnect(int seq) {
 void dap_frontend::handle_configuration_done(int seq) {
     send_response(seq, "configurationDone", true);
     if (connected_) {
-        on_stop(debugger_.session().status());
+        on_stop(initial_stop_snapshot());
     }
 }
 
@@ -963,6 +961,36 @@ json_value dap_frontend::make_variable_object(
     return json_value(std::move(object));
 }
 
+std::optional<uint32_t> dap_frontend::entry_address() const {
+    const auto* symbols = debugger_.session().symbols();
+    if (symbols == nullptr || !symbols->entry_address.has_value()) {
+        return std::nullopt;
+    }
+    return symbols->entry_address;
+}
+
+stop_snapshot dap_frontend::initial_stop_snapshot() {
+    const auto current = debugger_.session().status();
+    if (!stop_on_entry_requested_) {
+        return current;
+    }
+
+    const auto entry = entry_address();
+    if (!entry.has_value() || current.pc >= entry.value()) {
+        return current;
+    }
+
+    suppress_stop_events_ = true;
+    try {
+        const auto stop = continue_to_temporary_breakpoint(entry.value());
+        suppress_stop_events_ = false;
+        return stop;
+    } catch (...) {
+        suppress_stop_events_ = false;
+        throw;
+    }
+}
+
 std::optional<uint32_t> dap_frontend::stack_return_address(uint32_t sp) {
     const auto bytes = debugger_.session().read_memory(sp, 2);
     if (bytes.size() < 2) {
@@ -975,6 +1003,20 @@ std::optional<uint32_t> dap_frontend::stack_return_address(uint32_t sp) {
 stop_snapshot dap_frontend::continue_to_temporary_breakpoint(uint32_t address) {
     const bool had_breakpoint = has_breakpoint_at(address);
     std::optional<int> temp_breakpoint_id;
+    auto current = debugger_.session().status();
+    if (current.reason == xdbgstub::stop_reason::breakpoint &&
+        has_breakpoint_at(current.pc)) {
+        if (current.pc == address) {
+            return current;
+        }
+        current = debugger_.step_instruction();
+        if (current.reason == xdbgstub::stop_reason::exited ||
+            current.reason == xdbgstub::stop_reason::halted ||
+            current.pc == address) {
+            return current;
+        }
+    }
+
     if (!had_breakpoint) {
         temp_breakpoint_id = debugger_.add_breakpoint("*" + hex_u32(address)).id;
     }

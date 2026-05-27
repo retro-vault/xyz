@@ -1,0 +1,96 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8.4 Configuration Bits</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node156.html">
+<LINK REL="previous" HREF="node154.html">
+<LINK REL="next" HREF="node156.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node156.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node154.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1895"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1897"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node156.html">4.8.5 Linking and Assembling</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node154.html">4.8.3 Interrupt Code</A>
+ &nbsp; <B>  <A ID="tex2html1896"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1898"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00584000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Configuration Bits</A>
+</H2>
+
+<P>
+Configuration bits (also known as fuses) can be configured using `<SPAN  CLASS="texttt">__code</SPAN>'
+and `<SPAN  CLASS="texttt">__at</SPAN>' modifiers. Possible options should be ANDed
+and can be found in your processor header file. Example for PIC16F88:
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#include&nbsp;&lt;pic16f88.h&gt;&nbsp;//Contains&nbsp;config&nbsp;addresses&nbsp;and&nbsp;options&nbsp;
+<BR>#include&nbsp;&lt;stdint.h&gt;&nbsp;//Needed&nbsp;for&nbsp;uint16_t&nbsp;
+<BR>&nbsp;
+<BR>
+static&nbsp;__code&nbsp;uint16_t&nbsp;__at&nbsp;(_CONFIG1)&nbsp;configword1&nbsp;=&nbsp;_INTRC_IO&nbsp;&amp;&nbsp;
+<BR>&nbsp;&nbsp;_CP_ALL&nbsp;&amp;&nbsp;_WDT_OFF&nbsp;&amp;&nbsp;[...];&nbsp;
+<BR>
+static&nbsp;__code&nbsp;uint16_t&nbsp;__at&nbsp;(_CONFIG2)&nbsp;configword2&nbsp;=&nbsp;[...];
+</DD>
+</DL>Although data type is ignored if the address (<SPAN  CLASS="texttt">__at()</SPAN>) refers
+to a config word location, using a type large enough for the configuration
+word (<SPAN  CLASS="texttt">uint16_t</SPAN> in this case) is recommended to prevent changes
+in the compiler (implicit, early range check and enforcement) from
+breaking the definition.
+<BR>
+<BR>
+If your processor header file doesn't contain config addresses you
+can declare it manually or use a literal address:
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>static&nbsp;__code&nbsp;uint16_t&nbsp;__at&nbsp;(0x2007)&nbsp;configword1&nbsp;=&nbsp;_INTRC_IO&nbsp;&amp;&nbsp;
+<BR>&nbsp;&nbsp;_CP_ALL&nbsp;&amp;&nbsp;_WDT_OFF&nbsp;&amp;&nbsp;[...];
+</DD>
+</DL>
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

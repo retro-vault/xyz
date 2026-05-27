@@ -1,0 +1,317 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4. Notes on supported Processors</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node182.html">
+<LINK REL="previous" HREF="node37.html">
+<LINK REL="next" HREF="node122.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node122.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="sdccman.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node120.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1584"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1586"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Up:</B> <A
+ HREF="sdccman.html">SDCC Compiler User Guide</A>
+<B> Previous:</B> <A
+ HREF="node120.html">3.17 Defines Created by the</A>
+ &nbsp; <B>  <A ID="tex2html1585"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1587"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00500000000000000000">
+<SPAN CLASS="arabic">4</SPAN>. Notes on supported Processors</A>
+</H1>
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1588"
+  HREF="node122.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> MCS51 variants</A>
+<UL>
+<LI><A ID="tex2html1589"
+  HREF="node123.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> pdata access by SFR</A>
+<LI><A ID="tex2html1590"
+  HREF="node124.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> Other Features available by SFR</A>
+<LI><A ID="tex2html1591"
+  HREF="node125.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> Bankswitching</A>
+<UL>
+<LI><A ID="tex2html1592"
+  HREF="node125.html#SECTION00513100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Hardware</A>
+<LI><A ID="tex2html1593"
+  HREF="node125.html#SECTION00513200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Software</A>
+</UL>
+<LI><A ID="tex2html1594"
+  HREF="node126.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> MCS51/DS390 Startup Code</A>
+<LI><A ID="tex2html1595"
+  HREF="node127.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> Interfacing with Assembler Code</A>
+<UL>
+<LI><A ID="tex2html1596"
+  HREF="node127.html#SECTION00515100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> Global Registers used for Parameter Passing</A>
+<LI><A ID="tex2html1597"
+  HREF="node127.html#SECTION00515200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> Register usage</A>
+<LI><A ID="tex2html1598"
+  HREF="node127.html#SECTION00515300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembler Routine (non-reentrant)</A>
+<LI><A ID="tex2html1599"
+  HREF="node127.html#SECTION00515400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">4</SPAN> Assembler Routine (reentrant)</A>
+</UL>
+</UL>
+<BR>
+<LI><A ID="tex2html1600"
+  HREF="node128.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">2</SPAN> DS400 port</A>
+<LI><A ID="tex2html1601"
+  HREF="node129.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN> The Z80, Z80N, Z180, Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit
+4000, Rabbit 5000, Rabbit 6000, SM83 (GameBoy), TLCS-90, eZ80, and
+R800 ports</A>
+<UL>
+<LI><A ID="tex2html1602"
+  HREF="node130.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Startup Code</A>
+<LI><A ID="tex2html1603"
+  HREF="node131.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Rabbit ports</A>
+<UL>
+<LI><A ID="tex2html1604"
+  HREF="node131.html#SECTION00532100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Port choice</A>
+<LI><A ID="tex2html1605"
+  HREF="node131.html#SECTION00532200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Rabbit hardware bugs</A>
+<LI><A ID="tex2html1606"
+  HREF="node131.html#SECTION00532300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Rabbit interrupt handlers</A>
+</UL>
+<LI><A ID="tex2html1607"
+  HREF="node132.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN> Z80, Z180, Z80N and R800 calling conventions</A>
+<UL>
+<LI><A ID="tex2html1608"
+  HREF="node132.html#SECTION00533100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Z80 SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1609"
+  HREF="node132.html#SECTION00533200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Z80 SDCC calling convention, version 0</A>
+</UL>
+<LI><A ID="tex2html1610"
+  HREF="node133.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN> Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit 4000, Rabbit 5000,
+Rabbit 6000, eZ80 and TLCS-90 calling conventions</A>
+<UL>
+<LI><A ID="tex2html1611"
+  HREF="node133.html#SECTION00534100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> Rabbit SDCC calling convention, version 1</A>
+</UL>
+<LI><A ID="tex2html1612"
+  HREF="node134.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN> SM83 calling conventions</A>
+<UL>
+<LI><A ID="tex2html1613"
+  HREF="node134.html#SECTION00535100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> SM83 SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1614"
+  HREF="node134.html#SECTION00535200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> SM83 SDCC calling convention, version 0</A>
+</UL>
+<LI><A ID="tex2html1615"
+  HREF="node135.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">6</SPAN> Small-C calling convention</A>
+<LI><A ID="tex2html1616"
+  HREF="node136.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">7</SPAN> Dynamic C calling convention</A>
+<LI><A ID="tex2html1617"
+  HREF="node137.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN> Complex instructions</A>
+<LI><A ID="tex2html1618"
+  HREF="node138.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN> Unsafe reads</A>
+<LI><A ID="tex2html1619"
+  HREF="node139.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">10</SPAN> Z80 banked calls</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1620"
+  HREF="node140.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">4</SPAN> The HC08 and S08 ports</A>
+<UL>
+<LI><A ID="tex2html1621"
+  HREF="node141.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> Startup Code</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1622"
+  HREF="node142.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN> The STM8 port</A>
+<UL>
+<LI><A ID="tex2html1623"
+  HREF="node143.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> Calling conventions</A>
+<UL>
+<LI><A ID="tex2html1624"
+  HREF="node143.html#SECTION00551100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1625"
+  HREF="node143.html#SECTION00551200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> SDCC calling convention, version 0</A>
+<LI><A ID="tex2html1626"
+  HREF="node143.html#SECTION00551300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> Raisonance calling convention</A>
+<LI><A ID="tex2html1627"
+  HREF="node143.html#SECTION00551400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> IAR calling convention</A>
+<LI><A ID="tex2html1628"
+  HREF="node143.html#SECTION00551500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> Cosmic calling convention</A>
+</UL>
+</UL>
+<BR>
+<LI><A ID="tex2html1629"
+  HREF="node144.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">6</SPAN> The f8 port</A>
+<UL>
+<LI><A ID="tex2html1630"
+  HREF="node145.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">1</SPAN> Calling convention</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1631"
+  HREF="node146.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">7</SPAN> The MOS6502 and WDC65C02 ports</A>
+<UL>
+<LI><A ID="tex2html1632"
+  HREF="node147.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">7</SPAN>.<SPAN CLASS="arabic">1</SPAN> Startup Code</A>
+<LI><A ID="tex2html1633"
+  HREF="node148.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">7</SPAN>.<SPAN CLASS="arabic">2</SPAN> Hooking up interrupts</A>
+<LI><A ID="tex2html1634"
+  HREF="node149.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">7</SPAN>.<SPAN CLASS="arabic">3</SPAN> Reentrancy</A>
+<LI><A ID="tex2html1635"
+  HREF="node150.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">7</SPAN>.<SPAN CLASS="arabic">4</SPAN> Code and Data placement</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1636"
+  HREF="node151.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN> The PIC14 port</A>
+<UL>
+<LI><A ID="tex2html1637"
+  HREF="node152.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> PIC Code Pages and Memory Banks</A>
+<LI><A ID="tex2html1638"
+  HREF="node153.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Adding New Devices to the Port </A>
+<LI><A ID="tex2html1639"
+  HREF="node154.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Interrupt Code</A>
+<LI><A ID="tex2html1640"
+  HREF="node155.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Configuration Bits</A>
+<LI><A ID="tex2html1641"
+  HREF="node156.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Linking and Assembling</A>
+<LI><A ID="tex2html1642"
+  HREF="node157.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> Command-Line Options</A>
+<LI><A ID="tex2html1643"
+  HREF="node158.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> Environment Variables</A>
+<LI><A ID="tex2html1644"
+  HREF="node159.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN> The Library</A>
+<UL>
+<LI><A ID="tex2html1645"
+  HREF="node159.html#SECTION00588100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Enhanced cores</A>
+<LI><A ID="tex2html1646"
+  HREF="node159.html#SECTION00588200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Accessing bits of special function registers</A>
+<LI><A ID="tex2html1647"
+  HREF="node159.html#SECTION00588300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Naming of special function registers</A>
+<LI><A ID="tex2html1648"
+  HREF="node159.html#SECTION00588400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> error: missing definition for symbol &ldquo;__gptrget1&rdquo;</A>
+<LI><A ID="tex2html1649"
+  HREF="node159.html#SECTION00588500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Processor mismatch in file &ldquo;XXX&rdquo;.</A>
+</UL>
+<LI><A ID="tex2html1650"
+  HREF="node160.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN> Known Bugs</A>
+<UL>
+<LI><A ID="tex2html1651"
+  HREF="node160.html#SECTION00589100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> Function arguments</A>
+<LI><A ID="tex2html1652"
+  HREF="node160.html#SECTION00589200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Regression tests fail</A>
+</UL>
+</UL>
+<BR>
+<LI><A ID="tex2html1653"
+  HREF="node161.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN> The PIC16 port</A>
+<UL>
+<LI><A ID="tex2html1654"
+  HREF="node162.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> Global Options</A>
+<LI><A ID="tex2html1655"
+  HREF="node163.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Port Specific Options</A>
+<UL>
+<LI><A ID="tex2html1656"
+  HREF="node163.html#SECTION00592100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Code Generation Options</A>
+<LI><A ID="tex2html1657"
+  HREF="node163.html#SECTION00592200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Optimization Options</A>
+<LI><A ID="tex2html1658"
+  HREF="node163.html#SECTION00592300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembling Options</A>
+<LI><A ID="tex2html1659"
+  HREF="node163.html#SECTION00592400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN> Linking Options</A>
+<LI><A ID="tex2html1660"
+  HREF="node163.html#SECTION00592500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">5</SPAN> Debugging Options</A>
+</UL>
+<LI><A ID="tex2html1661"
+  HREF="node164.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">3</SPAN> Environment Variables</A>
+<LI><A ID="tex2html1662"
+  HREF="node165.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">4</SPAN> Preprocessor Macros</A>
+<LI><A ID="tex2html1663"
+  HREF="node166.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">5</SPAN> Directories</A>
+<LI><A ID="tex2html1664"
+  HREF="node167.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">6</SPAN> Pragmas</A>
+<LI><A ID="tex2html1665"
+  HREF="node168.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">7</SPAN> Header Files and Libraries</A>
+<LI><A ID="tex2html1666"
+  HREF="node169.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">8</SPAN> Header Files</A>
+<LI><A ID="tex2html1667"
+  HREF="node170.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">9</SPAN> Libraries</A>
+<UL>
+<LI><A ID="tex2html1668"
+  HREF="node170.html#SECTION00599100000000000000">Building the libraries</A>
+<LI><A ID="tex2html1669"
+  HREF="node170.html#SECTION00599200000000000000">Output of float values via printf()</A>
+</UL>
+<LI><A ID="tex2html1670"
+  HREF="node171.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">10</SPAN> Adding New Devices to the Port</A>
+<LI><A ID="tex2html1671"
+  HREF="node172.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">11</SPAN> Memory Models</A>
+<LI><A ID="tex2html1672"
+  HREF="node173.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">12</SPAN> Stack</A>
+<LI><A ID="tex2html1673"
+  HREF="node174.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">13</SPAN> Functions</A>
+<LI><A ID="tex2html1674"
+  HREF="node175.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">14</SPAN> Function return values</A>
+<LI><A ID="tex2html1675"
+  HREF="node176.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">15</SPAN> Interrupts</A>
+<LI><A ID="tex2html1676"
+  HREF="node177.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">16</SPAN> Generic Pointers</A>
+<LI><A ID="tex2html1677"
+  HREF="node178.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">17</SPAN> Configuration Bits</A>
+<LI><A ID="tex2html1678"
+  HREF="node179.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN> PIC16 C Libraries</A>
+<UL>
+<LI><A ID="tex2html1679"
+  HREF="node179.html#SECTION005918100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN>.<SPAN CLASS="arabic">1</SPAN> Standard I/O Streams</A>
+<LI><A ID="tex2html1680"
+  HREF="node179.html#SECTION005918200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN>.<SPAN CLASS="arabic">2</SPAN> Printing functions</A>
+<LI><A ID="tex2html1681"
+  HREF="node179.html#SECTION005918300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN>.<SPAN CLASS="arabic">3</SPAN> Signals</A>
+</UL>
+<LI><A ID="tex2html1682"
+  HREF="node180.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN> PIC16 Port – Tips</A>
+<UL>
+<LI><A ID="tex2html1683"
+  HREF="node180.html#SECTION005919100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN>.<SPAN CLASS="arabic">1</SPAN> Stack size</A>
+</UL>
+<LI><A ID="tex2html1684"
+  HREF="node181.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">20</SPAN> Known Bugs</A>
+<UL>
+<LI><A ID="tex2html1685"
+  HREF="node181.html#SECTION005920100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">20</SPAN>.<SPAN CLASS="arabic">1</SPAN> Extended Instruction Set</A>
+<LI><A ID="tex2html1686"
+  HREF="node181.html#SECTION005920200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">20</SPAN>.<SPAN CLASS="arabic">2</SPAN> Regression Tests</A>
+</UL></UL></UL>
+<!--End of Table of Child-Links-->
+<BR><HR>
+
+</BODY>
+</HTML>

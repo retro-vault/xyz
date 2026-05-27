@@ -1,0 +1,153 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.9.2 Enabling and Disabling Interrupts directly</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node100.html">
+<LINK REL="previous" HREF="node98.html">
+<LINK REL="next" HREF="node100.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node100.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node97.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node98.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1466"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1468"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node100.html">3.9.3 Semaphore locking (mcs51/ds390)</A>
+<B> Up:</B> <A
+ HREF="node97.html">3.9 Enabling and Disabling Interrupts</A>
+<B> Previous:</B> <A
+ HREF="node98.html">3.9.1 Critical Functions and Critical</A>
+ &nbsp; <B>  <A ID="tex2html1467"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1469"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00492000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Enabling and Disabling Interrupts directly</A>
+</H2>
+
+<P>
+Interrupts<A ID="1922"></A> can also be disabled and enabled directly
+(8051):
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">EA = 0;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;or:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EA_SAVE
+= EA;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">...&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EA
+= 0;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">EA = 1;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;...</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EA
+= EA_SAVE;</SPAN>
+
+</BLOCKQUOTE>
+On other architectures which have separate opcodes for enabling and
+disabling interrupts you might want to make use of defines with inline
+assembly<A ID="1929"></A> (HC08<A ID="1930"></A>):
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">#define CLI __asm<A ID="1932"></A>&nbsp;&nbsp;cli&nbsp;&nbsp;__endasm<A ID="1933"></A>; </SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">#define SEI __asm&nbsp;&nbsp;sei&nbsp;&nbsp;__endasm; </SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE>or for SDCC version 3.2.0 or newer:
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">#define CLI __asm__ (&rdquo;cli&rdquo;); </SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">#define SEI __asm__ (&rdquo;sei&rdquo;); </SPAN>
+
+</BLOCKQUOTE>
+Note: it is sometimes sufficient to disable only a specific interrupt
+source like f.e. a timer or serial interrupt by manipulating an <SPAN  CLASS="textit">interrupt
+mask<A ID="1938"></A></SPAN> register. 
+
+<P>
+Usually the time during which interrupts are disabled should be kept
+as short as possible. This minimizes both <SPAN  CLASS="textit">interrupt latency</SPAN><A ID="1940"></A>
+(the time between the occurrence of the interrupt and the execution
+of the first code in the interrupt routine) and <SPAN  CLASS="textit">interrupt jitter</SPAN><A ID="1942"></A>
+(the difference between the shortest and the longest interrupt latency).
+These really are something different, f.e. a serial interrupt has
+to be served before its buffer overruns so it cares for the maximum
+interrupt latency, whereas it does not care about jitter. On a loudspeaker
+driven via a digital to analog converter which is fed by an interrupt
+a latency of a few milliseconds might be tolerable, whereas a much
+smaller jitter will be very audible.
+
+<P>
+You can re-enable interrupts within an interrupt routine and on some
+architectures you can make use of two (or more) levels of <SPAN  CLASS="textit">interrupt
+priorities</SPAN><A ID="1944"></A>. On some architectures which
+don't support interrupt priorities these can be implemented by manipulating
+the interrupt mask and re-enabling interrupts within the interrupt
+routine. Check there is sufficient space on the stack<A ID="1945"></A>
+and don't add complexity unless you have to. 
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node100.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node97.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node98.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1466"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1468"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node100.html">3.9.3 Semaphore locking (mcs51/ds390)</A>
+<B> Up:</B> <A
+ HREF="node97.html">3.9 Enabling and Disabling Interrupts</A>
+<B> Previous:</B> <A
+ HREF="node98.html">3.9.1 Critical Functions and Critical</A>
+ &nbsp; <B>  <A ID="tex2html1467"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1469"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

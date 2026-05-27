@@ -1,0 +1,120 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.1.15 Register Allocation</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node229.html">
+<LINK REL="previous" HREF="node227.html">
+<LINK REL="next" HREF="node229.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node229.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node227.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2357"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2359"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node229.html">8.1.16 Peephole Optimizer</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node227.html">8.1.14 Lifetime-Optimal Speculative Partial Redundancy</A>
+ &nbsp; <B>  <A ID="tex2html2358"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2360"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION009115000000000000000"></A><A ID="subsec:Register-Allocation"></A><A ID="4543"></A>
+<BR>
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">15</SPAN> Register Allocation
+</H2>
+
+<P>
+SDCC currently has two register allocators. One of them is optimal
+when optimizing for code size. This register allocator is used by
+default on all ports except for mcs51, ds390, pic14 and pic16. With
+the exception of hc08 and s08, it is also the only available register
+allocator for these ports. Even though it runs in polynomial time,
+it can be quite slow; therefore the <SPAN  CLASS="texttt">--max-allocs-per-node</SPAN>
+command line option can be used for a trade-off between compilation
+speed and quality of the generated code: Lower values result in faster
+compilation, higher values can result in better code being generated.
+
+<P>
+It first creates a tree-decomposition of the control-flow graph, and
+then uses dynamic programming bottom-up along the tree-decomposition.
+Optimality is achieved through the use of a cost function, which gives
+cost for instructions under register assignments. The cost function
+is target-specific and has to be implemented for each port; in all
+current SDCC ports the cost function is integrated into code generation.
+
+<P>
+For more details on how this register allocator works, see: Philipp
+Klaus Krause, &rdquo;Optimal Register Allocation in Polynomial Time&rdquo;,
+Compiler Construction - 22nd International Conference, CC 2013, Held
+as Part of the European Joint Conferences on Theory and Practice of
+Software, ETAPS 2013. Proceedings, Lecture Notes in Computer Science,
+volume 7791, pp. 1-20. Springer, 2013. Also: Philipp Klaus Krause,
+&rdquo;Bytewise Register Allocation&rdquo;, Proceedings of the 18th International
+Workshop on Software and Compilers for Embedded Systems, SCOPES ’15,
+pp 22–27. Association for Computing Machinery, 2015. 
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node229.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node227.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2357"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2359"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node229.html">8.1.16 Peephole Optimizer</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node227.html">8.1.14 Lifetime-Optimal Speculative Partial Redundancy</A>
+ &nbsp; <B>  <A ID="tex2html2358"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2360"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

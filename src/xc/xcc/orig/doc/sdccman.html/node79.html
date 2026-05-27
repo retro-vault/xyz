@@ -1,0 +1,200 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.5.10 Absolute Addressing</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node80.html">
+<LINK REL="previous" HREF="node78.html">
+<LINK REL="next" HREF="node80.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node80.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node78.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1368"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1370"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node80.html">3.5.11 __sdcc_external_startup</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node78.html">3.5.9 Non-intrinsic named address spaces</A>
+ &nbsp; <B>  <A ID="tex2html1369"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1371"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION004510000000000000000"></A><A ID="1628"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">10</SPAN> Absolute Addressing
+</H2>
+
+<P>
+Data items can be assigned an absolute address with the <SPAN  CLASS="textit">__at<A ID="1629"></A>
+&lt;address&gt;</SPAN> keyword (the address needs to be either a parenthesized
+constant expression or a constant), which can also be used in addition
+to a named address space, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__xdata unsigned int __at (0x7ffe) chksum;</SPAN>
+
+</BLOCKQUOTE>
+In the above example the variable chksum will be located at 0x7ffe
+and 0x7fff of the external ram. The compiler does <SPAN  CLASS="textit">not</SPAN> reserve
+any space for variables declared in this way
+(they are implemented with an equate in the assembler). Thus it is
+left to the programmer to make sure there are no overlaps with other
+variables that are declared without the absolute address. The assembler
+listing file (.lst<A ID="1635"></A>) and the linker output files
+(.rst<A ID="1636"></A>) and (.map<A ID="1637"></A>) are good places
+to look for such overlaps.
+
+<P>
+If however you provide an initializer<A ID="1638"></A>
+actual memory allocation will take place and overlaps will be detected
+by the linker. E.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__code char __at (0x7ff0) Id[5] = &rdquo;SDCC&rdquo;;</SPAN>
+
+</BLOCKQUOTE>
+In the above example the variable Id will be located from 0x7ff0 to
+0x7ff4 in code memory.
+
+<P>
+In case of memory mapped I/O devices the keyword <SPAN  CLASS="textit">volatile</SPAN> has
+to be used to tell the compiler that accesses might not be removed:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">volatile<A ID="1645"></A> __xdata<A ID="1646"></A>
+unsigned char __at<A ID="1647"></A> (0x8000) PORTA_8255;</SPAN>
+
+</BLOCKQUOTE>
+For some architectures (mcs51) array accesses are more efficient if
+an (xdata/far) array<SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><A ID="1649"></A></SPAN></SPAN>
+starts at a block (256 byte) boundary<A ID="1650"></A> (section
+<A HREF="node104.html#subsec:A-Step-by_Assembler_Introduction">3.11.2</A> has an example).
+<BR>
+Absolute addresses can be specified for variables in all named address
+spaces, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__bit<A ID="1653"></A> __at<A ID="1654"></A> (0x02)
+bvar;</SPAN>
+
+</BLOCKQUOTE>
+The above example will allocate the variable at offset 0x02 in the
+bit-addressable space. There is no real advantage to assigning absolute
+addresses to variables in this manner, unless you want strict control
+over all the variables allocated. One possible use would be to write
+hardware portable code. For example, if you have a routine that uses
+one or more of the microcontroller I/O pins, and such pins are different
+for two different hardwares, you can declare the I/O pins in your
+routine using:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">extern volatile<A ID="1657"></A> __bit MOSI;&nbsp;&nbsp;&nbsp;&nbsp;/*
+master out, slave in */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">extern volatile __bit MISO;&nbsp;&nbsp;&nbsp;&nbsp;/* master in, slave
+out */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">extern volatile __bit MCLK;&nbsp;&nbsp;&nbsp;&nbsp;/* master clock */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/* Input and Output of a byte on a 3-wire serial bus.</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;If needed adapt polarity of clock, polarity of data
+and bit order</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;*/</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">unsigned char spi_io(unsigned char out_byte)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{ </SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;unsigned char i=8;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;do { </SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MOSI = out_byte &amp; 0x80;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;out_byte «= 1;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCLK = 1;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* __asm nop __endasm; */&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/*
+for slow peripherals */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if(MISO)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;out_byte += 1;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MCLK = 0;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;} while(--i);</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return out_byte;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+Then, someplace in the code for the first hardware you would use
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__bit __at<A ID="1687"></A> (0x80) MOSI;&nbsp;&nbsp;&nbsp;&nbsp;/*
+I/O port 0, bit 0 */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__bit __at (0x81) MISO;&nbsp;&nbsp;&nbsp;&nbsp;/* I/O port 0, bit 1
+*/</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__bit __at (0x82) MCLK;&nbsp;&nbsp;&nbsp;&nbsp;/* I/O port 0, bit 2
+*/</SPAN>
+
+</BLOCKQUOTE>
+Similarly, for the second hardware you would use
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__bit __at (0x83) MOSI;&nbsp;&nbsp;&nbsp;&nbsp;/* I/O port 0, bit 3
+*/</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__bit __at (0x91) MISO;&nbsp;&nbsp;&nbsp;&nbsp;/* I/O port 1, bit 1
+*/</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__bit<A ID="1700"></A> __at (0x92) MCLK;&nbsp;&nbsp;&nbsp;&nbsp;/*
+I/O port 1, bit 2 */</SPAN>
+
+</BLOCKQUOTE>
+and you can use the same hardware dependent routine without changes,
+as for example in a library. This is somehow similar to sbit, but
+only one absolute address has to be specified in the whole project.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node80.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node78.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1368"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1370"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node80.html">3.5.11 __sdcc_external_startup</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node78.html">3.5.9 Non-intrinsic named address spaces</A>
+ &nbsp; <B>  <A ID="tex2html1369"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1371"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

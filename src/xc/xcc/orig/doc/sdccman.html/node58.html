@@ -1,0 +1,175 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.3.5 Linker Options</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node59.html">
+<LINK REL="previous" HREF="node57.html">
+<LINK REL="next" HREF="node59.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node59.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node57.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1223"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1225"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node59.html">3.3.6 MCS51 Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node57.html">3.3.4 Other Options</A>
+ &nbsp; <B>  <A ID="tex2html1224"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1226"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00435000000000000000"></A><A ID="1180"></A><A ID="1181"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN> Linker Options
+</H2>
+
+<UL>
+<LI>[<SPAN  CLASS="textbf">-</SPAN><SPAN  CLASS="textbf">-lib-path<A ID="1185"></A></SPAN>&nbsp;&lt;absolute] path
+to additional libraries&gt; This option is passed to the linkage editor's
+additional libraries<A ID="1186"></A> search path. The path name
+must be absolute. Additional library files may be specified in the
+command line. See section Compiling programs for more details.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-L&nbsp;<A ID="1187"></A></SPAN>&nbsp;&lt;absolute] path to additional
+libraries&gt; Same as above.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;xram-loc</SPAN><A ID="1189"></A>&nbsp;&lt;Value&gt;] The
+start location of the external ram<A ID="1190"></A>,
+default value is 0. The value entered can be in Hexadecimal or Decimal
+format, e.g.: &mdash;xram-loc 0x8000 or &mdash;xram-loc 32768.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;code-loc</SPAN><A ID="1192"></A>&nbsp;&lt;Value&gt;] The
+start location of the code<A ID="1193"></A> segment, default value 0.
+Note when this option is used the interrupt vector table<A ID="1194"></A>
+is also relocated to the given address. The value entered can be in
+Hexadecimal or Decimal format, e.g.: &mdash;code-loc 0x8000 or &mdash;code-loc
+32768.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;stack-loc</SPAN><A ID="1196"></A>&nbsp;&lt;Value&gt;] The
+value entered can be in Hexadecimal or Decimal format, e.g. &mdash;stack-loc
+0x20 or &mdash;stack-loc 32.
+
+<P>
+For stm8, by default the stack is placed at the device-specific reset
+value. By using this option, the stack can be placed anywhere in the
+lower 16-bits of the stm8 memory space. This is particularly useful
+for working around the stack roll-over antifeature present in some
+stm8 devices.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;xstack-loc</SPAN><A ID="1198"></A>&nbsp;&lt;Value&gt;] By
+default the external stack<A ID="1199"></A> is placed after the __pdata<A ID="1200"></A>
+segment. Using this option the xstack can be placed anywhere in the
+external memory space of the 8051. The value entered can be in Hexadecimal
+or Decimal format, e.g. &mdash;xstack-loc 0x8000 or &mdash;xstack-loc
+32768. The provided value should not overlap any other memory areas
+such as the pdata or xdata segment and with enough space for the current
+application.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;data-loc</SPAN><A ID="1202"></A>&nbsp;&lt;Value&gt;] The
+start location of the internal ram data<A ID="1203"></A>
+segment. The value entered can be in Hexadecimal or Decimal format,
+eg. &mdash;data-loc 0x20 or &mdash;data-loc 32. (By default, the start
+location of the internal ram data segment  is set as low as possible
+in memory, taking into account the used register banks and the bit
+segment at address 0x20. For example if register banks 0 and 1 are
+used without bit variables, the data segment will be set, if &mdash;data-loc
+is not used, to location 0x10.)
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;idata-loc</SPAN><A ID="1205"></A>&nbsp;&lt;Value&gt;] The
+start location of the indirectly addressable internal ram<A ID="1206"></A>
+of the 8051, default value is 0x80. The value entered can be in Hexadecimal
+or Decimal format, eg. &mdash;idata-loc 0x88 or &mdash;idata-loc 136.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;bit-loc</SPAN>&nbsp;&lt;Value&gt;] The start location of the bit<A ID="1208"></A>
+addressable internal ram of the 8051. This is <SPAN  CLASS="textit">not</SPAN> implemented
+yet. Instead an option can be passed directly to the linker: -Wl&nbsp;-bBSEG=&lt;Value&gt;.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;out-fmt-ihx<A ID="1210"></A></SPAN>] The
+linker output (final object code) is in Intel Hex format.<A ID="1211"></A>
+This is the default option. The format itself is documented in the
+documentation of srecord<A ID="1212"></A>.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;out-fmt-s19<A ID="1213"></A></SPAN>] The
+linker output (final object code) is in Motorola S19 format<A ID="1214"></A>.
+The format itself is documented in the documentation of srecord.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;out-fmt-elf<A ID="1215"></A><A ID="1216"></A></SPAN>] The
+linker output (final object code) is in ELF format<A ID="1217"></A>.
+(Currently only supported for the HC08<A ID="1218"></A>, S08 and STM8
+processors). When used with –debug, the debug info is in DWARF format
+instead of CDB.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-Wl&nbsp;linkOption[,linkOption]</SPAN><A ID="5807"></A><A ID="lyx:-Wl_option"></A>...] Pass
+the linkOption to the linker. If a bootloader is used an option like
+&rdquo;-Wl&nbsp;-bCSEG=0x1000&rdquo; would be typical to set the start of the
+code segment. Either use the double quotes around this option or use
+no space (e.g. -Wl-bCSEG=0x1000). See also #pragma constseg and #pragma
+codeseg in section<A HREF="node119.html#sec:Pragmas">3.16</A>. File sdcc/sdas/doc/asmlnk.txt
+has more on linker options.
+</LI>
+</UL>
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node59.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node57.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1223"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1225"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node59.html">3.3.6 MCS51 Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node57.html">3.3.4 Other Options</A>
+ &nbsp; <B>  <A ID="tex2html1224"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1226"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

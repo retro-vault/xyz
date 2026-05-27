@@ -1,0 +1,98 @@
+//
+// sdasz80_emitter.cpp — SDCC sdasz80 assembler syntax output.
+//
+// MIT License (see: LICENSE)
+// Copyright (C) 2026 tomaz stih
+//
+#include "backend/sdasz80_emitter.h"
+
+namespace xcc {
+
+void sdasz80_emitter::instr(const std::string &text) {
+    out_ << "\t" << text << "\n";
+}
+
+void sdasz80_emitter::label(const std::string &name, bool global) {
+    if (global) out_ << "\t.globl " << name << "\n";
+    out_ << name << ":\n";
+}
+
+void sdasz80_emitter::comment(const std::string &text) {
+    out_ << "\t; " << text << "\n";
+}
+
+void sdasz80_emitter::raw(const std::string &text) {
+    out_ << text;
+}
+
+void sdasz80_emitter::module_header() {
+    out_ << "\t.module xcc_output\n\n";
+}
+
+void sdasz80_emitter::section_code() {
+    out_ << "\n\t.area _CODE\n\n";
+}
+
+void sdasz80_emitter::section_data() {
+    out_ << "\t.area _DATA\n";
+}
+
+void sdasz80_emitter::section_rodata() {
+    out_ << "\t.area _CONST\n";
+}
+
+void sdasz80_emitter::section_tls() {
+    out_ << "\t.area _TLS\n";
+}
+
+void sdasz80_emitter::global_decl(const std::string &name) {
+    out_ << "\t.globl " << name << "\n";
+}
+
+void sdasz80_emitter::symbol_assign(const std::string &name, long long val) {
+    out_ << name << " = " << val << "\n";
+}
+
+void sdasz80_emitter::db(int val) {
+    out_ << "\t.db " << val << "\n";
+}
+
+void sdasz80_emitter::db_list(const std::vector<int> &vals) {
+    out_ << "\t.db ";
+    for (size_t i = 0; i < vals.size(); ++i) {
+        if (i) out_ << ", ";
+        out_ << vals[i];
+    }
+    out_ << "\n";
+}
+
+void sdasz80_emitter::dw(int val) {
+    out_ << "\t.dw " << val << "\n";
+}
+
+void sdasz80_emitter::dl(int val) {
+    out_ << "\t.dl " << val << "\n";
+}
+
+void sdasz80_emitter::ds(int bytes) {
+    out_ << "\t.ds " << bytes << "\n";
+}
+
+std::string sdasz80_emitter::imm(long long val) const {
+    return "#" + std::to_string(val);
+}
+
+std::string sdasz80_emitter::imm_sym(const std::string &mangled) const {
+    return "#" + mangled;
+}
+
+std::string sdasz80_emitter::ix_rel(int off) const {
+    return std::to_string(off) + "(ix)";
+}
+
+std::string sdasz80_emitter::indir_global(const std::string &mangled, int off) const {
+    if (off == 0) return "(#" + mangled + ")";
+    return "(#" + mangled + " + " + std::to_string(off) + ")";
+}
+
+} // namespace xcc

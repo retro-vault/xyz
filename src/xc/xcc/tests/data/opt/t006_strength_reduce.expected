@@ -1,0 +1,45 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_f
+_f:
+	; prologue: f (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param x at 4(ix)
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	add	hl, hl
+	add	hl, hl
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	push	hl
+	ld	hl, #3
+	ld	b, l
+	pop	hl
+__shift_9383:
+	ld	a, b
+	or	a, a
+	jp	z, __sdone_886
+	srl	h
+	rr	l
+	djnz	__shift_9383
+__sdone_886:
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	e, -4(ix)
+	ld	d, -3(ix)
+	add	hl, de
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

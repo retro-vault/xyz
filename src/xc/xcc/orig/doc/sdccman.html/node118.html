@@ -1,0 +1,76 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.15.4 MOS6502 Memory Models</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node117.html">
+<LINK REL="next" HREF="node119.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node119.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node117.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1572"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1574"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node119.html">3.16 Pragmas</A>
+<B> Up:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+<B> Previous:</B> <A
+ HREF="node117.html">3.15.3 STM8 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html1573"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1575"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION004154000000000000000"></A><A ID="2376"></A><A ID="2377"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">4</SPAN> MOS6502 Memory Models
+</H2>
+
+<P>
+SDCC implements two memory models for the MOS6502: <SPAN  CLASS="textit">small</SPAN> and
+<SPAN  CLASS="textit">large</SPAN> (default). Modules compiled with different memory models
+should <SPAN  CLASS="textit">never</SPAN> be combined together. The library routines supplied
+with the compiler are compiled for all models.
+
+<P>
+In the small model all data objects are placed by default in Page
+Zero. This is normally only useful in embedded systems.
+
+<P>
+In the large memory model, data is placed by default in 16-bit addressable
+memory. Critical data can still be placed in Page Zero using the __ZP
+or __near storage modifier. Code generated for the large model is
+slightly bigger and slower than code generated for the small model.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

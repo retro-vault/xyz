@@ -1,0 +1,122 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8.1 PIC Code Pages and Memory Banks</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node153.html">
+<LINK REL="previous" HREF="node151.html">
+<LINK REL="next" HREF="node153.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node153.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1883"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1885"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node153.html">4.8.2 Adding New Devices to</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+ &nbsp; <B>  <A ID="tex2html1884"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1886"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00581000000000000000"></A><A ID="3154"></A><A ID="3155"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> PIC Code Pages and Memory Banks
+</H2>
+
+<P>
+The linker organizes allocation for the code page and RAM banks. It
+does not have intimate knowledge of the code flow. It will put all
+the code section of a single .asm file into a single code page. In
+order to make use of multiple code pages, separate asm files must
+be used. The compiler assigns all <SPAN  CLASS="textit">static</SPAN> functions of a single
+.c file into the same code page.
+<BR>
+<BR>
+To get the best results, follow these guidelines:
+
+<OL>
+<LI>Make local functions static, as non static functions require code
+page selection overhead.
+<BR>
+Due to the way SDCC handles functions, place called functions prior
+to calling functions in the file wherever possible: Otherwise SDCC
+will insert unnecessary pagesel directives around the call, believing
+that the called function is externally defined.
+</LI>
+<LI>For devices that have multiple code pages it is more efficient to
+use the same number of files as pages: Use up to 4 separate .c files
+for the 16F877, but only 2 files for the 16F874. This way the linker
+can put the code for each file into different code pages and there
+will be less page selection overhead.
+</LI>
+<LI>And as for any 8 bit micro (especially for PIC14 as they have a very
+simple instruction set), use `unsigned char' wherever possible instead
+of `int'.
+</LI>
+</OL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node153.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1883"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1885"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node153.html">4.8.2 Adding New Devices to</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+ &nbsp; <B>  <A ID="tex2html1884"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1886"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

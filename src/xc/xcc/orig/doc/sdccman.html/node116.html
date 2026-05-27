@@ -1,0 +1,118 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.15.2 DS390 Memory Model</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node117.html">
+<LINK REL="previous" HREF="node115.html">
+<LINK REL="next" HREF="node117.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node117.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node115.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1564"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1566"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node117.html">3.15.3 STM8 Memory Models</A>
+<B> Up:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+<B> Previous:</B> <A
+ HREF="node115.html">3.15.1 MCS51 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html1565"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1567"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION004152000000000000000"></A><A ID="2362"></A><A ID="2363"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">2</SPAN> DS390 Memory Model
+</H2>
+
+<P>
+The only model supported is Flat 24<A ID="2364"></A>.
+This generates code for the 24 bit contiguous addressing mode of the
+Dallas DS80C390 part. In this mode, up to four meg of external RAM
+or code space can be directly addressed. See the data sheets at www.dalsemi.com
+for further information on this part.
+<BR>
+<BR>
+Note that the compiler does not generate any code to place the processor
+into 24 bit mode (although <SPAN  CLASS="textit">tinibios</SPAN> in the ds390 libraries
+will do that for you). If you don't use <SPAN  CLASS="textit">tinibios</SPAN><A ID="2367"></A>,
+the boot loader or similar code must ensure that the processor is
+in 24 bit contiguous addressing mode before calling the SDCC startup
+code.
+<BR>
+<BR>
+Like the <SPAN  CLASS="textit">&mdash;model-large</SPAN> option, variables will by default
+be placed into the XDATA segment.
+<BR>
+<BR>
+Segments may be placed anywhere in the 4 meg address space using the
+usual &mdash;*-loc options. Note that if any segments are located
+above 64K, the -r flag must be passed to the linker to generate the
+proper segment relocations, and the Intel HEX output format must be
+used. The -r flag can be passed to the linker by using the option
+<SPAN  CLASS="textit">-Wl-r</SPAN> on the SDCC command line. However, currently the linker
+can not handle code segments &gt; 64k.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node117.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node115.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1564"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1566"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node117.html">3.15.3 STM8 Memory Models</A>
+<B> Up:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+<B> Previous:</B> <A
+ HREF="node115.html">3.15.1 MCS51 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html1565"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1567"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

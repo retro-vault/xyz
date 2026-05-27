@@ -1,0 +1,137 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.3 The Z80, Z80N, Z180, Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit
+4000, Rabbit 5000, Rabbit 6000, SM83 (GameBoy), TLCS-90, eZ80, and
+R800 ports</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node140.html">
+<LINK REL="previous" HREF="node128.html">
+<LINK REL="next" HREF="node130.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node130.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node121.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node128.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1732"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1734"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node130.html">4.3.1 Startup Code</A>
+<B> Up:</B> <A
+ HREF="node121.html">4. Notes on supported Processors</A>
+<B> Previous:</B> <A
+ HREF="node128.html">4.2 DS400 port</A>
+ &nbsp; <B>  <A ID="tex2html1733"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1735"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00530000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN> The Z80, Z80N, Z180, Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit
+4000, Rabbit 5000, Rabbit 6000, SM83 (GameBoy), TLCS-90, eZ80, and
+R800 ports</A>
+</H1>
+
+<P>
+SDCC can target the Z80<A ID="3063"></A>, Z80N, Z180, eZ80, Rabbit 2000,
+Rabbit 2000A, Rabbit 3000A and LR35902, the Sharp SM83 (used .e.g
+in the Nintendo GameBoy) sm83<A ID="3064"></A>.
+
+<P>
+When a frame pointer is used, it resides in IX. Register A, B, C,
+D, E, H, L and IY are used as a temporary registers for holding variables.
+
+<P>
+When enabling optimizations using <SPAN  CLASS="texttt">--opt-code</SPAN> size and a
+sufficiently high value for <SPAN  CLASS="texttt">--max-allocs-per-node</SPAN> SDCC typically
+generates much better code for these architectures than many other
+compilers. A comparison of compilers for these architecture can be
+found at <kbd><A ID="tex2html66"
+  HREF="http://sdcc.sourceforge.net/wiki/index.php/Z80_code_size">http://sdcc.sourceforge.net/wiki/index.php/Z80_code_size</A></kbd>.
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1736"
+  HREF="node130.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Startup Code</A>
+<LI><A ID="tex2html1737"
+  HREF="node131.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Rabbit ports</A>
+<UL>
+<LI><A ID="tex2html1738"
+  HREF="node131.html#SECTION00532100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Port choice</A>
+<LI><A ID="tex2html1739"
+  HREF="node131.html#SECTION00532200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Rabbit hardware bugs</A>
+<LI><A ID="tex2html1740"
+  HREF="node131.html#SECTION00532300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Rabbit interrupt handlers</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1741"
+  HREF="node132.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN> Z80, Z180, Z80N and R800 calling conventions</A>
+<UL>
+<LI><A ID="tex2html1742"
+  HREF="node132.html#SECTION00533100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Z80 SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1743"
+  HREF="node132.html#SECTION00533200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Z80 SDCC calling convention, version 0</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1744"
+  HREF="node133.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN> Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit 4000, Rabbit 5000,
+Rabbit 6000, eZ80 and TLCS-90 calling conventions</A>
+<UL>
+<LI><A ID="tex2html1745"
+  HREF="node133.html#SECTION00534100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> Rabbit SDCC calling convention, version 1</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1746"
+  HREF="node134.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN> SM83 calling conventions</A>
+<UL>
+<LI><A ID="tex2html1747"
+  HREF="node134.html#SECTION00535100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> SM83 SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1748"
+  HREF="node134.html#SECTION00535200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> SM83 SDCC calling convention, version 0</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1749"
+  HREF="node135.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">6</SPAN> Small-C calling convention</A>
+<LI><A ID="tex2html1750"
+  HREF="node136.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">7</SPAN> Dynamic C calling convention</A>
+<LI><A ID="tex2html1751"
+  HREF="node137.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN> Complex instructions</A>
+<LI><A ID="tex2html1752"
+  HREF="node138.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN> Unsafe reads</A>
+<LI><A ID="tex2html1753"
+  HREF="node139.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">10</SPAN> Z80 banked calls</A>
+</UL>
+<!--End of Table of Child-Links-->
+<BR><HR>
+
+</BODY>
+</HTML>

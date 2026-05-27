@@ -1,0 +1,151 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.12 Support routines for integer multiplicative operators</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node108.html">
+<LINK REL="previous" HREF="node102.html">
+<LINK REL="next" HREF="node108.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node108.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node37.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node106.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1506"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1508"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node108.html">3.13 Floating Point Support</A>
+<B> Up:</B> <A
+ HREF="node37.html">3. Using SDCC</A>
+<B> Previous:</B> <A
+ HREF="node106.html">3.11.4 Use of Labels within</A>
+ &nbsp; <B>  <A ID="tex2html1507"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1509"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION004120000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">12</SPAN> Support routines for integer multiplicative operators</A>
+</H1>
+
+<P>
+Depending on the target architecture, some integer multiplicative
+operators might be implemented by support routines. These support
+routines exist in portable C versions to facilitate porting to other
+MCUs, although depending on the target, assembler routines might be
+used instead. The following files contain some of the described routines,
+all of them can be found in &lt;installdir&gt;/share/sdcc/lib.
+<BR>
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TH CLASS="LEFT"><SPAN  CLASS="textbf">Function</SPAN></TH>
+<TH CLASS="LEFT"><SPAN  CLASS="textbf">Description</SPAN></TH>
+</TR>
+<TR><TD CLASS="LEFT">_mulint.c</TD>
+<TD CLASS="LEFT">16 bit multiplication</TD>
+</TR>
+<TR><TD CLASS="LEFT">_divsint.c</TD>
+<TD CLASS="LEFT">signed 16 bit division (calls _divuint)</TD>
+</TR>
+<TR><TD CLASS="LEFT">_divuint.c</TD>
+<TD CLASS="LEFT">unsigned 16 bit division</TD>
+</TR>
+<TR><TD CLASS="LEFT">_modsint.c</TD>
+<TD CLASS="LEFT">signed 16 bit modulus (calls _moduint)</TD>
+</TR>
+<TR><TD CLASS="LEFT">_moduint.c</TD>
+<TD CLASS="LEFT">unsigned 16 bit modulus</TD>
+</TR>
+<TR><TD CLASS="LEFT">_mullong.c</TD>
+<TD CLASS="LEFT">32 bit multiplication</TD>
+</TR>
+<TR><TD CLASS="LEFT">_divslong.c</TD>
+<TD CLASS="LEFT">signed 32 division (calls _divulong)</TD>
+</TR>
+<TR><TD CLASS="LEFT">_divulong.c</TD>
+<TD CLASS="LEFT">unsigned 32 division</TD>
+</TR>
+<TR><TD CLASS="LEFT">_modslong.c</TD>
+<TD CLASS="LEFT">signed 32 bit modulus (calls _modulong)</TD>
+</TR>
+<TR><TD CLASS="LEFT">_modulong.c</TD>
+<TD CLASS="LEFT">unsigned 32 bit modulus</TD>
+</TR>
+</TABLE>
+<BR></DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+In the mcs51, ds390, hc08, s08, pdk13, pdk14, pdk15, pic14 and pic16
+backends they are by default compiled as <SPAN  CLASS="textit">non-reentrant</SPAN><A ID="2241"></A>;
+when targeting on of these architectures, interrupt<A ID="2242"></A>
+service routines should not do any of the above operations. If this
+is unavoidable then the above routines will need to be compiled with
+the <SPAN  CLASS="textit">&mdash;stack-auto<A ID="2243"></A></SPAN> option,
+after which the source program will have to be compiled with <SPAN  CLASS="textit">&mdash;int-long-reent<A ID="2244"></A></SPAN>
+option. Notice that you don't have to call these routines directly.
+The compiler will use them automatically every time an integer operation
+is required.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node108.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node37.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node106.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1506"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1508"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node108.html">3.13 Floating Point Support</A>
+<B> Up:</B> <A
+ HREF="node37.html">3. Using SDCC</A>
+<B> Previous:</B> <A
+ HREF="node106.html">3.11.4 Use of Labels within</A>
+ &nbsp; <B>  <A ID="tex2html1507"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1509"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,100 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.5.8 MOS6502 intrinsic named address spaces</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node78.html">
+<LINK REL="previous" HREF="node76.html">
+<LINK REL="next" HREF="node78.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node78.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node76.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1358"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1360"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node78.html">3.5.9 Non-intrinsic named address spaces</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node76.html">3.5.7 PDK14/PDK15 intrinsic named address</A>
+ &nbsp; <B>  <A ID="tex2html1359"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1361"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1362"
+  HREF="node77.html#SECTION00458100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> __zp/__data
+/__near</A>
+<LI><A ID="tex2html1363"
+  HREF="node77.html#SECTION00458200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata
+/__far</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00458000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN> MOS6502 intrinsic named address spaces</A>
+</H2>
+
+<P>
+
+<H3><A ID="SECTION00458100000000000000"></A><A ID="1602"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> __zp/__data
+/__near
+</H3>
+
+<P>
+Variables in the address space __zp reside in the first 256 bytes
+of memory (the Page Zero). The MOS6502<A ID="1603"></A> is most efficient
+at accessing variables stored here. Pointers can only be dereferenced
+directly if they reside in Page Zero. This is the default for the
+small memory model.
+
+<P>
+
+<H3><A ID="SECTION00458200000000000000"></A><A ID="1604"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata
+/__far
+</H3>
+
+<P>
+Variables in the address space __xdata can reside anywhere in the
+64K memory space. This is the default (for the large memory model).
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

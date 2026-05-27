@@ -1,0 +1,73 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.3.10 Z80 banked calls</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node138.html">
+<LINK REL="next" HREF="node140.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node140.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node129.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node138.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1798"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1800"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node140.html">4.4 The HC08 and S08</A>
+<B> Up:</B> <A
+ HREF="node129.html">4.3 The Z80, Z80N, Z180,</A>
+<B> Previous:</B> <A
+ HREF="node138.html">4.3.9 Unsafe reads</A>
+ &nbsp; <B>  <A ID="tex2html1799"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1801"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION005310000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">10</SPAN> Z80 banked calls</A>
+</H2>
+
+<P>
+Banked calls are supported via __banked. Banked calls are done via
+a trampoline (__sdcc_bcall if --legacy-banking is specified,
+__sdcc_bcall_abc for z88dk_fastcall, __sdcc_bcall_ehl for
+other calls). Default trampolines are provided in the library. The
+default trampolines calls user supplied helper functions set_bank
+and get_bank that set the current bank to the value in register a,
+or return the current bank in register a.
+
+<P>
+For banked functions, the calling convention is slightly different:
+the stack is always cleared up by the caller. Unless __z88dk_fastcall
+is used, all parameters are passed on the stack.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

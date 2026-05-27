@@ -1,0 +1,202 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>Microcontroller Simulator</title>
+  </head>
+  <body style="    background-color: white;">
+    [ <a href="news.html">News</a> ]
+    [ <a href="#download">Download</a> (<a href="https://github.com/danieldrotos/ucsim/releases/latest">latest</a>) ]
+    [ <a href="#install">Installation</a> ]
+    [ <a href="#use">Usage</a> ]
+    [ <a href="mailto:dr.dkdb@gmail.com">Mail to developer</a> ]
+    
+    <p> </p>
+
+    <pre><tt><font size="+1">
+        _____     _           
+       / ____|   (_)          
+ _   _| |     ___ _ _ __ ___  
+| | | | |    / __| | '_ ` _ \ 
+| |_| | |____\__ \ | | | | | |
+\ ._,_|\_____|___/_|_| |_| |_|
+| |                           
+|_|                           
+    </font></tt></pre>
+    
+    <h1>Software simulator for microcontrollers</h1>
+    
+    <p><b><i>&micro;Csim</i></b> can be used to simulate
+      microcontrollers. It supports
+
+      <ul><li>Intel (MCS51 family, MCS48, MCS80, MCS85)</li>
+	<li>XA51,</li>
+	<li>AVR core,</li>
+	<li>Z80 (Z80, Z180, GB80, EZ80, Z80N, R800),</li>
+	<li>TLCS90,</li>
+	<li>Rabbit (r2k, r3k, r4k, r5k)</li>
+	<li>Motorola (6800, 68hc08, 6809, 68hc11, 68hc12)</li>
+	<li>MOS6502,</li>
+	<li>ST7,</li>
+	<li>STM8,</li>
+	<li>Padauk (pdk13, pdk14, pdk15, pdk16)</li>
+	<li>PicoBlaze,</li>
+	<li><a href="https://danieldrotos.github.io/p12dev/">p1516,
+	p2223</a> soft processors,</li>
+	<li>F8 soft processor,</li>
+	<li>OISC processors (URISC, MISC16)</li>
+      </ul>
+      
+      It can run on Linux, Windows, OSX, BSD, and other systems.</p>
+
+    <p>See <a href="news.html">what's new</a> in current version.</p>
+      
+      <h2><a name="download">Download</a></h2>
+      
+      <p>You can download <i>&micro;Csim</i> from two places:</p>
+      
+      
+	
+      <p><b>SDCC homepage.</b> <i>&micro;Csim</i> is part of the SDCC
+        (Small Device C Compiler) project. You can download source of
+        SDCC or precompiled binaries from <a href="http://sdcc.sf.net">http://sdcc.sf.net</a>.
+	  Please note, that SDCC binary package contains limited <i>&micro;Csim</i>,
+	including simulators for SDCC ports only.</p>
+	
+      <p><b><i>&micro;Csim</i> site.</b> Standalone source package is
+	  available on the <i>&micro;Csim</i> web site:
+	
+        <a href="https://github.com/danieldrotos/ucsim/releases">https://github.com/danieldrotos/ucsim/releases</a></p>
+
+	  <p>Home site contains precompiled Debian (i386 and amd64
+	architectures) packages for all Debian based Linux
+	distributions, Windows installer and standalone Windows
+	    package.</p>
+	  
+	  <p>Older versions are available from the archive site: <a href="http://mazsola.iit.uni-miskolc.hu/ucsim/archive">http://mazsola.iit.uni-miskolc.hu/ucsim/download</a></p>
+	  
+	      
+      <p><!-- INSTALL --></p>
+      
+      <h2><a name="install">How to install</a></h2>
+      
+      <p>UNIX version is distributed in source, as well as
+	in pre-compiled debian stable packages for i386 and amd64
+	architectures.</p>
+
+      <p>Windows version distributed as a setup executable and as a
+	portable zip package.</p>
+
+      <h3>How to compile from source</h3>
+      
+    <ol>
+
+      <li>Get archive file, uncompress and untar it. These steps will
+        produce a directory <b>ucsim-X.Y.Z</b> where X.Y.Z is the
+        version number. </li>
+      
+      <li>Make sure, that following packages are installed on your
+      system: <b>make</b> (GNU make is required),
+        <b>bison</b> (or yacc), <b>flex</b> (or lex), <b>libncurses-dev</b>.
+        You will need a C++ compiler as well.</li>
+      
+      <li>Go to the directory and configure the
+        package. Issue <tt><b>./configure</b></tt> command. It will
+        determine your system and produce <b>Makefile</b>.
+        Installation directory can be specified
+        with <b><tt>--prefix=<i>dir</i></tt></b><!-- -- --> option to
+        the <tt><b>configure</b></tt>. Default directory
+        is <tt>/usr/local</tt>.  Executable files will be placed
+        in <tt>bin</tt> subdirectory.</li>
+      
+      <li>Compile the package with <tt><b>make</b></tt> command,
+      or <b>gmake</b> if GNU make has that name. </li>
+      
+      <li>Install
+      executables <b>ucsim_i8051</b>, <b>ucsim_avr</b>, <b>ucsim_hc08</b>, <b>ucsim_xa</b>, <b>ucsim_z80,
+      etc.</b> to any directory you want. It can be done
+      with <tt><b>make install</b></tt> command which will place files
+      in installation directory specified
+      with <tt><b>--prefix=<i>dir</i></b><!-- -- --></tt> option
+      of <tt><b>configure</b></tt>. Note that you may have to have
+      special privilege to do this if installation directory is not
+      writable by the user. </li>
+      
+    </ol>
+    
+    <!-- USE -->
+    <h2><a name="use">How to use</a></h2>
+    <ul>
+      <li> <a href="invoke.html">Invocation</a>.<br>
+        Starting the simulator program. </li>
+    </ul>
+    <p><b>Features of the simulator</b> </p>
+    <ul>
+      
+      <li><a href="analyzer.html">Code analyzer</a>. <br>
+        The simulator tries to figure out places of valid instructions in code
+        area.</li>
+      
+      <li><a href="cpu_types.html">Processor types</a>. <br>
+        The simulator can simulate different types of microcontrollers. </li>
+      
+      <li><a href="mulcons.html">Multiple consoles</a>. <br>
+        The simulator can handle more than one command console and accepts
+        command from multiple sources. It also can be driven by other programs
+        such as debugger interfaces. </li>
+      
+      <li><a href="serial.html">Serial interfaces</a>. <br>
+        The simulator can virtually connect a terminal to serial interface of
+        the simulated CPU. </li>
+      
+      <li><a href="memory.html">Memory simulation</a>. <br>
+        Simulated CPU provides address spaces, storage is simulated by memory
+        chips, address decoders connect them together. </li>
+      
+      <li><a href="simif.html">Simulator interface</a>.<br>  This is a
+        special interface which provides services for the simulated
+        program. These services can be used to control the simulator
+        (for example run/stop) and access some host features (print,
+        file I/O).</li>
+      
+      <li><a href="vcd.html">VCD file I/O</a>.<br>
+        This is a special virtual hardware peripheral which can monitor changes
+        of a memory location (or a bit in MCS51 where bit address space is
+        available) and write out changes to a VCD file. It can also be used to
+        replay events from a VCD file in order to simulate external events.</li>
+
+      <li><a href="display.html">Peripheral displays</a>. <br>Textual
+      user interfaces which can show information about a
+      peripheral. Some of them are interactive and can be used to
+      provide external input data for the simulated system (port,
+      uart).</li>
+      
+      <li><a href="syntax.html">Command syntax</a>
+        and <a href="cmd.html">command
+        reference</a>, <a href="syntax.html#expr">expressions</a>. <br>
+	
+        The simulator can be controlled via a command line
+        interface. It accepts simple commands. </li>
+      
+    </ul>
+    <p><b>Microcontroller specific features</b> </p>
+    <ul>
+	    <li><a href="stm8/index.html">STM8</a></li>
+    </ul>
+    <h2><a name="dev">Developers</a></h2>
+    <ul>
+      <li><a href="testing.html">Regression Testing</a></li>
+    </ul>
+    <hr>
+    <table border="0">
+      <tbody>
+        <tr>
+          <td><a href="mailto:dr.dkdb@gmail.com"><img src="post.jpg"
+                border="0" align="top"></a></td>
+          <td><i>&copy; 1997 Dániel Drótos</i> <br>
+            <a href="mailto:dr.dkdb@gmail.com">dr.dkdb@gmail.com</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

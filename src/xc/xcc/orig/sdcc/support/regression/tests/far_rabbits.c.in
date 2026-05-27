@@ -1,0 +1,86 @@
+/** far_rabbits.c.in - test __far space that contains generic space.
+
+    type: unsigned char, unsigned int, unsigned long, unsigned long long
+*/
+#include <testfwk.h>
+
+#if !defined(__SDCC_r2k) && !defined(__SDCC_r2ka) && !defined(__SDCC_r3ka) && !defined(__SDCC_r4k) && !defined(__SDCC_r5k) && !defined(__SDCC_r6k) && !defined(__SDCC_tlcs90) /*&& !defined(__SDCC_ez80) TODO bug #3882*/
+#define __far
+char farmemblock[2];
+#else
+#undef __far
+// Ensure that farmemblock and farmemblock+sizeof(farmemblock) differ in more than just the lowest 16 bits. Also gives further objects in __far an address > 2^16.
+char memblock[6000];
+__far char farmemblock[40000];
+#endif
+
+__far {type} i;
+__far {type} ii = 0x55;
+__far {type} j;
+const __far {type} ci = 0xaa;
+
+{type} readfarptr(__far {type} *p)
+{
+	return(*p);
+}
+
+void writefarptr(__far {type} *p, {type} i)
+{
+	*p = i;
+}
+
+void testFarObj(void)
+{
+	// Read initialized variable in __far
+	ASSERT(ii == 0x55);
+	ASSERT(ci == 0xaa);
+}
+
+void testFarPtr(void)
+{
+	// Write variable in __far
+	i = 0xa5;
+	ASSERT(i == 0xa5);
+
+	// Pointer access to __far
+	ASSERT(readfarptr(&i) == 0xa5);
+	writefarptr(&i, 0x5a);
+	ASSERT(i == 0x5a);
+
+	// generic space is in __far
+	{type} k = 23;
+#if 0 // Doesn't work yet.
+	ASSERT(readfarptr((__far {type} *)(&k)) == 23);
+	writefarptr((__far {type} *)(&k), 42);
+	ASSERT(k == 42);
+	__far {type} *volatile p = (__far {type} *)(&k);
+	ASSERT(({type} *)p == &k);
+	ASSERT(({type} *)p == (__far {type} *)(&k));
+#endif
+}
+
+void testFarArith(void)
+{
+	i = 23;
+	j = 42;
+	ASSERT(i + j == 23 + 42);
+	i += j;
+	ASSERT(readfarptr(&i) == 23 + 42);
+}
+
+void testFarPtrArith(void)
+{
+	__far char *p = farmemblock;
+	__far char *volatile q = farmemblock;
+	ASSERT(p + sizeof(farmemblock) == farmemblock + sizeof(farmemblock));
+	ASSERT(q + sizeof(farmemblock) == farmemblock + sizeof(farmemblock));
+	p[0] = 23;
+	p[sizeof(farmemblock) - 1] = 42;
+	ASSERT(farmemblock[0] == 23);
+	ASSERT(farmemblock[sizeof(farmemblock) - 1] == 42);
+	q[0] = 42;
+	q[sizeof(farmemblock) - 1] = 23;
+	ASSERT(farmemblock[0] == 42);
+	ASSERT(farmemblock[sizeof(farmemblock) - 1] == 23);
+}
+

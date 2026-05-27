@@ -1,0 +1,138 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8.5 Linking and Assembling</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node157.html">
+<LINK REL="previous" HREF="node155.html">
+<LINK REL="next" HREF="node157.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node157.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node155.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1899"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1901"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node157.html">4.8.6 Command-Line Options</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node155.html">4.8.4 Configuration Bits</A>
+ &nbsp; <B>  <A ID="tex2html1900"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1902"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00585000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Linking and Assembling</A>
+</H2>
+
+<P>
+For assembling you can use either GPUTILS'<A ID="3194"></A>
+gpasm.exe or MPLAB's mpasmwin.exe. GPUTILS are available from <kbd><A ID="tex2html68"
+  HREF="http://sourceforge.net/projects/gputils">http://sourceforge.net/projects/gputils</A></kbd>.
+For linking you can use either GPUTILS' gplink or MPLAB's mplink.exe.
+If you use MPLAB and an interrupt function then the linker script
+file vectors section will need to be enlarged to link with mplink.
+<BR>
+<BR>
+Pic device specific header and c source files are automatically generated
+from MPLAB include files, which are published by Microchip with a
+special requirement that they are only to be used with authentic Microchip
+devices. This reqirement prevents to publish generated header and
+c source files under the GPL compatible license, so they are located
+in non-free directory (see section <A HREF="node13.html#subsec:Search-Paths">2.3</A>). In
+order to include them in include and library search paths, the <SPAN  CLASS="textbf">&mdash;use-non-free<A ID="3197"></A></SPAN>
+command line option should be defined.
+<BR>
+<BR>
+NOTE: the compiled code, which use non-free pic device specific libraries,
+is not GPL compatible!
+<BR>
+<BR>
+Here is a <SPAN  CLASS="texttt">Makefile</SPAN> using GPUTILS:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">.c.o:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sdcc -V --use-non-free -mpic14 -p16f877
+-c $&lt;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">$(PRJ).hex: $(OBJS)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gplink -m -s $(PRJ).lkr -o $(PRJ).hex $(OBJS)
+libsdcc.lib</SPAN>
+
+</BLOCKQUOTE>
+Here is a <SPAN  CLASS="texttt">Makefile</SPAN> using MPLAB:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">.c.o: </SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sdcc -S -V --use-non-free -mpic14 -p16f877
+$&lt;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mpasmwin /q /o $*.asm</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">$(PRJ).hex: $(OBJS)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mplink /v $(PRJ).lkr /m $(PRJ).map /o $(PRJ).hex
+$(OBJS) libsdcc.lib</SPAN>
+
+</BLOCKQUOTE>
+Please note that indentations within a <SPAN  CLASS="texttt">Makefile</SPAN> have to be
+done with a tabulator character.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node157.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node155.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1899"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1901"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node157.html">4.8.6 Command-Line Options</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node155.html">4.8.4 Configuration Bits</A>
+ &nbsp; <B>  <A ID="tex2html1900"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1902"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

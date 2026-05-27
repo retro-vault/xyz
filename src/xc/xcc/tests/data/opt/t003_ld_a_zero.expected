@@ -1,0 +1,19 @@
+	.module	xcc_output
+	.area	_DATA
+	.globl	_g
+_g:
+	.ds	1
+	.area	_CODE
+	.globl	_f
+_f:
+	; prologue: f (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #0
+	ld	(_g), hl
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

@@ -1,0 +1,156 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.3.4 Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit 4000, Rabbit 5000,
+Rabbit 6000, eZ80 and TLCS-90 calling conventions</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node134.html">
+<LINK REL="previous" HREF="node132.html">
+<LINK REL="next" HREF="node134.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node134.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node129.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node132.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1771"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1773"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node134.html">4.3.5 SM83 calling conventions</A>
+<B> Up:</B> <A
+ HREF="node129.html">4.3 The Z80, Z80N, Z180,</A>
+<B> Previous:</B> <A
+ HREF="node132.html">4.3.3 Z80, Z180, Z80N and</A>
+ &nbsp; <B>  <A ID="tex2html1772"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1774"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1775"
+  HREF="node133.html#SECTION00534100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> Rabbit SDCC calling convention, version 1</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00534000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN> Rabbit 2000, Rabbit 2000A, Rabbit 3000A, Rabbit 4000, Rabbit 5000,
+Rabbit 6000, eZ80 and TLCS-90 calling conventions</A>
+</H2>
+
+<P>
+The current default is the Rabbit calling convention described here,
+version 1. Using the command-line option –sdcccall 8, the default
+can be changed to version 0 of the Z80 calling convention, described
+above. There are four other calling conventions supported, which can
+be specified using the keywords __smallc, __z88dk_fastcall, __z88dk_callee
+and __dynamicc. They are primarily intended for compatibility with
+libraries written for other compilers. For __z88dk_fastcall, there
+may be only one parameter of at most 32 bits, which is passed the
+same way as the return value. For __z88dk_callee, the stack is
+not adjusted for stack parameters the parameters after the call (thus
+the callee has to do this instead). __z88dk_callee can be combined
+with __smallc, __sdcccall(0) or __sdcccall(1).
+
+<P>
+
+<H3><A ID="SECTION00534100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> Rabbit SDCC calling convention, version 1</A>
+</H3>
+
+<P>
+This calling convention can be chosen per function via __sdcccall(1).
+8-bit return values are passed in a, 16-bit values in hl, 24-bit values
+in lde, 32-bit values in hlde. Larger return values (as well as struct
+and union independent of their size) are passed in memory in a location
+specified by the caller through a hidden pointer argument.
+
+<P>
+For functions that have variable arguments: All parameters are passed
+on the stack. The stack is not adjusted for the parameters by the
+callee (thus the caller has to do this instead).
+
+<P>
+7#7
+
+<P>
+For Functions that do not have variable arguments: the first parameter
+is passed in a if it has 8 bits. If it has 16 bits it is passed in
+hl. If it has 32 bits, it is passed in hlde. If the first parameter
+is in a, and the second has 8 bits, it is passed in l; if the first
+is in hl or hlde, and the second has 8 bits, it is passed in a; if
+the first is in a, and the second has 16 bits, it is passed in hl;
+all other parameters are passed on the stack, right-to-left. Independent
+of their size, struct / union parameters and all following parameters
+are always passed on the stack.
+
+<P>
+6#6
+
+<P>
+If __z88dk_callee is not used, after the call, the stack parameters
+are cleaned up by the caller, with the following exceptions: functions
+that do not have variable arguments and return void or a type of at
+most 16 bits, or have both a first parameter of type float and a return
+value of type float.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node134.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node129.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node132.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1771"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1773"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node134.html">4.3.5 SM83 calling conventions</A>
+<B> Up:</B> <A
+ HREF="node129.html">4.3 The Z80, Z80N, Z180,</A>
+<B> Previous:</B> <A
+ HREF="node132.html">4.3.3 Z80, Z180, Z80N and</A>
+ &nbsp; <B>  <A ID="tex2html1772"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1774"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

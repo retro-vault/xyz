@@ -1,0 +1,93 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.8.5 Rabbit 2000, 3000, 3000A, 4000, 5000, and 6000 Interrupt Service
+Routines</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node95.html">
+<LINK REL="previous" HREF="node93.html">
+<LINK REL="next" HREF="node95.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node95.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node89.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node93.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1443"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1445"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node95.html">3.8.6 SM83 and TLCS-90 Interrupt</A>
+<B> Up:</B> <A
+ HREF="node89.html">3.8 Interrupt Service Routines</A>
+<B> Previous:</B> <A
+ HREF="node93.html">3.8.4 Z80, Z180 and eZ80</A>
+ &nbsp; <B>  <A ID="tex2html1444"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1446"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00485000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Rabbit 2000, 3000, 3000A, 4000, 5000, and 6000 Interrupt Service
+Routines</A>
+</H2>
+
+<P>
+SDCC generates an internal interrupt vector table, but does not attempt
+to generate an external interrupt vector table.
+
+<P>
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="LEFT">Type</TD>
+<TD CLASS="LEFT">Syntax</TD>
+<TD CLASS="LEFT TOP"  WIDTH=150>
+<DIV class="LEFT">
+Behaviour
+</DIV></TD>
+</TR>
+<TR><TD CLASS="LEFT">Interruptible interrupt handler</TD>
+<TD CLASS="LEFT">void f(void) __interrupt</TD>
+<TD CLASS="LEFT TOP"  WIDTH=150>
+<DIV class="LEFT">
+Interrupt handler can be interrupted by further interrupts of same
+priority
+</DIV></TD>
+</TR>
+<TR><TD CLASS="LEFT">Non-interruptible interrupt handler</TD>
+<TD CLASS="LEFT">void f(void) __critical __interrupt(0)</TD>
+<TD CLASS="LEFT TOP"  WIDTH=150>
+<DIV class="LEFT">
+Interrupt handler can be interrupted by interrupts of higher priority
+only. amd will be added to internal interrupt table as first entry.
+</DIV></TD>
+</TR>
+</TABLE>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

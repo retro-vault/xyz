@@ -1,0 +1,697 @@
+/*
+   smallserpent.c.in
+   op: encrypt, decrypt
+
+   The serpent cipher was an AES competition finalist, that ultimately lost to Rijndael.
+
+   The test is a C23/C2y implementation derived from the CycloneCrypto one, substantially
+   modified to reduce memoy use (by not precomputing the subkeys), which comes at a price
+   in performance, since the subkeys will have to be recomputed on-the-fly while processing
+   individual blocks.
+
+   (c) 2025 Philipp Klaus Krause
+*/
+
+#include <testfwk.h>
+
+#ifdef __SDCC
+#pragma disable_warning 147
+#endif
+
+#define OP_{op}
+
+// This implementation needs quite some code memory.
+#if defined(__SDCC_pdk13) || defined(__SDCC_pdk14) || defined(__SDCC_pdk15) \
+  || defined(__SDCC_mcs51) \
+  || defined(__SDCC_hc08) || defined(__SDCC_s08) // todo: enable for s08 when we support code space larger than 32K.
+#define LACK_OF_MEMORY
+#endif
+
+#ifndef __SDCC_tlcs90 // Bug #3910
+#ifndef __SDCC_ds390 // Bug #3911
+//#ifndef __SDCC_f8 // Bug #3912
+#ifndef LACK_OF_MEMORY
+
+#if defined(__SDCC) && __STDC_VERSION__ <= 202311L
+#define __STDC_VERSION__ 202512L
+#endif
+
+#include <string.h>
+#include <stdint.h>
+#if defined (__SDCC) || __STDC_VERSION__ >= 202311L
+#include <stdbit.h>
+#endif
+
+#if __STDC_VERSION__ <= 202311L
+#define stdc_load8_leu32(p) ( \
+    ((uint32_t)(((uint8_t *)(p))[0]) << 0) | \
+    ((uint32_t)(((uint8_t *)(p))[1]) << 8) | \
+    ((uint32_t)(((uint8_t *)(p))[2]) << 16) | \
+    ((uint32_t)(((uint8_t *)(p))[3]) << 24))
+#define stdc_store8_leu32(a, p) \
+    ((uint8_t *)(p))[0] = ((uint32_t)(a) >> 0) & 0xFFU, \
+    ((uint8_t *)(p))[1] = ((uint32_t)(a) >> 8) & 0xFFU, \
+    ((uint8_t *)(p))[2] = ((uint32_t)(a) >> 16) & 0xFFU, \
+    ((uint8_t *)(p))[3] = ((uint32_t)(a) >> 24) & 0xFFU
+#define stdc_rotate_left(x, n) (((x) << (n)) | ((x) >> (32-(n))))
+#define stdc_rotate_right(x, n) (((x) >> (n)) | ((x) << (32-(n))))
+#endif
+
+typedef uint_fast8_t uint_t;
+
+/**
+ * Copyright (C) 2010-2025 Oryx Embedded SARL. All rights reserved.
+ *
+ * This file is part of CycloneCRYPTO Open.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ * Serpent is a block cipher algorithm which supports a key size of 128, 192
+ * or 256 bits. S-box functions are implemented as per Dag Arne Osvik's
+ * paper "Speeding up Serpent"
+ **/
+ 
+// The context is a sliding subkey / round key window.
+typedef struct
+{
+   uint32_t wk[8]; // 4 words of w (w[i - 4] to w [i - 1]) followed by four words of k (k[0] to k[3]).
+   uint_fast8_t i_plus8;
+} serpent_context;
+
+void serpent_init(serpent_context *context, const uint8_t *key, size_t keyLen);
+
+// Golden ratio
+#define PHI 0x9E3779B9
+
+// S-box 0
+#define SBOX0(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r3 ^= r0; r4 = r1; \
+   r1 &= r3; r4 ^= r2; \
+   r1 ^= r0; r0 |= r3; \
+   r0 ^= r4; r4 ^= r3; \
+   r3 ^= r2; r2 |= r1; \
+   r2 ^= r4; r4 = ~r4; \
+   r4 |= r1; r1 ^= r3; \
+   r1 ^= r4; r3 |= r0; \
+   r1 ^= r3; r4 ^= r3; \
+   r3 = r0; r0 = r1; r1 = r4; \
+}
+
+// Inverse S-box 0
+#define IBOX0(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r2 = ~r2; r4 = r1; \
+   r1 |= r0; r4 = ~r4; \
+   r1 ^= r2; r2 |= r4; \
+   r1 ^= r3; r0 ^= r4; \
+   r2 ^= r0; r0 &= r3; \
+   r4 ^= r0; r0 |= r1; \
+   r0 ^= r2; r3 ^= r4; \
+   r2 ^= r1; r3 ^= r0; \
+   r3 ^= r1; \
+   r2 &= r3; \
+   r4 ^= r2; \
+   r2 = r1; r1 = r4; \
+}
+
+// S-box 1
+#define SBOX1(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r0 = ~r0; r2 = ~r2; \
+   r4 = r0; r0 &= r1; \
+   r2 ^= r0; r0 |= r3; \
+   r3 ^= r2; r1 ^= r0; \
+   r0 ^= r4; r4 |= r1; \
+   r1 ^= r3; r2 |= r0; \
+   r2 &= r4; r0 ^= r1; \
+   r1 &= r2; \
+   r1 ^= r0; r0 &= r2; \
+   r0 ^= r4; \
+   r4 = r0; r0 = r2; r2 = r3; r3 = r1; r1 = r4; \
+}
+
+// Inverse S-box 1
+#define IBOX1(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r1; r1 ^= r3; \
+   r3 &= r1; r4 ^= r2; \
+   r3 ^= r0; r0 |= r1; \
+   r2 ^= r3; r0 ^= r4; \
+   r0 |= r2; r1 ^= r3; \
+   r0 ^= r1; r1 |= r3; \
+   r1 ^= r0; r4 = ~r4; \
+   r4 ^= r1; r1 |= r0; \
+   r1 ^= r0; \
+   r1 |= r4; \
+   r3 ^= r1; \
+   r1 = r0; r0 = r4; r4 = r2; r2 = r3; r3 = r4; \
+}
+
+//S-box 2
+#define SBOX2(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r0; r0 &= r2; \
+   r0 ^= r3; r2 ^= r1; \
+   r2 ^= r0; r3 |= r4; \
+   r3 ^= r1; r4 ^= r2; \
+   r1 = r3; r3 |= r4; \
+   r3 ^= r0; r0 &= r1; \
+   r4 ^= r0; r1 ^= r3; \
+   r1 ^= r4; r4 = ~r4; \
+   r0 = r2; r2 = r1; r1 = r3; r3 = r4; \
+}
+
+// Inverse S-box 2
+#define IBOX2(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r2 ^= r3; r3 ^= r0; \
+   r4 = r3; r3 &= r2; \
+   r3 ^= r1; r1 |= r2; \
+   r1 ^= r4; r4 &= r3; \
+   r2 ^= r3; r4 &= r0; \
+   r4 ^= r2; r2 &= r1; \
+   r2 |= r0; r3 = ~r3; \
+   r2 ^= r3; r0 ^= r3; \
+   r0 &= r1; r3 ^= r4; \
+   r3 ^= r0; \
+   r0 = r1; r1 = r4; \
+}
+
+// S-box 3
+#define SBOX3(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r0; r0 |= r3; \
+   r3 ^= r1; r1 &= r4; \
+   r4 ^= r2; r2 ^= r3; \
+   r3 &= r0; r4 |= r1; \
+   r3 ^= r4; r0 ^= r1; \
+   r4 &= r0; r1 ^= r3; \
+   r4 ^= r2; r1 |= r0; \
+   r1 ^= r2; r0 ^= r3; \
+   r2 = r1; r1 |= r3; \
+   r1 ^= r0; \
+   r0 = r1; r1 = r2; r2 = r3; r3 = r4; \
+}
+
+// Inverse S-box 3
+#define IBOX3(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r2; r2 ^= r1; \
+   r0 ^= r2; r4 &= r2; \
+   r4 ^= r0; r0 &= r1; \
+   r1 ^= r3; r3 |= r4; \
+   r2 ^= r3; r0 ^= r3; \
+   r1 ^= r4; r3 &= r2; \
+   r3 ^= r1; r1 ^= r0; \
+   r1 |= r2; r0 ^= r3; \
+   r1 ^= r4; \
+   r0 ^= r1; \
+   r4 = r0; r0 = r2; r2 = r3; r3 = r4; \
+}
+
+// S-box 4
+#define SBOX4(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r1 ^= r3; r3 = ~r3; \
+   r2 ^= r3; r3 ^= r0; \
+   r4 = r1; r1 &= r3; \
+   r1 ^= r2; r4 ^= r3; \
+   r0 ^= r4; r2 &= r4; \
+   r2 ^= r0; r0 &= r1; \
+   r3 ^= r0; r4 |= r1; \
+   r4 ^= r0; r0 |= r3; \
+   r0 ^= r2; r2 &= r3; \
+   r0 = ~r0; r4 ^= r2; \
+   r2 = r0; r0 = r1; r1 = r4; \
+}
+
+
+// Inverse S-box 4
+#define IBOX4(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r2; r2 &= r3; \
+   r2 ^= r1; r1 |= r3; \
+   r1 &= r0; r4 ^= r2; \
+   r4 ^= r1; r1 &= r2; \
+   r0 = ~r0; r3 ^= r4; \
+   r1 ^= r3; r3 &= r0; \
+   r3 ^= r2; r0 ^= r1; \
+   r2 &= r0; r3 ^= r0; \
+   r2 ^= r4; \
+   r2 |= r3; r3 ^= r0; \
+   r2 ^= r1; \
+   r1 = r3; r3 = r4; \
+}
+
+// S-box 5
+#define SBOX5(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r0 ^= r1; r1 ^= r3; \
+   r3 = ~r3; r4 = r1; \
+   r1 &= r0; r2 ^= r3; \
+   r1 ^= r2; r2 |= r4; \
+   r4 ^= r3; r3 &= r1; \
+   r3 ^= r0; r4 ^= r1; \
+   r4 ^= r2; r2 ^= r0; \
+   r0 &= r3; r2 = ~r2; \
+   r0 ^= r4; r4 |= r3; \
+   r2 ^= r4; \
+   r4 = r0; r0 = r1; r1 = r3; r3 = r2; r2 = r4; \
+}
+
+// Inverse S-box 5
+#define IBOX5(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r1 = ~r1; r4 = r3; \
+   r2 ^= r1; r3 |= r0; \
+   r3 ^= r2; r2 |= r1; \
+   r2 &= r0; r4 ^= r3; \
+   r2 ^= r4; r4 |= r0; \
+   r4 ^= r1; r1 &= r2; \
+   r1 ^= r3; r4 ^= r2; \
+   r3 &= r4; r4 ^= r1; \
+   r3 ^= r4; r4 = ~r4; \
+   r3 ^= r0; \
+   r0 = r1; r1 = r4; r4 = r2; r2 = r3; r3 = r4; \
+}
+
+// S-box 6
+#define SBOX6(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r2 = ~r2; r4 = r3; \
+   r3 &= r0; r0 ^= r4; \
+   r3 ^= r2; r2 |= r4; \
+   r1 ^= r3; r2 ^= r0; \
+   r0 |= r1; r2 ^= r1; \
+   r4 ^= r0; r0 |= r3; \
+   r0 ^= r2; r4 ^= r3; \
+   r4 ^= r0; r3 = ~r3; \
+   r2 &= r4; \
+   r2 ^= r3; \
+   r3 = r2; r2 = r4; \
+}
+
+// Inverse S-box 6
+#define IBOX6(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r0 ^= r2; r4 = r2; \
+   r2 &= r0; r4 ^= r3; \
+   r2 = ~r2; r3 ^= r1; \
+   r2 ^= r3; r4 |= r0; \
+   r0 ^= r2; r3 ^= r4; \
+   r4 ^= r1; r1 &= r3; \
+   r1 ^= r0; r0 ^= r3; \
+   r0 |= r2; r3 ^= r1; \
+   r4 ^= r0; \
+   r0 = r1; r1 = r2; r2 = r4; \
+}
+
+// S-box 7
+#define SBOX7(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r1; r1 |= r2; \
+   r1 ^= r3; r4 ^= r2; \
+   r2 ^= r1; r3 |= r4; \
+   r3 &= r0; r4 ^= r2; \
+   r3 ^= r1; r1 |= r4; \
+   r1 ^= r0; r0 |= r4; \
+   r0 ^= r2; r1 ^= r4; \
+   r2 ^= r1; r1 &= r0; \
+   r1 ^= r4; r2 = ~r2; \
+   r2 |= r0; \
+   r4 ^= r2; \
+   r2 = r1; r1 = r3; r3 = r0; r0 = r4; \
+}
+
+// Inverse S-box 7
+#define IBOX7(r0, r1, r2, r3) \
+{ \
+   uint32_t r4; \
+   r4 = r2; r2 ^= r0; \
+   r0 &= r3; r4 |= r3; \
+   r2 = ~r2; r3 ^= r1; \
+   r1 |= r0; r0 ^= r2; \
+   r2 &= r4; r3 &= r4; \
+   r1 ^= r2; r2 ^= r0; \
+   r0 |= r2; r4 ^= r1; \
+   r0 ^= r3; r3 ^= r4; \
+   r4 |= r0; r3 ^= r2; \
+   r4 ^= r2; \
+   r2 = r1; r1 = r0; r0 = r3; r3 = r4; \
+}
+
+// Linear transformation
+#define LT(x0, x1, x2, x3) \
+{ \
+   x0 = stdc_rotate_left(x0, 13); \
+   x2 = stdc_rotate_left(x2, 3); \
+   x1 ^= x0 ^ x2; \
+   x3 ^= x2 ^ (x0 << 3); \
+   x1 = stdc_rotate_left(x1, 1); \
+   x3 = stdc_rotate_left(x3, 7); \
+   x0 ^= x1 ^ x3; \
+   x2 ^= x3 ^ (x1 << 7); \
+   x0 = stdc_rotate_left(x0, 5); \
+   x2 = stdc_rotate_left(x2, 22); \
+}
+
+// Inverse linear transformation
+#define ILT(x0, x1, x2, x3) \
+{ \
+   x2 = stdc_rotate_right(x2, 22); \
+   x0 = stdc_rotate_right(x0, 5); \
+   x2 ^= x3 ^ (x1 << 7); \
+   x0 ^= x1 ^ x3; \
+   x3 = stdc_rotate_right(x3, 7); \
+   x1 = stdc_rotate_right(x1, 1); \
+   x3 ^= x2 ^ (x0 << 3); \
+   x1 ^= x0 ^ x2; \
+   x2 = stdc_rotate_right(x2, 3); \
+   x0 = stdc_rotate_right(x0, 13); \
+}
+
+// XOR operation
+#define XOR(x0, x1, x2, x3, k) \
+{ \
+   x0 ^= k[0]; \
+   x1 ^= k[1]; \
+   x2 ^= k[2]; \
+   x3 ^= k[3]; \
+}
+
+// Encryption round
+#define ROUND(n, x0, x1, x2, x3, k) \
+{ \
+   XOR(x0, x1, x2, x3, k); \
+   SBOX##n(x0, x1, x2, x3); \
+   LT(x0, x1, x2, x3); \
+}
+
+// Decryption round
+#define IROUND(n, x0, x1, x2, x3, k) \
+{ \
+   ILT(x0, x1, x2, x3); \
+   IBOX##n(x0, x1, x2, x3); \
+   XOR(x0, x1, x2, x3, k); \
+}
+
+static void serpent_subkeys_increment(serpent_context *context)
+{
+  uint32_t *w = context->wk;
+  uint32_t t = w[0] ^ w[3] ^ w[5] ^ w[7] ^ PHI ^ context->i_plus8;
+  memmove (w, w + 1, 7 * 4);
+  w[7] = stdc_rotate_left(t, 11);
+  context->i_plus8++;
+}
+
+static void serpent_subkeys_decrement(serpent_context *context)
+{
+  uint32_t *w = context->wk;
+  uint32_t t = stdc_rotate_right(w[7], 11);
+  context->i_plus8--;
+  memmove (w + 1, w, 7 * 4);
+  w[0] = t ^ w[3] ^ w[5] ^ w[7] ^ PHI ^ context->i_plus8;
+}
+
+// Return pointer to K[i], which is a 4-word array k[4 * i] ... k[4 * i + 3].
+static const uint32_t* serpent_roundkey(uint_fast8_t r, serpent_context *context)
+{
+  uint32_t *w = context->wk;
+
+  // Get back to full 8 words of w.
+  uint_fast8_t oldr = (context->i_plus8 - 4) / 4;
+  switch (oldr % 8)
+  {
+  case 0:
+    IBOX3(w[4], w[5], w[6], w[7]);
+    break;
+  case 1:
+    IBOX2(w[4], w[5], w[6], w[7]);
+    break;
+  case 2:
+    IBOX1(w[4], w[5], w[6], w[7]);
+    break;
+  case 3:
+    IBOX0(w[4], w[5], w[6], w[7]);
+    break;
+  case 4:
+    IBOX7(w[4], w[5], w[6], w[7]);
+    break;
+  case 5:
+    IBOX6(w[4], w[5], w[6], w[7]);
+    break;
+  case 6:
+    IBOX5(w[4], w[5], w[6], w[7]);
+    break;
+  case 7:
+    IBOX4(w[4], w[5], w[6], w[7]);
+    break;
+  }
+
+  while(context->i_plus8 < 4 + 4 * r)
+    serpent_subkeys_increment(context);
+  while(context->i_plus8 > 4 + 4 * r)
+    serpent_subkeys_decrement(context);
+
+  // Create four words of k from w.
+  switch (r % 8)
+  {
+  case 0:
+    SBOX3(w[4], w[5], w[6], w[7]);
+    break;
+  case 1:
+    SBOX2(w[4], w[5], w[6], w[7]);
+    break;
+  case 2:
+    SBOX1(w[4], w[5], w[6], w[7]);
+    break;
+  case 3:
+    SBOX0(w[4], w[5], w[6], w[7]);
+    break;
+  case 4:
+    SBOX7(w[4], w[5], w[6], w[7]);
+    break;
+  case 5:
+    SBOX6(w[4], w[5], w[6], w[7]);
+    break;
+  case 6:
+    SBOX5(w[4], w[5], w[6], w[7]);
+    break;
+  case 7:
+    SBOX4(w[4], w[5], w[6], w[7]);
+    break;
+  }
+
+  return(context->wk + 4);
+}
+
+// Initialize subkey/key array
+void serpent_init(serpent_context *context, const uint8_t *key, size_t key_len)
+{
+  uint_fast8_t i;
+  uint32_t *w = context->wk;
+
+  // Convert key_len to words (Serpent is based on 32-bit words).
+  key_len /= 4;
+
+  // Copy the original key.
+  for(i = 0; i < key_len; i++)
+    w[i] = stdc_load8_leu32(key + i * 4);
+
+  // Short keys with less than 256 bits are mapped to full-length keys of
+  // 256 bits by appending one 1 bit to the MSB end.
+  if(i < 8)
+    w[i++] = 0x00000001;
+
+  // Append as many 0 bits as required to make up 256 bits.
+  while(i < 8)
+    w[i++] = 0;
+
+  context->i_plus8 = 0;
+
+  // Calculate w[0] ... w[3]
+  while(context->i_plus8 < 4)
+    serpent_subkeys_increment(context);
+
+  // Create four words of k from w.
+  SBOX3(w[4], w[5], w[6], w[7]);
+}
+
+// Encrypt a 16-byte block using Serpent algorithm
+#if defined (OP_encrypt)
+void serpent_encrypt_block(uint8_t *output, const uint8_t *input, serpent_context *context)
+{
+  // The 16 bytes of plaintext are split into 4 words
+  uint32_t r0 = stdc_load8_leu32(input + 0);
+  uint32_t r1 = stdc_load8_leu32(input + 4);
+  uint32_t r2 = stdc_load8_leu32(input + 8);
+  uint32_t r3 = stdc_load8_leu32(input + 12);
+
+  // The 32 rounds use 8 different S-boxes
+  for(uint_fast8_t i = 0; i < 32; i += 8)
+  {
+    ROUND(0, r0, r1, r2, r3, serpent_roundkey(i + 0, context));
+    ROUND(1, r0, r1, r2, r3, serpent_roundkey(i + 1, context));
+    ROUND(2, r0, r1, r2, r3, serpent_roundkey(i + 2, context));
+    ROUND(3, r0, r1, r2, r3, serpent_roundkey(i + 3, context));
+    ROUND(4, r0, r1, r2, r3, serpent_roundkey(i + 4, context));
+    ROUND(5, r0, r1, r2, r3, serpent_roundkey(i + 5, context));
+    ROUND(6, r0, r1, r2, r3, serpent_roundkey(i + 6, context));
+    ROUND(7, r0, r1, r2, r3, serpent_roundkey(i + 7, context));
+  }
+
+  // In the last round, the linear transformation is replaced by an additional
+  // key mixing
+  ILT(r0, r1, r2, r3);
+  XOR(r0, r1, r2, r3, serpent_roundkey(32, context));
+
+  // The 4 words of ciphertext are then written as 16 bytes
+  stdc_store8_leu32(r0, output + 0);
+  stdc_store8_leu32(r1, output + 4);
+  stdc_store8_leu32(r2, output + 8);
+  stdc_store8_leu32(r3, output + 12);
+}
+#endif
+
+// Decrypt a 16-byte block using Serpent algorithm
+#if defined (OP_decrypt)
+void serpent_decrypt_block(uint8_t *output, const uint8_t *input, serpent_context *context)
+{
+  // The 16 bytes of ciphertext are split into 4 words
+  uint32_t r0 = stdc_load8_leu32(input + 0);
+  uint32_t r1 = stdc_load8_leu32(input + 4);
+  uint32_t r2 = stdc_load8_leu32(input + 8);
+  uint32_t r3 = stdc_load8_leu32(input + 12);
+
+  // In the first decryption round, the inverse linear transformation is
+  // replaced by an additional key mixing
+  XOR(r0, r1, r2, r3, serpent_roundkey(32, context));
+  LT(r0, r1, r2, r3);
+
+  // Decryption is different from encryption in that the inverse of the
+  // S-boxes must be used in the reverse order, as well as the inverse linear
+  // transformation and reverse order of the subkeys
+  for(uint_fast8_t i = 0; i < 32; i += 8)
+  {
+    IROUND(7, r0, r1, r2, r3, serpent_roundkey(31 - i, context));
+    IROUND(6, r0, r1, r2, r3, serpent_roundkey(30 - i, context));
+    IROUND(5, r0, r1, r2, r3, serpent_roundkey(29 - i, context));
+    IROUND(4, r0, r1, r2, r3, serpent_roundkey(28 - i, context));
+    IROUND(3, r0, r1, r2, r3, serpent_roundkey(27 - i, context));
+    IROUND(2, r0, r1, r2, r3, serpent_roundkey(26 - i, context));
+    IROUND(1, r0, r1, r2, r3, serpent_roundkey(25 - i, context));
+    IROUND(0, r0, r1, r2, r3, serpent_roundkey(24 - i, context));
+  }
+
+  // The 4 words of plaintext are then written as 16 bytes
+  stdc_store8_leu32(r0, output + 0);
+  stdc_store8_leu32(r1, output + 4);
+  stdc_store8_leu32(r2, output + 8);
+  stdc_store8_leu32(r3, output + 12);
+}
+#endif
+
+const struct test
+  {
+    int key_length;
+    unsigned char key[32];
+    unsigned char text_plain[16];
+    unsigned char text_cipher[16];
+  } test_data[] =
+    {
+      {
+	16,
+	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+	"\xD2\x9D\x57\x6F\xCE\xA3\xA3\xA7\xED\x90\x99\xF2\x92\x73\xD7\x8E",
+	"\xB2\x28\x8B\x96\x8A\xE8\xB0\x86\x48\xD1\xCE\x96\x06\xFD\x99\x2D"
+      },
+      {
+	24,
+	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+	"\x00\x00\x00\x00\x00\x00\x00\x00",
+	"\xD2\x9D\x57\x6F\xCE\xAB\xA3\xA7\xED\x98\x99\xF2\x92\x7B\xD7\x8E",
+	"\x13\x0E\x35\x3E\x10\x37\xC2\x24\x05\xE8\xFA\xEF\xB2\xC3\xC3\xE9"
+      },
+      {
+	32,
+	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+	"\xD0\x95\x57\x6F\xCE\xA3\xE3\xA7\xED\x98\xD9\xF2\x90\x73\xD7\x8E",
+	"\xB9\x0E\xE5\x86\x2D\xE6\x91\x68\xF2\xBD\xD5\x12\x5B\x45\x47\x2B"
+      },
+      {
+	32,
+	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+	"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+	"\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00",
+	"\x20\x61\xA4\x27\x82\xBD\x52\xEC\x69\x1E\xC3\x83\xB0\x3B\xA7\x7C"
+      },
+      {
+	0
+      },
+    };
+#endif
+//#endif
+#endif
+#endif
+
+void testSerpent (void)
+{
+#if !defined(__SDCC_stm8) // Bug #3914
+#if !defined(__SDCC_ds390) // Bug #3911
+#if !defined(__SDCC_z80) && !defined(__SDCC_z80n) && !defined(__SDCC_z180) && !defined(__SDCC_r2k) && !defined(__SDCC_r2ka) && !defined(__SDCC_r3ka) && !defined(__SDCC_r4k) && !defined(__SDCC_r5k) && !defined(__SDCC_r6k) && !defined(__SDCC_sm83) && !defined(__SDCC_tlcs90) && !defined(__SDCC_ez80) && !defined(__SDCC_r800) // Bug #3910
+#ifndef __SDCC_f8 // Bug #3912
+#ifndef LACK_OF_MEMORY
+  serpent_context context;
+  unsigned char scratch[16];
+  unsigned int i;
+
+  for (i = 0; test_data[i].key_length; i++)
+    {
+      serpent_init(&context, test_data[i].key, test_data[i].key_length);
+
+#if defined(OP_encrypt)
+      serpent_encrypt_block(scratch, test_data[i].text_plain, &context);
+      ASSERT(!memcmp(scratch, test_data[i].text_cipher, sizeof (scratch)));
+#endif
+
+#if defined(OP_decrypt)
+      serpent_decrypt_block(scratch, test_data[i].text_cipher, &context);
+      ASSERT(!memcmp(scratch, test_data[i].text_plain, sizeof (scratch)));
+#endif
+    }
+#endif
+#endif
+#endif
+#endif
+#endif
+}
+

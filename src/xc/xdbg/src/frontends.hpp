@@ -192,6 +192,8 @@ private:
         const std::string& name,
         const std::string& value,
         const std::optional<std::string>& type_name = std::nullopt) const;
+    std::optional<uint32_t> entry_address() const;
+    stop_snapshot initial_stop_snapshot();
     std::optional<uint32_t> stack_return_address(uint32_t sp);
     stop_snapshot continue_to_temporary_breakpoint(uint32_t address);
     bool has_breakpoint_at(uint32_t pc) const;
@@ -215,6 +217,7 @@ private:
     bool suppress_stop_events_ = false;
     bool initialized_ = false;
     bool connected_ = false;
+    bool stop_on_entry_requested_ = false;
 };
 
 #endif

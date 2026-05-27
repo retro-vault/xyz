@@ -1,0 +1,236 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.1.16 Peephole Optimizer</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node228.html">
+<LINK REL="next" HREF="node230.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node230.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node228.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2361"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2363"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node230.html">8.2 Cyclomatic Complexity</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node228.html">8.1.15 Register Allocation</A>
+ &nbsp; <B>  <A ID="tex2html2362"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2364"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION009116000000000000000"></A><A ID="subsec:Peephole-Optimizer"></A><A ID="4546"></A>
+<BR>
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">16</SPAN> Peephole Optimizer
+</H2>
+
+<P>
+The compiler uses a rule based, pattern matching and re-writing mechanism
+for peep-hole optimization. It is inspired by <SPAN  CLASS="textit">copt</SPAN> a peep-hole
+optimizer by Christopher W. Fraser (cwfraser&nbsp;@&nbsp;microsoft.com). A
+default set of rules are compiled into the compiler, additional rules
+may be added with the <SPAN  CLASS="textit">&mdash;peep-file<A ID="4548"></A>
+&lt;filename&gt;</SPAN> option. The rule language is best illustrated with examples.
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">replace {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;mov %1,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;mov a,%1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">} by {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;mov %1,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+The above rule will change the following assembly<A ID="4557"></A>
+sequence:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">mov r1,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">mov a,r1</SPAN>
+
+</BLOCKQUOTE>
+to
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">mov r1,a</SPAN>
+
+</BLOCKQUOTE>
+Note: All occurrences of a <SPAN  CLASS="textit">%n</SPAN> (pattern variable) must denote
+the same string. With the above rule, the assembly sequence:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">mov r1,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">mov a,r2</SPAN>
+
+</BLOCKQUOTE>
+will remain unmodified.
+<BR>
+<BR>
+Other special case optimizations may be added by the user (via <SPAN  CLASS="textit">&mdash;peep-file
+option</SPAN>). E.g. some variants of the 8051 MCU<A ID="4571"></A>
+allow only <SPAN  CLASS="texttt">ajmp</SPAN> and <SPAN  CLASS="texttt">acall</SPAN>. The following two rules
+will change all <SPAN  CLASS="texttt">ljmp</SPAN> and <SPAN  CLASS="texttt">lcall</SPAN> to <SPAN  CLASS="texttt">ajmp</SPAN>
+and <SPAN  CLASS="texttt">acall</SPAN>
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">replace { lcall %1 } by { acall %1 }</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">replace { ljmp %1 } by { ajmp %1 }</SPAN>
+
+</BLOCKQUOTE>
+(NOTE: from version 2.7.3 on, you can use option -<SPAN  CLASS="textit"></SPAN>-acall-ajmp<A ID="4583"></A>,
+which also takes care of aligning the interrupt vectors properly.)
+<BR>
+<P>
+The <SPAN  CLASS="textit">inline-assembler code</SPAN> is also passed through the peep hole
+optimizer, thus the peephole optimizer can also be used as an assembly
+level macro expander. The rules themselves are MCU dependent whereas
+the rule language infra-structure is MCU independent. Peephole optimization
+rules for other MCU can be easily programmed using the rule language.
+<BR>
+<BR>
+The syntax for a rule is as follows:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">rule := replace [ restart ] '{' &lt;assembly sequence&gt; '\n'</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; '}' by '{' '\n'</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;assembly
+sequence&gt; '\n'</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; '}' [if &lt;functionName&gt;
+] '\n'</SPAN>
+
+</BLOCKQUOTE>
+&lt;assembly sequence&gt; := assembly instruction (each instruction including
+labels must be on a separate line).
+<BR>
+<BR>
+The optimizer will apply to the rules one by one from the top in the
+sequence of their appearance, it will terminate when all rules are
+exhausted. If the 'restart' option is specified, then the optimizer
+will start matching the rules again from the top, this option for
+a rule is expensive (performance), it is intended to be used in situations
+where a transformation will trigger the same rule again. An example
+of this (not a good one, it has side effects) is the following rule:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">replace restart {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;pop %1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;push %1 } by {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;; nop</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+Note that the replace pattern cannot be a blank, but can be a comment
+line. Without the 'restart' option only the innermost 'pop' 'push'
+pair would be eliminated, i.e.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">pop ar1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">pop ar2</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">push ar2</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">push ar1</SPAN>
+
+</BLOCKQUOTE>
+would result in:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">pop ar1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">; nop</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">push ar1</SPAN>
+
+</BLOCKQUOTE>
+<SPAN  CLASS="textit">with</SPAN> the restart option the rule will be applied again to the
+resulting code and then all the pop-push pairs will be eliminated
+to yield:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">; nop</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">; nop</SPAN>
+
+</BLOCKQUOTE>
+A conditional function can be attached to a rule. Attaching rules
+are somewhat more involved, let's illustrate this with an example.
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">replace {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;ljmp %5</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">%2:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">} by {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;sjmp %5</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">%2:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">} if labelInRange</SPAN>
+
+</BLOCKQUOTE>
+The optimizer does a look-up of a function name table defined in function
+<SPAN  CLASS="textit">callFuncByName</SPAN> in the source file SDCCpeeph.c, with the name
+<SPAN  CLASS="textit">labelInRange</SPAN>. If it finds a corresponding entry the function
+is called. Note there can be no parameters specified for some of these
+functions, in this case the use of <SPAN  CLASS="textit">%5</SPAN> is crucial, since the
+function <SPAN  CLASS="textit">labelInRange</SPAN> expects to find the label in that particular
+variable (the hash table containing the variable bindings is passed
+as a parameter). If you want to code more such functions, take a close
+look at the function labelInRange and the calling mechanism in source
+file SDCCpeeph.c. Currently implemented are <SPAN  CLASS="textit">labelInRange, labelRefCount,
+labelRefCountChange, labelIsReturnOnly, xramMovcOption, portIsDS390,
+24bitMode, notVolatile</SPAN>. <SPAN  CLASS="textit">notUsed, notSame, operandsNotRelated,
+labelJTInRange, canAssign, optimizeReturn, notUsedFrom, labelIsReturnOnly,
+operandsLiteral, labelIsUncondJump, deadMove, useAcallAjmp</SPAN> and <SPAN  CLASS="textit">okToRemoveSLOC.</SPAN>
+
+<P>
+This whole thing is a little kludgy, but maybe some day SDCC will
+have some better means. If you are looking at the <SPAN  CLASS="texttt">peeph*.def</SPAN>
+files, you will see the default rules that are compiled into the compiler,
+you can add your own rules in the default set there if you get tired
+of specifying the &mdash;peep-file option.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node230.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node228.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2361"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2363"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node230.html">8.2 Cyclomatic Complexity</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node228.html">8.1.15 Register Allocation</A>
+ &nbsp; <B>  <A ID="tex2html2362"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2364"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

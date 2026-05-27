@@ -1,0 +1,165 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.11.3 Naked Functions</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node106.html">
+<LINK REL="previous" HREF="node104.html">
+<LINK REL="next" HREF="node106.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node106.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node102.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node104.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1498"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1500"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node106.html">3.11.4 Use of Labels within</A>
+<B> Up:</B> <A
+ HREF="node102.html">3.11 Inline Assembler Code</A>
+<B> Previous:</B> <A
+ HREF="node104.html">3.11.2 A Step by Step</A>
+ &nbsp; <B>  <A ID="tex2html1499"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1501"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION004113000000000000000"></A><A ID="subsec:Naked-Functions"></A><A ID="2143"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">3</SPAN> Naked Functions
+</H2>
+
+<P>
+A special keyword may be associated with a function declaring it as
+<SPAN  CLASS="textit">__naked<A ID="2144"></A><A ID="2145"></A>.</SPAN> The
+<SPAN  CLASS="textit">_naked</SPAN> function modifier attribute prevents the compiler from
+generating prologue<A ID="2147"></A> and epilogue<A ID="2148"></A>
+code for that function. This means that the user is entirely responsible
+for such things as saving any registers that may need to be preserved,
+selecting the proper register bank, generating the <SPAN  CLASS="textit">return</SPAN> instruction
+at the end, etc. Practically, this means that the contents of the
+function must be written in inline assembler. This is particularly
+useful for interrupt functions, which can have a large (and often
+unnecessary) prologue/epilogue. For example, compare the code generated
+by these two functions:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">volatile<A ID="2151"></A> __data unsigned char counter;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">void simpleInterrupt(void) __interrupt<A ID="2153"></A><A ID="2154"></A>
+(1)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;counter++;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">void nakedInterrupt(void) __interrupt (2) __naked</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;__asm<A ID="2161"></A></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inc&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_counter ; does not change flags,
+no need to save psw</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;reti&nbsp;&nbsp;&nbsp;&nbsp;; MUST explicitly include ret or reti
+in _naked function.</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;__endasm<A ID="2164"></A>;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+For an 8051 target, the generated simpleInterrupt looks like:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">Note, this is an</SPAN> <SPAN  CLASS="texttt"><SPAN  CLASS="textit">outdated</SPAN></SPAN> <SPAN  CLASS="texttt">example,
+recent versions of SDCC generate</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">the</SPAN> <SPAN  CLASS="texttt"><SPAN  CLASS="textit">same</SPAN></SPAN> <SPAN  CLASS="texttt">code for simpleInterrupt()
+and nakedInterrupt()!</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">_simpleInterrupt:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;push&nbsp;&nbsp;&nbsp;&nbsp;acc</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;push&nbsp;&nbsp;&nbsp;&nbsp;b</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;push&nbsp;&nbsp;&nbsp;&nbsp;dpl</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;push&nbsp;&nbsp;&nbsp;&nbsp;dph</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;push&nbsp;&nbsp;&nbsp;&nbsp;psw</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;psw,#0x00</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;inc&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_counter</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;pop&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;psw</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;pop&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dph</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;pop&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dpl</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;pop&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;b</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;pop&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;acc</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;reti</SPAN>
+
+</BLOCKQUOTE>
+whereas nakedInterrupt looks like:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">_nakedInterrupt:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;inc&nbsp;&nbsp;&nbsp;&nbsp;_counter ; does not change flags, no need
+to save psw</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;reti&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;; MUST explicitly include
+ret or reti in _naked function</SPAN>
+
+</BLOCKQUOTE>
+The related directive #pragma exclude<A ID="2195"></A>
+allows a more fine grained control over pushing &amp; popping<A ID="2196"></A>
+the registers.
+
+<P>
+While there is nothing preventing you from writing C code inside a
+<SPAN  CLASS="texttt">_naked</SPAN> function, there are many ways to shoot yourself in
+the foot doing this, and it is recommended that you stick to inline
+assembler.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node106.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node102.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node104.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1498"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1500"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node106.html">3.11.4 Use of Labels within</A>
+<B> Up:</B> <A
+ HREF="node102.html">3.11 Inline Assembler Code</A>
+<B> Previous:</B> <A
+ HREF="node104.html">3.11.2 A Step by Step</A>
+ &nbsp; <B>  <A ID="tex2html1499"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1501"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

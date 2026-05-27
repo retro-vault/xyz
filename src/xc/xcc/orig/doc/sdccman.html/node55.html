@@ -1,0 +1,146 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.3.2 Preprocessor Options</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node56.html">
+<LINK REL="previous" HREF="node54.html">
+<LINK REL="next" HREF="node56.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node56.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node54.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1211"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1213"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node56.html">3.3.3 Optimization Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node54.html">3.3.1 Processor Selection Options</A>
+ &nbsp; <B>  <A ID="tex2html1212"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1214"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00432000000000000000"></A><A ID="948"></A><A ID="949"></A><A ID="950"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Preprocessor Options
+</H2>
+
+<P>
+SDCC uses <SPAN  CLASS="textit">sdcpp</SPAN>, an adapted version of the GNU Compiler Collection<A ID="952"></A>
+preprocessor <SPAN  CLASS="textit">cpp</SPAN><A ID="5686"></A> (<SPAN  CLASS="textit">gcc</SPAN> <kbd><A ID="tex2html42"
+  HREF="http://gcc.gnu.org/">http://gcc.gnu.org/</A></kbd>).
+If you need more dedicated options than those listed below please
+refer to the GCC&nbsp;CPP&nbsp;Manual at <kbd><A ID="tex2html43"
+  HREF="http://www.gnu.org/software/gcc/onlinedocs/">http://www.gnu.org/software/gcc/onlinedocs/</A></kbd>.
+
+<UL>
+<LI>[<SPAN  CLASS="textbf">-I&lt;path&gt;<A ID="960"></A></SPAN>] The additional location where
+the preprocessor will look for &lt;..h&gt; or &ldquo;..h&rdquo; files.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-D&lt;macro[=value]&gt;<A ID="5688"></A></SPAN>] Command
+line definition of macros. Passed to the preprocessor.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-M<A ID="965"></A></SPAN>] Tell the preprocessor to output a rule
+suitable for make describing the dependencies of each object file.
+For each source file, the preprocessor outputs one make-rule whose
+target is the object file name for that source file and whose dependencies
+are all the files `#include'd in it. This rule may be a single line
+or may be continued with `\'-newline if it is long.
+The list of rules is printed on standard output instead of the preprocessed
+C program. `-M' implies `-E<A ID="966"></A>'.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-C<A ID="967"></A></SPAN>] Tell the preprocessor not to discard comments.
+Used with the `-E' option.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-MM<A ID="968"></A></SPAN>] Like `-M' but the output mentions only
+the user header files included with `#include &ldquo;file'.
+System header files included with `#include &lt;file&gt;' are omitted.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-Aquestion(answer)<A ID="969"></A></SPAN>] Assert
+the answer answer for question, in case it is tested with a preprocessor
+conditional such as `#if #question(answer)'. `-A-' disables the
+standard assertions that normally describe the target machine.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-Umacro<A ID="970"></A></SPAN>] Undefine macro macro. `-U' options
+are evaluated after all `-D' options, but before any `-include' and
+`-imacros' options.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-dM<A ID="971"></A></SPAN>] Tell the preprocessor to output only
+a list of the macro definitions that are in effect at the end of preprocessing.
+Used with the `-E' option.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-dD<A ID="972"></A></SPAN>] Tell the preprocessor to pass all macro
+definitions into the output, in their proper sequence in the rest
+of the output.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-dN<A ID="973"></A></SPAN>] Like `-dD' except that the macro arguments
+and contents are omitted. Only `#define name' is included in the
+output.
+</LI>
+<LI>[<SPAN  CLASS="textbf">-Wp&nbsp;preprocessorOption[,preprocessorOption]</SPAN><A ID="5698"></A>...] Pass
+the preprocessorOption to the preprocessor <SPAN  CLASS="texttt">sdcpp</SPAN><A ID="979"></A>. 
+</LI>
+</UL>
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node56.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node54.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1211"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1213"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node56.html">3.3.3 Optimization Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node54.html">3.3.1 Processor Selection Options</A>
+ &nbsp; <B>  <A ID="tex2html1212"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1214"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,108 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.17 Configuration Bits</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node179.html">
+<LINK REL="previous" HREF="node177.html">
+<LINK REL="next" HREF="node179.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node179.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node177.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2034"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2036"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node179.html">4.9.18 PIC16 C Libraries</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node177.html">4.9.16 Generic Pointers</A>
+ &nbsp; <B>  <A ID="tex2html2035"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2037"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION005917000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">17</SPAN> Configuration Bits</A>
+</H2>
+
+<P>
+Configuration bits (also known as fuses) can be configured using one
+of two methods:
+
+<UL>
+<LI>using #pragma config (see section <A HREF="node167.html#subsec:PIC16_Pragmas">4.9.6</A>), which
+is a preferred method for the new code. Example:
+</LI>
+</UL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#pragma&nbsp;config&nbsp;CP0=OFF,OSCS=ON,OSC=LP,BOR=ON,BORV=25,WDT=ON,WDTPS=128,CCP2MUX=ON
+
+<P>
+#pragma&nbsp;config&nbsp;STVR=ON
+</DD>
+</DL>
+<UL>
+<LI>using `<SPAN  CLASS="texttt">__code</SPAN>' and `<SPAN  CLASS="texttt">__at</SPAN>' modifiers. This method
+is deprecated. Possible options should be ANDed and can be found in
+your processor header file. Example for PIC18F2550:
+</LI>
+</UL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#include&nbsp;&lt;pic18fregs.h&gt;&nbsp;//Contains&nbsp;config&nbsp;addresses&nbsp;and&nbsp;options&nbsp;
+<BR>&nbsp;
+<BR>
+static&nbsp;__code&nbsp;char&nbsp;__at(__CONFIG1L)&nbsp;configword1l&nbsp;=&nbsp;
+<BR>&nbsp;&nbsp;_USBPLL_CLOCK_SRC_FROM_96MHZ_PLL_2_1L&nbsp;&amp;
+
+<P>
+&nbsp;&nbsp;_PLLDIV_NO_DIVIDE__4MHZ_INPUT__1L&nbsp;&amp;&nbsp;[...];&nbsp;
+<BR>
+static&nbsp;__code&nbsp;char&nbsp;__at(__CONFIG1H)&nbsp;configword1h&nbsp;=&nbsp;[...];&nbsp;
+<BR>
+static&nbsp;__code&nbsp;char&nbsp;__at(__CONFIG2L)&nbsp;configword2l&nbsp;=&nbsp;[...];&nbsp;
+<BR>//More&nbsp;configuration&nbsp;words
+</DD>
+</DL>Mixing both methods is not allowed and throws an error message &rdquo;mixing
+__CONFIG and CONFIG directives&rdquo;.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

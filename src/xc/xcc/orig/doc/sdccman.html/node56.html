@@ -1,0 +1,186 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.3.3 Optimization Options</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node57.html">
+<LINK REL="previous" HREF="node55.html">
+<LINK REL="next" HREF="node57.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node57.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node55.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1215"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1217"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node57.html">3.3.4 Other Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node55.html">3.3.2 Preprocessor Options</A>
+ &nbsp; <B>  <A ID="tex2html1216"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1218"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00433000000000000000"></A><A ID="981"></A><A ID="982"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN> Optimization Options
+</H2>
+
+<UL>
+<LI>[<SPAN  CLASS="textbf">&mdash;nogcse<A ID="985"></A></SPAN>] Will not do
+global common subexpression elimination, this option may be used when
+the compiler creates undesirably large stack/data spaces to store
+compiler temporaries (<SPAN  CLASS="textit">s</SPAN>pill <SPAN  CLASS="textit">loc</SPAN>ations, sloc<A ID="988"></A>).
+A warning message will be generated when this happens and the compiler
+will indicate the number of extra bytes it allocated. It is recommended
+that this option NOT be used, #pragma&nbsp;nogcse<A ID="989"></A>
+can be used to turn off global subexpression elimination<A ID="990"></A>
+for a given function only.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;noinvariant<A ID="991"></A></SPAN>] Will
+not do loop invariant optimizations, this may be turned off for reasons
+explained for the previous option. For more details of loop optimizations
+performed see Loop Invariants in section <A HREF="node217.html#subsec:Loop-Optimizations">8.1.4</A>.
+It is recommended that this option NOT be used, #pragma&nbsp;noinvariant<A ID="993"></A>
+can be used to turn off invariant optimizations for a given function
+only.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;noinduction<A ID="994"></A></SPAN>] Will
+not do loop induction optimizations, see section strength reduction
+for more details. It is recommended that this option is NOT used,
+#pragma&nbsp;noinduction<A ID="995"></A>
+can be used to turn off induction optimizations for a given function
+only.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;noloopreverse<A ID="996"></A></SPAN>] Will
+not do loop reversal <A ID="997"></A>optimization.
+</LI>
+<LI>[&mdash;<SPAN  CLASS="textbf">nolabelopt</SPAN>] <A ID="999"></A>Will
+not optimize labels (makes the dumpfiles more readable).
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;no-xinit-opt<A ID="1000"></A></SPAN>] Will
+not memcpy initialized data from code space into xdata space. This
+saves a few bytes in code space if you don't have initialized data<A ID="1001"></A>.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;nooverlay<A ID="1002"></A></SPAN>]  The
+compiler will not overlay parameters and local variables of any function,
+see section Parameters and local variables for more details.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;no-peep<A ID="1003"></A></SPAN>] Disable peep-hole
+optimization with built-in rules.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;peep-file</SPAN><A ID="1005"></A>&nbsp;&lt;filename&gt;] This
+option can be used to use additional rules to be used by the peep
+hole optimizer. See section <A HREF="node229.html#subsec:Peephole-Optimizer">8.1.16</A>&nbsp;Peep
+Hole optimizations for details on how to write these rules.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;peep-asm<A ID="1007"></A></SPAN>] Pass the
+inline assembler code through the peep hole optimizer. This can cause
+unexpected changes to inline assembler code, please go through the
+peephole optimizer<A ID="1008"></A> rules defined in the
+source file tree '&lt;target&gt;/peeph.def' before using this option.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;peep-return<A ID="1009"></A></SPAN>] Let
+the peep hole optimizer do return optimizations. This is the default
+without <SPAN  CLASS="textbf">&mdash;</SPAN>debug<SPAN  CLASS="textbf"><A ID="1011"></A></SPAN>.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;no-peep-return<A ID="1012"></A></SPAN>] Do
+not let the peep hole optimizer do return optimizations. This is the
+default with <SPAN  CLASS="textbf">&mdash;</SPAN>debug<SPAN  CLASS="textbf"><A ID="1014"></A></SPAN>.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;opt-code-speed<A ID="1015"></A></SPAN>] The
+compiler will optimize code generation towards fast code, possibly
+at the expense of code size.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;opt-code-size<A ID="1016"></A></SPAN>] The
+compiler will optimize code generation towards compact code, possibly
+at the expense of code speed.
+</LI>
+<LI>[&mdash;<SPAN  CLASS="textbf">fomit-frame-pointer</SPAN><A ID="1018"></A>] Frame
+pointer will be omitted when the function uses no local variables.
+On the z80-related ports this option will result in the frame pointer
+always being omitted.
+</LI>
+<LI>[&mdash;<SPAN  CLASS="textbf">max-allocs-per-node</SPAN><A ID="1020"></A>] Setting
+this to a high value will result in increased compilation time (and
+increased memory use during compilation) and more optimized code being
+generated. Setting it to lower values speeds up compilation, but does
+not optimize as much. The default value is 3000. This option currently
+does not affect the mcs51, ds390, pic14 and pic16 ports.
+</LI>
+<LI>[&mdash;<SPAN  CLASS="textbf">nolospre</SPAN><A ID="1022"></A>] Disable
+lospre. lospre is an advanced redundancy elimination technique, essentially
+an improved variant of global subexpression elimination.
+</LI>
+<LI>[&mdash;<SPAN  CLASS="textbf">allow-unsafe-read</SPAN><A ID="1024"></A>] Allow
+optimizations to generate unsafe reads. This will enable additional
+optimizations, but can result in spurious reads from undefined memory
+addresses, which can be harmful if the target system uses certain
+ways of doing memory-mapped I/O.
+</LI>
+<LI>[&mdash;<SPAN  CLASS="textbf">nostdlibcall</SPAN><A ID="1026"></A>] Disable
+the optimization of calls to the standard library.
+</LI>
+</UL>
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node57.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node55.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1215"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1217"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node57.html">3.3.4 Other Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node55.html">3.3.2 Preprocessor Options</A>
+ &nbsp; <B>  <A ID="tex2html1216"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1218"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

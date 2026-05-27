@@ -1,0 +1,49 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _counter
+_counter:
+	.ds 2
+
+
+	.area _CODE
+
+	.globl _increment
+_increment:
+	; prologue: increment (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, (_counter)
+	inc	hl
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	(_counter), hl
+__increment_end:
+	; epilogue: increment
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _main
+_main:
+	; prologue: main (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	.globl _increment
+	call	_increment
+	.globl _increment
+	call	_increment
+	.globl _increment
+	call	_increment
+	ld	hl, (_counter)
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

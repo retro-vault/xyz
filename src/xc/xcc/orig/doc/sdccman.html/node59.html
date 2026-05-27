@@ -1,0 +1,147 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.3.6 MCS51 Options</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node60.html">
+<LINK REL="previous" HREF="node58.html">
+<LINK REL="next" HREF="node60.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node60.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node58.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1227"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1229"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node60.html">3.3.7 DS390 / DS400 Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node58.html">3.3.5 Linker Options</A>
+ &nbsp; <B>  <A ID="tex2html1228"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1230"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00436000000000000000"></A><A ID="1226"></A><A ID="1227"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">6</SPAN> MCS51 Options
+</H2>
+
+<UL>
+<LI>[<SPAN  CLASS="textbf">&mdash;model-small<A ID="1230"></A></SPAN>] Generate
+code for Small model programs, see section Memory Models for more
+details. This is the default model.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;model-medium<A ID="1231"></A></SPAN>] Generate
+code for Medium model programs, see section Memory Models for more
+details. If this option is used all source files in the project have
+to be compiled with this option. It must also be used when invoking
+the linker.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;model-large<A ID="1232"></A></SPAN>] Generate
+code for Large model programs, see section Memory Models for more
+details. If this option is used all source files in the project have
+to be compiled with this option. It must also be used when invoking
+the linker.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;model-huge<A ID="1233"></A></SPAN>] Generate
+code for Huge model programs, see section Memory Models for more details.
+If this option is used all source files in the project have to be
+compiled with this option. It must also be used when invoking the
+linker.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;xstack<A ID="1234"></A></SPAN>] Uses a pseudo
+stack in the __pdata<A ID="1235"></A>
+area (usually the first 256 bytes in the external ram) for allocating
+variables and passing parameters. See section <A HREF="node115.html#subsec:External-Stack">3.15.1.2</A>&nbsp;
+External Stack for more details.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;iram-size</SPAN>&nbsp;&lt;Value&gt;<A ID="1238"></A>] Causes
+the linker to check if the internal ram usage is within limits of
+the given value.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;xram-size</SPAN>&nbsp;&lt;Value&gt;<A ID="1240"></A>] Causes
+the linker to check if the external ram usage is within limits of
+the given value.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;code-size</SPAN>&nbsp;&lt;Value&gt;<A ID="1242"></A>] Causes
+the linker to check if the code memory usage is within limits of the
+given value.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;stack-size</SPAN>&nbsp;&lt;Value&gt;<A ID="1244"></A>] Causes
+the linker to check if there is at minimum &lt;Value&gt; bytes for stack.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;acall-ajmp</SPAN>&nbsp;<A ID="1246"></A>] Replaces
+the three byte instructions lcall/ljmp with the two byte instructions
+acall/ajmp. Only use this option if your code is in the same 2k block
+of memory. You may need to use this option for some 8051 derivatives
+which lack the lcall/ljmp instructions.
+</LI>
+<LI>[<SPAN  CLASS="textbf">&mdash;no-ret-without-call</SPAN>&nbsp;<A ID="1248"></A>] Causes
+the code generator to insert an extra lcall or acall instruction whenever
+it needs to use a ret instruction in a context other than a function
+returning. This option is needed when using the Infineon<A ID="1249"></A>
+XC800 series microcontrollers to keep its Memory Extension Stack balanced.
+</LI>
+</UL>
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node60.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node53.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node58.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1227"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1229"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node60.html">3.3.7 DS390 / DS400 Options</A>
+<B> Up:</B> <A
+ HREF="node53.html">3.3 Command Line Options</A>
+<B> Previous:</B> <A
+ HREF="node58.html">3.3.5 Linker Options</A>
+ &nbsp; <B>  <A ID="tex2html1228"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1230"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

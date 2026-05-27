@@ -1,0 +1,92 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8.6 Command-Line Options</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node158.html">
+<LINK REL="previous" HREF="node156.html">
+<LINK REL="next" HREF="node158.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node158.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node156.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1903"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1905"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node158.html">4.8.7 Environment Variables</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node156.html">4.8.5 Linking and Assembling</A>
+ &nbsp; <B>  <A ID="tex2html1904"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1906"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00586000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> Command-Line Options</A>
+</H2>
+
+<P>
+Besides the switches common to all SDCC backends, the PIC14 port accepts
+the following options (for an updated list see sdcc &mdash;help):
+<DL>
+<DT><STRONG>&mdash;debug-xtra<A ID="3218"></A></STRONG></DT>
+<DD>emit
+debug info in assembly output
+</DD>
+<DT><STRONG>&mdash;no-pcode-opt<A ID="3219"></A></STRONG></DT>
+<DD>disable
+(slightly faulty) optimization on pCode
+</DD>
+<DT><STRONG>&mdash;stack-loc<A ID="3220"></A></STRONG></DT>
+<DD>sets
+the lowest address of the argument passing stack (defaults to a suitably
+large shared databank to reduce BANKSEL overhead)
+</DD>
+<DT><STRONG>&mdash;stack-size<A ID="3221"></A></STRONG></DT>
+<DD>sets
+the size if the argument passing stack (default: 16, minimum: 4)
+</DD>
+<DT><STRONG>&mdash;use-non-free<A ID="3222"></A></STRONG></DT>
+<DD>make
+non-free device headers and libraries available in the compiler's
+search paths (implicit -I and -L options)
+</DD>
+<DT><STRONG>&mdash;no-extended-instructions</STRONG></DT>
+<DD>forbid use of the extended instruction
+set (e.g., ADDFSR)
+</DD>
+</DL>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

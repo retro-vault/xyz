@@ -1,0 +1,87 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _max
+_max:
+	; prologue: max (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param a at 4(ix)
+	; receive param b at 6(ix)
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	push	hl
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	pop	de
+	ex	de, hl
+	or	a, a
+	sbc	hl, de
+	jp	z, __cmp_e_30886
+	jp	p, __cmp_t_89383
+	ld	hl, #0
+	jp	__cmp_e_30886
+__cmp_t_89383:
+	ld	hl, #1
+__cmp_e_30886:
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L0
+	jp	__xcc_L1
+__xcc_L0:
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	jp	__xcc_L2
+__xcc_L1:
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+__xcc_L2:
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	jp	__max_end
+__max_end:
+	; epilogue: max
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _main
+_main:
+	; prologue: main (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #7
+	push	hl
+	ld	hl, #10
+	push	hl
+	.globl _max
+	call	_max
+	pop	bc
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

@@ -1,0 +1,76 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _main
+_main:
+	; prologue: main (locals=5)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-5
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #1000
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, l
+	dec	sp
+	dec	sp
+	ld	-7(ix), a
+	ld	a, -7(ix)
+	ld	-3(ix), a
+	ld	a, -3(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	dec	sp
+	dec	sp
+	ld	-9(ix), l
+	ld	-8(ix), h
+	ld	l, -9(ix)
+	ld	h, -8(ix)
+	ld	-5(ix), l
+	ld	-4(ix), h
+	ld	hl, #24
+	ld	a, l
+	cpl
+	ld	l, a
+	ld	a, h
+	cpl
+	ld	h, a
+	inc	hl
+	dec	sp
+	dec	sp
+	ld	-11(ix), l
+	ld	-10(ix), h
+	ld	l, -5(ix)
+	ld	h, -4(ix)
+	push	hl
+	ld	l, -11(ix)
+	ld	h, -10(ix)
+	pop	de
+	or	a, a
+	sbc	hl, de
+	jp	z, __cmp_t_89383
+	ld	hl, #0
+	jp	__cmp_e_30886
+__cmp_t_89383:
+	ld	hl, #1
+__cmp_e_30886:
+	dec	sp
+	dec	sp
+	ld	-13(ix), l
+	ld	-12(ix), h
+	ld	l, -13(ix)
+	ld	h, -12(ix)
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

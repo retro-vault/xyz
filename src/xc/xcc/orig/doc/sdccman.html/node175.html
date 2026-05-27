@@ -1,0 +1,92 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.14 Function return values</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node176.html">
+<LINK REL="previous" HREF="node174.html">
+<LINK REL="next" HREF="node176.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node176.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node174.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2022"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2024"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node176.html">4.9.15 Interrupts</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node174.html">4.9.13 Functions</A>
+ &nbsp; <B>  <A ID="tex2html2023"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2025"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION005914000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">14</SPAN> Function return values</A>
+</H2>
+
+<P>
+Return values from functions are placed to the appropriate registers
+following a modified Microchip policy optimized for SDCC. The following
+table shows these registers:
+
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">size</TD>
+<TD CLASS="CENTER">destination register</TD>
+</TR>
+<TR><TD CLASS="CENTER">8 bits</TD>
+<TD CLASS="CENTER">WREG</TD>
+</TR>
+<TR><TD CLASS="CENTER">16 bits</TD>
+<TD CLASS="CENTER">PRODL:WREG</TD>
+</TR>
+<TR><TD CLASS="CENTER">24 bits</TD>
+<TD CLASS="CENTER">PRODH:PRODL:WREG</TD>
+</TR>
+<TR><TD CLASS="CENTER">32 bits</TD>
+<TD CLASS="CENTER">FSR0L:PRODH:PRODL:WREG</TD>
+</TR>
+<TR><TD CLASS="CENTER">&gt;32 bits</TD>
+<TD CLASS="CENTER">on stack, FSR0 points to the beginning</TD>
+</TR>
+</TABLE>
+</DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

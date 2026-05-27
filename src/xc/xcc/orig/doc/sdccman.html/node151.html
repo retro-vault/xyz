@@ -1,0 +1,365 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8 The PIC14 port</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node161.html">
+<LINK REL="previous" HREF="node146.html">
+<LINK REL="next" HREF="node152.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node152.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node121.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node150.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1863"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1865"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node152.html">4.8.1 PIC Code Pages and</A>
+<B> Up:</B> <A
+ HREF="node121.html">4. Notes on supported Processors</A>
+<B> Previous:</B> <A
+ HREF="node150.html">4.7.4 Code and Data placement</A>
+ &nbsp; <B>  <A ID="tex2html1864"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1866"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00580000000000000000"></A><A ID="3142"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN> The PIC14 port
+</H1>
+
+<P>
+The PIC14 port adds support for Microchip<A ID="3143"></A><SPAN CLASS="MATH">10#10</SPAN>
+PIC<A ID="3145"></A><SPAN CLASS="MATH">10#10</SPAN> MCUs with 14 bit wide instructions.
+This port is not yet mature and still lacks many features. However,
+it can work for simple code.
+
+<P>
+Currently supported devices include:
+
+<P>
+
+<P>
+<BR>
+
+
+<P>
+10F320, 10F322, 10LF320, 10LF322
+
+<P>
+12F609, 12F615, 12F617, 12F629, 12F635, 12F675, 12F683
+
+<P>
+12F752
+
+<P>
+12HV752
+
+<P>
+16C62, 16C63A, 16C65B
+
+<P>
+16C71, 16C72, 16C73B, 16C74B
+
+<P>
+16C432, 16C433
+
+<P>
+16C554, 16C557, 16C558
+
+<P>
+16C620, 16C620A, 16C621, 16C621A, 16C622, 16C622A
+
+<P>
+16C710, 16C711, 16C715, 16C717, 16C745, 16C765, 16C770, 16C771, 16C773,
+16C774, 16C781, 16C782
+
+<P>
+16C925, 16C926 
+
+<P>
+16CR73, 16CR74, 16CR76, 16CR77
+
+<P>
+16CR620A
+
+<P>
+16F72 ,16F73, 16F74, 16F76, 16F77
+
+<P>
+16F84, 16F84A, 16F87, 16F88
+
+<P>
+16F610, 16F616, 16F627, 16F627A, 16F628, 16F628A, 16F630, 16F631,
+16F636, 16F639, 16F648A
+
+<P>
+16F676, 16F677, 16F684, 16F685, 16F687, 16F688, 16F689, 16F690
+
+<P>
+16F707, 16F716, 16F720, 16F721, 16F722, 16F722A, 16F723, 16F723A,
+16F724, 16F726, 16F727
+
+<P>
+16F737, 16F747, 16F753, 16F767, 16F777, 16F785
+
+<P>
+16F818, 16F819, 16F870, 16F871, 16F872, 16F873, 16F873A, 16F874, 16F874A,
+16F876, 16F876A
+
+<P>
+16F877, 16F877A, 16F882, 16F883, 16F884, 16F886, 16F887
+
+<P>
+16F913, 16F914, 16F916, 16F917, 16F946
+
+<P>
+16LF74, 16LF76, 16LF77
+
+<P>
+16LF84, 16LF84A, 16LF87, 16LF88
+
+<P>
+16LF627, 16LF627A, 16LF628, 16LF628A, 16LF648A
+
+<P>
+16LF707, 16LF720, 16LF721, 16LF722, 16LF722A, 16LF723, 16LF723A, 16LF724,
+16LF726, 16LF727 
+
+<P>
+16LF747, 16LF767, 16LF777
+
+<P>
+16LF818, 16LF819, 16LF870, 16LF871, 16LF872, 16LF873, 16LF873A, 16LF874,
+16LF874A
+
+<P>
+16LF876, 16LF876A, 16LF877, 16LF877A
+
+<P>
+16HV610, 16HV616, 16HV753, 16HV785
+
+<P>
+
+<P>
+<BR>
+
+
+<P>
+<DIV class="LEFT">
+Supported devices with enhanced cores:
+</DIV>
+<P>
+<DIV class="LEFT">
+</DIV>
+
+<P>
+
+<P>
+<BR>
+
+
+<P>
+12F1501, 12F1571, 12F1572, 12F1612, 12F1822, 12F1840
+
+<P>
+12LF1501, 12LF1552, 12LF1571, 12LF1572, 12LF1612, 12LF1822, 12LF1840,
+12LF1840T39A, 12LF1840T48A
+
+<P>
+16F1454, 16F1455, 16F1458, 16F1459
+
+<P>
+16F1503, 16F1507, 16F1508, 16F1509, 16F1512, 16F1513, 16F1516, 16F1517,
+16F1518, 16F1519
+
+<P>
+16F1526, 16F1527, 16F1574, 16F1575, 16F1578, 16F1579
+
+<P>
+16F1613, 16F1614, 16F1615, 16F1618, 16F1619
+
+<P>
+16F1703, 16F1704, 16F1705, 16F1707, 16F1708, 16F1709, 16F1713, 16F1716,
+16F1717, 16F1718, 16F1719
+
+<P>
+16F1764, 16F1765, 16F1768, 16F1769, 16F1773, 16F1776, 16F1777, 16F1778,
+16F1779
+
+<P>
+16F1782, 16F1783, 16F1784, 16F1786, 16F1787, 16F1788, 16F1789
+
+<P>
+16F1823, 16F1824, 16F1825, 16F1826, 16F1827, 16F1828, 16F1829, 16F1829LIN,
+16F1847
+
+<P>
+16F1933, 16F1934, 16F1936, 16F1937, 16F1938, 16F1939, 16F1946, 16F1947
+
+<P>
+16F18313, 16F18323, 16F18324, 16F18325, 16F18344, 16F18345,
+
+<P>
+16F18855, 16F18875
+
+<P>
+16LF1454, 16LF1455, 16LF1458, 16LF1459
+
+<P>
+16LF1503, 16LF1507, 16LF1508, 16LF1509, 16LF1512, 16LF1513, 16LF1516,
+16LF1517, 16LF1518, 16LF1519,
+
+<P>
+16LF1526, 16LF1527 
+
+<P>
+16LF1554, 16LF1559, 16LF1566, 16LF1567, 16LF1574, 16LF1575, 16LF1578,
+16LF1579
+
+<P>
+16LF1613, 16LF1614, 16LF1615, 16LF1618, 16LF1619
+
+<P>
+16LF1703, 16LF1704, 16LF1705, 16LF1707, 16LF1708, 16LF1709, 16LF1713,
+16LF1716, 16LF1717, 16LF1718, 16LF1719 
+
+<P>
+16LF1764, 16LF1765, 16LF1768, 16LF1769, 16LF1773, 16LF1776, 16LF1777,
+16LF1778, 16LF1779
+
+<P>
+16LF1782, 16LF1783, 16LF1784, 16LF1786, 16LF1787, 16LF1788, 16LF1789,
+
+<P>
+16LF1823, 16LF1824, 16LF1824T39A
+
+<P>
+16LF1825, 16LF1826, 16LF1827, 16LF1828, 16LF1829, 16LF1847
+
+<P>
+16LF1902, 16LF1903, 16LF1904, 16LF1906, 16LF1907
+
+<P>
+16LF1933, 16LF1934, 16LF1936, 16LF1937, 16LF1938, 16LF1939, 16LF1946,
+16LF1947
+
+<P>
+16LF18313, 16LF18323, 16LF18324, 16LF18325, 16LF18344, 16LF18345
+
+<P>
+16LF18855, 16LF18875
+
+<P>
+
+<P>
+<BR>
+
+
+<P>
+An up-to-date list of currently supported devices can be
+obtained via <SPAN  CLASS="texttt">sdcc -mpic14 -phelp foo.c</SPAN> (foo.c must exist...).
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1867"
+  HREF="node152.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> PIC Code Pages and Memory Banks</A>
+<LI><A ID="tex2html1868"
+  HREF="node153.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Adding New Devices to the Port </A>
+<LI><A ID="tex2html1869"
+  HREF="node154.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Interrupt Code</A>
+<LI><A ID="tex2html1870"
+  HREF="node155.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Configuration Bits</A>
+<LI><A ID="tex2html1871"
+  HREF="node156.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Linking and Assembling</A>
+<LI><A ID="tex2html1872"
+  HREF="node157.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> Command-Line Options</A>
+<LI><A ID="tex2html1873"
+  HREF="node158.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> Environment Variables</A>
+<LI><A ID="tex2html1874"
+  HREF="node159.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN> The Library</A>
+<UL>
+<LI><A ID="tex2html1875"
+  HREF="node159.html#SECTION00588100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Enhanced cores</A>
+<LI><A ID="tex2html1876"
+  HREF="node159.html#SECTION00588200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Accessing bits of special function registers</A>
+<LI><A ID="tex2html1877"
+  HREF="node159.html#SECTION00588300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Naming of special function registers</A>
+<LI><A ID="tex2html1878"
+  HREF="node159.html#SECTION00588400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> error: missing definition for symbol &ldquo;__gptrget1&rdquo;</A>
+<LI><A ID="tex2html1879"
+  HREF="node159.html#SECTION00588500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Processor mismatch in file &ldquo;XXX&rdquo;.</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1880"
+  HREF="node160.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN> Known Bugs</A>
+<UL>
+<LI><A ID="tex2html1881"
+  HREF="node160.html#SECTION00589100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> Function arguments</A>
+<LI><A ID="tex2html1882"
+  HREF="node160.html#SECTION00589200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Regression tests fail</A>
+</UL></UL>
+<!--End of Table of Child-Links-->
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node152.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node121.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node150.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1863"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1865"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node152.html">4.8.1 PIC Code Pages and</A>
+<B> Up:</B> <A
+ HREF="node121.html">4. Notes on supported Processors</A>
+<B> Previous:</B> <A
+ HREF="node150.html">4.7.4 Code and Data placement</A>
+ &nbsp; <B>  <A ID="tex2html1864"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1866"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

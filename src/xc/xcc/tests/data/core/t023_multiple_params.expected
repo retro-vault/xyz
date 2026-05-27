@@ -1,0 +1,69 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _sum3
+_sum3:
+	; prologue: sum3 (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param a at 4(ix)
+	; receive param b at 6(ix)
+	; receive param c at 8(ix)
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	ld	e, 6(ix)
+	ld	d, 7(ix)
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	e, 8(ix)
+	ld	d, 9(ix)
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	jp	__sum3_end
+__sum3_end:
+	; epilogue: sum3
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _main
+_main:
+	; prologue: main (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #3
+	push	hl
+	ld	hl, #2
+	push	hl
+	ld	hl, #1
+	push	hl
+	.globl _sum3
+	call	_sum3
+	pop	bc
+	pop	bc
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

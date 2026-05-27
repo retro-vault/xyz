@@ -1,0 +1,32 @@
+This directory contains infrastructure for generating SDCC code size and performance history graphs.
+
+WARNINGS:
+* No SDCC should be installed on the system (to avoid linking to the wrong standard library)!
+* Reproducing the graphs takes a lot of time and disk space!
+* Reproducing the stm8 benchmark score graphs requires the STM8AF board from the STM8A-Discovery, and sufficient access privileges on the host system!
+* Reproducing the mcs51 benchmark score graphs requires the C8051 V2.1 board (C8051F120 variant), and sufficient access privileges on the host system!
+* Reproducing the r3ka benchmark score graphs requires the RCM3319 board, and sufficient access privileges on the host system!
+* Reproducing the r4k benchmark score graphs requires the RCM4110 board, and sufficient access privileges on the host system!
+
+The boards for the respective architectures were chosen to make it easy to reproduce results: relatively well-supported by free tools, widely available, cheap.
+
+Files:
+
+Makefile:
+Build infrastructure for graphs, uses the other files.
+Invoking GNU make via "make" will create the code size graphs for Whetstone and Dhrystone on stm8, mcs51, r3ka, r4k and z80.
+
+Further graphs (score graphs for all benchmarks, sizegraph for Coremark and stdcbench) can be build by making their respective targets.
+
+execute_benchmark-stm8:
+Execute a benchmark (Whetstone, Dhrystone or Coremark) on an STM8AF board and report the results line.
+execute_benchmark-mcs51:
+Execute a benchmark (Whetstone, Dhrystone or Coremark) on a C8051 V2.1 board and report the results line.
+execute_benchmark-r3ka:
+Execute a benchmark (Whetstone, Dhrystone or Coremark) on an RCM3319 board and report the results line.
+execute_benchmark-r4k:
+Execute a benchmark (Whetstone, Dhrystone or Coremark) on an RCM4110 board and report the results line.
+
+*.p:
+gnuplot command files to generate graphs from data files.
+

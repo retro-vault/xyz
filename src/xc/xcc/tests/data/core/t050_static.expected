@@ -1,0 +1,83 @@
+	.module xcc_output
+
+	.area _DATA
+_counter__n_0:
+	.ds 2
+
+
+	.area _CODE
+
+	.globl _counter
+_counter:
+	; prologue: counter (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, (_counter__n_0)
+	inc	hl
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	(_counter__n_0), hl
+	ld	hl, (_counter__n_0)
+	jp	__counter_end
+__counter_end:
+	; epilogue: counter
+	ld	sp, ix
+	pop	ix
+	ret
+_double_it:
+	; prologue: double_it (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param x at 4(ix)
+	.globl __mul16
+	ld	hl, #2
+	push	hl
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	push	hl
+	call	__mul16
+	pop	bc
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__double_it_end
+__double_it_end:
+	; epilogue: double_it
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _use_double
+_use_double:
+	; prologue: use_double (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param x at 4(ix)
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	push	hl
+	.globl _double_it
+	call	_double_it
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__use_double_end
+__use_double_end:
+	; epilogue: use_double
+	ld	sp, ix
+	pop	ix
+	ret

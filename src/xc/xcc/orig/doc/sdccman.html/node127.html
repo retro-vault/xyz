@@ -1,0 +1,282 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.1.5 Interfacing with Assembler Code</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node126.html">
+<LINK REL="next" HREF="node128.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node128.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node126.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1720"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1722"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node128.html">4.2 DS400 port</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node126.html">4.1.4 MCS51/DS390 Startup Code</A>
+ &nbsp; <B>  <A ID="tex2html1721"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1723"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1724"
+  HREF="node127.html#SECTION00515100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> Global Registers used for Parameter Passing</A>
+<LI><A ID="tex2html1725"
+  HREF="node127.html#SECTION00515200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> Register usage</A>
+<LI><A ID="tex2html1726"
+  HREF="node127.html#SECTION00515300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembler Routine (non-reentrant)</A>
+<LI><A ID="tex2html1727"
+  HREF="node127.html#SECTION00515400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">4</SPAN> Assembler Routine (reentrant)</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00515000000000000000"></A><A ID="2946"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> Interfacing with Assembler Code
+</H2>
+
+<P>
+
+<H3><A ID="SECTION00515100000000000000"></A><A ID="2947"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> Global Registers used for Parameter Passing
+</H3>
+
+<P>
+The compiler always uses the global registers <SPAN  CLASS="textit">DPL, DPH<A ID="2948"></A><A ID="2949"></A>,
+B<A ID="2950"></A></SPAN> and <SPAN  CLASS="textit">ACC<A ID="2951"></A></SPAN>
+to pass the first (non-bit, non-struct) parameter to a function, and
+also to pass the return value <A ID="2952"></A>of function; according
+to the following scheme: one byte return value in <SPAN  CLASS="textit">DPL</SPAN>, two
+byte value in <SPAN  CLASS="textit">DPL</SPAN> (LSB) and <SPAN  CLASS="textit">DPH</SPAN> (MSB). three byte values
+(generic pointers) in <SPAN  CLASS="textit">DPH</SPAN>, <SPAN  CLASS="textit">DPL</SPAN> and <SPAN  CLASS="textit">B</SPAN>, and four
+byte values in <SPAN  CLASS="textit">DPH</SPAN>, <SPAN  CLASS="textit">DPL</SPAN>, <SPAN  CLASS="textit">B</SPAN> and <SPAN  CLASS="textit">ACC</SPAN>. Generic
+pointers<A ID="2963"></A> contain type of accessed memory in
+<SPAN  CLASS="textit">B</SPAN>: <SPAN  CLASS="textbf">0x00</SPAN> – xdata/far, <SPAN  CLASS="textbf">0x40</SPAN> – idata/near –
+, <SPAN  CLASS="textbf">0x60</SPAN> – pdata, <SPAN  CLASS="textbf">0x80</SPAN> – code.
+
+<P>
+Further such parameters (and all struct parameters, as well as the
+bit parameters from the 9th onwards) are either allocated on the stack
+(for reentrant routines or if &mdash;stack-auto is used) or in data/xdata
+memory (depending on the memory model).
+
+<P>
+The first 8 bit parameters are passed in a virtual register called
+'bits' in bit-addressable space for reentrant functions or allocated
+directly in bit memory otherwise.
+
+<P>
+Functions (with two or more parameters or bit parameters) that are
+called through function pointers<A ID="2969"></A> must therefor
+be reentrant so the compiler knows how to pass the parameters.
+
+<P>
+
+<H3><A ID="SECTION00515200000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> Register usage</A>
+</H3>
+
+<P>
+Unless the called function is declared as <SPAN  CLASS="texttt">_naked</SPAN><A ID="2972"></A>,
+or the &mdash;callee-saves<A ID="2973"></A>/&mdash;all-callee-saves
+command line option or the corresponding callee_saves pragma are
+used, the caller will save the registers (<SPAN  CLASS="textit">R0-R7</SPAN>) around the
+call, so the called function can destroy they content freely.
+
+<P>
+If the called function is not declared as <SPAN  CLASS="texttt">_naked</SPAN>, the caller
+will swap register banks around the call, if caller and callee use
+different register banks (having them defined by the <SPAN  CLASS="texttt">__using</SPAN>
+modifier). 
+
+<P>
+The called function can also use <SPAN  CLASS="textit">DPL</SPAN>, <SPAN  CLASS="textit">DPH</SPAN>, <SPAN  CLASS="textit">B</SPAN>
+and <SPAN  CLASS="textit">ACC</SPAN> observing that they are used for parameter/return value
+passing.
+
+<P>
+
+<H3><A ID="SECTION00515300000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembler Routine (non-reentrant)</A>
+</H3>
+
+<P>
+In the following example<A ID="2982"></A><A ID="2983"></A>
+the function c_func calls an assembler routine asm_func, which takes
+two parameters<A ID="2984"></A>.
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">extern int asm_func(unsigned char, unsigned char);</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">int c_func (unsigned char i, unsigned char j)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return asm_func(i,j);</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">int main()</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return c_func(10,9);</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+The corresponding assembler function is:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.globl _asm_func_PARM_2</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.globl _asm_func</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area OSEG</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">_asm_func_PARM_2:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ds    1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area CSEG</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">_asm_func:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;&nbsp;&nbsp;a,dpl</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add&nbsp;&nbsp;&nbsp;&nbsp;a,_asm_func_PARM_2</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;&nbsp;&nbsp;dpl,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;&nbsp;&nbsp;dph<A ID="3009"></A>,#0x00</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ret</SPAN>
+
+</BLOCKQUOTE>
+The parameter naming convention is _&lt;function_name&gt;_PARM_&lt;n&gt;,
+where n is the parameter number starting from 1, and counting from
+the left. The first parameter is passed in <SPAN  CLASS="textit">DPH</SPAN>, <SPAN  CLASS="textit">DPL</SPAN>,
+<SPAN  CLASS="textit">B</SPAN> and <SPAN  CLASS="textit">ACC</SPAN> according to the description above. The variable
+name for the second parameter will be _&lt;function_name&gt;_PARM_2.
+<BR>
+<BR>
+Assemble the assembler routine with the following command:
+<BR>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdas8051 -losg asmfunc.asm</SPAN></SPAN>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf"></SPAN></SPAN>
+<BR>
+Then compile and link the assembler routine to the C source file with
+the following command:
+<BR>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc cfunc.c asmfunc.rel</SPAN></SPAN>
+
+<P>
+
+<H3><A ID="SECTION00515400000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">4</SPAN> Assembler Routine (reentrant)</A>
+</H3>
+
+<P>
+In this case<A ID="3020"></A><A ID="3021"></A>
+the second parameter<A ID="3022"></A> onwards will be passed
+on the stack, the parameters are pushed from right to left i.e. before
+the call the second leftmost parameter will be on the top of the stack
+(the leftmost parameter is passed in registers). Here is an example:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">extern int asm_func(unsigned char, unsigned char, unsigned
+char) reentrant;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">int c_func (unsigned char i, unsigned char j, unsigned char
+k) reentrant </SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return asm_func(i,j,k);</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">int main()</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return c_func(10,9,8);</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+The corresponding (unoptimized) assembler routine is:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">.globl _asm_func</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">_asm_func:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;push&nbsp;_bp</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;_bp,sp&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;;stack contains: _bp, return
+address, second parameter, third parameter</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;r2,dpl</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;a,_bp</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;add&nbsp;&nbsp;a,#0xfd&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;;calculate pointer to the
+second parameter</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;r0,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;a,_bp</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;add&nbsp;&nbsp;a,#0xfc&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;;calculate pointer to the
+rightmost parameter</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;r1,a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;a,@r0</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;add&nbsp;&nbsp;a,@r1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;add&nbsp;&nbsp;a,r2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;;calculate the result (=
+sum of all three parameters)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;dpl,a&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;;return value goes into
+dptr (cast into int)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;dph,#0x00</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;mov&nbsp;&nbsp;sp,_bp</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;pop&nbsp;&nbsp;_bp</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;ret</SPAN>
+
+</BLOCKQUOTE>
+The compiling and linking procedure remains the same, however note
+the extra entry &amp; exit linkage required for the assembler code, _bp
+is the stack frame pointer and is used to compute the offset into
+the stack for parameters and local variables.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node128.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node126.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1720"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1722"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node128.html">4.2 DS400 port</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node126.html">4.1.4 MCS51/DS390 Startup Code</A>
+ &nbsp; <B>  <A ID="tex2html1721"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1723"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,46 @@
+#!/bin/bash
+# Takes a few seconds to execute
+# RCM4110 board must be attached.
+# Must be able to access the programming cable.
+
+OPENRABBITFU=/home/philipp/OpenRabbit/src/openrabbitfu
+
+if [ $# != 2 ]; then
+	echo "execute_benchmark-r3ka: Execute a benchmark on an RCM3319 and report the results line"
+	echo "Wrong number of parameters. Usage: execute_benchmark-r3ka <serial device> <benchmark file>"
+	exit 1
+fi
+
+if ! command -v $OPENRABBITFU &> /dev/null; then
+	echo "$OPENRABBITFU not found!";
+	exit 1
+fi
+
+# Ensure that we don't get any leftover results from an old benchmark still running on the device
+while read -r line; do
+	if [ "$line" == "Hello, World!" ]; then
+		break
+	fi
+done < <($OPENRABBITFU --run --serialout hello-r4k/hello.ihx $1)
+
+# Load benchmark onto the board
+while read -r line; do
+	# Whetstone result
+	if [[ "$line" == "Loops:"* ]]; then
+		break
+	fi
+	# Dhrystone result
+	if [[ "$line" == "Dhrystones per Second"* ]]; then
+		break
+	fi
+	# Coremark result
+	if [[ "$line" == "Total ticks"* ]]; then
+		break
+	fi
+	# stdcbench result
+	if [[ "$line" == "stdcbench final score"* ]]; then
+		break
+	fi
+done < <($OPENRABBITFU --run --serialout "$2" $1)
+echo $line
+

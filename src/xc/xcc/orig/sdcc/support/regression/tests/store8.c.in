@@ -1,0 +1,49 @@
+/* store8.c.in
+   endian-aware store functions from stdbit.h
+   typewidth: 16, 32, 64
+ */
+
+#include <testfwk.h>
+
+#include <stdint.h>
+
+#if __STDC_VERSION__ > 202311L || defined(__SDCC)
+#include <stdbit.h>
+#endif
+
+#define STYPE int_least ## {typewidth} ## _t
+#define STORE8LEU stdc_store8_leu ## {typewidth}
+#define STORE8BEU stdc_store8_beu ## {typewidth}
+#define STORE8LEUA stdc_store8_leu_aligned ## {typewidth}
+#define STORE8BEUA stdc_store8_beu_aligned ## {typewidth}
+#define STORE8LES stdc_store8_leu ## {typewidth}
+#define STORE8BES stdc_store8_beu ## {typewidth}
+#define STORE8LESA stdc_store8_leu_aligned ## {typewidth}
+#define STORE8BESA stdc_store8_beu_aligned ## {typewidth}
+#define UVALUE (0x55 | (0xaaull << ((sizeof(a) - 1) * 8)))
+
+unsigned char a[{typewidth} / 8];
+
+void testStore8(void)
+{
+#if __STDC_VERSION_STDBIT_H__ > 202311L || defined(__SDCC)
+	STORE8LEU(UVALUE, a);
+	ASSERT(a[0] == 0x55 && a[sizeof(a) - 1] == 0xaa);
+	STORE8BEU(UVALUE, a);
+	ASSERT(a[0] == 0xaa && a[sizeof(a) - 1] == 0x55);
+	STORE8LEUA(UVALUE, a);
+	ASSERT(a[0] == 0x55 && a[sizeof(a) - 1] == 0xaa);
+	STORE8BEUA(UVALUE, a);
+	ASSERT(a[0] == 0xaa && a[sizeof(a) - 1] == 0x55);
+
+	STORE8LES((STYPE)UVALUE, a);
+	ASSERT(a[0] == 0x55 && a[sizeof(a) - 1] == 0xaa);
+	STORE8BES((STYPE)UVALUE, a);
+	ASSERT(a[0] == 0xaa && a[sizeof(a) - 1] == 0x55);
+	STORE8LESA((STYPE)UVALUE, a);
+	ASSERT(a[0] == 0x55 && a[sizeof(a) - 1] == 0xaa);
+	STORE8BESA((STYPE)UVALUE, a);
+	ASSERT(a[0] == 0xaa && a[sizeof(a) - 1] == 0x55);
+#endif
+}
+

@@ -1,0 +1,349 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.6 Pragmas</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node168.html">
+<LINK REL="previous" HREF="node166.html">
+<LINK REL="next" HREF="node168.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node168.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node166.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1988"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1990"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node168.html">4.9.7 Header Files and Libraries</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node166.html">4.9.5 Directories</A>
+ &nbsp; <B>  <A ID="tex2html1989"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1991"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00596000000000000000"></A><A ID="subsec:PIC16_Pragmas"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">6</SPAN> Pragmas
+</H2>
+
+<P>
+The PIC16<A ID="3376"></A> port currently supports the following pragmas:
+<DL>
+<DT><STRONG>stack<A ID="3378"></A></STRONG></DT>
+<DD>This
+forces the code generator to initialize the stack &amp; frame pointers
+at a specific address. This is an ad hoc solution for cases where
+no STACK directive is available in the linker script or gplink is
+not instructed to create a stack section.
+<BR>
+The stack pragma should be used only once in a project. Multiple pragmas
+may result in indeterminate behaviour of the program.<A ID="tex2html69"
+  HREF="footnode.html#foot3379"><SUP><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">2</SPAN></SUP></A>
+<BR>
+The format is as follows:
+</DD>
+</DL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#pragma&nbsp;stack&nbsp;bottom_address&nbsp;[stack_size]&nbsp;
+<BR></DD>
+</DL><SPAN  CLASS="textit">bottom_address</SPAN> is the lower bound of the stack section. The
+stack pointer initially will point at address (bottom_address+stack_size-1).
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>Example:
+
+<P>
+/*&nbsp;initializes&nbsp;stack&nbsp;of&nbsp;100&nbsp;bytes&nbsp;at&nbsp;RAM&nbsp;address&nbsp;0x200&nbsp;*/
+
+<P>
+#pragma&nbsp;stack&nbsp;0x200&nbsp;100
+</DD>
+</DL>If the stack_size field is omitted then a stack is created with the
+default size of 64. This size might be enough for most programs, but
+its not enough for operations with deep function nesting or excessive
+stack usage.
+<DL>
+<DT><STRONG>code<A ID="3391"></A></STRONG></DT>
+<DD>Force a
+function to a static FLASH address.
+</DD>
+</DL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>Example:
+
+<P>
+/*&nbsp;place&nbsp;function&nbsp;test_func&nbsp;at&nbsp;0x4000&nbsp;*/
+
+<P>
+#pragma&nbsp;code&nbsp;test_func&nbsp;0x4000
+
+<P>
+</DD>
+
+<DT><STRONG>library<A ID="3398"></A></STRONG></DT>
+<DD>instructs
+the linker to use a library module.
+<BR>
+Usage:
+</DD>
+</DL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#pragma&nbsp;library&nbsp;module_name
+</DD>
+</DL><SPAN  CLASS="textit">module_name</SPAN> can be any library or object file (including its
+path). Note that there are four reserved keywords which have special
+meaning. These are:
+
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Keyword</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>Description</TD>
+<TD CLASS="LEFT">Module to link</TD>
+</TR>
+<TR><TH CLASS="CENTER"><SPAN  CLASS="textbf">ignore</SPAN></TH>
+<TD CLASS="LEFT TOP"  WIDTH=0>ignore all library pragmas</TD>
+<TD CLASS="LEFT"><SPAN  CLASS="textit">(none)</SPAN></TD>
+</TR>
+<TR><TH CLASS="CENTER"><SPAN  CLASS="textbf">c</SPAN></TH>
+<TD CLASS="LEFT TOP"  WIDTH=0>link the C library</TD>
+<TD CLASS="LEFT"><SPAN  CLASS="textit">libc18f</SPAN>.lib</TD>
+</TR>
+<TR><TH CLASS="CENTER"><SPAN  CLASS="textbf">math</SPAN></TH>
+<TD CLASS="LEFT TOP"  WIDTH=0>link the Math libarary</TD>
+<TD CLASS="LEFT"><SPAN  CLASS="textit">libm18f</SPAN>.lib</TD>
+</TR>
+<TR><TH CLASS="CENTER"><SPAN  CLASS="textbf">io</SPAN></TH>
+<TD CLASS="LEFT TOP"  WIDTH=0>link the I/O library</TD>
+<TD CLASS="LEFT"><SPAN  CLASS="textit">libio18f*</SPAN>.lib</TD>
+</TR>
+<TR><TH CLASS="CENTER"><SPAN  CLASS="textbf">debug</SPAN></TH>
+<TD CLASS="LEFT TOP"  WIDTH=0>link the debug library</TD>
+<TD CLASS="LEFT"><SPAN  CLASS="textit">libdebug</SPAN>.lib</TD>
+</TR>
+</TABLE>
+<BR>* is the device number, i.e. 452 for PIC18F452 MCU.
+</DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+This feature allows for linking with specific libraries
+without having to explicit name them in the command line. Note that
+the <SMALL>IGNORE</SMALL> keyword will reject all modules specified by the
+library pragma.
+<DL>
+<DT><STRONG>udata<A ID="3421"></A></STRONG></DT>
+<DD>The pragma
+udata instructs the compiler to emit code so that linker will place
+a variable at a specific memory bank.
+</DD>
+</DL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>Example:
+
+<P>
+/*&nbsp;places&nbsp;variable&nbsp;foo&nbsp;at&nbsp;bank2&nbsp;*/
+
+<P>
+#pragma&nbsp;udata&nbsp;bank2&nbsp;foo
+
+<P>
+char&nbsp;foo;
+</DD>
+</DL>In order for this pragma to work extra SECTION directives should be
+added in the .lkr script. In the following example a sample .lkr file
+is shown:
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD><P>
+//&nbsp;Sample&nbsp;linker&nbsp;script&nbsp;for&nbsp;the&nbsp;PIC18F452&nbsp;processor
+
+<P>
+LIBPATH&nbsp;.
+
+<P>
+CODEPAGE&nbsp;&nbsp;&nbsp;NAME=vectors&nbsp;&nbsp;&nbsp;&nbsp;START=0x0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x29&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PROTECTED
+
+<P>
+CODEPAGE&nbsp;&nbsp;&nbsp;NAME=page&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x2A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x7FFF
+
+<P>
+CODEPAGE&nbsp;&nbsp;&nbsp;NAME=idlocs&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x200000&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x200007&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PROTECTED
+
+<P>
+CODEPAGE&nbsp;&nbsp;&nbsp;NAME=config&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x300000&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x30000D&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PROTECTED
+
+<P>
+CODEPAGE&nbsp;&nbsp;&nbsp;NAME=devid&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x3FFFFE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x3FFFFF&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PROTECTED
+
+<P>
+CODEPAGE&nbsp;&nbsp;&nbsp;NAME=eedata&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0xF00000&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0xF000FF&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PROTECTED
+
+<P>
+ACCESSBANK&nbsp;NAME=accessram&nbsp;&nbsp;START=0x0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x7F
+
+<P>
+DATABANK&nbsp;&nbsp;&nbsp;NAME=gpr0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x80&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0xFF
+
+<P>
+DATABANK&nbsp;&nbsp;&nbsp;NAME=gpr1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x100&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x1FF
+
+<P>
+DATABANK&nbsp;&nbsp;&nbsp;NAME=gpr2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x200&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x2FF
+
+<P>
+DATABANK&nbsp;&nbsp;&nbsp;NAME=gpr3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x300&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x3FF
+
+<P>
+DATABANK&nbsp;&nbsp;&nbsp;NAME=gpr4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x400&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x4FF
+
+<P>
+DATABANK&nbsp;&nbsp;&nbsp;NAME=gpr5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;START=0x500&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0x5FF
+
+<P>
+ACCESSBANK&nbsp;NAME=accesssfr&nbsp;&nbsp;START=0xF80&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;END=0xFFF&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PROTECTED
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=CONFIG&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ROM=config
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=bank0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM=gpr0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;these&nbsp;SECTION&nbsp;directives
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=bank1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM=gpr1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;should&nbsp;be&nbsp;added&nbsp;to&nbsp;link
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=bank2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM=gpr2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;section&nbsp;name&nbsp;'bank?'&nbsp;with
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=bank3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM=gpr3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#&nbsp;a&nbsp;specific&nbsp;DATABANK&nbsp;name
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=bank4&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM=gpr4
+
+<P>
+SECTION&nbsp;&nbsp;&nbsp;&nbsp;NAME=bank5&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RAM=gpr5
+</DD>
+</DL>The linker will recognise the section name set in the pragma statement
+and will position the variable at the memory bank set with the RAM
+field at the SECTION line in the linker script file.
+<DL>
+<DT><STRONG>config<A ID="3430"></A></STRONG></DT>
+<DD>The
+pragma config instructs the compiler to emit config directive.
+<BR>
+The format is as follows:
+</DD>
+</DL>
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#pragma&nbsp;config&nbsp;setting=value&nbsp;[,&nbsp;setting=value]
+
+<P>
+</DD>
+</DL>Multiple settings may be defined on a single line, separated by commas.
+Settings for a single configuration byte may also be defined on separate
+lines. 
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>Example:
+
+<P>
+#pragma&nbsp;config&nbsp;CP0=OFF,OSCS=ON,OSC=LP,BOR=ON,BORV=25,WDT=ON,WDTPS=128,CCP2MUX=ON
+
+<P>
+#pragma&nbsp;config&nbsp;STVR=ON&nbsp;
+</DD>
+</DL>
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node168.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node166.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1988"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1990"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node168.html">4.9.7 Header Files and Libraries</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node166.html">4.9.5 Directories</A>
+ &nbsp; <B>  <A ID="tex2html1989"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1991"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

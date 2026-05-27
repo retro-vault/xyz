@@ -1,0 +1,26 @@
+# A Makefile for SDCC targeting the RCM3319 board. Requires SDCC 4.0.4 or later. Earlier SDCC can be used with a crt0 from SDCC 4.0.4 (linking it explicitly and specifiying --no-std-crt0).
+
+CC = $(SDCC) $(SDCCFLAGS)
+SOURCES = c90base.c c90base-data.c c90base-huffman-recursive.c c90base-isort.c c90float.c c90base-huffman_tree.c stdcbench.c c90base-compression.c c90base-huffman-iterative.c c90base-immul.c c90double.c c90lib.c c90lib-lnlc.c c90lib-peep.c c90lib-peep-stm8.c c90lib-htab.c portme.c
+OBJECTS = $(SOURCES:.c=.rel)
+
+.PHONY: all clean
+
+all: stdcbench.ihx
+
+stdcbench.ihx: $(OBJECTS)
+	$(CC) *.rel -o stdcbench.ihx
+	cp stdcbench.ihx image.ihx
+
+%.rel: %.c *.h portme.h
+	$(CC) -c $<
+
+portme.c: examples/portme.c.SDCC-R3KA
+	cp examples/portme.c.SDCC-R3KA portme.c
+
+portme.h: examples/portme.h.SDCC-R3KA
+	cp examples/portme.h.SDCC-R3KA portme.h
+
+clean:
+	rm -f *.asm *.lst *.rel *.sym *.rst *.map *.lk *.cdb portme.c portme.h
+
