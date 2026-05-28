@@ -26,6 +26,9 @@ Host-side command-line programs:
 - `mdr` compatibility alias for `microdrive`
 - `microdrive` creates and edits `.mdr` cartridge images
 - `serial` transfers data over a serial link
+- `xas` assembler for Z80 build products
+- `xar` archive tool for `.rel` libraries
+- `xcc` C compiler for Z80 targets
 - `xdbg` debugger frontend
 - `xdbg-z80` local Z80 debug target
 - `xlink` linker for Z80 build products
