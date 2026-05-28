@@ -1,0 +1,1476 @@
+// codegen.cpp
+//
+// Two-pass Z80 code generator.
+//
+// Pass 1: scan all statements, assign section offsets to labels, compute
+//         instruction sizes.  Expressions with forward references are left
+//         as "unknown" but their size is still determined.
+//
+// Pass 2: emit bytes to the emitter, resolve all expressions, patch
+//         backward-known values and emit relocation records for symbols
+//         that are still external after pass 1.
+//
+// Z80 register codes used throughout:
+//   B=0  C=1  D=2  E=3  H=4  L=5  (HL)=6  A=7
+//   BC=0 DE=1 HL=2 SP=3
+//   BC=0 DE=1 HL=2 AF=3   (for PUSH/POP)
+//
+// MIT License (see: LICENSE)
+// copyright (C) 2026 tomaz stih
+//
+#include <algorithm>
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include <xas/errors.hpp>
+#include <xas/cli.hpp>
+#include <xas/frontend/ast.hpp>
+#include <xas/backend/emitter.hpp>
+#include <xbfd/types.hpp>
+
+namespace xas {
+
+    // =========================================================================
+    // Register encoding helpers
+    // =========================================================================
+
+    namespace {
+
+        // 8-bit register code (B=0..A=7, -1 if not a simple reg).
+        static int reg8(const std::string& r)
+        {
+            if (r == "B") return 0;
+            if (r == "C") return 1;
+            if (r == "D") return 2;
+            if (r == "E") return 3;
+            if (r == "H") return 4;
+            if (r == "L") return 5;
+            if (r == "A") return 7;
+            return -1;
+        }
+
+        // 16-bit register pair code for LD/INC/DEC/ADD (BC=0 DE=1 HL=2 SP=3).
+        static int reg16_sp(const std::string& r)
+        {
+            if (r == "BC") return 0;
+            if (r == "DE") return 1;
+            if (r == "HL") return 2;
+            if (r == "SP") return 3;
+            return -1;
+        }
+
+        // 16-bit register pair code for PUSH/POP (BC=0 DE=1 HL=2 AF=3).
+        static int reg16_af(const std::string& r)
+        {
+            if (r == "BC") return 0;
+            if (r == "DE") return 1;
+            if (r == "HL") return 2;
+            if (r == "AF") return 3;
+            return -1;
+        }
+
+        // Condition code (NZ=0 Z=1 NC=2 C=3 PO=4 PE=5 P=6 M=7).
+        static int cond_code(const std::string& c)
+        {
+            if (c == "NZ") return 0;
+            if (c == "Z")  return 1;
+            if (c == "NC") return 2;
+            if (c == "C")  return 3;
+            if (c == "PO") return 4;
+            if (c == "PE") return 5;
+            if (c == "P")  return 6;
+            if (c == "M")  return 7;
+            return -1;
+        }
+
+        // Conditions valid for JR (subset: NZ=0, Z=1, NC=2, C=3).
+        static int jr_cond(const std::string& c)
+        {
+            if (c == "NZ") return 0;
+            if (c == "Z")  return 1;
+            if (c == "NC") return 2;
+            if (c == "C")  return 3;
+            return -1;
+        }
+
+    } // anonymous namespace
+
+    // =========================================================================
+    // Symbol table
+    // =========================================================================
+
+    struct sym_entry {
+        std::string section_name;
+        uint32_t    value    = 0;
+        bool        defined  = false;
+        bool        global   = false;
+        bool        external = false; // referenced but not defined
+    };
+
+    using sym_table = std::map<std::string, sym_entry>;
+
+    // =========================================================================
+    // Expression evaluator
+    // =========================================================================
+
+    static std::optional<int64_t> eval_expr(const expr& e,
+                                             const sym_table& syms,
+                                             uint32_t cur_addr)
+    {
+        switch (e.kind) {
+            case expr_kind::integer:
+                return e.int_val;
+
+            case expr_kind::current_addr:
+                return static_cast<int64_t>(cur_addr);
+
+            case expr_kind::symbol: {
+                auto it = syms.find(e.name);
+                if (it == syms.end() || !it->second.defined)
+                    return std::nullopt;
+                return static_cast<int64_t>(it->second.value);
+            }
+
+            case expr_kind::unary: {
+                auto v = eval_expr(*e.lhs, syms, cur_addr);
+                if (!v) return std::nullopt;
+                if (e.op == '-') return -*v;
+                if (e.op == '~') return ~*v;
+                return std::nullopt;
+            }
+
+            case expr_kind::binary: {
+                auto lv = eval_expr(*e.lhs, syms, cur_addr);
+                auto rv = eval_expr(*e.rhs, syms, cur_addr);
+                if (!lv || !rv) return std::nullopt;
+                switch (e.op) {
+                    case '+': return *lv + *rv;
+                    case '-': return *lv - *rv;
+                    case '*': return *lv * *rv;
+                    case '/': return *rv ? *lv / *rv : 0;
+                    case '%': return *rv ? *lv % *rv : 0;
+                    case '&': return *lv & *rv;
+                    case '|': return *lv | *rv;
+                    case '^': return *lv ^ *rv;
+                    case '<': return *lv << *rv;
+                    case '>': return *lv >> *rv;
+                    default:  return std::nullopt;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Returns true if the expression references a symbol that is not locally
+    // defined, meaning a relocation will be needed.
+    static bool needs_reloc(const expr& e, const sym_table& syms,
+                             const std::string& cur_section)
+    {
+        switch (e.kind) {
+            case expr_kind::integer:
+            case expr_kind::current_addr:
+                return false;
+            case expr_kind::symbol: {
+                auto it = syms.find(e.name);
+                if (it == syms.end()) return true;       // undefined
+                if (!it->second.defined) return true;    // external ref
+                // cross-section reference needs a reloc so the linker
+                // can add the target section's final base address.
+                return it->second.section_name != cur_section;
+            }
+            case expr_kind::unary:
+                return needs_reloc(*e.lhs, syms, cur_section);
+            case expr_kind::binary:
+                return needs_reloc(*e.lhs, syms, cur_section)
+                    || needs_reloc(*e.rhs, syms, cur_section);
+        }
+        return false;
+    }
+
+    static std::string reloc_symbol_name(const expr& e)
+    {
+        if (e.kind == expr_kind::symbol) return e.name;
+        if (e.kind == expr_kind::unary) return reloc_symbol_name(*e.lhs);
+        if (e.kind == expr_kind::binary) {
+            std::string n = reloc_symbol_name(*e.lhs);
+            if (!n.empty()) return n;
+            return reloc_symbol_name(*e.rhs);
+        }
+        return {};
+    }
+
+    // =========================================================================
+    // codegen class
+    // =========================================================================
+
+    struct codegen {
+        emitter&   emit_;
+        sym_table  syms_;
+        std::string cur_section_;
+        uint32_t   cur_offset_ = 0;
+        int        pass_       = 1;
+        std::string src_file_;
+
+        codegen(emitter& e, const std::string& src)
+            : emit_(e), src_file_(src) {}
+
+        // -----------------------------------------------------------------------
+        // Emit helpers (only called in pass 2)
+        // -----------------------------------------------------------------------
+
+        void emit_byte_val(uint8_t v)
+        {
+            if (pass_ == 2) emit_.emit_byte(v);
+            ++cur_offset_;
+        }
+
+        void emit_word_val(uint16_t v)
+        {
+            if (pass_ == 2) emit_.emit_word(v);
+            cur_offset_ += 2;
+        }
+
+        // Emit a byte that may need a relocation.
+        void emit_byte_expr(const expr& e, int line)
+        {
+            auto v = eval_expr(e, syms_, cur_offset_);
+            if (pass_ == 2) {
+                if (needs_reloc(e, syms_, cur_section_)) {
+                    emit_.emit_reloc(reloc_symbol_name(e),
+                                     bfd::reloc_type::z80_8, true);
+                    emit_.emit_byte(0);
+                } else {
+                    emit_.emit_byte(v ? static_cast<uint8_t>(*v) : 0);
+                }
+            }
+            ++cur_offset_;
+        }
+
+        // Emit a 16-bit word that may need a relocation.
+        void emit_word_expr(const expr& e, int line)
+        {
+            auto v = eval_expr(e, syms_, cur_offset_);
+            if (pass_ == 2) {
+                if (needs_reloc(e, syms_, cur_section_)) {
+                    emit_.emit_reloc(reloc_symbol_name(e),
+                                     bfd::reloc_type::z80_16, true);
+                    emit_.emit_word(0);
+                } else {
+                    emit_.emit_word(v ? static_cast<uint16_t>(*v) : 0);
+                }
+            }
+            cur_offset_ += 2;
+        }
+
+        // Emit an 8-bit PC-relative offset (for JR / DJNZ).
+        void emit_pcrel8(const expr& e, int line)
+        {
+            auto v = eval_expr(e, syms_, cur_offset_);
+            if (pass_ == 2) {
+                if (needs_reloc(e, syms_, cur_section_)) {
+                    emit_.emit_reloc(reloc_symbol_name(e),
+                                     bfd::reloc_type::z80_pc8, true);
+                    emit_.emit_byte(0);
+                } else {
+                    // cur_offset_ is after the opcode byte but before the offset.
+                    int32_t off = v ? static_cast<int32_t>(*v)
+                                      - static_cast<int32_t>(cur_offset_ + 1)
+                                    : 0;
+                    if (off < -128 || off > 127)
+                        throw codegen_error(src_file_, line,
+                            "relative jump out of range");
+                    emit_.emit_byte(static_cast<uint8_t>(off));
+                }
+            }
+            ++cur_offset_;
+        }
+
+        // -----------------------------------------------------------------------
+        // Instruction size helpers (for pass 1)
+        // -----------------------------------------------------------------------
+
+        bool is_ix_iy(const operand& op)
+        {
+            return op.kind == operand_kind::ind_ix_off
+                || op.kind == operand_kind::ind_iy_off
+                || (op.kind == operand_kind::reg
+                    && (op.reg_name == "IX" || op.reg_name == "IY"
+                        || op.reg_name == "IXH" || op.reg_name == "IXL"
+                        || op.reg_name == "IYH" || op.reg_name == "IYL"));
+        }
+
+        // -----------------------------------------------------------------------
+        // Instruction emitters
+        // -----------------------------------------------------------------------
+
+        void do_ld(const stmt& s, int line)
+        {
+            if (s.operands.size() != 2)
+                throw codegen_error(src_file_, line, "LD requires 2 operands");
+
+            const operand& dst = s.operands[0];
+            const operand& src = s.operands[1];
+
+            // LD r, r'
+            if (dst.kind == operand_kind::reg && src.kind == operand_kind::reg) {
+                int d = reg8(dst.reg_name);
+                int s8 = reg8(src.reg_name);
+                if (d >= 0 && s8 >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(0x40 | (d << 3) | s8));
+                    return;
+                }
+                // LD dd, ss (16-bit register to register — no direct opcode)
+                // LD SP, HL
+                if (dst.reg_name == "SP" && src.reg_name == "HL") {
+                    emit_byte_val(0xF9); return;
+                }
+                if (dst.reg_name == "SP" && src.reg_name == "IX") {
+                    emit_byte_val(0xDD); emit_byte_val(0xF9); return;
+                }
+                if (dst.reg_name == "SP" && src.reg_name == "IY") {
+                    emit_byte_val(0xFD); emit_byte_val(0xF9); return;
+                }
+                // LD I, A / LD R, A / LD A, I / LD A, R
+                if (dst.reg_name == "I" && src.reg_name == "A") {
+                    emit_byte_val(0xED); emit_byte_val(0x47); return;
+                }
+                if (dst.reg_name == "R" && src.reg_name == "A") {
+                    emit_byte_val(0xED); emit_byte_val(0x4F); return;
+                }
+                if (dst.reg_name == "A" && src.reg_name == "I") {
+                    emit_byte_val(0xED); emit_byte_val(0x57); return;
+                }
+                if (dst.reg_name == "A" && src.reg_name == "R") {
+                    emit_byte_val(0xED); emit_byte_val(0x5F); return;
+                }
+            }
+
+            // LD r, n
+            if (dst.kind == operand_kind::reg && src.kind == operand_kind::imm) {
+                int d = reg8(dst.reg_name);
+                if (d >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(0x06 | (d << 3)));
+                    emit_byte_expr(*src.value, line);
+                    return;
+                }
+                if (dst.reg_name == "BC" || dst.reg_name == "DE"
+                    || dst.reg_name == "HL" || dst.reg_name == "SP") {
+                    int rr = reg16_sp(dst.reg_name);
+                    emit_byte_val(static_cast<uint8_t>(0x01 | (rr << 4)));
+                    emit_word_expr(*src.value, line);
+                    return;
+                }
+                if (dst.reg_name == "IX") {
+                    emit_byte_val(0xDD);
+                    emit_byte_val(0x21);
+                    emit_word_expr(*src.value, line);
+                    return;
+                }
+                if (dst.reg_name == "IY") {
+                    emit_byte_val(0xFD);
+                    emit_byte_val(0x21);
+                    emit_word_expr(*src.value, line);
+                    return;
+                }
+            }
+
+            // LD r, (HL)
+            if (dst.kind == operand_kind::reg
+                && src.kind == operand_kind::ind_reg
+                && src.reg_name == "HL") {
+                int d = reg8(dst.reg_name);
+                if (d >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(0x46 | (d << 3)));
+                    return;
+                }
+            }
+
+            // LD r, (IX+d) / LD r, (IY+d)
+            if (dst.kind == operand_kind::reg
+                && (src.kind == operand_kind::ind_ix_off
+                    || src.kind == operand_kind::ind_iy_off)) {
+                int d = reg8(dst.reg_name);
+                if (d >= 0) {
+                    uint8_t pfx = (src.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                    emit_byte_val(pfx);
+                    emit_byte_val(static_cast<uint8_t>(0x46 | (d << 3)));
+                    emit_byte_expr(*src.value, line);
+                    return;
+                }
+            }
+
+            // LD (HL), r
+            if (dst.kind == operand_kind::ind_reg
+                && dst.reg_name == "HL"
+                && src.kind == operand_kind::reg) {
+                int s8 = reg8(src.reg_name);
+                if (s8 >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(0x70 | s8));
+                    return;
+                }
+            }
+
+            // LD (IX+d), r / LD (IY+d), r
+            if ((dst.kind == operand_kind::ind_ix_off
+                 || dst.kind == operand_kind::ind_iy_off)
+                && src.kind == operand_kind::reg) {
+                int s8 = reg8(src.reg_name);
+                if (s8 >= 0) {
+                    uint8_t pfx = (dst.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                    emit_byte_val(pfx);
+                    emit_byte_val(static_cast<uint8_t>(0x70 | s8));
+                    emit_byte_expr(*dst.value, line);
+                    return;
+                }
+            }
+
+            // LD (HL), n
+            if (dst.kind == operand_kind::ind_reg
+                && dst.reg_name == "HL"
+                && src.kind == operand_kind::imm) {
+                emit_byte_val(0x36);
+                emit_byte_expr(*src.value, line);
+                return;
+            }
+
+            // LD (IX+d), n / LD (IY+d), n
+            if ((dst.kind == operand_kind::ind_ix_off
+                 || dst.kind == operand_kind::ind_iy_off)
+                && src.kind == operand_kind::imm) {
+                uint8_t pfx = (dst.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                emit_byte_val(pfx); emit_byte_val(0x36);
+                emit_byte_expr(*dst.value, line);
+                emit_byte_expr(*src.value, line);
+                return;
+            }
+
+            // LD A, (BC) / LD A, (DE)
+            if (dst.kind == operand_kind::reg && dst.reg_name == "A"
+                && src.kind == operand_kind::ind_reg) {
+                if (src.reg_name == "BC") { emit_byte_val(0x0A); return; }
+                if (src.reg_name == "DE") { emit_byte_val(0x1A); return; }
+            }
+
+            // LD (BC), A / LD (DE), A
+            if (dst.kind == operand_kind::ind_reg
+                && src.kind == operand_kind::reg && src.reg_name == "A") {
+                if (dst.reg_name == "BC") { emit_byte_val(0x02); return; }
+                if (dst.reg_name == "DE") { emit_byte_val(0x12); return; }
+            }
+
+            // LD A, (nn)
+            if (dst.kind == operand_kind::reg && dst.reg_name == "A"
+                && src.kind == operand_kind::ind_expr) {
+                emit_byte_val(0x3A);
+                emit_word_expr(*src.value, line);
+                return;
+            }
+
+            // LD (nn), A
+            if (dst.kind == operand_kind::ind_expr
+                && src.kind == operand_kind::reg && src.reg_name == "A") {
+                emit_byte_val(0x32);
+                emit_word_expr(*dst.value, line);
+                return;
+            }
+
+            // LD HL, (nn)
+            if (dst.kind == operand_kind::reg && dst.reg_name == "HL"
+                && src.kind == operand_kind::ind_expr) {
+                emit_byte_val(0x2A);
+                emit_word_expr(*src.value, line);
+                return;
+            }
+
+            // LD (nn), HL
+            if (dst.kind == operand_kind::ind_expr
+                && src.kind == operand_kind::reg && src.reg_name == "HL") {
+                emit_byte_val(0x22);
+                emit_word_expr(*dst.value, line);
+                return;
+            }
+
+            // LD dd, (nn) — ED prefix
+            if (dst.kind == operand_kind::reg
+                && src.kind == operand_kind::ind_expr) {
+                int rr = reg16_sp(dst.reg_name);
+                if (rr >= 0 && dst.reg_name != "HL") {
+                    emit_byte_val(0xED);
+                    emit_byte_val(static_cast<uint8_t>(0x4B | (rr << 4)));
+                    emit_word_expr(*src.value, line);
+                    return;
+                }
+                if (dst.reg_name == "IX") {
+                    emit_byte_val(0xDD); emit_byte_val(0x2A);
+                    emit_word_expr(*src.value, line); return;
+                }
+                if (dst.reg_name == "IY") {
+                    emit_byte_val(0xFD); emit_byte_val(0x2A);
+                    emit_word_expr(*src.value, line); return;
+                }
+            }
+
+            // LD (nn), dd — ED prefix
+            if (dst.kind == operand_kind::ind_expr
+                && src.kind == operand_kind::reg) {
+                int rr = reg16_sp(src.reg_name);
+                if (rr >= 0 && src.reg_name != "HL") {
+                    emit_byte_val(0xED);
+                    emit_byte_val(static_cast<uint8_t>(0x43 | (rr << 4)));
+                    emit_word_expr(*dst.value, line);
+                    return;
+                }
+                if (src.reg_name == "IX") {
+                    emit_byte_val(0xDD); emit_byte_val(0x22);
+                    emit_word_expr(*dst.value, line); return;
+                }
+                if (src.reg_name == "IY") {
+                    emit_byte_val(0xFD); emit_byte_val(0x22);
+                    emit_word_expr(*dst.value, line); return;
+                }
+            }
+
+            throw codegen_error(src_file_, line, "unrecognised LD form");
+        }
+
+        void do_alu(const stmt& s, int line)
+        {
+            // ALU op codes: ADD=0 ADC=1 SUB=2 SBC=3 AND=4 XOR=5 OR=6 CP=7
+            static const char* NAMES[] = {
+                "ADD","ADC","SUB","SBC","AND","XOR","OR","CP"
+            };
+            int op_idx = -1;
+            for (int i = 0; i < 8; ++i)
+                if (s.mnemonic == NAMES[i]) { op_idx = i; break; }
+            if (op_idx < 0) return;
+
+            bool has_a = (s.operands.size() == 2
+                          && s.operands[0].kind == operand_kind::reg
+                          && s.operands[0].reg_name == "A");
+
+            const operand& src = has_a ? s.operands[1] : s.operands[0];
+
+            // ADD HL, ss / ADC HL, ss / SBC HL, ss
+            if ((s.mnemonic == "ADD" || s.mnemonic == "ADC"
+                 || s.mnemonic == "SBC") && s.operands.size() == 2) {
+                const operand& d = s.operands[0];
+                const operand& r = s.operands[1];
+                if (d.kind == operand_kind::reg && r.kind == operand_kind::reg) {
+                    int rr = reg16_sp(r.reg_name);
+                    if (d.reg_name == "HL" && rr >= 0) {
+                        if (s.mnemonic == "ADD") {
+                            emit_byte_val(static_cast<uint8_t>(0x09 | (rr << 4)));
+                        } else {
+                            uint8_t ed_op = (s.mnemonic == "ADC") ? 0x4A : 0x42;
+                            emit_byte_val(0xED);
+                            emit_byte_val(static_cast<uint8_t>(ed_op | (rr << 4)));
+                        }
+                        return;
+                    }
+                    if (d.reg_name == "IX") {
+                        int rr2 = reg16_sp(r.reg_name);
+                        if (rr2 < 0 && r.reg_name == "IX") rr2 = 2; // IX self-add = HL slot
+                        if (rr2 >= 0 && s.mnemonic == "ADD") {
+                            emit_byte_val(0xDD);
+                            emit_byte_val(static_cast<uint8_t>(0x09 | (rr2 << 4)));
+                            return;
+                        }
+                    }
+                    if (d.reg_name == "IY") {
+                        int rr2 = reg16_sp(r.reg_name);
+                        if (rr2 < 0 && r.reg_name == "IY") rr2 = 2; // IY self-add = HL slot
+                        if (rr2 >= 0 && s.mnemonic == "ADD") {
+                            emit_byte_val(0xFD);
+                            emit_byte_val(static_cast<uint8_t>(0x09 | (rr2 << 4)));
+                            return;
+                        }
+                    }
+                }
+            }
+
+            uint8_t base = static_cast<uint8_t>(0x80 | (op_idx << 3));
+            uint8_t imm_op = static_cast<uint8_t>(0xC6 | (op_idx << 3));
+
+            if (src.kind == operand_kind::reg) {
+                int s8 = reg8(src.reg_name);
+                if (s8 >= 0) { emit_byte_val(base | s8); return; }
+            }
+            if (src.kind == operand_kind::ind_reg && src.reg_name == "HL") {
+                emit_byte_val(base | 6); return;
+            }
+            if (src.kind == operand_kind::ind_ix_off
+                || src.kind == operand_kind::ind_iy_off) {
+                uint8_t pfx = (src.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                emit_byte_val(pfx); emit_byte_val(base | 6);
+                emit_byte_expr(*src.value, line); return;
+            }
+            if (src.kind == operand_kind::imm) {
+                emit_byte_val(imm_op);
+                emit_byte_expr(*src.value, line); return;
+            }
+            throw codegen_error(src_file_, line,
+                "unrecognised ALU form: " + s.mnemonic);
+        }
+
+        void do_inc_dec(const stmt& s, int line)
+        {
+            bool is_inc = (s.mnemonic == "INC");
+            if (s.operands.size() != 1)
+                throw codegen_error(src_file_, line,
+                    s.mnemonic + " requires 1 operand");
+            const operand& op = s.operands[0];
+            if (op.kind == operand_kind::reg) {
+                int r8 = reg8(op.reg_name);
+                if (r8 >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(
+                        is_inc ? (0x04 | (r8 << 3)) : (0x05 | (r8 << 3))));
+                    return;
+                }
+                int r16 = reg16_sp(op.reg_name);
+                if (r16 >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(
+                        is_inc ? (0x03 | (r16 << 4)) : (0x0B | (r16 << 4))));
+                    return;
+                }
+                if (op.reg_name == "IX") {
+                    emit_byte_val(0xDD);
+                    emit_byte_val(is_inc ? 0x23 : 0x2B);
+                    return;
+                }
+                if (op.reg_name == "IY") {
+                    emit_byte_val(0xFD);
+                    emit_byte_val(is_inc ? 0x23 : 0x2B);
+                    return;
+                }
+            }
+            if (op.kind == operand_kind::ind_reg && op.reg_name == "HL") {
+                emit_byte_val(is_inc ? 0x34 : 0x35); return;
+            }
+            if (op.kind == operand_kind::ind_ix_off
+                || op.kind == operand_kind::ind_iy_off) {
+                uint8_t pfx = (op.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                emit_byte_val(pfx);
+                emit_byte_val(is_inc ? 0x34 : 0x35);
+                emit_byte_expr(*op.value, line);
+                return;
+            }
+            throw codegen_error(src_file_, line,
+                "unrecognised " + s.mnemonic + " form");
+        }
+
+        void do_rotate(const stmt& s, int line)
+        {
+            // RLCA RRCA RLA RRA — single byte, no CB prefix
+            if (s.mnemonic == "RLCA") { emit_byte_val(0x07); return; }
+            if (s.mnemonic == "RRCA") { emit_byte_val(0x0F); return; }
+            if (s.mnemonic == "RLA")  { emit_byte_val(0x17); return; }
+            if (s.mnemonic == "RRA")  { emit_byte_val(0x1F); return; }
+
+            // CB-prefix rotates: RLC RRC RL RR SLA SRA SRL SLL
+            static const char* ROT_NAMES[] = {
+                "RLC","RRC","RL","RR","SLA","SRA","SLL","SRL"
+            };
+            int rot_idx = -1;
+            for (int i = 0; i < 8; ++i)
+                if (s.mnemonic == ROT_NAMES[i]) { rot_idx = i; break; }
+            if (rot_idx < 0) return;
+
+            if (s.operands.size() != 1)
+                throw codegen_error(src_file_, line,
+                    s.mnemonic + " requires 1 operand");
+            const operand& op = s.operands[0];
+
+            uint8_t cb_base = static_cast<uint8_t>(rot_idx << 3);
+            if (op.kind == operand_kind::reg) {
+                int r8 = reg8(op.reg_name);
+                if (r8 >= 0) {
+                    emit_byte_val(0xCB); emit_byte_val(cb_base | r8); return;
+                }
+            }
+            if (op.kind == operand_kind::ind_reg && op.reg_name == "HL") {
+                emit_byte_val(0xCB); emit_byte_val(cb_base | 6); return;
+            }
+            if (op.kind == operand_kind::ind_ix_off
+                || op.kind == operand_kind::ind_iy_off) {
+                uint8_t pfx = (op.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                emit_byte_val(pfx); emit_byte_val(0xCB);
+                emit_byte_expr(*op.value, line);
+                emit_byte_val(cb_base | 6);
+                return;
+            }
+            throw codegen_error(src_file_, line,
+                "unrecognised rotate form: " + s.mnemonic);
+        }
+
+        void do_bit(const stmt& s, int line)
+        {
+            static const char* BIT_NAMES[] = {"BIT","SET","RES"};
+            int bit_idx = -1;
+            for (int i = 0; i < 3; ++i)
+                if (s.mnemonic == BIT_NAMES[i]) { bit_idx = i; break; }
+            if (bit_idx < 0) return;
+
+            if (s.operands.size() != 2)
+                throw codegen_error(src_file_, line,
+                    s.mnemonic + " requires 2 operands");
+
+            auto bit_v = eval_expr(*s.operands[0].value, syms_, cur_offset_);
+            int bit_num = bit_v ? static_cast<int>(*bit_v & 7) : 0;
+
+            // CB base: BIT=0x40, RES=0x80, SET=0xC0
+            uint8_t cb_base = static_cast<uint8_t>(
+                (bit_idx == 0 ? 0x40 : (bit_idx == 2 ? 0x80 : 0xC0))
+                | (bit_num << 3));
+
+            const operand& op = s.operands[1];
+            if (op.kind == operand_kind::reg) {
+                int r8 = reg8(op.reg_name);
+                if (r8 >= 0) {
+                    emit_byte_val(0xCB); emit_byte_val(cb_base | r8); return;
+                }
+            }
+            if (op.kind == operand_kind::ind_reg && op.reg_name == "HL") {
+                emit_byte_val(0xCB); emit_byte_val(cb_base | 6); return;
+            }
+            if (op.kind == operand_kind::ind_ix_off
+                || op.kind == operand_kind::ind_iy_off) {
+                uint8_t pfx = (op.kind == operand_kind::ind_ix_off) ? 0xDD : 0xFD;
+                emit_byte_val(pfx); emit_byte_val(0xCB);
+                emit_byte_expr(*op.value, line);
+                emit_byte_val(cb_base | 6);
+                return;
+            }
+            throw codegen_error(src_file_, line,
+                "unrecognised " + s.mnemonic + " form");
+        }
+
+        void do_jump(const stmt& s, int line)
+        {
+            if (s.mnemonic == "JP") {
+                if (s.operands.empty())
+                    throw codegen_error(src_file_, line, "JP requires operand");
+                const operand& op0 = s.operands[0];
+                // JP (HL) / JP (IX) / JP (IY)
+                if (op0.kind == operand_kind::ind_reg
+                    || op0.kind == operand_kind::ind_ix_off
+                    || op0.kind == operand_kind::ind_iy_off) {
+                    if (op0.reg_name == "HL") { emit_byte_val(0xE9); return; }
+                    if (op0.reg_name == "IX") { emit_byte_val(0xDD); emit_byte_val(0xE9); return; }
+                    if (op0.reg_name == "IY") { emit_byte_val(0xFD); emit_byte_val(0xE9); return; }
+                }
+                if (op0.kind == operand_kind::reg) {
+                    if (op0.reg_name == "HL") { emit_byte_val(0xE9); return; }
+                    if (op0.reg_name == "IX") { emit_byte_val(0xDD); emit_byte_val(0xE9); return; }
+                    if (op0.reg_name == "IY") { emit_byte_val(0xFD); emit_byte_val(0xE9); return; }
+                }
+                // JP cc, nn ("C" register is ambiguous — also carry condition)
+                if (s.operands.size() == 2) {
+                    std::string cc_name;
+                    if (op0.kind == operand_kind::cond)
+                        cc_name = op0.cond_name;
+                    else if (op0.kind == operand_kind::reg && op0.reg_name == "C")
+                        cc_name = "C";
+                    if (!cc_name.empty()) {
+                        int cc = cond_code(cc_name);
+                        if (cc < 0)
+                            throw codegen_error(src_file_, line, "bad condition");
+                        emit_byte_val(static_cast<uint8_t>(0xC2 | (cc << 3)));
+                        emit_word_expr(*s.operands[1].value, line);
+                        return;
+                    }
+                }
+                // JP nn
+                if (s.operands.size() == 1 && op0.kind == operand_kind::imm) {
+                    emit_byte_val(0xC3);
+                    emit_word_expr(*op0.value, line);
+                    return;
+                }
+                throw codegen_error(src_file_, line, "unrecognised JP form");
+            }
+
+            if (s.mnemonic == "JR") {
+                if (s.operands.size() == 2) {
+                    const operand& op0 = s.operands[0];
+                    // "C" is ambiguous: parsed as reg but used as carry condition.
+                    std::string cc_name;
+                    if (op0.kind == operand_kind::cond)
+                        cc_name = op0.cond_name;
+                    else if (op0.kind == operand_kind::reg && op0.reg_name == "C")
+                        cc_name = "C";
+                    if (!cc_name.empty()) {
+                        int cc = jr_cond(cc_name);
+                        if (cc < 0)
+                            throw codegen_error(src_file_, line,
+                                "condition not valid for JR");
+                        emit_byte_val(static_cast<uint8_t>(0x20 | (cc << 3)));
+                        emit_pcrel8(*s.operands[1].value, line);
+                        return;
+                    }
+                }
+                if (s.operands.size() == 1
+                    && s.operands[0].kind == operand_kind::imm) {
+                    emit_byte_val(0x18);
+                    emit_pcrel8(*s.operands[0].value, line);
+                    return;
+                }
+                throw codegen_error(src_file_, line, "unrecognised JR form");
+            }
+
+            if (s.mnemonic == "DJNZ") {
+                if (s.operands.size() != 1)
+                    throw codegen_error(src_file_, line, "DJNZ requires 1 operand");
+                emit_byte_val(0x10);
+                emit_pcrel8(*s.operands[0].value, line);
+                return;
+            }
+
+            if (s.mnemonic == "CALL") {
+                if (s.operands.size() == 2
+                    && s.operands[0].kind == operand_kind::cond) {
+                    int cc = cond_code(s.operands[0].cond_name);
+                    if (cc < 0)
+                        throw codegen_error(src_file_, line, "bad condition");
+                    emit_byte_val(static_cast<uint8_t>(0xC4 | (cc << 3)));
+                    emit_word_expr(*s.operands[1].value, line);
+                    return;
+                }
+                if (s.operands.size() == 1
+                    && s.operands[0].kind == operand_kind::imm) {
+                    emit_byte_val(0xCD);
+                    emit_word_expr(*s.operands[0].value, line);
+                    return;
+                }
+                throw codegen_error(src_file_, line, "unrecognised CALL form");
+            }
+
+            if (s.mnemonic == "RET") {
+                if (s.operands.empty()) { emit_byte_val(0xC9); return; }
+                if (s.operands[0].kind == operand_kind::cond) {
+                    int cc = cond_code(s.operands[0].cond_name);
+                    if (cc >= 0) {
+                        emit_byte_val(static_cast<uint8_t>(0xC0 | (cc << 3)));
+                        return;
+                    }
+                }
+                throw codegen_error(src_file_, line, "unrecognised RET form");
+            }
+
+            if (s.mnemonic == "RETI") { emit_byte_val(0xED); emit_byte_val(0x4D); return; }
+            if (s.mnemonic == "RETN") { emit_byte_val(0xED); emit_byte_val(0x45); return; }
+
+            if (s.mnemonic == "RST") {
+                if (s.operands.size() != 1)
+                    throw codegen_error(src_file_, line, "RST requires 1 operand");
+                auto v = eval_expr(*s.operands[0].value, syms_, cur_offset_);
+                uint8_t p = v ? static_cast<uint8_t>(*v & 0x38) : 0;
+                emit_byte_val(static_cast<uint8_t>(0xC7 | p));
+                return;
+            }
+        }
+
+        void do_push_pop(const stmt& s, int line)
+        {
+            bool is_push = (s.mnemonic == "PUSH");
+            if (s.operands.size() != 1)
+                throw codegen_error(src_file_, line,
+                    s.mnemonic + " requires 1 operand");
+            const operand& op = s.operands[0];
+            if (op.kind == operand_kind::reg) {
+                int qq = reg16_af(op.reg_name);
+                if (qq >= 0) {
+                    emit_byte_val(static_cast<uint8_t>(
+                        is_push ? (0xC5 | (qq << 4)) : (0xC1 | (qq << 4))));
+                    return;
+                }
+                if (op.reg_name == "IX") {
+                    emit_byte_val(0xDD); emit_byte_val(is_push ? 0xE5 : 0xE1); return;
+                }
+                if (op.reg_name == "IY") {
+                    emit_byte_val(0xFD); emit_byte_val(is_push ? 0xE5 : 0xE1); return;
+                }
+            }
+            throw codegen_error(src_file_, line,
+                "unrecognised " + s.mnemonic + " operand");
+        }
+
+        void do_exchange(const stmt& s, int line)
+        {
+            if (s.operands.size() != 2)
+                throw codegen_error(src_file_, line, "EX requires 2 operands");
+            const operand& a = s.operands[0];
+            const operand& b = s.operands[1];
+            if (a.kind == operand_kind::reg && b.kind == operand_kind::reg) {
+                if (a.reg_name == "DE" && b.reg_name == "HL") { emit_byte_val(0xEB); return; }
+                if (a.reg_name == "AF" && b.reg_name == "AF'") { emit_byte_val(0x08); return; }
+            }
+            if (a.kind == operand_kind::ind_reg && a.reg_name == "SP") {
+                if (b.kind == operand_kind::reg) {
+                    if (b.reg_name == "HL") { emit_byte_val(0xE3); return; }
+                    if (b.reg_name == "IX") { emit_byte_val(0xDD); emit_byte_val(0xE3); return; }
+                    if (b.reg_name == "IY") { emit_byte_val(0xFD); emit_byte_val(0xE3); return; }
+                }
+            }
+            throw codegen_error(src_file_, line, "unrecognised EX form");
+        }
+
+        void do_io(const stmt& s, int line)
+        {
+            if (s.mnemonic == "IN") {
+                if (s.operands.size() == 2) {
+                    const operand& dst = s.operands[0];
+                    const operand& src = s.operands[1];
+                    if (dst.kind == operand_kind::reg && dst.reg_name == "A"
+                        && src.kind == operand_kind::ind_expr) {
+                        emit_byte_val(0xDB);
+                        emit_byte_expr(*src.value, line);
+                        return;
+                    }
+                    if (dst.kind == operand_kind::reg
+                        && src.kind == operand_kind::ind_reg
+                        && src.reg_name == "C") {
+                        int r = reg8(dst.reg_name);
+                        if (r >= 0) {
+                            emit_byte_val(0xED);
+                            emit_byte_val(static_cast<uint8_t>(0x40 | (r << 3)));
+                            return;
+                        }
+                    }
+                }
+                throw codegen_error(src_file_, line, "unrecognised IN form");
+            }
+            if (s.mnemonic == "OUT") {
+                if (s.operands.size() == 2) {
+                    const operand& dst = s.operands[0];
+                    const operand& src = s.operands[1];
+                    if (dst.kind == operand_kind::ind_expr
+                        && src.kind == operand_kind::reg && src.reg_name == "A") {
+                        emit_byte_val(0xD3);
+                        emit_byte_expr(*dst.value, line);
+                        return;
+                    }
+                    if (dst.kind == operand_kind::ind_reg && dst.reg_name == "C"
+                        && src.kind == operand_kind::reg) {
+                        int r = reg8(src.reg_name);
+                        if (r >= 0) {
+                            emit_byte_val(0xED);
+                            emit_byte_val(static_cast<uint8_t>(0x41 | (r << 3)));
+                            return;
+                        }
+                    }
+                }
+                throw codegen_error(src_file_, line, "unrecognised OUT form");
+            }
+        }
+
+        // Simple no-operand instructions.
+        void do_simple(const stmt& s, int line)
+        {
+            struct { const char* mn; uint8_t b1, b2; } table[] = {
+                {"NOP",  0x00, 0},
+                {"HALT", 0x76, 0},
+                {"DI",   0xF3, 0},
+                {"EI",   0xFB, 0},
+                {"EXX",  0xD9, 0},
+                {"DAA",  0x27, 0},
+                {"CPL",  0x2F, 0},
+                {"SCF",  0x37, 0},
+                {"CCF",  0x3F, 0},
+                {"LDI",  0xED, 0xA0},
+                {"LDD",  0xED, 0xA8},
+                {"LDIR", 0xED, 0xB0},
+                {"LDDR", 0xED, 0xB8},
+                {"CPI",  0xED, 0xA1},
+                {"CPD",  0xED, 0xA9},
+                {"CPIR", 0xED, 0xB1},
+                {"CPDR", 0xED, 0xB9},
+                {"INI",  0xED, 0xA2},
+                {"IND",  0xED, 0xAA},
+                {"INIR", 0xED, 0xB2},
+                {"INDR", 0xED, 0xBA},
+                {"OUTI", 0xED, 0xA3},
+                {"OUTD", 0xED, 0xAB},
+                {"OTIR", 0xED, 0xB3},
+                {"OTDR", 0xED, 0xBB},
+                {"NEG",  0xED, 0x44},
+                {"RETI", 0xED, 0x4D},
+                {"RETN", 0xED, 0x45},
+                {"RLD",  0xED, 0x6F},
+                {"RRD",  0xED, 0x67},
+            };
+            for (auto& e : table) {
+                if (s.mnemonic == e.mn) {
+                    emit_byte_val(e.b1);
+                    if (e.b2) emit_byte_val(e.b2);
+                    return;
+                }
+            }
+        }
+
+        void do_im(const stmt& s, int line)
+        {
+            if (s.operands.size() != 1)
+                throw codegen_error(src_file_, line, "IM requires 1 operand");
+            auto v = eval_expr(*s.operands[0].value, syms_, cur_offset_);
+            uint8_t mode = v ? static_cast<uint8_t>(*v) : 0;
+            emit_byte_val(0xED);
+            switch (mode) {
+                case 0: emit_byte_val(0x46); break;
+                case 1: emit_byte_val(0x56); break;
+                case 2: emit_byte_val(0x5E); break;
+                default: throw codegen_error(src_file_, line, "IM mode must be 0, 1, or 2");
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // Instruction size calculator (pass 1)
+        // -----------------------------------------------------------------------
+
+        uint32_t instr_size(const stmt& s)
+        {
+            const std::string& mn = s.mnemonic;
+
+            // Simple 1-byte or 2-byte instructions.
+            static const char* ONE[] = {
+                "NOP","HALT","DI","EI","EXX","DAA","CPL","SCF","CCF",
+                "RLCA","RRCA","RLA","RRA"
+            };
+            for (auto* x : ONE) if (mn == x) return 1;
+
+            static const char* TWO_ED[] = {
+                "LDI","LDD","LDIR","LDDR","CPI","CPD","CPIR","CPDR",
+                "INI","IND","INIR","INDR","OUTI","OUTD","OTIR","OTDR",
+                "NEG","RETI","RETN","RLD","RRD"
+            };
+            for (auto* x : TWO_ED) if (mn == x) return 2;
+
+            if (mn == "EX" || mn == "EXX") return 1;
+
+            if (mn == "PUSH" || mn == "POP") {
+                if (!s.operands.empty()) {
+                    const std::string& r = s.operands[0].reg_name;
+                    if (r == "IX" || r == "IY") return 2;
+                }
+                return 1;
+            }
+
+            if (mn == "INC" || mn == "DEC") {
+                if (!s.operands.empty()) {
+                    const operand& op = s.operands[0];
+                    if (op.kind == operand_kind::ind_ix_off
+                        || op.kind == operand_kind::ind_iy_off) return 3;
+                    if (op.kind == operand_kind::reg
+                        && (op.reg_name == "IX" || op.reg_name == "IY")) return 2;
+                }
+                return 1;
+            }
+
+            if (mn == "LD") return ld_size(s);
+
+            if (mn == "ADD" || mn == "ADC" || mn == "SUB" || mn == "SBC"
+                || mn == "AND" || mn == "XOR" || mn == "OR" || mn == "CP")
+                return alu_size(s);
+
+            if (mn == "JP") {
+                if (s.operands.size() == 1) {
+                    if (s.operands[0].kind == operand_kind::reg
+                        || s.operands[0].kind == operand_kind::ind_reg) {
+                        const std::string& r = s.operands[0].reg_name;
+                        if (r == "IX" || r == "IY") return 2;
+                        return 1;
+                    }
+                }
+                return 3;
+            }
+            if (mn == "JR" || mn == "DJNZ") return 2;
+            if (mn == "CALL") return 3;
+            if (mn == "RET") {
+                if (s.operands.empty()) return 1;
+                return 1;
+            }
+            if (mn == "RETI" || mn == "RETN") return 2;
+            if (mn == "RST") return 1;
+            if (mn == "IM") return 2;
+            if (mn == "IN" || mn == "OUT") return 2;
+
+            // CB prefix rotates.
+            static const char* ROT[] = {"RLC","RRC","RL","RR","SLA","SRA","SRL","SLL"};
+            for (auto* x : ROT) {
+                if (mn == x) {
+                    if (!s.operands.empty()
+                        && (s.operands[0].kind == operand_kind::ind_ix_off
+                            || s.operands[0].kind == operand_kind::ind_iy_off))
+                        return 4;
+                    return 2;
+                }
+            }
+
+            static const char* BIT[] = {"BIT","SET","RES"};
+            for (auto* x : BIT) {
+                if (mn == x) {
+                    if (s.operands.size() > 1
+                        && (s.operands[1].kind == operand_kind::ind_ix_off
+                            || s.operands[1].kind == operand_kind::ind_iy_off))
+                        return 4;
+                    return 2;
+                }
+            }
+
+            return 1; // fallback
+        }
+
+        uint32_t ld_size(const stmt& s)
+        {
+            if (s.operands.size() != 2) return 1;
+            const operand& dst = s.operands[0];
+            const operand& src = s.operands[1];
+
+            // Special SP variants.
+            if (dst.reg_name == "SP" && (src.reg_name == "IX" || src.reg_name == "IY")) return 2;
+            if (dst.reg_name == "SP" && src.reg_name == "HL") return 1;
+
+            // I/R loads.
+            if ((dst.reg_name == "I" || dst.reg_name == "R" ||
+                 src.reg_name == "I" || src.reg_name == "R")) return 2;
+
+            // r, r'
+            if (dst.kind == operand_kind::reg && src.kind == operand_kind::reg) {
+                if (reg8(dst.reg_name) >= 0 && reg8(src.reg_name) >= 0) return 1;
+            }
+            // r, n
+            if (dst.kind == operand_kind::reg && src.kind == operand_kind::imm) {
+                if (reg8(dst.reg_name) >= 0) return 2;
+                if (dst.reg_name == "IX" || dst.reg_name == "IY") return 4;
+                if (reg16_sp(dst.reg_name) >= 0) return 3;
+            }
+            // r, (HL)
+            if (dst.kind == operand_kind::reg
+                && src.kind == operand_kind::ind_reg && src.reg_name == "HL")
+                return 1;
+            // r, (IX+d) / r, (IY+d)
+            if (dst.kind == operand_kind::reg
+                && (src.kind == operand_kind::ind_ix_off
+                    || src.kind == operand_kind::ind_iy_off)) return 3;
+            // (HL), r
+            if (dst.kind == operand_kind::ind_reg && dst.reg_name == "HL"
+                && src.kind == operand_kind::reg && reg8(src.reg_name) >= 0) return 1;
+            // (IX+d), r / (IY+d), r
+            if ((dst.kind == operand_kind::ind_ix_off
+                 || dst.kind == operand_kind::ind_iy_off)
+                && src.kind == operand_kind::reg) return 3;
+            // (HL), n
+            if (dst.kind == operand_kind::ind_reg && dst.reg_name == "HL"
+                && src.kind == operand_kind::imm) return 2;
+            // (IX+d), n
+            if ((dst.kind == operand_kind::ind_ix_off
+                 || dst.kind == operand_kind::ind_iy_off)
+                && src.kind == operand_kind::imm) return 4;
+            // A, (BC) / A, (DE) / (BC), A / (DE), A
+            if ((dst.kind == operand_kind::reg && dst.reg_name == "A"
+                 && src.kind == operand_kind::ind_reg
+                 && (src.reg_name == "BC" || src.reg_name == "DE")) ||
+                (dst.kind == operand_kind::ind_reg
+                 && (dst.reg_name == "BC" || dst.reg_name == "DE")
+                 && src.kind == operand_kind::reg && src.reg_name == "A"))
+                return 1;
+            // A,(nn) / (nn),A / HL,(nn) / (nn),HL
+            if (dst.kind == operand_kind::ind_expr || src.kind == operand_kind::ind_expr) {
+                if ((dst.reg_name == "IX" || dst.reg_name == "IY"
+                     || src.reg_name == "IX" || src.reg_name == "IY")) return 4;
+                if ((dst.reg_name == "HL" || src.reg_name == "HL")) return 3;
+                if (reg16_sp(dst.reg_name) >= 0
+                    || reg16_sp(src.reg_name) >= 0) return 4;
+                return 3;
+            }
+            return 1;
+        }
+
+        uint32_t alu_size(const stmt& s)
+        {
+            const operand* src = nullptr;
+            if (s.operands.size() == 2) src = &s.operands[1];
+            else if (s.operands.size() == 1) src = &s.operands[0];
+            else return 1;
+
+            // ADD HL,ss / ADC HL,ss / SBC HL,ss = 1 or 2 bytes
+            if (s.operands.size() == 2
+                && s.operands[0].kind == operand_kind::reg
+                && s.operands[0].reg_name == "HL")
+                return (s.mnemonic == "ADD") ? 1 : 2;
+            if (s.operands.size() == 2
+                && s.operands[0].kind == operand_kind::reg
+                && (s.operands[0].reg_name == "IX" || s.operands[0].reg_name == "IY"))
+                return 2;
+
+            if (src->kind == operand_kind::reg) return 1;
+            if (src->kind == operand_kind::ind_reg && src->reg_name == "HL") return 1;
+            if (src->kind == operand_kind::ind_ix_off
+                || src->kind == operand_kind::ind_iy_off) return 3;
+            if (src->kind == operand_kind::imm) return 2;
+            return 1;
+        }
+
+        // -----------------------------------------------------------------------
+        // Directive handler
+        // -----------------------------------------------------------------------
+
+        void process_directive(const stmt& s)
+        {
+            const std::string& dn = s.directive_name;
+
+            if (dn == "area" || dn == "section") {
+                std::string sec_name = s.string_arg;
+                if (sec_name.empty()) sec_name = "_CODE";
+                cur_section_ = sec_name;
+                cur_offset_  = 0;
+                if (pass_ == 2) {
+                    bfd::section_flags sf = bfd::section_flags::alloc
+                                          | bfd::section_flags::load
+                                          | bfd::section_flags::code
+                                          | bfd::section_flags::reloc;
+                    emit_.set_section(cur_section_, sf);
+                }
+                return;
+            }
+
+            if (dn == "globl" || dn == "global") {
+                for (const auto& arg : s.args) {
+                    if (arg->kind == expr_kind::symbol)
+                        syms_[arg->name].global = true;
+                }
+                return;
+            }
+
+            if (dn == "org" || dn == "origin") {
+                if (!s.args.empty()) {
+                    auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                    if (v) cur_offset_ = static_cast<uint32_t>(*v);
+                }
+                return;
+            }
+
+            if (dn == "byte" || dn == "db") {
+                for (char c : s.string_arg) {
+                    emit_byte_val(static_cast<uint8_t>(c));
+                }
+                for (const auto& arg : s.args) {
+                    emit_byte_expr(*arg, s.source_line);
+                }
+                return;
+            }
+
+            if (dn == "word" || dn == "dw" || dn == "2byte") {
+                for (const auto& arg : s.args) {
+                    emit_word_expr(*arg, s.source_line);
+                }
+                return;
+            }
+
+            if (dn == "ascii" || dn == "asciz" || dn == "string") {
+                for (char c : s.string_arg)
+                    emit_byte_val(static_cast<uint8_t>(c));
+                return;
+            }
+
+            if (dn == "ds" || dn == "space") {
+                uint32_t n = 0;
+                if (!s.args.empty()) {
+                    auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                    if (v) n = static_cast<uint32_t>(*v);
+                }
+                if (pass_ == 2) emit_.emit_space(n);
+                cur_offset_ += n;
+                return;
+            }
+
+            if (dn == "equ" || dn == "set") {
+                if (!s.string_arg.empty() && !s.args.empty()) {
+                    auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                    if (v) {
+                        syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
+                        syms_[s.string_arg].defined = true;
+                    }
+                }
+                return;
+            }
+            // Other directives: module, file, include, conditionals — skip.
+        }
+
+        // -----------------------------------------------------------------------
+        // Process one statement
+        // -----------------------------------------------------------------------
+
+        void process_stmt(const stmt& s)
+        {
+            if (s.kind == stmt_kind::label) {
+                if (pass_ == 1) {
+                    syms_[s.label_name].section_name = cur_section_;
+                    syms_[s.label_name].value        = cur_offset_;
+                    syms_[s.label_name].defined      = true;
+                    if (s.label_global)
+                        syms_[s.label_name].global = true;
+                } else {
+                    bool is_global = syms_.count(s.label_name)
+                                  && syms_[s.label_name].global;
+                    emit_.define_symbol(s.label_name, cur_offset_,
+                                        cur_section_, is_global);
+                }
+                return;
+            }
+
+            if (s.kind == stmt_kind::equ) {
+                auto v = eval_expr(*s.equ_value, syms_, cur_offset_);
+                if (v) {
+                    syms_[s.equ_name].value   = static_cast<uint32_t>(*v);
+                    syms_[s.equ_name].defined = true;
+                }
+                return;
+            }
+
+            if (s.kind == stmt_kind::directive) {
+                process_directive(s);
+                return;
+            }
+
+            if (s.kind == stmt_kind::instruction) {
+                const std::string& mn = s.mnemonic;
+                int line = s.source_line;
+
+                if (mn == "LD") { do_ld(s, line); return; }
+                if (mn == "ADD" || mn == "ADC" || mn == "SUB" || mn == "SBC"
+                    || mn == "AND" || mn == "XOR" || mn == "OR"  || mn == "CP")
+                { do_alu(s, line); return; }
+                if (mn == "INC" || mn == "DEC") { do_inc_dec(s, line); return; }
+                if (mn == "RLCA" || mn == "RRCA" || mn == "RLA" || mn == "RRA"
+                    || mn == "RLC" || mn == "RRC" || mn == "RL" || mn == "RR"
+                    || mn == "SLA" || mn == "SRA" || mn == "SRL" || mn == "SLL")
+                { do_rotate(s, line); return; }
+                if (mn == "BIT" || mn == "SET" || mn == "RES")
+                { do_bit(s, line); return; }
+                if (mn == "JP" || mn == "JR" || mn == "DJNZ"
+                    || mn == "CALL" || mn == "RET" || mn == "RETI"
+                    || mn == "RETN" || mn == "RST")
+                { do_jump(s, line); return; }
+                if (mn == "PUSH" || mn == "POP") { do_push_pop(s, line); return; }
+                if (mn == "EX")  { do_exchange(s, line); return; }
+                if (mn == "IN" || mn == "OUT") { do_io(s, line); return; }
+                if (mn == "IM") { do_im(s, line); return; }
+                do_simple(s, line);
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // run — public entry point
+        // -----------------------------------------------------------------------
+
+        void run(const stmt_list& stmts, const std::string& module_name,
+                 asm_mode mode)
+        {
+            // Initialise emitter.
+            emit_.begin_module(module_name);
+
+            // Default section.
+            std::string default_sec = (mode == asm_mode::gnu) ? ".text" : "_CODE";
+            cur_section_ = default_sec;
+            cur_offset_  = 0;
+
+            // Pass 1: collect labels.
+            pass_ = 1;
+            cur_offset_ = 0;
+            for (const auto& s : stmts) {
+                if (s.kind == stmt_kind::directive
+                    && (s.directive_name == "area" || s.directive_name == "section")) {
+                    cur_section_ = s.string_arg.empty() ? default_sec : s.string_arg;
+                    cur_offset_  = 0;
+                    continue;
+                }
+                if (s.kind == stmt_kind::label) {
+                    syms_[s.label_name].value        = cur_offset_;
+                    syms_[s.label_name].section_name = cur_section_;
+                    syms_[s.label_name].defined      = true;
+                    continue;
+                }
+                if (s.kind == stmt_kind::equ) {
+                    auto v = eval_expr(*s.equ_value, syms_, cur_offset_);
+                    if (v) {
+                        syms_[s.equ_name].value   = static_cast<uint32_t>(*v);
+                        syms_[s.equ_name].defined = true;
+                    }
+                    continue;
+                }
+                if (s.kind == stmt_kind::instruction) {
+                    cur_offset_ += instr_size(s);
+                    continue;
+                }
+                // Directives that affect offset.
+                if (s.kind == stmt_kind::directive) {
+                    const std::string& dn = s.directive_name;
+                    if (dn == "byte" || dn == "db")
+                        cur_offset_ += static_cast<uint32_t>(s.string_arg.size()
+                                                              + s.args.size());
+                    else if (dn == "word" || dn == "dw" || dn == "2byte")
+                        cur_offset_ += 2 * static_cast<uint32_t>(s.args.size());
+                    else if (dn == "ascii" || dn == "asciz" || dn == "string")
+                        cur_offset_ += static_cast<uint32_t>(s.string_arg.size());
+                    else if (dn == "ds" || dn == "space") {
+                        if (!s.args.empty()) {
+                            auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                            if (v) cur_offset_ += static_cast<uint32_t>(*v);
+                        }
+                    }
+                }
+            }
+
+            // Mark .globl symbols as referenced-but-possibly-external.
+            for (const auto& s : stmts) {
+                if (s.kind == stmt_kind::directive
+                    && (s.directive_name == "globl" || s.directive_name == "global")) {
+                    for (const auto& arg : s.args) {
+                        if (arg->kind == expr_kind::symbol)
+                            syms_[arg->name].global = true;
+                    }
+                }
+            }
+
+            // Pass 2: emit code.
+            pass_ = 2;
+            cur_section_ = default_sec;
+            cur_offset_  = 0;
+            {
+                bfd::section_flags sf = bfd::section_flags::alloc
+                                      | bfd::section_flags::load
+                                      | bfd::section_flags::code
+                                      | bfd::section_flags::reloc;
+                emit_.set_section(cur_section_, sf);
+            }
+
+            // Declare external refs.
+            for (const auto& [name, sym] : syms_) {
+                if (!sym.defined && sym.global)
+                    emit_.refer_symbol(name);
+            }
+
+            for (const auto& s : stmts)
+                process_stmt(s);
+
+            emit_.end_module();
+        }
+    };
+
+    // =========================================================================
+    // Public entry point
+    // =========================================================================
+
+    void assemble(const stmt_list& stmts, emitter& emit,
+                  const std::string& module_name,
+                  const std::string& src_file,
+                  asm_mode mode)
+    {
+        codegen cg(emit, src_file);
+        cg.run(stmts, module_name, mode);
+    }
+
+} // namespace xas

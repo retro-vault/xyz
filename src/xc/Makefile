@@ -1,11 +1,13 @@
 # ---------------------------------------------------------------------------
-# src/xc/Makefile — builds compiler toolchain (linker and assembler support).
-# xcc: C compiler (SDCC, external)
-# xas: Assembler (SDCC as, external)
-# xlink: XYZ linker (custom Z80 linker)
+# src/xc/Makefile — builds compiler toolchain.
+# xlink: Z80 linker (uses libxbfd)
+# xdbg: debugger stub
+# xcc: C compiler
+# xas: Z80 assembler (uses libxbfd)
+# xar: archive tool (uses libxbfd)
 # ---------------------------------------------------------------------------
 
-SUBDIRS := xlink xdbg xcc
+SUBDIRS := xlink xdbg xcc xas xar
 
 .PHONY: all
 all:

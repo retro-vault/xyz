@@ -5,10 +5,14 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 CXXFLAGS ?= -std=c++2a -g
 
+XBFD_DIR  := $(ROOT)/lib/xbfd
+XBFD_INC  := $(XBFD_DIR)/include
+XBFD_LIB  := $(BUILD_DIR)/lib/libxbfd.a
+
 SOURCES         = $(wildcard src/*.cpp)
 HEADERS         = $(wildcard include/xlink/*.hpp)
 TARGET          = xlink
-INCLUDE         = -Iinclude -I$(ROOT)/include
+INCLUDE         = -Iinclude -I$(ROOT)/include -I$(XBFD_INC)
 XDBG_SOURCE     = $(ROOT)/lib/xdbg/src/xdbg.cpp
 
 TEST_MAIN       = tests/test_main.cpp
@@ -20,9 +24,12 @@ BIN_OUTPUT      = $(HOST_BIN_DIR)
 
 .PHONY: all test clean
 
-all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(SOURCES) $(HEADERS)
+all: $(XBFD_LIB) $(BIN_OUTPUT) $(OUTPUT_DIR) $(SOURCES) $(HEADERS)
 	$(CXX) -o $(BIN_OUTPUT)/$(TARGET) $(SOURCES) $(XDBG_SOURCE) \
-		$(CXXFLAGS) $(INCLUDE)
+		$(CXXFLAGS) $(INCLUDE) $(XBFD_LIB)
+
+$(XBFD_LIB):
+	$(MAKE) -C $(XBFD_DIR)
 
 $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
@@ -30,9 +37,9 @@ $(OUTPUT_DIR):
 $(BIN_OUTPUT):
 	mkdir -p $(BIN_OUTPUT)
 
-test: $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
+test: $(XBFD_LIB) $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
 	$(CXX) -o $(OUTPUT_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
-		$(XDBG_SOURCE) $(CXXFLAGS) $(INCLUDE) -Itests
+		$(XDBG_SOURCE) $(CXXFLAGS) $(INCLUDE) -Itests $(XBFD_LIB)
 	$(OUTPUT_DIR)/$(TEST_TARGET)
 
 clean:

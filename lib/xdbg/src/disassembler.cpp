@@ -16,7 +16,8 @@
 #include <string>
 #include <vector>
 
-#include <z80ex_dasm.h>
+#include <xz80/disassembler.hpp>
+#include <xz80/memory.hpp>
 
 #include <xdbg/disassembler.hpp>
 #include <xdbg/error.hpp>
@@ -25,14 +26,19 @@ namespace xdbg {
 
     namespace {
 
-        struct z80ex_read_context {
-            const memory_reader* memory = nullptr;
+        // Adapts xdbg::memory_reader (uint32_t addresses) to xz80::IMemory
+        // (uint16_t addresses) so the xz80 disassembler can fetch bytes via
+        // the xdbg memory abstraction without any allocation.
+        class memory_bridge final : public xz80::IMemory {
+        public:
+            explicit memory_bridge(const memory_reader& r) noexcept : reader_(r) {}
+            uint8_t read(uint16_t addr) const noexcept override {
+                return reader_.read8(addr);
+            }
+            void write(uint16_t, uint8_t) noexcept override {}
+        private:
+            const memory_reader& reader_;
         };
-
-        static Z80EX_BYTE z80ex_readbyte_cb(Z80EX_WORD addr, void* user_data) {
-            const auto* context = static_cast<const z80ex_read_context*>(user_data);
-            return context->memory->read8(addr);
-        }
 
         std::string trim(const std::string& value) {
             const auto start = value.find_first_not_of(" \t\r\n");
@@ -82,21 +88,18 @@ namespace xdbg {
                 [](unsigned char ch) { return std::isxdigit(ch) != 0; });
         }
 
+        // xz80 disassembler produces (IX+N) / (IX-N) with signed decimal displacement.
+        // Convert to SDCC form: N(ix).
         std::string normalize_indexed_operand(const std::string& operand) {
-            static const std::regex pattern(
-                R"(\((IX|IY)\+#([0-9A-Fa-f]+)\))");
+            static const std::regex pattern(R"(\((IX|IY)([+-]\d+)\))");
             std::smatch match;
             if (!std::regex_match(operand, match, pattern)) {
                 return "";
             }
-
             const auto reg = to_lower(match[1].str());
-            const uint32_t raw = static_cast<uint32_t>(
-                std::stoul(match[2].str(), nullptr, 16));
-            const int8_t disp = static_cast<int8_t>(raw & 0xFF);
-
+            const int disp = std::stoi(match[2].str());
             std::ostringstream out;
-            out << static_cast<int>(disp) << "(" << reg << ")";
+            out << disp << "(" << reg << ")";
             return out.str();
         }
 
@@ -105,11 +108,13 @@ namespace xdbg {
                 return indexed;
             }
 
+            // #NNNN or #NN — keep the # prefix, normalize hex case
             if (operand.size() > 1 && operand[0] == '#' && is_hex_string(operand.substr(1))) {
                 return "#" + format_hex_value(
                     static_cast<uint32_t>(std::stoul(operand.substr(1), nullptr, 16)));
             }
 
+            // (#NNNN) — direct address
             static const std::regex direct_pattern(R"(\(#([0-9A-Fa-f]+)\))");
             std::smatch match;
             if (std::regex_match(operand, match, direct_pattern)) {
@@ -145,7 +150,7 @@ namespace xdbg {
             }
         };
 
-        class z80ex_disassembler final : public disassembler {
+        class xz80_disassembler final : public disassembler {
         public:
             cpu_kind cpu() const override {
                 return cpu_kind::z80;
@@ -154,46 +159,40 @@ namespace xdbg {
             disassembled_instruction disassemble_one(
                 uint32_t address, const memory_reader& memory) const override
             {
-                z80ex_read_context context{&memory};
-                char buffer[128];
-                int t_states = 0;
-                int t_states_alt = 0;
-                const int length = z80ex_dasm(
-                    buffer, sizeof(buffer), 0, &t_states, &t_states_alt,
-                    z80ex_readbyte_cb, static_cast<Z80EX_WORD>(address), &context);
+                const memory_bridge bridge{memory};
+                const xz80::disasm_result r =
+                    dasm_.disassemble(static_cast<uint16_t>(address), bridge);
 
-                if (length <= 0) {
-                    throw error("failed to disassemble instruction");
+                disassembled_instruction instr;
+                instr.cpu          = cpu_kind::z80;
+                instr.address      = address;
+                instr.t_states     = r.t_states;
+                instr.t_states_alt = r.t_states2;
+                instr.text         = r.text;
+
+                for (uint8_t i = 0; i < r.length; ++i) {
+                    instr.bytes.push_back(r.bytes[i]);
                 }
 
-                disassembled_instruction instruction;
-                instruction.cpu = cpu_kind::z80;
-                instruction.address = address;
-                instruction.t_states = t_states;
-                instruction.t_states_alt = t_states_alt;
-
-                for (int i = 0; i < length; ++i) {
-                    instruction.bytes.push_back(memory.read8(address + static_cast<uint32_t>(i)));
-                }
-
-                instruction.text = trim(buffer);
-                const auto split_at = instruction.text.find_first_of(" \t");
+                const auto split_at = instr.text.find_first_of(" \t");
                 if (split_at == std::string::npos) {
-                    instruction.mnemonic = instruction.text;
+                    instr.mnemonic = instr.text;
                 } else {
-                    instruction.mnemonic = trim(instruction.text.substr(0, split_at));
-                    instruction.operands = split_operands(
-                        instruction.text.substr(split_at + 1));
+                    instr.mnemonic = trim(instr.text.substr(0, split_at));
+                    instr.operands = split_operands(instr.text.substr(split_at + 1));
                 }
 
-                return instruction;
+                return instr;
             }
+
+        private:
+            xz80::disassembler dasm_;
         };
 
     } // namespace
 
     std::unique_ptr<disassembler> make_z80_disassembler() {
-        return std::make_unique<z80ex_disassembler>();
+        return std::make_unique<xz80_disassembler>();
     }
 
     std::unique_ptr<syntax_formatter> make_native_formatter() {

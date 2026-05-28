@@ -2,18 +2,11 @@ ROOT ?= ../..
 BUILD_DIR ?= $(ROOT)/build
 DIST_DIR ?= $(ROOT)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
-CC ?= cc
 CXX ?= g++
-CXXFLAGS ?= -std=c++2a -g
-Z80EX_DIR ?= $(ROOT)/lib/z80ex
-Z80EX_INCLUDE = -I$(Z80EX_DIR) -I$(Z80EX_DIR)/include
-Z80EX_DEFINES = \
-	-DWORDS_LITTLE_ENDIAN \
-	-DZ80EX_API_REVISION=1 \
-	-DZ80EX_VERSION_MAJOR=1 \
-	-DZ80EX_VERSION_MINOR=21 \
-	-DZ80EX_VERSION_STR=\"1.1.21\" \
-	-DZ80EX_RELEASE_TYPE=\"\"
+CXXFLAGS ?= -std=c++20 -g
+XZ80_DIR ?= $(ROOT)/lib/xz80
+XZ80_INCLUDE = -I$(XZ80_DIR)/include
+XZ80_LIB = $(BUILD_DIR)/lib/libxz80.a
 
 SOURCES = $(wildcard src/*.cpp)
 HEADERS = $(wildcard $(ROOT)/include/xdbg/*.hpp)
@@ -22,7 +15,6 @@ LIB_DIR = $(PUBLIC_LIB_DIR)
 LIB_TARGET = $(LIB_DIR)/libxdbg.a
 TEST_TARGET = $(OUTPUT_DIR)/xdbg_tests
 OBJECTS = $(patsubst src/%.cpp,$(OUTPUT_DIR)/%.o,$(SOURCES))
-Z80EX_DASM_OBJECT = $(OUTPUT_DIR)/z80ex_dasm.o
 
 .PHONY: all test clean
 
@@ -35,16 +27,14 @@ $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
 
 $(OUTPUT_DIR)/%.o: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) -I$(ROOT)/include $(Z80EX_INCLUDE) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(ROOT)/include $(XZ80_INCLUDE) -c $< -o $@
 
-$(Z80EX_DASM_OBJECT): $(Z80EX_DIR)/z80ex_dasm.c
-	$(CC) -g $(Z80EX_INCLUDE) $(Z80EX_DEFINES) -c $< -o $@
+$(LIB_TARGET): $(OUTPUT_DIR) $(LIB_DIR) $(OBJECTS)
+	ar rcs $@ $(OBJECTS)
 
-$(LIB_TARGET): $(OUTPUT_DIR) $(LIB_DIR) $(OBJECTS) $(Z80EX_DASM_OBJECT)
-	ar rcs $@ $(OBJECTS) $(Z80EX_DASM_OBJECT)
-
-test: $(OUTPUT_DIR) $(SOURCES) $(HEADERS) tests/test_main.cpp $(Z80EX_DASM_OBJECT)
-	$(CXX) $(CXXFLAGS) -I$(ROOT)/include $(Z80EX_INCLUDE) tests/test_main.cpp $(SOURCES) $(Z80EX_DASM_OBJECT) -o $(TEST_TARGET)
+test: $(OUTPUT_DIR) $(SOURCES) $(HEADERS) tests/test_main.cpp
+	$(CXX) $(CXXFLAGS) -I$(ROOT)/include $(XZ80_INCLUDE) \
+		tests/test_main.cpp $(SOURCES) $(XZ80_LIB) -o $(TEST_TARGET)
 	$(TEST_TARGET)
 
 clean:

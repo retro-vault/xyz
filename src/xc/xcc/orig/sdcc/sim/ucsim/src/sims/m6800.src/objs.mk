@@ -1,3 +1,0 @@
-PKG		= m6800
-
-OBJECTS		= sm6800.o

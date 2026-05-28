@@ -43,7 +43,7 @@ export ZX_MDR_DIR         := $(ZX_TARGET_DIR)/mdr
 
 # Compilable sub-projects — order matters (dependencies first).
 # Add new entries here as sub-projects become ready; do not add make targets.
-SUBDIRS := tools src/xc src/yos
+SUBDIRS := lib tools src/xc src/yos
 
 .PHONY: all
 all:

@@ -3,18 +3,11 @@ BUILD_DIR ?= $(ROOT)/build
 DIST_DIR ?= $(ROOT)/bin
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
-CC ?= cc
 CXX ?= g++
-CXXFLAGS ?= -std=c++2a -g
-Z80EX_DIR ?= $(ROOT)/lib/z80ex
-Z80EX_INCLUDE = -I$(Z80EX_DIR) -I$(Z80EX_DIR)/include
-Z80EX_DEFINES = \
-	-DWORDS_LITTLE_ENDIAN \
-	-DZ80EX_API_REVISION=1 \
-	-DZ80EX_VERSION_MAJOR=1 \
-	-DZ80EX_VERSION_MINOR=21 \
-	-DZ80EX_VERSION_STR=\"1.1.21\" \
-	-DZ80EX_RELEASE_TYPE=\"\"
+CXXFLAGS ?= -std=c++20 -g
+XZ80_DIR ?= $(ROOT)/lib/xz80
+XZ80_INCLUDE = -I$(XZ80_DIR)/include
+XZ80_LIB = $(BUILD_DIR)/lib/libxz80.a
 
 HEADERS = $(wildcard $(ROOT)/include/xdbg/*.hpp) $(wildcard $(ROOT)/include/xdbgstub/*.hpp)
 OUTPUT_DIR = $(BUILD_DIR)/xc/xdbg
@@ -33,25 +26,25 @@ DAP_PROTOCOL_OBJECT = $(OUTPUT_DIR)/dap_frontend.o
 CLI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxdbg_cli.a
 MI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxdbg_mi.a
 DAP_PROTOCOL_LIB = $(LIB_OUTPUT)/libxdbg_dap.a
-Z80EX_CPU_OBJECT = $(OUTPUT_DIR)/z80ex.o
 
 .PHONY: all test clean
 
 all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(LIB_OUTPUT)
+	$(MAKE) -C $(XZ80_DIR) all
 	$(MAKE) -C $(ROOT)/lib/xdbg all
 	$(MAKE) -C $(ROOT)/lib/xdbgstub all
 	$(MAKE) $(CLI_PROTOCOL_LIB) $(MI_PROTOCOL_LIB) $(DAP_PROTOCOL_LIB)
-	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(Z80EX_INCLUDE) $(XDBG_SOURCES) \
+	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(XDBG_SOURCES) \
 		$(CLI_PROTOCOL_LIB) \
 		$(MI_PROTOCOL_LIB) \
 		$(DAP_PROTOCOL_LIB) \
 		$(PUBLIC_LIB_DIR)/libxdbg.a \
 		$(PUBLIC_LIB_DIR)/libxdbgstub.a \
+		$(XZ80_LIB) \
 		-o $(XDBG_TARGET)
-	$(CC) -g $(Z80EX_INCLUDE) $(Z80EX_DEFINES) -c $(Z80EX_DIR)/z80ex.c -o $(Z80EX_CPU_OBJECT)
-	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(Z80EX_INCLUDE) $(XDBG_Z80_SOURCES) \
+	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(XZ80_INCLUDE) $(XDBG_Z80_SOURCES) \
 		$(PUBLIC_LIB_DIR)/libxdbgstub.a \
-		$(Z80EX_CPU_OBJECT) \
+		$(XZ80_LIB) \
 		-o $(XDBG_Z80_TARGET)
 
 $(OUTPUT_DIR):
@@ -61,13 +54,13 @@ $(LIB_OUTPUT):
 	mkdir -p $(LIB_OUTPUT)
 
 $(CLI_PROTOCOL_OBJECT): $(CLI_PROTOCOL_SOURCE)
-	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(Z80EX_INCLUDE) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include -c $< -o $@
 
 $(MI_PROTOCOL_OBJECT): $(MI_PROTOCOL_SOURCE)
-	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(Z80EX_INCLUDE) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include -c $< -o $@
 
 $(DAP_PROTOCOL_OBJECT): $(DAP_PROTOCOL_SOURCE)
-	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include $(Z80EX_INCLUDE) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -pthread -I$(ROOT)/include -c $< -o $@
 
 $(CLI_PROTOCOL_LIB): $(LIB_OUTPUT) $(CLI_PROTOCOL_OBJECT)
 	ar rcs $@ $(CLI_PROTOCOL_OBJECT)

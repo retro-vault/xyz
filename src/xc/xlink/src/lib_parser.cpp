@@ -1,40 +1,40 @@
+// lib_parser.cpp
 //
-// SDCC .lib parser/dispatcher
+// Reads .lib archives (both SDCC text-index and GNU ar formats) by
+// delegating to libxbfd, then converts the result to xlink::lib_member.
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2021 tomaz stih
 //
 #include <fstream>
 #include <iterator>
-#include <vector>
 
 #include <xlink/lib_parser.hpp>
 #include <xlink/errors.hpp>
+#include <xbfd/bfd.hpp>
+#include <xbfd/errors.hpp>
 
 namespace xlink {
 
     std::vector<lib_member> lib_parser::parse(const std::filesystem::path& path)
     {
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open())
-            throw parse_error("cannot open library file: " + path.string());
+        try {
+            auto arc = bfd::bfd::open_r(path);
+            if (!arc->check_format(bfd::format::archive))
+                throw parse_error("not a library file: " + path.string());
 
-        std::string data((std::istreambuf_iterator<char>(file)),
-                         std::istreambuf_iterator<char>());
-
-        ar_library_reader ar_reader;
-        text_index_library_reader text_reader;
-        std::vector<const library_reader*> readers = {
-            &ar_reader,
-            &text_reader,
-        };
-
-        for (const auto* reader : readers) {
-            if (reader->can_read(path, data))
-                return reader->read(path, data);
+            std::vector<lib_member> result;
+            for (const auto& m : arc->members()) {
+                lib_member lm;
+                lm.path     = m.path;
+                if (m.data.has_value())
+                    lm.contents = *m.data;
+                result.push_back(std::move(lm));
+            }
+            return result;
+        } catch (const bfd::bfd_error& e) {
+            throw parse_error(std::string(e.what()));
         }
-
-        throw parse_error("unsupported library format: " + path.string());
     }
 
 } // namespace xlink
