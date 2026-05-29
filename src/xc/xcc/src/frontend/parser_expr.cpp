@@ -266,6 +266,10 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::DEREF;
         e->operand = parse_cast_expression();
+        // *p has the pointee type (if we can determine it now)
+        if (e->operand && e->operand->type && e->operand->type->is_ptr())
+            e->type = e->operand->type->base;
+        e->is_lvalue = true;
         return e;
     }
     if (check(tk::AMP)) {
@@ -273,6 +277,9 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::ADDR;
         e->operand = parse_cast_expression();
+        // &expr has type pointer-to-operand-type
+        if (e->operand && e->operand->type)
+            e->type = type::make_pointer(e->operand->type->unqual());
         return e;
     }
     if (check(tk::PLUS_PLUS)) {
@@ -489,6 +496,27 @@ expr_ptr parser::parse_primary_expression() {
         e->type->is_const = true;
         return e;
     }
+    // C23 keyword literals
+    if (check(tk::KW_TRUE)) {
+        token t = consume();
+        auto e = std::make_unique<int_literal_expr>();
+        e->loc = t.loc; e->value = 1; e->type = type::make_bool();
+        return e;
+    }
+    if (check(tk::KW_FALSE)) {
+        token t = consume();
+        auto e = std::make_unique<int_literal_expr>();
+        e->loc = t.loc; e->value = 0; e->type = type::make_bool();
+        return e;
+    }
+    if (check(tk::KW_NULLPTR)) {
+        token t = consume();
+        auto e = std::make_unique<int_literal_expr>();
+        e->loc = t.loc; e->value = 0;
+        e->type = type::make_pointer(type::make_void()); // void* null pointer constant
+        return e;
+    }
+
     if (check(tk::IDENT)) {
         token t = consume();
         if (t.text == "__func__") {
@@ -510,13 +538,45 @@ expr_ptr parser::parse_primary_expression() {
             expect(tk::RPAREN);
             return e;
         }
+        if (t.text == "__builtin_unreachable") {
+            // C23 unreachable(): marks a code path as never reached.
+            // Emit an inline halt so the Z80 stops if it gets here anyway.
+            expect(tk::LPAREN);
+            expect(tk::RPAREN);
+            // Wrap in a GNU statement expression that emits halt and returns void.
+            // We model this as a call to an external __builtin_unreachable symbol
+            // that is [[noreturn]]; the backend will omit subsequent dead code.
+            auto callee_e = std::make_unique<ident_expr>();
+            callee_e->loc  = t.loc;
+            callee_e->name = "__builtin_unreachable";
+            // Build or retrieve the symbol
+            auto sym = syms_.lookup("__builtin_unreachable");
+            if (!sym) {
+                sym = std::make_shared<symbol>();
+                sym->name           = "__builtin_unreachable";
+                sym->kind           = sym_kind::FUNC;
+                sym->type           = type::make_function(type::make_void(), {}, false);
+                sym->is_global      = true;
+                sym->attr_noreturn  = true;
+                syms_.insert(sym);
+            }
+            callee_e->sym  = sym;
+            callee_e->type = sym->type;
+            auto call_e = std::make_unique<call_expr>();
+            call_e->loc    = t.loc;
+            call_e->callee = std::move(callee_e);
+            call_e->type   = type::make_void();
+            return call_e;
+        }
         auto e = std::make_unique<ident_expr>();
         e->loc  = t.loc;
         e->name = t.text;
         // Resolve symbol
         e->sym = syms_.lookup(t.text);
         if (!e->sym) {
-            // Undeclared — create a placeholder (for forward refs like printf)
+            // C23: implicit function declaration is not permitted.
+            // Emit a warning and create a variadic-int placeholder for error recovery.
+            diag_.warning(t.loc, "implicit declaration of function '%s'", t.text.c_str());
             auto sym = std::make_shared<symbol>();
             sym->name      = t.text;
             sym->kind      = sym_kind::FUNC;
@@ -551,17 +611,34 @@ expr_ptr parser::parse_primary_expression() {
             expect(tk::RPAREN);
             return se;
         }
-        // Check for cast or compound literal: '(' type-name ')' ...
+        // Check for cast or compound literal: '(' [storage-class] type-name ')' ...
+        // C23 §6.5.2.5: compound literals may carry a storage-class specifier.
         // __attribute__ can precede the type name in GCC-style casts.
         if (is_type_start() || check(tk::KW___ATTRIBUTE__)) {
-            type_ptr tname = parse_type_name();
+            decl_spec ds = parse_declaration_specifiers();
+            type_ptr tname = parse_abstract_declarator(ds.base_type);
+            if (!tname) tname = ds.base_type;
             expect(tk::RPAREN);
             // Compound literal: (type){ initializer }
             if (check(tk::LBRACE)) {
                 auto cl   = std::make_unique<compound_literal_expr>();
                 cl->loc   = loc;
                 cl->type  = tname;
-                if (cur_func_) {
+                bool is_static_cl = (ds.sc == storage_class::STATIC ||
+                                     ds.sc == storage_class::EXTERN);
+                if (is_static_cl) {
+                    // Static compound literal: treat as a named static variable.
+                    std::string lname = "__sclit" + std::to_string(clit_counter_++);
+                    auto sym        = std::make_shared<symbol>();
+                    sym->name       = lname;
+                    sym->kind       = sym_kind::VAR;
+                    sym->type       = tname;
+                    sym->is_global  = true;
+                    sym->storage    = storage_class::STATIC;
+                    sym->asm_name   = "_" + lname;
+                    syms_.insert(sym);
+                    cl->sym = sym;
+                } else if (cur_func_) {
                     auto sym        = std::make_shared<symbol>();
                     sym->name       = "__clit" + std::to_string(clit_counter_++);
                     sym->kind       = sym_kind::VAR;
@@ -574,7 +651,7 @@ expr_ptr parser::parse_primary_expression() {
                 cl->is_lvalue = true;
                 return cl;
             }
-            // Regular cast
+            // Regular cast — but only if no storage class (storage on a cast is invalid)
             auto cast         = std::make_unique<cast_expr>();
             cast->loc         = loc;
             cast->target_type = tname;

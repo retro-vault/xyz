@@ -1,0 +1,115 @@
+	.module xcc_output
+
+	.area _CONST
+__str_0:
+	.db 104, 101, 108, 108, 111, 0
+
+
+	.area _CODE
+
+	.globl _get_table
+_get_table:
+	; prologue: get_table (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #___sclit0
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	de, #1
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	de, #2
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	de, #2
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	de, #4
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	push	hl
+	ld	de, #3
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	de, #6
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	push	hl
+	ld	de, #4
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ld	hl, (___sclit0)
+	jp	__get_table_end
+__get_table_end:
+	; epilogue: get_table
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _get_msg
+_get_msg:
+	; prologue: get_msg (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #___sclit1
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #__str_0
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	e, -4(ix)
+	ld	d, -3(ix)
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ld	hl, (___sclit1)
+	jp	__get_msg_end
+__get_msg_end:
+	; epilogue: get_msg
+	ld	sp, ix
+	pop	ix
+	ret

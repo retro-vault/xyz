@@ -57,6 +57,8 @@ enum class type_kind : uint8_t {
     UNION,
     ENUM,           // treated as int
     COMPLEX,        // float _Complex / double _Complex: 8 bytes (re+im as soft-floats)
+    BITINT,         // _BitInt(N): bit-precise integer, backed by nearest 1/2/4-byte type
+    CHAR8T,         // char8_t: distinct unsigned-char-sized type for UTF-8 (C23)
 };
 
 struct type;
@@ -87,10 +89,15 @@ struct type {
     // ARRAY: element count (0 = incomplete / unsized)
     int array_size = 0;
 
+    // BITINT: bit width (1–64) and signedness
+    int  bitint_width    = 0;
+    bool bitint_unsigned = false;
+
     // FUNCTION: return type, parameter types, and variadic flag
     type_ptr              ret;
     std::vector<type_ptr> params;
-    bool                  variadic = false;
+    bool                  variadic     = false;
+    bool                  is_prototyped = false; // true for f(void)/f(T)/f() in C23
 
     // STRUCT / UNION: tag name, field list, and completeness flag
     std::string                tag;
@@ -235,6 +242,21 @@ struct type {
     //
     static type_ptr make_complex() {
         return std::make_shared<type>(type_kind::COMPLEX);
+    }
+
+    //
+    // Return a _BitInt(N) type with the given width (1–64) and signedness.
+    // Size rounds up to the nearest of 1, 2, or 4 bytes (Z80 max 32-bit useful).
+    //
+    static type_ptr make_char8t() {
+        return std::make_shared<type>(type_kind::CHAR8T);
+    }
+
+    static type_ptr make_bitint(int width, bool is_unsigned) {
+        auto t = std::make_shared<type>(type_kind::BITINT);
+        t->bitint_width    = width;
+        t->bitint_unsigned = is_unsigned;
+        return t;
     }
 
     // ----- predicates ------------------------------------------------

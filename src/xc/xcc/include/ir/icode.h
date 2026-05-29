@@ -266,6 +266,7 @@ struct ir_function {
     call_abi            abi              = call_abi::DEFAULT;
     int                 reg_param_count  = 0; // sdccall(1): number of register-passed params (0-3)
     int                 orig_local_bytes = 0; // sdccall(1): local_bytes before register spill area
+    bool                is_noreturn      = false; // [[noreturn]]: epilogue unreachable
 
     //
     // Dump all instructions of this function to stdout.

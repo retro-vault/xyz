@@ -70,6 +70,7 @@ type_ptr parser::parse_direct_declarator_suffix(type_ptr base, std::string &/*na
             std::vector<type_ptr> ptypes;
             for (auto &p : params) ptypes.push_back(p->type);
             base = type::make_function(base, std::move(ptypes), variadic);
+            base->is_prototyped = true; // C23: all explicit param lists are prototyped
             // Save named params for parse_external_declaration to recover.
             last_params_   = std::move(params);
             last_variadic_ = variadic;
@@ -143,6 +144,7 @@ declarator_info parser::parse_declarator(type_ptr base) {
             std::vector<type_ptr> ptypes;
             for (auto &p : inner_params) ptypes.push_back(p->type);
             type_ptr func_type = type::make_function(base, std::move(ptypes), inner_variadic);
+            func_type->is_prototyped = true;
             di.type = parse_direct_declarator_suffix(func_type, di.name);
             last_params_   = std::move(inner_params);
             last_variadic_ = inner_variadic;

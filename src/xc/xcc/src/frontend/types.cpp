@@ -17,12 +17,13 @@ namespace xcc {
 
 bool type::is_integer() const {
     switch (kind) {
-    case type_kind::BOOL:  case type_kind::CHAR:   case type_kind::UCHAR:
-    case type_kind::SHORT: case type_kind::USHORT:
-    case type_kind::INT:   case type_kind::UINT:
-    case type_kind::LONG:  case type_kind::ULONG:
-    case type_kind::LLONG: case type_kind::ULLONG:
-    case type_kind::ENUM:
+    case type_kind::BOOL:   case type_kind::CHAR:   case type_kind::UCHAR:
+    case type_kind::SHORT:  case type_kind::USHORT:
+    case type_kind::INT:    case type_kind::UINT:
+    case type_kind::LONG:   case type_kind::ULONG:
+    case type_kind::LLONG:  case type_kind::ULLONG:
+    case type_kind::ENUM:   case type_kind::BITINT:
+    case type_kind::CHAR8T:
         return true;
     default:
         return false;
@@ -34,6 +35,10 @@ bool type::is_unsigned() const {
     case type_kind::BOOL:  case type_kind::UCHAR:  case type_kind::USHORT:
     case type_kind::UINT:  case type_kind::ULONG:  case type_kind::ULLONG:
         return true;
+    case type_kind::BITINT:
+        return bitint_unsigned;
+    case type_kind::CHAR8T:
+        return true; // char8_t is unsigned
     default:
         return false;
     }
@@ -84,13 +89,26 @@ int type::size() const {
         }
         return total;
     }
+    case type_kind::CHAR8T:  return 1;  // unsigned char size
     case type_kind::FUNCTION:
         return 2; // pointer-sized (function never directly sized)
+    case type_kind::BITINT: {
+        // Round up to the nearest of 1, 2, or 4 bytes (max 32-bit on Z80).
+        int bytes = (bitint_width + 7) / 8;
+        if (bytes <= 1) return 1;
+        if (bytes <= 2) return 2;
+        return 4;
+    }
     }
     return 0;
 }
 
 int type::align() const {
+    // C23 §6.2.8: alignment of an array type equals alignment of its element.
+    // This covers incomplete arrays (array_size == 0) where size() returns 0.
+    if (kind == type_kind::ARRAY && base)
+        return base->align();
+
     // Z80 has no alignment requirements beyond 1 byte for most things,
     // but we align 2+ byte types to 2 for potential performance benefit.
     int sz = size();
@@ -120,6 +138,8 @@ std::string type::to_string() const {
     case type_kind::FLOAT:   os << "float"; break;
     case type_kind::DOUBLE:  os << "double"; break;
     case type_kind::COMPLEX: os << "float _Complex"; break;
+    case type_kind::CHAR8T:  os << "char8_t"; break;
+    case type_kind::BITINT:  os << (bitint_unsigned ? "unsigned " : "") << "_BitInt(" << bitint_width << ")"; break;
     case type_kind::POINTER: os << base->to_string() << "*"; break;
     case type_kind::ARRAY:   os << base->to_string() << "[" << array_size << "]"; break;
     case type_kind::FUNCTION:

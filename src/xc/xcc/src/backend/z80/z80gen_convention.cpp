@@ -35,9 +35,13 @@ void abi_convention::std_prologue_frame(z80_gen &g, const ir_function &fn)
 void abi_convention::std_epilogue_frame(z80_gen &g, const ir_function &fn)
 {
     g.emit_label(g.fn_end_lbl_, false);
-    g.emit_comment("epilogue: %s", fn.name.c_str());
-    g.emit_line("ld\tsp, ix");
-    g.emit_line("pop\tix");
+    if (fn.is_noreturn)
+        g.emit_comment("epilogue omitted: %s is [[noreturn]]", fn.name.c_str());
+    else {
+        g.emit_comment("epilogue: %s", fn.name.c_str());
+        g.emit_line("ld\tsp, ix");
+        g.emit_line("pop\tix");
+    }
 }
 
 void abi_convention::std_send_push(z80_gen &g, const icode &ic)

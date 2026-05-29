@@ -70,6 +70,16 @@ enum class tk {
     KW___TYPES_COMPAT_P,// __builtin_types_compatible_p(t1, t2) — GNU type compat check
     KW___BIT_CAST,      // __builtin_bit_cast(type, expr) — C23 bit reinterpretation
 
+    // C23 keywords
+    KW_BOOL,            // bool  — first-class type keyword (C23; was a macro in C11)
+    KW_TRUE,            // true  — boolean literal
+    KW_FALSE,           // false — boolean literal
+    KW_NULLPTR,         // nullptr — null pointer constant
+    KW_CONSTEXPR,       // constexpr — compile-time constant object
+    KW_TYPEOF_UNQUAL,   // typeof_unqual — typeof stripped of qualifiers
+    KW__BITINT,         // _BitInt(N) — bit-precise integer type
+    KW_CHAR8_T,         // char8_t — distinct unsigned char type for UTF-8
+
     // Punctuation / operators
     LBRACE, RBRACE,         // { }
     LBRACKET, RBRACKET,     // [ ]

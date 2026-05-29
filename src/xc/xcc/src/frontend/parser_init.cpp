@@ -11,9 +11,28 @@
 
 namespace xcc {
 
-expr_ptr parser::parse_initializer(type_ptr /*type*/) {
+expr_ptr parser::parse_initializer(type_ptr type) {
     auto loc = peek().loc;
     expect(tk::LBRACE);
+
+    // C23: empty braces {} zero-initialise any type.
+    if (check(tk::RBRACE)) {
+        consume();
+        // For scalar types return a literal zero of the correct type.
+        if (type && type->is_scalar() && !type->is_array()) {
+            auto z = std::make_unique<int_literal_expr>();
+            z->loc   = loc;
+            z->value = 0;
+            z->type  = type;
+            return z;
+        }
+        // For aggregates return empty init-list (irgen zero-fills missing elements).
+        auto il = std::make_unique<init_list_expr>();
+        il->loc  = loc;
+        il->type = type;
+        return il;
+    }
+
     auto il = std::make_unique<init_list_expr>();
     il->loc  = loc;
     il->type = nullptr;

@@ -200,11 +200,19 @@ extern void           __atomic_flag_clear(unsigned char *flag);
 #define atomic_is_lock_free(obj)     1
 
 // ----- ATOMIC_*_LOCK_FREE constants ----------------------------------
-#define ATOMIC_BOOL_LOCK_FREE     1
-#define ATOMIC_CHAR_LOCK_FREE     1
-#define ATOMIC_SHORT_LOCK_FREE    1
-#define ATOMIC_INT_LOCK_FREE      1
-#define ATOMIC_LONG_LOCK_FREE     0  // 32-bit needs 4 bytes; not atomic on Z80 without DI/EI
-#define ATOMIC_POINTER_LOCK_FREE  1
+#define ATOMIC_BOOL_LOCK_FREE      1
+#define ATOMIC_CHAR_LOCK_FREE      1
+#define ATOMIC_CHAR8_T_LOCK_FREE   1  // C23: char8_t = unsigned char, 1 byte
+#define ATOMIC_SHORT_LOCK_FREE     1
+#define ATOMIC_INT_LOCK_FREE       1
+#define ATOMIC_LONG_LOCK_FREE      0  // 32-bit; not lock-free on Z80 without DI/EI
+#define ATOMIC_LLONG_LOCK_FREE     0  // 64-bit
+#define ATOMIC_POINTER_LOCK_FREE   1
+#define ATOMIC_WCHAR_T_LOCK_FREE   1
+#define ATOMIC_CHAR16_T_LOCK_FREE  1
+#define ATOMIC_CHAR32_T_LOCK_FREE  0  // 32-bit
+
+// ----- C23: atomic_char8_t ----------------------------------------
+typedef _Atomic unsigned char atomic_char8_t;
 
 #endif // _STDATOMIC_H

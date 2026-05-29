@@ -79,6 +79,8 @@ const char *token::kind_name() const {
     CASE(PLUS); CASE(MINUS); CASE(STAR); CASE(SLASH); CASE(PERCENT);
     CASE(PLUS_PLUS); CASE(MINUS_MINUS);
     CASE(LATTR); CASE(RATTR);
+    CASE(KW_BOOL); CASE(KW_TRUE); CASE(KW_FALSE); CASE(KW_NULLPTR);
+    CASE(KW_CONSTEXPR); CASE(KW_TYPEOF_UNQUAL); CASE(KW__BITINT); CASE(KW_CHAR8_T);
     CASE(HASH); CASE(END_OF_FILE); CASE(ERROR);
 #undef CASE
     default: return "?";
@@ -150,6 +152,20 @@ tk lexer::keyword_kind(const std::string &s) {
         {"typeof",         tk::KW___TYPEOF__},
         {"__builtin_types_compatible_p", tk::KW___TYPES_COMPAT_P},
         {"__builtin_bit_cast",           tk::KW___BIT_CAST},
+        // C23 keywords
+        {"bool",            tk::KW_BOOL},
+        {"true",            tk::KW_TRUE},
+        {"false",           tk::KW_FALSE},
+        {"nullptr",         tk::KW_NULLPTR},
+        {"constexpr",       tk::KW_CONSTEXPR},
+        {"typeof_unqual",   tk::KW_TYPEOF_UNQUAL},
+        {"_BitInt",         tk::KW__BITINT},
+        {"char8_t",         tk::KW_CHAR8_T},
+        // C23 standardised spellings (no underscore prefix)
+        {"static_assert",   tk::KW__STATIC_ASSERT},
+        {"thread_local",    tk::KW__THREAD_LOCAL},
+        {"alignas",         tk::KW__ALIGNAS},
+        {"alignof",         tk::KW__ALIGNOF},
     };
     auto it = kw.find(s);
     return it != kw.end() ? it->second : tk::IDENT;
@@ -244,7 +260,10 @@ token lexer::lex_number() {
     if (cur() == '0' && (peek_char() == 'x' || peek_char() == 'X')) {
         // Hex
         s += advance(); s += advance(); // 0x
-        while (hex_digit(cur()) >= 0) s += advance();
+        while (hex_digit(cur()) >= 0 || cur() == '\'') {
+            if (cur() == '\'') { advance(); continue; } // digit separator
+            s += advance();
+        }
         if (cur() == '.') {               // hex fractional part
             is_float = true;
             s += advance();
@@ -256,8 +275,26 @@ token lexer::lex_number() {
             if (cur() == '+' || cur() == '-') s += advance();
             while (std::isdigit((unsigned char)cur())) s += advance();
         }
+    } else if (cur() == '0' && (peek_char() == 'b' || peek_char() == 'B')) {
+        // Binary: 0b1010
+        s += advance(); s += advance(); // 0b
+        while (cur() == '0' || cur() == '1' || cur() == '\'') {
+            if (cur() == '\'') { advance(); continue; } // digit separator
+            s += advance();
+        }
+        // Parse binary string as base 2
+        token t = make(tk::INT_LIT, s, loc);
+        try {
+            t.ival = (long long)std::stoull(s.substr(2), nullptr, 2);
+        } catch (...) { t.ival = 0; }
+        // Consume integer suffixes (u, l, ll)
+        while (std::isalpha((unsigned char)cur())) advance();
+        return t;
     } else {
-        while (std::isdigit((unsigned char)cur())) s += advance();
+        while (std::isdigit((unsigned char)cur()) || cur() == '\'') {
+            if (cur() == '\'') { advance(); continue; } // digit separator
+            s += advance();
+        }
         if (cur() == '.') { is_float = true; s += advance(); }
         while (std::isdigit((unsigned char)cur())) s += advance();
         if (cur() == 'e' || cur() == 'E') {
@@ -268,7 +305,7 @@ token lexer::lex_number() {
         }
     }
 
-    // Suffixes (u, l, ul, ll, f, etc.)
+    // Suffixes: u, l, ul, ll, f, wb (C23 _BitInt), uwb (C23 unsigned _BitInt)
     std::string suffix;
     while (std::isalpha((unsigned char)cur())) suffix += advance();
 
@@ -503,6 +540,10 @@ token lexer::lex_one() {
     if ((c == 'L') && peek_char() == '"') { advance(); return lex_string_literal(2); }
     if ((c == 'u') && peek_char() == '"') { advance(); return lex_string_literal(2); }
     if ((c == 'U') && peek_char() == '"') { advance(); return lex_string_literal(4); }
+    // C23: u8'A' — UTF-8 character literal (char8_t, value is single ASCII code unit)
+    if (c == 'u' && peek_char() == '8' && peek_char(2) == '\'') {
+        advance(); advance(); return lex_char_literal();
+    }
     if ((c == 'L' || c == 'u' || c == 'U') && peek_char() == '\'') {
         advance(); return lex_char_literal();
     }

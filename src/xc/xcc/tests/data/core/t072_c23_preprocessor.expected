@@ -1,0 +1,18 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _get_result
+_get_result:
+	; prologue: get_result (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #10
+	jp	__get_result_end
+__get_result_end:
+	; epilogue: get_result
+	ld	sp, ix
+	pop	ix
+	ret

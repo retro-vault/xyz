@@ -1,0 +1,133 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _buf
+_buf:
+	.db 195
+	.db 169
+	.db 0
+	.db 0
+
+
+	.area _CODE
+
+	.globl _get_first
+_get_first:
+	; prologue: get_first (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	.globl __mul16
+	ld	hl, #2
+	push	hl
+	ld	hl, #0
+	push	hl
+	call	__mul16
+	pop	bc
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, (#_buf)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	pop	de
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, (#_buf + 2)
+	push	hl
+	ld	l, 0(ix)
+	ld	h, 1(ix)
+	pop	de
+	adc	hl, de
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	dec	sp
+	dec	sp
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	jp	__get_first_end
+__get_first_end:
+	; epilogue: get_first
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _get_second
+_get_second:
+	; prologue: get_second (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	.globl __mul16
+	ld	hl, #2
+	push	hl
+	ld	hl, #1
+	push	hl
+	call	__mul16
+	pop	bc
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, (#_buf)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	pop	de
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, (#_buf + 2)
+	push	hl
+	ld	l, 0(ix)
+	ld	h, 1(ix)
+	pop	de
+	adc	hl, de
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	dec	sp
+	dec	sp
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	jp	__get_second_end
+__get_second_end:
+	; epilogue: get_second
+	ld	sp, ix
+	pop	ix
+	ret

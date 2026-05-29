@@ -168,7 +168,8 @@ void sema::visit(call_expr &e) {
     if (fn_type && fn_type->ret)
         e.type = fn_type->ret;
 
-    if (fn_type && !fn_type->variadic && !fn_type->params.empty()) {
+    // C23: any prototyped function (including f(void) and f()) enforces arg count.
+    if (fn_type && fn_type->is_prototyped && !fn_type->variadic) {
         if (e.args.size() != fn_type->params.size())
             diag_.error(e.loc, "wrong number of arguments to function call");
     }
@@ -314,6 +315,11 @@ void sema::visit(var_decl &d) {
     if (d.sym && !d.attrs.empty())
         apply_attrs(*d.sym, d.attrs, d.loc);
     if (d.init) d.init->accept(*this);
+    // constexpr requires a constant initializer.
+    if (d.sym && d.sym->type && d.sym->type->is_const && d.init) {
+        if (!const_expr_evaluator::evaluate(d.init.get()))
+            diag_.warning(d.loc, "constexpr / const initializer is not a constant expression");
+    }
 }
 
 void sema::visit(func_decl &d) {

@@ -1,6 +1,10 @@
-ROOT ?= ../../..
+# Absolute path to this Makefile's directory — always correct regardless of
+# where make is invoked from, and safe when ROOT/BUILD_DIR are already
+# exported by the root Makefile (the ?= guards prevent overwriting them).
+_THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOT      ?= $(abspath $(_THIS_DIR)/../../..)
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR  ?= $(ROOT)/bin
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 CXX ?= g++

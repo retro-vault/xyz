@@ -88,6 +88,31 @@ void ir_gen::visit(var_decl &vd) {
         ic2.left   = bytes;
         emit(ic2);
         emit_assign(sym_to_operand(*vd.sym, vd.type), ptr_res);
+
+        // C23: int vla[n] = {} → zero-initialise the allocated region.
+        if (vd.init) {
+            auto *il = dynamic_cast<init_list_expr*>(vd.init.get());
+            bool is_empty_init = il && il->elements.empty();
+            if (is_empty_init) {
+                // Emit: __vla_zero(ptr_res, bytes)
+                icode sz_ic;
+                sz_ic.op         = icode_op::SEND;
+                sz_ic.left       = bytes;
+                sz_ic.argreg     = 1; // second arg (byte count)
+                emit(sz_ic);
+                icode ptr_ic;
+                ptr_ic.op        = icode_op::SEND;
+                ptr_ic.left      = ptr_res;
+                ptr_ic.argreg    = 0; // first arg (pointer)
+                emit(ptr_ic);
+                icode call_ic;
+                call_ic.op        = icode_op::CALL;
+                call_ic.func_name = "__vla_zero";
+                call_ic.num_params = 2;
+                call_ic.arg_bytes  = 4; // 2 bytes ptr + 2 bytes count
+                emit(call_ic);
+            }
+        }
         return;
     }
 
@@ -139,6 +164,7 @@ void ir_gen::gen_func(func_decl &fd) {
     fn.orig_local_bytes = fd.local_bytes;
     fn.num_params       = static_cast<int>(fd.params.size());
     fn.abi              = fd.sym ? fd.sym->abi : call_abi::DEFAULT;
+    fn.is_noreturn      = fd.sym ? fd.sym->attr_noreturn : false;
     fn.reg_param_count  = 0;
 
     // sdccall(1): first ≤3 parameters arrive in registers (HL, DE, BC).

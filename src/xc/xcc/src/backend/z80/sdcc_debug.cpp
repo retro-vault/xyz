@@ -37,6 +37,10 @@ std::string sdcc_debug_emitter::type_suffix(const type *t) {
     case type_kind::DOUBLE:                return "%SF";
     case type_kind::ENUM:                  return "%S16";
     case type_kind::COMPLEX:               return "%SF";
+    case type_kind::CHAR8T:                return "%U8";   // char8_t = unsigned char
+    case type_kind::BITINT:
+        return t->bitint_unsigned ? "%U" + std::to_string(t->bitint_width)
+                                  : "%S" + std::to_string(t->bitint_width);
     case type_kind::STRUCT:
         if (!t->tag.empty())
             return "%struct:" + t->tag;

@@ -1,0 +1,29 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _aligned_var
+_aligned_var:
+	.ds 2
+
+
+	.area _CODE
+
+	.globl _get_align
+_get_align:
+	; prologue: get_align (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #2
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__get_align_end
+__get_align_end:
+	; epilogue: get_align
+	ld	sp, ix
+	pop	ix
+	ret

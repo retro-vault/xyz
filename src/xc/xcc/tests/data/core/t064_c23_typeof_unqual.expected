@@ -1,0 +1,28 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _x
+_x:
+	.dw 42
+	.globl _y
+_y:
+	.ds 2
+
+
+	.area _CODE
+
+	.globl _get
+_get:
+	; prologue: get (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #1
+	ld	(_y), hl
+	ld	hl, (_y)
+	jp	__get_end
+__get_end:
+	; epilogue: get
+	ld	sp, ix
+	pop	ix
+	ret

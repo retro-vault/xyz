@@ -78,7 +78,7 @@ preprocessor::preprocessor(diag_engine                   &diag,
     };
     predef("__STDC__",                 "1");
     predef("__STDC_HOSTED__",          "1");
-    predef("__STDC_VERSION__",         "201112L");
+    predef("__STDC_VERSION__",         "202311L"); // C23
     predef("__CHAR_BIT__",             "8");
     predef("__SCHAR_MAX__",            "127");
     predef("__SHRT_MAX__",             "32767");
@@ -115,6 +115,13 @@ preprocessor::preprocessor(diag_engine                   &diag,
     predef("__USHRT_MAX__",            "65535U");
     predef("__UINT_MAX__",             "65535U");
     predef("__ULONG_MAX__",            "4294967295UL");
+    predef("__SIZE_MAX__",             "65535U");    // sizeof(size_t)=2 on Z80
+    predef("__PTRDIFF_MAX__",          "32767");
+    predef("__WCHAR_MAX__",            "32767");
+    // C23 feature-test macros
+    predef("__STDC_NO_VLA__",          "1");         // VLAs optional in C23
+    predef("__STDC_UTF_16__",          "1");
+    predef("__STDC_UTF_32__",          "1");
 
     for (auto &def : cmdline_defines) {
         size_t eq = def.find('=');
@@ -327,7 +334,7 @@ std::string preprocessor::expand(const std::string &text,
         const auto &params = m.params;
         std::string body = m.body;
 
-        // Handle variadic: __VA_ARGS__
+        // Handle variadic: __VA_ARGS__ and __VA_OPT__(tokens)
         if (m.is_variadic) {
             std::string va;
             size_t fixed = params.size();
@@ -335,9 +342,33 @@ std::string preprocessor::expand(const std::string &text,
                 if (k > fixed) va += ", ";
                 va += args[k];
             }
+            // C23 §6.10.3.6: __VA_OPT__ expands iff the token sequence produced
+            // by expanding __VA_ARGS__ is non-empty.  Expand va before testing.
+            std::vector<std::string> va_guard;
+            std::string va_expanded = expand(va, va_guard);
+            // Trim whitespace for the emptiness check.
+            size_t s0 = va_expanded.find_first_not_of(" \t");
+            bool va_nonempty = (s0 != std::string::npos);
             std::string tmp;
             size_t p = 0;
             while (p < body.size()) {
+                // __VA_OPT__(tokens) — C23: expand to tokens if __VA_ARGS__ non-empty
+                if (body.substr(p, 10) == "__VA_OPT__") {
+                    p += 10;
+                    // skip optional whitespace, consume '('
+                    while (p < body.size() && body[p] == ' ') ++p;
+                    if (p < body.size() && body[p] == '(') ++p;
+                    std::string inner;
+                    int depth = 1;
+                    while (p < body.size() && depth > 0) {
+                        if (body[p] == '(') { depth++; inner += body[p++]; }
+                        else if (body[p] == ')') { if (--depth > 0) inner += body[p]; p++; }
+                        else inner += body[p++];
+                    }
+                    if (va_nonempty) tmp += inner; // expand to inner content
+                    // else: expand to nothing (omit)
+                    continue;
+                }
                 if (body.substr(p, 11) == "__VA_ARGS__") {
                     tmp += va;
                     p += 11;
@@ -497,6 +528,43 @@ struct eval_ctx {
         if (expr[pos] == '~') { ++pos; return ~parse_primary(); }
         if (expr[pos] == '-') { ++pos; return -parse_primary(); }
         if (expr[pos] == '+') { ++pos; return  parse_primary(); }
+
+        // C23: __has_include("file") / __has_include(<file>)
+        // Returns 1 optimistically (include search paths are configured correctly).
+        if (expr.substr(pos, 13) == "__has_include") {
+            pos += 13;
+            int depth = 0;
+            while (pos < expr.size() && !(depth == 0 && expr[pos] == ')')) {
+                if (expr[pos] == '(') depth++;
+                else if (expr[pos] == ')') depth--;
+                ++pos;
+            }
+            if (pos < expr.size()) ++pos; // consume ')'
+            return 1; // optimistic: assume include is available
+        }
+
+        // C23: __has_c_attribute([[ns::name]]) — 0 for unknown, 1 for known C23 attrs
+        if (expr.substr(pos, 18) == "__has_c_attribute") {
+            pos += 18;
+            // Collect the attribute name from inside the parens
+            std::string attr_arg;
+            int depth = 0;
+            while (pos < expr.size() && !(depth == 0 && expr[pos] == ')')) {
+                if (expr[pos] == '(') depth++;
+                else if (expr[pos] == ')') depth--;
+                else attr_arg += expr[pos];
+                ++pos;
+            }
+            if (pos < expr.size()) ++pos;
+            // Known standard C23 attributes (return version number per spec)
+            for (auto &ch : attr_arg) if (ch == ' ' || ch == '\t') ch = 0;
+            if (attr_arg == "noreturn" || attr_arg == "deprecated" ||
+                attr_arg == "nodiscard" || attr_arg == "maybe_unused" ||
+                attr_arg == "fallthrough" || attr_arg == "unsequenced" ||
+                attr_arg == "reproducible")
+                return 202311L; // C23 version stamp
+            return 0;
+        }
 
         // defined(X) or defined X
         if (expr.substr(pos, 7) == "defined") {
@@ -901,6 +969,30 @@ void preprocessor::process_text(const std::string &source,
                 }
                 continue;
             }
+            // C23: #elifdef sym == #elif defined(sym)
+            if (dir == "elifdef" || dir == "elifndef") {
+                if (cond_stack.empty())
+                    diag_.fatal(filename.c_str(), lineno,
+                                "#%s without #if", dir.c_str());
+                auto &f = cond_stack.back();
+                if (f.has_else)
+                    diag_.fatal(filename.c_str(), lineno,
+                                "#%s after #else", dir.c_str());
+                if (!f.branch_taken) {
+                    bool parent_emit = true;
+                    for (size_t k = 0; k + 1 < cond_stack.size(); ++k)
+                        if (!cond_stack[k].active) { parent_emit = false; break; }
+                    if (parent_emit) {
+                        bool defined = macros_.count(rest) > 0;
+                        bool act = (dir == "elifdef") ? defined : !defined;
+                        f.active = act;
+                        f.branch_taken = act;
+                    }
+                } else {
+                    f.active = false;
+                }
+                continue;
+            }
             if (dir == "else") {
                 if (cond_stack.empty()) {
                     diag_.fatal(filename.c_str(), lineno, "#else without #if");
@@ -1009,6 +1101,12 @@ void preprocessor::process_text(const std::string &source,
 
             if (dir == "error") {
                 diag_.fatal(filename.c_str(), lineno, "#error %s", rest.c_str());
+            }
+
+            // C23: #warning emits a diagnostic but continues compilation.
+            if (dir == "warning") {
+                diag_.warning(filename.c_str(), lineno, "#warning %s", rest.c_str());
+                continue;
             }
 
             if (dir == "pragma") {

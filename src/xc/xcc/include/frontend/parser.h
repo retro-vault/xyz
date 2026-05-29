@@ -41,10 +41,12 @@ namespace xcc {
 
 struct decl_spec {
     type_ptr      base_type;
-    storage_class sc        = storage_class::NONE;
-    bool          is_inline = false;
-    bool          is_tls    = false;
-    attr_list     attrs;    // accumulated [[...]] attributes on this declaration
+    storage_class sc           = storage_class::NONE;
+    bool          is_inline    = false;
+    bool          is_tls       = false;
+    bool          is_constexpr = false; // C23 constexpr: object with constant initializer
+    bool          is_deduced   = false; // C23 auto: type inferred from initializer
+    attr_list     attrs;
 };
 
 // ----- declarator_info -----------------------------------------------

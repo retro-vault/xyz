@@ -96,7 +96,11 @@ stmt_ptr parser::parse_compound_statement() {
             if (check(tk::SEMICOLON)) { consume(); continue; } // bare type decl
 
             do {
-                auto      di    = parse_declarator(dspec.base_type);
+                // For C23 auto deduction, pass a placeholder int base so
+                // parse_declarator never receives nullptr; the real type
+                // is resolved from the initializer below.
+                type_ptr parse_base = dspec.is_deduced ? type::make_int() : dspec.base_type;
+                auto      di    = parse_declarator(parse_base);
                 auto      vname = di.name;
                 type_ptr  vtype = di.type;
                 auto vd = std::make_unique<var_decl>();
@@ -142,15 +146,33 @@ stmt_ptr parser::parse_compound_statement() {
                     syms_.insert(vsym);
                     vd->sym = vsym;
                 } else {
-                    vd->sym = make_local_sym(vname, vtype, dspec.sc);
+                    // C23 auto deduction: allocate with placeholder type,
+                    // then fix up after parsing the initializer.
+                    type_ptr alloc_type = dspec.is_deduced ? type::make_int() : vtype;
+                    vd->sym = make_local_sym(vname, alloc_type, dspec.sc);
                     if (match(tk::EQ)) {
                         vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
                                                       : parse_assignment_expression();
+                        if (dspec.is_deduced && vd->init && vd->init->type) {
+                            // Resolve deduced type from the initializer.
+                            vtype        = vd->init->type->unqual();
+                            vd->type     = vtype;
+                            vd->sym->type = vtype;
+                            // Shrink/grow the stack slot to the correct size.
+                            // (The alloc_local already advanced local_offset by 2;
+                            //  adjust if the real type is smaller or larger.)
+                            int real_sz = vtype->size() > 0 ? vtype->size() : 2;
+                            frame_.local_offset -= (real_sz - (alloc_type->size() > 0 ? alloc_type->size() : 2));
+                        } else if (dspec.is_deduced) {
+                            error("'auto' variable requires an initializer with a known type");
+                        }
                         if (vd->sym && vd->sym->type && vd->sym->type->is_const &&
                             vd->sym->type->is_integer() && vd->init) {
                             if (auto cv = const_expr_evaluator::evaluate(vd->init.get()))
                                 vd->sym->const_val = cv;
                         }
+                    } else if (dspec.is_deduced) {
+                        error("'auto' variable requires an initializer");
                     }
                 }
                 ds->decls.push_back(std::move(vd));
@@ -322,9 +344,12 @@ stmt_ptr parser::parse_label_or_expr_statement() {
         auto s = std::make_unique<label_stmt>();
         s->loc  = id.loc;
         s->name = id.text;
-        // Label may be followed by a statement on the same line or just by more statements.
-        if (!check(tk::RBRACE) && !check(tk::END_OF_FILE))
+        // C23: a label may be followed directly by a declaration.
+        // Attach an empty statement as the label body; the declaration
+        // is handled normally by the enclosing compound-statement loop.
+        if (!check(tk::RBRACE) && !check(tk::END_OF_FILE) && !is_type_start())
             s->body = parse_statement();
+        // else: body stays nullptr — the outer compound loop picks up the decl.
         return s;
     }
 

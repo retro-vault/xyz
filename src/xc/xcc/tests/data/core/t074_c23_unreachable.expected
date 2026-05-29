@@ -1,0 +1,75 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _panic
+_panic:
+	; prologue: panic (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	.globl __builtin_unreachable
+	call	__builtin_unreachable
+__panic_end:
+	; epilogue omitted: panic is [[noreturn]]
+	ret
+	.globl _safe_div
+_safe_div:
+	; prologue: safe_div (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param a at 4(ix)
+	; receive param b at 6(ix)
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	push	hl
+	ld	hl, #0
+	pop	de
+	or	a, a
+	sbc	hl, de
+	jp	z, __cmp_t_89383
+	ld	hl, #0
+	jp	__cmp_e_30886
+__cmp_t_89383:
+	ld	hl, #1
+__cmp_e_30886:
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L0
+	jp	__xcc_L2
+__xcc_L0:
+	.globl _panic
+	call	_panic
+	.globl __builtin_unreachable
+	call	__builtin_unreachable
+	jp	__xcc_L2
+__xcc_L2:
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	push	hl
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	pop	de
+	.globl __divsint
+	call	__divsint
+	ex	de, hl
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	jp	__safe_div_end
+__safe_div_end:
+	; epilogue: safe_div
+	ld	sp, ix
+	pop	ix
+	ret

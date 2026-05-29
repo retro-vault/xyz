@@ -17,10 +17,11 @@ namespace xcc {
 // Returns the combined base type.
 
 decl_spec parser::parse_declaration_specifiers() {
-    storage_class sc        = storage_class::NONE;
-    bool          is_inline = false;
-    bool          is_tls    = false;
-    attr_list     local_attrs; // accumulates [[...]] found inside the specifier sequence
+    storage_class sc           = storage_class::NONE;
+    bool          is_inline    = false;
+    bool          is_tls       = false;
+    bool          is_constexpr = false;
+    attr_list     local_attrs;
 
     bool has_unsigned = false;
     bool has_short    = false;
@@ -61,6 +62,19 @@ decl_spec parser::parse_declaration_specifiers() {
             continue;
         }
 
+        // C23 constexpr — compile-time constant; implies const + static/auto storage
+        if (k == tk::KW_CONSTEXPR) { is_constexpr = true; is_const = true; consume(); continue; }
+
+        // _Alignas(N) / alignas(N) — parsed and discarded (Z80 always aligns to 1 byte)
+        if (k == tk::KW__ALIGNAS) {
+            consume();
+            expect(tk::LPAREN);
+            if (is_type_start()) parse_type_name();
+            else                 parse_assignment_expression();
+            expect(tk::RPAREN);
+            continue;
+        }
+
         // Function specifiers
         if (k == tk::KW_INLINE)     { is_inline = true; consume(); continue; }
         if (k == tk::KW__NORETURN)  { consume(); continue; }
@@ -69,11 +83,28 @@ decl_spec parser::parse_declaration_specifiers() {
         if (k == tk::KW_CONST)    { is_const    = true; consume(); continue; }
         if (k == tk::KW_VOLATILE) { is_volatile = true; consume(); continue; }
         if (k == tk::KW_RESTRICT) { is_restrict = true; consume(); continue; }
-        if (k == tk::KW__ATOMIC)  { consume(); continue; }
+        if (k == tk::KW__ATOMIC) {
+            consume();
+            // _Atomic(type-name) form — parse and strip the qualifier (Z80 uses DI/EI stubs)
+            if (check(tk::LPAREN) && !explicit_type) {
+                expect(tk::LPAREN);
+                if (is_type_start()) {
+                    decl_spec ads = parse_declaration_specifiers();
+                    explicit_type = ads.base_type ? ads.base_type->unqual() : nullptr;
+                    parse_abstract_declarator(explicit_type ? explicit_type : type::make_int());
+                }
+                expect(tk::RPAREN);
+            }
+            continue;
+        }
 
         // type specifiers
         if (k == tk::KW_VOID)     { has_void   = true; consume(); continue; }
         if (k == tk::KW__BOOL)    { has_bool   = true; consume(); continue; }
+        if (k == tk::KW_BOOL)     { has_bool   = true; consume(); continue; } // C23 bool
+        if (k == tk::KW_CHAR8_T && !explicit_type) {
+            consume(); explicit_type = type::make_char8t(); continue;
+        }
         if (k == tk::KW_CHAR)     { has_char   = true; consume(); continue; }
         if (k == tk::KW_INT)      { has_int    = true; consume(); continue; }
         if (k == tk::KW_FLOAT)     { has_float   = true; consume(); continue; }
@@ -120,14 +151,21 @@ decl_spec parser::parse_declaration_specifiers() {
             continue;
         }
 
-        // Enum
+        // Enum — optionally with C23 underlying type: enum E : unsigned char { ... }
         if (k == tk::KW_ENUM) {
             consume();
             if (peek().kind == tk::IDENT) consume(); // optional tag
+            // C23: optional underlying-type specifier after ':'
+            type_ptr enum_base = type::make_int(); // default: int
+            if (check(tk::COLON)) {
+                consume();
+                decl_spec uds = parse_declaration_specifiers();
+                if (uds.base_type) enum_base = uds.base_type->unqual();
+            }
             if (peek().kind == tk::LBRACE) {
                 parse_enum_body();
             }
-            explicit_type = type::make_int(); // enum treated as int
+            explicit_type = enum_base;
             continue;
         }
 
@@ -141,21 +179,44 @@ decl_spec parser::parse_declaration_specifiers() {
             }
         }
 
-        // __typeof__(type-or-expr) — GNU extension
-        if (k == tk::KW___TYPEOF__ && !explicit_type) {
-            consume(); // consume __typeof__
+        // __typeof__(type-or-expr) — GNU extension, and C23 typeof
+        if ((k == tk::KW___TYPEOF__ || k == tk::KW_TYPEOF_UNQUAL) && !explicit_type) {
+            bool strip_quals = (k == tk::KW_TYPEOF_UNQUAL);
+            consume();
             expect(tk::LPAREN);
-            // Try to parse as a type first; fall back to expression.
             if (is_type_start()) {
                 decl_spec ds = parse_declaration_specifiers();
                 type_ptr t = parse_abstract_declarator(ds.base_type);
                 explicit_type = t ? t : ds.base_type;
             } else {
                 auto e = parse_expression();
-                if (e && e->type) explicit_type = e->type->unqual();
+                if (e && e->type) explicit_type = e->type;
                 else              explicit_type = type::make_int();
             }
+            if (strip_quals && explicit_type) explicit_type = explicit_type->unqual();
             expect(tk::RPAREN);
+            continue;
+        }
+
+        // _BitInt(N) — C23 bit-precise integer
+        if (k == tk::KW__BITINT && !explicit_type) {
+            consume();
+            expect(tk::LPAREN);
+            auto we = parse_assignment_expression();
+            auto wv = const_expr_evaluator::evaluate(we.get());
+            int width = wv ? (int)*wv : 0;
+            expect(tk::RPAREN);
+            if (width < 1) {
+                error("_BitInt width must be at least 1");
+                width = 1;
+            }
+            if (width > 64) {
+                // C23 allows arbitrary widths; xcc caps at 64 on Z80.
+                diag_.warning(peek().loc,
+                    "_BitInt(%d) exceeds xcc maximum (64); capped at 64", width);
+                width = 64;
+            }
+            explicit_type = type::make_bitint(width, has_unsigned);
             continue;
         }
 
@@ -190,11 +251,30 @@ decl_spec parser::parse_declaration_specifiers() {
         base = has_unsigned ? type::make_uint() : type::make_int();
     }
 
-    base = base->unqual();
-    base->is_const    = is_const;
-    base->is_volatile = is_volatile;
-    base->is_restrict = is_restrict;
-    return decl_spec{base, sc, is_inline, is_tls, std::move(local_attrs)};
+    // C23 auto deduction: 'auto' with no type specifier = deduced type.
+    bool is_deduced = (!explicit_type && !has_void && !has_bool && !has_char &&
+                       !has_int && !has_float && !has_double && !has_complex &&
+                       !has_short && !has_long && !has_llong && !has_unsigned &&
+                       sc == storage_class::AUTO);
+    // If deducing, reset storage class to NONE (auto deduction ≠ auto storage).
+    if (is_deduced) sc = storage_class::NONE;
+
+    if (!is_deduced) {
+        base = base->unqual();
+        base->is_const    = is_const;
+        base->is_volatile = is_volatile;
+        base->is_restrict = is_restrict;
+    }
+
+    decl_spec ds;
+    ds.base_type   = is_deduced ? nullptr : base;
+    ds.sc          = sc;
+    ds.is_inline   = is_inline;
+    ds.is_tls      = is_tls;
+    ds.is_constexpr= is_constexpr;
+    ds.is_deduced  = is_deduced;
+    ds.attrs       = std::move(local_attrs);
+    return ds;
 }
 
 // ----- parse_struct_body ---------------------------------------------

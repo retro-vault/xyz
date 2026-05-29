@@ -1,0 +1,26 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _LIMIT
+_LIMIT:
+	.dw 32
+	.globl _arr
+_arr:
+	.ds 2
+
+
+	.area _CODE
+
+	.globl _get_limit
+_get_limit:
+	; prologue: get_limit (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, (_LIMIT)
+	jp	__get_limit_end
+__get_limit_end:
+	; epilogue: get_limit
+	ld	sp, ix
+	pop	ix
+	ret

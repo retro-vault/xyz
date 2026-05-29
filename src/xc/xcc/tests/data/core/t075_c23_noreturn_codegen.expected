@@ -1,0 +1,30 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _halt_forever
+_halt_forever:
+	; prologue: halt_forever (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+__xcc_L0:
+	ld	hl, #1
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L1
+	jp	__xcc_L2
+__xcc_L1:
+	jp	__xcc_L0
+__xcc_L2:
+__halt_forever_end:
+	; epilogue omitted: halt_forever is [[noreturn]]
+	ret
+	.globl _raw_halt
+_raw_halt:
+	; naked: raw_halt
+halt
+jp 0
+__raw_halt_end:
+	; naked epilogue: raw_halt

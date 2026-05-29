@@ -163,7 +163,8 @@ bool parser::is_type_start() const {
     case tk::KW_AUTO: case tk::KW_EXTERN: case tk::KW_REGISTER:
     case tk::KW_STATIC: case tk::KW_TYPEDEF: case tk::KW__THREAD_LOCAL:
     case tk::KW_INLINE: case tk::KW__NORETURN:
-    case tk::KW___TYPEOF__:
+    case tk::KW___TYPEOF__: case tk::KW_TYPEOF_UNQUAL:
+    case tk::KW_BOOL: case tk::KW_CONSTEXPR: case tk::KW__BITINT: case tk::KW_CHAR8_T:
         return true;
     case tk::IDENT: {
         auto sym = syms_.lookup(lex_.peek().text);
@@ -356,6 +357,14 @@ decl_ptr parser::parse_external_declaration() {
     if (match(tk::EQ)) {
         vd->init = check(tk::LBRACE) ? parse_initializer(decl_type)
                                       : parse_assignment_expression();
+        // C23 auto deduction: resolve type from initializer now that we have it.
+        if (ds.is_deduced && vd->init && vd->init->type) {
+            vd->type  = vd->init->type->unqual();
+            decl_type = vd->type;
+        }
+    } else if (ds.is_deduced) {
+        error("'auto' variable requires an initializer");
+        vd->type = type::make_int(); // recover
     }
 
     auto sym = std::make_shared<symbol>();
