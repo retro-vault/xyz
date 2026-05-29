@@ -15,9 +15,90 @@
 //
 #include "frontend/sema.h"
 #include "frontend/const_eval.h"
+#include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 namespace xcc {
+
+// ----- attribute application -----------------------------------------
+
+void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
+    for (auto &a : attrs) {
+        // ----- standard C23 attributes (no namespace) ----------------
+        if (a.ns.empty()) {
+            if (a.name == "noreturn") {
+                sym.attr_noreturn = true;
+            } else if (a.name == "deprecated") {
+                sym.attr_deprecated = true;
+                if (!a.args.empty()) sym.deprecated_msg = a.args[0];
+            } else if (a.name == "nodiscard") {
+                sym.attr_nodiscard = true;
+                if (!a.args.empty()) sym.nodiscard_msg = a.args[0];
+            } else if (a.name == "maybe_unused") {
+                sym.attr_maybe_unused = true;
+            } else if (a.name == "fallthrough") {
+                // Statement attribute; no symbol effect
+            } else if (a.name == "unsequenced") {
+                sym.attr_unsequenced = true;
+            } else if (a.name == "reproducible") {
+                sym.attr_reproducible = true;
+            } else {
+                diag_.warning(a.loc, "unknown standard attribute '[[%s]]' ignored",
+                              a.name.c_str());
+            }
+        }
+        // ----- SDCC vendor attributes (namespace sdcc) ---------------
+        else if (a.ns == "sdcc") {
+            if (a.name == "naked") {
+                sym.abi = call_abi::NAKED;
+            } else if (a.name == "interrupt") {
+                sym.abi = call_abi::INTERRUPT;
+            } else if (a.name == "critical") {
+                sym.abi = call_abi::CRITICAL;
+            } else if (a.name == "sdccall") {
+                if (a.args.empty()) {
+                    diag_.error(a.loc, "[[sdcc::sdccall]] requires an integer argument (0 or 1)");
+                } else {
+                    int n = std::stoi(a.args[0]);
+                    if (n == 0)       sym.abi = call_abi::SDCCCALL0;
+                    else if (n == 1)  sym.abi = call_abi::SDCCCALL1;
+                    else diag_.error(a.loc, "[[sdcc::sdccall(%d)]]: only 0 and 1 are supported", n);
+                }
+            } else if (a.name == "at") {
+                if (a.args.empty()) {
+                    diag_.error(a.loc, "[[sdcc::at]] requires an address argument");
+                } else {
+                    try {
+                        sym.at_address = (int64_t)std::stoull(a.args[0], nullptr, 0);
+                    } catch (...) {
+                        diag_.error(a.loc, "[[sdcc::at]]: invalid address '%s'",
+                                    a.args[0].c_str());
+                    }
+                }
+            } else if (a.name == "sfr") {
+                if (a.args.empty()) {
+                    diag_.error(a.loc, "[[sdcc::sfr]] requires a port number argument");
+                } else {
+                    try {
+                        sym.sfr_port = (int)std::stoull(a.args[0], nullptr, 0);
+                    } catch (...) {
+                        diag_.error(a.loc, "[[sdcc::sfr]]: invalid port '%s'",
+                                    a.args[0].c_str());
+                    }
+                }
+            } else {
+                diag_.warning(a.loc, "unknown sdcc attribute '[[sdcc::%s]]' ignored",
+                              a.name.c_str());
+            }
+        }
+        // ----- unknown namespace ------------------------------------
+        else {
+            // Unknown namespace — silently ignore per C23 rules.
+            (void)loc;
+        }
+    }
+}
 
 // ----- helpers -------------------------------------------------------
 
@@ -71,6 +152,7 @@ void sema::visit(call_expr &e) {
     // Only fires when the function type has at least one declared parameter
     // (empty params = K&R / void, can't reliably distinguish without extra state).
     const type *fn_type = nullptr;
+    const symbol *callee_sym = nullptr;
     if (e.callee && e.callee->type) {
         if (e.callee->type->is_func())
             fn_type = e.callee->type.get();
@@ -78,6 +160,8 @@ void sema::visit(call_expr &e) {
                  e.callee->type->base->is_func())
             fn_type = e.callee->type->base.get();
     }
+    if (auto *id = dynamic_cast<ident_expr*>(e.callee.get()))
+        callee_sym = id->sym.get();
 
     // Propagate the callee return type onto the call expression so IR
     // generation can size temporaries and returns correctly.
@@ -87,6 +171,19 @@ void sema::visit(call_expr &e) {
     if (fn_type && !fn_type->variadic && !fn_type->params.empty()) {
         if (e.args.size() != fn_type->params.size())
             diag_.error(e.loc, "wrong number of arguments to function call");
+    }
+
+    // Attribute use-site checks
+    if (callee_sym) {
+        if (callee_sym->attr_deprecated) {
+            if (callee_sym->deprecated_msg.empty())
+                diag_.warning(e.loc, "'%s' is deprecated", callee_sym->name.c_str());
+            else
+                diag_.warning(e.loc, "'%s' is deprecated: %s",
+                              callee_sym->name.c_str(),
+                              callee_sym->deprecated_msg.c_str());
+        }
+        // nodiscard: checked in visit(expr_stmt) since we need the stmt context
     }
 }
 
@@ -125,6 +222,23 @@ void sema::visit(compound_stmt &s) {
 
 void sema::visit(expr_stmt &s) {
     if (s.expr) s.expr->accept(*this);
+    // [[nodiscard]] check: warn when a nodiscard function's return value is discarded
+    if (s.expr) {
+        auto *ce = dynamic_cast<call_expr*>(s.expr.get());
+        if (ce && ce->callee) {
+            if (auto *id = dynamic_cast<ident_expr*>(ce->callee.get())) {
+                if (id->sym && id->sym->attr_nodiscard) {
+                    if (id->sym->nodiscard_msg.empty())
+                        diag_.warning(s.loc, "return value of '%s' should not be discarded",
+                                      id->sym->name.c_str());
+                    else
+                        diag_.warning(s.loc, "return value of '%s' should not be discarded: %s",
+                                      id->sym->name.c_str(),
+                                      id->sym->nodiscard_msg.c_str());
+                }
+            }
+        }
+    }
 }
 
 void sema::visit(decl_stmt &s) {
@@ -197,10 +311,14 @@ void sema::visit(case_stmt &s) {
 // ----- decl_visitor --------------------------------------------------
 
 void sema::visit(var_decl &d) {
+    if (d.sym && !d.attrs.empty())
+        apply_attrs(*d.sym, d.attrs, d.loc);
     if (d.init) d.init->accept(*this);
 }
 
 void sema::visit(func_decl &d) {
+    if (d.sym && !d.attrs.empty())
+        apply_attrs(*d.sym, d.attrs, d.loc);
     if (d.body) d.body->accept(*this);
 }
 

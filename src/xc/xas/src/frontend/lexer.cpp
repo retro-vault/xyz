@@ -312,6 +312,7 @@ namespace xas {
 
         TOK1(':', colon)
         TOK1(',', comma)
+        TOK1('=', eq)
         TOK1('(', lparen)
         TOK1(')', rparen)
         TOK1('+', plus)

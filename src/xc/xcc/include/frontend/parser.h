@@ -44,6 +44,7 @@ struct decl_spec {
     storage_class sc        = storage_class::NONE;
     bool          is_inline = false;
     bool          is_tls    = false;
+    attr_list     attrs;    // accumulated [[...]] attributes on this declaration
 };
 
 // ----- declarator_info -----------------------------------------------
@@ -190,7 +191,7 @@ private:
     decl_ptr parse_function_definition(
         type_ptr ret, std::string name, storage_class sc,
         std::vector<std::unique_ptr<param_decl>> params,
-        bool variadic, source_loc loc);
+        bool variadic, source_loc loc, attr_list attrs = {});
     std::vector<decl_ptr> parse_declaration(
         bool allow_function_def = false);
     std::unique_ptr<var_decl> parse_var_decl(
@@ -242,6 +243,14 @@ private:
     // Handles arbitrary nesting of parentheses inside the attribute.
     //
     void skip_attribute();
+
+    //
+    // Parse one or more consecutive C23 [[attr]] sequences and return
+    // the accumulated list.  The first token must be LATTR; if the
+    // current token is not LATTR the method returns an empty list
+    // without consuming anything.
+    //
+    attr_list parse_attr_list();
 
     //
     // Return true if the current token can begin a type-specifier,

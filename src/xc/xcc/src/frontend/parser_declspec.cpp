@@ -20,6 +20,7 @@ decl_spec parser::parse_declaration_specifiers() {
     storage_class sc        = storage_class::NONE;
     bool          is_inline = false;
     bool          is_tls    = false;
+    attr_list     local_attrs; // accumulates [[...]] found inside the specifier sequence
 
     bool has_unsigned = false;
     bool has_short    = false;
@@ -52,6 +53,13 @@ decl_spec parser::parse_declaration_specifiers() {
 
         // GNU extension: __attribute__((...)) — parse and ignore
         if (k == tk::KW___ATTRIBUTE__) { skip_attribute(); continue; }
+
+        // C23 [[attributes]] — parse and accumulate into local_attrs
+        if (k == tk::LATTR) {
+            auto more = parse_attr_list();
+            for (auto &a : more) local_attrs.push_back(std::move(a));
+            continue;
+        }
 
         // Function specifiers
         if (k == tk::KW_INLINE)     { is_inline = true; consume(); continue; }
@@ -186,7 +194,7 @@ decl_spec parser::parse_declaration_specifiers() {
     base->is_const    = is_const;
     base->is_volatile = is_volatile;
     base->is_restrict = is_restrict;
-    return decl_spec{base, sc, is_inline, is_tls};
+    return decl_spec{base, sc, is_inline, is_tls, std::move(local_attrs)};
 }
 
 // ----- parse_struct_body ---------------------------------------------

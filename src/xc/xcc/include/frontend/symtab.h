@@ -34,6 +34,21 @@ enum class storage_class {
     NONE, AUTO, EXTERN, STATIC, REGISTER, TYPEDEF
 };
 
+// ----- call_abi ------------------------------------------------------
+//
+// Calling convention for a function, set by [[sdcc::sdccall(N)]] or
+// [[sdcc::naked]] / [[sdcc::interrupt]] / [[sdcc::critical]].
+// DEFAULT maps to SDCCCALL0 (all parameters on stack).
+
+enum class call_abi {
+    DEFAULT,     // same as SDCCCALL0 — stack-based ABI, current xcc default
+    SDCCCALL0,   // [[sdcc::sdccall(0)]] — explicit stack-based ABI
+    SDCCCALL1,   // [[sdcc::sdccall(1)]] — SDCC 4.3+ register-based ABI
+    NAKED,       // [[sdcc::naked]]      — no prologue/epilogue emitted
+    INTERRUPT,   // [[sdcc::interrupt]]  — ISR: save all regs, reti
+    CRITICAL,    // [[sdcc::critical]]   — wrap body with di/ei
+};
+
 // ----- sym_kind ------------------------------------------------------
 
 enum class sym_kind {
@@ -78,6 +93,21 @@ struct symbol {
     std::shared_ptr<symbol> vla_size_sym; // for VLA pointer vars: hidden local storing byte count
 
     source_loc defined_at;
+
+    // ----- C23 standard attributes -----------------------------------
+    bool        attr_noreturn    = false;
+    bool        attr_deprecated  = false;
+    std::string deprecated_msg;
+    bool        attr_nodiscard   = false;
+    std::string nodiscard_msg;
+    bool        attr_maybe_unused = false;
+    bool        attr_unsequenced  = false;
+    bool        attr_reproducible = false;
+
+    // ----- SDCC vendor attributes (namespace sdcc::) ----------------
+    call_abi    abi       = call_abi::DEFAULT;
+    int64_t     at_address = -1;  // [[sdcc::at(addr)]] — absolute address (-1 = not set)
+    int         sfr_port   = -1;  // [[sdcc::sfr(port)]] — SFR port number (-1 = not set)
 };
 
 using sym_ptr = std::shared_ptr<symbol>;

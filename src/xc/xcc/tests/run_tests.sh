@@ -34,6 +34,31 @@ run_test() {
         opts="$(cat "${base}.opts")"
     fi
 
+    # Warning tests: compiler must succeed AND stderr must contain expected pattern.
+    local warn_pat="${base}.warning"
+    if [[ -f "$warn_pat" ]]; then
+        local pat
+        pat="$(cat "$warn_pat")"
+        tmpfile=$(mktemp /tmp/xcc_test_XXXXXX.s)
+        if ! "$XCC" $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
+            echo "${RED}FAIL${RESET} $name  [unexpected compile error]"
+            head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
+            rm -f "$tmpfile" /tmp/xcc_err_$$.txt
+            FAIL=$((FAIL + 1))
+            return
+        fi
+        if grep -qF "$pat" /tmp/xcc_err_$$.txt; then
+            echo "${GREEN}PASS${RESET} $name"
+            PASS=$((PASS + 1))
+        else
+            echo "${RED}FAIL${RESET} $name  [warning not found: '$pat']"
+            head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
+            FAIL=$((FAIL + 1))
+        fi
+        rm -f "$tmpfile" /tmp/xcc_err_$$.txt
+        return
+    fi
+
     # Error tests: compiler must reject and stderr must contain expected pattern.
     if [[ -f "$error_pat" ]]; then
         local pat

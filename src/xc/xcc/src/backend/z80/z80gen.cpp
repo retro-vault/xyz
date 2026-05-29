@@ -93,6 +93,7 @@ void z80_gen::emit_function(const ir_function &fn) {
     temp_slots_.clear();
     temp_regs_.clear();
     next_temp_slot_ = 0;
+    cur_convention_ = make_abi_convention(fn.abi);
 
     if (opt_level_ >= 2)
         regalloc_prepass(fn);
@@ -104,29 +105,11 @@ void z80_gen::emit_function(const ir_function &fn) {
 }
 
 void z80_gen::emit_prologue(const ir_function &fn) {
-    std::string lbl = mangle(fn.name);
-    if (debug_) debug_->begin_function(fn, lbl);
-    asm_.label(lbl, fn.is_global);
-
-    emit_comment("prologue: %s (locals=%d)", fn.name.c_str(), fn.local_bytes);
-    emit_line("push\tix");
-    emit_line("ld\tix, %s", asm_.imm(0).c_str());
-    emit_line("add\tix, sp");
-
-    if (fn.local_bytes > 0) {
-        emit_line("ld\thl, %s", asm_.imm(-fn.local_bytes).c_str());
-        emit_line("add\thl, sp");
-        emit_line("ld\tsp, hl");
-    }
+    cur_convention_->emit_prologue(*this, fn);
 }
 
 void z80_gen::emit_epilogue(const ir_function &fn) {
-    emit_label(fn_end_lbl_, false);
-    emit_comment("epilogue: %s", fn.name.c_str());
-    emit_line("ld\tsp, ix");
-    emit_line("pop\tix");
-    emit_line("ret");
-    if (debug_) debug_->end_function(fn);
+    cur_convention_->emit_epilogue(*this, fn);
 }
 
 // ----- Icode dispatch ------------------------------------------------

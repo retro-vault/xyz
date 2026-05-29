@@ -304,12 +304,29 @@ void ir_gen::visit(call_expr &e) {
     for (auto &a : e.args)
         arg_ops.push_back(gen_expr(*a));
 
+    // Look up callee ABI so caller can use the right convention.
+    call_abi c_abi = call_abi::DEFAULT;
+    if (auto *id = dynamic_cast<ident_expr*>(e.callee.get()))
+        if (id->sym && id->sym->kind == sym_kind::FUNC)
+            c_abi = id->sym->abi;
+
+    // Number of args that sdccall(1) passes in registers (not on the stack).
+    int n_reg = (c_abi == call_abi::SDCCCALL1)
+                ? std::min(3, static_cast<int>(arg_ops.size())) : 0;
+
+    // Emit SEND icodes right-to-left (standard C push order).
     int total_arg_bytes = 0;
     for (int i = static_cast<int>(arg_ops.size()) - 1; i >= 0; --i) {
         int sz = arg_ops[i].type ? arg_ops[i].type->size() : 2;
-        int pushed = (sz <= 1) ? 2 : (sz + 1) & ~1;
-        total_arg_bytes += pushed;
-        icode ic; ic.op = icode_op::SEND; ic.left = arg_ops[i]; ic.argreg = i; emit(ic);
+        // Register-passed args (argreg < n_reg) contribute 0 stack bytes.
+        if (i >= n_reg)
+            total_arg_bytes += (sz <= 1) ? 2 : (sz + 1) & ~1;
+        icode ic;
+        ic.op         = icode_op::SEND;
+        ic.left       = arg_ops[i];
+        ic.argreg     = i;
+        ic.callee_abi = c_abi;
+        emit(ic);
     }
 
     type_ptr ret_type = e.type ? e.type : type::make_int();
@@ -323,13 +340,13 @@ void ir_gen::visit(call_expr &e) {
     ic.num_params = static_cast<int>(e.args.size());
     ic.arg_bytes  = total_arg_bytes;
     ic.result     = result;
+    ic.callee_abi = c_abi;
 
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
-        if (id->sym && id->sym->kind == sym_kind::FUNC) {
+        if (id->sym && id->sym->kind == sym_kind::FUNC)
             ic.func_name = id->name;
-        } else {
+        else
             ic.left = gen_expr(*e.callee);
-        }
     } else {
         ic.left = gen_expr(*e.callee);
     }

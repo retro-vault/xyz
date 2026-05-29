@@ -107,6 +107,10 @@ enum class tk {
     PLUS, MINUS, STAR, SLASH, PERCENT, // + - * / %
     PLUS_PLUS, MINUS_MINUS,            // ++ --
 
+    // C23 attribute brackets
+    LATTR,                  // [[
+    RATTR,                  // ]]
+
     // Special
     HASH,                   // # (preprocessor line, skipped by lexer)
     END_OF_FILE,

@@ -31,6 +31,21 @@
 
 namespace xcc {
 
+// ----- C23 attribute representation ----------------------------------
+//
+// An attribute parsed from [[ns::name(arg1, arg2)]] syntax.
+// ns is empty for standard (unnamespaced) attributes.
+// args holds raw string tokens for arguments; empty when no parentheses.
+
+struct attr {
+    std::string              ns;
+    std::string              name;
+    std::vector<std::string> args;
+    source_loc               loc;
+};
+
+using attr_list = std::vector<attr>;
+
 // Forward declarations
 struct expr;  struct stmt;  struct decl;
 struct translation_unit;
@@ -493,9 +508,10 @@ struct param_decl : decl {
 // A variable declaration with optional initializer.
 //
 struct var_decl : decl {
-    expr_ptr init;     // nullptr if no initializer
-    sym_ptr  sym;
-    expr_ptr vla_size; // for VLA: runtime size expression (non-owning raw after parse)
+    expr_ptr  init;      // nullptr if no initializer
+    sym_ptr   sym;
+    expr_ptr  vla_size;  // for VLA: runtime size expression (non-owning raw after parse)
+    attr_list attrs;
     void accept(decl_visitor &v) override;
 };
 
@@ -506,10 +522,11 @@ struct var_decl : decl {
 //
 struct func_decl : decl {
     std::vector<std::unique_ptr<param_decl>> params;
-    bool     is_variadic = false;
-    stmt_ptr body;
-    sym_ptr  sym;
-    int      local_bytes = 0;
+    bool      is_variadic = false;
+    stmt_ptr  body;
+    sym_ptr   sym;
+    int       local_bytes = 0;
+    attr_list attrs;
     void accept(decl_visitor &v) override;
 };
 

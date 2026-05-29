@@ -50,9 +50,11 @@ void ir_gen::gen_decl(decl &d) { d.accept(*this); }
 
 operand ir_gen::sym_to_operand(const symbol &sym, type_ptr ty) {
     const std::string &name = !sym.asm_name.empty() ? sym.asm_name : sym.name;
+    bool is_sfr = (sym.sfr_port >= 0);
     return operand::make_symbol(name, ty ? ty : sym.type,
                                 sym.is_global, sym.is_param,
-                                sym.stack_offset, sym.is_tls);
+                                sym.stack_offset, sym.is_tls,
+                                is_sfr, sym.sfr_port);
 }
 
 operand ir_gen::promote(operand op) {

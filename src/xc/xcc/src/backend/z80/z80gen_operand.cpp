@@ -193,7 +193,19 @@ void z80_gen::load_hl (const operand &op) { constexpr reg_pair HL{"hl",'l','h',f
 void z80_gen::load_de (const operand &op) { constexpr reg_pair DE{"de",'e','d',true};  emit_load_rr (DE, op); }
 void z80_gen::store_hl(const operand &op) { constexpr reg_pair HL{"hl",'l','h',false}; emit_store_rr(HL, op); }
 
+void z80_gen::load_bc(const operand &op) {
+    // Load op into BC via HL (no direct BC load from memory on Z80).
+    load_hl(op);
+    emit_line("ld\tb, h");
+    emit_line("ld\tc, l");
+}
+
 void z80_gen::load_a(const operand &op) {
+    // [[sdcc::sfr(N)]]: read via IN instruction
+    if (op.is_sfr && op.sfr_port >= 0) {
+        emit_line("in\ta, (%s)", asm_.imm(op.sfr_port).c_str());
+        return;
+    }
     if (op.kind == operand_kind::INT_CONST) {
         emit_line("ld\ta, %s", asm_.imm(op.ival & 0xFF).c_str());
         return;
@@ -221,6 +233,11 @@ void z80_gen::load_a(const operand &op) {
 }
 
 void z80_gen::store_a(const operand &op) {
+    // [[sdcc::sfr(N)]]: write via OUT instruction
+    if (op.is_sfr && op.sfr_port >= 0) {
+        emit_line("out\t(%s), a", asm_.imm(op.sfr_port).c_str());
+        return;
+    }
     if (op.kind == operand_kind::SYMBOL && op.is_global && op.is_tls) {
         int off = tls_offsets_.count(mangle(op.name)) ? tls_offsets_.at(mangle(op.name)) : 0;
         emit_line("push\taf");

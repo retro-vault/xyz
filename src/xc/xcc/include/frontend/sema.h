@@ -47,6 +47,12 @@ private:
 
     bool is_const_lval(const expr &e) const;
 
+    //
+    // Apply the attrs list to sym, setting flags and emitting diagnostics
+    // for invalid or unrecognised attributes.
+    //
+    void apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc);
+
     // ----- expr_visitor overrides ------------------------------------
     void visit(binary_expr           &e) override;
     void visit(unary_expr            &e) override;

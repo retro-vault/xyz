@@ -29,6 +29,7 @@
 #pragma once
 #include "z80.h"
 #include "backend/asm_emitter.h"
+#include "backend/z80/convention.h"
 #include "backend/z80/debug_info.h"
 #include "ir/icode.h"
 #include <memory>
@@ -55,7 +56,20 @@ enum class temp_home {
 
 class z80_peep;
 
+// Forward-declare concrete convention classes so z80_gen can grant them friendship.
+struct cc_default;
+struct cc_sdcccall1;
+struct cc_naked;
+struct cc_interrupt;
+struct cc_critical;
+
 class z80_gen {
+    friend struct abi_convention;
+    friend struct cc_default;
+    friend struct cc_sdcccall1;
+    friend struct cc_naked;
+    friend struct cc_interrupt;
+    friend struct cc_critical;
 public:
     //
     // Construct a code generator that emits assembly via the given emitter.
@@ -86,6 +100,9 @@ private:
     const ir_function *cur_fn_       = nullptr;
     int               local_bytes_   = 0;
     std::string       fn_end_lbl_;
+
+    // Active calling-convention for the function being compiled.
+    std::unique_ptr<abi_convention> cur_convention_;
 
     std::unique_ptr<debug_info_emitter> debug_; // null unless -g was passed
 
@@ -243,6 +260,11 @@ private:
     void load_de(const operand &op);
 
     //
+    // Load op (16-bit) into BC (for sdccall(1) 3rd argument).
+    //
+    void load_bc(const operand &op);
+
+    //
     // Load op (8-bit) into A.
     //
     void load_a(const operand &op);
@@ -324,6 +346,7 @@ private:
     // Currently prepends underscore: "foo" -> "_foo".
     //
     std::string mangle(const std::string &name) const;
+
 
     //
     // Return the IX-relative byte offset for a parameter operand.

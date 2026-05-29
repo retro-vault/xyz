@@ -78,6 +78,7 @@ const char *token::kind_name() const {
     CASE(AMP); CASE(PIPE); CASE(CARET); CASE(TILDE); CASE(LSHIFT); CASE(RSHIFT);
     CASE(PLUS); CASE(MINUS); CASE(STAR); CASE(SLASH); CASE(PERCENT);
     CASE(PLUS_PLUS); CASE(MINUS_MINUS);
+    CASE(LATTR); CASE(RATTR);
     CASE(HASH); CASE(END_OF_FILE); CASE(ERROR);
 #undef CASE
     default: return "?";
@@ -391,8 +392,12 @@ token lexer::lex_operator() {
     switch (c) {
     case '{': return make(tk::LBRACE,    "{", loc);
     case '}': return make(tk::RBRACE,    "}", loc);
-    case '[': return make(tk::LBRACKET,  "[", loc);
-    case ']': return make(tk::RBRACKET,  "]", loc);
+    case '[':
+        if (n == '[') { advance(); return make(tk::LATTR,   "[[", loc); }
+        return make(tk::LBRACKET,  "[", loc);
+    case ']':
+        if (n == ']') { advance(); return make(tk::RATTR,   "]]", loc); }
+        return make(tk::RBRACKET,  "]", loc);
     case '(': return make(tk::LPAREN,    "(", loc);
     case ')': return make(tk::RPAREN,    ")", loc);
     case ';': return make(tk::SEMICOLON, ";", loc);

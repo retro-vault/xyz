@@ -444,6 +444,48 @@ namespace xas {
             return s;
         }
 
+        // .dl expr — emit 32-bit (double-long) value (SDCC extension)
+        if (name == "dl") {
+            do { s.args.push_back(parse_expr()); } while (eat(token_kind::comma));
+            skip_to_newline();
+            return s;
+        }
+
+        // .blkb N — reserve N bytes (SDCC extension, alias for .ds)
+        if (name == "blkb") {
+            s.directive_name = "ds"; // normalise to .ds
+            s.args.push_back(parse_expr());
+            skip_to_newline();
+            return s;
+        }
+
+        // .blkw N — reserve N words = 2N bytes (SDCC extension)
+        if (name == "blkw") {
+            s.args.push_back(parse_expr());
+            skip_to_newline();
+            return s;
+        }
+
+        // .define symbol [= value] — define a symbol (SDCC extension)
+        if (name == "define") {
+            if (peek().kind == token_kind::ident) {
+                const token &a = advance();
+                s.string_arg = a.raw.empty() ? a.text : a.raw;
+            }
+            if (eat(token_kind::eq) && !at_end() && peek().kind != token_kind::newline)
+                s.args.push_back(parse_expr());
+            else
+                s.args.push_back(expr::make_int(1, s.source_line)); // default value 1
+            skip_to_newline();
+            return s;
+        }
+
+        // .optsdcc ... — SDCC assembler option (ignored, no-op)
+        if (name == "optsdcc") { skip_to_newline(); return s; }
+
+        // .24bit / .32bit — SDCC pointer-size hints (no-op for xas)
+        if (name == "24bit" || name == "32bit") { skip_to_newline(); return s; }
+
         // Unknown directive — collect remaining tokens as string_arg.
         while (!at_end() && peek().kind != token_kind::newline) {
             s.string_arg += advance().text + " ";
@@ -541,11 +583,23 @@ namespace xas {
                 return s;
             }
 
-            // EQU keyword
+            // EQU keyword: "name EQU expr" / "name DEFL expr" / "name SET expr"
             if (peek().kind == token_kind::ident
                 && (peek().text == "EQU" || peek().text == "DEFL"
                     || peek().text == "SET")) {
                 return parse_equ(sym);
+            }
+
+            // Absolute symbol assignment: "name = expr" (SDCC / GNU syntax)
+            if (peek().kind == token_kind::eq) {
+                advance(); // consume '='
+                stmt s;
+                s.kind       = stmt_kind::equ;
+                s.equ_name   = sym;
+                s.source_line = t.line;
+                s.equ_value  = parse_expr();
+                skip_to_newline();
+                return s;
             }
 
             // Otherwise it's an instruction mnemonic.

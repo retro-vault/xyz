@@ -59,12 +59,32 @@ void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template
 void z80_gen::emit_globals(const ir_module &mod) {
     if (mod.globals.empty()) return;
 
+    // Emit [[sdcc::at(N)]] variables as absolute symbol assignments first.
+    // These do NOT live in any section; they are pure address aliases.
+    for (auto &g : mod.globals) {
+        if (g.at_address < 0 || g.sfr_port >= 0) continue;
+        std::string lbl = mangle(g.name);
+        if (!g.is_static) asm_.global_decl(lbl);
+        asm_.symbol_assign(lbl, (long long)g.at_address);
+    }
+
+    // [[sdcc::sfr(N)]] variables: no data section entry; reads/writes use IN/OUT.
+    // Emit an absolute symbol so the address is available if taken.
+    for (auto &g : mod.globals) {
+        if (g.sfr_port < 0) continue;
+        std::string lbl = mangle(g.name);
+        if (!g.is_static) asm_.global_decl(lbl);
+        asm_.symbol_assign(lbl, (long long)g.sfr_port);
+    }
+
     bool any_data = false;
-    for (auto &g : mod.globals) if (!g.is_tls) { any_data = true; break; }
+    for (auto &g : mod.globals)
+        if (!g.is_tls && g.at_address < 0 && g.sfr_port < 0) { any_data = true; break; }
     if (any_data) {
         asm_.section_data();
         for (auto &g : mod.globals) {
             if (g.is_tls) continue;
+            if (g.at_address >= 0 || g.sfr_port >= 0) continue; // handled above
             std::string lbl = mangle(g.name);
             if (!g.is_static) asm_.global_decl(lbl);
             asm_.label(lbl, false);

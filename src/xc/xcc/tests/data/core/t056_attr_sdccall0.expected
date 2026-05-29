@@ -1,0 +1,56 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _add
+_add:
+	; prologue: add (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param a at 4(ix)
+	; receive param b at 6(ix)
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	ld	e, 6(ix)
+	ld	d, 7(ix)
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__add_end
+__add_end:
+	; epilogue: add
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _main
+_main:
+	; prologue: main (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #2
+	push	hl
+	ld	hl, #1
+	push	hl
+	.globl _add
+	call	_add
+	pop	bc
+	pop	bc
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

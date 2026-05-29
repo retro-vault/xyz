@@ -95,11 +95,13 @@ void ir_gen::visit(var_decl &vd) {
         if (vd.sym->storage == storage_class::EXTERN) return;
 
         ir_module::global_var gv;
-        gv.name      = vd.name;
-        gv.type      = vd.type;
-        gv.has_init  = vd.init != nullptr;
-        gv.is_tls    = vd.sym->is_tls;
-        gv.is_static = (vd.sym->storage == storage_class::STATIC);
+        gv.name       = vd.name;
+        gv.type       = vd.type;
+        gv.has_init   = vd.init != nullptr;
+        gv.is_tls     = vd.sym->is_tls;
+        gv.is_static  = (vd.sym->storage == storage_class::STATIC);
+        gv.at_address = vd.sym->at_address;
+        gv.sfr_port   = vd.sym->sfr_port;
         if (vd.init) {
             if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
                 collect_global_inits(*il, vd.type, gv.init_vals);
@@ -130,11 +132,31 @@ void ir_gen::gen_func(func_decl &fd) {
     if (!fd.body) return;
 
     ir_function fn;
-    fn.name        = fd.name;
-    fn.is_global   = (fd.storage != storage_class::STATIC);
-    fn.ret_type    = fd.type ? fd.type->ret : type::make_void();
-    fn.local_bytes = fd.local_bytes;
-    fn.num_params  = static_cast<int>(fd.params.size());
+    fn.name             = fd.name;
+    fn.is_global        = (fd.storage != storage_class::STATIC);
+    fn.ret_type         = fd.type ? fd.type->ret : type::make_void();
+    fn.local_bytes      = fd.local_bytes;
+    fn.orig_local_bytes = fd.local_bytes;
+    fn.num_params       = static_cast<int>(fd.params.size());
+    fn.abi              = fd.sym ? fd.sym->abi : call_abi::DEFAULT;
+    fn.reg_param_count  = 0;
+
+    // sdccall(1): first ≤3 parameters arrive in registers (HL, DE, BC).
+    // Remap their symbols to negative IX offsets (local spill area) so the
+    // rest of the compiler accesses them correctly via IX-relative loads.
+    if (fn.abi == call_abi::SDCCCALL1) {
+        int n_reg = std::min(3, static_cast<int>(fd.params.size()));
+        fn.reg_param_count = n_reg;
+        for (int i = 0; i < n_reg; ++i) {
+            if (fd.params[i]->sym) {
+                // Place each spill slot just below the existing local area.
+                fd.params[i]->sym->stack_offset = -(fd.local_bytes + 2 * (i + 1));
+                fd.params[i]->sym->is_param     = false; // addressed as local
+            }
+        }
+        // Enlarge local_bytes to include the spill area.
+        fn.local_bytes += 2 * n_reg;
+    }
 
     mod_->functions.push_back(std::move(fn));
     cur_fn_ = &mod_->functions.back();

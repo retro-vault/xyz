@@ -55,6 +55,7 @@ SRCS := \
   $(SRCDIR)/backend/z80/dwarf.cpp \
   $(SRCDIR)/backend/z80/sdcc_debug.cpp \
   $(SRCDIR)/backend/z80/z80gen.cpp \
+  $(SRCDIR)/backend/z80/z80gen_convention.cpp \
   $(SRCDIR)/backend/z80/z80gen_data.cpp \
   $(SRCDIR)/backend/z80/z80gen_operand.cpp \
   $(SRCDIR)/backend/z80/z80gen_ctrl.cpp \

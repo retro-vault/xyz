@@ -65,32 +65,18 @@ void z80_gen::gen_return(const icode &ic) {
 }
 
 void z80_gen::gen_send(const icode &ic) {
-    int sz = op_size(ic.left);
-    if (sz == 1) {
-        load_a(ic.left);
-        emit_line("ld\tl, a");
-        emit_line("ld\th, %s", asm_.imm(0).c_str());
-        emit_line("push\thl");
-    } else if (sz == 8) {
-        for (int w = 3; w >= 0; --w) {
-            load_hl_word(ic.left, w);
-            emit_line("push\thl");
-        }
-    } else if (sz == 4) {
-        load_hl_hi32(ic.left); emit_line("push\thl");
-        load_hl_lo32(ic.left); emit_line("push\thl");
-    } else {
-        load_hl(ic.left);
-        emit_line("push\thl");
-    }
+    // Delegate to the CALLEE's convention (not the current function's).
+    auto conv = make_abi_convention(ic.callee_abi);
+    conv->emit_send(*this, ic);
 }
 
 void z80_gen::gen_receive(const icode &ic) {
-    emit_comment("receive param %s at %s",
-                 ic.result.name.c_str(), addr_of(ic.result).c_str());
+    // Delegate to the current function's convention.
+    cur_convention_->emit_receive(*this, ic);
 }
 
 void z80_gen::gen_call(const icode &ic) {
+    // Emit the CALL instruction.
     if (!ic.func_name.empty()) {
         std::string callee = mangle(ic.func_name);
         asm_.global_decl(callee);
@@ -101,12 +87,11 @@ void z80_gen::gen_call(const icode &ic) {
         emit_line("call\t__call_hl");
     }
 
-    if (ic.num_params > 0) {
-        int bytes = ic.arg_bytes > 0 ? ic.arg_bytes : ic.num_params * 2;
-        for (int n = 0; n < bytes / 2; ++n)
-            emit_line("pop\tbc");
-    }
+    // Stack cleanup via the callee's convention (only pops stack-passed args).
+    auto conv = make_abi_convention(ic.callee_abi);
+    conv->emit_call_cleanup(*this, ic);
 
+    // Collect return value.
     if (!ic.result.is_none()) {
         int sz = op_size(ic.result);
         if (sz == 1) {

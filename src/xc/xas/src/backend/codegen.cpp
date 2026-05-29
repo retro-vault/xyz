@@ -1286,6 +1286,44 @@ namespace xas {
                 return;
             }
 
+            // .dl expr — 32-bit little-endian word (SDCC extension)
+            if (dn == "dl") {
+                for (const auto &arg : s.args) {
+                    auto v = eval_expr(*arg, syms_, cur_offset_);
+                    if (pass_ == 2) {
+                        uint32_t val = v ? static_cast<uint32_t>(*v) : 0;
+                        emit_.emit_word(static_cast<uint16_t>(val & 0xFFFF));
+                        emit_.emit_word(static_cast<uint16_t>((val >> 16) & 0xFFFF));
+                    }
+                    cur_offset_ += 4;
+                }
+                return;
+            }
+
+            // .blkw N — reserve N words (2N bytes) (SDCC extension)
+            if (dn == "blkw") {
+                uint32_t n = 0;
+                if (!s.args.empty()) {
+                    auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                    if (v) n = static_cast<uint32_t>(*v);
+                }
+                if (pass_ == 2) emit_.emit_space(n * 2);
+                cur_offset_ += n * 2;
+                return;
+            }
+
+            // .define symbol [= value] — absolute symbol definition (SDCC extension)
+            if (dn == "define") {
+                if (!s.string_arg.empty() && !s.args.empty()) {
+                    auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                    if (v) {
+                        syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
+                        syms_[s.string_arg].defined = true;
+                    }
+                }
+                return;
+            }
+
             if (dn == "equ" || dn == "set") {
                 if (!s.string_arg.empty() && !s.args.empty()) {
                     auto v = eval_expr(*s.args[0], syms_, cur_offset_);
@@ -1296,7 +1334,7 @@ namespace xas {
                 }
                 return;
             }
-            // Other directives: module, file, include, conditionals — skip.
+            // Other directives: module, file, include, conditionals, optsdcc — skip.
         }
 
         // -----------------------------------------------------------------------
@@ -1413,8 +1451,16 @@ namespace xas {
                                                               + s.args.size());
                     else if (dn == "word" || dn == "dw" || dn == "2byte")
                         cur_offset_ += 2 * static_cast<uint32_t>(s.args.size());
+                    else if (dn == "dl")
+                        cur_offset_ += 4 * static_cast<uint32_t>(s.args.size());
                     else if (dn == "ascii" || dn == "asciz" || dn == "string")
                         cur_offset_ += static_cast<uint32_t>(s.string_arg.size());
+                    else if (dn == "blkw") {
+                        if (!s.args.empty()) {
+                            auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                            if (v) cur_offset_ += static_cast<uint32_t>(*v) * 2;
+                        }
+                    }
                     else if (dn == "ds" || dn == "space") {
                         if (!s.args.empty()) {
                             auto v = eval_expr(*s.args[0], syms_, cur_offset_);

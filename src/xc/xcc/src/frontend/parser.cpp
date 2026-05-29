@@ -76,6 +76,77 @@ void parser::skip_attribute() {
     }
 }
 
+// ----- C23 attribute parsing -----------------------------------------
+//
+// Grammar (simplified):
+//   attr-specifier-seq = { '[[' attr-list ']]' }+
+//   attr-list          = attr { ',' attr }
+//   attr               = ident [ '::' ident ] [ '(' raw-args ')' ]
+//   raw-args           = any tokens (balanced parens) until ')'
+
+attr_list parser::parse_attr_list() {
+    attr_list result;
+    while (check(tk::LATTR)) {
+        consume(); // consume [[
+        while (!check(tk::RATTR) && !check(tk::END_OF_FILE)) {
+            attr a;
+            a.loc = peek().loc;
+
+            // Attribute name: ident or ident::ident
+            if (!check(tk::IDENT) && !peek().is_keyword()) {
+                // Unexpected token inside [[...]]; skip to ]] to recover
+                while (!check(tk::RATTR) && !check(tk::END_OF_FILE)) consume();
+                break;
+            }
+            a.name = consume().text;
+            // Namespace separator ::
+            if (check(tk::COLON)) {
+                consume(); // first :
+                if (check(tk::COLON)) { consume(); } // second :
+                a.ns   = a.name;
+                a.name = consume().text;
+            }
+
+            // Optional argument list ( raw tokens )
+            if (check(tk::LPAREN)) {
+                consume(); // consume (
+                int depth = 1;
+                std::string arg;
+                while (depth > 0 && !check(tk::END_OF_FILE)) {
+                    if (check(tk::LPAREN))  { depth++; arg += "("; consume(); }
+                    else if (check(tk::RPAREN)) {
+                        depth--;
+                        if (depth > 0) { arg += ")"; consume(); }
+                        else consume();
+                    } else if (check(tk::COMMA) && depth == 1) {
+                        // split arguments at top-level commas
+                        std::string trimmed = arg;
+                        while (!trimmed.empty() && trimmed.front() == ' ') trimmed.erase(0,1);
+                        while (!trimmed.empty() && trimmed.back()  == ' ') trimmed.pop_back();
+                        if (!trimmed.empty()) a.args.push_back(trimmed);
+                        arg.clear();
+                        consume();
+                    } else {
+                        arg += peek().text;
+                        consume();
+                    }
+                }
+                std::string trimmed = arg;
+                while (!trimmed.empty() && trimmed.front() == ' ') trimmed.erase(0,1);
+                while (!trimmed.empty() && trimmed.back()  == ' ') trimmed.pop_back();
+                if (!trimmed.empty()) a.args.push_back(trimmed);
+            }
+
+            result.push_back(std::move(a));
+
+            if (!match(tk::COMMA)) break; // no comma = end of attr-list
+        }
+        // Allow trailing comma before ]]
+        if (check(tk::RATTR)) consume();
+    }
+    return result;
+}
+
 
 // ----- type helpers --------------------------------------------------
 
@@ -161,8 +232,14 @@ decl_ptr parser::parse_external_declaration() {
     if (check(tk::END_OF_FILE)) return nullptr;
     if (check(tk::KW__STATIC_ASSERT)) { parse_static_assert(); return nullptr; }
 
+    // Leading [[attributes]] before the declaration specifiers
+    attr_list leading_attrs = parse_attr_list();
+
     source_loc loc = peek().loc;
     decl_spec  ds  = parse_declaration_specifiers();
+
+    // Merge attrs from decl_spec (inline [[...]]) and leading attrs
+    for (auto &a : leading_attrs) ds.attrs.push_back(std::move(a));
 
     // May have no declarator (e.g., struct declaration)
     if (check(tk::SEMICOLON)) { consume(); return nullptr; }
@@ -186,9 +263,12 @@ decl_ptr parser::parse_external_declaration() {
         if (check(tk::LBRACE)) {
             return parse_function_definition(decl_type->ret, name, ds.sc,
                                               std::move(params),
-                                              variadic, loc);
+                                              variadic, loc, ds.attrs);
         }
-        // Prototype
+        // Prototype — also pick up [[attrs]] that follow the declarator
+        attr_list post_attrs = parse_attr_list();
+        for (auto &a : post_attrs) ds.attrs.push_back(std::move(a));
+
         auto fd = std::make_unique<func_decl>();
         fd->loc        = loc;
         fd->name       = name;
@@ -197,6 +277,7 @@ decl_ptr parser::parse_external_declaration() {
         fd->is_variadic = decl_type->variadic;
         fd->params     = std::move(params);
         fd->body       = nullptr;
+        fd->attrs      = ds.attrs;
 
         auto sym = std::make_shared<symbol>();
         sym->name    = name;
@@ -261,12 +342,16 @@ decl_ptr parser::parse_external_declaration() {
         return td;
     }
 
-    // Global variable declaration
+    // Global variable declaration — pick up trailing [[attrs]] before '='
+    attr_list post_var_attrs = parse_attr_list();
+    for (auto &a : post_var_attrs) ds.attrs.push_back(std::move(a));
+
     auto vd = std::make_unique<var_decl>();
     vd->loc     = loc;
     vd->name    = name;
     vd->type    = decl_type;
     vd->storage = ds.sc;
+    vd->attrs   = ds.attrs;
 
     if (match(tk::EQ)) {
         vd->init = check(tk::LBRACE) ? parse_initializer(decl_type)
@@ -319,13 +404,14 @@ decl_ptr parser::parse_external_declaration() {
 decl_ptr parser::parse_function_definition(
     type_ptr ret, std::string name, storage_class sc,
     std::vector<std::unique_ptr<param_decl>> params,
-    bool variadic, source_loc loc)
+    bool variadic, source_loc loc, attr_list attrs)
 {
     auto fd = std::make_unique<func_decl>();
     fd->loc        = loc;
     fd->name       = name;
     fd->storage    = sc;
     fd->is_variadic = variadic;
+    fd->attrs      = std::move(attrs);
 
     // Build function type
     std::vector<type_ptr> ptypes;

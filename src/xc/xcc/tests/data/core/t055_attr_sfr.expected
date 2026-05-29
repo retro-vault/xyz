@@ -1,0 +1,35 @@
+	.module xcc_output
+
+	.globl _PORT_A
+_PORT_A = 63
+
+	.area _CODE
+
+	.globl _set_port
+_set_port:
+	; prologue: set_port (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; receive param v at 4(ix)
+	ld	a, 4(ix)
+	out	(#63), a
+__set_port_end:
+	; epilogue: set_port
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _get_port
+_get_port:
+	; prologue: get_port (locals=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	in	a, (#63)
+	ld	l, a
+	jp	__get_port_end
+__get_port_end:
+	; epilogue: get_port
+	ld	sp, ix
+	pop	ix
+	ret

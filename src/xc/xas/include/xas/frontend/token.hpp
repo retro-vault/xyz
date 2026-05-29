@@ -43,6 +43,7 @@ namespace xas {
         dot,            // . (current address, GNU style)
         newline,        // end of logical line
         directive,      // .keyword  (starts with .)
+        eq,             // = (assignment / EQU form)
 
         // Control
         eof,

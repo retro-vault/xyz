@@ -75,6 +75,8 @@ type_ptr parser::parse_direct_declarator_suffix(type_ptr base, std::string &/*na
             last_variadic_ = variadic;
         } else if (check(tk::KW___ATTRIBUTE__)) {
             skip_attribute(); // __attribute__ on a declarator — ignore
+        } else if (check(tk::LATTR)) {
+            parse_attr_list(); // [[...]] on a declarator suffix — ignore for now
         } else {
             break;
         }

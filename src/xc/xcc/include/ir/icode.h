@@ -26,6 +26,7 @@
 
 #pragma once
 #include "frontend/types.h"
+#include "frontend/symtab.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -129,6 +130,8 @@ struct operand {
     bool        is_global   = false;
     bool        is_param    = false;
     bool        is_tls      = false; // _Thread_local global: access via __tls_base
+    bool        is_sfr      = false; // [[sdcc::sfr(N)]]: read via IN, write via OUT
+    int         sfr_port    = -1;    // port number when is_sfr is true
     int         stack_offset = 0;
     int         byte_offset  = 0;   // sub-object byte offset (for complex re/im access)
 
@@ -185,7 +188,8 @@ struct operand {
     //
     static operand make_symbol(std::string name, type_ptr t,
                                bool global, bool param, int offset,
-                               bool tls = false) {
+                               bool tls = false,
+                               bool sfr = false, int sfr_p = -1) {
         operand o;
         o.kind         = operand_kind::SYMBOL;
         o.name         = std::move(name);
@@ -193,6 +197,8 @@ struct operand {
         o.is_global    = global;
         o.is_param     = param;
         o.is_tls       = tls;
+        o.is_sfr       = sfr;
+        o.sfr_port     = sfr_p;
         o.stack_offset = offset;
         return o;
     }
@@ -236,8 +242,9 @@ struct icode {
     int         local_bytes = 0;
     int         argreg      = 0; // SEND/RECEIVE: argument slot index
 
-    int line = 0;
-    int arg_bytes = 0; // CALL: total bytes pushed by SEND instructions (for SP cleanup)
+    int      line        = 0;
+    int      arg_bytes   = 0;               // CALL: total bytes pushed by SEND (for SP cleanup)
+    call_abi callee_abi  = call_abi::DEFAULT; // SEND/CALL: ABI of the callee function
 
     //
     // Print a human-readable dump of this instruction to stdout.
@@ -254,6 +261,11 @@ struct ir_function {
     type_ptr            ret_type;
     int                 local_bytes = 0;
     int                 num_params  = 0;
+
+    // Calling-convention variant from [[sdcc::...]] attributes
+    call_abi            abi              = call_abi::DEFAULT;
+    int                 reg_param_count  = 0; // sdccall(1): number of register-passed params (0-3)
+    int                 orig_local_bytes = 0; // sdccall(1): local_bytes before register spill area
 
     //
     // Dump all instructions of this function to stdout.
@@ -274,8 +286,10 @@ struct ir_module {
         std::string str_init; // set for string literals
         int         char_width = 1; // 1=.db, 2=.dw (char16), 4=.dl (char32) for string literals
 
-        bool is_tls    = false; // _Thread_local: placed in TLS block, not _DATA
-        bool is_static = false; // static linkage: do not emit .globl
+        bool    is_tls     = false; // _Thread_local: placed in TLS block, not _DATA
+        bool    is_static  = false; // static linkage: do not emit .globl
+        int64_t at_address = -1;   // [[sdcc::at(N)]]: emit as absolute symbol (not in _DATA)
+        int     sfr_port   = -1;   // [[sdcc::sfr(N)]]: no data emitted, reads/writes use IN/OUT
 
         // Each entry is (value, byte_size); non-empty for aggregate {…} inits.
         struct init_elem { int64_t value = 0; int size = 2; };
