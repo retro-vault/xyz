@@ -2,20 +2,22 @@
 	.area	_CODE
 	.globl	_sum
 _sum:
-	; prologue: sum (locals=2)
+	; sdcccall(1) prologue: sum (locals=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-2
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, #-4
 	add	hl, sp
 	ld	sp, hl
-	; receive param n at 4(ix)
+	; receive (sdcccall1) param n at -4(ix)
 	ld	hl, #0
 	ld	-2(ix), l
 	ld	-1(ix), h
 __xcc_L0:
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	ex	de, hl
 	ld	hl, #0
 	ex	de, hl
@@ -34,26 +36,27 @@ __cmp_e_30886:
 __xcc_L1:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	ld	e, 4(ix)
-	ld	d, 5(ix)
+	ld	e, -4(ix)
+	ld	d, -3(ix)
 	add	hl, de
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	dec	sp
 	dec	sp
-	ld	-8(ix), l
-	ld	-7(ix), h
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	dec	hl
-	ld	4(ix), l
-	ld	5(ix), h
+	ld	-4(ix), l
+	ld	-3(ix), h
 	jp	__xcc_L0
 __xcc_L2:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	ex	de, hl
 __sum_end:
 	; epilogue: sum
 	ld	sp, ix

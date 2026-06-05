@@ -1,18 +1,13 @@
 //
-// sdcc_debug.h — SDCC-style debug info emitter for the xcc Z80 code generator.
+// sdcc_debug.h — SDCC-compatible CDB debug info emitter for xcc.
 //
-// sdcc_debug_emitter implements debug_info_emitter for the sdasz80 dialect.
-// It emits SDCC ;! directives inline in the .s assembly file and writes a
-// companion .adb file that maps source lines to assembly labels for SDCDB.
-//
-// ;! directive summary:
-//   ;!FILE path        — open compilation unit
-//   ;!DEFT name %type  — declare a named type alias
-//   ;!FUNC name %type  — begin function, %type = return type
-//   ;!DEFS name %type loc — declare symbol; loc = IX+n, D, or SP+n
-//   ;!LINE n           — source line
-//   ;!ENDF             — end function
-//   ;!ENDFILE          — close compilation unit
+// Emits:
+//   - C$file.c$line$scope$block = . / .globl labels in the .s file so that
+//     every source line has an address symbol xld can extract.
+//   - G$name$0$0 = . / .globl before each function label (function address).
+//   - G$name$0_0$0 = . before each global variable (variable address).
+//   - A standard SDCC-format .adb file with M:, F:, S: records covering
+//     functions, local variables, and global variables.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
@@ -22,6 +17,7 @@
 #include "backend/z80/debug_info.h"
 #include "frontend/types.h"
 #include <iosfwd>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -29,40 +25,71 @@ namespace xcc {
 
 class sdcc_debug_emitter : public debug_info_emitter {
 public:
-    //
-    // out        — stream for .s inline ;! directives
-    // source_file — path of the .c source being compiled
-    // adb_path   — output path for the .adb line-number file
-    //
     sdcc_debug_emitter(std::ostream &out,
                        const std::string &source_file,
                        const std::string &adb_path);
 
-    void begin_module() override;
-    void emit_location(int line) override;
+    void begin_module()                                    override;
+    void emit_location(int line)                           override;
+    void emit_global(const std::string &name,
+                     const type *t,
+                     bool is_static)                       override;
     void begin_function(const ir_function &fn,
-                        const std::string &mangled) override;
-    void end_function(const ir_function &fn) override;
-    void end_module(const std::string &producer) override;
+                        const std::string &mangled)        override;
+    void end_function(const ir_function &fn)               override;
+    void end_module(const std::string &producer)           override;
 
 private:
-    struct line_entry { std::string mangled; int line; };
+    // One source-line record for the .adb / C$ label.
+    struct c_line { int line; int scope; int block; };
 
-    std::ostream       &out_;
-    std::string         source_file_;
-    std::string         adb_path_;
-    int                 cur_line_ = -1;
-    std::vector<line_entry> line_entries_;
+    // One local variable record collected during begin_function.
+    struct local_var {
+        std::string name;
+        const type *t        = nullptr;
+        int         offset   = 0;   // IX-relative offset (B storage)
+        bool        on_stack = true;
+    };
 
-    //
-    // Return the SDCC ;! type suffix for t (e.g., "%S16", "%U8", "%*%S16").
-    // Returns "%V" for void or unknown types.
-    //
-    static std::string type_suffix(const type *t);
+    // One function record stored for write_adb().
+    struct fn_record {
+        std::string  func_name;  // C name (no leading _)
+        const type  *ret_type   = nullptr;
+        bool         is_void    = false;
+        int          block      = 7;    // block counter at start of this function
+        std::vector<local_var> locals;
+    };
 
-    //
-    // Write the .adb file from accumulated line_entries_.
-    //
+    // One global variable record.
+    struct gbl_record {
+        std::string  name;
+        const type  *t       = nullptr;
+        bool         is_func = false;
+        const type  *ret_t   = nullptr; // set when is_func
+    };
+
+    std::ostream        &out_;
+    std::string          source_file_;
+    std::string          module_name_;   // stem of source_file_
+    std::string          adb_path_;
+
+    int                  cur_line_    = -1;
+    int                  block_ctr_   = 7;  // SDCC starts block numbering at 7
+
+    std::vector<fn_record>  fn_records_;
+    std::vector<gbl_record> gbl_records_;
+
+    // Currently-open function (accumulated during begin_function … end_function).
+    fn_record *cur_fn_ = nullptr;
+
+    // ----- helpers -------------------------------------------------------
+    static std::string module_stem(const std::string &source_file);
+
+    // CDB type string {N}Tspec for S: records.
+    static std::string cdb_type(const type *t);
+    // CDB base type (no size prefix) for use inside derived types.
+    static std::string cdb_base_type(const type *t);
+
     void write_adb() const;
 };
 

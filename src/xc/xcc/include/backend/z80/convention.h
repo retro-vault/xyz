@@ -1,22 +1,23 @@
 //
 // convention.h — Z80 calling-convention abstraction for the xcc backend.
 //
-// Each C23 [[sdcc::sdccall(N)]] / [[sdcc::naked]] / [[sdcc::interrupt]] /
-// [[sdcc::critical]] attribute maps to a concrete abi_convention subclass.
-// z80_gen selects the right subclass at the start of each function and
-// delegates all ABI-specific emission through it, so the main code
-// generator stays mode-agnostic.
+// Each supported function ABI maps to a concrete abi_convention subclass.
+// The same convention objects are consulted by both IR lowering and the
+// Z80 backend so argument layout, stack accounting, and emitted calling
+// sequences stay in sync.
 //
 // Interface:
-//   emit_prologue  — callee: function entry label + frame setup
-//   emit_epilogue  — callee: frame teardown + return instruction
-//   emit_send      — caller: pass one argument (register or stack)
-//   emit_receive   — callee: accept one incoming parameter
-//   emit_call_cleanup — caller: remove stack-passed arguments after CALL
-//   stack_bytes_for   — how many bytes argreg N contributes to the stack
+//   classify_args           — map params to concrete ABI locations
+//   stack_arg_bytes         — physical bytes consumed on the caller stack
+//   spill_bytes             — frame bytes needed to spill register params
+//   emit_prologue/epilogue  — callee entry/exit
+//   emit_send               — caller-side argument passing
+//   emit_call_cleanup       — caller-side stack repair after direct/indirect call
+//   emit_indirect_call      — ABI-specific trampoline for function pointers
+//   emit_return_value       — place current function's return value in ABI regs
+//   emit_store_call_result  — store a call result from ABI regs into an operand
 //
-// Concrete subclasses: cc_default, cc_sdcccall1, cc_naked, cc_interrupt,
-// cc_critical (all defined in z80gen_convention.cpp).
+// Concrete subclasses live in z80gen_convention.cpp.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
@@ -37,6 +38,18 @@ class z80_gen;  // forward – defined in z80gen.h
 struct abi_convention {
     virtual ~abi_convention() = default;
 
+    virtual call_abi abi_tag() const = 0;
+
+    virtual std::vector<abi_arg_loc>
+    classify_args(const std::vector<type_ptr> &types) const = 0;
+
+    virtual int stack_arg_bytes(type_ptr type, abi_arg_loc loc) const = 0;
+
+    virtual int spill_bytes(type_ptr type, abi_arg_loc loc) const {
+        if (loc == abi_arg_loc::STACK) return 0;
+        return type ? type->size() : 2;
+    }
+
     // Callee side.
     virtual void emit_prologue  (z80_gen &g, const ir_function &fn) = 0;
     virtual void emit_epilogue  (z80_gen &g, const ir_function &fn) = 0;
@@ -45,12 +58,9 @@ struct abi_convention {
     // Caller side.
     virtual void emit_send         (z80_gen &g, const icode &ic) = 0;
     virtual void emit_call_cleanup (z80_gen &g, const icode &ic) = 0;
-
-    // How many bytes argreg N pushes onto the stack.
-    // Returns 0 for register-passed arguments (e.g. sdccall(1) args 0-2).
-    virtual int stack_bytes_for(int /*argreg*/, int arg_sz) const {
-        return (arg_sz <= 1) ? 2 : (arg_sz + 1) & ~1;
-    }
+    virtual void emit_indirect_call(z80_gen &g, const icode &ic) const = 0;
+    virtual void emit_return_value(z80_gen &g, const operand &value) const = 0;
+    virtual void emit_store_call_result(z80_gen &g, const icode &ic) const = 0;
 
 protected:
     // Shared helpers implemented in z80gen_convention.cpp.
@@ -59,12 +69,27 @@ protected:
     static void std_epilogue_frame(z80_gen &g, const ir_function &fn);
     static void std_send_push     (z80_gen &g, const icode &ic);
     static void std_call_cleanup  (z80_gen &g, const icode &ic);
+    static void exact_stack_drop  (z80_gen &g, int bytes);
+    static void callee_stack_return(z80_gen &g, int bytes);
+    static void emit_bc_indirect_call(z80_gen &g, const operand &target,
+                                      bool preserve_af,
+                                      bool preserve_hl,
+                                      bool preserve_de);
+    static void emit_legacy_return_value(z80_gen &g, const operand &value);
+    static void emit_store_legacy_result(z80_gen &g, const icode &ic);
+    static void emit_modern_return_value(z80_gen &g, const operand &value);
+    static void emit_store_modern_result(z80_gen &g, const icode &ic);
+    static void spill_fastcall_receive(z80_gen &g, const icode &ic);
+    static void spill_modern_receive(z80_gen &g, const icode &ic);
+    static void spill_leading_receives(z80_gen &g, const ir_function &fn,
+                                       void (*spill_one)(z80_gen &, const icode &));
 };
 
 // ---------------------------------------------------------------------------
 // Factory — returns the convention for the given ABI tag
 // ---------------------------------------------------------------------------
 
-std::unique_ptr<abi_convention> make_abi_convention(call_abi abi);
+call_abi effective_call_abi(call_abi abi);
+abi_convention &get_abi_convention(call_abi abi);
 
 } // namespace xcc

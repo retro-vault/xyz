@@ -14,6 +14,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "ir/irgen.h"
+#include "backend/z80/convention.h"
 #include <cassert>
 
 namespace xcc {
@@ -53,7 +54,8 @@ operand ir_gen::sym_to_operand(const symbol &sym, type_ptr ty) {
     bool is_sfr = (sym.sfr_port >= 0);
     return operand::make_symbol(name, ty ? ty : sym.type,
                                 sym.is_global, sym.is_param,
-                                sym.stack_offset, sym.is_tls,
+                                sym.stack_offset, sym.kind == sym_kind::FUNC,
+                                sym.is_tls,
                                 is_sfr, sym.sfr_port);
 }
 

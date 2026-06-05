@@ -59,7 +59,8 @@ include/
   ir/
     icode.h          — operand, icode, ir_function, ir_module
     irgen.h          — ir_gen class
-    iropt.h          — ir_optimizer class
+  opt/
+    iropt.h          — IR optimizer pipeline and pass abstractions
   backend/
     asm_emitter.h    — abstract emitter interface (dialect-independent)
     sdasz80_emitter.h — sdasz80-syntax emitter
@@ -92,7 +93,8 @@ src/
     irgen_expr.cpp         — expression visitors and arithmetic helpers
     irgen_lvalue.cpp       — lvalue read/write, index/member access
     irgen_init.cpp         — aggregate initialiser lowering
-    iropt.cpp
+  opt/
+    iropt.cpp              — CFG/value/loop analysis plus IR optimization passes
   backend/
     sdasz80_emitter.cpp
     gnuas_emitter.cpp
@@ -305,16 +307,17 @@ struct icode {
 **`SET_VALUE_AT` convention**: `ic.result` = pointer operand (address to write to),
 `ic.left` = value to store.  Swapping these fields silently stores to address 0.
 
-### ir_optimizer (`src/ir/iropt.h/cpp`)
+### ir_optimizer (`include/opt/iropt.h`, `src/opt/iropt.cpp`)
 
-Runs a fixed-point loop of five passes:
-1. `constant_fold` — evaluate binary/unary ops on INT_CONST operands
-2. `algebraic_simplify` — fold identities: `x+0→x`, `x*0→0`, `x&0→0`, etc.
-3. `copy_prop` — replace `ASSIGN(t_dst, t_src)` uses with `t_src` directly
-4. `dead_code_elim` — remove pure instructions whose result temp has zero uses
-5. `strength_reduce` — `MUL(x, 2^n)` → `SHL(x, n)`;
-   unsigned `DIV(x, 2^n)` → `SHR(x, n)`;
-   unsigned `MOD(x, 2^n)` → `BAND(x, 2^n - 1)`
+Runs a fixed-point IR pipeline built from pass objects:
+1. `cfg_cleanup` — fold constant branches and remove unreachable blocks
+2. `value_propagation` — SSA-style reaching-value propagation across basic blocks
+3. `constant_fold` — evaluate binary/unary ops on INT_CONST operands
+4. `algebraic_simplify` — fold identities: `x+0→x`, `x*0→0`, `x&0→0`, etc.
+5. `loop_licm` — hoist loop-invariant pure computations
+6. `loop_induction` — rewrite canonical loop multiplies into running values
+7. `strength_reduce` — replace constant multiplies/divides/mods with cheaper shifts/adds
+8. `dead_code_elim` — remove removable instructions whose results are not live
 
 Activated at `-O2` and above.
 

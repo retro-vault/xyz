@@ -26,11 +26,11 @@
 #include <string>
 #include <vector>
 
-#include <xas/errors.hpp>
-#include <xas/cli.hpp>
-#include <xas/frontend/ast.hpp>
-#include <xas/backend/emitter.hpp>
-#include <xbfd/types.hpp>
+#include <xas/errors.h>
+#include <xas/cli.h>
+#include <xas/frontend/ast.h>
+#include <xas/backend/emitter.h>
+#include <xbfd/xbfd.h>
 
 namespace xas {
 
@@ -203,6 +203,23 @@ namespace xas {
         return {};
     }
 
+    static uint32_t reloc_addend(const expr& e, const sym_table& syms, uint32_t cur_offset)
+    {
+        auto value = eval_expr(e, syms, cur_offset);
+        if (!value)
+            return 0;
+
+        const auto name = reloc_symbol_name(e);
+        if (name.empty())
+            return static_cast<uint32_t>(*value);
+
+        auto it = syms.find(name);
+        if (it == syms.end() || !it->second.defined)
+            return static_cast<uint32_t>(*value);
+
+        return static_cast<uint32_t>(*value) - it->second.value;
+    }
+
     // =========================================================================
     // codegen class
     // =========================================================================
@@ -235,14 +252,15 @@ namespace xas {
         }
 
         // Emit a byte that may need a relocation.
-        void emit_byte_expr(const expr& e, int line)
+        void emit_byte_expr(const expr& e, int)
         {
             auto v = eval_expr(e, syms_, cur_offset_);
             if (pass_ == 2) {
                 if (needs_reloc(e, syms_, cur_section_)) {
+                    const auto addend = reloc_addend(e, syms_, cur_offset_);
                     emit_.emit_reloc(reloc_symbol_name(e),
                                      bfd::reloc_type::z80_8, true);
-                    emit_.emit_byte(0);
+                    emit_.emit_byte(static_cast<uint8_t>(addend & 0xFF));
                 } else {
                     emit_.emit_byte(v ? static_cast<uint8_t>(*v) : 0);
                 }
@@ -251,14 +269,15 @@ namespace xas {
         }
 
         // Emit a 16-bit word that may need a relocation.
-        void emit_word_expr(const expr& e, int line)
+        void emit_word_expr(const expr& e, int)
         {
             auto v = eval_expr(e, syms_, cur_offset_);
             if (pass_ == 2) {
                 if (needs_reloc(e, syms_, cur_section_)) {
+                    const auto addend = reloc_addend(e, syms_, cur_offset_);
                     emit_.emit_reloc(reloc_symbol_name(e),
                                      bfd::reloc_type::z80_16, true);
-                    emit_.emit_word(0);
+                    emit_.emit_word(static_cast<uint16_t>(addend & 0xFFFF));
                 } else {
                     emit_.emit_word(v ? static_cast<uint16_t>(*v) : 0);
                 }
@@ -272,9 +291,10 @@ namespace xas {
             auto v = eval_expr(e, syms_, cur_offset_);
             if (pass_ == 2) {
                 if (needs_reloc(e, syms_, cur_section_)) {
+                    const auto addend = reloc_addend(e, syms_, cur_offset_);
                     emit_.emit_reloc(reloc_symbol_name(e),
                                      bfd::reloc_type::z80_pc8, true);
-                    emit_.emit_byte(0);
+                    emit_.emit_byte(static_cast<uint8_t>(addend & 0xFF));
                 } else {
                     // cur_offset_ is after the opcode byte but before the offset.
                     int32_t off = v ? static_cast<int32_t>(*v)
@@ -967,7 +987,7 @@ namespace xas {
         }
 
         // Simple no-operand instructions.
-        void do_simple(const stmt& s, int line)
+        void do_simple(const stmt& s, int)
         {
             struct { const char* mn; uint8_t b1, b2; } table[] = {
                 {"NOP",  0x00, 0},
@@ -1319,6 +1339,12 @@ namespace xas {
                     if (v) {
                         syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
                         syms_[s.string_arg].defined = true;
+                        if (pass_ == 2) {
+                            emit_.define_symbol(s.string_arg,
+                                                static_cast<uint32_t>(*v),
+                                                "",
+                                                syms_[s.string_arg].global);
+                        }
                     }
                 }
                 return;
@@ -1330,6 +1356,12 @@ namespace xas {
                     if (v) {
                         syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
                         syms_[s.string_arg].defined = true;
+                        if (pass_ == 2) {
+                            emit_.define_symbol(s.string_arg,
+                                                static_cast<uint32_t>(*v),
+                                                "",
+                                                syms_[s.string_arg].global);
+                        }
                     }
                 }
                 return;
@@ -1364,6 +1396,12 @@ namespace xas {
                 if (v) {
                     syms_[s.equ_name].value   = static_cast<uint32_t>(*v);
                     syms_[s.equ_name].defined = true;
+                    if (pass_ == 2) {
+                        emit_.define_symbol(s.equ_name,
+                                            static_cast<uint32_t>(*v),
+                                            "",
+                                            syms_[s.equ_name].global);
+                    }
                 }
                 return;
             }

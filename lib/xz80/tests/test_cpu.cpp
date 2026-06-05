@@ -2,10 +2,10 @@
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih
-#include <xz80/cpu.hpp>
-#include <xz80/memory.hpp>
-#include <xz80/ports.hpp>
-#include <xz80/cpu_state.hpp>
+#include <xz80/cpu.h>
+#include <xz80/memory.h>
+#include <xz80/ports.h>
+#include <xz80/cpu_state.h>
 
 // ---------------------------------------------------------------------------
 // Helper: small machine with flat RAM and null ports

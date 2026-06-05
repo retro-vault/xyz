@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include <xas/errors.hpp>
-#include <xas/frontend/lexer.hpp>
+#include <xas/errors.h>
+#include <xas/frontend/lexer.h>
 
 namespace xas {
 
@@ -169,7 +169,7 @@ namespace xas {
         while (pos_ < src_.size()) {
             char c = src_[pos_];
             if (std::isalnum(static_cast<unsigned char>(c)) || c == '_'
-                || c == '.' || c == '\'' || c == '!')
+                || c == '.' || c == '$' || c == '\'' || c == '!')
                 ++pos_;
             else
                 break;

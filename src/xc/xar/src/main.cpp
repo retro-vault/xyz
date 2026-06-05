@@ -9,8 +9,8 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <xar/cli.hpp>
-#include <xar/operations.hpp>
+#include <xar/cli.h>
+#include <xar/operations.h>
 
 int main(int argc, char** argv)
 {

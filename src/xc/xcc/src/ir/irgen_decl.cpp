@@ -9,6 +9,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "ir/irgen.h"
+#include "backend/z80/convention.h"
 #include <cassert>
 
 namespace xcc {
@@ -165,24 +166,35 @@ void ir_gen::gen_func(func_decl &fd) {
     fn.num_params       = static_cast<int>(fd.params.size());
     fn.abi              = fd.sym ? fd.sym->abi : call_abi::DEFAULT;
     fn.is_noreturn      = fd.sym ? fd.sym->attr_noreturn : false;
-    fn.reg_param_count  = 0;
 
-    // sdccall(1): first ≤3 parameters arrive in registers (HL, DE, BC).
-    // Remap their symbols to negative IX offsets (local spill area) so the
-    // rest of the compiler accesses them correctly via IX-relative loads.
-    if (fn.abi == call_abi::SDCCCALL1) {
-        int n_reg = std::min(3, static_cast<int>(fd.params.size()));
-        fn.reg_param_count = n_reg;
-        for (int i = 0; i < n_reg; ++i) {
-            if (fd.params[i]->sym) {
-                // Place each spill slot just below the existing local area.
-                fd.params[i]->sym->stack_offset = -(fd.local_bytes + 2 * (i + 1));
-                fd.params[i]->sym->is_param     = false; // addressed as local
-            }
+    std::vector<type_ptr> param_types;
+    param_types.reserve(fd.params.size());
+    for (auto &p : fd.params)
+        param_types.push_back(p ? p->type : type::make_int());
+
+    const auto &conv = get_abi_convention(fn.abi);
+    auto param_locs = conv.classify_args(param_types);
+    int spill_bytes = 0;
+    int stack_bytes = 0;
+
+    for (int i = 0; i < static_cast<int>(fd.params.size()); ++i) {
+        auto &p = fd.params[i];
+        if (!p || !p->sym) continue;
+
+        abi_arg_loc loc = param_locs[i];
+        if (loc == abi_arg_loc::STACK) {
+            p->sym->stack_offset = stack_bytes;
+            p->sym->is_param     = true;
+            stack_bytes += conv.stack_arg_bytes(p->type, loc);
+        } else {
+            spill_bytes += conv.spill_bytes(p->type, loc);
+            p->sym->stack_offset = -(fd.local_bytes + spill_bytes);
+            p->sym->is_param     = false;
         }
-        // Enlarge local_bytes to include the spill area.
-        fn.local_bytes += 2 * n_reg;
     }
+
+    fn.local_bytes += spill_bytes;
+    fn.stack_param_bytes = stack_bytes;
 
     mod_->functions.push_back(std::move(fn));
     cur_fn_ = &mod_->functions.back();
@@ -192,7 +204,7 @@ void ir_gen::gen_func(func_decl &fd) {
         ic.op          = icode_op::FUNCTION;
         ic.func_name   = fd.name;
         ic.num_params  = static_cast<int>(fd.params.size());
-        ic.local_bytes = fd.local_bytes;
+        ic.local_bytes = cur_fn_->local_bytes;
         emit(ic);
     }
 
@@ -204,6 +216,7 @@ void ir_gen::gen_func(func_decl &fd) {
         ic.op     = icode_op::RECEIVE;
         ic.result = dst;
         ic.argreg = i;
+        ic.arg_loc = param_locs[i];
         emit(ic);
     }
 

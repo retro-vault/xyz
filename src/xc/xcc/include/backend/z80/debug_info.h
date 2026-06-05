@@ -1,59 +1,72 @@
 //
-// debug_info.h — Abstract debug information emitter interface.
+// debug_info.h — Thin adapter: xcc IR events → xbfd::debug_writer calls.
 //
-// debug_info_emitter is the common protocol for debug output back-ends.
-// Concrete implementations:
-//   dwarf_emitter    — DWARF 2 sections (.debug_info etc.) for GNU as
-//   sdcc_debug_emitter — SDCC-style ;! directives + .adb for sdasz80
-//
-// z80_gen holds a std::unique_ptr<debug_info_emitter> and talks through
-// this interface; the driver creates the right subclass based on the
-// -g flag and the selected assembler dialect (-masm=).
+// xcc's Z80 backend calls this interface; it translates xcc-specific
+// types (ir_function, type*) into xbfd::type_ref / xbfd::storage and
+// forwards them to an xbfd::debug_writer.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
 //
-
 #pragma once
 #include "ir/icode.h"
+#include "frontend/types.h"
+#include <xbfd/xbfd.h>
+#include <memory>
 #include <string>
 
 namespace xcc {
 
+// Abstract interface the Z80 backend calls — matches xdi events 1:1
+// but uses xcc IR types so xcc code stays clean.
 class debug_info_emitter {
 public:
     virtual ~debug_info_emitter() = default;
 
-    //
-    // Called once at the start of module emission.
-    // Emits file-level directives (.file for DWARF, ;!FILE for SDCC).
-    //
     virtual void begin_module() = 0;
-
-    //
-    // Called before each icode; line <= 0 means unknown.
-    // Implementations should suppress duplicate consecutive lines.
-    //
     virtual void emit_location(int line) = 0;
+    virtual void begin_function(const ir_function& fn,
+                                const std::string& mangled) = 0;
+    virtual void end_function  (const ir_function& fn) = 0;
+    virtual void emit_global   (const std::string& name,
+                                 const type*       t,
+                                 bool              is_static) {}
+    virtual void end_module(const std::string& producer) = 0;
+};
 
-    //
-    // Called before the function entry label is emitted.
-    // mangled is the assembly label (e.g., "_main").
-    // fn provides full IR metadata (name, ret_type, params via RECEIVE icodes).
-    //
-    virtual void begin_function(const ir_function &fn,
-                                const std::string &mangled) = 0;
+// ---------------------------------------------------------------------------
+// xdi_adapter — bridges xcc IR types to xbfd::debug_writer
+// ---------------------------------------------------------------------------
 
-    //
-    // Called immediately after the function's ret instruction.
-    //
-    virtual void end_function(const ir_function &fn) = 0;
+class xdi_adapter final : public debug_info_emitter {
+public:
+    explicit xdi_adapter(std::unique_ptr<xbfd::debug_writer> writer,
+                         const std::string& source_file)
+        : owned_(std::move(writer))
+        , writer_(owned_.get())
+        , source_file_(source_file) {}
 
-    //
-    // Called once at the end of module emission, after all functions.
-    // producer is a tool/version string (e.g., "xcc 0.1.0").
-    //
-    virtual void end_module(const std::string &producer) = 0;
+    void begin_module() override {
+        writer_->begin_module();
+    }
+    void emit_location(int line) override {
+        writer_->source_line(line);
+    }
+    void begin_function(const ir_function& fn, const std::string& mangled) override;
+    void end_function  (const ir_function& fn) override {
+        writer_->end_function(fn.name);
+    }
+    void emit_global(const std::string& name, const type* t, bool is_static) override;
+    void end_module(const std::string& producer) override {
+        writer_->end_module(producer);
+    }
+
+private:
+    static xbfd::type_ref to_xdi(const type* t);
+
+    std::unique_ptr<xbfd::debug_writer> owned_;
+    xbfd::debug_writer*                 writer_;
+    std::string                        source_file_;
 };
 
 } // namespace xcc

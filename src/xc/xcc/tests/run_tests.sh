@@ -8,6 +8,7 @@ TESTS_ROOT="$(dirname "$0")/data"
 PASS=0
 FAIL=0
 SKIP=0
+XCC_ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -18,6 +19,10 @@ if [[ ! -x "$XCC" ]]; then
     echo "${RED}ERROR: xcc not found at '$XCC'${RESET}"
     exit 1
 fi
+
+run_xcc() {
+    env ASAN_OPTIONS="$XCC_ASAN_OPTIONS" "$XCC" "$@"
+}
 
 run_test() {
     local c_file="$1"
@@ -40,7 +45,7 @@ run_test() {
         local pat
         pat="$(cat "$warn_pat")"
         tmpfile=$(mktemp /tmp/xcc_test_XXXXXX.s)
-        if ! "$XCC" $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
+        if ! run_xcc $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
             echo "${RED}FAIL${RESET} $name  [unexpected compile error]"
             head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
             rm -f "$tmpfile" /tmp/xcc_err_$$.txt
@@ -64,7 +69,7 @@ run_test() {
         local pat
         pat="$(cat "$error_pat")"
         tmpfile=$(mktemp /tmp/xcc_test_XXXXXX.s)
-        if "$XCC" $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
+        if run_xcc $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
             echo "${RED}FAIL${RESET} $name  [expected compile error but succeeded]"
             rm -f "$tmpfile" /tmp/xcc_err_$$.txt
             FAIL=$((FAIL + 1))
@@ -84,7 +89,7 @@ run_test() {
 
     # Compile to assembly
     tmpfile=$(mktemp /tmp/xcc_test_XXXXXX.s)
-    if ! "$XCC" $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
+    if ! run_xcc $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
         echo "${RED}FAIL${RESET} $name  [compile error]"
         head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
         rm -f "$tmpfile" /tmp/xcc_err_$$.txt

@@ -8,6 +8,92 @@
 
 namespace xcc {
 
+bool z80_gen::fits_ix_disp(int off) {
+    return off >= -128 && off <= 127;
+}
+
+void z80_gen::load_ix_addr_hl(int off) {
+    emit_line("push\tix");
+    emit_line("pop\thl");
+    emit_line("ld\tbc, %s", asm_.imm(off).c_str());
+    emit_line("add\thl, bc");
+}
+
+void z80_gen::load_frame_byte(char dst, int off) {
+    if (fits_ix_disp(off)) {
+        emit_line("ld\t%c, %s", dst, asm_.ix_rel(off).c_str());
+        return;
+    }
+
+    if (dst != 'a')
+        emit_line("push\taf");
+    emit_line("push\tbc");
+    load_ix_addr_hl(off);
+    emit_line("ld\ta, (hl)");
+    emit_line("pop\tbc");
+    if (dst != 'a')
+        emit_line("ld\t%c, a", dst);
+    if (dst != 'a')
+        emit_line("pop\taf");
+}
+
+void z80_gen::store_frame_byte(int off, char src) {
+    if (fits_ix_disp(off)) {
+        emit_line("ld\t%s, %c", asm_.ix_rel(off).c_str(), src);
+        return;
+    }
+
+    emit_line("push\taf");
+    emit_line("push\tbc");
+    if (src != 'a')
+        emit_line("ld\ta, %c", src);
+    load_ix_addr_hl(off);
+    emit_line("ld\t(hl), a");
+    emit_line("pop\tbc");
+    emit_line("pop\taf");
+}
+
+void z80_gen::load_frame_word(const reg_pair &r, int off) {
+    if (fits_ix_disp(off) && fits_ix_disp(off + 1)) {
+        emit_line("ld\t%c, %s", r.lo, asm_.ix_rel(off).c_str());
+        emit_line("ld\t%c, %s", r.hi, asm_.ix_rel(off + 1).c_str());
+        return;
+    }
+
+    emit_line("push\tbc");
+    load_ix_addr_hl(off);
+    if (r.lo == 'l') {
+        emit_line("push\taf");
+        emit_line("ld\ta, (hl)");
+        emit_line("inc\thl");
+        emit_line("ld\th, (hl)");
+        emit_line("ld\tl, a");
+        emit_line("pop\taf");
+    } else {
+        emit_line("ld\t%c, (hl)", r.lo);
+        emit_line("inc\thl");
+        emit_line("ld\t%c, (hl)", r.hi);
+    }
+    emit_line("pop\tbc");
+}
+
+void z80_gen::store_frame_word(const reg_pair &r, int off) {
+    if (fits_ix_disp(off) && fits_ix_disp(off + 1)) {
+        emit_line("ld\t%s, %c", asm_.ix_rel(off).c_str(),     r.lo);
+        emit_line("ld\t%s, %c", asm_.ix_rel(off + 1).c_str(), r.hi);
+        return;
+    }
+
+    emit_line("push\tbc");
+    emit_line("push\t%s", r.name);
+    load_ix_addr_hl(off);
+    emit_line("pop\tbc");
+    emit_line("ld\t(hl), c");
+    emit_line("inc\thl");
+    emit_line("ld\t(hl), b");
+    emit_line("pop\tbc");
+}
+
 int z80_gen::op_size(const operand &op) const {
     if (!op.type) return 2;
     return op.type->size();
@@ -99,7 +185,7 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 emit_line("ld\tl, c");
                 emit_line("ld\th, b");
             }
-        } else if (op.is_global && op.type && op.type->is_func()) {
+        } else if (op.is_global && op.is_func) {
             if (r.via_hl) {
                 emit_line("ld\thl, %s", asm_.imm_sym(mangle(op.name)).c_str());
                 emit_line("ex\tde, hl");
@@ -114,9 +200,7 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 emit_line("ld\t%s, (%s)", r.name, mangle(op.name).c_str());
             }
         } else {
-            int off = ix_offset_of(op);
-            emit_line("ld\t%c, %s", r.lo, asm_.ix_rel(off).c_str());
-            emit_line("ld\t%c, %s", r.hi, asm_.ix_rel(off + 1).c_str());
+            load_frame_word(r, ix_offset_of(op));
         }
         break;
     case operand_kind::TEMP: {
@@ -126,9 +210,7 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
             else             { emit_line("ld\td, b"); emit_line("ld\te, c"); }
             break;
         }
-        int off = ix_offset_of(op);
-        emit_line("ld\t%c, %s", r.lo, asm_.ix_rel(off).c_str());
-        emit_line("ld\t%c, %s", r.hi, asm_.ix_rel(off + 1).c_str());
+        load_frame_word(r, ix_offset_of(op));
         break;
     }
     case operand_kind::LABEL_REF:
@@ -166,9 +248,7 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
         } else if (op.is_global) {
             emit_line("ld\t(%s), %s", mangle(op.name).c_str(), r.name);
         } else {
-            int off = ix_offset_of(op);
-            emit_line("ld\t%s, %c", asm_.ix_rel(off).c_str(),     r.lo);
-            emit_line("ld\t%s, %c", asm_.ix_rel(off + 1).c_str(), r.hi);
+            store_frame_word(r, ix_offset_of(op));
         }
         break;
     case operand_kind::TEMP: {
@@ -178,9 +258,7 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
             else             { emit_line("ld\tb, d"); emit_line("ld\tc, e"); }
             break;
         }
-        int off = ix_offset_of(op);
-        emit_line("ld\t%s, %c", asm_.ix_rel(off).c_str(),     r.lo);
-        emit_line("ld\t%s, %c", asm_.ix_rel(off + 1).c_str(), r.hi);
+        store_frame_word(r, ix_offset_of(op));
         break;
     }
     default:
@@ -229,7 +307,7 @@ void z80_gen::load_a(const operand &op) {
             return;
         }
     }
-    emit_line("ld\ta, %s", asm_.ix_rel(ix_offset_of(op)).c_str());
+    load_frame_byte('a', ix_offset_of(op));
 }
 
 void z80_gen::store_a(const operand &op) {
@@ -259,7 +337,7 @@ void z80_gen::store_a(const operand &op) {
             return;
         }
     }
-    emit_line("ld\t%s, a", asm_.ix_rel(ix_offset_of(op)).c_str());
+    store_frame_byte(ix_offset_of(op), 'a');
 }
 
 void z80_gen::load_hl_word(const operand &op, int word_index) {
@@ -270,9 +348,8 @@ void z80_gen::load_hl_word(const operand &op, int word_index) {
         int total = op.byte_offset + word_byte;
         emit_line("ld\thl, %s", asm_.indir_global(mangle(op.name), total).c_str());
     } else {
-        int off = ix_offset_of(op);
-        emit_line("ld\tl, %s", asm_.ix_rel(off + word_byte).c_str());
-        emit_line("ld\th, %s", asm_.ix_rel(off + word_byte + 1).c_str());
+        load_frame_word(reg_pair{"hl", 'l', 'h', false},
+                        ix_offset_of(op) + word_byte);
     }
 }
 
@@ -282,9 +359,8 @@ void z80_gen::store_hl_word(const operand &op, int word_index) {
         int total = op.byte_offset + word_byte;
         emit_line("ld\t%s, hl", asm_.indir_global(mangle(op.name), total).c_str());
     } else {
-        int off = ix_offset_of(op);
-        emit_line("ld\t%s, l", asm_.ix_rel(off + word_byte).c_str());
-        emit_line("ld\t%s, h", asm_.ix_rel(off + word_byte + 1).c_str());
+        store_frame_word(reg_pair{"hl", 'l', 'h', false},
+                         ix_offset_of(op) + word_byte);
     }
 }
 

@@ -6,6 +6,6 @@ Architecture: @DEB_ARCH@
 Maintainer: xyz project <tomaz.stih@wischner.co.uk>
 Depends: libc6, libgcc-s1, libstdc++6
 Description: XYZ compiler, linker, debugger, and runtime tool suite
- xcc, xas, xar, xlink, xdbg, xdbg-z80, compiler runtime libraries,
+ xcc, xas, xar, xld, xgdb, xgdb-z80, compiler runtime libraries,
  staged headers, static helper libraries, and related extension/target
  assets for Ubuntu deployments.

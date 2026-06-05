@@ -8,8 +8,8 @@
 #include <string>
 #include <unordered_set>
 
-#include <xas/backend/emitter.hpp>
-#include <xbfd/bfd.hpp>
+#include <xas/backend/emitter.h>
+#include <xbfd/xbfd.h>
 
 namespace xas {
 
@@ -37,7 +37,7 @@ namespace xas {
         void emit_byte(uint8_t v) override
         {
             auto* sec = obj_->find_section(cur_section_);
-            if (sec) sec->append_byte(v);
+            if (sec) sec->data.push_back(v);
             ++cur_offset_;
         }
 
@@ -45,8 +45,8 @@ namespace xas {
         {
             auto* sec = obj_->find_section(cur_section_);
             if (sec) {
-                sec->append_byte(v & 0xFF);
-                sec->append_byte((v >> 8) & 0xFF);
+                sec->data.push_back(v & 0xFF);
+                sec->data.push_back((v >> 8) & 0xFF);
             }
             cur_offset_ += 2;
         }
@@ -55,7 +55,7 @@ namespace xas {
         {
             auto* sec = obj_->find_section(cur_section_);
             if (sec) {
-                for (uint32_t i = 0; i < n; ++i) sec->append_byte(0);
+                for (uint32_t i = 0; i < n; ++i) sec->data.push_back(0);
             }
             cur_offset_ += n;
         }
@@ -72,7 +72,7 @@ namespace xas {
             r.sym_relative = sym_relative;
             r.name         = name;
             r.addend       = 0;
-            sec->add_reloc(r);
+            sec->relocs.push_back(r);
         }
 
         void define_symbol(const std::string& name,

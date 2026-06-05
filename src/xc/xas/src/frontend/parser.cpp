@@ -10,8 +10,8 @@
 #include <cctype>
 #include <string>
 
-#include <xas/errors.hpp>
-#include <xas/frontend/parser.hpp>
+#include <xas/errors.h>
+#include <xas/frontend/parser.h>
 
 namespace xas {
 

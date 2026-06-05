@@ -9,11 +9,12 @@ _debug_counter:
 
 	.globl _main
 _main:
-	; prologue: main (locals=0)
+	; sdcccall(1) prologue: main (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

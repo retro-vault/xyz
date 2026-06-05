@@ -6,15 +6,17 @@ It is arranged so selected subdirectories can be copied directly into a
 system prefix such as `/usr`:
 
 - `bin/` for host-side executables
-- `docs/` for packaged component documentation
-- `include/` for public headers
-- `lib/` for static libraries
+- `include/` for public headers, with Z80 target headers under `include/z80/`
+- `lib/` for host-side static libraries, with Z80 target libraries under
+  `lib/z80/`
+- `libexec/xcc/` for compiler-private runtime and include support
+- `share/xtools/` for staged documentation and future examples/templates
+- `pkg/` for generated package artifacts
 
 It also contains target-specific output that is not part of a normal
 host `/usr` layout:
 
-- `targets/` for generated ZX Spectrum and generic Z80 build artifacts
-- `extensions/` for editor integrations such as VS Code packages
+- `z80/` for generated generic and platform-specific target deliverables
 
 ## Top-Level Contents
 
@@ -29,22 +31,61 @@ Host-side command-line programs:
 - `xas` assembler for Z80 build products
 - `xar` archive tool for `.rel` libraries
 - `xcc` C compiler for Z80 targets
-- `xdbg` debugger frontend
-- `xdbg-z80` local Z80 debug target
-- `xlink` linker for Z80 build products
+- `xgdb` debugger frontend
+- `xgdb-z80` local Z80 debug target
+- `xld` linker for Z80 build products
 
 ### `bin/include`
 
-Public headers staged from the repository root `include/` tree.
+Public host-side library headers staged from the repository root `include/`
+tree and library public include trees.
 
-Current public headers include:
+Current host-side headers include:
 
-- `yos.h` for the YOS interface
 - `microdrive/` for the microdrive library API
-- `xdbg/` for the debugger library API
-- `xdbgstub/` for the debug stub library API
+- `rsp/` for the remote-serial-protocol library API
+- `xbfd/` for the binary/debug-info library API
+- `xgdb/` for the debugger library API
 
-### `bin/docs`
+### `bin/include/z80`
+
+Public target-side headers for Z80 programs.
+
+Current Z80 headers include:
+
+- the staged C23 libc work under `lib/libc/include/`
+- `platform/yos.h` for the YOS platform interface
+
+### `bin/lib`
+
+Host-side static libraries:
+
+- `libmicrodrive.a`
+- `librsp.a`
+- `libxbfd.a`
+- `libxgdb.a`
+- `libxgdb_cli.a`
+- `libxgdb_mi.a`
+
+### `bin/lib/z80`
+
+Target-side Z80 libraries:
+
+- `libc.a` for the current standard C library work
+
+### `bin/lib/z80/spectrum`
+
+Reserved for ZX Spectrum-specific target libraries such as `crt0` or platform
+overrides.
+
+### `bin/libexec/xcc`
+
+Compiler-private support files used by the Z80 toolchain:
+
+- `include/` for xcc-only support headers not yet published as libc headers
+- `runtime/` for assembled `.rel` helpers and `z80.lib` / `runtime.lib`
+
+### `bin/share/xtools/docs`
 
 Packaged component documentation staged with stable filenames:
 
@@ -52,43 +93,20 @@ Packaged component documentation staged with stable filenames:
 - `DEBUGGER_INTEGRATION.md`
 - `MICRODRIVE.md`
 - `SERIAL.md`
-- `XLINK.md`
+- `XLD.md`
 - `YOS.md`
 
-### `bin/lib`
+### `bin/z80/spectrum`
 
-Host-side static libraries:
+ZX Spectrum target deliverables:
 
-- `libmicrodrive.a`
-- `libxdbg.a`
-- `libxdbg_cli.a`
-- `libxdbg_dap.a`
-- `libxdbg_mi.a`
-- `libxdbgstub.a`
+- `bin/` for ROM images, staged application payloads, and `.mdr` media
+- `include/` reserved for extra platform headers
+- `lib/` reserved for extra platform libraries
 
-### `bin/extensions`
+### `bin/pkg`
 
-Editor integration artifacts.
+Generated package artifacts:
 
-Current intended location:
-
-- `vscode/` for packaged VS Code extensions such as `.vsix` files
-
-### `bin/targets`
-
-Generated target-side artifacts grouped by machine family.
-
-#### `bin/targets/zxspectrum`
-
-ZX Spectrum outputs:
-
-- `roms/` for ROM images such as `yos.rom`
-- `apps/` for ZX Spectrum application payloads
-- `mdr/` for microdrive cartridge images such as `hello.mdr`
-
-#### `bin/targets/z80`
-
-Generic Z80 outputs:
-
-- `apps/` for non-ZX-Spectrum Z80 application/debug payloads such as the
-  `tests/debug` `sieve` sample
+- `deb/` for Debian package outputs
+- `vsix/` for staged VS Code extension packages

@@ -7,7 +7,7 @@
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
 //
-#include "z80.hpp"
+#include "z80.h"
 
 #include <cstdint>
 #include <cstdio>

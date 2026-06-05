@@ -1,19 +1,34 @@
 /*
  * stddef.h
  *
- * standard C header file
- * 
+ * Standard C23 common definitions for the xcc Z80 target.
+ *
+ * On this target, pointers and size_t are 16-bit quantities. wchar_t is also
+ * represented as a 16-bit signed integer until a wider wide-character runtime
+ * is introduced.
+ *
  * MIT License (see: LICENSE)
- * copyright (c) 2021 tomaz stih
- *
- * 01.05.2021   tstih
- *
+ * Copyright (C) 2026 tomaz stih
  */
-#ifndef __STDDEF_H__
-#define __STDDEF_H__
+#ifndef _STDDEF_H
+#define _STDDEF_H
 
-#define NULL ((void *)0)
+#define __STDC_VERSION_STDDEF_H__ 202311L
 
-typedef unsigned int    size_t;
+/* Null pointer constant. */
+#ifndef NULL
+#  define NULL ((void *)0)
+#endif
 
-#endif /* __STDDEF_H_ */
+/* Core object and pointer-related types. */
+typedef int ptrdiff_t;
+typedef unsigned int size_t;
+typedef int wchar_t;
+
+/* Compute the byte offset of a member within a structure type. */
+#define offsetof(type, member) ((size_t)(&((type *)0)->member))
+
+/* Compiler-facing utility hooks. */
+#define unreachable() __builtin_unreachable()
+
+#endif /* _STDDEF_H */

@@ -1,5 +1,5 @@
 # Host-side libraries.  xbfd must build first (tools depend on it).
-SUBDIRS = xbfd xdbg xdbgstub
+SUBDIRS = xbfd xgdb rsp
 
 # Rules.
 .PHONY: all
@@ -9,8 +9,7 @@ all: $(SUBDIRS)
 $(SUBDIRS):
 	$(MAKE) -C $@
 
-xdbg: xbfd
-xdbgstub: xbfd
+xgdb: xbfd
 
 .PHONY: clean
 clean:

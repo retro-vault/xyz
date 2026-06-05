@@ -15,6 +15,18 @@
 
 namespace xcc {
 
+static const char *abi_arg_loc_name(abi_arg_loc loc) {
+    switch (loc) {
+    case abi_arg_loc::STACK:   return "stack";
+    case abi_arg_loc::REG_A:   return "a";
+    case abi_arg_loc::REG_L:   return "l";
+    case abi_arg_loc::REG_HL:  return "hl";
+    case abi_arg_loc::REG_DE:  return "de";
+    case abi_arg_loc::REG_DEHL:return "dehl";
+    }
+    return "?";
+}
+
 const char *icode_op_name(icode_op op) {
     switch (op) {
 #define CASE(k) case icode_op::k: return #k
@@ -78,10 +90,12 @@ void icode::dump() const {
             printf("  ret %s\n", left.to_string().c_str());
         break;
     case icode_op::SEND:
-        printf("  send(%d) %s\n", argreg, left.to_string().c_str());
+        printf("  send(%d,%s) %s\n", argreg, abi_arg_loc_name(arg_loc),
+               left.to_string().c_str());
         break;
     case icode_op::RECEIVE:
-        printf("  %s = recv(%d)\n", result.to_string().c_str(), argreg);
+        printf("  %s = recv(%d,%s)\n", result.to_string().c_str(), argreg,
+               abi_arg_loc_name(arg_loc));
         break;
     case icode_op::CALL:
         printf("  %s = call %s (%d)\n",

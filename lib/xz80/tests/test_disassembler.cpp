@@ -2,8 +2,8 @@
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih
-#include <xz80/disassembler.hpp>
-#include <xz80/memory.hpp>
+#include <xz80/disassembler.h>
+#include <xz80/memory.h>
 
 // ---------------------------------------------------------------------------
 // Helpers

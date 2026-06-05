@@ -2,19 +2,19 @@
 # asm_compare_test.sh
 #
 # For each xcc core test: compile C → assembly with xcc, then assemble
-# with both xas and sdasz80, link both with xlink, and compare the
+# with both xas and sdasz80, link both with xld, and compare the
 # resulting Z80 code bytes (stripping the XL binary header).
 #
 # A test is SKIPPED (not FAILED) when both assemblers produce output that
-# xlink can't link for the same reason (e.g. missing runtime library).
+# xld can't link for the same reason (e.g. missing runtime library).
 #
-# Usage: ./asm_compare_test.sh [path-to-xcc] [path-to-xas] [path-to-xlink]
+# Usage: ./asm_compare_test.sh [path-to-xcc] [path-to-xas] [path-to-xld]
 
 set -euo pipefail
 
 XCC="${1:-$(dirname "$0")/../../../../bin/bin/xcc}"
 XAS="${2:-$(dirname "$0")/../../../../bin/bin/xas}"
-XLINK="${3:-$(dirname "$0")/../../../../bin/bin/xlink}"
+XLD="${3:-$(dirname "$0")/../../../../bin/bin/xld}"
 SDAS="${SDAS:-sdasz80}"
 TESTS_DIR="$(dirname "$0")/../../xcc/tests/data/core"
 RUNTIME_DIR="$(dirname "$0")/../../xcc/lib/runtime"
@@ -27,11 +27,16 @@ RESET=$'\033[0m'
 PASS=0
 FAIL=0
 SKIP=0
+XCC_ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 
 XAR="${XAR:-$(dirname "$0")/../../../../bin/bin/xar}"
 
+run_xcc() {
+    env ASAN_OPTIONS="$XCC_ASAN_OPTIONS" "$XCC" "$@"
+}
+
 # Check tools exist.
-for tool in "$XCC" "$XAS" "$XLINK" "$XAR" "$SDAS"; do
+for tool in "$XCC" "$XAS" "$XLD" "$XAR" "$SDAS"; do
     if ! command -v "$tool" &>/dev/null && ! [[ -x "$tool" ]]; then
         echo "${RED}ERROR${RESET}: tool not found: $tool"
         exit 1
@@ -106,7 +111,7 @@ for c_file in "$TESTS_DIR"/*.c; do
     code_sdcc="$TMPDIR/${name}_sdcc.code"
 
     # Step 1: compile C → SDCC assembly.
-    if ! "$XCC" -S -O0 "$c_file" -o "$asm" 2>"$TMPDIR/xcc_err.txt"; then
+    if ! run_xcc -S -O0 "$c_file" -o "$asm" 2>"$TMPDIR/xcc_err.txt"; then
         echo "${YELLOW}SKIP${RESET} $name  [xcc failed: $(head -1 "$TMPDIR/xcc_err.txt")]"
         SKIP=$((SKIP+1)); total=$((total-1)); continue
     fi
@@ -129,13 +134,13 @@ for c_file in "$TESTS_DIR"/*.c; do
 
     # Step 3a: link xas output (with runtime library).
     xas_link_ok=true
-    if ! "$XLINK" -e "$entry" -o "$bin_xas" "$rel_xas" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_xas_err.txt"; then
+    if ! "$XLD" -e "$entry" -o "$bin_xas" "$rel_xas" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_xas_err.txt"; then
         xas_link_ok=false
     fi
 
     # Step 3b: link sdasz80 output (with runtime library).
     sdcc_link_ok=true
-    if ! "$XLINK" -e "$entry" -o "$bin_sdcc" "$rel_sdcc" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_sdcc_err.txt"; then
+    if ! "$XLD" -e "$entry" -o "$bin_sdcc" "$rel_sdcc" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_sdcc_err.txt"; then
         sdcc_link_ok=false
     fi
 
@@ -147,13 +152,13 @@ for c_file in "$TESTS_DIR"/*.c; do
 
     # If xas link fails but sdcc link succeeded, that's a real bug.
     if ! $xas_link_ok; then
-        echo "${RED}FAIL${RESET} $name  [xlink(xas) error: $(head -1 "$TMPDIR/xlink_xas_err.txt")]"
+        echo "${RED}FAIL${RESET} $name  [xld(xas) error: $(head -1 "$TMPDIR/xlink_xas_err.txt")]"
         FAIL=$((FAIL+1)); continue
     fi
 
     # If sdcc link fails but xas link succeeded, unexpected.
     if ! $sdcc_link_ok; then
-        echo "${RED}FAIL${RESET} $name  [xlink(sdcc) error: $(head -1 "$TMPDIR/xlink_sdcc_err.txt")]"
+        echo "${RED}FAIL${RESET} $name  [xld(sdcc) error: $(head -1 "$TMPDIR/xlink_sdcc_err.txt")]"
         FAIL=$((FAIL+1)); continue
     fi
 

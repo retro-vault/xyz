@@ -30,7 +30,7 @@ namespace xcc {
 enum class opt_level {
     O0 = 0, // no optimization
     O1 = 1, // peephole rules
-    O2 = 2, // (reserved — future register allocator)
+    O2 = 2, // IR optimization pipeline + backend register allocation
 };
 
 //

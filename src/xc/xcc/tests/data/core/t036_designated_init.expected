@@ -5,7 +5,7 @@
 
 	.globl _test_struct_designated
 _test_struct_designated:
-	; prologue: test_struct_designated (locals=4)
+	; sdcccall(1) prologue: test_struct_designated (locals=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -189,6 +189,7 @@ __xcc_L1:
 __xcc_L2:
 	ld	l, -28(ix)
 	ld	h, -27(ix)
+	ex	de, hl
 	jp	__test_struct_designated_end
 __test_struct_designated_end:
 	; epilogue: test_struct_designated
@@ -197,7 +198,7 @@ __test_struct_designated_end:
 	ret
 	.globl _test_array_designated
 _test_array_designated:
-	; prologue: test_array_designated (locals=8)
+	; sdcccall(1) prologue: test_array_designated (locals=8, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -237,13 +238,13 @@ _test_array_designated:
 	inc	hl
 	ld	(hl), d
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #0
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-14(ix), l
@@ -312,10 +313,10 @@ __xcc_L10:
 	ld	hl, #2
 	push	hl
 	ld	hl, #2
-	push	hl
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-24(ix), l
@@ -399,6 +400,7 @@ __xcc_L7:
 __xcc_L8:
 	ld	l, -34(ix)
 	ld	h, -33(ix)
+	ex	de, hl
 	jp	__test_array_designated_end
 __test_array_designated_end:
 	; epilogue: test_array_designated
@@ -407,7 +409,7 @@ __test_array_designated_end:
 	ret
 	.globl _test_mixed
 _test_mixed:
-	; prologue: test_mixed (locals=6)
+	; sdcccall(1) prologue: test_mixed (locals=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -591,6 +593,7 @@ __xcc_L13:
 __xcc_L14:
 	ld	l, -30(ix)
 	ld	h, -29(ix)
+	ex	de, hl
 	jp	__test_mixed_end
 __test_mixed_end:
 	; epilogue: test_mixed
@@ -599,12 +602,14 @@ __test_mixed_end:
 	ret
 	.globl _main
 _main:
-	; prologue: main (locals=0)
+	; sdcccall(1) prologue: main (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	.globl _test_struct_designated
 	call	_test_struct_designated
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-2(ix), l
@@ -634,11 +639,14 @@ __cmp_e_21530:
 	jp	__xcc_L20
 __xcc_L18:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L20
 __xcc_L20:
 	.globl _test_array_designated
 	call	_test_array_designated
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-6(ix), l
@@ -668,11 +676,14 @@ __cmp_e_65123:
 	jp	__xcc_L23
 __xcc_L21:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L23
 __xcc_L23:
 	.globl _test_mixed
 	call	_test_mixed
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-10(ix), l
@@ -702,10 +713,12 @@ __cmp_e_3135:
 	jp	__xcc_L26
 __xcc_L24:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L26
 __xcc_L26:
 	ld	hl, #1
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

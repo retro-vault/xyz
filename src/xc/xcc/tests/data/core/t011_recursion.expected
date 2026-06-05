@@ -5,13 +5,18 @@
 
 	.globl _fact
 _fact:
-	; prologue: fact (locals=0)
+	; sdcccall(1) prologue: fact (locals=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	; receive param n at 4(ix)
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param n at -2(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
 	ld	hl, #1
 	pop	de
@@ -27,52 +32,54 @@ __cmp_t_89383:
 __cmp_e_30886:
 	dec	sp
 	dec	sp
-	ld	-2(ix), l
-	ld	-1(ix), h
-	ld	l, -2(ix)
-	ld	h, -1(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L0
 	jp	__xcc_L2
 __xcc_L0:
 	ld	hl, #1
+	ex	de, hl
 	jp	__fact_end
 	jp	__xcc_L2
 __xcc_L2:
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	dec	hl
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
-	ld	l, -4(ix)
-	ld	h, -3(ix)
-	push	hl
-	.globl _fact
-	call	_fact
-	pop	bc
 	dec	sp
 	dec	sp
 	ld	-6(ix), l
 	ld	-5(ix), h
-	.globl __mul16
 	ld	l, -6(ix)
 	ld	h, -5(ix)
-	push	hl
-	ld	l, 4(ix)
-	ld	h, 5(ix)
-	push	hl
-	call	__mul16
-	pop	bc
-	pop	bc
+	.globl _fact
+	call	_fact
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-8(ix), l
 	ld	-7(ix), h
+	.globl __mul16
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
 	ld	l, -8(ix)
 	ld	h, -7(ix)
+	pop	de
+	call	__mul16
+	push	de
+	pop	hl
+	dec	sp
+	dec	sp
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	ex	de, hl
 	jp	__fact_end
 __fact_end:
 	; epilogue: fact
@@ -81,21 +88,22 @@ __fact_end:
 	ret
 	.globl _main
 _main:
-	; prologue: main (locals=0)
+	; sdcccall(1) prologue: main (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	hl, #5
-	push	hl
 	.globl _fact
 	call	_fact
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

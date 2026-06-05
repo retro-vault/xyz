@@ -1,0 +1,55 @@
+// cli.h
+//
+// command-line argument parsing
+//
+// MIT License (see: LICENSE)
+// copyright (C) 2021 tomaz stih
+//
+// 2021-07-28   tstih
+#ifndef XLINK_CLI_HPP
+#define XLINK_CLI_HPP
+
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <xld/types.h>
+
+namespace xld {
+
+    enum class link_mode {
+        sdcc,
+        gnu
+    };
+
+    struct cli_options {
+        std::vector<std::filesystem::path> input_files;
+        std::filesystem::path output_file = "a.out";
+        std::optional<std::filesystem::path> cdb_file;
+        std::optional<std::filesystem::path> sdcc_runtime_dir;
+        std::string entry_symbol = "_main";
+        link_mode mode = link_mode::sdcc;
+        std::vector<address_range> reserved_ranges;
+        std::map<std::string, uint16_t> area_bases;
+        std::optional<address_range> output_range;
+        output_format format = output_format::xl;
+        bool debug_info = false;
+        bool no_startfiles = false;
+        bool no_stdlib = false;
+        bool verbose = false;
+        bool print_map = false;
+        bool show_help = false;
+        bool show_version = false;
+    };
+
+    class cli {
+    public:
+        static cli_options parse(int argc, char* argv[]);
+        static void print_usage(const char* argv0);
+    };
+
+} // namespace xld
+
+#endif // XLINK_CLI_HPP

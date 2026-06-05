@@ -5,7 +5,7 @@
 
 ROOT ?= $(realpath ..)
 
-SUBDIRS := serial microdrive appmake xdbg-vsix
+SUBDIRS := serial microdrive appmake xgdb-vsix
 
 .PHONY: all
 all:

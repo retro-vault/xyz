@@ -15,7 +15,7 @@ work exactly like the existing `tests/data/exec` suite.
   Soft-float execution tests.
 - `tests/data/exec/runtime/*.c`
   Runtime and calling-convention tests.
-- `tests/tools/z80emu/z80.hpp`
+- `tests/tools/z80emu/z80.h`
   Header-only Z80 emulator core.
 - `tests/tools/z80emu/z80_exec.cpp`
   Runner that loads `.ihx` or `.bin`, executes, and reads the mailbox.

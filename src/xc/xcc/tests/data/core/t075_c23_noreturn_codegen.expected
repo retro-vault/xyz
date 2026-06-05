@@ -5,7 +5,7 @@
 
 	.globl _halt_forever
 _halt_forever:
-	; prologue: halt_forever (locals=0)
+	; sdcccall(1) prologue: halt_forever (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -20,7 +20,6 @@ __xcc_L1:
 __xcc_L2:
 __halt_forever_end:
 	; epilogue omitted: halt_forever is [[noreturn]]
-	ret
 	.globl _raw_halt
 _raw_halt:
 	; naked: raw_halt

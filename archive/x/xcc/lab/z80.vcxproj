@@ -148,8 +148,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\common.h" />
-    <ClInclude Include="..\SDCCralloc.hpp" />
-    <ClInclude Include="..\SDCCtree_dec.hpp" />
+    <ClInclude Include="..\SDCCralloc.h" />
+    <ClInclude Include="..\SDCCtree_dec.h" />
     <ClInclude Include="gen.h" />
     <ClInclude Include="peep.h" />
     <ClInclude Include="ralloc.h" />

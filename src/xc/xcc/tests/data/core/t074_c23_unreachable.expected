@@ -5,7 +5,7 @@
 
 	.globl _panic
 _panic:
-	; prologue: panic (locals=0)
+	; sdcccall(1) prologue: panic (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -13,17 +13,23 @@ _panic:
 	call	__builtin_unreachable
 __panic_end:
 	; epilogue omitted: panic is [[noreturn]]
-	ret
 	.globl _safe_div
 _safe_div:
-	; prologue: safe_div (locals=0)
+	; sdcccall(1) prologue: safe_div (locals=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	; receive param a at 4(ix)
-	; receive param b at 6(ix)
-	ld	l, 6(ix)
-	ld	h, 7(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -2(ix)
+	; receive (sdcccall1) param b at -4(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	push	hl
 	ld	hl, #0
 	pop	de
@@ -37,10 +43,10 @@ __cmp_t_89383:
 __cmp_e_30886:
 	dec	sp
 	dec	sp
-	ld	-2(ix), l
-	ld	-1(ix), h
-	ld	l, -2(ix)
-	ld	h, -1(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L0
@@ -52,21 +58,21 @@ __xcc_L0:
 	call	__builtin_unreachable
 	jp	__xcc_L2
 __xcc_L2:
-	ld	l, 6(ix)
-	ld	h, 7(ix)
-	push	hl
-	ld	l, 4(ix)
-	ld	h, 5(ix)
-	pop	de
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	e, -4(ix)
+	ld	d, -3(ix)
 	.globl __divsint
 	call	__divsint
+	push	de
+	pop	hl
+	dec	sp
+	dec	sp
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
 	ex	de, hl
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
-	ld	l, -4(ix)
-	ld	h, -3(ix)
 	jp	__safe_div_end
 __safe_div_end:
 	; epilogue: safe_div

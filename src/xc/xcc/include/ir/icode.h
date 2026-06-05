@@ -34,6 +34,15 @@
 
 namespace xcc {
 
+enum class abi_arg_loc : uint8_t {
+    STACK,
+    REG_A,
+    REG_L,
+    REG_HL,
+    REG_DE,
+    REG_DEHL,
+};
+
 // ----- icode_op ------------------------------------------------------
 
 enum class icode_op : uint8_t {
@@ -129,6 +138,7 @@ struct operand {
     std::string name;
     bool        is_global   = false;
     bool        is_param    = false;
+    bool        is_func     = false;
     bool        is_tls      = false; // _Thread_local global: access via __tls_base
     bool        is_sfr      = false; // [[sdcc::sfr(N)]]: read via IN, write via OUT
     int         sfr_port    = -1;    // port number when is_sfr is true
@@ -188,6 +198,7 @@ struct operand {
     //
     static operand make_symbol(std::string name, type_ptr t,
                                bool global, bool param, int offset,
+                               bool func = false,
                                bool tls = false,
                                bool sfr = false, int sfr_p = -1) {
         operand o;
@@ -196,6 +207,7 @@ struct operand {
         o.type         = t;
         o.is_global    = global;
         o.is_param     = param;
+        o.is_func      = func;
         o.is_tls       = tls;
         o.is_sfr       = sfr;
         o.sfr_port     = sfr_p;
@@ -241,6 +253,7 @@ struct icode {
     int         num_params  = 0;
     int         local_bytes = 0;
     int         argreg      = 0; // SEND/RECEIVE: argument slot index
+    abi_arg_loc arg_loc     = abi_arg_loc::STACK; // SEND/RECEIVE: concrete ABI location
 
     int      line        = 0;
     int      arg_bytes   = 0;               // CALL: total bytes pushed by SEND (for SP cleanup)
@@ -264,8 +277,8 @@ struct ir_function {
 
     // Calling-convention variant from [[sdcc::...]] attributes
     call_abi            abi              = call_abi::DEFAULT;
-    int                 reg_param_count  = 0; // sdccall(1): number of register-passed params (0-3)
     int                 orig_local_bytes = 0; // sdccall(1): local_bytes before register spill area
+    int                 stack_param_bytes = 0; // sdccall(1): bytes physically passed on stack
     bool                is_noreturn      = false; // [[noreturn]]: epilogue unreachable
 
     //

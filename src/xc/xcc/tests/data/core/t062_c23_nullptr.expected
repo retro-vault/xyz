@@ -5,11 +5,12 @@
 
 	.globl _make_null
 _make_null:
-	; prologue: make_null (locals=0)
+	; sdcccall(1) prologue: make_null (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	hl, #0
+	ex	de, hl
 	jp	__make_null_end
 __make_null_end:
 	; epilogue: make_null

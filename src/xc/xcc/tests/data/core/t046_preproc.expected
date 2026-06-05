@@ -5,7 +5,7 @@
 
 	.globl _preproc_test
 _preproc_test:
-	; prologue: preproc_test (locals=6)
+	; sdcccall(1) prologue: preproc_test (locals=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -107,6 +107,7 @@ __xcc_L2:
 	ld	-5(ix), h
 	ld	l, -6(ix)
 	ld	h, -5(ix)
+	ex	de, hl
 	jp	__preproc_test_end
 __preproc_test_end:
 	; epilogue: preproc_test

@@ -31,6 +31,12 @@ else
     XCC_FLAGS="-S -O0 --mode=sdcc"
 fi
 
+XCC_ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
+
+run_xcc() {
+    env ASAN_OPTIONS="$XCC_ASAN_OPTIONS" "$XCC" "$@"
+}
+
 # ---------------------------------------------------------------------------
 # Feature detection patterns (grep -E extended regex, applied to file content)
 # FAIL-FEATURE = known unsupported / outside xcc scope
@@ -132,7 +138,7 @@ classify_file() {
     local tmp_out
     tmp_out=$(mktemp /tmp/xcc_run_XXXXXX.txt)
     # shellcheck disable=SC2086
-    $XCC $XCC_FLAGS -I"$INCLUDE_DIR" "$filepath" -o /dev/null >"$tmp_out" 2>&1
+    run_xcc $XCC_FLAGS -I"$INCLUDE_DIR" "$filepath" -o /dev/null >"$tmp_out" 2>&1
     local exit_code=$?
     local output
     output=$(cat "$tmp_out")

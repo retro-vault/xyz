@@ -8,6 +8,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "ir/irgen.h"
+#include "backend/z80/convention.h"
 
 namespace xcc {
 
@@ -310,21 +311,47 @@ void ir_gen::visit(call_expr &e) {
         if (id->sym && id->sym->kind == sym_kind::FUNC)
             c_abi = id->sym->abi;
 
-    // Number of args that sdccall(1) passes in registers (not on the stack).
-    int n_reg = (c_abi == call_abi::SDCCCALL1)
-                ? std::min(3, static_cast<int>(arg_ops.size())) : 0;
+    const type *fn_type = nullptr;
+    if (e.callee && e.callee->type) {
+        if (e.callee->type->is_func())
+            fn_type = e.callee->type.get();
+        else if (e.callee->type->is_ptr() && e.callee->type->base &&
+                 e.callee->type->base->is_func())
+            fn_type = e.callee->type->base.get();
+    }
+
+    std::vector<type_ptr> arg_types;
+    arg_types.reserve(arg_ops.size());
+    for (size_t i = 0; i < arg_ops.size(); ++i) {
+        type_ptr abi_type = arg_ops[i].type ? arg_ops[i].type : type::make_int();
+        if (fn_type && i < fn_type->params.size() && fn_type->params[i])
+            abi_type = fn_type->params[i];
+        arg_types.push_back(abi_type);
+        if (arg_ops[i].type != abi_type) {
+            bool needs_materialized_cast =
+                arg_ops[i].type &&
+                arg_ops[i].type->size() < abi_type->size() &&
+                arg_ops[i].kind != operand_kind::INT_CONST &&
+                arg_ops[i].kind != operand_kind::FLOAT_CONST;
+            if (needs_materialized_cast) {
+                arg_ops[i] = emit_unop(icode_op::CAST, arg_ops[i], abi_type);
+            } else {
+                arg_ops[i].type = abi_type;
+            }
+        }
+    }
+    const auto &conv = get_abi_convention(c_abi);
+    auto arg_locs = conv.classify_args(arg_types);
 
     // Emit SEND icodes right-to-left (standard C push order).
     int total_arg_bytes = 0;
     for (int i = static_cast<int>(arg_ops.size()) - 1; i >= 0; --i) {
-        int sz = arg_ops[i].type ? arg_ops[i].type->size() : 2;
-        // Register-passed args (argreg < n_reg) contribute 0 stack bytes.
-        if (i >= n_reg)
-            total_arg_bytes += (sz <= 1) ? 2 : (sz + 1) & ~1;
+        total_arg_bytes += conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
         icode ic;
         ic.op         = icode_op::SEND;
         ic.left       = arg_ops[i];
         ic.argreg     = i;
+        ic.arg_loc    = arg_locs[i];
         ic.callee_abi = c_abi;
         emit(ic);
     }

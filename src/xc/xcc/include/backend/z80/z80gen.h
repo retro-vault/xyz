@@ -57,16 +57,22 @@ enum class temp_home {
 class z80_peep;
 
 // Forward-declare concrete convention classes so z80_gen can grant them friendship.
-struct cc_default;
+struct stack_linkage_convention;
+struct cc_sdcccall0;
 struct cc_sdcccall1;
+struct cc_z88dk_fastcall;
+struct cc_z88dk_callee;
 struct cc_naked;
 struct cc_interrupt;
 struct cc_critical;
 
 class z80_gen {
     friend struct abi_convention;
-    friend struct cc_default;
+    friend struct stack_linkage_convention;
+    friend struct cc_sdcccall0;
     friend struct cc_sdcccall1;
+    friend struct cc_z88dk_fastcall;
+    friend struct cc_z88dk_callee;
     friend struct cc_naked;
     friend struct cc_interrupt;
     friend struct cc_critical;
@@ -102,7 +108,7 @@ private:
     std::string       fn_end_lbl_;
 
     // Active calling-convention for the function being compiled.
-    std::unique_ptr<abi_convention> cur_convention_;
+    abi_convention *cur_convention_ = nullptr;
 
     std::unique_ptr<debug_info_emitter> debug_; // null unless -g was passed
 
@@ -195,8 +201,7 @@ private:
 
     //
     // Emit a function call.  Direct calls use ic.func_name; indirect
-    // calls (function pointers) load HL and call the __call_hl trampoline
-    // because the Z80 has no CALL (HL) instruction.
+    // calls delegate to the callee ABI's trampoline rules.
     //
     void gen_call        (const icode &ic);
 
@@ -248,6 +253,13 @@ private:
     // sequence to store the register pair described by r into op.
     //
     void emit_store_rr(const reg_pair &r, const operand &op);
+
+    static bool fits_ix_disp(int off);
+    void load_ix_addr_hl(int off);
+    void load_frame_byte(char dst, int off);
+    void store_frame_byte(int off, char src);
+    void load_frame_word(const reg_pair &r, int off);
+    void store_frame_word(const reg_pair &r, int off);
 
     //
     // Load op (16-bit) into HL.

@@ -49,14 +49,14 @@ Your emulator should:
 Use:
 
 ```cpp
-#include <xdbgstub/xdbgstub.hpp>
+#include <xdbgstub/xdbgstub.h>
 ```
 
 Relevant public headers:
 
-- `include/xdbgstub/model.hpp`
-- `include/xdbgstub/server.hpp`
-- `include/xdbgstub/xdbgstub.hpp`
+- `include/xdbgstub/model.h`
+- `include/xdbgstub/server.h`
+- `include/xdbgstub/xdbgstub.h`
 
 ## Required Target Methods
 
@@ -83,7 +83,7 @@ These methods are the seam between your emulator core and the debugger.
 #include <cstdint>
 #include <vector>
 
-#include <xdbgstub/xdbgstub.hpp>
+#include <xdbgstub/xdbgstub.h>
 
 class emulator_target final : public xdbgstub::target {
 public:
@@ -257,8 +257,8 @@ plus `xdbgstub::server`.
 
 Read these first:
 
-- `include/xdbgstub/server.hpp`
-- `include/xdbgstub/model.hpp`
+- `include/xdbgstub/server.h`
+- `include/xdbgstub/model.h`
 - `lib/xdbgstub/README.md`
 - `src/xc/xdbg/src/xdbg_z80.cpp`
 - `src/xc/xdbg/README.md`

@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# Makefile for hello — xlink integration test.
+# Makefile for hello — xld integration test.
 #
 # Two modes:
 #   Outside Docker (default): runs a single container to compile .c/.s
-#                             files, then runs xlink on the host.
+#                             files, then runs xld on the host.
 #   Inside  Docker (IN_DOCKER=1): compiles and assembles only.
 #
 # Usage:
@@ -16,9 +16,9 @@ THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/hello
 DIST_DIR  ?= $(ROOT)/bin
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
-ZX_APPS_DIR ?= $(DIST_DIR)/targets/zxspectrum/apps
+ZX_APPS_DIR ?= $(DIST_DIR)/z80/spectrum/bin/apps
 BIN_DIR   := $(ZX_APPS_DIR)/hello
-XLINK     := $(HOST_BIN_DIR)/xlink
+XLD     := $(HOST_BIN_DIR)/xld
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
@@ -30,7 +30,7 @@ clean:
 
 ifndef IN_DOCKER
 # ---------------------------------------------------------------------------
-# Host entry point: Docker for SDCC compilation, then xlink on host.
+# Host entry point: Docker for SDCC compilation, then xld on host.
 # ---------------------------------------------------------------------------
 .PHONY: all
 all:
@@ -41,7 +41,7 @@ all:
 	    -w $(THIS_DIR) \
 	    $(DOCKER_IMAGE) \
 	    make IN_DOCKER=1 ROOT=$(ROOT)
-	$(XLINK) -v -m -e _entry \
+	$(XLD) -v -m -e _entry \
 	    -o $(BIN_DIR)/hello.xl \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/hello.rel

@@ -87,6 +87,7 @@ void z80_gen::emit_globals(const ir_module &mod) {
             if (g.at_address >= 0 || g.sfr_port >= 0) continue; // handled above
             std::string lbl = mangle(g.name);
             if (!g.is_static) asm_.global_decl(lbl);
+            if (debug_) debug_->emit_global(g.name, g.type.get(), g.is_static);
             asm_.label(lbl, false);
             emit_global_body(g, false);
         }

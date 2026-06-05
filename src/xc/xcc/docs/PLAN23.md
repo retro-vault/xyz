@@ -17,13 +17,15 @@ xcc is a hand-written recursive-descent C compiler targeting Z80 via SDCC assemb
 ```
 src/xc/xcc/
 ├── include/frontend/   token.h  lexer.h  parser.h  ast.h  types.h  symtab.h  sema.h
-├── include/ir/         icode.h  irgen.h  iropt.h
+├── include/ir/         icode.h  irgen.h
+├── include/opt/        iropt.h
 ├── include/backend/z80/z80gen.h  (+ subheaders)
 ├── src/frontend/       lexer.cpp  parser.cpp  parser_declspec.cpp  parser_declarator.cpp
 │                       parser_stmt.cpp  parser_expr.cpp  parser_init.cpp
 │                       types.cpp  symtab.cpp  sema.cpp
 ├── src/ir/             icode.cpp  irgen.cpp  irgen_decl.cpp  irgen_stmt.cpp
-│                       irgen_expr.cpp  irgen_lvalue.cpp  irgen_init.cpp  iropt.cpp
+│                       irgen_expr.cpp  irgen_lvalue.cpp  irgen_init.cpp
+├── src/opt/            iropt.cpp
 ├── src/backend/z80/    z80gen.cpp  z80gen_ctrl.cpp  z80gen_data.cpp  z80gen_operand.cpp
 │                       z80gen_mem.cpp  z80gen_arith.cpp  z80gen_regalloc.cpp
 │                       z80peep.cpp  dwarf.cpp  sdcc_debug.cpp

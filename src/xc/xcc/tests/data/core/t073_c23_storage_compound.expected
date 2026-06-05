@@ -9,7 +9,7 @@ __str_0:
 
 	.globl _get_table
 _get_table:
-	; prologue: get_table (locals=0)
+	; sdcccall(1) prologue: get_table (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -75,6 +75,7 @@ _get_table:
 	inc	hl
 	ld	(hl), d
 	ld	hl, (___sclit0)
+	ex	de, hl
 	jp	__get_table_end
 __get_table_end:
 	; epilogue: get_table
@@ -83,7 +84,7 @@ __get_table_end:
 	ret
 	.globl _get_msg
 _get_msg:
-	; prologue: get_msg (locals=0)
+	; sdcccall(1) prologue: get_msg (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -107,6 +108,7 @@ _get_msg:
 	inc	hl
 	ld	(hl), d
 	ld	hl, (___sclit1)
+	ex	de, hl
 	jp	__get_msg_end
 __get_msg_end:
 	; epilogue: get_msg

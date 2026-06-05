@@ -15,12 +15,12 @@
         ; __xc_test_start
         ; inputs: none.
         ; outputs: does not return; writes the mailbox and halts.
-        ; clobbers: af, hl, sp.
+        ; clobbers: af, de, hl, sp.
 
 __xc_test_start:
         ld      sp, 0xf000
         call    _main
-        ld      (0xff00), hl
+        ld      (0xff00), de
         ld      a, 0xa5
         ld      (0xff02), a
 1:

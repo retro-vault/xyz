@@ -1,4 +1,4 @@
-        ; ABI bridge for IEEE-754 single multiplication.
+        ; Public fsmul entry point with caller-clean modern SDCC ABI.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -8,26 +8,16 @@
         .globl  __fsmul
         .globl  ___fsmul
 
-        ; __fsmul
-        ; inputs: 4(ix)..11(ix) = xcc 32-bit float operands.
-        ; outputs: HL = low16 product, DE = high16 product.
-        ; clobbers: af, bc, de, hl, ix.
-
 __fsmul:
         push    ix
         ld      ix, #0
         add     ix, sp
-        ld      e, 4(ix)
-        ld      d, 5(ix)
-        ld      l, 6(ix)
-        ld      h, 7(ix)
-        ld      c, 10(ix)
-        ld      b, 11(ix)
+        ld      c, 6(ix)
+        ld      b, 7(ix)
         push    bc
-        ld      c, 8(ix)
-        ld      b, 9(ix)
+        ld      c, 4(ix)
+        ld      b, 5(ix)
         push    bc
         call    ___fsmul
-        ex      de, hl
         pop     ix
         ret

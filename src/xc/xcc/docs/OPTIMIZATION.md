@@ -12,7 +12,7 @@ The compiler should prefer:
 - predictable code generation that the peephole pass can clean up well
 
 This document is based on the current optimizer/backend structure in
-`src/ir/iropt.cpp`, `src/backend/z80/z80gen.cpp`,
+`src/opt/iropt.cpp`, `src/backend/z80/z80gen.cpp`,
 `src/backend/z80/z80gen_arith.cpp`, `src/backend/z80/z80peep.cpp`, and
 `lib/runtime.s`.
 

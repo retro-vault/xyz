@@ -1,21 +1,34 @@
 /*
  * stdarg.h
  *
- * standard C header file
- * 
+ * Standard C23 variadic argument support for the xcc Z80 target.
+ *
+ * xcc places arguments on the stack in declaration order as seen from the
+ * callee's frame, so a variadic list can be represented as a byte pointer to
+ * the next unread argument slot.
+ *
  * MIT License (see: LICENSE)
- * copyright (c) 2021 tomaz stih
- *
- * 03.05.2021   tstih
- *
+ * Copyright (C) 2026 tomaz stih
  */
-#ifndef __STDARG_H__
-#define __STDARG_H__
+#ifndef _STDARG_H
+#define _STDARG_H
 
-/* Standard C var arg macros */
-#define va_list                 unsigned char *
-#define va_start(marker, last)  { marker = (va_list)&last + sizeof(last); }
-#define va_arg(marker, type)    *((type *)((marker += sizeof(type)) - sizeof(type)))
-#define va_end(marker)          marker = (va_list) 0;
+#define __STDC_VERSION_STDARG_H__ 202311L
 
-#endif /* __STDARG_H__ */
+typedef char *va_list;
+
+/* Initialize a variadic cursor just past the last named argument. */
+#define va_start(ap, last) \
+    ((ap) = (va_list)((char *)(&(last)) + sizeof(last)))
+
+/* Read the current argument as type T and advance the cursor. */
+#define va_arg(ap, T) \
+    (*(T *)((ap) += sizeof(T), (ap) - sizeof(T)))
+
+/* No target-specific cleanup is required for this ABI. */
+#define va_end(ap) ((void)0)
+
+/* Copy one variadic cursor to another. */
+#define va_copy(dst, src) ((dst) = (src))
+
+#endif /* _STDARG_H */

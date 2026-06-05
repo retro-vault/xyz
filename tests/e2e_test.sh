@@ -2,12 +2,14 @@
 # tests/e2e_test.sh
 #
 # End-to-end regression test for the XYZ toolchain.
-# Runs in phases: build, xcc unit tests, xlink unit tests,
-# xas parity tests, xar smoke tests, full-chain integration.
+# Runs in phases: build, xz80 tests, xcc unit + execution tests,
+# xld tests, xas parity, xar smoke tests, xgdb tests,
+# mdr-emu end-to-end tests, and full-chain integration.
 #
 # Usage: ./tests/e2e_test.sh [--no-build] [--phase <name>]
 #   --no-build   skip the build step (assume binaries are current)
-#   --phase      run only the named phase (xz80|xcc|xlink|xas|xar|chain)
+#   --phase      run only the named phase
+#                (build|xz80|xcc|xcc-exec|xld|xas|xar|xgdb|mdr|chain)
 #
 # Exit: 0 if all selected phases pass, 1 otherwise.
 
@@ -18,13 +20,17 @@ BIN="$ROOT/bin/bin"
 XCC="$BIN/xcc"
 XAS="$BIN/xas"
 XAR="$BIN/xar"
-XLINK="$BIN/xlink"
+XLD="$BIN/xld"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[0;33m'
 BOLD=$'\033[1m'
 RESET=$'\033[0m'
+
+# LeakSanitizer cannot run under the ptrace-based test runner used here.
+# Keep ASan/UBSan active, but disable leak detection for spawned tool invocations.
+export ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 
 DO_BUILD=true
 ONLY_PHASE=""
@@ -67,7 +73,7 @@ phase_build() {
         "$ROOT/src/xc/xcc"
         "$ROOT/src/xc/xas"
         "$ROOT/src/xc/xar"
-        "$ROOT/src/xc/xlink"
+        "$ROOT/src/xc/xld"
     )
     local ok=true
     for d in "${dirs[@]}"; do
@@ -100,10 +106,35 @@ phase_xcc() {
 }
 
 # ---------------------------------------------------------------------------
-# Phase: xlink unit tests
+# Phase: xcc execution tests
 # ---------------------------------------------------------------------------
-phase_xlink() {
-    make -C "$ROOT/src/xc/xlink" test
+phase_xcc_exec() {
+    local missing=()
+    local gnu_prefix="${Z80_GNU_PREFIX:-/usr/local/z80-elf/bin/z80-unknown-elf-}"
+    local gnu_as="${gnu_prefix}as"
+    local gnu_ld="${gnu_prefix}ld"
+    local gnu_objcopy="${gnu_prefix}objcopy"
+
+    command -v sdasz80 >/dev/null 2>&1 || missing+=("sdasz80")
+    command -v sdldz80 >/dev/null 2>&1 || missing+=("sdldz80")
+    command -v g++ >/dev/null 2>&1 || missing+=("g++")
+    command -v "$gnu_as" >/dev/null 2>&1 || missing+=("$gnu_as")
+    command -v "$gnu_ld" >/dev/null 2>&1 || missing+=("$gnu_ld")
+    command -v "$gnu_objcopy" >/dev/null 2>&1 || missing+=("$gnu_objcopy")
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "${YELLOW}SKIP${RESET}: missing required tools: ${missing[*]}"
+        return 0
+    fi
+
+    bash "$ROOT/src/xc/xcc/tests/run_exec_tests.sh" "$XCC"
+}
+
+# ---------------------------------------------------------------------------
+# Phase: xld unit tests
+# ---------------------------------------------------------------------------
+phase_xld() {
+    make -C "$ROOT/src/xc/xld" test
 }
 
 # ---------------------------------------------------------------------------
@@ -114,7 +145,7 @@ phase_xas() {
         echo "${YELLOW}SKIP${RESET}: sdasz80 not found, skipping xas parity phase"
         return 0
     fi
-    "$ROOT/src/xc/xas/tests/asm_compare_test.sh" "$XCC" "$XAS" "$XLINK"
+    "$ROOT/src/xc/xas/tests/asm_compare_test.sh" "$XCC" "$XAS" "$XLD"
 }
 
 # ---------------------------------------------------------------------------
@@ -174,8 +205,8 @@ _main:
 EOF
     "$XAS" --mode=sdcc "$tmpdir/main.s" -o "$tmpdir/main.rel" 2>/dev/null \
         || { echo "  xas failed on main.s"; return 1; }
-    "$XLINK" -e _main -o "$tmpdir/out.bin" "$tmpdir/main.rel" "$tmpdir/test.lib" 2>/dev/null \
-        || { echo "  xlink failed to link against archive"; return 1; }
+    "$XLD" -e _main -o "$tmpdir/out.bin" "$tmpdir/main.rel" "$tmpdir/test.lib" 2>/dev/null \
+        || { echo "  xld failed to link against archive"; return 1; }
     [[ -f "$tmpdir/out.bin" ]] || { rm -rf "$tmpdir"; echo "  no output binary"; return 1; }
     echo "  ${GREEN}link-with-archive${RESET}: ok"
 
@@ -184,7 +215,21 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Phase: full-chain integration (xcc → xas → xlink produces valid XL binary)
+# Phase: xgdb library tests
+# ---------------------------------------------------------------------------
+phase_xgdb() {
+    make -C "$ROOT/lib/xgdb" test
+}
+
+# ---------------------------------------------------------------------------
+# Phase: mdr-emu end-to-end tests
+# ---------------------------------------------------------------------------
+phase_mdr() {
+    make -C "$ROOT/tests/mdr-emu" test
+}
+
+# ---------------------------------------------------------------------------
+# Phase: full-chain integration (xcc → xas → xld produces valid XL binary)
 # ---------------------------------------------------------------------------
 phase_chain() {
     local tmpdir
@@ -222,8 +267,8 @@ phase_chain() {
         if ! "$XAS" --mode=sdcc "$dir/${name}.s" -o "$dir/${name}.rel" 2>/dev/null; then
             echo "  ${RED}FAIL${RESET} $name [xas]"; return 1
         fi
-        if ! "$XLINK" -e _main -o "$dir/${name}.bin" "$dir/${name}.rel" "$rtlib" 2>/dev/null; then
-            echo "  ${RED}FAIL${RESET} $name [xlink]"; return 1
+        if ! "$XLD" -e _main -o "$dir/${name}.bin" "$dir/${name}.rel" "$rtlib" 2>/dev/null; then
+            echo "  ${RED}FAIL${RESET} $name [xld]"; return 1
         fi
         local magic
         magic=$(python3 -c "import sys; d=open('$dir/$name.bin','rb').read(); print(d[:2])" 2>/dev/null)
@@ -267,12 +312,15 @@ if $DO_BUILD && [[ -z "$ONLY_PHASE" || "$ONLY_PHASE" == "build" ]]; then
     fi
 fi
 
-run_phase "xz80"  "xz80 unit tests"             phase_xz80
-run_phase "xcc"   "xcc unit tests"             phase_xcc
-run_phase "xlink" "xlink unit tests"           phase_xlink
-run_phase "xas"   "xas parity (vs sdasz80)"    phase_xas
-run_phase "xar"   "xar smoke tests"            phase_xar
-run_phase "chain" "Full-chain integration"     phase_chain
+run_phase "xz80"     "xz80 unit tests"             phase_xz80
+run_phase "xcc"      "xcc unit tests"              phase_xcc
+run_phase "xcc-exec" "xcc execution tests"         phase_xcc_exec
+run_phase "xld"      "xld unit tests"              phase_xld
+run_phase "xas"      "xas parity (vs sdasz80)"     phase_xas
+run_phase "xar"      "xar smoke tests"             phase_xar
+run_phase "xgdb"     "xgdb library tests"          phase_xgdb
+run_phase "mdr"      "mdr-emu end-to-end tests"    phase_mdr
+run_phase "chain"    "Full-chain integration"      phase_chain
 
 echo ""
 echo "${BOLD}=== E2E Summary ===${RESET}"

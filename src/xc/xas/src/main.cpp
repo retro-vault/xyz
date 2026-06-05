@@ -13,11 +13,11 @@
 #include <memory>
 #include <stdexcept>
 
-#include <xas/cli.hpp>
-#include <xas/errors.hpp>
-#include <xas/frontend/lexer.hpp>
-#include <xas/frontend/parser.hpp>
-#include <xas/backend/emitter.hpp>
+#include <xas/cli.h>
+#include <xas/errors.h>
+#include <xas/frontend/lexer.h>
+#include <xas/frontend/parser.h>
+#include <xas/backend/emitter.h>
 
 namespace xas {
     // Defined in codegen.cpp.

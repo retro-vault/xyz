@@ -16,7 +16,7 @@ __str_22:
 
 	.globl _test_alignof
 _test_alignof:
-	; prologue: test_alignof (locals=4)
+	; sdcccall(1) prologue: test_alignof (locals=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -130,6 +130,7 @@ __xcc_L1:
 __xcc_L2:
 	ld	l, -14(ix)
 	ld	h, -13(ix)
+	ex	de, hl
 	jp	__test_alignof_end
 __test_alignof_end:
 	; epilogue: test_alignof
@@ -138,7 +139,7 @@ __test_alignof_end:
 	ret
 	.globl _test_func_name
 _test_func_name:
-	; prologue: test_func_name (locals=2)
+	; sdcccall(1) prologue: test_func_name (locals=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -191,6 +192,7 @@ __xcc_L8:
 __xcc_L9:
 	ld	l, -8(ix)
 	ld	h, -7(ix)
+	ex	de, hl
 	jp	__test_func_name_end
 __test_func_name_end:
 	; epilogue: test_func_name
@@ -199,7 +201,7 @@ __test_func_name_end:
 	ret
 	.globl _test_array_init
 _test_array_init:
-	; prologue: test_array_init (locals=8)
+	; sdcccall(1) prologue: test_array_init (locals=8, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -271,13 +273,13 @@ _test_array_init:
 	inc	hl
 	ld	(hl), d
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #0
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-18(ix), l
@@ -343,13 +345,13 @@ __cmp_e_20059:
 	jp	__xcc_L17
 __xcc_L18:
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #1
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-28(ix), l
@@ -441,10 +443,10 @@ __xcc_L16:
 	ld	hl, #2
 	push	hl
 	ld	hl, #2
-	push	hl
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-40(ix), l
@@ -533,13 +535,13 @@ __cmp_e_21530:
 	jp	__xcc_L13
 __xcc_L14:
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #3
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-52(ix), l
@@ -623,6 +625,7 @@ __xcc_L11:
 __xcc_L12:
 	ld	l, -62(ix)
 	ld	h, -61(ix)
+	ex	de, hl
 	jp	__test_array_init_end
 __test_array_init_end:
 	; epilogue: test_array_init
@@ -631,7 +634,7 @@ __test_array_init_end:
 	ret
 	.globl _test_wide_string
 _test_wide_string:
-	; prologue: test_wide_string (locals=2)
+	; sdcccall(1) prologue: test_wide_string (locals=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -684,6 +687,7 @@ __xcc_L24:
 __xcc_L25:
 	ld	l, -8(ix)
 	ld	h, -7(ix)
+	ex	de, hl
 	jp	__test_wide_string_end
 __test_wide_string_end:
 	; epilogue: test_wide_string
@@ -692,12 +696,14 @@ __test_wide_string_end:
 	ret
 	.globl _main
 _main:
-	; prologue: main (locals=0)
+	; sdcccall(1) prologue: main (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	.globl _test_alignof
 	call	_test_alignof
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-2(ix), l
@@ -727,11 +733,14 @@ __cmp_e_23058:
 	jp	__xcc_L28
 __xcc_L26:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L28
 __xcc_L28:
 	.globl _test_func_name
 	call	_test_func_name
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-6(ix), l
@@ -761,11 +770,14 @@ __cmp_e_98167:
 	jp	__xcc_L31
 __xcc_L29:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L31
 __xcc_L31:
 	.globl _test_array_init
 	call	_test_array_init
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-10(ix), l
@@ -795,11 +807,14 @@ __cmp_e_18456:
 	jp	__xcc_L34
 __xcc_L32:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L34
 __xcc_L34:
 	.globl _test_wide_string
 	call	_test_wide_string
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-14(ix), l
@@ -829,10 +844,12 @@ __cmp_e_78042:
 	jp	__xcc_L37
 __xcc_L35:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L37
 __xcc_L37:
 	ld	hl, #1
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

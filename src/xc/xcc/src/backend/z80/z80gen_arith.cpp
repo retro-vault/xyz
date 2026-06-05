@@ -131,24 +131,28 @@ void z80_gen::gen_mul(const icode &ic) {
         asm_.global_decl("__mul32");
         load_hl_hi32(ic.right); emit_line("push\thl");
         load_hl_lo32(ic.right); emit_line("push\thl");
-        load_hl_hi32(ic.left);  emit_line("push\thl");
         load_hl_lo32(ic.left);  emit_line("push\thl");
+        load_hl_hi32(ic.left);  emit_line("pop\tde");
         emit_line("call\t__mul32");
-        for (int n = 0; n < 4; ++n) emit_line("pop\tbc");
-        store_hl_lo32(ic.result);
-        emit_line("ex\tde, hl");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
         emit_line("push\tde");
         emit_line("pop\thl");
+        store_hl_lo32(ic.result);
+        emit_line("ld\th, b");
+        emit_line("ld\tl, c");
         store_hl_hi32(ic.result);
     } else {
         asm_.global_decl("__mul16");
-        load_hl(ic.right);
-        emit_line("push\thl");
         load_hl(ic.left);
         emit_line("push\thl");
+        load_hl(ic.right);
+        emit_line("pop\tde");
         emit_line("call\t__mul16");
-        emit_line("pop\tbc");
-        emit_line("pop\tbc");
+        emit_line("push\tde");
+        emit_line("pop\thl");
         store_hl(ic.result);
     }
 }
@@ -173,35 +177,45 @@ void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
         asm_.global_decl(helper);
         load_hl_hi32(ic.right); emit_line("push\thl");
         load_hl_lo32(ic.right); emit_line("push\thl");
-        load_hl_hi32(ic.left);  emit_line("push\thl");
         load_hl_lo32(ic.left);  emit_line("push\thl");
+        load_hl_hi32(ic.left);  emit_line("pop\tde");
         emit_line("call\t%s", helper);
-        for (int n = 0; n < 4; ++n) emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_line("push\tde");
+        emit_line("pop\thl");
         store_hl_lo32(ic.result);
-        emit_line("push\tde"); emit_line("pop\thl");
+        emit_line("ld\th, b");
+        emit_line("ld\tl, c");
         store_hl_hi32(ic.result);
     } else {
-        // Load operands into SDCC register ABI: HL=dividend, DE=divisor.
-        // Use push/pop to avoid clobbering HL when loading the second operand.
-        load_hl(ic.right);
-        emit_line("push\thl");
         load_hl(ic.left);
-        emit_line("pop\tde");
+        load_de(ic.right);
         if (is_signed) {
             if (want_mod) {
                 asm_.global_decl("__smod16");
                 emit_line("call\t__smod16");     // HL = remainder
+                store_hl(ic.result);
             } else {
                 asm_.global_decl("__divsint");
                 emit_line("call\t__divsint");    // DE = quotient
-                emit_line("ex\tde, hl");         // HL = quotient
+                emit_line("push\tde");
+                emit_line("pop\thl");
+                store_hl(ic.result);
             }
         } else {
             asm_.global_decl("__divuint");
             emit_line("call\t__divuint");        // HL = remainder, DE = quotient
-            if (!want_mod) emit_line("ex\tde, hl"); // HL = quotient for div
+            if (want_mod) {
+                store_hl(ic.result);
+            } else {
+                emit_line("push\tde");
+                emit_line("pop\thl");
+                store_hl(ic.result);
+            }
         }
-        store_hl(ic.result);
     }
 }
 
@@ -448,10 +462,11 @@ void z80_gen::gen_float_arith(const icode &ic) {
         asm_.global_decl(helper);
         load_hl_hi32(ic.right); emit_line("push\thl");
         load_hl_lo32(ic.right); emit_line("push\thl");
-        load_hl_hi32(ic.left);  emit_line("push\thl");
         load_hl_lo32(ic.left);  emit_line("push\thl");
+        load_hl_hi32(ic.left);  emit_line("pop\tde");
         emit_line("call\t%s", helper);
-        for (int n = 0; n < 4; ++n) emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
     } else {
         asm_.global_decl(helper);
         load_hl_hi32(ic.left); emit_line("push\thl");
@@ -459,8 +474,13 @@ void z80_gen::gen_float_arith(const icode &ic) {
         emit_line("call\t%s", helper);
         emit_line("pop\tbc"); emit_line("pop\tbc");
     }
+    emit_line("ld\tb, h");
+    emit_line("ld\tc, l");
+    emit_line("push\tde");
+    emit_line("pop\thl");
     store_hl_lo32(ic.result);
-    emit_line("push\tde"); emit_line("pop\thl");
+    emit_line("ld\th, b");
+    emit_line("ld\tl, c");
     store_hl_hi32(ic.result);
 }
 

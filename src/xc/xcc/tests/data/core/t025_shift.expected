@@ -5,7 +5,7 @@
 
 	.globl _main
 _main:
-	; prologue: main (locals=6)
+	; sdcccall(1) prologue: main (locals=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -131,6 +131,7 @@ __xcc_L0:
 __xcc_L2:
 	ld	l, -18(ix)
 	ld	h, -17(ix)
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

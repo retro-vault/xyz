@@ -186,6 +186,12 @@ resolve_modules() {
         __call_hl)
             add_runtime_module "call_hl_bridge.s"
             ;;
+        __sdcc_call_hl)
+            add_runtime_module "call_hl_runtime.s"
+            ;;
+        __sdcc_call_bc)
+            add_runtime_module "call_bc_runtime.s"
+            ;;
         esac
     done <<< "$helpers"
 }

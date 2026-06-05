@@ -1,22 +1,25 @@
 /*
  * stdbool.h
  *
- * standard C header file
- * 
+ * Standard C boolean convenience definitions for the xcc Z80 target.
+ *
+ * In C23, bool/true/false are language keywords and this header is effectively
+ * reduced to the legacy feature macro. In pre-C23 modes, the standard macro
+ * spellings are provided in the usual way.
+ *
  * MIT License (see: LICENSE)
- * copyright (c) 2021 tomaz stih
- *
- * 01.05.2021   tstih
- *
+ * Copyright (C) 2026 tomaz stih
  */
-#ifndef __STDBOOL_H__
-#define __STDBOOL_H__
+#ifndef _STDBOOL_H
+#define _STDBOOL_H
 
-#define bool int
+#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L
+#  define bool  _Bool
+#  define true  1
+#  define false 0
+#endif
 
-#define false 0
-#define FALSE 0
-#define true 1
-#define TRUE 1
+/* Required by the C standard, obsolescent in C23. */
+#define __bool_true_false_are_defined 1
 
-#endif /* __STDBOOL_H */
+#endif /* _STDBOOL_H */

@@ -6,7 +6,7 @@ _g:
 	.area	_CODE
 	.globl	_f
 _f:
-	; prologue: f (locals=0)
+	; sdcccall(1) prologue: f (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp

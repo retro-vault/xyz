@@ -92,6 +92,17 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
                               a.name.c_str());
             }
         }
+        // ----- z88dk vendor attributes (namespace z88dk) ------------
+        else if (a.ns == "z88dk") {
+            if (a.name == "fastcall") {
+                sym.abi = call_abi::Z88DK_FASTCALL;
+            } else if (a.name == "callee") {
+                sym.abi = call_abi::Z88DK_CALLEE;
+            } else {
+                diag_.warning(a.loc, "unknown z88dk attribute '[[z88dk::%s]]' ignored",
+                              a.name.c_str());
+            }
+        }
         // ----- unknown namespace ------------------------------------
         else {
             // Unknown namespace — silently ignore per C23 rules.
@@ -325,6 +336,18 @@ void sema::visit(var_decl &d) {
 void sema::visit(func_decl &d) {
     if (d.sym && !d.attrs.empty())
         apply_attrs(*d.sym, d.attrs, d.loc);
+    if (d.sym && d.sym->abi == call_abi::Z88DK_FASTCALL) {
+        if (d.params.size() != 1) {
+            diag_.error(d.loc, "[[z88dk::fastcall]] requires exactly one parameter");
+        } else {
+            type_ptr param_type = d.params.front() ? d.params.front()->type : nullptr;
+            int sz = param_type ? param_type->size() : 0;
+            if (!(sz == 1 || sz == 2 || sz == 4)) {
+                diag_.error(d.loc,
+                            "[[z88dk::fastcall]] requires an 8-, 16-, or 32-bit parameter");
+            }
+        }
+    }
     if (d.body) d.body->accept(*this);
 }
 

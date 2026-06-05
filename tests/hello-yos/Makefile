@@ -10,10 +10,10 @@ THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/hello-yos
 DIST_DIR  ?= $(ROOT)/bin
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
-ZX_APPS_DIR ?= $(DIST_DIR)/targets/zxspectrum/apps
-ZX_MDR_DIR ?= $(DIST_DIR)/targets/zxspectrum/mdr
+ZX_APPS_DIR ?= $(DIST_DIR)/z80/spectrum/bin/apps
+ZX_MDR_DIR ?= $(DIST_DIR)/z80/spectrum/bin/mdr
 BIN_DIR   := $(ZX_APPS_DIR)/hello-yos
-XLINK     := $(HOST_BIN_DIR)/xlink
+XLD     := $(HOST_BIN_DIR)/xld
 MDR_TOOL  := $(HOST_BIN_DIR)/microdrive
 APPMAKE   := $(HOST_BIN_DIR)/appmake
 IMAGE     := $(ZX_MDR_DIR)/hello.mdr
@@ -37,7 +37,7 @@ all:
 	    -w $(THIS_DIR) \
 	    $(DOCKER_IMAGE) \
 	    make IN_DOCKER=1 ROOT=$(ROOT)
-	$(XLINK) -v -m -e _entry \
+	$(XLD) -v -m -e _entry \
 	    -o $(BIN_DIR)/hello-yos.xl \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/hello-yos.rel

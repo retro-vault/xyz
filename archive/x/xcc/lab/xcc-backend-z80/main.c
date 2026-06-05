@@ -1098,7 +1098,7 @@ PORT z80_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -1232,7 +1232,7 @@ PORT z180_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -1365,7 +1365,7 @@ PORT r2k_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -1499,7 +1499,7 @@ PORT r2ka_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -1633,7 +1633,7 @@ PORT r3ka_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -1769,7 +1769,7 @@ PORT sm83_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  7,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  7,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -1903,7 +1903,7 @@ PORT tlcs90_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -2037,7 +2037,7 @@ PORT ez80_z80_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -2171,7 +2171,7 @@ PORT z80n_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 
@@ -2305,7 +2305,7 @@ PORT r800_port =
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  9,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.h */
   PORT_MAGIC
 };
 

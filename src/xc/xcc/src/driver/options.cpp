@@ -16,12 +16,12 @@
 
 namespace xcc {
 
-static bool apply_mode_option(options& opts, const char *mode) {
-    if (strcmp(mode, "gnu") == 0) {
+static bool apply_asm_dialect_option(options& opts, const char *mode) {
+    if (strcmp(mode, "gnu") == 0 || strcmp(mode, "gnuas") == 0) {
         opts.dialect = asm_dialect::GNUAS;
         return true;
     }
-    if (strcmp(mode, "sdcc") == 0) {
+    if (strcmp(mode, "sdcc") == 0 || strcmp(mode, "sdasz80") == 0) {
         opts.dialect = asm_dialect::SDASZ80;
         return true;
     }
@@ -43,6 +43,7 @@ void options::usage(const char *argv0) {
         "  -I<dir>           Add include directory\n"
         "  -D<macro>[=val]   Define preprocessor macro\n"
         "  -std=c11          Language standard (only c11 supported)\n"
+        "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  -g                Emit debug info\n"
         "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
         "  --mode=gnu        Output for GNU binutils assembler\n"
@@ -94,9 +95,21 @@ options options::parse(int argc, char **argv) {
             opts.defines.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
         } else if (strncmp(a, "-std=", 5) == 0) {
             // We only support c11; silently accept c99/c11/gnu11 etc.
+        } else if (strncmp(a, "-masm=", 6) == 0) {
+            const char *mode = a + 6;
+            if (!apply_asm_dialect_option(opts, mode))
+                fprintf(stderr, "xcc: warning: unknown assembler dialect '%s'\n", mode);
+        } else if (strcmp(a, "-masm") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "xcc: error: -masm requires a dialect\n");
+                exit(1);
+            }
+            const char *mode = argv[++i];
+            if (!apply_asm_dialect_option(opts, mode))
+                fprintf(stderr, "xcc: warning: unknown assembler dialect '%s'\n", mode);
         } else if (strncmp(a, "--mode=", 7) == 0) {
             const char *mode = a + 7;
-            if (!apply_mode_option(opts, mode))
+            if (!apply_asm_dialect_option(opts, mode))
                 fprintf(stderr, "xcc: warning: unknown mode '%s'\n", mode);
         } else if (strcmp(a, "-g") == 0) {
             opts.debug = true;

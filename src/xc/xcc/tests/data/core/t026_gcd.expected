@@ -5,18 +5,22 @@
 
 	.globl _gcd
 _gcd:
-	; prologue: gcd (locals=2)
+	; sdcccall(1) prologue: gcd (locals=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-2
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	-6(ix), e
+	ld	-5(ix), d
+	ld	hl, #-6
 	add	hl, sp
 	ld	sp, hl
-	; receive param a at 4(ix)
-	; receive param b at 6(ix)
+	; receive (sdcccall1) param a at -4(ix)
+	; receive (sdcccall1) param b at -6(ix)
 __xcc_L0:
-	ld	l, 6(ix)
-	ld	h, 7(ix)
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	push	hl
 	ld	hl, #0
 	pop	de
@@ -30,68 +34,68 @@ __cmp_t_89383:
 __cmp_e_30886:
 	dec	sp
 	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
-	ld	l, -4(ix)
-	ld	h, -3(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L1
 	jp	__xcc_L2
 __xcc_L1:
-	ld	l, 6(ix)
-	ld	h, 7(ix)
-	ld	-2(ix), l
-	ld	-1(ix), h
-	ld	l, 6(ix)
-	ld	h, 7(ix)
-	push	hl
-	ld	l, 4(ix)
-	ld	h, 5(ix)
-	pop	de
-	.globl __divsint
-	call	__divsint
-	ex	de, hl
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
-	.globl __mul16
-	ld	l, 6(ix)
-	ld	h, 7(ix)
-	push	hl
 	ld	l, -6(ix)
 	ld	h, -5(ix)
-	push	hl
-	call	__mul16
-	pop	bc
-	pop	bc
-	dec	sp
-	dec	sp
-	ld	-8(ix), l
-	ld	-7(ix), h
-	ld	l, 4(ix)
-	ld	h, 5(ix)
-	ld	e, -8(ix)
-	ld	d, -7(ix)
-	or	a, a
-	sbc	hl, de
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, -6(ix)
+	ld	d, -5(ix)
+	.globl __divsint
+	call	__divsint
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-10(ix), l
 	ld	-9(ix), h
+	.globl __mul16
 	ld	l, -10(ix)
 	ld	h, -9(ix)
-	ld	6(ix), l
-	ld	7(ix), h
+	push	hl
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	pop	de
+	call	__mul16
+	push	de
+	pop	hl
+	dec	sp
+	dec	sp
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, -12(ix)
+	ld	d, -11(ix)
+	or	a, a
+	sbc	hl, de
+	dec	sp
+	dec	sp
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	ld	4(ix), l
-	ld	5(ix), h
+	ld	-4(ix), l
+	ld	-3(ix), h
 	jp	__xcc_L0
 __xcc_L2:
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ex	de, hl
 	jp	__gcd_end
 __gcd_end:
 	; epilogue: gcd
@@ -100,24 +104,23 @@ __gcd_end:
 	ret
 	.globl _main
 _main:
-	; prologue: main (locals=0)
+	; sdcccall(1) prologue: main (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #18
-	push	hl
+	ld	de, #18
 	ld	hl, #48
-	push	hl
 	.globl _gcd
 	call	_gcd
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

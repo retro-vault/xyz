@@ -18,4 +18,6 @@ ___sdcc_call_iy:
         ; outputs: n/a (jumps to target)
         ; clobbers: depends on target
 __sdcc_call_iy:
-        jp      (iy)
+        push    iy
+        pop     hl
+        jp      (hl)

@@ -8,7 +8,9 @@ DIST_DIR  ?= $(ROOT)/bin
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 CXX ?= g++
-CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src
+
+XBFD_LIB := $(DIST_DIR)/lib/libxbfd.a
+CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src  -I$(ROOT)/include -I$(ROOT)/lib/xbfd/include
 DBGFLAGS ?= -g3 -O0 -DDEBUG -fsanitize=address,undefined
 RELFLAGS ?= -O2 -DNDEBUG
 LDFLAGS ?=
@@ -47,7 +49,7 @@ SRCS := \
   $(SRCDIR)/frontend/parser_expr.cpp \
   $(SRCDIR)/frontend/sema.cpp \
   $(SRCDIR)/ir/icode.cpp \
-  $(SRCDIR)/ir/iropt.cpp \
+  $(SRCDIR)/opt/iropt.cpp \
   $(SRCDIR)/ir/irgen.cpp \
   $(SRCDIR)/ir/irgen_decl.cpp \
   $(SRCDIR)/ir/irgen_stmt.cpp \
@@ -56,8 +58,7 @@ SRCS := \
   $(SRCDIR)/ir/irgen_init.cpp \
   $(SRCDIR)/backend/sdasz80_emitter.cpp \
   $(SRCDIR)/backend/gnuas_emitter.cpp \
-  $(SRCDIR)/backend/z80/dwarf.cpp \
-  $(SRCDIR)/backend/z80/sdcc_debug.cpp \
+  $(SRCDIR)/backend/z80/debug_info_adapter.cpp \
   $(SRCDIR)/backend/z80/z80gen.cpp \
   $(SRCDIR)/backend/z80/z80gen_convention.cpp \
   $(SRCDIR)/backend/z80/z80gen_data.cpp \
@@ -77,7 +78,7 @@ DEPS := $(OBJS:.o=.d)
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS) | $(HOST_BIN_DIR)
+$(TARGET): $(OBJS) $(XBFD_LIB) | $(HOST_BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | dirs

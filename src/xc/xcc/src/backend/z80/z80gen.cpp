@@ -93,7 +93,7 @@ void z80_gen::emit_function(const ir_function &fn) {
     temp_slots_.clear();
     temp_regs_.clear();
     next_temp_slot_ = 0;
-    cur_convention_ = make_abi_convention(fn.abi);
+    cur_convention_ = &get_abi_convention(fn.abi);
 
     if (opt_level_ >= 2)
         regalloc_prepass(fn);

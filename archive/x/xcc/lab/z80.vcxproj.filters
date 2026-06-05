@@ -52,10 +52,10 @@
     <ClInclude Include="z80.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\SDCCralloc.hpp">
+    <ClInclude Include="..\SDCCralloc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\SDCCtree_dec.hpp">
+    <ClInclude Include="..\SDCCtree_dec.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

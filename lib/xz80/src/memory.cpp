@@ -3,7 +3,7 @@
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih
 #include <algorithm>
-#include <xz80/memory.hpp>
+#include <xz80/memory.h>
 
 namespace xz80 {
 

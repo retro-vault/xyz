@@ -2,35 +2,43 @@
 	.area	_CODE
 	.globl	_f
 _f:
-	; prologue: f (locals=0)
+	; sdcccall(1) prologue: f (locals=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	; receive param a at 4(ix)
-	; receive param b at 6(ix)
-	ld	e, 6 (ix)
-	ld	d, 7 (ix)
-	ld	l, 4 (ix)
-	ld	h, 5 (ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -2(ix)
+	; receive (sdcccall1) param b at -4(ix)
+	ld	e, -4 (ix)
+	ld	d, -3 (ix)
+	ld	l, -2 (ix)
+	ld	h, -1 (ix)
 	or	a, a
 	sbc	hl, de
 	jp	p, __xcc_L1
 __xcc_L0:
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	dec	sp
 	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
+	ld	-8(ix), l
+	ld	-7(ix), h
 	jp	__xcc_L2
 __xcc_L1:
-	ld	l, 6(ix)
-	ld	h, 7(ix)
-	ld	-4(ix), l
-	ld	-3(ix), h
-__xcc_L2:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+__xcc_L2:
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ex	de, hl
 __f_end:
 	; epilogue: f
 	ld	sp, ix

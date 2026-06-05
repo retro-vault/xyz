@@ -18,9 +18,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include <xar/operations.hpp>
-#include <xbfd/bfd.hpp>
-#include <xbfd/errors.hpp>
+#include <xar/operations.h>
+#include <xbfd/xbfd.h>
 
 namespace xar {
 

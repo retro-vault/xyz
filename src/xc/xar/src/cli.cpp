@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <string>
 
-#include <xar/cli.hpp>
+#include <xar/cli.h>
 
 namespace xar {
 

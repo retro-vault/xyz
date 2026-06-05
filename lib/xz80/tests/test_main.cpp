@@ -1,4 +1,4 @@
-// test_main.cpp — xz80 test runner (include-based, mirrors xlink/xbfd pattern).
+// test_main.cpp — xz80 test runner (include-based, mirrors xld/xbfd pattern).
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih

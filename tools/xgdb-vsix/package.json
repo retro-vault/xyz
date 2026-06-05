@@ -1,0 +1,141 @@
+{
+  "name": "xgdb-vsix",
+  "displayName": "xgdb",
+  "description": "Visual Studio Code debugger integration for xgdb over DAP.",
+  "version": "0.0.1",
+  "publisher": "xgdb",
+  "license": "MIT",
+  "keywords": [
+    "debugger",
+    "dap",
+    "z80",
+    "xgdb"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/retro-vault/xyz.git"
+  },
+  "bugs": {
+    "url": "https://github.com/retro-vault/xyz/issues"
+  },
+  "homepage": "https://github.com/retro-vault/xyz",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onDebug"
+  ],
+  "main": "extension.js",
+  "contributes": {
+    "debuggers": [
+      {
+        "type": "xgdb",
+        "label": "xgdb",
+        "languages": [
+          "c",
+          "cpp",
+          "asm"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program",
+              "symbols",
+              "remoteTarget"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "default": "xgdb launch"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "xgdb"
+                ]
+              },
+              "request": {
+                "type": "string",
+                "enum": [
+                  "launch",
+                  "attach"
+                ],
+                "default": "launch"
+              },
+              "program": {
+                "type": "string",
+                "description": "Target program image passed to xgdb."
+              },
+              "symbols": {
+                "type": "string",
+                "description": "Companion .xgdb symbols file."
+              },
+              "remoteTarget": {
+                "type": "string",
+                "description": "Remote target in host:port form."
+              },
+              "debuggerPath": {
+                "type": "string",
+                "default": "xgdb",
+                "description": "Path to the xgdb executable."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory used when launching xgdb."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": true
+              },
+              "preLaunchTask": {
+                "type": "string",
+                "description": "Task to start the remote debug target."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "name": "xgdb sieve (dap)",
+            "type": "xgdb",
+            "request": "launch",
+            "program": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.bin",
+            "symbols": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.xgdb",
+            "remoteTarget": "127.0.0.1:9000",
+            "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
+            "cwd": "${workspaceFolder}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "xgdb DAP",
+            "description": "Launch xgdb as a DAP debugger for a remote target.",
+            "body": {
+              "name": "^\"xgdb launch\"",
+              "type": "xgdb",
+              "request": "launch",
+              "program": "^\"${workspaceFolder}/program.bin\"",
+              "symbols": "^\"${workspaceFolder}/program.xgdb\"",
+              "remoteTarget": "^\"127.0.0.1:9000\"",
+              "debuggerPath": "^\"xgdb\"",
+              "cwd": "^\"${workspaceFolder}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "check": "node --check extension.js",
+    "package": "make all",
+    "package:ci": "make all"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.1"
+  }
+}

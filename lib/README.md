@@ -5,17 +5,17 @@ repo.
 
 ## Components
 
-[lib/xdbg/README.md](/home/tstih/data/retro-vault/xyz/lib/xdbg/README.md)
+[lib/xgdb/README.md](/home/tstih/data/retro-vault/xyz/lib/xgdb/README.md)
 
-- linked debug database model and `.xdbg` reader/writer
+- linked debug database model plus disassembly helpers
 - pluggable disassembler interface
 - Z80 decoder plus SDCC-style formatter
 
-[lib/xdbgstub/README.md](/home/tstih/data/retro-vault/xyz/lib/xdbgstub/README.md)
+`lib/rsp`
 
 - remote debugger transport library
-- debugger-side client
-- emulator-side server and target interface
+- GDB remote serial protocol server and target interface
+- shared transport used by `xgdb` and `xgdb-z80`
 
 ## Build
 
@@ -25,9 +25,8 @@ Build both libraries:
 make -C lib
 ```
 
-Run their tests individually:
+Run the `xgdb` library tests individually:
 
 ```sh
-make -C lib/xdbg test
-make -C lib/xdbgstub test
+make -C lib/xgdb test
 ```

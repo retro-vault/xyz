@@ -13,7 +13,7 @@ _table:
 
 	.globl _main
 _main:
-	; prologue: main (locals=2)
+	; sdcccall(1) prologue: main (locals=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -24,13 +24,13 @@ _main:
 	ld	-2(ix), l
 	ld	-1(ix), h
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #0
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-4(ix), l
@@ -83,13 +83,13 @@ __xcc_L0:
 	jp	__xcc_L2
 __xcc_L2:
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #1
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-12(ix), l
@@ -145,10 +145,10 @@ __xcc_L5:
 	ld	hl, #2
 	push	hl
 	ld	hl, #2
-	push	hl
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-20(ix), l
@@ -201,13 +201,13 @@ __xcc_L6:
 	jp	__xcc_L8
 __xcc_L8:
 	.globl __mul16
-	ld	hl, #2
-	push	hl
 	ld	hl, #3
 	push	hl
+	ld	hl, #2
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-28(ix), l
@@ -261,6 +261,7 @@ __xcc_L9:
 __xcc_L11:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

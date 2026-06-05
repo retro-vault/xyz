@@ -11,7 +11,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <xas/cli.hpp>
+#include <xas/cli.h>
 
 namespace xas {
 

@@ -10,8 +10,8 @@
 #include <string>
 #include <unordered_set>
 
-#include <xas/backend/emitter.hpp>
-#include <xbfd/bfd.hpp>
+#include <xas/backend/emitter.h>
+#include <xbfd/xbfd.h>
 
 namespace xas {
 
@@ -28,21 +28,29 @@ namespace xas {
         void begin_module(const std::string& name) override
         {
             module_name_ = name;
+            obj_->set_module_name(name);
         }
 
         void set_section(const std::string& name,
                           bfd::section_flags flags) override
         {
             cur_section_ = name;
-            cur_offset_  = 0;
-            if (!obj_->find_section(name))
-                obj_->add_section(name, flags);
+            auto* sec = obj_->find_section(name);
+            if (!sec) {
+                sec = &obj_->add_section(name, flags);
+            } else {
+                sec->flags = flags;
+            }
+            cur_offset_ = static_cast<uint32_t>(sec->size);
         }
 
         void emit_byte(uint8_t v) override
         {
             auto* sec = obj_->find_section(cur_section_);
-            if (sec) sec->append_byte(v);
+            if (sec) {
+                sec->data.push_back(v);
+                sec->size = sec->data.size();
+            }
             ++cur_offset_;
         }
 
@@ -50,8 +58,9 @@ namespace xas {
         {
             auto* sec = obj_->find_section(cur_section_);
             if (sec) {
-                sec->append_byte(v & 0xFF);
-                sec->append_byte((v >> 8) & 0xFF);
+                sec->data.push_back(v & 0xFF);
+                sec->data.push_back((v >> 8) & 0xFF);
+                sec->size = sec->data.size();
             }
             cur_offset_ += 2;
         }
@@ -60,7 +69,8 @@ namespace xas {
         {
             auto* sec = obj_->find_section(cur_section_);
             if (sec) {
-                for (uint32_t i = 0; i < n; ++i) sec->append_byte(0);
+                for (uint32_t i = 0; i < n; ++i) sec->data.push_back(0);
+                sec->size = sec->data.size();
             }
             cur_offset_ += n;
         }
@@ -77,7 +87,7 @@ namespace xas {
             r.sym_relative = sym_relative;
             r.name         = name;
             r.addend       = 0;
-            sec->add_reloc(r);
+            sec->relocs.push_back(r);
         }
 
         void define_symbol(const std::string& name,
@@ -89,6 +99,8 @@ namespace xas {
             defined_syms_.insert(name);
             bfd::symbol_flags sf = global ? bfd::symbol_flags::global
                                            : bfd::symbol_flags::local;
+            if (section_name.empty())
+                sf = sf | bfd::symbol_flags::absolute;
             obj_->add_symbol(name, sf, value, section_name);
         }
 

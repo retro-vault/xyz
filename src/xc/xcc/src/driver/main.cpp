@@ -16,7 +16,7 @@
 #include "frontend/diag.h"
 #include "frontend/preproc.h"
 #include "frontend/lexer.h"
-#include "ir/iropt.h"
+#include "opt/iropt.h"
 #include "frontend/parser.h"
 #include "frontend/sema.h"
 #include "ir/irgen.h"
@@ -24,8 +24,8 @@
 #include "backend/gnuas_emitter.h"
 #include "backend/z80/z80gen.h"
 #include "backend/z80/z80peep.h"
-#include "backend/z80/dwarf.h"
-#include "backend/z80/sdcc_debug.h"
+#include "backend/z80/debug_info.h"
+#include <xbfd/xbfd.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -117,18 +117,20 @@ static int compile_file(const std::string &input_path, const options &opts) {
         z80_gen codegen(*emitter);
         codegen.set_opt_level(static_cast<int>(opts.opt));
         if (opts.debug) {
-            if (opts.dialect == asm_dialect::GNUAS) {
-                codegen.set_debug(std::make_unique<dwarf_emitter>(
-                    asm_buf, input_path));
-            } else {
-                // Derive .adb path: replace .s extension with .adb
-                std::string adb = out_path;
-                auto dot = adb.rfind('.');
-                if (dot != std::string::npos) adb = adb.substr(0, dot);
-                adb += ".adb";
-                codegen.set_debug(std::make_unique<sdcc_debug_emitter>(
-                    asm_buf, input_path, adb));
-            }
+            std::string base = out_path;
+            auto dot = base.rfind('.');
+            if (dot != std::string::npos) base = base.substr(0, dot);
+
+            // Build the writer with the right format backend, then
+            // attach an xcc adapter that translates IR types to xdi calls.
+            auto writer = std::make_unique<xbfd::debug_writer>();
+            if (opts.dialect == asm_dialect::GNUAS)
+                writer->add_dwarf(asm_buf, input_path);
+            else
+                writer->add_sdcc(asm_buf, input_path, base + ".adb");
+
+            codegen.set_debug(std::make_unique<xcc::xdi_adapter>(
+                std::move(writer), input_path));
         }
         codegen.emit_module(*mod);
     }

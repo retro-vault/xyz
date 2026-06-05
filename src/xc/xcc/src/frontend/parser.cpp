@@ -280,13 +280,16 @@ decl_ptr parser::parse_external_declaration() {
         fd->body       = nullptr;
         fd->attrs      = ds.attrs;
 
-        auto sym = std::make_shared<symbol>();
-        sym->name    = name;
-        sym->kind    = sym_kind::FUNC;
+        auto sym = syms_.lookup_current(name);
+        if (!sym || sym->kind != sym_kind::FUNC) {
+            sym = std::make_shared<symbol>();
+            sym->name      = name;
+            sym->kind      = sym_kind::FUNC;
+            sym->is_global = true;
+            syms_.insert(sym);
+        }
         sym->type    = decl_type;
         sym->storage = ds.sc;
-        sym->is_global = true;
-        syms_.insert(sym);
         fd->sym = sym;
 
         // Handle comma-separated declarations: int f(int), g(int), a;
@@ -297,10 +300,17 @@ decl_ptr parser::parse_external_declaration() {
                 efd->loc = loc; efd->name = edi.name; efd->type = edi.type;
                 efd->storage = ds.sc; efd->is_variadic = edi.variadic;
                 efd->params = std::move(edi.params); efd->body = nullptr;
-                auto esym = std::make_shared<symbol>();
-                esym->name = edi.name; esym->kind = sym_kind::FUNC;
-                esym->type = edi.type; esym->storage = ds.sc; esym->is_global = true;
-                syms_.insert(esym); efd->sym = esym;
+                auto esym = syms_.lookup_current(edi.name);
+                if (!esym || esym->kind != sym_kind::FUNC) {
+                    esym = std::make_shared<symbol>();
+                    esym->name = edi.name;
+                    esym->kind = sym_kind::FUNC;
+                    esym->is_global = true;
+                    syms_.insert(esym);
+                }
+                esym->type = edi.type;
+                esym->storage = ds.sc;
+                efd->sym = esym;
                 pending_decls_.push_back(std::move(efd));
             } else {
                 auto evd = std::make_unique<var_decl>();
@@ -428,13 +438,16 @@ decl_ptr parser::parse_function_definition(
     fd->type = type::make_function(ret, ptypes, variadic);
 
     // Register the function symbol
-    auto fsym = std::make_shared<symbol>();
-    fsym->name      = name;
-    fsym->kind      = sym_kind::FUNC;
-    fsym->type      = fd->type;
-    fsym->storage   = sc;
-    fsym->is_global = true;
-    syms_.insert(fsym);
+    auto fsym = syms_.lookup_current(name);
+    if (!fsym || fsym->kind != sym_kind::FUNC) {
+        fsym = std::make_shared<symbol>();
+        fsym->name      = name;
+        fsym->kind      = sym_kind::FUNC;
+        fsym->is_global = true;
+        syms_.insert(fsym);
+    }
+    fsym->type    = fd->type;
+    fsym->storage = sc;
     fd->sym = fsym;
 
     // Enter function scope; RAII guard ensures pop even on early return.

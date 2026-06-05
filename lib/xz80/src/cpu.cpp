@@ -1,8 +1,8 @@
 // cpu.cpp — Z80 CPU implementation (SUZUKI PLAN back-end).
 //
 // The SUZUKI PLAN emulator is a MIT-licensed, single-header C++ Z80
-// implementation vendored at src/vendor/z80.hpp.  It is an implementation
-// detail: clients depend only on cpu.hpp.
+// implementation vendored at src/vendor/z80.h.  It is an implementation
+// detail: clients depend only on cpu.h.
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih
@@ -12,10 +12,10 @@
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#include "vendor/z80.hpp"
+#include "vendor/z80.h"
 #pragma GCC diagnostic pop
 
-#include <xz80/cpu.hpp>
+#include <xz80/cpu.h>
 
 namespace xz80 {
 

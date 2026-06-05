@@ -15,8 +15,9 @@ ROOT     ?= $(realpath ../..)
 THIS_DIR := $(realpath .)
 BUILD_DIR := $(ROOT)/build/yos
 DIST_DIR ?= $(ROOT)/bin
-ZX_ROMS_DIR ?= $(DIST_DIR)/targets/zxspectrum/roms
+ZX_ROMS_DIR ?= $(DIST_DIR)/z80/spectrum/bin
 BIN_DIR   := $(ZX_ROMS_DIR)
+TARGET :=  yos
 
 DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
@@ -24,7 +25,8 @@ DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
 .PHONY: clean
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -rf $(BUILD_DIR)
+	rm -f $(BIN_DIR)/$(TARGET).rom $(BIN_DIR)/$(TARGET).cdb
 
 .PHONY: docs
 docs:
@@ -65,22 +67,25 @@ CFLAGS  :=  --std-c11 -mz80 --debug --nostdinc \
 
 ASFLAGS :=  -xlos -g
 
-XLINK   :=  $(BUILD_DIR)/xlink
-XLINK_SOURCES := $(wildcard $(ROOT)/src/xc/xlink/src/*.cpp)
-XLINK_HEADERS := $(wildcard $(ROOT)/src/xc/xlink/include/xlink/*.hpp)
-XLINK_XDBG_SOURCE := $(ROOT)/lib/xdbg/src/xdbg.cpp
-XLINK_CXXFLAGS := -std=c++2a -O2 \
-                  -I$(ROOT)/src/xc/xlink/include \
-                  -I$(ROOT)/include
+XLD   :=  $(BUILD_DIR)/xld
+XLD_SOURCES := $(wildcard $(ROOT)/src/xc/xld/src/*.cpp)
+XLD_HEADERS := $(wildcard $(ROOT)/src/xc/xld/include/xld/*.h)
+XBFD_INC  := $(ROOT)/lib/xbfd/include
+XBFD_LIB  := $(BUILD_DIR)/lib/libxbfd.a
 
-# SDCC Z80 runtime library used by xlink for unresolved helper routines.
+XLD_CXXFLAGS := -std=c++2a -O2 \
+                  -I$(ROOT)/src/xc/xld/include \
+                  -I$(ROOT)/include \
+                  -I$(XBFD_INC)
+
+# SDCC Z80 runtime library used by xld for unresolved helper routines.
 # Provides: __divuint, __moduint, ___sdcc_call_hl, ___sdcc_call_iy, etc.
 SDCC_Z80_LIB :=  /opt/sdcc/share/sdcc/lib/z80/z80.lib
-SDCC_XLINK_LIB_DIR := $(BUILD_DIR)/sdcc-z80-lib
-SDCC_XLINK_LIB := $(SDCC_XLINK_LIB_DIR)/z80.lib
+SDCC_XLD_LIB_DIR := $(BUILD_DIR)/sdcc-z80-lib
+SDCC_XLD_LIB := $(SDCC_XLD_LIB_DIR)/z80.lib
 
 # Protect the ZX Spectrum Interface 1 ROM paging trigger at 0x1708.
-XLINKFLAGS := -f bin \
+XLDFLAGS := -f bin \
               -x 0000-3FFF \
               -b _CODE=0100 \
               -b _DATA=5b00 \
@@ -105,22 +110,23 @@ OBJS   :=  $(addprefix $(BUILD_DIR)/,$(notdir \
                $(patsubst %.c,%.rel,$(C_SRCS)) \
                $(patsubst %.s,%.rel,$(S_SRCS)) ))
 
-TARGET :=  yos
-
 .PHONY: all
 all: $(BIN_DIR)/$(TARGET).rom
 
-$(BIN_DIR)/$(TARGET).rom: $(OBJS) $(XLINK) $(SDCC_XLINK_LIB)
-	$(XLINK) $(XLINKFLAGS) -n $(BUILD_DIR)/$(TARGET).noi -o $@ $(OBJS) $(SDCC_XLINK_LIB)
+$(BIN_DIR)/$(TARGET).rom: $(OBJS) $(XLD) $(SDCC_XLD_LIB)
+	$(XLD) $(XLDFLAGS) -g -o $@ $(OBJS) $(SDCC_XLD_LIB)
 
-$(XLINK): $(XLINK_SOURCES) $(XLINK_HEADERS)
-	$(CXX) -o $@ $(XLINK_SOURCES) $(XLINK_XDBG_SOURCE) $(XLINK_CXXFLAGS)
+$(XBFD_LIB): $(wildcard $(ROOT)/lib/xbfd/src/*.cpp) $(wildcard $(ROOT)/lib/xbfd/include/xbfd/*.h)
+	$(MAKE) -C $(ROOT)/lib/xbfd BUILD_DIR=$(BUILD_DIR) CXX=$(CXX)
 
-$(SDCC_XLINK_LIB): $(SDCC_Z80_LIB)
-	rm -rf $(SDCC_XLINK_LIB_DIR)
-	mkdir -p $(SDCC_XLINK_LIB_DIR)
-	cd $(SDCC_XLINK_LIB_DIR) && ar x $(SDCC_Z80_LIB)
-	cd $(SDCC_XLINK_LIB_DIR) && ls -1 *.rel > $(SDCC_XLINK_LIB)
+$(XLD): $(XLD_SOURCES) $(XLD_HEADERS) $(XBFD_LIB)
+	$(CXX) -o $@ $(XLD_SOURCES) $(XLD_CXXFLAGS) $(XBFD_LIB)
+
+$(SDCC_XLD_LIB): $(SDCC_Z80_LIB)
+	rm -rf $(SDCC_XLD_LIB_DIR)
+	mkdir -p $(SDCC_XLD_LIB_DIR)
+	cd $(SDCC_XLD_LIB_DIR) && ar x $(SDCC_Z80_LIB)
+	cd $(SDCC_XLD_LIB_DIR) && ls -1 *.rel > $(SDCC_XLD_LIB)
 
 $(BUILD_DIR)/$(CRT0).rel: startup/$(CRT0).s
 	$(AS) $(ASFLAGS) -o $@ $<

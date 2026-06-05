@@ -5,7 +5,7 @@
 
 	.globl _main
 _main:
-	; prologue: main (locals=4)
+	; sdcccall(1) prologue: main (locals=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -19,21 +19,22 @@ _main:
 	ld	-4(ix), l
 	ld	-3(ix), h
 	.globl __mul16
-	ld	l, -4(ix)
-	ld	h, -3(ix)
-	push	hl
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	push	hl
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	pop	de
 	call	__mul16
-	pop	bc
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-6(ix), l
 	ld	-5(ix), h
 	ld	l, -6(ix)
 	ld	h, -5(ix)
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

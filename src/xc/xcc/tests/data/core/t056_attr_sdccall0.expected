@@ -5,12 +5,12 @@
 
 	.globl _add
 _add:
-	; prologue: add (locals=0)
+	; sdcccall(0) prologue: add (locals=0, stack_params=4)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	; receive param a at 4(ix)
-	; receive param b at 6(ix)
+	; receive (sdcccall(0)) param a at 4(ix)
+	; receive (sdcccall(0)) param b at 6(ix)
 	ld	l, 4(ix)
 	ld	h, 5(ix)
 	ld	e, 6(ix)
@@ -30,7 +30,7 @@ __add_end:
 	ret
 	.globl _main
 _main:
-	; prologue: main (locals=0)
+	; sdcccall(1) prologue: main (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -48,6 +48,7 @@ _main:
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

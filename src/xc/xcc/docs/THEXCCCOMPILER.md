@@ -305,7 +305,7 @@ level C ideas turn into low-level compiler operations.
 
 ### 6.11 IR Optimizer
 
-`src/ir/iropt.cpp` contains a small, understandable optimizer.
+`src/opt/iropt.cpp` contains the IR optimizer pipeline.
 
 It does three main things:
 

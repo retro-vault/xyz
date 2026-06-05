@@ -13,13 +13,14 @@ _y:
 
 	.globl _get
 _get:
-	; prologue: get (locals=0)
+	; sdcccall(1) prologue: get (locals=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	hl, #1
 	ld	(_y), hl
 	ld	hl, (_y)
+	ex	de, hl
 	jp	__get_end
 __get_end:
 	; epilogue: get

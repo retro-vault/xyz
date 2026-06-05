@@ -1,11 +1,13 @@
 # Debug Sample
 
 This directory contains a tiny standalone Z80 C program meant for
-debugging with:
+debugging with the native X toolchain:
 
-- `xlink`
-- `xdbg`
-- `xdbg-z80`
+- `xcc`
+- `xas`
+- `xld`
+- `xgdb`
+- `xgdb-z80`
 
 The sample is intentionally simple:
 
@@ -16,8 +18,8 @@ The sample is intentionally simple:
 
 It builds into:
 
-- a flat binary linked by `xlink`
-- a linked `.xdbg` sidecar emitted by `xlink`
+- a flat binary linked by `xld`
+- a linked `.cdb` sidecar emitted by `xld`
 
 ## Files
 
@@ -41,23 +43,26 @@ make -C tests/debug all
 
 That produces:
 
-- `bin/targets/zxspectrum/apps/debug/sieve.bin`
-- `bin/targets/zxspectrum/apps/debug/sieve.xdbg`
+- `bin/z80/bin/apps/debug/sieve.bin`
+- `bin/z80/bin/apps/debug/sieve.cdb`
 
 The build path is:
 
-1. `sdcc` compiles `sieve.c` to `sieve.rel`
-2. `sdasz80` assembles `crt0.s` to `crt0.rel`
-3. `xlink -g` links both objects into `sieve.bin` and `sieve.xdbg`
+1. `xcc -g -S` compiles `sieve.c` to `sieve.s` and emits `sieve.adb`
+2. `xas --mode=sdcc` assembles `sieve.s` to `sieve.rel`
+3. `xas --mode=sdcc` assembles `crt0.s` to `crt0.rel`
+4. `xas --mode=sdcc` assembles the runtime helpers from `src/xc/xcc/lib/runtime/*.s`
+5. `xar rcs` packs those helpers into `runtime.lib`
+6. `xld -g` links the sample objects against `runtime.lib` into `sieve.bin` and `sieve.cdb`
 
 ## Run The Reference Emulator
 
 In one terminal:
 
 ```sh
-bin/bin/xc/xdbg/xdbg-z80 \
+bin/bin/xgdb-z80 \
     --listen 127.0.0.1:9000 \
-    --load-bin bin/targets/zxspectrum/apps/debug/sieve.bin \
+    --load-bin bin/z80/bin/apps/debug/sieve.bin \
     --origin 0x0100 \
     --pc 0x0100 \
     --sp 0xFFFE
@@ -71,22 +76,23 @@ provides a remote debug target on TCP port `9000`.
 In a second terminal:
 
 ```sh
-bin/bin/xc/xdbg/xdbg \
-    --exec bin/targets/zxspectrum/apps/debug/sieve.bin \
-    --symbols bin/targets/zxspectrum/apps/debug/sieve.xdbg \
-    --remote 127.0.0.1:9000
+bin/bin/xgdb \
+    --exec bin/z80/bin/apps/debug/sieve.bin \
+    --cdb bin/z80/bin/apps/debug/sieve.cdb \
+    --remote 127.0.0.1:9000 \
+    -d tests/debug
 ```
 
 ## Run It From DDD
 
-You can also point GNU DDD at `xdbg` as a custom debugger command.
+You can also point GNU DDD at `xgdb` as a custom debugger command.
 
-Start `xdbg-z80` first:
+Start `xgdb-z80` first:
 
 ```sh
-bin/bin/xc/xdbg/xdbg-z80 \
+bin/bin/xgdb-z80 \
     --listen 127.0.0.1:9000 \
-    --load-bin bin/targets/zxspectrum/apps/debug/sieve.bin \
+    --load-bin bin/z80/bin/apps/debug/sieve.bin \
     --origin 0x0100 \
     --pc 0x0100 \
     --sp 0xFFFE
@@ -95,7 +101,7 @@ bin/bin/xc/xdbg/xdbg-z80 \
 Then, from the repo root, launch DDD like this:
 
 ```sh
-ddd --debugger "bin/bin/xc/xdbg/xdbg --quiet --exec bin/targets/zxspectrum/apps/debug/sieve.bin --symbols bin/targets/zxspectrum/apps/debug/sieve.xdbg --remote 127.0.0.1:9000"
+ddd --debugger "bin/bin/xgdb --quiet --exec bin/z80/bin/apps/debug/sieve.bin --cdb bin/z80/bin/apps/debug/sieve.cdb --remote 127.0.0.1:9000 -d tests/debug"
 ```
 
 Once DDD opens:
@@ -123,11 +129,11 @@ Once DDD opens:
    list
    ```
 
-   That forces `xdbg` to emit source context, which helps DDD align the
-   current location with the loaded `.xdbg` file.
+   That forces `xgdb` to emit source context, which helps DDD align the
+   current location with the loaded `.cdb` file.
 
 Useful commands from the DDD command tool are the same as in terminal
-`xdbg`:
+`xgdb`:
 
 - `break _sieve`
 - `continue`
@@ -140,7 +146,7 @@ Useful commands from the DDD command tool are the same as in terminal
 
 This flow is best-effort right now.
 
-`xdbg` is intentionally GDB-like in switches and common commands, but it
+`xgdb` is intentionally GDB-like in switches and common commands, but it
 is not yet a full GDB replacement:
 
 - it does not implement GDB/MI
@@ -150,9 +156,9 @@ is not yet a full GDB replacement:
 
 So for now:
 
-- terminal `xdbg` is the most reliable path
+- terminal `xgdb` is the most reliable path
 - DDD should be useful for viewing C source and driving common commands
-- more advanced DDD features may not work until `xdbg` grows a fuller
+- more advanced DDD features may not work until `xgdb` grows a fuller
   compatibility layer
 
 ## Run It From VS Code
@@ -167,20 +173,20 @@ Open `tests/debug` itself as the VS Code workspace folder.
 There are now two VS Code workflows:
 
 1. task-based terminal workflow
-2. native F5 workflow through the `xdbg-vsix` DAP extension
+2. native F5 workflow through the `xgdb-vsix` DAP extension
 
 ### Native DAP Workflow
 
 The repo now contains a dedicated VS Code extension project in:
 
-- [tools/xdbg-vsix/package.json](/home/tstih/data/retro-vault/xyz/tools/xdbg-vsix/package.json)
-- [tools/xdbg-vsix/extension.js](/home/tstih/data/retro-vault/xyz/tools/xdbg-vsix/extension.js)
-- [tools/xdbg-vsix/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tools/xdbg-vsix/.vscode/launch.json)
+- [tools/xgdb-vsix/package.json](/home/tstih/data/retro-vault/xyz/tools/xgdb-vsix/package.json)
+- [tools/xgdb-vsix/extension.js](/home/tstih/data/retro-vault/xyz/tools/xgdb-vsix/extension.js)
+- [tools/xgdb-vsix/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tools/xgdb-vsix/.vscode/launch.json)
 
-This extension contributes a new debugger type named `xdbg` and starts:
+This extension contributes a new debugger type named `xgdb` and starts:
 
 ```text
-xdbg --interpreter=dap --quiet
+xgdb --interpreter=dap --quiet
 ```
 
 The included [tests/debug/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tests/debug/.vscode/launch.json)
@@ -188,13 +194,13 @@ now also contains:
 
 ```json
 {
-  "name": "xdbg sieve (dap)",
-  "type": "xdbg",
+  "name": "xgdb sieve (dap)",
+  "type": "xgdb",
   "request": "launch",
-  "program": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.bin",
-  "symbols": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.xdbg",
+  "program": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.bin",
+  "cdb": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.cdb",
   "remoteTarget": "127.0.0.1:9000",
-  "debuggerPath": "${workspaceFolder}/../../bin/bin/xc/xdbg/xdbg",
+  "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
   "cwd": "${workspaceFolder}",
   "stopOnEntry": true
 }
@@ -202,12 +208,12 @@ now also contains:
 
 To test it:
 
-1. Open `tools/xdbg-vsix` in VS Code.
-2. Run the `Run xdbg VSIX on sieve` launch configuration.
+1. Open `tools/xgdb-vsix` in VS Code.
+2. Run the `Run xgdb VSIX on sieve` launch configuration.
 3. Start your target separately so it is already listening on
    `127.0.0.1:9000`.
 4. In the Extension Development Host window that opens, select
-   `xdbg sieve (dap)` and press `F5`.
+   `xgdb sieve (dap)` and press `F5`.
 5. Open [sieve.c](/home/tstih/data/retro-vault/xyz/tests/debug/sieve.c),
    set breakpoints, then step and inspect state through the standard VS Code
    debug UI.
@@ -216,7 +222,7 @@ If you step into or over a linked library function that has symbols but
 no source file:
 
 - VS Code may not have a C source editor location to show for that stop
-- `xdbg` now reports that honestly instead of pointing at a fake file
+- `xgdb` now reports that honestly instead of pointing at a fake file
 - the DAP frontend now supports disassembly fallback, so the session can
   continue in assembly instead of freezing on an attempted source step
 
@@ -236,17 +242,17 @@ The included `tasks.json` provides:
       "problemMatcher": []
     },
     {
-      "label": "run xdbg-z80 sieve target",
+      "label": "run xgdb-z80 sieve target",
       "type": "process",
-      "command": "${workspaceFolder}/run_xdbg_z80.sh",
+      "command": "${workspaceFolder}/run_xgdb_z80.sh",
       "dependsOn": "build sieve debug sample",
       "isBackground": true,
       "problemMatcher": []
     },
     {
-      "label": "stop xdbg-z80 sieve target",
+      "label": "stop xgdb-z80 sieve target",
       "type": "process",
-      "command": "${workspaceFolder}/stop_xdbg_z80.sh",
+      "command": "${workspaceFolder}/stop_xgdb_z80.sh",
       "problemMatcher": []
     }
   ]
@@ -258,33 +264,33 @@ The included `tasks.json` provides:
 Inside VS Code:
 
 1. Run `Tasks: Run Task`
-2. Choose `run xdbg-z80 sieve target`
+2. Choose `run xgdb-z80 sieve target`
 3. Open `tests/debug/sieve.c` in the editor
 
 This is the target-only half of the workflow. Pair it with the DAP
 launch configuration described above, or connect manually from another
-terminal if you want to use raw `xdbg`.
+terminal if you want to use raw `xgdb`.
 
 The DAP launch configuration does not start or stop the target for you.
 Use the provided tasks only if you want a manual convenience wrapper
-around the reference `xdbg-z80` target.
+around the reference `xgdb-z80` target.
 
 ### Included `launch.json`
 
-The included `launch.json` is the native `xdbg` DAP configuration:
+The included `launch.json` is the native `xgdb` DAP configuration:
 
 ```json
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "xdbg sieve (dap)",
-      "type": "xdbg",
+      "name": "xgdb sieve (dap)",
+      "type": "xgdb",
       "request": "launch",
-      "program": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.bin",
-      "symbols": "${workspaceFolder}/../../bin/targets/zxspectrum/apps/debug/sieve.xdbg",
+      "program": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.bin",
+      "cdb": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.cdb",
       "remoteTarget": "127.0.0.1:9000",
-      "debuggerPath": "${workspaceFolder}/../../bin/bin/xc/xdbg/xdbg",
+      "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
       "cwd": "${workspaceFolder}",
       "stopOnEntry": true
     }
@@ -299,12 +305,12 @@ Inside VS Code:
 1. Open the `tests/debug` folder
 2. Open [sieve.c](/home/tstih/data/retro-vault/xyz/tests/debug/sieve.c)
 3. Go to `Run and Debug`
-4. Select `xdbg sieve (dap)`
+4. Select `xgdb sieve (dap)`
 5. Press `F5`
 
 VS Code should then:
 
-1. launch `xdbg` in DAP mode
+1. launch `xgdb` in DAP mode
 2. connect to the already-running remote target
 3. drive the session through the native VS Code debug UI
 
@@ -327,10 +333,10 @@ accidentally selecting the wrong debugger backend.
 A practical layout is:
 
 1. left editor pane: `tests/debug/sieve.c`
-2. bottom terminal 1: `xdbg-z80`
-3. bottom terminal 2: `xdbg`
+2. bottom terminal 1: `xgdb-z80`
+3. bottom terminal 2: `xgdb`
 
-Then when `xdbg` stops on `_sieve`, use:
+Then when `xgdb` stops on `_sieve`, use:
 
 ```text
 list
@@ -341,7 +347,7 @@ while the same file is open in the editor.
 
 ### Future Direction
 
-Once `xdbg` grows either:
+Once `xgdb` grows either:
 
 - a fuller MI implementation, or
 - a real UDAP adapter for VS Code
@@ -353,58 +359,58 @@ this README can be upgraded to a real `launch.json`-based F5 workflow.
 Set a breakpoint at the C function:
 
 ```text
-(xdbg) break _sieve
-(xdbg) continue
+(xgdb) break _sieve
+(xgdb) continue
 ```
 
 Show current source:
 
 ```text
-(xdbg) list
+(xgdb) list
 ```
 
 Show available functions:
 
 ```text
-(xdbg) info functions
+(xgdb) info functions
 ```
 
 Show registers:
 
 ```text
-(xdbg) info registers
+(xgdb) info registers
 ```
 
 Disassemble around the current PC:
 
 ```text
-(xdbg) disassemble
+(xgdb) disassemble
 ```
 
 Or from a specific symbol:
 
 ```text
-(xdbg) x/12i _sieve
+(xgdb) x/12i _sieve
 ```
 
 Inspect the sieve result globals in memory:
 
 ```text
-(xdbg) x/4xb _prime_count
-(xdbg) x/4xb _last_prime
-(xdbg) x/80xb _flags
+(xgdb) x/4xb _prime_count
+(xgdb) x/4xb _last_prime
+(xgdb) x/80xb _flags
 ```
 
 Single-step one instruction:
 
 ```text
-(xdbg) stepi
+(xgdb) stepi
 ```
 
 Detach:
 
 ```text
-(xdbg) detach
+(xgdb) detach
 ```
 
 ## What To Expect

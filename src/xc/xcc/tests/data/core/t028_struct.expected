@@ -5,22 +5,54 @@
 
 	.globl _area
 _area:
-	; prologue: area (locals=4)
+	; sdcccall(1) prologue: area (locals=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-4
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	hl, #-6
 	add	hl, sp
 	ld	sp, hl
-	; receive param r at 4(ix)
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	; receive (sdcccall1) param r at -6(ix)
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ld	de, #4
 	add	hl, de
 	dec	sp
 	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
+	dec	sp
+	dec	sp
+	dec	sp
+	dec	sp
+	ld	-12(ix), l
+	ld	-11(ix), h
+	push	ix
+	pop	hl
+	ld	de, #-12
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
+	dec	sp
+	dec	sp
+	ld	-16(ix), l
+	ld	-15(ix), h
 	ld	l, -6(ix)
 	ld	h, -5(ix)
 	ld	e, (hl)
@@ -31,80 +63,50 @@ _area:
 	dec	sp
 	dec	sp
 	dec	sp
-	ld	-10(ix), l
-	ld	-9(ix), h
-	push	ix
-	pop	hl
-	ld	de, #-10
-	add	hl, de
-	dec	sp
-	dec	sp
-	ld	-12(ix), l
-	ld	-11(ix), h
-	ld	l, -12(ix)
-	ld	h, -11(ix)
-	ld	e, (hl)
-	inc	hl
-	ld	d, (hl)
-	ex	de, hl
-	dec	sp
-	dec	sp
-	ld	-14(ix), l
-	ld	-13(ix), h
-	ld	l, 4(ix)
-	ld	h, 5(ix)
-	ld	e, (hl)
-	inc	hl
-	ld	d, (hl)
-	ex	de, hl
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	ld	-18(ix), l
-	ld	-17(ix), h
-	push	ix
-	pop	hl
-	ld	de, #-18
-	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-20(ix), l
 	ld	-19(ix), h
-	ld	l, -20(ix)
-	ld	h, -19(ix)
-	ld	e, (hl)
-	inc	hl
-	ld	d, (hl)
-	ex	de, hl
+	push	ix
+	pop	hl
+	ld	de, #-20
+	add	hl, de
 	dec	sp
 	dec	sp
 	ld	-22(ix), l
 	ld	-21(ix), h
-	ld	l, -14(ix)
-	ld	h, -13(ix)
-	ld	e, -22(ix)
-	ld	d, -21(ix)
-	or	a, a
-	sbc	hl, de
+	ld	l, -22(ix)
+	ld	h, -21(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
 	dec	sp
 	dec	sp
 	ld	-24(ix), l
 	ld	-23(ix), h
-	ld	l, -24(ix)
-	ld	h, -23(ix)
-	ld	-2(ix), l
-	ld	-1(ix), h
-	ld	l, 4(ix)
-	ld	h, 5(ix)
-	ld	de, #4
-	add	hl, de
+	ld	l, -16(ix)
+	ld	h, -15(ix)
+	ld	e, -24(ix)
+	ld	d, -23(ix)
+	or	a, a
+	sbc	hl, de
 	dec	sp
 	dec	sp
 	ld	-26(ix), l
 	ld	-25(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	de, #4
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-28(ix), l
+	ld	-27(ix), h
+	ld	l, -28(ix)
+	ld	h, -27(ix)
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
@@ -113,19 +115,11 @@ _area:
 	dec	sp
 	dec	sp
 	dec	sp
-	ld	-30(ix), l
-	ld	-29(ix), h
-	push	ix
-	pop	hl
-	ld	de, #-30
-	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-32(ix), l
 	ld	-31(ix), h
-	ld	l, -32(ix)
-	ld	h, -31(ix)
-	ld	de, #2
+	push	ix
+	pop	hl
+	ld	de, #-32
 	add	hl, de
 	dec	sp
 	dec	sp
@@ -133,16 +127,24 @@ _area:
 	ld	-33(ix), h
 	ld	l, -34(ix)
 	ld	h, -33(ix)
-	ld	e, (hl)
-	inc	hl
-	ld	d, (hl)
-	ex	de, hl
+	ld	de, #2
+	add	hl, de
 	dec	sp
 	dec	sp
 	ld	-36(ix), l
 	ld	-35(ix), h
-	ld	l, 4(ix)
-	ld	h, 5(ix)
+	ld	l, -36(ix)
+	ld	h, -35(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ex	de, hl
+	dec	sp
+	dec	sp
+	ld	-38(ix), l
+	ld	-37(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
@@ -151,19 +153,11 @@ _area:
 	dec	sp
 	dec	sp
 	dec	sp
-	ld	-40(ix), l
-	ld	-39(ix), h
-	push	ix
-	pop	hl
-	ld	de, #-40
-	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-42(ix), l
 	ld	-41(ix), h
-	ld	l, -42(ix)
-	ld	h, -41(ix)
-	ld	de, #2
+	push	ix
+	pop	hl
+	ld	de, #-42
 	add	hl, de
 	dec	sp
 	dec	sp
@@ -171,44 +165,53 @@ _area:
 	ld	-43(ix), h
 	ld	l, -44(ix)
 	ld	h, -43(ix)
+	ld	de, #2
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-46(ix), l
+	ld	-45(ix), h
+	ld	l, -46(ix)
+	ld	h, -45(ix)
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
 	ex	de, hl
 	dec	sp
 	dec	sp
-	ld	-46(ix), l
-	ld	-45(ix), h
-	ld	l, -36(ix)
-	ld	h, -35(ix)
-	ld	e, -46(ix)
-	ld	d, -45(ix)
-	or	a, a
-	sbc	hl, de
-	dec	sp
-	dec	sp
 	ld	-48(ix), l
 	ld	-47(ix), h
-	ld	l, -48(ix)
-	ld	h, -47(ix)
-	ld	-4(ix), l
-	ld	-3(ix), h
-	.globl __mul16
-	ld	l, -4(ix)
-	ld	h, -3(ix)
-	push	hl
-	ld	l, -2(ix)
-	ld	h, -1(ix)
-	push	hl
-	call	__mul16
-	pop	bc
-	pop	bc
+	ld	l, -38(ix)
+	ld	h, -37(ix)
+	ld	e, -48(ix)
+	ld	d, -47(ix)
+	or	a, a
+	sbc	hl, de
 	dec	sp
 	dec	sp
 	ld	-50(ix), l
 	ld	-49(ix), h
 	ld	l, -50(ix)
 	ld	h, -49(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	.globl __mul16
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	pop	de
+	call	__mul16
+	push	de
+	pop	hl
+	dec	sp
+	dec	sp
+	ld	-52(ix), l
+	ld	-51(ix), h
+	ld	l, -52(ix)
+	ld	h, -51(ix)
+	ex	de, hl
 	jp	__area_end
 __area_end:
 	; epilogue: area
@@ -217,7 +220,7 @@ __area_end:
 	ret
 	.globl _main
 _main:
-	; prologue: main (locals=14)
+	; sdcccall(1) prologue: main (locals=14, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -307,6 +310,7 @@ __cmp_e_30886:
 	jp	__xcc_L2
 __xcc_L0:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L2
 __xcc_L2:
@@ -361,6 +365,7 @@ __cmp_e_36915:
 	jp	__xcc_L5
 __xcc_L3:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L5
 __xcc_L5:
@@ -450,6 +455,7 @@ __cmp_e_38335:
 	jp	__xcc_L8
 __xcc_L6:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L8
 __xcc_L8:
@@ -532,6 +538,7 @@ __cmp_e_60492:
 	jp	__xcc_L11
 __xcc_L9:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L11
 __xcc_L11:
@@ -721,10 +728,10 @@ __xcc_L11:
 	ld	-101(ix), h
 	ld	l, -102(ix)
 	ld	h, -101(ix)
-	push	hl
 	.globl _area
 	call	_area
-	pop	bc
+	push	de
+	pop	hl
 	dec	sp
 	dec	sp
 	ld	-104(ix), l
@@ -754,10 +761,12 @@ __cmp_e_41421:
 	jp	__xcc_L14
 __xcc_L12:
 	ld	hl, #0
+	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L14
 __xcc_L14:
 	ld	hl, #1
+	ex	de, hl
 	jp	__main_end
 __main_end:
 	; epilogue: main

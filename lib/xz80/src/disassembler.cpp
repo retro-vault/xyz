@@ -21,8 +21,8 @@
 #include <cstring>
 #include <string>
 
-#include <xz80/disassembler.hpp>
-#include <xz80/memory.hpp>
+#include <xz80/disassembler.h>
+#include <xz80/memory.h>
 
 namespace xz80 {
 
