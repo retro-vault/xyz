@@ -10,7 +10,7 @@ system prefix such as `/usr`:
 - `lib/` for host-side static libraries, with Z80 target libraries under
   `lib/z80/`
 - `libexec/xcc/` for compiler-private runtime and include support
-- `share/xtools/` for staged documentation and future examples/templates
+- `share/xtools/` for staged documentation, examples, and templates
 - `pkg/` for generated package artifacts
 
 It also contains target-specific output that is not part of a normal
@@ -87,14 +87,25 @@ Compiler-private support files used by the Z80 toolchain:
 
 ### `bin/share/xtools/docs`
 
-Packaged component documentation staged with stable filenames:
+Mirrored project documentation staged from the repository `docs/` tree.
+The staged layout keeps the same categories:
 
-- `APPMAKE.md`
-- `DEBUGGER_INTEGRATION.md`
-- `MICRODRIVE.md`
-- `SERIAL.md`
-- `XLD.md`
-- `YOS.md`
+- `README.md` as the documentation index
+- `dist/` for distribution-layout documentation
+- `howtos/` for workflow guides
+- `research/` for imported reference material
+- `standards/` for coding and assembly standards
+- `todo/` for current gap analyses
+- `components/` for staged README files owned by individual tools and
+  subprojects
+
+Current staged component documents include:
+
+- `components/APPMAKE.md`
+- `components/MICRODRIVE.md`
+- `components/SERIAL.md`
+- `components/XLD.md`
+- `components/YOS.md`
 
 ### `bin/z80/spectrum`
 

@@ -117,14 +117,14 @@ stage-xcc-support:
 stage-dist-docs:
 	mkdir -p $(DIST_DIR)
 	rm -rf $(DIST_DIR)/doc $(DIST_DIR)/docs $(DIST_DIR)/extensions $(DOCS_DIR)
-	mkdir -p $(DOCS_DIR) $(EXAMPLES_DIR) $(TEMPLATES_DIR) $(PKG_DIR)/deb $(PKG_DIR)/vsix
+	mkdir -p $(DOCS_DIR) $(DOCS_DIR)/components $(EXAMPLES_DIR) $(TEMPLATES_DIR) $(PKG_DIR)/deb $(PKG_DIR)/vsix
 	cp $(ROOT)/docs/dist/README.md $(DIST_DIR)/README.md
-	cp $(ROOT)/tools/appmake/README.md $(DOCS_DIR)/APPMAKE.md
-	cp $(ROOT)/tools/microdrive/README.md $(DOCS_DIR)/MICRODRIVE.md
-	cp $(ROOT)/tools/serial/README.md $(DOCS_DIR)/SERIAL.md
-	cp $(ROOT)/src/xc/xld/README.md $(DOCS_DIR)/XLD.md
-	cp $(ROOT)/src/yos/README.md $(DOCS_DIR)/YOS.md
-	cp $(ROOT)/docs/DEBUGGER_INTEGRATION.md $(DOCS_DIR)/DEBUGGER_INTEGRATION.md
+	cp -R $(ROOT)/docs/. $(DOCS_DIR)/
+	cp $(ROOT)/tools/appmake/README.md $(DOCS_DIR)/components/APPMAKE.md
+	cp $(ROOT)/tools/microdrive/README.md $(DOCS_DIR)/components/MICRODRIVE.md
+	cp $(ROOT)/tools/serial/README.md $(DOCS_DIR)/components/SERIAL.md
+	cp $(ROOT)/src/xc/xld/README.md $(DOCS_DIR)/components/XLD.md
+	cp $(ROOT)/src/yos/README.md $(DOCS_DIR)/components/YOS.md
 
 .PHONY: clean
 clean:

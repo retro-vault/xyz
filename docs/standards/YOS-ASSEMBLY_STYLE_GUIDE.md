@@ -1,8 +1,12 @@
-# Assembly Style Guide for yos
+# Assembly Style Guide for YOS
+
+This guide is the YOS-specific overlay on top of the general Z80 assembly
+style. Use it for `src/yos/` and closely related YOS-side assembly files.
 
 ## 0. Whitespace Rules
 
-**CRITICAL**: All indentation must use SPACES, never TABS. Assembly files must not contain any tab characters.
+**CRITICAL**: All indentation must use spaces, never tabs. Assembly files
+must not contain any tab characters.
 
 ## 1. File Header Format
 
@@ -38,19 +42,19 @@ All header comments and directives **must be indented** (8 spaces) to align with
 ```asm
         ;; ------------------------------------------------------------
         ;; _routine_name
-        ;; routine description, can be multiline and incldue hyphens
+        ;; routine description, can be multiline and include hyphens
         ;;
         ;; Signature: (only if exposed to C)
         ;;   uint8_t mdr_detect_drives(void)
         ;;
         ;; Arguments: (only if it has them)
         ;;
-        ;; Return: what it retuns and where
+        ;; Return: what it returns and where
         ;;
         ;; Clobbers: which registers it clobbers
         ;;
-        ;; References: 
-        ;;    which other routine or global symbols it references
+        ;; References:
+        ;;   which other routine or global symbols it references
 function_name::
         code here
         ;; continuation of notes if multi-line
@@ -118,8 +122,10 @@ For local subroutines (prefixed with dot), if complex, use **indented** (8 space
 All utility/helper functions: `__function_name` (double underscore)
 Examples: `__kbd_scan`, `__clock_tick`, `__mouse_calibrate`
 
-Utility/helper functions should be placed in a separate file with the same name as the original, but prefixed with an underscore (_).
-Example: windows.c → helper functions go in _windows.c
+Utility/helper functions should be placed in a separate file with the same
+name as the original, but prefixed with an underscore (`_`) when that split
+improves readability.
+Example: `windows.s` -> helper functions go in `_windows.s`
 
 ## 7. Register Aliases
 

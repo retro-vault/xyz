@@ -1,10 +1,11 @@
 # Z80-CODING-STYLE.md - Z80 Assembly Coding Standards
 
 This document defines the Z80 assembly style for code in
-`lib/runtime/`, `tests/tools/`, and other hand-written Z80 modules.
+`src/xc/xcc/lib/runtime/`, `lib/libc/src/`, `tests/`, and other
+hand-written Z80 modules.
 
-The baseline style comes from the imported runtime modules now merged
-under `lib/runtime/`.
+The baseline style comes from the imported and adapted runtime modules now
+living under `src/xc/xcc/lib/runtime/`.
 
 Those imported files already show several good patterns:
 
@@ -24,6 +25,7 @@ Use this style for:
 
 - Imported SDCC runtime code after cleanup.
 - xcc ABI bridge modules.
+- libc assembly under `lib/libc/src/`.
 - Startup code, trampolines, and test support assembly.
 - Any new hand-written Z80 source file.
 
@@ -220,7 +222,7 @@ Use one descriptive naming scheme across the whole runtime:
 
 ## 12. Imported Library Policy
 
-When importing or adapting code from `libsdcc-z80`:
+When importing or adapting code from SDCC or similar external runtimes:
 
 - Split helpers into one function per file where practical.
 - Add a real file header.
@@ -253,9 +255,9 @@ Use this as the starting point for new files:
 
 __helper_name:
         push    ix
-    ld      ix, #0
-    add     ix, sp
-    ret
+        ld      ix, #0
+        add     ix, sp
+        ret
 ```
 
 ## 15. Summary

@@ -16,10 +16,12 @@ Do not leave editor backups, stray object files, or temporary files in
 the tree.
 
 - `src/` contains application `.cpp` files.
-- `include/` contains all public `.h` files.
+- `include/` contains top-level public headers that belong to the root project.
 - `lib/` contains project libraries and third-party libraries.
 - `lib/<name>/` contains the implementation of a library such as
   `lib/dbf/`.
+- `lib/<name>/include/` contains library-local public headers.
+- `lib/libc/include/` contains target-side public libc headers.
 - `bin/` contains final programs and other final generated outputs.
 - `build/` contains all build artifacts, including object files,
   dependency files, static libraries, maps, listings, and temporary
@@ -30,15 +32,15 @@ the tree.
 
 Rules:
 
-- Public headers must live in `include/`.
+- Public headers must live either in the root `include/` tree or in the
+  owning library's `lib/<name>/include/` tree.
 - Project source files may live in `src/` or in a library directory
   under `lib/`.
 - Build artifacts must go only into the root `build/` directory.
 - No nested `build/` directories are allowed.
 - Nothing else should be created at the project root except normal
-  project files such as `LICENSE`, `README.md`, `Makefile`,
-  `CPP-CODING-STYLE.md`, `Z80-CODING-STYLE.md`, and similar top-level
-  metadata.
+  project files such as `LICENSE`, `README.md`, `Makefile`, and similar
+  top-level metadata. Coding standards now live under `docs/standards/`.
 
 ## 2. Naming Conventions
 
@@ -54,9 +56,10 @@ Examples:
 
 ## 3. Header and Implementation Separation
 
-Every module must follow a classic C layout.
+Every module must follow a clear header-and-implementation layout.
 
-- A public `.h` file in `include/` contains:
+- A public `.h` file in `include/`, `lib/<name>/include/`, or
+  `lib/libc/include/` contains:
   - A file header comment
   - Public declarations
   - Public types
@@ -160,7 +163,8 @@ Rules:
   - How to build the project
   - Dependencies
   - Usage
-- Keep notes in `docs/` so the project retains context over time.
+- Keep notes in `docs/`, using the current subfolders:
+  `dist/`, `howtos/`, `research/`, `standards/`, and `todo/`.
 
 ## 9. Tests
 
