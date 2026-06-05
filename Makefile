@@ -104,7 +104,7 @@ stage-target-assets:
 stage-xcc-support:
 	rm -rf $(LIBEXEC_DIR)
 	mkdir -p $(XCC_SUPPORT_INCLUDE_DIR) $(XCC_SUPPORT_RUNTIME_DIR)
-	cp -R $(ROOT)/src/xc/xcc/lib/include/. $(XCC_SUPPORT_INCLUDE_DIR)/
+	cp -R $(ROOT)/lib/libc/include/. $(XCC_SUPPORT_INCLUDE_DIR)/
 	@for src in $(sort $(wildcard $(ROOT)/src/xc/xcc/lib/runtime/*.s)); do \
 	    rel="$(XCC_SUPPORT_RUNTIME_DIR)/$$(basename "$${src%.s}").rel"; \
 	    $(HOST_BIN_DIR)/xas --mode=sdcc "$$src" -o "$$rel"; \

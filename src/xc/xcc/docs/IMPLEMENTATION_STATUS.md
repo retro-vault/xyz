@@ -42,7 +42,7 @@ or a known limitation is fixed.
 | `__attribute__((...))` | Parsed only | Ignored |
 | `__builtin_expect` | Complete | Returns first argument unchanged |
 | `__func__` | Complete | |
-| Variadic functions | Complete | `va_list` via `lib/include/stdarg.h` |
+| Variadic functions | Complete | `va_list` via `lib/libc/include/stdarg.h` |
 | Function prototypes | Complete | |
 | Multiple declarators | Partial | `typedef int a, b;` works; global multi-declarator vars partially handled |
 | Wide string/char literals | Complete | `L""`, `u""`, `U""`, `u8""` |

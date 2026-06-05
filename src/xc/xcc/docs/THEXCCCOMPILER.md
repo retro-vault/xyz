@@ -88,8 +88,8 @@ These are the directories that matter most:
 - `src/ir/`: IR definitions, IR lowering, IR optimizer
 - `src/backend/`: assembler emitters and Z80 backend
 - `include/`: public headers for the compiler itself
-- `lib/runtime.s`: Z80 runtime helper implementations and stubs
-- `lib/include/`: target-side C headers such as `stdatomic.h` and `complex.h`
+- `lib/runtime/`: Z80 runtime helper implementations and stubs
+- `../../../lib/libc/include/`: canonical target-side C headers such as `stdatomic.h` and `complex.h`
 - `tests/data/core/`: regression inputs and expected assembly outputs
 - `docs/`: notes, architecture docs, and now this book
 - `orig/`: SDCC reference sources, not part of the live build

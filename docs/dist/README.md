@@ -82,7 +82,7 @@ overrides.
 
 Compiler-private support files used by the Z80 toolchain:
 
-- `include/` for xcc-only support headers not yet published as libc headers
+- `include/` as a compatibility mirror of the staged Z80 libc headers
 - `runtime/` for assembled `.rel` helpers and `z80.lib` / `runtime.lib`
 
 ### `bin/share/xtools/docs`

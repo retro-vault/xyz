@@ -38,7 +38,7 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | `_Complex` / `_Imaginary` | 8-byte soft-float pair; `+`/`-`/`*` lowered to component FADD/FSUB/FMUL; `<complex.h>` with `I`, `CMPLXF`, `creal`, `cimag`, `conj`, `cabs`, `carg` |
 | `_Alignas` | Accepted, ignored (Z80 has no alignment requirements) |
 | `_Thread_local` | Per-thread globals via `__tls_base()` OS hook; compiler emits TLS-address sequence; OS must copy `__tls_template` at thread start |
-| `_Atomic` / `<stdatomic.h>` | `lib/include/stdatomic.h` with `_Generic` macros; 18 `DI`/`EI`-wrapped stubs in `lib/runtime.s`; OS can replace with lock-free versions |
+| `_Atomic` / `<stdatomic.h>` | `lib/libc/include/stdatomic.h` with `_Generic` macros; 18 `DI`/`EI`-wrapped stubs in `lib/runtime/`; OS can replace with lock-free versions |
 | Global aggregate initializers `{…}` | `int a[3] = {1,2,3};` at file scope; per-element `.dw`/`.db` in `_DATA` |
 | Compound assignment on array subscript | `a[i] += n`, `a[i] -= n`, etc. — write-back via ADD+SET_VALUE_AT |
 | Designated initializers | `.field = value` and `[N] = value`; struct fields by name, array elements by absolute offset; `init_list_expr::elem` carries designation info |
@@ -92,10 +92,10 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | Item | Notes |
 |------|-------|
 | **`_Thread_local`** | Per-thread globals via `__tls_base()` OS hook. Compiler emits `call __tls_base; ld bc, #offset; add hl, bc` then loads/stores through HL. OS must initialise TLS block (size = `__tls_size`) from `__tls_template` at thread start. |
-| **`_Atomic` / `<stdatomic.h>`** | `lib/include/stdatomic.h` — full C11 API via `_Generic` macros mapping to 18 runtime stubs in `lib/runtime.s`. All stubs use `DI`/`EI` for atomicity on preemptive Z80. Covers load/store/exchange/CAS/fetch-add/sub/and/or/xor for 1-byte and 2-byte types + `atomic_flag`. OS can override any stub with a lock-free version. |
+| **`_Atomic` / `<stdatomic.h>`** | `lib/libc/include/stdatomic.h` — full C11 API via `_Generic` macros mapping to 18 runtime stubs in `lib/runtime/`. All stubs use `DI`/`EI` for atomicity on preemptive Z80. Covers load/store/exchange/CAS/fetch-add/sub/and/or/xor for 1-byte and 2-byte types + `atomic_flag`. OS can override any stub with a lock-free version. |
 | **Register allocator (-O2)** | `regalloc_prepass()` in `z80gen.cpp`: linear-scan over BC (16-bit) and A' (8-bit via `ex af,af'`); live interval analysis; interior clobber check; immediately-adjacent temps left for peephole. IR optimizer (`src/opt/iropt.cpp`): CFG/value/loop-aware IR pass pipeline activated by `-O2`. |
 | **Built-in preprocessor** | `src/frontend/preproc.cpp`: object/function-like macros, `#include`, `#ifdef/#ifndef/#if/#elif/#else/#endif`, `#error`, `#pragma` (no-op), `__FILE__`/`__LINE__`/`__DATE__`/`__TIME__`, `defined()` in `#if`, variadic macros, stringify `#`, token-paste `##`, recursion guard, depth limit 32, `# linenum "file"` markers for lexer |
-| **`<stdarg.h>` header** | `lib/include/stdarg.h` — `va_list = char*`; `va_start`/`va_arg`/`va_end`/`va_copy` macros using xcc Z80 ABI stack layout |
+| **`<stdarg.h>` header** | `lib/libc/include/stdarg.h` — `va_list = char*`; `va_start`/`va_arg`/`va_end`/`va_copy` macros using xcc Z80 ABI stack layout |
 | **Global aggregate init in codegen** | `emit_globals()` in `z80gen.cpp` emits per-element `.db`/`.dw` from `g.init_vals`; 4-byte values split into two `.dw` words |
 | **Peephole rule set** | `z80peep.cpp`: temp-store/reload elimination (29% overall reduction), push/pop HL pairs, redundant `ld`, self-store no-op, dead HL load; runs up to 10 passes to fixed point |
 | **Soft-float runtime stubs** | `lib/runtime.s` exports `__fitosf/__fstoi/__fsadd/__fssub/__fsmul/__fsdiv` as zero-returning stubs. Link SDCC's `libsdcc` for real IEEE 754. |
@@ -113,9 +113,9 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | **Hex float literals** | `0x1.8p+1` — lexer now consumes optional `.`+hex-fraction before `p`; uses `strtod` (C99-guaranteed hex float parsing) |
 | **`__func__` outside a function** | Emits `warning: '__func__' used outside a function` on stderr; yields `""` as before |
 | **Compound literals** | `(struct Point){1, 2}` — `compound_literal_expr` AST node; anonymous local allocated by parser; lowered via `gen_init_list()` in irgen |
-| **Variadic `va_list` / `va_arg`** | `lib/include/stdarg.h` header with `va_list = char*`; `va_start`/`va_arg`/`va_end`/`va_copy` macros for xcc Z80 ABI stack layout |
+| **Variadic `va_list` / `va_arg`** | `lib/libc/include/stdarg.h` header with `va_list = char*`; `va_start`/`va_arg`/`va_end`/`va_copy` macros for xcc Z80 ABI stack layout |
 | **Bit-fields** | `struct_field::bit_width` + `bit_offset`; packed within storage units in `parse_struct_body()`; read uses SHR+BAND mask; write uses load-modify-store in irgen |
 | **Anonymous structs/unions** | Field promotion in `parse_struct_body()` via `promote_anon()` lambda; handles both unnamed and tag-only (no declarator) inner structs/unions |
 | **`const` enforcement** | New semantic pass `src/frontend/sema.cpp`; `sema::check()` walks the full AST; reports error for any assignment to a `const`-qualified lvalue |
 | **`_Generic` selection** | `parse_generic_selection()` in parser; `types_compatible()` compares unqualified types by kind/tag; `default:` fallback; matched expression returned directly (no runtime overhead) |
-| **`_Complex` / `_Imaginary`** | `type_kind::COMPLEX` (8 bytes: re+im as 4-byte soft-floats each); `+`/`-`/`*` lowered in `irgen` to component `FADD`/`FSUB`/`FMUL` + `MAKE_COMPLEX` pack; `byte_offset` on `operand` for component addressing; `sz=8` alloc in `alloc_temp`; `lib/include/complex.h` with `I`, `CMPLXF`, `creal`, `cimag`, `conj`, `cabs`, `carg`; `__fsneg`/`__fssqrt`/`__fsatan2` + `__creal`/`__cimag`/`conjf`/`cabsf`/`cargf` in `lib/runtime.s`; binary-op type inference from operands when parser annotation absent |
+| **`_Complex` / `_Imaginary`** | `type_kind::COMPLEX` (8 bytes: re+im as 4-byte soft-floats each); `+`/`-`/`*` lowered in `irgen` to component `FADD`/`FSUB`/`FMUL` + `MAKE_COMPLEX` pack; `byte_offset` on `operand` for component addressing; `sz=8` alloc in `alloc_temp`; `lib/libc/include/complex.h` with `I`, `CMPLXF`, `creal`, `cimag`, `conj`, `cabs`, `carg`; `__fsneg`/`__creal`/`__cimag` in `lib/runtime/`, with the remaining helpers supplied by libc; binary-op type inference from operands when parser annotation absent |

@@ -32,7 +32,7 @@ RUNTIME_SOURCES := $(sort $(wildcard $(RUNTIME_DIR)/*.s))
 DISTDIR := $(PROJECT_BUILD_DIR)/dist
 DIST_BINDIR := $(DISTDIR)/bin
 DIST_LIBDIR := $(DISTDIR)/lib/xcc/runtime
-DIST_INCDIR := $(DISTDIR)/include/xcc
+DIST_INCDIR := $(DISTDIR)/include/z80
 
 SRCS := \
   $(SRCDIR)/frontend/diag.cpp \
@@ -115,9 +115,11 @@ dist: $(TARGET)
 	  rel="$(DIST_LIBDIR)/$$(basename "$${src%.s}").rel"; \
 	  sdasz80 -o "$$rel" "$$src"; \
 	done
+	@cp -R $(ROOT)/lib/libc/include/. $(DIST_INCDIR)/
 	@echo "Staged:"
 	@echo "  $(DIST_BINDIR)/xcc         -> /usr/local/bin/xcc"
 	@echo "  $(DIST_LIBDIR)/*.rel -> /usr/local/lib/xcc/runtime/"
+	@echo "  $(DIST_INCDIR)        -> /usr/local/include/z80/"
 
 # Static analysis. Requires cppcheck in PATH; set LINT=1 to enable.
 # Example: make lint  or  LINT=1 make lint

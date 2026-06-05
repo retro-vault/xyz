@@ -11,7 +11,7 @@
 XCC=/home/tstih/data/retro-vault/xyz/bin/bin/xcc
 C23_DIR=/home/tstih/data/retro-vault/xyz/src/xc/xcc/tests/data/external/C23
 C2Y_DIR=/home/tstih/data/retro-vault/xyz/src/xc/xcc/tests/data/external/C2y
-INCLUDE_DIR=/home/tstih/data/retro-vault/xyz/src/xc/xcc/lib/include
+INCLUDE_DIR=/home/tstih/data/retro-vault/xyz/lib/libc/include
 
 # ---------------------------------------------------------------------------
 # Argument parsing

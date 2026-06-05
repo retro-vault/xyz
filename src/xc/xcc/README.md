@@ -36,7 +36,8 @@ build/dist/
     xcc                  <- the compiler binary
   lib/xcc/runtime/
     *.rel                <- per-helper Z80 runtime objects
-  include/xcc/           <- (reserved for future public C headers)
+  include/z80/
+    *.h                  <- canonical target-side libc headers
 ```
 
 To install system-wide on Linux:
@@ -46,7 +47,8 @@ make dist
 sudo cp build/dist/bin/xcc                /usr/local/bin/
 sudo mkdir -p /usr/local/lib/xcc/runtime
 sudo cp build/dist/lib/xcc/runtime/*.rel  /usr/local/lib/xcc/runtime/
-sudo cp -r build/dist/include/xcc         /usr/local/include/
+sudo mkdir -p /usr/local/include/z80
+sudo cp -r build/dist/include/z80/.       /usr/local/include/z80/
 ```
 
 ---
