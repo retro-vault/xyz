@@ -84,7 +84,7 @@ or a known limitation is fixed.
 | 32-bit values (DE:HL) | Complete | |
 | 64-bit values | Stub | Emitted as zero |
 | Floating-point codegen | Stub | Delegates to soft-float stubs |
-| Register allocation (-O2) | Partial | One 16-bit temp to BC; one 8-bit temp to A' |
+| Register allocation (-O2) | Partial | Bounded stable allocator for one 16-bit temp in BC; wider/local-byte allocation still pending |
 | Alternate register set (EXX regions) | Reserved | `temp_home` enum extended; no EXX regions yet |
 | Calling convention | Complete | Right-to-left push; IX frame; caller cleans |
 | Indirect calls | Complete | Via `__call_hl` trampoline |
@@ -97,7 +97,7 @@ or a known limitation is fixed.
 
 ## Peephole Optimizer
 
-Activated at `-O1` and above.  19 rules run to fixed-point (up to 10 passes).
+Activated at `-O1` and above.  19 hand-written rules run to fixed-point (up to 10 passes).
 See `docs/ARCHITECTURE.md` for the complete rule table.
 
 ---

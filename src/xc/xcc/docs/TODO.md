@@ -62,7 +62,7 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | `# N "filename"` line directives | Lexer updates `line_` and `file_` from preprocessor line markers |
 | C preprocessor | Object/function-like macros, `#include`, `#ifdef/#if/#elif/#else/#endif`, `#error`, `#define`/`#undef`, `defined()`, `#`, `##`, `__FILE__`/`__LINE__`/`__DATE__`/`__TIME__`, variadic macros |
 | `-O2` IR optimizer | Constant fold, copy-prop (TEMP+INT_CONST), DCE (fixed-point), strength reduction (MUL/DIV/MOD by power-of-two → shift) |
-| `-O2` register allocator | BC for one 16-bit temp; A' (`ex af,af'`) for one 8-bit temp; live range analysis with clobber safety |
+| `-O2` register allocator | Stable bounded BC allocator for one short-lived 16-bit temp; broader local / byte allocation still pending |
 | `-O1` / `-O2` peephole | 12 rules including push/pop elimination, `ex de,hl` substitution, `xor a` for zero loads, inline shifts |
 
 ---
@@ -93,7 +93,7 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 |------|-------|
 | **`_Thread_local`** | Per-thread globals via `__tls_base()` OS hook. Compiler emits `call __tls_base; ld bc, #offset; add hl, bc` then loads/stores through HL. OS must initialise TLS block (size = `__tls_size`) from `__tls_template` at thread start. |
 | **`_Atomic` / `<stdatomic.h>`** | `lib/libc/include/stdatomic.h` — full C11 API via `_Generic` macros mapping to 18 runtime stubs in `lib/runtime/`. All stubs use `DI`/`EI` for atomicity on preemptive Z80. Covers load/store/exchange/CAS/fetch-add/sub/and/or/xor for 1-byte and 2-byte types + `atomic_flag`. OS can override any stub with a lock-free version. |
-| **Register allocator (-O2)** | `regalloc_prepass()` in `z80gen.cpp`: linear-scan over BC (16-bit) and A' (8-bit via `ex af,af'`); live interval analysis; interior clobber check; immediately-adjacent temps left for peephole. IR optimizer (`src/opt/iropt.cpp`): CFG/value/loop-aware IR pass pipeline activated by `-O2`. |
+| **Register allocator (-O2)** | `regalloc_prepass()` in `z80gen.cpp`: bounded linear-scan over BC for short straight-line 16-bit temp windows, with backend hazard checks. IR optimizer (`src/opt/iropt.cpp`): CFG/value/loop-aware IR pass pipeline activated by `-O2`. |
 | **Built-in preprocessor** | `src/frontend/preproc.cpp`: object/function-like macros, `#include`, `#ifdef/#ifndef/#if/#elif/#else/#endif`, `#error`, `#pragma` (no-op), `__FILE__`/`__LINE__`/`__DATE__`/`__TIME__`, `defined()` in `#if`, variadic macros, stringify `#`, token-paste `##`, recursion guard, depth limit 32, `# linenum "file"` markers for lexer |
 | **`<stdarg.h>` header** | `lib/libc/include/stdarg.h` — `va_list = char*`; `va_start`/`va_arg`/`va_end`/`va_copy` macros using xcc Z80 ABI stack layout |
 | **Global aggregate init in codegen** | `emit_globals()` in `z80gen.cpp` emits per-element `.db`/`.dw` from `g.init_vals`; 4-byte values split into two `.dw` words |

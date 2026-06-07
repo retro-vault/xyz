@@ -1,6 +1,6 @@
 # xgdb
 
-This directory contains the first debugger front-end and the first
+This directory contains the current debugger front-end and the current
 reference remote target.
 
 Built binaries:
@@ -58,6 +58,10 @@ tries `foo.bin.cdb` and `foo.bin.map` as sidecars.
 For machine-interface (IDE) integration use:
 
 - `--interpreter=mi` or `--mi`
+
+The protocol abstraction layer also has a DAP-shaped direction in the code,
+but the current `xgdb` entry point does not yet expose
+`--interpreter=dap`.
 
 For DDD integration use `xgdb` directly:
 
@@ -213,11 +217,11 @@ What it is:
 - enough debugger surface to inspect memory, symbols, lines, and locals
 - enough remote target surface to test the debugger end to end
 - a GDB-style CLI and MI interface for IDE integration
+- a GDB Remote Serial Protocol transport path through `librsp`
 
 What it is not yet:
 
-- GDB/MI
-- GDB remote serial protocol
+- a DAP mode exposed by the main `xgdb` executable
 - a source-level expression evaluator
 - a call stack unwinder
 - a full emulator integration for Iskra Delta Partner devices

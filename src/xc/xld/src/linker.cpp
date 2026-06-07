@@ -17,6 +17,7 @@
 #include <xld/rel_parser.h>
 #include <xld/lib_parser.h>
 #include <xld/area_placer.h>
+#include <xld/branch_relaxer.h>
 #include <xld/relocator.h>
 #include <xld/errors.h>
 
@@ -30,6 +31,7 @@ namespace xld {
         load_inputs(ctx, opts);
         resolve_libraries(ctx, opts);
         resolve_symbols(ctx);
+        relax_branches(ctx);
         place_areas(ctx);
         define_linker_symbols(ctx);
         relocate(ctx);
@@ -197,6 +199,10 @@ namespace xld {
             std::cout << "Code size: 0x" << std::hex << ctx.code_size
                       << std::dec << " (" << ctx.code_size << " bytes)\n";
         }
+    }
+
+    void linker::relax_branches(link_context& ctx) {
+        branch_relaxer::relax(ctx);
     }
 
     void linker::define_linker_symbols(link_context& ctx) {

@@ -2,6 +2,16 @@
 
 `appmake` is a small command-style helper for ZX Spectrum tape files and legacy `yos` `.app` images.
 
+## Build
+
+```bash
+make -C tools/appmake
+```
+
+The binary is staged at:
+
+- `bin/bin/appmake`
+
 ## Commands
 
 - `list`: list the contents of a `.tap` or `.tzx` tape image
@@ -29,21 +39,21 @@ The exact format is documented in:
 ### List tape contents
 
 ```bash
-bin/bin/tools/appmake/appmake list tests/tapes/manic.tap
-bin/bin/tools/appmake/appmake list tests/tapes/fist.tzx
+bin/bin/appmake list tests/tapes/manic.tap
+bin/bin/appmake list tests/tapes/fist.tzx
 ```
 
 ### Analyze program start and dependencies
 
 ```bash
-bin/bin/tools/appmake/appmake analyze tests/tapes/manic.tap
+bin/bin/appmake analyze tests/tapes/manic.tap
 ```
 
 ### Build and write a runnable `.app` to microdrive
 
 ```bash
-bin/bin/tools/appmake/appmake make tests/tapes/manic.tap tests/microdrives/hello.mdr --app manic.app
-bin/bin/tools/appmake/appmake make tests/tapes/fist.tzx tests/microdrives/hello.mdr --app fist.app
+bin/bin/appmake make tests/tapes/manic.tap tests/microdrives/hello.mdr --app manic.app
+bin/bin/appmake make tests/tapes/fist.tzx tests/microdrives/hello.mdr --app fist.app
 ```
 
 Defaults:
@@ -57,9 +67,9 @@ Defaults:
 ### Convert tape CODE block
 
 ```bash
-bin/bin/tools/appmake/appmake tap input.tap output.app
-bin/bin/tools/appmake/appmake tap input.tap output.app --name LOADER
-bin/bin/tools/appmake/appmake tap input.tap output.app --load 0x8000 --start 0x8000
+bin/bin/appmake tap input.tap output.app
+bin/bin/appmake tap input.tap output.app --name LOADER
+bin/bin/appmake tap input.tap output.app --load 0x8000 --start 0x8000
 ```
 
 Defaults:
@@ -70,8 +80,8 @@ Defaults:
 ### Convert 48K snapshot
 
 ```bash
-bin/bin/tools/appmake/appmake sna input.sna output.app --load 0x8000
-bin/bin/tools/appmake/appmake sna input.sna output.app --load 0x9000 --start 0x9200
+bin/bin/appmake sna input.sna output.app --load 0x8000
+bin/bin/appmake sna input.sna output.app --load 0x9000 --start 0x9200
 ```
 
 For `.sna`:

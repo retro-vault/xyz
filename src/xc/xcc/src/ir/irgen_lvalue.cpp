@@ -21,9 +21,33 @@ static const struct_field *find_member(const member_expr &e) {
 }
 
 operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
+    auto coerce_for_store = [&](operand value, const type_ptr &target) -> operand {
+        if (!target)
+            return value;
+        if (!value.type) {
+            value.type = target;
+            return value;
+        }
+        bool same_type =
+            value.type->kind == target->kind &&
+            value.type->size() == target->size() &&
+            value.type->is_unsigned() == target->is_unsigned();
+        if (same_type) {
+            value.type = target;
+            return value;
+        }
+        if (value.kind == operand_kind::INT_CONST ||
+            value.kind == operand_kind::FLOAT_CONST) {
+            value.type = target;
+            return value;
+        }
+        return emit_unop(icode_op::CAST, value, target);
+    };
+
     if (auto *id = dynamic_cast<ident_expr*>(&lhs)) {
         if (id->sym) {
             operand dst = sym_to_operand(*id->sym, id->type);
+            src = coerce_for_store(src, dst.type);
             emit_assign(dst, src);
             return dst;
         }
@@ -31,6 +55,7 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
     if (auto *deref = dynamic_cast<unary_expr*>(&lhs)) {
         if (deref->op == unary_op::DEREF) {
             operand ptr = gen_expr(*deref->operand);
+            src = coerce_for_store(src, deref->type ? deref->type : lhs.type);
             icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);
             return src;
         }
@@ -54,13 +79,23 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
             operand combined = emit_binop(icode_op::BOR, cleared, s_src, unit_type);
             icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = combined; emit(ic);
         } else {
+            src = coerce_for_store(src, fld ? fld->type : (mem->type ? mem->type : lhs.type));
             icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);
         }
         return src;
     }
     if (auto *idx = dynamic_cast<index_expr*>(&lhs)) {
         operand base  = gen_expr(*idx->base);
+        if (idx->base->type && idx->base->type->is_array() && idx->base->type->base) {
+            // Array expressions decay to element pointers before index arithmetic.
+            base = emit_unop(icode_op::ADDRESS_OF, base,
+                             type::make_pointer(idx->base->type->base));
+        }
         operand index = gen_expr(*idx->index);
+        if (index.type && index.type->is_integer() &&
+            index.type->size() < type::make_int()->size()) {
+            index = emit_unop(icode_op::CAST, index, type::make_int());
+        }
         type_ptr elem_type = idx->type ? idx->type : type::make_int();
         int elem_sz = elem_type->size();
         if (elem_sz > 1) {
@@ -68,6 +103,7 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
             index = emit_binop(icode_op::MUL, index, scale, index.type);
         }
         operand addr = emit_binop(icode_op::ADD, base, index, type::make_pointer(elem_type));
+        src = coerce_for_store(src, elem_type);
         icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = addr; ic.left = src; emit(ic);
         return src;
     }
@@ -76,7 +112,16 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
 
 void ir_gen::visit(index_expr &e) {
     operand base  = gen_expr(*e.base);
+    if (e.base->type && e.base->type->is_array() && e.base->type->base) {
+        // Array expressions decay to element pointers before index arithmetic.
+        base = emit_unop(icode_op::ADDRESS_OF, base,
+                         type::make_pointer(e.base->type->base));
+    }
     operand index = gen_expr(*e.index);
+    if (index.type && index.type->is_integer() &&
+        index.type->size() < type::make_int()->size()) {
+        index = emit_unop(icode_op::CAST, index, type::make_int());
+    }
 
     type_ptr elem_type = e.type ? e.type : type::make_int();
     int elem_sz = elem_type->size();
@@ -90,8 +135,6 @@ void ir_gen::visit(index_expr &e) {
 }
 
 operand ir_gen::gen_member_ptr(member_expr &e) {
-    operand obj = gen_expr(*e.object);
-
     type_ptr struct_type = e.object->type;
     if (e.is_arrow && struct_type && struct_type->is_ptr())
         struct_type = struct_type->base;
@@ -108,19 +151,68 @@ operand ir_gen::gen_member_ptr(member_expr &e) {
         }
     }
 
-    type_ptr ptr_type = type::make_pointer(field_type);
+    type_ptr struct_ptr_type =
+        type::make_pointer(struct_type ? struct_type : field_type);
+    type_ptr field_ptr_type = type::make_pointer(field_type);
     operand ptr;
     if (e.is_arrow) {
-        ptr = obj;
+        ptr = gen_expr(*e.object);
     } else {
-        ptr = emit_unop(icode_op::ADDRESS_OF, obj, ptr_type);
+        ptr = gen_lvalue_addr(*e.object, struct_ptr_type);
     }
 
     if (field_offset != 0) {
         operand off = operand::make_int(field_offset, type::make_int());
-        ptr = emit_binop(icode_op::ADD, ptr, off, ptr_type);
+        ptr = emit_binop(icode_op::ADD, ptr, off, field_ptr_type);
+    } else {
+        ptr.type = field_ptr_type;
     }
     return ptr;
+}
+
+operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
+    if (auto *id = dynamic_cast<ident_expr*>(&e)) {
+        if (id->sym) {
+            operand obj = sym_to_operand(*id->sym, id->type);
+            return emit_unop(icode_op::ADDRESS_OF, obj, ptr_t);
+        }
+    }
+
+    if (auto *deref = dynamic_cast<unary_expr*>(&e)) {
+        if (deref->op == unary_op::DEREF)
+            return gen_expr(*deref->operand);
+    }
+
+    if (auto *idx = dynamic_cast<index_expr*>(&e)) {
+        operand base = gen_expr(*idx->base);
+        if (idx->base->type && idx->base->type->is_array() &&
+            idx->base->type->base) {
+            base = emit_unop(icode_op::ADDRESS_OF, base,
+                             type::make_pointer(idx->base->type->base));
+        }
+
+        operand index = gen_expr(*idx->index);
+        if (index.type && index.type->is_integer() &&
+            index.type->size() < type::make_int()->size()) {
+            index = emit_unop(icode_op::CAST, index, type::make_int());
+        }
+
+        type_ptr elem_type = e.type ? e.type : type::make_int();
+        int elem_sz = elem_type->size();
+        if (elem_sz > 1) {
+            operand scale = operand::make_int(elem_sz, type::make_int());
+            index = emit_binop(icode_op::MUL, index, scale, index.type);
+        }
+
+        return emit_binop(icode_op::ADD, base, index,
+                          ptr_t ? ptr_t : type::make_pointer(elem_type));
+    }
+
+    if (auto *mem = dynamic_cast<member_expr*>(&e))
+        return gen_member_ptr(*mem);
+
+    operand obj = gen_expr(e);
+    return emit_unop(icode_op::ADDRESS_OF, obj, ptr_t);
 }
 
 void ir_gen::visit(member_expr &e) {

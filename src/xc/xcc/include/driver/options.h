@@ -18,20 +18,11 @@
 //
 
 #pragma once
+#include "opt/opt_settings.h"
 #include <string>
 #include <vector>
 
 namespace xcc {
-
-//
-// Optimization level.  Matches GCC -O flag numbering.
-// Peephole optimization is activated at O1 and above.
-//
-enum class opt_level {
-    O0 = 0, // no optimization
-    O1 = 1, // peephole rules
-    O2 = 2, // IR optimization pipeline + backend register allocation
-};
 
 //
 // Target assembler dialect.  Selected with --mode=<name>.
@@ -56,6 +47,7 @@ struct options {
 
     // Optimization
     opt_level                opt       = opt_level::O0;
+    optimization_settings    opt_settings = optimization_settings::for_level(opt_level::O0);
 
     // Assembler dialect
     asm_dialect              dialect   = asm_dialect::SDASZ80;
@@ -68,6 +60,7 @@ struct options {
     std::vector<std::string> defines;
 
     bool                     debug = false; // -g: emit debug info (DWARF 2 for gnuas, SDCC ;! for sdasz80)
+    bool                     dump_ir = false; // --dump-ir: print lowered IR to stderr
 
     // Use IX as the frame pointer (always true for now)
     bool                     use_ix_fp = true;

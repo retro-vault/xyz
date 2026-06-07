@@ -81,6 +81,7 @@ protected:
     static void emit_store_modern_result(z80_gen &g, const icode &ic);
     static void spill_fastcall_receive(z80_gen &g, const icode &ic);
     static void spill_modern_receive(z80_gen &g, const icode &ic);
+    static void materialize_modern_receive(z80_gen &g, const icode &ic);
     static void spill_leading_receives(z80_gen &g, const ir_function &fn,
                                        void (*spill_one)(z80_gen &, const icode &));
 };

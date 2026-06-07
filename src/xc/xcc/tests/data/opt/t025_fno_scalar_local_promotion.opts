@@ -1,0 +1,1 @@
+-S -O2 -fno-function-const-eval -fno-scalar-local-promotion

@@ -5,11 +5,11 @@
 
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=5, stack_params=0)
+	; sdcccall(1) prologue: main (locals=5, temp_frame=10, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-5
+	ld	hl, #-15
 	add	hl, sp
 	ld	sp, hl
 	ld	hl, #1000
@@ -18,8 +18,6 @@ _main:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	ld	a, l
-	dec	sp
-	dec	sp
 	ld	-7(ix), a
 	ld	a, -7(ix)
 	ld	-3(ix), a
@@ -28,8 +26,6 @@ _main:
 	rlca
 	sbc	a, a
 	ld	h, a
-	dec	sp
-	dec	sp
 	ld	-9(ix), l
 	ld	-8(ix), h
 	ld	l, -9(ix)
@@ -44,8 +40,6 @@ _main:
 	cpl
 	ld	h, a
 	inc	hl
-	dec	sp
-	dec	sp
 	ld	-11(ix), l
 	ld	-10(ix), h
 	ld	l, -5(ix)
@@ -56,18 +50,18 @@ _main:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_89383
-	ld	hl, #0
-	jp	__cmp_e_30886
-__cmp_t_89383:
 	ld	hl, #1
-__cmp_e_30886:
-	dec	sp
-	dec	sp
+	jp	z, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
 	ld	-13(ix), l
 	ld	-12(ix), h
 	ld	l, -13(ix)
 	ld	h, -12(ix)
+	ld	-15(ix), l
+	ld	-14(ix), h
+	ld	l, -15(ix)
+	ld	h, -14(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

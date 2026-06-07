@@ -148,8 +148,13 @@ private:
     static uint16_t hex16(const std::string& s) { return static_cast<uint16_t>(std::stoul(s, nullptr, 16)); }
     static uint8_t  hex8 (const std::string& s) { return static_cast<uint8_t> (std::stoul(s, nullptr, 16)); }
     static std::vector<std::string> split(const std::string& s) {
-        std::vector<std::string> out; std::istringstream iss(s); std::string tok;
-        while (iss >> tok) out.push_back(tok); return out;
+        std::vector<std::string> out;
+        std::istringstream iss(s);
+        std::string tok;
+        while (iss >> tok) {
+            out.push_back(tok);
+        }
+        return out;
     }
     static std::string trim(const std::string& s) {
         const auto a = s.find_first_not_of(" \t\r\n");

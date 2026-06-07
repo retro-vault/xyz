@@ -26,6 +26,7 @@ Source (.c)
 │  IR (three-address code)                         │
 │                                                  │
 │  IrGen          AST → ICode stream               │
+│  IRModOpt       TU-local static/helper cleanup   │
 │  IRModule       list of IRFunctions              │
 │  ICode ops:     ASSIGN, ADD, SUB, MUL, CALL,    │
 │                 IFX, GOTO, LABEL, SEND, RECEIVE  │
@@ -106,7 +107,8 @@ xcc [options] <input.c> [-o output]
   -S                 Emit assembly (default)
   -O0                No optimization (default)
   -O1                Enable peephole optimizer
-  -O2                Reserved (same as -O1 for now)
+  -O2                Enable general optimization
+  -Os                Enable size optimization
   -I<dir>            Add include directory
   -D<macro>[=val]    Define macro
   -std=c11           Language standard (only c11 supported)

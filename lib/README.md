@@ -1,32 +1,44 @@
 # Libraries
 
-This directory contains the host-side debugger libraries built in this
-repo.
+This directory contains the reusable libraries used by the host-side tools
+and the target toolchain.
 
-## Components
+## Current Libraries
 
-[lib/xgdb/README.md](/home/tstih/data/retro-vault/xyz/lib/xgdb/README.md)
+- `lib/rsp/`
+  GDB Remote Serial Protocol transport used by `xgdb` and `xgdb-z80`
+- `lib/xgdb/`
+  debugger-side document model and disassembly library
+- `lib/xbfd/`
+  object, binary, and debug-info reader/writer support
+- `lib/xz80/`
+  Z80 CPU and disassembly support library with tests
+- `lib/libc/`
+  target-side C library headers and archive for Z80 programs
 
-- linked debug database model plus disassembly helpers
-- pluggable disassembler interface
-- Z80 decoder plus SDCC-style formatter
+Public headers live in library-local include trees such as
+`lib/<name>/include/` and are staged into:
 
-`lib/rsp`
-
-- remote debugger transport library
-- GDB remote serial protocol server and target interface
-- shared transport used by `xgdb` and `xgdb-z80`
+- `bin/include/` for host-side libraries
+- `bin/include/z80/` for target-side libc headers
 
 ## Build
 
-Build both libraries:
+Build all libraries:
 
 ```sh
 make -C lib
 ```
 
-Run the `xgdb` library tests individually:
+Useful focused commands:
 
 ```sh
 make -C lib/xgdb test
+make -C lib/xz80 test
+make -C lib/libc
 ```
+
+## Linked Docs
+
+- [librsp](rsp/README.md)
+- [libxgdb](xgdb/README.md)

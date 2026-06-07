@@ -70,6 +70,10 @@ void sdasz80_emitter::dw(int val) {
     out_ << "\t.dw " << val << "\n";
 }
 
+void sdasz80_emitter::dw_sym(const std::string &name) {
+    out_ << "\t.dw " << name << "\n";
+}
+
 void sdasz80_emitter::dl(int val) {
     out_ << "\t.dl " << val << "\n";
 }

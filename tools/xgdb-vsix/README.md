@@ -1,43 +1,50 @@
 # xgdb VSIX
 
-This project provides a minimal Visual Studio Code debugger extension for
+This directory contains the Visual Studio Code extension scaffolding for
 `xgdb`.
 
-It does not implement a debug adapter itself. Instead, it launches:
+## Current Status
 
-```text
-xgdb --interpreter=dap --quiet
-```
+This is not yet a supported end-to-end debugger workflow.
 
-and lets VS Code speak DAP directly with `xgdb` over stdio.
+What exists today:
+
+- a VS Code extension manifest that contributes the `xgdb` debugger type
+- an adapter launcher in `extension.js`
+- local packaging and staging into `bin/pkg/vsix/`
+
+What is not aligned yet:
+
+- the extension launcher currently tries `xgdb --interpreter=dap --quiet`
+- the current `xgdb` command-line entry point only exposes `cli` and `mi`
+- the extension manifest still models a `symbols` / `.xgdb` input, while
+  current debugger flows are centered on `.cdb` plus optional `.map`
+
+So the honest state is:
+
+- packaging the VSIX works
+- the extension source is a useful starting point
+- native F5 debugging through this VSIX is still in progress
 
 ## Layout
 
-- `package.json` declares the `xgdb` debugger type.
-- `extension.js` starts `xgdb` as the debug adapter executable.
-- `.vscode/launch.json` launches an Extension Development Host against the
-  `tests/debug` sieve sample workspace.
+- `package.json` declares the `xgdb` debugger type and package metadata
+- `extension.js` launches `xgdb` as the adapter executable
+- `.vscode/launch.json` is for extension-development testing
 
-## Debug Configuration Fields
+## Current Manifest Fields
 
-- `program`: Target binary image.
-- `symbols`: `.xgdb` symbols file.
-- `remoteTarget`: Remote target in `host:port` format.
-- `debuggerPath`: Path to the `xgdb` executable.
-- `cwd`: Working directory used to launch `xgdb`.
-- `stopOnEntry`: Stop immediately after launch or attach.
+The extension manifest currently defines these configuration fields:
 
-The extension does not start an emulator or target process for you.
-Your configured `remoteTarget` is expected to already be listening.
+- `program`
+- `symbols`
+- `remoteTarget`
+- `debuggerPath`
+- `cwd`
+- `stopOnEntry`
 
-Current debugger-side behavior worth knowing:
-
-- if the linked `.xgdb` file has no real source file for a library
-  function, `xgdb` will not invent one
-- in that case VS Code may switch to disassembly-oriented navigation for
-  that frame
-- `xgdb` now supports the DAP `disassemble` request, so assembly fallback
-  is available instead of failing source lookup outright
+Treat that schema as provisional until the debugger-side DAP path is wired
+through the live `xgdb` binary.
 
 ## Local Validation
 
@@ -65,6 +72,3 @@ and stages the final package at:
 
 The VSIX version comes from `VSIX_VERSION` in the repository root
 `Makefile`, which defaults to `PACKAGE_VERSION`.
-
-You can still run the extension directly in VS Code using the included
-Extension Development Host launch config.

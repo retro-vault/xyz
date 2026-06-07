@@ -18,6 +18,7 @@
         .globl  __string_scan_nul
         .globl  __string_copy_cstr
         .globl  __string_char_in_set
+        .globl  __string_fold_lower
 
         .area   _CODE
 
@@ -110,4 +111,18 @@ __string_char_in_set_found:
 __string_char_in_set_not_found:
         pop     bc
         inc     a
+        ret
+
+        ; __string_fold_lower
+        ; inputs:  A = ASCII byte
+        ; outputs: A = tolower(byte) for 'A'..'Z', unchanged otherwise
+        ; clobbers: F
+        ; preserves: BC, DE, HL
+__string_fold_lower::
+        cp      #0x41                   ; < 'A' ?
+        jr      c,__string_fold_lower_done
+        cp      #0x5b                   ; > 'Z' ?  ('Z'+1 = 0x5B)
+        jr      nc,__string_fold_lower_done
+        add     a,#0x20                 ; uppercase -> lowercase
+__string_fold_lower_done:
         ret

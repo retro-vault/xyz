@@ -10,7 +10,7 @@ _aligned_var:
 
 	.globl _get_align
 _get_align:
-	; sdcccall(1) prologue: get_align (locals=0, stack_params=0)
+	; sdcccall(1) prologue: get_align (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -21,6 +21,12 @@ _get_align:
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	ex	de, hl
 	jp	__get_align_end
 __get_align_end:

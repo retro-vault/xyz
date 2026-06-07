@@ -5,11 +5,11 @@
 
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=10, stack_params=0)
+	; sdcccall(1) prologue: main (locals=10, temp_frame=22, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-10
+	ld	hl, #-32
 	add	hl, sp
 	ld	sp, hl
 	ld	hl, #15
@@ -30,8 +30,6 @@ _main:
 	ld	a, h
 	and	a, d
 	ld	h, a
-	dec	sp
-	dec	sp
 	ld	-12(ix), l
 	ld	-11(ix), h
 	ld	l, -12(ix)
@@ -40,17 +38,12 @@ _main:
 	ld	-5(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
-	ld	hl, #240
-	pop	de
 	ld	a, l
-	or	a, e
+	or	#240
 	ld	l, a
 	ld	a, h
-	or	a, d
+	or	#0
 	ld	h, a
-	dec	sp
-	dec	sp
 	ld	-14(ix), l
 	ld	-13(ix), h
 	ld	l, -14(ix)
@@ -59,17 +52,12 @@ _main:
 	ld	-7(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
-	ld	hl, #255
-	pop	de
 	ld	a, l
-	xor	a, e
+	xor	#255
 	ld	l, a
 	ld	a, h
-	xor	a, d
+	xor	#0
 	ld	h, a
-	dec	sp
-	dec	sp
 	ld	-16(ix), l
 	ld	-15(ix), h
 	ld	l, -16(ix)
@@ -83,14 +71,10 @@ _main:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_89383
-	ld	hl, #0
-	jp	__cmp_e_30886
-__cmp_t_89383:
 	ld	hl, #1
-__cmp_e_30886:
-	dec	sp
-	dec	sp
+	jp	z, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
 	ld	-18(ix), l
 	ld	-17(ix), h
 	ld	l, -18(ix)
@@ -100,14 +84,10 @@ __cmp_e_30886:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	nz, __cmp_t_92777
-	ld	hl, #0
-	jp	__cmp_e_36915
-__cmp_t_92777:
 	ld	hl, #1
-__cmp_e_36915:
-	dec	sp
-	dec	sp
+	jp	nz, __cmp_e_30886
+	dec	hl
+__cmp_e_30886:
 	ld	-20(ix), l
 	ld	-19(ix), h
 	ld	l, -20(ix)
@@ -124,14 +104,10 @@ __xcc_L3:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_47793
-	ld	hl, #0
-	jp	__cmp_e_38335
-__cmp_t_47793:
 	ld	hl, #1
-__cmp_e_38335:
-	dec	sp
-	dec	sp
+	jp	z, __cmp_e_92777
+	dec	hl
+__cmp_e_92777:
 	ld	-22(ix), l
 	ld	-21(ix), h
 	ld	l, -22(ix)
@@ -141,14 +117,10 @@ __cmp_e_38335:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	nz, __cmp_t_85386
-	ld	hl, #0
-	jp	__cmp_e_60492
-__cmp_t_85386:
 	ld	hl, #1
-__cmp_e_60492:
-	dec	sp
-	dec	sp
+	jp	nz, __cmp_e_36915
+	dec	hl
+__cmp_e_36915:
 	ld	-24(ix), l
 	ld	-23(ix), h
 	jp	__xcc_L4
@@ -164,14 +136,10 @@ __xcc_L4:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	nz, __cmp_t_16649
-	ld	hl, #0
-	jp	__cmp_e_41421
-__cmp_t_16649:
 	ld	hl, #1
-__cmp_e_41421:
-	dec	sp
-	dec	sp
+	jp	nz, __cmp_e_47793
+	dec	hl
+__cmp_e_47793:
 	ld	-26(ix), l
 	ld	-25(ix), h
 	ld	l, -26(ix)
@@ -188,14 +156,10 @@ __xcc_L1:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_2362
-	ld	hl, #0
-	jp	__cmp_e_90027
-__cmp_t_2362:
 	ld	hl, #1
-__cmp_e_90027:
-	dec	sp
-	dec	sp
+	jp	z, __cmp_e_38335
+	dec	hl
+__cmp_e_38335:
 	ld	-28(ix), l
 	ld	-27(ix), h
 	ld	l, -28(ix)
@@ -205,14 +169,10 @@ __cmp_e_90027:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	nz, __cmp_t_68690
-	ld	hl, #0
-	jp	__cmp_e_20059
-__cmp_t_68690:
 	ld	hl, #1
-__cmp_e_20059:
-	dec	sp
-	dec	sp
+	jp	nz, __cmp_e_85386
+	dec	hl
+__cmp_e_85386:
 	ld	-30(ix), l
 	ld	-29(ix), h
 	jp	__xcc_L5
@@ -223,6 +183,10 @@ __xcc_L0:
 __xcc_L5:
 	ld	l, -30(ix)
 	ld	h, -29(ix)
+	ld	-32(ix), l
+	ld	-31(ix), h
+	ld	l, -32(ix)
+	ld	h, -31(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

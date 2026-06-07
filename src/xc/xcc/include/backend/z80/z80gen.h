@@ -32,6 +32,7 @@
 #include "backend/z80/convention.h"
 #include "backend/z80/debug_info.h"
 #include "ir/icode.h"
+#include "opt/opt_settings.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -48,7 +49,15 @@ namespace xcc {
 enum class temp_home {
     stack,    // spilled to IX frame (default)
     main_bc,  // 16-bit temp in main BC register pair
+    main_hl,  // next-use-only 16-bit temp still live in HL
+    remat_hl, // 16-bit temp rematerialized cheaply into HL on demand
+    main_a,   // next-use-only 8-bit temp still live in A
+    main_c,   // 8-bit temp kept in C across a wider straight-line / branchy window
     alt_a,    // 8-bit temp in A' via ex af,af'
+    arg_a,    // incoming 8-bit argument still live in A
+    arg_l,    // incoming 8-bit argument still live in L
+    arg_hl,   // incoming 16-bit argument still live in HL
+    arg_de,   // incoming 16-bit argument still live in DE
     alt_bc,   // (reserved) 16-bit temp in BC' within an EXX region
     alt_de,   // (reserved) 16-bit temp in DE' within an EXX region
     alt_hl,   // (reserved) 16-bit temp in HL' within an EXX region
@@ -83,10 +92,11 @@ public:
     explicit z80_gen(asm_emitter &asm_out);
 
     //
-    // Set optimization level (0=none, 1=peephole, 2=IR opt + regalloc).
-    // Must be called before emit_module().
-    //
-    void set_opt_level(int level) { opt_level_ = level; }
+    // Set normalized optimization settings. Must be called before
+    // emit_module().
+    void set_opt_settings(const optimization_settings &settings) {
+        opt_settings_ = settings;
+    }
 
     //
     // Attach a debug info emitter (DWARF or SDCC-style).
@@ -102,6 +112,15 @@ public:
     void emit_module(const ir_module &mod);
 
 private:
+    struct pair_cache_state {
+        bool valid = false;
+        std::string key;
+    };
+    struct byte_cache_state {
+        bool valid = false;
+        std::string key;
+    };
+
     asm_emitter      &asm_;
     const ir_function *cur_fn_       = nullptr;
     int               local_bytes_   = 0;
@@ -112,11 +131,20 @@ private:
 
     std::unique_ptr<debug_info_emitter> debug_; // null unless -g was passed
 
-    int opt_level_ = 1; // set by set_opt_level() from the driver
+    optimization_settings opt_settings_ =
+        optimization_settings::for_level(opt_level::O0);
 
     std::unordered_map<int, int>       temp_slots_; // temp_id -> IX offset
     std::unordered_map<int, temp_home> temp_regs_;  // temp_id -> register home (if not stack)
+    std::unordered_map<int, temp_home> incoming_symbol_homes_; // local symbol stack_offset -> incoming arg home
+    std::unordered_map<int, temp_home> symbol_regs_; // local symbol key -> register home (if not stack)
     int next_temp_slot_ = 0;
+    int temp_stack_bytes_ = 0;
+    int temp_frame_bytes_ = 0;
+    size_t cur_ic_index_ = 0;
+    pair_cache_state hl_cache_;
+    pair_cache_state de_cache_;
+    byte_cache_state a_cache_;
 
     // TLS: maps mangled global name → byte offset within the TLS block.
     // Built during emit_module() before globals are emitted.
@@ -132,6 +160,10 @@ private:
     // Populates temp_regs_.  Called at the start of emit_function() for -O2.
     void regalloc_prepass(const ir_function &fn);
 
+    // Compute the total bytes needed for stack-resident TEMP slots and
+    // pre-plan reusable IX spill slots for overlapping temp live ranges.
+    int compute_temp_frame_bytes(const ir_function &fn);
+
     // ----- assembly emission -----------------------------------------
 
     //
@@ -146,6 +178,45 @@ private:
     void emit_label(const std::string &name, bool global = false);
 
     void emit_comment(const char *fmt, ...);
+    void invalidate_pair_cache();
+    void invalidate_hl_cache();
+    void invalidate_de_cache();
+    void invalidate_a_cache();
+    std::string pair_load_cache_key(const operand &op) const;
+    std::string pair_word_cache_key(const operand &op, int word_index) const;
+    std::string pair_ix_addr_cache_key(int off) const;
+    std::string a_load_cache_key(const operand &op) const;
+    void track_emitted_instruction(const std::string &line);
+
+    bool regalloc_enabled() const { return opt_settings_.regalloc; }
+    bool compare_ifx_fusion_enabled() const { return opt_settings_.compare_ifx_fusion; }
+    bool frame_omit_enabled() const { return opt_settings_.frame_omit; }
+    bool temp_frame_prealloc_enabled() const { return opt_settings_.prealloc_temp_frame; }
+    bool switch_jump_tables_enabled() const { return opt_settings_.switch_jump_tables; }
+    bool size_opt_enabled() const { return opt_settings_.level == opt_level::Os; }
+    bool pair_cache_enabled() const {
+        return opt_settings_.level == opt_level::O2 ||
+               opt_settings_.level == opt_level::O3 ||
+               opt_settings_.level == opt_level::Os;
+    }
+    bool a_cache_enabled() const { return pair_cache_enabled(); }
+    int required_frame_bytes() const { return local_bytes_ + temp_stack_bytes_; }
+    int total_frame_bytes() const { return local_bytes_ + temp_frame_bytes_; }
+    static bool temp_home_uses_spill_slot(temp_home home);
+    static int symbol_reg_key(const operand &op);
+    bool symbol_home_in_bc(const operand &op) const;
+    bool needs_frame_without_temps(const ir_function &fn) const;
+    bool can_omit_frame_pointer(const ir_function &fn) const;
+    bool temp_value_used_after(const ir_function &fn, size_t start_idx, int temp_id) const;
+    bool symbol_value_used_after(const ir_function &fn, size_t start_idx,
+                                 const operand &sym) const;
+    const icode *find_temp_def_before(int temp_id, size_t before_idx) const;
+    bool get_zero_extended_u8_source(const operand &op, operand &src) const;
+    bool emit_rematerialize_hl(const operand &op);
+    void maybe_materialize_incoming_arg_temp(const operand &op);
+    void maybe_materialize_incoming_arg_symbol(const operand &op);
+    bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
+    bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);
 
     // ----- module-level emission -------------------------------------
 
@@ -219,6 +290,11 @@ private:
     void gen_bxor        (const icode &ic);
     void gen_bnot        (const icode &ic);
     void gen_shift       (const icode &ic, bool right, bool arithmetic);
+    void gen_rotate      (const icode &ic, bool right);
+    void gen_pack_bytes  (const icode &ic);
+    void emit_compare_branch(const icode &ic, icode_op cmp,
+                             const std::string &true_lbl,
+                             const std::string &false_lbl);
     void gen_compare     (const icode &ic, icode_op cmp);
     void gen_cast        (const icode &ic);
     void gen_float_arith (const icode &ic);
@@ -240,6 +316,11 @@ private:
         char        hi;   // high-byte register: 'h', 'd'
         bool        via_hl; // must use HL+ex for global indirect loads
     };
+
+    void set_pair_cache(const reg_pair &r, const std::string &key);
+    bool pair_cache_matches(const reg_pair &r, const std::string &key) const;
+    void set_a_cache(const std::string &key);
+    bool a_cache_matches(const std::string &key) const;
 
     //
     // Unified 16-bit register-pair load: emit the correct instruction
@@ -287,6 +368,11 @@ private:
     void store_hl(const operand &op);
 
     //
+    // Store DE into the location identified by op.
+    //
+    void store_de(const operand &op);
+
+    //
     // Store A into the location identified by op.
     //
     void store_a(const operand &op);
@@ -298,6 +384,11 @@ private:
     // word_index 0 = lowest 16 bits, 1 = next 16, 2 = bits 32-47, 3 = bits 48-63.
     //
     void load_hl_word(const operand &op, int word_index);
+
+    //
+    // Load 16-bit word at byte-offset word_index*2 from op into DE.
+    //
+    void load_de_word(const operand &op, int word_index);
 
     //
     // Store HL into the 16-bit word at byte-offset word_index*2 in op.

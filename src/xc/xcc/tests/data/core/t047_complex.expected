@@ -4,7 +4,7 @@
 	.area _CODE
 
 _feq:
-	; sdcccall(1) prologue: feq (locals=4, stack_params=4)
+	; sdcccall(1) prologue: feq (locals=4, temp_frame=4, stack_params=4)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -12,7 +12,7 @@ _feq:
 	ld	-3(ix), d
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	hl, #-4
+	ld	hl, #-8
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param a at -4(ix)
@@ -25,18 +25,18 @@ _feq:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_89383
-	ld	hl, #0
-	jp	__cmp_e_30886
-__cmp_t_89383:
 	ld	hl, #1
-__cmp_e_30886:
-	dec	sp
-	dec	sp
+	jp	z, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
 	ld	-6(ix), l
 	ld	-5(ix), h
 	ld	l, -6(ix)
 	ld	h, -5(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
 	ex	de, hl
 	jp	__feq_end
 __feq_end:
@@ -52,25 +52,21 @@ __feq_end:
 	ret
 	.globl _test_complex_add
 _test_complex_add:
-	; sdcccall(1) prologue: test_complex_add (locals=30, stack_params=0)
+	; sdcccall(1) prologue: test_complex_add (locals=30, temp_frame=74, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-30
+	ld	hl, #-104
 	add	hl, sp
 	ld	sp, hl
 	push	ix
 	pop	hl
-	ld	de, #-8
-	add	hl, de
-	dec	sp
-	dec	sp
+	ld	bc, #-8
+	add	hl, bc
 	ld	-32(ix), l
 	ld	-31(ix), h
 	ld	l, -32(ix)
 	ld	h, -31(ix)
-	dec	sp
-	dec	sp
 	ld	-34(ix), l
 	ld	-33(ix), h
 	ld	l, -34(ix)
@@ -79,16 +75,12 @@ _test_complex_add:
 	ld	-25(ix), h
 	push	ix
 	pop	hl
-	ld	de, #-16
-	add	hl, de
-	dec	sp
-	dec	sp
+	ld	bc, #-16
+	add	hl, bc
 	ld	-36(ix), l
 	ld	-35(ix), h
 	ld	l, -36(ix)
 	ld	h, -35(ix)
-	dec	sp
-	dec	sp
 	ld	-38(ix), l
 	ld	-37(ix), h
 	ld	l, -38(ix)
@@ -98,22 +90,19 @@ _test_complex_add:
 	.globl __mul16
 	ld	hl, #0
 	push	hl
-	ld	hl, #2
+	ld	hl, #4
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-40(ix), l
 	ld	-39(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
+	push	hl
 	ld	e, -40(ix)
 	ld	d, -39(ix)
+	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-42(ix), l
 	ld	-41(ix), h
 	ld	l, -42(ix)
@@ -128,22 +117,19 @@ _test_complex_add:
 	.globl __mul16
 	ld	hl, #1
 	push	hl
-	ld	hl, #2
+	ld	hl, #4
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-44(ix), l
 	ld	-43(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
+	push	hl
 	ld	e, -44(ix)
 	ld	d, -43(ix)
+	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-46(ix), l
 	ld	-45(ix), h
 	ld	l, -46(ix)
@@ -158,22 +144,19 @@ _test_complex_add:
 	.globl __mul16
 	ld	hl, #0
 	push	hl
-	ld	hl, #2
+	ld	hl, #4
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-48(ix), l
 	ld	-47(ix), h
 	ld	l, -28(ix)
 	ld	h, -27(ix)
+	push	hl
 	ld	e, -48(ix)
 	ld	d, -47(ix)
+	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-50(ix), l
 	ld	-49(ix), h
 	ld	l, -50(ix)
@@ -188,22 +171,19 @@ _test_complex_add:
 	.globl __mul16
 	ld	hl, #1
 	push	hl
-	ld	hl, #2
+	ld	hl, #4
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-52(ix), l
 	ld	-51(ix), h
 	ld	l, -28(ix)
 	ld	h, -27(ix)
+	push	hl
 	ld	e, -52(ix)
 	ld	d, -51(ix)
+	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-54(ix), l
 	ld	-53(ix), h
 	ld	l, -54(ix)
@@ -233,12 +213,7 @@ _test_complex_add:
 	pop	bc
 	ld	b, h
 	ld	c, l
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-58(ix), l
 	ld	-57(ix), h
 	ld	h, b
@@ -263,26 +238,13 @@ _test_complex_add:
 	pop	bc
 	ld	b, h
 	ld	c, l
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-62(ix), l
 	ld	-61(ix), h
 	ld	h, b
 	ld	l, c
 	ld	-60(ix), l
 	ld	-59(ix), h
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
 	ld	l, -58(ix)
 	ld	h, -57(ix)
 	ld	-70(ix), l
@@ -317,16 +279,12 @@ _test_complex_add:
 	ld	-17(ix), h
 	push	ix
 	pop	hl
-	ld	de, #-24
-	add	hl, de
-	dec	sp
-	dec	sp
+	ld	bc, #-24
+	add	hl, bc
 	ld	-72(ix), l
 	ld	-71(ix), h
 	ld	l, -72(ix)
 	ld	h, -71(ix)
-	dec	sp
-	dec	sp
 	ld	-74(ix), l
 	ld	-73(ix), h
 	ld	l, -74(ix)
@@ -336,22 +294,19 @@ _test_complex_add:
 	.globl __mul16
 	ld	hl, #0
 	push	hl
-	ld	hl, #2
+	ld	hl, #4
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-76(ix), l
 	ld	-75(ix), h
 	ld	l, -30(ix)
 	ld	h, -29(ix)
+	push	hl
 	ld	e, -76(ix)
 	ld	d, -75(ix)
+	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-78(ix), l
 	ld	-77(ix), h
 	ld	l, -78(ix)
@@ -359,64 +314,51 @@ _test_complex_add:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ex	de, hl
-	dec	sp
-	dec	sp
-	ld	-80(ix), l
-	ld	-79(ix), h
-	ld	l, -80(ix)
-	ld	h, -79(ix)
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	ld	-84(ix), l
-	ld	-83(ix), h
+	ld	-82(ix), e
+	ld	-81(ix), d
 	ld	l, 2(ix)
 	ld	h, 3(ix)
 	push	hl
 	ld	l, 0(ix)
 	ld	h, 1(ix)
 	push	hl
-	ld	l, -84(ix)
-	ld	h, -83(ix)
-	push	hl
 	ld	l, -82(ix)
 	ld	h, -81(ix)
+	push	hl
+	ld	l, -80(ix)
+	ld	h, -79(ix)
 	pop	de
 	.globl _feq
 	call	_feq
 	push	de
 	pop	hl
-	dec	sp
-	dec	sp
-	ld	-86(ix), l
-	ld	-85(ix), h
-	ld	l, -86(ix)
-	ld	h, -85(ix)
+	ld	-84(ix), l
+	ld	-83(ix), h
+	ld	l, -84(ix)
+	ld	h, -83(ix)
 	push	hl
 	ld	hl, #0
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_92777
-	ld	hl, #0
-	jp	__cmp_e_36915
-__cmp_t_92777:
 	ld	hl, #1
-__cmp_e_36915:
-	dec	sp
-	dec	sp
-	ld	-88(ix), l
-	ld	-87(ix), h
-	ld	l, -88(ix)
-	ld	h, -87(ix)
+	jp	z, __cmp_e_30886
+	dec	hl
+__cmp_e_30886:
+	ld	-86(ix), l
+	ld	-85(ix), h
+	ld	l, -86(ix)
+	ld	h, -85(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L0
 	jp	__xcc_L2
 __xcc_L0:
 	ld	hl, #0
+	ld	-88(ix), l
+	ld	-87(ix), h
+	ld	l, -88(ix)
+	ld	h, -87(ix)
 	ex	de, hl
 	jp	__test_complex_add_end
 	jp	__xcc_L2
@@ -424,22 +366,19 @@ __xcc_L2:
 	.globl __mul16
 	ld	hl, #1
 	push	hl
-	ld	hl, #2
+	ld	hl, #4
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-90(ix), l
 	ld	-89(ix), h
 	ld	l, -30(ix)
 	ld	h, -29(ix)
+	push	hl
 	ld	e, -90(ix)
 	ld	d, -89(ix)
+	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
 	ld	-92(ix), l
 	ld	-91(ix), h
 	ld	l, -92(ix)
@@ -447,69 +386,60 @@ __xcc_L2:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ex	de, hl
-	dec	sp
-	dec	sp
-	ld	-94(ix), l
-	ld	-93(ix), h
-	ld	l, -94(ix)
-	ld	h, -93(ix)
-	dec	sp
-	dec	sp
-	dec	sp
-	dec	sp
-	ld	-98(ix), l
-	ld	-97(ix), h
+	ld	-96(ix), e
+	ld	-95(ix), d
 	ld	l, 2(ix)
 	ld	h, 3(ix)
 	push	hl
 	ld	l, 0(ix)
 	ld	h, 1(ix)
 	push	hl
-	ld	l, -98(ix)
-	ld	h, -97(ix)
-	push	hl
 	ld	l, -96(ix)
 	ld	h, -95(ix)
+	push	hl
+	ld	l, -94(ix)
+	ld	h, -93(ix)
 	pop	de
 	.globl _feq
 	call	_feq
 	push	de
 	pop	hl
-	dec	sp
-	dec	sp
-	ld	-100(ix), l
-	ld	-99(ix), h
-	ld	l, -100(ix)
-	ld	h, -99(ix)
+	ld	-98(ix), l
+	ld	-97(ix), h
+	ld	l, -98(ix)
+	ld	h, -97(ix)
 	push	hl
 	ld	hl, #0
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_47793
-	ld	hl, #0
-	jp	__cmp_e_38335
-__cmp_t_47793:
 	ld	hl, #1
-__cmp_e_38335:
-	dec	sp
-	dec	sp
-	ld	-102(ix), l
-	ld	-101(ix), h
-	ld	l, -102(ix)
-	ld	h, -101(ix)
+	jp	z, __cmp_e_92777
+	dec	hl
+__cmp_e_92777:
+	ld	-100(ix), l
+	ld	-99(ix), h
+	ld	l, -100(ix)
+	ld	h, -99(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L3
 	jp	__xcc_L5
 __xcc_L3:
 	ld	hl, #0
+	ld	-102(ix), l
+	ld	-101(ix), h
+	ld	l, -102(ix)
+	ld	h, -101(ix)
 	ex	de, hl
 	jp	__test_complex_add_end
 	jp	__xcc_L5
 __xcc_L5:
 	ld	hl, #1
+	ld	-104(ix), l
+	ld	-103(ix), h
+	ld	l, -104(ix)
+	ld	h, -103(ix)
 	ex	de, hl
 	jp	__test_complex_add_end
 __test_complex_add_end:
@@ -519,7 +449,7 @@ __test_complex_add_end:
 	ret
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=0, stack_params=0)
+	; sdcccall(1) prologue: main (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -538,12 +468,10 @@ _main:
 	pop	de
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_t_85386
-	ld	hl, #0
-	jp	__cmp_e_60492
-__cmp_t_85386:
 	ld	hl, #1
-__cmp_e_60492:
+	jp	z, __cmp_e_36915
+	dec	hl
+__cmp_e_36915:
 	dec	sp
 	dec	sp
 	ld	-4(ix), l
@@ -556,11 +484,23 @@ __cmp_e_60492:
 	jp	__xcc_L8
 __xcc_L6:
 	ld	hl, #0
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L8
 __xcc_L8:
 	ld	hl, #1
+	dec	sp
+	dec	sp
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

@@ -58,4 +58,19 @@ extern char *strstr(const char *s1, const char *s2);
 extern char *strtok(char *restrict s1, const char *restrict s2);
 extern char *strerror(int errnum);
 
+/* POSIX / GNU / BSD extensions (implemented in assembly). */
+extern char *stpcpy(char *restrict s1, const char *restrict s2);
+extern char *stpncpy(char *restrict s1, const char *restrict s2, size_t n);
+extern void *mempcpy(void *restrict s1, const void *restrict s2, size_t n);
+extern void *memrchr(const void *s, int c, size_t n);
+extern void *rawmemchr(const void *s, int c);
+extern char *strchrnul(const char *s, int c);
+extern int   strcasecmp(const char *s1, const char *s2);
+extern int   strncasecmp(const char *s1, const char *s2, size_t n);
+extern size_t strlcpy(char *restrict s1, const char *restrict s2, size_t n);
+extern size_t strlcat(char *restrict s1, const char *restrict s2, size_t n);
+extern void   swab(const void *restrict s1, void *restrict s2, size_t n);
+extern char *strsep(char **stringp, const char *delim);
+extern char *strcasestr(const char *haystack, const char *needle);
+
 #endif /* __STRING_H__ */

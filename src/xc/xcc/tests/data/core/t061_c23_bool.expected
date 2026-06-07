@@ -5,34 +5,46 @@
 
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=2, stack_params=0)
+	; sdcccall(1) prologue: main (locals=2, temp_frame=10, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-2
+	ld	hl, #-12
 	add	hl, sp
 	ld	sp, hl
 	ld	a, #1
 	ld	-1(ix), a
 	ld	a, #0
 	ld	-2(ix), a
-	ld	l, -1(ix)
-	ld	h, 0(ix)
-	ld	e, -2(ix)
-	ld	d, -1(ix)
-	add	hl, de
-	dec	sp
-	dec	sp
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	l, -4(ix)
-	ld	h, -3(ix)
-	dec	sp
-	dec	sp
+	ld	a, -2(ix)
+	ld	l, a
+	ld	h, #0
 	ld	-6(ix), l
 	ld	-5(ix), h
-	ld	l, -6(ix)
-	ld	h, -5(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	e, -6(ix)
+	ld	d, -5(ix)
+	pop	hl
+	add	hl, de
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

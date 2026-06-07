@@ -2,7 +2,7 @@
 	.area	_CODE
 	.globl	_f
 _f:
-	; sdcccall(1) prologue: f (locals=4, stack_params=0)
+	; sdcccall(1) prologue: f (locals=4, temp_frame=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -10,7 +10,7 @@ _f:
 	ld	-1(ix), h
 	ld	-4(ix), e
 	ld	-3(ix), d
-	ld	hl, #-4
+	ld	hl, #-10
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param a at -2(ix)
@@ -21,12 +21,18 @@ _f:
 	ld	h, -1 (ix)
 	or	a, a
 	sbc	hl, de
-	jp	p, __xcc_L1
+	ld	hl, #1
+	jp	m, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	a, h
+	or	a, l
+	jp	z, __xcc_L1
 __xcc_L0:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	dec	sp
-	dec	sp
 	ld	-8(ix), l
 	ld	-7(ix), h
 	jp	__xcc_L2
@@ -38,6 +44,8 @@ __xcc_L1:
 __xcc_L2:
 	ld	l, -8(ix)
 	ld	h, -7(ix)
+	ld	-10(ix), l
+	ld	-9(ix), h
 	ex	de, hl
 __f_end:
 	; epilogue: f

@@ -74,6 +74,38 @@ make -C lib/xgdb test
 make -C tests/mdr-emu test
 bash src/xc/xcc/tests/run_tests.sh ./bin/bin/xcc
 bash src/xc/xcc/tests/run_exec_tests.sh ./bin/bin/xcc
+make -C src/xc/xcc bench
+```
+
+## Codegen Benchmarks
+
+For a repeatable compiler-size benchmark against SDCC that measures only
+generated translation-unit code, use:
+
+```sh
+bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc
+```
+
+By default this benchmarks the `exec/int` suite with `sdcccall(1)` and
+records `xcc -O0/-O1/-O2/-Os` against SDCC `--opt-code-size` and
+`--opt-code-speed`.
+
+Outputs land under:
+
+```sh
+build/xc/xcc/bench/codegen/int/
+```
+
+The benchmark writes:
+
+- `results.csv` with per-test byte counts
+- `summary.md` with totals, deltas, and the `-Os` versus `-O2` comparison
+- `versions.txt` with the exact tool versions used
+
+To cover all exec suites instead of only integer tests:
+
+```sh
+bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc --suite all
 ```
 
 ## Practical Refactoring Checklist

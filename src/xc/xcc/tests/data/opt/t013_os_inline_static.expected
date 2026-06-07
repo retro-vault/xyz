@@ -1,0 +1,32 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_use_double
+_use_double:
+	; sdcccall(1) prologue: use_double (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	dec	sp
+	dec	sp
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	pop	hl
+	add	hl, de
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	inc	hl
+	dec	sp
+	dec	sp
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ex	de, hl
+__use_double_end:
+	; epilogue: use_double
+	ld	sp, ix
+	pop	ix
+	ret

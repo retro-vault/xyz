@@ -10,7 +10,7 @@
 namespace xcc {
 
 void z80_gen::gen_label(const icode &ic) {
-    asm_.label(ic.label_name, false);
+    emit_label(ic.label_name, false);
 }
 
 void z80_gen::gen_goto(const icode &ic) {

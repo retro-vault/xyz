@@ -202,10 +202,51 @@ void sema::visit(call_expr &e) {
 void sema::visit(index_expr &e) {
     if (e.base)  e.base->accept(*this);
     if (e.index) e.index->accept(*this);
+
+    auto set_from_subscriptable = [&](const type_ptr &t) -> bool {
+        if (!t)
+            return false;
+        type_ptr u = t->unqual();
+        if (!u)
+            return false;
+        if ((u->kind == type_kind::ARRAY || u->kind == type_kind::POINTER) && u->base) {
+            e.type = u->base;
+            e.is_lvalue = true;
+            return true;
+        }
+        return false;
+    };
+
+    if (set_from_subscriptable(e.base ? e.base->type : nullptr))
+        return;
+    set_from_subscriptable(e.index ? e.index->type : nullptr);
 }
 
 void sema::visit(member_expr &e) {
     if (e.object) e.object->accept(*this);
+
+    type_ptr st = e.object ? e.object->type : nullptr;
+    if (!st)
+        return;
+
+    st = st->unqual();
+    if (e.is_arrow) {
+        if (st && st->is_ptr())
+            st = st->base ? st->base->unqual() : nullptr;
+        else
+            return;
+    }
+
+    if (!st || (st->kind != type_kind::STRUCT && st->kind != type_kind::UNION))
+        return;
+
+    for (auto &f : st->fields) {
+        if (f.name != e.member)
+            continue;
+        e.type = f.type;
+        e.is_lvalue = true;
+        return;
+    }
 }
 
 void sema::visit(compound_literal_expr &e) {

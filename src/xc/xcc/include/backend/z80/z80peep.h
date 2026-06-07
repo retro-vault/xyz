@@ -6,12 +6,16 @@
 // redundant instructions.  The optimization runs in multiple passes
 // until no more rules fire.
 //
+// The simplest fixed-window peepholes are described in a small
+// structural rule table, while the more context-sensitive patterns stay
+// as custom matchers.
+//
 // Rules target patterns that xcc's code generator commonly produces:
 //
 //   ld r, r                                     — no-op self-load removed
 //   push hl; pop hl                             — redundant push/pop removed
 //   jp label; label:                            — jump to next line removed
-//   jp [cc,] L  (L within ±30 lines)            — replaced with jr (saves 1 byte)
+//   jp [cc,] L  (final displacement in range)   — replaced with jr (saves 1 byte)
 //   or a,a; or a,a                              — duplicate flag test removed
 //   dec sp;dec sp;ld N(ix),l/h;ld l/h,N(ix)    — full temp store+reload elided
 //   ld N(ix),l;ld N+1(ix),h;ld l,N(ix);ld h,…  — redundant 16-bit reload removed
@@ -85,6 +89,10 @@ private:
     // Remove push hl / pop hl pairs with nothing in between.
     bool rule_push_pop_hl(size_t i);
 
+    // call target; ret  →  jp target
+    // call target; label: ret  →  jp target; label: ret
+    bool rule_call_ret_to_jp(size_t i);
+
     // push hl; pop de  →  ex de,hl  (no instructions between)
     bool rule_push_hl_pop_de(size_t i);
 
@@ -124,8 +132,16 @@ private:
     //   →  ld a,h; or a,l; jp z/nz,L   (zero-compare shortcut)
     bool rule_zero_cmp_optimize(size_t i);
 
-    // jp [cc,] L  →  jr [cc,] L  when L is within ±30 lines
-    // (saves 1 byte per branch; jr only supports z/nz/c/nc conditions)
+    // [push hl | ld b,h; ld c,l; ex de,hl]; ld hl,#0; or a,a; sbc hl,de;
+    // ld hl,#1; jr/jp nz,L; dec hl; L:
+    //   →  ld a,h; or a,l; ld hl,#1; jr/jp nz,L; dec hl; L:
+    // Shrinks generic 16-bit "value != 0" boolean materialization when the
+    // tested value is already in HL.
+    bool rule_hl_nonzero_materialize(size_t i);
+
+    // jp [cc,] L  →  jr [cc,] L  when the estimated final displacement is
+    // within JR range. Only unconditional and z/nz/c/nc branches can be
+    // shortened this way.
     bool rule_jp_to_jr(size_t i);
 
     // push hl; pop bc  →  ld b,h; ld c,l  (same size, faster)

@@ -242,11 +242,11 @@ phase_chain() {
     # Build runtime library.
     echo -n "  Building runtime library ... "
     local rt_ok=true
-    for s in "$runtime_dir"/*.s; do
+    while IFS= read -r s; do
         local base
         base=$(basename "${s%.s}")
         "$XAS" --mode=sdcc "$s" -o "$rtdir/${base}.rel" 2>/dev/null || true
-    done
+    done < <(find "$runtime_dir" -type f -name '*.s' | sort)
     "$XAR" rcs "$rtdir/runtime.lib" "$rtdir"/*.rel 2>/dev/null \
         || { echo "${RED}FAILED${RESET}"; rt_ok=false; }
     $rt_ok && echo "${GREEN}ok${RESET}"

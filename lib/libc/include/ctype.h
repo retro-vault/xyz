@@ -32,4 +32,8 @@ extern int isxdigit(int c);
 extern int tolower(int c);
 extern int toupper(int c);
 
+/* POSIX 7-bit ASCII helpers (implemented in assembly). */
+extern int isascii(int c);
+extern int toascii(int c);
+
 #endif /* __CTYPE_H__ */

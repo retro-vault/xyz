@@ -27,10 +27,10 @@ When **receiving** (Spectrum → PC) the header is 7 bytes (no `reserved` word).
 From the repository root:
 
 ```
-make
+make -C tools/serial
 ```
 
-The binary is placed at `bin/bin/tools/serial/serial`.
+The binary is staged at `bin/bin/serial`.
 
 ## Usage
 

@@ -1,0 +1,103 @@
+	.module	xcc_output
+	.area	_CODE
+_sum_to:
+	; sdcccall(1) prologue: sum_to (locals=2, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param n at -2(ix)
+	ld	hl, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+__xcc_L0:
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ex	de, hl
+	ld	hl, #0
+	ex	de, hl
+	or	a, a
+	sbc	hl, de
+	jr	z, __xcc_L2
+	jp	m, __xcc_L2
+__xcc_L1:
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	pop	hl
+	add	hl, de
+	ld	b, h
+	ld	c, l
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	dec	hl
+	ld	b, h
+	ld	c, l
+	ld	-2(ix), l
+	ld	-1(ix), h
+	jr	__xcc_L0
+__xcc_L2:
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__sum_to_end:
+	; epilogue: sum_to
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_use_a
+_use_a:
+	; sdcccall(1) prologue: use_a (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #4
+	.globl	_sum_to
+	call	_sum_to
+	push	de
+	pop	hl
+	ld	b, h
+	ld	c, l
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ex	de, hl
+__use_a_end:
+	; epilogue: use_a
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_use_b
+_use_b:
+	; sdcccall(1) prologue: use_b (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #6
+	.globl	_sum_to
+	call	_sum_to
+	push	de
+	pop	hl
+	ld	b, h
+	ld	c, l
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ex	de, hl
+__use_b_end:
+	; epilogue: use_b
+	ld	sp, ix
+	pop	ix
+	ret

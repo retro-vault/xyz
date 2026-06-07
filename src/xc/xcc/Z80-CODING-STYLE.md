@@ -3,8 +3,9 @@
 This document defines the Z80 assembly style for code in
 `lib/runtime/`, `tests/tools/`, and other hand-written Z80 modules.
 
-The baseline style comes from the imported runtime modules now merged
-under `lib/runtime/`.
+The baseline style comes from the imported runtime modules now grouped
+under `lib/runtime/` into folders such as `int8/`, `int16/`, `int32/`,
+`int64/`, `float/`, `double/`, `common/`, `atomic/`, `jumps/`, and `sys/`.
 
 Those imported files already show several good patterns:
 
@@ -212,11 +213,11 @@ not use prefixes such as `xcc_` or `sdcc_`.
 Use one descriptive naming scheme across the whole runtime:
 
 - plain helper names when there is no conflict:
-  `divsigned.s`, `mullong.s`, `fp.s`
-- `_bridge` for ABI bridge modules:
-  `mul16_bridge.s`, `fsadd_bridge.s`, `call_hl_bridge.s`
-- `_core` only when two helpers would otherwise collide:
-  `fsadd_core.s`, `fsdiv_core.s`
+  `divsigned.s`, `divschar.s`, `mullong.s`, `fp_zero32.s`
+- prefer folding public aliases into the real implementation file instead
+  of creating a trampoline bridge
+- `_core` only when a file is truly private shared machinery; do not use
+  it for the public helper itself
 
 ## 12. Imported Library Policy
 

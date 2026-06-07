@@ -36,6 +36,7 @@ const char *icode_op_name(icode_op op) {
     CASE(ASSIGN); CASE(ADDRESS_OF); CASE(GET_VALUE_AT); CASE(SET_VALUE_AT);
     CASE(ADD); CASE(SUB); CASE(MUL); CASE(DIV); CASE(MOD); CASE(NEG);
     CASE(BAND); CASE(BOR); CASE(BXOR); CASE(BNOT); CASE(SHL); CASE(SHR);
+    CASE(ROL); CASE(ROR); CASE(PACK_BYTES);
     CASE(EQ); CASE(NE); CASE(LT); CASE(LE); CASE(GT); CASE(GE);
     CASE(CAST);
     CASE(FADD); CASE(FSUB); CASE(FMUL); CASE(FDIV);
@@ -123,6 +124,12 @@ void icode::dump() const {
                result.to_string().c_str(),
                result.type ? result.type->to_string().c_str() : "?",
                left.to_string().c_str());
+        break;
+    case icode_op::PACK_BYTES:
+        printf("  %s = pack_bytes(%s,%s)\n",
+               result.to_string().c_str(),
+               left.to_string().c_str(),
+               right.to_string().c_str());
         break;
     default:
         printf("  %s = %s %s %s\n",

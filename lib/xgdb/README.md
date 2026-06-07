@@ -17,9 +17,9 @@ The library is intended for tools such as:
 
 - `xgdb`, when it disassembles target memory and works with the debug model
 
-At the moment the build produces a static archive:
+The library currently builds and stages a static archive at:
 
-- `build/lib/xgdb/libxgdb.a`
+- `bin/lib/libxgdb.a`
 
 ## Public Headers
 

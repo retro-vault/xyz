@@ -79,6 +79,18 @@ extra_opts_for_test() {
     fi
 }
 
+opt_levels_for_test() {
+    local c_file="$1"
+    local base="${c_file%.c}"
+
+    if [[ -f "${base}.levels" ]]; then
+        cat "${base}.levels"
+        return
+    fi
+
+    printf '%s\n' O0 O1 O2
+}
+
 declare -a MODULES=()
 declare -A SEEN=()
 
@@ -105,92 +117,130 @@ resolve_modules() {
         [[ -n "$helper" ]] || continue
         case "$helper" in
         __mul16)
-            add_runtime_module "mul16_bridge.s"
-            add_runtime_module "mulint.s"
+            add_runtime_module "int16/mulint.s"
             ;;
         __div16)
-            add_runtime_module "div16_bridge.s"
-            add_runtime_module "divunsigned.s"
+            add_runtime_module "int16/divunsigned.s"
             ;;
         __mod16)
-            add_runtime_module "mod16_bridge.s"
-            add_runtime_module "divunsigned.s"
-            add_runtime_module "modunsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            add_runtime_module "int16/modunsigned.s"
+            ;;
+        __sdiv16)
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
             ;;
         __divsint)
-            add_runtime_module "divsigned.s"
-            add_runtime_module "divunsigned.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __divschar)
+            add_runtime_module "int8/divschar.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __divsuchar)
+            add_runtime_module "int8/divsuchar.s"
+            add_runtime_module "int8/divschar.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __divuschar)
+            add_runtime_module "int8/divuschar.s"
+            add_runtime_module "int8/divschar.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
             ;;
         __divuint)
-            add_runtime_module "divunsigned.s"
+            add_runtime_module "int16/divunsigned.s"
             ;;
         __smod16)
-            add_runtime_module "smod16.s"
-            add_runtime_module "divunsigned.s"
+            add_runtime_module "int16/smod16.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __modschar)
+            add_runtime_module "int8/modschar.s"
+            add_runtime_module "int8/divschar.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __modsint)
+            add_runtime_module "int16/modsigned.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __modsuchar)
+            add_runtime_module "int8/modsuchar.s"
+            add_runtime_module "int8/divschar.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __moduschar)
+            add_runtime_module "int8/moduschar.s"
+            add_runtime_module "int8/divschar.s"
+            add_runtime_module "int16/divsigned.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        __mulschar)
+            add_runtime_module "int8/mulschar.s"
+            add_runtime_module "int16/mulint.s"
+            ;;
+        __muluschar)
+            add_runtime_module "int8/muluschar.s"
+            add_runtime_module "int16/mulint.s"
+            ;;
+        __mulsuchar)
+            add_runtime_module "int8/mulsuchar.s"
+            add_runtime_module "int16/mulint.s"
             ;;
         __mul32)
-            add_runtime_module "mul32_bridge.s"
-            add_runtime_module "mullong.s"
+            add_runtime_module "int32/mullong.s"
             ;;
         __div32)
-            add_runtime_module "div32_bridge.s"
-            add_runtime_module "divulong.s"
+            add_runtime_module "int32/divulong.s"
             ;;
         __mod32)
-            add_runtime_module "mod32_bridge.s"
-            add_runtime_module "modulong.s"
+            add_runtime_module "int32/modulong.s"
             ;;
         __sdiv32)
-            add_runtime_module "sdiv32_bridge.s"
-            add_runtime_module "divslong.s"
-            add_runtime_module "divulong.s"
+            add_runtime_module "int32/divslong.s"
             ;;
         __smod32)
-            add_runtime_module "smod32_bridge.s"
-            add_runtime_module "modslong.s"
-            add_runtime_module "divulong.s"
+            add_runtime_module "int32/modslong.s"
             ;;
         __fsadd)
-            add_runtime_module "fsadd_bridge.s"
-            add_runtime_module "fsadd_core.s"
-            add_runtime_module "fp.s"
-            add_runtime_module "fppack.s"
-            add_runtime_module "fpret.s"
+            add_runtime_module "float/fsadd.s"
+            add_runtime_module "float/fp_zero32.s"
+            add_runtime_module "float/fppack.s"
             ;;
         __fssub)
-            add_runtime_module "fssub_bridge.s"
-            add_runtime_module "fssub_core.s"
-            add_runtime_module "fsadd_core.s"
-            add_runtime_module "fp.s"
-            add_runtime_module "fppack.s"
-            add_runtime_module "fpret.s"
+            add_runtime_module "float/fssub.s"
+            add_runtime_module "float/fsadd.s"
+            add_runtime_module "float/fp_zero32.s"
+            add_runtime_module "float/fppack.s"
             ;;
         __fsmul)
-            add_runtime_module "fsmul_bridge.s"
-            add_runtime_module "fsmul_core.s"
-            add_runtime_module "fp.s"
-            add_runtime_module "fppack.s"
-            add_runtime_module "fpret.s"
-            add_runtime_module "fpunpack.s"
-            add_runtime_module "fpmant.s"
+            add_runtime_module "float/fsmul.s"
+            add_runtime_module "float/fp_zero32.s"
+            add_runtime_module "float/fppack.s"
+            add_runtime_module "float/fpunpack.s"
+            add_runtime_module "float/fpmant.s"
             ;;
         __fsdiv)
-            add_runtime_module "fsdiv_bridge.s"
-            add_runtime_module "fsdiv_core.s"
-            add_runtime_module "fp.s"
-            add_runtime_module "fppack.s"
-            add_runtime_module "fpret.s"
-            add_runtime_module "fpunpack.s"
-            add_runtime_module "fpmant.s"
+            add_runtime_module "float/fsdiv.s"
+            add_runtime_module "float/fp_zero32.s"
+            add_runtime_module "float/fppack.s"
+            add_runtime_module "float/fpunpack.s"
+            add_runtime_module "float/fpmant.s"
             ;;
         __call_hl)
-            add_runtime_module "call_hl_bridge.s"
+            add_runtime_module "jumps/call_hl_runtime.s"
             ;;
         __sdcc_call_hl)
-            add_runtime_module "call_hl_runtime.s"
+            add_runtime_module "jumps/call_hl_runtime.s"
             ;;
         __sdcc_call_bc)
-            add_runtime_module "call_bc_runtime.s"
+            add_runtime_module "jumps/call_bc_runtime.s"
             ;;
         esac
     done <<< "$helpers"
@@ -328,10 +378,11 @@ build_runner
 mkdir -p "$EXEC_BUILD"
 
 while IFS= read -r c_file; do
-    for opt_level in O0 O1 O2; do
+    while IFS= read -r opt_level; do
+        [[ -n "$opt_level" ]] || continue
         run_one "$c_file" "sdasz80" "$opt_level"
         run_one "$c_file" "gnuas" "$opt_level"
-    done
+    done < <(opt_levels_for_test "$c_file")
 done < <(find "$TEST_ROOT" -type f -name '*.c' | sort)
 
 echo

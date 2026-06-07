@@ -70,6 +70,10 @@ void gnuas_emitter::dw(int val) {
     out_ << "\t.short " << val << "\n";
 }
 
+void gnuas_emitter::dw_sym(const std::string &name) {
+    out_ << "\t.short " << name << "\n";
+}
+
 void gnuas_emitter::dl(int val) {
     out_ << "\t.long " << val << "\n";
 }

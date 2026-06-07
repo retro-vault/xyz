@@ -1,0 +1,56 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_div64
+_div64:
+	; sdcccall(1) prologue: div64 (locals=0, temp_frame=16, stack_params=16)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-16
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at 4(ix)
+	; receive (sdcccall1) param b at 12(ix)
+	.globl	__divll
+	ld	l, 18(ix)
+	ld	h, 19(ix)
+	push	hl
+	ld	l, 16(ix)
+	ld	h, 17(ix)
+	push	hl
+	ld	l, 14(ix)
+	ld	h, 15(ix)
+	push	hl
+	ld	l, 12(ix)
+	ld	h, 13(ix)
+	push	hl
+	ld	l, 10(ix)
+	ld	h, 11(ix)
+	push	hl
+	ld	l, 8(ix)
+	ld	h, 9(ix)
+	push	hl
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	push	hl
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	push	hl
+	call	__divll
+	ld	hl, #16
+	add	hl, sp
+	ld	sp, hl
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	-16(ix), l
+	ld	-15(ix), h
+	push	hl
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ex	de, hl
+	pop	hl
+__div64_end:
+	; epilogue: div64
+	ld	sp, ix
+	pop	ix
+	ret

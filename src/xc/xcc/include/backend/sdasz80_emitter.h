@@ -34,6 +34,7 @@ public:
     void db(int val) override;
     void db_list(const std::vector<int> &vals) override;
     void dw(int val) override;
+    void dw_sym(const std::string &name) override;
     void dl(int val) override;
     void ds(int bytes) override;
 

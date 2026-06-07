@@ -5,7 +5,7 @@
 
 	.globl _halt_forever
 _halt_forever:
-	; sdcccall(1) prologue: halt_forever (locals=0, stack_params=0)
+	; sdcccall(1) prologue: halt_forever (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp

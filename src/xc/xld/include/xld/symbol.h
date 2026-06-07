@@ -30,6 +30,7 @@ namespace xld {
         const std::string& name() const { return name_; }
         symbol_type type() const { return type_; }
         uint16_t value() const { return value_; }
+        void set_value(uint16_t value) { value_ = value; }
         int index() const { return index_; }
         int area_index() const { return area_index_; }
 

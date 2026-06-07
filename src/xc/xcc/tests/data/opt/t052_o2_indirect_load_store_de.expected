@@ -1,0 +1,27 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_fetch
+_fetch:
+	; sdcccall(1) prologue: fetch (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; keep incoming register arg t2 live in register for first use
+	; receive (sdcccall1) register param handled by prologue
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	dec	sp
+	dec	sp
+	ld	-2(ix), e
+	ld	-1(ix), d
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__fetch_end:
+	; epilogue: fetch
+	ld	sp, ix
+	pop	ix
+	ret

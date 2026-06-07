@@ -153,7 +153,32 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
     if (!expr_type)
         expr_type = type::make_int();
 
+    auto coerce_operand = [&](operand op, const type_ptr &target) -> operand {
+        if (!target)
+            return op;
+        if (!op.type) {
+            op.type = target;
+            return op;
+        }
+        bool same_type =
+            op.type->kind == target->kind &&
+            op.type->size() == target->size() &&
+            op.type->is_unsigned() == target->is_unsigned();
+        if (same_type) {
+            op.type = target;
+            return op;
+        }
+        if (op.kind == operand_kind::INT_CONST ||
+            op.kind == operand_kind::FLOAT_CONST) {
+            op.type = target;
+            return op;
+        }
+        return emit_unop(icode_op::CAST, op, target);
+    };
+
     if (expr_type->kind == type_kind::COMPLEX) {
+        lhs = coerce_operand(lhs, expr_type);
+        rhs = coerce_operand(rhs, expr_type);
         operand res = new_temp(expr_type);
         gen_complex_arith(lhs, rhs, res, e.op);
         expr_result_ = res;
@@ -162,6 +187,10 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
 
     bool is_float = expr_type->kind == type_kind::FLOAT ||
                     expr_type->kind == type_kind::DOUBLE;
+    if (lhs.type && rhs.type && lhs.type->is_arith() && rhs.type->is_arith()) {
+        lhs = coerce_operand(lhs, expr_type);
+        rhs = coerce_operand(rhs, expr_type);
+    }
     icode_op op = is_float ? float_op_to_icode(e.op) : bin_op_to_icode(e.op);
     expr_result_ = emit_binop(op, lhs, rhs, expr_type);
 }
@@ -169,6 +198,33 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
 void ir_gen::gen_binary_compare(binary_expr &e) {
     operand lhs = gen_expr(*e.left);
     operand rhs = gen_expr(*e.right);
+    auto coerce_operand = [&](operand op, const type_ptr &target) -> operand {
+        if (!target)
+            return op;
+        if (!op.type) {
+            op.type = target;
+            return op;
+        }
+        bool same_type =
+            op.type->kind == target->kind &&
+            op.type->size() == target->size() &&
+            op.type->is_unsigned() == target->is_unsigned();
+        if (same_type) {
+            op.type = target;
+            return op;
+        }
+        if (op.kind == operand_kind::INT_CONST ||
+            op.kind == operand_kind::FLOAT_CONST) {
+            op.type = target;
+            return op;
+        }
+        return emit_unop(icode_op::CAST, op, target);
+    };
+    if (lhs.type && rhs.type && lhs.type->is_arith() && rhs.type->is_arith()) {
+        type_ptr cmp_type = usual_arith_conv(lhs.type, rhs.type);
+        lhs = coerce_operand(lhs, cmp_type);
+        rhs = coerce_operand(rhs, cmp_type);
+    }
     expr_result_ = emit_binop(bin_op_to_icode(e.op), lhs, rhs, type::make_int());
 }
 
@@ -215,7 +271,41 @@ void ir_gen::gen_assign(binary_expr &e) {
 void ir_gen::gen_compound_assign(binary_expr &e) {
     operand lhs_src = gen_expr(*e.left);
     operand rhs     = gen_expr(*e.right);
-    operand tmp     = emit_binop(bin_op_to_icode(e.op), lhs_src, rhs, lhs_src.type);
+    operand lhs_for_op = lhs_src;
+    operand rhs_for_op = rhs;
+    type_ptr op_type = lhs_src.type ? lhs_src.type : type::make_int();
+
+    auto coerce_operand = [&](operand op, const type_ptr &target) -> operand {
+        if (!target)
+            return op;
+        if (!op.type) {
+            op.type = target;
+            return op;
+        }
+        bool same_type =
+            op.type->kind == target->kind &&
+            op.type->size() == target->size() &&
+            op.type->is_unsigned() == target->is_unsigned();
+        if (same_type) {
+            op.type = target;
+            return op;
+        }
+        if (op.kind == operand_kind::INT_CONST ||
+            op.kind == operand_kind::FLOAT_CONST) {
+            op.type = target;
+            return op;
+        }
+        return emit_unop(icode_op::CAST, op, target);
+    };
+
+    if (lhs_src.type && rhs.type &&
+        lhs_src.type->is_arith() && rhs.type->is_arith()) {
+        op_type = usual_arith_conv(lhs_src.type, rhs.type);
+        lhs_for_op = coerce_operand(lhs_src, op_type);
+        rhs_for_op = coerce_operand(rhs, op_type);
+    }
+
+    operand tmp = emit_binop(bin_op_to_icode(e.op), lhs_for_op, rhs_for_op, op_type);
     expr_result_ = gen_lvalue_write(*e.left, tmp);
 }
 
@@ -275,21 +365,28 @@ void ir_gen::visit(unary_expr &e) {
         break;
     case unary_op::PRE_INC: case unary_op::PRE_DEC: {
         bool inc = (e.op == unary_op::PRE_INC);
-        operand op  = gen_expr(*e.operand);
-        operand one = operand::make_int(1, op.type);
-        icode ic; ic.op = inc ? icode_op::ADD : icode_op::SUB;
-        ic.result = op; ic.left = op; ic.right = one; emit(ic);
-        expr_result_ = op;
+        operand op = gen_expr(*e.operand);
+        int step_value = 1;
+        if (op.type && op.type->is_ptr() && op.type->base)
+            step_value = op.type->base->size();
+        operand step = operand::make_int(step_value, type::make_int());
+        operand tmp = emit_binop(inc ? icode_op::ADD : icode_op::SUB,
+                                 op, step, op.type ? op.type : type::make_int());
+        expr_result_ = gen_lvalue_write(*e.operand, tmp);
         break;
     }
     case unary_op::POST_INC: case unary_op::POST_DEC: {
         bool inc = (e.op == unary_op::POST_INC);
-        operand op  = gen_expr(*e.operand);
+        operand op = gen_expr(*e.operand);
         operand old = new_temp(op.type ? op.type : type::make_int());
         emit_assign(old, op);
-        operand one = operand::make_int(1, op.type);
-        icode ic; ic.op = inc ? icode_op::ADD : icode_op::SUB;
-        ic.result = op; ic.left = op; ic.right = one; emit(ic);
+        int step_value = 1;
+        if (op.type && op.type->is_ptr() && op.type->base)
+            step_value = op.type->base->size();
+        operand step = operand::make_int(step_value, type::make_int());
+        operand tmp = emit_binop(inc ? icode_op::ADD : icode_op::SUB,
+                                 op, step, op.type ? op.type : type::make_int());
+        gen_lvalue_write(*e.operand, tmp);
         expr_result_ = old;
         break;
     }

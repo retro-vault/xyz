@@ -28,7 +28,7 @@ PROJECT_BUILD_DIR := $(BUILD_DIR)/xc/xcc
 OBJDIR   := $(PROJECT_BUILD_DIR)/obj
 TARGET   := $(HOST_BIN_DIR)/xcc
 RUNTIME_DIR := lib/runtime
-RUNTIME_SOURCES := $(sort $(wildcard $(RUNTIME_DIR)/*.s))
+RUNTIME_SOURCES := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
 DISTDIR := $(PROJECT_BUILD_DIR)/dist
 DIST_BINDIR := $(DISTDIR)/bin
 DIST_LIBDIR := $(DISTDIR)/lib/xcc/runtime
@@ -49,6 +49,7 @@ SRCS := \
   $(SRCDIR)/frontend/parser_expr.cpp \
   $(SRCDIR)/frontend/sema.cpp \
   $(SRCDIR)/ir/icode.cpp \
+  $(SRCDIR)/opt/iromod.cpp \
   $(SRCDIR)/opt/iropt.cpp \
   $(SRCDIR)/ir/irgen.cpp \
   $(SRCDIR)/ir/irgen_decl.cpp \
@@ -74,7 +75,7 @@ SRCS := \
 OBJS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean test check dist lint dirs
+.PHONY: all clean test check dist lint dirs bench
 
 all: $(TARGET)
 
@@ -95,6 +96,11 @@ $(HOST_BIN_DIR):
 # Run the test suite against the current build.
 test: $(TARGET)
 	@bash tests/run_tests.sh $(TARGET)
+
+# Run the repeatable codegen-only benchmark against SDCC.
+# Outputs land under $(BUILD_DIR)/xc/xcc/bench/codegen/.
+bench: $(TARGET)
+	@bash tests/run_codegen_bench.sh $(TARGET)
 
 # Like 'make test' but forces a debug build (sanitizers active).
 # Use this before committing to catch memory and UB issues.

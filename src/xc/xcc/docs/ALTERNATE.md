@@ -19,10 +19,10 @@ The goal is:
 Today the backend already does a small amount of alternate-register use:
 
 - `src/backend/z80/z80gen_regalloc.cpp` assigns one 16-bit temp to main
-  `BC` when its live range does not cross a known `BC` clobber.
-- The same prepass assigns one 8-bit temp to `A'` via `ex af,af'` when
-  its live range does not cross a `CALL`, `IFX`, or other operation
-  treated as unsafe.
+  `BC` when its live range stays inside a short straight-line window and
+  does not cross a known `BC` scratch hazard.
+- The older `A'` byte-temp experiment is still implemented in pieces of
+  the backend, but it is not part of the stable preset allocator today.
 - `src/backend/z80/z80gen.cpp` implements those assignments in
   `emit_load_rr()`, `emit_store_rr()`, `load_a()`, and `store_a()`.
 - The backend does not currently use `BC'`, `DE'`, or `HL'` in general

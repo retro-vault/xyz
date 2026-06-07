@@ -51,7 +51,10 @@ The build path is:
 1. `xcc -g -S` compiles `sieve.c` to `sieve.s` and emits `sieve.adb`
 2. `xas --mode=sdcc` assembles `sieve.s` to `sieve.rel`
 3. `xas --mode=sdcc` assembles `crt0.s` to `crt0.rel`
-4. `xas --mode=sdcc` assembles the runtime helpers from `src/xc/xcc/lib/runtime/*.s`
+4. `xas --mode=sdcc` assembles the runtime helpers from
+   `src/xc/xcc/lib/runtime/`, recursively across the grouped subdirectories
+   such as `int8/`, `int16/`, `int32/`, `int64/`, `float/`, `atomic/`,
+   `jumps/`, `common/`, and `sys/`
 5. `xar rcs` packs those helpers into `runtime.lib`
 6. `xld -g` links the sample objects against `runtime.lib` into `sieve.bin` and `sieve.cdb`
 
@@ -149,8 +152,8 @@ This flow is best-effort right now.
 `xgdb` is intentionally GDB-like in switches and common commands, but it
 is not yet a full GDB replacement:
 
-- it does not implement GDB/MI
-- it does not implement the GDB remote serial protocol
+- it does expose a CLI and MI entry point
+- it does speak the remote target protocol through `librsp`
 - DDD integration depends on the subset of command-line behavior DDD
   expects from the inferior debugger
 
@@ -163,68 +166,33 @@ So for now:
 
 ## Run It From VS Code
 
-This directory now contains ready-to-use VS Code files:
+This directory contains helpful VS Code workspace files:
 
 - [tests/debug/.vscode/tasks.json](/home/tstih/data/retro-vault/xyz/tests/debug/.vscode/tasks.json)
 - [tests/debug/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tests/debug/.vscode/launch.json)
 
 Open `tests/debug` itself as the VS Code workspace folder.
 
-There are now two VS Code workflows:
+What works today:
 
-1. task-based terminal workflow
-2. native F5 workflow through the `xgdb-vsix` DAP extension
+- the task-based workflow for building the sample and starting/stopping
+  `xgdb-z80`
+- editing `sieve.c` while driving `xgdb` manually from a terminal
 
-### Native DAP Workflow
+What is still in progress:
 
-The repo now contains a dedicated VS Code extension project in:
+- the `xgdb-vsix` extension project in `tools/xgdb-vsix/`
+- the DAP-oriented launch configuration in
+  [tests/debug/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tests/debug/.vscode/launch.json)
 
-- [tools/xgdb-vsix/package.json](/home/tstih/data/retro-vault/xyz/tools/xgdb-vsix/package.json)
-- [tools/xgdb-vsix/extension.js](/home/tstih/data/retro-vault/xyz/tools/xgdb-vsix/extension.js)
-- [tools/xgdb-vsix/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tools/xgdb-vsix/.vscode/launch.json)
+The current extension scaffolding and launch file are not yet a supported
+end-to-end path, because:
 
-This extension contributes a new debugger type named `xgdb` and starts:
-
-```text
-xgdb --interpreter=dap --quiet
-```
-
-The included [tests/debug/.vscode/launch.json](/home/tstih/data/retro-vault/xyz/tests/debug/.vscode/launch.json)
-now also contains:
-
-```json
-{
-  "name": "xgdb sieve (dap)",
-  "type": "xgdb",
-  "request": "launch",
-  "program": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.bin",
-  "cdb": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.cdb",
-  "remoteTarget": "127.0.0.1:9000",
-  "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
-  "cwd": "${workspaceFolder}",
-  "stopOnEntry": true
-}
-```
-
-To test it:
-
-1. Open `tools/xgdb-vsix` in VS Code.
-2. Run the `Run xgdb VSIX on sieve` launch configuration.
-3. Start your target separately so it is already listening on
-   `127.0.0.1:9000`.
-4. In the Extension Development Host window that opens, select
-   `xgdb sieve (dap)` and press `F5`.
-5. Open [sieve.c](/home/tstih/data/retro-vault/xyz/tests/debug/sieve.c),
-   set breakpoints, then step and inspect state through the standard VS Code
-   debug UI.
-
-If you step into or over a linked library function that has symbols but
-no source file:
-
-- VS Code may not have a C source editor location to show for that stop
-- `xgdb` now reports that honestly instead of pointing at a fake file
-- the DAP frontend now supports disassembly fallback, so the session can
-  continue in assembly instead of freezing on an attempted source step
+- the extension launcher still tries `xgdb --interpreter=dap --quiet`
+- the live `xgdb` command-line entry point currently exposes only `cli`
+  and `mi`
+- the extension manifest still models an older `symbols` / `.xgdb` input
+  shape rather than the current `.cdb` plus optional `.map` flow
 
 ### Included `tasks.json`
 
@@ -267,66 +235,16 @@ Inside VS Code:
 2. Choose `run xgdb-z80 sieve target`
 3. Open `tests/debug/sieve.c` in the editor
 
-This is the target-only half of the workflow. Pair it with the DAP
-launch configuration described above, or connect manually from another
-terminal if you want to use raw `xgdb`.
+This is the supported VS Code workflow today. After the target is running,
+connect from another terminal with:
 
-The DAP launch configuration does not start or stop the target for you.
-Use the provided tasks only if you want a manual convenience wrapper
-around the reference `xgdb-z80` target.
-
-### Included `launch.json`
-
-The included `launch.json` is the native `xgdb` DAP configuration:
-
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "xgdb sieve (dap)",
-      "type": "xgdb",
-      "request": "launch",
-      "program": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.bin",
-      "cdb": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.cdb",
-      "remoteTarget": "127.0.0.1:9000",
-      "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
-      "cwd": "${workspaceFolder}",
-      "stopOnEntry": true
-    }
-  ]
-}
+```sh
+bin/bin/xgdb \
+    --exec bin/z80/bin/apps/debug/sieve.bin \
+    --cdb bin/z80/bin/apps/debug/sieve.cdb \
+    --remote 127.0.0.1:9000 \
+    -d tests/debug
 ```
-
-### How To Try F5 Debugging
-
-Inside VS Code:
-
-1. Open the `tests/debug` folder
-2. Open [sieve.c](/home/tstih/data/retro-vault/xyz/tests/debug/sieve.c)
-3. Go to `Run and Debug`
-4. Select `xgdb sieve (dap)`
-5. Press `F5`
-
-VS Code should then:
-
-1. launch `xgdb` in DAP mode
-2. connect to the already-running remote target
-3. drive the session through the native VS Code debug UI
-
-Stepping behavior worth knowing:
-
-- `F10` / `next` now uses a temporary return breakpoint when it has
-  stepped into a callee with no source, instead of trying to single-step
-  the entire function one instruction at a time
-- if no source exists for the current function, use the disassembly view
-  or the terminal `disassemble` command to inspect progress
-
-### What To Expect From The F5 Path
-
-This is the preferred VS Code path now. The older `cppdbg` / MI sample
-configuration has been removed from `tests/debug/.vscode` to avoid
-accidentally selecting the wrong debugger backend.
 
 ### Best Current VS Code Layout
 
@@ -347,12 +265,9 @@ while the same file is open in the editor.
 
 ### Future Direction
 
-Once `xgdb` grows either:
-
-- a fuller MI implementation, or
-- a real UDAP adapter for VS Code
-
-this README can be upgraded to a real `launch.json`-based F5 workflow.
+Once the `xgdb-vsix` configuration and the live `xgdb` entry point agree on
+the debugger protocol and symbol-loading shape, this README can be expanded
+again into a real F5 workflow.
 
 ## Useful Commands
 

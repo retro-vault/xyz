@@ -1,0 +1,26 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_keep
+_keep:
+	; sdcccall(1) prologue: keep (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	; receive (sdcccall1) register param already materialized in prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	inc	hl
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ex	de, hl
+__keep_end:
+	; epilogue: keep
+	ld	sp, ix
+	pop	ix
+	ret

@@ -1,0 +1,39 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_less
+_less:
+	; sdcccall(1) prologue: less (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	push	de
+	pop	hl
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	; receive (sdcccall1) register param already materialized in prologue
+	; receive (sdcccall1) register param already materialized in prologue
+	ld	e, -4 (ix)
+	ld	d, -3 (ix)
+	ld	l, -2 (ix)
+	ld	h, -1 (ix)
+	or	a, a
+	sbc	hl, de
+	jp	p, __xcc_L2
+__xcc_L0:
+	ld	hl, #1
+	ex	de, hl
+	jp	__less_end
+__xcc_L2:
+	ld	hl, #0
+	ex	de, hl
+__less_end:
+	; epilogue: less
+	ld	sp, ix
+	pop	ix
+	ret

@@ -28,6 +28,7 @@ namespace xld {
 
         const std::string& name() const { return name_; }
         uint16_t size() const { return size_; }
+        void set_size(uint16_t size) { size_ = size; }
         area_flags flags() const { return flags_; }
         int index() const { return index_; }
         std::optional<uint16_t> org_addr() const { return org_addr_; }

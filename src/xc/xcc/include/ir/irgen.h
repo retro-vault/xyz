@@ -96,6 +96,21 @@ private:
     void gen_stmt(stmt &s);
 
     //
+    // Lower e directly as a control-flow condition that branches to
+    // true_lbl / false_lbl with proper short-circuit semantics.
+    //
+    void emit_cond_branch(expr &e,
+                          const std::string &true_lbl,
+                          const std::string &false_lbl);
+
+    //
+    // Lower e as a condition value for IFX, preserving the special
+    // identifier handling and integer promotion rules used by control
+    // statements.
+    //
+    operand gen_cond_value(expr &e);
+
+    //
     // Visit d through the decl_visitor interface.
     //
     void gen_decl(decl &d);
@@ -185,6 +200,7 @@ private:
     // by e.  Used by both read (member_expr visitor) and write
     // (gen_assign, gen_compound_assign) code paths.
     //
+    operand gen_lvalue_addr(expr &e, type_ptr ptr_t);
     operand gen_member_ptr(member_expr &e);
 
     // ----- stmt_visitor ----------------------------------------------

@@ -29,8 +29,26 @@
 | Switch      | Description |
 |-------------|-------------|
 | `-O0`       | No optimisation (default). |
-| `-O1`       | Enable peephole optimiser. Removes redundant loads, dead jumps, temp store/reload pairs. |
-| `-O2`       | Enable advanced optimisations: IR constant-fold/copy-prop/DCE, strength reduction (multiply/divide/mod by power-of-two → shift), BC and A' register allocation, plus all `-O1` peephole rules. |
+| `-O1`       | Enable peephole optimiser. Removes redundant loads, dead jumps, temp store/reload pairs. The simplest fixed-window peepholes are now table-driven; the more context-sensitive ones still use custom matchers. |
+| `-O2`       | Enable general optimisation: module-level dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested private-helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same safe subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, IR constant-fold/DCE, strength reduction (multiply/divide/mod by power-of-two → shift), conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, dead-local frame compaction, the bounded stable temp register allocator for short straight-line 16-bit temp windows, automatic TEMP preallocation inside functions that already need an IX frame, smaller nearby `&local` / `&temp` address materialization, frameless zero-frame functions when safe, plus all `-O1` peephole rules. |
+| `-O3`       | Enable experimental optimisation: stable wins graduate into `-O2`, while `-O3` remains the landing zone for broader analysis budgets and new experimental optimisations before they are treated as everyday-safe. It is distinct again on the current benchmark suite because it now carries experimental dense-switch jump-table lowering. |
+| `-Os`       | Enable size optimisation: everything in `-O2`, with the size-oriented preset kept available for heuristics that prove size-profitable enough to become public defaults later. On the current benchmark suite it currently converges to the same emitted code as `-O2`. |
+
+`xcc` also supports fine-grained overrides with `-f<name>` and
+`-fno-<name>`. Current names include:
+
+- `peephole`
+- `dead-static-functions`, `const-arg-prop`, `const-call-eval`, `function-const-eval`, `dead-params`
+- `merge-identical-functions`, `inline-static-functions`
+- `cfg-cleanup`, `jump-threading`, `address-deref-fold`, `value-propagation`
+- `constant-fold`, `algebraic-simplify`
+- `loop-licm`, `loop-induction`, `strength-reduction`
+- `dead-code-elim`, `scalar-local-promotion`
+- `reg-param-promotion`, `duplicate-block-merge`, `merge-tails`
+- `local-frame-compaction`, `regalloc`
+  `regalloc` is now part of the stable `-O2` / `-Os` presets, and the
+  explicit flag remains useful for bisects and lower-level experiments.
+- `compare-ifx-fusion`, `frame-omit`, `prealloc-temp-frame`
 
 ### Assembler dialect
 
@@ -203,7 +221,7 @@ sdldz80 -i program.ihx /usr/local/lib/xcc/crt0.rel module_a.rel module_b.rel \
 | Function definitions              | ✓ |
 | Recursive calls                   | ✓ |
 | Variadic `...`                    | parsed; `va_list` not yet implemented |
-| Inline `__asm__`                  | not yet |
+| Inline `__asm__`                  | ✓ GNU-style `__asm__("...")` passthrough |
 
 ### Preprocessor
 
@@ -213,22 +231,31 @@ xcc has a built-in preprocessor.  Source files are preprocessed automatically be
 
 ## ABI and calling convention
 
-xcc uses a stack-based calling convention for Z80 compatible with sdasz80/sdldz80 toolchain conventions.
+`xcc` uses the modern SDCC-style `sdcccall(1)` register-based calling
+convention by default on Z80.
 
 ### Parameter passing
 
-- Parameters are pushed **right-to-left** (last argument pushed first) by the **caller**.
-- All parameters occupy 2 bytes on the stack (chars and bools are zero/sign-extended to 16 bits before pushing).
-- 32-bit (long/float) parameters occupy 4 bytes: low word pushed first, high word pushed second so that the low word is at the lower IX-relative address.
-- The **caller** cleans the stack after the call returns (caller-cleans convention).
+- `sdcccall(1)` uses up to two register-passed arguments before spilling
+  to the stack.
+- First 8-bit argument: `A`
+- First 16-bit argument: `HL`
+- First 32-bit argument: `DEHL`
+- Second 8-bit argument after an 8-bit first argument: `L`
+- Second 16-bit argument after an 8-bit or 16-bit first argument: `DE`
+- Remaining arguments are pushed **right-to-left** by the caller.
+- Stack-passed `char` and `_Bool` arguments occupy one pushed byte.
+- Stack cleanup follows the callee ABI rules already encoded in the IR:
+  register-passed arguments need no cleanup, and stack-passed arguments
+  are dropped according to the selected convention.
 
 ### Return values
 
 | Return type size | Register(s) |
 |-----------------|-------------|
-| ≤ 1 byte (`char`, `bool`) | **L** (low byte of HL) |
-| ≤ 2 bytes (`int`, `short`, any pointer) | **HL** |
-| ≤ 4 bytes (`long`, `float`) | **DEHL** — DE = high word, HL = low word |
+| 1 byte (`char`, `bool`) | **A** |
+| 2 bytes (`int`, `short`, any pointer) | **DE** |
+| 4 bytes (`long`, `float`) | **DEHL** — DE = high word, HL = low word |
 | `void` | none |
 
 ### Caller-saved vs callee-saved registers
@@ -242,7 +269,9 @@ xcc uses a stack-based calling convention for Z80 compatible with sdasz80/sdldz8
 
 ## Stack frame layout
 
-Immediately after the function prologue (`push ix; ld ix,#0; add ix,sp`):
+For functions that actually need an IX frame, stack-passed arguments are
+laid out relative to IX like this immediately after the prologue
+(`push ix; ld ix,#0; add ix,sp`):
 
 ```
   Higher addresses

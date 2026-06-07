@@ -1,0 +1,432 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_sdiv8
+_sdiv8:
+	; sdcccall(1) prologue: sdiv8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__divsint
+	call	__divsint
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__sdiv8_end:
+	; epilogue: sdiv8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_sudiv8
+_sudiv8:
+	; sdcccall(1) prologue: sudiv8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	ld	h, #0
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__divsint
+	call	__divsint
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__sudiv8_end:
+	; epilogue: sudiv8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_usdiv8
+_usdiv8:
+	; sdcccall(1) prologue: usdiv8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__divsint
+	call	__divsint
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__usdiv8_end:
+	; epilogue: usdiv8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_udiv8
+_udiv8:
+	; sdcccall(1) prologue: udiv8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	ld	h, #0
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__divsint
+	call	__divsint
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__udiv8_end:
+	; epilogue: udiv8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_smod8
+_smod8:
+	; sdcccall(1) prologue: smod8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__smod16
+	call	__smod16
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__smod8_end:
+	; epilogue: smod8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_sumod8
+_sumod8:
+	; sdcccall(1) prologue: sumod8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	ld	h, #0
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__smod16
+	call	__smod16
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__sumod8_end:
+	; epilogue: sumod8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_usmod8
+_usmod8:
+	; sdcccall(1) prologue: usmod8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	d, b
+	ld	e, c
+	.globl	__smod16
+	call	__smod16
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__usmod8_end:
+	; epilogue: usmod8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_smul8
+_smul8:
+	; sdcccall(1) prologue: smul8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	.globl	__mul16
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	h, b
+	ld	l, c
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__smul8_end:
+	; epilogue: smul8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_sumul8
+_sumul8:
+	; sdcccall(1) prologue: sumul8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	ld	h, #0
+	ld	b, h
+	ld	c, l
+	.globl	__mul16
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	h, b
+	ld	l, c
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__sumul8_end:
+	; epilogue: sumul8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_usmul8
+_usmul8:
+	; sdcccall(1) prologue: usmul8 (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	-2(ix), l
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -1(ix)
+	; receive (sdcccall1) param b at -2(ix)
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	.globl	__mul16
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	h, b
+	ld	l, c
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__usmul8_end:
+	; epilogue: usmul8
+	ld	sp, ix
+	pop	ix
+	ret

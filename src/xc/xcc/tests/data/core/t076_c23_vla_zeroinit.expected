@@ -5,13 +5,13 @@
 
 	.globl _zero_test
 _zero_test:
-	; sdcccall(1) prologue: zero_test (locals=10, stack_params=0)
+	; sdcccall(1) prologue: zero_test (locals=10, temp_frame=12, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	-10(ix), l
 	ld	-9(ix), h
-	ld	hl, #-10
+	ld	hl, #-22
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param n at -10(ix)
@@ -22,10 +22,7 @@ _zero_test:
 	ld	hl, #2
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-12(ix), l
 	ld	-11(ix), h
 	ld	l, -12(ix)
@@ -40,8 +37,6 @@ _zero_test:
 	or	a, a
 	sbc	hl, de
 	ld	sp, hl
-	dec	sp
-	dec	sp
 	ld	-14(ix), l
 	ld	-13(ix), h
 	ld	l, -14(ix)
@@ -55,10 +50,7 @@ _zero_test:
 	ld	hl, #2
 	pop	de
 	call	__mul16
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
+	ex	de, hl
 	ld	-16(ix), l
 	ld	-15(ix), h
 	ld	l, -16(ix)
@@ -73,8 +65,6 @@ _zero_test:
 	or	a, a
 	sbc	hl, de
 	ld	sp, hl
-	dec	sp
-	dec	sp
 	ld	-18(ix), l
 	ld	-17(ix), h
 	ld	l, -18(ix)
@@ -83,14 +73,10 @@ _zero_test:
 	ld	-7(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	dec	sp
-	dec	sp
 	ld	-20(ix), l
 	ld	-19(ix), h
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	dec	sp
-	dec	sp
 	ld	-22(ix), l
 	ld	-21(ix), h
 __zero_test_end:

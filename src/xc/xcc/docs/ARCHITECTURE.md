@@ -28,8 +28,8 @@ source.c
    │              DCE, strength-reduce (MUL/DIV/MOD by power-of-two → shift)
    │  (activated at -O2)
    ▼
- Z80Gen         — walks IR; emits Z80 assembly via asm_emitter abstraction;
-   │              BC/A' register allocation prepass at -O2
+Z80Gen         — walks IR; emits Z80 assembly via asm_emitter abstraction;
+   │              bounded BC register allocation prepass at -O2
    │  text lines
    ▼
  Z80Peep        — pattern-based peephole optimizer (activated at -O1+)
@@ -383,11 +383,12 @@ Caller pushes parameters right-to-left, calls, callee does
 - `store_hl(op)` — store HL to operand location
 - `alloc_temp(id)` — assign a stack slot for a TEMP (grows downward, 2 bytes)
 
-**Optimization at -O2**: `regalloc_prepass()` performs linear-scan allocation of
-one 16-bit temp to BC and one 8-bit temp to A' (`ex af,af'`).  Live interval
-analysis; interior-clobber check ensures no CALL/MUL/DIV/SHL crosses the live range.
-Register homes are tracked with the `temp_home` enum (`stack`, `main_bc`, `alt_a`,
-and reserved `alt_bc`/`alt_de`/`alt_hl` for future EXX-region support).
+**Optimization at -O2**: `regalloc_prepass()` performs a bounded linear-scan
+allocation of one 16-bit temp to BC inside short straight-line windows. Live
+interval analysis plus backend hazard checks keep the stable allocator away
+from CALL / DIV / MUL / shift-helper windows and known BC-scratch sites.
+Register homes are tracked with the `temp_home` enum (`stack`, `main_bc`,
+`alt_a`, and reserved `alt_bc`/`alt_de`/`alt_hl` for future EXX-region support).
 
 **Inline constant shifts**: shift-by-0 → no-op; shift-by-1/2 → unrolled bit ops;
 shift-by-8 → byte-move trick; shift by other constants → B-register counted loop.

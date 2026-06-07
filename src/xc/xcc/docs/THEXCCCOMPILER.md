@@ -66,7 +66,7 @@ semantic check
   ->
 IR generator
   ->
-IR optimizer (-O2)
+IR optimizer (-O2 and experimental -O3)
   ->
 Z80 code generator
   ->
@@ -85,10 +85,13 @@ very visible. The compiler is not hiding behind a giant framework.
 These are the directories that matter most:
 
 - `src/frontend/`: preprocessor, lexer, parser, semantic pass
-- `src/ir/`: IR definitions, IR lowering, IR optimizer
+- `src/ir/`: IR definitions and IR lowering
+- `src/opt/`: module-level and per-function IR optimizers
 - `src/backend/`: assembler emitters and Z80 backend
 - `include/`: public headers for the compiler itself
-- `lib/runtime/`: Z80 runtime helper implementations and stubs
+- `lib/runtime/`: Z80 runtime helper implementations and stubs, grouped into
+  `int8/`, `int16/`, `int32/`, `int64/`, `float/`, `double/`, `common/`,
+  `atomic/`, `jumps/`, and `sys/`
 - `../../../lib/libc/include/`: canonical target-side C headers such as `stdatomic.h` and `complex.h`
 - `tests/data/core/`: regression inputs and expected assembly outputs
 - `docs/`: notes, architecture docs, and now this book
@@ -123,8 +126,11 @@ stage in order.
 Important options today:
 
 - `-O0`: no optimization
-- `-O1`: peephole optimizer after assembly generation
-- `-O2`: IR optimization plus small register-allocation tricks
+- `-O1`: peephole optimizer after assembly generation; the simplest fixed-window peepholes are now table-driven while the more contextual ones still use custom matchers
+- `-O2`: general optimization, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; the core local algebraic identities are now shared through one small declarative rule table instead of duplicated `switch` logic
+- `-O3`: experimental optimization built on top of `-O2`; it still serves as the landing zone for broader analysis budgets and new backend ideas, and it now carries an experimental dense-switch jump-table pass that makes it distinct again on the benchmark suite
+- `-Os`: size optimization built on top of `-O2`; the current public size preset is conservative and currently converges to stable `-O2` on the executable benchmark suite
+- `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info
 - `-masm=sdasz80` or `-masm=gnuas`: choose assembly dialect
 
@@ -352,13 +358,13 @@ It is not trying to be a hyper-aggressive optimizing compiler yet.
 
 ### 6.13 Small Register Allocation
 
-At `-O2`, the backend tries a limited prepass register allocation.
+At `-O2` / `-Os`, or when forced with `-fregalloc`, the backend tries a
+limited prepass register allocation.
 
 This is not a full global allocator.
 It is more like:
 
 - keep some 16-bit temps in `BC`
-- keep some 8-bit temps in alternate `A'`
 - only do it when the live range looks safe
 
 So the project already has a little more than "everything spills to the

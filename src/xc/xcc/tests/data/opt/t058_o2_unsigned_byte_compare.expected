@@ -1,0 +1,69 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_lt_u8
+_lt_u8:
+	; sdcccall(1) prologue: lt_u8 (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	dec	sp
+	dec	sp
+	ld	-2(ix), a
+	; keep incoming register arg t6 live in register for first use
+	; receive (sdcccall1) register param handled by prologue
+	; receive (sdcccall1) register param handled by prologue
+	ld	a, -2(ix)
+	dec	sp
+	dec	sp
+	ld	c, -4(ix)
+	cp	c
+	jr	nc, __xcc_L2
+__xcc_L0:
+	ld	a, #1
+	dec	sp
+	dec	sp
+	ld	-6(ix), a
+	jr	__lt_u8_end
+__xcc_L2:
+	xor	a
+	dec	sp
+	dec	sp
+	ld	-8(ix), a
+__lt_u8_end:
+	; epilogue: lt_u8
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_ge_u8
+_ge_u8:
+	; sdcccall(1) prologue: ge_u8 (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	dec	sp
+	dec	sp
+	ld	-2(ix), a
+	; keep incoming register arg t10 live in register for first use
+	; receive (sdcccall1) register param handled by prologue
+	; receive (sdcccall1) register param handled by prologue
+	ld	a, -2(ix)
+	dec	sp
+	dec	sp
+	ld	c, -4(ix)
+	cp	c
+	ld	hl, #1
+	jr	nc, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
+	ld	b, h
+	ld	c, l
+	dec	sp
+	dec	sp
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ex	de, hl
+__ge_u8_end:
+	; epilogue: ge_u8
+	ld	sp, ix
+	pop	ix
+	ret

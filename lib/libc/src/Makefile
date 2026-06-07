@@ -20,6 +20,14 @@ S_SRCS := $(sort $(wildcard *.s */*.s))
 OBJS := $(patsubst %.c,$(OBJDIR)/%.rel,$(C_SRCS)) \
         $(patsubst %.s,$(OBJDIR)/%.rel,$(S_SRCS))
 
+# Platform (sys) backend, selectable at build time.  "none" is the bare-metal
+# default; an OS build sets SYS=<os> to pull in lib/sys/<os>/ instead.
+SYS ?= none
+SYS_DIR  := $(ROOT)/lib/sys/$(SYS)
+SYS_SRCS := $(sort $(wildcard $(SYS_DIR)/*.s) $(wildcard $(SYS_DIR)/*.c))
+OBJS += $(patsubst $(SYS_DIR)/%.s,$(OBJDIR)/sys/%.rel,$(filter %.s,$(SYS_SRCS))) \
+        $(patsubst $(SYS_DIR)/%.c,$(OBJDIR)/sys/%.rel,$(filter %.c,$(SYS_SRCS)))
+
 .PHONY: all clean
 
 all: $(BUILD_TARGET)
@@ -37,6 +45,19 @@ $(OBJDIR)/%.rel: %.s | $(OBJDIR)
 	$(AS8) $(AS8FLAGS) $< -o $@
 
 $(OBJDIR)/%.rel: $(OBJDIR)/%.s | $(OBJDIR)
+	@mkdir -p $(dir $@)
+	$(AS8) $(AS8FLAGS) $< -o $@
+
+# sys backend objects (assembled / compiled from lib/sys/$(SYS)/)
+$(OBJDIR)/sys/%.rel: $(SYS_DIR)/%.s | $(OBJDIR)
+	@mkdir -p $(dir $@)
+	$(AS8) $(AS8FLAGS) $< -o $@
+
+$(OBJDIR)/sys/%.s: $(SYS_DIR)/%.c | $(OBJDIR)
+	@mkdir -p $(dir $@)
+	$(C8C) -S $(C8FLAGS) -o $@ $<
+
+$(OBJDIR)/sys/%.rel: $(OBJDIR)/sys/%.s | $(OBJDIR)
 	@mkdir -p $(dir $@)
 	$(AS8) $(AS8FLAGS) $< -o $@
 

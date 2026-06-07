@@ -1,0 +1,22 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_poke
+_poke:
+	; sdcccall(1) prologue: poke (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	; receive (sdcccall1) register param handled by prologue
+	ld	de, #4660
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+__poke_end:
+	; epilogue: poke
+	ld	sp, ix
+	pop	ix
+	ret

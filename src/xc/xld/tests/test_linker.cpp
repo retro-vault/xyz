@@ -133,3 +133,36 @@ TEST(linker_binary_output) {
     in.close();
     std::filesystem::remove(out);
 }
+
+TEST(linker_relaxes_local_jp_to_jr) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+
+    auto mod = std::make_shared<xld::module>("relax", "relax.rel");
+    mod->areas().emplace_back("_CODE", 4, xld::area_flags::none, 0);
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+    mod->symbols().emplace_back("L1", xld::symbol_type::def, 3, 1, 0);
+
+    xld::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0xC3, 0x00, 0x00, 0xC9}; // jp L1 ; ret
+
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::word | xld::reloc_mode::sym;
+    re.offset_in_t = 1;
+    re.ref_index = 1;
+    tr.relocs.push_back(re);
+    mod->texts().push_back(tr);
+    ctx.modules.push_back(mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    ASSERT_EQ(ctx.code_size, 3);
+    ASSERT_EQ(static_cast<int>(ctx.code_buffer.size()), 3);
+    ASSERT_EQ(ctx.code_buffer[0], 0x18);
+    ASSERT_EQ(ctx.code_buffer[1], 0x00);
+    ASSERT_EQ(ctx.code_buffer[2], 0xC9);
+    ASSERT_EQ(static_cast<int>(ctx.reloc_table.size()), 0);
+}

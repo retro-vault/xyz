@@ -217,6 +217,7 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::NOT;
         e->operand = parse_cast_expression();
+        e->type = type::make_int();
         return e;
     }
     if (check(tk::TILDE)) {
@@ -224,6 +225,8 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::BNOT;
         e->operand = parse_cast_expression();
+        if (e->operand && e->operand->type)
+            e->type = integer_promote(e->operand->type->unqual());
         return e;
     }
     if (check(tk::MINUS)) {
@@ -231,6 +234,10 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::NEG;
         e->operand = parse_cast_expression();
+        if (e->operand && e->operand->type) {
+            type_ptr t = e->operand->type->unqual();
+            e->type = t->is_integer() ? integer_promote(t) : t;
+        }
         return e;
     }
     if (check(tk::PLUS)) {
@@ -287,6 +294,7 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::PRE_INC;
         e->operand = parse_unary_expression();
+        if (e->operand) e->type = e->operand->type;
         return e;
     }
     if (check(tk::MINUS_MINUS)) {
@@ -294,6 +302,7 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<unary_expr>();
         e->loc = loc; e->op = unary_op::PRE_DEC;
         e->operand = parse_unary_expression();
+        if (e->operand) e->type = e->operand->type;
         return e;
     }
     if (check(tk::KW__ALIGNOF)) {
@@ -393,12 +402,14 @@ expr_ptr parser::parse_postfix_expression() {
             auto u = std::make_unique<unary_expr>();
             u->loc = loc; u->op = unary_op::POST_INC;
             u->operand = std::move(e);
+            if (u->operand) u->type = u->operand->type;
             e = std::move(u);
         } else if (check(tk::MINUS_MINUS)) {
             consume();
             auto u = std::make_unique<unary_expr>();
             u->loc = loc; u->op = unary_op::POST_DEC;
             u->operand = std::move(e);
+            if (u->operand) u->type = u->operand->type;
             e = std::move(u);
         } else {
             break;

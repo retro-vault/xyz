@@ -1,0 +1,40 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_shift_loop
+_shift_loop:
+	; sdcccall(1) prologue: shift_loop (locals=4, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	; keep incoming register arg n live in register for first use
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param x at -2(ix)
+	; receive (sdcccall1) param n at -4(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	h, d
+	ld	l, e
+	ld	b, l
+	pop	hl
+	ld	a, b
+	or	a, a
+	jr	z, __sdone_886
+__shift_9383:
+	add	hl, hl
+	djnz	__shift_9383
+__sdone_886:
+	ld	b, h
+	ld	c, l
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ex	de, hl
+__shift_loop_end:
+	; epilogue: shift_loop
+	ld	sp, ix
+	pop	ix
+	ret

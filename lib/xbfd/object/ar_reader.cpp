@@ -93,12 +93,11 @@ private:
         }
         if (raw.size() > 1 && raw[0] == '/' && std::isdigit(static_cast<unsigned char>(raw[1]))) {
             const auto off = static_cast<size_t>(std::stoul(raw.substr(1), nullptr, 10));
-            return gnu_long_name(gnu_table, off, path);
+            return gnu_long_name(gnu_table, off);
         }
         return ar_trim(raw);
     }
-    static std::string gnu_long_name(const std::string& table, size_t off,
-                                      const std::filesystem::path& path) {
+    static std::string gnu_long_name(const std::string& table, size_t off) {
         if (off >= table.size()) throw xbfd::format_error("invalid GNU ar string table offset");
         size_t end = off;
         while (end < table.size()) {

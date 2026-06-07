@@ -25,7 +25,6 @@ host `/usr` layout:
 Host-side command-line programs:
 
 - `appmake` converts tape and snapshot input into application payloads
-- `mdr` compatibility alias for `microdrive`
 - `microdrive` creates and edits `.mdr` cartridge images
 - `serial` transfers data over a serial link
 - `xas` assembler for Z80 build products

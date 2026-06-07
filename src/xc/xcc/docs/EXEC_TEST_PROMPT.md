@@ -27,8 +27,10 @@ work exactly like the existing `tests/data/exec` suite.
   GNU linker script for executable tests.
 - `tests/run_exec_tests.sh`
   Main script that builds, links, runs, and checks all executable tests.
-- `lib/runtime/*.s`
-  Merged xcc ABI bridge modules and imported runtime cores.
+- `lib/runtime/**`
+  Merged xcc runtime helpers grouped by domain under `int8/`, `int16/`,
+  `int32/`, `int64/`, `float/`, `double/`, `common/`, `atomic/`, `jumps/`,
+  and `sys/`.
 - `build/exec/...`
   Per-test generated assembly, objects, images, and debug artifacts.
 
@@ -37,7 +39,7 @@ Rule:
 - Put new C tests only under `tests/data/exec/<suite>/`.
 - Do not put helper tools under `tests/data`.
 - Keep new runtime/helper assembly outside `tests/data`, usually under
-  `lib/runtime/`.
+  `lib/runtime/` in the matching grouped subdirectory.
 
 ### Current Passing Test Set
 

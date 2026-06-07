@@ -13,11 +13,17 @@ _arr:
 
 	.globl _get_limit
 _get_limit:
-	; sdcccall(1) prologue: get_limit (locals=0, stack_params=0)
+	; sdcccall(1) prologue: get_limit (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	hl, (_LIMIT)
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	ex	de, hl
 	jp	__get_limit_end
 __get_limit_end:

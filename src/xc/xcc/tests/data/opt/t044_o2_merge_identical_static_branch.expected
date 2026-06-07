@@ -1,0 +1,84 @@
+	.module	xcc_output
+	.area	_CODE
+_picka:
+	; sdcccall(1) prologue: picka (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; keep incoming register arg t4 live in register for first use
+	; receive (sdcccall1) register param handled by prologue
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	a, h
+	or	a, l
+	jr	z, __xcc_L2
+__xcc_L0:
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	inc	hl
+	ld	b, h
+	ld	c, l
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ex	de, hl
+	jr	__picka_end
+__xcc_L2:
+	ld	hl, #0
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__picka_end:
+	; epilogue: picka
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_use_pick
+_use_pick:
+	; sdcccall(1) prologue: use_pick (locals=4, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -2(ix)
+	; receive (sdcccall1) param b at -4(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	.globl	_picka
+	call	_picka
+	push	de
+	pop	hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	.globl	_picka
+	call	_picka
+	push	de
+	pop	hl
+	ld	b, h
+	ld	c, l
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	d, b
+	ld	e, c
+	add	hl, de
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__use_pick_end:
+	; epilogue: use_pick
+	ld	sp, ix
+	pop	ix
+	ret

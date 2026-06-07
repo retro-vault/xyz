@@ -11,7 +11,7 @@ XCC       := $(HOST_BIN_DIR)/xcc
 XAS       := $(HOST_BIN_DIR)/xas
 XAR       := $(HOST_BIN_DIR)/xar
 XLD       := $(HOST_BIN_DIR)/xld
-RUNTIME_SOURCES := $(sort $(wildcard $(RUNTIME_DIR)/*.s))
+RUNTIME_SOURCES := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(RT_BUILD_DIR)/%.rel,$(RUNTIME_SOURCES))
 RUNTIME_LIB := $(RT_BUILD_DIR)/runtime.lib
 
@@ -57,10 +57,12 @@ $(BUILD_DIR)/crt0.rel: crt0.s | $(XAS) $(BUILD_DIR)
 	$(XAS) $(XASFLAGS) $< -o $@
 
 $(RT_BUILD_DIR)/%.rel: $(RUNTIME_DIR)/%.s | $(XAS) $(RT_BUILD_DIR)
+	mkdir -p $(dir $@)
 	$(XAS) $(XASFLAGS) $< -o $@
 
-$(RUNTIME_LIB): $(RUNTIME_RELS) | $(XAR)
-	$(XAR) rcs $@ $^
+$(RUNTIME_LIB): $(RUNTIME_RELS) | $(XAR) $(RT_BUILD_DIR)
+	rm -f $@
+	$(XAR) rcs $@ $(RUNTIME_RELS)
 
 $(BIN_DIR)/sieve.bin: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/sieve.rel $(RUNTIME_LIB) | $(XLD) $(BIN_DIR)
 	$(XLD) $(XLDFLAGS) -o $@ $^

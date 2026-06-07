@@ -8,6 +8,71 @@
 
 namespace xcc {
 
+operand ir_gen::gen_cond_value(expr &e) {
+    operand cond;
+    if (auto *id = dynamic_cast<ident_expr *>(&e);
+        id && id->sym && id->sym->kind != sym_kind::ENUM_CONST) {
+        cond = sym_to_operand(*id->sym, id->sym->type);
+    } else {
+        cond = gen_expr(e);
+    }
+
+    if (cond.type && cond.type->is_integer() &&
+        cond.type->size() < type::make_int()->size()) {
+        cond = emit_unop(icode_op::CAST, cond, type::make_int());
+    }
+    return cond;
+}
+
+void ir_gen::emit_cond_branch(expr &e,
+                              const std::string &true_lbl,
+                              const std::string &false_lbl) {
+    if (auto *bin = dynamic_cast<binary_expr *>(&e)) {
+        if (bin->op == bin_op::LAND) {
+            std::string rhs_lbl = new_label();
+            emit_cond_branch(*bin->left, rhs_lbl, false_lbl);
+            { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = rhs_lbl; emit(lbl); }
+            emit_cond_branch(*bin->right, true_lbl, false_lbl);
+            return;
+        }
+        if (bin->op == bin_op::LOR) {
+            std::string rhs_lbl = new_label();
+            emit_cond_branch(*bin->left, true_lbl, rhs_lbl);
+            { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = rhs_lbl; emit(lbl); }
+            emit_cond_branch(*bin->right, true_lbl, false_lbl);
+            return;
+        }
+        if (bin->op == bin_op::COMMA) {
+            gen_expr(*bin->left);
+            emit_cond_branch(*bin->right, true_lbl, false_lbl);
+            return;
+        }
+    }
+
+    if (auto *un = dynamic_cast<unary_expr *>(&e)) {
+        if (un->op == unary_op::NOT) {
+            emit_cond_branch(*un->operand, false_lbl, true_lbl);
+            return;
+        }
+    }
+
+    if (auto *lit = dynamic_cast<int_literal_expr *>(&e)) {
+        icode ic;
+        ic.op = icode_op::GOTO;
+        ic.label_name = lit->value ? true_lbl : false_lbl;
+        emit(ic);
+        return;
+    }
+
+    operand cond = gen_cond_value(e);
+    icode ic;
+    ic.op = icode_op::IFX;
+    ic.left = cond;
+    ic.true_lbl = true_lbl;
+    ic.false_lbl = false_lbl;
+    emit(ic);
+}
+
 void ir_gen::visit(compound_stmt &s) {
     for (auto &child : s.body)
         if (child) gen_stmt(*child);
@@ -25,7 +90,14 @@ void ir_gen::visit(decl_stmt &s) {
 void ir_gen::visit(return_stmt &s) {
     icode ic;
     ic.op = icode_op::RETURN;
-    if (s.value) ic.left = gen_expr(*s.value);
+    if (s.value) {
+        ic.left = gen_expr(*s.value);
+        if (cur_fn_ && cur_fn_->ret_type &&
+            cur_fn_->ret_type->kind != type_kind::VOID &&
+            ic.left.type != cur_fn_->ret_type) {
+            ic.left = emit_unop(icode_op::CAST, ic.left, cur_fn_->ret_type);
+        }
+    }
     emit(ic);
 }
 
@@ -34,16 +106,7 @@ void ir_gen::visit(if_stmt &s) {
     std::string else_lbl = new_label();
     std::string end_lbl  = new_label();
 
-    operand cond = gen_expr(*s.cond);
-
-    {
-        icode ic;
-        ic.op        = icode_op::IFX;
-        ic.left      = cond;
-        ic.true_lbl  = then_lbl;
-        ic.false_lbl = s.else_body ? else_lbl : end_lbl;
-        emit(ic);
-    }
+    emit_cond_branch(*s.cond, then_lbl, s.else_body ? else_lbl : end_lbl);
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = then_lbl; emit(lbl); }
     gen_stmt(*s.then_body);
@@ -68,9 +131,7 @@ void ir_gen::visit(while_stmt &s) {
     cont_lbl_  = cond_lbl;
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = cond_lbl; emit(lbl); }
-    operand cond = gen_expr(*s.cond);
-    { icode ic; ic.op = icode_op::IFX; ic.left = cond;
-      ic.true_lbl = body_lbl; ic.false_lbl = end_lbl; emit(ic); }
+    emit_cond_branch(*s.cond, body_lbl, end_lbl);
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = body_lbl; emit(lbl); }
     gen_stmt(*s.body);
@@ -95,9 +156,7 @@ void ir_gen::visit(do_while_stmt &s) {
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = body_lbl; emit(lbl); }
     gen_stmt(*s.body);
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = cond_lbl; emit(lbl); }
-    operand cond = gen_expr(*s.cond);
-    { icode ic; ic.op = icode_op::IFX; ic.left = cond;
-      ic.true_lbl = body_lbl; ic.false_lbl = end_lbl; emit(ic); }
+    emit_cond_branch(*s.cond, body_lbl, end_lbl);
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = end_lbl; emit(lbl); }
 
     break_lbl_ = saved_break;
@@ -119,9 +178,7 @@ void ir_gen::visit(for_stmt &s) {
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = cond_lbl; emit(lbl); }
     if (s.cond) {
-        operand cond = gen_expr(*s.cond);
-        icode ic; ic.op = icode_op::IFX; ic.left = cond;
-        ic.true_lbl = body_lbl; ic.false_lbl = end_lbl; emit(ic);
+        emit_cond_branch(*s.cond, body_lbl, end_lbl);
     }
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = body_lbl; emit(lbl); }

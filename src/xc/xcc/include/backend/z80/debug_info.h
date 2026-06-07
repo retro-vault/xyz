@@ -28,9 +28,7 @@ public:
     virtual void begin_function(const ir_function& fn,
                                 const std::string& mangled) = 0;
     virtual void end_function  (const ir_function& fn) = 0;
-    virtual void emit_global   (const std::string& name,
-                                 const type*       t,
-                                 bool              is_static) {}
+    virtual void emit_global(const std::string&, const type*, bool) {}
     virtual void end_module(const std::string& producer) = 0;
 };
 

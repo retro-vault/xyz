@@ -16,6 +16,7 @@
 #include "frontend/diag.h"
 #include "frontend/preproc.h"
 #include "frontend/lexer.h"
+#include "opt/iromod.h"
 #include "opt/iropt.h"
 #include "frontend/parser.h"
 #include "frontend/sema.h"
@@ -27,7 +28,6 @@
 #include "backend/z80/debug_info.h"
 #include <xbfd/xbfd.h>
 
-#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -95,11 +95,16 @@ static int compile_file(const std::string &input_path, const options &opts) {
     ir_gen irgen;
     auto  mod = irgen.lower(*tu);
 
-    // ----- 3.5 IR optimization (-O2) ---------------------------------
-    if (opts.opt >= opt_level::O2) {
-        for (auto &fn : mod->functions)
-            ir_optimizer::optimize(fn);
+    // ----- 3.5 IR optimization (-O2 / -O3 / -Os) ----------------------
+    if (opts.opt_settings.has_module_passes()) {
+        ir_module_optimizer::optimize(*mod, opts.opt_settings);
     }
+    if (opts.opt_settings.has_function_ir_passes()) {
+        for (auto &fn : mod->functions)
+            ir_optimizer::optimize(fn, opts.opt_settings);
+    }
+    if (opts.dump_ir)
+        mod->dump();
 
     // ----- 4. Code generation ----------------------------------------
     std::string out_path = opts.output_file.empty()
@@ -115,7 +120,7 @@ static int compile_file(const std::string &input_path, const options &opts) {
             emitter = std::make_unique<sdasz80_emitter>(asm_buf);
 
         z80_gen codegen(*emitter);
-        codegen.set_opt_level(static_cast<int>(opts.opt));
+        codegen.set_opt_settings(opts.opt_settings);
         if (opts.debug) {
             std::string base = out_path;
             auto dot = base.rfind('.');
@@ -137,7 +142,7 @@ static int compile_file(const std::string &input_path, const options &opts) {
     std::string asm_text = asm_buf.str();
 
     // ----- 5. Peephole optimization ----------------------------------
-    if (opts.opt >= opt_level::O1) {
+    if (opts.opt_settings.peephole) {
         asm_text = z80_peep::optimize(asm_text);
     }
 

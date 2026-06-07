@@ -37,8 +37,25 @@ When the distribution tree is staged, those documents are collected under
 - [howtos/HOW-TO-TEST.md](/home/tstih/data/retro-vault/xyz/docs/howtos/HOW-TO-TEST.md)
   End-to-end and focused regression test workflows.
 
+- [howtos/BENCHMARKS.md](/home/tstih/data/retro-vault/xyz/docs/howtos/BENCHMARKS.md)
+  Repeatable codegen and bare-metal benchmark workflows against SDCC.
+
+- [howtos/IR.md](/home/tstih/data/retro-vault/xyz/docs/howtos/IR.md)
+  A practical guide to the three-address intermediate language that sits
+  between the frontend and the Z80 backend.
+
+- [GAPS.md](/home/tstih/data/retro-vault/xyz/docs/GAPS.md)
+  Current benchmark/code-quality gap analysis against SDCC.
+
+- [SDCC-CODEGEN.md](/home/tstih/data/retro-vault/xyz/docs/SDCC-CODEGEN.md)
+  Notes from studying the original SDCC Z80 backend and adapting its
+  winning code-generation ideas into `xcc`.
+
 - [howtos/DEBUGGER_INTEGRATION.md](/home/tstih/data/retro-vault/xyz/docs/howtos/DEBUGGER_INTEGRATION.md)
   How to connect an emulator or target to the current debugger stack.
+
+- [howtos/OPTIMIZATIONS.md](/home/tstih/data/retro-vault/xyz/docs/howtos/OPTIMIZATIONS.md)
+  What `xcc` optimization levels already do today.
 
 - [todo/LIBC-GAPS.md](/home/tstih/data/retro-vault/xyz/docs/todo/LIBC-GAPS.md)
   Honest status of the current Z80 libc surface and missing pieces.

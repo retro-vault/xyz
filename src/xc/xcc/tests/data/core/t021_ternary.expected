@@ -5,7 +5,7 @@
 
 	.globl _max
 _max:
-	; sdcccall(1) prologue: max (locals=4, stack_params=0)
+	; sdcccall(1) prologue: max (locals=4, temp_frame=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -13,7 +13,7 @@ _max:
 	ld	-1(ix), h
 	ld	-4(ix), e
 	ld	-3(ix), d
-	ld	hl, #-4
+	ld	hl, #-10
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param a at -2(ix)
@@ -27,15 +27,11 @@ _max:
 	ex	de, hl
 	or	a, a
 	sbc	hl, de
-	jp	z, __cmp_e_30886
-	jp	p, __cmp_t_89383
 	ld	hl, #0
-	jp	__cmp_e_30886
-__cmp_t_89383:
-	ld	hl, #1
-__cmp_e_30886:
-	dec	sp
-	dec	sp
+	jp	z, __cmp_e_89383
+	jp	m, __cmp_e_89383
+	inc	l
+__cmp_e_89383:
 	ld	-6(ix), l
 	ld	-5(ix), h
 	ld	l, -6(ix)
@@ -47,8 +43,6 @@ __cmp_e_30886:
 __xcc_L0:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	dec	sp
-	dec	sp
 	ld	-8(ix), l
 	ld	-7(ix), h
 	jp	__xcc_L2
@@ -60,6 +54,10 @@ __xcc_L1:
 __xcc_L2:
 	ld	l, -8(ix)
 	ld	h, -7(ix)
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -10(ix)
+	ld	h, -9(ix)
 	ex	de, hl
 	jp	__max_end
 __max_end:
@@ -69,7 +67,7 @@ __max_end:
 	ret
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=0, stack_params=0)
+	; sdcccall(1) prologue: main (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -85,6 +83,12 @@ _main:
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
+	dec	sp
+	dec	sp
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

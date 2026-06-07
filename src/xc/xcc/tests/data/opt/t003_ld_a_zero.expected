@@ -6,12 +6,12 @@ _g:
 	.area	_CODE
 	.globl	_f
 _f:
-	; sdcccall(1) prologue: f (locals=0, stack_params=0)
+	; sdcccall(1) prologue: f (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #0
-	ld	(_g), hl
+	xor	a
+	ld	(_g), a
 __f_end:
 	; epilogue: f
 	ld	sp, ix

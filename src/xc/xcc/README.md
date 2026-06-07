@@ -309,7 +309,9 @@ GENERATE=1 bash tests/run_tests.sh ./build/bin/xcc # update baselines
 When you intentionally change code-generation output, regenerate baselines with
 `GENERATE=1` before committing.
 
-Tests run with `-O0` by default and compare normalized assembly snapshots.
+Most snapshot tests run with `-O0` by default and compare normalized
+assembly snapshots. Some optimization regressions pin explicit `-O2`
+or `-Os` outputs.
 
 ---
 

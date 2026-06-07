@@ -13,7 +13,8 @@ make -C tools/microdrive
 
 The binaries are placed at:
 
-- `bin/bin/tools/microdrive/microdrive`
+- `bin/bin/microdrive`
+- `bin/lib/libmicrodrive.a`
 
 ## Usage
 

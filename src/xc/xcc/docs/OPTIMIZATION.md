@@ -31,7 +31,7 @@ still intentionally small.
   IX-relative spill slots, and stack space for them is grown at first
   use by emitting `dec sp` or `ld hl,#-N / add hl,sp / ld sp,hl`.
 - Register allocation is a lightweight pre-pass that can pin a 16-bit
-  temp in `BC` or an 8-bit temp in `A'`, but only in narrow windows.
+  temp in `BC` inside narrow straight-line windows.
 - The peephole pass is purely syntactic and already removes several
   common push/pop, self-load, and jump-to-next-label patterns.
 
@@ -218,9 +218,8 @@ What it does:
 
 Why it is effective:
 
-- this is likely one of the biggest code-size wins available
-- current lazy `alloc_temp()` emits `dec sp` noise throughout the
-  function body
+- it can remove repeated `dec sp` growth in functions that really do
+  need many stack-backed temp spills
 - fixed spill offsets also make later peephole and addressing logic much
   simpler
 
@@ -228,6 +227,13 @@ Implementation approach:
 
 - perform a pre-pass to assign all non-register temps fixed frame
   offsets
+
+Current status:
+
+- implemented as `-fprealloc-temp-frame`
+- now also enabled automatically at `-O2` / `-O3` / `-Os` when the function
+  already needs an IX frame for locals, stack parameters, or fixed-frame
+  hazards
 - compute `max_temp_bytes`
 - reserve `local_bytes + max_temp_bytes` in the prologue once
 - stop emitting stack adjustment instructions from `alloc_temp()`
@@ -578,8 +584,12 @@ Expected result:
 
 ### Phase 2: Reduce Stack Traffic
 
-- pre-allocate temp spill space in the prologue
+- broaden automatic TEMP preallocation beyond the current
+  “function already needs an IX frame” rule only when a clear byte-gain
+  heuristic says it is worth forcing a fixed frame
 - add single-use temp forwarding and store/load forwarding
+- fold exact `&symbol` temporaries and simple `&symbol + const` address
+  expressions back into direct local/global accesses before codegen
 - improve 8-bit operation selection
 - fold address expressions into direct accesses
 
@@ -608,13 +618,15 @@ Expected result:
 
 If only a few items are implemented first, the best bets are:
 
-1. Pre-allocate temp spill space once per function.
-2. Fuse compare generation with `IFX` so boolean temps are not
+1. Fuse compare generation with `IFX` so boolean temps are not
    materialized unless truly needed.
-3. Replace generic post-call stack cleanup with `pop`-based Z80 forms.
-4. Add true 8-bit operation lowering instead of routing byte values
+2. Replace generic post-call stack cleanup with `pop`-based Z80 forms.
+3. Add true 8-bit operation lowering instead of routing byte values
    through 16-bit paths.
-5. Expand IR algebraic simplification and direct address folding.
+4. Expand IR algebraic simplification and direct address folding.
+5. Broaden automatic TEMP preallocation beyond the current
+   existing-frame heuristic only when a byte-gain rule proves where
+   forcing a frame is worth it.
 
 Those five changes fit the current architecture, target the biggest
 repeated size costs in the existing code generator, and do not require a

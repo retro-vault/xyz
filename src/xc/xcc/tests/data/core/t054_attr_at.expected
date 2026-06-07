@@ -7,11 +7,17 @@ _mapped_var = 16384
 
 	.globl _get
 _get:
-	; sdcccall(1) prologue: get (locals=0, stack_params=0)
+	; sdcccall(1) prologue: get (locals=0, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	hl, (_mapped_var)
+	dec	sp
+	dec	sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	ex	de, hl
 	jp	__get_end
 __get_end:

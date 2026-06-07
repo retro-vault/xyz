@@ -30,7 +30,7 @@ Commands:
 - `make -C tests/mdr-emu test` runs one full smoke pass
 - `make -C tests/mdr-emu stress` runs repeated smoke passes
 - `make -C tests/mdr-emu size` prints microdrive object sizes and ROM size
-- `make -C tests/mdr-emu repro-strict` (or `bin/mdr-emu/mdr_emu repro-strict`) runs a Fuse-like strict
+- `make -C tests/mdr-emu repro-strict` (or `build/mdr-emu/mdr_emu repro-strict`) runs a Fuse-like strict
   IF1/Microdrive model against `mdrstep.mdr`:
   - control/data/net port decode by `port & 0x18`
   - motor rotation from control clock/data bits

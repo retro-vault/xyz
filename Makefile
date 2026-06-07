@@ -105,7 +105,7 @@ stage-xcc-support:
 	rm -rf $(LIBEXEC_DIR)
 	mkdir -p $(XCC_SUPPORT_INCLUDE_DIR) $(XCC_SUPPORT_RUNTIME_DIR)
 	cp -R $(ROOT)/lib/libc/include/. $(XCC_SUPPORT_INCLUDE_DIR)/
-	@for src in $(sort $(wildcard $(ROOT)/src/xc/xcc/lib/runtime/*.s)); do \
+	@for src in $$(find $(ROOT)/src/xc/xcc/lib/runtime -name '*.s' | sort); do \
 	    rel="$(XCC_SUPPORT_RUNTIME_DIR)/$$(basename "$${src%.s}").rel"; \
 	    $(HOST_BIN_DIR)/xas --mode=sdcc "$$src" -o "$$rel"; \
 	done

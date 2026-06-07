@@ -45,6 +45,24 @@ namespace xar {
             return false;
         }
 
+        // Build a stable text-index member path relative to the archive
+        // location so nested runtime/object directories can round-trip.
+        static std::string relative_member_name(
+            const std::string& archive_path,
+            const std::filesystem::path& member_path)
+        {
+            const auto archive_dir =
+                std::filesystem::absolute(std::filesystem::path(archive_path))
+                    .parent_path()
+                    .lexically_normal();
+            const auto member_abs =
+                std::filesystem::absolute(member_path).lexically_normal();
+            auto rel = member_abs.lexically_relative(archive_dir);
+            if (rel.empty())
+                rel = member_path.lexically_normal();
+            return rel.generic_string();
+        }
+
         // Load existing archive members; returns empty if archive does not exist.
         static std::vector<bfd::archive_member> load_existing(
             const std::string& archive_path)
@@ -92,7 +110,9 @@ namespace xar {
 
         for (const auto& member_path : opts.members) {
             std::filesystem::path p(member_path);
-            std::string name = p.filename().string();
+            std::string name = (opts.mode == archive_mode::sdcc)
+                ? relative_member_name(opts.archive, p)
+                : p.filename().string();
 
             bfd::archive_member m;
             m.name = name;

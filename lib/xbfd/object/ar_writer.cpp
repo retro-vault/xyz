@@ -18,9 +18,9 @@ public:
     void emit_text(const xbfd::object& arc, std::ostream& out) {
         out << "# xbfd text-index library\n";
         for (const auto& m : arc.members) {
-            const auto entry = m.path.empty()
+            const auto entry = !m.name.empty()
                 ? m.name
-                : std::filesystem::path(m.path).filename().string();
+                : std::filesystem::path(m.path).filename().generic_string();
             out << entry << "\n";
         }
     }

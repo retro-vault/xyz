@@ -19,6 +19,8 @@
 #include <cctype>
 #include <cstring>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace xcc {
 
@@ -106,6 +108,499 @@ static bool parse_ix_ref(const std::string &s, int &offset) {
     catch (...) { return false; }
 }
 
+struct asm_pattern_line {
+    const char *label = nullptr;
+    const char *mnemonic = nullptr;
+    const char *operands = nullptr;
+};
+
+struct asm_template_line {
+    const char *label = nullptr;
+    const char *mnemonic = nullptr;
+    const char *operands = nullptr;
+};
+
+struct asm_structural_rule {
+    const char *name = "";
+    const asm_pattern_line *match = nullptr;
+    size_t match_count = 0;
+    const asm_template_line *replace = nullptr;
+    size_t replace_count = 0;
+};
+
+static bool is_capture_field(const char *field) {
+    return field != nullptr && field[0] == '$' && field[1] != '\0';
+}
+
+static bool match_pattern_field(const char *pattern,
+                                const std::string &actual,
+                                std::unordered_map<std::string, std::string> &captures) {
+    if (pattern == nullptr)
+        return true;
+    if (is_capture_field(pattern)) {
+        const std::string key(pattern + 1);
+        auto it = captures.find(key);
+        if (it == captures.end()) {
+            captures.emplace(key, actual);
+            return true;
+        }
+        return it->second == actual;
+    }
+    return actual == pattern;
+}
+
+static bool expand_template_field(const char *templ,
+                                  const std::unordered_map<std::string, std::string> &captures,
+                                  std::string &out) {
+    if (templ == nullptr) {
+        out.clear();
+        return true;
+    }
+    if (is_capture_field(templ)) {
+        auto it = captures.find(templ + 1);
+        if (it == captures.end())
+            return false;
+        out = it->second;
+        return true;
+    }
+    out = templ;
+    return true;
+}
+
+static void collect_capture_names(const char *field,
+                                  std::unordered_set<std::string> &names) {
+    if (is_capture_field(field))
+        names.insert(field + 1);
+}
+
+static bool validate_structural_rule(const asm_structural_rule &rule) {
+    std::unordered_set<std::string> bound;
+    for (size_t i = 0; i < rule.match_count; ++i) {
+        collect_capture_names(rule.match[i].label, bound);
+        collect_capture_names(rule.match[i].mnemonic, bound);
+        collect_capture_names(rule.match[i].operands, bound);
+    }
+
+    auto replacement_capture_known = [&](const char *field) {
+        return !is_capture_field(field) || bound.count(field + 1) != 0;
+    };
+
+    for (size_t i = 0; i < rule.replace_count; ++i) {
+        if (!replacement_capture_known(rule.replace[i].label) ||
+            !replacement_capture_known(rule.replace[i].mnemonic) ||
+            !replacement_capture_known(rule.replace[i].operands)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool apply_structural_rule_at(std::vector<asm_line> &lines, size_t index,
+                                     const asm_structural_rule &rule) {
+    if (index + rule.match_count > lines.size())
+        return false;
+
+    std::unordered_map<std::string, std::string> captures;
+    for (size_t i = 0; i < rule.match_count; ++i) {
+        const asm_line &line = lines[index + i];
+        if (!match_pattern_field(rule.match[i].label, line.label, captures) ||
+            !match_pattern_field(rule.match[i].mnemonic, line.mnemonic, captures) ||
+            !match_pattern_field(rule.match[i].operands, line.operands, captures)) {
+            return false;
+        }
+    }
+
+    std::vector<asm_line> replacement;
+    replacement.reserve(rule.replace_count);
+    for (size_t i = 0; i < rule.replace_count; ++i) {
+        asm_line line;
+        if (!expand_template_field(rule.replace[i].label, captures, line.label) ||
+            !expand_template_field(rule.replace[i].mnemonic, captures, line.mnemonic) ||
+            !expand_template_field(rule.replace[i].operands, captures, line.operands)) {
+            return false;
+        }
+        line.is_label = !line.label.empty();
+        replacement.push_back(std::move(line));
+    }
+
+    lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(index),
+                lines.begin() + static_cast<std::ptrdiff_t>(index + rule.match_count));
+    lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(index),
+                 replacement.begin(), replacement.end());
+    return true;
+}
+
+static bool apply_structural_rules(std::vector<asm_line> &lines, size_t index) {
+    static const asm_pattern_line k_push_pop_hl_match[] = {
+        {"", "push", "hl"},
+        {"", "pop",  "hl"},
+    };
+    static const asm_pattern_line k_jp_next_match[] = {
+        {"",       "jp", "$target"},
+        {"$target","",   ""},
+    };
+    static const asm_template_line k_jp_next_replace[] = {
+        {"$target", "", ""},
+    };
+    static const asm_pattern_line k_call_ret_match[] = {
+        {"", "call", "$target"},
+        {"", "ret",  ""},
+    };
+    static const asm_template_line k_call_ret_replace[] = {
+        {"", "jp", "$target"},
+    };
+    static const asm_pattern_line k_push_pop_bc_match[] = {
+        {"", "push", "hl"},
+        {"", "pop",  "bc"},
+    };
+    static const asm_template_line k_push_pop_bc_replace[] = {
+        {"", "ld", "b, h"},
+        {"", "ld", "c, l"},
+    };
+
+    static const asm_structural_rule k_rules[] = {
+        {"push_pop_hl", k_push_pop_hl_match, 2, nullptr, 0},
+        {"jp_next",     k_jp_next_match,     2, k_jp_next_replace, 1},
+        {"call_ret_to_jp_simple", k_call_ret_match, 2, k_call_ret_replace, 1},
+        {"push_pop_bc", k_push_pop_bc_match, 2, k_push_pop_bc_replace, 2},
+    };
+
+    static const bool validated = []() {
+        for (const auto &rule : k_rules)
+            if (!validate_structural_rule(rule))
+                return false;
+        return true;
+    }();
+
+    if (!validated)
+        return false;
+
+    for (const auto &rule : k_rules) {
+        if (apply_structural_rule_at(lines, index, rule))
+            return true;
+    }
+    return false;
+}
+
+static bool parse_conditional_jump(const asm_line &line,
+                                   std::string &cc,
+                                   std::string &target) {
+    if (line.mnemonic != "jp" && line.mnemonic != "jr")
+        return false;
+
+    static const char *const ccs[] = {
+        "nz,", "z,", "nc,", "c,", "m,", "p,", "pe,", "po,", nullptr
+    };
+
+    std::string ops = trim(line.operands);
+    for (int k = 0; ccs[k]; ++k) {
+        size_t len = std::strlen(ccs[k]);
+        if (ops.size() <= len || ops.substr(0, len) != ccs[k])
+            continue;
+        cc = ops.substr(0, len - 1);
+        target = trim(ops.substr(len));
+        return !target.empty();
+    }
+
+    return false;
+}
+
+static bool parse_unconditional_jump(const asm_line &line,
+                                     std::string &target) {
+    if (line.mnemonic != "jp" && line.mnemonic != "jr")
+        return false;
+
+    target = trim(line.operands);
+    return !target.empty() && target.find(',') == std::string::npos;
+}
+
+static bool is_numeric_literal(const std::string &s) {
+    if (s.empty())
+        return false;
+    size_t i = 0;
+    if (s[i] == '#')
+        ++i;
+    if (i < s.size() && (s[i] == '-' || s[i] == '+'))
+        ++i;
+    if (i >= s.size())
+        return false;
+    if (s[i] == '0' && i + 1 < s.size() &&
+        (s[i + 1] == 'x' || s[i + 1] == 'X')) {
+        i += 2;
+        if (i >= s.size())
+            return false;
+        for (; i < s.size(); ++i) {
+            if (!std::isxdigit(static_cast<unsigned char>(s[i])))
+                return false;
+        }
+        return true;
+    }
+    for (; i < s.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(s[i])))
+            return false;
+    }
+    return true;
+}
+
+static bool is_reg8(const std::string &s) {
+    return s == "a" || s == "b" || s == "c" || s == "d" ||
+           s == "e" || s == "h" || s == "l" ||
+           s == "ixl" || s == "ixh" || s == "iyl" || s == "iyh";
+}
+
+static bool is_reg16(const std::string &s) {
+    return s == "af" || s == "bc" || s == "de" || s == "hl" ||
+           s == "ix" || s == "iy" || s == "sp";
+}
+
+static bool uses_ixiy_disp(const std::string &s) {
+    return s.find("(ix") != std::string::npos ||
+           s.find("(iy") != std::string::npos ||
+           s.find("(ix)") != std::string::npos ||
+           s.find("(iy)") != std::string::npos;
+}
+
+static bool uses_hl_indirect(const std::string &s) {
+    return s == "(hl)";
+}
+
+static bool uses_abs_indirect(const std::string &s) {
+    if (s.size() < 3 || s.front() != '(' || s.back() != ')')
+        return false;
+    return !uses_hl_indirect(s) && !uses_ixiy_disp(s);
+}
+
+static int count_csv_items(const std::string &ops) {
+    if (trim(ops).empty())
+        return 0;
+    int count = 1;
+    for (char ch : ops) {
+        if (ch == ',')
+            ++count;
+    }
+    return count;
+}
+
+static bool is_section_directive(const asm_line &line) {
+    return line.mnemonic == ".area" || line.mnemonic == ".section" ||
+           line.mnemonic == ".text" || line.mnemonic == ".data" ||
+           line.mnemonic == ".module";
+}
+
+static int estimate_instruction_size(const asm_line &line) {
+    if (line.mnemonic.empty())
+        return 0;
+
+    if (is_section_directive(line) ||
+        line.mnemonic == ".globl" || line.mnemonic == ".global" ||
+        line.mnemonic == ".optsdcc" || line.mnemonic == ".set") {
+        return 0;
+    }
+
+    if (line.mnemonic == ".db" || line.mnemonic == ".byte")
+        return count_csv_items(line.operands);
+    if (line.mnemonic == ".dw" || line.mnemonic == ".short")
+        return 2 * count_csv_items(line.operands);
+    if (line.mnemonic == ".dl" || line.mnemonic == ".long")
+        return 4 * count_csv_items(line.operands);
+    if (line.mnemonic == ".ds" || line.mnemonic == ".space") {
+        std::string n = trim(line.operands);
+        return is_numeric_literal(n) ? std::stoi(n[0] == '#' ? n.substr(1) : n) : 0;
+    }
+
+    if (line.mnemonic == "ret" || line.mnemonic == "reti" || line.mnemonic == "retn" ||
+        line.mnemonic == "nop" || line.mnemonic == "halt" || line.mnemonic == "di" ||
+        line.mnemonic == "ei" || line.mnemonic == "cpl" || line.mnemonic == "ccf" ||
+        line.mnemonic == "scf" || line.mnemonic == "neg" || line.mnemonic == "rla" ||
+        line.mnemonic == "rlca" || line.mnemonic == "rra" || line.mnemonic == "rrca" ||
+        line.mnemonic == "rld" || line.mnemonic == "rrd" || line.mnemonic == "exx") {
+        return 1;
+    }
+
+    if (line.mnemonic == "jp" || line.mnemonic == "call")
+        return 3;
+    if (line.mnemonic == "jr" || line.mnemonic == "djnz")
+        return 2;
+    if (line.mnemonic == "ldir" || line.mnemonic == "ldi" ||
+        line.mnemonic == "ldd" || line.mnemonic == "cpir" ||
+        line.mnemonic == "cpdr" || line.mnemonic == "cpi" ||
+        line.mnemonic == "cpd") {
+        return 2;
+    }
+
+    if (line.mnemonic == "push" || line.mnemonic == "pop") {
+        std::string op = trim(line.operands);
+        return (op == "ix" || op == "iy") ? 2 : 1;
+    }
+
+    if (line.mnemonic == "ex") {
+        std::string ops = trim(line.operands);
+        return (ops == "de, hl" || ops == "hl, de" ||
+                ops == "af, af'" || ops == "af', af") ? 1 : 2;
+    }
+
+    if (line.mnemonic == "inc" || line.mnemonic == "dec") {
+        std::string op = trim(line.operands);
+        if (op == "ix" || op == "iy")
+            return 2;
+        if (uses_ixiy_disp(op))
+            return 3;
+        return 1;
+    }
+
+    if (line.mnemonic == "add" || line.mnemonic == "adc" || line.mnemonic == "sbc" ||
+        line.mnemonic == "sub" || line.mnemonic == "and" || line.mnemonic == "or" ||
+        line.mnemonic == "xor" || line.mnemonic == "cp") {
+        std::string dst, src;
+        if (!split_ld(line.operands, dst, src)) {
+            std::string op = trim(line.operands);
+            if (uses_ixiy_disp(op))
+                return 3;
+            if (uses_hl_indirect(op) || is_reg8(op) || is_reg16(op))
+                return 1;
+            return is_numeric_literal(op) ? 2 : 3;
+        }
+
+        if ((trim(dst) == "ix" || trim(dst) == "iy") && is_reg16(trim(src)))
+            return 2;
+        if (trim(dst) == "hl" && is_reg16(trim(src)))
+            return 1;
+        if (uses_ixiy_disp(trim(src)))
+            return 3;
+        if (uses_hl_indirect(trim(src)))
+            return 1;
+        if (is_numeric_literal(trim(src)))
+            return 2;
+        return 1;
+    }
+
+    if (line.mnemonic == "rr" || line.mnemonic == "rl" || line.mnemonic == "sra" ||
+        line.mnemonic == "srl" || line.mnemonic == "sla" || line.mnemonic == "rlc" ||
+        line.mnemonic == "rrc" || line.mnemonic == "bit" || line.mnemonic == "set" ||
+        line.mnemonic == "res") {
+        std::string op = trim(line.operands);
+        if (uses_ixiy_disp(op))
+            return 4;
+        return 2;
+    }
+
+    if (line.mnemonic == "ld") {
+        std::string dst, src;
+        if (!split_ld(line.operands, dst, src))
+            return 4;
+        dst = trim(dst);
+        src = trim(src);
+
+        if ((dst == "sp" && src == "ix") || (dst == "sp" && src == "iy"))
+            return 2;
+        if ((dst == "ix" || dst == "iy") && is_numeric_literal(src))
+            return 4;
+        if (is_reg16(dst) && is_numeric_literal(src))
+            return 3;
+        if ((dst == "ix" || dst == "iy") && uses_abs_indirect(src))
+            return 4;
+        if ((src == "ix" || src == "iy") && uses_abs_indirect(dst))
+            return 4;
+        if (uses_ixiy_disp(dst) || uses_ixiy_disp(src))
+            return 3;
+        if (dst == "(hl)" && is_numeric_literal(src))
+            return 2;
+        if ((uses_abs_indirect(dst) && (src == "a" || src == "hl")) ||
+            ((dst == "a" || dst == "hl") && uses_abs_indirect(src)))
+            return 3;
+        if (uses_hl_indirect(dst) || uses_hl_indirect(src))
+            return 1;
+        if (is_reg8(dst) && is_numeric_literal(src))
+            return 2;
+        if (is_reg8(dst) && is_reg8(src))
+            return 1;
+        if (is_reg16(dst) && is_reg16(src))
+            return 2;
+        if (is_reg16(dst))
+            return 3;
+        return 2;
+    }
+
+    // Conservative fallback: prefer missing a relaxation over emitting an
+    // out-of-range JR due to underestimating instruction sizes.
+    return 4;
+}
+
+struct code_layout_entry {
+    int section = 0;
+    int offset = 0;
+};
+
+struct code_layout {
+    std::vector<code_layout_entry> line_pos;
+    std::unordered_map<std::string, code_layout_entry> label_pos;
+};
+
+static code_layout compute_code_layout(const std::vector<asm_line> &lines) {
+    code_layout layout;
+    layout.line_pos.resize(lines.size());
+
+    int section = 0;
+    int offset = 0;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        layout.line_pos[i] = {section, offset};
+        if (!lines[i].label.empty())
+            layout.label_pos[lines[i].label] = {section, offset};
+
+        if (is_section_directive(lines[i])) {
+            ++section;
+            offset = 0;
+            continue;
+        }
+
+        offset += estimate_instruction_size(lines[i]);
+    }
+
+    return layout;
+}
+
+// jp z,L_true; jp m,L_true; jp L_false; L_true:
+//   -> jp m,L_true; jp nz,L_false; L_true:
+//
+// Signed <= branches leave "greater than zero" as the only false case after
+// `sbc hl,de`. When the true block is the immediate fallthrough, a pair of
+// branches is enough: negative jumps true, positive-nonzero jumps false, and
+// equal falls through into the true block.
+static bool rule_signed_le_fallthrough(std::vector<asm_line> &lines, size_t i) {
+    if (i + 3 >= lines.size())
+        return false;
+
+    auto &l0 = lines[i];
+    auto &l1 = lines[i + 1];
+    auto &l2 = lines[i + 2];
+    auto &l3 = lines[i + 3];
+
+    if (!l0.label.empty() || !l1.label.empty() || !l2.label.empty())
+        return false;
+
+    std::string cc0, true_lbl;
+    if (!parse_conditional_jump(l0, cc0, true_lbl) || cc0 != "z")
+        return false;
+
+    std::string cc1, true_lbl_2;
+    if (!parse_conditional_jump(l1, cc1, true_lbl_2) ||
+        cc1 != "m" || true_lbl_2 != true_lbl) {
+        return false;
+    }
+
+    std::string false_lbl;
+    if (!parse_unconditional_jump(l2, false_lbl) || false_lbl == true_lbl)
+        return false;
+
+    if (l3.label != true_lbl || !l3.mnemonic.empty())
+        return false;
+
+    lines[i] = asm_line::parse("\tjp\tm, " + true_lbl);
+    lines[i + 1] = asm_line::parse("\tjp\tnz, " + false_lbl);
+    lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    return true;
+}
+
 // ----- z80_peep ------------------------------------------------------
 
 void z80_peep::load(const std::string &text) {
@@ -126,9 +621,13 @@ std::string z80_peep::dump() const {
 bool z80_peep::apply_once() {
     bool changed = false;
     for (size_t i = 0; i + 1 < lines_.size(); ++i) {
+        if (apply_structural_rules(lines_, i)) { changed = true; continue; }
         if (rule_bool_ifx_shortcircuit(i)) { changed = true; continue; }
+        if (rule_call_ret_to_jp(i))      { changed = true; continue; }
+        if (rule_signed_le_fallthrough(lines_, i)) { changed = true; continue; }
         if (rule_invert_branch_skip(i))  { changed = true; continue; }
         if (rule_zero_cmp_optimize(i))   { changed = true; continue; }
+        if (rule_hl_nonzero_materialize(i)) { changed = true; continue; }
         if (rule_ex_de_hl_load_double(i)) { changed = true; continue; }
         if (rule_ix_store_reload(i))     { changed = true; continue; }
         if (rule_dead_hl_ix_load(i))     { changed = true; continue; }
@@ -195,6 +694,30 @@ bool z80_peep::rule_push_pop_hl(size_t i) {
         lines_.erase(lines_.begin() + i, lines_.begin() + i + 2);
         return true;
     }
+    return false;
+}
+
+// call target; ret  →  jp target
+// call target; label: ret  →  jp target; label: ret
+bool z80_peep::rule_call_ret_to_jp(size_t i) {
+    if (i + 1 >= lines_.size()) return false;
+
+    auto &call = lines_[i];
+    if (call.mnemonic != "call") return false;
+    if (call.operands.find(',') != std::string::npos) return false;
+
+    auto is_noncode = [](const asm_line &l) {
+        return l.mnemonic.empty();
+    };
+    size_t j = i + 1;
+    while (j < lines_.size() && is_noncode(lines_[j]))
+        ++j;
+    if (j < lines_.size() && lines_[j].mnemonic == "ret" && lines_[j].label.empty()) {
+        call.mnemonic = "jp";
+        lines_.erase(lines_.begin() + j);
+        return true;
+    }
+
     return false;
 }
 
@@ -525,18 +1048,134 @@ bool z80_peep::rule_zero_cmp_optimize(size_t i) {
     return true;
 }
 
+bool z80_peep::rule_hl_nonzero_materialize(size_t i) {
+    auto is_end_label = [&](size_t idx, const std::string &expected) {
+        return idx < lines_.size() &&
+               lines_[idx].label == expected &&
+               lines_[idx].mnemonic.empty();
+    };
+
+    auto rewrite_common_tail = [&](size_t start,
+                                   size_t branch_idx,
+                                   const std::string &end_lbl) {
+        if (branch_idx + 2 >= lines_.size())
+            return false;
+        const asm_line &branch = lines_[branch_idx];
+        if ((branch.mnemonic != "jr" && branch.mnemonic != "jp") ||
+            lines_[branch_idx + 1].mnemonic != "dec" ||
+            trim(lines_[branch_idx + 1].operands) != "hl" ||
+            !is_end_label(branch_idx + 2, end_lbl))
+            return false;
+
+        std::string ops = trim(branch.operands);
+        size_t comma = ops.find(',');
+        if (comma == std::string::npos)
+            return false;
+        if (trim(ops.substr(0, comma)) != "nz" ||
+            trim(ops.substr(comma + 1)) != end_lbl)
+            return false;
+
+        asm_line l0; l0.mnemonic = "ld"; l0.operands = "a, h";
+        asm_line l1; l1.mnemonic = "or"; l1.operands = "a, l";
+        asm_line l2; l2.mnemonic = "ld"; l2.operands = "hl, #1";
+        asm_line l3 = branch;
+        asm_line l4; l4.mnemonic = "dec"; l4.operands = "hl";
+        asm_line l5; l5.label = end_lbl; l5.is_label = true;
+
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(start),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(branch_idx + 3));
+        lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(start),
+                      {l0, l1, l2, l3, l4, l5});
+        return true;
+    };
+
+    // push hl; ld hl,#0; pop de; or a,a; sbc hl,de; ld hl,#1; jr/jp nz,L; dec hl; L:
+    if (i + 8 < lines_.size() &&
+        lines_[i].mnemonic == "push" && trim(lines_[i].operands) == "hl" &&
+        lines_[i + 1].mnemonic == "ld" && trim(lines_[i + 1].operands) == "hl, #0" &&
+        lines_[i + 2].mnemonic == "pop" && trim(lines_[i + 2].operands) == "de" &&
+        lines_[i + 3].mnemonic == "or" && trim(lines_[i + 3].operands) == "a, a" &&
+        lines_[i + 4].mnemonic == "sbc" && trim(lines_[i + 4].operands) == "hl, de" &&
+        lines_[i + 5].mnemonic == "ld" && trim(lines_[i + 5].operands) == "hl, #1") {
+        std::string ops = trim(lines_[i + 6].operands);
+        size_t comma = ops.find(',');
+        if (comma != std::string::npos) {
+            std::string end_lbl = trim(ops.substr(comma + 1));
+            if (rewrite_common_tail(i, i + 6, end_lbl))
+                return true;
+        }
+    }
+
+    // ld b,h; ld c,l; ex de,hl; ld hl,#0; or a,a; sbc hl,de; ld hl,#1; jr/jp nz,L; dec hl; L:
+    if (i + 9 < lines_.size() &&
+        lines_[i].mnemonic == "ld" && trim(lines_[i].operands) == "b, h" &&
+        lines_[i + 1].mnemonic == "ld" && trim(lines_[i + 1].operands) == "c, l" &&
+        lines_[i + 2].mnemonic == "ex" && trim(lines_[i + 2].operands) == "de, hl" &&
+        lines_[i + 3].mnemonic == "ld" && trim(lines_[i + 3].operands) == "hl, #0" &&
+        lines_[i + 4].mnemonic == "or" && trim(lines_[i + 4].operands) == "a, a" &&
+        lines_[i + 5].mnemonic == "sbc" && trim(lines_[i + 5].operands) == "hl, de" &&
+        lines_[i + 6].mnemonic == "ld" && trim(lines_[i + 6].operands) == "hl, #1") {
+        std::string ops = trim(lines_[i + 7].operands);
+        size_t comma = ops.find(',');
+        if (comma != std::string::npos) {
+            std::string end_lbl = trim(ops.substr(comma + 1));
+            if (rewrite_common_tail(i, i + 7, end_lbl))
+                return true;
+        }
+    }
+
+    return false;
+}
+
 // jp [cc,] L  →  jr [cc,] L
 //
-// This optimization is currently disabled. The earlier implementation
-// used source-line proximity as a proxy for the final branch distance,
-// which can produce out-of-range `jr` instructions after later passes
-// or when different assemblers lay the code out differently.
-//
-// Re-enable this only after the backend can measure the final encoded
-// displacement instead of guessing from nearby lines.
+// This pass computes a conservative section-local code layout from the final
+// assembly text and only shortens branches whose estimated final JR
+// displacement is in range. That makes it much closer to what SDCC does in
+// practice than the old line-count heuristic.
 bool z80_peep::rule_jp_to_jr(size_t i) {
-    (void)i;
-    return false;
+    if (i >= lines_.size())
+        return false;
+
+    auto &line = lines_[i];
+    if (line.mnemonic != "jp")
+        return false;
+
+    std::string cc;
+    std::string target;
+    bool conditional = parse_conditional_jump(line, cc, target);
+    if (!conditional) {
+        if (!parse_unconditional_jump(line, target))
+            return false;
+    } else if (cc != "z" && cc != "nz" && cc != "c" && cc != "nc") {
+        return false;
+    }
+
+    const auto layout = compute_code_layout(lines_);
+    auto target_it = layout.label_pos.find(target);
+    if (target_it == layout.label_pos.end())
+        return false;
+
+    const auto &src = layout.line_pos[i];
+    const auto &dst = target_it->second;
+    if (src.section != dst.section)
+        return false;
+
+    // If the target is after the shortened branch, it moves back by one byte
+    // when JP (3 bytes) becomes JR (2 bytes). Backward targets do not move.
+    int disp = 0;
+    if (dst.offset > src.offset)
+        disp = dst.offset - (src.offset + 3);
+    else
+        disp = dst.offset - (src.offset + 2);
+
+    // Keep a little headroom because this pass still relies on an internal
+    // size estimator rather than the assembler's final encoded addresses.
+    if (disp < -120 || disp > 120)
+        return false;
+
+    line.mnemonic = "jr";
+    return true;
 }
 
 // push hl; pop bc  →  ld b,h; ld c,l

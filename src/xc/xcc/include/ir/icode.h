@@ -82,6 +82,9 @@ enum class icode_op : uint8_t {
     BNOT,           // ~left
     SHL,
     SHR,
+    ROL,            // rotate left  (16-bit integer)
+    ROR,            // rotate right (16-bit integer)
+    PACK_BYTES,     // result(16-bit) = low-byte left | (high-byte right << 8)
 
     // ----- comparison (result is int 0 or 1) -------------------------
     EQ, NE, LT, LE, GT, GE,

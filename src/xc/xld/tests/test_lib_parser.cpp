@@ -60,6 +60,30 @@ TEST(lib_parser_text_index_comments_and_blank_lines) {
     std::filesystem::remove(lib_path);
 }
 
+TEST(lib_parser_text_index_nested_member_paths) {
+    char tmp_template[] = "/tmp/xld-lib-nested-XXXXXX";
+    int fd = mkstemp(tmp_template);
+    ASSERT(fd >= 0);
+    close(fd);
+    std::filesystem::path lib_path = tmp_template;
+    std::filesystem::remove(lib_path);
+    std::filesystem::create_directories(lib_path.parent_path() / "int16");
+
+    {
+        std::ofstream out(lib_path);
+        out << "# comment\n"
+            << "int16/mulint.rel\n";
+    }
+
+    auto members = xld::lib_parser::parse(lib_path);
+    ASSERT_EQ(static_cast<int>(members.size()), 1);
+    ASSERT_EQ(members[0].path,
+              (lib_path.parent_path() / "int16" / "mulint.rel"));
+    ASSERT(!members[0].contents.has_value());
+
+    std::filesystem::remove(lib_path);
+}
+
 TEST(lib_parser_ar_archive_long_names) {
     char tmp_template[] = "/tmp/xld-lib-archive-XXXXXX";
     int fd = mkstemp(tmp_template);
