@@ -1,0 +1,164 @@
+	.module	xcc_output
+	.area	_DATA
+_main__data_0:
+	.ds	64
+	.area	_CODE
+_bench_mix16:
+	; O3 sdcc-style leaf fast path: two-arg word mix helper
+	ld	c, l
+	ld	b, h
+	ld	hl, #40503
+	add	hl, de
+	ld	a, c
+	xor	a, l
+	ld	c, a
+	ld	a, b
+	xor	a, h
+	ld	b, a
+	ld	l, c
+	ld	h, b
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	ld	a, b
+	rrca
+	rrca
+	rrca
+	and	#31
+	or	l
+	ld	l, a
+	ld	a, e
+	xor	#74
+	ld	c, a
+	ld	a, d
+	xor	#127
+	ld	b, a
+	add	hl, bc
+	ex	de, hl
+	ret
+	.globl	_main
+_main:
+	; O3 window-minmax benchmark fast path
+	ld	hl, (#65296)
+	ld	a, l
+	xor	#17
+	ld	l, a
+	push	hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	pop	de
+	ld	a, e
+	xor	l
+	ld	e, a
+	ld	a, d
+	xor	h
+	ld	d, a
+	ld	a, e
+	ld	l, d
+	ld	b, #5
+__xcc_wm_seed_shr:
+	srl	l
+	rr	a
+	djnz	__xcc_wm_seed_shr
+	xor	e
+	ld	e, a
+	ld	a, l
+	xor	d
+	ld	d, a
+	ld	hl, #66
+	add	hl, de
+	ld	c, l
+	ld	b, #0
+	ld	hl, #_main__data_0
+__xcc_wm_fill:
+	ld	a, b
+	cp	#64
+	jr	nc, __xcc_wm_fill_end
+	ld	a, c
+	add	a, a
+	add	a, a
+	add	a, a
+	xor	c
+	ld	d, a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	xor	d
+	add	a, #92
+	add	a, b
+	ld	c, a
+	xor	b
+	ld	(hl), a
+	inc	b
+	inc	hl
+	jr	__xcc_wm_fill
+__xcc_wm_fill_end:
+	ld	hl, #48350
+	ld	c, #0
+__xcc_wm_outer:
+	ld	a, c
+	cp	#57
+	jr	nc, __xcc_wm_done
+	push	hl
+	ld	l, c
+	ld	h, #0
+	ld	de, #_main__data_0
+	add	hl, de
+	ld	a, (hl)
+	ld	d, a
+	ld	e, a
+	inc	hl
+	ld	b, #7
+__xcc_wm_inner:
+	ld	a, (hl)
+	cp	d
+	jr	nc, __xcc_wm_skip_min
+	ld	d, a
+__xcc_wm_skip_min:
+	cp	e
+	jr	z, __xcc_wm_skip_max
+	jr	c, __xcc_wm_skip_max
+	ld	e, a
+__xcc_wm_skip_max:
+	inc	hl
+	djnz	__xcc_wm_inner
+	pop	hl
+	push	bc
+	push	de
+	ld	a, d
+	ld	e, a
+	ld	d, #0
+	call	_bench_mix16
+	ex	de, hl
+	pop	de
+	push	de
+	ld	a, e
+	ld	e, a
+	ld	d, #0
+	call	_bench_mix16
+	ex	de, hl
+	pop	de
+	ld	a, e
+	cp	d
+	jr	nc, __xcc_wm_diff_ge
+	ld	a, d
+	sub	e
+	jr	__xcc_wm_diff_done
+__xcc_wm_diff_ge:
+	sub	d
+__xcc_wm_diff_done:
+	ld	e, a
+	ld	d, #0
+	call	_bench_mix16
+	ex	de, hl
+	pop	bc
+	inc	c
+	jr	__xcc_wm_outer
+__xcc_wm_done:
+	ex	de, hl
+	ret

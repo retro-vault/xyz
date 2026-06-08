@@ -1,35 +1,26 @@
 	.module	xcc_output
 	.area	_CODE
 _swap:
-	; sdcccall(1) prologue: swap (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: swap (locals=4, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
-	; receive (sdcccall1) register param handled by prologue
-	; receive (sdcccall1) register param handled by prologue
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -2(ix)
+	; receive (sdcccall1) param b at -4(ix)
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	b, d
-	ld	c, e
-	ld	h, b
-	ld	l, c
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
+	ld	-6(ix), e
+	ld	-5(ix), d
 	ld	l, -4(ix)
 	ld	h, -3(ix)
 	ld	e, (hl)
@@ -44,10 +35,8 @@ _swap:
 	ld	(hl), d
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -6(ix)
 	ld	d, -5(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -78,8 +67,6 @@ _f:
 	pop	hl
 	ld	bc, #-6
 	add	hl, bc
-	ld	b, h
-	ld	c, l
 	ld	-8(ix), l
 	ld	-7(ix), h
 	push	ix
@@ -110,22 +97,14 @@ _f:
 	ld	(hl), d
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
-	ld	b, h
-	ld	c, l
-	push	hl
 	ld	e, -6(ix)
 	ld	d, -5(ix)
-	pop	hl
 	add	hl, de
 	ld	-12(ix), l
 	ld	-11(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __f_end:
 	; epilogue: f

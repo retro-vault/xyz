@@ -5,7 +5,7 @@
 
 	.globl _add3
 _add3:
-	; sdcccall(1) prologue: add3 (locals=4, temp_frame=6, stack_params=2)
+	; sdcccall(1) prologue: add3 (locals=4, temp_frame=4, stack_params=2)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -13,7 +13,7 @@ _add3:
 	ld	-1(ix), h
 	ld	-4(ix), e
 	ld	-3(ix), d
-	ld	hl, #-10
+	ld	hl, #-8
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param a at -2(ix)
@@ -21,28 +21,24 @@ _add3:
 	; receive (sdcccall1) param c at 4(ix)
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
 	ld	-6(ix), l
 	ld	-5(ix), h
 	ld	l, -6(ix)
 	ld	h, -5(ix)
-	push	hl
 	ld	e, 4(ix)
 	ld	d, 5(ix)
-	pop	hl
 	add	hl, de
 	ld	-8(ix), l
 	ld	-7(ix), h
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	ld	-10(ix), l
-	ld	-9(ix), h
-	ld	l, -10(ix)
-	ld	h, -9(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ex	de, hl
 	jp	__add3_end
 __add3_end:

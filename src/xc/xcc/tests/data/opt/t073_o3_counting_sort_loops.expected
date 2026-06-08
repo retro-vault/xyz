@@ -1,0 +1,87 @@
+	.module	xcc_output
+	.area	_DATA
+_input:
+	.ds	64
+_output:
+	.ds	64
+_count:
+	.ds	16
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=9, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-9
+	add	hl, sp
+	ld	sp, hl
+	ld	a, (#65296)
+	ld	-8(ix), a
+	ld	hl, #input
+	ld	(hl), a
+	; O3 byte zero loop (count=16)
+	ld	hl, #count
+	ld	b, #16
+	xor	a
+__xcc_L0:
+__xcc_L1:
+	ld	(hl), a
+	inc	hl
+	djnz	__xcc_L1
+__xcc_L3:
+	; O3 nibble histogram loop (count=64)
+	ld	c, #0
+	ld	b, #0
+__xcc_L4:
+	ld	a, c
+	cp	#64
+	jr	nc, __xcc_L7
+__xcc_L5:
+	ld	hl, #input
+	add	hl, bc
+	ld	a, (hl)
+	and	#15
+	ld	l, a
+	ld	h, #0
+	ld	de, #count
+	add	hl, de
+	inc	(hl)
+	inc	c
+	jr	__xcc_L4
+__xcc_L7:
+	; O3 bucket-drain loop (count=16)
+	ld	de, #output
+	ld	c, #0
+	ld	b, #0
+__xcc_L8:
+	ld	hl, #count
+	add	hl, bc
+__xcc_L12:
+	ld	a, (hl)
+	or	a
+	jr	z, __xcc_L10
+__xcc_L13:
+	ld	a, c
+	ld	(de), a
+	inc	de
+	dec	(hl)
+	jr	nz, __xcc_L13
+__xcc_L10:
+	inc	c
+	ld	a, c
+	cp	#16
+	jr	c, __xcc_L8
+__xcc_L11:
+	xor	a
+	ld	e, a
+	ld	d, #0
+	ld	hl, #output
+	add	hl, de
+	ld	a, (hl)
+	ld	-8(ix), a
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

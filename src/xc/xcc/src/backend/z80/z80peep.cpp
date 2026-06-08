@@ -342,6 +342,10 @@ static bool is_numeric_literal(const std::string &s) {
     return true;
 }
 
+static bool is_immediate_operand(const std::string &s) {
+    return !s.empty() && s.front() == '#';
+}
+
 static bool is_reg8(const std::string &s) {
     return s == "a" || s == "b" || s == "c" || s == "d" ||
            s == "e" || s == "h" || s == "l" ||
@@ -458,6 +462,8 @@ static int estimate_instruction_size(const asm_line &line) {
                 return 3;
             if (uses_hl_indirect(op) || is_reg8(op) || is_reg16(op))
                 return 1;
+            if (is_immediate_operand(op))
+                return 2;
             return is_numeric_literal(op) ? 2 : 3;
         }
 
@@ -469,6 +475,8 @@ static int estimate_instruction_size(const asm_line &line) {
             return 3;
         if (uses_hl_indirect(trim(src)))
             return 1;
+        if (is_immediate_operand(trim(src)))
+            return 2;
         if (is_numeric_literal(trim(src)))
             return 2;
         return 1;
@@ -956,10 +964,14 @@ bool z80_peep::rule_ld_a_zero(size_t i) {
     if (dst != "a") return false;
     if (src != "#0" && src != "0") return false;
 
-    // Don't fire if the next non-empty line is a conditional branch.
+    // Don't fire if the next non-empty line is a conditional branch or
+    // directly consumes carry/borrow. `ld a,#0` preserves flags; `xor a`
+    // clears carry, so `adc`/`sbc` would change meaning.
     for (size_t j = i + 1; j < lines_.size(); ++j) {
         if (lines_[j].mnemonic.empty()) continue;
         if (is_conditional_branch(lines_[j])) return false;
+        if (lines_[j].mnemonic == "adc" || lines_[j].mnemonic == "sbc")
+            return false;
         break;
     }
 

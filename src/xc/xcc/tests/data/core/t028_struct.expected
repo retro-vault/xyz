@@ -37,10 +37,8 @@ _area:
 	ld	-11(ix), d
 	ld	l, -10(ix)
 	ld	h, -9(ix)
-	push	hl
 	ld	e, -12(ix)
 	ld	d, -11(ix)
-	pop	hl
 	or	a, a
 	sbc	hl, de
 	ld	-14(ix), l
@@ -83,10 +81,8 @@ _area:
 	ld	-23(ix), d
 	ld	l, -20(ix)
 	ld	h, -19(ix)
-	push	hl
 	ld	e, -24(ix)
 	ld	d, -23(ix)
-	pop	hl
 	or	a, a
 	sbc	hl, de
 	ld	-26(ix), l
@@ -287,10 +283,8 @@ __xcc_L5:
 	ld	-45(ix), h
 	ld	l, -46(ix)
 	ld	h, -45(ix)
-	push	hl
 	ld	e, -44(ix)
 	ld	d, -43(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d

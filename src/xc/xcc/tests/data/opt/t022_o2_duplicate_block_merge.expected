@@ -1,47 +1,45 @@
 	.module	xcc_output
 	.area	_CODE
 _choose:
-	; sdcccall(1) prologue: choose (locals=4, temp_frame=8, stack_params=0)
+	; sdcccall(1) prologue: choose (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	-4(ix), e
-	ld	-3(ix), d
-	ld	hl, #-12
+	push	de
+	pop	hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, #-4
 	add	hl, sp
 	ld	sp, hl
-	; receive (sdcccall1) param x at -2(ix)
-	; receive (sdcccall1) param y at -4(ix)
-	jp	dispatch
+	; receive (sdcccall1) register param handled by prologue
+	; receive (sdcccall1) register param handled by prologue
+	jr	dispatch
 a:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
 	ld	de, #5
 	add	hl, de
-	ld	-6(ix), l
-	ld	-5(ix), h
 	ld	-4(ix), l
 	ld	-3(ix), h
-	jp	done
+	jr	done
 b:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
 	ld	de, #5
 	add	hl, de
-	ld	-8(ix), l
-	ld	-7(ix), h
 	ld	-4(ix), l
 	ld	-3(ix), h
-	jp	done
+	jr	done
 dispatch:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	ld	a, h
 	or	a, l
-	jp	nz, a
-	jp	b
+	jr	nz, a
+	jr	b
 done:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
@@ -51,10 +49,8 @@ done:
 	ld	a, h
 	xor	#0
 	ld	h, a
-	ld	-10(ix), l
-	ld	-9(ix), h
-	ld	-12(ix), l
-	ld	-11(ix), h
+	ld	b, h
+	ld	c, l
 	ex	de, hl
 __choose_end:
 	; epilogue: choose
@@ -63,31 +59,29 @@ __choose_end:
 	ret
 	.globl	_f
 _f:
-	; sdcccall(1) prologue: f (locals=4, temp_frame=4, stack_params=0)
+	; sdcccall(1) prologue: f (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	-4(ix), e
-	ld	-3(ix), d
-	ld	hl, #-8
+	ld	b, d
+	ld	c, e
+	ld	hl, #-2
 	add	hl, sp
 	ld	sp, hl
-	; receive (sdcccall1) param x at -2(ix)
-	; receive (sdcccall1) param y at -4(ix)
-	ld	e, -4(ix)
-	ld	d, -3(ix)
+	; receive (sdcccall1) register param handled by prologue
+	; receive (sdcccall1) register param handled by prologue
+	ld	d, b
+	ld	e, c
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	.globl	_choose
 	call	_choose
 	push	de
 	pop	hl
-	ld	-6(ix), l
-	ld	-5(ix), h
-	ld	-8(ix), l
-	ld	-7(ix), h
+	ld	b, h
+	ld	c, l
 	ex	de, hl
 __f_end:
 	; epilogue: f

@@ -126,10 +126,8 @@ __xcc_L3:
 __xcc_L5:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -2(ix)
 	ld	d, -1(ix)
-	pop	hl
 	add	hl, de
 	ld	-10(ix), l
 	ld	-9(ix), h

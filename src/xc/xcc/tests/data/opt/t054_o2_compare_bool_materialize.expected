@@ -2,20 +2,24 @@
 	.area	_CODE
 	.globl	_eqv
 _eqv:
-	; sdcccall(1) prologue: eqv (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: eqv (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; keep incoming register arg t3 live in register for first use
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
-	ld	h, d
-	ld	l, e
+	ld	h, b
+	ld	l, c
 	pop	de
 	or	a, a
 	sbc	hl, de
@@ -23,12 +27,8 @@ _eqv:
 	jr	z, __cmp_e_89383
 	dec	hl
 __cmp_e_89383:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __eqv_end:
 	; epilogue: eqv
@@ -37,20 +37,24 @@ __eqv_end:
 	ret
 	.globl	_nev
 _nev:
-	; sdcccall(1) prologue: nev (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: nev (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; keep incoming register arg t5 live in register for first use
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
-	ld	h, d
-	ld	l, e
+	ld	h, b
+	ld	l, c
 	pop	de
 	or	a, a
 	sbc	hl, de
@@ -58,12 +62,8 @@ _nev:
 	jr	nz, __cmp_e_30886
 	dec	hl
 __cmp_e_30886:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __nev_end:
 	; epilogue: nev
@@ -72,20 +72,24 @@ __nev_end:
 	ret
 	.globl	_ltv
 _ltv:
-	; sdcccall(1) prologue: ltv (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: ltv (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; keep incoming register arg t7 live in register for first use
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
-	ld	h, d
-	ld	l, e
+	ld	h, b
+	ld	l, c
 	pop	de
 	ex	de, hl
 	or	a, a
@@ -94,12 +98,8 @@ _ltv:
 	jp	m, __cmp_e_92777
 	dec	hl
 __cmp_e_92777:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __ltv_end:
 	; epilogue: ltv
@@ -108,20 +108,24 @@ __ltv_end:
 	ret
 	.globl	_lev
 _lev:
-	; sdcccall(1) prologue: lev (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: lev (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; keep incoming register arg t9 live in register for first use
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
-	ld	h, d
-	ld	l, e
+	ld	h, b
+	ld	l, c
 	pop	de
 	ex	de, hl
 	or	a, a
@@ -131,12 +135,8 @@ _lev:
 	jp	m, __cmp_e_36915
 	dec	hl
 __cmp_e_36915:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __lev_end:
 	; epilogue: lev
@@ -145,20 +145,24 @@ __lev_end:
 	ret
 	.globl	_gtv
 _gtv:
-	; sdcccall(1) prologue: gtv (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: gtv (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; keep incoming register arg t11 live in register for first use
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
-	ld	h, d
-	ld	l, e
+	ld	h, b
+	ld	l, c
 	pop	de
 	ex	de, hl
 	or	a, a
@@ -168,12 +172,8 @@ _gtv:
 	jp	m, __cmp_e_47793
 	inc	l
 __cmp_e_47793:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __gtv_end:
 	; epilogue: gtv
@@ -182,20 +182,24 @@ __gtv_end:
 	ret
 	.globl	_gev
 _gev:
-	; sdcccall(1) prologue: gev (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: gev (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; keep incoming register arg t13 live in register for first use
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
-	ld	h, d
-	ld	l, e
+	ld	h, b
+	ld	l, c
 	pop	de
 	ex	de, hl
 	or	a, a
@@ -204,12 +208,8 @@ _gev:
 	jp	p, __cmp_e_38335
 	dec	hl
 __cmp_e_38335:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __gev_end:
 	; epilogue: gev

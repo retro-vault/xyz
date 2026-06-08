@@ -24,7 +24,7 @@ __xcc_L0:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #0
-	jp	z, __cmp_e_89383
+	jr	z, __cmp_e_89383
 	jp	m, __cmp_e_89383
 	inc	l
 __cmp_e_89383:
@@ -32,14 +32,12 @@ __cmp_e_89383:
 	ld	-5(ix), h
 	ld	a, h
 	or	a, l
-	jp	z, __xcc_L2
+	jr	z, __xcc_L2
 __xcc_L1:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
 	ld	-8(ix), l
 	ld	-7(ix), h
@@ -56,7 +54,7 @@ __xcc_L1:
 	ld	-11(ix), h
 	ld	-4(ix), l
 	ld	-3(ix), h
-	jp	__xcc_L0
+	jr	__xcc_L0
 __xcc_L2:
 	ld	l, -2(ix)
 	ld	h, -1(ix)

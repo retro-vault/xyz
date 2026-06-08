@@ -2,23 +2,24 @@
 	.area	_CODE
 	.globl	_fetch
 _fetch:
-	; sdcccall(1) prologue: fetch (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: fetch (locals=2, temp_frame=0, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	; keep incoming register arg t2 live in register for first use
-	; receive (sdcccall1) register param handled by prologue
+	; keep incoming register arg p live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) param p at -2(ix)
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	dec	sp
-	dec	sp
-	ld	-2(ix), e
-	ld	-1(ix), d
-	ld	l, -2(ix)
-	ld	h, -1(ix)
-	ld	b, h
-	ld	c, l
+	ld	b, d
+	ld	c, e
+	ld	h, b
+	ld	l, c
 	ex	de, hl
 __fetch_end:
 	; epilogue: fetch

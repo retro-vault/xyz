@@ -36,7 +36,13 @@ static bool load_byte_preserves_hl(const operand &op,
         return true;
     if (op.kind == operand_kind::TEMP) {
         auto it = temp_regs.find(op.temp_id);
-        return it != temp_regs.end() && it->second == temp_home::alt_a;
+        return it != temp_regs.end() &&
+               (it->second == temp_home::alt_a ||
+                it->second == temp_home::main_a ||
+                it->second == temp_home::main_b ||
+                it->second == temp_home::main_c ||
+                it->second == temp_home::arg_a ||
+                it->second == temp_home::arg_l);
     }
     return false;
 }
@@ -74,6 +80,17 @@ void z80_gen::gen_address_of(const icode &ic) {
 }
 
 void z80_gen::gen_get_value_at(const icode &ic) {
+    auto is_bc_pointer_home = [&](const operand &op) {
+        if (op.kind == operand_kind::TEMP) {
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() && it->second == temp_home::main_bc;
+        }
+        if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+            auto it = symbol_regs_.find(symbol_reg_key(op));
+            return it != symbol_regs_.end() && it->second == temp_home::main_bc;
+        }
+        return false;
+    };
     if (ic.left.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         op_size(ic.result) == 1) {
@@ -140,6 +157,12 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         return;
     }
 
+    if (op_size(ic.result) == 1 && is_bc_pointer_home(ic.left)) {
+        emit_line("ld\ta, (bc)");
+        store_a(ic.result);
+        return;
+    }
+
     if (!emit_global_plus_u8_index_hl(ic.left))
         load_hl(ic.left);
     if (op_size(ic.result) == 1) {
@@ -154,6 +177,85 @@ void z80_gen::gen_get_value_at(const icode &ic) {
 }
 
 void z80_gen::gen_set_value_at(const icode &ic) {
+    auto is_bc_pointer_home = [&](const operand &op) {
+        if (op.kind == operand_kind::TEMP) {
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() && it->second == temp_home::main_bc;
+        }
+        if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+            auto it = symbol_regs_.find(symbol_reg_key(op));
+            return it != symbol_regs_.end() && it->second == temp_home::main_bc;
+        }
+        return false;
+    };
+    auto byte_load_preserves_hl_here = [&](const operand &op) {
+        if (load_byte_preserves_hl(op, temp_regs_))
+            return true;
+        if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+            auto it = incoming_symbol_homes_.find(op.stack_offset);
+            if (it != incoming_symbol_homes_.end() &&
+                !symbol_value_used_after(*cur_fn_, cur_ic_index_ + 1, op))
+                return true;
+            int off = ix_offset_of(op);
+            return fits_ix_disp(off);
+        }
+        if (op.kind == operand_kind::TEMP) {
+            auto it = temp_regs_.find(op.temp_id);
+            if (it != temp_regs_.end()) {
+                switch (it->second) {
+                case temp_home::main_a:
+                case temp_home::main_b:
+                case temp_home::main_c:
+                case temp_home::alt_a:
+                    return true;
+                case temp_home::arg_a:
+                case temp_home::arg_l:
+                    return !temp_value_used_after(*cur_fn_, cur_ic_index_ + 1,
+                                                  op.temp_id);
+                default:
+                    break;
+                }
+            }
+            int off = ix_offset_of(op);
+            return fits_ix_disp(off);
+        }
+        return false;
+    };
+    auto word_load_preserves_hl_here = [&](const operand &op) {
+        if (load_word_preserves_hl(op))
+            return true;
+        if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+            if (symbol_home_in_bc(op))
+                return true;
+            auto it = incoming_symbol_homes_.find(op.stack_offset);
+            if (it != incoming_symbol_homes_.end() &&
+                !symbol_value_used_after(*cur_fn_, cur_ic_index_ + 1, op))
+                return true;
+            int off = ix_offset_of(op);
+            return fits_ix_disp(off) && fits_ix_disp(off + 1);
+        }
+        if (op.kind == operand_kind::TEMP) {
+            auto it = temp_regs_.find(op.temp_id);
+            if (it != temp_regs_.end()) {
+                switch (it->second) {
+                case temp_home::main_bc:
+                case temp_home::remat_hl:
+                    return true;
+                case temp_home::main_hl:
+                    return false;
+                case temp_home::arg_hl:
+                case temp_home::arg_de:
+                    return !temp_value_used_after(*cur_fn_, cur_ic_index_ + 1,
+                                                  op.temp_id);
+                default:
+                    break;
+                }
+            }
+            int off = ix_offset_of(op);
+            return fits_ix_disp(off) && fits_ix_disp(off + 1);
+        }
+        return false;
+    };
     if (ic.result.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         op_size(ic.left) == 1) {
@@ -164,10 +266,10 @@ void z80_gen::gen_set_value_at(const icode &ic) {
             emit_line("ld\td, %s", asm_.imm(0).c_str());
             emit_line("ld\thl, %s", asm_.imm_sym(ic.result.name).c_str());
             emit_line("add\thl, de");
-            if (!load_byte_preserves_hl(ic.left, temp_regs_))
+            if (!byte_load_preserves_hl_here(ic.left))
                 emit_line("push\thl");
             load_a(ic.left);
-            if (!load_byte_preserves_hl(ic.left, temp_regs_))
+            if (!byte_load_preserves_hl_here(ic.left))
                 emit_line("pop\thl");
             emit_line("ld\t(hl), a");
             return;
@@ -175,10 +277,10 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         load_de(ic.right);
         emit_line("ld\thl, %s", asm_.imm_sym(ic.result.name).c_str());
         emit_line("add\thl, de");
-        if (!load_byte_preserves_hl(ic.left, temp_regs_))
+        if (!byte_load_preserves_hl_here(ic.left))
             emit_line("push\thl");
         load_a(ic.left);
-        if (!load_byte_preserves_hl(ic.left, temp_regs_))
+        if (!byte_load_preserves_hl_here(ic.left))
             emit_line("pop\thl");
         emit_line("ld\t(hl), a");
         return;
@@ -228,20 +330,26 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         return;
     }
 
+    if (op_size(ic.left) == 1 && is_bc_pointer_home(ic.result)) {
+        load_a(ic.left);
+        emit_line("ld\t(bc), a");
+        return;
+    }
+
     if (!emit_global_plus_u8_index_hl(ic.result))
         load_hl(ic.result);
     if (op_size(ic.left) == 1) {
-        if (!load_byte_preserves_hl(ic.left, temp_regs_))
+        if (!byte_load_preserves_hl_here(ic.left))
             emit_line("push\thl");
         load_a(ic.left);
-        if (!load_byte_preserves_hl(ic.left, temp_regs_))
+        if (!byte_load_preserves_hl_here(ic.left))
             emit_line("pop\thl");
         emit_line("ld\t(hl), a");
     } else {
-        if (!load_word_preserves_hl(ic.left))
+        if (!word_load_preserves_hl_here(ic.left))
             emit_line("push\thl");
         load_de(ic.left);
-        if (!load_word_preserves_hl(ic.left))
+        if (!word_load_preserves_hl_here(ic.left))
             emit_line("pop\thl");
         emit_line("ld\t(hl), e");
         emit_line("inc\thl");

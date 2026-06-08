@@ -2,33 +2,33 @@
 	.area	_CODE
 	.globl	_less
 _less:
-	; sdcccall(1) prologue: less (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: less (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
-	push	de
-	pop	hl
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
-	; receive (sdcccall1) register param already materialized in prologue
-	; receive (sdcccall1) register param already materialized in prologue
-	ld	e, -4 (ix)
-	ld	d, -3 (ix)
-	ld	l, -2 (ix)
-	ld	h, -1 (ix)
+	ld	b, d
+	ld	c, e
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) register param handled by prologue
+	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	h, b
+	ld	l, c
+	pop	de
+	ex	de, hl
 	or	a, a
 	sbc	hl, de
 	jp	p, __xcc_L2
 __xcc_L0:
 	ld	hl, #1
 	ex	de, hl
-	jp	__less_end
+	jr	__less_end
 __xcc_L2:
 	ld	hl, #0
 	ex	de, hl

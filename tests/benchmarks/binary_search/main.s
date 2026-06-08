@@ -6,289 +6,202 @@ _main__query_1:
 	.ds	32
 	.area	_CODE
 _bench_seed_byte:
-	; sdcccall(1) prologue: bench_seed_byte (locals=0, temp_frame=5, stack_params=0)
-	push	ix
-	ld	ix, #0
-	add	ix, sp
-	ld	-1(ix), a
-	ld	hl, #-5
-	add	hl, sp
-	ld	sp, hl
-	; receive (sdcccall1) register param handled by prologue
+	; O3 sdcc-style leaf fast path: byte seed helper
+	ld	c, a
 	ld	hl, (#65296)
-	ld	-3(ix), l
-	ld	-2(ix), h
-	ld	l, a
-	ld	h, #0
-	ld	b, h
-	ld	c, l
-	ld	l, -3(ix)
-	ld	h, -2(ix)
-	ld	d, b
-	ld	e, c
 	ld	a, l
-	xor	a, e
+	xor	a, c
 	ld	l, a
-	ld	a, h
-	xor	a, d
-	ld	h, a
-	ld	-5(ix), l
-	ld	-4(ix), h
+	ld	e, l
+	ld	d, h
 	add	hl, hl
 	add	hl, hl
 	add	hl, hl
-	ld	b, h
-	ld	c, l
-	ld	l, -5(ix)
-	ld	h, -4(ix)
-	ld	d, b
-	ld	e, c
 	ld	a, l
 	xor	a, e
-	ld	l, a
+	ld	e, a
 	ld	a, h
 	xor	a, d
-	ld	h, a
-	ld	-3(ix), l
-	ld	-2(ix), h
-	srl	h
-	rr	l
-	srl	h
-	rr	l
-	srl	h
-	rr	l
-	srl	h
-	rr	l
-	srl	h
-	rr	l
-	ld	b, h
-	ld	c, l
-	ld	l, -3(ix)
-	ld	h, -2(ix)
-	ld	d, b
-	ld	e, c
-	ld	a, l
+	ld	d, a
+	ld	a, e
+	ld	l, d
+	ld	b, #5
+__bench_seed_byte_seed_shift:
+	srl	l
+	rr	a
+	djnz	__bench_seed_byte_seed_shift
 	xor	a, e
-	ld	l, a
-	ld	a, h
+	ld	e, a
+	ld	a, l
 	xor	a, d
-	ld	h, a
-	ld	-5(ix), l
-	ld	-4(ix), h
-	ld	a, -1(ix)
-	add	a, #49
-	ld	-2(ix), a
-	ld	l, -5(ix)
-	ld	h, -4(ix)
-	ld	e, -2(ix)
-	ld	d, #0
+	ld	d, a
+	ld	b, #0
+	ld	hl, #49
+	add	hl, bc
 	add	hl, de
 	ld	a, l
-	ld	-1(ix), a
-__bench_seed_byte_end:
-	; epilogue: bench_seed_byte
-	ld	sp, ix
-	pop	ix
+	ret
+_bench_mix16:
+	; O3 sdcc-style leaf fast path: two-arg word mix helper
+	ld	c, l
+	ld	b, h
+	ld	hl, #40503
+	add	hl, de
+	ld	a, c
+	xor	a, l
+	ld	c, a
+	ld	a, b
+	xor	a, h
+	ld	b, a
+	ld	l, c
+	ld	h, b
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	ld	a, b
+	rrca
+	rrca
+	rrca
+	and	#31
+	or	l
+	ld	l, a
+	ld	a, e
+	xor	#74
+	ld	c, a
+	ld	a, d
+	xor	#127
+	ld	b, a
+	add	hl, bc
+	ex	de, hl
 	ret
 	.globl	_main
 _main:
-	; sdcccall(1) prologue: main (locals=0, temp_frame=19, stack_params=0)
+	; sdcccall(1) prologue: main (locals=0, temp_frame=20, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-19
+	ld	hl, #-20
 	add	hl, sp
 	ld	sp, hl
-	push	hl
+	; O3 seeded recurrence loop (count=64)
 	ld	a, #1
-	pop	hl
-	.globl	_bench_seed_byte
 	call	_bench_seed_byte
-	ld	-12(ix), a
 	and	#7
-	ld	-16(ix), a
-	ld	hl, #_main__data_0
-	ld	(hl), a
-	ld	a, #1
-	ld	-9(ix), a
+	ld	(_main__data_0), a
+	ld	hl, #_main__data_0 + 1
+	ld	c, #1
 __xcc_L3:
-	ld	a, -9(ix)
-	cp	#64
-	jr	nc, __xcc_L7
 __xcc_L4:
-	ld	a, -9(ix)
-	ld	l, a
-	ld	h, #0
-	dec	hl
-	ld	-17(ix), l
-	ld	-16(ix), h
-	ld	hl, #_main__data_0
-	ld	e, -17(ix)
-	ld	d, -16(ix)
-	add	hl, de
-	ld	a, (hl)
-	add	a, #1
-	ld	-8(ix), a
 	push	hl
-	ld	a, -9(ix)
-	pop	hl
-	.globl	_bench_seed_byte
+	push	bc
+	ld	a, c
 	call	_bench_seed_byte
-	ld	-6(ix), a
-	and	#3
-	ld	-16(ix), a
-	ld	a, -8(ix)
-	ld	e, a
-	ld	a, -16(ix)
-	ld	d, a
-	ld	a, e
-	add	a, d
-	ld	-17(ix), a
-	ld	a, -9(ix)
-	ld	l, a
-	ld	h, #0
-	ld	b, h
-	ld	c, l
-	ld	hl, #_main__data_0
-	ld	d, b
-	ld	e, c
-	add	hl, de
-	push	hl
-	ld	a, -17(ix)
+	pop	bc
 	pop	hl
+	and	#3
+	ld	b, a
+	dec	hl
+	ld	a, (hl)
+	inc	hl
+	inc	a
+	add	a, b
 	ld	(hl), a
-__xcc_L5:
-	ld	a, -9(ix)
-	add	a, #1
-	ld	-9(ix), a
-	jr	__xcc_L3
+	inc	hl
+	inc	c
+	ld	a, c
+	cp	#64
+	jr	c, __xcc_L4
 __xcc_L7:
 	push	hl
 	ld	a, #60
 	pop	hl
 	.globl	_bench_seed_byte
 	call	_bench_seed_byte
-	ld	-11(ix), a
-	ld	-7(ix), a
-	xor	a
-	ld	-4(ix), a
+	ld	-12(ix), a
+	; O3 bench-fill loop (count=32)
+	ld	c, a
+	ld	b, #0
+	ld	hl, #_main__query_1
 __xcc_L10:
-	ld	a, -4(ix)
+	ld	a, b
 	cp	#32
 	jr	nc, __xcc_L9
 __xcc_L11:
-	ld	a, -7(ix)
+	ld	a, c
 	add	a, a
 	add	a, a
 	add	a, a
-	ld	-16(ix), a
-	ld	a, -7(ix)
-	ld	e, a
-	ld	a, -16(ix)
+	xor	c
 	ld	d, a
-	ld	a, e
-	xor	a, d
-	ld	-17(ix), a
 	srl	a
 	srl	a
 	srl	a
 	srl	a
 	srl	a
-	ld	-16(ix), a
-	ld	a, -17(ix)
-	ld	e, a
-	ld	a, -16(ix)
-	ld	d, a
-	ld	a, e
-	xor	a, d
-	ld	-18(ix), a
-	ld	a, -4(ix)
-	add	a, #102
-	add	a, #17
-	ld	-16(ix), a
-	ld	a, -18(ix)
-	ld	e, a
-	ld	a, -16(ix)
-	ld	d, a
-	ld	a, e
-	add	a, d
-	ld	-7(ix), a
-	ld	a, -4(ix)
-	ld	l, a
-	ld	h, #0
-	ld	-17(ix), l
-	ld	-16(ix), h
-	ld	a, -7(ix)
-	ld	e, a
-	ld	a, -4(ix)
-	ld	d, a
-	ld	a, e
-	xor	a, d
-	ld	-18(ix), a
-	ld	hl, #_main__query_1
-	ld	e, -17(ix)
-	ld	d, -16(ix)
-	add	hl, de
+	xor	d
+	add	a, #119
+	add	a, b
+	ld	c, a
+	xor	b
 	ld	(hl), a
-__xcc_L12:
-	ld	a, -4(ix)
-	add	a, #1
-	ld	-4(ix), a
-	jp	__xcc_L10
+	inc	b
+	inc	hl
+	jr	__xcc_L10
 __xcc_L9:
 	ld	hl, #22136
-	ld	-3(ix), l
-	ld	-2(ix), h
+	ld	-7(ix), l
+	ld	-6(ix), h
 	xor	a
-	ld	-9(ix), a
+	ld	-13(ix), a
 __xcc_L14:
-	ld	a, -9(ix)
+	ld	a, -13(ix)
 	cp	#32
 	jp	nc, __xcc_L17
 __xcc_L15:
 	xor	a
-	ld	-13(ix), a
+	ld	-5(ix), a
 	ld	a, #63
-	ld	-1(ix), a
+	ld	-4(ix), a
 	xor	a
-	ld	-10(ix), a
+	ld	-11(ix), a
 __xcc_L18:
-	ld	a, -13(ix)
-	ld	c, -1(ix)
+	ld	a, -5(ix)
+	ld	c, -4(ix)
 	cp	c
 	jr	z, __xcc_L19
 	jr	c, __xcc_L19
 	jp	__xcc_L20
 __xcc_L19:
-	ld	a, -13(ix)
+	ld	a, -5(ix)
 	ld	e, a
-	ld	a, -1(ix)
+	ld	a, -4(ix)
 	ld	d, a
 	ld	a, e
 	add	a, d
 	srl	a
-	ld	-14(ix), a
-	ld	e, a
+	ld	-3(ix), a
+	ld	e, -3(ix)
 	ld	d, #0
 	ld	hl, #_main__data_0
 	add	hl, de
 	ld	a, (hl)
-	ld	-5(ix), a
-	ld	a, -9(ix)
-	ld	e, a
+	ld	-2(ix), a
+	ld	e, -13(ix)
 	ld	d, #0
 	ld	hl, #_main__query_1
 	add	hl, de
 	ld	a, (hl)
-	ld	-15(ix), a
-	ld	a, -5(ix)
-	ld	c, -15(ix)
+	ld	-1(ix), a
+	ld	a, -2(ix)
+	ld	c, -1(ix)
 	cp	c
 	jr	nz, __xcc_L23
 __xcc_L21:
 	ld	a, #1
-	ld	-10(ix), a
-	ld	a, -14(ix)
+	ld	-11(ix), a
+	ld	a, -3(ix)
 	ld	l, a
 	ld	h, #0
 	ld	b, h
@@ -299,73 +212,33 @@ __xcc_L21:
 	ld	a, h
 	or	#128
 	ld	h, a
-	ld	-17(ix), l
-	ld	-16(ix), h
-	ld	l, -3(ix)
-	ld	h, -2(ix)
 	ld	-19(ix), l
 	ld	-18(ix), h
-	ld	l, -17(ix)
-	ld	h, -16(ix)
-	ld	de, #40503
-	add	hl, de
+	ld	e, -19(ix)
+	ld	d, -18(ix)
+	ld	l, -7(ix)
+	ld	h, -6(ix)
+	.globl	_bench_mix16
+	call	_bench_mix16
+	push	de
+	pop	hl
 	ld	b, h
 	ld	c, l
-	ld	l, -19(ix)
-	ld	h, -18(ix)
-	ld	d, b
-	ld	e, c
-	ld	a, l
-	xor	a, e
-	ld	l, a
-	ld	a, h
-	xor	a, d
-	ld	h, a
-	ld	b, h
-	add	hl, hl
-	add	hl, hl
-	add	hl, hl
-	add	hl, hl
-	add	hl, hl
-	ld	a, b
-	rrca
-	rrca
-	rrca
-	and	#31
-	or	l
-	ld	l, a
-	ld	-19(ix), l
-	ld	-18(ix), h
-	ld	l, -17(ix)
-	ld	h, -16(ix)
-	ld	a, l
-	xor	#74
-	ld	l, a
-	ld	a, h
-	xor	#127
-	ld	h, a
-	ld	b, h
-	ld	c, l
-	ld	l, -19(ix)
-	ld	h, -18(ix)
-	ld	d, b
-	ld	e, c
-	add	hl, de
-	ld	-3(ix), l
-	ld	-2(ix), h
+	ld	-7(ix), l
+	ld	-6(ix), h
 	jr	__xcc_L20
 __xcc_L23:
-	ld	a, -5(ix)
-	ld	c, -15(ix)
+	ld	a, -2(ix)
+	ld	c, -1(ix)
 	cp	c
 	jr	nc, __xcc_L25
 __xcc_L24:
-	ld	a, -14(ix)
+	ld	a, -3(ix)
 	add	a, #1
-	ld	-13(ix), a
+	ld	-5(ix), a
 	jp	__xcc_L18
 __xcc_L25:
-	ld	a, -14(ix)
+	ld	a, -3(ix)
 	ld	l, a
 	ld	h, #0
 	ld	b, h
@@ -376,13 +249,13 @@ __xcc_L25:
 	or	a, l
 	jr	z, __xcc_L20
 __xcc_L29:
-	ld	a, -14(ix)
+	ld	a, -3(ix)
 	sub	#1
-	ld	-1(ix), a
+	ld	-4(ix), a
 __xcc_L26:
 	jp	__xcc_L18
 __xcc_L20:
-	ld	a, -10(ix)
+	ld	a, -11(ix)
 	ld	l, a
 	ld	h, #0
 	ld	b, h
@@ -391,7 +264,7 @@ __xcc_L20:
 	or	a, l
 	jr	nz, __xcc_L16
 __xcc_L30:
-	ld	a, -13(ix)
+	ld	a, -5(ix)
 	ld	l, a
 	ld	h, #0
 	ld	a, l
@@ -400,69 +273,29 @@ __xcc_L30:
 	ld	a, h
 	or	#64
 	ld	h, a
-	ld	-17(ix), l
-	ld	-16(ix), h
-	ld	l, -3(ix)
-	ld	h, -2(ix)
 	ld	-19(ix), l
 	ld	-18(ix), h
-	ld	l, -17(ix)
-	ld	h, -16(ix)
-	ld	de, #40503
-	add	hl, de
+	ld	e, -19(ix)
+	ld	d, -18(ix)
+	ld	l, -7(ix)
+	ld	h, -6(ix)
+	.globl	_bench_mix16
+	call	_bench_mix16
+	push	de
+	pop	hl
 	ld	b, h
 	ld	c, l
-	ld	l, -19(ix)
-	ld	h, -18(ix)
-	ld	d, b
-	ld	e, c
-	ld	a, l
-	xor	a, e
-	ld	l, a
-	ld	a, h
-	xor	a, d
-	ld	h, a
-	ld	b, h
-	add	hl, hl
-	add	hl, hl
-	add	hl, hl
-	add	hl, hl
-	add	hl, hl
-	ld	a, b
-	rrca
-	rrca
-	rrca
-	and	#31
-	or	l
-	ld	l, a
-	ld	-19(ix), l
-	ld	-18(ix), h
-	ld	l, -17(ix)
-	ld	h, -16(ix)
-	ld	a, l
-	xor	#74
-	ld	l, a
-	ld	a, h
-	xor	#127
-	ld	h, a
-	ld	b, h
-	ld	c, l
-	ld	l, -19(ix)
-	ld	h, -18(ix)
-	ld	d, b
-	ld	e, c
-	add	hl, de
-	ld	-3(ix), l
-	ld	-2(ix), h
+	ld	-7(ix), l
+	ld	-6(ix), h
 __xcc_L32:
 __xcc_L16:
-	ld	a, -9(ix)
+	ld	a, -13(ix)
 	add	a, #1
-	ld	-9(ix), a
+	ld	-13(ix), a
 	jp	__xcc_L14
 __xcc_L17:
-	ld	l, -3(ix)
-	ld	h, -2(ix)
+	ld	l, -7(ix)
+	ld	h, -6(ix)
 	ld	b, h
 	ld	c, l
 	ex	de, hl

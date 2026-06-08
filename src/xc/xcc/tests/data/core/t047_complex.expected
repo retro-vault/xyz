@@ -52,11 +52,11 @@ __feq_end:
 	ret
 	.globl _test_complex_add
 _test_complex_add:
-	; sdcccall(1) prologue: test_complex_add (locals=30, temp_frame=74, stack_params=0)
+	; sdcccall(1) prologue: test_complex_add (locals=30, temp_frame=70, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-104
+	ld	hl, #-100
 	add	hl, sp
 	ld	sp, hl
 	push	ix
@@ -98,10 +98,8 @@ _test_complex_add:
 	ld	-39(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
-	push	hl
 	ld	e, -40(ix)
 	ld	d, -39(ix)
-	pop	hl
 	add	hl, de
 	ld	-42(ix), l
 	ld	-41(ix), h
@@ -125,10 +123,8 @@ _test_complex_add:
 	ld	-43(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
-	push	hl
 	ld	e, -44(ix)
 	ld	d, -43(ix)
-	pop	hl
 	add	hl, de
 	ld	-46(ix), l
 	ld	-45(ix), h
@@ -152,10 +148,8 @@ _test_complex_add:
 	ld	-47(ix), h
 	ld	l, -28(ix)
 	ld	h, -27(ix)
-	push	hl
 	ld	e, -48(ix)
 	ld	d, -47(ix)
-	pop	hl
 	add	hl, de
 	ld	-50(ix), l
 	ld	-49(ix), h
@@ -179,10 +173,8 @@ _test_complex_add:
 	ld	-51(ix), h
 	ld	l, -28(ix)
 	ld	h, -27(ix)
-	push	hl
 	ld	e, -52(ix)
 	ld	d, -51(ix)
-	pop	hl
 	add	hl, de
 	ld	-54(ix), l
 	ld	-53(ix), h
@@ -302,10 +294,8 @@ _test_complex_add:
 	ld	-75(ix), h
 	ld	l, -30(ix)
 	ld	h, -29(ix)
-	push	hl
 	ld	e, -76(ix)
 	ld	d, -75(ix)
-	pop	hl
 	add	hl, de
 	ld	-78(ix), l
 	ld	-77(ix), h
@@ -336,29 +326,16 @@ _test_complex_add:
 	ld	-83(ix), h
 	ld	l, -84(ix)
 	ld	h, -83(ix)
-	push	hl
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L2
+	jp	__xcc_L0
+__xcc_L0:
 	ld	hl, #0
-	pop	de
-	or	a, a
-	sbc	hl, de
-	ld	hl, #1
-	jp	z, __cmp_e_30886
-	dec	hl
-__cmp_e_30886:
 	ld	-86(ix), l
 	ld	-85(ix), h
 	ld	l, -86(ix)
 	ld	h, -85(ix)
-	ld	a, h
-	or	a, l
-	jp	nz, __xcc_L0
-	jp	__xcc_L2
-__xcc_L0:
-	ld	hl, #0
-	ld	-88(ix), l
-	ld	-87(ix), h
-	ld	l, -88(ix)
-	ld	h, -87(ix)
 	ex	de, hl
 	jp	__test_complex_add_end
 	jp	__xcc_L2
@@ -370,76 +347,61 @@ __xcc_L2:
 	pop	de
 	call	__mul16
 	ex	de, hl
-	ld	-90(ix), l
-	ld	-89(ix), h
+	ld	-88(ix), l
+	ld	-87(ix), h
 	ld	l, -30(ix)
 	ld	h, -29(ix)
-	push	hl
-	ld	e, -90(ix)
-	ld	d, -89(ix)
-	pop	hl
+	ld	e, -88(ix)
+	ld	d, -87(ix)
 	add	hl, de
-	ld	-92(ix), l
-	ld	-91(ix), h
-	ld	l, -92(ix)
-	ld	h, -91(ix)
+	ld	-90(ix), l
+	ld	-89(ix), h
+	ld	l, -90(ix)
+	ld	h, -89(ix)
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-96(ix), e
-	ld	-95(ix), d
+	ld	-94(ix), e
+	ld	-93(ix), d
 	ld	l, 2(ix)
 	ld	h, 3(ix)
 	push	hl
 	ld	l, 0(ix)
 	ld	h, 1(ix)
 	push	hl
-	ld	l, -96(ix)
-	ld	h, -95(ix)
-	push	hl
 	ld	l, -94(ix)
 	ld	h, -93(ix)
+	push	hl
+	ld	l, -92(ix)
+	ld	h, -91(ix)
 	pop	de
 	.globl _feq
 	call	_feq
 	push	de
 	pop	hl
+	ld	-96(ix), l
+	ld	-95(ix), h
+	ld	l, -96(ix)
+	ld	h, -95(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L5
+	jp	__xcc_L3
+__xcc_L3:
+	ld	hl, #0
 	ld	-98(ix), l
 	ld	-97(ix), h
 	ld	l, -98(ix)
 	ld	h, -97(ix)
-	push	hl
-	ld	hl, #0
-	pop	de
-	or	a, a
-	sbc	hl, de
-	ld	hl, #1
-	jp	z, __cmp_e_92777
-	dec	hl
-__cmp_e_92777:
-	ld	-100(ix), l
-	ld	-99(ix), h
-	ld	l, -100(ix)
-	ld	h, -99(ix)
-	ld	a, h
-	or	a, l
-	jp	nz, __xcc_L3
-	jp	__xcc_L5
-__xcc_L3:
-	ld	hl, #0
-	ld	-102(ix), l
-	ld	-101(ix), h
-	ld	l, -102(ix)
-	ld	h, -101(ix)
 	ex	de, hl
 	jp	__test_complex_add_end
 	jp	__xcc_L5
 __xcc_L5:
 	ld	hl, #1
-	ld	-104(ix), l
-	ld	-103(ix), h
-	ld	l, -104(ix)
-	ld	h, -103(ix)
+	ld	-100(ix), l
+	ld	-99(ix), h
+	ld	l, -100(ix)
+	ld	h, -99(ix)
 	ex	de, hl
 	jp	__test_complex_add_end
 __test_complex_add_end:
@@ -449,58 +411,40 @@ __test_complex_add_end:
 	ret
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: main (locals=0, temp_frame=6, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
 	.globl _test_complex_add
 	call	_test_complex_add
 	push	de
 	pop	hl
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L8
+	jp	__xcc_L6
+__xcc_L6:
 	ld	hl, #0
-	pop	de
-	or	a, a
-	sbc	hl, de
-	ld	hl, #1
-	jp	z, __cmp_e_36915
-	dec	hl
-__cmp_e_36915:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	ld	a, h
-	or	a, l
-	jp	nz, __xcc_L6
-	jp	__xcc_L8
-__xcc_L6:
-	ld	hl, #0
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
-	ld	l, -6(ix)
-	ld	h, -5(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L8
 __xcc_L8:
 	ld	hl, #1
-	dec	sp
-	dec	sp
-	ld	-8(ix), l
-	ld	-7(ix), h
-	ld	l, -8(ix)
-	ld	h, -7(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

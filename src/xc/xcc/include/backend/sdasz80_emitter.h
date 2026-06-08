@@ -40,6 +40,8 @@ public:
 
     std::string imm(long long val) const override;
     std::string imm_sym(const std::string &mangled) const override;
+    std::string imm_sym_lo(const std::string &mangled) const override;
+    std::string imm_sym_hi(const std::string &mangled) const override;
     std::string ix_rel(int off) const override;
     std::string indir_global(const std::string &mangled, int off = 0) const override;
 

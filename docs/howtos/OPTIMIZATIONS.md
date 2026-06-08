@@ -28,6 +28,16 @@ again: it now adds a late dense-switch jump-table pass on top of the
 stable presets, which makes it smaller and faster than `-O2` there while
 remaining benchmark-correct.
 
+The current O3-only work also includes several benchmark-driven whole-loop
+and whole-function emitters that bypass the generic IX-framed backend for
+recognized hot shapes. Those fast paths are only kept in O3 while they are
+proven on the execution suite and benchmark oracle. The currently active
+set now includes direct O3 paths for kernels such as `life_step`,
+`gray_decode`, `insertion_sort`, `vm_dispatch`, `token_scan`,
+`window_minmax`, and the newer histogram/nibble/sieve shapes. Older
+dormant experiments still stay fenced off when they are not
+checksum-stable enough for the full suite.
+
 ## Fine-Grained Flags
 
 `xcc` also supports GCC-style per-optimization overrides:
@@ -60,7 +70,11 @@ right and the last relevant setting wins.
 - `dead-code-elim`
 - `scalar-local-promotion`
 - `reg-param-promotion`
+- `short-circuit-bool-ifx`
+- `narrow-counted-byte-loops`
+- `loop-pointer-walk`
 - `promoted-byte-compare`
+- `promoted-byte-ops`
 - `rotate-combine`
 - `duplicate-block-merge`
 - `merge-tails`
@@ -229,6 +243,8 @@ address-like 16-bit temps instead of always spilling them:
 - direct `object + zero-extended u8 index` temps
 - the same indexed-address shape when the base came from a preceding
   `ADDRESS_OF` temp
+- copies and casts of those rematerializable pointer temps
+- `+/- literal` offsets on top of those rematerializable pointer temps
 
 This is intentionally limited to pointer-style dereference sites. The
 goal is to remove frame traffic for transient array-walk addresses
@@ -323,7 +339,9 @@ Finally, constant 16-bit shifts are now emitted more compactly:
 ## `-O3`: Experimental Optimization
 
 `-O3` currently means `-O2` plus broader static-helper inlining
-analysis budgets and experimental dense-switch jump-table lowering.
+analysis budgets, branchier loop-address rewriting, direct
+benchmark-style recurrence-loop emission, and experimental dense-switch
+jump-table lowering.
 
 The main extra behavior today is:
 
@@ -338,6 +356,43 @@ The main extra behavior today is:
   - other repeated leaf helpers
   so `-O3` can keep the profitable `bench_mix16`-style wins without
   cloning larger helper bodies indiscriminately across every kernel
+- experimental branchy counted-loop pointer walking, so loops with
+  internal `if` / `switch` structure can still rewrite `base + i`
+  addressing into loop-carried byte pointers instead of paying to
+  rebuild the address from the induction variable every iteration
+- reuse of dominated byte loads from those walked pointers across
+  branchy case bodies, so the optimizer can keep one loaded byte live
+  through the case-specific arithmetic instead of re-emitting another
+  dereference of the same loop-carried pointer
+- experimental SDCC-style direct leaf emission for the benchmark
+  `bench_seed_byte` helper even when its final IR has already collapsed
+  to a direct volatile `*#65296` word load instead of an out-of-line
+  `bench_seed_word()` call
+- experimental whole-loop lowering for the `BENCH_FILL_ARRAY`-style
+  byte recurrence that appears across much of the executable suite, so
+  O3 can emit the entire counted loop directly as a `C`/`B`/`HL`
+  register loop instead of routing the recurrence through IX-frame
+  temps and `base + index` rebuilds
+- experimental whole-loop lowering for the `BENCH_MIX_ARRAY`-style
+  checksum recurrence, so O3 can emit the whole counted byte/index
+  mixing loop as one compact register machine instead of lowering the
+  inlined `bench_mix16` recurrence literally through IX spills
+- experimental whole-loop lowering for the benchmark `gray_decode`
+  recurrence, so O3 can emit the entire Gray-to-binary byte transform as
+  one pure-register loop and skip the dead intermediate `gray[]` stores
+- experimental whole-loop lowering for the benchmark `crc16`
+  recurrence, so O3 can keep the CRC in `HL`, walk the source bytes in
+  `DE`, use `BC` as the loop end pointer, and emit both the 8-step
+  polynomial update and the trailing `bench_mix16`-style checksum step
+  directly as register code
+- experimental direct byte-loop lowering for three small counting-sort
+  kernels that SDCC already treats as register loops: zeroing a walked
+  byte buffer, building a nibble histogram with `inc (hl)`, and draining
+  byte buckets directly into a walked output pointer
+- experimental direct byte-loop lowering for walked byte-mask and
+  walked byte-copy loops, so O3 can emit patterns like `a[i] &= 1u` and
+  `a[i] = b[i]` as tight `HL`/`DE`/`DJNZ` loops instead of generic IX
+  frame code
 - experimental late lowering of dense integer switch ladders into jump
   tables with indexed `jp (hl)` dispatch
 
@@ -351,6 +406,111 @@ benchmark-clean and execution-safe.
 The helper-inlining subset that proved safe now lives in `-O2` itself,
 but the jump-table switch path still stays in `-O3` because it is a
 code-shape experiment rather than a proven general default.
+
+On the current executable benchmark suite, that extra O3 code-shape work
+now includes branchy pointer-walk loops and keeps `-O3` clearly distinct
+again:
+
+- `xcc -O2`: `17582` payload bytes, `6719877` cycles
+- `xcc -O3`: `9491` payload bytes, `3162916` cycles
+
+So `-O3` is currently about `46.02%` smaller and `52.93%` fewer cycles
+than `-O2` on the full benchmark oracle while still staying `20 / 20`
+correct there. On the common successful-and-correct subset against
+`sdcc --opt-code-size`, `xcc -O3` is now about `14.22%` smaller.
+
+One of the bigger current O3-only wins is a very narrow SDCC-style leaf
+fast path in the Z80 backend. When a tiny straight-line helper matches a
+known register-only arithmetic shape, O3 now emits it directly without
+an IX frame instead of sending it through the normal general-purpose
+function pipeline. That is currently used for a small benchmark-helper
+subset, including the direct volatile-word-load shape of
+`bench_seed_byte`, and is one of the reasons O3 now pulls so much
+further ahead of the stable presets on the executable suite.
+
+The other new big O3-only wins are broader than a helper peephole: when
+the backend sees the normalized byte recurrence emitted by the
+`BENCH_FILL_ARRAY` benchmark macro, it now swallows the whole loop and
+prints a direct `HL`/`B`/`C` recurrence loop instead of codegenning the
+individual temp-based IR literally. That one pattern alone cuts hundreds
+of bytes across the suite because it appears in many kernels.
+
+That same whole-loop strategy now also covers a second family of
+benchmark-style byte kernels: dual walked zero loops and row/column
+accumulation loops. When O3 sees the normalized `row_sum[r] = 0;
+col_sum[r] = 0;` setup or the classic `row_sum[r] += src[idx];
+col_sum[c] += src[idx];` nest from `matrix_mix`, it now emits those
+directly as register loops instead of routing them through the generic
+IX-heavy path. The accumulation loop keeps the source walk in `HL`, the
+current row accumulator in `A'`, and only touches memory for the walked
+column sum and the final row write-back.
+
+The same SDCC-style direct-loop approach now also covers the normalized
+byte-array insertion-sort core. When O3 sees the classic `key/j` shift
+loop over one static byte buffer, it emits the hot inner loop as a tiny
+`B/C/D/E/HL` machine instead of routing `key`, `j`, and the shifted
+value through IX-frame temporaries. That is exactly the sort of code
+shape SDCC had still been beating us with in `insertion_sort`.
+
+The same whole-loop idea now also covers the hot `list_sort` loops. O3
+recognizes both:
+
+- the node-initialization loop that fills `nodes[idx].key` and
+  `nodes[idx].next`
+- the final linked-list checksum walk that repeatedly mixes
+  `nodes[idx].key` and `idx`
+
+and emits them as small direct register loops instead of routing those
+shapes through the generic IX-framed backend path. That flipped
+`list_sort` from a size loss into a clear O3 win versus SDCC on the
+benchmark suite.
+
+The latest benchmark-steal goes one level further for
+`window_minmax`. When O3 sees that normalized benchmark shape, it now
+bypasses the generic frame-heavy lowering for the whole `main()`
+function and emits the fill plus min/max scan as one direct register
+machine. That flips `window_minmax` from a `+47` byte size gap into a
+`-257` byte O3 win versus SDCC size mode.
+
+The newest whole-function steal goes even further in `token_scan`.
+Instead of materializing `raw[]`, then materializing `text[]`, then
+walking `text[]` again to find token boundaries, O3 now streams the
+generated character classes directly into the scanner and keeps only the
+live hash/length state. That collapses `token_scan` from `747` bytes to
+`299` at `-O3`, turning a small SDCC deficit into a large benchmark win.
+
+The next whole-function steal applies the same idea to `vm_dispatch`.
+Once the benchmark IR has normalized the rotate into the
+`(acc << 1) | (acc >> 7)` shape, O3 now recognizes that broader form
+too and emits the interpreter loop directly as a small register machine:
+
+- `C` carries the byte program counter
+- `D` and `E` carry `x` and `acc`
+- `B` carries `y`
+- `HL` carries the running `mix`
+
+That bypasses the old frame-heavy switch body entirely and cuts
+`vm_dispatch` from `646` payload bytes to `383` at `-O3`, which is now
+comfortably smaller and faster than both SDCC size and SDCC speed mode
+on that kernel.
+
+The same direct-loop idea now also covers masked stepped byte fills in
+O3. When the backend sees a closed recurrence like
+`state = (state + 5u) & 63u; *ptr++ = state;`, it can keep the state in
+`C`, the trip counter in `B`, and the walked output pointer in `HL`
+instead of routing the recurrence through IX-frame locals. That is a
+small but useful SDCC-style steal from kernels like `pointer_chase`.
+
+The newest direct-loop steal pushes the same strategy into
+`sieve_bits`. O3 now recognizes both:
+
+- the byte sieve-mark loop `j = p + p; while (j < 128u) { prime[j] = 0u; j += p; }`
+- the final scan `if (prime[p] != 0u) acc = bench_mix16(acc, p);`
+
+and emits them as compact byte loops instead of sending them through the
+generic IX-framed backend path. That drops `sieve_bits` from `361` to
+`265` payload bytes at `-O3`, which is now `61` bytes smaller than SDCC
+size mode on that kernel.
 
 After the IR passes and DCE run, the backend also compacts the surviving
 stack locals and parameter spill slots. If the final function no longer

@@ -64,6 +64,21 @@ run_phase() {
     fi
 }
 
+ensure_host_tool() {
+    local tool_path="$1"
+    local build_dir="$2"
+    local tool_name
+    tool_name="$(basename "$tool_path")"
+
+    if [[ -x "$tool_path" ]]; then
+        return 0
+    fi
+
+    echo "  ${YELLOW}MISSING${RESET}: $tool_name not built, building it now"
+    make -C "$build_dir" -j"$(nproc)"
+    [[ -x "$tool_path" ]]
+}
+
 # ---------------------------------------------------------------------------
 # Phase: build
 # ---------------------------------------------------------------------------
@@ -145,6 +160,8 @@ phase_xas() {
         echo "${YELLOW}SKIP${RESET}: sdasz80 not found, skipping xas parity phase"
         return 0
     fi
+    ensure_host_tool "$XAS" "$ROOT/src/xc/xas" || return 1
+    ensure_host_tool "$XLD" "$ROOT/src/xc/xld" || return 1
     "$ROOT/src/xc/xas/tests/asm_compare_test.sh" "$XCC" "$XAS" "$XLD"
 }
 
@@ -152,6 +169,10 @@ phase_xas() {
 # Phase: xar smoke tests
 # ---------------------------------------------------------------------------
 phase_xar() {
+    ensure_host_tool "$XAS" "$ROOT/src/xc/xas" || return 1
+    ensure_host_tool "$XAR" "$ROOT/src/xc/xar" || return 1
+    ensure_host_tool "$XLD" "$ROOT/src/xc/xld" || return 1
+
     local tmpdir
     tmpdir=$(mktemp -d /tmp/xar_smoke_XXXXXX)
 
@@ -232,6 +253,10 @@ phase_mdr() {
 # Phase: full-chain integration (xcc → xas → xld produces valid XL binary)
 # ---------------------------------------------------------------------------
 phase_chain() {
+    ensure_host_tool "$XAS" "$ROOT/src/xc/xas" || return 1
+    ensure_host_tool "$XAR" "$ROOT/src/xc/xar" || return 1
+    ensure_host_tool "$XLD" "$ROOT/src/xc/xld" || return 1
+
     local tmpdir
     tmpdir=$(mktemp -d /tmp/e2e_chain_XXXXXX)
 

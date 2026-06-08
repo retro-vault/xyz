@@ -79,6 +79,9 @@ DEPS := $(OBJS:.o=.d)
 
 all: $(TARGET)
 
+$(XBFD_LIB):
+	$(MAKE) -C $(ROOT)/lib/xbfd
+
 $(TARGET): $(OBJS) $(XBFD_LIB) | $(HOST_BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 

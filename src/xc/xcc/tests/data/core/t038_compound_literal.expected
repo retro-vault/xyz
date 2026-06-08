@@ -55,10 +55,8 @@ _sum:
 	ld	-13(ix), d
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	push	hl
 	ld	e, -14(ix)
 	ld	d, -13(ix)
-	pop	hl
 	add	hl, de
 	ld	-16(ix), l
 	ld	-15(ix), h

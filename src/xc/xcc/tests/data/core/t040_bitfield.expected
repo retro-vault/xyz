@@ -60,10 +60,8 @@ _main:
 	ld	-11(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -12(ix)
 	ld	d, -11(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -84,17 +82,9 @@ _main:
 	ld	-15(ix), h
 	ld	l, -16(ix)
 	ld	h, -15(ix)
-	push	hl
-	ld	hl, #3
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_886
-__shift_9383:
 	add	hl, hl
-	djnz	__shift_9383
-__sdone_886:
+	add	hl, hl
+	add	hl, hl
 	ld	-18(ix), l
 	ld	-17(ix), h
 	ld	l, -14(ix)
@@ -130,10 +120,8 @@ __sdone_886:
 	ld	-23(ix), h
 	ld	l, -14(ix)
 	ld	h, -13(ix)
-	push	hl
 	ld	e, -24(ix)
 	ld	d, -23(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -154,17 +142,10 @@ __sdone_886:
 	ld	-27(ix), h
 	ld	l, -28(ix)
 	ld	h, -27(ix)
-	push	hl
-	ld	hl, #7
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_6915
-__shift_2777:
+	ld	b, #7
+__shift_9383:
 	add	hl, hl
-	djnz	__shift_2777
-__sdone_6915:
+	djnz	__shift_9383
 	ld	-30(ix), l
 	ld	-29(ix), h
 	ld	l, -26(ix)
@@ -200,10 +181,8 @@ __sdone_6915:
 	ld	-35(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
-	push	hl
 	ld	e, -36(ix)
 	ld	d, -35(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -238,9 +217,9 @@ __sdone_6915:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_47793
+	jp	nz, __cmp_e_30886
 	dec	hl
-__cmp_e_47793:
+__cmp_e_30886:
 	ld	-44(ix), l
 	ld	-43(ix), h
 	ld	l, -44(ix)
@@ -274,18 +253,12 @@ __xcc_L2:
 	ld	-49(ix), d
 	ld	l, -50(ix)
 	ld	h, -49(ix)
-	push	hl
-	ld	hl, #3
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_5386
-__shift_8335:
 	srl	h
 	rr	l
-	djnz	__shift_8335
-__sdone_5386:
+	srl	h
+	rr	l
+	srl	h
+	rr	l
 	ld	-52(ix), l
 	ld	-51(ix), h
 	ld	l, -52(ix)
@@ -306,9 +279,9 @@ __sdone_5386:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_60492
+	jp	nz, __cmp_e_92777
 	dec	hl
-__cmp_e_60492:
+__cmp_e_92777:
 	ld	-56(ix), l
 	ld	-55(ix), h
 	ld	l, -56(ix)
@@ -342,18 +315,11 @@ __xcc_L5:
 	ld	-61(ix), d
 	ld	l, -62(ix)
 	ld	h, -61(ix)
-	push	hl
-	ld	hl, #7
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_1421
-__shift_6649:
+	ld	b, #7
+__shift_6915:
 	srl	h
 	rr	l
-	djnz	__shift_6649
-__sdone_1421:
+	djnz	__shift_6915
 	ld	-64(ix), l
 	ld	-63(ix), h
 	ld	l, -64(ix)
@@ -374,9 +340,9 @@ __sdone_1421:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_2362
+	jp	nz, __cmp_e_47793
 	dec	hl
-__cmp_e_2362:
+__cmp_e_47793:
 	ld	-68(ix), l
 	ld	-67(ix), h
 	ld	l, -68(ix)
@@ -443,10 +409,8 @@ __xcc_L8:
 	ld	-79(ix), h
 	ld	l, -72(ix)
 	ld	h, -71(ix)
-	push	hl
 	ld	e, -80(ix)
 	ld	d, -79(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -481,9 +445,9 @@ __xcc_L8:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_90027
+	jp	nz, __cmp_e_38335
 	dec	hl
-__cmp_e_90027:
+__cmp_e_38335:
 	ld	-88(ix), l
 	ld	-87(ix), h
 	ld	l, -88(ix)
@@ -517,18 +481,12 @@ __xcc_L11:
 	ld	-93(ix), d
 	ld	l, -94(ix)
 	ld	h, -93(ix)
-	push	hl
-	ld	hl, #3
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_59
-__shift_8690:
 	srl	h
 	rr	l
-	djnz	__shift_8690
-__sdone_59:
+	srl	h
+	rr	l
+	srl	h
+	rr	l
 	ld	-96(ix), l
 	ld	-95(ix), h
 	ld	l, -96(ix)
@@ -549,9 +507,9 @@ __sdone_59:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_97763
+	jp	nz, __cmp_e_85386
 	dec	hl
-__cmp_e_97763:
+__cmp_e_85386:
 	ld	-100(ix), l
 	ld	-99(ix), h
 	ld	l, -100(ix)
@@ -585,18 +543,11 @@ __xcc_L14:
 	ld	-105(ix), d
 	ld	l, -106(ix)
 	ld	h, -105(ix)
-	push	hl
-	ld	hl, #7
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_540
-__shift_3926:
+	ld	b, #7
+__shift_492:
 	srl	h
 	rr	l
-	djnz	__shift_3926
-__sdone_540:
+	djnz	__shift_492
 	ld	-108(ix), l
 	ld	-107(ix), h
 	ld	l, -108(ix)
@@ -617,9 +568,9 @@ __sdone_540:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_83426
+	jp	nz, __cmp_e_16649
 	dec	hl
-__cmp_e_83426:
+__cmp_e_16649:
 	ld	-112(ix), l
 	ld	-111(ix), h
 	ld	l, -112(ix)

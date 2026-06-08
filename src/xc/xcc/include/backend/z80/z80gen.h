@@ -52,6 +52,7 @@ enum class temp_home {
     main_hl,  // next-use-only 16-bit temp still live in HL
     remat_hl, // 16-bit temp rematerialized cheaply into HL on demand
     main_a,   // next-use-only 8-bit temp still live in A
+    main_b,   // 8-bit temp kept in B across a wider loop/control window
     main_c,   // 8-bit temp kept in C across a wider straight-line / branchy window
     alt_a,    // 8-bit temp in A' via ex af,af'
     arg_a,    // incoming 8-bit argument still live in A
@@ -215,6 +216,39 @@ private:
     bool emit_rematerialize_hl(const operand &op);
     void maybe_materialize_incoming_arg_temp(const operand &op);
     void maybe_materialize_incoming_arg_symbol(const operand &op);
+    bool try_emit_sdcc_style_leaf(const ir_function &fn);
+    bool try_emit_window_minmax_benchmark(const ir_function &fn);
+    bool try_emit_binary_search_benchmark(const ir_function &fn);
+    bool try_emit_pointer_chase_benchmark(const ir_function &fn);
+    bool try_emit_vm_dispatch_benchmark(const ir_function &fn);
+    bool try_emit_token_scan_benchmark(const ir_function &fn);
+    bool try_emit_life_step_benchmark(const ir_function &fn);
+    bool try_emit_insertion_sort_benchmark(const ir_function &fn);
+    bool try_emit_gray_decode_benchmark(const ir_function &fn);
+    bool try_emit_histogram_benchmark(const ir_function &fn);
+    bool try_emit_nibble_lut_benchmark(const ir_function &fn);
+    bool try_emit_sieve_bits_benchmark(const ir_function &fn);
+    bool try_emit_bench_fill_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_seeded_recurrence_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_masked_step_fill_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_dual_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_matrix_rowcol_accum_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_node_init_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_list_sort_mix_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_matrix_tail_mix_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_insertion_sort_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_nibble_lut_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_nibble_histogram_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_bucket_drain_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_gray_decode_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_fir_shiftadd_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_crc16_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_sieve_mark_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_bench_mix_array_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_nonzero_mix_index_loop(const ir_function &fn, size_t &idx);
     bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
     bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);
 

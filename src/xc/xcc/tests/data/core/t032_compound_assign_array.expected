@@ -29,10 +29,8 @@ _main:
 	ld	-13(ix), h
 	ld	l, -12(ix)
 	ld	h, -11(ix)
-	push	hl
 	ld	e, -14(ix)
 	ld	d, -13(ix)
-	pop	hl
 	add	hl, de
 	ld	-16(ix), l
 	ld	-15(ix), h
@@ -59,10 +57,8 @@ _main:
 	ld	-19(ix), h
 	ld	l, -18(ix)
 	ld	h, -17(ix)
-	push	hl
 	ld	e, -20(ix)
 	ld	d, -19(ix)
-	pop	hl
 	add	hl, de
 	ld	-22(ix), l
 	ld	-21(ix), h
@@ -89,10 +85,8 @@ _main:
 	ld	-25(ix), h
 	ld	l, -24(ix)
 	ld	h, -23(ix)
-	push	hl
 	ld	e, -26(ix)
 	ld	d, -25(ix)
-	pop	hl
 	add	hl, de
 	ld	-28(ix), l
 	ld	-27(ix), h
@@ -123,10 +117,8 @@ _main:
 	ld	-31(ix), h
 	ld	l, -30(ix)
 	ld	h, -29(ix)
-	push	hl
 	ld	e, -32(ix)
 	ld	d, -31(ix)
-	pop	hl
 	add	hl, de
 	ld	-34(ix), l
 	ld	-33(ix), h
@@ -161,19 +153,15 @@ _main:
 	ld	-41(ix), h
 	ld	l, -40(ix)
 	ld	h, -39(ix)
-	push	hl
 	ld	e, -42(ix)
 	ld	d, -41(ix)
-	pop	hl
 	add	hl, de
 	ld	-44(ix), l
 	ld	-43(ix), h
 	ld	l, -44(ix)
 	ld	h, -43(ix)
-	push	hl
 	ld	e, -38(ix)
 	ld	d, -37(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -194,10 +182,8 @@ _main:
 	ld	-47(ix), h
 	ld	l, -46(ix)
 	ld	h, -45(ix)
-	push	hl
 	ld	e, -48(ix)
 	ld	d, -47(ix)
-	pop	hl
 	add	hl, de
 	ld	-50(ix), l
 	ld	-49(ix), h
@@ -230,19 +216,15 @@ _main:
 	ld	-57(ix), h
 	ld	l, -56(ix)
 	ld	h, -55(ix)
-	push	hl
 	ld	e, -58(ix)
 	ld	d, -57(ix)
-	pop	hl
 	add	hl, de
 	ld	-60(ix), l
 	ld	-59(ix), h
 	ld	l, -60(ix)
 	ld	h, -59(ix)
-	push	hl
 	ld	e, -54(ix)
 	ld	d, -53(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -263,10 +245,8 @@ _main:
 	ld	-63(ix), h
 	ld	l, -62(ix)
 	ld	h, -61(ix)
-	push	hl
 	ld	e, -64(ix)
 	ld	d, -63(ix)
-	pop	hl
 	add	hl, de
 	ld	-66(ix), l
 	ld	-65(ix), h
@@ -327,10 +307,8 @@ __xcc_L3:
 	ld	-75(ix), h
 	ld	l, -74(ix)
 	ld	h, -73(ix)
-	push	hl
 	ld	e, -76(ix)
 	ld	d, -75(ix)
-	pop	hl
 	add	hl, de
 	ld	-78(ix), l
 	ld	-77(ix), h
@@ -410,10 +388,8 @@ __xcc_L1:
 	ld	-89(ix), h
 	ld	l, -88(ix)
 	ld	h, -87(ix)
-	push	hl
 	ld	e, -90(ix)
 	ld	d, -89(ix)
-	pop	hl
 	add	hl, de
 	ld	-92(ix), l
 	ld	-91(ix), h

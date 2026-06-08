@@ -42,10 +42,8 @@ __cmp_e_89383:
 __xcc_L1:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -2(ix)
 	ld	d, -1(ix)
-	pop	hl
 	add	hl, de
 	ld	-8(ix), l
 	ld	-7(ix), h

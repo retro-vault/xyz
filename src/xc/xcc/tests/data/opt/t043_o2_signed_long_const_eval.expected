@@ -2,59 +2,11 @@
 	.area	_CODE
 	.globl	_f
 _f:
-	; sdcccall(1) prologue: f (locals=4, temp_frame=8, stack_params=0)
-	push	ix
-	ld	ix, #0
-	add	ix, sp
-	ld	hl, #-12
-	add	hl, sp
-	ld	sp, hl
-	ld	hl, #15536
-	ld	-8(ix), l
-	ld	-7(ix), h
-	ld	hl, #65535
-	ld	-6(ix), l
-	ld	-5(ix), h
-	ld	l, -8(ix)
-	ld	h, -7(ix)
-	ld	-4(ix), l
-	ld	-3(ix), h
-	ld	l, -6(ix)
-	ld	h, -5(ix)
-	ld	-2(ix), l
-	ld	-1(ix), h
-	ld	l, -4(ix)
-	ld	h, -3(ix)
-	ld	de, #54464
-	add	hl, de
-	ld	-12(ix), l
-	ld	-11(ix), h
-	ld	l, -2(ix)
-	ld	h, -1(ix)
-	ld	de, #1
-	adc	hl, de
-	ld	-10(ix), l
-	ld	-9(ix), h
-	ld	l, -12(ix)
-	ld	h, -11(ix)
-	ex	de, hl
-	ld	hl, #70000
-	or	a, a
-	sbc	hl, de
-	jr	z, __xcc_L2
-__xcc_L0:
-	ld	hl, #1
-	ld	b, h
-	ld	c, l
-	ex	de, hl
-	jr	__f_end
+	; sdcccall(1) prologue: f (locals=0, temp_frame=0, stack_params=0)
+	; frameless function: no IX frame needed
 __xcc_L2:
 	ld	hl, #0
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __f_end:
 	; epilogue: f
-	ld	sp, ix
-	pop	ix
 	ret

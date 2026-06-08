@@ -16,19 +16,18 @@ _large:
 
 	.globl _get_port
 _get_port:
-	; sdcccall(1) prologue: get_port (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: get_port (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	ld	hl, (_port)
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ld	l, -4(ix)

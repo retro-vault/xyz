@@ -25,17 +25,16 @@ __set_port_end:
 	ret
 	.globl _get_port
 _get_port:
-	; sdcccall(1) prologue: get_port (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: get_port (locals=0, temp_frame=1, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	l, (_PORT_A)
-	ld	h, #0
-	dec	sp
-	dec	sp
-	ld	-2(ix), l
-	ld	-1(ix), h
-	ld	a, -2(ix)
+	ld	hl, #-1
+	add	hl, sp
+	ld	sp, hl
+	in	a, (#63)
+	ld	-1(ix), a
+	ld	a, -1(ix)
 	jp	__get_port_end
 __get_port_end:
 	; epilogue: get_port

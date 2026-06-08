@@ -1,29 +1,53 @@
 	.module	xcc_output
 	.area	_CODE
-	.globl	_use_double
-_use_double:
-	; sdcccall(1) prologue: use_double (locals=0, temp_frame=0, stack_params=0)
+_double_it:
+	; sdcccall(1) prologue: double_it (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
-	ld	l, -2(ix)
-	ld	h, -1(ix)
+	; keep incoming register arg t4 live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) register param handled by prologue
 	push	hl
-	ld	e, -2(ix)
-	ld	d, -1(ix)
+	ld	d, h
+	ld	e, l
 	pop	hl
 	add	hl, de
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ex	de, hl
+__double_it_end:
+	; epilogue: double_it
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_use_double
+_use_double:
+	; sdcccall(1) prologue: use_double (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	b, h
+	ld	c, l
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) register param handled by prologue
+	ld	h, b
+	ld	l, c
+	.globl	_double_it
+	call	_double_it
+	push	de
+	pop	hl
+	ld	b, h
+	ld	c, l
 	inc	hl
-	dec	sp
-	dec	sp
-	ld	-12(ix), l
-	ld	-11(ix), h
+	ld	-2(ix), l
+	ld	-1(ix), h
 	ex	de, hl
 __use_double_end:
 	; epilogue: use_double

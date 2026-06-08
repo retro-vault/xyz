@@ -2,18 +2,21 @@
 	.area	_CODE
 	.globl	_addf
 _addf:
-	; sdcccall(1) prologue: addf (locals=4, temp_frame=8, stack_params=4)
+	; sdcccall(1) prologue: addf (locals=0, temp_frame=8, stack_params=4)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	-4(ix), e
-	ld	-3(ix), d
+	push	hl
+	ex	de, hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	pop	hl
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	hl, #-12
+	ld	hl, #-8
 	add	hl, sp
 	ld	sp, hl
-	; receive (sdcccall1) param a at -4(ix)
+	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) param b at 4(ix)
 	.globl	__fsadd
 	ld	l, 6(ix)
@@ -41,11 +44,11 @@ _addf:
 	ld	-5(ix), h
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	ld	-12(ix), l
-	ld	-11(ix), h
+	ld	-4(ix), l
+	ld	-3(ix), h
 	ex	de, hl
-	ld	l, -10(ix)
-	ld	h, -9(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 __addf_end:
 	; epilogue: addf
 	ld	sp, ix

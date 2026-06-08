@@ -1,0 +1,99 @@
+	.module	xcc_output
+	.area	_DATA
+_data:
+	.ds	48
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=5, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-5
+	add	hl, sp
+	ld	sp, hl
+	ld	a, #1
+	ld	-3(ix), a
+__xcc_L0:
+	ld	a, -3(ix)
+	cp	#48
+	jp	nc, __xcc_L3
+__xcc_L1:
+	ld	e, -3(ix)
+	ld	d, #0
+	ld	hl, #data
+	add	hl, de
+	ld	a, (hl)
+	ld	-2(ix), a
+	ld	a, -3(ix)
+	ld	-1(ix), a
+__xcc_L4:
+	ld	a, -1(ix)
+	cp	#0
+	jr	z, __xcc_L6
+	jr	c, __xcc_L6
+__xcc_L7:
+	ld	a, -1(ix)
+	sub	#1
+	ld	-4(ix), a
+	ld	e, -4(ix)
+	ld	d, #0
+	ld	hl, #data
+	add	hl, de
+	ld	a, (hl)
+	ld	-5(ix), a
+	ld	c, -2(ix)
+	cp	c
+	jr	z, __xcc_L6
+	jr	c, __xcc_L6
+__xcc_L5:
+	ld	a, -1(ix)
+	sub	#1
+	ld	-4(ix), a
+	ld	e, -4(ix)
+	ld	d, #0
+	ld	hl, #data
+	add	hl, de
+	ld	a, (hl)
+	ld	-5(ix), a
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	b, h
+	ld	c, l
+	ld	hl, #data
+	add	hl, bc
+	ld	a, -5(ix)
+	ld	(hl), a
+	ld	a, -1(ix)
+	sub	#1
+	ld	-1(ix), a
+	jr	__xcc_L4
+__xcc_L6:
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	b, h
+	ld	c, l
+	ld	hl, #data
+	add	hl, bc
+	ld	a, -2(ix)
+	ld	(hl), a
+__xcc_L2:
+	ld	a, -3(ix)
+	add	a, #1
+	ld	-3(ix), a
+	jp	__xcc_L0
+__xcc_L3:
+	xor	a
+	ld	e, a
+	ld	d, #0
+	ld	hl, #data
+	add	hl, de
+	ld	a, (hl)
+	ld	-4(ix), a
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

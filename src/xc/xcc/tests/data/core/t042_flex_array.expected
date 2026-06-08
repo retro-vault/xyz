@@ -5,19 +5,15 @@
 
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=6, temp_frame=84, stack_params=0)
+	; sdcccall(1) prologue: main (locals=6, temp_frame=83, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-90
+	ld	hl, #-89
 	add	hl, sp
 	ld	sp, hl
-	ld	hl, #2
-	push	hl
-	ld	hl, #2
-	pop	de
-	or	a, a
-	sbc	hl, de
+	ld	a, #2
+	cp	#2
 	ld	hl, #1
 	jp	nz, __cmp_e_89383
 	dec	hl
@@ -267,16 +263,16 @@ __xcc_L5:
 	ld	l, -80(ix)
 	ld	h, -79(ix)
 	ld	a, (hl)
-	ld	-82(ix), a
-	ld	a, -82(ix)
+	ld	-81(ix), a
+	ld	a, -81(ix)
 	ld	l, a
 	rlca
 	sbc	a, a
 	ld	h, a
-	ld	-84(ix), l
-	ld	-83(ix), h
-	ld	l, -84(ix)
-	ld	h, -83(ix)
+	ld	-83(ix), l
+	ld	-82(ix), h
+	ld	l, -83(ix)
+	ld	h, -82(ix)
 	push	hl
 	ld	hl, #97
 	pop	de
@@ -286,29 +282,29 @@ __xcc_L5:
 	jp	nz, __cmp_e_92777
 	dec	hl
 __cmp_e_92777:
-	ld	-86(ix), l
-	ld	-85(ix), h
-	ld	l, -86(ix)
-	ld	h, -85(ix)
+	ld	-85(ix), l
+	ld	-84(ix), h
+	ld	l, -85(ix)
+	ld	h, -84(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L6
 	jp	__xcc_L8
 __xcc_L6:
 	ld	hl, #0
-	ld	-88(ix), l
-	ld	-87(ix), h
-	ld	l, -88(ix)
-	ld	h, -87(ix)
+	ld	-87(ix), l
+	ld	-86(ix), h
+	ld	l, -87(ix)
+	ld	h, -86(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L8
 __xcc_L8:
 	ld	hl, #1
-	ld	-90(ix), l
-	ld	-89(ix), h
-	ld	l, -90(ix)
-	ld	h, -89(ix)
+	ld	-89(ix), l
+	ld	-88(ix), h
+	ld	l, -89(ix)
+	ld	h, -88(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

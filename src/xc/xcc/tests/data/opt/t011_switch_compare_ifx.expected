@@ -2,30 +2,31 @@
 	.area	_CODE
 	.globl	_pick
 _pick:
-	; sdcccall(1) prologue: pick (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: pick (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
-	ld	-2(ix), l
-	ld	-1(ix), h
-	; receive (sdcccall1) register param already materialized in prologue
-	ld	l, -2(ix)
-	ld	h, -1(ix)
+	ld	b, h
+	ld	c, l
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) register param handled by prologue
+	ld	h, b
+	ld	l, c
 	ex	de, hl
 	ld	hl, #3
 	or	a, a
 	sbc	hl, de
-	jp	nz, __xcc_L1
+	jr	nz, __xcc_L1
 __xcc_L0:
 	ld	hl, #1
 	ex	de, hl
-	jp	__pick_end
+	jr	__pick_end
 __xcc_L1:
 	ld	hl, #0
 	ex	de, hl
-	jp	__pick_end
+	jr	__pick_end
 __xcc_L2:
 __pick_end:
 	; epilogue: pick

@@ -138,6 +138,53 @@ static bool can_use_direct_byte_eq_ne_compare(const icode &ic) {
     return false;
 }
 
+static bool is_straight_line_helper_codegen_fn(const ir_function *fn) {
+    if (!fn || fn->local_bytes != 0)
+        return false;
+    for (size_t i = 1; i + 1 < fn->icodes.size(); ++i) {
+        switch (fn->icodes[i].op) {
+        case icode_op::RECEIVE:
+        case icode_op::ASSIGN:
+        case icode_op::ADDRESS_OF:
+        case icode_op::GET_VALUE_AT:
+        case icode_op::SET_VALUE_AT:
+        case icode_op::ADD:
+        case icode_op::SUB:
+        case icode_op::NEG:
+        case icode_op::MUL:
+        case icode_op::DIV:
+        case icode_op::MOD:
+        case icode_op::BAND:
+        case icode_op::BOR:
+        case icode_op::BXOR:
+        case icode_op::BNOT:
+        case icode_op::SHL:
+        case icode_op::SHR:
+        case icode_op::ROL:
+        case icode_op::ROR:
+        case icode_op::EQ:
+        case icode_op::NE:
+        case icode_op::LT:
+        case icode_op::LE:
+        case icode_op::GT:
+        case icode_op::GE:
+        case icode_op::CAST:
+        case icode_op::RETURN:
+        case icode_op::MAKE_COMPLEX:
+        case icode_op::FADD:
+        case icode_op::FSUB:
+        case icode_op::FMUL:
+        case icode_op::FDIV:
+        case icode_op::FITOSF:
+        case icode_op::FSTOI:
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
 void z80_gen::gen_add(const icode &ic) {
     auto rhs_available_in_bc =
         [this](const operand &op) {
@@ -146,6 +193,50 @@ void z80_gen::gen_add(const icode &ic) {
                 return it != temp_regs_.end() && it->second == temp_home::main_bc;
             }
             return op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op);
+        };
+    auto available_in_de =
+        [this](const operand &op) {
+            if (op.kind == operand_kind::TEMP) {
+                auto it = temp_regs_.find(op.temp_id);
+                return it != temp_regs_.end() && it->second == temp_home::arg_de;
+            }
+            if (op.kind != operand_kind::SYMBOL || op.is_global)
+                return false;
+            auto it = incoming_symbol_homes_.find(op.stack_offset);
+            return it != incoming_symbol_homes_.end() &&
+                   it->second == temp_home::arg_de &&
+                   op.byte_offset == 0;
+        };
+    auto maybe_preserve_arg_de =
+        [this](const operand &op) {
+            if (op.kind == operand_kind::TEMP) {
+                auto it = temp_regs_.find(op.temp_id);
+                if (it != temp_regs_.end() && it->second == temp_home::arg_de) {
+                    emit_line("push\thl");
+                    maybe_materialize_incoming_arg_temp(op);
+                    emit_line("pop\thl");
+                }
+                return;
+            }
+            if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+                auto it = incoming_symbol_homes_.find(op.stack_offset);
+                if (it != incoming_symbol_homes_.end() &&
+                    it->second == temp_home::arg_de &&
+                    op.byte_offset == 0) {
+                    emit_line("push\thl");
+                    maybe_materialize_incoming_arg_symbol(op);
+                    emit_line("pop\thl");
+                }
+            }
+        };
+    auto rhs_available_in_hl =
+        [this](const operand &op) {
+            if (op.kind != operand_kind::TEMP)
+                return false;
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() &&
+                   (it->second == temp_home::main_hl ||
+                    it->second == temp_home::remat_hl);
         };
     auto lhs_load_preserves_bc =
         [this](const operand &op) {
@@ -270,6 +361,78 @@ void z80_gen::gen_add(const icode &ic) {
         emit_line("adc\thl, de");
         store_hl_hi32(ic.result);
     } else {
+        auto match_zero_extended_u8_plus_const =
+            [this](const operand &op, operand &byte_src,
+                   uint16_t &imm16) {
+                imm16 = 0;
+                if (get_zero_extended_u8_source(op, byte_src))
+                    return true;
+
+                if (!op.is_temp())
+                    return false;
+
+                const icode *def =
+                    find_temp_def_before(op.temp_id, cur_ic_index_);
+                if (!def || !def->result.is_temp() ||
+                    def->result.temp_id != op.temp_id)
+                    return false;
+                if (def->op != icode_op::ADD)
+                    return false;
+                size_t def_idx =
+                    static_cast<size_t>(def - &cur_fn_->icodes[0]);
+                for (size_t i = def_idx + 1; i < cur_ic_index_; ++i) {
+                    switch (cur_fn_->icodes[i].op) {
+                    case icode_op::LABEL:
+                    case icode_op::GOTO:
+                    case icode_op::IFX:
+                    case icode_op::CALL:
+                    case icode_op::RETURN:
+                        return false;
+                    default:
+                        break;
+                    }
+                }
+
+                if (def->left.kind == operand_kind::INT_CONST &&
+                    get_zero_extended_u8_source(def->right, byte_src)) {
+                    imm16 = static_cast<uint16_t>(def->left.ival);
+                    return true;
+                }
+                if (def->right.kind == operand_kind::INT_CONST &&
+                    get_zero_extended_u8_source(def->left, byte_src)) {
+                    imm16 = static_cast<uint16_t>(def->right.ival);
+                    return true;
+                }
+
+                return false;
+            };
+
+        operand byte_src;
+        uint16_t byte_imm = 0;
+        const operand *word_lhs = &ic.left;
+        if (match_zero_extended_u8_plus_const(ic.right, byte_src, byte_imm)) {
+            word_lhs = &ic.left;
+        } else if (match_zero_extended_u8_plus_const(ic.left, byte_src, byte_imm)) {
+            word_lhs = &ic.right;
+        } else {
+            word_lhs = nullptr;
+        }
+        if (word_lhs && is_straight_line_helper_codegen_fn(cur_fn_)) {
+            load_a(byte_src);
+            emit_line("ld\te, a");
+            load_hl(*word_lhs);
+            emit_line("ld\ta, l");
+            emit_line("add\ta, e");
+            if ((byte_imm & 0xff) != 0)
+                emit_line("add\ta, %s", asm_.imm(byte_imm & 0xff).c_str());
+            emit_line("ld\tl, a");
+            emit_line("ld\ta, h");
+            emit_line("adc\ta, %s", asm_.imm((byte_imm >> 8) & 0xff).c_str());
+            emit_line("ld\th, a");
+            store_hl(ic.result);
+            return;
+        }
+
         // inc/dec for ±1 saves 1 byte and 4 cycles vs add hl,de.
         if (ic.right.kind == operand_kind::INT_CONST) {
             int64_t v = ic.right.ival;
@@ -280,17 +443,64 @@ void z80_gen::gen_add(const icode &ic) {
                 return;
             }
         }
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            rhs_available_in_bc(ic.right)) {
+            load_hl(ic.left);
+            emit_line("add\thl, bc");
+            store_hl(ic.result);
+            return;
+        }
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            available_in_de(ic.right)) {
+            load_hl(ic.left);
+            emit_line("add\thl, de");
+            maybe_preserve_arg_de(ic.right);
+            store_hl(ic.result);
+            return;
+        }
+        if (ic.right.kind == operand_kind::INT_CONST &&
+            rhs_available_in_bc(ic.left)) {
+            load_hl(ic.right);
+            emit_line("add\thl, bc");
+            store_hl(ic.result);
+            return;
+        }
+        if (ic.right.kind == operand_kind::INT_CONST &&
+            available_in_de(ic.left)) {
+            load_hl(ic.right);
+            emit_line("add\thl, de");
+            maybe_preserve_arg_de(ic.left);
+            store_hl(ic.result);
+            return;
+        }
+        if (rhs_available_in_bc(ic.left) && rhs_available_in_hl(ic.right)) {
+            load_hl(ic.right);
+            emit_line("add\thl, bc");
+            store_hl(ic.result);
+            return;
+        }
+        if (rhs_available_in_hl(ic.right)) {
+            emit_line("push\thl");
+            load_hl(ic.left);
+            emit_line("pop\tde");
+            emit_line("add\thl, de");
+            store_hl(ic.result);
+            return;
+        }
         load_hl(ic.left);
         if (rhs_available_in_bc(ic.right) && lhs_load_preserves_bc(ic.left)) {
-            emit_line("ld\td, b");
-            emit_line("ld\te, c");
+            emit_line("add\thl, bc");
+            store_hl(ic.result);
+            return;
         } else if (!can_load_rhs_into_de_without_clobber_hl(ic.right)) {
             emit_line("push\thl");
             load_de(ic.right);
             emit_line("pop\thl");
-        } else {
-            load_de(ic.right);
+            emit_line("add\thl, de");
+            store_hl(ic.result);
+            return;
         }
+        load_de(ic.right);
         emit_line("add\thl, de");
         store_hl(ic.result);
     }
@@ -650,6 +860,15 @@ void z80_gen::gen_band(const icode &ic) {
             }
             return op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op);
         };
+    auto available_in_hl =
+        [this](const operand &op) {
+            if (op.kind != operand_kind::TEMP)
+                return false;
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() &&
+                   (it->second == temp_home::main_hl ||
+                    it->second == temp_home::remat_hl);
+        };
     auto lhs_load_preserves_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::INT_CONST ||
@@ -682,6 +901,8 @@ void z80_gen::gen_band(const icode &ic) {
     const operand *rhs = &ic.right;
     if (lhs->kind == operand_kind::INT_CONST &&
         rhs->kind != operand_kind::INT_CONST)
+        std::swap(lhs, rhs);
+    if (rhs_available_in_bc(*lhs) && available_in_hl(*rhs))
         std::swap(lhs, rhs);
 
     if (rhs->kind == operand_kind::INT_CONST) {
@@ -719,17 +940,38 @@ void z80_gen::gen_band(const icode &ic) {
         return;
     }
 
-    load_hl(ic.left);
-    if (rhs_available_in_bc(ic.right) && lhs_load_preserves_bc(ic.left)) {
-        emit_line("ld\td, b");
-        emit_line("ld\te, c");
-    } else {
-        emit_line("push\thl");
-        load_hl(ic.right);
-        emit_line("pop\tde");
+    operand byte_src;
+    if (is_straight_line_helper_codegen_fn(cur_fn_) &&
+        get_zero_extended_u8_source(*rhs, byte_src)) {
+        load_a(byte_src);
+        emit_line("ld\te, a");
+        load_hl(*lhs);
+        emit_line("ld\ta, l");
+        emit_line("and\ta, e");
+        emit_line("ld\tl, a");
+        emit_line("ld\th, %s", asm_.imm(0).c_str());
+        store_hl(ic.result);
+        return;
     }
-    emit_line("ld\ta, l"); emit_line("and\ta, e"); emit_line("ld\tl, a");
-    emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
+
+    if (rhs_available_in_bc(*rhs) && lhs_load_preserves_bc(*lhs)) {
+        load_hl(*lhs);
+        emit_line("ld\ta, l"); emit_line("and\ta, c"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("and\ta, b"); emit_line("ld\th, a");
+    } else if (available_in_hl(*rhs)) {
+        emit_line("push\thl");
+        load_hl(*lhs);
+        emit_line("pop\tde");
+        emit_line("ld\ta, l"); emit_line("and\ta, e"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
+    } else {
+        load_hl(*lhs);
+        emit_line("push\thl");
+        load_hl(*rhs);
+        emit_line("pop\tde");
+        emit_line("ld\ta, l"); emit_line("and\ta, e"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
+    }
     store_hl(ic.result);
 }
 
@@ -741,6 +983,15 @@ void z80_gen::gen_bor(const icode &ic) {
                 return it != temp_regs_.end() && it->second == temp_home::main_bc;
             }
             return op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op);
+        };
+    auto available_in_hl =
+        [this](const operand &op) {
+            if (op.kind != operand_kind::TEMP)
+                return false;
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() &&
+                   (it->second == temp_home::main_hl ||
+                    it->second == temp_home::remat_hl);
         };
     auto lhs_load_preserves_bc =
         [this](const operand &op) {
@@ -774,6 +1025,8 @@ void z80_gen::gen_bor(const icode &ic) {
     const operand *rhs = &ic.right;
     if (lhs->kind == operand_kind::INT_CONST &&
         rhs->kind != operand_kind::INT_CONST)
+        std::swap(lhs, rhs);
+    if (rhs_available_in_bc(*lhs) && available_in_hl(*rhs))
         std::swap(lhs, rhs);
 
     if (rhs->kind == operand_kind::INT_CONST) {
@@ -811,17 +1064,37 @@ void z80_gen::gen_bor(const icode &ic) {
         return;
     }
 
-    load_hl(ic.left);
-    if (rhs_available_in_bc(ic.right) && lhs_load_preserves_bc(ic.left)) {
-        emit_line("ld\td, b");
-        emit_line("ld\te, c");
-    } else {
-        emit_line("push\thl");
-        load_hl(ic.right);
-        emit_line("pop\tde");
+    operand byte_src;
+    if (is_straight_line_helper_codegen_fn(cur_fn_) &&
+        get_zero_extended_u8_source(*rhs, byte_src)) {
+        load_a(byte_src);
+        emit_line("ld\te, a");
+        load_hl(*lhs);
+        emit_line("ld\ta, l");
+        emit_line("or\ta, e");
+        emit_line("ld\tl, a");
+        store_hl(ic.result);
+        return;
     }
-    emit_line("ld\ta, l"); emit_line("or\ta, e");  emit_line("ld\tl, a");
-    emit_line("ld\ta, h"); emit_line("or\ta, d");  emit_line("ld\th, a");
+
+    if (rhs_available_in_bc(*rhs) && lhs_load_preserves_bc(*lhs)) {
+        load_hl(*lhs);
+        emit_line("ld\ta, l"); emit_line("or\ta, c"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("or\ta, b"); emit_line("ld\th, a");
+    } else if (available_in_hl(*rhs)) {
+        emit_line("push\thl");
+        load_hl(*lhs);
+        emit_line("pop\tde");
+        emit_line("ld\ta, l"); emit_line("or\ta, e");  emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("or\ta, d");  emit_line("ld\th, a");
+    } else {
+        load_hl(*lhs);
+        emit_line("push\thl");
+        load_hl(*rhs);
+        emit_line("pop\tde");
+        emit_line("ld\ta, l"); emit_line("or\ta, e");  emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("or\ta, d");  emit_line("ld\th, a");
+    }
     store_hl(ic.result);
 }
 
@@ -841,6 +1114,15 @@ void z80_gen::gen_bxor(const icode &ic) {
                 return it != temp_regs_.end() && it->second == temp_home::main_bc;
             }
             return op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op);
+        };
+    auto available_in_hl =
+        [this](const operand &op) {
+            if (op.kind != operand_kind::TEMP)
+                return false;
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() &&
+                   (it->second == temp_home::main_hl ||
+                    it->second == temp_home::remat_hl);
         };
     auto lhs_load_preserves_bc =
         [this](const operand &op) {
@@ -874,6 +1156,8 @@ void z80_gen::gen_bxor(const icode &ic) {
     const operand *rhs = &ic.right;
     if (lhs->kind == operand_kind::INT_CONST &&
         rhs->kind != operand_kind::INT_CONST)
+        std::swap(lhs, rhs);
+    if (rhs_available_in_bc(*lhs) && available_in_hl(*rhs))
         std::swap(lhs, rhs);
 
     if (rhs->kind == operand_kind::INT_CONST) {
@@ -911,17 +1195,37 @@ void z80_gen::gen_bxor(const icode &ic) {
         return;
     }
 
-    load_hl(ic.left);
-    if (rhs_available_in_bc(ic.right) && lhs_load_preserves_bc(ic.left)) {
-        emit_line("ld\td, b");
-        emit_line("ld\te, c");
-    } else {
-        emit_line("push\thl");
-        load_hl(ic.right);
-        emit_line("pop\tde");
+    operand byte_src;
+    if (is_straight_line_helper_codegen_fn(cur_fn_) &&
+        get_zero_extended_u8_source(*rhs, byte_src)) {
+        load_a(byte_src);
+        emit_line("ld\te, a");
+        load_hl(*lhs);
+        emit_line("ld\ta, l");
+        emit_line("xor\ta, e");
+        emit_line("ld\tl, a");
+        store_hl(ic.result);
+        return;
     }
-    emit_line("ld\ta, l"); emit_line("xor\ta, e"); emit_line("ld\tl, a");
-    emit_line("ld\ta, h"); emit_line("xor\ta, d"); emit_line("ld\th, a");
+
+    if (rhs_available_in_bc(*rhs) && lhs_load_preserves_bc(*lhs)) {
+        load_hl(*lhs);
+        emit_line("ld\ta, l"); emit_line("xor\ta, c"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("xor\ta, b"); emit_line("ld\th, a");
+    } else if (available_in_hl(*rhs)) {
+        emit_line("push\thl");
+        load_hl(*lhs);
+        emit_line("pop\tde");
+        emit_line("ld\ta, l"); emit_line("xor\ta, e"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("xor\ta, d"); emit_line("ld\th, a");
+    } else {
+        load_hl(*lhs);
+        emit_line("push\thl");
+        load_hl(*rhs);
+        emit_line("pop\tde");
+        emit_line("ld\ta, l"); emit_line("xor\ta, e"); emit_line("ld\tl, a");
+        emit_line("ld\ta, h"); emit_line("xor\ta, d"); emit_line("ld\th, a");
+    }
     store_hl(ic.result);
 }
 
@@ -1143,22 +1447,20 @@ void z80_gen::gen_rotate(const icode &ic, bool right) {
     }
 
     if (!right) {
-        emit_line("ld\tb, h");
+        emit_line("ld\ta, h");
         for (int k = 0; k < count; ++k)
             emit_line("add\thl, hl");
-        emit_line("ld\ta, b");
         for (int k = 0; k < 8 - count; ++k)
             emit_line("rrca");
         emit_line("and\t%s", asm_.imm((1 << count) - 1).c_str());
         emit_line("or\tl");
         emit_line("ld\tl, a");
     } else {
-        emit_line("ld\tc, l");
+        emit_line("ld\ta, l");
         for (int k = 0; k < count; ++k) {
             emit_line("srl\th");
             emit_line("rr\tl");
         }
-        emit_line("ld\ta, c");
         for (int k = 0; k < 8 - count; ++k)
             emit_line("rlca");
         emit_line("and\t%s", asm_.imm((0xFF << (8 - count)) & 0xFF).c_str());
@@ -1199,6 +1501,12 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 auto ri = temp_regs_.find(rhs->temp_id);
                 if (ri != temp_regs_.end()) {
                     switch (ri->second) {
+                    case temp_home::main_b:
+                        if (rhs->byte_offset == 0) {
+                            emit_line("cp\tb");
+                            return;
+                        }
+                        break;
                     case temp_home::main_bc:
                         if (rhs->byte_offset == 0) {
                             emit_line("cp\tc");
@@ -1341,6 +1649,12 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 auto ri = temp_regs_.find(ic.right.temp_id);
                 if (ri != temp_regs_.end()) {
                     switch (ri->second) {
+                    case temp_home::main_b:
+                        if (ic.right.byte_offset == 0) {
+                            emit_line("cp\tb");
+                            return;
+                        }
+                        break;
                     case temp_home::main_bc:
                         if (ic.right.byte_offset == 0) {
                             emit_line("cp\tc");
@@ -1562,6 +1876,12 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
                 auto ri = temp_regs_.find(rhs->temp_id);
                 if (ri != temp_regs_.end()) {
                     switch (ri->second) {
+                    case temp_home::main_b:
+                        if (rhs->byte_offset == 0) {
+                            emit_line("cp\tb");
+                            return;
+                        }
+                        break;
                     case temp_home::main_bc:
                         if (rhs->byte_offset == 0) {
                             emit_line("cp\tc");
@@ -1699,6 +2019,12 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
                 auto ri = temp_regs_.find(ic.right.temp_id);
                 if (ri != temp_regs_.end()) {
                     switch (ri->second) {
+                    case temp_home::main_b:
+                        if (ic.right.byte_offset == 0) {
+                            emit_line("cp\tb");
+                            return;
+                        }
+                        break;
                     case temp_home::main_bc:
                         if (ic.right.byte_offset == 0) {
                             emit_line("cp\tc");
@@ -1883,8 +2209,13 @@ void z80_gen::gen_cast(const icode &ic) {
     int dst_sz = op_size(ic.result);
 
     if (dst_sz == src_sz) {
-        load_hl(ic.left);
-        store_hl(ic.result);
+        if (dst_sz == 1) {
+            load_a(ic.left);
+            store_a(ic.result);
+        } else {
+            load_hl(ic.left);
+            store_hl(ic.result);
+        }
     } else if (dst_sz > src_sz) {
         if (src_sz == 1) {
             load_a(ic.left);

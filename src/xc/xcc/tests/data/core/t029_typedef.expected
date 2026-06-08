@@ -20,10 +20,8 @@ _add:
 	; receive (sdcccall1) param b at -4(ix)
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
 	ld	-6(ix), l
 	ld	-5(ix), h
@@ -191,10 +189,8 @@ __xcc_L5:
 	ld	-36(ix), d
 	ld	l, -31(ix)
 	ld	h, -30(ix)
-	push	hl
 	ld	e, -37(ix)
 	ld	d, -36(ix)
-	pop	hl
 	add	hl, de
 	ld	-39(ix), l
 	ld	-38(ix), h

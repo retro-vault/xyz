@@ -20,10 +20,8 @@ _add:
 	; receive (sdcccall1) param b at -4(ix)
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
 	ld	-6(ix), l
 	ld	-5(ix), h
@@ -57,10 +55,8 @@ _sub:
 	; receive (sdcccall1) param b at -4(ix)
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	or	a, a
 	sbc	hl, de
 	ld	-6(ix), l

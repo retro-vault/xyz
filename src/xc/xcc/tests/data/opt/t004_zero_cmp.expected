@@ -14,12 +14,10 @@ _f:
 	; receive (sdcccall1) param x at -2(ix)
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	ex	de, hl
-	ld	hl, #0
-	or	a, a
-	sbc	hl, de
+	ld	a, h
+	or	a, l
 	ld	hl, #1
-	jp	nz, __cmp_e_89383
+	jr	nz, __cmp_e_89383
 	dec	hl
 __cmp_e_89383:
 	ld	-4(ix), l

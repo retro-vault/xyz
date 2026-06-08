@@ -35,12 +35,12 @@ __int_val_end:
 	ret
 	.globl _char_val
 _char_val:
-	; sdcccall(1) prologue: char_val (locals=1, temp_frame=6, stack_params=0)
+	; sdcccall(1) prologue: char_val (locals=1, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
 	ld	-1(ix), a
-	ld	hl, #-7
+	ld	hl, #-5
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param x at -1(ix)
@@ -59,10 +59,10 @@ _char_val:
 	ld	-4(ix), h
 	ld	l, -5(ix)
 	ld	h, -4(ix)
-	ld	-7(ix), l
-	ld	-6(ix), h
-	ld	l, -7(ix)
-	ld	h, -6(ix)
+	ld	-3(ix), l
+	ld	-2(ix), h
+	ld	l, -3(ix)
+	ld	h, -2(ix)
 	ex	de, hl
 	jp	__char_val_end
 __char_val_end:
@@ -163,12 +163,8 @@ __xcc_L5:
 	ld	hl, #5
 	ld	-5(ix), l
 	ld	-4(ix), h
-	ld	hl, #99
-	push	hl
-	ld	hl, #99
-	pop	de
-	or	a, a
-	sbc	hl, de
+	ld	a, #99
+	cp	#99
 	ld	hl, #1
 	jp	nz, __cmp_e_92777
 	dec	hl

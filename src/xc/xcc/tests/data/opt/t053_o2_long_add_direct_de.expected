@@ -2,7 +2,7 @@
 	.area	_CODE
 	.globl	_add_params
 _add_params:
-	; sdcccall(1) prologue: add_params (locals=0, temp_frame=12, stack_params=4)
+	; sdcccall(1) prologue: add_params (locals=0, temp_frame=8, stack_params=4)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -13,7 +13,7 @@ _add_params:
 	pop	hl
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	hl, #-12
+	ld	hl, #-8
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
@@ -34,11 +34,9 @@ _add_params:
 	ld	-5(ix), h
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	ld	-12(ix), l
-	ld	-11(ix), h
 	ex	de, hl
-	ld	l, -10(ix)
-	ld	h, -9(ix)
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 __add_params_end:
 	; epilogue: add_params
 	ld	sp, ix
@@ -46,7 +44,7 @@ __add_params_end:
 	ret
 	.globl	_sub_params
 _sub_params:
-	; sdcccall(1) prologue: sub_params (locals=0, temp_frame=12, stack_params=4)
+	; sdcccall(1) prologue: sub_params (locals=0, temp_frame=8, stack_params=4)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
@@ -57,7 +55,7 @@ _sub_params:
 	pop	hl
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	hl, #-12
+	ld	hl, #-8
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
@@ -79,11 +77,9 @@ _sub_params:
 	ld	-5(ix), h
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	ld	-12(ix), l
-	ld	-11(ix), h
 	ex	de, hl
-	ld	l, -10(ix)
-	ld	h, -9(ix)
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 __sub_params_end:
 	; epilogue: sub_params
 	ld	sp, ix

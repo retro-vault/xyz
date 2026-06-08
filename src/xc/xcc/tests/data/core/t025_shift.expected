@@ -17,17 +17,9 @@ _main:
 	ld	-1(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
-	ld	hl, #3
-	ld	b, l
-	pop	hl
-	ld	a, b
-	or	a, a
-	jp	z, __sdone_886
-__shift_9383:
 	add	hl, hl
-	djnz	__shift_9383
-__sdone_886:
+	add	hl, hl
+	add	hl, hl
 	ld	-8(ix), l
 	ld	-7(ix), h
 	ld	l, -8(ix)
@@ -52,9 +44,9 @@ __sdone_886:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	z, __cmp_e_92777
+	jp	z, __cmp_e_89383
 	dec	hl
-__cmp_e_92777:
+__cmp_e_89383:
 	ld	-12(ix), l
 	ld	-11(ix), h
 	ld	l, -12(ix)
@@ -65,9 +57,9 @@ __cmp_e_92777:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_36915
+	jp	nz, __cmp_e_30886
 	dec	hl
-__cmp_e_36915:
+__cmp_e_30886:
 	ld	-14(ix), l
 	ld	-13(ix), h
 	ld	l, -14(ix)
@@ -85,9 +77,9 @@ __xcc_L1:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	z, __cmp_e_47793
+	jp	z, __cmp_e_92777
 	dec	hl
-__cmp_e_47793:
+__cmp_e_92777:
 	ld	-16(ix), l
 	ld	-15(ix), h
 	ld	l, -16(ix)
@@ -98,9 +90,9 @@ __cmp_e_47793:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_38335
+	jp	nz, __cmp_e_36915
 	dec	hl
-__cmp_e_38335:
+__cmp_e_36915:
 	ld	-18(ix), l
 	ld	-17(ix), h
 	jp	__xcc_L2

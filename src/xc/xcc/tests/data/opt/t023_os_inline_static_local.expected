@@ -1,36 +1,57 @@
 	.module	xcc_output
 	.area	_CODE
-	.globl	_use_local_helper
-_use_local_helper:
-	; sdcccall(1) prologue: use_local_helper (locals=0, temp_frame=0, stack_params=0)
+_helper:
+	; sdcccall(1) prologue: helper (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
-	ld	l, -2(ix)
-	ld	h, -1(ix)
-	inc	hl
+	; keep incoming register arg t3 live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) register param handled by prologue
+	ld	a, #1
+	ld	e, a
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ex	de, hl
+__helper_end:
+	; epilogue: helper
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_use_local_helper
+_use_local_helper:
+	; sdcccall(1) prologue: use_local_helper (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
 	ld	b, h
 	ld	c, l
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) register param handled by prologue
+	ld	h, b
+	ld	l, c
+	.globl	_helper
+	call	_helper
+	push	de
+	pop	hl
 	ld	b, h
 	ld	c, l
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
-	ld	de, #3
-	add	hl, de
-	ld	b, h
-	ld	c, l
-	dec	sp
-	dec	sp
-	ld	-8(ix), l
-	ld	-7(ix), h
+	ld	hl, #3
+	add	hl, bc
+	ld	-2(ix), l
+	ld	-1(ix), h
 	ex	de, hl
 __use_local_helper_end:
 	; epilogue: use_local_helper

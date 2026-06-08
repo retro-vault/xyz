@@ -16,7 +16,7 @@ _f:
 	ld	h, -1(ix)
 	ld	a, h
 	or	a, l
-	jp	z, __xcc_L2
+	jr	z, __xcc_L2
 __xcc_L0:
 	ld	hl, #1
 	ld	-2(ix), l

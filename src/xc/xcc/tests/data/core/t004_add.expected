@@ -20,10 +20,8 @@ _main:
 	ld	-3(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
 	ld	-6(ix), l
 	ld	-5(ix), h

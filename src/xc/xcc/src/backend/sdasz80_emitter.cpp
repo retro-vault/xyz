@@ -90,6 +90,14 @@ std::string sdasz80_emitter::imm_sym(const std::string &mangled) const {
     return "#" + mangled;
 }
 
+std::string sdasz80_emitter::imm_sym_lo(const std::string &mangled) const {
+    return "#<(" + mangled + ")";
+}
+
+std::string sdasz80_emitter::imm_sym_hi(const std::string &mangled) const {
+    return "#>(" + mangled + ")";
+}
+
 std::string sdasz80_emitter::ix_rel(int off) const {
     return std::to_string(off) + "(ix)";
 }

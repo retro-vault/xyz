@@ -3,38 +3,18 @@
 	.globl	_use_a
 _use_a:
 	; sdcccall(1) prologue: use_a (locals=0, temp_frame=0, stack_params=0)
-	push	ix
-	ld	ix, #0
-	add	ix, sp
+	; frameless function: no IX frame needed
 	ld	hl, #8
-	dec	sp
-	dec	sp
-	ld	-2(ix), l
-	ld	-1(ix), h
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
 	ex	de, hl
 __use_a_end:
 	; epilogue: use_a
-	ld	sp, ix
-	pop	ix
 	ret
 	.globl	_use_b
 _use_b:
 	; sdcccall(1) prologue: use_b (locals=0, temp_frame=0, stack_params=0)
-	push	ix
-	ld	ix, #0
-	add	ix, sp
+	; frameless function: no IX frame needed
 	ld	hl, #8
-	dec	sp
-	dec	sp
-	ld	-4(ix), l
-	ld	-3(ix), h
 	ex	de, hl
 __use_b_end:
 	; epilogue: use_b
-	ld	sp, ix
-	pop	ix
 	ret

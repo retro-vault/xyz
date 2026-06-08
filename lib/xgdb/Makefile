@@ -32,7 +32,10 @@ $(OUTPUT_DIR)/%.o: src/%.cpp $(HEADERS)
 $(LIB_TARGET): $(OUTPUT_DIR) $(LIB_DIR) $(OBJECTS)
 	ar rcs $@ $(OBJECTS)
 
-test: $(OUTPUT_DIR) $(SOURCES) $(HEADERS) tests/test_main.cpp
+$(XZ80_LIB):
+	$(MAKE) -C $(XZ80_DIR)
+
+test: $(OUTPUT_DIR) $(SOURCES) $(HEADERS) tests/test_main.cpp $(XZ80_LIB)
 	$(CXX) $(CXXFLAGS) -Iinclude $(XZ80_INCLUDE) \
 		tests/test_main.cpp $(SOURCES) $(XZ80_LIB) -o $(TEST_TARGET)
 	$(TEST_TARGET)

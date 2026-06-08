@@ -3,13 +3,9 @@
 	.globl	_zero
 _zero:
 	; sdcccall(1) prologue: zero (locals=0, temp_frame=0, stack_params=0)
-	push	ix
-	ld	ix, #0
-	add	ix, sp
+	; frameless function: no IX frame needed
 	ld	hl, #0
 	ex	de, hl
 __zero_end:
 	; epilogue: zero
-	ld	sp, ix
-	pop	ix
 	ret

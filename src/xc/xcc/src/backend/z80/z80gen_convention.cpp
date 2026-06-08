@@ -57,7 +57,7 @@ bool is_passive_leading_op(const icode &ic) {
     return ic.op == icode_op::LABEL;
 }
 
-bool is_straight_line_helper_fn(const ir_function &fn) {
+[[maybe_unused]] bool is_straight_line_helper_fn(const ir_function &fn) {
     if (fn.local_bytes != 0)
         return false;
     for (size_t i = 1; i + 1 < fn.icodes.size(); ++i) {
@@ -105,9 +105,9 @@ bool is_straight_line_helper_fn(const ir_function &fn) {
     return true;
 }
 
-int count_symbol_uses_after(const ir_function &fn,
-                            size_t receive_idx,
-                            const operand &sym) {
+[[maybe_unused]] int count_symbol_uses_after(const ir_function &fn,
+                                             size_t receive_idx,
+                                             const operand &sym) {
     int count = 0;
     for (size_t i = receive_idx + 1; i < fn.icodes.size(); ++i) {
         const auto &scan = fn.icodes[i];
@@ -117,6 +117,46 @@ int count_symbol_uses_after(const ir_function &fn,
             ++count;
     }
     return count;
+}
+
+[[maybe_unused]] int count_temp_uses_after(const ir_function &fn,
+                                           size_t receive_idx,
+                                           int temp_id) {
+    int count = 0;
+    for (size_t i = receive_idx + 1; i < fn.icodes.size(); ++i) {
+        const auto &scan = fn.icodes[i];
+        if (icode_uses_temp(scan, temp_id))
+            ++count;
+        if (uses_temp(scan.result, temp_id))
+            ++count;
+    }
+    return count;
+}
+
+[[maybe_unused]] size_t first_symbol_use_after(const ir_function &fn,
+                                               size_t receive_idx,
+                                               const operand &sym) {
+    for (size_t i = receive_idx + 1; i < fn.icodes.size(); ++i) {
+        const auto &scan = fn.icodes[i];
+        if (icode_uses_symbol(scan, sym) ||
+            same_local_symbol(scan.result, sym)) {
+            return i;
+        }
+    }
+    return fn.icodes.size();
+}
+
+[[maybe_unused]] size_t first_temp_use_after(const ir_function &fn,
+                                             size_t receive_idx,
+                                             int temp_id) {
+    for (size_t i = receive_idx + 1; i < fn.icodes.size(); ++i) {
+        const auto &scan = fn.icodes[i];
+        if (icode_uses_temp(scan, temp_id) ||
+            uses_temp(scan.result, temp_id)) {
+            return i;
+        }
+    }
+    return fn.icodes.size();
 }
 
 temp_home incoming_arg_home(abi_arg_loc loc) {
@@ -339,6 +379,59 @@ void abi_convention::spill_fastcall_receive(z80_gen &g, const icode &ic)
 
 void abi_convention::spill_modern_receive(z80_gen &g, const icode &ic)
 {
+    if (ic.result.is_symbol() && ic.result.byte_offset == 0 &&
+        !ic.result.is_global) {
+        auto sri = g.symbol_regs_.find(g.symbol_reg_key(ic.result));
+        if (sri != g.symbol_regs_.end()) {
+            switch (sri->second) {
+            case temp_home::main_a:
+                if (ic.arg_loc == abi_arg_loc::REG_A)
+                    return;
+                break;
+            case temp_home::main_b:
+                switch (ic.arg_loc) {
+                case abi_arg_loc::REG_A:
+                    g.emit_line("ld\tb, a");
+                    return;
+                case abi_arg_loc::REG_L:
+                    g.emit_line("ld\tb, l");
+                    return;
+                default:
+                    break;
+                }
+                break;
+            case temp_home::main_c:
+                switch (ic.arg_loc) {
+                case abi_arg_loc::REG_A:
+                    g.emit_line("ld\tc, a");
+                    return;
+                case abi_arg_loc::REG_L:
+                    g.emit_line("ld\tc, l");
+                    return;
+                default:
+                    break;
+                }
+                break;
+            case temp_home::main_bc:
+                switch (ic.arg_loc) {
+                case abi_arg_loc::REG_HL:
+                    g.emit_line("ld\tb, h");
+                    g.emit_line("ld\tc, l");
+                    return;
+                case abi_arg_loc::REG_DE:
+                    g.emit_line("ld\tb, d");
+                    g.emit_line("ld\tc, e");
+                    return;
+                default:
+                    break;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
     if (ic.result.is_symbol() && g.symbol_home_in_bc(ic.result) &&
         ic.result.byte_offset == 0) {
         switch (ic.arg_loc) {
@@ -401,16 +494,50 @@ void abi_convention::materialize_modern_receive(z80_gen &g, const icode &ic)
 
     auto temp_home_it = g.temp_regs_.find(ic.result.temp_id);
     if (temp_home_it != g.temp_regs_.end() &&
-        temp_home_it->second == temp_home::main_bc) {
-        switch (ic.arg_loc) {
-        case abi_arg_loc::REG_HL:
-            g.emit_line("ld\tb, h");
-            g.emit_line("ld\tc, l");
-            return;
-        case abi_arg_loc::REG_DE:
-            g.emit_line("ld\tb, d");
-            g.emit_line("ld\tc, e");
-            return;
+        ic.result.byte_offset == 0) {
+        switch (temp_home_it->second) {
+        case temp_home::main_a:
+            if (ic.arg_loc == abi_arg_loc::REG_A)
+                return;
+            break;
+        case temp_home::main_b:
+            switch (ic.arg_loc) {
+            case abi_arg_loc::REG_A:
+                g.emit_line("ld\tb, a");
+                return;
+            case abi_arg_loc::REG_L:
+                g.emit_line("ld\tb, l");
+                return;
+            default:
+                break;
+            }
+            break;
+        case temp_home::main_c:
+            switch (ic.arg_loc) {
+            case abi_arg_loc::REG_A:
+                g.emit_line("ld\tc, a");
+                return;
+            case abi_arg_loc::REG_L:
+                g.emit_line("ld\tc, l");
+                return;
+            default:
+                break;
+            }
+            break;
+        case temp_home::main_bc:
+            switch (ic.arg_loc) {
+            case abi_arg_loc::REG_HL:
+                g.emit_line("ld\tb, h");
+                g.emit_line("ld\tc, l");
+                return;
+            case abi_arg_loc::REG_DE:
+                g.emit_line("ld\tb, d");
+                g.emit_line("ld\tc, e");
+                return;
+            default:
+                break;
+            }
+            break;
         default:
             break;
         }
@@ -747,30 +874,13 @@ struct cc_sdcccall1 final : abi_convention {
                 g.opt_settings_.level == opt_level::O3 ||
                 g.opt_settings_.level == opt_level::Os;
             std::unordered_map<size_t, temp_home> retained;
-            std::unordered_map<size_t, temp_home> bc_pinned;
             bool retain_hl_like = false;
             bool retain_de = false;
-            const bool helper_like_fn = is_straight_line_helper_fn(fn);
-            bool helper_bc_taken = false;
             if (retain_incoming_regs) {
                 for (size_t i = 1; i < fn.icodes.size(); ++i) {
                     const auto &ic = fn.icodes[i];
                     if (ic.op != icode_op::RECEIVE)
                         break;
-                    if (helper_like_fn &&
-                        !helper_bc_taken &&
-                        ic.result.is_symbol() &&
-                        ic.result.type &&
-                        ic.result.type->size() == 2 &&
-                        ic.result.byte_offset == 0 &&
-                        (ic.arg_loc == abi_arg_loc::REG_HL ||
-                         ic.arg_loc == abi_arg_loc::REG_DE) &&
-                        count_symbol_uses_after(fn, i, ic.result) >= 2) {
-                        bc_pinned[i] = temp_home::main_bc;
-                        g.symbol_regs_[g.symbol_reg_key(ic.result)] = temp_home::main_bc;
-                        helper_bc_taken = true;
-                        continue;
-                    }
                     if (ic.result.is_temp()) {
                         auto ti = g.temp_regs_.find(ic.result.temp_id);
                         if (ti != g.temp_regs_.end() &&
@@ -805,19 +915,6 @@ struct cc_sdcccall1 final : abi_convention {
                 const auto &ic = fn.icodes[i];
                 if (ic.op != icode_op::RECEIVE)
                     break;
-                auto bc_it = bc_pinned.find(i);
-                if (bc_it != bc_pinned.end()) {
-                    g.emit_comment("keep incoming register arg %s resident in BC across helper body",
-                                   ic.result.name.c_str());
-                    if (ic.arg_loc == abi_arg_loc::REG_HL) {
-                        g.emit_line("ld\tb, h");
-                        g.emit_line("ld\tc, l");
-                    } else {
-                        g.emit_line("ld\tb, d");
-                        g.emit_line("ld\tc, e");
-                    }
-                    continue;
-                }
                 auto keep_it = retained.find(i);
                 if (keep_it != retained.end()) {
                     if (ic.result.is_temp()) {

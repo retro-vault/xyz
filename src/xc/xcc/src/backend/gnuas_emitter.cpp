@@ -90,6 +90,14 @@ std::string gnuas_emitter::imm_sym(const std::string &mangled) const {
     return mangled;
 }
 
+std::string gnuas_emitter::imm_sym_lo(const std::string &mangled) const {
+    return "(" + mangled + ") & 255";
+}
+
+std::string gnuas_emitter::imm_sym_hi(const std::string &mangled) const {
+    return "(" + mangled + " >> 8)";
+}
+
 std::string gnuas_emitter::ix_rel(int off) const {
     if (off >= 0) return "(ix+" + std::to_string(off) + ")";
     return "(ix" + std::to_string(off) + ")";

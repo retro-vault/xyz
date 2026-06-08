@@ -2,11 +2,11 @@
 	.area	_CODE
 	.globl	_div64
 _div64:
-	; sdcccall(1) prologue: div64 (locals=0, temp_frame=16, stack_params=16)
+	; sdcccall(1) prologue: div64 (locals=0, temp_frame=8, stack_params=16)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-16
+	ld	hl, #-8
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) param a at 4(ix)
@@ -42,11 +42,9 @@ _div64:
 	ld	sp, hl
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	ld	-16(ix), l
-	ld	-15(ix), h
 	push	hl
-	ld	l, -14(ix)
-	ld	h, -13(ix)
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ex	de, hl
 	pop	hl
 __div64_end:

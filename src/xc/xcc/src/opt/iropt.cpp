@@ -1267,6 +1267,14 @@ static bool rewrite_operand(operand &op, const ssa_env &env,
         auto bank_it = operand_bank.find(candidate_key);
         if (bank_it == operand_bank.end()) continue;
         operand repl = bank_it->second;
+        // Pointer temps participate in loop-carried address updates. Replacing
+        // them with a base symbol/label through generic SSA equivalence is too
+        // aggressive: once a later back-edge redefinition bumps the pointer,
+        // earlier "same value" reasoning is no longer a safe source-level
+        // substitute. Keep pointer identities explicit unless we are merely
+        // rewriting to another temp.
+        if (op.type && op.type->is_ptr() && !repl.is_temp())
+            continue;
         if (op.type) repl.type = op.type;
         op = repl;
         return true;
@@ -2256,17 +2264,6 @@ public:
                     break;
             }
             if (!found_update)
-                continue;
-
-            int internal_ifx = 0;
-            for (size_t block_id : loop.blocks) {
-                const auto &block = cfg.block(block_id);
-                for (size_t i = block.begin; i < block.end; ++i) {
-                    if (fn.icodes[i].op == icode_op::IFX && i != compare_idx)
-                        ++internal_ifx;
-                }
-            }
-            if (internal_ifx != 0)
                 continue;
 
             std::vector<bool> in_loop_inst(fn.icodes.size(), false);
@@ -3565,25 +3562,41 @@ static bool is_available_byte_load_barrier(const icode &ic) {
 }
 
 static bool is_available_byte_load_candidate(const icode &ic) {
-    return ic.op == icode_op::GET_VALUE_AT &&
-           ic.result.kind != operand_kind::NONE &&
-           ic.result.type &&
-           ic.result.type->size() == 1 &&
-           ic.left.kind == operand_kind::LABEL_REF &&
-           !ic.right.is_none();
+    if (ic.op != icode_op::GET_VALUE_AT ||
+        ic.result.kind == operand_kind::NONE ||
+        !ic.result.type ||
+        ic.result.type->size() != 1)
+        return false;
+
+    if (ic.left.kind == operand_kind::LABEL_REF)
+        return !ic.right.is_none();
+
+    return ic.right.is_none() &&
+           !local_cse_operand_key(ic.left).empty();
 }
 
 static std::string available_byte_load_key(const icode &ic) {
     if (!is_available_byte_load_candidate(ic))
         return {};
-    std::string idx = local_cse_operand_key(ic.right);
-    if (idx.empty())
+
+    if (ic.left.kind == operand_kind::LABEL_REF) {
+        std::string idx = local_cse_operand_key(ic.right);
+        if (idx.empty())
+            return {};
+        return "LOAD8|" + ic.left.name + "|" + idx;
+    }
+
+    std::string ptr = local_cse_operand_key(ic.left);
+    if (ptr.empty())
         return {};
-    return "LOAD8|" + ic.left.name + "|" + idx;
+    return "LOAD8PTR|" + ptr;
 }
 
 static std::vector<std::string> available_byte_load_deps(const icode &ic) {
     std::vector<std::string> deps;
+    std::string ptr = local_cse_operand_key(ic.left);
+    if (!ptr.empty())
+        deps.push_back(ptr);
     std::string idx = local_cse_operand_key(ic.right);
     if (!idx.empty())
         deps.push_back(idx);

@@ -54,10 +54,8 @@ _arr_zero:
 	ld	-9(ix), h
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	push	hl
 	ld	e, -10(ix)
 	ld	d, -9(ix)
-	pop	hl
 	add	hl, de
 	ld	-12(ix), l
 	ld	-11(ix), h
@@ -85,10 +83,8 @@ _arr_zero:
 	ld	-17(ix), h
 	ld	l, -16(ix)
 	ld	h, -15(ix)
-	push	hl
 	ld	e, -18(ix)
 	ld	d, -17(ix)
-	pop	hl
 	add	hl, de
 	ld	-20(ix), l
 	ld	-19(ix), h
@@ -101,10 +97,8 @@ _arr_zero:
 	ld	-21(ix), d
 	ld	l, -14(ix)
 	ld	h, -13(ix)
-	push	hl
 	ld	e, -22(ix)
 	ld	d, -21(ix)
-	pop	hl
 	add	hl, de
 	ld	-24(ix), l
 	ld	-23(ix), h
@@ -125,10 +119,8 @@ _arr_zero:
 	ld	-27(ix), h
 	ld	l, -26(ix)
 	ld	h, -25(ix)
-	push	hl
 	ld	e, -28(ix)
 	ld	d, -27(ix)
-	pop	hl
 	add	hl, de
 	ld	-30(ix), l
 	ld	-29(ix), h
@@ -141,10 +133,8 @@ _arr_zero:
 	ld	-31(ix), d
 	ld	l, -24(ix)
 	ld	h, -23(ix)
-	push	hl
 	ld	e, -32(ix)
 	ld	d, -31(ix)
-	pop	hl
 	add	hl, de
 	ld	-34(ix), l
 	ld	-33(ix), h

@@ -2,18 +2,17 @@
 	.area	_CODE
 	.globl	_f
 _f:
-	; sdcccall(1) prologue: f (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: f (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	ld	hl, #0
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	hl, #1
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
 __xcc_L0:
@@ -29,21 +28,15 @@ __xcc_L0:
 __xcc_L1:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -4(ix)
 	ld	d, -3(ix)
-	pop	hl
 	add	hl, de
-	ld	b, h
-	ld	c, l
 	ld	-2(ix), l
 	ld	-1(ix), h
 __xcc_L2:
 	ld	l, -4(ix)
 	ld	h, -3(ix)
 	inc	hl
-	ld	b, h
-	ld	c, l
 	ld	-4(ix), l
 	ld	-3(ix), h
 	jr	__xcc_L0

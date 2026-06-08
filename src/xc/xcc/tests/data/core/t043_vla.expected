@@ -86,19 +86,15 @@ __xcc_L1:
 	ld	-19(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -20(ix)
 	ld	d, -19(ix)
-	pop	hl
 	add	hl, de
 	ld	-22(ix), l
 	ld	-21(ix), h
 	ld	l, -22(ix)
 	ld	h, -21(ix)
-	push	hl
 	ld	e, -18(ix)
 	ld	d, -17(ix)
-	pop	hl
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -155,10 +151,8 @@ __xcc_L5:
 	ld	-27(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -28(ix)
 	ld	d, -27(ix)
-	pop	hl
 	add	hl, de
 	ld	-30(ix), l
 	ld	-29(ix), h
@@ -171,10 +165,8 @@ __xcc_L5:
 	ld	-31(ix), d
 	ld	l, -8(ix)
 	ld	h, -7(ix)
-	push	hl
 	ld	e, -32(ix)
 	ld	d, -31(ix)
-	pop	hl
 	add	hl, de
 	ld	-34(ix), l
 	ld	-33(ix), h
@@ -209,17 +201,18 @@ __sum_vla_end:
 	ret
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: main (locals=0, temp_frame=14, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
+	ld	hl, #-14
+	add	hl, sp
+	ld	sp, hl
 	ld	hl, #4
 	.globl _sum_vla
 	call	_sum_vla
 	push	de
 	pop	hl
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)
@@ -233,8 +226,6 @@ _main:
 	jp	nz, __cmp_e_92777
 	dec	hl
 __cmp_e_92777:
-	dec	sp
-	dec	sp
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ld	l, -4(ix)
@@ -245,8 +236,6 @@ __cmp_e_92777:
 	jp	__xcc_L10
 __xcc_L8:
 	ld	hl, #0
-	dec	sp
-	dec	sp
 	ld	-6(ix), l
 	ld	-5(ix), h
 	ld	l, -6(ix)
@@ -260,8 +249,6 @@ __xcc_L10:
 	call	_sum_vla
 	push	de
 	pop	hl
-	dec	sp
-	dec	sp
 	ld	-8(ix), l
 	ld	-7(ix), h
 	ld	l, -8(ix)
@@ -275,8 +262,6 @@ __xcc_L10:
 	jp	nz, __cmp_e_36915
 	dec	hl
 __cmp_e_36915:
-	dec	sp
-	dec	sp
 	ld	-10(ix), l
 	ld	-9(ix), h
 	ld	l, -10(ix)
@@ -287,8 +272,6 @@ __cmp_e_36915:
 	jp	__xcc_L13
 __xcc_L11:
 	ld	hl, #0
-	dec	sp
-	dec	sp
 	ld	-12(ix), l
 	ld	-11(ix), h
 	ld	l, -12(ix)
@@ -298,8 +281,6 @@ __xcc_L11:
 	jp	__xcc_L13
 __xcc_L13:
 	ld	hl, #1
-	dec	sp
-	dec	sp
 	ld	-14(ix), l
 	ld	-13(ix), h
 	ld	l, -14(ix)

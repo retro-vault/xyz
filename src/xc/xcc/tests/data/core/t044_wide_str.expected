@@ -53,10 +53,8 @@ _main:
 	ld	-9(ix), h
 	ld	l, -2(ix)
 	ld	h, -1(ix)
-	push	hl
 	ld	e, -10(ix)
 	ld	d, -9(ix)
-	pop	hl
 	add	hl, de
 	ld	-12(ix), l
 	ld	-11(ix), h
@@ -111,10 +109,8 @@ __xcc_L4:
 	ld	-21(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -22(ix)
 	ld	d, -21(ix)
-	pop	hl
 	add	hl, de
 	ld	-24(ix), l
 	ld	-23(ix), h

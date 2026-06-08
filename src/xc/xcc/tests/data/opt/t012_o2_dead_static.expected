@@ -2,22 +2,27 @@
 	.area	_CODE
 	.globl	_keep
 _keep:
-	; sdcccall(1) prologue: keep (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: keep (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
+	; keep incoming register arg t4 live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) register param handled by prologue
+	ld	a, #1
+	ld	e, a
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
 	ld	-2(ix), l
 	ld	-1(ix), h
-	; receive (sdcccall1) register param already materialized in prologue
-	ld	l, -2(ix)
-	ld	h, -1(ix)
-	inc	hl
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
 	ex	de, hl
 __keep_end:
 	; epilogue: keep

@@ -2,23 +2,24 @@
 	.area	_CODE
 	.globl	_f
 _f:
-	; sdcccall(1) prologue: f (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: f (locals=0, temp_frame=4, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	; keep incoming register arg t6 live in register for first use
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
 	; receive (sdcccall1) register param handled by prologue
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	push	hl
 	ld	h, d
 	ld	l, e
 	; materialize incoming arg temp t6 for later reuse
-	dec	sp
-	dec	sp
 	ld	-4(ix), e
 	ld	-3(ix), d
 	pop	de
@@ -33,10 +34,6 @@ __xcc_L0:
 	inc	hl
 	ld	b, h
 	ld	c, l
-	dec	sp
-	dec	sp
-	ld	-6(ix), l
-	ld	-5(ix), h
 	ex	de, hl
 	jr	__f_end
 __xcc_L2:
@@ -45,10 +42,6 @@ __xcc_L2:
 	inc	hl
 	ld	b, h
 	ld	c, l
-	dec	sp
-	dec	sp
-	ld	-8(ix), l
-	ld	-7(ix), h
 	ex	de, hl
 __f_end:
 	; epilogue: f

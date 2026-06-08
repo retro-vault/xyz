@@ -2,13 +2,13 @@
 	.area	_CODE
 	.globl	_through_local_ptr
 _through_local_ptr:
-	; sdcccall(1) prologue: through_local_ptr (locals=2, temp_frame=6, stack_params=0)
+	; sdcccall(1) prologue: through_local_ptr (locals=4, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	-4(ix), l
-	ld	-3(ix), h
-	ld	hl, #-8
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	hl, #-6
 	add	hl, sp
 	ld	sp, hl
 	; receive (sdcccall1) register param handled by prologue
@@ -19,14 +19,10 @@ _through_local_ptr:
 	pop	hl
 	dec	hl
 	dec	hl
-	ld	b, h
-	ld	c, l
-	ld	-6(ix), l
-	ld	-5(ix), h
-	push	hl
-	ld	e, -4(ix)
-	ld	d, -3(ix)
-	pop	hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	e, -6(ix)
+	ld	d, -5(ix)
 	ld	(hl), e
 	inc	hl
 	ld	(hl), d
@@ -35,8 +31,6 @@ _through_local_ptr:
 	inc	hl
 	ld	b, h
 	ld	c, l
-	ld	-8(ix), l
-	ld	-7(ix), h
 	ex	de, hl
 __through_local_ptr_end:
 	; epilogue: through_local_ptr

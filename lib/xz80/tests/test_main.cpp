@@ -6,6 +6,7 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace test_fw {
@@ -27,7 +28,7 @@ static test_case* g_current = nullptr;
 
 static void register_test(const char* name, std::function<void()> fn)
 {
-    suite().push_back({ name, std::move(fn) });
+    suite().push_back(test_case{std::string{name}, std::move(fn), true, {}});
 }
 
 static void require(bool cond, const char* expr, const char* file, int line)
@@ -52,7 +53,8 @@ static void require(bool cond, const char* expr, const char* file, int line)
 
 #define REQUIRE_EQ(a, b) \
     do { auto _a = (a); auto _b = (b); \
-         if (!(_a == _b) && test_fw::g_current) { \
+         using _cmp_t = std::common_type_t<decltype(_a), decltype(_b)>; \
+         if (!(static_cast<_cmp_t>(_a) == static_cast<_cmp_t>(_b)) && test_fw::g_current) { \
              test_fw::g_current->passed = false; \
              test_fw::g_current->failure = std::string(__FILE__) + ":" \
                  + std::to_string(__LINE__) + ": REQUIRE_EQ(" #a ", " #b ") failed"; \

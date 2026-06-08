@@ -64,6 +64,10 @@ public:
     // Immediate symbol address: "#_foo" (sdasz80) or "_foo" (GNU as).
     virtual std::string imm_sym(const std::string &mangled) const = 0;
 
+    // Low/high byte of a symbol address as an immediate expression.
+    virtual std::string imm_sym_lo(const std::string &mangled) const = 0;
+    virtual std::string imm_sym_hi(const std::string &mangled) const = 0;
+
     // IX-relative memory location: "-2(ix)" (sdasz80) or "(ix-2)" (GNU as).
     virtual std::string ix_rel(int off) const = 0;
 

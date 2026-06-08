@@ -10,14 +10,22 @@ _counter:
 
 	.globl _increment
 _increment:
-	; sdcccall(1) prologue: increment (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: increment (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ld	a, #1
+	ld	e, a
 	ld	hl, (_counter)
-	inc	hl
-	dec	sp
-	dec	sp
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)
@@ -30,10 +38,13 @@ __increment_end:
 	ret
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: main (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
 	.globl _increment
 	call	_increment
 	.globl _increment
@@ -41,8 +52,6 @@ _main:
 	.globl _increment
 	call	_increment
 	ld	hl, (_counter)
-	dec	sp
-	dec	sp
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	l, -2(ix)

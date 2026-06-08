@@ -37,10 +37,8 @@ _main:
 	ld	-5(ix), h
 	ld	l, -4(ix)
 	ld	h, -3(ix)
-	push	hl
 	ld	e, -6(ix)
 	ld	d, -5(ix)
-	pop	hl
 	add	hl, de
 	ld	-8(ix), l
 	ld	-7(ix), h
@@ -90,10 +88,8 @@ __xcc_L2:
 	ld	-15(ix), h
 	ld	l, -14(ix)
 	ld	h, -13(ix)
-	push	hl
 	ld	e, -16(ix)
 	ld	d, -15(ix)
-	pop	hl
 	add	hl, de
 	ld	-18(ix), l
 	ld	-17(ix), h
@@ -143,10 +139,8 @@ __xcc_L5:
 	ld	-25(ix), h
 	ld	l, -24(ix)
 	ld	h, -23(ix)
-	push	hl
 	ld	e, -26(ix)
 	ld	d, -25(ix)
-	pop	hl
 	add	hl, de
 	ld	-28(ix), l
 	ld	-27(ix), h
@@ -196,10 +190,8 @@ __xcc_L8:
 	ld	-35(ix), h
 	ld	l, -34(ix)
 	ld	h, -33(ix)
-	push	hl
 	ld	e, -36(ix)
 	ld	d, -35(ix)
-	pop	hl
 	add	hl, de
 	ld	-38(ix), l
 	ld	-37(ix), h

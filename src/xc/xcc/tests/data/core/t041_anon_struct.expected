@@ -228,10 +228,8 @@ __xcc_L8:
 	ld	-55(ix), h
 	ld	l, -54(ix)
 	ld	h, -53(ix)
-	push	hl
 	ld	e, -56(ix)
 	ld	d, -55(ix)
-	pop	hl
 	add	hl, de
 	ld	-58(ix), l
 	ld	-57(ix), h
@@ -301,10 +299,8 @@ __xcc_L11:
 	ld	-75(ix), h
 	ld	l, -74(ix)
 	ld	h, -73(ix)
-	push	hl
 	ld	e, -76(ix)
 	ld	d, -75(ix)
-	pop	hl
 	add	hl, de
 	ld	-78(ix), l
 	ld	-77(ix), h
@@ -374,10 +370,8 @@ __xcc_L14:
 	ld	-95(ix), h
 	ld	l, -94(ix)
 	ld	h, -93(ix)
-	push	hl
 	ld	e, -96(ix)
 	ld	d, -95(ix)
-	pop	hl
 	add	hl, de
 	ld	-98(ix), l
 	ld	-97(ix), h

@@ -224,6 +224,21 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 return;
             }
             if (!op.is_global) {
+                auto sri = symbol_regs_.find(symbol_reg_key(op));
+                if (sri != symbol_regs_.end()) {
+                    switch (sri->second) {
+                    case temp_home::main_b:
+                        emit_line("ld\t%c, b", r.lo);
+                        extend_loaded_byte(r.lo, r.hi);
+                        return;
+                    case temp_home::main_c:
+                        emit_line("ld\t%c, c", r.lo);
+                        extend_loaded_byte(r.lo, r.hi);
+                        return;
+                    default:
+                        break;
+                    }
+                }
                 auto si = incoming_symbol_homes_.find(op.stack_offset);
                 if (si != incoming_symbol_homes_.end()) {
                     switch (si->second) {
@@ -263,6 +278,10 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 switch (ri->second) {
                 case temp_home::main_a:
                     emit_line("ld\t%c, a", r.lo);
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::main_b:
+                    emit_line("ld\t%c, b", r.lo);
                     extend_loaded_byte(r.lo, r.hi);
                     return;
                 case temp_home::main_c:
@@ -575,6 +594,21 @@ void z80_gen::load_a(const operand &op) {
         return;
     }
     if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+        auto sri = symbol_regs_.find(symbol_reg_key(op));
+        if (sri != symbol_regs_.end()) {
+            switch (sri->second) {
+            case temp_home::main_b:
+                emit_line("ld\ta, b");
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_c:
+                emit_line("ld\ta, c");
+                set_a_cache(cache_key);
+                return;
+            default:
+                break;
+            }
+        }
         if (symbol_home_in_bc(op)) {
             emit_line("ld\ta, %c", op.byte_offset == 0 ? 'c' : 'b');
             set_a_cache(cache_key);
@@ -612,6 +646,10 @@ void z80_gen::load_a(const operand &op) {
         if (ri != temp_regs_.end()) {
             switch (ri->second) {
             case temp_home::main_a:
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_b:
+                emit_line("ld\ta, b");
                 set_a_cache(cache_key);
                 return;
             case temp_home::main_c:
@@ -666,6 +704,21 @@ void z80_gen::store_a(const operand &op) {
         return;
     }
     if (op.kind == operand_kind::SYMBOL && !op.is_global) {
+        auto sri = symbol_regs_.find(symbol_reg_key(op));
+        if (sri != symbol_regs_.end()) {
+            switch (sri->second) {
+            case temp_home::main_b:
+                emit_line("ld\tb, a");
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_c:
+                emit_line("ld\tc, a");
+                set_a_cache(cache_key);
+                return;
+            default:
+                break;
+            }
+        }
         if (symbol_home_in_bc(op)) {
             emit_line("ld\t%c, a", op.byte_offset == 0 ? 'c' : 'b');
             set_a_cache(cache_key);
@@ -678,6 +731,10 @@ void z80_gen::store_a(const operand &op) {
         if (ri != temp_regs_.end()) {
             switch (ri->second) {
             case temp_home::main_a:
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_b:
+                emit_line("ld\tb, a");
                 set_a_cache(cache_key);
                 return;
             case temp_home::main_c:
