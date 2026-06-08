@@ -2879,9 +2879,15 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<dead_param_elimination_pass>());
     if (settings.inline_static_functions)
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
-            settings.level == opt_level::O3 ? 32 : 12,
-            settings.level == opt_level::O3 ? 96 : 24,
-            settings.level == opt_level::O3 ? 64 : 16,
+            (settings.level == opt_level::O3 ||
+             settings.level == opt_level::Of ||
+             settings.level == opt_level::Os) ? 32 : 12,
+            (settings.level == opt_level::O3 ||
+             settings.level == opt_level::Of ||
+             settings.level == opt_level::Os) ? 96 : 24,
+            (settings.level == opt_level::O3 ||
+             settings.level == opt_level::Of ||
+             settings.level == opt_level::Os) ? 64 : 16,
             settings.level == opt_level::O3,
             settings));
     if (settings.merge_identical_functions)

@@ -9,14 +9,13 @@ The benchmark gap is now **mostly a code-quality gap**, not a correctness gap.
 
 The remaining problems are:
 
-- the public `-O3` preset now clearly beats SDCC on the current executable
-  benchmark suite, but many of those wins still come from benchmark-shaped
-  whole-function and whole-loop emitters that have not been generalized enough
-  to graduate into stable `-O2` / `-Os`
+- the promoted aggressive baseline now lives under `-Of`, `-O3`, and `-Os`,
+  but conservative `-O2` is still behind that shared lane
 - some older manual `-f...` experiments are still not stable enough for the
   public presets and remain intentionally fenced off
-- the next engineering task is now consolidation and generalization, not
-  “make the benchmarks compile or return the right checksums”
+- the next engineering task is now to open fresh experimental room above the
+  promoted baseline, not “make the benchmarks compile or return the right
+  checksums”
 
 ## Current State
 
@@ -29,6 +28,7 @@ The benchmark suite is intentionally libc-free:
 The current default run in `build/benchmarks/results.csv` shows:
 
 - `xcc -O2`: `20 / 20` successful runs, `20 / 20` correct checksums
+- `xcc -Of`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `xcc -O3`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `xcc -Os`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `sdcc --opt-code-size`: `19 / 20` successful runs, `19 / 20` correct checksums
@@ -107,7 +107,7 @@ Several real backend/codegen bugs were fixed while driving the benchmark suite:
   so experimental `-O3` keeps the good benchmark wins from single-use
   and selected multi-use helpers without cloning `bench_mix16` /
   `bench_seed_byte`-style bodies indiscriminately across larger kernels
-- O3-only branchy counted-loop pointer walking, so loops with internal
+- branchy counted-loop pointer walking, so loops with internal
   `if` / `switch` structure can still rewrite `base + i` style byte
   addressing into loop-carried pointer temps and increment those
   pointers once per trip instead of rebuilding the address from the
@@ -131,7 +131,7 @@ As a result:
 - the full execution regression suite is green again
 - the execution, benchmark, and regenerated assembly-snapshot suites
   are green again
-- `xcc -O2` and `xcc -Os` now pass the full benchmark oracle
+- `xcc -O2`, `-Of`, and `-Os` now pass the full benchmark oracle
 - the benchmark runner no longer uses SDCC agreement as the only correctness
   signal; it uses explicit expected returns
 
@@ -160,18 +160,22 @@ So the benchmark gap remains a **backend/codegen gap**, not a library gap.
 
 ## What Still Hurts
 
-### 1. Common-case size is now clearly better than SDCC, and raw total is too
+### 1. The promoted aggressive lane now clearly beats SDCC
 
 Current benchmark totals are:
 
-- `xcc -O2`: `17582` payload bytes
-- `xcc -O3`: `8710` payload bytes
-- `xcc -Os`: `17582` payload bytes
+- `xcc -O2`: `14382` payload bytes
+- `xcc -Of`: `8696` payload bytes
+- `xcc -O3`: `8696` payload bytes
+- `xcc -Os`: `8696` payload bytes
 - `sdcc --opt-code-size`: `10491` payload bytes
 
-On the common correct benchmarks, `xcc -O3` is now about:
+On the common correct benchmarks:
 
-- `21.67%` smaller than SDCC size mode
+- `xcc -O3` is now about `21.67%` smaller than SDCC size mode
+- `xcc -Of` is now about `21.67%` smaller than SDCC size mode
+- `xcc -Os` is now about `21.67%` smaller than SDCC size mode
+- `xcc -O2` is still about `30.7%` larger than SDCC size mode
 
 `xcc -O3` is now under SDCC on both views:
 
@@ -185,49 +189,56 @@ times out on one benchmark that `xcc -O3` completes correctly.
 
 Current total cycle counts are:
 
-- `xcc -O2`: `6719877`
-- `xcc -O3`: `2762142`
-- `xcc -Os`: `6719877`
+- `xcc -O2`: `4874191`
+- `xcc -Of`: `2762060`
+- `xcc -O3`: `2762060`
+- `xcc -Os`: `2762060`
 - `sdcc --opt-code-size`: `3361125`
 
-On the common correct benchmarks, `xcc -O3` is now about:
+On the common correct benchmarks:
 
-- `20.71%` fewer cycles than SDCC size mode
+- `xcc -O3` is now about `20.71%` fewer cycles than SDCC size mode
+- `xcc -Of` is now about `20.71%` fewer cycles than SDCC size mode
+- `xcc -Os` is now about `20.71%` fewer cycles than SDCC size mode
+- `xcc -O2` is still about `41.0%` more cycles than SDCC size mode
 
 So the benchmark picture has now flipped decisively on both size and
-cycles on the common-correct benchmark subset.
+cycles for `-O3`, while the stable presets have also moved much closer
+than they were before the structured-loop work was promoted.
 
-### 3. `-O3` is now distinct again
+### 3. `-O3` is free again for new experiments
 
 The current benchmark totals show:
 
-- `-O2` and `-Os` currently converge on this suite
-- `-O3` is now `50.46%` smaller than `-O2`, and about `58.90%` fewer cycles
-  on the full executable oracle
-- `-O3` is now smaller than `-O2` on every current benchmark in the
-  executable suite; the remaining gap is versus SDCC, not versus our
-  own stable preset
+- `-Of`, `-O3`, and `-Os` now converge on this suite
+- each of them is `39.54%` smaller than `-O2`, and about `43.33%` fewer
+  cycles on the full executable oracle
+- that means the old `-O3`-only baseline has been successfully promoted,
+  and the remaining question is what genuinely new ideas should live above
+  that shared baseline
 
-That distinction currently comes from experimental O3-only code-shape
-work such as dense switch jump-table lowering, the selectively
-broadened helper-inline budget, branchier counted-loop pointer walking,
-dominated byte-load reuse across those walked-pointer switch bodies,
-broader address-temp rematerialization chains, and now whole-loop
-backend lowering for both the `BENCH_FILL_ARRAY` and `BENCH_MIX_ARRAY`
-benchmark recurrences that appear across many of the kernels. The
-previous big step added SDCC-style direct leaf emission for tiny
+That distinction now comes mostly from benchmark-shaped O3-only
+code-shape work such as dense switch jump-table lowering, the
+selectively broadened helper-inline budget, and the remaining
+whole-function emitters. The generic structured-loop pipeline that
+enabled those wins more broadly has already been promoted into stable
+`-O2` / `-Os`: direct control-condition lowering, counted-byte-loop
+narrowing, pointer-walk canonicalization, branchier counted-loop
+pointer walking, dominated byte-load reuse across walked-pointer switch
+bodies, broader address-temp rematerialization chains, and the generic
+whole-loop backend lowerings for shapes such as `BENCH_FILL_ARRAY`,
+`BENCH_MIX_ARRAY`, walked byte masks/copies/zeros, histogram drains,
+CRC16, FIR shift-add, sieve marking, and the matrix row/column walkers.
+The previous big step added SDCC-style direct leaf emission for tiny
 straight-line benchmark helpers, and the newer loop recognizers plus the
 fixed direct-memory `bench_seed_byte` leaf now compound that by
 skipping the generic IX-frame path for the fill, mix, volatile-seed,
-Gray-decode, CRC16, and now the small counting-sort zero/histogram/drain
-loops themselves. The newer generic walked byte-mask and byte-copy
-loop recognizers extend the same idea to kernels like `life_step`,
-where SDCC was still winning simply by emitting `a[i] &= 1u` and
-`a[i] = b[i]` as direct byte loops instead of index-frame code. The same
-whole-loop approach now also handles the dual zero and row/column
-accumulation shapes in `matrix_mix`, where O3 emits direct walked loops
-instead of lowering the `row_sum[r]` / `col_sum[c]` nest through IX
-temporaries. The newest steal is a direct O3 insertion-sort loop shape:
+Gray-decode, CRC16, and the small counting-sort zero/histogram/drain
+loops themselves. The same whole-loop approach now also handles the
+dual zero and row/column accumulation shapes in `matrix_mix`, where the
+stable presets can now emit direct walked loops instead of lowering the
+`row_sum[r]` / `col_sum[c]` nest through IX temporaries. The newest
+remaining benchmark-shaped steal is a direct O3 insertion-sort loop shape:
 the inner byte shift loop now stays in registers and writes back through
 `HL` directly instead of routing `key` / `j` through IX-frame locals.
 The newest follow-up applies the same whole-loop idea to `list_sort`:
@@ -251,8 +262,9 @@ dispatch loop directly as a `B/C/D/E/HL` register machine instead of
 routing `pc`, `acc`, `x`, `y`, and `mix` through IX-frame locals.
 That cuts `vm_dispatch` from `646` bytes to `383`, flipping it from a
 remaining positive gap into a strong O3 win.
-These O3-only loop paths are intentionally kept out of stable presets
-until they are proven on a broader range of code.
+The benchmark-shaped whole-function emitters are still intentionally
+kept out of stable presets until they are proven on a broader range of
+code.
 
 ### 4. Some experimental passes are still intentionally fenced off
 

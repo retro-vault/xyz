@@ -36,6 +36,7 @@ namespace xld {
         // Reserved address ranges (holes).
         std::vector<address_range> holes;
         std::map<std::string, uint16_t> area_bases;
+        std::vector<std::string> area_order;
         std::optional<address_range> output_range;
         output_format format = output_format::xl;
 

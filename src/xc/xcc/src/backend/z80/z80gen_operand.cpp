@@ -5,8 +5,27 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/z80/z80gen.h"
+#include <cstring>
 
 namespace xcc {
+
+namespace {
+
+uint16_t fp_const_word(const operand &op, int word_index) {
+    if (op.type && op.type->size() == 8) {
+        uint64_t bits = 0;
+        double value = op.fval;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return static_cast<uint16_t>((bits >> (word_index * 16)) & 0xffffu);
+    }
+
+    uint32_t bits = 0;
+    float value = static_cast<float>(op.fval);
+    std::memcpy(&bits, &value, sizeof(bits));
+    return static_cast<uint16_t>((bits >> (word_index * 16)) & 0xffffu);
+}
+
+} // namespace
 
 bool z80_gen::fits_ix_disp(int off) {
     return off >= -128 && off <= 127;
@@ -79,6 +98,7 @@ void z80_gen::load_frame_word(const reg_pair &r, int off) {
         return;
     }
 
+    emit_line("push\taf");
     emit_line("push\tbc");
     load_ix_addr_hl(off);
     emit_line("ld\tc, (hl)");
@@ -87,6 +107,7 @@ void z80_gen::load_frame_word(const reg_pair &r, int off) {
     emit_line("ld\t%c, c", r.lo);
     emit_line("ld\t%c, b", r.hi);
     emit_line("pop\tbc");
+    emit_line("pop\taf");
 }
 
 void z80_gen::store_frame_word(const reg_pair &r, int off) {
@@ -97,6 +118,8 @@ void z80_gen::store_frame_word(const reg_pair &r, int off) {
         return;
     }
 
+    emit_line("push\taf");
+    emit_line("push\tbc");
     if (r.lo == 'l') {
         emit_line("push\tde");
         emit_line("ld\td, h");
@@ -108,11 +131,15 @@ void z80_gen::store_frame_word(const reg_pair &r, int off) {
         emit_line("inc\thl");
         emit_line("ld\t(hl), d");
         emit_line("pop\tde");
+        emit_line("pop\tbc");
+        emit_line("pop\taf");
         return;
     }
     emit_line("ld\t(hl), %c", r.lo);
     emit_line("inc\thl");
     emit_line("ld\t(hl), %c", r.hi);
+    emit_line("pop\tbc");
+    emit_line("pop\taf");
 }
 
 int z80_gen::op_size(const operand &op) const {
@@ -784,6 +811,8 @@ void z80_gen::load_hl_word(const operand &op, int word_index) {
     }
     if (op.kind == operand_kind::INT_CONST)
         emit_line("ld\thl, %s", asm_.imm((op.ival >> (word_index * 16)) & 0xFFFF).c_str());
+    else if (op.kind == operand_kind::FLOAT_CONST)
+        emit_line("ld\thl, %s", asm_.imm(fp_const_word(op, word_index)).c_str());
     else if (op.kind == operand_kind::SYMBOL && op.is_global) {
         int total = op.byte_offset + word_byte;
         emit_line("ld\thl, %s", asm_.indir_global(mangle(op.name), total).c_str());
@@ -832,6 +861,8 @@ void z80_gen::load_de_word(const operand &op, int word_index) {
     }
     if (op.kind == operand_kind::INT_CONST) {
         emit_line("ld\tde, %s", asm_.imm((op.ival >> (word_index * 16)) & 0xFFFF).c_str());
+    } else if (op.kind == operand_kind::FLOAT_CONST) {
+        emit_line("ld\tde, %s", asm_.imm(fp_const_word(op, word_index)).c_str());
     } else if (op.kind == operand_kind::SYMBOL && op.is_global) {
         int total = op.byte_offset + word_byte;
         emit_line("ld\thl, %s", asm_.indir_global(mangle(op.name), total).c_str());
@@ -898,5 +929,40 @@ void z80_gen::load_hl_lo32 (const operand &op) { load_hl_word(op, 0); }
 void z80_gen::load_hl_hi32 (const operand &op) { load_hl_word(op, 1); }
 void z80_gen::store_hl_lo32(const operand &op) { store_hl_word(op, 0); }
 void z80_gen::store_hl_hi32(const operand &op) { store_hl_word(op, 1); }
+
+void z80_gen::load_reg64(const operand &op) {
+    invalidate_pair_cache();
+    for (int w = 3; w >= 0; --w) {
+        load_hl_word(op, w);
+        emit_line("push\thl");
+    }
+    emit_line("pop\tde");
+    emit_line("pop\thl");
+    emit_line("exx");
+    emit_line("pop\tde");
+    emit_line("pop\thl");
+    emit_line("exx");
+    invalidate_pair_cache();
+}
+
+void z80_gen::store_reg64(const operand &op) {
+    invalidate_pair_cache();
+    emit_line("push\tde");
+    emit_line("push\thl");
+    emit_line("exx");
+    emit_line("push\tde");
+    emit_line("push\thl");
+    emit_line("exx");
+
+    emit_line("pop\thl");
+    store_hl_word(op, 3);
+    emit_line("pop\thl");
+    store_hl_word(op, 2);
+    emit_line("pop\thl");
+    store_hl_word(op, 1);
+    emit_line("pop\thl");
+    store_hl_word(op, 0);
+    invalidate_pair_cache();
+}
 
 } // namespace xcc

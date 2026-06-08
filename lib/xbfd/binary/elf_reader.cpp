@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -57,6 +58,46 @@ static uint32_t u32le(const uint8_t* p) {
     return p[0] | (p[1]<<8u) | (p[2]<<16u) | (p[3]<<24u);
 }
 
+static uint32_t read_uleb128(const std::vector<uint8_t>& data, std::size_t& pos) {
+    uint32_t value = 0;
+    unsigned shift = 0;
+    while (pos < data.size()) {
+        uint8_t byte = data[pos++];
+        value |= static_cast<uint32_t>(byte & 0x7f) << shift;
+        if ((byte & 0x80u) == 0)
+            break;
+        shift += 7;
+    }
+    return value;
+}
+
+static std::string read_cstring(const std::vector<uint8_t>& data, std::size_t& pos) {
+    std::string out;
+    while (pos < data.size() && data[pos] != 0)
+        out.push_back(static_cast<char>(data[pos++]));
+    if (pos < data.size())
+        ++pos;
+    return out;
+}
+
+static uint32_t read_addr(const std::vector<uint8_t>& data,
+                          std::size_t& pos,
+                          uint8_t addr_size)
+{
+    if (addr_size == 2) {
+        if (pos + 2 > data.size())
+            return 0;
+        uint32_t value = u16le(data.data() + pos);
+        pos += 2;
+        return value;
+    }
+    if (pos + 4 > data.size())
+        return 0;
+    uint32_t value = u32le(data.data() + pos);
+    pos += 4;
+    return value;
+}
+
 // -------------------------------------------------------------------------
 // elf_parser — parses raw ELF bytes into xbfd::object
 // -------------------------------------------------------------------------
@@ -73,6 +114,7 @@ public:
         load_sections();
         load_symbols();
         load_relocations();
+        load_debug_functions();
         return std::move(obj_);
     }
 
@@ -237,6 +279,106 @@ private:
                 tsec.relocs.push_back(r);
             }
         }
+    }
+
+    void load_debug_functions() {
+        const auto *debug_info = find_section_bytes(".debug_info");
+        if (!debug_info || debug_info->empty())
+            return;
+
+        std::size_t unit_pos = 0;
+        while (unit_pos + 11 <= debug_info->size()) {
+            if (unit_pos + 4 > debug_info->size())
+                break;
+            const uint32_t unit_length = u32le(debug_info->data() + unit_pos);
+            if (unit_length == 0)
+                break;
+            const std::size_t unit_end = unit_pos + 4u + unit_length;
+            if (unit_end > debug_info->size())
+                break;
+
+            const uint16_t version = u16le(debug_info->data() + unit_pos + 4);
+            (void)version;
+            const uint8_t addr_size = (*debug_info)[unit_pos + 10];
+            std::size_t pos = unit_pos + 11;
+
+            const uint32_t cu_abbrev = read_uleb128(*debug_info, pos);
+            if (cu_abbrev != 1) {
+                unit_pos = unit_end;
+                continue;
+            }
+
+            if (addr_size == 2) {
+                (void)read_cstring(*debug_info, pos); // producer
+                pos += 2;                             // language
+                (void)read_cstring(*debug_info, pos); // source path
+                (void)read_addr(*debug_info, pos, addr_size); // low_pc
+                (void)read_addr(*debug_info, pos, addr_size); // high_pc
+                pos += 4;                             // stmt_list
+            } else {
+                (void)read_cstring(*debug_info, pos); // producer
+                (void)read_cstring(*debug_info, pos); // source path
+                pos += 4;                             // stmt_list
+                (void)read_addr(*debug_info, pos, addr_size); // low_pc
+                (void)read_addr(*debug_info, pos, addr_size); // high_pc
+                pos += 2;                             // language
+            }
+
+            while (pos < unit_end) {
+                const uint32_t abbrev = read_uleb128(*debug_info, pos);
+                if (abbrev == 0)
+                    break;
+                if (abbrev != 2) {
+                    pos = unit_end;
+                    break;
+                }
+
+                xbfd::debug_function fn;
+                fn.name = read_cstring(*debug_info, pos);
+                fn.start = read_addr(*debug_info, pos, addr_size);
+                fn.end = read_addr(*debug_info, pos, addr_size);
+                if (pos < unit_end)
+                    ++pos; // external flag
+                if (pos < unit_end)
+                    fn.convention = static_cast<xbfd::calling_convention>((*debug_info)[pos++]);
+                obj_.debug.functions.push_back(std::move(fn));
+            }
+
+            unit_pos = unit_end;
+        }
+
+        std::optional<xbfd::calling_convention> common;
+        for (const auto& fn : obj_.debug.functions) {
+            if (fn.convention == xbfd::calling_convention::unknown)
+                continue;
+            if (!common.has_value()) {
+                common = fn.convention;
+                continue;
+            }
+            if (*common != fn.convention) {
+                common.reset();
+                break;
+            }
+        }
+        if (common.has_value())
+            obj_.default_calling_convention = *common;
+    }
+
+    const std::vector<uint8_t>* find_section_bytes(const std::string& name) const {
+        auto matches = [&](const std::string& sec_name) {
+            if (sec_name == name)
+                return true;
+            if (!name.empty() && name[0] == '.'
+                && sec_name == name.substr(1)) {
+                return true;
+            }
+            return false;
+        };
+        for (const auto& sec : obj_.sections) {
+            if (matches(sec.name))
+                return &sec.data;
+        }
+        return nullptr;
     }
 
     static const char* strtab_get(const std::string& tab, uint32_t off) {

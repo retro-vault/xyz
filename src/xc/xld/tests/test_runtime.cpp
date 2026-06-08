@@ -31,6 +31,29 @@ TEST(runtime_apply_sdcc_runtime_noop_without_option) {
     ASSERT_EQ(opts.input_files[0], std::filesystem::path("main.rel"));
 }
 
+TEST(runtime_apply_sdcc_runtime_noop_in_gnu_mode) {
+    auto dir = make_temp_dir("/tmp/xld-runtime-XXXXXX");
+    auto crt0 = dir / "crt0.rel";
+    auto lib = dir / "z80.lib";
+
+    {
+        std::ofstream(crt0) << "XL\nM crt0\n";
+        std::ofstream(lib) << "# runtime library index\nhelper.rel\n";
+    }
+
+    xld::cli_options opts;
+    opts.mode = xld::link_mode::gnu;
+    opts.sdcc_runtime_dir = dir;
+    opts.input_files = {"main.o"};
+
+    xld::runtime::apply_sdcc_runtime(opts);
+
+    ASSERT_EQ(static_cast<int>(opts.input_files.size()), 1);
+    ASSERT_EQ(opts.input_files[0], std::filesystem::path("main.o"));
+
+    std::filesystem::remove_all(dir);
+}
+
 TEST(runtime_apply_sdcc_runtime_injects_crt0_and_lib) {
     auto dir = make_temp_dir("/tmp/xld-runtime-XXXXXX");
     auto crt0 = dir / "crt0.rel";

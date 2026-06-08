@@ -27,7 +27,6 @@
 # Executables
 *.hex
 *.ihx
-*.lk
 *.noi
 *.map
 

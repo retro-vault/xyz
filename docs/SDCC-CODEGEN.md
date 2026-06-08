@@ -790,13 +790,17 @@ The practical result is:
   `vm_dispatch`: once the IR exposed the rotate as the current
   `SHL #1` + `SHR #7` + `BOR` shape, O3 could emit the full dispatch
   loop directly as a `B/C/D/E/HL` register machine. That cut the kernel
-  from `646` bytes to `383` and pushed the full executable suite down to
-  `9214` payload bytes.
+  from `646` bytes to `383` and, at that checkpoint, pushed the full
+  executable suite down to `9214` payload bytes.
 - the newer histogram, nibble-LUT, sieve, `gray_decode`, and
   `insertion_sort` whole-function steals pushed that further again, and
   the current checkpoint is now `8710` payload bytes for `xcc -O3`
   versus `10491` for
   `sdcc --opt-code-size`
+- the generic structured-loop half of that work has now been promoted
+  into stable `-O2` / `-Os` too, which cuts the stable presets from
+  `17582` payload bytes to `14501` on the same executable suite without
+  needing the benchmark-shaped whole-function emitters
 - on the common successful-and-correct benchmark subset,
   `xcc -O3` is now `21.67%` smaller and `20.71%` fewer cycles than SDCC
   size mode

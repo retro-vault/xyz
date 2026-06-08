@@ -266,6 +266,21 @@ namespace xld {
             }
         }
 
+        static xbfd::calling_convention parse_calling_convention(
+            const std::vector<std::string>& fields)
+        {
+            for (const auto& field : fields) {
+                constexpr std::string_view prefix = "ABI=";
+                if (field.rfind(prefix.data(), 0) != 0)
+                    continue;
+                auto parsed = xbfd::parse_calling_convention(
+                    trim(field.substr(prefix.size())));
+                if (parsed.has_value())
+                    return *parsed;
+            }
+            return xbfd::calling_convention::unknown;
+        }
+
         static void parse_record(const std::string& source_name,
                                  int line_num,
                                  const std::string& record,
@@ -320,6 +335,7 @@ namespace xld {
                 function.return_type = type;
                 function.line = name.line;
                 function.file_local = name.file_local;
+                function.calling_convention = parse_calling_convention(fields);
                 doc.functions.push_back(std::move(function));
                 return;
             }

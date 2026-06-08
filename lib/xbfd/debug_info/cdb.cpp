@@ -57,6 +57,19 @@ std::vector<std::string_view> split(std::string_view str, char delim) {
     return parts;
 }
 
+std::optional<calling_convention> parse_abi_field(
+    const std::vector<std::string_view>& fields)
+{
+    for (auto field : fields) {
+        field = trim(field);
+        constexpr std::string_view prefix = "ABI=";
+        if (field.substr(0, prefix.size()) != prefix)
+            continue;
+        return parse_calling_convention(trim(field.substr(prefix.size())));
+    }
+    return std::nullopt;
+}
+
 std::string strip_scope_qualifier(std::string_view name) {
     if (const auto dot = name.find('.'); dot != std::string_view::npos)
         return std::string(name.substr(dot + 1));
@@ -227,7 +240,13 @@ private:
 
         auto& module = ensure_module(current_module_);
         auto name = strip_scope_qualifier(content.substr(first + 1, second - first - 1));
-        ensure_function(module, name);
+        auto& fn = ensure_function(module, name);
+
+        if (const auto close = content.find("),"); close != std::string_view::npos) {
+            auto fields = split(content.substr(close + 2), ',');
+            if (auto cc = parse_abi_field(fields); cc.has_value())
+                fn.convention = *cc;
+        }
     }
 
     void parse_symbol(std::string_view content) {
@@ -512,7 +531,10 @@ void cdb::write_adb() const {
     std::ofstream f(adb_); if (!f) return;
     f << "M:" << mod_ << "\n";
     for (const auto& fn : fns_) {
-        f << "F:G$" << fn.name << "$0_0$0({2}DF," << cdb_base(fn.ret) << "),C,0,0,0,0,0\n";
+        f << "F:G$" << fn.name << "$0_0$0({2}DF," << cdb_base(fn.ret) << "),C,0,0,0,0,0";
+        if (fn.cc != calling_convention::unknown)
+            f << ",ABI=" << to_string(fn.cc);
+        f << "\n";
         for (const auto& lv : fn.locals) {
             f << "S:L" << mod_ << "." << fn.name << "$" << lv.name << "$1_0$" << fn.blk
               << "(" << cdb_type(lv.type) << ")," << sc(lv.sc_) << ",0," << lv.off;
@@ -531,12 +553,13 @@ void cdb::on_global(const std::string& n, const type_ref& t, bool s) {
     gbls_.push_back({n, t, s});
 }
 
-void cdb::on_function_begin(const std::string& c, const std::string&, bool g, const type_ref& r) {
+void cdb::on_function_begin(const std::string& c, const std::string&, bool g,
+                            const type_ref& r, calling_convention cc) {
     if (out_) *out_ << "G$" << c << "$0$0:\n\t.globl\tG$" << c << "$0$0\n";
     cur_ = &fns_.emplace_back();
-    cur_->name = c; cur_->global = g; cur_->ret = r; cur_->blk = blk_++;
+    cur_->name = c; cur_->global = g; cur_->ret = r; cur_->cc = cc; cur_->blk = blk_++;
     line_ = -1;
-    fsyms_.push_back({c, r, g});
+    fsyms_.push_back({c, r, g, cc});
 }
 
 void cdb::on_local(const std::string& n, const type_ref& t, var_storage s, int o, const std::string& r) {

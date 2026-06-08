@@ -142,3 +142,29 @@ TEST(relocator_word_relocation_rejects_final_byte_start) {
 
     ASSERT_THROWS(xld::relocator::relocate(ctx), xld::reloc_error);
 }
+
+TEST(relocator_pc_relative_byte_rejects_out_of_range_target) {
+    xld::link_context ctx;
+    auto mod = std::make_shared<xld::module>("test", "test.rel");
+    mod->areas().emplace_back("_SRC", 2, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_DST", 1, xld::area_flags::none, 1);
+    mod->areas()[0].set_placed_addr(0x0000);
+    mod->areas()[1].set_placed_addr(0x0200);
+
+    xld::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0x18, 0x00}; // jr area1
+
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::pc_rel;
+    re.offset_in_t = 1;
+    re.ref_index = 1;
+    tr.relocs.push_back(re);
+    mod->texts().push_back(tr);
+
+    ctx.modules.push_back(mod);
+    ctx.code_size = 0x0201;
+
+    ASSERT_THROWS(xld::relocator::relocate(ctx), xld::reloc_error);
+}

@@ -1,57 +1,41 @@
 	.module	xcc_output
 	.area	_CODE
-_dec_to_zero:
-	; sdcccall(1) prologue: dec_to_zero (locals=0, temp_frame=2, stack_params=0)
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=2, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	; keep incoming register arg t2 live in register for first use
+	; keep incoming register arg t6 live in register for first use
 	ex	de, hl
 	ld	hl, #-2
 	add	hl, sp
 	ld	sp, hl
 	ex	de, hl
 	; receive (sdcccall1) register param handled by prologue
-__xcc_L0:
-	; materialize incoming arg temp t2 for later reuse
 	ld	-2(ix), l
 	ld	-1(ix), h
+__xcc_inl___xcc_L0_0:
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	ld	a, h
 	or	a, l
-	jr	z, __xcc_L2
-__xcc_L1:
+	jr	z, __xcc_inl___xcc_L2_0
+__xcc_inl___xcc_L1_0:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	dec	hl
 	ld	-2(ix), l
 	ld	-1(ix), h
-	jr	__xcc_L0
-__xcc_L2:
+	jr	__xcc_inl___xcc_L0_0
+__xcc_inl___xcc_L2_0:
 	ld	l, -2(ix)
 	ld	h, -1(ix)
 	ld	b, h
 	ld	c, l
 	ex	de, hl
-__dec_to_zero_end:
-	; epilogue: dec_to_zero
-	ld	sp, ix
-	pop	ix
-	ret
-	.globl	_f
-_f:
-	; sdcccall(1) prologue: f (locals=0, temp_frame=0, stack_params=0)
-	; frameless function: no IX frame needed
-	ld	b, h
-	ld	c, l
-	ld	h, b
-	ld	l, c
-	.globl	_dec_to_zero
-	call	_dec_to_zero
-	push	de
-	pop	hl
-	ld	b, h
-	ld	c, l
-	ex	de, hl
 __f_end:
 	; epilogue: f
+	ld	sp, ix
+	pop	ix
 	ret

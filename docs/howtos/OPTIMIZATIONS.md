@@ -14,29 +14,32 @@ The current public optimization model is:
 - default / `-O0`: no optimization
 - `-O1`: peephole optimization
 - `-O2`: general optimization
+- `-Of`: speed optimization
 - `-O3`: experimental optimization
 - `-Os`: size optimization
 
 These are presets, not additive flags. You normally pick one of them.
 
-`-O3` is intentionally experimental. It starts from `-O2` and keeps
-room for broader analysis budgets and future benchmark-driven
-experiments, but the benchmark-proven helper inlining that used to live
-only above `-O2` has now been promoted into the stable `-O2` preset.
-On the current bare-metal executable benchmark suite, `-O3` is distinct
-again: it now adds a late dense-switch jump-table pass on top of the
-stable presets, which makes it smaller and faster than `-O2` there while
-remaining benchmark-correct.
+`-Of`, `-O3`, and `-Os` now share the same proven aggressive baseline.
+That baseline includes the helper-inline budget, denser switch lowering,
+the structured-loop pipeline, and the benchmark-proven direct emitters
+that survived the full execution and benchmark oracle.
 
-The current O3-only work also includes several benchmark-driven whole-loop
-and whole-function emitters that bypass the generic IX-framed backend for
-recognized hot shapes. Those fast paths are only kept in O3 while they are
-proven on the execution suite and benchmark oracle. The currently active
-set now includes direct O3 paths for kernels such as `life_step`,
-`gray_decode`, `insertion_sort`, `vm_dispatch`, `token_scan`,
-`window_minmax`, and the newer histogram/nibble/sieve shapes. Older
-dormant experiments still stay fenced off when they are not
-checksum-stable enough for the full suite.
+`-O3` is intentionally still the experimental lane, but it is no longer
+better on the current benchmark suite because of hidden extra default
+work. Instead, it is now free again to host the next wave of genuinely
+new experiments without leaving `-Of` / `-Os` behind on the already
+validated code-shape wins.
+
+The newer generic structured-loop pipeline is now in the stable presets
+too: direct control-condition lowering, counted-byte-loop narrowing,
+pointer-walk canonicalization, and the generic walked-loop backend
+emitters that feed from those shapes all run under `-O2` / `-Of` / `-Os`.
+
+On the current bare-metal executable benchmark suite, the promoted
+baseline means `-Of`, `-O3`, and `-Os` now land on the same measured
+totals. That is deliberate: the proven size/speed wins are no longer
+stuck behind the experimental preset.
 
 ## Fine-Grained Flags
 
@@ -193,6 +196,10 @@ The IR pipeline currently includes:
   byte-width even when the IR briefly widened them through `unsigned int`
 - rotate combine for unsigned 16-bit idioms such as
   `(x << k) | (x >> (16 - k))`
+- counted-byte loop narrowing for proven `< 256` induction variables
+- loop pointer-walk canonicalization, so repeated `base + i` array
+  accesses can turn into loop-carried walked pointers before Z80
+  lowering
 - constant folding
 - algebraic simplification
 - loop-invariant code motion
@@ -336,88 +343,57 @@ Finally, constant 16-bit shifts are now emitted more compactly:
 - larger constant shifts no longer emit a pointless zero-count test
   before the loop, because the count is already known nonzero
 
-## `-O3`: Experimental Optimization
+## `-Of`: Speed Optimization
 
-`-O3` currently means `-O2` plus broader static-helper inlining
-analysis budgets, branchier loop-address rewriting, direct
-benchmark-style recurrence-loop emission, and experimental dense-switch
-jump-table lowering.
+`-Of` currently means `-O2` plus the safe speed-oriented generic work
+that proved stable enough to graduate out of the experimental lane.
 
 The main extra behavior today is:
 
-- experimental inlining of larger size-profitable internal static
-  helpers than the stable `-Os` threshold allows
-- experimental widening of the repeated-helper analysis budget, so
-  small multi-use private helpers can inline even when their raw
-  pre-cleanup IR body is a little larger than the stable `-Os` budget
-- experimental repeated-helper cloning that now distinguishes:
-  - tiny repeated pure arithmetic helpers
-  - repeated helpers that themselves contain calls
-  - other repeated leaf helpers
-  so `-O3` can keep the profitable `bench_mix16`-style wins without
-  cloning larger helper bodies indiscriminately across every kernel
-- experimental branchy counted-loop pointer walking, so loops with
-  internal `if` / `switch` structure can still rewrite `base + i`
-  addressing into loop-carried byte pointers instead of paying to
-  rebuild the address from the induction variable every iteration
-- reuse of dominated byte loads from those walked pointers across
-  branchy case bodies, so the optimizer can keep one loaded byte live
-  through the case-specific arithmetic instead of re-emitting another
-  dereference of the same loop-carried pointer
-- experimental SDCC-style direct leaf emission for the benchmark
-  `bench_seed_byte` helper even when its final IR has already collapsed
-  to a direct volatile `*#65296` word load instead of an out-of-line
-  `bench_seed_word()` call
-- experimental whole-loop lowering for the `BENCH_FILL_ARRAY`-style
-  byte recurrence that appears across much of the executable suite, so
-  O3 can emit the entire counted loop directly as a `C`/`B`/`HL`
-  register loop instead of routing the recurrence through IX-frame
-  temps and `base + index` rebuilds
-- experimental whole-loop lowering for the `BENCH_MIX_ARRAY`-style
-  checksum recurrence, so O3 can emit the whole counted byte/index
-  mixing loop as one compact register machine instead of lowering the
-  inlined `bench_mix16` recurrence literally through IX spills
-- experimental whole-loop lowering for the benchmark `gray_decode`
-  recurrence, so O3 can emit the entire Gray-to-binary byte transform as
-  one pure-register loop and skip the dead intermediate `gray[]` stores
-- experimental whole-loop lowering for the benchmark `crc16`
-  recurrence, so O3 can keep the CRC in `HL`, walk the source bytes in
-  `DE`, use `BC` as the loop end pointer, and emit both the 8-step
-  polynomial update and the trailing `bench_mix16`-style checksum step
-  directly as register code
-- experimental direct byte-loop lowering for three small counting-sort
-  kernels that SDCC already treats as register loops: zeroing a walked
-  byte buffer, building a nibble histogram with `inc (hl)`, and draining
-  byte buckets directly into a walked output pointer
-- experimental direct byte-loop lowering for walked byte-mask and
-  walked byte-copy loops, so O3 can emit patterns like `a[i] &= 1u` and
-  `a[i] = b[i]` as tight `HL`/`DE`/`DJNZ` loops instead of generic IX
-  frame code
-- experimental late lowering of dense integer switch ladders into jump
-  tables with indexed `jp (hl)` dispatch
+- the wider static-helper inline budget that used to live only in `-O3`
+- dense switch jump-table lowering for integer switches when the backend
+  can prove the span is profitable
+- the same generic structured-loop pipeline that stable `-O2` already
+  uses, but paired with the more aggressive speed-biased helper-inline
+  thresholds
 
-That wider helper inlining is intentionally kept in `-O3` for now. It
-is useful when pushing on benchmark kernels, but it still needs more
-real-program validation before becoming part of the stable presets
-because it can still trade bytes differently across individual kernels.
-That is the intended role of `-O3` now: new experimental optimizations
-should land there first, and only move down into `-O2` once they are
-benchmark-clean and execution-safe.
-The helper-inlining subset that proved safe now lives in `-O2` itself,
-but the jump-table switch path still stays in `-O3` because it is a
-code-shape experiment rather than a proven general default.
+On the current executable benchmark suite, that split now looks like:
 
-On the current executable benchmark suite, that extra O3 code-shape work
-now includes branchy pointer-walk loops and keeps `-O3` clearly distinct
-again:
+- `xcc -O2`: `14382` payload bytes, `4874191` cycles
+- `xcc -Of`: `12099` payload bytes, `4456408` cycles
 
-- `xcc -O2`: `17582` payload bytes, `6719877` cycles
-- `xcc -O3`: `9491` payload bytes, `3162916` cycles
+So `-Of` is currently about `15.87%` smaller and `8.57%` fewer cycles
+than `-O2` on the full benchmark oracle, while still staying `20 / 20`
+correct there.
 
-So `-O3` is currently about `46.02%` smaller and `52.93%` fewer cycles
-than `-O2` on the full benchmark oracle while still staying `20 / 20`
-correct there. On the common successful-and-correct subset against
-`sdcc --opt-code-size`, `xcc -O3` is now about `14.22%` smaller.
+## `-O3`: Experimental Optimization
+
+`-O3` currently starts from the same promoted aggressive baseline as
+`-Of` and `-Os`. That is deliberate: already-proven loop emitters,
+helper fast paths, and other benchmark-clean structural wins are no
+longer hidden behind the experimental preset.
+
+So the role of `-O3` now is simpler:
+
+- it is the place where new optimization ideas land first
+- unsuccessful experiments are expected to be rejected, not kept around
+- successful experiments should eventually graduate down into `-Of`,
+  `-Os`, or even `-O2`
+
+At the moment there is no additional always-on `-O3` pass beyond that
+shared aggressive baseline, which is exactly what frees it for the next
+experimental wave.
+
+On the current executable benchmark suite, that shared promoted baseline
+means:
+
+- `xcc -Of`: `8696` payload bytes, `2762060` cycles
+- `xcc -O3`: `8696` payload bytes, `2762060` cycles
+- `xcc -Os`: `8696` payload bytes, `2762060` cycles
+
+So the promoted aggressive pipeline is currently about `21.80%` smaller
+and `20.71%` fewer cycles than `sdcc --opt-code-size` on the common
+successful-and-correct benchmark subset.
 
 One of the bigger current O3-only wins is a very narrow SDCC-style leaf
 fast path in the Z80 backend. When a tiny straight-line helper matches a
@@ -1200,12 +1176,12 @@ the lazy spill path.
 - compare-to-branch fusion is now handled directly in the backend for
   immediate compare-plus-`IFX` pairs, and the older peephole cleanup
   remains as a backstop for legacy shapes
-- `-O3` is explicitly experimental, but the preset itself now stays
-  aligned with the stable `-O2` pipeline while the not-yet-proven IR
-  passes remain opt-in through individual `-f...` flags.
-- `-Os` is the only dedicated size-oriented public preset today.
-  It keeps the general `-O2` pipeline and adds the current size-biased
-  codegen heuristics such as size-profitable static helper inlining.
+- `-Of` is now the public speed-oriented lane between `-O2` and `-O3`.
+- `-O3` is explicitly experimental, but it now shares the promoted
+  aggressive baseline with `-Of` and `-Os` so it can be used for new
+  experiments without hoarding old proven wins.
+- `-Os` is the dedicated size-oriented public preset, but today it also
+  shares that same promoted aggressive baseline.
 - The runtime helper library is also split more finely now for signed
   byte divide/mod front-ends and float zero helpers, so linked programs
   do not pull those entry points in as part of larger mixed helper

@@ -23,6 +23,35 @@ namespace xcc {
 
 // ----- attribute application -----------------------------------------
 
+static bool attrs_specify_call_abi(const attr_list &attrs) {
+    for (const auto &a : attrs) {
+        if (a.ns == "sdcc" &&
+            (a.name == "naked" || a.name == "interrupt"
+             || a.name == "critical" || a.name == "sdccall")) {
+            return true;
+        }
+        if (a.ns == "z88dk" &&
+            (a.name == "fastcall" || a.name == "callee")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static const char *call_abi_name(call_abi abi) {
+    switch (abi) {
+    case call_abi::DEFAULT:         return "default";
+    case call_abi::SDCCCALL0:       return "sdcccall(0)";
+    case call_abi::SDCCCALL1:       return "sdcccall(1)";
+    case call_abi::Z88DK_FASTCALL:  return "z88dk::fastcall";
+    case call_abi::Z88DK_CALLEE:    return "z88dk::callee";
+    case call_abi::NAKED:           return "sdcc::naked";
+    case call_abi::INTERRUPT:       return "sdcc::interrupt";
+    case call_abi::CRITICAL:        return "sdcc::critical";
+    default:                        return "unknown";
+    }
+}
+
 void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
     for (auto &a : attrs) {
         // ----- standard C23 attributes (no namespace) ----------------
@@ -109,6 +138,33 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
             (void)loc;
         }
     }
+}
+
+void sema::apply_imported_call_abi(symbol &sym,
+                                   const attr_list &attrs,
+                                   source_loc loc) {
+    if (!imported_abis_ || sym.kind != sym_kind::FUNC)
+        return;
+
+    auto it = imported_abis_->find(sym.name);
+    if (it == imported_abis_->end())
+        return;
+
+    const call_abi imported = it->second;
+    if (imported == call_abi::DEFAULT)
+        return;
+
+    if (attrs_specify_call_abi(attrs)) {
+        if (sym.abi != imported) {
+            diag_.warning(loc,
+                          "declaration for '%s' overrides imported library calling convention %s",
+                          sym.name.c_str(), call_abi_name(imported));
+        }
+        return;
+    }
+
+    if (sym.abi == call_abi::DEFAULT)
+        sym.abi = imported;
 }
 
 // ----- helpers -------------------------------------------------------
@@ -377,6 +433,8 @@ void sema::visit(var_decl &d) {
 void sema::visit(func_decl &d) {
     if (d.sym && !d.attrs.empty())
         apply_attrs(*d.sym, d.attrs, d.loc);
+    if (d.sym)
+        apply_imported_call_abi(*d.sym, d.attrs, d.loc);
     if (d.sym && d.sym->abi == call_abi::Z88DK_FASTCALL) {
         if (d.params.size() != 1) {
             diag_.error(d.loc, "[[z88dk::fastcall]] requires exactly one parameter");

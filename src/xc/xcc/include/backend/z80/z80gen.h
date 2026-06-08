@@ -143,6 +143,8 @@ private:
     int temp_stack_bytes_ = 0;
     int temp_frame_bytes_ = 0;
     size_t cur_ic_index_ = 0;
+    bool direct_call_return_pending_ = false;
+    operand direct_call_return_value_;
     pair_cache_state hl_cache_;
     pair_cache_state de_cache_;
     byte_cache_state a_cache_;
@@ -195,10 +197,13 @@ private:
     bool temp_frame_prealloc_enabled() const { return opt_settings_.prealloc_temp_frame; }
     bool switch_jump_tables_enabled() const { return opt_settings_.switch_jump_tables; }
     bool size_opt_enabled() const { return opt_settings_.level == opt_level::Os; }
-    bool pair_cache_enabled() const {
-        return opt_settings_.level == opt_level::O2 ||
+    bool o3_baseline_enabled() const {
+        return opt_settings_.level == opt_level::Of ||
                opt_settings_.level == opt_level::O3 ||
                opt_settings_.level == opt_level::Os;
+    }
+    bool pair_cache_enabled() const {
+        return opt_settings_.level == opt_level::O2 || o3_baseline_enabled();
     }
     bool a_cache_enabled() const { return pair_cache_enabled(); }
     int required_frame_bytes() const { return local_bytes_ + temp_stack_bytes_; }
@@ -208,6 +213,9 @@ private:
     bool symbol_home_in_bc(const operand &op) const;
     bool needs_frame_without_temps(const ir_function &fn) const;
     bool can_omit_frame_pointer(const ir_function &fn) const;
+    bool structured_loop_fastpaths_enabled() const {
+        return opt_settings_.level == opt_level::O2 || o3_baseline_enabled();
+    }
     bool temp_value_used_after(const ir_function &fn, size_t start_idx, int temp_id) const;
     bool symbol_value_used_after(const ir_function &fn, size_t start_idx,
                                  const operand &sym) const;
@@ -448,6 +456,13 @@ private:
     // Store HL into the high 16 bits of a 32-bit destination.
     //
     void store_hl_hi32(const operand &op);
+
+    //
+    // Load/store a full 64-bit operand using the runtime ABI register shape:
+    //   DE:HL:DE':HL'  (word0..word3, low to high)
+    //
+    void load_reg64(const operand &op);
+    void store_reg64(const operand &op);
 
     //
     // Return the SDAS addressing string for op's memory location

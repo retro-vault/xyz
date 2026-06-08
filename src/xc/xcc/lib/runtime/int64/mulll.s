@@ -1,12 +1,17 @@
-        ; 64-bit multiply (unsigned/signed — same low-64-bit result)
+        ; 64-bit multiply (low 64 bits only)
         ;
-        ; Algorithm: 64-iteration shift-add.
-        ;   for each bit of multiplier a (shifted right): if set, acc += b (shifted left)
+        ; Uses 16x16->32 partial products:
+        ;   a = a0 + a1<<16 + a2<<32 + a3<<48
+        ;   b = b0 + b1<<16 + b2<<32 + b3<<48
+        ; low64(a*b) = sum(ai*bj << (16*(i+j))) for i+j < 4
         ;
-        ; Frame layout (16 bytes of locals):
-        ;   ix-8..ix-1:  multiplier a0..a7 (lsb at ix-8, msb at ix-1)
-        ;   ix-16..ix-9: accumulator (lsb at ix-16, msb at ix-9)
-        ; Multiplicand b is shifted in-place on the stack (ix+4..ix+11).
+        ; Since we keep only the low 64 bits, signed and unsigned two's-
+        ; complement multiplication share the same bit-level result.
+        ;
+        ; Frame layout (24 bytes):
+        ;   ix-24..ix-17 : a0..a3 (little-endian words, low to high)
+        ;   ix-16..ix-9  : b0..b3 (little-endian words, low to high)
+        ;   ix-8 ..ix-1  : result r0..r3 (little-endian words, low to high)
         ;
         ; MIT License (see: LICENSE)
         ; copyright (C) 2026 tomaz stih
@@ -15,11 +20,7 @@
         .optsdcc -mz80 sdcccall(1)
         .area   _CODE
         .globl  __mulll
-
-        ; __mulll
-        ; inputs:  a in DE:HL:DE':HL', b at ix+4..ix+11 (lsb..msb)
-        ; outputs: DE:HL:DE':HL' = low 64 bits of a * b
-        ; clobbers: af, bc, de, hl, ix, de', hl'
+        .globl  ___muluint2ulong
 
 __mulll:
         push    ix
@@ -29,96 +30,263 @@ __mulll:
         ld      b, h
         ld      c, l
 
-        ld      hl, #-16
+        ld      hl, #-24
         add     hl, sp
         ld      sp, hl
 
         ld      h, b
         ld      l, c
 
-        ld      -8(ix), e
-        ld      -7(ix), d
-        ld      -6(ix), l
-        ld      -5(ix), h
+        ; save a words
+        ld      -24(ix), e
+        ld      -23(ix), d
+        ld      -22(ix), l
+        ld      -21(ix), h
         exx
-        ld      -4(ix), e
-        ld      -3(ix), d
-        ld      -2(ix), l
-        ld      -1(ix), h
+        ld      -20(ix), e
+        ld      -19(ix), d
+        ld      -18(ix), l
+        ld      -17(ix), h
         exx
 
-        xor     a
+        ; save b words
+        ld      a, 4(ix)
         ld      -16(ix), a
+        ld      a, 5(ix)
         ld      -15(ix), a
+        ld      a, 6(ix)
         ld      -14(ix), a
+        ld      a, 7(ix)
         ld      -13(ix), a
+        ld      a, 8(ix)
         ld      -12(ix), a
+        ld      a, 9(ix)
         ld      -11(ix), a
+        ld      a, 10(ix)
         ld      -10(ix), a
-        ld      -9(ix),  a
-
-        ld      b, #64
-.mulll_loop:
-        bit     0, -8(ix)
-        jp      z, .mulll_noadd
-
-        or      a
-        ld      a, -16(ix)
-        add     a, 4(ix)
-        ld      -16(ix), a
-        ld      a, -15(ix)
-        adc     a, 5(ix)
-        ld      -15(ix), a
-        ld      a, -14(ix)
-        adc     a, 6(ix)
-        ld      -14(ix), a
-        ld      a, -13(ix)
-        adc     a, 7(ix)
-        ld      -13(ix), a
-        ld      a, -12(ix)
-        adc     a, 8(ix)
-        ld      -12(ix), a
-        ld      a, -11(ix)
-        adc     a, 9(ix)
-        ld      -11(ix), a
-        ld      a, -10(ix)
-        adc     a, 10(ix)
-        ld      -10(ix), a
-        ld      a, -9(ix)
-        adc     a, 11(ix)
+        ld      a, 11(ix)
         ld      -9(ix), a
 
-.mulll_noadd:
-        sla     4(ix)
-        rl      5(ix)
-        rl      6(ix)
-        rl      7(ix)
-        rl      8(ix)
-        rl      9(ix)
-        rl      10(ix)
-        rl      11(ix)
+        ; r = 0
+        xor     a
+        ld      -8(ix), a
+        ld      -7(ix), a
+        ld      -6(ix), a
+        ld      -5(ix), a
+        ld      -4(ix), a
+        ld      -3(ix), a
+        ld      -2(ix), a
+        ld      -1(ix), a
 
-        srl     -1(ix)
-        rr      -2(ix)
-        rr      -3(ix)
-        rr      -4(ix)
-        rr      -5(ix)
-        rr      -6(ix)
-        rr      -7(ix)
-        rr      -8(ix)
-
-        dec     b
-        jp      nz, .mulll_loop
-
+        ; ------------------------------------------------------------
+        ; k = 0: a0 * b0  -> add to r0..r3
+        ; ------------------------------------------------------------
+        ld      l, -24(ix)
+        ld      h, -23(ix)
         ld      e, -16(ix)
         ld      d, -15(ix)
-        ld      l, -14(ix)
-        ld      h, -13(ix)
-        exx
+        call    ___muluint2ulong
+
+        ld      a, -8(ix)
+        add     a, e
+        ld      -8(ix), a
+        ld      a, -7(ix)
+        adc     a, d
+        ld      -7(ix), a
+        ld      a, -6(ix)
+        adc     a, l
+        ld      -6(ix), a
+        ld      a, -5(ix)
+        adc     a, h
+        ld      -5(ix), a
+        ld      a, -4(ix)
+        adc     a, #0
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        adc     a, #0
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        adc     a, #0
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, #0
+        ld      -1(ix), a
+
+        ; ------------------------------------------------------------
+        ; k = 1: a0 * b1  -> add to r1..r3
+        ; ------------------------------------------------------------
+        ld      l, -24(ix)
+        ld      h, -23(ix)
+        ld      e, -14(ix)
+        ld      d, -13(ix)
+        call    ___muluint2ulong
+
+        ld      a, -6(ix)
+        add     a, e
+        ld      -6(ix), a
+        ld      a, -5(ix)
+        adc     a, d
+        ld      -5(ix), a
+        ld      a, -4(ix)
+        adc     a, l
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        adc     a, h
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        adc     a, #0
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, #0
+        ld      -1(ix), a
+
+        ; k = 1: a1 * b0
+        ld      l, -22(ix)
+        ld      h, -21(ix)
+        ld      e, -16(ix)
+        ld      d, -15(ix)
+        call    ___muluint2ulong
+
+        ld      a, -6(ix)
+        add     a, e
+        ld      -6(ix), a
+        ld      a, -5(ix)
+        adc     a, d
+        ld      -5(ix), a
+        ld      a, -4(ix)
+        adc     a, l
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        adc     a, h
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        adc     a, #0
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, #0
+        ld      -1(ix), a
+
+        ; ------------------------------------------------------------
+        ; k = 2: a0*b2 + a1*b1 + a2*b0  -> add to r2..r3
+        ; ------------------------------------------------------------
+        ld      l, -24(ix)
+        ld      h, -23(ix)
         ld      e, -12(ix)
         ld      d, -11(ix)
-        ld      l, -10(ix)
-        ld      h, -9(ix)
+        call    ___muluint2ulong
+
+        ld      a, -4(ix)
+        add     a, e
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        adc     a, d
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        adc     a, l
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, h
+        ld      -1(ix), a
+
+        ld      l, -22(ix)
+        ld      h, -21(ix)
+        ld      e, -14(ix)
+        ld      d, -13(ix)
+        call    ___muluint2ulong
+
+        ld      a, -4(ix)
+        add     a, e
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        adc     a, d
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        adc     a, l
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, h
+        ld      -1(ix), a
+
+        ld      l, -20(ix)
+        ld      h, -19(ix)
+        ld      e, -16(ix)
+        ld      d, -15(ix)
+        call    ___muluint2ulong
+
+        ld      a, -4(ix)
+        add     a, e
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        adc     a, d
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        adc     a, l
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, h
+        ld      -1(ix), a
+
+        ; ------------------------------------------------------------
+        ; k = 3: a0*b3 + a1*b2 + a2*b1 + a3*b0 -> add low word to r3 only
+        ; ------------------------------------------------------------
+        ld      l, -24(ix)
+        ld      h, -23(ix)
+        ld      e, -10(ix)
+        ld      d, -9(ix)
+        call    ___muluint2ulong
+        ld      a, -2(ix)
+        add     a, e
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, d
+        ld      -1(ix), a
+
+        ld      l, -22(ix)
+        ld      h, -21(ix)
+        ld      e, -12(ix)
+        ld      d, -11(ix)
+        call    ___muluint2ulong
+        ld      a, -2(ix)
+        add     a, e
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, d
+        ld      -1(ix), a
+
+        ld      l, -20(ix)
+        ld      h, -19(ix)
+        ld      e, -14(ix)
+        ld      d, -13(ix)
+        call    ___muluint2ulong
+        ld      a, -2(ix)
+        add     a, e
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, d
+        ld      -1(ix), a
+
+        ld      l, -18(ix)
+        ld      h, -17(ix)
+        ld      e, -16(ix)
+        ld      d, -15(ix)
+        call    ___muluint2ulong
+        ld      a, -2(ix)
+        add     a, e
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        adc     a, d
+        ld      -1(ix), a
+
+        ; return r in DE:HL:DE':HL'
+        ld      e, -8(ix)
+        ld      d, -7(ix)
+        ld      l, -6(ix)
+        ld      h, -5(ix)
+        exx
+        ld      e, -4(ix)
+        ld      d, -3(ix)
+        ld      l, -2(ix)
+        ld      h, -1(ix)
         exx
 
         ld      sp, ix

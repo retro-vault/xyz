@@ -20,6 +20,7 @@
 #pragma once
 #include "frontend/ast.h"
 #include "frontend/diag.h"
+#include <unordered_map>
 
 namespace xcc {
 
@@ -29,7 +30,9 @@ class sema
     , public default_decl_visitor
 {
 public:
-    explicit sema(diag_engine &diag) : diag_(diag) {}
+    explicit sema(diag_engine &diag,
+                  const std::unordered_map<std::string, call_abi> *imported_abis = nullptr)
+        : diag_(diag), imported_abis_(imported_abis) {}
 
     //
     // Walk the entire translation unit and report semantic errors to
@@ -44,6 +47,7 @@ public:
 
 private:
     diag_engine &diag_;
+    const std::unordered_map<std::string, call_abi> *imported_abis_ = nullptr;
 
     bool is_const_lval(const expr &e) const;
 
@@ -52,6 +56,7 @@ private:
     // for invalid or unrecognised attributes.
     //
     void apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc);
+    void apply_imported_call_abi(symbol &sym, const attr_list &attrs, source_loc loc);
 
     // ----- expr_visitor overrides ------------------------------------
     void visit(binary_expr           &e) override;

@@ -27,12 +27,14 @@ namespace xld {
     struct cli_options {
         std::vector<std::filesystem::path> input_files;
         std::filesystem::path output_file = "a.out";
+        std::optional<std::filesystem::path> script_file;
         std::optional<std::filesystem::path> cdb_file;
         std::optional<std::filesystem::path> sdcc_runtime_dir;
         std::string entry_symbol = "_main";
         link_mode mode = link_mode::sdcc;
         std::vector<address_range> reserved_ranges;
         std::map<std::string, uint16_t> area_bases;
+        std::vector<std::string> area_order;
         std::optional<address_range> output_range;
         output_format format = output_format::xl;
         bool debug_info = false;

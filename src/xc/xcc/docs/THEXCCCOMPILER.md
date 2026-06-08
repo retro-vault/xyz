@@ -66,7 +66,7 @@ semantic check
   ->
 IR generator
   ->
-IR optimizer (-O2 and experimental -O3)
+IR optimizer (-O2, -Of / -Os promoted baseline, and experimental -O3)
   ->
 Z80 code generator
   ->
@@ -127,9 +127,10 @@ Important options today:
 
 - `-O0`: no optimization
 - `-O1`: peephole optimizer after assembly generation; the simplest fixed-window peepholes are now table-driven while the more contextual ones still use custom matchers
-- `-O2`: general optimization, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; the core local algebraic identities are now shared through one small declarative rule table instead of duplicated `switch` logic
-- `-O3`: experimental optimization built on top of `-O2`; it still serves as the landing zone for broader analysis budgets and new backend ideas, and it now carries an experimental dense-switch jump-table pass that makes it distinct again on the benchmark suite
-- `-Os`: size optimization built on top of `-O2`; the current public size preset is conservative and currently converges to stable `-O2` on the executable benchmark suite
+- `-O2`: general optimization, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, direct control-condition lowering, counted-byte-loop narrowing, loop pointer-walk canonicalization, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; the core local algebraic identities are now shared through one small declarative rule table instead of duplicated `switch` logic
+- `-Of`: speed optimization; it now shares the current proven aggressive baseline with `-O3` and `-Os`
+- `-O3`: experimental optimization; it currently starts from the same promoted baseline as `-Of` / `-Os`, so it is free again to host genuinely new experiments rather than just hoarding already-proven wins
+- `-Os`: size optimization; it now also shares that same promoted aggressive baseline, while still allowing size-biased backend choices where they exist
 - `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info
 - `-masm=sdasz80` or `-masm=gnuas`: choose assembly dialect
@@ -232,7 +233,8 @@ Important target sizes in this compiler:
 - `long`: 4 bytes
 - `long long`: 8 bytes
 - pointer: 2 bytes
-- `float` and `double`: 4 bytes
+- `float`: 4 bytes
+- `double`: 8 bytes
 
 So the frontend already knows the target machine well before codegen starts.
 

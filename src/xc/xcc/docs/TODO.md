@@ -13,7 +13,7 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | Feature | Notes |
 |---------|-------|
 | All integer types + `_Bool` | Z80 sizes: char=1, short/int=2, long=4 |
-| `float` / `double` | Stored as 4-byte IEEE 754; arithmetic via soft-float stubs (`__fsadd/__fssub/__fsmul/__fsdiv/__fitosf/__fstoi`); binary operator type now inferred from operands when parser annotation absent |
+| `float` / `double` | `float` is 4-byte IEEE 754 single; `double` is 8-byte IEEE 754 double; arithmetic lowered through runtime soft-float helpers |
 | Pointers (any depth), arrays (fixed-size) | 16-bit flat address space |
 | `struct`, `union` | Field read/write, compound-assign on fields, pointer-to-struct (`->`), nested structs, aggregate `{...}` init (locals); bit-fields; anonymous struct/union promotion |
 | `enum` | Enumerators usable as integer constants |
@@ -42,7 +42,7 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | Global aggregate initializers `{…}` | `int a[3] = {1,2,3};` at file scope; per-element `.dw`/`.db` in `_DATA` |
 | Compound assignment on array subscript | `a[i] += n`, `a[i] -= n`, etc. — write-back via ADD+SET_VALUE_AT |
 | Designated initializers | `.field = value` and `[N] = value`; struct fields by name, array elements by absolute offset; `init_list_expr::elem` carries designation info |
-| Floating-point arithmetic (soft-float stubs) | FADD/FSUB/FMUL/FDIV/FITOSF/FSTOI opcodes; `gen_float_arith()` calls `__fsadd/__fssub/__fsmul/__fsdiv/__fitosf/__fstoi` stubs |
+| Floating-point arithmetic | FADD/FSUB/FMUL/FDIV/FITOSF/FSTOI opcodes; `gen_float_arith()` calls runtime soft-float helpers |
 | `long long` ADD / SUB | Inline 4-word carry/borrow chain in z80gen; `is_llong_op()` guard |
 | `long long` MUL / DIV / MOD | `__mulll`, `__divll`, `__modll` stubs; args pushed as 4 words each |
 | `_Static_assert` with enum constants | `eval_const_expr()` resolves `ident_expr` with `sym_kind::ENUM_CONST` via `sym->enum_val` |
@@ -76,7 +76,7 @@ but meaningless on a single-threaded, bare-metal Z80 target.
 | `_BitInt` | C23 bit-precise integers |
 | `_Generic` with non-identity compatible types | Current matching is exact kind+tag |
 | Soft-float arithmetic | Codegen calls `__fsadd` etc.; link SDCC's `libsdcc` for real IEEE 754 |
-| `long long` mul/div/mod | Codegen calls `__mulll/__divll/__modll`; stubs return 0 |
+| `long long` mul/div/mod | Codegen calls `__mulll/__divll/__modll`; runtime helpers are active |
 
 ### Z80 N/A — in C11 standard but not practical on bare-metal Z80
 

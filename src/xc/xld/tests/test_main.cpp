@@ -12,6 +12,7 @@
 #include <functional>
 #include <iostream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 // Simple test framework.
@@ -49,6 +50,8 @@ template<typename T>
 auto printable(T v) {
     if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
         return static_cast<int>(v);
+    else if constexpr (std::is_enum_v<T>)
+        return static_cast<std::underlying_type_t<T>>(v);
     else
         return v;
 }
@@ -77,13 +80,16 @@ auto printable(T v) {
 
 // Include all test files.
 #include "test_rel_parser.cpp"
+#include "test_cli.cpp"
 #include "test_lib_parser.cpp"
 #include "test_area_placer.cpp"
 #include "test_binary_emitter.cpp"
 #include "test_relocator.cpp"
 #include "test_linker.cpp"
 #include "test_runtime.cpp"
+#include "test_adb_parser.cpp"
 #include "test_cdb_emitter.cpp"
+#include "test_elf_debug_emitter.cpp"
 
 int main() {
     int passed = 0, failed = 0;

@@ -65,8 +65,21 @@ __xcc_L2:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-20(ix), e
-	ld	-19(ix), d
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-20(ix), l
+	ld	-19(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-18(ix), l
+	ld	-17(ix), h
+	pop	hl
 	push	ix
 	pop	hl
 	ld	bc, #-20
@@ -100,8 +113,21 @@ __xcc_L2:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-32(ix), e
-	ld	-31(ix), d
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-32(ix), l
+	ld	-31(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-30(ix), l
+	ld	-29(ix), h
+	pop	hl
 	push	ix
 	pop	hl
 	ld	bc, #-32
@@ -134,8 +160,21 @@ __xcc_L2:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-44(ix), e
-	ld	-43(ix), d
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-44(ix), l
+	ld	-43(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-42(ix), l
+	ld	-41(ix), h
+	pop	hl
 	push	ix
 	pop	hl
 	ld	bc, #-44
@@ -169,8 +208,21 @@ __xcc_L2:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-56(ix), e
-	ld	-55(ix), d
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-56(ix), l
+	ld	-55(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-54(ix), l
+	ld	-53(ix), h
+	pop	hl
 	push	ix
 	pop	hl
 	ld	bc, #-56
@@ -246,8 +298,21 @@ __xcc_L5:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-76(ix), e
-	ld	-75(ix), d
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-76(ix), l
+	ld	-75(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-74(ix), l
+	ld	-73(ix), h
+	pop	hl
 	push	ix
 	pop	hl
 	ld	bc, #-76

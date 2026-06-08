@@ -416,7 +416,7 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
     }
 
     if (!temp_slot_reuse_safe(fn)) {
-        if (opt_settings_.level == opt_level::O3) {
+        if (o3_baseline_enabled()) {
             int dedicated_bytes = 0;
             std::unordered_map<int, std::vector<temp_interval>> region_locals;
 
@@ -1290,7 +1290,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     std::vector<std::pair<int, int>> c_windows;
     std::vector<std::pair<int, int>> hl_windows;
 
-    if (opt_settings_.level == opt_level::O3) {
+    if (o3_baseline_enabled()) {
         auto force_bench_fill_lanes = [&]() {
             auto find_temp_zero_init_before = [&](int tid, int before_idx) {
                 auto it = ivs.find(tid);
@@ -1721,7 +1721,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (opt_settings_.level == opt_level::O3) {
+    if (o3_baseline_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
             int score = 0;
@@ -1804,7 +1804,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (opt_settings_.level == opt_level::O3) {
+    if (o3_baseline_enabled()) {
         for (const auto &cand : hl_candidates) {
             if (temp_regs_.find(cand.id) != temp_regs_.end())
                 continue;
@@ -1824,7 +1824,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (opt_settings_.level == opt_level::O3) {
+    if (o3_baseline_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
             if (iv.size != 1)                         continue;

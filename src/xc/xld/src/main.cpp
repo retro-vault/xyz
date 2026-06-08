@@ -16,6 +16,7 @@
 #include <xld/linker.h>
 #include <xld/binary_emitter.h>
 #include <xld/debug_emitter.h>
+#include <xld/elf_debug_emitter.h>
 #include <xld/errors.h>
 #include <xld/runtime.h>
 
@@ -43,16 +44,14 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-        if (opts.mode == xld::link_mode::gnu) {
-            throw xld::xld_error("GNU mode is not implemented yet");
-        }
-
-        xld::runtime::apply_sdcc_runtime(opts);
+        if (opts.mode == xld::link_mode::sdcc)
+            xld::runtime::apply_sdcc_runtime(opts);
 
         xld::link_context ctx;
         ctx.entry_name = opts.entry_symbol;
         ctx.holes = opts.reserved_ranges;
         ctx.area_bases = opts.area_bases;
+        ctx.area_order = opts.area_order;
         ctx.output_range = opts.output_range;
         ctx.format = opts.format;
         ctx.verbose = opts.verbose;
@@ -65,13 +64,21 @@ int main(int argc, char* argv[]) {
         xld::binary_emitter::emit(opts.output_file, ctx);
 
         if (opts.debug_info) {
-            opts.cdb_file = replace_extension(opts.output_file, ".cdb");
+            opts.cdb_file = replace_extension(
+                opts.output_file,
+                opts.mode == xld::link_mode::gnu ? ".elf" : ".cdb");
         }
 
         if (opts.cdb_file.has_value()) {
-            xld::cdb_emitter emitter;
-            const xld::debug_emitter& debug = emitter;
-            debug.emit(opts.cdb_file.value(), opts.output_file, ctx);
+            if (opts.mode == xld::link_mode::gnu) {
+                xld::elf_debug_emitter emitter;
+                const xld::debug_emitter& debug = emitter;
+                debug.emit(opts.cdb_file.value(), opts.output_file, ctx);
+            } else {
+                xld::cdb_emitter emitter;
+                const xld::debug_emitter& debug = emitter;
+                debug.emit(opts.cdb_file.value(), opts.output_file, ctx);
+            }
         }
 
         if (ctx.verbose) {

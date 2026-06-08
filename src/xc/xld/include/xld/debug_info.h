@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include <xbfd/xbfd.h>
 #include <xld/adb_parser.h>
 #include <xld/link_context.h>
 
@@ -33,6 +34,7 @@ namespace xld {
         std::optional<uint32_t> line;
         std::optional<std::string> return_type;
         bool file_local = false;
+        xbfd::calling_convention calling_convention = xbfd::calling_convention::unknown;
     };
 
     struct linked_module_debug_info {
@@ -42,6 +44,7 @@ namespace xld {
         std::map<uint32_t, uint32_t> line_by_address;
         std::map<std::string, debug_function_info> functions;
         std::optional<adb_document> adb;
+        std::optional<xbfd::debug_info> cdb;
     };
 
     struct linked_debug_info {

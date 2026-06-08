@@ -451,9 +451,9 @@ SDAS Z80 assembler source.  Link with every xcc-compiled program.
 | `__div32` | 32-bit divide; result in DE:HL | working |
 | `__mod32` | 32-bit modulo; result in DE:HL | working |
 | `__call_hl` | Indirect call trampoline: `jp (hl)` | working |
-| `__fsadd/__fssub/__fsmul/__fsdiv` | Soft-float arithmetic | **stub (returns 0)** |
-| `__fitosf/__fstoi` | Integer ↔ soft-float conversion | **stub (returns 0)** |
-| `__mulll/__divll/__modll` | 64-bit multiply/divide/modulo | **stub (returns 0)** |
+| `__fsadd/__fssub/__fsmul/__fsdiv` | Soft-float arithmetic | working |
+| `__fitosf/__fstoi` | Integer ↔ soft-float conversion | working |
+| `__mulll/__divll/__modll` | 64-bit multiply/divide/modulo | working |
 | `__atomic_*` (18 symbols) | Atomic ops via DI/EI | **stub** |
 
 ---

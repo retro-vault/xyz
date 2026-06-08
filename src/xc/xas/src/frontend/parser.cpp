@@ -444,8 +444,10 @@ namespace xas {
             return s;
         }
 
-        // .dl expr — emit 32-bit (double-long) value (SDCC extension)
-        if (name == "dl") {
+        // .dl / .long expr — emit 32-bit value
+        if (name == "dl" || name == "long") {
+            if (name == "long")
+                s.directive_name = "dl"; // normalize GNU spelling
             do { s.args.push_back(parse_expr()); } while (eat(token_kind::comma));
             skip_to_newline();
             return s;

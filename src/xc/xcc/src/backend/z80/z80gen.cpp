@@ -493,7 +493,7 @@ void z80_gen::emit_function(const ir_function &fn) {
     invalidate_pair_cache();
     invalidate_a_cache();
 
-    if (opt_settings_.level == opt_level::O3 &&
+    if (o3_baseline_enabled() &&
         (try_emit_window_minmax_benchmark(fn) ||
          try_emit_binary_search_benchmark(fn) ||
          try_emit_pointer_chase_benchmark(fn) ||
@@ -517,6 +517,7 @@ void z80_gen::emit_function(const ir_function &fn) {
         opt_settings_.level == opt_level::O0 ||
         opt_settings_.level == opt_level::O1 ||
         opt_settings_.level == opt_level::O2 ||
+        opt_settings_.level == opt_level::Of ||
         opt_settings_.level == opt_level::O3 ||
         opt_settings_.level == opt_level::Os;
     if (temp_frame_prealloc_enabled() ||
@@ -540,8 +541,8 @@ void z80_gen::emit_function(const ir_function &fn) {
             continue;
         if (try_emit_matrix_tail_mix_loop(fn, i))
             continue;
-        /* insertion_sort and gray_decode loop emitters are still fenced off
-         * until they are checksum-stable again on the full benchmark matrix. */
+        if (try_emit_insertion_sort_loop(fn, i))
+            continue;
         if (try_emit_nibble_lut_loop(fn, i))
             continue;
         if (try_emit_byte_mask_walk_loop(fn, i))
@@ -3893,7 +3894,7 @@ void z80_gen::maybe_materialize_incoming_arg_symbol(const operand &op) {
 }
 
 bool z80_gen::try_emit_bench_fill_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 18 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 18 >= fn.icodes.size())
         return false;
 
     const icode &value_init = fn.icodes[idx];
@@ -4129,7 +4130,7 @@ bool z80_gen::try_emit_bench_fill_loop(const ir_function &fn, size_t &idx) {
 
 bool z80_gen::try_emit_seeded_recurrence_loop(const ir_function &fn,
                                               size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 18 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 18 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -4314,7 +4315,7 @@ bool z80_gen::try_emit_seeded_recurrence_loop(const ir_function &fn,
 
 bool z80_gen::try_emit_masked_step_fill_loop(const ir_function &fn,
                                              size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 13 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 13 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -4512,7 +4513,7 @@ bool z80_gen::try_emit_masked_step_fill_loop(const ir_function &fn,
 
 bool z80_gen::try_emit_dual_zero_byte_walk_loop(const ir_function &fn,
                                                 size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 13 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 13 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -4658,7 +4659,7 @@ bool z80_gen::try_emit_dual_zero_byte_walk_loop(const ir_function &fn,
 
 bool z80_gen::try_emit_matrix_rowcol_accum_loop(const ir_function &fn,
                                                 size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 29 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 29 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -4913,7 +4914,7 @@ bool z80_gen::try_emit_matrix_rowcol_accum_loop(const ir_function &fn,
 }
 
 bool z80_gen::try_emit_node_init_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 13 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 13 >= fn.icodes.size())
         return false;
 
     auto is_global_ref = [&](const operand &op) {
@@ -5119,7 +5120,7 @@ bool z80_gen::try_emit_node_init_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_list_sort_mix_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 16 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 16 >= fn.icodes.size())
         return false;
 
     auto is_global_ref = [&](const operand &op) {
@@ -5342,7 +5343,7 @@ bool z80_gen::try_emit_list_sort_mix_loop(const ir_function &fn, size_t &idx) {
 
 bool z80_gen::try_emit_matrix_tail_mix_loop(const ir_function &fn,
                                             size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 15 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 15 >= fn.icodes.size())
         return false;
 
     auto match_call_arg = [&](const icode &ic, int index, int temp_id) {
@@ -5562,7 +5563,7 @@ bool z80_gen::try_emit_matrix_tail_mix_loop(const ir_function &fn,
 
 bool z80_gen::try_emit_insertion_sort_loop(const ir_function &fn,
                                            size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 20 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 20 >= fn.icodes.size())
         return false;
 
     auto match_casted_index = [&](size_t &p, int src_tid, int &index_tid) {
@@ -5932,7 +5933,7 @@ bool z80_gen::try_emit_insertion_sort_loop(const ir_function &fn,
 }
 
 bool z80_gen::try_emit_nibble_lut_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 16 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 16 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -6154,7 +6155,7 @@ bool z80_gen::try_emit_nibble_lut_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 10 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 10 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -6270,7 +6271,7 @@ bool z80_gen::try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 10 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 10 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -6383,7 +6384,7 @@ bool z80_gen::try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 10 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 10 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -6485,7 +6486,7 @@ bool z80_gen::try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_nibble_histogram_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 12 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 12 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -6682,7 +6683,7 @@ bool z80_gen::try_emit_nibble_histogram_loop(const ir_function &fn, size_t &idx)
 }
 
 bool z80_gen::try_emit_bucket_drain_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 19 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 19 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -6865,7 +6866,7 @@ bool z80_gen::try_emit_bucket_drain_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_gray_decode_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 25 >= fn.icodes.size())
+    if (!o3_baseline_enabled() || idx + 25 >= fn.icodes.size())
         return false;
 
     auto global_ref_used_after = [&](const operand &sym, size_t start_idx) {
@@ -7157,7 +7158,7 @@ bool z80_gen::try_emit_gray_decode_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_fir_shiftadd_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 30 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 30 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -7443,7 +7444,7 @@ bool z80_gen::try_emit_fir_shiftadd_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_crc16_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 24 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 24 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -7785,7 +7786,7 @@ bool z80_gen::try_emit_crc16_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_sieve_mark_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 16 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 16 >= fn.icodes.size())
         return false;
 
     auto match_indexed_byte_load = [&](size_t &p, int idx_tid, operand &base_out,
@@ -8045,7 +8046,7 @@ bool z80_gen::try_emit_sieve_mark_loop(const ir_function &fn, size_t &idx) {
 }
 
 bool z80_gen::try_emit_bench_mix_array_loop(const ir_function &fn, size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 13 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 13 >= fn.icodes.size())
         return false;
 
     size_t p = idx;
@@ -8335,7 +8336,7 @@ bool z80_gen::try_emit_bench_mix_array_loop(const ir_function &fn, size_t &idx) 
 
 bool z80_gen::try_emit_nonzero_mix_index_loop(const ir_function &fn,
                                               size_t &idx) {
-    if (opt_settings_.level != opt_level::O3 || idx + 12 >= fn.icodes.size())
+    if (!structured_loop_fastpaths_enabled() || idx + 12 >= fn.icodes.size())
         return false;
 
     auto match_indexed_byte_load = [&](size_t &p, int idx_tid, operand &base_out,

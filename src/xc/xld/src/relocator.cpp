@@ -153,6 +153,16 @@ namespace xld {
                         // relocated field.
                         uint16_t pc = patch_offset + (is_word ? 2 : 1);
                         value = existing + target - pc;
+
+                        if (!is_word) {
+                            // 8-bit PC-relative branches must still fit after
+                            // final placement, including any reserved holes or
+                            // linker-added branch-size rewrites.
+                            if (value > 0x007F && value < 0xFF80) {
+                                throw reloc_error(
+                                    "PC-relative relocation out of range");
+                            }
+                        }
                     }
 
                     // Patch the buffer.

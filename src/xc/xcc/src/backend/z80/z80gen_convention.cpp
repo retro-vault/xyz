@@ -275,11 +275,7 @@ void abi_convention::emit_legacy_return_value(z80_gen &g, const operand &value)
         g.load_a(value);
         g.emit_line("ld\tl, a");
     } else if (sz == 8) {
-        g.load_hl_word(value, 0);
-        g.emit_line("push\thl");
-        g.load_hl_word(value, 1);
-        g.emit_line("ex\tde, hl");
-        g.emit_line("pop\thl");
+        g.load_reg64(value);
     } else if (sz == 4) {
         g.load_hl_hi32(value);
         g.emit_line("push\thl");
@@ -298,6 +294,8 @@ void abi_convention::emit_store_legacy_result(z80_gen &g, const icode &ic)
     if (sz == 1) {
         g.emit_line("ld\ta, l");
         g.store_a(ic.result);
+    } else if (sz == 8) {
+        g.store_reg64(ic.result);
     } else if (sz == 4) {
         g.store_hl_lo32(ic.result);
         g.emit_line("push\tde");
@@ -316,11 +314,7 @@ void abi_convention::emit_modern_return_value(z80_gen &g, const operand &value)
     if (sz == 1) {
         g.load_a(value);
     } else if (sz == 8) {
-        g.load_hl_word(value, 0);
-        g.emit_line("push\thl");
-        g.load_hl_word(value, 1);
-        g.emit_line("ex\tde, hl");
-        g.emit_line("pop\thl");
+        g.load_reg64(value);
     } else if (sz == 4) {
         g.load_hl_lo32(value);
         g.emit_line("push\thl");
@@ -339,6 +333,8 @@ void abi_convention::emit_store_modern_result(z80_gen &g, const icode &ic)
     int sz = g.op_size(ic.result);
     if (sz == 1) {
         g.store_a(ic.result);
+    } else if (sz == 8) {
+        g.store_reg64(ic.result);
     } else if (sz == 4) {
         g.emit_line("ld\tb, h");
         g.emit_line("ld\tc, l");
@@ -871,8 +867,7 @@ struct cc_sdcccall1 final : abi_convention {
             g.emit_line("add\tix, sp");
             bool retain_incoming_regs =
                 g.opt_settings_.level == opt_level::O2 ||
-                g.opt_settings_.level == opt_level::O3 ||
-                g.opt_settings_.level == opt_level::Os;
+                g.o3_baseline_enabled();
             std::unordered_map<size_t, temp_home> retained;
             bool retain_hl_like = false;
             bool retain_de = false;

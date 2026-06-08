@@ -26,7 +26,7 @@ void dwarf2_writer::abbrev() {
          << "\t.byte 0x25,0x08\n\t.byte 0x13,0x05\n\t.byte 0x03,0x08\n"
          << "\t.byte 0x11,0x01\n\t.byte 0x12,0x01\n\t.byte 0x10,0x06\n\t.byte 0x00,0x00\n"
          << "\t.byte 2\n\t.byte 0x2e\n\t.byte 0x00\n"
-         << "\t.byte 0x03,0x08\n\t.byte 0x11,0x01\n\t.byte 0x12,0x01\n\t.byte 0x3f,0x0c\n"
+         << "\t.byte 0x03,0x08\n\t.byte 0x11,0x01\n\t.byte 0x12,0x01\n\t.byte 0x3f,0x0c\n\t.byte 0x36,0x0b\n"
          << "\t.byte 0x00,0x00\n\t.byte 0x00\n";
 }
 
@@ -41,6 +41,7 @@ void dwarf2_writer::info(const std::string& producer) {
         out_ << "\t.byte 2\n";
         str(fn.c);
         out_ << "\t.word " << fn.m << "\n\t.word " << el(fn.c) << "\n\t.byte " << (fn.g ? 1 : 0) << "\n";
+        out_ << "\t.byte " << static_cast<int>(fn.cc) << "\n";
     }
     out_ << "\t.byte 0\n.Ldebug_info_end:\n";
 }
@@ -62,8 +63,9 @@ void dwarf2_writer::on_module_end(const std::string& p) {
 }
 
 void dwarf2_writer::on_function_begin(const std::string& c, const std::string& m,
-                                       bool g, const type_ref&) {
-    fns_.push_back({c, m, g});
+                                       bool g, const type_ref&,
+                                       calling_convention cc) {
+    fns_.push_back({c, m, g, cc});
 }
 
 void dwarf2_writer::on_function_end(const std::string& c) {

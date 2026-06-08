@@ -39,6 +39,10 @@ need_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"
 }
 
+if [[ "$XCC" != /* ]]; then
+    XCC="$(cd "$(dirname "$XCC")" && pwd)/$(basename "$XCC")"
+fi
+
 build_runner() {
     mkdir -p "$ROOT_DIR/build/bin"
     if [[ ! -x "$RUNNER_BIN" || "$RUNNER_SRC" -nt "$RUNNER_BIN" ]]; then
@@ -107,15 +111,16 @@ add_runtime_module() {
 }
 
 resolve_modules() {
-    local asm_file="$1"
     MODULES=()
     SEEN=()
 
-    local helpers
-    helpers="$(grep -o '__[A-Za-z0-9_]\+' "$asm_file" | sort -u || true)"
-    while IFS= read -r helper; do
-        [[ -n "$helper" ]] || continue
-        case "$helper" in
+    local asm_file
+    for asm_file in "$@"; do
+        local helpers
+        helpers="$(grep -o '__[A-Za-z0-9_]\+' "$asm_file" | sort -u || true)"
+        while IFS= read -r helper; do
+            [[ -n "$helper" ]] || continue
+            case "$helper" in
         __mul16)
             add_runtime_module "int16/mulint.s"
             ;;
@@ -208,6 +213,55 @@ resolve_modules() {
         __smod32)
             add_runtime_module "int32/modslong.s"
             ;;
+        __mulll)
+            add_runtime_module "int64/mulll.s"
+            add_runtime_module "int32/muluint2slong.s"
+            ;;
+        __divull|__div64)
+            add_runtime_module "int64/divull.s"
+            ;;
+        __divsll|__sdiv64)
+            add_runtime_module "int64/divsll.s"
+            ;;
+        __modull|__mod64)
+            add_runtime_module "int64/modull.s"
+            ;;
+        __modsll|__smod64)
+            add_runtime_module "int64/modsll.s"
+            ;;
+        __shl64)
+            add_runtime_module "int64/shl64.s"
+            ;;
+        __shr64u)
+            add_runtime_module "int64/shr64u.s"
+            ;;
+        __shr64s)
+            add_runtime_module "int64/shr64s.s"
+            ;;
+        ___sint2ll)
+            add_runtime_module "int64/sint2ll.s"
+            ;;
+        ___uint2ll)
+            add_runtime_module "int64/uint2ll.s"
+            ;;
+        ___slong2ll)
+            add_runtime_module "int64/slong2ll.s"
+            ;;
+        ___ulong2ll)
+            add_runtime_module "int64/ulong2ll.s"
+            ;;
+        ___ll2sint)
+            add_runtime_module "int64/ll2sint.s"
+            ;;
+        ___ll2uint)
+            add_runtime_module "int64/ll2uint.s"
+            ;;
+        ___ll2slong)
+            add_runtime_module "int64/ll2slong.s"
+            ;;
+        ___ll2ulong)
+            add_runtime_module "int64/ll2ulong.s"
+            ;;
         __fsadd)
             add_runtime_module "float/fsadd.s"
             add_runtime_module "float/fp_zero32.s"
@@ -233,6 +287,83 @@ resolve_modules() {
             add_runtime_module "float/fpunpack.s"
             add_runtime_module "float/fpmant.s"
             ;;
+        ___fscmp)
+            add_runtime_module "float/fscmp.s"
+            add_runtime_module "float/fpret.s"
+            ;;
+        ___slong2fs)
+            add_runtime_module "int32/slong2fs.s"
+            add_runtime_module "int32/ulong2fs.s"
+            ;;
+        ___ulong2fs)
+            add_runtime_module "int32/ulong2fs.s"
+            ;;
+        ___fs2slong)
+            add_runtime_module "int32/fs2slong.s"
+            add_runtime_module "float/fp_zero32.s"
+            add_runtime_module "int32/fs2u32mag.s"
+            ;;
+        ___fs2ulong)
+            add_runtime_module "int32/fs2ulong.s"
+            add_runtime_module "float/fp_zero32.s"
+            add_runtime_module "int32/fs2u32mag.s"
+            ;;
+        __dbadd|___dbadd)
+            add_runtime_module "double/dbadd.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        __dbsub|___dbsub)
+            add_runtime_module "double/dbsub.s"
+            add_runtime_module "double/dbadd.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        ___dbmul)
+            add_runtime_module "double/dbmul.s"
+            ;;
+        ___dbdiv)
+            add_runtime_module "double/dbdiv.s"
+            ;;
+        ___dbcmp)
+            add_runtime_module "double/dbcmp.s"
+            ;;
+        ___dbeq)
+            add_runtime_module "double/dbeq.s"
+            add_runtime_module "double/dbcmp.s"
+            ;;
+        ___dblt)
+            add_runtime_module "double/dblt.s"
+            add_runtime_module "double/dbcmp.s"
+            ;;
+        ___fs2db)
+            add_runtime_module "double/fs2db.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        ___db2fs)
+            add_runtime_module "double/db2fs.s"
+            ;;
+        ___sint2db|___uint2db)
+            add_runtime_module "double/sint2db.s"
+            add_runtime_module "double/ull2db.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        ___slong2db|___ulong2db)
+            add_runtime_module "double/slong2db.s"
+            add_runtime_module "double/ull2db.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        ___ull2db|___sll2db)
+            add_runtime_module "double/ull2db.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        ___db2sint|___db2uint|___db2slong|___db2ulong|___db2ull)
+            add_runtime_module "double/db2int.s"
+            add_runtime_module "double/db2ll.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
+        ___db2sll)
+            add_runtime_module "double/db2ll.s"
+            add_runtime_module "double/db_zero.s"
+            ;;
         __call_hl)
             add_runtime_module "jumps/call_hl_runtime.s"
             ;;
@@ -242,8 +373,9 @@ resolve_modules() {
         __sdcc_call_bc)
             add_runtime_module "jumps/call_bc_runtime.s"
             ;;
-        esac
-    done <<< "$helpers"
+            esac
+        done <<< "$helpers"
+    done
 }
 
 compile_xcc() {
@@ -268,13 +400,11 @@ run_sdasz80() {
     local test_rel="$workdir/$name.rel"
     local crt_rel="$workdir/crt0.rel"
     local outbase="$workdir/$name"
-
     compile_xcc "$c_file" "$asm_file" "sdasz80" "$opt_level"
     resolve_modules "$asm_file"
 
     sdasz80 -o "$crt_rel" "$CRT0_SDAS" >/dev/null
     sdasz80 -o "$test_rel" "$asm_file" >/dev/null
-
     local rels=("$crt_rel" "$test_rel")
     local src
     for src in "${MODULES[@]}"; do
@@ -302,14 +432,12 @@ run_gnuas() {
     local elf_file="$workdir/$name.elf"
     local bin_file="$workdir/$name.bin"
     local gnu_runtime_dir="$workdir/gnu_runtime"
-
     compile_xcc "$c_file" "$asm_file" "gnuas" "$opt_level"
     resolve_modules "$asm_file"
 
     mkdir -p "$gnu_runtime_dir"
     "$GNU_AS" -march=z80 -o "$crt_o" "$CRT0_GNU"
     "$GNU_AS" -march=z80 -o "$test_o" "$asm_file"
-
     local objs=("$crt_o" "$test_o")
     local src
     for src in "${MODULES[@]}"; do

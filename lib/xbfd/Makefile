@@ -17,6 +17,9 @@ SOURCES  := \
     debug_info/map_reader.cpp \
     debug_info/dwarf2_writer.cpp \
     debug_info/writer.cpp \
+    lscript/lscript.cpp \
+    lscript/gnu_lscript.cpp \
+    lscript/sdcc_lscript.cpp \
     object/bfd.cpp \
     object/rel_reader.cpp \
     object/rel_writer.cpp \

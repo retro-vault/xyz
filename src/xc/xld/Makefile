@@ -23,15 +23,15 @@ TEST_TARGET     = xld_tests
 OUTPUT_DIR      = $(BUILD_DIR)/xc/xld
 BIN_OUTPUT      = $(HOST_BIN_DIR)
 
-.PHONY: all test clean
+.PHONY: all test clean xbfd-lib
 
-all: $(BIN_OUTPUT)/$(TARGET)
+all: xbfd-lib $(BIN_OUTPUT)/$(TARGET)
 
-$(BIN_OUTPUT)/$(TARGET): $(SOURCES) $(HEADERS) $(XBFD_LIB) | $(BIN_OUTPUT) $(OUTPUT_DIR)
+$(BIN_OUTPUT)/$(TARGET): $(SOURCES) $(HEADERS) | $(BIN_OUTPUT) $(OUTPUT_DIR)
 	$(CXX) -o $@ $(SOURCES) \
 		$(CXXFLAGS) $(INCLUDE) $(XBFD_LIB)
 
-$(XBFD_LIB):
+xbfd-lib:
 	$(MAKE) -C $(XBFD_DIR)
 
 $(OUTPUT_DIR):
@@ -40,7 +40,7 @@ $(OUTPUT_DIR):
 $(BIN_OUTPUT):
 	mkdir -p $(BIN_OUTPUT)
 
-test: $(XBFD_LIB) $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
+test: xbfd-lib $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
 	$(CXX) -o $(OUTPUT_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
 		$(CXXFLAGS) $(INCLUDE) -Itests $(XBFD_LIB)
 	$(OUTPUT_DIR)/$(TEST_TARGET)

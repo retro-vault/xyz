@@ -9,6 +9,26 @@
 
 namespace xcc {
 
+namespace {
+
+bool same_call_result_operand(const operand &a, const operand &b) {
+    if (a.kind != b.kind)
+        return false;
+    switch (a.kind) {
+    case operand_kind::TEMP:
+        return a.temp_id == b.temp_id;
+    case operand_kind::SYMBOL:
+        return a.name == b.name &&
+               a.stack_offset == b.stack_offset &&
+               a.byte_offset == b.byte_offset &&
+               a.is_global == b.is_global;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
 void z80_gen::gen_label(const icode &ic) {
     emit_label(ic.label_name, false);
 }
@@ -33,6 +53,8 @@ void z80_gen::gen_ifx(const icode &ic) {
 }
 
 void z80_gen::gen_function(const icode &) {
+    direct_call_return_pending_ = false;
+    direct_call_return_value_ = operand{};
     if (cur_fn_) emit_prologue(*cur_fn_);
 }
 
@@ -41,7 +63,15 @@ void z80_gen::gen_endfunction(const icode &) {
 }
 
 void z80_gen::gen_return(const icode &ic) {
-    cur_convention_->emit_return_value(*this, ic.left);
+    if (direct_call_return_pending_ &&
+        same_call_result_operand(ic.left, direct_call_return_value_)) {
+        direct_call_return_pending_ = false;
+        direct_call_return_value_ = operand{};
+    } else {
+        direct_call_return_pending_ = false;
+        direct_call_return_value_ = operand{};
+        cur_convention_->emit_return_value(*this, ic.left);
+    }
     emit_line("jp\t%s", fn_end_lbl_.c_str());
 }
 
@@ -56,6 +86,8 @@ void z80_gen::gen_receive(const icode &ic) {
 }
 
 void z80_gen::gen_call(const icode &ic) {
+    direct_call_return_pending_ = false;
+    direct_call_return_value_ = operand{};
     auto &conv = get_abi_convention(ic.callee_abi);
 
     // Emit the CALL instruction.
@@ -70,8 +102,20 @@ void z80_gen::gen_call(const icode &ic) {
     // Stack cleanup via the callee's convention (only pops stack-passed args).
     conv.emit_call_cleanup(*this, ic);
 
-    // Collect return value.
-    conv.emit_store_call_result(*this, ic);
+    bool direct_return = false;
+    if (cur_fn_ && !ic.result.is_none() &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+        const auto &next = cur_fn_->icodes[cur_ic_index_ + 1];
+        direct_return = next.op == icode_op::RETURN &&
+                        same_call_result_operand(next.left, ic.result);
+    }
+
+    if (direct_return) {
+        direct_call_return_pending_ = true;
+        direct_call_return_value_ = ic.result;
+    } else {
+        conv.emit_store_call_result(*this, ic);
+    }
 }
 
 } // namespace xcc

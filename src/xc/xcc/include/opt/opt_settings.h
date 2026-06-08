@@ -18,8 +18,9 @@ enum class opt_level {
     O0 = 0, // no optimization
     O1 = 1, // peephole rules
     O2 = 2, // general optimization
-    O3 = 3, // experimental optimization
-    Os = 4, // size optimization
+    O3 = 3, // single-translation-unit experimental optimization
+    Of = 4, // speed optimization
+    Os = 5, // size optimization
 };
 
 struct optimization_settings {
@@ -102,6 +103,9 @@ struct optimization_settings {
             s.dead_code_elim = true;
             s.scalar_local_promotion = true;
             s.reg_param_promotion = true;
+            s.short_circuit_bool_ifx = true;
+            s.narrow_counted_byte_loops = true;
+            s.loop_pointer_walk = true;
             s.promoted_byte_compare = true;
             s.promoted_byte_ops = true;
             s.rotate_combine = true;
@@ -111,22 +115,23 @@ struct optimization_settings {
             s.regalloc = true;
             s.compare_ifx_fusion = true;
             s.frame_omit = true;
+            s.switch_jump_tables = true;
+            break;
+
+        case opt_level::Of:
+            s = for_level(opt_level::O3);
+            s.level = level;
             break;
 
         case opt_level::O3:
             s = for_level(opt_level::O2);
             s.level = level;
             s.inline_static_functions = true;
-            s.short_circuit_bool_ifx = true;
-            s.narrow_counted_byte_loops = true;
-            s.loop_pointer_walk = true;
-            s.switch_jump_tables = true;
             break;
 
         case opt_level::Os:
-            s = for_level(opt_level::O2);
+            s = for_level(opt_level::O3);
             s.level = level;
-            s.inline_static_functions = false;
             break;
 
         }

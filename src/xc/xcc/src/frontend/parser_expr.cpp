@@ -482,7 +482,15 @@ expr_ptr parser::parse_primary_expression() {
         auto e = std::make_unique<float_literal_expr>();
         e->loc   = t.loc;
         e->value = t.fval;
-        e->type  = type::make_double();
+        if (!t.text.empty()) {
+            char suffix = t.text.back();
+            if (suffix == 'f' || suffix == 'F')
+                e->type = type::make_float();
+            else
+                e->type = type::make_double();
+        } else {
+            e->type = type::make_double();
+        }
         return e;
     }
     if (check(tk::CHAR_LIT)) {

@@ -13,8 +13,8 @@ or a known limitation is fixed.
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Integer arithmetic (8/16/32 bit) | Complete | All ops through runtime helpers |
-| 64-bit integers (`long long`) | Partial | Type exists; arithmetic stubs (returns 0) |
-| Floating-point (`float`, `double`) | Partial | Type exists; arithmetic via soft-float stubs (returns 0) |
+| 64-bit integers (`long long`) | Complete | Lowered through 64-bit runtime helpers |
+| Floating-point (`float`, `double`) | Complete | `float` uses 32-bit soft-float helpers; `double` uses 64-bit soft-float helpers |
 | `_Complex` / `_Imaginary` | Partial | Type exists; component access works; arithmetic is stub-backed |
 | `_Bool` | Complete | |
 | Pointers | Complete | Including pointer arithmetic, function pointers |
@@ -82,8 +82,8 @@ or a known limitation is fixed.
 | 8-bit values (A register) | Complete | |
 | 16-bit values (HL/DE/BC) | Complete | |
 | 32-bit values (DE:HL) | Complete | |
-| 64-bit values | Stub | Emitted as zero |
-| Floating-point codegen | Stub | Delegates to soft-float stubs |
+| 64-bit values | Complete | Runtime ABI uses `DE:HL:DE':HL'` |
+| Floating-point codegen | Complete | Delegates to runtime soft-float helpers |
 | Register allocation (-O2) | Partial | Bounded stable allocator for one 16-bit temp in BC; wider/local-byte allocation still pending |
 | Alternate register set (EXX regions) | Reserved | `temp_home` enum extended; no EXX regions yet |
 | Calling convention | Complete | Right-to-left push; IX frame; caller cleans |
@@ -109,9 +109,9 @@ See `docs/ARCHITECTURE.md` for the complete rule table.
 | `__mul16`, `__div16`, `__mod16` | Working |
 | `__mul32`, `__div32`, `__mod32` | Working |
 | `__call_hl` | Working |
-| `__fsadd`, `__fssub`, `__fsmul`, `__fsdiv` | Stub (returns 0) |
-| `__fitosf`, `__fstoi` | Stub (returns 0) |
-| `__mulll`, `__divll`, `__modll` | Stub (returns 0) |
+| `__fsadd`, `__fssub`, `__fsmul`, `__fsdiv` | Working |
+| `__fitosf`, `__fstoi` | Working |
+| `__mulll`, `__divll`, `__modll` | Working |
 | `__atomic_*` (18 symbols) | Stub (DI/EI guards, no real atomicity) |
 
 ---

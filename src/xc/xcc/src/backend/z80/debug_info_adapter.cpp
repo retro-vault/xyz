@@ -59,6 +59,20 @@ xbfd::type_ref xdi_adapter::to_xdi(const type* t) {
     return r;
 }
 
+xbfd::calling_convention xdi_adapter::to_xdi(call_abi abi) {
+    switch (abi) {
+    case call_abi::DEFAULT:         return xbfd::calling_convention::normal;
+    case call_abi::SDCCCALL0:       return xbfd::calling_convention::xcc_sdcccall0;
+    case call_abi::SDCCCALL1:       return xbfd::calling_convention::xcc_sdcccall1;
+    case call_abi::Z88DK_FASTCALL:  return xbfd::calling_convention::xcc_z88dk_fastcall;
+    case call_abi::Z88DK_CALLEE:    return xbfd::calling_convention::xcc_z88dk_callee;
+    case call_abi::NAKED:           return xbfd::calling_convention::xcc_naked;
+    case call_abi::INTERRUPT:       return xbfd::calling_convention::xcc_interrupt;
+    case call_abi::CRITICAL:        return xbfd::calling_convention::xcc_critical;
+    default:                        return xbfd::calling_convention::unknown;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // begin_function: scan icodes, emit locals and params
 // ---------------------------------------------------------------------------
@@ -66,7 +80,8 @@ xbfd::type_ref xdi_adapter::to_xdi(const type* t) {
 void xdi_adapter::begin_function(const ir_function& fn,
                                   const std::string& mangled) {
     writer_->begin_function(fn.name, mangled, fn.is_global,
-                             to_xdi(fn.ret_type.get()));
+                             to_xdi(fn.ret_type.get()),
+                             to_xdi(fn.abi));
 
     // Collect unique local variables (non-global, non-param)
     std::map<std::string, const operand*> seen;

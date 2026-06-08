@@ -78,11 +78,6 @@ _f:
 	ld	h, -1(ix)
 	.globl	_choose
 	call	_choose
-	push	de
-	pop	hl
-	ld	b, h
-	ld	c, l
-	ex	de, hl
 __f_end:
 	; epilogue: f
 	ld	sp, ix

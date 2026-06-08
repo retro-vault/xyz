@@ -72,9 +72,27 @@ std::unique_ptr<bfd> bfd::open_r_stream(const std::string& name, std::istream& i
     auto obj       = std::unique_ptr<bfd>(new bfd());
     obj->path_     = name;
     obj->writable_ = false;
-    parse_rel(obj->obj_, name, input);
-    obj->obj_.format  = xbfd::obj_format::object;
-    obj->obj_.flavour = xbfd::obj_flavour::rel;
+
+    std::string raw_str((std::istreambuf_iterator<char>(input)), {});
+
+    if (is_ar_magic(raw_str)) {
+        obj->obj_.format  = xbfd::obj_format::archive;
+        obj->obj_.flavour = xbfd::obj_flavour::ar_binary;
+        obj->obj_.members = parse_archive(obj->path_, raw_str);
+    } else if (is_elf_magic(raw_str)) {
+        parse_elf(obj->obj_, name, {raw_str.begin(), raw_str.end()});
+        obj->obj_.format  = xbfd::obj_format::object;
+        obj->obj_.flavour = xbfd::obj_flavour::elf;
+    } else if (is_rel_magic(raw_str)) {
+        std::istringstream iss(raw_str);
+        parse_rel(obj->obj_, name, iss);
+        obj->obj_.format  = xbfd::obj_format::object;
+        obj->obj_.flavour = xbfd::obj_flavour::rel;
+    } else {
+        obj->obj_.format  = xbfd::obj_format::archive;
+        obj->obj_.flavour = xbfd::obj_flavour::ar_text;
+        obj->obj_.members = parse_archive(obj->path_, raw_str);
+    }
     return obj;
 }
 

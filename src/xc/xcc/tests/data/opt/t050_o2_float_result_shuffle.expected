@@ -46,6 +46,12 @@ _addf:
 	ld	h, -7(ix)
 	ld	-4(ix), l
 	ld	-3(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	ex	de, hl
 	ld	l, -2(ix)
 	ld	h, -1(ix)

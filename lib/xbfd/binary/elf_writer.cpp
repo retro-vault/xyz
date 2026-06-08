@@ -7,9 +7,13 @@
 // copyright (C) 2026 tomaz stih
 //
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <map>
 #include <ostream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -29,6 +33,368 @@ static constexpr uint32_t SHF_ALLOC    = 0x02;
 static constexpr uint32_t SHF_EXECINSTR= 0x04;
 static constexpr uint16_t EM_Z80       = 220;
 
+static constexpr uint16_t DW_TAG_compile_unit = 0x11;
+static constexpr uint16_t DW_TAG_subprogram   = 0x2e;
+static constexpr uint16_t DW_AT_name          = 0x03;
+static constexpr uint16_t DW_AT_stmt_list     = 0x10;
+static constexpr uint16_t DW_AT_low_pc        = 0x11;
+static constexpr uint16_t DW_AT_high_pc       = 0x12;
+static constexpr uint16_t DW_AT_language      = 0x13;
+static constexpr uint16_t DW_AT_producer      = 0x25;
+static constexpr uint16_t DW_AT_calling_convention = 0x36;
+static constexpr uint16_t DW_AT_external      = 0x3f;
+static constexpr uint8_t  DW_FORM_addr        = 0x01;
+static constexpr uint8_t  DW_FORM_data2       = 0x05;
+static constexpr uint8_t  DW_FORM_data4       = 0x06;
+static constexpr uint8_t  DW_FORM_string      = 0x08;
+static constexpr uint8_t  DW_FORM_data1       = 0x0b;
+static constexpr uint8_t  DW_FORM_flag        = 0x0c;
+static constexpr uint8_t  DW_LNS_copy         = 1;
+static constexpr uint8_t  DW_LNS_advance_pc   = 2;
+static constexpr uint8_t  DW_LNS_advance_line = 3;
+static constexpr uint8_t  DW_LNS_set_file     = 4;
+static constexpr uint8_t  DW_LNS_set_column   = 5;
+static constexpr uint8_t  DW_LNS_negate_stmt  = 6;
+static constexpr uint8_t  DW_LNS_set_basic_block = 7;
+static constexpr uint8_t  DW_LNS_const_add_pc = 8;
+static constexpr uint8_t  DW_LNS_fixed_advance_pc = 9;
+static constexpr uint8_t  DW_LNE_end_sequence = 1;
+static constexpr uint8_t  DW_LNE_set_address  = 2;
+
+static bool debug_sections_requested(const xbfd::debug_info& debug) {
+    return !debug.files.empty()
+        || !debug.functions.empty()
+        || !debug.lines.empty()
+        || !debug.symbols.empty();
+}
+
+static uint16_t dwarf_language(xbfd::debug_lang lang) {
+    switch (lang) {
+    case xbfd::debug_lang::c:
+        return 0x0002; // DW_LANG_C
+    case xbfd::debug_lang::assembly:
+        return 0x8001; // vendor range, used as "assembly"
+    default:
+        return 0x0000;
+    }
+}
+
+class dwarf2_section_builder {
+public:
+    explicit dwarf2_section_builder(const xbfd::object& obj)
+        : obj_(obj) {}
+
+    void append_to(xbfd::object& out) {
+        if (!debug_sections_requested(obj_.debug))
+            return;
+
+        collect_file_state();
+
+        auto abbrev = build_abbrev();
+        auto line = build_line();
+        auto info = build_info();
+
+        add_section(out, ".debug_abbrev", std::move(abbrev));
+        add_section(out, ".debug_line", std::move(line));
+        add_section(out, ".debug_info", std::move(info));
+    }
+
+private:
+    struct file_state {
+        xbfd::debug_source_file file;
+        std::vector<xbfd::debug_line> lines;
+        std::vector<xbfd::debug_function> functions;
+        uint32_t stmt_offset = 0;
+        uint32_t info_offset = 0;
+        uint32_t low_pc = 0;
+        uint32_t high_pc = 0;
+        bool has_range = false;
+    };
+
+    static void add_section(xbfd::object& out,
+                            const std::string& name,
+                            std::vector<uint8_t> data)
+    {
+        xbfd::section sec;
+        sec.name = name;
+        sec.flags = xbfd::section_flags::debugging;
+        sec.size = data.size();
+        sec.data = std::move(data);
+        out.sections.push_back(std::move(sec));
+    }
+
+    static void push_u8(std::vector<uint8_t>& out, uint8_t value) {
+        out.push_back(value);
+    }
+
+    static void push_u16(std::vector<uint8_t>& out, uint16_t value) {
+        out.push_back(static_cast<uint8_t>(value & 0xFF));
+        out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
+    }
+
+    static void push_u32(std::vector<uint8_t>& out, uint32_t value) {
+        out.push_back(static_cast<uint8_t>(value & 0xFF));
+        out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
+        out.push_back(static_cast<uint8_t>((value >> 16) & 0xFF));
+        out.push_back(static_cast<uint8_t>((value >> 24) & 0xFF));
+    }
+
+    static void patch_u32(std::vector<uint8_t>& out,
+                          std::size_t offset,
+                          uint32_t value)
+    {
+        out[offset + 0] = static_cast<uint8_t>(value & 0xFF);
+        out[offset + 1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+        out[offset + 2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+        out[offset + 3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+    }
+
+    static void push_string(std::vector<uint8_t>& out, const std::string& text) {
+        out.insert(out.end(), text.begin(), text.end());
+        out.push_back(0);
+    }
+
+    static void push_uleb128(std::vector<uint8_t>& out, uint32_t value) {
+        do {
+            uint8_t byte = static_cast<uint8_t>(value & 0x7F);
+            value >>= 7;
+            if (value != 0)
+                byte |= 0x80;
+            out.push_back(byte);
+        } while (value != 0);
+    }
+
+    static void push_sleb128(std::vector<uint8_t>& out, int32_t value) {
+        bool more = true;
+        while (more) {
+            uint8_t byte = static_cast<uint8_t>(value & 0x7F);
+            const bool sign = (byte & 0x40) != 0;
+            value >>= 7;
+            if ((value == 0 && !sign) || (value == -1 && sign)) {
+                more = false;
+            } else {
+                byte |= 0x80;
+            }
+            out.push_back(byte);
+        }
+    }
+
+    static std::string normalize_path(const std::string& path) {
+        if (path.empty())
+            return "unknown";
+        return std::filesystem::path(path).lexically_normal().string();
+    }
+
+    static std::string dirname_or_empty(const std::string& path) {
+        auto dir = std::filesystem::path(path).parent_path();
+        if (dir.empty())
+            return "";
+        return dir.lexically_normal().string();
+    }
+
+    static std::string basename_or_self(const std::string& path) {
+        auto p = std::filesystem::path(path);
+        auto name = p.filename().string();
+        return name.empty() ? p.string() : name;
+    }
+
+    bool is_external_function(const std::string& name) const {
+        for (const auto& sym : obj_.symbols) {
+            if (!sym.is_global())
+                continue;
+            if (sym.name == name)
+                return true;
+            if (!name.empty() && name[0] != '_' && sym.name == "_" + name)
+                return true;
+        }
+        return false;
+    }
+
+    void update_range(file_state& state, uint32_t start, uint32_t end) {
+        if (!state.has_range) {
+            state.low_pc = start;
+            state.high_pc = end;
+            state.has_range = true;
+            return;
+        }
+        state.low_pc = std::min(state.low_pc, start);
+        state.high_pc = std::max(state.high_pc, end);
+    }
+
+    void collect_file_state() {
+        for (const auto& file : obj_.debug.files) {
+            file_state state;
+            state.file = file;
+            file_index_[file.id] = files_.size();
+            files_.push_back(std::move(state));
+        }
+
+        for (const auto& line : obj_.debug.lines) {
+            auto it = file_index_.find(line.file_id);
+            if (it == file_index_.end())
+                continue;
+            auto& state = files_[it->second];
+            state.lines.push_back(line);
+            update_range(state, line.address, line.address + 1u);
+        }
+
+        for (const auto& fn : obj_.debug.functions) {
+            auto it = file_index_.find(fn.file_id);
+            if (it == file_index_.end())
+                continue;
+            auto& state = files_[it->second];
+            state.functions.push_back(fn);
+            update_range(state, fn.start, std::max<uint32_t>(fn.end, fn.start + 1u));
+        }
+
+        for (auto& state : files_) {
+            std::sort(state.lines.begin(), state.lines.end(),
+                      [](const auto& a, const auto& b) {
+                          if (a.address != b.address)
+                              return a.address < b.address;
+                          return a.line < b.line;
+                      });
+            std::sort(state.functions.begin(), state.functions.end(),
+                      [](const auto& a, const auto& b) {
+                          if (a.start != b.start)
+                              return a.start < b.start;
+                          return a.name < b.name;
+                      });
+        }
+    }
+
+    std::vector<uint8_t> build_abbrev() const {
+        std::vector<uint8_t> out;
+        // abbrev 1: compile_unit with children
+        push_u8(out, 1);
+        push_u8(out, DW_TAG_compile_unit);
+        push_u8(out, 1);
+        push_u8(out, DW_AT_producer);  push_u8(out, DW_FORM_string);
+        push_u8(out, DW_AT_name);      push_u8(out, DW_FORM_string);
+        push_u8(out, DW_AT_stmt_list); push_u8(out, DW_FORM_data4);
+        push_u8(out, DW_AT_low_pc);    push_u8(out, DW_FORM_addr);
+        push_u8(out, DW_AT_high_pc);   push_u8(out, DW_FORM_addr);
+        push_u8(out, DW_AT_language);  push_u8(out, DW_FORM_data2);
+        push_u8(out, 0);               push_u8(out, 0);
+
+        // abbrev 2: subprogram without children
+        push_u8(out, 2);
+        push_u8(out, DW_TAG_subprogram);
+        push_u8(out, 0);
+        push_u8(out, DW_AT_name);      push_u8(out, DW_FORM_string);
+        push_u8(out, DW_AT_low_pc);    push_u8(out, DW_FORM_addr);
+        push_u8(out, DW_AT_high_pc);   push_u8(out, DW_FORM_addr);
+        push_u8(out, DW_AT_external);  push_u8(out, DW_FORM_flag);
+        push_u8(out, DW_AT_calling_convention); push_u8(out, DW_FORM_data1);
+        push_u8(out, 0);               push_u8(out, 0);
+
+        push_u8(out, 0);
+        return out;
+    }
+
+    std::vector<uint8_t> build_line() {
+        std::vector<uint8_t> out;
+
+        for (auto& state : files_) {
+            state.stmt_offset = static_cast<uint32_t>(out.size());
+            const auto unit_start = out.size();
+            push_u32(out, 0); // unit_length patch later
+            push_u16(out, 2); // DWARF v2
+            const auto header_length_pos = out.size();
+            push_u32(out, 0); // header_length patch later
+            const auto header_start = out.size();
+
+            push_u8(out, 1);  // minimum_instruction_length
+            push_u8(out, 1);  // default_is_stmt
+            push_u8(out, 0);  // line_base
+            push_u8(out, 1);  // line_range
+            push_u8(out, 10); // opcode_base
+            const uint8_t std_lengths[9] = {0, 1, 1, 1, 1, 0, 0, 0, 1};
+            out.insert(out.end(), std::begin(std_lengths), std::end(std_lengths));
+
+            const auto full_path = normalize_path(state.file.path);
+            const auto dir = dirname_or_empty(full_path);
+            if (!dir.empty())
+                push_string(out, dir);
+            push_u8(out, 0); // end include dirs
+
+            push_string(out, basename_or_self(full_path));
+            push_uleb128(out, dir.empty() ? 0u : 1u);
+            push_uleb128(out, 0);
+            push_uleb128(out, 0);
+            push_u8(out, 0); // end file table
+
+            patch_u32(out, header_length_pos,
+                      static_cast<uint32_t>(out.size() - header_start));
+
+            uint32_t current_line = 1;
+            for (const auto& row : state.lines) {
+                push_u8(out, 0);
+                push_uleb128(out, 5);
+                push_u8(out, DW_LNE_set_address);
+                push_u32(out, row.address);
+
+                if (row.line != current_line) {
+                    push_u8(out, DW_LNS_advance_line);
+                    push_sleb128(out, static_cast<int32_t>(row.line)
+                                       - static_cast<int32_t>(current_line));
+                    current_line = row.line;
+                }
+                push_u8(out, DW_LNS_copy);
+            }
+
+            push_u8(out, 0);
+            push_uleb128(out, 1);
+            push_u8(out, DW_LNE_end_sequence);
+
+            patch_u32(out, unit_start,
+                      static_cast<uint32_t>(out.size() - unit_start - 4));
+        }
+
+        return out;
+    }
+
+    std::vector<uint8_t> build_info() {
+        std::vector<uint8_t> out;
+
+        for (auto& state : files_) {
+            state.info_offset = static_cast<uint32_t>(out.size());
+            const auto unit_start = out.size();
+            push_u32(out, 0); // unit_length patch later
+            push_u16(out, 2); // DWARF v2
+            push_u32(out, 0); // abbrev offset
+            push_u8(out, 4);  // address size
+
+            push_u8(out, 1); // CU abbrev
+            push_string(out, "xld GNU mode");
+            push_string(out, normalize_path(state.file.path));
+            push_u32(out, state.stmt_offset);
+            push_u32(out, state.low_pc);
+            push_u32(out, state.has_range ? state.high_pc : state.low_pc);
+            push_u16(out, dwarf_language(state.file.language));
+
+            for (const auto& fn : state.functions) {
+                push_u8(out, 2); // subprogram abbrev
+                push_string(out, fn.name);
+                push_u32(out, fn.start);
+                push_u32(out, std::max<uint32_t>(fn.end, fn.start + 1u));
+                push_u8(out, is_external_function(fn.name) ? 1 : 0);
+                push_u8(out, static_cast<uint8_t>(fn.convention));
+            }
+
+            push_u8(out, 0); // end children
+            patch_u32(out, unit_start,
+                      static_cast<uint32_t>(out.size() - unit_start - 4));
+        }
+
+        return out;
+    }
+
+    const xbfd::object& obj_;
+    std::vector<file_state> files_;
+    std::map<uint32_t, std::size_t> file_index_;
+};
+
 // -------------------------------------------------------------------------
 // elf_builder — accumulates a byte buffer then writes it as ELF32
 // -------------------------------------------------------------------------
@@ -36,16 +402,19 @@ static constexpr uint16_t EM_Z80       = 220;
 class elf_builder {
 public:
     void emit(const xbfd::object& obj, std::ostream& out) {
+        xbfd::object materialized = obj;
+        dwarf2_section_builder(materialized).append_to(materialized);
+
         buf_.reserve(4096);
         buf_.resize(52, 0); // ELF header placeholder
 
-        build_string_tables(obj);
-        build_symbol_table(obj);
-        build_section_data(obj);
-        build_rel_sections(obj);
+        build_string_tables(materialized);
+        build_symbol_table(materialized);
+        build_section_data(materialized);
+        build_rel_sections(materialized);
         build_shstrtab();
-        build_section_headers(obj);
-        patch_elf_header(obj);
+        build_section_headers(materialized);
+        patch_elf_header(materialized);
 
         out.write(reinterpret_cast<const char*>(buf_.data()),
                   static_cast<std::streamsize>(buf_.size()));

@@ -97,6 +97,7 @@ void options::usage(const char *argv0) {
         "  -O0               No optimization (default)\n"
         "  -O1               Enable peephole optimizer\n"
         "  -O2               Enable general optimization\n"
+        "  -Of               Enable speed optimization\n"
         "  -O3               Enable experimental optimization\n"
         "  -Os               Enable size optimization\n"
         "  -f<name>          Enable one optimization family\n"
@@ -153,6 +154,9 @@ options options::parse(int argc, char **argv) {
             opts.opt_settings = optimization_settings::for_level(opts.opt);
         } else if (strcmp(a, "-O2") == 0) {
             opts.opt = opt_level::O2;
+            opts.opt_settings = optimization_settings::for_level(opts.opt);
+        } else if (strcmp(a, "-Of") == 0) {
+            opts.opt = opt_level::Of;
             opts.opt_settings = optimization_settings::for_level(opts.opt);
         } else if (strcmp(a, "-O3") == 0) {
             opts.opt = opt_level::O3;

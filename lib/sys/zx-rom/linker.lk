@@ -1,0 +1,14 @@
+; ZX Spectrum ROM image layout.
+; Written in SDCC command-file style so it can be consumed by both
+; sdldz80 and xld. Use the command line to choose output format and
+; explicit entry symbol if needed.
+;
+; Important current limitation:
+; xcc still emits ordinary writable globals directly into _DATA instead of a
+; full _INITIALIZER -> _INITIALIZED split. So this script keeps the ROM/RAM
+; intent visible, but full initialized-data correctness still needs compiler
+; support.
+
+-b _CODE  = 0x0000
+-b _DATA  = 0x8000
+-e

@@ -5,9 +5,10 @@
 # xcc: C compiler
 # xas: Z80 assembler (uses libxbfd)
 # xar: archive tool (uses libxbfd)
+# xobjcopy: object/archive conversion tool (uses libxbfd)
 # ---------------------------------------------------------------------------
 
-SUBDIRS := xld xgdb xcc xas xar
+SUBDIRS := xld xgdb xcc xas xar xobjcopy
 
 .PHONY: all
 all:

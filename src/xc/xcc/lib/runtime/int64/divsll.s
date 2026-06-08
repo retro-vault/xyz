@@ -1,11 +1,13 @@
         ; signed 64-bit divide
         ;
-        ; Strategy: abs(a), abs(b_copy), unsigned divide, negate if signs differ.
+        ; Strategy: abs(a), abs(b), unsigned divide, negate quotient if
+        ; signs differ.
         ;
-        ; Frame layout (17 bytes):
-        ;   ix-8..ix-1:  abs(a) / quotient
-        ;   ix-16..ix-9: remainder
-        ;   ix-17:       sign_q (0=positive, 1=negative)
+        ; Frame layout (25 bytes):
+        ;   ix-8..ix-1:   quotient/dividend q
+        ;   ix-16..ix-9:  divisor d (absolute value)
+        ;   ix-24..ix-17: remainder r
+        ;   ix-25:        sign_q (0/1)
         ;
         ; MIT License (see: LICENSE)
         ; copyright (C) 2026 tomaz stih
@@ -16,11 +18,6 @@
         .globl  __divsll
         .globl  __sdiv64
 
-        ; __divsll / __sdiv64
-        ; inputs:  a in DE:HL:DE':HL', b at ix+4..ix+11 (lsb..msb)
-        ; outputs: DE:HL:DE':HL' = signed quotient (truncated toward zero)
-        ; clobbers: af, bc, de, hl, ix, de', hl'
-
 __sdiv64:
 __divsll:
         push    ix
@@ -30,33 +27,29 @@ __divsll:
         ld      b, h
         ld      c, l
 
-        ld      hl, #-17
+        ld      hl, #-25
         add     hl, sp
         ld      sp, hl
 
         ld      h, b
         ld      l, c
 
-        ; sign_q = sign(a) XOR sign(b)
         exx
-        ld      a, h            ; H' = msb of a
+        ld      a, h
         exx
-        ld      b, a            ; save sign of a
-        ld      a, 11(ix)       ; msb of b
-        xor     b               ; XOR signs
+        xor     11(ix)
         and     #0x80
-        rlca                    ; sign bit to bit0
-        ld      -17(ix), a      ; store sign_q (0 or 1)
+        rlca
+        ld      -25(ix), a
 
-        ; abs(a): negate if negative (bit7 of H' set)
         exx
-        bit     7, h
+        ld      a, h
         exx
+        and     #0x80
         jr      z, .divsll_a_pos
-        call    .neg64
+        call    .neg64_reg
 .divsll_a_pos:
 
-        ; Store abs(a) in frame
         ld      -8(ix), e
         ld      -7(ix), d
         ld      -6(ix), l
@@ -68,96 +61,144 @@ __divsll:
         ld      -1(ix), h
         exx
 
-        ; abs(b): negate in-place on stack if negative (bit7 of ix+11)
-        bit     7, 11(ix)
+        ld      a, 4(ix)
+        ld      -16(ix), a
+        ld      a, 5(ix)
+        ld      -15(ix), a
+        ld      a, 6(ix)
+        ld      -14(ix), a
+        ld      a, 7(ix)
+        ld      -13(ix), a
+        ld      a, 8(ix)
+        ld      -12(ix), a
+        ld      a, 9(ix)
+        ld      -11(ix), a
+        ld      a, 10(ix)
+        ld      -10(ix), a
+        ld      a, 11(ix)
+        ld      -9(ix), a
+
+        ld      a, -9(ix)
+        and     #0x80
         jr      z, .divsll_b_pos
-        call    .negstack
+        call    .neg_divisor
 .divsll_b_pos:
 
-        ; Zero remainder
         xor     a
-        ld      -16(ix), a
-        ld      -15(ix), a
-        ld      -14(ix), a
-        ld      -13(ix), a
-        ld      -12(ix), a
-        ld      -11(ix), a
-        ld      -10(ix), a
-        ld      -9(ix),  a
+        ld      -24(ix), a
+        ld      -23(ix), a
+        ld      -22(ix), a
+        ld      -21(ix), a
+        ld      -20(ix), a
+        ld      -19(ix), a
+        ld      -18(ix), a
+        ld      -17(ix), a
 
         ld      b, #64
 .divsll_loop:
-        sla     -8(ix)
-        rl      -7(ix)
-        rl      -6(ix)
-        rl      -5(ix)
-        rl      -4(ix)
-        rl      -3(ix)
-        rl      -2(ix)
-        rl      -1(ix)
+        ld      a, -8(ix)
+        add     a, a
+        ld      -8(ix), a
+        ld      a, -7(ix)
+        rla
+        ld      -7(ix), a
+        ld      a, -6(ix)
+        rla
+        ld      -6(ix), a
+        ld      a, -5(ix)
+        rla
+        ld      -5(ix), a
+        ld      a, -4(ix)
+        rla
+        ld      -4(ix), a
+        ld      a, -3(ix)
+        rla
+        ld      -3(ix), a
+        ld      a, -2(ix)
+        rla
+        ld      -2(ix), a
+        ld      a, -1(ix)
+        rla
+        ld      -1(ix), a
 
-        rl      -16(ix)
-        rl      -15(ix)
-        rl      -14(ix)
-        rl      -13(ix)
-        rl      -12(ix)
-        rl      -11(ix)
-        rl      -10(ix)
-        rl      -9(ix)
+        ld      a, -24(ix)
+        rla
+        ld      -24(ix), a
+        ld      a, -23(ix)
+        rla
+        ld      -23(ix), a
+        ld      a, -22(ix)
+        rla
+        ld      -22(ix), a
+        ld      a, -21(ix)
+        rla
+        ld      -21(ix), a
+        ld      a, -20(ix)
+        rla
+        ld      -20(ix), a
+        ld      a, -19(ix)
+        rla
+        ld      -19(ix), a
+        ld      a, -18(ix)
+        rla
+        ld      -18(ix), a
+        ld      a, -17(ix)
+        rla
+        ld      -17(ix), a
 
         or      a
-        ld      a, -16(ix)
-        sbc     a, 4(ix)
-        ld      -16(ix), a
-        ld      a, -15(ix)
-        sbc     a, 5(ix)
-        ld      -15(ix), a
-        ld      a, -14(ix)
-        sbc     a, 6(ix)
-        ld      -14(ix), a
-        ld      a, -13(ix)
-        sbc     a, 7(ix)
-        ld      -13(ix), a
-        ld      a, -12(ix)
-        sbc     a, 8(ix)
-        ld      -12(ix), a
-        ld      a, -11(ix)
-        sbc     a, 9(ix)
-        ld      -11(ix), a
-        ld      a, -10(ix)
-        sbc     a, 10(ix)
-        ld      -10(ix), a
-        ld      a, -9(ix)
-        sbc     a, 11(ix)
-        ld      -9(ix), a
-        jp      nc, .divsll_keep
+        ld      a, -24(ix)
+        sbc     a, -16(ix)
+        ld      -24(ix), a
+        ld      a, -23(ix)
+        sbc     a, -15(ix)
+        ld      -23(ix), a
+        ld      a, -22(ix)
+        sbc     a, -14(ix)
+        ld      -22(ix), a
+        ld      a, -21(ix)
+        sbc     a, -13(ix)
+        ld      -21(ix), a
+        ld      a, -20(ix)
+        sbc     a, -12(ix)
+        ld      -20(ix), a
+        ld      a, -19(ix)
+        sbc     a, -11(ix)
+        ld      -19(ix), a
+        ld      a, -18(ix)
+        sbc     a, -10(ix)
+        ld      -18(ix), a
+        ld      a, -17(ix)
+        sbc     a, -9(ix)
+        ld      -17(ix), a
+        jr      nc, .divsll_keep
 
         or      a
-        ld      a, -16(ix)
-        adc     a, 4(ix)
-        ld      -16(ix), a
-        ld      a, -15(ix)
-        adc     a, 5(ix)
-        ld      -15(ix), a
-        ld      a, -14(ix)
-        adc     a, 6(ix)
-        ld      -14(ix), a
-        ld      a, -13(ix)
-        adc     a, 7(ix)
-        ld      -13(ix), a
-        ld      a, -12(ix)
-        adc     a, 8(ix)
-        ld      -12(ix), a
-        ld      a, -11(ix)
-        adc     a, 9(ix)
-        ld      -11(ix), a
-        ld      a, -10(ix)
-        adc     a, 10(ix)
-        ld      -10(ix), a
-        ld      a, -9(ix)
-        adc     a, 11(ix)
-        ld      -9(ix), a
-        jp      .divsll_next
+        ld      a, -24(ix)
+        adc     a, -16(ix)
+        ld      -24(ix), a
+        ld      a, -23(ix)
+        adc     a, -15(ix)
+        ld      -23(ix), a
+        ld      a, -22(ix)
+        adc     a, -14(ix)
+        ld      -22(ix), a
+        ld      a, -21(ix)
+        adc     a, -13(ix)
+        ld      -21(ix), a
+        ld      a, -20(ix)
+        adc     a, -12(ix)
+        ld      -20(ix), a
+        ld      a, -19(ix)
+        adc     a, -11(ix)
+        ld      -19(ix), a
+        ld      a, -18(ix)
+        adc     a, -10(ix)
+        ld      -18(ix), a
+        ld      a, -17(ix)
+        adc     a, -9(ix)
+        ld      -17(ix), a
+        jr      .divsll_next
 
 .divsll_keep:
         set     0, -8(ix)
@@ -166,7 +207,6 @@ __divsll:
         dec     b
         jp      nz, .divsll_loop
 
-        ; Load quotient (ix-8..ix-1) into registers
         ld      e, -8(ix)
         ld      d, -7(ix)
         ld      l, -6(ix)
@@ -178,19 +218,17 @@ __divsll:
         ld      h, -1(ix)
         exx
 
-        ; Negate if sign_q = 1
-        ld      a, -17(ix)
+        ld      a, -25(ix)
         or      a
         jr      z, .divsll_done
-        call    .neg64
+        call    .neg64_reg
 
 .divsll_done:
         ld      sp, ix
         pop     ix
         ret
 
-        ; Negate DE:HL:DE':HL' (two's complement)
-.neg64:
+.neg64_reg:
         xor     a
         sub     a, e
         ld      e, a
@@ -219,30 +257,29 @@ __divsll:
         exx
         ret
 
-        ; Negate the 8-byte b on stack (ix+4..ix+11) in-place
-.negstack:
+.neg_divisor:
         xor     a
-        sub     a, 4(ix)
-        ld      4(ix), a
+        sub     a, -16(ix)
+        ld      -16(ix), a
         ld      a, #0
-        sbc     a, 5(ix)
-        ld      5(ix), a
+        sbc     a, -15(ix)
+        ld      -15(ix), a
         ld      a, #0
-        sbc     a, 6(ix)
-        ld      6(ix), a
+        sbc     a, -14(ix)
+        ld      -14(ix), a
         ld      a, #0
-        sbc     a, 7(ix)
-        ld      7(ix), a
+        sbc     a, -13(ix)
+        ld      -13(ix), a
         ld      a, #0
-        sbc     a, 8(ix)
-        ld      8(ix), a
+        sbc     a, -12(ix)
+        ld      -12(ix), a
         ld      a, #0
-        sbc     a, 9(ix)
-        ld      9(ix), a
+        sbc     a, -11(ix)
+        ld      -11(ix), a
         ld      a, #0
-        sbc     a, 10(ix)
-        ld      10(ix), a
+        sbc     a, -10(ix)
+        ld      -10(ix), a
         ld      a, #0
-        sbc     a, 11(ix)
-        ld      11(ix), a
+        sbc     a, -9(ix)
+        ld      -9(ix), a
         ret

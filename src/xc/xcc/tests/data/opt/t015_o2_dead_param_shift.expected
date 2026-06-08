@@ -37,12 +37,6 @@ _use_second:
 	ld	h, b
 	ld	l, c
 	.globl	_keep_second
-	call	_keep_second
-	push	de
-	pop	hl
-	ld	b, h
-	ld	c, l
-	ex	de, hl
+	jr	_keep_second
 __use_second_end:
 	; epilogue: use_second
-	ret

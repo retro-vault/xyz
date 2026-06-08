@@ -10,7 +10,8 @@
 //   short / int              2 bytes
 //   long                     4 bytes
 //   long long                8 bytes
-//   float / double           4 bytes  (IEEE 754 single; double == float)
+//   float                    4 bytes  (IEEE 754 single)
+//   double                   8 bytes  (IEEE 754 double)
 //   pointer                  2 bytes  (16-bit near)
 //
 // Factory functions (type::make_int(), type::make_pointer(), …) are the
@@ -172,7 +173,7 @@ struct type {
     static type_ptr make_float()  { return std::make_shared<type>(type_kind::FLOAT);  }
 
     //
-    // Return a new double type (same as float on Z80: 4 bytes).
+    // Return a new double type (8 bytes on Z80).
     //
     static type_ptr make_double() { return std::make_shared<type>(type_kind::DOUBLE); }
 

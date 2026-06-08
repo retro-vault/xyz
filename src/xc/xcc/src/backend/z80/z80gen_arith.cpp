@@ -27,6 +27,18 @@ static bool is_llong_op(const operand &op) {
                        op.type->kind == type_kind::ULLONG);
 }
 
+static bool is_float32_op(const operand &op) {
+    return op.type && op.type->kind == type_kind::FLOAT && op.type->size() == 4;
+}
+
+static bool is_double64_op(const operand &op) {
+    return op.type && op.type->kind == type_kind::DOUBLE && op.type->size() == 8;
+}
+
+static bool is_real_float_op(const operand &op) {
+    return is_float32_op(op) || is_double64_op(op);
+}
+
 static bool is_matching_shift_op(const icode &ic, bool right, bool arithmetic) {
     if (ic.op == icode_op::SHL)
         return !right;
@@ -678,12 +690,17 @@ void z80_gen::gen_mul(const icode &ic) {
 
     if (is_llong_op(ic.left)) {
         asm_.global_decl("__mulll");
-        for (int w = 3; w >= 0; --w) { load_hl_word(ic.right, w); emit_line("push\thl"); }
-        for (int w = 3; w >= 0; --w) { load_hl_word(ic.left,  w); emit_line("push\thl"); }
+        for (int w = 3; w >= 0; --w) {
+            load_hl_word(ic.right, w);
+            emit_line("push\thl");
+        }
+        load_reg64(ic.left);
         emit_line("call\t__mulll");
-        emit_line("ld\thl, %s", asm_.imm(16).c_str());
-        emit_line("add\thl, sp");
-        emit_line("ld\tsp, hl");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        store_reg64(ic.result);
         return;
     }
     if (op_size(ic.left) == 4) {
@@ -716,14 +733,22 @@ void z80_gen::gen_mul(const icode &ic) {
 
 void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
     if (is_llong_op(ic.left)) {
-        const char *helper = want_mod ? "__modll" : "__divll";
+        const bool is_signed = ic.left.type && !ic.left.type->is_unsigned();
+        const char *helper =
+            want_mod ? (is_signed ? "__modsll" : "__modull")
+                     : (is_signed ? "__divsll" : "__divull");
         asm_.global_decl(helper);
-        for (int w = 3; w >= 0; --w) { load_hl_word(ic.right, w); emit_line("push\thl"); }
-        for (int w = 3; w >= 0; --w) { load_hl_word(ic.left,  w); emit_line("push\thl"); }
+        for (int w = 3; w >= 0; --w) {
+            load_hl_word(ic.right, w);
+            emit_line("push\thl");
+        }
+        load_reg64(ic.left);
         emit_line("call\t%s", helper);
-        emit_line("ld\thl, %s", asm_.imm(16).c_str());
-        emit_line("add\thl, sp");
-        emit_line("ld\tsp, hl");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        store_reg64(ic.result);
         return;
     }
 
@@ -831,6 +856,45 @@ void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
 }
 
 void z80_gen::gen_neg(const icode &ic) {
+    if (is_double64_op(ic.left)) {
+        load_hl_word(ic.left, 0);
+        store_hl_word(ic.result, 0);
+        load_hl_word(ic.left, 1);
+        store_hl_word(ic.result, 1);
+        load_hl_word(ic.left, 2);
+        store_hl_word(ic.result, 2);
+        load_hl_word(ic.left, 3);
+        emit_line("ld\ta, h");
+        emit_line("xor\t%s", asm_.imm(0x80).c_str());
+        emit_line("ld\th, a");
+        store_hl_word(ic.result, 3);
+        return;
+    }
+
+    if (is_float32_op(ic.left)) {
+        load_hl_lo32(ic.left);
+        store_hl_lo32(ic.result);
+        load_hl_hi32(ic.left);
+        emit_line("ld\ta, h");
+        emit_line("xor\t%s", asm_.imm(0x80).c_str());
+        emit_line("ld\th, a");
+        store_hl_hi32(ic.result);
+        return;
+    }
+
+    if (is_llong_op(ic.left)) {
+        for (int w = 0; w < 4; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("ex\tde, hl");
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            if (w == 0)
+                emit_line("or\ta, a");
+            emit_line("sbc\thl, de");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     if (op_size(ic.result) == 1) {
         load_a(ic.left);
         emit_line("cpl");
@@ -852,6 +916,19 @@ void z80_gen::gen_neg(const icode &ic) {
 }
 
 void z80_gen::gen_band(const icode &ic) {
+    if (is_llong_op(ic.left)) {
+        for (int w = 0; w < 4; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ld\ta, l"); emit_line("and\ta, e"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -976,6 +1053,19 @@ void z80_gen::gen_band(const icode &ic) {
 }
 
 void z80_gen::gen_bor(const icode &ic) {
+    if (is_llong_op(ic.left)) {
+        for (int w = 0; w < 4; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ld\ta, l"); emit_line("or\te"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("or\td"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -1107,6 +1197,19 @@ void z80_gen::gen_pack_bytes(const icode &ic) {
 }
 
 void z80_gen::gen_bxor(const icode &ic) {
+    if (is_llong_op(ic.left)) {
+        for (int w = 0; w < 4; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ld\ta, l"); emit_line("xor\ta, e"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("xor\ta, d"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -1230,6 +1333,16 @@ void z80_gen::gen_bxor(const icode &ic) {
 }
 
 void z80_gen::gen_bnot(const icode &ic) {
+    if (is_llong_op(ic.left)) {
+        for (int w = 0; w < 4; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("ld\ta, l"); emit_line("cpl"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("cpl"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     if (op_size(ic.result) == 1) {
         load_a(ic.left);
         emit_line("cpl");
@@ -1244,6 +1357,24 @@ void z80_gen::gen_bnot(const icode &ic) {
 }
 
 void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
+    if (is_llong_op(ic.left)) {
+        const char *helper = !right ? "__shl64"
+                                    : (arithmetic ? "__shr64s" : "__shr64u");
+        asm_.global_decl(helper);
+        if (ic.right.kind == operand_kind::INT_CONST) {
+            emit_line("ld\thl, %s",
+                      asm_.imm(static_cast<int>(ic.right.ival & 0xff)).c_str());
+        } else {
+            load_hl(ic.right);
+        }
+        emit_line("push\thl");
+        load_reg64(ic.left);
+        emit_line("call\t%s", helper);
+        emit_line("pop\tbc");
+        store_reg64(ic.result);
+        return;
+    }
+
     if (op_size(ic.result) == 1 && op_size(ic.left) == 1) {
         load_a(ic.left);
 
@@ -1474,6 +1605,162 @@ void z80_gen::gen_rotate(const icode &ic, bool right) {
 void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                                   const std::string &true_lbl,
                                   const std::string &false_lbl) {
+    if (is_real_float_op(ic.left)) {
+        auto emit_de_cmp_branch = [&](icode_op op) {
+            std::string skip_lbl;
+            switch (op) {
+            case icode_op::EQ:
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                if (!true_lbl.empty())
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                break;
+            case icode_op::NE:
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                if (!true_lbl.empty())
+                    emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            case icode_op::LT:
+                if (!true_lbl.empty())
+                    emit_line("bit\t7, d"), emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            case icode_op::LE:
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                if (!true_lbl.empty()) {
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                    emit_line("bit\t7, d");
+                    emit_line("jp\tnz, %s", true_lbl.c_str());
+                }
+                break;
+            case icode_op::GT:
+                skip_lbl = "__fcmp_skip_" + std::to_string(rand() % 100000);
+                emit_line("bit\t7, d");
+                emit_line("jp\tnz, %s",
+                          false_lbl.empty() ? skip_lbl.c_str() : false_lbl.c_str());
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                if (!true_lbl.empty())
+                    emit_line("jp\tnz, %s", true_lbl.c_str());
+                if (false_lbl.empty())
+                    asm_.label(skip_lbl, false);
+                break;
+            case icode_op::GE:
+                emit_line("bit\t7, d");
+                if (!true_lbl.empty())
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                break;
+            default:
+                break;
+            }
+            if (!false_lbl.empty())
+                emit_line("jp\t%s", false_lbl.c_str());
+        };
+
+        if (is_double64_op(ic.left)) {
+            asm_.global_decl("___dbcmp");
+            for (int w = 3; w >= 0; --w) {
+                load_hl_word(ic.right, w);
+                emit_line("push\thl");
+            }
+            load_reg64(ic.left);
+            emit_line("call\t___dbcmp");
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+        } else {
+            asm_.global_decl("___fscmp");
+            load_hl_hi32(ic.right);
+            emit_line("push\thl");
+            load_hl_lo32(ic.right);
+            emit_line("push\thl");
+            load_hl_lo32(ic.left);
+            emit_line("push\thl");
+            load_hl_hi32(ic.left);
+            emit_line("pop\tde");
+            emit_line("call\t___fscmp");
+        }
+        emit_de_cmp_branch(cmp);
+        return;
+    }
+
+    if (is_llong_op(ic.left)) {
+        const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+        const std::string less_lbl = "__llcmp_lt_" + std::to_string(rand() % 100000);
+        const std::string greater_lbl = "__llcmp_gt_" + std::to_string(rand() % 100000);
+        const std::string end_lbl = "__llcmp_end_" + std::to_string(rand() % 100000);
+
+        for (int w = 3; w >= 0; --w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ex\tde, hl");
+            if (w == 3 && !is_unsigned) {
+                emit_line("ld\ta, h");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\th, a");
+                emit_line("ld\ta, d");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\td, a");
+            }
+            emit_line("or\ta, a");
+            emit_line("sbc\thl, de");
+            emit_line("jp\tc, %s", less_lbl.c_str());
+            emit_line("jp\tnz, %s", greater_lbl.c_str());
+        }
+
+        switch (cmp) {
+        case icode_op::EQ:
+        case icode_op::LE:
+        case icode_op::GE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        else
+            emit_line("jp\t%s", end_lbl.c_str());
+
+        asm_.label(less_lbl, false);
+        switch (cmp) {
+        case icode_op::LT:
+        case icode_op::LE:
+        case icode_op::NE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        else
+            emit_line("jp\t%s", end_lbl.c_str());
+
+        asm_.label(greater_lbl, false);
+        switch (cmp) {
+        case icode_op::GT:
+        case icode_op::GE:
+        case icode_op::NE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        else
+            asm_.label(end_lbl, false);
+        return;
+    }
+
     auto swapped_compare = [](icode_op op) {
         switch (op) {
         case icode_op::LT: return icode_op::GT;
@@ -1859,6 +2146,154 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
     };
 
+    if (is_real_float_op(ic.left)) {
+        auto store_bool_from_de_cmp = [&](icode_op op) {
+            std::string true_lbl = "__fcmp_true_" + std::to_string(rand() % 100000);
+            std::string end_lbl = "__fcmp_end_" + std::to_string(rand() % 100000);
+
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            switch (op) {
+            case icode_op::EQ:
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                emit_line("jp\tz, %s", true_lbl.c_str());
+                break;
+            case icode_op::NE:
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            case icode_op::LT:
+                emit_line("bit\t7, d");
+                emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            case icode_op::LE:
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                emit_line("jp\tz, %s", true_lbl.c_str());
+                emit_line("bit\t7, d");
+                emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            case icode_op::GT:
+                emit_line("bit\t7, d");
+                emit_line("jp\tnz, %s", end_lbl.c_str());
+                emit_line("ld\ta, d");
+                emit_line("or\te");
+                emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            case icode_op::GE:
+                emit_line("bit\t7, d");
+                emit_line("jp\tz, %s", true_lbl.c_str());
+                break;
+            default:
+                break;
+            }
+            emit_line("jp\t%s", end_lbl.c_str());
+            asm_.label(true_lbl, false);
+            emit_line("inc\tl");
+            asm_.label(end_lbl, false);
+            store_hl(ic.result);
+        };
+
+        if (is_double64_op(ic.left)) {
+            asm_.global_decl("___dbcmp");
+            for (int w = 3; w >= 0; --w) {
+                load_hl_word(ic.right, w);
+                emit_line("push\thl");
+            }
+            load_reg64(ic.left);
+            emit_line("call\t___dbcmp");
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+        } else {
+            asm_.global_decl("___fscmp");
+            load_hl_hi32(ic.right);
+            emit_line("push\thl");
+            load_hl_lo32(ic.right);
+            emit_line("push\thl");
+            load_hl_lo32(ic.left);
+            emit_line("push\thl");
+            load_hl_hi32(ic.left);
+            emit_line("pop\tde");
+            emit_line("call\t___fscmp");
+        }
+        store_bool_from_de_cmp(cmp);
+        return;
+    }
+
+    if (is_llong_op(ic.left)) {
+        const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+        const std::string less_lbl = "__llcmp_lt_" + std::to_string(rand() % 100000);
+        const std::string greater_lbl = "__llcmp_gt_" + std::to_string(rand() % 100000);
+        const std::string equal_lbl = "__llcmp_eq_" + std::to_string(rand() % 100000);
+        const std::string done_lbl = "__llcmp_done_" + std::to_string(rand() % 100000);
+
+        for (int w = 3; w >= 0; --w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ex\tde, hl");
+            if (w == 3 && !is_unsigned) {
+                emit_line("ld\ta, h");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\th, a");
+                emit_line("ld\ta, d");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\td, a");
+            }
+            emit_line("or\ta, a");
+            emit_line("sbc\thl, de");
+            emit_line("jp\tc, %s", less_lbl.c_str());
+            emit_line("jp\tnz, %s", greater_lbl.c_str());
+        }
+        emit_line("jp\t%s", equal_lbl.c_str());
+
+        emit_line("ld\thl, %s", asm_.imm(0).c_str());
+        asm_.label(less_lbl, false);
+        switch (cmp) {
+        case icode_op::LT:
+        case icode_op::LE:
+        case icode_op::NE:
+            emit_line("inc\tl");
+            break;
+        default:
+            break;
+        }
+        emit_line("jp\t%s", done_lbl.c_str());
+
+        asm_.label(greater_lbl, false);
+        switch (cmp) {
+        case icode_op::GT:
+        case icode_op::GE:
+        case icode_op::NE:
+            emit_line("ld\thl, %s", asm_.imm(1).c_str());
+            break;
+        default:
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            break;
+        }
+        emit_line("jp\t%s", done_lbl.c_str());
+
+        asm_.label(equal_lbl, false);
+        switch (cmp) {
+        case icode_op::EQ:
+        case icode_op::LE:
+        case icode_op::GE:
+            emit_line("ld\thl, %s", asm_.imm(1).c_str());
+            break;
+        default:
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            break;
+        }
+
+        asm_.label(done_lbl, false);
+        store_hl(ic.result);
+        return;
+    }
+
     if ((cmp == icode_op::EQ || cmp == icode_op::NE) &&
         can_use_direct_byte_eq_ne_compare(ic)) {
         const operand *lhs = &ic.left;
@@ -2205,11 +2640,269 @@ void z80_gen::gen_cast(const icode &ic) {
         return;
     }
 
+    const bool src_is_float32 = is_float32_op(ic.left);
+    const bool src_is_double64 = is_double64_op(ic.left);
+    const bool src_is_real_float = src_is_float32 || src_is_double64;
+    const bool src_is_llong = is_llong_op(ic.left);
+    const bool dst_is_float32 =
+        ic.result.type->kind == type_kind::FLOAT && ic.result.type->size() == 4;
+    const bool dst_is_double64 =
+        ic.result.type->kind == type_kind::DOUBLE && ic.result.type->size() == 8;
+    const bool dst_is_real_float = dst_is_float32 || dst_is_double64;
+    const bool dst_is_llong =
+        ic.result.type->kind == type_kind::LLONG ||
+        ic.result.type->kind == type_kind::ULLONG;
+
     int src_sz = op_size(ic.left);
     int dst_sz = op_size(ic.result);
 
-    if (dst_sz == src_sz) {
+    auto store_de_as_int = [&](int size) {
+        emit_line("push\tde");
+        emit_line("pop\thl");
+        if (size == 1) {
+            emit_line("ld\ta, l");
+            store_a(ic.result);
+        } else {
+            store_hl(ic.result);
+        }
+    };
+
+    auto store_dehl32 = [&]() {
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_line("push\tde");
+        emit_line("pop\thl");
         if (dst_sz == 1) {
+            emit_line("ld\ta, l");
+            store_a(ic.result);
+        } else if (dst_sz == 2) {
+            store_hl(ic.result);
+        } else {
+            store_hl_lo32(ic.result);
+            emit_line("ld\th, b");
+            emit_line("ld\tl, c");
+            store_hl_hi32(ic.result);
+        }
+    };
+
+    if (dst_is_real_float) {
+        if (src_is_float32 && dst_is_double64) {
+            asm_.global_decl("___fs2db");
+            load_hl_lo32(ic.left);
+            emit_line("push\thl");
+            load_hl_hi32(ic.left);
+            emit_line("pop\tde");
+            emit_line("call\t___fs2db");
+            store_reg64(ic.result);
+            return;
+        }
+
+        if (src_is_double64 && dst_is_float32) {
+            asm_.global_decl("___db2fs");
+            load_reg64(ic.left);
+            emit_line("call\t___db2fs");
+            store_dehl32();
+            return;
+        }
+
+        if (!src_is_real_float) {
+            if (dst_is_double64) {
+                if (src_is_llong) {
+                    asm_.global_decl(ic.left.type && ic.left.type->is_unsigned()
+                                         ? "___ull2db"
+                                         : "___sll2db");
+                    load_reg64(ic.left);
+                    emit_line("call\t%s",
+                              ic.left.type && ic.left.type->is_unsigned()
+                                  ? "___ull2db"
+                                  : "___sll2db");
+                } else if (src_sz <= 2) {
+                    const char *helper =
+                        ic.left.type && ic.left.type->is_unsigned()
+                            ? "___uint2db"
+                            : "___sint2db";
+                    asm_.global_decl(helper);
+                    load_hl(ic.left);
+                    emit_line("call\t%s", helper);
+                } else {
+                    const char *helper =
+                        ic.left.type && ic.left.type->is_unsigned()
+                            ? "___ulong2db"
+                            : "___slong2db";
+                    asm_.global_decl(helper);
+                    load_hl_lo32(ic.left);
+                    emit_line("push\thl");
+                    load_hl_hi32(ic.left);
+                    emit_line("pop\tde");
+                    emit_line("call\t%s", helper);
+                }
+                store_reg64(ic.result);
+                return;
+            }
+
+            if (dst_is_float32) {
+                if (src_is_llong) {
+                    asm_.global_decl(ic.left.type && ic.left.type->is_unsigned()
+                                         ? "___ull2db"
+                                         : "___sll2db");
+                    load_reg64(ic.left);
+                    emit_line("call\t%s",
+                              ic.left.type && ic.left.type->is_unsigned()
+                                  ? "___ull2db"
+                                  : "___sll2db");
+                    asm_.global_decl("___db2fs");
+                    emit_line("call\t___db2fs");
+                } else if (src_sz <= 2) {
+                    const char *helper =
+                        ic.left.type && ic.left.type->is_unsigned()
+                            ? "___uint2db"
+                            : "___sint2db";
+                    asm_.global_decl(helper);
+                    load_hl(ic.left);
+                    emit_line("call\t%s", helper);
+                    asm_.global_decl("___db2fs");
+                    emit_line("call\t___db2fs");
+                } else {
+                    const char *helper =
+                        ic.left.type && ic.left.type->is_unsigned()
+                            ? "___ulong2fs"
+                            : "___slong2fs";
+                    asm_.global_decl(helper);
+                    load_hl_lo32(ic.left);
+                    emit_line("push\thl");
+                    load_hl_hi32(ic.left);
+                    emit_line("pop\tde");
+                    emit_line("call\t%s", helper);
+                }
+                store_dehl32();
+                return;
+            }
+        }
+    }
+
+    if (src_is_real_float && !dst_is_real_float) {
+        if (src_is_double64) {
+            if (dst_is_llong) {
+                asm_.global_decl(ic.result.type->is_unsigned()
+                                     ? "___db2ull"
+                                     : "___db2sll");
+                load_reg64(ic.left);
+                emit_line("call\t%s",
+                          ic.result.type->is_unsigned()
+                              ? "___db2ull"
+                              : "___db2sll");
+                store_reg64(ic.result);
+                return;
+            }
+
+            const char *helper =
+                dst_sz <= 2
+                    ? (ic.result.type->is_unsigned() ? "___db2uint" : "___db2sint")
+                    : (ic.result.type->is_unsigned() ? "___db2ulong" : "___db2slong");
+            asm_.global_decl(helper);
+            load_reg64(ic.left);
+            emit_line("call\t%s", helper);
+            if (dst_sz <= 2)
+                store_de_as_int(dst_sz);
+            else
+                store_dehl32();
+            return;
+        }
+
+        if (src_is_float32) {
+            if (dst_is_llong) {
+                asm_.global_decl("___fs2db");
+                load_hl_lo32(ic.left);
+                emit_line("push\thl");
+                load_hl_hi32(ic.left);
+                emit_line("pop\tde");
+                emit_line("call\t___fs2db");
+                asm_.global_decl(ic.result.type->is_unsigned()
+                                     ? "___db2ull"
+                                     : "___db2sll");
+                emit_line("call\t%s",
+                          ic.result.type->is_unsigned()
+                              ? "___db2ull"
+                              : "___db2sll");
+                store_reg64(ic.result);
+                return;
+            }
+
+            const char *helper =
+                ic.result.type->is_unsigned() ? "___fs2ulong" : "___fs2slong";
+            asm_.global_decl(helper);
+            load_hl_lo32(ic.left);
+            emit_line("push\thl");
+            load_hl_hi32(ic.left);
+            emit_line("pop\tde");
+            emit_line("call\t%s", helper);
+            if (dst_sz <= 2)
+                store_de_as_int(dst_sz);
+            else
+                store_dehl32();
+            return;
+        }
+    }
+
+    if (!src_is_real_float && !dst_is_real_float &&
+        (src_is_llong || dst_is_llong)) {
+        if (dst_is_llong) {
+            if (src_is_llong) {
+                load_reg64(ic.left);
+                store_reg64(ic.result);
+                return;
+            }
+
+            if (src_sz <= 2) {
+                const char *helper =
+                    ic.left.type && ic.left.type->is_unsigned()
+                        ? "___uint2ll"
+                        : "___sint2ll";
+                asm_.global_decl(helper);
+                load_hl(ic.left);
+                emit_line("call\t%s", helper);
+            } else {
+                const char *helper =
+                    ic.left.type && ic.left.type->is_unsigned()
+                        ? "___ulong2ll"
+                        : "___slong2ll";
+                asm_.global_decl(helper);
+                load_hl_lo32(ic.left);
+                emit_line("push\thl");
+                load_hl_hi32(ic.left);
+                emit_line("pop\tde");
+                emit_line("call\t%s", helper);
+            }
+            store_reg64(ic.result);
+            return;
+        }
+
+        if (src_is_llong) {
+            const char *helper =
+                dst_sz <= 2
+                    ? (ic.result.type->is_unsigned() ? "___ll2uint" : "___ll2sint")
+                    : (ic.result.type->is_unsigned() ? "___ll2ulong" : "___ll2slong");
+            asm_.global_decl(helper);
+            load_reg64(ic.left);
+            emit_line("call\t%s", helper);
+            if (dst_sz <= 2)
+                store_de_as_int(dst_sz);
+            else
+                store_dehl32();
+            return;
+        }
+    }
+
+    if (dst_sz == src_sz) {
+        if (dst_sz == 8) {
+            load_reg64(ic.left);
+            store_reg64(ic.result);
+        } else if (dst_sz == 4) {
+            load_hl_lo32(ic.left);
+            store_hl_lo32(ic.result);
+            load_hl_hi32(ic.left);
+            store_hl_hi32(ic.result);
+        } else if (dst_sz == 1) {
             load_a(ic.left);
             store_a(ic.result);
         } else {
@@ -2230,18 +2923,41 @@ void z80_gen::gen_cast(const icode &ic) {
                 emit_line("ld\th, a");
             }
             store_hl(ic.result);
+        } else if (dst_sz == 4 && src_sz == 2) {
+            load_hl(ic.left);
+            store_hl_lo32(ic.result);
+            if (ic.left.type && ic.left.type->is_unsigned()) {
+                emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            } else {
+                emit_line("ld\ta, h");
+                emit_line("rlca");
+                emit_line("sbc\ta, a");
+                emit_line("ld\th, a");
+                emit_line("ld\tl, a");
+            }
+            store_hl_hi32(ic.result);
         } else {
             load_hl(ic.left);
             store_hl(ic.result);
         }
     } else {
         // Narrowing.
-        load_hl(ic.left);
-        if (dst_sz == 1) {
-            emit_line("ld\ta, l");
-            store_a(ic.result);
+        if (src_sz == 4 && dst_sz <= 2) {
+            load_hl_lo32(ic.left);
+            if (dst_sz == 1) {
+                emit_line("ld\ta, l");
+                store_a(ic.result);
+            } else {
+                store_hl(ic.result);
+            }
         } else {
-            store_hl(ic.result);
+            load_hl(ic.left);
+            if (dst_sz == 1) {
+                emit_line("ld\ta, l");
+                store_a(ic.result);
+            } else {
+                store_hl(ic.result);
+            }
         }
     }
 }
@@ -2252,6 +2968,34 @@ void z80_gen::gen_cast(const icode &ic) {
 // (lo word first); result returned in DE:HL (DE=hi, HL=lo).
 //
 void z80_gen::gen_float_arith(const icode &ic) {
+    if (op_size(ic.result) == 8 ||
+        is_double64_op(ic.left) ||
+        is_double64_op(ic.right)) {
+        const char *helper = "__dbadd";
+        switch (ic.op) {
+        case icode_op::FADD: helper = "__dbadd";  break;
+        case icode_op::FSUB: helper = "__dbsub";  break;
+        case icode_op::FMUL: helper = "___dbmul"; break;
+        case icode_op::FDIV: helper = "___dbdiv"; break;
+        default:
+            break;
+        }
+
+        asm_.global_decl(helper);
+        for (int w = 3; w >= 0; --w) {
+            load_hl_word(ic.right, w);
+            emit_line("push\thl");
+        }
+        load_reg64(ic.left);
+        emit_line("call\t%s", helper);
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        emit_line("pop\tbc");
+        store_reg64(ic.result);
+        return;
+    }
+
     static const struct {
         icode_op    op;
         const char *helper;

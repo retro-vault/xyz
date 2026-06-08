@@ -84,6 +84,9 @@ namespace xld {
     }
 
     void runtime::apply_sdcc_runtime(cli_options& opts) {
+        if (opts.mode == link_mode::gnu)
+            return;
+
         if (!opts.sdcc_runtime_dir.has_value())
             return;
 

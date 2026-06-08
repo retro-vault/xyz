@@ -123,6 +123,7 @@ stage-dist-docs:
 	cp $(ROOT)/tools/appmake/README.md $(DOCS_DIR)/components/APPMAKE.md
 	cp $(ROOT)/tools/microdrive/README.md $(DOCS_DIR)/components/MICRODRIVE.md
 	cp $(ROOT)/tools/serial/README.md $(DOCS_DIR)/components/SERIAL.md
+	cp $(ROOT)/src/xc/xobjcopy/README.md $(DOCS_DIR)/components/XOBJCOPY.md
 	cp $(ROOT)/src/xc/xld/README.md $(DOCS_DIR)/components/XLD.md
 	cp $(ROOT)/src/yos/README.md $(DOCS_DIR)/components/YOS.md
 

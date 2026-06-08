@@ -35,6 +35,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace xbfd {
@@ -49,6 +50,44 @@ enum class obj_flavour  { unknown, rel, elf, ar_text, ar_binary };
 enum class debug_lang   { unknown, c, assembly };
 enum class var_storage  { unknown, stack, reg, external };
 using storage = var_storage; // backward compat alias
+
+enum class calling_convention : uint8_t {
+    unknown         = 0x00,
+    normal          = 0x01, // DW_CC_normal
+    xcc_sdcccall0   = 0x40, // DWARF user range
+    xcc_sdcccall1   = 0x41,
+    xcc_z88dk_fastcall = 0x42,
+    xcc_z88dk_callee   = 0x43,
+    xcc_naked       = 0x44,
+    xcc_interrupt   = 0x45,
+    xcc_critical    = 0x46,
+};
+
+inline std::string_view to_string(calling_convention cc) {
+    switch (cc) {
+    case calling_convention::normal:             return "normal";
+    case calling_convention::xcc_sdcccall0:      return "sdcccall(0)";
+    case calling_convention::xcc_sdcccall1:      return "sdcccall(1)";
+    case calling_convention::xcc_z88dk_fastcall: return "z88dk::fastcall";
+    case calling_convention::xcc_z88dk_callee:   return "z88dk::callee";
+    case calling_convention::xcc_naked:          return "sdcc::naked";
+    case calling_convention::xcc_interrupt:      return "sdcc::interrupt";
+    case calling_convention::xcc_critical:       return "sdcc::critical";
+    default:                                     return "unknown";
+    }
+}
+
+inline std::optional<calling_convention> parse_calling_convention(std::string_view text) {
+    if (text == "normal")            return calling_convention::normal;
+    if (text == "sdcccall(0)")       return calling_convention::xcc_sdcccall0;
+    if (text == "sdcccall(1)")       return calling_convention::xcc_sdcccall1;
+    if (text == "z88dk::fastcall")   return calling_convention::xcc_z88dk_fastcall;
+    if (text == "z88dk::callee")     return calling_convention::xcc_z88dk_callee;
+    if (text == "sdcc::naked")       return calling_convention::xcc_naked;
+    if (text == "sdcc::interrupt")   return calling_convention::xcc_interrupt;
+    if (text == "sdcc::critical")    return calling_convention::xcc_critical;
+    return std::nullopt;
+}
 
 enum class section_flags : uint32_t {
     none=0, alloc=1, load=2, code=4, data=8, readonly=16,
@@ -110,7 +149,11 @@ struct archive_member {
 // ===========================================================================
 
 struct debug_source_file { uint32_t id=0; std::string path; debug_lang language=debug_lang::unknown; };
-struct debug_function    { std::string name; uint32_t start=0, end=0, file_id=0, line=0; };
+struct debug_function    {
+    std::string name;
+    uint32_t start=0, end=0, file_id=0, line=0;
+    calling_convention convention = calling_convention::unknown;
+};
 struct debug_variable    { std::string name, parent; var_storage storage=var_storage::unknown;
                            int offset=0; std::string reg, type_name; bool is_param=false; };
 struct debug_line        { uint32_t address=0, line=0, file_id=0; };
@@ -160,6 +203,7 @@ struct object {
     std::vector<symbol>          symbols;
     std::vector<archive_member>  members;
     debug_info                   debug;
+    calling_convention           default_calling_convention = calling_convention::unknown;
 };
 
 // ===========================================================================
@@ -196,7 +240,8 @@ public:
     virtual void on_module_end    (const std::string& /*producer*/)                                  {}
     virtual void on_global        (const std::string& /*name*/, const type_ref& /*type*/, bool)      {}
     virtual void on_function_begin(const std::string& /*c_name*/, const std::string& /*mangled*/,
-                                   bool /*is_global*/, const type_ref& /*return_type*/)              {}
+                                   bool /*is_global*/, const type_ref& /*return_type*/,
+                                   calling_convention /*cc*/)                                         {}
     virtual void on_local         (const std::string& /*name*/, const type_ref& /*type*/,
                                    var_storage /*storage*/, int /*offset*/,
                                    const std::string& /*reg*/ = "")                                  {}
@@ -249,7 +294,8 @@ public:
     // di_writer (valid when constructed with the stream ctor)
     void on_module_end    (const std::string& producer) override;
     void on_global        (const std::string& name, const type_ref& t, bool is_static) override;
-    void on_function_begin(const std::string& c, const std::string& m, bool g, const type_ref& r) override;
+    void on_function_begin(const std::string& c, const std::string& m, bool g,
+                           const type_ref& r, calling_convention cc) override;
     void on_local         (const std::string& n, const type_ref& t, var_storage s, int o,
                            const std::string& reg = "") override;
     void on_function_end  (const std::string& c) override;
@@ -257,9 +303,16 @@ public:
 
 private:
     struct local_r { std::string name; type_ref type; var_storage sc_; int off; std::string reg; };
-    struct fn_r    { std::string name; bool global; type_ref ret; int blk; std::vector<local_r> locals; };
+    struct fn_r    {
+        std::string name;
+        bool global;
+        type_ref ret;
+        calling_convention cc = calling_convention::unknown;
+        int blk;
+        std::vector<local_r> locals;
+    };
     struct gbl_r   { std::string name; type_ref type; bool is_static; };
-    struct fnsym_r { std::string name; type_ref ret; bool global; };
+    struct fnsym_r { std::string name; type_ref ret; bool global; calling_convention cc = calling_convention::unknown; };
 
     std::ostream*         out_  = nullptr;
     std::string           src_, mod_, adb_;
@@ -286,12 +339,13 @@ public:
 
     void on_module_begin  (const std::string& source_file) override;
     void on_module_end    (const std::string& producer)    override;
-    void on_function_begin(const std::string& c, const std::string& m, bool g, const type_ref& r) override;
+    void on_function_begin(const std::string& c, const std::string& m, bool g,
+                           const type_ref& r, calling_convention cc) override;
     void on_function_end  (const std::string& c) override;
     void on_source_line   (int l) override;
 
 private:
-    struct fn_t { std::string c, m; bool g; };
+    struct fn_t { std::string c, m; bool g; calling_convention cc = calling_convention::unknown; };
     std::ostream&     out_;
     std::string       src_;
     int               cur_ = -1;
@@ -316,7 +370,10 @@ public:
     void on_module_begin  (const std::string& s) override { for (auto& b:backends_) b->on_module_begin(s); }
     void on_module_end    (const std::string& p) override { for (auto& b:backends_) b->on_module_end(p); }
     void on_global        (const std::string& n, const type_ref& t, bool s) override { for (auto& b:backends_) b->on_global(n,t,s); }
-    void on_function_begin(const std::string& c, const std::string& m, bool g, const type_ref& r) override { for (auto& b:backends_) b->on_function_begin(c,m,g,r); }
+    void on_function_begin(const std::string& c, const std::string& m, bool g,
+                           const type_ref& r, calling_convention cc) override {
+        for (auto& b:backends_) b->on_function_begin(c,m,g,r,cc);
+    }
     void on_local         (const std::string& n, const type_ref& t, var_storage s, int o, const std::string& r) override { for (auto& b:backends_) b->on_local(n,t,s,o,r); }
     void on_function_end  (const std::string& c) override { for (auto& b:backends_) b->on_function_end(c); }
     void on_source_line   (int l) override { for (auto& b:backends_) b->on_source_line(l); }
@@ -327,7 +384,10 @@ public:
     void begin_module()                                                                          { on_module_begin(""); }
     void end_module  (const std::string& p = "")                                                { on_module_end(p); }
     void add_global  (const std::string& n, const type_ref& t, bool s)                          { on_global(n,t,s); }
-    void begin_function(const std::string& c,const std::string& m,bool g,const type_ref& r)     { on_function_begin(c,m,g,r); }
+    void begin_function(const std::string& c,const std::string& m,bool g,
+                        const type_ref& r, calling_convention cc = calling_convention::unknown) {
+        on_function_begin(c,m,g,r,cc);
+    }
     void add_local   (const std::string& n,const type_ref& t,var_storage s,int o,const std::string& r="") { on_local(n,t,s,o,r); }
     void end_function(const std::string& c)                                                      { on_function_end(c); }
     void source_line (int l)                                                                     { on_source_line(l); }

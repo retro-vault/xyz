@@ -91,7 +91,7 @@ TEST(cdb_emitter_merges_compiler_records_with_link_records) {
 
     write_cdb_text(c_cdb,
         "M:xlink_emit_main\n"
-        "F:G$main$0$0({2}DF,SI:S),C,0,0,0,0,0\n"
+        "F:G$main$0$0({2}DF,SI:S),C,0,0,0,0,0,ABI=sdcccall(1)\n"
         "S:G$main$0$0({2}DF,SI:S),C,0,0\n"
         "S:G$flags$0$0({1}SC:U),E,0,0\n");
 
@@ -118,7 +118,7 @@ TEST(cdb_emitter_merges_compiler_records_with_link_records) {
     const auto text = read_cdb_text(cdb_path);
 
     ASSERT(text.find("M:xlink_emit_main\n") != std::string::npos);
-    ASSERT(text.find("F:G$main$0$0({2}DF,SI:S),C,0,0,0,0,0\n") != std::string::npos);
+    ASSERT(text.find("F:G$main$0$0({2}DF,SI:S),C,0,0,0,0,0,ABI=sdcccall(1)\n") != std::string::npos);
     ASSERT(text.find("S:G$flags$0$0({1}SC:U),E,0,0\n") != std::string::npos);
     ASSERT(text.find("L:G$main$0$0:104\n") != std::string::npos);
     ASSERT(text.find("L:XG$main$0$0:107\n") != std::string::npos);
@@ -293,4 +293,71 @@ TEST(cdb_emitter_normalizes_native_sdcc_function_keys_and_preserves_c_lines) {
            != std::string::npos);
     ASSERT(text.find("L:C$xlink_emit_main.c$3$1$0:104\n")
            == std::string::npos);
+}
+
+TEST(cdb_emitter_tracks_symbol_shifts_after_reserved_hole_branch_promotion) {
+    cdb_temp_dir temp;
+
+    auto rel_path = temp.path / "branch_promote.rel";
+    auto cdb_sidecar = temp.path / "branch_promote.cdb";
+    auto bin_path = temp.path / "prog.bin";
+    auto cdb_path = temp.path / "prog.cdb";
+
+    write_cdb_text(cdb_sidecar,
+        "M:branch_promote\n"
+        "F:G$main$0$0({2}DF,SI:S),C,0,0,0,0,0\n"
+        "S:G$main$0$0({2}DF,SI:S),C,0,0\n");
+
+    auto mod = std::make_shared<xld::module>("branch_promote", rel_path);
+    mod->areas().emplace_back("_A", 3, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_B", 1, xld::area_flags::none, 1);
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+    mod->symbols().emplace_back("_target", xld::symbol_type::def, 0, 1, 1);
+    mod->symbols().emplace_back("C$branch.c$3$0_0$0",
+                                xld::symbol_type::def, 0, 2, 0);
+    mod->symbols().emplace_back("C$branch.c$4$0_0$0",
+                                xld::symbol_type::def, 2, 3, 0);
+    mod->symbols().emplace_back("G$main$0$0",
+                                xld::symbol_type::def, 0, 4, 0);
+    mod->symbols().emplace_back("XG$main$0$0",
+                                xld::symbol_type::def, 3, 5, 0);
+
+    xld::text_record source;
+    source.area_index = 0;
+    source.offset = 0;
+    source.data = {0x18, 0x00, 0xC9}; // jr _target ; ret
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::pc_rel | xld::reloc_mode::sym;
+    re.offset_in_t = 1;
+    re.ref_index = 1;
+    source.relocs.push_back(re);
+    mod->texts().push_back(source);
+
+    xld::text_record target;
+    target.area_index = 1;
+    target.offset = 0;
+    target.data = {0xC9};
+    mod->texts().push_back(target);
+
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+    ctx.format = xld::output_format::bin;
+    ctx.output_range = xld::address_range{0x0000, 0x01FF};
+    ctx.holes.push_back({0x0100, 0x017F});
+    ctx.area_bases["_A"] = 0x0000;
+    ctx.area_bases["_B"] = 0x0180;
+    ctx.modules.push_back(mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+    xld::binary_emitter::emit(bin_path, ctx);
+
+    xld::cdb_emitter emitter;
+    emitter.emit(cdb_path, bin_path, ctx);
+
+    const auto text = read_cdb_text(cdb_path);
+    ASSERT(text.find("L:G$main$0$0:0\n") != std::string::npos);
+    ASSERT(text.find("L:XG$main$0$0:4\n") != std::string::npos);
+    ASSERT(text.find("L:C$branch.c$3$0_0$0:0\n") != std::string::npos);
+    ASSERT(text.find("L:C$branch.c$4$0_0$0:3\n") != std::string::npos);
 }

@@ -81,9 +81,10 @@ Important files:
 
 ### What The Runner Measures
 
-Each benchmark is built five ways:
+Each benchmark is built six ways:
 
 - `xcc -O2`
+- `xcc -Of`
 - `xcc -O3`
 - `xcc -Os`
 - `sdcc --opt-code-size --fomit-frame-pointer --sdcccall 1`
@@ -158,6 +159,7 @@ translation-unit-only size numbers.
 At the time this guide was last updated, the default full run showed:
 
 - `xcc -O2`: `20 / 20` successful runs, `20 / 20` correct checksums
+- `xcc -Of`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `xcc -O3`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `xcc -Os`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `sdcc --opt-code-size`: `19 / 20` successful runs, `19 / 20` correct checksums
@@ -166,15 +168,17 @@ At the time this guide was last updated, the default full run showed:
 So the benchmark story has changed a lot:
 
 - `xcc` is now functionally correct on the full benchmark oracle set
-- experimental `-O3` is now benchmark-clean on this suite too
+- `-Of`, `-O3`, and `-Os` are all benchmark-clean on this suite
+- the proven aggressive baseline has now been promoted, so `-Of`, `-O3`,
+  and `-Os` currently measure the same on the executable benchmark set
+- `-O2` is still the more conservative general preset
 - the remaining benchmark problem is no longer correctness
-- the remaining benchmark problem is code quality:
-  `xcc` is still far larger and slower than SDCC on these kernels
-
+- the next benchmark task is to keep `-O3` available for new
+  experiments without regressing the shared promoted baseline
 Treat the executable suite as the better “trust but verify” tool when
 codegen-only size numbers look too good to be true, but now interpret it
-primarily as a **performance and code-quality** benchmark rather than a
-correctness triage harness.
+primarily as a **performance, size, and stabilization** benchmark rather
+than a correctness triage harness.
 
 ### Interpreting Status
 

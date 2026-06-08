@@ -1,0 +1,20 @@
+; zx-spectrum-rom.lnk
+-p
+-m
+-z
+-i
+
+-b _CODE = 0x0000
+-b _DATA = 0x4000
+-b _BSS  = 0x8000
+-b _RST8 = 0x0008
+-b _NMI  = 0x0066
+
+-k /path/to/sdcc/lib/z80
+-l z80
+
+crt0.rel
+main.rel
+yourcode.rel
+
+-e

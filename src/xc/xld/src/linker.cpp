@@ -20,11 +20,44 @@
 #include <xld/branch_relaxer.h>
 #include <xld/relocator.h>
 #include <xld/errors.h>
+#include <xbfd/xbfd.h>
 
 namespace xld {
 
     static bool is_linker_generated_symbol(const std::string& name) {
         return (name.rfind("s__", 0) == 0 || name.rfind("l__", 0) == 0);
+    }
+
+    enum class input_kind {
+        object,
+        library
+    };
+
+    static std::string lowercase_extension(const std::filesystem::path& path) {
+        std::string ext = path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        return ext;
+    }
+
+    static input_kind classify_input(const std::filesystem::path& path) {
+        try {
+            auto obj = bfd::bfd::open_r(path);
+            if (obj->check_format(bfd::format::object))
+                return input_kind::object;
+            if (obj->check_format(bfd::format::archive)) {
+                if (obj->get_flavour() == bfd::flavour::ar_text
+                    && lowercase_extension(path) != ".lib") {
+                    throw xld_error("unsupported linker input: "
+                                      + path.string()
+                                      + " (text-index libraries must use .lib)");
+                }
+                return input_kind::library;
+            }
+        } catch (const bfd::bfd_error& e) {
+            throw xld_error(std::string(e.what()));
+        }
+
+        throw xld_error("unsupported linker input: " + path.string());
     }
 
     void linker::link(link_context& ctx, const cli_options& opts) {
@@ -40,16 +73,13 @@ namespace xld {
 
     void linker::load_inputs(link_context& ctx, const cli_options& opts) {
         for (auto& path : opts.input_files) {
-            std::string ext = path.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-            if (ext == ".rel") {
+            if (classify_input(path) == input_kind::object) {
                 if (ctx.verbose)
                     std::cout << "Loading " << path << "\n";
                 auto mod = rel_parser::parse(path);
                 ctx.modules.push_back(mod);
             }
-            // .lib files are handled in resolve_libraries.
+            // Library files are handled in resolve_libraries.
         }
     }
 
@@ -67,10 +97,7 @@ namespace xld {
         std::vector<lib_module_info> lib_modules;
 
         for (auto& path : opts.input_files) {
-            std::string ext = path.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-            if (ext == ".lib") {
+            if (classify_input(path) == input_kind::library) {
                 if (ctx.verbose)
                     std::cout << "Scanning library " << path << "\n";
                 auto members = lib_parser::parse(path);

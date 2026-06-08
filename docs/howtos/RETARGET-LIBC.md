@@ -24,8 +24,10 @@ standard-library feature they unlock:
 ## The platform-backend mechanism
 
 Platform hooks live in **`lib/sys/<backend>/`**, one assembly file per hook
-(same one-function-per-file rule as the rest of the library). The backend is
-selected at build time:
+(same one-function-per-file rule as the rest of the library). The same backend
+directory is also the right home for platform startup and memory-map files such
+as `crt0.s`, `linker.ld`, and `linker.lk`. The backend is selected at build
+time:
 
 ```sh
 make -C lib/libc/src SYS=none     # bare-metal default (stubs)
@@ -33,13 +35,15 @@ make -C lib/libc/src SYS=myos     # pull in lib/sys/myos/ instead
 ```
 
 The libc `Makefile` globs `lib/sys/$(SYS)/*.s` (and `*.c`) and archives those
-objects into `libc.a` alongside the target-independent code. The shipped
+objects into `libc.a` alongside the target-independent code. It deliberately
+excludes `crt0.s`, which remains a standalone startup object. The shipped
 **`none`** backend provides empty/identity stubs so the library links and runs
 (clock reads as the epoch, etc.) on bare metal with no OS.
 
 To create a backend, copy `lib/sys/none/` to `lib/sys/<youros>/` and fill in the
-bodies. You only need the hooks for the features you want; an unused hook can be
-left as the `none` stub.
+bodies. Add `crt0.s` and optional linker scripts there too if the target needs
+its own startup or memory map. You only need the hooks for the features you
+want; an unused hook can be left as the `none` stub.
 
 ### Calling convention
 

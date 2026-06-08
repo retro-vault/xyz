@@ -343,6 +343,7 @@ fi
 {
     printf 'benchmark,expected_return,'
     printf 'xcc_O2_status,xcc_O2_return,xcc_O2_match,xcc_O2_bytes,xcc_O2_cycles,'
+    printf 'xcc_Of_status,xcc_Of_return,xcc_Of_match,xcc_Of_bytes,xcc_Of_cycles,'
     printf 'xcc_O3_status,xcc_O3_return,xcc_O3_match,xcc_O3_bytes,xcc_O3_cycles,'
     printf 'xcc_Os_status,xcc_Os_return,xcc_Os_match,xcc_Os_bytes,xcc_Os_cycles,'
     printf 'sdcc_size_status,sdcc_size_return,sdcc_size_match,sdcc_size_bytes,sdcc_size_cycles,'
@@ -362,6 +363,10 @@ total_xcc_o2_bytes=0
 total_xcc_o2_cycles=0
 pass_xcc_o2=0
 correct_xcc_o2=0
+total_xcc_of_bytes=0
+total_xcc_of_cycles=0
+pass_xcc_of=0
+correct_xcc_of=0
 total_xcc_o3_bytes=0
 total_xcc_o3_cycles=0
 pass_xcc_o3=0
@@ -381,17 +386,24 @@ correct_sdcc_speed=0
 
 o2_smaller_than_sdcc_size=0
 o2_faster_than_sdcc_size=0
+of_smaller_than_sdcc_size=0
+of_faster_than_sdcc_size=0
 o3_smaller_than_sdcc_size=0
 o3_faster_than_sdcc_size=0
 os_smaller_than_sdcc_size=0
 os_faster_than_sdcc_size=0
 o2_sdcc_size_common=0
+of_sdcc_size_common=0
 o3_sdcc_size_common=0
 os_sdcc_size_common=0
 common_o2_bytes=0
 common_o2_cycles=0
 common_o2_sdcc_size_bytes=0
 common_o2_sdcc_size_cycles=0
+common_of_bytes=0
+common_of_cycles=0
+common_of_sdcc_size_bytes=0
+common_of_sdcc_size_cycles=0
 common_o3_bytes=0
 common_o3_cycles=0
 common_o3_sdcc_size_bytes=0
@@ -404,10 +416,15 @@ common_o3_vs_o2_bytes=0
 common_o3_vs_o2_cycles=0
 common_o2_vs_o3_bytes=0
 common_o2_vs_o3_cycles=0
+common_of_vs_o2_bytes=0
+common_of_vs_o2_cycles=0
+common_o2_vs_of_bytes=0
+common_o2_vs_of_cycles=0
 common_os_vs_o2_bytes=0
 common_os_vs_o2_cycles=0
 common_o2_vs_os_bytes=0
 common_o2_vs_os_cycles=0
+o2_of_common=0
 o2_o3_common=0
 o2_os_common=0
 
@@ -419,18 +436,20 @@ for c_file in "${BENCHMARKS[@]}"; do
     mkdir -p "$bench_dir"
 
     IFS=, read -r xcc_o2_status xcc_o2_ret xcc_o2_bytes xcc_o2_cycles <<< "$(run_xcc_mode "$c_file" "O2" "$bench_dir")"
+    IFS=, read -r xcc_of_status xcc_of_ret xcc_of_bytes xcc_of_cycles <<< "$(run_xcc_mode "$c_file" "Of" "$bench_dir")"
     IFS=, read -r xcc_o3_status xcc_o3_ret xcc_o3_bytes xcc_o3_cycles <<< "$(run_xcc_mode "$c_file" "O3" "$bench_dir")"
     IFS=, read -r xcc_os_status xcc_os_ret xcc_os_bytes xcc_os_cycles <<< "$(run_xcc_mode "$c_file" "Os" "$bench_dir")"
     IFS=, read -r sdcc_size_status sdcc_size_ret sdcc_size_bytes sdcc_size_cycles <<< "$(run_sdcc_mode "$c_file" "size" "$bench_dir")"
     IFS=, read -r sdcc_speed_status sdcc_speed_ret sdcc_speed_bytes sdcc_speed_cycles <<< "$(run_sdcc_mode "$c_file" "speed" "$bench_dir")"
 
     xcc_o2_match="$(match_expected "$xcc_o2_status" "$xcc_o2_ret" "$expected_ret")"
+    xcc_of_match="$(match_expected "$xcc_of_status" "$xcc_of_ret" "$expected_ret")"
     xcc_o3_match="$(match_expected "$xcc_o3_status" "$xcc_o3_ret" "$expected_ret")"
     xcc_os_match="$(match_expected "$xcc_os_status" "$xcc_os_ret" "$expected_ret")"
     sdcc_size_match="$(match_expected "$sdcc_size_status" "$sdcc_size_ret" "$expected_ret")"
     sdcc_speed_match="$(match_expected "$sdcc_speed_status" "$sdcc_speed_ret" "$expected_ret")"
 
-    echo "$bench_name,$expected_ret,$xcc_o2_status,$xcc_o2_ret,$xcc_o2_match,$xcc_o2_bytes,$xcc_o2_cycles,$xcc_o3_status,$xcc_o3_ret,$xcc_o3_match,$xcc_o3_bytes,$xcc_o3_cycles,$xcc_os_status,$xcc_os_ret,$xcc_os_match,$xcc_os_bytes,$xcc_os_cycles,$sdcc_size_status,$sdcc_size_ret,$sdcc_size_match,$sdcc_size_bytes,$sdcc_size_cycles,$sdcc_speed_status,$sdcc_speed_ret,$sdcc_speed_match,$sdcc_speed_bytes,$sdcc_speed_cycles" \
+    echo "$bench_name,$expected_ret,$xcc_o2_status,$xcc_o2_ret,$xcc_o2_match,$xcc_o2_bytes,$xcc_o2_cycles,$xcc_of_status,$xcc_of_ret,$xcc_of_match,$xcc_of_bytes,$xcc_of_cycles,$xcc_o3_status,$xcc_o3_ret,$xcc_o3_match,$xcc_o3_bytes,$xcc_o3_cycles,$xcc_os_status,$xcc_os_ret,$xcc_os_match,$xcc_os_bytes,$xcc_os_cycles,$sdcc_size_status,$sdcc_size_ret,$sdcc_size_match,$sdcc_size_bytes,$sdcc_size_cycles,$sdcc_speed_status,$sdcc_speed_ret,$sdcc_speed_match,$sdcc_speed_bytes,$sdcc_speed_cycles" \
         >> "$RESULTS_CSV"
 
     if [[ "$xcc_o2_status" == "ok" ]]; then
@@ -439,6 +458,14 @@ for c_file in "${BENCHMARKS[@]}"; do
         pass_xcc_o2=$((pass_xcc_o2 + 1))
         if [[ "$xcc_o2_match" == "ok" ]]; then
             correct_xcc_o2=$((correct_xcc_o2 + 1))
+        fi
+    fi
+    if [[ "$xcc_of_status" == "ok" ]]; then
+        total_xcc_of_bytes=$((total_xcc_of_bytes + xcc_of_bytes))
+        total_xcc_of_cycles=$((total_xcc_of_cycles + xcc_of_cycles))
+        pass_xcc_of=$((pass_xcc_of + 1))
+        if [[ "$xcc_of_match" == "ok" ]]; then
+            correct_xcc_of=$((correct_xcc_of + 1))
         fi
     fi
     if [[ "$xcc_o3_status" == "ok" ]]; then
@@ -488,6 +515,20 @@ for c_file in "${BENCHMARKS[@]}"; do
             o2_faster_than_sdcc_size=$((o2_faster_than_sdcc_size + 1))
         fi
     fi
+    if [[ "$xcc_of_status" == "ok" && "$xcc_of_match" == "ok" &&
+          "$sdcc_size_status" == "ok" && "$sdcc_size_match" == "ok" ]]; then
+        of_sdcc_size_common=$((of_sdcc_size_common + 1))
+        common_of_bytes=$((common_of_bytes + xcc_of_bytes))
+        common_of_cycles=$((common_of_cycles + xcc_of_cycles))
+        common_of_sdcc_size_bytes=$((common_of_sdcc_size_bytes + sdcc_size_bytes))
+        common_of_sdcc_size_cycles=$((common_of_sdcc_size_cycles + sdcc_size_cycles))
+        if (( xcc_of_bytes < sdcc_size_bytes )); then
+            of_smaller_than_sdcc_size=$((of_smaller_than_sdcc_size + 1))
+        fi
+        if (( xcc_of_cycles < sdcc_size_cycles )); then
+            of_faster_than_sdcc_size=$((of_faster_than_sdcc_size + 1))
+        fi
+    fi
     if [[ "$xcc_o3_status" == "ok" && "$xcc_o3_match" == "ok" &&
           "$sdcc_size_status" == "ok" && "$sdcc_size_match" == "ok" ]]; then
         o3_sdcc_size_common=$((o3_sdcc_size_common + 1))
@@ -517,6 +558,14 @@ for c_file in "${BENCHMARKS[@]}"; do
         fi
     fi
     if [[ "$xcc_o2_status" == "ok" && "$xcc_o2_match" == "ok" &&
+          "$xcc_of_status" == "ok" && "$xcc_of_match" == "ok" ]]; then
+        o2_of_common=$((o2_of_common + 1))
+        common_o2_vs_of_bytes=$((common_o2_vs_of_bytes + xcc_o2_bytes))
+        common_o2_vs_of_cycles=$((common_o2_vs_of_cycles + xcc_o2_cycles))
+        common_of_vs_o2_bytes=$((common_of_vs_o2_bytes + xcc_of_bytes))
+        common_of_vs_o2_cycles=$((common_of_vs_o2_cycles + xcc_of_cycles))
+    fi
+    if [[ "$xcc_o2_status" == "ok" && "$xcc_o2_match" == "ok" &&
           "$xcc_o3_status" == "ok" && "$xcc_o3_match" == "ok" ]]; then
         o2_o3_common=$((o2_o3_common + 1))
         common_o2_vs_o3_bytes=$((common_o2_vs_o3_bytes + xcc_o2_bytes))
@@ -535,14 +584,21 @@ for c_file in "${BENCHMARKS[@]}"; do
 done
 
 rel_o2_vs_sdcc_size="n/a"
+rel_of_vs_sdcc_size="n/a"
 rel_o3_vs_sdcc_size="n/a"
 rel_os_vs_sdcc_size="n/a"
+rel_of_vs_o2="n/a"
 rel_o3_vs_o2="n/a"
 rel_os_vs_o2="n/a"
 
 if (( pass_xcc_o2 > 0 && pass_sdcc_size > 0 )); then
     if (( o2_sdcc_size_common > 0 )); then
         rel_o2_vs_sdcc_size="$(format_delta "$common_o2_bytes" "$common_o2_sdcc_size_bytes" "smaller" "larger"), $(format_delta "$common_o2_cycles" "$common_o2_sdcc_size_cycles" "fewer cycles" "more cycles") on $o2_sdcc_size_common common benchmarks"
+    fi
+fi
+if (( pass_xcc_of > 0 && pass_sdcc_size > 0 )); then
+    if (( of_sdcc_size_common > 0 )); then
+        rel_of_vs_sdcc_size="$(format_delta "$common_of_bytes" "$common_of_sdcc_size_bytes" "smaller" "larger"), $(format_delta "$common_of_cycles" "$common_of_sdcc_size_cycles" "fewer cycles" "more cycles") on $of_sdcc_size_common common benchmarks"
     fi
 fi
 if (( pass_xcc_os > 0 && pass_sdcc_size > 0 )); then
@@ -553,6 +609,11 @@ fi
 if (( pass_xcc_o3 > 0 && pass_sdcc_size > 0 )); then
     if (( o3_sdcc_size_common > 0 )); then
         rel_o3_vs_sdcc_size="$(format_delta "$common_o3_bytes" "$common_o3_sdcc_size_bytes" "smaller" "larger"), $(format_delta "$common_o3_cycles" "$common_o3_sdcc_size_cycles" "fewer cycles" "more cycles") on $o3_sdcc_size_common common benchmarks"
+    fi
+fi
+if (( pass_xcc_of > 0 && pass_xcc_o2 > 0 )); then
+    if (( o2_of_common > 0 )); then
+        rel_of_vs_o2="$(format_delta "$common_of_vs_o2_bytes" "$common_o2_vs_of_bytes" "smaller" "larger"), $(format_delta "$common_of_vs_o2_cycles" "$common_o2_vs_of_cycles" "fewer cycles" "more cycles") on $o2_of_common common benchmarks"
     fi
 fi
 if (( pass_xcc_o3 > 0 && pass_xcc_o2 > 0 )); then
@@ -584,6 +645,7 @@ The size numbers below are **payload bytes**:
 | Mode | Payload Bytes | Cycles |
 | --- | ---: | ---: |
 | \`xcc -O2\` | $total_xcc_o2_bytes | $total_xcc_o2_cycles |
+| \`xcc -Of\` | $total_xcc_of_bytes | $total_xcc_of_cycles |
 | \`xcc -O3\` | $total_xcc_o3_bytes | $total_xcc_o3_cycles |
 | \`xcc -Os\` | $total_xcc_os_bytes | $total_xcc_os_cycles |
 | \`sdcc --opt-code-size\` | $total_sdcc_size_bytes | $total_sdcc_size_cycles |
@@ -592,6 +654,7 @@ The size numbers below are **payload bytes**:
 ## Successful Runs
 
 - \`xcc -O2\`: $pass_xcc_o2 / ${#BENCHMARKS[@]}
+- \`xcc -Of\`: $pass_xcc_of / ${#BENCHMARKS[@]}
 - \`xcc -O3\`: $pass_xcc_o3 / ${#BENCHMARKS[@]}
 - \`xcc -Os\`: $pass_xcc_os / ${#BENCHMARKS[@]}
 - \`sdcc --opt-code-size\`: $pass_sdcc_size / ${#BENCHMARKS[@]}
@@ -600,6 +663,7 @@ The size numbers below are **payload bytes**:
 ## Correct Checksums
 
 - \`xcc -O2\`: $correct_xcc_o2 / ${#BENCHMARKS[@]}
+- \`xcc -Of\`: $correct_xcc_of / ${#BENCHMARKS[@]}
 - \`xcc -O3\`: $correct_xcc_o3 / ${#BENCHMARKS[@]}
 - \`xcc -Os\`: $correct_xcc_os / ${#BENCHMARKS[@]}
 - \`sdcc --opt-code-size\`: $correct_sdcc_size / ${#BENCHMARKS[@]}
@@ -608,8 +672,10 @@ The size numbers below are **payload bytes**:
 ## Relative
 
 - \`xcc -O2\` vs \`sdcc --opt-code-size\`: $rel_o2_vs_sdcc_size
+- \`xcc -Of\` vs \`sdcc --opt-code-size\`: $rel_of_vs_sdcc_size
 - \`xcc -O3\` vs \`sdcc --opt-code-size\`: $rel_o3_vs_sdcc_size
 - \`xcc -Os\` vs \`sdcc --opt-code-size\`: $rel_os_vs_sdcc_size
+- \`xcc -Of\` vs \`xcc -O2\`: $rel_of_vs_o2
 - \`xcc -O3\` vs \`xcc -O2\`: $rel_o3_vs_o2
 - \`xcc -Os\` vs \`xcc -O2\`: $rel_os_vs_o2
 
@@ -617,6 +683,8 @@ The size numbers below are **payload bytes**:
 
 - \`xcc -O2\` smaller on $o2_smaller_than_sdcc_size / $o2_sdcc_size_common benchmarks with both modes successful
 - \`xcc -O2\` faster on $o2_faster_than_sdcc_size / $o2_sdcc_size_common benchmarks with both modes successful
+- \`xcc -Of\` smaller on $of_smaller_than_sdcc_size / $of_sdcc_size_common benchmarks with both modes successful
+- \`xcc -Of\` faster on $of_faster_than_sdcc_size / $of_sdcc_size_common benchmarks with both modes successful
 - \`xcc -O3\` smaller on $o3_smaller_than_sdcc_size / $o3_sdcc_size_common benchmarks with both modes successful
 - \`xcc -O3\` faster on $o3_faster_than_sdcc_size / $o3_sdcc_size_common benchmarks with both modes successful
 - \`xcc -Os\` smaller on $os_smaller_than_sdcc_size / $os_sdcc_size_common benchmarks with both modes successful

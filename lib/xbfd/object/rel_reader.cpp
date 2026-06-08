@@ -40,6 +40,7 @@ private:
         switch (rec) {
         case 'X': on_version(line);        break;
         case 'M': on_module(rest);         break;
+        case 'O': on_option(line);         break;
         case 'A': on_area(rest, lineno);   break;
         case 'S': on_symbol(rest, lineno); break;
         case 'T': on_text(rest, lineno);   break;
@@ -56,6 +57,17 @@ private:
     void on_module(const std::string& rest) {
         const auto toks = split(rest);
         if (!toks.empty()) obj_.module_name = toks[0];
+    }
+    void on_option(const std::string& text) {
+        if (text.find("sdcccall(0)") != std::string::npos) {
+            obj_.default_calling_convention = xbfd::calling_convention::xcc_sdcccall0;
+        } else if (text.find("sdcccall(1)") != std::string::npos) {
+            obj_.default_calling_convention = xbfd::calling_convention::xcc_sdcccall1;
+        } else if (text.find("z88dk::fastcall") != std::string::npos) {
+            obj_.default_calling_convention = xbfd::calling_convention::xcc_z88dk_fastcall;
+        } else if (text.find("z88dk::callee") != std::string::npos) {
+            obj_.default_calling_convention = xbfd::calling_convention::xcc_z88dk_callee;
+        }
     }
     void on_area(const std::string& rest, int lineno) {
         const auto toks = split(rest);

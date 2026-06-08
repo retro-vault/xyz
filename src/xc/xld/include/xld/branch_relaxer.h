@@ -1,6 +1,9 @@
 // branch_relaxer.h
 //
-// Link-time JP->JR relaxation for local in-area branches.
+// Link-time branch canonicalization:
+// - shrink local in-area JP to JR when safe
+// - promote out-of-range short branches back to long forms after final
+//   placement decisions (including reserved BIN holes)
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih

@@ -451,6 +451,23 @@ namespace xld {
             return std::nullopt;
         }
 
+        static std::optional<xbfd::debug_function> find_cdb_function(
+            const xbfd::debug_info& info, const std::string& display_name)
+        {
+            auto canonical = [](const std::string& name) {
+                if (!name.empty() && name[0] == '_')
+                    return name.substr(1);
+                return name;
+            };
+
+            const auto want = canonical(display_name);
+            for (const auto& fn : info.functions) {
+                if (fn.name == display_name || canonical(fn.name) == want)
+                    return fn;
+            }
+            return std::nullopt;
+        }
+
     } // namespace
 
     uint32_t debug_info_builder::symbol_absolute_addr(const module* mod,
@@ -524,6 +541,10 @@ namespace xld {
                 info.adb = adb_parser::parse(adb.value());
                 info.language = debug_language::c;
             }
+            if (auto cdb = sidecar_path(*mod, ".cdb"); cdb.has_value()) {
+                info.cdb = xbfd::debug_reader::read_cdb(cdb->string());
+                info.language = debug_language::c;
+            }
 
             for (const auto& sym : mod->symbols()) {
                 if (!sym.is_def())
@@ -556,7 +577,14 @@ namespace xld {
                         fn.file_local = adb_fn->file_local;
                         if (!adb_fn->return_type.name.empty())
                             fn.return_type = adb_fn->return_type.name;
+                        fn.calling_convention = adb_fn->calling_convention;
                     }
+                }
+                if (fn.calling_convention == xbfd::calling_convention::unknown
+                    && info.cdb.has_value()) {
+                    auto cdb_fn = find_cdb_function(info.cdb.value(), name);
+                    if (cdb_fn.has_value())
+                        fn.calling_convention = cdb_fn->convention;
                 }
                 info.functions[name] = std::move(fn);
             }

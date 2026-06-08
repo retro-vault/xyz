@@ -61,6 +61,7 @@ public:
 
 private:
     static xbfd::type_ref to_xdi(const type* t);
+    static xbfd::calling_convention to_xdi(call_abi abi);
 
     std::unique_ptr<xbfd::debug_writer> owned_;
     xbfd::debug_writer*                 writer_;

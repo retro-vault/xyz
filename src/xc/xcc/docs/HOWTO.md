@@ -31,8 +31,9 @@
 | `-O0`       | No optimisation (default). |
 | `-O1`       | Enable peephole optimiser. Removes redundant loads, dead jumps, temp store/reload pairs. The simplest fixed-window peepholes are now table-driven; the more context-sensitive ones still use custom matchers. |
 | `-O2`       | Enable general optimisation: module-level dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested private-helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same safe subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, IR constant-fold/DCE, strength reduction (multiply/divide/mod by power-of-two → shift), conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, dead-local frame compaction, the bounded stable temp register allocator for short straight-line 16-bit temp windows, automatic TEMP preallocation inside functions that already need an IX frame, smaller nearby `&local` / `&temp` address materialization, frameless zero-frame functions when safe, plus all `-O1` peephole rules. |
-| `-O3`       | Enable experimental optimisation: stable wins graduate into `-O2`, while `-O3` remains the landing zone for broader analysis budgets and new experimental optimisations before they are treated as everyday-safe. It is distinct again on the current benchmark suite because it now carries experimental dense-switch jump-table lowering. |
-| `-Os`       | Enable size optimisation: everything in `-O2`, with the size-oriented preset kept available for heuristics that prove size-profitable enough to become public defaults later. On the current benchmark suite it currently converges to the same emitted code as `-O2`. |
+| `-Of`       | Enable speed optimisation: the promoted aggressive baseline that currently beats SDCC on the executable benchmark suite. |
+| `-O3`       | Enable experimental optimisation: it currently starts from the same promoted aggressive baseline as `-Of` / `-Os`, so it is free to host genuinely new experiments without hoarding already-proven wins. |
+| `-Os`       | Enable size optimisation: it currently shares the same promoted aggressive baseline as `-Of` / `-O3`. |
 
 `xcc` also supports fine-grained overrides with `-f<name>` and
 `-fno-<name>`. Current names include:
@@ -143,10 +144,10 @@ sdldz80 -i program.ihx /usr/local/lib/xcc/crt0.rel module_a.rel module_b.rel \
 | `unsigned int`                    | 2           | |
 | `long` / `signed long`            | 4           | |
 | `unsigned long`                   | 4           | |
-| `long long` / `signed long long`  | 8           | parsed; full 64-bit codegen not yet complete |
-| `unsigned long long`              | 8           | parsed; full 64-bit codegen not yet complete |
+| `long long` / `signed long long`  | 8           | lowered through 64-bit runtime helpers |
+| `unsigned long long`              | 8           | lowered through 64-bit runtime helpers |
 | `float`                           | 4           | IEEE 754 single (32-bit) |
-| `double`                          | 4           | same representation as float on Z80 |
+| `double`                          | 8           | IEEE 754 double (64-bit soft-float) |
 | `_Bool`                           | 1           | |
 | `void`                            | —           | |
 | Pointer (any)                     | 2           | 16-bit flat address space |
@@ -458,19 +459,20 @@ and results in HL (or DE:HL for 32-bit).
 | `__div32`   | 32-bit divide                                | working |
 | `__mod32`   | 32-bit modulo                                | working |
 | `__call_hl` | Indirect call trampoline (`jp (hl)`)          | working |
-| `__fsadd`   | Soft-float add                               | **stub — returns 0** |
-| `__fssub`   | Soft-float subtract                          | **stub — returns 0** |
-| `__fsmul`   | Soft-float multiply                          | **stub — returns 0** |
-| `__fsdiv`   | Soft-float divide                            | **stub — returns 0** |
-| `__fitosf`  | Integer to soft-float conversion             | **stub — returns 0** |
-| `__fstoi`   | Soft-float to integer conversion             | **stub — returns 0** |
-| `__mulll`   | 64-bit multiply                              | **stub — returns 0** |
-| `__divll`   | 64-bit divide                                | **stub — returns 0** |
-| `__modll`   | 64-bit modulo                                | **stub — returns 0** |
+| `__fsadd`   | Soft-float add                               | working |
+| `__fssub`   | Soft-float subtract                          | working |
+| `__fsmul`   | Soft-float multiply                          | working |
+| `__fsdiv`   | Soft-float divide                            | working |
+| `__fitosf`  | Integer to soft-float conversion             | working |
+| `__fstoi`   | Soft-float to integer conversion             | working |
+| `__mulll`   | 64-bit multiply                              | working |
+| `__divll`   | 64-bit divide                                | working |
+| `__modll`   | 64-bit modulo                                | working |
 | `__atomic_*`| Atomic load/store/exchange/CAS (DI/EI)       | **stub** |
 
-Replace the `__fs*` stubs with a real soft-float library (e.g., SDCC's `libsdcc`)
-to enable working `float`/`double` arithmetic.
+`float`, `double`, and `long long` arithmetic are now lowered through the
+runtime helpers above. Future runtime work should focus on coverage and
+performance, not basic bring-up.
 
 ---
 

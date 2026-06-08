@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include <xbfd/xbfd.h>
+
 namespace xld {
 
     struct adb_type_info {
@@ -36,6 +38,7 @@ namespace xld {
         adb_type_info return_type;
         std::optional<uint32_t> line;
         bool file_local = false;
+        xbfd::calling_convention calling_convention = xbfd::calling_convention::unknown;
     };
 
     struct adb_symbol_info {

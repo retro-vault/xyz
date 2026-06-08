@@ -24,7 +24,8 @@ OBJS := $(patsubst %.c,$(OBJDIR)/%.rel,$(C_SRCS)) \
 # default; an OS build sets SYS=<os> to pull in lib/sys/<os>/ instead.
 SYS ?= none
 SYS_DIR  := $(ROOT)/lib/sys/$(SYS)
-SYS_SRCS := $(sort $(wildcard $(SYS_DIR)/*.s) $(wildcard $(SYS_DIR)/*.c))
+SYS_SRCS := $(sort $(filter-out $(SYS_DIR)/crt0.s,\
+                    $(wildcard $(SYS_DIR)/*.s) $(wildcard $(SYS_DIR)/*.c)))
 OBJS += $(patsubst $(SYS_DIR)/%.s,$(OBJDIR)/sys/%.rel,$(filter %.s,$(SYS_SRCS))) \
         $(patsubst $(SYS_DIR)/%.c,$(OBJDIR)/sys/%.rel,$(filter %.c,$(SYS_SRCS)))
 

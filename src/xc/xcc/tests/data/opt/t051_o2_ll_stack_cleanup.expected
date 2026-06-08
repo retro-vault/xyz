@@ -11,7 +11,7 @@ _div64:
 	ld	sp, hl
 	; receive (sdcccall1) param a at 4(ix)
 	; receive (sdcccall1) param b at 12(ix)
-	.globl	__divll
+	.globl	__divull
 	ld	l, 18(ix)
 	ld	h, 19(ix)
 	push	hl
@@ -35,18 +35,52 @@ _div64:
 	push	hl
 	ld	l, 4(ix)
 	ld	h, 5(ix)
+	ex	de, hl
+	pop	hl
+	exx
+	pop	de
+	pop	hl
+	exx
+	call	__divull
+	pop	bc
+	pop	bc
+	pop	bc
+	pop	bc
+	push	de
 	push	hl
-	call	__divll
-	ld	hl, #16
-	add	hl, sp
-	ld	sp, hl
-	ld	l, -8(ix)
-	ld	h, -7(ix)
+	exx
+	push	de
+	push	hl
+	exx
+	pop	hl
+	ld	-2(ix), l
+	ld	-1(ix), h
+	pop	hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	pop	hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	pop	hl
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	push	hl
+	ld	l, -4(ix)
+	ld	h, -3(ix)
 	push	hl
 	ld	l, -6(ix)
 	ld	h, -5(ix)
+	push	hl
+	ld	l, -8(ix)
+	ld	h, -7(ix)
 	ex	de, hl
 	pop	hl
+	exx
+	pop	de
+	pop	hl
+	exx
 __div64_end:
 	; epilogue: div64
 	ld	sp, ix

@@ -115,6 +115,28 @@ namespace xld {
             }
         }
 
+        if (!ctx.area_order.empty()) {
+            std::vector<area_group> ordered;
+            std::vector<bool> used(groups.size(), false);
+
+            for (const auto& scripted_name : ctx.area_order) {
+                auto it = group_map.find(scripted_name);
+                if (it == group_map.end())
+                    continue;
+                if (used[it->second])
+                    continue;
+                ordered.push_back(groups[it->second]);
+                used[it->second] = true;
+            }
+
+            for (size_t i = 0; i < groups.size(); ++i) {
+                if (!used[i])
+                    ordered.push_back(groups[i]);
+            }
+
+            groups = std::move(ordered);
+        }
+
         // Place areas group by group.
         uint16_t cursor = 0;
 

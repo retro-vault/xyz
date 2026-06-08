@@ -4,25 +4,24 @@
 
 In plain words, it does four main jobs:
 
-1. read SDCC-style `.rel` object files and `.lib` libraries
+1. read relocatable object files and libraries from the supported input modes
 2. resolve symbols and pull in only the library modules that are needed
 3. place areas in memory while respecting base addresses and reserved holes
 4. write one or more output files for loading, ROM building, symbols, and debugging
 
 What `xld` can do today:
 
-- link `.rel` files produced from both C and assembly
-- read two `.lib` styles:
-  - xld text-index libraries
-  - native `ar`-style SDCC archives that contain `.rel` members
+- link SDCC `.rel` objects and GNU ELF `.o` / `.obj` objects
+- read library inputs as:
+  - xld text-index `.lib` libraries
+  - native `ar` archives such as SDCC `.lib` and GNU `.a`
 - place relocatable, absolute, and overlay areas
 - skip reserved address ranges during placement
 - emit relocatable `XL` output
 - emit flat absolute `BIN` output
-- emit a NoICE `.noi` command file
-- emit a linked SDCC `.cdb` debug file
-- emit a linked `.xgdb` debug sidecar
-- optionally prepend a runtime `crt0` and append a runtime library from `--sdcc-runtime <dir>`
+- emit a linked SDCC `.cdb` debug file in `--mode=sdcc`
+- emit a derived GNU ELF + DWARF2 `.elf` debug sidecar in `--mode=gnu`
+- optionally prepend a runtime `crt0` and append a runtime library from `--sdcc-runtime <dir>` in SDCC mode
 
 Current limits that are worth knowing up front:
 
@@ -37,20 +36,91 @@ Current limits that are worth knowing up front:
 
 | File | Purpose | Required |
 |------|---------|----------|
-| `.rel` | Main object format. Contains areas, symbols, code bytes, and relocations. | Yes |
-| `.lib` | Library of `.rel` modules. Can be either xld text-index format or a native SDCC `ar` archive. xld loads only members that satisfy unresolved symbols. | Optional |
+| `.rel` | SDCC/ASxxxx relocatable object. Contains areas, symbols, code bytes, and relocations. | Optional |
+| `.o`, `.obj` | GNU ELF relocatable object. Uses section names such as `.text`, `.data`, and `.bss`. | Optional |
+| `.lib` | Library input. Can be xld text-index format or a native `ar` archive. xld loads only members that satisfy unresolved symbols. | Optional |
+| `.a` | GNU/SysV `ar` archive, typically containing ELF `.o` members. | Optional |
 | `.adb` | SDCC C debug sidecar. Used by `.xgdb`, and as a fallback source for compiler records when emitting `.cdb`. | Optional |
 | `.cdb` | SDCC compiler debug sidecar. Preferred compiler-record source when emitting a linked `.cdb`. | Optional |
-| `.lst` | Assembler listing. Used when emitting `.xgdb`, `.noi`, or `.cdb` for assembly modules. | Optional |
+| `.lst` | Assembler listing. Used when emitting GNU/SDCC debug sidecars for assembly modules. | Optional |
 
 ### Notes
 
-- `.rel` is the real linker input.
-- Both C and assembly reach xld as `.rel`; the difference matters only when optional debug sidecars are collected.
+- `--mode=sdcc` defaults the entry symbol to `_main`, keeps `-Ttext/-Tdata/-Tbss` mapped to `_CODE/_DATA/_BSS`, and enables `--sdcc-runtime`.
+- `--mode=gnu` defaults the entry symbol to `_start` and maps `-Ttext/-Tdata/-Tbss` to `.text/.data/.bss`.
+- Both `.rel` and ELF `.o` eventually become the same internal module model inside `xld`.
 - `.adb`, `.cdb`, and `.lst` are not linked themselves; they are sidecars used only to enrich debug outputs.
 - `.adb` is usually present for SDCC C compilation with debug enabled.
 - `.cdb` is usually present for SDCC C compilation with `--debug`.
 - `.lst` is usually present for assembler output with listing/debug enabled.
+
+### Linker scripts
+
+`xld` now supports `-T <file>` and `--script=<file>`.
+
+Scripts are parsed through `libxbfd` and loaded as defaults before normal
+command-line processing. Any explicit command-line option still wins over the
+script:
+
+- `-e` overrides script `ENTRY`
+- `-f` / `--oformat` override script output format
+- `-x` overrides script binary range
+- `-b`, `--section-start`, `-Ttext`, `-Tdata`, `-Tbss` override script bases
+- `-r` / `--reserve` add extra reserved ranges on top of the script
+
+#### GNU script subset
+
+In `--mode=gnu`, `xld` accepts a practical GNU-ld style subset aimed at real
+Z80 ROM/RAM scripts:
+
+- `ENTRY(symbol)`
+- `OUTPUT_FORMAT(binary|xl|elf|ihx)`
+- `MEMORY { NAME : ORIGIN = ..., LENGTH = ... }`
+- `SECTIONS { .text 0x0100 : { *(.text) } }`
+- `SECTIONS { .text : { *(.text .text.*) *(.rodata .rodata.*) } > ROM }`
+- output-section ordering derived from wildcard patterns inside `SECTIONS`
+- `/DISCARD/ : { ... }`
+- section attributes such as `AT(0x1234)` and `AT>ROM`
+- simple assignments and assertions such as:
+  - `_rom_end = .;`
+  - `ASSERT(_rom_end <= 0x4000, "ROM overflow!")`
+
+`xld` also understands one extra non-standard construct:
+
+- `RESERVE(lo-hi)` or `RESERVE(lo, hi)`
+- `BINARY_RANGE(lo-hi)` or `BINARY_RANGE(lo, hi)`
+
+`RESERVE(...)` feeds the same reserved-hole machinery as `-r`.
+
+#### SDCC script format
+
+In `--mode=sdcc`, `xld` accepts either a simple keyword form:
+
+```text
+ENTRY _main
+FORMAT bin
+AREA _CODE = 0100
+AREA _DATA = 4000
+AREA _BSS  = 4100
+RANGE 0000-7FFF
+RESERVE 0100-017F
+```
+
+or the equivalent command-file style:
+
+```text
+-e _main
+-f bin
+-b _CODE=0100
+-b _DATA=4000
+-b _BSS=4100
+-x 0000-7FFF
+-r 0100-017F
+```
+
+It also tolerates real SDCC-style command files with one directive per line,
+including harmless linker-driver commands such as `-p`, `-m`, `-z`, `-k`,
+`-l`, and trailing object/library file lines before the final `-e`.
 
 ---
 
@@ -62,16 +132,16 @@ Current limits that are worth knowing up front:
 | `.xl` | default `-f xl` | Relocatable XYZ loader image with header and relocation table |
 | `.bin` | `-f bin` | Flat absolute binary image |
 | `.noi` | `-n <file>` | NoICE command file with `DEF`, `FILE`, `LINE`, and scope records |
-| `.cdb` | `-c <file>` or `--cdb <file>` | Linked SDCC CDB debug file |
-| `.xgdb` | `-g <file>` or `--xgdb <file>` | Linked debug database for `xgdb` |
+| `.cdb` | derived by `-g` in `--mode=sdcc` | Linked SDCC CDB debug file |
+| `.elf` | derived by `-g` in `--mode=gnu` | Derived ELF debug sidecar with DWARF2 sections |
 
 ### Which one should I use?
 
 - Use `XL` when a loader will relocate the program at load time.
 - Use `BIN` when you want a fixed-address ROM or raw memory image.
-- Use `-n` when you want NoICE-compatible symbols and source lines.
-- Use `-c` when you want a linked SDCC-native debug file.
 - Use `-g` when you want source-level debugging metadata.
+- In `--mode=sdcc`, `-g` derives a linked `.cdb`.
+- In `--mode=gnu`, `-g` derives an ELF sidecar with DWARF2 sections.
 
 ---
 
@@ -128,13 +198,14 @@ If C and assembly sidecars are present, xld also adds `FILE`, `LINE`,
 ### 4. Produce a binary plus a linked SDCC CDB file
 
 ```bash
-xld -f bin -e _entry \
+xld -f bin -g -e _entry \
       -b _CODE=0100 \
       -x 0100-02FF \
-      -c build/hello.cdb \
       -o hello.bin \
       build/crt0.rel build/hello.rel
 ```
+
+In SDCC mode, `-g` derives `hello.cdb` next to `hello.bin`.
 
 For the `.cdb` file to be rich:
 
@@ -142,21 +213,23 @@ For the `.cdb` file to be rich:
 - if a sibling `.cdb` is missing, xld falls back to sibling `.adb`
 - assembly modules should have sibling `.lst` files if you want `L:A...` line records
 
-### 5. Produce a binary plus an xgdb file
+### 5. Produce a binary plus a GNU ELF + DWARF2 sidecar
 
 ```bash
-xld -f bin -e _entry \
-      -b _CODE=0100 \
+xld --mode=gnu -f bin -g -e _start \
+      -Ttext=0100 \
       -x 0100-02FF \
-      -g build/hello.xgdb \
       -o hello.bin \
-      build/crt0.rel build/hello.rel
+      build/start.o build/hello.o
 ```
 
-For the `.xgdb` file to be rich:
+In GNU mode, `-g` derives `hello.elf` next to `hello.bin`.
 
-- C modules should have sibling `.adb` files
-- assembly modules should have sibling `.lst` files
+The ELF sidecar contains:
+
+- a `.text` section derived from the final linked image
+- a final symbol table
+- `.debug_abbrev`, `.debug_info`, and `.debug_line` DWARF2 sections
 
 ### 6. Use an SDCC runtime directory only when you want it
 
@@ -209,8 +282,7 @@ There are thirteen switches in total today.
 
 | Option | Short meaning |
 |--------|---------------|
-| `-c`, `--cdb <file>` | Write linked SDCC `.cdb` debug output |
-| `-g`, `--xgdb <file>` | Write linked `.xgdb` debug output |
+| `-g` | Write mode-specific debug output: `.cdb` in SDCC mode, `.elf` in GNU mode |
 | `--sdcc-runtime <dir>` | Auto-inject runtime `crt0` and default library from a directory |
 | `-o <file>` | Set primary output filename |
 | `-n <file>` | Write NoICE `.noi` output |
@@ -235,36 +307,22 @@ For `crt0`-style startup code, place the startup object first.
 
 ## Switch Reference
 
-### `-c`, `--cdb <file>`
+### `-g`
 
-Write a linked SDCC `.cdb` sidecar.
+Write mode-specific debug output.
 
-What xld writes into it:
+In `--mode=sdcc`, xld derives a linked `.cdb` sidecar with:
 
 - compiler records copied from sibling module `.cdb` files when available
 - fallback `M:`, `F:`, and `S:` compiler records synthesized from sibling `.adb` files when `.cdb` is missing
 - linker `L:` records generated from the final linked addresses
 - assembly `L:A...` line records from sibling `.lst` files
 
-This is the closest output to SDCC's native linked debug format.
+In `--mode=gnu`, xld derives an `.elf` sidecar with:
 
-### `-g`, `--xgdb <file>`
-
-Write a linked `.xgdb` sidecar.
-
-What it contains:
-
-- image path
-- entry address
-- source file table
-- linked symbols
-- function ranges
-- line mappings
-- local variable metadata when available
-
-Where the data comes from:
-
-- `.rel` symbols and linked addresses
+- a `.text` section derived from the final linked image
+- a final symbol table
+- `.debug_abbrev`, `.debug_info`, and `.debug_line` DWARF2 sections
 - `.adb` for SDCC C debug information
 - `.lst` for assembly source line mappings
 
@@ -454,6 +512,11 @@ reserved during area placement:
 
 That means later linked code is placed after them and relocated normally,
 instead of being overwritten at BIN emit time.
+
+If those final placement changes make an existing short branch (`JR`, conditional
+`JR`, or `DJNZ`) no longer fit, xld now promotes it back to a safe long form
+before relocation. This applies to both forward and backward jumps, so code that
+crosses a reserved hole stays correct without manual padding.
 
 That jump targets:
 

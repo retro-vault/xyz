@@ -71,7 +71,7 @@ int type::size() const {
     case type_kind::LLONG:   return 8;
     case type_kind::ULLONG:  return 8;
     case type_kind::FLOAT:   return 4;
-    case type_kind::DOUBLE:  return 4; // double == float on Z80 (no FPU)
+    case type_kind::DOUBLE:  return 8;
     case type_kind::COMPLEX: return 8; // re+im, each a 4-byte soft-float
     case type_kind::POINTER: return 2;
     case type_kind::ENUM:    return 2; // enum -> int -> 2 bytes

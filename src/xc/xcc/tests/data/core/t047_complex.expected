@@ -17,18 +17,28 @@ _feq:
 	ld	sp, hl
 	; receive (sdcccall1) param a at -4(ix)
 	; receive (sdcccall1) param b at 4(ix)
-	ld	l, -4(ix)
-	ld	h, -3(ix)
+	.globl ___fscmp
+	ld	l, 6(ix)
+	ld	h, 7(ix)
 	push	hl
 	ld	l, 4(ix)
 	ld	h, 5(ix)
+	push	hl
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
 	pop	de
-	or	a, a
-	sbc	hl, de
-	ld	hl, #1
-	jp	z, __cmp_e_89383
-	dec	hl
-__cmp_e_89383:
+	call	___fscmp
+	ld	hl, #0
+	ld	a, d
+	or	e
+	jp	z, __fcmp_true_89383
+	jp	__fcmp_end_30886
+__fcmp_true_89383:
+	inc	l
+__fcmp_end_30886:
 	ld	-6(ix), l
 	ld	-5(ix), h
 	ld	l, -6(ix)
@@ -106,8 +116,14 @@ _test_complex_add:
 	ld	l, -42(ix)
 	ld	h, -41(ix)
 	push	hl
-	; load_rr: unhandled operand_kind 4
 	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16256
 	pop	hl
 	ld	(hl), e
 	inc	hl
@@ -131,8 +147,14 @@ _test_complex_add:
 	ld	l, -46(ix)
 	ld	h, -45(ix)
 	push	hl
-	; load_rr: unhandled operand_kind 4
 	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16384
 	pop	hl
 	ld	(hl), e
 	inc	hl
@@ -156,8 +178,14 @@ _test_complex_add:
 	ld	l, -50(ix)
 	ld	h, -49(ix)
 	push	hl
-	; load_rr: unhandled operand_kind 4
 	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16448
 	pop	hl
 	ld	(hl), e
 	inc	hl
@@ -181,8 +209,14 @@ _test_complex_add:
 	ld	l, -54(ix)
 	ld	h, -53(ix)
 	push	hl
-	; load_rr: unhandled operand_kind 4
 	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16512
 	pop	hl
 	ld	(hl), e
 	inc	hl
@@ -304,13 +338,24 @@ _test_complex_add:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-82(ix), e
-	ld	-81(ix), d
-	ld	l, 2(ix)
-	ld	h, 3(ix)
+	inc	hl
 	push	hl
-	ld	l, 0(ix)
-	ld	h, 1(ix)
+	ex	de, hl
+	ld	-82(ix), l
+	ld	-81(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-80(ix), l
+	ld	-79(ix), h
+	pop	hl
+	ld	hl, #16512
+	push	hl
+	ld	hl, #0
 	push	hl
 	ld	l, -82(ix)
 	ld	h, -81(ix)
@@ -361,13 +406,24 @@ __xcc_L2:
 	ld	e, (hl)
 	inc	hl
 	ld	d, (hl)
-	ld	-94(ix), e
-	ld	-93(ix), d
-	ld	l, 2(ix)
-	ld	h, 3(ix)
+	inc	hl
 	push	hl
-	ld	l, 0(ix)
-	ld	h, 1(ix)
+	ex	de, hl
+	ld	-94(ix), l
+	ld	-93(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-92(ix), l
+	ld	-91(ix), h
+	pop	hl
+	ld	hl, #16576
+	push	hl
+	ld	hl, #0
 	push	hl
 	ld	l, -94(ix)
 	ld	h, -93(ix)

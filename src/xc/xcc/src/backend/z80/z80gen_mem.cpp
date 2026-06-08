@@ -150,6 +150,20 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         if (op_size(ic.result) == 1) {
             emit_line("ld\ta, %s", abs.c_str());
             store_a(ic.result);
+        } else if (op_size(ic.result) == 8) {
+            for (int w = 0; w < 4; ++w) {
+                const std::string wadd =
+                    "(" + asm_.imm(ic.left.ival + (w * 2)) + ")";
+                emit_line("ld\thl, %s", wadd.c_str());
+                store_hl_word(ic.result, w);
+            }
+        } else if (op_size(ic.result) == 4) {
+            for (int w = 0; w < 2; ++w) {
+                const std::string wadd =
+                    "(" + asm_.imm(ic.left.ival + (w * 2)) + ")";
+                emit_line("ld\thl, %s", wadd.c_str());
+                store_hl_word(ic.result, w);
+            }
         } else {
             emit_line("ld\thl, %s", abs.c_str());
             store_hl(ic.result);
@@ -168,6 +182,28 @@ void z80_gen::gen_get_value_at(const icode &ic) {
     if (op_size(ic.result) == 1) {
         emit_line("ld\ta, (hl)");
         store_a(ic.result);
+    } else if (op_size(ic.result) == 8) {
+        for (int w = 0; w < 4; ++w) {
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            emit_line("inc\thl");
+            emit_line("push\thl");
+            emit_line("ex\tde, hl");
+            store_hl_word(ic.result, w);
+            emit_line("pop\thl");
+        }
+    } else if (op_size(ic.result) == 4) {
+        for (int w = 0; w < 2; ++w) {
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            emit_line("inc\thl");
+            emit_line("push\thl");
+            emit_line("ex\tde, hl");
+            store_hl_word(ic.result, w);
+            emit_line("pop\thl");
+        }
     } else {
         emit_line("ld\te, (hl)");
         emit_line("inc\thl");
@@ -323,6 +359,20 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         if (op_size(ic.left) == 1) {
             load_a(ic.left);
             emit_line("ld\t%s, a", abs.c_str());
+        } else if (op_size(ic.left) == 8) {
+            for (int w = 0; w < 4; ++w) {
+                const std::string wadd =
+                    "(" + asm_.imm(ic.result.ival + (w * 2)) + ")";
+                load_hl_word(ic.left, w);
+                emit_line("ld\t%s, hl", wadd.c_str());
+            }
+        } else if (op_size(ic.left) == 4) {
+            for (int w = 0; w < 2; ++w) {
+                const std::string wadd =
+                    "(" + asm_.imm(ic.result.ival + (w * 2)) + ")";
+                load_hl_word(ic.left, w);
+                emit_line("ld\t%s, hl", wadd.c_str());
+            }
         } else {
             load_hl(ic.left);
             emit_line("ld\t%s, hl", abs.c_str());
@@ -345,6 +395,28 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         if (!byte_load_preserves_hl_here(ic.left))
             emit_line("pop\thl");
         emit_line("ld\t(hl), a");
+    } else if (op_size(ic.left) == 8) {
+        for (int w = 0; w < 4; ++w) {
+            emit_line("push\thl");
+            load_de_word(ic.left, w);
+            emit_line("pop\thl");
+            emit_line("ld\t(hl), e");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), d");
+            if (w != 3)
+                emit_line("inc\thl");
+        }
+    } else if (op_size(ic.left) == 4) {
+        for (int w = 0; w < 2; ++w) {
+            emit_line("push\thl");
+            load_de_word(ic.left, w);
+            emit_line("pop\thl");
+            emit_line("ld\t(hl), e");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), d");
+            if (w != 1)
+                emit_line("inc\thl");
+        }
     } else {
         if (!word_load_preserves_hl_here(ic.left))
             emit_line("push\thl");
