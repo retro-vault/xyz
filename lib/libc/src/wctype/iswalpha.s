@@ -12,7 +12,9 @@
         .globl  _iswalpha
         .globl  _isalpha
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswalpha
+        ;; Wide values above UCHAR_MAX are outside the narrow classification
+        ;; tables, so only byte-sized characters are delegated to isalpha.
 _iswalpha::
         ld      a,h
         or      a

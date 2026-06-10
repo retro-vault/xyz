@@ -5,7 +5,9 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcscmp
         .area   _CODE
-        ; HL = lhs, DE = rhs -> DE = -1/0/1
+        ;; _wcscmp
+        ;; Compare wchar_t values numerically. High bytes decide first so the
+        ;; signed 16-bit ordering matches ordinary integer comparison.
 _wcscmp::
 wcc_loop:
         ld      a,(hl)                  ; lhs low -> C
@@ -26,7 +28,7 @@ wcc_loop:
         cp      c                       ; rhs_low vs lhs_low
         jr      c,wcc_gt
         jr      nz,wcc_lt
-        ld      a,b                     ; element equal; terminator?
+        ld      a,b                     ; Equal element: stop only on the wide NUL.
         or      c
         jr      z,wcc_equal
         inc     hl

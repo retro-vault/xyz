@@ -63,9 +63,7 @@ _f:
 	add	hl, sp
 	ld	sp, hl
 __xcc_L0:
-	push	hl
 	ld	a, #75
-	pop	hl
 	.globl	_bench_seed_byte
 	call	_bench_seed_byte
 	ld	-2(ix), a

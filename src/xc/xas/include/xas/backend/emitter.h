@@ -37,6 +37,12 @@ namespace xas {
         virtual void begin_module(const std::string& name) = 0;
 
         //
+        // Record the default calling convention for the assembled module.
+        //
+        virtual void set_default_calling_convention(
+            xbfd::calling_convention /*cc*/) {}
+
+        //
         // Switch to / create the named section.  Subsequent emit_* calls
         // go into this section.
         //
@@ -52,16 +58,18 @@ namespace xas {
         //
         // Reserve n bytes of uninitialised space (.ds / .space).
         //
-        virtual void emit_space(uint32_t n) = 0;
+        virtual void emit_space(uint32_t n, int source_line) = 0;
 
         //
         // Record a relocation at the current position.
         // sym_relative: true = reference to a named symbol,
         //               false = reference to a section/area.
+        // addend: constant addend associated with the relocation target.
         //
         virtual void emit_reloc(const std::string& name,
                                   bfd::reloc_type type,
-                                  bool sym_relative) = 0;
+                                  bool sym_relative,
+                                  int32_t addend = 0) = 0;
 
         //
         // Define a symbol at the current section offset.
@@ -70,6 +78,12 @@ namespace xas {
                                     uint64_t value,
                                     const std::string& section_name,
                                     bool global) = 0;
+
+        //
+        // Record a label boundary at the current section offset.
+        // SDCC REL output uses these to break T/R records at label lines.
+        //
+        virtual void mark_label(int /*source_line*/) {}
 
         //
         // Declare an external (undefined) symbol reference.

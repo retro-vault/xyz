@@ -5,7 +5,10 @@
         .globl  _wcscspn
         .globl  __wchar_is_delim
         .area   _CODE
-        ; HL = s, DE = reject -> DE = count
+        ;; _wcscspn
+        ;; Advance over the leading wchar_t run that does not belong to reject.
+        ;; The distance is accumulated as a byte delta and converted back to
+        ;; element count at the end.
 _wcscspn::
         push    hl                      ; start
 wcsp_loop:
@@ -18,7 +21,7 @@ wcsp_loop:
         ld      a,b
         or      c
         jr      z,wcsp_done
-        call    __wchar_is_delim        ; Z if *s in reject
+        call    __wchar_is_delim        ; Stop as soon as the current wchar_t is rejected.
         jr      z,wcsp_done
         inc     hl
         inc     hl
@@ -33,5 +36,5 @@ wcsp_done:
         sbc     h
         ld      d,a                     ; DE = bytes
         srl     d
-        rr      e                       ; /2 -> element count
+        rr      e                       ; Convert the byte delta to wchar_t count.
         ret

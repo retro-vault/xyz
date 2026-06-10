@@ -1,7 +1,7 @@
 # Makefile — xcc runtime Z80 emulation tests
 #
 # Build flow:
-#   1. Assemble all runtime .s files with sdasz80
+#   1. Assemble all runtime .s files with the selected assembler
 #   2. Link at 0x0000 with sdldz80, producing runtime.ihx + runtime.map
 #   3. Convert to flat binary (tools/ihx2bin.py)
 #   4. Generate C++ symbol header (tools/gen_symbols.py)
@@ -16,9 +16,11 @@ XZ80_INC    := $(ROOT)/lib/xz80/include
 CXX         := g++
 CXXFLAGS    := -std=c++20 -Wall -Wextra -g -I$(XZ80_INC) -I$(BUILD) -I.
 
-ASM         := sdasz80
-ASMFLAGS    :=
-LINK        := sdldz80
+# Default to xas now that the runtime REL output matches sdasz80 byte-for-byte.
+# Keep both knobs overridable for parity debugging.
+ASM         ?= $(ROOT)/bin/bin/xas
+ASMFLAGS    ?= --mode=sdcc
+LINK        ?= sdldz80
 
 RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(BUILD)/objs/%.rel,$(RUNTIME_SRCS))

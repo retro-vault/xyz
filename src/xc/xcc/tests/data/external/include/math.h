@@ -13,6 +13,10 @@ double pow(double, double);
 double exp(double);
 double log(double);
 double log10(double);
+double erf(double);
+double erfc(double);
+double tgamma(double);
+double lgamma(double);
 double fabs(double);
 double ceil(double);
 double floor(double);
@@ -24,6 +28,10 @@ float sqrtf(float);
 float fabsf(float);
 float floorf(float);
 float ceilf(float);
+float erff(float);
+float erfcf(float);
+float tgammaf(float);
+float lgammaf(float);
 
 #define M_PI   3.14159265358979323846
 #define M_E    2.71828182845904523536

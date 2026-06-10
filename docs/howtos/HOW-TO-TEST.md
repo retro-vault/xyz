@@ -55,7 +55,7 @@ Current phase names are:
 | `xcc` | `src/xc/xcc/tests/run_tests.sh` | Compiler codegen, semantic, and optimizer regressions |
 | `xcc-exec` | `src/xc/xcc/tests/run_exec_tests.sh` | Execution-oriented compiler regressions |
 | `xld` | `src/xc/xld` tests | Linker parsing, placement, relocation, and emission |
-| `xas` | `src/xc/xas/tests/asm_compare_test.sh` | Parity against `sdasz80` when available |
+| `xas` | `src/xc/xas/tests/asm_compare_test.sh` plus `make -C src/xc/xas test` | Parity against `sdasz80` plus format-conversion coverage |
 | `xar` | Archive smoke tests inside the wrapper | Create, list, and link-against archive flow |
 | `xgdb` | `lib/xgdb` tests | Debugger library-level coverage |
 | `mdr` | `tests/mdr-emu` | Microdrive end-to-end validation |
@@ -69,6 +69,8 @@ Common direct commands:
 
 ```sh
 make -C lib/xz80 test
+make -C src/xc/xas test
+make -C src/xc/xas test-libs
 make -C src/xc/xld test
 make -C lib/xgdb test
 make -C tests/mdr-emu test
@@ -120,6 +122,9 @@ bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc --suite all
 
 - `sdasz80` must be on `PATH` for the `xas` parity phase.
   If it is missing, that phase is skipped.
+
+- `make -C src/xc/xas test-libs` is a heavier library round-trip parity sweep.
+  It also needs the GNU Z80 assembler (`${Z80_GNU_PREFIX}as` by default).
 
 - The `xcc-exec` phase needs:
   `sdasz80`, `sdldz80`, `g++`, and the configured Z80 GNU binutils

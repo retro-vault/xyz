@@ -12,7 +12,9 @@
         .globl  _strcmp
         .area   _CODE
 
-        ; _wctrans: HL = name -> DE = id (0/1/2)
+        ;; _wctrans
+        ;; Map the textual transformation name onto the compact descriptor used by
+        ;; towctrans. Descriptor 0 is reserved for "unknown".
 _wctrans::
         ld      a,h
         or      l

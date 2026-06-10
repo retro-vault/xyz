@@ -37,9 +37,11 @@ described as a broadly usable C23 library for `xcc`.
   `strxfrm()` is the identity transform.
   `strerror()` only distinguishes success from a generic error.
 
-- `complex.h` and `tgmath.h` currently cover the core complex helpers only.
-  `creal`, `cimag`, `conj`, `cabs`, and `carg` are present, but the wider
-  transcendental family is not implemented yet.
+- `complex.h` and `tgmath.h` now cover the standard complex surface through
+  the circular, inverse circular, hyperbolic, and inverse hyperbolic helper
+  families. The current limitation is ABI depth rather than missing entry
+  points: `double` and `long double` spellings still alias the float-first
+  implementation.
 
 - `fenv.h` models one process-wide soft-float environment only.
   Exception flags are sticky and user-visible, but the arithmetic helpers do
@@ -49,10 +51,8 @@ described as a broadly usable C23 library for `xcc`.
   `setlocale()` accepts `"C"`, `"POSIX"`, and the empty string as aliases
   for that one locale profile.
 
-- `math.h` is still a compact subset rather than a full hosted math library.
-  Classification, sign handling, `fabs`, `copysign`, `sqrt`, and `atan2`
-  are available; the larger transcendental and rounding surface is still
-  missing.
+- `math.h` is much broader now, but its transcendental families still need
+  accuracy hardening rather than just more entry points.
 
 - `signal.h` provides one process-global disposition table and synchronous
   `raise()` delivery only.
@@ -79,24 +79,23 @@ described as a broadly usable C23 library for `xcc`.
   There is no multibyte state machine, shift-state encoding, or Unicode
   normalization layer.
 
-- `wchar.h` and `wctype.h` implement wide strings and classification with the
-  current 16-bit `wchar_t` model, but wide I/O and locale-aware collation are
-  still absent.
+- `wchar.h` and `wctype.h` implement wide strings, classification, and the
+  basic wide stream bridge (`fgetwc`, `fgetws`, `fputwc`, `fputws`, `getwc`,
+  `getwchar`, `putwc`, `putwchar`, `ungetwc`) with the current 16-bit
+  `wchar_t` model. Formatted wide I/O and locale-aware collation are still
+  absent.
 
 ## Missing Headers Entirely
 
-- `stdio.h`
-- `threads.h`
-- `time.h`
+None. The remaining work is completeness and hosted-behavior depth inside
+headers that now exist.
 
 ## Missing Runtime Facilities
 
-- Formatted and stream I/O
+- Formatted floating-point and formatted wide-character stream I/O
 - Full locale catalogue and locale tables beyond the built-in `"C"` locale
-- The wider `<math.h>` and `<complex.h>` function families
-- Time/date support
-- Wide-character I/O and richer Unicode handling beyond one-byte conversions
-- Threading support
+- The still-hardening `<math.h>` approximation kernels
+- Richer threading semantics beyond the current single-thread fallback
 - Wide atomic helper coverage for 32-bit and 64-bit object operations
 - Environment access and hosted process helpers
 
@@ -108,11 +107,9 @@ described as a broadly usable C23 library for `xcc`.
 
 ## Recommended Next Steps
 
-- Build out `stdio.h` next so assertions, diagnostics, and future hosted
-  library layers have a real output path.
-- Add `time.h` only once there is a clear clock source and calendar policy for
-  the target environment.
-- Extend the math and complex families incrementally from the current small
-  runtime-backed subset.
+- Keep extending `stdio.h` toward hosted behavior: float formatting, real
+  buffering, and formatted wide I/O.
+- Harden the new transcendental math and complex kernels for edge cases and
+  accuracy, then add the inverse complex families.
 - Widen `stdatomic.h` beyond 8-bit and 16-bit helpers if larger atomic object
   types become a practical requirement.

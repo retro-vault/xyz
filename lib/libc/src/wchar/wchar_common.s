@@ -11,10 +11,10 @@
         .globl  __wchar_is_delim
         .area   _CODE
 
-        ; __wchar_is_delim
-        ; inputs:  BC = ch, DE = delim pointer
-        ; outputs: Z set if ch is in delim, NZ otherwise
-        ; preserves: BC, DE, HL   (clobbers AF)
+        ;; __wchar_is_delim
+        ;; Scan a NUL-terminated wchar_t set for the 16-bit character in BC.
+        ;; The helper reports membership through Z so callers can branch without
+        ;; materializing a separate boolean result.
 __wchar_is_delim::
         push    de
         push    hl
@@ -24,7 +24,7 @@ wid_loop:
         inc     de
         ld      a,(de)
         ld      h,a
-        inc     de                      ; HL = *delim
+        inc     de                      ; HL = current delimiter entry
         ld      a,h
         or      l
         jr      z,wid_nf
@@ -36,11 +36,11 @@ wid_loop:
         jr      nz,wid_loop
         pop     hl
         pop     de
-        xor     a                       ; Z = found
+        xor     a                       ; Return Z for "found in delimiter set".
         ret
 wid_nf:
         pop     hl
         pop     de
         ld      a,#1
-        or      a                       ; NZ = not found
+        or      a                       ; Return NZ for "not found".
         ret

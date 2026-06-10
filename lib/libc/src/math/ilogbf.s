@@ -1,28 +1,23 @@
-        ; ilogbf.s
-        ;
-        ; libc ilogbf implementation for the xcc Z80 libc.
-        ; Returns the unbiased exponent of x as an int.  Zero returns the
-        ; target's FP_ILOGB0 sentinel (INT_MIN for this 16-bit int).
-        ;
-        ; MIT License (see: LICENSE)
-        ; Copyright (C) 2026 tomaz stih
+        ;; ilogbf.s
+        ;;
+        ;; libc ilogbf implementation for the xcc Z80 libc.
+        ;; Returns the unbiased exponent of x as an int.  Zero returns the
+        ;; target's FP_ILOGB0 sentinel (INT_MIN for this 16-bit int).
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2026 tomaz stih
 
         .module ilogbf
         .optsdcc -mz80 sdcccall(1)
 
 
         .globl  _ilogbf
-        .globl  _ilogb
-        .globl  _ilogbl
-
         .area   _CODE
 
-        ; _ilogbf / _ilogb / _ilogbl  (32-bit float types on this target)
-        ; inputs:  HL:DE = float x
-        ; outputs: DE = floor(log2(|x|)) = exp8 - 127, or INT_MIN if x == 0
-        ; clobbers: AF
-_ilogb::
-_ilogbl::
+        ;; _ilogbf / _ilogb / _ilogbl  (32-bit float types on this target)
+        ;; inputs:  HL:DE = float x
+        ;; outputs: DE = floor(log2(|x|)) = exp8 - 127, or INT_MIN if x == 0
+        ;; clobbers: AF
 _ilogbf::
         ld      a,h
         and     #0x7f

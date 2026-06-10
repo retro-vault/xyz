@@ -11,12 +11,11 @@
 #include <cctype>
 #include <cstdint>
 #include <memory>
-#include <regex>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include <xz80/disassembler.h>
+#include <xz80/formatter.h>
 #include <xz80/memory.h>
 
 #include <xgdb/disassembler.h>
@@ -77,52 +76,34 @@ namespace xgdb {
             return value;
         }
 
-        std::string format_hex_value(uint32_t value) {
-            std::ostringstream out;
-            out << "0x" << std::hex << std::nouppercase << value << std::dec;
-            return out.str();
-        }
-
         bool is_hex_string(const std::string& value) {
             return !value.empty() && std::all_of(value.begin(), value.end(),
                 [](unsigned char ch) { return std::isxdigit(ch) != 0; });
         }
 
-        // xz80 disassembler produces (IX+N) / (IX-N) with signed decimal displacement.
-        // Convert to SDCC form: N(ix).
-        std::string normalize_indexed_operand(const std::string& operand) {
-            static const std::regex pattern(R"(\((IX|IY)([+-]\d+)\))");
-            std::smatch match;
-            if (!std::regex_match(operand, match, pattern)) {
-                return "";
+        std::string normalize_operand_for_formatter(std::string operand) {
+            if (operand.size() > 1 && operand[0] == '#'
+                && is_hex_string(operand.substr(1))) {
+                return "#0x" + to_lower(operand.substr(1));
             }
-            const auto reg = to_lower(match[1].str());
-            const int disp = std::stoi(match[2].str());
-            std::ostringstream out;
-            out << disp << "(" << reg << ")";
-            return out.str();
+
+            if (operand.size() > 3 && operand[0] == '(' && operand[1] == '#'
+                && operand.back() == ')') {
+                const std::string body = operand.substr(2, operand.size() - 3);
+                if (is_hex_string(body))
+                    return "(#0x" + to_lower(body) + ")";
+            }
+
+            return operand;
         }
 
-        std::string normalize_z80_operand(const std::string& operand) {
-            if (const auto indexed = normalize_indexed_operand(operand); !indexed.empty()) {
-                return indexed;
-            }
-
-            // #NNNN or #NN — keep the # prefix, normalize hex case
-            if (operand.size() > 1 && operand[0] == '#' && is_hex_string(operand.substr(1))) {
-                return "#" + format_hex_value(
-                    static_cast<uint32_t>(std::stoul(operand.substr(1), nullptr, 16)));
-            }
-
-            // (#NNNN) — direct address
-            static const std::regex direct_pattern(R"(\(#([0-9A-Fa-f]+)\))");
-            std::smatch match;
-            if (std::regex_match(operand, match, direct_pattern)) {
-                return "(#" + format_hex_value(
-                    static_cast<uint32_t>(std::stoul(match[1].str(), nullptr, 16))) + ")";
-            }
-
-            return to_lower(operand);
+        std::vector<std::string> normalize_operands_for_formatter(
+            const std::vector<std::string>& operands) {
+            std::vector<std::string> out;
+            out.reserve(operands.size());
+            for (const auto& operand : operands)
+                out.push_back(normalize_operand_for_formatter(operand));
+            return out;
         }
 
         class native_formatter final : public syntax_formatter {
@@ -130,23 +111,43 @@ namespace xgdb {
             std::string format(const disassembled_instruction& instruction) const override {
                 return instruction.text;
             }
+
+            xz80::formatted_line format_fragments(
+                const disassembled_instruction& instruction) const override {
+                return xz80::format_instruction(xz80::syntax_style::native,
+                                                instruction.mnemonic,
+                                                normalize_operands_for_formatter(
+                                                    instruction.operands));
+            }
         };
 
         class sdcc_z80_formatter final : public syntax_formatter {
         public:
             std::string format(const disassembled_instruction& instruction) const override {
-                std::ostringstream out;
-                out << to_lower(instruction.mnemonic);
-                if (!instruction.operands.empty()) {
-                    out << "\t";
-                    for (std::size_t i = 0; i < instruction.operands.size(); ++i) {
-                        if (i != 0) {
-                            out << ", ";
-                        }
-                        out << normalize_z80_operand(instruction.operands[i]);
-                    }
-                }
-                return out.str();
+                return xz80::render_line(format_fragments(instruction));
+            }
+
+            xz80::formatted_line format_fragments(
+                const disassembled_instruction& instruction) const override {
+                return xz80::format_instruction(xz80::syntax_style::sdcc,
+                                                instruction.mnemonic,
+                                                normalize_operands_for_formatter(
+                                                    instruction.operands));
+            }
+        };
+
+        class gnu_z80_formatter final : public syntax_formatter {
+        public:
+            std::string format(const disassembled_instruction& instruction) const override {
+                return xz80::render_line(format_fragments(instruction));
+            }
+
+            xz80::formatted_line format_fragments(
+                const disassembled_instruction& instruction) const override {
+                return xz80::format_instruction(xz80::syntax_style::gnu,
+                                                instruction.mnemonic,
+                                                normalize_operands_for_formatter(
+                                                    instruction.operands));
             }
         };
 
@@ -201,6 +202,10 @@ namespace xgdb {
 
     std::unique_ptr<syntax_formatter> make_sdcc_z80_formatter() {
         return std::make_unique<sdcc_z80_formatter>();
+    }
+
+    std::unique_ptr<syntax_formatter> make_gnu_z80_formatter() {
+        return std::make_unique<gnu_z80_formatter>();
     }
 
 } // namespace xgdb

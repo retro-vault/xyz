@@ -4,7 +4,8 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcslen
         .area   _CODE
-        ; HL = s -> DE = count
+        ;; _wcslen
+        ;; Count 16-bit elements until the wide NUL terminator is reached.
 _wcslen::
         ld      de,#0
 wl_loop:

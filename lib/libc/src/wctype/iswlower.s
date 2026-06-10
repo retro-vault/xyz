@@ -12,7 +12,9 @@
         .globl  _iswlower
         .globl  _islower
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswlower
+        ;; Lowercase classification is only meaningful for byte-sized execution
+        ;; characters in this libc.
 _iswlower::
         ld      a,h
         or      a

@@ -89,6 +89,37 @@ TEST(relocator_builds_reloc_table) {
     ASSERT_EQ(static_cast<int>(ctx.reloc_table.size()), 1);
     ASSERT_EQ(ctx.reloc_table[0].offset, 1);
     ASSERT_EQ(ctx.reloc_table[0].size, 2);
+    ASSERT_EQ(ctx.reloc_table[0].pad, 0);
+}
+
+TEST(relocator_builds_msb_byte_reloc_table_entry) {
+    xld::link_context ctx;
+    auto mod = std::make_shared<xld::module>("test", "test.rel");
+    mod->areas().emplace_back("_CODE", 1, xld::area_flags::none, 0);
+    mod->areas()[0].set_placed_addr(0x1234);
+
+    xld::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0x00};
+
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::msb;
+    re.offset_in_t = 0;
+    re.ref_index = 0;
+    tr.relocs.push_back(re);
+    mod->texts().push_back(tr);
+
+    ctx.modules.push_back(mod);
+    ctx.code_size = 1;
+
+    xld::relocator::relocate(ctx);
+
+    ASSERT_EQ(static_cast<int>(ctx.reloc_table.size()), 1);
+    ASSERT_EQ(ctx.reloc_table[0].offset, 0x1234);
+    ASSERT_EQ(ctx.reloc_table[0].size, 1);
+    ASSERT_EQ(ctx.reloc_table[0].pad, 0x01);
+    ASSERT_EQ(ctx.code_buffer[0x1234], 0x12);
 }
 
 TEST(relocator_word_relocation_writes_last_buffer_byte) {

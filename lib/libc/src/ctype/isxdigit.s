@@ -17,10 +17,9 @@
 
         .area   _CODE
 
-        ; _isxdigit
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is a hexadecimal digit, else 0
-        ; clobbers: AF, BC
+        ;; _isxdigit
+        ;; Hex digits are the decimal band plus the upper- and lowercase A-F
+        ;; islands.
 _isxdigit::
         ld      a,h
         or      a

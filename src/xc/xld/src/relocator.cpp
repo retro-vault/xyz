@@ -185,7 +185,7 @@ namespace xld {
                         output_reloc or_entry;
                         or_entry.offset = patch_offset;
                         or_entry.size = is_word ? 2 : 1;
-                        or_entry.pad = 0;
+                        or_entry.pad = is_msb ? 0x01 : 0x00;
                         ctx.reloc_table.push_back(or_entry);
                     }
                 }

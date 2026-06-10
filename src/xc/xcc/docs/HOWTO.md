@@ -221,7 +221,7 @@ sdldz80 -i program.ihx /usr/local/lib/xcc/crt0.rel module_a.rel module_b.rel \
 | Function declarations (prototype) | ✓ |
 | Function definitions              | ✓ |
 | Recursive calls                   | ✓ |
-| Variadic `...`                    | parsed; `va_list` not yet implemented |
+| Variadic `...`                    | ✓ stack-only ABI; `va_list` via `lib/libc/include/stdarg.h` |
 | Inline `__asm__`                  | ✓ GNU-style `__asm__("...")` passthrough |
 
 ### Preprocessor
@@ -234,6 +234,10 @@ xcc has a built-in preprocessor.  Source files are preprocessed automatically be
 
 `xcc` uses the modern SDCC-style `sdcccall(1)` register-based calling
 convention by default on Z80.
+
+Variadic functions are the one deliberate exception: any function
+declared with `...` is forced to `sdcccall(0)` so every argument is
+stack-passed in a stable layout for `va_list` handling.
 
 ### Parameter passing
 

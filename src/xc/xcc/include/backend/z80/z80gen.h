@@ -266,6 +266,7 @@ private:
     // Emit .area _DATA declarations for all global variables.
     //
     void emit_globals(const ir_module &mod);
+    void emit_external_data_refs(const ir_module &mod);
 
     //
     // Emit string literals into .area _DATA.

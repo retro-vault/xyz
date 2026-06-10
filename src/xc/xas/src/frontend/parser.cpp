@@ -61,6 +61,19 @@ namespace xas {
         eat(token_kind::newline);
     }
 
+    void parser::finish_stmt(stmt& s)
+    {
+        if (peek().kind == token_kind::comment)
+            s.trailing_comment = advance().text;
+        if (peek().kind == token_kind::newline) {
+            advance();
+            return;
+        }
+        if (peek().kind == token_kind::eof)
+            return;
+        throw parse_error(peek().file, peek().line, "expected end of line");
+    }
+
     // -------------------------------------------------------------------------
     // Register and condition helpers
     // -------------------------------------------------------------------------
@@ -88,6 +101,16 @@ namespace xas {
         for (auto& c : CONDITIONS)
             if (c == s) return true;
         return false;
+    }
+
+    static bool is_unsupported_macro_directive(const std::string& s)
+    {
+        return s == "macro"
+            || s == "endm"
+            || s == "mend"
+            || s == "rept"
+            || s == "irp"
+            || s == "irpc";
     }
 
     // -------------------------------------------------------------------------
@@ -331,13 +354,29 @@ namespace xas {
         s.source_line    = peek().line - 1; // already consumed directive token
         s.directive_name = name;
 
+        if (is_unsupported_macro_directive(name)) {
+            throw parse_error(peek().file,
+                              s.source_line,
+                              "macro directives are not supported in xas source mode");
+        }
+
         // .module / .file — just a module name string
         if (name == "module" || name == "file") {
             if (peek().kind == token_kind::ident
                 || peek().kind == token_kind::string_lit) {
                 const token& a = advance(); s.string_arg = a.raw.empty() ? a.text : a.raw;
             }
-            skip_to_newline();
+            finish_stmt(s);
+            return s;
+        }
+
+        // GNU shorthand section directives.
+        if (name == "text" || name == "data"
+            || name == "rodata" || name == "bss"
+            || name == "tdata") {
+            s.directive_name = "section";
+            s.string_arg = "." + name;
+            finish_stmt(s);
             return s;
         }
 
@@ -353,7 +392,14 @@ namespace xas {
                     const token& a = advance(); s.string_arg = "." + (a.raw.empty() ? a.text : a.raw);
                 }
             }
-            skip_to_newline();
+            while (!at_end() && peek().kind != token_kind::newline
+                   && peek().kind != token_kind::comment) {
+                if (!s.string_arg2.empty())
+                    s.string_arg2 += ' ';
+                const token& extra = advance();
+                s.string_arg2 += extra.raw.empty() ? extra.text : extra.raw;
+            }
+            finish_stmt(s);
             return s;
         }
 
@@ -364,7 +410,7 @@ namespace xas {
                 s.args.push_back(expr::make_sym(a.raw.empty() ? a.text : a.raw, peek().line));
                 eat(token_kind::comma);
             }
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -376,14 +422,14 @@ namespace xas {
             }
             eat(token_kind::comma);
             s.args.push_back(parse_expr());
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
         // .org / .origin — set origin
         if (name == "org" || name == "origin") {
             s.args.push_back(parse_expr());
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -396,21 +442,21 @@ namespace xas {
                     s.args.push_back(parse_expr());
                 }
             } while (eat(token_kind::comma));
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
         // .word / .dw / .2byte — emit 16-bit words
         if (name == "word" || name == "dw" || name == "2byte") {
             do { s.args.push_back(parse_expr()); } while (eat(token_kind::comma));
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
         // .ds / .space — reserve bytes
         if (name == "ds" || name == "space") {
             s.args.push_back(parse_expr());
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -420,7 +466,7 @@ namespace xas {
                 s.string_arg = advance().text;
             if (name == "asciz" || name == "string")
                 s.string_arg += '\0';
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -428,7 +474,7 @@ namespace xas {
         if (name == "include") {
             if (peek().kind == token_kind::string_lit)
                 s.string_arg = advance().text;
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -436,11 +482,11 @@ namespace xas {
         if (name == "if" || name == "ifdef" || name == "ifndef") {
             if (!at_end() && peek().kind != token_kind::newline)
                 s.args.push_back(parse_expr());
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
         if (name == "else" || name == "endif") {
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -449,7 +495,7 @@ namespace xas {
             if (name == "long")
                 s.directive_name = "dl"; // normalize GNU spelling
             do { s.args.push_back(parse_expr()); } while (eat(token_kind::comma));
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -457,14 +503,14 @@ namespace xas {
         if (name == "blkb") {
             s.directive_name = "ds"; // normalise to .ds
             s.args.push_back(parse_expr());
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
         // .blkw N — reserve N words = 2N bytes (SDCC extension)
         if (name == "blkw") {
             s.args.push_back(parse_expr());
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
@@ -478,21 +524,37 @@ namespace xas {
                 s.args.push_back(parse_expr());
             else
                 s.args.push_back(expr::make_int(1, s.source_line)); // default value 1
-            skip_to_newline();
+            finish_stmt(s);
             return s;
         }
 
-        // .optsdcc ... — SDCC assembler option (ignored, no-op)
-        if (name == "optsdcc") { skip_to_newline(); return s; }
+        // .optsdcc ... — SDCC assembler option payload
+        if (name == "optsdcc") {
+            bool first = true;
+            while (!at_end() && peek().kind != token_kind::newline) {
+                if (!first) s.string_arg2 += ' ';
+                s.string_arg2 += advance().text;
+                first = false;
+            }
+            finish_stmt(s);
+            return s;
+        }
 
         // .24bit / .32bit — SDCC pointer-size hints (no-op for xas)
-        if (name == "24bit" || name == "32bit") { skip_to_newline(); return s; }
+        if (name == "24bit" || name == "32bit") { finish_stmt(s); return s; }
 
         // Unknown directive — collect remaining tokens as string_arg.
         while (!at_end() && peek().kind != token_kind::newline) {
+            if (peek().kind == token_kind::comment) {
+                s.trailing_comment = advance().text;
+                break;
+            }
             s.string_arg += advance().text + " ";
         }
-        skip_to_newline();
+        if (peek().kind == token_kind::newline)
+            advance();
+        else if (peek().kind != token_kind::eof)
+            throw parse_error(peek().file, peek().line, "expected end of line");
         return s;
     }
 
@@ -508,13 +570,15 @@ namespace xas {
         s.source_line = peek().line;
 
         // Collect comma-separated operands until newline/eof.
-        if (!at_end() && peek().kind != token_kind::newline) {
+        if (!at_end()
+            && peek().kind != token_kind::newline
+            && peek().kind != token_kind::comment) {
             s.operands.push_back(parse_operand());
             while (eat(token_kind::comma)) {
                 s.operands.push_back(parse_operand());
             }
         }
-        skip_to_newline();
+        finish_stmt(s);
         return s;
     }
 
@@ -531,7 +595,21 @@ namespace xas {
         // consume EQU keyword
         advance();
         s.equ_value = parse_expr();
-        skip_to_newline();
+        finish_stmt(s);
+        return s;
+    }
+
+    stmt parser::parse_comment()
+    {
+        const token& t = expect(token_kind::comment, "expected comment");
+        stmt s;
+        s.kind = stmt_kind::comment;
+        s.source_line = t.line;
+        s.comment_text = t.text;
+        if (peek().kind == token_kind::newline)
+            advance();
+        else if (peek().kind != token_kind::eof)
+            throw parse_error(peek().file, peek().line, "expected end of line");
         return s;
     }
 
@@ -552,6 +630,9 @@ namespace xas {
 
         const token& t = peek();
 
+        if (t.kind == token_kind::comment)
+            return parse_comment();
+
         // Directive line — but may be a dot-prefixed local label (.name:).
         if (t.kind == token_kind::directive) {
             std::string raw  = t.raw.empty() ? t.text : t.raw;
@@ -563,6 +644,11 @@ namespace xas {
                 s.label_name  = "." + raw;
                 s.source_line = t.line;
                 advance(); // consume ':'
+                if (peek().kind == token_kind::comment
+                    || peek().kind == token_kind::newline
+                    || peek().kind == token_kind::eof) {
+                    finish_stmt(s);
+                }
                 return s;
             }
             return parse_directive(name);
@@ -582,6 +668,11 @@ namespace xas {
                 s.source_line= t.line;
                 advance(); // consume ':'
                 eat(token_kind::colon); // consume optional second ':' (SDCC '::')
+                if (peek().kind == token_kind::comment
+                    || peek().kind == token_kind::newline
+                    || peek().kind == token_kind::eof) {
+                    finish_stmt(s);
+                }
                 return s;
             }
 
@@ -589,6 +680,12 @@ namespace xas {
             if (peek().kind == token_kind::ident
                 && (peek().text == "EQU" || peek().text == "DEFL"
                     || peek().text == "SET")) {
+                return parse_equ(sym);
+            }
+
+            // SDCC/GAS-style dotted absolute assignment: "name .equ expr".
+            if (peek().kind == token_kind::directive
+                && (peek().text == "equ" || peek().text == "set")) {
                 return parse_equ(sym);
             }
 
@@ -600,7 +697,7 @@ namespace xas {
                 s.equ_name   = sym;
                 s.source_line = t.line;
                 s.equ_value  = parse_expr();
-                skip_to_newline();
+                finish_stmt(s);
                 return s;
             }
 

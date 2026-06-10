@@ -8,6 +8,9 @@
 //
 //   --mode=sdcc   SDCC sdasz80 directives; emit .rel object (default)
 //   --mode=gnu    GNU gas directives; emit ELF32 z80-elf object
+//   --format=sdcc Pretty-print / emit SDCC-style source
+//   --format=gnu  Pretty-print / emit GNU-style source
+//                 Supported source subset excludes assembler macros
 //   -o <file>     Output file (default: input stem + .rel or .o)
 //   -g            Emit debug information
 //   -I <dir>      Add include search directory
@@ -21,6 +24,7 @@
 #ifndef XAS_CLI_HPP
 #define XAS_CLI_HPP
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -31,10 +35,16 @@ namespace xas {
         gnu     // GNU gas directives + ELF output
     };
 
+    enum class output_format {
+        sdcc,   // Pretty-print / emit SDCC-style assembly text
+        gnu     // Pretty-print / emit GNU-style assembly text
+    };
+
     struct cli_options {
         asm_mode            mode      = asm_mode::sdcc;
         std::string         input;
         std::string         output;
+        std::optional<output_format> format;
         bool                debug     = false;
         std::vector<std::string> include_dirs;
         std::vector<std::string> defines;

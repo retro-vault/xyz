@@ -4,6 +4,9 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _mbsinit
         .area   _CODE
+        ;; _mbsinit
+        ;; This libc implements a stateless multibyte encoding, so every shift
+        ;; state object is already in the initial state.
 _mbsinit::
         ld      de,#1
         ret

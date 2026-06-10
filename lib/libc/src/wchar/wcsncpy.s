@@ -4,12 +4,14 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcsncpy
         .area   _CODE
-        ; HL = dst, DE = src, 4(ix) = count -> DE = dst
+        ;; _wcsncpy
+        ;; Copy at most count wchar_t elements. Once the source terminator has
+        ;; been copied, the remainder of the destination is padded with wide NULs.
 _wcsncpy::
         push    ix
         ld      ix,#0
         add     ix,sp
-        push    hl                      ; save dst
+        push    hl                      ; Preserve the original destination for the return value.
         ld      c,4(ix)
         ld      b,5(ix)                 ; BC = count
 wncp_copy:
@@ -30,7 +32,7 @@ wncp_copy:
         inc     hl
         inc     hl
         dec     bc
-        jr      z,wncp_pad              ; copied a NUL -> pad the rest
+        jr      z,wncp_pad              ; A copied terminator switches the loop into padding mode.
         jr      wncp_copy
 wncp_pad:
         ld      a,b

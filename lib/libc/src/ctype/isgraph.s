@@ -17,10 +17,8 @@
 
         .area   _CODE
 
-        ; _isgraph
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is graphical, else 0
-        ; clobbers: AF, BC
+        ;; _isgraph
+        ;; Graphical characters occupy the printable ASCII range without space.
 _isgraph::
         ld      a,h
         or      a

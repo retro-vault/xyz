@@ -13,7 +13,9 @@
         .globl  _towupper
         .area   _CODE
 
-        ; _towctrans: HL = wc, DE = desc -> DE = mapped wc
+        ;; _towctrans
+        ;; The descriptor space is tiny: 1 means towlower, 2 means towupper, and
+        ;; every other value is the identity transformation.
 _towctrans::
         ld      a,d
         or      a

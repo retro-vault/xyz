@@ -48,19 +48,25 @@ static bool load_byte_preserves_hl(const operand &op,
 }
 
 void z80_gen::gen_assign(const icode &ic) {
-    if (op_size(ic.left) == 1) {
+    int sz = op_size(ic.left);
+    if (sz == 1) {
         load_a(ic.left);
         store_a(ic.result);
-    } else if (op_size(ic.left) == 8) {
-        for (int w = 0; w < 4; ++w) {
+    } else if (sz > 2) {
+        for (int w = 0; w < sz / 2; ++w) {
             load_hl_word(ic.left, w);
             store_hl_word(ic.result, w);
         }
-    } else if (op_size(ic.left) == 4) {
-        load_hl_lo32(ic.left);
-        store_hl_lo32(ic.result);
-        load_hl_hi32(ic.left);
-        store_hl_hi32(ic.result);
+        if (sz & 1) {
+            operand src_tail = ic.left;
+            operand dst_tail = ic.result;
+            src_tail.byte_offset += (sz - 1);
+            dst_tail.byte_offset += (sz - 1);
+            src_tail.type = type::make_char();
+            dst_tail.type = type::make_char();
+            load_a(src_tail);
+            store_a(dst_tail);
+        }
     } else {
         load_hl(ic.left);
         store_hl(ic.result);

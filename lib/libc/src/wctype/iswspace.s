@@ -12,7 +12,9 @@
         .globl  _iswspace
         .globl  _isspace
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswspace
+        ;; Whitespace classification is inherited from the narrow helper for the
+        ;; execution charset only.
 _iswspace::
         ld      a,h
         or      a

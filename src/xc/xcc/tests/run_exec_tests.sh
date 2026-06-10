@@ -8,20 +8,26 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$ROOT_DIR/../../.." && pwd)"
 XCC="${1:-$ROOT_DIR/build/bin/xcc}"
 TEST_ROOT="$ROOT_DIR/tests/data/exec"
 INCLUDE_DIR="$TEST_ROOT/include"
+LIBC_INCLUDE_DIR="$REPO_ROOT/lib/libc/include"
+COMMON_INCLUDE_DIR="$REPO_ROOT/include"
 RUNNER_SRC="$ROOT_DIR/tests/tools/z80emu/z80_exec.cpp"
 RUNNER_BIN="$ROOT_DIR/build/bin/z80_exec"
 CRT0_SDAS="$ROOT_DIR/tests/tools/z80emu/crt0_sdasz80.s"
 CRT0_GNU="$ROOT_DIR/tests/tools/z80emu/crt0_gnuas.s"
 GNU_LD_SCRIPT="$ROOT_DIR/tests/tools/z80emu/z80_exec.ld"
+TEST_SYS_EXIT="$ROOT_DIR/tests/tools/z80emu/sys_exit.s"
 EXEC_BUILD="$ROOT_DIR/build/exec"
 GNU_PREFIX="${Z80_GNU_PREFIX:-/usr/local/z80-elf/bin/z80-unknown-elf-}"
 GNU_AS="${GNU_PREFIX}as"
 GNU_LD="${GNU_PREFIX}ld"
 GNU_OBJCOPY="${GNU_PREFIX}objcopy"
 RUNTIME_DIR="$ROOT_DIR/lib/runtime"
+LIBC_SRC_DIR="$REPO_ROOT/lib/libc/src"
+SYS_NONE_DIR="$REPO_ROOT/lib/sys/none"
 
 PASS=0
 FAIL=0
@@ -62,14 +68,17 @@ translate_sdas_to_gnu() {
         s/^\s*\.area\s+_DATA/\t.data/;
         s/^\s*\.area\s+_CONST/\t.section\t.rodata/;
         s/^\s*\.area\s+_TLS/\t.section\t.tdata,\"aw\"/;
+        s/^\s*\.area\s+_HEAP/\t.section\t.bss.heap,\"aw\"/;
         s/\b\.globl\b/.global/g;
         s/\b\.db\b/.byte/g;
         s/\b\.dw\b/.short/g;
         s/\b\.dl\b/.long/g;
         s/\b\.ds\b/.space/g;
         s/::/:/g;
+        s/#\(([^()]*)\)/$1/g;
         s/#//g;
         s/([+-]?\d+)\s*\((i[xy])\)/sprintf("(%s%s%d)", $2, ($1 < 0 ? "" : "+"), $1)/eg;
+        s/([A-Za-z_][A-Za-z0-9_]*)\s*\((i[xy])\)/sprintf("(%s+%s)", $2, $1)/eg;
     ' "$src" > "$dst"
 }
 
@@ -98,6 +107,11 @@ opt_levels_for_test() {
 declare -a MODULES=()
 declare -A SEEN=()
 
+reset_modules() {
+    MODULES=()
+    SEEN=()
+}
+
 add_module() {
     local path="$1"
     if [[ -z "${SEEN[$path]+x}" ]]; then
@@ -110,10 +124,458 @@ add_runtime_module() {
     add_module "$RUNTIME_DIR/$1"
 }
 
-resolve_modules() {
-    MODULES=()
-    SEEN=()
+add_libc_module() {
+    add_module "$LIBC_SRC_DIR/$1"
+}
 
+add_sys_none_module() {
+    add_module "$SYS_NONE_DIR/$1"
+}
+
+add_exec_tool_module() {
+    add_module "$ROOT_DIR/tests/tools/z80emu/$1"
+}
+
+resolve_libc_modules() {
+    local asm_file
+    for asm_file in "$@"; do
+        local public_refs
+        public_refs="$(grep -o '_[A-Za-z0-9_]\+' "$asm_file" | sort -u || true)"
+        while IFS= read -r ref; do
+            [[ -n "$ref" ]] || continue
+            case "$ref" in
+        _aligned_alloc)
+            add_libc_module "stdlib/aligned_alloc.s"
+            add_libc_module "stdlib/heap_core.s"
+            add_libc_module "string/memcpy.s"
+            add_sys_none_module "sys_sbrk.s"
+            add_runtime_module "int16/mulint.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        _malloc|_calloc|_realloc|_free)
+            add_libc_module "stdlib/heap_core.s"
+            add_libc_module "string/memcpy.s"
+            add_sys_none_module "sys_sbrk.s"
+            add_runtime_module "int16/mulint.s"
+            add_runtime_module "int16/divunsigned.s"
+            ;;
+        _qsort)
+            add_libc_module "stdlib/qsort.s"
+            add_runtime_module "int16/mulint.s"
+            add_runtime_module "jumps/call_bc_runtime.s"
+            ;;
+        _bsearch)
+            add_libc_module "stdlib/bsearch.s"
+            add_runtime_module "int16/mulint.s"
+            add_runtime_module "jumps/call_bc_runtime.s"
+            ;;
+        _ldiv)
+            add_libc_module "stdlib/ldiv.s"
+            add_runtime_module "int32/divslong.s"
+            add_runtime_module "int32/modslong.s"
+            ;;
+        _lldiv)
+            add_libc_module "stdlib/lldiv.s"
+            add_runtime_module "int64/divsll.s"
+            add_runtime_module "int64/modsll.s"
+            ;;
+        _abort|_atexit|_exit|__Exit|_at_quick_exit|_quick_exit)
+            add_libc_module "stdlib/exit_core.s"
+            add_exec_tool_module "sys_exit.s"
+            add_runtime_module "jumps/call_bc_runtime.s"
+            ;;
+        _atof)
+            add_libc_module "stdlib/atof.s"
+            ;;
+        _strtof)
+            add_libc_module "stdlib/strtof.s"
+            ;;
+        _strtod)
+            add_libc_module "stdlib/strtod.s"
+            ;;
+        _strtold)
+            add_libc_module "stdlib/strtold.s"
+            ;;
+        _mblen)
+            add_libc_module "stdlib/mblen.s"
+            ;;
+        _mbtowc)
+            add_libc_module "stdlib/mbtowc.s"
+            ;;
+        _wctomb)
+            add_libc_module "stdlib/wctomb.s"
+            ;;
+        _mbrlen)
+            add_libc_module "wchar/mbrlen.s"
+            ;;
+        _mbrtowc)
+            add_libc_module "wchar/mbrtowc.s"
+            ;;
+        _wcrtomb)
+            add_libc_module "wchar/wcrtomb.s"
+            ;;
+        _mbsrtowcs)
+            add_libc_module "wchar/mbsrtowcs.s"
+            ;;
+        _wcsrtombs)
+            add_libc_module "wchar/wcsrtombs.s"
+            ;;
+        _wcstof)
+            add_libc_module "wchar/wcstof.s"
+            ;;
+        _wcstod)
+            add_libc_module "wchar/wcstod.s"
+            ;;
+        _wcstold)
+            add_libc_module "wchar/wcstold.s"
+            ;;
+        _wcstol)
+            add_libc_module "wchar/wcstol.s"
+            ;;
+        _wcstoul)
+            add_libc_module "wchar/wcstoul.s"
+            ;;
+        _wcstoll)
+            add_libc_module "wchar/wcstoll.s"
+            ;;
+        _wcstoull)
+            add_libc_module "wchar/wcstoull.s"
+            ;;
+        _wcstoimax)
+            add_libc_module "inttypes/wcstoimax.s"
+            ;;
+        _wcstoumax)
+            add_libc_module "inttypes/wcstoumax.s"
+            ;;
+        _strtoll)
+            add_libc_module "stdlib/strtoll.s"
+            add_libc_module "stdlib/strtox_core.s"
+            add_runtime_module "int16/mulint.s"
+            ;;
+        _strtoull)
+            add_libc_module "stdlib/strtoull.s"
+            add_libc_module "stdlib/strtox_core.s"
+            add_runtime_module "int16/mulint.s"
+            ;;
+        _strtoimax)
+            add_libc_module "inttypes/strtoimax.s"
+            ;;
+        _strtoumax)
+            add_libc_module "inttypes/strtoumax.s"
+            ;;
+        _imaxdiv)
+            add_libc_module "inttypes/imaxdiv.s"
+            ;;
+        _wcscoll)
+            add_libc_module "wchar/wcscoll.s"
+            ;;
+        _wcscmp)
+            add_libc_module "wchar/wcscmp.s"
+            ;;
+        _wcsxfrm)
+            add_libc_module "wchar/wcsxfrm.s"
+            ;;
+        _sqrtf)
+            add_libc_module "math/sqrtf.s"
+            ;;
+        _fabsf)
+            add_libc_module "math/fabsf.s"
+            ;;
+        _copysignf)
+            add_libc_module "math/copysignf.s"
+            ;;
+        _sinf)
+            add_libc_module "math/trigf.s"
+            ;;
+        _cosf)
+            add_libc_module "math/trigf.s"
+            ;;
+        _atan2f)
+            add_libc_module "math/atan2f.s"
+            ;;
+        _roundf)
+            add_libc_module "math/roundf.s"
+            add_libc_module "math/round_common.s"
+            ;;
+        _truncf)
+            add_libc_module "math/truncf.s"
+            ;;
+        _frexpf)
+            add_libc_module "math/frexpf.s"
+            ;;
+        _ldexpf)
+            add_libc_module "math/ldexpf.s"
+            ;;
+        _expf)
+            add_libc_module "math/expf.s"
+            ;;
+        _logf)
+            add_libc_module "math/logf.s"
+            ;;
+        __libc_expf_core|__libc_logf_core)
+            add_libc_module "math/transf_core.s"
+            ;;
+        ___libc_fpclassifyf|__libc_fpclassifyf)
+            add_libc_module "math/libc_fpclassifyf.s"
+            ;;
+        ___libc_signbitf|__libc_signbitf)
+            add_libc_module "math/libc_signbitf.s"
+            ;;
+        ___libc_isinff|__libc_isinff)
+            add_libc_module "math/libc_isinff.s"
+            ;;
+        ___fsadd)
+            add_runtime_module "float/fsadd.s"
+            ;;
+        ___fssub)
+            add_runtime_module "float/fssub.s"
+            ;;
+        ___fsmul)
+            add_runtime_module "float/fsmul.s"
+            ;;
+        ___fsdiv)
+            add_runtime_module "float/fsdiv.s"
+            ;;
+        ___fscmp)
+            add_runtime_module "float/fscmp.s"
+            ;;
+        ___sint2fs)
+            add_runtime_module "int16/sint2fs.s"
+            ;;
+        ___uint2fs)
+            add_runtime_module "int16/uint2fs.s"
+            ;;
+        _sinhf)
+            add_libc_module "math/sinhf.s"
+            ;;
+        _coshf)
+            add_libc_module "math/coshf.s"
+            ;;
+        _tanhf)
+            add_libc_module "math/tanhf.s"
+            ;;
+        _asinhf)
+            add_libc_module "math/asinhf.s"
+            ;;
+        _acoshf)
+            add_libc_module "math/acoshf.s"
+            ;;
+        _atanhf)
+            add_libc_module "math/atanhf.s"
+            ;;
+        _sinh|_sinhl)
+            add_libc_module "math/sinh.s"
+            add_libc_module "math/sinhf.s"
+            ;;
+        _cosh|_coshl)
+            add_libc_module "math/cosh.s"
+            add_libc_module "math/coshf.s"
+            ;;
+        _tanh|_tanhl)
+            add_libc_module "math/tanh.s"
+            add_libc_module "math/tanhf.s"
+            ;;
+        _asinh)
+            add_libc_module "math/asinh.s"
+            add_libc_module "math/asinhf.s"
+            ;;
+        _asinhl)
+            add_libc_module "math/asinhl.s"
+            add_libc_module "math/asinh.s"
+            add_libc_module "math/asinhf.s"
+            ;;
+        _acosh)
+            add_libc_module "math/acosh.s"
+            add_libc_module "math/acoshf.s"
+            ;;
+        _acoshl)
+            add_libc_module "math/acoshl.s"
+            add_libc_module "math/acosh.s"
+            add_libc_module "math/acoshf.s"
+            ;;
+        _atanh)
+            add_libc_module "math/atanh.s"
+            add_libc_module "math/atanhf.s"
+            ;;
+        _atanhl)
+            add_libc_module "math/atanhl.s"
+            add_libc_module "math/atanh.s"
+            add_libc_module "math/atanhf.s"
+            ;;
+        _erff)
+            add_libc_module "math/erff.s"
+            add_libc_module "math/erff_core.s"
+            ;;
+        _erfcf)
+            add_libc_module "math/erfcf.s"
+            add_libc_module "math/erff.s"
+            add_libc_module "math/erff_core.s"
+            ;;
+        _lgammaf)
+            add_libc_module "math/lgammaf.s"
+            add_libc_module "math/gammaf_core.s"
+            ;;
+        _tgammaf)
+            add_libc_module "math/tgammaf.s"
+            add_libc_module "math/gammaf_core.s"
+            ;;
+        _erf|_erfl)
+            add_libc_module "math/erf.s"
+            add_libc_module "math/erff.s"
+            add_libc_module "math/erff_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _erfc)
+            add_libc_module "math/erfc.s"
+            add_libc_module "math/erf.s"
+            add_libc_module "math/erff.s"
+            add_libc_module "math/erff_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _erfcl)
+            add_libc_module "math/erfcl.s"
+            add_libc_module "math/erfc.s"
+            add_libc_module "math/erf.s"
+            add_libc_module "math/erff.s"
+            add_libc_module "math/erff_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _lgamma)
+            add_libc_module "math/lgamma.s"
+            add_libc_module "math/lgammaf.s"
+            add_libc_module "math/gammaf_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _lgammal)
+            add_libc_module "math/lgammal.s"
+            add_libc_module "math/lgamma.s"
+            add_libc_module "math/lgammaf.s"
+            add_libc_module "math/gammaf_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _tgamma)
+            add_libc_module "math/tgamma.s"
+            add_libc_module "math/tgammaf.s"
+            add_libc_module "math/gammaf_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _tgammal)
+            add_libc_module "math/tgammal.s"
+            add_libc_module "math/tgamma.s"
+            add_libc_module "math/tgammaf.s"
+            add_libc_module "math/gammaf_core.s"
+            add_libc_module "math/db1argf_common.s"
+            ;;
+        _cprojf)
+            add_libc_module "complex/cprojf.s"
+            ;;
+        _conjf)
+            add_libc_module "complex/conjf.s"
+            ;;
+        _cabsf)
+            add_libc_module "complex/cabsf.s"
+            ;;
+        _cargf)
+            add_libc_module "complex/cargf.s"
+            ;;
+        _cexpf)
+            add_libc_module "complex/cexpf.s"
+            ;;
+        _clogf)
+            add_libc_module "complex/clogf.s"
+            ;;
+        _cpowf)
+            add_libc_module "complex/cpowf.s"
+            ;;
+        _csqrtf)
+            add_libc_module "complex/csqrtf.s"
+            ;;
+        _csinf)
+            add_libc_module "complex/csinf.s"
+            ;;
+        _ccosf)
+            add_libc_module "complex/ccosf.s"
+            ;;
+        _ctanf)
+            add_libc_module "complex/ctanf.s"
+            ;;
+        _csinhf)
+            add_libc_module "complex/csinhf.s"
+            ;;
+        _ccoshf)
+            add_libc_module "complex/ccoshf.s"
+            ;;
+        _ctanhf)
+            add_libc_module "complex/ctanhf.s"
+            ;;
+        _casinf)
+            add_libc_module "complex/casinf.s"
+            add_libc_module "complex/casinhf.s"
+            ;;
+        _cacosf)
+            add_libc_module "complex/cacosf.s"
+            add_libc_module "complex/casinf.s"
+            add_libc_module "complex/casinhf.s"
+            ;;
+        _catanf)
+            add_libc_module "complex/catanf.s"
+            add_libc_module "complex/catanhf.s"
+            ;;
+        _casinhf)
+            add_libc_module "complex/casinhf.s"
+            ;;
+        _cacoshf)
+            add_libc_module "complex/cacoshf.s"
+            ;;
+        _catanhf)
+            add_libc_module "complex/catanhf.s"
+            ;;
+        __creal)
+            add_libc_module "complex/creal.s"
+            ;;
+        __cimag)
+            add_libc_module "complex/cimag.s"
+            ;;
+        __complex_I)
+            add_libc_module "complex/complex_i.s"
+            ;;
+        _call_once|_cnd_broadcast|_cnd_destroy|_cnd_init|_cnd_signal|_cnd_timedwait|_cnd_wait|_mtx_destroy|_mtx_init|_mtx_lock|_mtx_timedlock|_mtx_trylock|_mtx_unlock|_thrd_create|_thrd_current|_thrd_detach|_thrd_equal|_thrd_exit|_thrd_join|_thrd_sleep|_thrd_yield|_tss_create|_tss_delete|_tss_get|_tss_set)
+            add_libc_module "threads/threads_common.s"
+            add_libc_module "threads/call_once.s"
+            add_libc_module "threads/cnd_broadcast.s"
+            add_libc_module "threads/cnd_destroy.s"
+            add_libc_module "threads/cnd_init.s"
+            add_libc_module "threads/cnd_signal.s"
+            add_libc_module "threads/cnd_timedwait.s"
+            add_libc_module "threads/cnd_wait.s"
+            add_libc_module "threads/mtx_destroy.s"
+            add_libc_module "threads/mtx_init.s"
+            add_libc_module "threads/mtx_lock.s"
+            add_libc_module "threads/mtx_timedlock.s"
+            add_libc_module "threads/mtx_trylock.s"
+            add_libc_module "threads/mtx_unlock.s"
+            add_libc_module "threads/thrd_create.s"
+            add_libc_module "threads/thrd_current.s"
+            add_libc_module "threads/thrd_detach.s"
+            add_libc_module "threads/thrd_equal.s"
+            add_libc_module "threads/thrd_exit.s"
+            add_libc_module "threads/thrd_join.s"
+            add_libc_module "threads/thrd_sleep.s"
+            add_libc_module "threads/thrd_yield.s"
+            add_libc_module "threads/tss_create.s"
+            add_libc_module "threads/tss_delete.s"
+            add_libc_module "threads/tss_get.s"
+            add_libc_module "threads/tss_set.s"
+            add_libc_module "stdlib/exit_core.s"
+            add_exec_tool_module "sys_exit.s"
+            add_runtime_module "jumps/call_bc_runtime.s"
+            ;;
+            esac
+        done <<< "$public_refs"
+    done
+}
+
+resolve_modules() {
     local asm_file
     for asm_file in "$@"; do
         local helpers
@@ -317,11 +779,14 @@ resolve_modules() {
             add_runtime_module "double/dbadd.s"
             add_runtime_module "double/db_zero.s"
             ;;
-        ___dbmul)
+        __dbmul|___dbmul)
             add_runtime_module "double/dbmul.s"
             ;;
-        ___dbdiv)
+        __dbdiv|___dbdiv)
             add_runtime_module "double/dbdiv.s"
+            ;;
+        __dbneg|___dbneg)
+            add_runtime_module "double/dbneg.s"
             ;;
         ___dbcmp)
             add_runtime_module "double/dbcmp.s"
@@ -340,6 +805,18 @@ resolve_modules() {
             ;;
         ___db2fs)
             add_runtime_module "double/db2fs.s"
+            ;;
+        __strtod_core)
+            add_libc_module "stdlib/strtod_core.s"
+            ;;
+        __wcstod_core)
+            add_libc_module "wchar/wcstod_core.s"
+            ;;
+        __wcstox_core)
+            add_libc_module "wchar/wcstox_core.s"
+            ;;
+        __cmplxf)
+            add_libc_module "complex/cmplxf.s"
             ;;
         ___sint2db|___uint2db)
             add_runtime_module "double/sint2db.s"
@@ -373,8 +850,28 @@ resolve_modules() {
         __sdcc_call_bc)
             add_runtime_module "jumps/call_bc_runtime.s"
             ;;
+        __errno_value)
+            add_libc_module "errno/errno.s"
+            ;;
             esac
         done <<< "$helpers"
+    done
+}
+
+resolve_module_closure() {
+    local roots=("$@")
+    local before after
+
+    while :; do
+        before=${#MODULES[@]}
+        resolve_modules "${roots[@]}"
+        resolve_libc_modules "${roots[@]}"
+        if [[ ${#MODULES[@]} -gt 0 ]]; then
+            resolve_modules "${MODULES[@]}"
+            resolve_libc_modules "${MODULES[@]}"
+        fi
+        after=${#MODULES[@]}
+        [[ $after -eq $before ]] && break
     done
 }
 
@@ -388,6 +885,8 @@ compile_xcc() {
 
     env ASAN_OPTIONS=detect_leaks=0 "$XCC" -S "-$opt_level" $extra_opts \
         "-I$INCLUDE_DIR" \
+        "-I$LIBC_INCLUDE_DIR" \
+        "-I$COMMON_INCLUDE_DIR" \
         "-masm=$dialect" "$c_file" -o "$asm_file"
 }
 
@@ -401,7 +900,8 @@ run_sdasz80() {
     local crt_rel="$workdir/crt0.rel"
     local outbase="$workdir/$name"
     compile_xcc "$c_file" "$asm_file" "sdasz80" "$opt_level"
-    resolve_modules "$asm_file"
+    reset_modules
+    resolve_module_closure "$asm_file"
 
     sdasz80 -o "$crt_rel" "$CRT0_SDAS" >/dev/null
     sdasz80 -o "$test_rel" "$asm_file" >/dev/null
@@ -433,7 +933,8 @@ run_gnuas() {
     local bin_file="$workdir/$name.bin"
     local gnu_runtime_dir="$workdir/gnu_runtime"
     compile_xcc "$c_file" "$asm_file" "gnuas" "$opt_level"
-    resolve_modules "$asm_file"
+    reset_modules
+    resolve_module_closure "$asm_file"
 
     mkdir -p "$gnu_runtime_dir"
     "$GNU_AS" -march=z80 -o "$crt_o" "$CRT0_GNU"

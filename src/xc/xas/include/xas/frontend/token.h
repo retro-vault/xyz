@@ -42,6 +42,7 @@ namespace xas {
         dollar,         // $ (current address)
         dot,            // . (current address, GNU style)
         newline,        // end of logical line
+        comment,        // line comment text without the comment leader
         directive,      // .keyword  (starts with .)
         eq,             // = (assignment / EQU form)
 

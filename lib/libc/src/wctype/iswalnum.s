@@ -12,7 +12,9 @@
         .globl  _iswalnum
         .globl  _isalnum
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswalnum
+        ;; This libc only classifies the single-byte execution charset. Wide
+        ;; values above UCHAR_MAX fail immediately; everything else reuses isalnum.
 _iswalnum::
         ld      a,h
         or      a

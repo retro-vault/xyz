@@ -62,8 +62,8 @@ ___process_relocate::
         ld      h,a
         inc     de
         ld      a,(de)                  ; A = size
-        inc     de
-        inc     de                      ; skip reserved
+        inc     de                      ; DE -> relocation flags byte
+                                        ; bit0 marks high-byte-only patches
 
         push    de
         push    bc
@@ -100,15 +100,28 @@ ___process_relocate::
         jr      .next
 
 .patch_byte:
+        ld      a,(de)                  ; flags
+        and     #0x01                   ; bit0 = patch high byte only
+        jr      nz,.patch_byte_msb
+
         ld      a,(hl)
         push    ix
         pop     bc
         add     a,c                     ; + low byte of code_ptr
         ld      (hl),a
+        jr      .next
+
+.patch_byte_msb:
+        ld      a,(hl)
+        push    ix
+        pop     bc
+        add     a,b                     ; + high byte of code_ptr
+        ld      (hl),a
 
 .next:
         pop     bc
         pop     de
+        inc     de                      ; advance past relocation flags byte
         dec     bc
         jr      .reloc_loop
 

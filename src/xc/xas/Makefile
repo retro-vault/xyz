@@ -8,8 +8,11 @@ CXXFLAGS ?= -std=c++2a -Wall -Wextra -Wpedantic -g
 XBFD_DIR  := $(ROOT)/lib/xbfd
 XBFD_INC  := $(XBFD_DIR)/include
 XBFD_LIB  := $(BUILD_DIR)/lib/libxbfd.a
+XZ80_DIR  := $(ROOT)/lib/xz80
+XZ80_INC  := $(XZ80_DIR)/include
+XZ80_LIB  := $(BUILD_DIR)/lib/libxz80.a
 
-INCLUDE   := -Iinclude -I$(XBFD_INC)
+INCLUDE   := -Iinclude -I$(XBFD_INC) -I$(XZ80_INC)
 
 TARGET    := $(HOST_BIN_DIR)/xas
 OBJDIR    := $(BUILD_DIR)/xc/xas/obj
@@ -20,21 +23,25 @@ SRCS := \
     src/frontend/lexer.cpp \
     src/frontend/parser.cpp \
     src/backend/codegen.cpp \
+    src/backend/source_emitter.cpp \
     src/backend/rel_emitter.cpp \
     src/backend/elf_emitter.cpp
 
 OBJS := $(patsubst src/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean
+.PHONY: all test test-libs clean
 
-all: $(XBFD_LIB) $(TARGET)
+all: $(XBFD_LIB) $(XZ80_LIB) $(TARGET)
 
 $(XBFD_LIB):
 	$(MAKE) -C $(XBFD_DIR)
 
-$(TARGET): $(OBJS) $(XBFD_LIB) | $(HOST_BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+$(XZ80_LIB):
+	$(MAKE) -C $(XZ80_DIR)
+
+$(TARGET): $(OBJS) $(XBFD_LIB) $(XZ80_LIB) | $(HOST_BIN_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(XBFD_LIB) $(XZ80_LIB)
 
 $(OBJDIR)/%.o: src/%.cpp | dirs
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -MMD -MP -c -o $@ $<
@@ -46,6 +53,12 @@ $(HOST_BIN_DIR):
 	@mkdir -p $@
 
 -include $(DEPS)
+
+test: all
+	bash ./tests/format_test.sh
+
+test-libs: all
+	bash ./tests/library_format_roundtrip_test.sh
 
 clean:
 	rm -rf $(OBJDIR)

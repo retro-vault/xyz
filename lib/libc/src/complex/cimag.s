@@ -1,28 +1,24 @@
-        ; Imaginary-part accessor for float complex values.
-        ; Returns the upper two words of the incoming complex argument.
-        ;
-        ; MIT License (see: LICENSE)
-        ; Copyright (C) 2026 tomaz stih
+        ;; cimag.s
+        ;;
+        ;; libc cimagf()/cimag()/cimagl() backend for the xcc Z80 libc.
+        ;; float _Complex arguments are laid out as two adjacent float words:
+        ;;   real low/high at 4(ix)..7(ix), imag low/high at 8(ix)..11(ix).
+        ;; Scalar float returns use DE = low 16 bits and HL = high 16 bits.
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2026 tomaz stih
 
         .module cimag
         .area   _CODE
         .globl  __cimag
 
-        ; __cimag
-        ; inputs: 4(ix)..11(ix) = complex value, real words first.
-        ; outputs: DE = high 16 bits, HL = low 16 bits of the imag part.
-        ; clobbers: IX.
-
 __cimag:
         push    ix
         ld      ix, #0
         add     ix, sp
-        ld      l, 8(ix)
-        ld      h, 9(ix)
-        push    hl
+        ld      e, 8(ix)
+        ld      d, 9(ix)
         ld      l, 10(ix)
         ld      h, 11(ix)
-        ex      de, hl
-        pop     hl
         pop     ix
         ret

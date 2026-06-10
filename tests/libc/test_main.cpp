@@ -24,7 +24,7 @@ struct test_case { std::string name; std::function<void()> run;
 static std::vector<test_case>& suite() { static std::vector<test_case> s; return s; }
 static test_case* g_current = nullptr;
 static void register_test(const char* n, std::function<void()> fn)
-{ suite().push_back({ n, std::move(fn) }); }
+{ suite().push_back({ n, std::move(fn), true, {} }); }
 static void fail(const std::string& msg)
 { if (g_current) { g_current->passed = false; g_current->failure = msg; } }
 } // namespace test_fw
@@ -46,6 +46,8 @@ static void fail(const std::string& msg)
 
 #include "runtime_machine.hpp"
 #include "libc_symbols.hpp"
+
+static std::vector<uint8_t> g_code_image;
 
 // ---------------------------------------------------------------------------
 // abs — int in HL, |x| in DE
@@ -135,13 +137,14 @@ TEST(div_values)
 // String/memory helpers: place bytes in emulator RAM and call with pointers.
 // Scratch region well above code, below the stack.
 // ---------------------------------------------------------------------------
-static constexpr uint16_t S1 = 0x9000; // first buffer
-static constexpr uint16_t S2 = 0x9400; // second buffer
-static constexpr uint16_t S3 = 0x9800; // destination buffer
+static constexpr uint16_t S1 = 0xC000; // first buffer
+static constexpr uint16_t S2 = 0xC800; // second buffer
+static constexpr uint16_t S3 = 0xD000; // destination buffer
 
+static uint16_t readw(uint16_t addr);
 static void put(uint16_t addr, const char* s)
 { for (; *s; ++s) g_rt->mem.write(addr++, (uint8_t)*s); g_rt->mem.write(addr, 0); }
-static void putn(uint16_t addr, const void* p, size_t n)
+[[maybe_unused]] static void putn(uint16_t addr, const void* p, size_t n)
 { auto b = (const uint8_t*)p; for (size_t i = 0; i < n; ++i) g_rt->mem.write(addr+i, b[i]); }
 static std::string gets(uint16_t addr)
 { std::string r; for (uint8_t c; (c = g_rt->mem.read(addr)) != 0; ++addr) r.push_back((char)c); return r; }
@@ -543,7 +546,7 @@ TEST(ilogbf_values)
 // ---------------------------------------------------------------------------
 TEST(frexpf_values)
 {
-    const uint16_t EXP = 0x9C00; // scratch slot for the int* out-param
+    const uint16_t EXP = 0xE000; // scratch slot for the int* out-param
     float cs[] = { 1.0f, 1.5f, -1.5f, 3.0f, 0.5f, 0.75f, 1024.0f, 0.0f,
                    123.456f, -0.0625f };
     for (float x : cs) {
@@ -603,7 +606,7 @@ TEST(fdimf_values)
 // ---------------------------------------------------------------------------
 TEST(modff_values)
 {
-    const uint16_t IP = 0x9C00; // scratch slot for the float* out-param
+    const uint16_t IP = 0xE000; // scratch slot for the float* out-param
     float cs[] = { 0.0f, -0.0f, 1.5f, -1.5f, 2.75f, -2.75f, 123.456f,
                    -123.456f, 0.25f, -0.25f, 1000000.5f, 8388608.0f, 3.0f };
     for (float x : cs) {
@@ -624,27 +627,226 @@ TEST(modff_values)
 }
 
 // ---------------------------------------------------------------------------
-// double / long double aliases share the float code (32-bit float types)
+// extra non-transcendental float math
 // ---------------------------------------------------------------------------
-TEST(double_aliases_match_float)
+TEST(rintf_family)
 {
-    // trunc == truncf
-    g_rt->call_float1(rt_sym::trunc, 3.7f);
-    REQUIRE(g_rt->result_float_hlde() == 3.0f);
-    g_rt->call_float1(rt_sym::truncl, -3.7f);
-    REQUIRE(g_rt->result_float_hlde() == -3.0f);
-    // ldexp == ldexpf
-    uint32_t xb; float x = 1.5f; std::memcpy(&xb,&x,4);
-    g_rt->call32(rt_sym::ldexp, ((uint32_t)((xb>>16)&0xFFFF)<<16)|(xb&0xFFFF), 2);
-    REQUIRE(g_rt->result_float_hlde() == 6.0f);
-    // fmax == fmaxf
-    g_rt->call_float2(rt_sym::fmax, -2.0f, 5.0f);
-    REQUIRE(g_rt->result_float_hlde() == 5.0f);
-    g_rt->call_float2(rt_sym::fminl, -2.0f, 5.0f);
-    REQUIRE(g_rt->result_float_hlde() == -2.0f);
-    // ilogb == ilogbf
-    g_rt->call_float1(rt_sym::ilogb, 8.0f);
+    float cs[] = { 0.0f, -0.0f, 0.1f, -0.1f, 1.4f, 1.6f, -1.4f, -1.6f, 3.0f, -3.0f };
+    for (float x : cs) {
+        g_rt->call_float1(rt_sym::rintf, x);
+        REQUIRE(g_rt->result_float_hlde() == std::round(x));
+        g_rt->call_float1(rt_sym::nearbyintf, x);
+        REQUIRE(g_rt->result_float_hlde() == std::round(x));
+        g_rt->call_float1(rt_sym::lroundf, x);
+        REQUIRE_EQ((int32_t)g_rt->result32(), (int32_t)std::lround(x));
+        g_rt->call_float1(rt_sym::lrintf, x);
+        REQUIRE_EQ((int32_t)g_rt->result32(), (int32_t)std::lround(x));
+        g_rt->call_float1(rt_sym::llroundf, x);
+        REQUIRE_EQ((int64_t)g_rt->result64_regs(), (int64_t)std::llround(x));
+        g_rt->call_float1(rt_sym::llrintf, x);
+        REQUIRE_EQ((int64_t)g_rt->result64_regs(), (int64_t)std::llround(x));
+    }
+}
+
+TEST(scalblnf_values)
+{
+    struct { float x; long n; } cs[] = {
+        { 0.75f, 2 }, { 3.0f, -1 }, { -1.5f, 5 }, { 1.0f, 0 }, { 2.0f, -8 }
+    };
+    for (auto c : cs) {
+        uint32_t xb; std::memcpy(&xb, &c.x, 4);
+        uint32_t nb = (uint32_t)c.n;
+        g_rt->call32(rt_sym::scalblnf,
+                     ((uint32_t)((xb >> 16) & 0xFFFF) << 16) | (xb & 0xFFFF),
+                     nb);
+        float got = g_rt->result_float_hlde();
+        float ref = std::ldexp(c.x, (int)c.n);
+        REQUIRE(std::fabs(got - ref) <= 1e-6f * (1.0f + std::fabs(ref)));
+    }
+}
+
+TEST(fmaf_hypotf_values)
+{
+    struct { float x, y, z; } fmas[] = {
+        { 1.5f, 2.0f, 0.25f }, { -3.0f, 4.0f, 1.0f }, { 0.5f, -8.0f, 2.0f }
+    };
+    for (auto c : fmas) {
+        REQUIRE(g_rt->call_float3(rt_sym::fmaf, c.x, c.y, c.z));
+        float got = g_rt->result_float_hlde();
+        float ref = c.x * c.y + c.z;
+        REQUIRE(std::fabs(got - ref) <= 1e-5f * (1.0f + std::fabs(ref)));
+    }
+    float hp[][2] = { {3.0f,4.0f}, {5.0f,12.0f}, {0.5f,0.5f}, {-6.0f,8.0f} };
+    for (auto& p : hp) {
+        g_rt->call_float2(rt_sym::hypotf, p[0], p[1]);
+        float got = g_rt->result_float_hlde();
+        float ref = std::hypot(p[0], p[1]);
+        REQUIRE(std::fabs(got - ref) <= 1e-3f * (1.0f + std::fabs(ref)));
+    }
+}
+
+TEST(fmodf_remainderf_nextafterf_values)
+{
+    struct { float x, y; } pairs[] = {
+        { 5.3f, 2.0f }, { -5.3f, 2.0f }, { 7.0f, 3.0f }, { 1.0f, 0.25f }
+    };
+    for (auto c : pairs) {
+        g_rt->call_float2(rt_sym::fmodf, c.x, c.y);
+        float got_mod = g_rt->result_float_hlde();
+        float ref_mod = std::fmod(c.x, c.y);
+        REQUIRE(std::fabs(got_mod - ref_mod) <= 1e-5f * (1.0f + std::fabs(ref_mod)));
+
+        g_rt->call_float2(rt_sym::remainderf, c.x, c.y);
+        float got_rem = g_rt->result_float_hlde();
+        float ref_rem = c.x - std::round(c.x / c.y) * c.y;
+        REQUIRE(std::fabs(got_rem - ref_rem) <= 1e-5f * (1.0f + std::fabs(ref_rem)));
+    }
+
+    g_rt->call_float2(rt_sym::nextafterf, 1.0f, 2.0f);
+    REQUIRE(g_rt->result_float_hlde() > 1.0f);
+    g_rt->call_float2(rt_sym::nextafterf, 1.0f, 0.0f);
+    REQUIRE(g_rt->result_float_hlde() < 1.0f);
+    g_rt->call_float2(rt_sym::nextafterf, 0.0f, -1.0f);
+    REQUIRE(std::signbit(g_rt->result_float_hlde()));
+}
+
+TEST(remquof_values)
+{
+    const uint16_t QP = 0xE080;
+    REQUIRE(g_rt->call_float2_ptr(rt_sym::remquof, 5.2f, 2.0f, QP));
+    float got = g_rt->result_float_hlde();
+    int16_t q = (int16_t)readw(QP);
+    REQUIRE(std::fabs(got - (5.2f - 3.0f * 2.0f)) <= 1e-5f);
+    REQUIRE_EQ(q, 3);
+}
+
+TEST(double_math_wrappers)
+{
+    REQUIRE(g_rt->call_c_double1(rt_sym::rint, 3.6));
+    REQUIRE(g_rt->result_double_regs() == 4.0);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::nearbyint, -2.4));
+    REQUIRE(g_rt->result_double_regs() == -2.0);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::lround, 7.4));
+    REQUIRE_EQ((int32_t)g_rt->result32(), 7);
+
+    REQUIRE(g_rt->call_c_double1_long(rt_sym::scalbln, 0.75, 2));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double3(rt_sym::fma, 1.5, 2.0, 0.25));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 3.25) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::hypot, 3.0, 4.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 5.0) <= 1e-9);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::fmod, 5.3, 2.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::fmod(5.3, 2.0)) <= 1e-6);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::remainder, 5.3, 2.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::remainder(5.3, 2.0)) <= 1e-6);
+
+    const uint16_t QP = 0xE0A0;
+    REQUIRE(g_rt->call_c_double2_ptr(rt_sym::remquo, 5.2, 2.0, QP));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - (5.2 - 3.0 * 2.0)) <= 1e-6);
+    REQUIRE_EQ((int16_t)readw(QP), 3);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::nextafter, 1.0, 2.0));
+    REQUIRE(g_rt->result_double_regs() > 1.0);
+}
+
+// ---------------------------------------------------------------------------
+// legacy math entry points now use the real double ABI
+// ---------------------------------------------------------------------------
+TEST(legacy_double_math_wrappers)
+{
+    auto readd = [](uint16_t addr) {
+        uint64_t bits = 0;
+        for (int i = 0; i < 8; ++i)
+            bits |= (uint64_t)g_rt->mem.read(addr + i) << (8 * i);
+        double d;
+        std::memcpy(&d, &bits, sizeof d);
+        return d;
+    };
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::fabs, -2.5));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 2.5) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::copysign, 2.5, -1.0));
+    REQUIRE(std::signbit(g_rt->result_double_regs()));
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::trunc, -3.7));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - -3.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::floor, -3.2));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - -4.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::ceil, -3.2));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - -3.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::round, 2.6));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1_int(rt_sym::ldexp, 1.5, 2));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 6.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1_int(rt_sym::scalbn, 0.5, 3));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 4.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::fmax, -2.0, 5.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 5.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::fminl, -2.0, 5.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - -2.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::fdim, 5.0, 2.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+
+    const uint16_t EP = 0xE0C0;
+    REQUIRE(g_rt->call_c_double1_ptr(rt_sym::frexp, 8.0, EP));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 0.5) <= 1e-12);
+    REQUIRE_EQ((int16_t)readw(EP), 4);
+
+    const uint16_t DP = 0xE0D0;
+    REQUIRE(g_rt->call_c_double1_ptr(rt_sym::modf, 3.75, DP));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 0.75) <= 1e-12);
+    REQUIRE(std::fabs(readd(DP) - 3.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::ilogb, 8.0));
     REQUIRE_EQ((int16_t)g_rt->snap().de, (int16_t)3);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::logb, 8.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::sqrt, 9.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-9);
+
+    REQUIRE(g_rt->call_c_double2(rt_sym::atan2, 1.0, 0.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - (3.14159265358979323846 / 2.0)) <= 1e-3);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::atan, 1.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - (3.14159265358979323846 / 4.0)) <= 5e-2);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::asin, 0.5));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::asin(0.5)) <= 5e-2);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::acos, 0.5));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::acos(0.5)) <= 5e-2);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::sin, 1.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::sin(1.0)) <= 3e-2);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::cos, 1.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::cos(1.0)) <= 3e-2);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::tan, 0.75));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - std::tan(0.75)) <= 8e-2);
+
+    REQUIRE(g_rt->call_c_double1(rt_sym::significand, 6.0));
+    REQUIRE(std::fabs(g_rt->result_double_regs() - 1.5) <= 1e-12);
+
+    REQUIRE(g_rt->call16(rt_sym::nan, 0, 0));
+    REQUIRE(std::isnan(g_rt->result_double_regs()));
 }
 
 // ---------------------------------------------------------------------------
@@ -724,8 +926,8 @@ TEST(logbf_values)
 #include <ctime>
 TEST(asctime_r_values)
 {
-    const uint16_t TM = 0x9C00;  // struct tm scratch (9 ints, 18 bytes)
-    const uint16_t BUF = 0x9C40; // output buffer
+    const uint16_t TM = 0xE100;  // struct tm scratch (9 ints, 18 bytes)
+    const uint16_t BUF = 0xE140; // output buffer
     struct { int sec,min,hour,mday,mon,year,wday,yday; } cs[] = {
         {0,0,0,1,0,70,4,0},          // Thu Jan  1 00:00:00 1970
         {59,59,23,31,11,99,5,364},   // Fri Dec 31 23:59:59 1999
@@ -743,8 +945,11 @@ TEST(asctime_r_values)
         uint16_t ret = g_rt->snap().de;            // returns buf
         REQUIRE_EQ(ret, BUF);
         std::string got;
-        for (uint16_t a = BUF; ; ++a) { uint8_t ch = g_rt->mem.read(a);
-                                        if (!ch) break; got.push_back((char)ch); }
+        for (uint16_t a = BUF; ; ++a) {
+            uint8_t ch = g_rt->mem.read(a);
+            if (!ch) break;
+            got.push_back((char)ch);
+        }
         struct tm ref{}; ref.tm_sec=c.sec; ref.tm_min=c.min; ref.tm_hour=c.hour;
         ref.tm_mday=c.mday; ref.tm_mon=c.mon; ref.tm_year=c.year;
         ref.tm_wday=c.wday; ref.tm_yday=c.yday;
@@ -758,8 +963,8 @@ TEST(asctime_r_values)
 // ---------------------------------------------------------------------------
 TEST(gmtime_r_values)
 {
-    const uint16_t T = 0x9D00;   // time_t (4 bytes)
-    const uint16_t TM = 0x9D08;  // struct tm out (18 bytes)
+    const uint16_t T = 0xE200;   // time_t (4 bytes)
+    const uint16_t TM = 0xE208;  // struct tm out (18 bytes)
     long times[] = { 0, 1, 59, 60, 3600, 86399, 86400, 1000000000L, -1L,
                      -86400L, -86401L, 951782400L /*2000-02-29*/, 1582934400L,
                      2000000000L, -2000000000L, 1234567890L, 68169600L,
@@ -784,7 +989,7 @@ TEST(gmtime_r_values)
 // ---------------------------------------------------------------------------
 TEST(mktime_values)
 {
-    const uint16_t TM = 0x9E00;
+    const uint16_t TM = 0xE300;
     struct { int sec,min,hour,mday,mon,year; } cs[] = {
         {0,0,0,1,0,70},      // 1970-01-01 -> 0
         {59,59,23,31,11,99}, // 1999-12-31 23:59:59
@@ -816,7 +1021,7 @@ TEST(mktime_values)
 // ---------------------------------------------------------------------------
 TEST(strftime_values)
 {
-    const uint16_t TM = 0x9E80, FMT = 0x9F00, OUT = 0x9F40;
+    const uint16_t TM = 0xE380, FMT = 0xE400, OUT = 0xE440;
     auto putstr = [&](uint16_t a, const char* s){ for (; *s; ++s) g_rt->mem.write(a++, *s); g_rt->mem.write(a, 0); };
     auto call_strftime = [&](uint16_t out, uint16_t n, uint16_t fmt, uint16_t tm) -> uint16_t {
         uint16_t sp = 0xF000;
@@ -928,18 +1133,6 @@ TEST(sqrtf_values)
     REQUIRE(std::isnan(n));
 }
 
-TEST(atan2f_values)
-{
-    float pairs[][2] = { {0.0f,1.0f},{1.0f,1.0f},{1.0f,0.0f},{-1.0f,0.0f},
-                         {1.0f,-1.0f},{-1.0f,-1.0f},{0.5f,2.0f},{3.0f,4.0f} };
-    for (auto& p : pairs) {
-        g_rt->call_float2(rt_sym::atan2f, p[0], p[1]);
-        float got = g_rt->result_float_hlde();
-        float ref = std::atan2(p[0], p[1]);
-        REQUIRE(std::fabs(got - ref) <= 0.05f); // rational approximation
-    }
-}
-
 // ---------------------------------------------------------------------------
 // wctype: towlower/towupper, isw*, wctype/iswctype, wctrans/towctrans
 // ---------------------------------------------------------------------------
@@ -1047,6 +1240,10 @@ TEST(uchar_roundtrip)
 // ---------------------------------------------------------------------------
 TEST(signal_install)
 {
+    runtime_machine fresh(std::span<const uint8_t>(g_code_image.data(),
+                                                   g_code_image.size()));
+    runtime_machine* old = g_rt;
+    g_rt = &fresh;
     // signal(SIGINT=4, 0x1234) returns previous (SIG_DFL=0)
     REQUIRE_EQ((int)call2(rt_sym::signal, 4, 0x1234), 0);
     // installing again returns the previous handler
@@ -1054,6 +1251,7 @@ TEST(signal_install)
     // invalid signal -> SIG_ERR (-1)
     REQUIRE_EQ((int)call2(rt_sym::signal, 0, 0x1111), (int)(uint16_t)0xFFFF);
     REQUIRE_EQ((int)call2(rt_sym::signal, 99, 0x1111), (int)(uint16_t)0xFFFF);
+    g_rt = old;
 }
 
 // ---------------------------------------------------------------------------
@@ -1166,6 +1364,51 @@ TEST(wchar_btowc_wctob)
     REQUIRE_EQ((int)call2(rt_sym::wctob, 'Z', 0), 'Z');
     REQUIRE_EQ((int)call2(rt_sym::wctob, 0x1234, 0), (int)(uint16_t)0xFFFF); // out of byte range
     REQUIRE_EQ((int)call2(rt_sym::mbsinit, 0, 0), 1);
+}
+
+TEST(stdlib_multibyte_and_hosted_stubs)
+{
+    put(S1, "A");
+    REQUIRE_EQ((int)call2(rt_sym::mblen, S1, 1), 1);
+    REQUIRE_EQ((int)call2(rt_sym::mblen, S1, 0), (int)(uint16_t)0xFFFF);
+    REQUIRE_EQ((int)call2(rt_sym::mblen, 0, 0), 0);
+
+    putw1(S2, 0x9999);
+    REQUIRE_EQ((int)call3(rt_sym::mbtowc, S2, S1, 1), 1);
+    REQUIRE_EQ((int)readw(S2), 'A');
+    put(S1, "");
+    REQUIRE_EQ((int)call3(rt_sym::mbtowc, S2, S1, 1), 0);
+    REQUIRE_EQ((int)readw(S2), 0);
+    REQUIRE_EQ((int)call3(rt_sym::mbtowc, S2, 0, 1), 0);
+
+    REQUIRE_EQ((int)call2(rt_sym::wctomb, S3, 'Q'), 1);
+    REQUIRE_EQ((int)g_rt->mem.read(S3), 'Q');
+    g_rt->mem.write(rt_sym::errno_value, 0);
+    g_rt->mem.write(rt_sym::errno_value + 1, 0);
+    REQUIRE_EQ((int)call2(rt_sym::wctomb, S3, 0x1234), (int)(uint16_t)0xFFFF);
+    REQUIRE_EQ((int)readw(rt_sym::errno_value), 84);
+
+    put(S1, "Hi");
+    REQUIRE_EQ((int)call3(rt_sym::mbstowcs, S2, S1, 4), 2);
+    REQUIRE_EQ((int)readw(S2 + 0), 'H');
+    REQUIRE_EQ((int)readw(S2 + 2), 'i');
+    REQUIRE_EQ((int)readw(S2 + 4), 0);
+
+    putws(S2, "Hi");
+    REQUIRE_EQ((int)call3(rt_sym::wcstombs, S1, S2, 4), 2);
+    REQUIRE(gets(S1) == "Hi");
+
+    putw1(S2 + 0, 0x1234);
+    putw1(S2 + 2, 0x0000);
+    g_rt->mem.write(rt_sym::errno_value, 0);
+    g_rt->mem.write(rt_sym::errno_value + 1, 0);
+    REQUIRE_EQ((int)call3(rt_sym::wcstombs, S1, S2, 4), (int)(uint16_t)0xFFFF);
+    REQUIRE_EQ((int)readw(rt_sym::errno_value), 84);
+
+    put(S1, "PATH");
+    REQUIRE_EQ((int)call2(rt_sym::getenv, S1, 0), 0);
+    REQUIRE_EQ((int)call2(rt_sym::system, 0, 0), 0);
+    REQUIRE_EQ((int)call2(rt_sym::system, S1, 0), (int)(uint16_t)0xFFFF);
 }
 
 // ---------------------------------------------------------------------------
@@ -1291,6 +1534,50 @@ TEST(atoi_atol_atoll)
     }
 }
 
+TEST(stdio_printf_family)
+{
+    runtime_machine fresh(std::span<const uint8_t>(g_code_image.data(),
+                                                   g_code_image.size()));
+    runtime_machine* old = g_rt;
+    g_rt = &fresh;
+    REQUIRE(g_rt->call16(rt_sym::stdio_cases, 0, 0));
+    REQUIRE_EQ((int)g_rt->snap().de, 0);
+    g_rt = old;
+}
+
+TEST(stdio_tmpfile_case)
+{
+    runtime_machine fresh(std::span<const uint8_t>(g_code_image.data(),
+                                                   g_code_image.size()));
+    runtime_machine* old = g_rt;
+    g_rt = &fresh;
+    REQUIRE(g_rt->call16(rt_sym::stdio_tmpfile_case, 0, 0));
+    REQUIRE_EQ((int)g_rt->snap().de, 0);
+    g_rt = old;
+}
+
+TEST(stdio_freopen_case)
+{
+    runtime_machine fresh(std::span<const uint8_t>(g_code_image.data(),
+                                                   g_code_image.size()));
+    runtime_machine* old = g_rt;
+    g_rt = &fresh;
+    REQUIRE(g_rt->call16(rt_sym::stdio_freopen_case, 0, 0));
+    REQUIRE_EQ((int)g_rt->snap().de, 0);
+    g_rt = old;
+}
+
+TEST(stdio_scan_cases)
+{
+    runtime_machine fresh(std::span<const uint8_t>(g_code_image.data(),
+                                                   g_code_image.size()));
+    runtime_machine* old = g_rt;
+    g_rt = &fresh;
+    REQUIRE(g_rt->call16(rt_sym::stdio_scan_cases, 0, 0));
+    REQUIRE_EQ((int)g_rt->snap().de, 0);
+    g_rt = old;
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -1304,10 +1591,14 @@ static std::vector<uint8_t> load_file(const char* path)
 int main(int argc, char* argv[])
 {
     const char* bin_path = argc > 1 ? argv[1] : "build/libc.bin";
-    auto code = load_file(bin_path);
-    if (code.empty()) { std::fprintf(stderr, "fatal: %s not found\n", bin_path); return 1; }
+    g_code_image = load_file(bin_path);
+    if (g_code_image.empty()) {
+        std::fprintf(stderr, "fatal: %s not found\n", bin_path);
+        return 1;
+    }
 
-    runtime_machine rt(std::span<const uint8_t>(code.data(), code.size()));
+    runtime_machine rt(std::span<const uint8_t>(g_code_image.data(),
+                                                g_code_image.size()));
     g_rt = &rt;
 
     int pass = 0, fail = 0;

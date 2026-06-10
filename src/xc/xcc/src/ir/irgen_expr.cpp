@@ -88,7 +88,13 @@ void ir_gen::visit(ident_expr &e) {
         expr_result_ = operand::make_int(e.sym->enum_val, type::make_int());
         return;
     }
-    expr_result_ = sym_to_operand(*e.sym, e.type);
+    operand sym_op = sym_to_operand(*e.sym, e.type);
+    if (e.type && e.type->is_array() && e.type->base) {
+        expr_result_ = emit_unop(icode_op::ADDRESS_OF, sym_op,
+                                 type::make_pointer(e.type->base));
+        return;
+    }
+    expr_result_ = sym_op;
 }
 
 // ----- Arithmetic helpers --------------------------------------------
@@ -356,8 +362,9 @@ void ir_gen::visit(unary_expr &e) {
                                  e.type ? e.type : type::make_int());
         break;
     case unary_op::ADDR:
-        expr_result_ = emit_unop(icode_op::ADDRESS_OF, gen_expr(*e.operand),
-                                 e.type ? e.type : type::make_pointer(type::make_void()));
+        expr_result_ = gen_lvalue_addr(*e.operand,
+                                       e.type ? e.type
+                                              : type::make_pointer(type::make_void()));
         break;
     case unary_op::DEREF:
         expr_result_ = emit_unop(icode_op::GET_VALUE_AT, gen_expr(*e.operand),
@@ -403,6 +410,9 @@ void ir_gen::visit(call_expr &e) {
         arg_ops.push_back(gen_expr(*a));
 
     // Look up callee ABI so caller can use the right convention.
+    // Variadic function types must stay stack-only even when there is
+    // no direct named callee symbol (for example, through a function
+    // pointer), so the type-level variadic bit also participates here.
     call_abi c_abi = call_abi::DEFAULT;
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get()))
         if (id->sym && id->sym->kind == sym_kind::FUNC)
@@ -416,6 +426,9 @@ void ir_gen::visit(call_expr &e) {
                  e.callee->type->base->is_func())
             fn_type = e.callee->type->base.get();
     }
+
+    if (fn_type && fn_type->variadic && c_abi == call_abi::DEFAULT)
+        c_abi = call_abi::SDCCCALL0;
 
     std::vector<type_ptr> arg_types;
     arg_types.reserve(arg_ops.size());

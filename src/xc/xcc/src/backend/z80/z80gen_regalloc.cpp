@@ -1558,6 +1558,34 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
              8 + (iv.last_use - iv.first_def + 1), false, tid});
     }
 
+    // Broaden the stable BC path one notch beyond the fully contiguous case:
+    // if a 16-bit temp stays inside one straight-line window with no BC
+    // backend hazards, keep it resident even when a few interior instructions
+    // do not mention it. This is still far from a global allocator, but it
+    // captures more ordinary scalar state than the old “every instruction in
+    // the window must mention the temp” rule.
+    for (auto &[fd, tid] : order) {
+        const interval &iv = ivs[tid];
+        if (iv.size != 2)                          continue;
+        if (iv.has_addr_of)                        continue;
+        if (iv.mentions < 3)                       continue;
+        if (iv.last_use <= iv.first_def)           continue;
+        if (contiguous_live_window(iv, tid))       continue;
+        if (!interior_safe(iv, bc_clob))           continue;
+        bool backend_safe = true;
+        for (int k = iv.first_def + 1; k <= iv.last_use - 1; ++k) {
+            if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                backend_safe = false;
+                break;
+            }
+        }
+        if (!backend_safe)                         continue;
+        bc_candidates.push_back(
+            {iv.first_def, iv.last_use,
+             14 + iv.mentions * 3 - (iv.last_use - iv.first_def),
+             false, tid});
+    }
+
     // Keep one incoming register-passed 16-bit TEMP in BC across a wider
     // straight-line helper window. This is more permissive than the generic
     // contiguous TEMP rule above, but still restricted to barrier-free
@@ -1636,6 +1664,31 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         bc_candidates.push_back(
             {iv.first_idx, iv.last_idx,
              16 + iv.mentions * 2 - (iv.last_idx - iv.first_idx),
+             true, key});
+    }
+
+    // Same widening for ordinary 16-bit locals/parameters whose mentions are
+    // not fully contiguous but still stay inside one barrier-free BC-safe
+    // window.
+    for (const auto &[key, iv] : syms) {
+        if (!iv.base.type || iv.base.type->size() != 2) continue;
+        if (iv.has_addr_of || iv.unsupported)            continue;
+        if (iv.mentions < 4)                             continue;
+        if (iv.last_idx <= iv.first_idx)                 continue;
+        if (contiguous_symbol_window(iv))                continue;
+        if (!interior_safe(interval{iv.first_idx, iv.last_idx, 2, false}, bc_clob))
+            continue;
+        bool backend_safe = true;
+        for (int k = iv.first_idx + 1; k <= iv.last_idx - 1; ++k) {
+            if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                backend_safe = false;
+                break;
+            }
+        }
+        if (!backend_safe)                               continue;
+        bc_candidates.push_back(
+            {iv.first_idx, iv.last_idx,
+             18 + iv.mentions * 3 - (iv.last_idx - iv.first_idx),
              true, key});
     }
 

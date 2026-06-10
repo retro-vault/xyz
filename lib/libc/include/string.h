@@ -62,6 +62,8 @@ extern char *strerror(int errnum);
 extern char *stpcpy(char *restrict s1, const char *restrict s2);
 extern char *stpncpy(char *restrict s1, const char *restrict s2, size_t n);
 extern void *mempcpy(void *restrict s1, const void *restrict s2, size_t n);
+extern void *memmem(const void *haystack, size_t haystacklen,
+                    const void *needle, size_t needlelen);
 extern void *memrchr(const void *s, int c, size_t n);
 extern void *rawmemchr(const void *s, int c);
 extern char *strchrnul(const char *s, int c);
@@ -72,5 +74,6 @@ extern size_t strlcat(char *restrict s1, const char *restrict s2, size_t n);
 extern void   swab(const void *restrict s1, void *restrict s2, size_t n);
 extern char *strsep(char **stringp, const char *delim);
 extern char *strcasestr(const char *haystack, const char *needle);
+extern char *strsignal(int sig);
 
 #endif /* __STRING_H__ */

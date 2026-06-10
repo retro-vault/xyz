@@ -1,11 +1,13 @@
-        ; libc_fpclassifyf.s — IEEE-754 single classification core.
-        ; MIT License (see: LICENSE)  Copyright (C) 2026 tomaz stih
+        ;; libc_fpclassifyf.s — IEEE-754 single classification core.
+        ;; MIT License (see: LICENSE)  Copyright (C) 2026 tomaz stih
         .module libc_fpclassifyf
         .optsdcc -mz80 sdcccall(1)
+        .globl  __libc_fpclassifyf
         .globl  ___libc_fpclassifyf
         .area   _CODE
-        ; HL:DE = x -> DE = FP_NAN/INFINITE/ZERO/SUBNORMAL/NORMAL
-        ; preserves HL
+        ;; HL:DE = x -> DE = FP_NAN/INFINITE/ZERO/SUBNORMAL/NORMAL
+        ;; preserves HL for callers that still need the original float words.
+__libc_fpclassifyf:
 ___libc_fpclassifyf::
         ld      a,h
         and     #0x7f

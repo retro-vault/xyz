@@ -16,10 +16,9 @@
 
         .area   _CODE
 
-        ; _isblank
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is a blank, else 0
-        ; clobbers: AF
+        ;; _isblank
+        ;; isblank only accepts horizontal tab and space, so direct compares are
+        ;; smaller than routing through the interval helper twice.
 _isblank::
         ld      a,h
         or      a

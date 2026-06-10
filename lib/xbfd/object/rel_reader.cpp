@@ -4,6 +4,7 @@
 // copyright (C) 2026 tomaz stih
 //
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -34,6 +35,37 @@ public:
     }
 
 private:
+    static std::string lower_copy(std::string value) {
+        std::transform(value.begin(), value.end(), value.begin(),
+                       [](unsigned char ch) {
+                           return static_cast<char>(std::tolower(ch));
+                       });
+        return value;
+    }
+
+    static xbfd::section_flags classify_named_flags(const std::string& name,
+                                                    xbfd::section_flags flags)
+    {
+        const std::string lower = lower_copy(name);
+        if (lower == "_code" || lower == ".text"
+            || lower == "_gsinit" || lower == "_gsfinal") {
+            return flags | xbfd::section_flags::code;
+        }
+        if (lower == "_bss" || lower == ".bss" || lower == "_heap") {
+            return flags | xbfd::section_flags::data
+                         | xbfd::section_flags::never_load;
+        }
+        if (lower == "_data" || lower == ".data"
+            || lower == "_initialized" || lower == "_dabs") {
+            return flags | xbfd::section_flags::data;
+        }
+        if (lower == "_const" || lower == ".rodata"
+            || lower == "_initializer") {
+            return flags | xbfd::section_flags::readonly;
+        }
+        return flags;
+    }
+
     void dispatch(const std::string& line, int lineno) {
         const char        rec  = line[0];
         const std::string rest = line.size() > 2 ? line.substr(2) : "";
@@ -75,7 +107,7 @@ private:
         xbfd::section sec;
         sec.name  = toks[0];
         sec.size  = hex16(toks[2]);
-        sec.flags = decode_area_flags(hex8(toks[4]));
+        sec.flags = classify_named_flags(sec.name, decode_area_flags(hex8(toks[4])));
         if (toks.size() >= 7 && toks[5] == "addr") sec.vma = hex16(toks[6]);
         area_names_.push_back(sec.name);
         obj_.sections.push_back(std::move(sec));
@@ -151,6 +183,35 @@ private:
                     sec->size = sec->data.size();
             }
         }
+
+        for (auto& sec : obj_.sections) {
+            for (auto& reloc : sec.relocs) {
+                if (reloc.offset >= sec.data.size()) {
+                    reloc.addend = 0;
+                    continue;
+                }
+                switch (reloc.type) {
+                case xbfd::reloc_type::z80_16:
+                    if (reloc.offset + 1 < sec.data.size()) {
+                        reloc.addend = static_cast<int32_t>(
+                            sec.data[reloc.offset]
+                            | (static_cast<uint16_t>(sec.data[reloc.offset + 1]) << 8));
+                    } else {
+                        reloc.addend = static_cast<int32_t>(sec.data[reloc.offset]);
+                    }
+                    break;
+                case xbfd::reloc_type::z80_pc8:
+                    reloc.addend = static_cast<int32_t>(
+                        static_cast<int8_t>(sec.data[reloc.offset]));
+                    break;
+                case xbfd::reloc_type::z80_8:
+                case xbfd::reloc_type::z80_16_msb:
+                default:
+                    reloc.addend = static_cast<int32_t>(sec.data[reloc.offset]);
+                    break;
+                }
+            }
+        }
     }
 
     xbfd::section* find_section(const std::string& name) {
@@ -180,16 +241,16 @@ private:
         if (raw & 0x08) f = f | xbfd::section_flags::abs;
         return f;
     }
-    static void decode_mode(uint8_t mode, bool xl4, xbfd::reloc_type& type, bool& sym_rel) {
-        if (xl4) mode ^= 0x01;
+    static void decode_mode(uint8_t mode, bool, xbfd::reloc_type& type, bool& sym_rel) {
         sym_rel            = (mode & 0x02) != 0;
-        const bool word    = (mode & 0x01) != 0;
+        const bool byte    = (mode & 0x01) != 0;
         const bool pc_rel  = (mode & 0x04) != 0;
+        const bool bytx    = (mode & 0x08) != 0;
         const bool msb     = (mode & 0x80) != 0;
-        type = pc_rel ? xbfd::reloc_type::z80_pc8
-             : msb    ? xbfd::reloc_type::z80_16_msb
-             : word   ? xbfd::reloc_type::z80_16
-                      : xbfd::reloc_type::z80_8;
+        type = pc_rel               ? xbfd::reloc_type::z80_pc8
+             : (byte && bytx && msb) ? xbfd::reloc_type::z80_16_msb
+             : byte                 ? xbfd::reloc_type::z80_8
+                                    : xbfd::reloc_type::z80_16;
     }
 
     struct pending_t { std::string section_name; uint16_t offset = 0; std::vector<uint8_t> data; };

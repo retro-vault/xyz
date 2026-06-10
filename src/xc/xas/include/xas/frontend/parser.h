@@ -10,6 +10,8 @@
 //         .org, .equ, .set, .include, .if/.else/.endif
 //
 // Both modes accept the same Z80 instruction mnemonics.
+// The supported source subset intentionally excludes assembler macro
+// directives such as .macro/.endm and .rept.
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih
@@ -44,12 +46,14 @@ namespace xas {
         bool eat(token_kind k);
         const token& expect(token_kind k, const std::string& msg);
         void skip_to_newline();
+        void finish_stmt(stmt& s);
 
         stmt parse_stmt();
         stmt parse_label(const std::string& name);
         stmt parse_instruction(const std::string& mnemonic);
         stmt parse_directive(const std::string& name);
         stmt parse_equ(const std::string& name);
+        stmt parse_comment();
 
         operand parse_operand();
         expr_ptr parse_expr();

@@ -126,13 +126,15 @@ namespace xas {
         label,
         instruction,
         directive,
-        equ
+        equ,
+        comment
     };
 
     struct stmt {
         stmt_kind   kind;
         int         source_line = 0;
         std::string source_file;
+        std::string trailing_comment;
 
         // label_stmt
         std::string label_name;
@@ -146,10 +148,14 @@ namespace xas {
         std::string directive_name; // without leading dot
         std::vector<expr_ptr> args;
         std::string string_arg;     // for .ascii / .asciz / .module
+        std::string string_arg2;    // auxiliary payload for directives like .optsdcc
 
         // equ_stmt
         std::string equ_name;
         expr_ptr    equ_value;
+
+        // comment_stmt
+        std::string comment_text;
     };
 
     using stmt_list = std::vector<stmt>;

@@ -17,10 +17,8 @@
 
         .area   _CODE
 
-        ; _isupper
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is uppercase, else 0
-        ; clobbers: AF, BC
+        ;; _isupper
+        ;; Only the uppercase ASCII letter band qualifies.
 _isupper::
         ld      a,h
         or      a

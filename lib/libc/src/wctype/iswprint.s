@@ -12,7 +12,8 @@
         .globl  _iswprint
         .globl  _isprint
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswprint
+        ;; Only byte-sized execution characters can be classified as printable.
 _iswprint::
         ld      a,h
         or      a

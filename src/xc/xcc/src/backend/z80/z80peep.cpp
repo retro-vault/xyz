@@ -374,6 +374,68 @@ static bool uses_abs_indirect(const std::string &s) {
     return !uses_hl_indirect(s) && !uses_ixiy_disp(s);
 }
 
+static bool is_section_directive(const asm_line &line);
+
+static bool operand_has_token(const std::string &operand, const std::string &token) {
+    if (token.empty())
+        return false;
+    for (size_t i = 0; i < operand.size();) {
+        if (!std::isalnum(static_cast<unsigned char>(operand[i])) &&
+            operand[i] != '_') {
+            ++i;
+            continue;
+        }
+        size_t j = i + 1;
+        while (j < operand.size() &&
+               (std::isalnum(static_cast<unsigned char>(operand[j])) ||
+                operand[j] == '_')) {
+            ++j;
+        }
+        if (operand.substr(i, j - i) == token)
+            return true;
+        i = j;
+    }
+    return false;
+}
+
+static bool operand_mentions_pair_or_bytes(const std::string &operand,
+                                           const std::string &pair,
+                                           char lo,
+                                           char hi) {
+    return operand_has_token(operand, pair) ||
+           operand_has_token(operand, std::string(1, lo)) ||
+           operand_has_token(operand, std::string(1, hi));
+}
+
+static bool line_preserves_pair_and_sp(const asm_line &line,
+                                       const std::string &pair,
+                                       char lo,
+                                       char hi) {
+    if (!line.label.empty())
+        return false;
+    if (line.mnemonic.empty())
+        return false;
+    if (is_section_directive(line))
+        return false;
+
+    // Reject anything that definitely changes control flow, stack depth,
+    // or swaps register banks/pairs in ways that are awkward to model
+    // conservatively here.
+    const std::string &m = line.mnemonic;
+    if (m == "push" || m == "pop" || m == "call" || m == "ret" ||
+        m == "reti" || m == "retn" || m == "rst" || m == "jp" ||
+        m == "jr" || m == "djnz" || m == "ex" || m == "exx" ||
+        m == "ldi" || m == "ldir" || m == "ldd" || m == "lddr" ||
+        m == "cpi" || m == "cpir" || m == "cpd" || m == "cpdr") {
+        return false;
+    }
+
+    if (operand_has_token(line.operands, "sp"))
+        return false;
+
+    return !operand_mentions_pair_or_bytes(line.operands, pair, lo, hi);
+}
+
 static int count_csv_items(const std::string &ops) {
     if (trim(ops).empty())
         return 0;
@@ -645,6 +707,9 @@ bool z80_peep::apply_once() {
         if (rule_push_hl_pop_de(i))      { changed = true; continue; }
         if (rule_push_hl_pop_bc(i))      { changed = true; continue; }
         if (rule_push_hl_de_load(i))     { changed = true; continue; }
+        if (rule_push_pair_exchange_span(i)) { changed = true; continue; }
+        if (rule_push_pair_copy_span(i)) { changed = true; continue; }
+        if (rule_push_pop_same_reg_span(i)) { changed = true; continue; }
         if (rule_ix_byte_store_reload(i)) { changed = true; continue; }
         if (rule_redundant_ld(i))        { changed = true; continue; }
         if (rule_self_store(i))          { changed = true; continue; }
@@ -1202,6 +1267,148 @@ bool z80_peep::rule_push_hl_pop_bc(size_t i) {
     a.mnemonic = "ld";  a.operands = "b, h";
     b.mnemonic = "ld";  b.operands = "c, l";
     return true;
+}
+
+bool z80_peep::rule_push_pop_same_reg_span(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+
+    struct pair_desc {
+        const char *name;
+        char lo;
+        char hi;
+    };
+    static const pair_desc pairs[] = {
+        {"hl", 'l', 'h'},
+        {"de", 'e', 'd'},
+        {"bc", 'c', 'b'},
+    };
+
+    const asm_line &push = lines_[i];
+    if (push.mnemonic != "push")
+        return false;
+    const std::string pushed = trim(push.operands);
+
+    for (const auto &pair : pairs) {
+        if (pushed != pair.name)
+            continue;
+        for (size_t pop_idx = i + 2;
+             pop_idx < lines_.size() && pop_idx <= i + 4;
+             ++pop_idx) {
+            const asm_line &pop = lines_[pop_idx];
+            if (pop.mnemonic != "pop" || trim(pop.operands) != pair.name)
+                continue;
+            bool safe = true;
+            for (size_t k = i + 1; k < pop_idx; ++k) {
+                if (!line_preserves_pair_and_sp(lines_[k], pair.name,
+                                                pair.lo, pair.hi)) {
+                    safe = false;
+                    break;
+                }
+            }
+            if (!safe)
+                continue;
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(pop_idx));
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+    }
+    return false;
+}
+
+bool z80_peep::rule_push_pair_exchange_span(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+
+    const asm_line &push = lines_[i];
+    if (push.mnemonic != "push")
+        return false;
+    const std::string pushed = trim(push.operands);
+    if (pushed != "hl" && pushed != "de")
+        return false;
+
+    const std::string popped = (pushed == "hl") ? "de" : "hl";
+    for (size_t pop_idx = i + 2;
+         pop_idx < lines_.size() && pop_idx <= i + 4;
+         ++pop_idx) {
+        const asm_line &pop = lines_[pop_idx];
+        if (pop.mnemonic != "pop" || trim(pop.operands) != popped)
+            continue;
+        bool safe = true;
+        for (size_t k = i + 1; k < pop_idx; ++k) {
+            if (!line_preserves_pair_and_sp(lines_[k], "hl", 'l', 'h') ||
+                !line_preserves_pair_and_sp(lines_[k], "de", 'e', 'd')) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe)
+            continue;
+        lines_[i].mnemonic = "ex";
+        lines_[i].operands = "de, hl";
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(pop_idx));
+        return true;
+    }
+    return false;
+}
+
+bool z80_peep::rule_push_pair_copy_span(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+
+    struct copy_desc {
+        const char *src;
+        char src_lo;
+        char src_hi;
+        const char *dst;
+        char dst_lo;
+        char dst_hi;
+    };
+    static const copy_desc copies[] = {
+        {"hl", 'l', 'h', "bc", 'c', 'b'},
+        {"bc", 'c', 'b', "hl", 'l', 'h'},
+        {"bc", 'c', 'b', "de", 'e', 'd'},
+        {"de", 'e', 'd', "bc", 'c', 'b'},
+    };
+
+    const asm_line &push = lines_[i];
+    if (push.mnemonic != "push")
+        return false;
+    const std::string pushed = trim(push.operands);
+
+    for (const auto &copy : copies) {
+        if (pushed != copy.src)
+            continue;
+        for (size_t pop_idx = i + 2;
+             pop_idx < lines_.size() && pop_idx <= i + 4;
+             ++pop_idx) {
+            const asm_line &pop = lines_[pop_idx];
+            if (pop.mnemonic != "pop" || trim(pop.operands) != copy.dst)
+                continue;
+            bool safe = true;
+            for (size_t k = i + 1; k < pop_idx; ++k) {
+                if (!line_preserves_pair_and_sp(lines_[k], copy.src, copy.src_lo, copy.src_hi) ||
+                    !line_preserves_pair_and_sp(lines_[k], copy.dst, copy.dst_lo, copy.dst_hi)) {
+                    safe = false;
+                    break;
+                }
+            }
+            if (!safe)
+                continue;
+
+            lines_[i] = asm_line::parse(
+                "\tld\t" + std::string(1, copy.dst_hi) + ", " +
+                std::string(1, copy.src_hi));
+            lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1),
+                          asm_line::parse(
+                              "\tld\t" + std::string(1, copy.dst_lo) + ", " +
+                              std::string(1, copy.src_lo)));
+            ++pop_idx;
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(pop_idx));
+            return true;
+        }
+    }
+    return false;
 }
 
 // ld l,N(ix); ld h,N+1(ix); ld l,M(ix); ld h,M+1(ix)  →  last 2 lines only.

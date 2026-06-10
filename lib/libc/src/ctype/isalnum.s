@@ -17,10 +17,9 @@
 
         .area   _CODE
 
-        ; _isalnum
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is alphanumeric, else 0
-        ; clobbers: AF, BC
+        ;; _isalnum
+        ;; Reject values outside the single-byte execution charset, then test the
+        ;; three ASCII bands that make up the alphanumeric class.
 _isalnum::
         ld      a,h
         or      a

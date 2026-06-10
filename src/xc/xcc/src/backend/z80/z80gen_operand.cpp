@@ -13,12 +13,16 @@ namespace {
 
 uint16_t fp_const_word(const operand &op, int word_index) {
     if (op.type && op.type->size() == 8) {
+        if (word_index < 0 || word_index >= 4)
+            return 0;
         uint64_t bits = 0;
         double value = op.fval;
         std::memcpy(&bits, &value, sizeof(bits));
         return static_cast<uint16_t>((bits >> (word_index * 16)) & 0xffffu);
     }
 
+    if (word_index < 0 || word_index >= 2)
+        return 0;
     uint32_t bits = 0;
     float value = static_cast<float>(op.fval);
     std::memcpy(&bits, &value, sizeof(bits));

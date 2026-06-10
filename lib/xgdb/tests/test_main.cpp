@@ -67,6 +67,27 @@ TEST(z80_disassembler_sdcc_output) {
     ASSERT_EQ(formatter->format(inst2), "ld\t-2(ix), a");
 }
 
+TEST(z80_disassembler_gnu_output) {
+    const std::vector<uint8_t> bytes = {
+        0x3E, 0x42,
+        0xDD, 0x7E, 0x05,
+        0xDD, 0x77, 0xFE
+    };
+
+    xgdb::vector_memory_reader memory(bytes);
+    auto disassembler = xgdb::make_z80_disassembler();
+    auto formatter = xgdb::make_gnu_z80_formatter();
+
+    auto inst0 = disassembler->disassemble_one(0x0000, memory);
+    ASSERT_EQ(formatter->format(inst0), "ld\ta, 0x42");
+
+    auto inst1 = disassembler->disassemble_one(0x0002, memory);
+    ASSERT_EQ(formatter->format(inst1), "ld\ta, (ix+5)");
+
+    auto inst2 = disassembler->disassemble_one(0x0005, memory);
+    ASSERT_EQ(formatter->format(inst2), "ld\t(ix-2), a");
+}
+
 int main() {
     int passed = 0;
     int failed = 0;

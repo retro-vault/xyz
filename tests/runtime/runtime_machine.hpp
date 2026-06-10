@@ -52,7 +52,7 @@
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t HALT_ADDR  = 0xFF00;  // HALT sentinel address
-static constexpr uint16_t STACK_BASE = 0xF000;  // initial SP (grows down)
+static constexpr uint16_t STACK_BASE = 0xFE00;  // initial SP (grows down)
 static constexpr int      MAX_STEPS  = 300000;  // step budget per call
 
 // ---------------------------------------------------------------------------
@@ -222,6 +222,50 @@ struct runtime_machine {
         return run_to_halt_already_set();
     }
 
+    // Float 3-arg: a in HL:DE, then c and b on the stack so the callee sees
+    // b at ix+4..7 and c at ix+8..11.
+    bool call_float3(uint16_t fn, float a, float b, float c)
+    {
+        uint32_t a_bits, b_bits, c_bits;
+        std::memcpy(&a_bits, &a, sizeof a);
+        std::memcpy(&b_bits, &b, sizeof b);
+        std::memcpy(&c_bits, &c, sizeof c);
+
+        uint16_t sp = STACK_BASE;
+        sp = push32_arg(sp, c_bits);
+        sp = push32_arg(sp, b_bits);
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.hl = (a_bits >> 16) & 0xFFFF;
+        s.de = a_bits & 0xFFFF;
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    // Float 2-arg + pointer: a in HL:DE, b on the stack, pointer after that.
+    bool call_float2_ptr(uint16_t fn, float a, float b, uint16_t ptr)
+    {
+        uint32_t a_bits, b_bits;
+        std::memcpy(&a_bits, &a, sizeof a);
+        std::memcpy(&b_bits, &b, sizeof b);
+
+        uint16_t sp = STACK_BASE;
+        sp = push16(sp, ptr);
+        sp = push32_arg(sp, b_bits);
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.hl = (a_bits >> 16) & 0xFFFF;
+        s.de = a_bits & 0xFFFF;
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
     // Float compare/eq/lt: a in HL:DE, b on stack.
     // Used by fscmp, fseq, fslt (callee-cleans stack).
     bool call_float_cmp(uint16_t fn, float a, float b)
@@ -256,6 +300,28 @@ struct runtime_machine {
 
         uint16_t sp = STACK_BASE;
         sp = push32_arg(sp, bits);
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    // float _Complex 1-arg entirely on stack: real first, imag second.
+    // Public complex helpers like cabsf/cargf/conjf receive:
+    //   ix+4..7   = real float
+    //   ix+8..11  = imag float
+    bool call_complex1(uint16_t fn, float real, float imag)
+    {
+        uint32_t real_bits, imag_bits;
+        std::memcpy(&real_bits, &real, sizeof real_bits);
+        std::memcpy(&imag_bits, &imag, sizeof imag_bits);
+
+        uint16_t sp = STACK_BASE;
+        sp = push32_arg(sp, imag_bits);
+        sp = push32_arg(sp, real_bits);
         sp = push16(sp, HALT_ADDR);
 
         xz80::cpu_state s{};
@@ -512,6 +578,107 @@ struct runtime_machine {
     bool call_double1(uint16_t fn, double a)
     {
         return call64_1arg(fn, double_bits(a));
+    }
+
+    // C-library double ABI: regular functions currently receive double args on
+    // the stack, not in the runtime-helper DE:HL:DE':HL' fast path.
+    bool call_c_double1(uint16_t fn, double a)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    bool call_c_double1_int(uint16_t fn, double a, int16_t b)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push16(sp, (uint16_t)b);
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    bool call_c_double2(uint16_t fn, double a, double b)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push64_arg(sp, double_bits(b));
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    bool call_c_double1_ptr(uint16_t fn, double a, uint16_t ptr)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push16(sp, ptr);
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    bool call_c_double1_long(uint16_t fn, double a, int32_t b)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push32_arg(sp, (uint32_t)b);
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    bool call_c_double3(uint16_t fn, double a, double b, double c)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push64_arg(sp, double_bits(c));
+        sp = push64_arg(sp, double_bits(b));
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    bool call_c_double2_ptr(uint16_t fn, double a, double b, uint16_t ptr)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push16(sp, ptr);
+        sp = push64_arg(sp, double_bits(b));
+        sp = push64_arg(sp, double_bits(a));
+        sp = push16(sp, HALT_ADDR);
+
+        xz80::cpu_state s{};
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
     }
 
 private:

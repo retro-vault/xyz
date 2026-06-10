@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include <xz80/formatter.h>
+
 namespace xgdb {
 
     // Processor family supported by a disassembler instance.
@@ -115,6 +117,18 @@ namespace xgdb {
          *      Formatted instruction text.
          */
         virtual std::string format(const disassembled_instruction& instruction) const = 0;
+
+        /*
+         * Render one decoded instruction into typed output fragments.
+         *
+         * Parameters:
+         *      instruction - Instruction to format.
+         *
+         * Returns:
+         *      Structured fragments for styled rendering.
+         */
+        virtual xz80::formatted_line format_fragments(
+            const disassembled_instruction& instruction) const = 0;
     };
 
     /*
@@ -176,6 +190,14 @@ namespace xgdb {
      *      Heap-allocated syntax formatter.
      */
     std::unique_ptr<syntax_formatter> make_sdcc_z80_formatter();
+
+    /*
+     * Create a formatter that emits GNU-style Z80 syntax.
+     *
+     * Returns:
+     *      Heap-allocated syntax formatter.
+     */
+    std::unique_ptr<syntax_formatter> make_gnu_z80_formatter();
 
 } // namespace xgdb
 

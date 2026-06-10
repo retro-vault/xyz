@@ -12,7 +12,9 @@
         .globl  _iswcntrl
         .globl  _iscntrl
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswcntrl
+        ;; The runtime has no Unicode control table, so only byte-sized values
+        ;; can be classified through the narrow iscntrl implementation.
 _iswcntrl::
         ld      a,h
         or      a

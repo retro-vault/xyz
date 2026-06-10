@@ -7,7 +7,7 @@ OUTPUT_DIR   = $(BUILD_DIR)/lib/xz80
 LIB_OUTPUT   = $(BUILD_DIR)/lib
 LIB_TARGET   = $(LIB_OUTPUT)/libxz80.a
 
-SOURCES      = src/cpu.cpp src/disassembler.cpp src/memory.cpp
+SOURCES      = src/cpu.cpp src/disassembler.cpp src/formatter.cpp src/memory.cpp
 OBJECTS      = $(patsubst src/%.cpp,$(OUTPUT_DIR)/%.o,$(SOURCES))
 
 TEST_TARGET  = $(OUTPUT_DIR)/xz80_tests

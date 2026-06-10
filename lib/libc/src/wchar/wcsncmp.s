@@ -4,7 +4,9 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcsncmp
         .area   _CODE
-        ; HL = lhs, DE = rhs, 4(ix) = count -> DE = -1/0/1
+        ;; _wcsncmp
+        ;; Compare at most count wchar_t elements. The loop stops early on the
+        ;; first mismatch or the first shared terminator.
 _wcsncmp::
         push    ix
         ld      ix,#0

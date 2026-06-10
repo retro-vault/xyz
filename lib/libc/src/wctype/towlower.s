@@ -12,14 +12,16 @@
         .globl  _towlower
         .globl  _tolower
         .area   _CODE
-        ; HL = wc -> DE = mapped wc
+        ;; _towlower
+        ;; Only byte-sized wide characters participate in the execution charset.
+        ;; Larger wchar_t values are returned unchanged instead of being narrowed.
 _towlower::
         ld      a,h
         or      a
         jr      nz,tow_id
         call    _tolower
-        ld      d,#0                    ; (unsigned char) result
+        ld      d,#0                    ; Re-promote the narrow result back to wint_t.
         ret
 tow_id:
-        ex      de,hl                   ; return wc unchanged
+        ex      de,hl                   ; Return wc unchanged when it is not byte-sized.
         ret

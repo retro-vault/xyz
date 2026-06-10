@@ -333,6 +333,26 @@ void abi_convention::emit_store_modern_result(z80_gen &g, const icode &ic)
     int sz = g.op_size(ic.result);
     if (sz == 1) {
         g.store_a(ic.result);
+    } else if (sz > 8) {
+        g.emit_line("push\tde");
+        g.emit_line("pop\thl");
+        for (int w = 0; w < sz / 2; ++w) {
+            g.emit_line("ld\te, (hl)");
+            g.emit_line("inc\thl");
+            g.emit_line("ld\td, (hl)");
+            g.emit_line("inc\thl");
+            g.emit_line("push\thl");
+            g.emit_line("ex\tde, hl");
+            g.store_hl_word(ic.result, w);
+            g.emit_line("pop\thl");
+        }
+        if (sz & 1) {
+            g.emit_line("ld\ta, (hl)");
+            operand tail = ic.result;
+            tail.byte_offset += (sz - 1);
+            tail.type = type::make_char();
+            g.store_a(tail);
+        }
     } else if (sz == 8) {
         g.store_reg64(ic.result);
     } else if (sz == 4) {

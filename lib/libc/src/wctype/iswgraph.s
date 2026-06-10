@@ -12,7 +12,9 @@
         .globl  _iswgraph
         .globl  _isgraph
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswgraph
+        ;; Graphical classification is inherited from the narrow helper for the
+        ;; single-byte execution charset only.
 _iswgraph::
         ld      a,h
         or      a

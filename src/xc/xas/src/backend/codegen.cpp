@@ -19,6 +19,7 @@
 // copyright (C) 2026 tomaz stih
 //
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -39,6 +40,70 @@ namespace xas {
     // =========================================================================
 
     namespace {
+
+        static std::optional<xbfd::calling_convention> parse_optsdcc_cc(const std::string& text)
+        {
+            std::string compact;
+            compact.reserve(text.size());
+            for (char ch : text) {
+                if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n')
+                    compact.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+            }
+            if (compact.find("sdcccall(0)") != std::string::npos)
+                return xbfd::calling_convention::xcc_sdcccall0;
+            if (compact.find("sdcccall(1)") != std::string::npos)
+                return xbfd::calling_convention::xcc_sdcccall1;
+            if (compact.find("z88dk::fastcall") != std::string::npos)
+                return xbfd::calling_convention::xcc_z88dk_fastcall;
+            if (compact.find("z88dk::callee") != std::string::npos)
+                return xbfd::calling_convention::xcc_z88dk_callee;
+            return std::nullopt;
+        }
+
+        static std::string lowercase(std::string text)
+        {
+            for (char& ch : text)
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            return text;
+        }
+
+        static bfd::section_flags classify_section_flags(const std::string& name)
+        {
+            const std::string lower = lowercase(name);
+            bfd::section_flags flags = bfd::section_flags::alloc
+                                     | bfd::section_flags::reloc;
+
+            const bool is_bss_like =
+                lower == ".bss" || lower == "_bss" || lower == "_heap";
+            const bool is_data_like =
+                lower == ".data" || lower == ".tdata"
+                || lower == "_data" || lower == "_initialized"
+                || lower == "_initializer" || lower == "_dabs";
+            const bool is_rodata_like =
+                lower == ".rodata" || lower == ".rdata"
+                || lower == "_rodata" || lower == "_const";
+            const bool is_code_like =
+                lower == ".text" || lower == ".init" || lower == ".fini"
+                || lower == "_code" || lower == "_gsinit"
+                || lower == "_gsfinal" || lower == "_cabs"
+                || lower == ".vectors";
+
+            if (is_bss_like)
+                return flags | bfd::section_flags::data
+                             | bfd::section_flags::never_load;
+            if (is_data_like)
+                return flags | bfd::section_flags::load
+                             | bfd::section_flags::data;
+            if (is_rodata_like)
+                return flags | bfd::section_flags::load
+                             | bfd::section_flags::readonly;
+            if (is_code_like)
+                return flags | bfd::section_flags::load
+                             | bfd::section_flags::code;
+
+            return flags | bfd::section_flags::load
+                         | bfd::section_flags::code;
+        }
 
         // 8-bit register code (B=0..A=7, -1 if not a simple reg).
         static int reg8(const std::string& r)
@@ -165,30 +230,116 @@ namespace xas {
         return std::nullopt;
     }
 
-    // Returns true if the expression references a symbol that is not locally
-    // defined, meaning a relocation will be needed.
-    static bool needs_reloc(const expr& e, const sym_table& syms,
-                             const std::string& cur_section)
+    static std::optional<int64_t> eval_expr_symbol_zero(const expr& e,
+                                                        uint32_t cur_addr)
+    {
+        switch (e.kind) {
+            case expr_kind::integer:
+                return e.int_val;
+
+            case expr_kind::current_addr:
+                return static_cast<int64_t>(cur_addr);
+
+            case expr_kind::symbol:
+                return 0;
+
+            case expr_kind::unary: {
+                auto v = eval_expr_symbol_zero(*e.lhs, cur_addr);
+                if (!v) return std::nullopt;
+                if (e.op == '-') return -*v;
+                if (e.op == '~') return ~*v;
+                return std::nullopt;
+            }
+
+            case expr_kind::binary: {
+                auto lv = eval_expr_symbol_zero(*e.lhs, cur_addr);
+                auto rv = eval_expr_symbol_zero(*e.rhs, cur_addr);
+                if (!lv || !rv) return std::nullopt;
+                switch (e.op) {
+                    case '+': return *lv + *rv;
+                    case '-': return *lv - *rv;
+                    case '*': return *lv * *rv;
+                    case '/': return *rv ? *lv / *rv : 0;
+                    case '%': return *rv ? *lv % *rv : 0;
+                    case '&': return *lv & *rv;
+                    case '|': return *lv | *rv;
+                    case '^': return *lv ^ *rv;
+                    case '<': return *lv << *rv;
+                    case '>': return *lv >> *rv;
+                    default:  return std::nullopt;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    static int symbol_ref_count(const expr& e)
     {
         switch (e.kind) {
             case expr_kind::integer:
             case expr_kind::current_addr:
-                return false;
-            case expr_kind::symbol: {
-                auto it = syms.find(e.name);
-                if (it == syms.end()) return true;       // undefined
-                if (!it->second.defined) return true;    // external ref
-                // cross-section reference needs a reloc so the linker
-                // can add the target section's final base address.
-                return it->second.section_name != cur_section;
-            }
+                return 0;
+            case expr_kind::symbol:
+                return 1;
             case expr_kind::unary:
-                return needs_reloc(*e.lhs, syms, cur_section);
+                return symbol_ref_count(*e.lhs);
             case expr_kind::binary:
-                return needs_reloc(*e.lhs, syms, cur_section)
-                    || needs_reloc(*e.rhs, syms, cur_section);
+                return symbol_ref_count(*e.lhs) + symbol_ref_count(*e.rhs);
         }
-        return false;
+        return 0;
+    }
+
+    static std::string reloc_symbol_name(const expr& e);
+
+    // Returns true if the expression should carry a relocation record.
+    // For relocatable objects, even same-section absolute symbol references
+    // such as `jp label` need relocation so the linker can add the section's
+    // final base address. We only suppress relocations for fully absolute
+    // expressions and for compound expressions with multiple symbol refs that
+    // already fold to a stable constant (for example label differences).
+    static bool needs_reloc(const expr& e, const sym_table& syms,
+                             const std::string&)
+    {
+        const int sym_count = symbol_ref_count(e);
+        if (sym_count == 0)
+            return false;
+        if (sym_count != 1)
+            return false;
+
+        const auto name = reloc_symbol_name(e);
+        if (name.empty())
+            return false;
+
+        auto it = syms.find(name);
+        if (it == syms.end())
+            return true;
+        if (!it->second.defined)
+            return true;
+        return !it->second.section_name.empty();
+    }
+
+    // PC-relative branches only need relocation when the target is not a
+    // locally defined label in the same relocatable section. Same-section
+    // deltas survive section rebasing unchanged.
+    static bool needs_pcrel_reloc(const expr& e, const sym_table& syms,
+                                  const std::string& cur_section)
+    {
+        const int sym_count = symbol_ref_count(e);
+        if (sym_count == 0)
+            return false;
+        if (sym_count != 1)
+            return false;
+
+        const auto name = reloc_symbol_name(e);
+        if (name.empty())
+            return false;
+
+        auto it = syms.find(name);
+        if (it == syms.end())
+            return true;
+        if (!it->second.defined)
+            return true;
+        return it->second.section_name != cur_section;
     }
 
     static std::string reloc_symbol_name(const expr& e)
@@ -203,21 +354,57 @@ namespace xas {
         return {};
     }
 
-    static uint32_t reloc_addend(const expr& e, const sym_table& syms, uint32_t cur_offset)
-    {
-        auto value = eval_expr(e, syms, cur_offset);
-        if (!value)
-            return 0;
+    struct reloc_target {
+        std::string name;
+        bool sym_relative = true;
+        bool valid = false;
+    };
 
+    static reloc_target pick_reloc_target(const expr& e, const sym_table& syms,
+                                          const std::string&)
+    {
         const auto name = reloc_symbol_name(e);
         if (name.empty())
-            return static_cast<uint32_t>(*value);
+            return {};
 
         auto it = syms.find(name);
         if (it == syms.end() || !it->second.defined)
-            return static_cast<uint32_t>(*value);
+            return {name, true, true};
 
-        return static_cast<uint32_t>(*value) - it->second.value;
+        if (!it->second.section_name.empty())
+            return {it->second.section_name, false, true};
+
+        return {};
+    }
+
+    static uint32_t reloc_addend(const expr& e, const sym_table& syms, uint32_t cur_offset,
+                                 const reloc_target& target)
+    {
+        auto value = eval_expr(e, syms, cur_offset);
+        auto relaxed = value ? value : eval_expr_symbol_zero(e, cur_offset);
+        if (!relaxed)
+            return 0;
+
+        const auto name = reloc_symbol_name(e);
+        if (name.empty() || !target.valid)
+            return static_cast<uint32_t>(*relaxed);
+
+        if (!target.sym_relative)
+            return static_cast<uint32_t>(*relaxed);
+
+        auto it = syms.find(name);
+        if (it == syms.end() || !it->second.defined)
+            return static_cast<uint32_t>(*relaxed);
+
+        return static_cast<uint32_t>(*relaxed) - it->second.value;
+    }
+
+    static bool is_external_target(const reloc_target& target, const sym_table& syms)
+    {
+        if (!target.valid || !target.sym_relative || target.name.empty())
+            return false;
+        auto it = syms.find(target.name);
+        return it == syms.end() || !it->second.defined;
     }
 
     // =========================================================================
@@ -227,28 +414,64 @@ namespace xas {
     struct codegen {
         emitter&   emit_;
         sym_table  syms_;
+        std::map<std::string, bool> emitted_sections_;
+        std::map<std::string, uint32_t> section_offsets_;
         std::string cur_section_;
         uint32_t   cur_offset_ = 0;
         int        pass_       = 1;
         std::string src_file_;
+        bool       section_ready_ = false;
 
         codegen(emitter& e, const std::string& src)
             : emit_(e), src_file_(src) {}
+
+        void note_section_offset()
+        {
+            section_offsets_[cur_section_] = cur_offset_;
+        }
+
+        void switch_section(const std::string& name)
+        {
+            cur_section_ = name;
+            cur_offset_ = section_offsets_[cur_section_];
+            if (pass_ == 2) {
+                bfd::section_flags sf = classify_section_flags(cur_section_);
+                emit_.set_section(cur_section_, sf);
+                emitted_sections_[cur_section_] = true;
+                section_ready_ = true;
+            } else {
+                section_ready_ = false;
+            }
+        }
 
         // -----------------------------------------------------------------------
         // Emit helpers (only called in pass 2)
         // -----------------------------------------------------------------------
 
+        void ensure_section()
+        {
+            if (pass_ != 2 || section_ready_)
+                return;
+            bfd::section_flags sf = classify_section_flags(cur_section_);
+            emit_.set_section(cur_section_, sf);
+            emitted_sections_[cur_section_] = true;
+            section_ready_ = true;
+        }
+
         void emit_byte_val(uint8_t v)
         {
+            ensure_section();
             if (pass_ == 2) emit_.emit_byte(v);
             ++cur_offset_;
+            note_section_offset();
         }
 
         void emit_word_val(uint16_t v)
         {
+            ensure_section();
             if (pass_ == 2) emit_.emit_word(v);
             cur_offset_ += 2;
+            note_section_offset();
         }
 
         // Emit a byte that may need a relocation.
@@ -256,10 +479,16 @@ namespace xas {
         {
             auto v = eval_expr(e, syms_, cur_offset_);
             if (pass_ == 2) {
+                ensure_section();
                 if (needs_reloc(e, syms_, cur_section_)) {
-                    const auto addend = reloc_addend(e, syms_, cur_offset_);
-                    emit_.emit_reloc(reloc_symbol_name(e),
-                                     bfd::reloc_type::z80_8, true);
+                    const auto target = pick_reloc_target(e, syms_, cur_section_);
+                    const auto addend = reloc_addend(e, syms_, cur_offset_, target);
+                    if (is_external_target(target, syms_))
+                        emit_.refer_symbol(target.name);
+                    emit_.emit_reloc(target.name,
+                                     bfd::reloc_type::z80_8,
+                                     target.sym_relative,
+                                     static_cast<int32_t>(addend));
                     emit_.emit_byte(static_cast<uint8_t>(addend & 0xFF));
                 } else {
                     emit_.emit_byte(v ? static_cast<uint8_t>(*v) : 0);
@@ -273,10 +502,16 @@ namespace xas {
         {
             auto v = eval_expr(e, syms_, cur_offset_);
             if (pass_ == 2) {
+                ensure_section();
                 if (needs_reloc(e, syms_, cur_section_)) {
-                    const auto addend = reloc_addend(e, syms_, cur_offset_);
-                    emit_.emit_reloc(reloc_symbol_name(e),
-                                     bfd::reloc_type::z80_16, true);
+                    const auto target = pick_reloc_target(e, syms_, cur_section_);
+                    const auto addend = reloc_addend(e, syms_, cur_offset_, target);
+                    if (is_external_target(target, syms_))
+                        emit_.refer_symbol(target.name);
+                    emit_.emit_reloc(target.name,
+                                     bfd::reloc_type::z80_16,
+                                     target.sym_relative,
+                                     static_cast<int32_t>(addend));
                     emit_.emit_word(static_cast<uint16_t>(addend & 0xFFFF));
                 } else {
                     emit_.emit_word(v ? static_cast<uint16_t>(*v) : 0);
@@ -290,10 +525,16 @@ namespace xas {
         {
             auto v = eval_expr(e, syms_, cur_offset_);
             if (pass_ == 2) {
-                if (needs_reloc(e, syms_, cur_section_)) {
-                    const auto addend = reloc_addend(e, syms_, cur_offset_);
-                    emit_.emit_reloc(reloc_symbol_name(e),
-                                     bfd::reloc_type::z80_pc8, true);
+                ensure_section();
+                if (needs_pcrel_reloc(e, syms_, cur_section_)) {
+                    const auto target = pick_reloc_target(e, syms_, cur_section_);
+                    const auto addend = reloc_addend(e, syms_, cur_offset_, target);
+                    if (is_external_target(target, syms_))
+                        emit_.refer_symbol(target.name);
+                    emit_.emit_reloc(target.name,
+                                     bfd::reloc_type::z80_pc8,
+                                     target.sym_relative,
+                                     static_cast<int32_t>(addend));
                     emit_.emit_byte(static_cast<uint8_t>(addend & 0xFF));
                 } else {
                     // cur_offset_ is after the opcode byte but before the offset.
@@ -1097,7 +1338,9 @@ namespace xas {
             if (mn == "JP") {
                 if (s.operands.size() == 1) {
                     if (s.operands[0].kind == operand_kind::reg
-                        || s.operands[0].kind == operand_kind::ind_reg) {
+                        || s.operands[0].kind == operand_kind::ind_reg
+                        || s.operands[0].kind == operand_kind::ind_ix_off
+                        || s.operands[0].kind == operand_kind::ind_iy_off) {
                         const std::string& r = s.operands[0].reg_name;
                         if (r == "IX" || r == "IY") return 2;
                         return 1;
@@ -1244,15 +1487,7 @@ namespace xas {
             if (dn == "area" || dn == "section") {
                 std::string sec_name = s.string_arg;
                 if (sec_name.empty()) sec_name = "_CODE";
-                cur_section_ = sec_name;
-                cur_offset_  = 0;
-                if (pass_ == 2) {
-                    bfd::section_flags sf = bfd::section_flags::alloc
-                                          | bfd::section_flags::load
-                                          | bfd::section_flags::code
-                                          | bfd::section_flags::reloc;
-                    emit_.set_section(cur_section_, sf);
-                }
+                switch_section(sec_name);
                 return;
             }
 
@@ -1301,8 +1536,12 @@ namespace xas {
                     auto v = eval_expr(*s.args[0], syms_, cur_offset_);
                     if (v) n = static_cast<uint32_t>(*v);
                 }
-                if (pass_ == 2) emit_.emit_space(n);
+                if (pass_ == 2) {
+                    ensure_section();
+                    emit_.emit_space(n, s.source_line);
+                }
                 cur_offset_ += n;
+                note_section_offset();
                 return;
             }
 
@@ -1311,12 +1550,14 @@ namespace xas {
                 for (const auto &arg : s.args) {
                     auto v = eval_expr(*arg, syms_, cur_offset_);
                     if (pass_ == 2) {
+                        ensure_section();
                         uint32_t val = v ? static_cast<uint32_t>(*v) : 0;
                         emit_.emit_word(static_cast<uint16_t>(val & 0xFFFF));
                         emit_.emit_word(static_cast<uint16_t>((val >> 16) & 0xFFFF));
                     }
                     cur_offset_ += 4;
                 }
+                note_section_offset();
                 return;
             }
 
@@ -1327,8 +1568,12 @@ namespace xas {
                     auto v = eval_expr(*s.args[0], syms_, cur_offset_);
                     if (v) n = static_cast<uint32_t>(*v);
                 }
-                if (pass_ == 2) emit_.emit_space(n * 2);
+                if (pass_ == 2) {
+                    ensure_section();
+                    emit_.emit_space(n * 2, s.source_line);
+                }
                 cur_offset_ += n * 2;
+                note_section_offset();
                 return;
             }
 
@@ -1366,7 +1611,14 @@ namespace xas {
                 }
                 return;
             }
-            // Other directives: module, file, include, conditionals, optsdcc — skip.
+            if (dn == "optsdcc") {
+                if (pass_ == 2) {
+                    if (auto cc = parse_optsdcc_cc(s.string_arg2))
+                        emit_.set_default_calling_convention(*cc);
+                }
+                return;
+            }
+            // Other directives: module, file, include, conditionals — skip.
         }
 
         // -----------------------------------------------------------------------
@@ -1375,6 +1627,9 @@ namespace xas {
 
         void process_stmt(const stmt& s)
         {
+            if (s.kind == stmt_kind::comment)
+                return;
+
             if (s.kind == stmt_kind::label) {
                 if (pass_ == 1) {
                     syms_[s.label_name].section_name = cur_section_;
@@ -1383,10 +1638,12 @@ namespace xas {
                     if (s.label_global)
                         syms_[s.label_name].global = true;
                 } else {
+                    ensure_section();
                     bool is_global = syms_.count(s.label_name)
                                   && syms_[s.label_name].global;
                     emit_.define_symbol(s.label_name, cur_offset_,
                                         cur_section_, is_global);
+                    emit_.mark_label(s.source_line);
                 }
                 return;
             }
@@ -1452,15 +1709,20 @@ namespace xas {
             std::string default_sec = (mode == asm_mode::gnu) ? ".text" : "_CODE";
             cur_section_ = default_sec;
             cur_offset_  = 0;
+            section_offsets_.clear();
+            section_offsets_[default_sec] = 0;
 
             // Pass 1: collect labels.
             pass_ = 1;
             cur_offset_ = 0;
+            section_ready_ = false;
             for (const auto& s : stmts) {
+                if (s.kind == stmt_kind::comment)
+                    continue;
                 if (s.kind == stmt_kind::directive
                     && (s.directive_name == "area" || s.directive_name == "section")) {
                     cur_section_ = s.string_arg.empty() ? default_sec : s.string_arg;
-                    cur_offset_  = 0;
+                    cur_offset_  = section_offsets_[cur_section_];
                     continue;
                 }
                 if (s.kind == stmt_kind::label) {
@@ -1479,11 +1741,30 @@ namespace xas {
                 }
                 if (s.kind == stmt_kind::instruction) {
                     cur_offset_ += instr_size(s);
+                    note_section_offset();
                     continue;
                 }
                 // Directives that affect offset.
                 if (s.kind == stmt_kind::directive) {
                     const std::string& dn = s.directive_name;
+                    if ((dn == "equ" || dn == "set")
+                        && !s.string_arg.empty() && !s.args.empty()) {
+                        auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                        if (v) {
+                            syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
+                            syms_[s.string_arg].defined = true;
+                        }
+                        continue;
+                    }
+                    if (dn == "define"
+                        && !s.string_arg.empty() && !s.args.empty()) {
+                        auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                        if (v) {
+                            syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
+                            syms_[s.string_arg].defined = true;
+                        }
+                        continue;
+                    }
                     if (dn == "byte" || dn == "db")
                         cur_offset_ += static_cast<uint32_t>(s.string_arg.size()
                                                               + s.args.size());
@@ -1505,11 +1786,14 @@ namespace xas {
                             if (v) cur_offset_ += static_cast<uint32_t>(*v);
                         }
                     }
+                    note_section_offset();
                 }
             }
 
             // Mark .globl symbols as referenced-but-possibly-external.
             for (const auto& s : stmts) {
+                if (s.kind == stmt_kind::comment)
+                    continue;
                 if (s.kind == stmt_kind::directive
                     && (s.directive_name == "globl" || s.directive_name == "global")) {
                     for (const auto& arg : s.args) {
@@ -1523,22 +1807,36 @@ namespace xas {
             pass_ = 2;
             cur_section_ = default_sec;
             cur_offset_  = 0;
-            {
-                bfd::section_flags sf = bfd::section_flags::alloc
-                                      | bfd::section_flags::load
-                                      | bfd::section_flags::code
-                                      | bfd::section_flags::reloc;
-                emit_.set_section(cur_section_, sf);
+            section_offsets_.clear();
+            section_offsets_[default_sec] = 0;
+            section_ready_ = false;
+            emitted_sections_.clear();
+
+            // Emit undefined globals in declaration order before codegen so
+            // the REL symbol table matches SDCC's .globl-driven ordering.
+            for (const auto& s : stmts) {
+                if (s.kind == stmt_kind::comment)
+                    continue;
+                if (s.kind != stmt_kind::directive)
+                    continue;
+                if (s.directive_name != "globl" && s.directive_name != "global")
+                    continue;
+                for (const auto& arg : s.args) {
+                    if (arg->kind != expr_kind::symbol)
+                        continue;
+                    emit_.refer_symbol(arg->name);
+                }
             }
 
-            // Declare external refs.
-            for (const auto& [name, sym] : syms_) {
-                if (!sym.defined && sym.global)
-                    emit_.refer_symbol(name);
+            for (size_t i = 0; i < stmts.size(); ++i) {
+                process_stmt(stmts[i]);
             }
 
-            for (const auto& s : stmts)
-                process_stmt(s);
+            if (!emitted_sections_.count(default_sec)) {
+                bfd::section_flags sf = classify_section_flags(default_sec);
+                emit_.set_section(default_sec, sf);
+                emitted_sections_[default_sec] = true;
+            }
 
             emit_.end_module();
         }

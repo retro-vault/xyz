@@ -16,12 +16,12 @@
         .area   _CODE
 
         ; _strerror
-        ; inputs:  DE = error number
+        ; inputs:  HL = error number
         ; outputs: DE = pointer to a static message string
         ; clobbers: AF
 _strerror::
-        ld      a,d
-        or      e
+        ld      a,h
+        or      l
         ld      de,#_strerror_unknown
         ret     nz
         ld      de,#_strerror_none

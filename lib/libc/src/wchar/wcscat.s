@@ -4,7 +4,9 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcscat
         .area   _CODE
-        ; HL = dst, DE = src -> DE = dst
+        ;; _wcscat
+        ;; Walk dst to its terminating wchar_t, then copy the source string
+        ;; including its terminator so the result remains properly terminated.
 _wcscat::
         push    hl
 wca_end:
@@ -16,7 +18,7 @@ wca_end:
         or      c
         jr      nz,wca_end
         dec     hl
-        dec     hl                      ; HL = dst terminator
+        dec     hl                      ; Rewind from the probe step to the terminator slot.
 wca_copy:
         ld      a,(de)
         ld      (hl),a

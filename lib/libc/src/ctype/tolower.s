@@ -17,10 +17,9 @@
 
         .area   _CODE
 
-        ; _tolower
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = converted character value
-        ; clobbers: AF, BC
+        ;; _tolower
+        ;; Only 'A'..'Z' are rewritten. Every other promoted int, including EOF,
+        ;; must pass through unchanged.
 _tolower::
         ld      a,h
         or      a

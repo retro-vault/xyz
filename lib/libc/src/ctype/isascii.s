@@ -15,12 +15,11 @@
 
         .area   _CODE
 
-        ; _isascii
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when 0 <= value <= 127, else 0
-        ; clobbers: AF
+        ;; _isascii
+        ;; This POSIX extension is a pure numerical range test rather than a
+        ;; character-class query.
 _isascii::
-        ; ASCII iff the high byte is zero and bit7 of the low byte is clear.
+        ;; ASCII iff the high byte is zero and bit 7 of the low byte is clear.
         ld      a,h
         or      a
         jr      nz,isascii_false

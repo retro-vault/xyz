@@ -49,6 +49,7 @@ namespace xas {
         void skip_to_eol();
 
         token next_token();
+        token read_comment();
         token read_integer();
         token read_string();
         token read_ident_or_directive();

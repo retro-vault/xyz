@@ -910,9 +910,15 @@ Each relocation entry is 4 bytes:
 |--------|------|-------|---------|
 | 0 | 2 | `offset` | byte offset into payload |
 | 2 | 1 | `size` | `1` = byte, `2` = word |
-| 3 | 1 | `pad` | reserved |
+| 3 | 1 | `pad` | bit0: for byte relocations, patch MSB instead of LSB |
 
 Only non-PC-relative absolute relocations appear here.
+
+For byte relocations:
+- `size = 1`, `pad bit0 = 0` means add the load base low byte
+- `size = 1`, `pad bit0 = 1` means add the load base high byte
+
+Word relocations keep `size = 2` and currently leave `pad = 0`.
 
 #### Code/data payload
 

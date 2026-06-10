@@ -25,6 +25,9 @@ namespace xas {
             << "options:\n"
             << "  --mode=sdcc   SDCC sdasz80 directives, .rel output (default)\n"
             << "  --mode=gnu    GNU gas directives, ELF32 output\n"
+            << "  --format=sdcc Pretty-print / emit SDCC-style assembly text\n"
+            << "  --format=gnu  Pretty-print / emit GNU-style assembly text\n"
+            << "                Supported source subset excludes assembler macros\n"
             << "  -o <file>     Output file\n"
             << "  -g            Emit debug information\n"
             << "  -I <dir>      Add include directory\n"
@@ -56,6 +59,10 @@ namespace xas {
                 opts.mode = asm_mode::sdcc;
             } else if (arg == "--mode=gnu") {
                 opts.mode = asm_mode::gnu;
+            } else if (arg == "--format=sdcc") {
+                opts.format = output_format::sdcc;
+            } else if (arg == "--format=gnu") {
+                opts.format = output_format::gnu;
             } else if (arg == "-g") {
                 opts.debug = true;
             } else if (arg == "-o") {
@@ -87,6 +94,9 @@ namespace xas {
 
         if (opts.input.empty())
             print_usage_and_exit(prog, 1);
+
+        if (opts.format && opts.output.empty())
+            throw std::runtime_error("--format requires -o <file>");
 
         if (opts.output.empty()) {
             std::filesystem::path p(opts.input);

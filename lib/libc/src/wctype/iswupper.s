@@ -12,7 +12,9 @@
         .globl  _iswupper
         .globl  _isupper
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswupper
+        ;; Uppercase classification is only defined for byte-sized execution
+        ;; characters in this libc.
 _iswupper::
         ld      a,h
         or      a

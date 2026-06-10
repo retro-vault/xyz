@@ -4,12 +4,14 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcsncat
         .area   _CODE
-        ; HL = dst, DE = src, 4(ix) = count -> DE = dst
+        ;; _wcsncat
+        ;; Append at most count wchar_t elements from src and always leave dst
+        ;; terminated. If src ends earlier, the copied NUL stops the loop naturally.
 _wcsncat::
         push    ix
         ld      ix,#0
         add     ix,sp
-        push    hl                      ; dst (return)
+        push    hl                      ; Preserve the original destination for the return value.
 wnca_end:
         ld      a,(hl)
         ld      c,a
@@ -19,9 +21,9 @@ wnca_end:
         or      c
         jr      nz,wnca_end
         dec     hl
-        dec     hl                      ; HL = dst terminator
+        dec     hl                      ; Rewind from the probe step to the terminator slot.
         ld      c,4(ix)
-        ld      b,5(ix)                 ; BC = count
+        ld      b,5(ix)                 ; BC = remaining element count
 wnca_copy:
         ld      a,b
         or      c
@@ -39,7 +41,7 @@ wnca_copy:
         or      (hl)                    ; copied char == 0 ?
         inc     hl
         inc     hl
-        jr      z,wnca_done             ; copied the NUL -> finished
+        jr      z,wnca_done             ; Copying the source terminator finishes the append.
         dec     bc
         jr      wnca_copy
 wnca_term:

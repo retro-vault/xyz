@@ -4,7 +4,8 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcscpy
         .area   _CODE
-        ; HL = dst, DE = src -> DE = dst
+        ;; _wcscpy
+        ;; Copy 16-bit elements until the terminating wide NUL has been copied.
 _wcscpy::
         push    hl
 wcp_loop:

@@ -62,6 +62,7 @@ static void require(bool cond, const char* expr, const char* file, int line)
 
 // Include all test files (each registers its tests via static initializers).
 #include "test_disassembler.cpp"
+#include "test_formatter.cpp"
 #include "test_cpu.cpp"
 
 int main()

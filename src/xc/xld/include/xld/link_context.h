@@ -25,7 +25,7 @@ namespace xld {
     struct output_reloc {
         uint16_t offset;    // offset into code_buffer
         uint8_t size;       // 1 = byte, 2 = word
-        uint8_t pad;        // reserved, 0
+        uint8_t pad;        // bit0: byte relocation patches MSB
     };
 
     class link_context {

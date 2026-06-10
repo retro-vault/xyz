@@ -856,7 +856,7 @@ void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
 }
 
 void z80_gen::gen_neg(const icode &ic) {
-    if (is_double64_op(ic.left)) {
+    if (is_double64_op(ic.result)) {
         load_hl_word(ic.left, 0);
         store_hl_word(ic.result, 0);
         load_hl_word(ic.left, 1);
@@ -871,7 +871,7 @@ void z80_gen::gen_neg(const icode &ic) {
         return;
     }
 
-    if (is_float32_op(ic.left)) {
+    if (is_float32_op(ic.result)) {
         load_hl_lo32(ic.left);
         store_hl_lo32(ic.result);
         load_hl_hi32(ic.left);
@@ -882,7 +882,25 @@ void z80_gen::gen_neg(const icode &ic) {
         return;
     }
 
-    if (is_llong_op(ic.left)) {
+    if (op_size(ic.result) == 4) {
+        // 32-bit integer negate: subtract each word from zero and
+        // propagate the borrow into the high word.
+        load_hl_lo32(ic.left);
+        emit_line("ex\tde, hl");
+        emit_line("ld\thl, %s", asm_.imm(0).c_str());
+        emit_line("or\ta, a");
+        emit_line("sbc\thl, de");
+        store_hl_lo32(ic.result);
+
+        load_hl_hi32(ic.left);
+        emit_line("ex\tde, hl");
+        emit_line("ld\thl, %s", asm_.imm(0).c_str());
+        emit_line("sbc\thl, de");
+        store_hl_hi32(ic.result);
+        return;
+    }
+
+    if (is_llong_op(ic.result)) {
         for (int w = 0; w < 4; ++w) {
             load_hl_word(ic.left, w);
             emit_line("ex\tde, hl");

@@ -17,10 +17,8 @@
 
         .area   _CODE
 
-        ; _isprint
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is printable, else 0
-        ; clobbers: AF, BC
+        ;; _isprint
+        ;; Printable ASCII spans one dense interval once space is included.
 _isprint::
         ld      a,h
         or      a

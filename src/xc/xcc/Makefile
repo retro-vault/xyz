@@ -8,6 +8,8 @@ DIST_DIR  ?= $(ROOT)/bin
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 CXX ?= g++
+XAS ?= $(HOST_BIN_DIR)/xas
+XASFLAGS ?= --mode=sdcc
 
 XBFD_LIB := $(DIST_DIR)/lib/libxbfd.a
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src  -I$(ROOT)/include -I$(ROOT)/lib/xbfd/include
@@ -114,15 +116,15 @@ check:
 # Copy $(DISTDIR)/bin/, $(DISTDIR)/lib/, and $(DISTDIR)/include/
 # into /usr/local/ to install.
 dist: $(TARGET)
-	@command -v sdasz80 >/dev/null 2>&1 || { \
-	  echo "xcc: error: sdasz80 not found in PATH — install z88dk to build the runtime"; \
+	@command -v $(XAS) >/dev/null 2>&1 || { \
+	  echo "xcc: error: xas not found — build src/xc/xas first"; \
 	  exit 1; }
 	@mkdir -p $(DIST_BINDIR) $(DIST_LIBDIR) $(DIST_INCDIR)
 	strip -o $(DIST_BINDIR)/xcc $(TARGET)
 	@rm -f $(DIST_LIBDIR)/*.rel
 	@for src in $(RUNTIME_SOURCES); do \
 	  rel="$(DIST_LIBDIR)/$$(basename "$${src%.s}").rel"; \
-	  sdasz80 -o "$$rel" "$$src"; \
+	  $(XAS) $(XASFLAGS) "$$src" -o "$$rel"; \
 	done
 	@cp -R $(ROOT)/lib/libc/include/. $(DIST_INCDIR)/
 	@echo "Staged:"

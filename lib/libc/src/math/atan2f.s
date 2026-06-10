@@ -1,20 +1,18 @@
-        ; atan2f.s
-        ;
-        ; libc atan2f for the xcc Z80 libc.  Rational approximation built on the
-        ; soft-float runtime (one body serves atan2f/atan2/atan2l).  Matches the
-        ; previous C implementation (0.28 Pade-style fit), including the
-        ; quadrant corrections.  Constants:
-        ;   PI = 0x40490FDB  0.5*PI = 0x3FC90FDB  0.28 = 0x3E8F5C29
-        ;   1.0 = 0x3F800000
-        ;
-        ; MIT License (see: LICENSE)
-        ; Copyright (C) 2026 tomaz stih
+        ;; atan2f.s
+        ;;
+        ;; libc atan2f for the xcc Z80 libc.  Rational approximation built on the
+        ;; soft-float runtime.  Matches the
+        ;; previous C implementation (0.28 Pade-style fit), including the
+        ;; quadrant corrections.  Constants:
+        ;;   PI = 0x40490FDB  0.5*PI = 0x3FC90FDB  0.28 = 0x3E8F5C29
+        ;;   1.0 = 0x3F800000
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2026 tomaz stih
 
         .module atan2f
         .optsdcc -mz80 sdcccall(1)
         .globl  _atan2f
-        .globl  _atan2
-        .globl  _atan2l
         .globl  ___libc_fpclassifyf
         .globl  ___fsadd
         .globl  ___fssub
@@ -27,9 +25,7 @@ __at_z: .ds 4
 __at_t: .ds 4
 __at_a: .ds 4
         .area   _CODE
-        ; HL:DE = y, x at 4(ix)..7(ix) -> HL:DE = atan2(y, x)
-_atan2::
-_atan2l::
+        ;; HL:DE = y, x at 4(ix)..7(ix) -> HL:DE = atan2(y, x)
 _atan2f::
         push    ix
         ld      ix,#0
@@ -44,7 +40,7 @@ _atan2f::
         ld      (__at_x + 2),a
         ld      a,7(ix)
         ld      (__at_x + 3),a
-        ; NaN check
+        ;; NaN check
         ld      hl,(__at_x + 2)
         ld      de,(__at_x)
         call    ___libc_fpclassifyf
@@ -57,7 +53,7 @@ _atan2f::
         ld      a,d
         or      e
         jp      z,at_nan
-        ; x == 0 ?
+        ;; x == 0 ?
         ld      a,(__at_x + 3)
         and     #0x7f
         ld      c,a
@@ -70,7 +66,7 @@ _atan2f::
         ld      a,(__at_x)
         or      c
         jp      nz,at_xnonzero
-        ; y == 0 ?
+        ;; y == 0 ?
         ld      a,(__at_y + 3)
         and     #0x7f
         ld      c,a
@@ -102,7 +98,7 @@ at_nan:
         ld      de,#0
         jp      at_ret
 at_xnonzero:
-        ; z = y / x
+        ;; z = y / x
         ld      hl,(__at_x + 2)
         ld      bc,(__at_x)
         push    hl
@@ -114,7 +110,7 @@ at_xnonzero:
         pop     bc
         ld      (__at_z),de
         ld      (__at_z + 2),hl
-        ; abs_z < 1.0 ? e8(z) < 127
+        ;; abs_z < 1.0 ? e8(z) < 127
         ld      a,(__at_z + 3)
         and     #0x7f
         add     a,a
@@ -125,7 +121,7 @@ at_xnonzero:
         or      c
         cp      #127
         jp      nc,at_large
-        ; small: atan = z / (1.0 + 0.28*z*z)
+        ;; small: atan = z / (1.0 + 0.28*z*z)
         ld      hl,(__at_z + 2)
         ld      bc,(__at_z)
         push    hl
@@ -170,7 +166,7 @@ at_xnonzero:
         pop     bc
         ld      (__at_a),de
         ld      (__at_a + 2),hl
-        ; x<0 correction
+        ;; x<0 correction
         ld      a,(__at_x + 3)
         bit     7,a
         jr      z,at_a_plain
@@ -203,7 +199,7 @@ at_a_plain:
         ld      de,(__at_a)
         jp      at_ret
 at_large:
-        ; atan = 0.5*PI - z/(z*z + 0.28); if y<0 atan -= PI
+        ;; atan = 0.5*PI - z/(z*z + 0.28); if y<0 atan -= PI
         ld      hl,(__at_z + 2)
         ld      bc,(__at_z)
         push    hl

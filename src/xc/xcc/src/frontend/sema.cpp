@@ -52,6 +52,10 @@ static const char *call_abi_name(call_abi abi) {
     }
 }
 
+static bool variadic_abi_must_be_stack(call_abi abi) {
+    return abi == call_abi::DEFAULT || abi == call_abi::SDCCCALL0;
+}
+
 void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
     for (auto &a : attrs) {
         // ----- standard C23 attributes (no namespace) ----------------
@@ -167,6 +171,20 @@ void sema::apply_imported_call_abi(symbol &sym,
         sym.abi = imported;
 }
 
+void sema::normalize_variadic_call_abi(func_decl &d) {
+    if (!d.is_variadic || !d.sym)
+        return;
+
+    if (!variadic_abi_must_be_stack(d.sym->abi)) {
+        diag_.error(d.loc,
+                    "variadic function '%s' must use sdcccall(0)",
+                    d.name.c_str());
+        return;
+    }
+
+    d.sym->abi = call_abi::SDCCCALL0;
+}
+
 // ----- helpers -------------------------------------------------------
 
 bool sema::is_const_lval(const expr &e) const {
@@ -253,6 +271,11 @@ void sema::visit(call_expr &e) {
         }
         // nodiscard: checked in visit(expr_stmt) since we need the stmt context
     }
+}
+
+void sema::visit(sizeof_expr &e) {
+    if (e.sizeof_expr_op)
+        e.sizeof_expr_op->accept(*this);
 }
 
 void sema::visit(index_expr &e) {
@@ -435,6 +458,7 @@ void sema::visit(func_decl &d) {
         apply_attrs(*d.sym, d.attrs, d.loc);
     if (d.sym)
         apply_imported_call_abi(*d.sym, d.attrs, d.loc);
+    normalize_variadic_call_abi(d);
     if (d.sym && d.sym->abi == call_abi::Z88DK_FASTCALL) {
         if (d.params.size() != 1) {
             diag_.error(d.loc, "[[z88dk::fastcall]] requires exactly one parameter");

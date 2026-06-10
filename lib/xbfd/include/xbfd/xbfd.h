@@ -118,6 +118,14 @@ struct reloc_entry {
     int32_t     addend       = 0;
 };
 
+struct emitted_item {
+    std::vector<uint8_t>        data;
+    std::optional<reloc_entry>  reloc;
+    bool                        label_marker = false;
+    uint32_t                    reserve_bytes = 0;
+    int                         source_line = 0;
+};
+
 struct section {
     std::string              name;
     section_flags            flags = section_flags::none;
@@ -125,6 +133,7 @@ struct section {
     uint64_t                 size  = 0;
     std::vector<uint8_t>     data;
     std::vector<reloc_entry> relocs;
+    std::vector<emitted_item> emitted_items;
 };
 
 struct symbol {

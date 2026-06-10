@@ -86,10 +86,10 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
     }
     if (auto *idx = dynamic_cast<index_expr*>(&lhs)) {
         operand base  = gen_expr(*idx->base);
-        if (idx->base->type && idx->base->type->is_array() && idx->base->type->base) {
+        if (base.type && base.type->is_array() && base.type->base) {
             // Array expressions decay to element pointers before index arithmetic.
             base = emit_unop(icode_op::ADDRESS_OF, base,
-                             type::make_pointer(idx->base->type->base));
+                             type::make_pointer(base.type->base));
         }
         operand index = gen_expr(*idx->index);
         if (index.type && index.type->is_integer() &&
@@ -112,10 +112,10 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
 
 void ir_gen::visit(index_expr &e) {
     operand base  = gen_expr(*e.base);
-    if (e.base->type && e.base->type->is_array() && e.base->type->base) {
+    if (base.type && base.type->is_array() && base.type->base) {
         // Array expressions decay to element pointers before index arithmetic.
         base = emit_unop(icode_op::ADDRESS_OF, base,
-                         type::make_pointer(e.base->type->base));
+                         type::make_pointer(base.type->base));
     }
     operand index = gen_expr(*e.index);
     if (index.type && index.type->is_integer() &&
@@ -185,10 +185,9 @@ operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
 
     if (auto *idx = dynamic_cast<index_expr*>(&e)) {
         operand base = gen_expr(*idx->base);
-        if (idx->base->type && idx->base->type->is_array() &&
-            idx->base->type->base) {
+        if (base.type && base.type->is_array() && base.type->base) {
             base = emit_unop(icode_op::ADDRESS_OF, base,
-                             type::make_pointer(idx->base->type->base));
+                             type::make_pointer(base.type->base));
         }
 
         operand index = gen_expr(*idx->index);

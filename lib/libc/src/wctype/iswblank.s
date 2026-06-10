@@ -12,7 +12,9 @@
         .globl  _iswblank
         .globl  _isblank
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswblank
+        ;; Blank classification is only defined through the execution charset here,
+        ;; so non-byte wchar_t values are rejected before delegating to isblank.
 _iswblank::
         ld      a,h
         or      a

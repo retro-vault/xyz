@@ -5,7 +5,7 @@
 Today it builds these host-side tools into `bin/bin/`:
 
 - `xcc` — C compiler for Z80 targets
-- `xas` — assembler for SDCC-style `.rel` objects
+- `xas` — assembler plus assembly pretty-printer / dialect converter
 - `xar` — archive tool for `.rel` libraries
 - `xobjcopy` — object/archive conversion and debug-stripping tool
 - `xld` — linker for `XL`, `BIN`, `CDB`, and related outputs

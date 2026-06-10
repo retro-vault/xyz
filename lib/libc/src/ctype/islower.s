@@ -17,10 +17,8 @@
 
         .area   _CODE
 
-        ; _islower
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is lowercase, else 0
-        ; clobbers: AF, BC
+        ;; _islower
+        ;; Only the lowercase ASCII letter band qualifies.
 _islower::
         ld      a,h
         or      a

@@ -387,11 +387,11 @@ experimental wave.
 On the current executable benchmark suite, that shared promoted baseline
 means:
 
-- `xcc -Of`: `8696` payload bytes, `2762060` cycles
-- `xcc -O3`: `8696` payload bytes, `2762060` cycles
-- `xcc -Os`: `8696` payload bytes, `2762060` cycles
+- `xcc -Of`: `8686` payload bytes, `2760674` cycles
+- `xcc -O3`: `8686` payload bytes, `2760674` cycles
+- `xcc -Os`: `8686` payload bytes, `2760674` cycles
 
-So the promoted aggressive pipeline is currently about `21.80%` smaller
+So the promoted aggressive pipeline is currently about `21.86%` smaller
 and `20.71%` fewer cycles than `sdcc --opt-code-size` on the common
 successful-and-correct benchmark subset.
 

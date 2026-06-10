@@ -3,9 +3,10 @@
  *
  * Standard C23 mathematics support for the xcc Z80 target.
  *
- * float, double, and long double are all 32-bit IEEE-754 single precision on
- * this target, so each routine exposes the f-suffixed, unsuffixed, and
- * l-suffixed names from a single implementation.
+ * float is IEEE-754 single precision, while double and long double use the
+ * 64-bit software runtime ABI on this target. Many entry points share common
+ * kernels internally, but the unsuffixed and l-suffixed forms are no longer
+ * simple aliases of the float bodies.
  *
  * This header declares the full standard interface.  The classification,
  * sign/abs, square root, atan2, nearest-integer, decomposition, scaling and

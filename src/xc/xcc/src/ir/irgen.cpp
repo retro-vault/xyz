@@ -82,6 +82,12 @@ void ir_gen::emit_assign(operand dst, operand src) {
 }
 
 operand ir_gen::emit_binop(icode_op op, operand left, operand right, type_ptr t) {
+    if (t) {
+        if (left.kind == operand_kind::FLOAT_CONST)
+            left.type = t;
+        if (right.kind == operand_kind::FLOAT_CONST)
+            right.type = t;
+    }
     operand res = new_temp(t);
     icode ic; ic.op = op; ic.result = res; ic.left = left; ic.right = right;
     emit(ic);
@@ -89,6 +95,8 @@ operand ir_gen::emit_binop(icode_op op, operand left, operand right, type_ptr t)
 }
 
 operand ir_gen::emit_unop(icode_op op, operand left, type_ptr t) {
+    if (t && left.kind == operand_kind::FLOAT_CONST)
+        left.type = t;
     operand res = new_temp(t);
     icode ic; ic.op = op; ic.result = res; ic.left = left;
     emit(ic);

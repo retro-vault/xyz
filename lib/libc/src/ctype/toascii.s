@@ -14,10 +14,8 @@
 
         .area   _CODE
 
-        ; _toascii
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = value & 0x7F
-        ; clobbers: AF
+        ;; _toascii
+        ;; POSIX specifies this as a plain mask operation, not a validity check.
 _toascii::
         ld      a,l
         and     #0x7f

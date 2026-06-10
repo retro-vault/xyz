@@ -21,11 +21,12 @@
 
 /* The imaginary unit constant for this target's float-complex layout. */
 extern float _Complex __complex_I;
+extern float _Complex __cmplxf(float real, float imag);
 #define _Complex_I  __complex_I
 #define I           _Complex_I
 
 /* Construct float-, double-, or long-double complex values. */
-#define CMPLXF(x, y)  ((float _Complex)((x) + (y) * I))
+#define CMPLXF(x, y)  __cmplxf((float)(x), (float)(y))
 #define CMPLX(x, y)   CMPLXF((x), (y))
 #define CMPLXL(x, y)  CMPLXF((x), (y))
 
@@ -53,5 +54,60 @@ extern float cabsf(float _Complex z);
 extern float cargf(float _Complex z);
 #define carg(z)   cargf(z)
 #define cargl(z)  cargf(z)
+
+/* Complex exponential, logarithm, and square root. */
+extern float _Complex cexpf(float _Complex z);
+extern float _Complex clogf(float _Complex z);
+extern float _Complex cpowf(float _Complex x, float _Complex y);
+extern float _Complex csqrtf(float _Complex z);
+extern float _Complex csinf(float _Complex z);
+extern float _Complex ccosf(float _Complex z);
+extern float _Complex ctanf(float _Complex z);
+extern float _Complex casinf(float _Complex z);
+extern float _Complex cacosf(float _Complex z);
+extern float _Complex catanf(float _Complex z);
+extern float _Complex csinhf(float _Complex z);
+extern float _Complex ccoshf(float _Complex z);
+extern float _Complex ctanhf(float _Complex z);
+extern float _Complex casinhf(float _Complex z);
+extern float _Complex cacoshf(float _Complex z);
+extern float _Complex catanhf(float _Complex z);
+#define cexp(z)   cexpf(z)
+#define cexpl(z)  cexpf(z)
+#define clog(z)   clogf(z)
+#define clogl(z)  clogf(z)
+#define cpow(x,y)  cpowf((x), (y))
+#define cpowl(x,y) cpowf((x), (y))
+#define csqrt(z)  csqrtf(z)
+#define csqrtl(z) csqrtf(z)
+#define csin(z)   csinf(z)
+#define csinl(z)  csinf(z)
+#define ccos(z)   ccosf(z)
+#define ccosl(z)  ccosf(z)
+#define ctan(z)   ctanf(z)
+#define ctanl(z)  ctanf(z)
+#define casin(z)  casinf(z)
+#define casinl(z) casinf(z)
+#define cacos(z)  cacosf(z)
+#define cacosl(z) cacosf(z)
+#define catan(z)  catanf(z)
+#define catanl(z) catanf(z)
+#define csinh(z)  csinhf(z)
+#define csinhl(z) csinhf(z)
+#define ccosh(z)  ccoshf(z)
+#define ccoshl(z) ccoshf(z)
+#define ctanh(z)  ctanhf(z)
+#define ctanhl(z) ctanhf(z)
+#define casinh(z)  casinhf(z)
+#define casinhl(z) casinhf(z)
+#define cacosh(z)  cacoshf(z)
+#define cacoshl(z) cacoshf(z)
+#define catanh(z)  catanhf(z)
+#define catanhl(z) catanhf(z)
+
+/* Projection onto the Riemann sphere branch cut. */
+extern float _Complex cprojf(float _Complex z);
+#define cproj(z)  cprojf(z)
+#define cprojl(z) cprojf(z)
 
 #endif /* _COMPLEX_H */

@@ -51,6 +51,28 @@ namespace xas {
             ++pos_;
     }
 
+    token lexer::read_comment()
+    {
+        token t;
+        t.kind = token_kind::comment;
+        t.file = file_;
+        t.line = line_;
+
+        if (src_[pos_] == ';') {
+            ++pos_;
+        } else if (src_[pos_] == '/' && peek(1) == '/') {
+            pos_ += 2;
+        }
+
+        if (pos_ < src_.size() && src_[pos_] == ' ')
+            ++pos_;
+
+        const size_t start = pos_;
+        skip_to_eol();
+        t.text = src_.substr(start, pos_ - start);
+        return t;
+    }
+
     // -------------------------------------------------------------------------
     // Integer literal parsing
     // -------------------------------------------------------------------------
@@ -215,10 +237,8 @@ namespace xas {
         char c = src_[pos_];
 
         // Comments.
-        if (c == ';' || (c == '/' && peek(1) == '/')) {
-            skip_to_eol();
-            // Fall through to return newline below.
-        }
+        if (c == ';' || (c == '/' && peek(1) == '/'))
+            return read_comment();
 
         if (pos_ >= src_.size()) {
             token t; t.kind = token_kind::eof; t.file = file_; t.line = line_;

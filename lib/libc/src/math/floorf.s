@@ -1,30 +1,26 @@
-        ; floorf.s
-        ;
-        ; libc floorf implementation for the xcc Z80 libc.
-        ; Rounds toward negative infinity.  double / long double are 32-bit
-        ; on this target, so floor / floorl share the implementation.
-        ;
-        ; MIT License (see: LICENSE)
-        ; Copyright (C) 2026 tomaz stih
+        ;; floorf.s
+        ;;
+        ;; libc floorf implementation for the xcc Z80 libc.
+        ;; Rounds toward negative infinity.  double / long double are 32-bit
+        ;; on this target, so floor / floorl share the implementation.
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2026 tomaz stih
 
         .module floorf
         .optsdcc -mz80 sdcccall(1)
 
 
         .globl  _floorf
-        .globl  _floor
-        .globl  _floorl
         .globl  _truncf
         .globl  __float_incmag
 
         .area   _CODE
 
-        ; _floorf / _floor / _floorl
-        ; inputs:  HL:DE = float x
-        ; outputs: HL:DE = floor(x)
-        ; clobbers: AF, BC, IX
-_floor::
-_floorl::
+        ;; _floorf / _floor / _floorl
+        ;; inputs:  HL:DE = float x
+        ;; outputs: HL:DE = floor(x)
+        ;; clobbers: AF, BC, IX
 _floorf::
         push    de                      ; save x low
         push    hl                      ; save x high

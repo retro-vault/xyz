@@ -15,6 +15,7 @@
 
 #include <xas/cli.h>
 #include <xas/errors.h>
+#include <xas/backend/source_emitter.h>
 #include <xas/frontend/lexer.h>
 #include <xas/frontend/parser.h>
 #include <xas/backend/emitter.h>
@@ -51,16 +52,27 @@ int main(int argc, char** argv)
         xas::parser par;
         auto stmts = par.parse(tokens, opts.mode);
 
-        // Choose emitter.
-        std::unique_ptr<xas::emitter> emit;
-        if (opts.mode == xas::asm_mode::gnu)
-            emit = xas::make_elf_emitter(opts.output);
-        else
-            emit = xas::make_rel_emitter(opts.output);
+        if (opts.format.has_value()) {
+            auto emit = xas::make_source_emitter(*opts.format);
+            auto document = emit->emit(stmts);
+            std::ofstream out(opts.output);
+            if (!out.is_open()) {
+                std::cerr << "xas: error: cannot create '" << opts.output << "'\n";
+                return 1;
+            }
+            xas::write_formatted_document(out, document);
+        } else {
+            // Choose emitter.
+            std::unique_ptr<xas::emitter> emit;
+            if (opts.mode == xas::asm_mode::gnu)
+                emit = xas::make_elf_emitter(opts.output);
+            else
+                emit = xas::make_rel_emitter(opts.output);
 
-        // Code generation (two-pass).
-        std::string module = std::filesystem::path(opts.input).stem().string();
-        xas::assemble(stmts, *emit, module, opts.input, opts.mode);
+            // Code generation (two-pass).
+            std::string module = std::filesystem::path(opts.input).stem().string();
+            xas::assemble(stmts, *emit, module, opts.input, opts.mode);
+        }
 
         return 0;
 

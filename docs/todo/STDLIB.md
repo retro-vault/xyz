@@ -27,7 +27,7 @@ All headers live in `lib/libc/include/` and are staged to
 | Header | State |
 |--------|-------|
 | `assert.h` | minimal (failure sink only) |
-| `complex.h` | partial (core helpers) |
+| `complex.h` | implemented (float-first complex surface) |
 | `ctype.h` | complete |
 | `errno.h` | present (process-global) |
 | `fenv.h` | partial (one soft-float env) |
@@ -44,14 +44,14 @@ All headers live in `lib/libc/include/` and are staged to
 | `stdatomic.h` | header + runtime (`__atomic_*` live in the runtime, not libc) |
 | `stdbit.h` | complete (C23 bit ops, header-inline) |
 | `stdckdint.h` | placeholder (no real overflow report) |
-| `stdlib.h` | mostly complete (no float parsing / multibyte / env) |
+| `stdlib.h` | mostly complete (no C23 alloc/formatted-float extras) |
 | `string.h` | complete + extensions |
 | `strings.h` | complete (BSD) |
-| `tgmath.h` | partial (tracks `complex.h`/`math.h`) |
-| `uchar.h` | partial (single-byte encoding) |
+| `tgmath.h` | partial (tracks the implemented `complex.h`/`math.h` surface) |
+| `uchar.h` | partial (single-byte encoding, restartable API present) |
 | `wchar.h` `wctype.h` | wide strings + classification |
-| **`stdio.h`** | **missing entirely** |
-| **`threads.h`** | **missing entirely** |
+| `stdio.h` | partial (fd-backed streams + formatter family) |
+| `threads.h` | partial (single-thread fallback) |
 | `time.h` | implemented (all in assembly; sys clock hooks) |
 
 ---
@@ -62,18 +62,18 @@ All headers live in `lib/libc/include/` and are staged to
 |----------|--------|-------|
 | `abs` `labs` `llabs` | asm, gcc-tested | |
 | `div` | asm, gcc-tested | returns `{quot,rem}` in DE:HL |
-| `ldiv` `lldiv` | C | 8-/16-byte struct return |
-| `atoi` `atol` `atoll` | C | |
-| `strtol` `strtoul` `strtoll` `strtoull` | C | |
-| `rand` `srand` | C | |
-| `malloc` `calloc` `realloc` `free` | C | fixed in-library heap |
-| `bsearch` `qsort` | C | insertion-sort `qsort` |
-| `abort` `exit` `_Exit` `atexit` | C | |
-| `quick_exit` `at_quick_exit` | C | |
-| `atof` `strtod` `strtof` `strtold` | **—** | no float string parsing |
-| `getenv` `system` | **—** | no hosted environment |
-| `mblen` `mbtowc` `wctomb` `mbstowcs` `wcstombs` | **—** | multibyte conversion |
-| `aligned_alloc` | **—** | C11 aligned allocation |
+| `ldiv` `lldiv` | asm, gcc-tested | 8-/16-byte struct return |
+| `atoi` `atol` `atoll` | asm, gcc-tested | |
+| `strtol` `strtoul` `strtoll` `strtoull` | asm, gcc-tested | |
+| `rand` `srand` | asm, gcc-tested | |
+| `malloc` `calloc` `realloc` `free` | asm, gcc-tested | fixed in-library heap |
+| `bsearch` `qsort` | asm, gcc-tested | insertion-sort `qsort` |
+| `abort` `exit` `_Exit` `atexit` | asm, gcc-tested | |
+| `quick_exit` `at_quick_exit` | asm, gcc-tested | |
+| `atof` `strtod` `strtof` `strtold` | asm | decimal parser, exponent support, no hex-float locale forms |
+| `getenv` `system` | asm, gcc-tested | unhosted stubs (`getenv` always null, `system` unsupported) |
+| `mblen` `mbtowc` `wctomb` `mbstowcs` `wcstombs` | asm, gcc-tested | single-byte execution charset only |
+| `aligned_alloc` | asm | over-allocates, stores base-pointer metadata, tested through exec runtime |
 | `strfromd` `strfromf` `strfroml` | **—** | C23 float formatting |
 
 ---
@@ -96,16 +96,17 @@ Extensions — all **asm, gcc-tested**:
 |----------|--------|
 | `stpcpy` `stpncpy` | POSIX |
 | `mempcpy` `memrchr` `rawmemchr` `strchrnul` | GNU |
+| `memmem` | GNU |
 | `strcasecmp` `strncasecmp` | POSIX |
 | `strlcpy` `strlcat` | BSD |
 | `strsep` | BSD |
 | `strcasestr` | GNU |
+| `strsignal` | POSIX |
 | `swab` | POSIX |
 | `bcopy` `bzero` `bcmp` `index` `rindex` | BSD (`strings.h`) |
 | `ffs` `ffsl` `ffsll` | POSIX/GNU (`strings.h`) |
 
-Not yet implemented: `memmem`, `strverscmp`, `basename`, `dirname`,
-`strsignal`.
+Not yet implemented: `strverscmp`, `basename`, `dirname`.
 
 ---
 
@@ -119,20 +120,56 @@ Complete (ASCII), all **asm**:
 
 ---
 
+## `<complex.h>` / `<tgmath.h>`
+
+Implemented in **asm**:
+
+`creal[f/l]` `cimag[f/l]` `conj[f/l]` `cabs[f/l]` `carg[f/l]` `cproj[f/l]`
+`cexp[f/l]` `clog[f/l]` `cpow[f/l]` `csqrt[f/l]`
+`csin[f/l]` `ccos[f/l]` `ctan[f/l]`
+`casin[f/l]` `cacos[f/l]` `catan[f/l]`
+`csinh[f/l]` `ccosh[f/l]` `ctanh[f/l]`
+`casinh[f/l]` `cacosh[f/l]` `catanh[f/l]`
+
+Notes:
+
+- The current public surface is still float-first: `double` and `long double`
+  spellings presently alias the same single-precision complex entry points.
+- `CMPLXF` / `CMPLX` / `CMPLXL` now go through a tiny internal constructor
+  helper instead of relying on direct complex arithmetic lowering for constant
+  construction.
+- `tgmath.h` tracks the currently implemented complex surface with `_Generic`
+  mappings for `creal`, `cimag`, `conj`, `cabs`, `carg`, `cproj`, `cexp`,
+  `clog`, `cpow`, `csqrt`, `csin`, `ccos`, `ctan`, `casin`, `cacos`,
+  `catan`, `csinh`, `ccosh`, `ctanh`, `casinh`, `cacosh`, and `catanh`.
+
 ## `<math.h>`
 
 The largest gap in the library. Implemented:
 
-Because `float`, `double`, and `long double` are all 32-bit on this target,
-each assembly routine below exposes the `f`-suffixed, unsuffixed, and
-`l`-suffixed names from one body (e.g. `truncf` / `trunc` / `truncl`).
+`float` is the existing 32-bit soft-float format. `double` is now the 64-bit
+runtime format, and `long double` currently aliases `double`. The
+non-transcendental family below now has real stack-based `double` /
+`long double` wrappers on top of the single-precision kernels.
 
 | Function | Status |
 |----------|--------|
-| `fabs[f/l]` | C |
-| `copysign[f/l]` | C |
-| `sqrt[f/l]` | C |
-| `atan2[f/l]` | C |
+| `fabs[f/l]` | asm, gcc-tested |
+| `copysign[f/l]` | asm, gcc-tested |
+| `sqrt[f/l]` | asm, gcc-tested |
+| `atan[f/l]` | asm, gcc-tested |
+| `asin[f/l]` | asm, gcc-tested |
+| `acos[f/l]` | asm, gcc-tested |
+| `sin[f/l]` | asm, gcc-tested |
+| `cos[f/l]` | asm, gcc-tested |
+| `tan[f/l]` | asm, gcc-tested |
+| `sinh[f/l]` | asm |
+| `cosh[f/l]` | asm |
+| `tanh[f/l]` | asm |
+| `asinh[f/l]` | asm |
+| `acosh[f/l]` | asm |
+| `atanh[f/l]` | asm |
+| `atan2[f/l]` | asm, gcc-tested |
 | `trunc[f/l]` | asm, gcc-tested (bit-exact) |
 | `floor[f/l]` `ceil[f/l]` `round[f/l]` | asm, gcc-tested (bit-exact) |
 | `ldexp[f/l]` `scalbn[f/l]` | asm, gcc-tested |
@@ -141,8 +178,19 @@ each assembly routine below exposes the `f`-suffixed, unsuffixed, and
 | `fmax[f/l]` `fmin[f/l]` | asm, gcc-tested |
 | `fdim[f/l]` | asm, gcc-tested |
 | `modf[f/l]` | asm, gcc-tested (bit-exact, signed zero) |
+| `exp[f/l]` `exp2[f/l]` `expm1[f/l]` | asm, gcc-tested |
+| `log[f/l]` `log2[f/l]` `log10[f/l]` `log1p[f/l]` | asm, gcc-tested |
+| `pow[f/l]` `cbrt[f/l]` | asm, gcc-tested |
+| `erf[f/l]` `erfc[f/l]` | asm |
+| `tgamma[f/l]` `lgamma[f/l]` | asm |
+| `rint*` `nearbyint*` `lround*` `llround*` `lrint*` `llrint*` | asm, gcc-tested |
+| `scalbln*` | asm, gcc-tested |
+| `fma*` | asm, gcc-tested |
+| `hypot*` | asm, gcc-tested |
+| `fmod*` `remainder*` `remquo*` | asm, gcc-tested |
+| `nextafter*` | asm, gcc-tested |
 | `nan[f/l]` | asm, gcc-tested |
-| `significand[f]` | asm, gcc-tested |
+| `significand[f/l]` | asm, gcc-tested |
 | classification helpers `__libc_fpclassifyf` / `signbit` / `isnan` / `isinf` / `isfinite` | C / header |
 
 The header (`math.h`) is **finalized**: it declares the complete C23 interface
@@ -153,17 +201,10 @@ provides the classification (`fpclassify`/`isfinite`/`isinf`/`isnan`/
 `isnormal`/`signbit`) and comparison (`isgreater`/`isless`/`isunordered`/…)
 macros.  It parses cleanly through `xcc`.
 
-Missing implementations (declared in the header, not yet linkable):
+Remaining implementation gap in `<math.h>`:
 
-- **Rounding (remaining):** `rint*`, `nearbyint*`, `lround*`, `llround*`,
-  `lrint*`, `llrint*`.
-- **Decompose / scale (remaining):** `scalbln*`, `nextafter*`.
-- **Min/max/diff:** `fma*`.
-- **Remainder:** `fmod*`, `remainder*`, `remquo*`.
-- **Transcendental:** `sin* cos* tan* asin* acos* atan* sinh* cosh* tanh*`,
-  `exp* exp2* expm1* log* log2* log10* log1p*`, `pow* hypot* cbrt*`,
-  `erf*`, `tgamma*`, `lgamma*`.  These need polynomial kernels — the largest
-  remaining math effort.
+- The classic transcendental families are now linkable. What remains is
+  broader accuracy hardening rather than missing entry points.
 
 The single-precision soft-float runtime (`__fsadd`, `__fsmul`, `__fsdiv`,
 `__fscmp`, …) and the new 64-bit `double` runtime (`__dbadd`, `__dbmul`,
@@ -213,30 +254,81 @@ an OS backend.
 
 ---
 
+## `<stdio.h>`
+
+Implemented **in asm**:
+
+- character / line output: `putchar` `fputc` `putc` `puts` `fputs`
+- character / block input: `getchar` `fgetc` `getc` `ungetc` `fgets`
+  `fread`
+- block / fd-backed output: `fwrite`
+- file handles: `fopen` `freopen` `tmpfile` `fclose` `fseek` `ftell`
+  `fgetpos` `fsetpos` `rewind`
+  `fflush` `feof` `ferror` `clearerr`
+- convenience / filesystem helpers: `remove` `rename` `tmpnam`
+  `perror` `setbuf` `setvbuf`
+- formatter family: `printf` `fprintf` `sprintf` `snprintf`
+  `vprintf` `vfprintf` `vsprintf` `vsnprintf`
+- scanning family: `scanf` `fscanf` `sscanf`
+  `vscanf` `vfscanf` `vsscanf`
+
+Current model:
+
+- all public stdio entry points use `sdcccall(0)` so stack layout is uniform
+  across the formatter family and the fd-backed stream wrappers
+- `FILE` is a tiny unbuffered fd-backed descriptor layered over platform
+  `open/read/write/lseek/close`
+- the `none` backend ships an in-memory fake filesystem used by the libc tests
+
+Still missing:
+
+- formatted floating-point output (`%f`/`%e`/`%g`/`%a`)
+- real buffering behind `setbuf`/`setvbuf` (the current implementations are
+  compatibility no-ops)
+- formatted wide stdio (`fwprintf`, `fwscanf`, ...)
+
+---
+
 ## `<inttypes.h>`
 
 | Function | Status |
 |----------|--------|
 | `imaxabs` | asm, gcc-tested |
-| `imaxdiv` | C |
-| `strtoimax` `strtoumax` | C |
+| `imaxdiv` | asm |
+| `strtoimax` `strtoumax` | asm |
+| `wcstoimax` `wcstoumax` | asm |
 | `PRI*` / `SCN*` format macros | header, complete |
-
-`wcstoimax` / `wcstoumax` not implemented.
 
 ---
 
 ## `<wchar.h>` / `<wctype.h>`
 
-Wide string/array family (16-bit `wchar_t`) — **C**:
+Wide string/array family (16-bit `wchar_t`) — **asm**:
 
 `wcslen` `wcsnlen` `wcscpy` `wcsncpy` `wcscat` `wcsncat` `wcscmp` `wcsncmp`
 `wcschr` `wcsrchr` `wcsspn` `wcscspn` `wcspbrk` `wcsstr` `wcstok`
-`wmemchr` `wmemcmp` `wmemcpy` `wmemmove` `wmemset` `wctob`
+`wcscoll` `wcsxfrm`
+`wmemchr` `wmemcmp` `wmemcpy` `wmemmove` `wmemset`
 
-Missing: wide I/O (`fwprintf` etc.), `wcscoll`/`wcsxfrm` beyond identity,
-`wcsto*` numeric parsing, `mbrtowc`/`wcrtomb` state machines, the wide
-counterparts of the new BSD/GNU string extensions (`wcpcpy`, `wcscasecmp`, …).
+Single-byte restartable conversion layer — **asm**:
+
+`btowc` `wctob` `mbrlen` `mbrtowc` `wcrtomb` `mbsinit`
+`mbsrtowcs` `wcsrtombs`
+
+Wide numeric conversion layer — **asm**:
+
+`wcstof` `wcstod` `wcstold`
+`wcstol` `wcstoul` `wcstoll` `wcstoull`
+
+Basic wide stdio is now present in asm too:
+
+`fgetwc` `fgetws` `fputwc` `fputws` `getwc` `getwchar` `putwc` `putwchar`
+`ungetwc`
+
+Missing: formatted wide I/O (`fwprintf` etc.), `wcscoll`/`wcsxfrm` beyond
+identity, stateful multibyte conversion beyond the target's single-byte
+execution charset, and the wide counterparts of the new BSD/GNU string
+extensions (`wcpcpy`, `wcscasecmp`, …).
 
 `<wctype.h>` provides the classification family against the 16-bit model.
 
@@ -244,10 +336,11 @@ counterparts of the new BSD/GNU string extensions (`wcpcpy`, `wcscasecmp`, …).
 
 ## `<complex.h>`
 
-Implemented (**asm/C**): `creal*` `cimag*` `conj*` `cabs*` `carg*`.
+Implemented (**asm**): `creal*` `cimag*` `conj*` `cabs*` `carg*` `cproj*`
+`cexp*` `clog*` `cpow*` `csqrt*` `csin*` `ccos*` `ctan*` `csinh*`
+`ccosh*` `ctanh*`.
 
-Missing: the transcendental complex family (`cexp` `clog` `cpow` `csqrt`
-`csin` `ccos` `ctan` `csinh` …) and `cproj`.
+Missing: the inverse circular/hyperbolic complex families.
 
 ---
 
@@ -275,17 +368,34 @@ time rather than miscompiling.
 | `signal.h` | `signal` / `raise` (synchronous) | OS signal integration |
 | `locale.h` | `setlocale`/`localeconv` (`"C"` only) | real locale catalogue |
 | `fenv.h` | one soft-float environment; sticky flags | auto-raised exceptions |
-| `uchar.h` | `c16`/`c32` ↔ multibyte (single-byte) | shift-state / normalization |
+| `uchar.h` | `mbrtoc16` `c16rtomb` `mbrtoc32` `c32rtomb` (single-byte) | shift-state / normalization |
 | `stdbit.h` | full C23 bit utilities (header-inline) | — |
 | `stdckdint.h` | `ckd_add/sub/mul` (compute only) | real overflow flag |
 
 ---
 
-## Missing headers (entire)
+## `<threads.h>`
 
-- **`stdio.h`** — no formatted or stream I/O. Blocks `printf`, `assert`
-  diagnostics to `stderr`, and most hosted code. Highest-impact gap.
-- **`threads.h`** — no threading model.
+Implemented as a **single-threaded asm fallback**:
+
+- `call_once`
+- mutex family: `mtx_init` `mtx_destroy` `mtx_lock` `mtx_trylock`
+  `mtx_timedlock` `mtx_unlock`
+- condition family: `cnd_init` `cnd_destroy` `cnd_signal`
+  `cnd_broadcast` `cnd_wait` `cnd_timedwait`
+- thread identity / lifecycle shims: `thrd_current` `thrd_equal`
+  `thrd_sleep` `thrd_yield` `thrd_exit`
+- thread-specific storage: `tss_create` `tss_delete` `tss_get` `tss_set`
+
+Current model:
+
+- there is no scheduler or true concurrency
+- `thrd_create`, `thrd_join`, and `thrd_detach` are linkable assembly stubs
+  that return `thrd_error`
+- mutexes, once-flags, and TLS are usable by single-threaded portable code
+- condition variables are local signal/timed-out shims, not blocking waits
+
+## Missing headers (entire)
 
 ---
 
@@ -293,27 +403,26 @@ time rather than miscompiling.
 
 `tests/libc/` assembles the hand-written routines, links them at `0x0000`,
 runs each in the xz80 emulator, and compares results to the host (gcc)
-computation. Currently **36 test groups, all passing**, covering: `abs`
-`labs` `llabs` `div` `imaxabs`; `stpcpy` `stpncpy` `mempcpy` `memrchr`
-`strchrnul` `strcasecmp` `strncasecmp`; `bzero` `swab` `rawmemchr` `index`
-`rindex` `bcopy` `bcmp` `strlcpy` `strlcat`; `ffs` `ffsl` `ffsll`;
-`isascii` `toascii`; `truncf` `ldexpf`/`scalbnf` `ilogbf` `frexpf`
-`fmaxf` `fminf` `floorf` `ceilf` `roundf` `nanf` `significandf` `logbf`
-(and the `double`/`long double` aliases).
+computation. Coverage now includes the stdlib integer/parsing family, the
+single-byte multibyte conversion entry points, restartable wide conversions,
+string and ctype extensions, wide-char helpers, time/calendar code, the
+non-transcendental and trig math slices, locale/fenv/signal/uchar helpers,
+and the fd-backed stdio formatter/input/output layer.
 
-The C-implemented modules (`malloc`, `qsort`, `strtol`, wide-char, …) are not
-yet covered by this harness.
+The growing test surface now exceeds what one flat 64K Z80 image can carry, so
+the wide stdio slice is verified in a focused companion image from the same
+directory while the broad core harness continues to exercise the rest of libc.
 
 ---
 
 ## Suggested priority order
 
-1. **`stdio.h`** (at least `snprintf`/`vsnprintf` + a `putchar` hook) — unblocks
-   diagnostics, `assert`, and most hosted code.
-2. **`math.h` rounding / decompose / min-max** — now unblocked by the float and
-   double runtimes; `truncf` is the template. Single → double → long double.
-3. **Float string conversion** (`strtod`/`strtof`/`atof`) — pairs naturally with
+1. **Math accuracy hardening** (`exp/log/pow/hyperbolic/error-gamma`) — the
+   entry points are present, but this is still the biggest pure-library area
+   for tighter approximation and edge-case work.
+2. **Float string conversion** (`strtod`/`strtof`/`atof`) — pairs naturally with
    `stdio.h` float formatting.
-4. **`time.h`** once a clock source exists.
-5. Remaining string/wide extensions (`memmem`, `strsep`, `wcpcpy`, …).
-6. Transcendental `math.h` and `complex.h` kernels.
+3. **`stdio.h` scanning + buffering** — `scanf` family and real buffered FILEs.
+4. **`threads.h`** — decide whether the target exposes threads at all.
+5. Remaining string/wide extensions (`memmem`, wide BSD/GNU helpers, locale-aware collation, …).
+6. Transcendental `complex.h` kernels.

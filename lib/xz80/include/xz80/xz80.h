@@ -9,3 +9,4 @@
 #include <xz80/cpu_state.h>
 #include <xz80/cpu.h>
 #include <xz80/disassembler.h>
+#include <xz80/formatter.h>

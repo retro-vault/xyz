@@ -19,62 +19,53 @@
 
         .area   _CODE
 
-        ; __ctype_return_false
-        ; outputs: DE = 0
+        ;; __ctype_return_false
+        ;; Return the canonical false value used by the narrow ctype entry points.
 __ctype_return_false::
         ld      de,#0x0000
         ret
 
-        ; __ctype_return_true
-        ; outputs: DE = 1
+        ;; __ctype_return_true
+        ;; Return the canonical true value used by the narrow ctype entry points.
 __ctype_return_true::
         ld      de,#0x0001
         ret
 
-        ; __ctype_return_flag
-        ; inputs:  flags from the prior classification test
-        ; outputs: DE = 1 when Z is set, else 0
+        ;; __ctype_return_flag
+        ;; Convert a prior equality or range test into libc's 0/1 integer result.
+        ;; Callers arrange for Z to mean "classification matched".
 __ctype_return_flag::
         ld      de,#0x0000
         ret     nz
         inc     e
         ret
 
-        ; __ctype_return_hl
-        ; inputs:  HL = promoted int result
-        ; outputs: DE = HL
+        ;; __ctype_return_hl
+        ;; Return an unchanged promoted int through DE without rebuilding it bytewise.
 __ctype_return_hl::
         ex      de,hl
         ret
 
-        ; __ctype_test_interval
-        ; inputs:
-        ;   A = value to test
-        ;   D = inclusive upper bound
-        ;   E = inclusive lower bound
-        ; outputs:
-        ;   Z = 1 when E <= A <= D
-        ;   Z = 0 otherwise
-        ; clobbers: BC, flags
-        ; notes:
-        ;   The original input byte is parked in C so A can be reused for the
-        ;   compare sequence without losing the caller-visible value.
+        ;; __ctype_test_interval
+        ;; Test the ASCII byte in A against the closed interval [E, D].
+        ;; The helper preserves the original byte in A so callers can chain
+        ;; several range checks without reloading L each time.
 __ctype_test_interval::
         push    bc
-        ld      c,a                      ; preserve the tested byte
+        ld      c,a                      ; Keep the candidate byte available to callers.
         cp      e
         jr      c,__ctype_test_interval_outside
         cp      d
         jr      z,__ctype_test_interval_inside
         jr      c,__ctype_test_interval_inside
 __ctype_test_interval_outside:
-        xor     a                        ; force Z = 0 on exit
+        xor     a                        ; Return NZ for "outside the interval".
         inc     a
         ld      a,c
         pop     bc
         ret
 __ctype_test_interval_inside:
-        xor     a                        ; force Z = 1 on exit
+        xor     a                        ; Return Z for "inside the interval".
         ld      a,c
         pop     bc
         ret

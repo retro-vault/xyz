@@ -12,7 +12,9 @@
         .globl  _iswpunct
         .globl  _ispunct
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswpunct
+        ;; Punctuation classification is delegated to the narrow ASCII helper
+        ;; after rejecting non-byte wchar_t values.
 _iswpunct::
         ld      a,h
         or      a

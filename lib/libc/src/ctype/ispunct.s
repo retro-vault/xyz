@@ -17,10 +17,9 @@
 
         .area   _CODE
 
-        ; _ispunct
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is punctuation, else 0
-        ; clobbers: AF, BC
+        ;; _ispunct
+        ;; Punctuation is split into four ASCII islands around digits and letters,
+        ;; so the routine walks those islands explicitly.
 _ispunct::
         ld      a,h
         or      a

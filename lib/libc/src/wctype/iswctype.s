@@ -14,11 +14,12 @@
         .globl  _iswpunct, _iswspace, _iswupper, _iswxdigit
         .area   _CODE
 
-        ; _iswctype
-        ; inputs:  HL = wc, DE = desc (1..12)
-        ; outputs: DE = boolean
+        ;; _iswctype
+        ;; Dispatch a runtime descriptor id onto the matching isw* predicate.
+        ;; Descriptor ids are 1-based so the table index is formed by subtracting
+        ;; one and scaling by the 16-bit jump-table entry size.
 _iswctype::
-        push    hl                      ; [wc]
+        push    hl                      ; Preserve wc while the descriptor is decoded.
         ld      a,d
         or      a
         jr      nz,iswct_zero
@@ -35,10 +36,10 @@ _iswctype::
         add     hl,bc
         ld      e,(hl)
         inc     hl
-        ld      d,(hl)                  ; DE = isw* address
-        pop     hl                      ; HL = wc
+        ld      d,(hl)                  ; DE = target classifier
+        pop     hl                      ; Restore wc for the callee.
         push    de
-        ret                             ; tail-call isw*(wc)
+        ret                             ; Tail-call the selected isw* routine.
 iswct_zero:
         pop     hl
         ld      de,#0

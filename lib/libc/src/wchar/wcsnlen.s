@@ -4,7 +4,9 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcsnlen
         .area   _CODE
-        ; HL = s, DE = maxlen -> DE = length
+        ;; _wcsnlen
+        ;; Count wide elements until either maxlen runs out or the wide NUL
+        ;; terminator is encountered.
 _wcsnlen::
         ld      b,d
         ld      c,e                     ; BC = maxlen

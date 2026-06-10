@@ -12,27 +12,27 @@
         .globl  _strcmp
         .area   _CODE
 
-        ; _wctype
-        ; inputs:  HL = name
-        ; outputs: DE = class id (1..12) or 0
+        ;; _wctype
+        ;; Resolve a textual class name into the compact descriptor consumed by
+        ;; iswctype. Each table row stores {name pointer, 16-bit id}.
 _wctype::
         ld      a,h
         or      l
         jr      z,wct_none
-        push    hl                      ; [name]
+        push    hl                      ; Keep the caller's name pointer stable across strcmp calls.
         ld      bc,#__wct_table
 wct_loop:
         ld      a,(bc)
         ld      e,a
         inc     bc
         ld      a,(bc)
-        ld      d,a                     ; DE = entry name pointer
+        ld      d,a                     ; DE = candidate class-name pointer
         inc     bc
         ld      a,d
         or      e
-        jr      z,wct_none_pop          ; sentinel -> not found
+        jr      z,wct_none_pop          ; Zero pointer marks the end-of-table sentinel.
         pop     hl
-        push    hl                      ; HL = name (kept on stack)
+        push    hl                      ; HL = name (kept on stack between probes)
         push    bc
         call    _strcmp                 ; HL=name, DE=entry
         ld      a,d
@@ -47,7 +47,7 @@ wct_hit:
         ld      e,a
         inc     bc
         ld      a,(bc)
-        ld      d,a                     ; DE = id
+        ld      d,a                     ; DE = matched descriptor id
         pop     hl                      ; discard [name]
         ret
 wct_none_pop:

@@ -26,12 +26,14 @@ static constexpr uint32_t SHT_NULL     = 0;
 static constexpr uint32_t SHT_PROGBITS = 1;
 static constexpr uint32_t SHT_SYMTAB   = 2;
 static constexpr uint32_t SHT_STRTAB   = 3;
+static constexpr uint32_t SHT_RELA     = 4;
 static constexpr uint32_t SHT_REL      = 9;
 static constexpr uint32_t SHT_NOBITS   = 8;
 static constexpr uint32_t SHF_WRITE    = 0x01;
 static constexpr uint32_t SHF_ALLOC    = 0x02;
 static constexpr uint32_t SHF_EXECINSTR= 0x04;
 static constexpr uint16_t EM_Z80       = 220;
+static constexpr uint8_t  STT_SECTION  = 3;
 
 static constexpr uint16_t DW_TAG_compile_unit = 0x11;
 static constexpr uint16_t DW_TAG_subprogram   = 0x2e;
@@ -431,14 +433,20 @@ private:
         shname_shstrtab_ = strtab_add(shstrtab_, ".shstrtab");
         for (const auto& sec : obj.sections)
             rel_shnames_.push_back(
-                sec.relocs.empty() ? 0 : strtab_add(shstrtab_, ".rel" + sec.name));
+                sec.relocs.empty() ? 0 : strtab_add(shstrtab_, ".rela" + sec.name));
     }
 
     void build_symbol_table(const xbfd::object& obj) {
         sym_entries_.push_back({0, 0, 0, 0});
         sec_shidx_.resize(obj.sections.size());
+        sec_symidx_.resize(obj.sections.size(), 0);
         for (size_t i = 0; i < obj.sections.size(); ++i)
             sec_shidx_[i] = static_cast<uint16_t>(1 + i);
+
+        for (size_t i = 0; i < obj.sections.size(); ++i) {
+            sec_symidx_[i] = static_cast<uint32_t>(sym_entries_.size());
+            sym_entries_.push_back({0, 0, STT_SECTION, sec_shidx_[i]});
+        }
 
         auto add_syms = [&](bool want_global) {
             for (const auto& sym : obj.symbols) {
@@ -452,6 +460,8 @@ private:
                         if (obj.sections[i].name == sym.section_name)
                             { shndx = sec_shidx_[i]; break; }
                 if (sym.is_absolute()) shndx = 0xFFF1;
+                sym_name_to_index_[sym.name] =
+                    static_cast<uint32_t>(sym_entries_.size());
                 sym_entries_.push_back({name_off, static_cast<uint32_t>(sym.value), info, shndx});
             }
         };
@@ -494,13 +504,21 @@ private:
             const uint32_t roff = static_cast<uint32_t>(buf_.size());
             for (const auto& r : sec.relocs) {
                 uint32_t sym_idx = 0;
-                for (size_t si = 1; si < sym_entries_.size(); ++si) {
-                    const char* nm = reinterpret_cast<const char*>(strtab_.data())
-                                   + sym_entries_[si].st_name;
-                    if (std::string(nm) == r.name) { sym_idx = static_cast<uint32_t>(si); break; }
+                if (r.sym_relative) {
+                    auto it = sym_name_to_index_.find(r.name);
+                    if (it != sym_name_to_index_.end())
+                        sym_idx = it->second;
+                } else {
+                    for (size_t si = 0; si < obj.sections.size(); ++si) {
+                        if (obj.sections[si].name == r.name) {
+                            sym_idx = sec_symidx_[si];
+                            break;
+                        }
+                    }
                 }
                 write_u32le(static_cast<uint32_t>(r.offset));
                 write_u32le((sym_idx << 8) | encode_reloc(r.type));
+                write_u32le(static_cast<uint32_t>(r.addend));
             }
             rel_infos_[i] = {roff, static_cast<uint32_t>(buf_.size()) - roff, sec_shidx_[i]};
         }
@@ -537,8 +555,8 @@ private:
         for (size_t i = 0; i < obj.sections.size(); ++i) {
             const auto& ri = rel_infos_[i];
             if (ri.size == 0) continue;
-            emit_shdr({rel_shnames_[i], SHT_REL, 0, 0, ri.offset, ri.size,
-                       symtab_shidx, ri.target_shidx, 4, 8});
+            emit_shdr({rel_shnames_[i], SHT_RELA, 0, 0, ri.offset, ri.size,
+                       symtab_shidx, ri.target_shidx, 4, 12});
         }
     }
 
@@ -608,6 +626,8 @@ private:
     uint32_t                 shname_symtab_=0, shname_strtab_=0, shname_shstrtab_=0;
     std::vector<sym_entry>   sym_entries_;
     std::vector<uint16_t>    sec_shidx_;
+    std::vector<uint32_t>    sec_symidx_;
+    std::map<std::string, uint32_t> sym_name_to_index_;
     uint32_t                 first_global_=0;
     std::vector<uint32_t>    sec_offsets_, sec_sizes_;
     uint32_t                 symtab_off_=0, symtab_size_=0;

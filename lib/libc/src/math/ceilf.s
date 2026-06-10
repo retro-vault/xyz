@@ -1,30 +1,26 @@
-        ; ceilf.s
-        ;
-        ; libc ceilf implementation for the xcc Z80 libc.
-        ; Rounds toward positive infinity.  double / long double are 32-bit
-        ; on this target, so ceil / ceill share the implementation.
-        ;
-        ; MIT License (see: LICENSE)
-        ; Copyright (C) 2026 tomaz stih
+        ;; ceilf.s
+        ;;
+        ;; libc ceilf implementation for the xcc Z80 libc.
+        ;; Rounds toward positive infinity.  double / long double are 32-bit
+        ;; on this target, so ceil / ceill share the implementation.
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2026 tomaz stih
 
         .module ceilf
         .optsdcc -mz80 sdcccall(1)
 
 
         .globl  _ceilf
-        .globl  _ceil
-        .globl  _ceill
         .globl  _truncf
         .globl  __float_incmag
 
         .area   _CODE
 
-        ; _ceilf / _ceil / _ceill
-        ; inputs:  HL:DE = float x
-        ; outputs: HL:DE = ceil(x)
-        ; clobbers: AF, BC, IX
-_ceil::
-_ceill::
+        ;; _ceilf / _ceil / _ceill
+        ;; inputs:  HL:DE = float x
+        ;; outputs: HL:DE = ceil(x)
+        ;; clobbers: AF, BC, IX
 _ceilf::
         push    de
         push    hl

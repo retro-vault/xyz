@@ -279,6 +279,37 @@ TEST(linker_binary_output) {
     ASSERT_EQ(reloc_buf[1], 0x00);
     // Size: 2.
     ASSERT_EQ(reloc_buf[2], 0x02);
+    ASSERT_EQ(reloc_buf[3], 0x00);
+
+    in.close();
+    std::filesystem::remove(out);
+}
+
+TEST(linker_binary_output_preserves_byte_reloc_flags) {
+    xld::link_context ctx;
+    ctx.code_size = 1;
+    ctx.code_buffer = {0x00};
+    ctx.entry_point = 0;
+
+    xld::output_reloc r;
+    r.offset = 0;
+    r.size = 1;
+    r.pad = 0x01;
+    ctx.reloc_table.push_back(r);
+
+    std::filesystem::path out = "/tmp/xlink_test_output_msb.xl";
+    xld::binary_emitter::emit(out, ctx);
+
+    std::ifstream in(out, std::ios::binary);
+    ASSERT(in.is_open());
+    in.seekg(12);
+
+    uint8_t reloc_buf[4];
+    in.read(reinterpret_cast<char*>(reloc_buf), 4);
+    ASSERT_EQ(reloc_buf[0], 0x00);
+    ASSERT_EQ(reloc_buf[1], 0x00);
+    ASSERT_EQ(reloc_buf[2], 0x01);
+    ASSERT_EQ(reloc_buf[3], 0x01);
 
     in.close();
     std::filesystem::remove(out);

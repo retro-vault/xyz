@@ -33,6 +33,7 @@ struct elf32_sym {
     uint8_t  st_info, st_other; uint16_t st_shndx;
 };
 struct elf32_rel { uint32_t r_offset, r_info; };
+struct elf32_rela { uint32_t r_offset, r_info, r_addend; };
 
 static constexpr uint8_t  ELFMAG0     = 0x7F;
 static constexpr uint8_t  ELFCLASS32  = 1;
@@ -42,6 +43,7 @@ static constexpr uint16_t EM_Z80      = 220;
 static constexpr uint32_t SHT_PROGBITS= 1;
 static constexpr uint32_t SHT_SYMTAB  = 2;
 static constexpr uint32_t SHT_STRTAB  = 3;
+static constexpr uint32_t SHT_RELA    = 4;
 static constexpr uint32_t SHT_REL     = 9;
 static constexpr uint32_t SHT_NOBITS  = 8;
 static constexpr uint32_t SHF_WRITE   = 0x01;
@@ -50,6 +52,7 @@ static constexpr uint32_t SHF_EXECINSTR = 0x04;
 static constexpr uint16_t SHN_UNDEF   = 0;
 static constexpr uint16_t SHN_ABS     = 0xFFF1;
 static constexpr uint8_t  STB_GLOBAL  = 1;
+static constexpr uint8_t  STT_SECTION = 3;
 
 static uint16_t u16le(const uint8_t* p) {
     return static_cast<uint16_t>(p[0] | (p[1] << 8));
@@ -119,6 +122,12 @@ public:
     }
 
 private:
+    struct raw_symbol {
+        std::string name;
+        uint16_t shndx = SHN_UNDEF;
+        bool is_section = false;
+    };
+
     void validate_header() {
         if (raw_.size() < sizeof(elf32_hdr))
             throw xbfd::format_error(src_, 0, "file too small for ELF header");
@@ -190,7 +199,7 @@ private:
             const auto& sh = shdrs_[i];
             if (sh.sh_type == 0) continue;
             if (sh.sh_type == SHT_SYMTAB || sh.sh_type == SHT_STRTAB) continue;
-            if (sh.sh_type == SHT_REL) continue;
+            if (sh.sh_type == SHT_REL || sh.sh_type == SHT_RELA) continue;
 
             const std::string name = strtab_get(shstrtab_, sh.sh_name);
             auto sf = xbfd::section_flags::none;
@@ -222,8 +231,9 @@ private:
         const auto& sh  = shdrs_[symtab_idx_];
         const uint32_t ent = sh.sh_entsize ? sh.sh_entsize : sizeof(elf32_sym);
         const uint32_t cnt = sh.sh_size / ent;
+        raw_symbols_.assign(cnt, {});
 
-        for (uint32_t i = 1; i < cnt; ++i) {
+        for (uint32_t i = 0; i < cnt; ++i) {
             const uint8_t* p = raw_.data() + sh.sh_offset + i * ent;
             elf32_sym sym{};
             sym.st_name  = u32le(p + 0); sym.st_value = u32le(p + 4);
@@ -231,7 +241,10 @@ private:
             sym.st_other = p[13];        sym.st_shndx = u16le(p + 14);
 
             const char* nm = strtab_get(strtab_, sym.st_name);
-            if (!nm || nm[0] == '\0') continue;
+            raw_symbols_[i].name = (nm ? nm : "");
+            raw_symbols_[i].shndx = sym.st_shndx;
+            raw_symbols_[i].is_section = (sym.st_info & 0x0F) == STT_SECTION;
+            if (i == 0 || !nm || nm[0] == '\0') continue;
 
             const bool is_global = (sym.st_info >> 4) == STB_GLOBAL;
             const bool is_undef  = sym.st_shndx == SHN_UNDEF;
@@ -254,28 +267,42 @@ private:
     void load_relocations() {
         for (int i = 0; i < shnum_; ++i) {
             const auto& sh = shdrs_[i];
-            if (sh.sh_type != SHT_REL) continue;
+            if (sh.sh_type != SHT_REL && sh.sh_type != SHT_RELA) continue;
             const uint32_t target = sh.sh_info;
             if (target >= static_cast<uint32_t>(shnum_)) continue;
             if (shidx_to_bfd_[target] < 0) continue;
 
             auto& tsec = obj_.sections[shidx_to_bfd_[target]];
-            const uint32_t ent = sh.sh_entsize ? sh.sh_entsize : sizeof(elf32_rel);
+            const uint32_t ent = sh.sh_entsize ? sh.sh_entsize
+                                               : (sh.sh_type == SHT_RELA
+                                                    ? sizeof(elf32_rela)
+                                                    : sizeof(elf32_rel));
             const uint32_t cnt = sh.sh_size / ent;
 
             for (uint32_t j = 0; j < cnt; ++j) {
                 const uint8_t* p = raw_.data() + sh.sh_offset + j * ent;
                 const uint32_t r_info   = u32le(p + 4);
+                const int32_t  r_addend = (sh.sh_type == SHT_RELA)
+                    ? static_cast<int32_t>(u32le(p + 8))
+                    : 0;
                 const uint32_t sym_idx  = r_info >> 8;
                 const uint8_t  rel_kind = static_cast<uint8_t>(r_info & 0xFF);
 
                 std::string ref; bool sym_rel = false;
-                if (sym_idx > 0 && sym_idx - 1 < obj_.symbols.size()) {
-                    ref = obj_.symbols[sym_idx - 1].name; sym_rel = true;
+                if (sym_idx < raw_symbols_.size()) {
+                    const auto& sym = raw_symbols_[sym_idx];
+                    if (!sym.name.empty()) {
+                        ref = sym.name;
+                        sym_rel = true;
+                    } else if (sym.is_section
+                               && sym.shndx < static_cast<uint32_t>(shnum_)) {
+                        ref = strtab_get(shstrtab_, shdrs_[sym.shndx].sh_name);
+                        sym_rel = false;
+                    }
                 }
                 xbfd::reloc_entry r;
                 r.offset = u32le(p + 0); r.type = decode_reloc(rel_kind);
-                r.sym_relative = sym_rel; r.name = ref;
+                r.sym_relative = sym_rel; r.name = ref; r.addend = r_addend;
                 tsec.relocs.push_back(r);
             }
         }
@@ -406,6 +433,7 @@ private:
     std::string                  strtab_;
     int                          symtab_idx_ = -1;
     std::vector<int>             shidx_to_bfd_;
+    std::vector<raw_symbol>      raw_symbols_;
     xbfd::object                 obj_;
 };
 

@@ -17,10 +17,8 @@
 
         .area   _CODE
 
-        ; _isspace
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is whitespace, else 0
-        ; clobbers: AF, BC
+        ;; _isspace
+        ;; C whitespace is the control run 0x09..0x0d plus the ordinary space.
 _isspace::
         ld      a,h
         or      a

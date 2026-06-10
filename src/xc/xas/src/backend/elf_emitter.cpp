@@ -23,21 +23,34 @@ namespace xas {
         void begin_module(const std::string& name) override
         {
             module_name_ = name;
+            obj_->set_module_name(name);
+        }
+
+        void set_default_calling_convention(xbfd::calling_convention cc) override
+        {
+            obj_->object().default_calling_convention = cc;
         }
 
         void set_section(const std::string& name,
                           bfd::section_flags flags) override
         {
             cur_section_ = name;
-            cur_offset_  = 0;
-            if (!obj_->find_section(name))
-                obj_->add_section(name, flags);
+            auto* sec = obj_->find_section(name);
+            if (!sec) {
+                sec = &obj_->add_section(name, flags);
+            } else {
+                sec->flags = flags;
+            }
+            cur_offset_ = static_cast<uint32_t>(sec->size);
         }
 
         void emit_byte(uint8_t v) override
         {
             auto* sec = obj_->find_section(cur_section_);
-            if (sec) sec->data.push_back(v);
+            if (sec) {
+                sec->data.push_back(v);
+                sec->size += 1;
+            }
             ++cur_offset_;
         }
 
@@ -47,22 +60,28 @@ namespace xas {
             if (sec) {
                 sec->data.push_back(v & 0xFF);
                 sec->data.push_back((v >> 8) & 0xFF);
+                sec->size += 2;
             }
             cur_offset_ += 2;
         }
 
-        void emit_space(uint32_t n) override
+        void emit_space(uint32_t n, int) override
         {
             auto* sec = obj_->find_section(cur_section_);
             if (sec) {
-                for (uint32_t i = 0; i < n; ++i) sec->data.push_back(0);
+                if (!bfd::has_flag(sec->flags, bfd::section_flags::never_load)) {
+                    for (uint32_t i = 0; i < n; ++i)
+                        sec->data.push_back(0);
+                }
+                sec->size += n;
             }
             cur_offset_ += n;
         }
 
         void emit_reloc(const std::string& name,
                          bfd::reloc_type type,
-                         bool sym_relative) override
+                         bool sym_relative,
+                         int32_t addend) override
         {
             auto* sec = obj_->find_section(cur_section_);
             if (!sec) return;
@@ -71,7 +90,7 @@ namespace xas {
             r.type         = type;
             r.sym_relative = sym_relative;
             r.name         = name;
-            r.addend       = 0;
+            r.addend       = addend;
             sec->relocs.push_back(r);
         }
 
@@ -87,6 +106,8 @@ namespace xas {
                 : bfd::symbol_flags::local;
             obj_->add_symbol(name, sf, value, section_name);
         }
+
+        void mark_label(int) override {}
 
         void refer_symbol(const std::string& name) override
         {

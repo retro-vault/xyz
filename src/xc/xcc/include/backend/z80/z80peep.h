@@ -147,6 +147,22 @@ private:
     // push hl; pop bc  →  ld b,h; ld c,l  (same size, faster)
     bool rule_push_hl_pop_bc(size_t i);
 
+    // push rr; <small span preserving rr>; pop rr  →  <span>
+    // for rr in {hl,de,bc}. This is a conservative liveness-aware
+    // extension of the adjacent push/pop removal.
+    bool rule_push_pop_same_reg_span(size_t i);
+
+    // push hl/de; <small span preserving both pairs>; pop de/hl
+    //   →  ex de,hl; <span>
+    // Generalizes the adjacent/existing load-specific rules to tiny
+    // register-neutral spans.
+    bool rule_push_pair_exchange_span(size_t i);
+
+    // push hl/de; <small span preserving source and destination>; pop bc/hl
+    //   →  ld hi,src_hi; ld lo,src_lo; <span>
+    // Used for tiny save/restore shuffles that do not need the stack.
+    bool rule_push_pair_copy_span(size_t i);
+
     // ld l,N(ix); ld h,N+1(ix); ld l,M(ix); ld h,M+1(ix)  →  last 2 only
     // (first 16-bit IX load is dead — immediately overwritten by second)
     bool rule_dead_hl_ix_load(size_t i);

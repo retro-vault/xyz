@@ -17,10 +17,9 @@
 
         .area   _CODE
 
-        ; _iscntrl
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is a control code, else 0
-        ; clobbers: AF, BC
+        ;; _iscntrl
+        ;; Most control characters live in one dense band; DEL is the lone extra
+        ;; code point and is checked separately.
 _iscntrl::
         ld      a,h
         or      a

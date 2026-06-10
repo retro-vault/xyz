@@ -17,10 +17,8 @@
 
         .area   _CODE
 
-        ; _isdigit
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is a decimal digit, else 0
-        ; clobbers: AF, BC
+        ;; _isdigit
+        ;; Decimal digits form one contiguous ASCII interval.
 _isdigit::
         ld      a,h
         or      a

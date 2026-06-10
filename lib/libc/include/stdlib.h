@@ -33,6 +33,8 @@ typedef struct lldiv_t {
     long long rem;
 } lldiv_t;
 
+typedef int (*__libc_compare_fn)(const void *, const void *);
+
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 #define RAND_MAX     32767
@@ -49,6 +51,7 @@ void *malloc(size_t size);
 void *calloc(size_t count, size_t size);
 void *realloc(void *ptr, size_t size);
 void free(void *ptr);
+void *aligned_alloc(size_t alignment, size_t size);
 
 int abs(int value);
 long labs(long value);
@@ -59,8 +62,12 @@ ldiv_t ldiv(long numer, long denom);
 lldiv_t lldiv(long long numer, long long denom);
 
 int atoi(const char *nptr);
+double atof(const char *nptr);
 long atol(const char *nptr);
 long long atoll(const char *nptr);
+float strtof(const char *restrict nptr, char **restrict endptr);
+double strtod(const char *restrict nptr, char **restrict endptr);
+long double strtold(const char *restrict nptr, char **restrict endptr);
 long strtol(const char *restrict nptr, char **restrict endptr, int base);
 unsigned long strtoul(const char *restrict nptr, char **restrict endptr, int base);
 long long strtoll(const char *restrict nptr, char **restrict endptr, int base);
@@ -73,10 +80,19 @@ void *bsearch(const void *key,
               const void *base,
               size_t      count,
               size_t      size,
-              int (*compar)(const void *, const void *));
+              __libc_compare_fn compar);
 void qsort(void *base,
            size_t count,
            size_t size,
-           int (*compar)(const void *, const void *));
+           __libc_compare_fn compar);
+
+int mblen(const char *s, size_t n);
+int mbtowc(wchar_t *restrict pwc, const char *restrict s, size_t n);
+int wctomb(char *s, wchar_t wc);
+size_t mbstowcs(wchar_t *restrict dst, const char *restrict src, size_t n);
+size_t wcstombs(char *restrict dst, const wchar_t *restrict src, size_t n);
+
+char *getenv(const char *name);
+int system(const char *command);
 
 #endif /* _STDLIB_H */

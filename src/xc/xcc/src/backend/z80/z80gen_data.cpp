@@ -6,6 +6,7 @@
 //
 #include "backend/z80/z80gen.h"
 #include <string>
+#include <unordered_set>
 
 namespace xcc {
 
@@ -26,6 +27,7 @@ void z80_gen::emit_module(const ir_module &mod) {
 
     emit_globals(mod);
     emit_strings(mod);
+    emit_external_data_refs(mod);
 
     asm_.section_code();
     for (auto &fn : mod.functions)
@@ -108,6 +110,41 @@ void z80_gen::emit_globals(const ir_module &mod) {
         asm_.symbol_assign("__tls_size", tls_size_);
         asm_.raw("\n");
     }
+}
+
+void z80_gen::emit_external_data_refs(const ir_module &mod) {
+    std::unordered_set<std::string> defined;
+    for (const auto &g : mod.globals)
+        defined.insert(mangle(g.name));
+    for (const auto &s : mod.string_literals)
+        defined.insert(mangle(s.name));
+
+    std::unordered_set<std::string> emitted;
+    auto maybe_emit = [&](const operand &op) {
+        if (op.kind != operand_kind::SYMBOL || !op.is_global || op.is_func)
+            return;
+        // C23 static compound literals currently lower through internal
+        // pseudo-globals named __sclitN. They are module-local compiler
+        // implementation details, not external data imports.
+        if (op.name.rfind("__sclit", 0) == 0)
+            return;
+        const std::string sym = mangle(op.name);
+        if (defined.count(sym) != 0 || emitted.count(sym) != 0)
+            return;
+        asm_.global_decl(sym);
+        emitted.insert(sym);
+    };
+
+    for (const auto &fn : mod.functions) {
+        for (const auto &ic : fn.icodes) {
+            maybe_emit(ic.result);
+            maybe_emit(ic.left);
+            maybe_emit(ic.right);
+        }
+    }
+
+    if (!emitted.empty())
+        asm_.raw("\n");
 }
 
 void z80_gen::emit_strings(const ir_module &mod) {

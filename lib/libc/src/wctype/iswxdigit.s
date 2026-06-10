@@ -12,7 +12,9 @@
         .globl  _iswxdigit
         .globl  _isxdigit
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswxdigit
+        ;; Hex-digit classification is delegated to the narrow helper once the
+        ;; wchar_t value is known to fit in one byte.
 _iswxdigit::
         ld      a,h
         or      a

@@ -12,7 +12,9 @@
         .globl  _iswdigit
         .globl  _isdigit
         .area   _CODE
-        ; HL = wc -> DE = boolean
+        ;; _iswdigit
+        ;; Decimal-digit classification is delegated to the narrow ASCII helper
+        ;; once the wchar_t value is known to fit in one byte.
 _iswdigit::
         ld      a,h
         or      a

@@ -17,10 +17,9 @@
 
         .area   _CODE
 
-        ; _isalpha
-        ; inputs:  HL = promoted int character value
-        ; outputs: DE = 1 when the character is alphabetic, else 0
-        ; clobbers: AF, BC
+        ;; _isalpha
+        ;; The alphabetic class is the union of the uppercase and lowercase
+        ;; ASCII letter bands.
 _isalpha::
         ld      a,h
         or      a

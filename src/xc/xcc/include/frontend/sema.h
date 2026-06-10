@@ -57,12 +57,14 @@ private:
     //
     void apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc);
     void apply_imported_call_abi(symbol &sym, const attr_list &attrs, source_loc loc);
+    void normalize_variadic_call_abi(func_decl &d);
 
     // ----- expr_visitor overrides ------------------------------------
     void visit(binary_expr           &e) override;
     void visit(unary_expr            &e) override;
     void visit(cast_expr             &e) override;
     void visit(call_expr             &e) override;
+    void visit(sizeof_expr           &e) override;
     void visit(index_expr            &e) override;
     void visit(member_expr           &e) override;
     void visit(compound_literal_expr &e) override;

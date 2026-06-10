@@ -17,6 +17,7 @@
 #define __STDC_VERSION_INTTYPES_H__ 202311L
 
 #include <stdint.h>
+#include <wchar.h>
 
 typedef struct imaxdiv_t {
     intmax_t quot;
@@ -199,5 +200,7 @@ intmax_t  imaxabs(intmax_t j);
 imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom);
 intmax_t  strtoimax(const char *restrict nptr, char **restrict endptr, int base);
 uintmax_t strtoumax(const char *restrict nptr, char **restrict endptr, int base);
+intmax_t  wcstoimax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
+uintmax_t wcstoumax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);
 
 #endif /* _INTTYPES_H */
