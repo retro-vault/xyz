@@ -86,7 +86,8 @@ namespace xld {
 
     enum class output_format {
         xl,
-        bin
+        bin,
+        ihx
     };
 
 } // namespace xld

@@ -21,24 +21,33 @@
 ALIGNED_MAGIC_LO .equ 0x6c
 ALIGNED_MAGIC_HI .equ 0xa1
 ALIGNED_META_SIZE .equ 6
-
-        .area   _DATA
-__libc_aligned_base:
-        .dw     0
-__libc_aligned_align:
-        .dw     0
-__libc_aligned_size:
-        .dw     0
-__libc_aligned_user:
-        .dw     0
+AA_FRAME_SIZE .equ 8
 
         .area   _CODE
 
+AA_USER   .equ 0
+AA_SIZE   .equ 2
+AA_ALIGN  .equ 4
+AA_BASE   .equ 6
+
 _aligned_alloc::
+        push    ix
+        ld      b,h
+        ld      c,l
+        ld      hl,#0
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        ld      ix,#0
+        add     ix,sp
+        ld      h,b
+        ld      l,c
+
         ;; alignment must be non-zero and a power of two
         ld      a,h
         or      l
-        jr      z,aligned_alloc_fail
+        jp      z,aligned_alloc_fail
         ld      b,h
         ld      c,l
         dec     bc
@@ -48,7 +57,7 @@ _aligned_alloc::
         ld      a,l
         and     c
         or      b
-        jr      nz,aligned_alloc_fail
+        jp      nz,aligned_alloc_fail
 
         ;; size must be an exact multiple of alignment
         ld      b,h
@@ -60,33 +69,38 @@ _aligned_alloc::
         ld      a,e
         and     c
         or      b
-        jr      nz,aligned_alloc_fail
+        jp      nz,aligned_alloc_fail
 
-        ld      (__libc_aligned_align),hl
+        ld      AA_ALIGN+0(ix),l
+        ld      AA_ALIGN+1(ix),h
         ex      de,hl
-        ld      (__libc_aligned_size),hl
+        ld      AA_SIZE+0(ix),l
+        ld      AA_SIZE+1(ix),h
         ex      de,hl                  ; HL = alignment, DE = size
 
         ;; total = size + alignment + metadata
         ex      de,hl                  ; HL = size, DE = alignment
         add     hl,de
-        jr      c,aligned_alloc_fail
+        jp      c,aligned_alloc_fail
         ld      de,#ALIGNED_META_SIZE
         add     hl,de
-        jr      c,aligned_alloc_fail
+        jp      c,aligned_alloc_fail
         call    _malloc
         ld      a,d
         or      e
-        jr      z,aligned_alloc_fail
+        jp      z,aligned_alloc_fail
 
-        ld      (__libc_aligned_base),de
+        ld      AA_BASE+0(ix),e
+        ld      AA_BASE+1(ix),d
         ex      de,hl                  ; HL = base pointer
         ld      de,#ALIGNED_META_SIZE
         add     hl,de                  ; first address after metadata
-        ld      de,(__libc_aligned_align)
+        ld      e,AA_ALIGN+0(ix)
+        ld      d,AA_ALIGN+1(ix)
         dec     de
         add     hl,de                  ; add alignment mask before clearing bits
-        ld      bc,(__libc_aligned_align)
+        ld      c,AA_ALIGN+0(ix)
+        ld      b,AA_ALIGN+1(ix)
         dec     bc
         ld      a,c
         cpl
@@ -100,14 +114,16 @@ _aligned_alloc::
         ld      a,h
         and     b
         ld      h,a
-        ld      (__libc_aligned_user),hl
+        ld      AA_USER+0(ix),l
+        ld      AA_USER+1(ix),h
 
         ;; Write size + magic + base pointer immediately before the user area.
         push    hl
         ld      de,#ALIGNED_META_SIZE
         xor     a
         sbc     hl,de
-        ld      de,(__libc_aligned_size)
+        ld      e,AA_SIZE+0(ix)
+        ld      d,AA_SIZE+1(ix)
         ld      (hl),e
         inc     hl
         ld      (hl),d
@@ -116,14 +132,25 @@ _aligned_alloc::
         inc     hl
         ld      (hl),#ALIGNED_MAGIC_HI
         inc     hl
-        ld      de,(__libc_aligned_base)
+        ld      e,AA_BASE+0(ix)
+        ld      d,AA_BASE+1(ix)
         ld      (hl),e
         inc     hl
         ld      (hl),d
         pop     hl
         ex      de,hl                  ; DE = aligned user pointer
+        ld      sp,ix
+        ld      hl,#AA_FRAME_SIZE
+        add     hl,sp
+        ld      sp,hl
+        pop     ix
         ret
 
 aligned_alloc_fail:
         ld      de,#0
+        ld      sp,ix
+        ld      hl,#AA_FRAME_SIZE
+        add     hl,sp
+        ld      sp,hl
+        pop     ix
         ret

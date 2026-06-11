@@ -14,27 +14,29 @@
         .globl  _wctob
         .globl  _fputc
 
-        .area   _DATA
-__fputws_ptr:
-        .dw     0
-__fputws_stream:
-        .dw     0
-
         .area   _CODE
 
+FPWS_PTR    .equ 0
+FPWS_STREAM .equ 2
+
 _fputws::
-        ld      (__fputws_ptr),hl
-        ld      (__fputws_stream),de
+        push    ix
+        push    de
+        push    hl
+        ld      ix,#0
+        add     ix,sp
         ld      a,h
         or      l
         jr      z,__fputws_fail
 __fputws_loop:
-        ld      hl,(__fputws_ptr)
+        ld      l,FPWS_PTR(ix)
+        ld      h,FPWS_PTR+1(ix)
         ld      e,(hl)
         inc     hl
         ld      d,(hl)
         inc     hl
-        ld      (__fputws_ptr),hl
+        ld      FPWS_PTR(ix),l
+        ld      FPWS_PTR+1(ix),h
         ld      a,d
         or      e
         jr      z,__fputws_ok
@@ -48,7 +50,8 @@ __fputws_loop:
         jr      z,__fputws_fail
 __fputws_emit:
         ex      de,hl
-        ld      de,(__fputws_stream)
+        ld      e,FPWS_STREAM(ix)
+        ld      d,FPWS_STREAM+1(ix)
         call    _fputc
         ld      a,d
         cp      #0xff
@@ -59,7 +62,15 @@ __fputws_emit:
         jr      __fputws_loop
 __fputws_ok:
         ld      de,#0x0000
+        ld      sp,ix
+        pop     hl
+        pop     bc
+        pop     ix
         ret
 __fputws_fail:
         ld      de,#0xffff
+        ld      sp,ix
+        pop     hl
+        pop     bc
+        pop     ix
         ret

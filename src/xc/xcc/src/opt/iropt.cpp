@@ -513,6 +513,12 @@ static ssa_value simplify_binary_value(const icode &ic,
                                        const ssa_value &lhs,
                                        const ssa_value &rhs,
                                        int value_id) {
+    auto is_fp_compare_operand = [](const operand &op) {
+        return op.type &&
+               (op.type->kind == type_kind::FLOAT ||
+                op.type->kind == type_kind::DOUBLE);
+    };
+
     if (lhs.tag == ssa_value::kind::INT_CONST &&
         rhs.tag == ssa_value::kind::INT_CONST &&
         is_binary_foldable(ic.op)) {
@@ -547,14 +553,21 @@ static ssa_value simplify_binary_value(const icode &ic,
     if (lhs.tag == ssa_value::kind::VALUE &&
         rhs.tag == ssa_value::kind::VALUE &&
         lhs.value_id == rhs.value_id) {
+        const bool fp_compare =
+            is_fp_compare_operand(ic.left) || is_fp_compare_operand(ic.right);
         switch (ic.op) {
         case icode_op::EQ:
         case icode_op::LE:
         case icode_op::GE:
+            if (fp_compare)
+                break;
             return ssa_value::int_const(1);
         case icode_op::NE:
         case icode_op::LT:
         case icode_op::GT:
+            if (fp_compare) {
+                break;
+            }
         case icode_op::SUB:
         case icode_op::BXOR:
             return ssa_value::int_const(0);

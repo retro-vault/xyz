@@ -200,6 +200,7 @@ struct sizeof_expr : expr {
     type_ptr sizeof_type;
     expr_ptr sizeof_expr_op;
     bool     is_alignof = false;
+    int      align_override = 0; // symbol-level alignas override for alignof(expr)
     void accept(expr_visitor &v) override;
 };
 

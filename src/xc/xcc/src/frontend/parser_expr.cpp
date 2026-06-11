@@ -310,9 +310,25 @@ expr_ptr parser::parse_unary_expression() {
         auto e = std::make_unique<sizeof_expr>();
         e->loc        = loc;
         e->is_alignof = true;
-        expect(tk::LPAREN);
-        e->sizeof_type = parse_type_name();
-        expect(tk::RPAREN);
+        if (check(tk::LPAREN)) {
+            consume();
+            if (is_type_start()) {
+                e->sizeof_type = parse_type_name();
+                expect(tk::RPAREN);
+            } else {
+                e->sizeof_expr_op = parse_expression();
+                expect(tk::RPAREN);
+            }
+        } else {
+            e->sizeof_expr_op = parse_unary_expression();
+        }
+        if (e->sizeof_expr_op) {
+            if (auto *id = dynamic_cast<ident_expr *>(e->sizeof_expr_op.get())) {
+                if (id->sym && id->sym->requested_align > 0)
+                    e->align_override = id->sym->requested_align;
+            }
+        }
+        e->type = type::make_uint();
         return e;
     }
     if (check(tk::KW_SIZEOF)) {
@@ -426,6 +442,28 @@ expr_ptr parser::parse_primary_expression() {
         auto e = std::make_unique<int_literal_expr>();
         e->loc   = t.loc;
         e->value = t.ival;
+        auto lower_text = t.text;
+        for (char &ch : lower_text) ch = (char)std::tolower((unsigned char)ch);
+        if (lower_text.size() >= 2 &&
+            lower_text.substr(lower_text.size() - 2) == "wb") {
+            bool is_unsigned_bitint = lower_text.size() >= 3 &&
+                                      lower_text.substr(lower_text.size() - 3) == "uwb";
+            int width = 1;
+            if (is_unsigned_bitint) {
+                unsigned long long u = (unsigned long long)e->value;
+                while (width < 64 && u > ((1ULL << width) - 1ULL)) ++width;
+            } else {
+                width = 2;
+                while (width < 64) {
+                    long long minv = -(1LL << (width - 1));
+                    long long maxv =  (1LL << (width - 1)) - 1LL;
+                    if (e->value >= minv && e->value <= maxv) break;
+                    ++width;
+                }
+            }
+            e->type = type::make_bitint(width, is_unsigned_bitint);
+            return e;
+        }
         // Derive type from integer suffix: L/l → long, LL/ll → long long, U/u → unsigned
         bool has_u = false, has_l = false, has_ll = false;
         for (char ch : t.text) {
@@ -498,7 +536,8 @@ expr_ptr parser::parse_primary_expression() {
         auto e = std::make_unique<char_literal_expr>();
         e->loc   = t.loc;
         e->value = t.ival;
-        e->type  = type::make_int(); // char constant has type int in C
+        e->type  = (t.char_width == 8) ? type::make_char8t()
+                                       : type::make_int(); // ordinary char constant has type int in C
         return e;
     }
     if (check(tk::STR_LIT)) {
@@ -556,6 +595,81 @@ expr_ptr parser::parse_primary_expression() {
             parse_assignment_expression(); // discard hint
             expect(tk::RPAREN);
             return e;
+        }
+        if (t.text == "__builtin_va_start") {
+            // __builtin_va_start(ap [, last]) — lower to an assignment-like
+            // side effect while keeping the expression type as void.
+            expect(tk::LPAREN);
+            auto ap = parse_assignment_expression();
+            expr_ptr last;
+            if (match(tk::COMMA))
+                last = parse_assignment_expression();
+            expect(tk::RPAREN);
+
+            auto assign = std::make_unique<binary_expr>();
+            assign->loc  = t.loc;
+            assign->op   = bin_op::ASSIGN;
+            assign->left = std::move(ap);
+
+            type_ptr ap_type = assign->left && assign->left->type
+                                 ? assign->left->type
+                                 : type::make_pointer(type::make_char());
+
+            expr_ptr rhs;
+            if (last) {
+                auto addr = std::make_unique<unary_expr>();
+                addr->loc       = t.loc;
+                addr->op        = unary_op::ADDR;
+                addr->operand   = std::move(last);
+                addr->type      = type::make_pointer(addr->operand && addr->operand->type
+                                                     ? addr->operand->type->unqual()
+                                                     : type::make_int());
+                addr->is_lvalue = false;
+
+                auto char_ptr = std::make_unique<cast_expr>();
+                char_ptr->loc         = t.loc;
+                char_ptr->target_type = type::make_pointer(type::make_char());
+                char_ptr->operand     = std::move(addr);
+                char_ptr->type        = char_ptr->target_type;
+
+                auto sz = std::make_unique<int_literal_expr>();
+                sz->loc   = t.loc;
+                sz->value = (char_ptr->operand && static_cast<unary_expr *>(char_ptr->operand.get())->operand &&
+                             static_cast<unary_expr *>(char_ptr->operand.get())->operand->type)
+                              ? static_cast<unary_expr *>(char_ptr->operand.get())->operand->type->size()
+                              : 0;
+                sz->type  = type::make_int();
+
+                auto add = std::make_unique<binary_expr>();
+                add->loc   = t.loc;
+                add->op    = bin_op::ADD;
+                add->left  = std::move(char_ptr);
+                add->right = std::move(sz);
+                add->type  = type::make_pointer(type::make_char());
+
+                auto cast = std::make_unique<cast_expr>();
+                cast->loc         = t.loc;
+                cast->target_type = ap_type;
+                cast->operand     = std::move(add);
+                cast->type        = ap_type;
+                rhs = std::move(cast);
+            } else {
+                auto zero = std::make_unique<int_literal_expr>();
+                zero->loc   = t.loc;
+                zero->value = 0;
+                zero->type  = type::make_int();
+
+                auto cast = std::make_unique<cast_expr>();
+                cast->loc         = t.loc;
+                cast->target_type = ap_type;
+                cast->operand     = std::move(zero);
+                cast->type        = ap_type;
+                rhs = std::move(cast);
+            }
+
+            assign->right = std::move(rhs);
+            assign->type  = type::make_void();
+            return assign;
         }
         if (t.text == "__builtin_unreachable") {
             // C23 unreachable(): marks a code path as never reached.

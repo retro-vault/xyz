@@ -137,3 +137,28 @@ TEST(binary_emitter_bin_pre_hole_jp_for_large_hole) {
 
     std::filesystem::remove(out_path);
 }
+
+TEST(binary_emitter_ihx_emits_linear_hex_image) {
+    xld::link_context ctx;
+    ctx.format = xld::output_format::ihx;
+    ctx.output_range = xld::address_range{0x0000, 0x0005};
+    ctx.code_buffer = {0x11, 0x22, 0x33};
+
+    char tmp_template[] = "/tmp/xld-ihx-test-XXXXXX";
+    int fd = mkstemp(tmp_template);
+    ASSERT(fd >= 0);
+    close(fd);
+    std::filesystem::path out_path = tmp_template;
+
+    xld::binary_emitter::emit(out_path, ctx);
+
+    std::ifstream in(out_path);
+    ASSERT(in.is_open());
+    std::string text((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+
+    ASSERT(text.find(":0600000011223300000094\n") != std::string::npos);
+    ASSERT(text.find(":00000001FF\n") != std::string::npos);
+
+    std::filesystem::remove(out_path);
+}

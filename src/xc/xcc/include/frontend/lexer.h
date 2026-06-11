@@ -91,7 +91,7 @@ private:
     token lex_ident_or_keyword();
     token lex_number();
     char  lex_escape();
-    token lex_char_literal();
+    token lex_char_literal(int char_width = 1);
     token lex_string_literal(int char_width = 1);
     token lex_operator();
 

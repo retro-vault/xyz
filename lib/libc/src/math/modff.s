@@ -18,9 +18,6 @@
         .globl  _truncf
         .globl  ___fssub
 
-        .area   _DATA
-__modf_x:   .ds 4                       ; saved x while computing trunc(x)
-
         .area   _CODE
 
         ;; _modff / _modf / _modfl
@@ -31,8 +28,8 @@ _modff::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__modf_x),de           ; save x (a0,a1)
-        ld      (__modf_x + 2),hl       ;        (a2,a3)
+        push    hl                      ; save x high word at -2(ix),-1(ix)
+        push    de                      ; save x low word at -4(ix),-3(ix)
         call    _truncf                 ; HL:DE = trunc(x)
         ;; store integer part through *iptr (a0,a1,a2,a3 = E,D,L,H)
         ld      c,4(ix)
@@ -53,8 +50,10 @@ _modff::
         ld      b,d                     ; BC = trunc b0,b1
         push    hl                      ; trunc b2,b3
         push    bc                      ; trunc b0,b1
-        ld      de,(__modf_x)           ; a = x
-        ld      hl,(__modf_x + 2)
+        ld      e,-4(ix)                ; reload x low word
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)                ; reload x high word
         call    ___fssub                ; DEHL = x - trunc(x)
         pop     bc
         pop     bc
@@ -66,12 +65,13 @@ _modff::
         or      d
         or      e
         jr      nz,modf_done
-        ld      a,(__modf_x + 3)        ; x's a3 (sign in bit7)
+        ld      a,-1(ix)                ; x's a3 (sign in bit7)
         and     #0x80
         ld      h,a
         ld      l,#0
         ld      d,#0
         ld      e,#0
 modf_done:
+        ld      sp,ix
         pop     ix
         ret

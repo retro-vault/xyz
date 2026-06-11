@@ -18,17 +18,23 @@
         .globl  __libc_logf_core
         .globl  __libc_expf_core
 
-        .area   _DATA
-__cbrtf_sign:
-        .ds     1
-__cbrtf_x:
-        .ds     4
-
         .area   _CODE
 
+CBR_XLO  .equ -5
+CBR_XHI  .equ -3
+CBR_SIGN .equ -1
+
 _cbrtf::
-        ld      (__cbrtf_x),de
-        ld      (__cbrtf_x + 2),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-5
+        add     hl,sp
+        ld      sp,hl
+        ld      CBR_XLO(ix),e
+        ld      CBR_XLO+1(ix),d
+        ld      CBR_XHI(ix),l
+        ld      CBR_XHI+1(ix),h
         call    ___libc_fpclassifyf
         ld      a,e
         cp      #0                      ; NaN -> return unchanged
@@ -38,8 +44,10 @@ _cbrtf::
         cp      #2                      ; Zero -> preserve signed zero
         jr      z,cbrtf_ret_x
 
-        ld      de,(__cbrtf_x)
-        ld      hl,(__cbrtf_x + 2)
+        ld      e,CBR_XLO(ix)
+        ld      d,CBR_XLO+1(ix)
+        ld      l,CBR_XHI(ix)
+        ld      h,CBR_XHI+1(ix)
         call    ___libc_signbitf
         ld      a,d
         or      e
@@ -47,11 +55,13 @@ _cbrtf::
         jr      z,cbrtf_have_sign
         ld      a,#1
 cbrtf_have_sign:
-        ld      (__cbrtf_sign),a
+        ld      CBR_SIGN(ix),a
 
-        ld      de,(__cbrtf_x)
-        ld      hl,(__cbrtf_x + 2)
-        ld      a,(__cbrtf_sign)
+        ld      e,CBR_XLO(ix)
+        ld      d,CBR_XLO+1(ix)
+        ld      l,CBR_XHI(ix)
+        ld      h,CBR_XHI+1(ix)
+        ld      a,CBR_SIGN(ix)
         or      a
         jr      z,cbrtf_positive
         ld      a,h
@@ -59,27 +69,28 @@ cbrtf_have_sign:
         ld      h,a
 cbrtf_positive:
         call    __libc_logf_core
-        ld      (__cbrtf_x),de
-        ld      (__cbrtf_x + 2),hl
         ld      hl,#0x3eaa              ; 1/3
         push    hl
         ld      hl,#0xaaab
         push    hl
-        ld      de,(__cbrtf_x)
-        ld      hl,(__cbrtf_x + 2)
         call    ___fsmul
         pop     bc
         pop     bc
         call    __libc_expf_core
-        ld      a,(__cbrtf_sign)
+        ld      a,CBR_SIGN(ix)
         or      a
-        ret     z
+        jr      z,cbrtf_done
         ld      a,h
         xor     #0x80
         ld      h,a
-        ret
+        jr      cbrtf_done
 
 cbrtf_ret_x:
-        ld      de,(__cbrtf_x)
-        ld      hl,(__cbrtf_x + 2)
+        ld      e,CBR_XLO(ix)
+        ld      d,CBR_XLO+1(ix)
+        ld      l,CBR_XHI(ix)
+        ld      h,CBR_XHI+1(ix)
+cbrtf_done:
+        ld      sp,ix
+        pop     ix
         ret

@@ -21,6 +21,7 @@ decl_spec parser::parse_declaration_specifiers() {
     bool          is_inline    = false;
     bool          is_tls       = false;
     bool          is_constexpr = false;
+    int           requested_align = 0;
     attr_list     local_attrs;
 
     bool has_unsigned = false;
@@ -65,12 +66,18 @@ decl_spec parser::parse_declaration_specifiers() {
         // C23 constexpr — compile-time constant; implies const + static/auto storage
         if (k == tk::KW_CONSTEXPR) { is_constexpr = true; is_const = true; consume(); continue; }
 
-        // _Alignas(N) / alignas(N) — parsed and discarded (Z80 always aligns to 1 byte)
+        // _Alignas(N) / alignas(N) — record the requested alignment.
         if (k == tk::KW__ALIGNAS) {
             consume();
             expect(tk::LPAREN);
-            if (is_type_start()) parse_type_name();
-            else                 parse_assignment_expression();
+            if (is_type_start()) {
+                auto at = parse_type_name();
+                if (at) requested_align = std::max(requested_align, at->align());
+            } else {
+                auto ae = parse_assignment_expression();
+                if (auto av = const_expr_evaluator::evaluate(ae.get()))
+                    requested_align = std::max(requested_align, (int)*av);
+            }
             expect(tk::RPAREN);
             continue;
         }
@@ -154,7 +161,8 @@ decl_spec parser::parse_declaration_specifiers() {
         // Enum — optionally with C23 underlying type: enum E : unsigned char { ... }
         if (k == tk::KW_ENUM) {
             consume();
-            if (peek().kind == tk::IDENT) consume(); // optional tag
+            std::string tag;
+            if (peek().kind == tk::IDENT) tag = consume().text; // optional tag
             // C23: optional underlying-type specifier after ':'
             type_ptr enum_base = type::make_int(); // default: int
             if (check(tk::COLON)) {
@@ -164,6 +172,10 @@ decl_spec parser::parse_declaration_specifiers() {
             }
             if (peek().kind == tk::LBRACE) {
                 parse_enum_body();
+                if (!tag.empty()) syms_.insert_tag(tag, enum_base);
+            } else if (!tag.empty()) {
+                if (auto existing = syms_.lookup_tag(tag))
+                    enum_base = existing;
             }
             explicit_type = enum_base;
             continue;
@@ -273,6 +285,7 @@ decl_spec parser::parse_declaration_specifiers() {
     ds.is_tls      = is_tls;
     ds.is_constexpr= is_constexpr;
     ds.is_deduced  = is_deduced;
+    ds.align_req   = requested_align;
     ds.attrs       = std::move(local_attrs);
     return ds;
 }

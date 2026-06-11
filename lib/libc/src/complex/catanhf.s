@@ -18,26 +18,15 @@
         .globl  ___fssub
         .globl  ___fsmul
 
-        .area   _DATA
-__catanhf_lp_re:
-        .ds     4
-__catanhf_lp_im:
-        .ds     4
-__catanhf_lm_re:
-        .ds     4
-__catanhf_lm_im:
-        .ds     4
-__catanhf_re:
-        .ds     4
-__catanhf_tmp:
-        .ds     4
-
         .area   _CODE
 
 _catanhf::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-24
+        add     hl,sp
+        ld      sp,hl
 
         ;; atanh(0) is exactly 0.
         ld      a,4(ix)
@@ -55,6 +44,7 @@ _catanhf::
         ld      de,#0x0000
         ld      hl,#0x0000
         exx
+        ld      sp,ix
         pop     ix
         ret
 
@@ -72,17 +62,21 @@ catanhf_nonzero:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__catanhf_tmp),de
-        ld      (__catanhf_tmp + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         ld      l,10(ix)
         ld      h,11(ix)
         push    hl
         ld      l,8(ix)
         ld      h,9(ix)
         push    hl
-        ld      hl,(__catanhf_tmp + 2)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        ld      hl,(__catanhf_tmp)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         push    hl
         call    _clogf
         inc     sp
@@ -93,11 +87,15 @@ catanhf_nonzero:
         inc     sp
         inc     sp
         inc     sp
-        ld      (__catanhf_lp_re),de
-        ld      (__catanhf_lp_re + 2),hl
+        ld      -24(ix),e
+        ld      -23(ix),d
+        ld      -22(ix),l
+        ld      -21(ix),h
         exx
-        ld      (__catanhf_lp_im),de
-        ld      (__catanhf_lp_im + 2),hl
+        ld      -20(ix),e
+        ld      -19(ix),d
+        ld      -18(ix),l
+        ld      -17(ix),h
         exx
 
         ;; clog(1 - z)
@@ -112,8 +110,10 @@ catanhf_nonzero:
         call    ___fssub
         pop     bc
         pop     bc
-        ld      (__catanhf_tmp),de
-        ld      (__catanhf_tmp + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         ld      a,11(ix)
         xor     #0x80                   ; imag(1-z) = -imag(z)
         ld      h,a
@@ -122,9 +122,11 @@ catanhf_nonzero:
         ld      l,8(ix)
         ld      h,9(ix)
         push    hl
-        ld      hl,(__catanhf_tmp + 2)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        ld      hl,(__catanhf_tmp)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         push    hl
         call    _clogf
         inc     sp
@@ -135,20 +137,28 @@ catanhf_nonzero:
         inc     sp
         inc     sp
         inc     sp
-        ld      (__catanhf_lm_re),de
-        ld      (__catanhf_lm_re + 2),hl
+        ld      -16(ix),e
+        ld      -15(ix),d
+        ld      -14(ix),l
+        ld      -13(ix),h
         exx
-        ld      (__catanhf_lm_im),de
-        ld      (__catanhf_lm_im + 2),hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
         exx
 
         ;; 0.5 * (lp.re - lm.re)
-        ld      hl,(__catanhf_lm_re + 2)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         push    hl
-        ld      hl,(__catanhf_lm_re)
+        ld      l,-16(ix)
+        ld      h,-15(ix)
         push    hl
-        ld      de,(__catanhf_lp_re)
-        ld      hl,(__catanhf_lp_re + 2)
+        ld      e,-24(ix)
+        ld      d,-23(ix)
+        ld      l,-22(ix)
+        ld      h,-21(ix)
         call    ___fssub
         pop     bc
         pop     bc
@@ -159,16 +169,22 @@ catanhf_nonzero:
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__catanhf_re),de
-        ld      (__catanhf_re + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
 
         ;; 0.5 * (lp.im - lm.im)
-        ld      hl,(__catanhf_lm_im + 2)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
-        ld      hl,(__catanhf_lm_im)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
         push    hl
-        ld      de,(__catanhf_lp_im)
-        ld      hl,(__catanhf_lp_im + 2)
+        ld      e,-20(ix)
+        ld      d,-19(ix)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
         call    ___fssub
         pop     bc
         pop     bc
@@ -179,13 +195,20 @@ catanhf_nonzero:
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__catanhf_tmp),de
-        ld      (__catanhf_tmp + 2),hl
-        ld      de,(__catanhf_re)
-        ld      hl,(__catanhf_re + 2)
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         exx
-        ld      de,(__catanhf_tmp)
-        ld      hl,(__catanhf_tmp + 2)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         exx
+        ld      sp,ix
         pop     ix
         ret

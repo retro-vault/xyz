@@ -14,12 +14,6 @@
         .globl  _fgetpos
         .globl  _ftell
 
-        .area   _DATA
-__stdio_fgetpos_lo:
-        .dw     0
-__stdio_fgetpos_hi:
-        .dw     0
-
         .area   _CODE
 
         ;; _fgetpos
@@ -49,18 +43,18 @@ _fgetpos::
         jr      z,__stdio_fgetpos_fail ; Propagate ftell() error.
 
 __stdio_fgetpos_store:
-        ld      (__stdio_fgetpos_lo),de
-        ld      (__stdio_fgetpos_hi),hl
+        push    hl
+        push    de
+        pop     bc
+        pop     de
         pop     hl
-        ld      bc,(__stdio_fgetpos_lo)
         ld      (hl),c
         inc     hl
         ld      (hl),b
         inc     hl
-        ld      bc,(__stdio_fgetpos_hi)
-        ld      (hl),c
+        ld      (hl),e
         inc     hl
-        ld      (hl),b
+        ld      (hl),d
         ld      hl,#0x0000
         push    hl
         pop     de

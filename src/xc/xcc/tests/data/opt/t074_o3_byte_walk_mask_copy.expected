@@ -40,7 +40,7 @@ __xcc_L7:
 	xor	a
 	ld	e, a
 	ld	d, #0
-	ld	hl, #a
+	ld	hl, #_a
 	add	hl, de
 	ld	a, (hl)
 	ld	-6(ix), a

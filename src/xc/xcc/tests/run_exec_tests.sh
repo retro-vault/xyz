@@ -25,6 +25,7 @@ GNU_PREFIX="${Z80_GNU_PREFIX:-/usr/local/z80-elf/bin/z80-unknown-elf-}"
 GNU_AS="${GNU_PREFIX}as"
 GNU_LD="${GNU_PREFIX}ld"
 GNU_OBJCOPY="${GNU_PREFIX}objcopy"
+XAS="${XAS:-}"
 RUNTIME_DIR="$ROOT_DIR/lib/runtime"
 LIBC_SRC_DIR="$REPO_ROOT/lib/libc/src"
 SYS_NONE_DIR="$REPO_ROOT/lib/sys/none"
@@ -49,6 +50,14 @@ if [[ "$XCC" != /* ]]; then
     XCC="$(cd "$(dirname "$XCC")" && pwd)/$(basename "$XCC")"
 fi
 
+if [[ -z "$XAS" ]]; then
+    if [[ -x "$(dirname "$XCC")/xas" ]]; then
+        XAS="$(dirname "$XCC")/xas"
+    else
+        XAS="$REPO_ROOT/bin/bin/xas"
+    fi
+fi
+
 build_runner() {
     mkdir -p "$ROOT_DIR/build/bin"
     if [[ ! -x "$RUNNER_BIN" || "$RUNNER_SRC" -nt "$RUNNER_BIN" ]]; then
@@ -60,26 +69,7 @@ build_runner() {
 translate_sdas_to_gnu() {
     local src="$1"
     local dst="$2"
-
-    perl -pe '
-        s/^\s*\.module[^\n]*\n//;
-        s/^\s*\.optsdcc[^\n]*\n//;
-        s/^\s*\.area\s+_CODE/\t.text/;
-        s/^\s*\.area\s+_DATA/\t.data/;
-        s/^\s*\.area\s+_CONST/\t.section\t.rodata/;
-        s/^\s*\.area\s+_TLS/\t.section\t.tdata,\"aw\"/;
-        s/^\s*\.area\s+_HEAP/\t.section\t.bss.heap,\"aw\"/;
-        s/\b\.globl\b/.global/g;
-        s/\b\.db\b/.byte/g;
-        s/\b\.dw\b/.short/g;
-        s/\b\.dl\b/.long/g;
-        s/\b\.ds\b/.space/g;
-        s/::/:/g;
-        s/#\(([^()]*)\)/$1/g;
-        s/#//g;
-        s/([+-]?\d+)\s*\((i[xy])\)/sprintf("(%s%s%d)", $2, ($1 < 0 ? "" : "+"), $1)/eg;
-        s/([A-Za-z_][A-Za-z0-9_]*)\s*\((i[xy])\)/sprintf("(%s+%s)", $2, $1)/eg;
-    ' "$src" > "$dst"
+    "$XAS" --mode=sdcc --format=gnu -o "$dst" "$src"
 }
 
 extra_opts_for_test() {
@@ -237,25 +227,37 @@ resolve_libc_modules() {
             ;;
         _wcstoll)
             add_libc_module "wchar/wcstoll.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         _wcstoull)
             add_libc_module "wchar/wcstoull.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         _wcstoimax)
             add_libc_module "inttypes/wcstoimax.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         _wcstoumax)
             add_libc_module "inttypes/wcstoumax.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         _strtoll)
             add_libc_module "stdlib/strtoll.s"
             add_libc_module "stdlib/strtox_core.s"
             add_runtime_module "int16/mulint.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         _strtoull)
             add_libc_module "stdlib/strtoull.s"
             add_libc_module "stdlib/strtox_core.s"
             add_runtime_module "int16/mulint.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         _strtoimax)
             add_libc_module "inttypes/strtoimax.s"
@@ -663,6 +665,9 @@ resolve_modules() {
         __mul32)
             add_runtime_module "int32/mullong.s"
             ;;
+        ___muluint2ulong)
+            add_runtime_module "int32/muluint2slong.s"
+            ;;
         __div32)
             add_runtime_module "int32/divulong.s"
             ;;
@@ -814,6 +819,8 @@ resolve_modules() {
             ;;
         __wcstox_core)
             add_libc_module "wchar/wcstox_core.s"
+            add_runtime_module "int32/mulsint2slong.s"
+            add_runtime_module "int32/muluint2slong.s"
             ;;
         __cmplxf)
             add_libc_module "complex/cmplxf.s"
@@ -998,6 +1005,7 @@ run_one() {
 }
 
 need_cmd "$XCC"
+need_cmd "$XAS"
 need_cmd sdasz80
 need_cmd sdldz80
 need_cmd "$GNU_AS"

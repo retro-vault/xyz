@@ -1,0 +1,1124 @@
+
+Draft Minutes of 2022 July 18-22 WG14 meeting
+
+First few minutes of Monday were done by Aaron Ballman.
+Rest of Monday was done by Rajan Bhakta.
+Rest of week was done by Fred Tydeman.
+Send comments / corrections to Fred Tydeman (tydeman@tybor.com)
+
+Votes in polls are shown as: Yes / No / Abstain
+
+MEETING OF ISO/IEC JTC 1/SC 22/WG 14
+WG 14 / N3044
+
+Dates and Times:
+ Monday,    18 July 2022 13:30 - 17:00 UTC
+ Tuesday,   19 July 2022 13:30 - 17:00 UTC
+ Wednesday, 20 July 2022 13:30 - 17:00 UTC
+ Thursday,  21 July 2022 13:30 - 17:00 UTC
+ Friday,    22 July 2022 13:30 - 17:00 UTC
+
+Meeting Location
+ Teleconference
+
+Monday
+1. Opening Activities
+
+1.1 Opening Comments (Keaton)
+
+1.2 Introduction of Participants/Roll Call
+Not done since virtual meeting.  Section added at end of week.
+
+This first section is USA voting members.
+| Name             | Organization                         | NB          | Notes                   |
+|------------------+--------------------------------------+-------------+-------------------------|
+| Aaron Ballman    | Intel                                | USA         | C++ Compatibility SG Chair |
+| Alex Gilding     | Perforce / Programming Research Ltd. | USA         |                         |
+| Clive Pygott     | LDRA Inc.                            | USA         | WG23 liaison            |
+| David Keaton     | Keaton Consulting                    | USA         | Convener                |
+| David Svoboda    | SEI/CERT/CMU                         | USA         | Undefined Behavior SG Chair |
+| David Vitek      | Grammatech                           | USA         |                         |
+| Douglas Teeple   | Plum Hall                            | USA         |                         |
+| Elizabeth Andrews| Intel                                | USA         |                         |
+| Fred Tydeman     | Tydeman Consulting                   | USA         | PL22.11 Vice Chair; scribe |
+| Jonathan Wakely  | IBM                                  | USA         |                         |
+| Lars Bjonnes     | Cisco Systems                        | USA         |                         |
+| Maged Michael    | Facebook                             | USA         |                         |
+| Rajan Bhakta     | IBM                                  | USA, Canada | PL22.11 Chair           |
+| Robert Seacord   | NCC Group                            | USA         |                         |
+| Tom Honermann    | Intel                                | USA         |                         |
+|------------------+--------------------------------------+-------------+-------------------------|
+| Aaron Bachmann   | Austrian Standards                   | Austria     | Austria NB              |
+| Bill Ash         | SC 22                                |             | SC22 manager            |
+| Corentin Jabot   | Freelance                            | France      | Guest                   |
+| Dave Banham      | BlackBerry QNX                       | UK          | MISRA Liaison           |
+| Eskil Steenberg  | Quel Solaar                          | Sweden      | Sweden NB               |
+| Hubert Tong      | IBM                                  | Canada      |                         |
+| Javier Mugica    |                                      |             | Spain guest             |
+| JeanHeyd Meneide | NEN                                  | Netherlands | Netherlands NB          |
+| Jens Gustedt     | INRIA                                | France      | France NB               |
+| Joseph Myers     | CodeSourcery / Siemens               | UK          | UK NB                   |
+| Marcus Johnson   | Self                                 | USA         | guest                   |
+| Martin Uecker    | University of Goettingen             | Germany     |                         |
+| Michael Wong     | Codeplay                             | Canada, UK  | WG21 Liaison            |
+| Miguel Ojeda     | UNE                                  | Spain       | Spain NB                |
+| Pascal Cuoq      |                                      |             | France                  |
+| Peter Sewell     | University of Cambridge              | UK          | Memory Model SG Chair   |
+| Philipp Krause   | Albert-Ludwigs-Universitat Freiburg  | Germany     | Germany NB              |
+| Roberto Bagnara  | BUGSENG                              | Italy       | Italy NB, MISRA Liaison |
+| Thomas Koppe     |                                      | USA         | guest                   |
+
+1.3 Procedures for this Meeting (Keaton)
+
+1.4 Required Reading
+1.4.1 ISO Code of Conduct
+1.4.2 IEC Code of Conduct
+1.4.3 JTC 1 Summary of Key Points [N2613]
+1.4.4 INCITS Code of Conduct
+
+1.5 Approval of Previous Minutes
+ WG 14 Minutes [N3004] (WG 14 motion)
+  David K: WG14 minutes approval: Fred moves, Clive seconds.
+  David K: Any objection to approving?
+  David K: Minutes are approved.
+
+ INCITS/C Minutes [pl22.11-2022-00006] (INCITS/C motion)
+  David K: INCITS/C minutes: Fred moves, Rajan seconds.
+  David K: Any objection to approving?
+  David K: Minutes are approved.
+
+1.6 Review of Action Items and Resolutions
+  Daivd K: Review of action items. Everyone's action items are done
+except for Marcus Johnson's on the final version of the unicode length
+modifiers.
+
+ACTION: Marcus Johnson to add a request to place the final version of
+the Unicode Length Modifiers proposal on the Papers of Interest
+list. - Not done. (Aaron Ballman to add it to the papers of interest
+list this week)
+
+ACTION: Aaron Ballman to put N2829 "friendly assert" on the Papers of
+Interest list. - Done.
+
+ACTION: David Keaton to request an extension to the C23 schedule at
+SG22 (so->SC22) plenary. - Done
+
+ACTION: JeanHeyd Meneide to make editorial change from "floating
+multiply-add" to "fused multiply-add". - Done.
+
+ACTION: David Keaton to submit a NWIP to SC22 for "C - Extensions to
+support generalized function calls" (proposed as N2976). - Submitted.
+
+ACTION: Aaron Ballman to write up the issue tracking process
+next-steps and post to the Reflector. - Done.
+
+ACTION: David Keaton to start the DTS ballot process for TS 6010. -
+Action item dropped (overtaken by events).
+
+ACTION: David Keaton to notify Peter Sewell that we are delaying the
+ballot to make the change in N2889 to TS 6010. - Done.
+
+1.7 Approval of Agenda [N3028] (INCITS/C motion, WG 14 motion)
+  David K: INCITS/C and WG14 proposal for approving the agenda: Alex
+moves, Clive seconds.
+
+  David K: Any discussion?
+
+  Rajan: The last minute change to normalized enumerations (5.11) was
+updated just today. I might not have time to review that version since
+it just came in today. I'd like to hold the right to object to it when
+we get to it if I've not had the chance to review it.
+
+  David K: That's fine, it was my mistake not Jean Heyd's.
+
+  Joseph: We have a new working draft and editor's report, do we want to
+discuss those?
+
+  Joseph: There were other new papers added over the past two weeks,
+can we get to those later in the week so I can review?
+
+  David K: The goal is to get through everything so we can get to CD ballot
+
+  David K: Any objection to approving the agenda (with notes made so far)?
+
+  David K: Agenda is approved, proviso that people may object to
+recent papers under the two week rule.
+
+  David K: We are at the July 18-22 meeting, and we intend (if all
+goes as planned) to wrap up everything after the meeting, have the
+editor revise the draft, have an editorial review committee, and then
+send the draft out for CD ballot in August. This is different from how
+C17 worked. We went straight to FDIS because it was a minor
+revision. This time, there are major revisions; the CD ballot serves
+the review purpose to try to find comments on things to correct.
+
+  Jens G: What is the documents deadline in December?
+
+  David K: That's for the ballot resolution meeting in January.
+
+1.8 Identify National Bodies Sending Experts
+  Austria, Canada, France, Germany, Italy, The Netherlands, Spain, Sweden, UK, USA
+
+1.9 INCITS Antitrust Guidelines and Patent Policy
+
+1.10 INCITS official designated member/alternate information
+  Keaton: Talk to Rajan if you don't know or are not sure.
+
+1.11 Note where we are in the current C23 schedule [N2984]
+  Keaton: We have an extension so if we need to have another meeting
+in between, we can.
+
+  Ballman: If we do bump the CD ballot out a bit, do we still get C23
+or is it C24?
+
+  Keaton: We currently end in November 2023, but if we push it out
+more than a month, it may end up in 2024.
+
+  Jens: What is the document deadline listed?
+    Keaton: For the ballot resolution meeting.
+
+2. Reports on Liaison Activities
+
+2.1 ISO, IEC, JTC 1, SC 22
+  Keaton: If someone is invited to a meeting, now two people need to be
+notified. Nothing really that affects us.
+
+2.2 INCITS/C / WG 14
+  Nothing new.
+
+2.3 INCITS/C++ / WG 21
+  Ballman: Last meeting for things going into C++23 is next
+week. Nothing major that will impact WG14. Some straw polls for
+liaison activities. Ex. #warning.
+
+2.4 PL22
+
+2.5 WG 23
+  Clive: Continuing to meet. Progressing well, but slowly. Focusing on
+the C++ document.
+
+  Keaton: The first JTC1 meeting on free availability of standards has
+me attending on behalf of SC22 and I will make known our view.
+
+2.6 MISRA C
+  Alex: Amendment 3 has the content set. Will be done by the end of
+the year. Looking at weeks from now to finalize the wording. Most of
+C11, but no atomics or threads.
+
+2.7 Austin Group
+
+2.8 Other Liaison Activities
+
+3. Study Groups
+
+3.1 C Floating Point Study Group activity report
+  Rajan:
+  - Continuing to handle any questions, bugs, comments from the
+community (papers in the pipeline here).
+  - Working on an update to TS 18661-4.
+  - Looking at the C2X draft to ensure all CFP papers were integrated
+correctly.
+
+3.2 C Memory Object Model Study Group activity report
+  Jens: Updated TS 6010. Did the changes requested by WG14 and we will
+discuss tomorrow.
+
+3.3 C and C++ Compatibility Study Group activity report
+  Ballman: Meeting regularly, but have had issues with
+quorum. Focusing on papers for 2023 (C and C++). No good day, and
+random group without quorum (C or C++).
+
+3.4 Undefined Behavior Study Group activity report
+  Svoboda: Have a draft for educational information on what UB
+is. Especially time travel. Will submit it as a TR. Meet every other
+Friday.
+
+4. Future Meetings
+
+4.1 Future Meeting Schedule
+  Please note that in-person meetings may be converted to virtual
+  meetings due to coronavirus considerations.
+  9-13 January, 2023 (proposed) - consider multi-homed hybrid meeting
+
+  Keaton: Can be virtual, hybrid with one location, or hybrid with two
+locations.
+
+  Jens: I would prefer multi-homed. I want to avoid travel. I can host
+the Europe part if needed.
+
+  Seacord: Weird to travel for half day meetings.
+
+  Alex: Will anyone turn up in person at all? We should ask that. I
+can host in Minneapolis if needed.
+
+  Keaton: I understand no guarantees, but who may attend in person.
+    9//0/1.
+
+  Keaton: US + Europe + virtual: Who would show up to USA's part?
+    5/1/2.
+
+  Keaton: US + Europe + virtual: Who would show up to France's part?
+    5/1/1.
+
+  Svoboda: Concerned about some on Zoom, some in the room. Never seen
+that work.
+
+  Ballman: Is this best effort? ISO definition or INCITS?
+
+  Keaton: If internet drops, they have a right to ask for a revote.
+
+  Seacord: The travel restrictions have gone away. We can go back to
+the full day as well if we do a single site.
+
+  Banham: May end up with telecon only. My company is back to a travel
+ban.
+
+  Keaton: If we had a hybrid meeting in Minneapolis, how many would
+attend in person?
+    6/2/3.
+
+  Keaton: If we had a hybrid meeting in France, how many would attend
+in person?
+    8/1/3.
+
+  Keaton: Leans to France, but only 8 people. What's the audio like
+there?
+
+  Jens: For audio, I'd have to organize something, but no worries.
+
+  Keaton: Prefer hybrid meeting in France vs telecon only?
+    5/7/5.
+
+  Keaton: So virtual meeting.
+
+4.2 Future Mailing Deadlines
+  Note: Please request document numbers by one week before these dates.
+  Post-Virtual-2022007 - 12 August, 2022
+  Pre-202301 - 9 December, 2022
+  Post-202301 - 3 February, 2023
+
+5. Document Review
+  JeanHeyd: I have received other emails asking for 7.1 to be in C23.
+  Editor's Note:  Document review slots are 30 minutes (unless noted otherwise).
+
+5.1 Jabot, Consider renaming remove_quals [N2930]
+  JeanHeyd: Full support for the paper. Some people in the committee
+had an objection, not formally in a meeting or anything. So I changed
+it there. Corentin's argument is very compelling though. When
+discussing with WG21, they forgot they raised the objection in the
+first place. It seems fine.
+
+  Jabot: No one objected to this in the liaison group.
+
+  Jens: I never liked the remove_quals name anyways. I prefer to have
+typeof as the leading name. In the tradition of prefixes.
+
+  Alex: What's the impact in the user namespace? Since this is
+reverting to what was there already in the original paper, JeanHeyd
+already found it is safe.
+
+  Philipp: We did have a preference for the new name in the liaison
+group.
+
+  Banham: A concise keyword, can be xtypeof. 'X' for excluded.
+
+  Ballman: From the liaison meeting: POLL: Does SG22 recommend that
+WG14 consider changing the name of remove_quals?
+    Committee     For         Against Abstain Notes
+    WG14          8           0       0       Unanimous consent
+    WG21          7           0       0       Unanimous consent
+
+  Jabot: I don't have a strong preference either way.
+
+  Rajan: The C++ paper, has it been discussed? What is the reaction?
+
+  Jabot: It was only for management purposes for the liaison
+group. Not discussed in C++.
+
+  JeanHeyd: decltype was used in C++ because they didn't want to take
+typeof from the C committee. Over 10 years ago.
+
+  Jabot: Neither of the alternative names are used in open source
+code.
+
+  ^Straw poll: Does WG14 want to rename remove_quals to typeof_unqual
+in C23 (as per N2930)?
+    19/0/2. (adopted)
+    Rename remove_quals to typeof_unqual in C23.
+
+5.2 Seacord, Identifier Syntax Fixes [N2939]
+
+  Seacord: Originally we allowed initial characters outside basic
+ASCII. The paper removed that which would break code. This new paper
+brings back the ability to use extended characters for the initial
+character.
+
+  Joseph: The previous wording allowed other characters that were not
+in Unicode. Like $. Is it deliberate to avoid those now?
+
+  Seacord: C17 allowed characters besides Unicode characters?
+
+  Joseph: No, it was characters not in those classes like $.
+
+  Jabot: C++ does not allow $ in identifiers so this paper tried to
+match C++. It can be an extension, but needs to emit a warning. We
+don't want to specifically allow $ in identifiers since
+implementations may not support that. If people do that, we should
+have both committees do the change in lockstep.
+
+  Alex: The problem from Joseph is already there in the current
+wording. This change does not make it worse.
+
+  Rajan: I do want to know the intent. This does fix a problem there
+now, but I would like to not break existing code.
+
+  Philipp: I wanted $ in comments and string literals, but was careful
+to not touch identifiers. There is an option we have in SDCC to allow
+it.
+
+  Alex: There is an extension in GNU as well. People seem to use it as
+an extension to mark it outside ISO C. Incredibly widely used. But it
+is something outside the core language.
+
+  ^Straw poll: Does WG14 want to bring back the original identifier
+rules (Example: Allow $ in identifiers as an extension, but not
+required to allow it)?
+    10/2/8. (adopted)
+    WG14 wants to allow extensions to have additional characters into
+identifiers.
+
+  ^Straw poll: Does WG14 want N2939 (Identifier Syntax Fixes) to be put into C23?
+    18/0/1. (adopted)
+    Put N2939 (Identifier Syntax Fixes) into C23.
+
+  Rajan: How do we handle the intent now given the timing of C23 and
+the paper deadlines?
+
+  JeanHeyd: NB (National Body) comment?
+
+  Philipp/Seacord: UAX #31 seems to allow it.
+
+  Jabot: No, from the grammar we have just approved, it is not
+allowed. We would have to put back some wording to do it.
+
+  Ballman: NB comment or filing an issue saying it applies
+retroactively.
+
+  Philipp: Can we do the $ as homework?
+
+  Keaton: This may be more complex than it seems to be. Perhaps the
+best way is with NB comments.
+
+  Ballman: We want a list of characters and we wanted this so adding
+back the implementation defined characters does the opposite of the
+purpose of the paper. Let the experts decide.
+
+  Philipp: The experts in UAX explicitly mention $. We don't break
+that "let the experts decide".
+
+  Keaton: Leave it as a post meeting paper followed by a NB comment.
+
+  ^AI: Robert Seacord: Write a post meeting paper for fulfilling the
+committee intent to allow extensions to have additional characters
+into identifiers.
+
+5.3 Seacord, Trigraphs [N2940]
+
+  Seacord: There is precedent in C++. Not well liked by the safety and
+security community. Searches in various code doesn't find it.
+
+  Ballman: Strong support of this paper. It is not as portable. Clang
+and GCC need it to be enabled. Users have been confused by them in
+string literals. There is cost to users. It allows users to continue
+to use them. Removes an edge case from C.
+
+  Alex: Other coding standards disallow this. A project using this is
+in the extension space. It is already working around other compilers.
+
+  Banham: The basic character set does not cover these characters
+while the source character set does include these. ISO 646 does
+include all these characters. If you want to remove trigraphs you need
+to talk to the basic character set. Perhaps go all Unicode?
+
+  Bachmann: In support of this proposal. I have seen errors from
+people using trigraphs unintentionally. The characters are no longer
+common.
+
+  Rajan: What does the standard mean? We don't do everything clang and
+gcc do. The purpose is if you want standards compliant code then you
+use it.
+
+  Seacord: We cannot input these characters without 646. CERT has a
+rule for this for safety and security. It has been broadly adopted.
+
+  Jabot: We don't have a description of source character sets. It is
+implementation defined how the compiler interprets it. We don't need
+to go all Unicode. C++ did not specify Unicode in phase 1. In C++ it
+has been a net positive to remove trigraphs. It is not expected in
+string literals. Since it only used by some platforms and some
+communities, not everyone should be forced to support it. It is useful
+for a subset of users, shouldn't force it on everyone else.
+
+  Jens: Also support this, string lengths can change. The comment line
+end is a killer for me.
+
+  Ballman: Re clang/gcc, we should ask why they don't do standards
+conforming by default. The reason it was not the default is important.
+
+  Keaton: We don't want to say because something is a minority case we
+can do without it. The standard is to bring together the important
+cases. It should be carefully considered.
+
+  Rajan: Subset comment: Every feature is a subset. Why do we raise
+some subsets over others? And not just one vendor.
+
+  Seacord: The goal of this proposal is to move forward with a
+reasonable resolution. Implementations that want to support trigraphs
+can, and ones that do not, do not have to. Some compilers are not
+conforming. All others outside the IBM platforms don't use
+trigraphs. That is a problem for them.
+
+  Banham: Unicode covers a wide range of characters. Why would they
+use trigraphs? The gaps in the basic character set need to be filled
+before we can remove trigraphs.
+
+  Rajan: Codebases you have access to don't use it since they don't
+need it. Lots of codebases do use it. As said before, you can't do
+this portably. It would violate the standard.
+
+  Alex: My strong yes is now tentative "no" due to Rajan's
+arguments. The MISRA rules are trivial to enforce. '??/' is not a
+vulnerability as it doesn't work. I do agree there is user surprise
+here. It doesn't need to be removed from the language. The language
+should serve multiple constituencies.
+
+  Ballman: In chat (https://godbolt.org/z/EEGzzMqex) both Clang and
+GCC are silent on this so it can catch people. JeanHeyd does say -Wall
+can catch this.
+
+  Bachmann: Existing practice to bring into the standard. Papers are
+intended to show this. Claiming there is proprietary code to get
+around the requirement is problematic.
+
+  Keaton: That has to be the case. They have to be allowed to keep
+code proprietary and they have to be able to attend standards meeting
+and keep it that way. It is not been normal to have a large codebase
+open and available for free.
+
+  Rajan: There is no normative reference to the invariant character
+set in the standard. The only reference is a footnote. There is no
+defect in the standard. Even the current footnote is fine since it
+doesn't say trigraphs are used to input ALL characters not in 646 so
+nothing needs to change.
+
+  No strong opinion on the digraph issue, however for trigraphs it
+seems we are rehashing the same discussions we had last time with no
+new information.
+  To quickly repeat some points from previous discussions:
+  - Yes, EBCDIC is still the primary character set on very relevant
+platforms. Including ones that will support parts of C23, including
+real use cases that are now not supportable by C23 portably. Just
+because a lot of people in the committee don't work on certain systems
+doesn't mean those industries or systems don't exist.
+  - I'm not sure what the burden of maintenance is. This is done early
+in the translation phases so I would say there is no or minimal burden
+for a feature that does exactly what ISO standards are there for:
+portability.
+  - I don't believe your understanding of the need for trigraphs is
+correct. Developers use certain code pages since that is what works
+for their development needs. It would not be useful to tell them they
+can't use certain code pages which are in use throughout their system
+in other applications and programming languages they use for zero
+benefit for those users.
+
+  I do think it would be useful as a committee to remember what we are
+here for in a wider context. To standardize existing practice. To make
+things standardized so they are portable. In a narrower context, to
+try and get people to keep using C and help them get real work done.
+
+  Seacord: If we do decide this is a defect, we need to resolve this.
+
+  ^Straw poll: Does WG14 want N2940 (removing trigraphs) into C23?
+    10/6/2. (adopted)
+  N2940 (removing trigraphs) goes into C23.
+
+  Svoboda: Can we go 2/3rds for removing a feature?
+
+  Keaton: We go by consensus. We have consensus here.
+
+5.4 Krause, bit-precise bit-fields [N2969]
+
+  Alex: Size-mismatch is something good to catch earlier in the
+analysis.
+
+  Joseph: The various ambiguities in N2958 all still exist here.
+
+  Jens: I like this very much.
+
+  Rajan: Disagree with unsigned only: Don't want special cases for
+unsigned vs signed.
+
+  Ballman: We are fine with supporting this feature. We did work in
+Clang for this already.
+
+  Banham: Is there a constraint where the bitfield width has to be the
+same?
+
+  Philipp: No, even the example shows it is not.
+
+  Banham: Can you make it wider?
+
+  Philipp: I didn't think that was allowed.
+
+  Banham: Why not just use the right size of the bit-precise type?
+
+  Philipp: I'm not changing anything re bool or other things. I can go
+larger than int here. I can portably create a 63-bit bitfield using a
+bitint.
+
+  JeanHeyd: For Ballman's comment, do you have support for both signed
+and unsigned?
+
+  Ballman: Yes.
+
+  Philipp: Yes.
+
+  ^Straw poll: Does WG14 want N2969 (bit-precise bit-fields) in C23?
+    14/1/3. (adopted)
+   Put N2969 (bit-precise bit-fields) into C23.
+
+5.26 Gilding, Queryable pointer alignment, v3 [N2974]
+
+  Philipp: Why does this have alignment fully spelled out?
+
+  Alex: Because memalign seems to be doing something to memory.
+
+  Joseph: If this goes in, the align spelling can be changed
+editorially.
+
+  Ballman: memalign already is a POSIX function. We shouldn't do that.
+
+  ^Straw poll: Does WG14 want N2974 (queryable pointer alignment)
+change 1 in C23?
+    12/1/3. (adopted)
+  Put N2974 (queryable pointer alignment) change 1 into C23.
+
+  ^Straw poll: Does WG14 want N2974 (queryable pointer alignment)
+change 2 in C23?
+    7/3/6. (adopted)
+  Put N2974 (queryable pointer alignment) change 2 into C23.
+
+  Ballman: I abstained since it does not affect me either way.
+
+  Jens: I did not feel comfortable enough for freestanding
+implementations.
+
+  Philipp: I abstained since it does not matter for me. We have no
+alignment restrictions.
+
+5.27 Gilding, Relax requirements for variadic parameter lists, v3 [N2975]
+
+  Seacord: Can we wait for the other paper?
+
+  Jabot: Let's do this since the other paper is an evolution.
+
+  ^Straw poll: Does WG14 want N2975 (Relax requirements for variadic
+parameter lists) in C23?
+    17/0/2. (adopted)
+  Put N2975 (Relax requirements for variadic parameter lists) into C23.
+
+
+Tuesday
+
+5.5 TS 6010 Provenance next steps (DTS ballot?) (working draft for
+reference [N3005]) (10 minutes)
+Was discussed.
+8 week ballot.
+National Bodies will vote.
+Ballot resolution meeting.
+^Straw poll: Should TS 6010 be sent to DTS ballot?
+  14 / 0 / 0 (passed)
+^AI: Keaton: send TS 6010 to DTS ballot.
+
+5.6 Tydeman, Make *_HAS_SUBNORM be obsolescent (10 minutes) [N2993]
+Was discussed.  Objection: Need a replacement.  Replacement would be a
+runtime function.
+^Straw poll: Should N2993 been added to C23?
+  11 / 1 / 5 (adopted)
+
+5.7 Meneide, Compound Literals and Empty Initializers, r0 (10 minutes)
+[N3011]
+Was discussed: fix grammar.
+^Straw poll: Should N3011 be added to C23?
+  18 / 0 / 0 (adopted)
+
+5.10 Meneide, Enhancements to Enumerations, r6 [N3021]
+Was discussed.  Some minor editorial fixes. Homework to do the
+fixes, then vote.
+Opinion poll:  Should something along the lines of N3021 added to C23?
+  17 / 0 / 2 (worth doing homework).
+
+5.11 Meneide, Improved Normal Enumerations, r2 [N2997]
+Was discussed.  Many existing compilers already do this (large values
+are accepted as type bigger than int).  Typed enums might be better
+solution.  This is value preserving, not type preserving.
+
+It is about enum e { a = LONG_MAX, b = a + 1, c = LLONG_MAX } - the
+expression a + 1 means nothing about a type for a, and that type needs
+to be determined without knowing subsequent enumerators.
+Homework to fixup issues and then discuss on Firday.
+
+5.8 Meneide, Preprocessor embed, r7 [N3017]
+Was discussed.  Some typos mentioned.
+^Straw poll: Should N3017 7.1 to 7.5 be added to C23?
+ 12 / 1 / 3 (adopted)
+^Straw poll: Should N3017 7.6 be added to C23?
+ 11 / 1 / 5 (adopted)
+^Straw poll: Should N3017 7.7 be added to C23?
+ 10 / 5 / 2 (adopted)
+Opinion poll: Should N3017 7.4#11 be altered along lines of "Otherwise
+is conditionally supported" in C23?
+ 5 / 5 / 7 (not done) 
+
+5.9 Meneide, Restartable Functions for Efficient Character
+Conversions, r8 (1 hour) [N2999]
+Was discussed.  Several issues and typos were noted.  Many want these
+NOT in freestanding.  "stdc_" prefix is an issue.
+Homework to fixup issues.  May not make C23.
+
+Wednesday
+
+5.12 M£gica, Memory layout of union members v.2 [N2929]
+Was discussed.
+^Straw poll: Should N2929 be added to C23.
+ 17 / 0 / 2 (adopted)
+
+5.13 M£gica, Identifier - Primary expression, v. 2. [N2938]
+Was discussed.  There were comments / corrections on the mailing list.
+Seems better to be a constraint violation.
+Opinion poll:  Should something along the lines of N2938 (with option I
+being a constraint violation) be added to C23?
+ 19 / 1 / 1 (homework)
+
+5.28 Uecker, Improved Rules for Tag Compatibility (updates N2863) [N3003]
+Was discussed.  Some wording issues need to be taken care of.
+Opinion poll:  Should something along the lines of N3003 be added to C23?
+ 16 / 0 / 3 (homework)
+
+5.25 Gilding, Qualifier-preserving standard library functions, v4 [N3020]
+Was discussed.
+^Straw poll: Should the non-optional changes of N3020 be added to C23?
+ 15 / 1 / 2 (adopted)
+^Straw poll: Should the optional changes of N3020 be added to C23?
+ 10 / 2 / 7 (adopted)
+
+5.23 Gustedt, Add new optional time bases v5 [N2957]
+Was discussed.  Some people would like: TIME_THREAD_ACTIVE should be
+allowed for systems without C threads.
+^Straw poll: Should we adopt TIME_MONOTONIC as proposed in N2957
+section 1.2 into C23?
+ 18 / 0 / 2 (adopted)
+
+^Straw poll: Should we adopt TIME_ACTIVE and TIME_THREAD_ACTIVE as
+proposed in N2957 section 1.3 into C23?
+ 10 / 1 / 5 (adopted)
+
+^Straw poll: Should we change the wording for the clock function as
+proposed in N2957 1.4 into C23?
+ 12 / 0 / 7 (adopted)
+
+^Straw poll: Should we add the wording for possible future requirement
+of TIME_MONOTONIC, TIME_ACTIVE and TIME_THREAD_ACTIVE as proposed in
+N2957 1.4 the future library directions into C23?
+ 9 / 0 / 9 (adopted)
+
+^Straw poll: Should we add the wording for the obsolescence of clock as
+proposed in N2957 1.4 the future library directions in C23?
+ 5 / 4 / 10 (not added)
+
+5.14 K”ppe, Comma omission and comma deletion rev 6 [N2994]
+Was discussed.  Matches C++ as much as possible.
+Opinion poll: Should we add something along the lines of N2994 to C23
+(with one sentence moved from Constraints to Semantics)?
+ 18 / 0 / 2 (homework)
+
+5.15 Johnson, Unicode Length Modifiers v3 [N3016]
+Was discussed.  Depends upon functions not yet voted into C23; should
+be "as if".  Locale dependencies is an issue for C++.  SG16: C++
+Unicode study group.  Consider for C2y.
+Opinion poll: Should something along the lines of N3016 be added to C23?
+ 3 / 10 / 9 (not added)
+
+5.16 Bhakta, Proposal to update CFP freestanding requirements V2 [N2951]
+Was discussed. 
+^Straw poll: Should N2951 change #1 be added to C23?
+ 13 / 0 / 7 (adopted)
+^Straw poll: Should N2951 change #2 be added to C23?
+ 12 / 0 / 8 (adopted)
+
+5.17 Ballman, _BitInt fixes (updates N2946) [N2960]
+Was discussed.  Minor fixes to already adopted papers about _BitInt.
+^Straw poll: Does WG14 wish to adopt N2960 Clarifications to Integer
+Promotions into C23?
+ 19 / 0  / 1
+
+^Straw poll: Does WG14 wish to adopt N2960 Clarify Increment/Decrement
+Behavior into C23?
+ 18 / 0 / 1 
+
+Opinion poll: Which stdint.h types should be allowed to be bit-precise
+integer types?
+0) Leave it as is - [u]intN_t may not be bit-precise, but [u]intptr_t
+and [u]intmax_t are unclear.
+ (no one asked for this direction)
+1) None of [u]intN_t, [u]intptr_t and [u]intmax_t.
+ 9 / 5 / 4 (this direction)
+2) None of [u]intN_t, [u]intptr_t and [u]intmax_t, unless they are
+wider than int.
+ 7 / 7 / 5 (not this direction)
+
+Thursday
+
+5.18 Gustedt, Under specified object declarations v2 [N3006]
+Was discussed.  No vote now as it depends upon other papers.
+
+5.19 Gustedt, Type inference for object definitions v8 [N3007]
+Was discussed.
+^Straw poll: Does WG14 prefer the use keyword auto for type inference
+as proposed in N3007?
+ 15 / 1 / 3 (adopted)
+^Straw poll: Does WG14 want to include the type inference feature of
+N3007 together with the under specified declaration feature of N3006
+into C23?
+ 11 / 3 / 3 (adopted)
+
+5.20 Gustedt, The constexpr specifier for object definitions v7 [N3018]
+Was discussed.
+^Straw poll: Do we want to integrate the changes of N3018 section 7
+(constexpr) plus the changes of N3006 (under specified definitions)
+into C23?
+ 8 / 4 / 3 (adopted)
+
+^Straw poll: Do we want to integrate the changes of N3018 section 8.2
+(constexpr struct and union members) into C23?
+ 9 / 4 / 4 (adopted)
+
+5.21 Gustedt, Unsequenced functions v5 [N2956]
+Was discussed.  Allows compilers to do better optimization.
+^Straw poll: Should N2956 be added to C23?
+ 11 / 2 / 4 (adopted)
+
+5.24 Gustedt, Introduce the nullptr constant v6 [N3019]
+Was discussed.  Missing some special cases about nullptr_t conversions.
+Opinion poll:  Should something along the lines of N3019 be added to C23?
+ 9 / 2 / 7 (homework)
+
+5.22 Gustedt, Introduce storage-class specifiers for compound literals [N2955]
+Was discussed.
+Opinion poll: Should something along the lines of N2955 be added to C23?
+ 8 / 1 / 8 (homework)
+Opinion poll: Should thread_local be added?
+ 9 / 2 / 6 (homework)
+
+Friday
+
+5.13 Homework: Ballman, Identifier - Primary expression, v. 3 [N3034]
+Was discussed.
+^Straw poll: Should N3034 be added to C23?
+ 18 / 0 / 1 (adopted)
+
+5.14 Homework: K”ppe, Comma omission and comma deletion rev 7 [N3033]
+Was discussed.
+^Straw poll: Should N3033 be added to C23?
+ 19 / 0  / 2 (adopted)
+
+5.28 Homework: Uecker, Improved Rules for Tag Compatibility (updates
+N3032) [N3037]
+Was discussed.
+Opinion poll: Do we want alternative wording in N3037?
+ 8 / 2 / 10 
+^Straw poll: Should N3037 with alternative wording be added to C23?
+ 19 / 0 / 2 (adopted)
+
+5.11 Homework: Meneide, Improved Normal Enumerations, r3 [N3029]
+Was discussed.
+^Straw poll: Should N3029 be added to C23 (with 'last' changed to
+'previous')?
+ 14 / 4 / 4 (adopted)
+
+5.10 Homework: Meneide, Enhancements to Enumerations, r7 [N3030]
+Was discussed.
+^Straw poll: Should N3030 be added to C23 (with editorial changes)?
+ 21 / 0 / 3 (adopted)
+
+5.17 Homework: Ballman, _BitInt Fixes [N3035]
+Was discussed.  These exclusions should be considered short term (need
+more implementation experience). Might be observable in _Generic.
+^Straw poll: Does WG14 want to drop the requirement of [u]intmax_t
+being able to hold any value of a bit-precise integer for C23 as in
+N3035?
+ 23 / 0 / 2 (adopted)
+
+^Straw poll: Does WG14 want to disallow types in stdint.h from being
+defined as a bit-precise integer for C23 as in N3035?
+ 16 / 1 / 7 (adopted)
+
+5.22 Homework: Gustedt, Introduce storage-class specifiers for
+compound literals v2 [N3038]
+Was discussed.
+^Straw poll: Should N3038 (with editorial changes) be added to C23?
+ 22 / 0 / 1 (adopted)
+
+5.24 Homework: Gustedt, Introduce the nullptr constant v7 [N3039]
+Was discussed.  Need "and the type of the right is nullptr_t" change.
+
+5.9 Homework: Meneide, Restartable Functions for Efficient Character
+Conversions, r9 [N3031]
+Was discussed.  Some conversions can be multiple inputs to multiple
+outputs.  Paper presented was N3031 with updates.  Meta discussion
+about prefixes for new functions (not just these functions).  "stdc"
+is not a reserved prefix in C.  Nor, is "STDC_" reserved for macros.
+"stdm" could be a better prfix.
+Opinion poll: Should there be a "stdc_" prefix for this header?
+ 8 / 6 / 8 (no consensus) 
+Opinion poll: Should there be a "STDC_" prefix on the macros, but not
+functions?
+ 10 / 9 / 5 (no consensus)
+Opinion poll: Do we want N3031 (with changes that were presented)
+added to C23?
+ 8 / 6 / 9  (no consensus)
+
+5.24 Homework: Gustedt, Introduce the nullptr constant v7 [N3042]
+Was discussed.  N3039 with "and the type of the right is nullptr_t"
+change.
+^Straw poll: Should N3042 be added to C23?
+ 17 / 1 / 3 (adopted)
+
+6. Clarification Requests
+The previous queue of clarification requests has been processed.
+
+7. Other Business 
+The following topics will be deferred to future meetings unless there
+is time available at this meeting.
+
+7.1 Meneide, Modern Bit Utilities, r4 (1 hour) [N3022]
+Was discussed.  stdc prefix versus something more specific.
+Rotate functions have issues.
+^Straw poll: Does WG14 want to accept N3022 without the rotate left,
+rotate right, endian-aware, or memory reversal functions for C23?
+(With Aaron Ballman's request for stdc_* to be reserved in future
+library directions to be considered as editorial.)
+ 12 / 3 / 6 (adopted)
+
+7.2 Additional Administrative Discussions
+
+7.2.1 How to schedule after C23 (continued from earlier meetings)
+Fixed or variable schedule? - General discussion leaned toward fixed.
+Should we alternate between feature/bugfix editions?
+What is the target time between editions (especially if fixed)?
+
+7.2.2 Ballman, Issue Tracking for C (1 hour) [N3002]
+
+The following will be processed after C23 content (if time permits):
+
+7.3 Steenberg, Redefining Undefined Behavior [N2769]
+
+7.4 Gilding, The `void`-_which-binds_: typesafe parametric polymorphism [N2853]
+
+7.5 Jabot, Accessing the command line arguments outside of main() [N2948]
+
+7.6 Meneide, Literal Suffixes for size_t, r1 [N2998]
+
+7.7 Meneide, __supports_literal [N2995]
+
+7.8 Meneide, Prefixes for the Standard Library (r0) [N2968]
+
+7.9 Meneide, Transparent Aliases (r2) [N2970]
+
+7.10 Gustedt, Primary expressions and constant expressions v2 [N3010]
+
+8. Recommendations and Decisions reached
+
+8.1 Review of Decisions Reached
+  ^Straw poll: Does WG14 want to rename remove_quals to typeof_unqual
+in C23 (as per N2930)?
+    19/0/2. (adopted)
+    Rename remove_quals to typeof_unqual in C23.
+
+  ^Straw poll: Does WG14 want to bring back the original identifier
+rules (Example: Allow $ in identifiers as an extension, but not
+required to allow it)?
+    10/2/8. (adopted)
+    WG14 wants to allow extensions to have additional characters into
+identifiers.
+
+  ^Straw poll: Does WG14 want N2939 (Identifier Syntax Fixes) to be put into C23?
+    18/0/1. (adopted)
+    Put N2939 (Identifier Syntax Fixes) into C23.
+
+  ^Straw poll: Does WG14 want N2940 (removing trigraphs) into C23?
+    10/6/2. (adopted)
+  N2940 (removing trigraphs) goes into C23.
+
+  ^Straw poll: Does WG14 want N2969 (bit-precise bit-fields) in C23?
+    14/1/3. (adopted)
+   Put N2969 (bit-precise bit-fields) into C23.
+
+  ^Straw poll: Does WG14 want N2974 (queryable pointer alignment)
+change 1 in C23?
+    12/1/3. (adopted)
+  Put N2974 (queryable pointer alignment) change 1 into C23.
+
+  ^Straw poll: Does WG14 want N2974 (queryable pointer alignment)
+change 2 in C23?
+    7/3/6. (adopted)
+  Put N2974 (queryable pointer alignment) change 2 into C23.
+
+  ^Straw poll: Does WG14 want N2975 (Relax requirements for variadic
+parameter lists) in C23?
+    17/0/2. (adopted)
+  Put N2975 (Relax requirements for variadic parameter lists) into C23.
+
+^Straw poll: Should TS 6010 be sent to DTS ballot?
+  14 / 0 / 0 (passed)
+
+^Straw poll: Should N2993 been added to C23?
+  11 / 1 / 5 (adopted)
+
+^Straw poll: Should N3011 be added to C23?
+  18 / 0 / 0 (adopted)
+
+^Straw poll: Should N3017 7.1 to 7.5 be added to C23?
+ 12 / 1 / 3 (adopted)
+
+^Straw poll: Should N3017 7.6 be added to C23?
+ 11 / 1 / 5 (adopted)
+
+^Straw poll: Should N3017 7.7 be added to C23?
+ 10 / 5 / 2 (adopted)
+
+^Straw poll: Should N2929 be added to C23.
+ 17 / 0 / 2 (adopted)
+
+^Straw poll: Should the non-optional changes of N3020 be added to C23?
+ 15 / 1 / 2 (adopted)
+
+^Straw poll: Should the optional changes of N3020 be added to C23?
+ 10 / 2 / 7 (adopted)
+
+^Straw poll: Should we adopt TIME_MONOTONIC as proposed in N2957
+section 1.2 into C23?
+ 18 / 0 / 2 (adopted)
+
+^Straw poll: Should we adopt TIME_ACTIVE and TIME_THREAD_ACTIVE as
+proposed in N2957 section 1.3 into C23?
+ 10 / 1 / 5 (adopted)
+
+^Straw poll: Should we change the wording for the clock function as
+proposed in N2957 1.4 into C23?
+ 12 / 0 / 7 (adopted)
+
+^Straw poll: Should we add the wording for possible future requirement
+of TIME_MONOTONIC, TIME_ACTIVE and TIME_THREAD_ACTIVE as proposed in
+N2957 1.4 the future library directions into C23?
+ 9 / 0 / 9 (adopted)
+
+^Straw poll: Should we add the wording for the obsolescence of clock as
+proposed in N2957 1.4 the future library directions in C23?
+ 5 / 4 / 10 (not added)
+
+^Straw poll: Should N2951 change #1 be added to C23?
+ 13 / 0 / 7 (adopted)
+
+^Straw poll: Should N2951 change #2 be added to C23?
+ 12 / 0 / 8 (adopted)
+
+^Straw poll: Does WG14 wish to adopt N2960 Clarifications to Integer
+Promotions into C23?
+ 19 / 0  / 1
+
+^Straw poll: Does WG14 wish to adopt N2960 Clarify Increment/Decrement
+Behavior into C23?
+ 18 / 0 / 1 
+
+^Straw poll: Does WG14 prefer the use keyword auto for type inference
+as proposed in N3007?
+ 15 / 1 / 3 (adopted)
+
+^Straw poll: Does WG14 want to include the type inference feature of
+N3007 together with the under specified declaration feature of N3006
+into C23?
+ 11 / 3 / 3 (adopted)
+
+^Straw poll: Do we want to integrate the changes of N3018 section 7
+(constexpr) plus the changes of N3006 (under specified definitions)
+into C23?
+ 8 / 4 / 3 (adopted)
+
+^Straw poll: Do we want to integrate the changes of N3018 section 8.2
+(constexpr struct and union members) into C23?
+ 9 / 4 / 4 (adopted)
+
+^Straw poll: Should N2956 be added to C23?
+ 11 / 2 / 4 (adopted)
+
+^Straw poll: Should N3034 be added to C23?
+ 18 / 0 / 1 (adopted)
+
+^Straw poll: Should N3033 be added to C23?
+ 19 / 0  / 2 (adopted)
+
+^Straw poll: Should N3037 with alternative wording be added to C23?
+ 19 / 0 / 2 (adopted)
+
+^Straw poll: Should N3029 be added to C23 (with 'last' changed to
+'previous')?
+ 14 / 4 / 4 (adopted)
+
+^Straw poll: Should N3030 be added to C23 (with editorial changes)?
+ 21 / 0 / 3 (adopted)
+
+^Straw poll: Does WG14 want to drop the requirement of [u]intmax_t
+being able to hold any value of a bit-precise integer for C23 as in
+N3035?
+ 23 / 0 / 2 (adopted)
+
+^Straw poll: Does WG14 want to disallow types in stdint.h from being
+defined as a bit-precise integer for C23 as in N3035?
+ 16 / 1 / 7 (adopted)
+
+^Straw poll: Should N3038 (with editorial changes) be added to C23?
+ 22 / 0 / 1 (adopted)
+
+^Straw poll: Should N3042 be added to C23?
+ 17 / 1 / 3 (adopted)
+
+^Straw poll: Does WG14 want to accept N3022 without the rotate left,
+rotate right, endian-aware, or memory reversal functions for C23?
+(With Aaron Ballman's request for stdc_* to be reserved in future
+library directions to be considered as editorial.)
+ 12 / 3 / 6 (adopted)
+
+8.2 Review of Action Items
+  ^AI: Marcus Johnson to add a request to place the final version of
+the Unicode Length Modifiers proposal on the Papers of Interest list.
+(Aaron Ballman to add it to the papers of interest list this week)
+
+  ^AI: Robert Seacord: Write a post meeting paper for fulfilling the
+committee intent to allow extensions to have additional characters
+into identifiers.
+
+  ^AI: Keaton: Send TS 6010 to DTS ballot.
+
+9. INCITS/C (PL22.C) Business
+
+10. Thanks to Host
+
+10.1 Thanks and apologies to Jens Gustedt, the originally intended host
+
+10.2 Thanks to ISO for supplying Zoom capabilities
+
+11. Adjournment (INCITS/C motion)
+Motion by Seacord; second by Tydeman
+
+Adjourned.

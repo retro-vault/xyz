@@ -20,14 +20,6 @@
         .module scanf_core
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  __stdio_scan_fmt
-        .globl  __stdio_scan_ap
-        .globl  __stdio_scan_width
-        .globl  __stdio_scan_count
-        .globl  __stdio_scan_assigned
-        .globl  __stdio_scan_stream
-        .globl  __stdio_scan_token
-        .globl  __stdio_scan_float_any
         .globl  __stdio_scan_init_stdin
         .globl  __stdio_scan_init_stream
         .globl  __stdio_scan_init_string
@@ -40,8 +32,6 @@
         .globl  _strtod
         .globl  _strtold
         .globl  __strtox_core
-        .globl  __sx_acc
-        .globl  __sx_neg
         .globl  __sx_negate
 
 SCAN_KIND_STREAM        .equ 1
@@ -56,55 +46,47 @@ SCAN_LEN_LDOUBLE       .equ 5
 
 TOK_CAP                .equ 66
 
-        .area   _DATA
-__stdio_scan_kind:
-        .db     0
-__stdio_scan_eof:
-        .db     0
-__stdio_scan_suppress:
-        .db     0
-__stdio_scan_length:
-        .db     0
-__stdio_scan_stream::
-        .dw     0
-__stdio_scan_str:
-        .dw     0
-__stdio_scan_fmt::
-        .dw     0
-__stdio_scan_ap::
-        .dw     0
-__stdio_scan_width::
-        .dw     0
-__stdio_scan_count::
-        .dw     0
-__stdio_scan_assigned::
-        .dw     0
-__stdio_scan_dest:
-        .dw     0
-__stdio_scan_tmp_end:
-        .dw     0
-__stdio_scan_saved_width:
-        .dw     0
-__stdio_scan_uval:
-        .ds     8
-__stdio_scan_fval:
-        .ds     8
-__stdio_scan_token::
-        .ds     TOK_CAP
-__stdio_scan_float_any::
-        .db     0
+SCAN_CTX_BYTES         .equ 107
+SC_KIND                .equ -107
+SC_EOF                 .equ -106
+SC_SUPPRESS            .equ -105
+SC_LENGTH              .equ -104
+SC_STREAM_LO           .equ -103
+SC_STREAM_HI           .equ -102
+SC_STR_LO              .equ -101
+SC_STR_HI              .equ -100
+SC_FMT_LO              .equ -99
+SC_FMT_HI              .equ -98
+SC_AP_LO               .equ -97
+SC_AP_HI               .equ -96
+SC_WIDTH_LO            .equ -95
+SC_WIDTH_HI            .equ -94
+SC_COUNT_LO            .equ -93
+SC_COUNT_HI            .equ -92
+SC_ASSIGNED_LO         .equ -91
+SC_ASSIGNED_HI         .equ -90
+SC_DEST_LO             .equ -89
+SC_DEST_HI             .equ -88
+SC_TMP_END_LO          .equ -87
+SC_TMP_END_HI          .equ -86
+SC_SAVED_WIDTH_LO      .equ -85
+SC_SAVED_WIDTH_HI      .equ -84
+SC_UVAL                .equ -83
+SC_FVAL                .equ -75
+SC_TOKEN               .equ -67
+SC_FLOAT_ANY           .equ -1
 
         .area   _CODE
 
 __stdio_scan_zero_state:
         xor     a
-        ld      (__stdio_scan_eof),a
-        ld      (__stdio_scan_suppress),a
-        ld      (__stdio_scan_length),a
-        ld      (__stdio_scan_count),a
-        ld      (__stdio_scan_count + 1),a
-        ld      (__stdio_scan_assigned),a
-        ld      (__stdio_scan_assigned + 1),a
+        ld      SC_EOF(ix),a
+        ld      SC_SUPPRESS(ix),a
+        ld      SC_LENGTH(ix),a
+        ld      SC_COUNT_LO(ix),a
+        ld      SC_COUNT_HI(ix),a
+        ld      SC_ASSIGNED_LO(ix),a
+        ld      SC_ASSIGNED_HI(ix),a
         ret
 
 __stdio_scan_init_stdin::
@@ -113,15 +95,17 @@ __stdio_scan_init_stdin::
 
 __stdio_scan_init_stream::
 __stdio_scan_init_stream_shared:
-        ld      (__stdio_scan_stream),hl
+        ld      SC_STREAM_LO(ix),l
+        ld      SC_STREAM_HI(ix),h
         ld      a,#SCAN_KIND_STREAM
-        ld      (__stdio_scan_kind),a
+        ld      SC_KIND(ix),a
         jp      __stdio_scan_zero_state
 
 __stdio_scan_init_string::
-        ld      (__stdio_scan_str),hl
+        ld      SC_STR_LO(ix),l
+        ld      SC_STR_HI(ix),h
         ld      a,#SCAN_KIND_STRING
-        ld      (__stdio_scan_kind),a
+        ld      SC_KIND(ix),a
         jp      __stdio_scan_zero_state
 
         ;; A = input byte -> Z when the byte is one of the scanf whitespace
@@ -144,40 +128,47 @@ __stdio_scan_isspace_yes:
 __stdio_scan_getc:
         push    bc
         push    de
-        ld      a,(__stdio_scan_kind)
+        ld      a,SC_KIND(ix)
         cp      #SCAN_KIND_STRING
         jr      z,__stdio_scan_getc_string
-        ld      hl,(__stdio_scan_stream)
+        ld      l,SC_STREAM_LO(ix)
+        ld      h,SC_STREAM_HI(ix)
         call    _fgetc
         ld      a,h
         cp      #0xff
         jr      z,__stdio_scan_getc_eof
         push    hl
-        ld      hl,(__stdio_scan_count)
+        ld      l,SC_COUNT_LO(ix)
+        ld      h,SC_COUNT_HI(ix)
         inc     hl
-        ld      (__stdio_scan_count),hl
+        ld      SC_COUNT_LO(ix),l
+        ld      SC_COUNT_HI(ix),h
         pop     hl
         pop     de
         pop     bc
         ret
 __stdio_scan_getc_string:
-        ld      hl,(__stdio_scan_str)
+        ld      l,SC_STR_LO(ix)
+        ld      h,SC_STR_HI(ix)
         ld      a,(hl)
         or      a
         jr      z,__stdio_scan_getc_eof
         inc     hl
-        ld      (__stdio_scan_str),hl
+        ld      SC_STR_LO(ix),l
+        ld      SC_STR_HI(ix),h
         ld      l,a
         ld      h,#0x00
-        ld      de,(__stdio_scan_count)
+        ld      e,SC_COUNT_LO(ix)
+        ld      d,SC_COUNT_HI(ix)
         inc     de
-        ld      (__stdio_scan_count),de
+        ld      SC_COUNT_LO(ix),e
+        ld      SC_COUNT_HI(ix),d
         pop     de
         pop     bc
         ret
 __stdio_scan_getc_eof:
         ld      a,#1
-        ld      (__stdio_scan_eof),a
+        ld      SC_EOF(ix),a
         ld      hl,#0xffff
         pop     de
         pop     bc
@@ -190,24 +181,29 @@ __stdio_scan_ungetc:
         ld      a,h
         cp      #0xff
         jr      z,__stdio_scan_ungetc_done
-        ld      a,(__stdio_scan_kind)
+        ld      a,SC_KIND(ix)
         cp      #SCAN_KIND_STRING
         jr      z,__stdio_scan_ungetc_string
         push    hl
-        ld      de,(__stdio_scan_stream)
+        ld      e,SC_STREAM_LO(ix)
+        ld      d,SC_STREAM_HI(ix)
         pop     hl
         call    _ungetc
         jr      __stdio_scan_ungetc_count
 __stdio_scan_ungetc_string:
-        ld      hl,(__stdio_scan_str)
+        ld      l,SC_STR_LO(ix)
+        ld      h,SC_STR_HI(ix)
         dec     hl
-        ld      (__stdio_scan_str),hl
+        ld      SC_STR_LO(ix),l
+        ld      SC_STR_HI(ix),h
 __stdio_scan_ungetc_count:
-        ld      hl,(__stdio_scan_count)
+        ld      l,SC_COUNT_LO(ix)
+        ld      h,SC_COUNT_HI(ix)
         dec     hl
-        ld      (__stdio_scan_count),hl
+        ld      SC_COUNT_LO(ix),l
+        ld      SC_COUNT_HI(ix),h
         xor     a
-        ld      (__stdio_scan_eof),a
+        ld      SC_EOF(ix),a
 __stdio_scan_ungetc_done:
         pop     de
         pop     bc
@@ -224,12 +220,14 @@ __stdio_scan_skip_input_ws:
         jp      __stdio_scan_ungetc
 
 __stdio_scan_fetch_ptr:
-        ld      hl,(__stdio_scan_ap)
+        ld      l,SC_AP_LO(ix)
+        ld      h,SC_AP_HI(ix)
         ld      e,(hl)
         inc     hl
         ld      d,(hl)
         inc     hl
-        ld      (__stdio_scan_ap),hl
+        ld      SC_AP_LO(ix),l
+        ld      SC_AP_HI(ix),h
         ld      l,e
         ld      h,d
         ret
@@ -237,7 +235,8 @@ __stdio_scan_fetch_ptr:
         ;; Parse width digits at (__stdio_scan_fmt). HL = width, default 0.
 __stdio_scan_parse_width:
         ld      hl,#0x0000
-        ld      de,(__stdio_scan_fmt)
+        ld      e,SC_FMT_LO(ix)
+        ld      d,SC_FMT_HI(ix)
 __stdio_scan_parse_width_loop:
         ld      a,(de)
         cp      #'0'
@@ -260,26 +259,28 @@ __stdio_scan_parse_width_loop:
         inc     de
         jr      __stdio_scan_parse_width_loop
 __stdio_scan_parse_width_done:
-        ld      (__stdio_scan_fmt),de
+        ld      SC_FMT_LO(ix),e
+        ld      SC_FMT_HI(ix),d
         ret
 
         ;; Parse length modifier at (__stdio_scan_fmt) into __stdio_scan_length.
 __stdio_scan_parse_length:
         xor     a
-        ld      (__stdio_scan_length),a
-        ld      hl,(__stdio_scan_fmt)
+        ld      SC_LENGTH(ix),a
+        ld      l,SC_FMT_LO(ix)
+        ld      h,SC_FMT_HI(ix)
         ld      a,(hl)
         cp      #'h'
         jr      nz,__stdio_scan_parse_length_l
         inc     hl
         ld      a,#SCAN_LEN_SHORT
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
         ld      a,(hl)
         cp      #'h'
         jr      nz,__stdio_scan_parse_length_store
         inc     hl
         ld      a,#SCAN_LEN_CHAR
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
         jr      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_l:
         ld      a,(hl)
@@ -287,27 +288,27 @@ __stdio_scan_parse_length_l:
         jr      nz,__stdio_scan_parse_length_j
         inc     hl
         ld      a,#SCAN_LEN_LONG
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
         ld      a,(hl)
         cp      #'l'
         jr      nz,__stdio_scan_parse_length_store
         inc     hl
         ld      a,#SCAN_LEN_LLONG
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
         jr      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_j:
         cp      #'j'
         jr      nz,__stdio_scan_parse_length_zt
         inc     hl
         ld      a,#SCAN_LEN_LLONG
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
         jr      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_zt:
         cp      #'L'
         jr      nz,__stdio_scan_parse_length_zt_lower
         inc     hl
         ld      a,#SCAN_LEN_LDOUBLE
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
         jr      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_zt_lower:
         cp      #'z'
@@ -317,9 +318,10 @@ __stdio_scan_parse_length_zt_lower:
 __stdio_scan_parse_length_word:
         inc     hl
         xor     a
-        ld      (__stdio_scan_length),a
+        ld      SC_LENGTH(ix),a
 __stdio_scan_parse_length_store:
-        ld      (__stdio_scan_fmt),hl
+        ld      SC_FMT_LO(ix),l
+        ld      SC_FMT_HI(ix),h
         ret
 
 __stdio_scan_digitval:
@@ -385,10 +387,16 @@ __stdio_scan_token_width_keep:
         ;;   __stdio_scan_token contains a NUL-terminated token
 __stdio_scan_collect_integer:
         push    af
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         call    __stdio_scan_token_width
-        ld      (__stdio_scan_width),bc
-        ld      de,#__stdio_scan_token
+        ld      SC_WIDTH_LO(ix),c
+        ld      SC_WIDTH_HI(ix),b
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
+        ex      de,hl
         pop     af
 
         ;; Optional sign for every integer conversion except %p.
@@ -432,20 +440,27 @@ __stdio_scan_collect_integer_after_sign:
         jp      z,__stdio_scan_collect_hex
         cp      #'X'
         jp      z,__stdio_scan_collect_hex
+        cp      #'b'
+        jp      z,__stdio_scan_collect_bin
+        cp      #'B'
+        jp      z,__stdio_scan_collect_bin
         cp      #'p'
         jp      z,__stdio_scan_collect_hex_ptr
         jp      __stdio_scan_collect_auto
 
 __stdio_scan_width_is_zero:
-        ld      hl,(__stdio_scan_width)
+        ld      l,SC_WIDTH_LO(ix)
+        ld      h,SC_WIDTH_HI(ix)
         ld      a,h
         or      l
         ret
 
 __stdio_scan_width_dec:
-        ld      hl,(__stdio_scan_width)
+        ld      l,SC_WIDTH_LO(ix)
+        ld      h,SC_WIDTH_HI(ix)
         dec     hl
-        ld      (__stdio_scan_width),hl
+        ld      SC_WIDTH_LO(ix),l
+        ld      SC_WIDTH_HI(ix),h
         ret
 
 __stdio_scan_collect_dec:
@@ -454,6 +469,10 @@ __stdio_scan_collect_dec:
 
 __stdio_scan_collect_oct:
         ld      b,#8
+        jp      __stdio_scan_collect_fixed_base
+
+__stdio_scan_collect_bin:
+        ld      b,#2
         jp      __stdio_scan_collect_fixed_base
 
 __stdio_scan_collect_hex:
@@ -666,32 +685,38 @@ __stdio_scan_collect_ok_base_b:
 
         ;; Store __stdio_scan_count through the current %n destination.
 __stdio_scan_store_n:
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         ret     nz
         call    __stdio_scan_fetch_ptr
-        ld      (__stdio_scan_dest),hl
-        ld      a,(__stdio_scan_length)
+        ld      SC_DEST_LO(ix),l
+        ld      SC_DEST_HI(ix),h
+        ld      a,SC_LENGTH(ix)
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_store_n_long
         cp      #SCAN_LEN_LLONG
         jr      z,__stdio_scan_store_n_llong
-        ld      de,(__stdio_scan_count)
-        ld      a,(__stdio_scan_length)
+        ld      e,SC_COUNT_LO(ix)
+        ld      d,SC_COUNT_HI(ix)
+        ld      a,SC_LENGTH(ix)
         cp      #SCAN_LEN_CHAR
         jr      z,__stdio_scan_store_n_char
-        ld      hl,(__stdio_scan_dest)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
         ld      (hl),e
         inc     hl
         ld      (hl),d
         ret
 __stdio_scan_store_n_char:
-        ld      hl,(__stdio_scan_dest)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
         ld      (hl),e
         ret
 __stdio_scan_store_n_long:
-        ld      hl,(__stdio_scan_dest)
-        ld      de,(__stdio_scan_count)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
+        ld      e,SC_COUNT_LO(ix)
+        ld      d,SC_COUNT_HI(ix)
         ld      (hl),e
         inc     hl
         ld      (hl),d
@@ -702,8 +727,10 @@ __stdio_scan_store_n_long:
         ld      (hl),a
         ret
 __stdio_scan_store_n_llong:
-        ld      hl,(__stdio_scan_dest)
-        ld      de,(__stdio_scan_count)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
+        ld      e,SC_COUNT_LO(ix)
+        ld      d,SC_COUNT_HI(ix)
         ld      (hl),e
         inc     hl
         ld      (hl),d
@@ -720,47 +747,57 @@ __stdio_scan_store_n_llong_zero:
         ;; length modifier. For signed conversions the parse helper has already
         ;; produced a two's-complement value.
 __stdio_scan_store_integer:
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         ret     nz
         call    __stdio_scan_fetch_ptr
-        ld      (__stdio_scan_dest),hl
-        ld      a,(__stdio_scan_length)
+        ld      SC_DEST_LO(ix),l
+        ld      SC_DEST_HI(ix),h
+        ld      a,SC_LENGTH(ix)
         cp      #SCAN_LEN_CHAR
         jr      z,__stdio_scan_store_integer_char
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_store_integer_long
         cp      #SCAN_LEN_LLONG
         jr      z,__stdio_scan_store_integer_llong
-        ld      hl,(__stdio_scan_dest)
-        ld      a,(__stdio_scan_uval)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
+        ld      a,SC_UVAL(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__stdio_scan_uval + 1)
+        ld      a,SC_UVAL + 1(ix)
         ld      (hl),a
         jp      __stdio_scan_inc_assigned
 __stdio_scan_store_integer_char:
-        ld      hl,(__stdio_scan_dest)
-        ld      a,(__stdio_scan_uval)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
+        ld      a,SC_UVAL(ix)
         ld      (hl),a
         jp      __stdio_scan_inc_assigned
 __stdio_scan_store_integer_long:
-        ld      hl,(__stdio_scan_dest)
-        ld      a,(__stdio_scan_uval)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
+        ld      a,SC_UVAL(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__stdio_scan_uval + 1)
+        ld      a,SC_UVAL + 1(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__stdio_scan_uval + 2)
+        ld      a,SC_UVAL + 2(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__stdio_scan_uval + 3)
+        ld      a,SC_UVAL + 3(ix)
         ld      (hl),a
         jp      __stdio_scan_inc_assigned
 __stdio_scan_store_integer_llong:
-        ld      hl,(__stdio_scan_dest)
-        ld      de,#__stdio_scan_uval
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
+        push    ix
+        pop     de
+        ld      bc,#SC_UVAL
+        ex      de,hl
+        add     hl,bc
+        ex      de,hl
         ld      b,#8
 __stdio_scan_store_integer_llong_loop:
         ld      a,(de)
@@ -771,115 +808,158 @@ __stdio_scan_store_integer_llong_loop:
         jp      __stdio_scan_inc_assigned
 
 __stdio_scan_store_pointer:
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         ret     nz
         call    __stdio_scan_fetch_ptr
-        ld      a,(__stdio_scan_uval)
+        ld      a,SC_UVAL(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__stdio_scan_uval + 1)
+        ld      a,SC_UVAL + 1(ix)
         ld      (hl),a
         jp      __stdio_scan_inc_assigned
 
 __stdio_scan_inc_assigned:
-        ld      hl,(__stdio_scan_assigned)
+        ld      l,SC_ASSIGNED_LO(ix)
+        ld      h,SC_ASSIGNED_HI(ix)
         inc     hl
-        ld      (__stdio_scan_assigned),hl
+        ld      SC_ASSIGNED_LO(ix),l
+        ld      SC_ASSIGNED_HI(ix),h
         ret
 
 __stdio_scan_copy_acc:
-        ld      hl,#__sx_acc
-        ld      de,#__stdio_scan_uval
-        ld      bc,#8
-        ldir
         ret
 
 __stdio_scan_capture_float:
         ld      a,e
-        ld      (__stdio_scan_fval),a
+        ld      SC_FVAL(ix),a
         ld      a,d
-        ld      (__stdio_scan_fval + 1),a
+        ld      SC_FVAL + 1(ix),a
         ld      a,l
-        ld      (__stdio_scan_fval + 2),a
+        ld      SC_FVAL + 2(ix),a
         ld      a,h
-        ld      (__stdio_scan_fval + 3),a
+        ld      SC_FVAL + 3(ix),a
         ret
 
 __stdio_scan_capture_double:
         ld      a,e
-        ld      (__stdio_scan_fval),a
+        ld      SC_FVAL(ix),a
         ld      a,d
-        ld      (__stdio_scan_fval + 1),a
+        ld      SC_FVAL + 1(ix),a
         ld      a,l
-        ld      (__stdio_scan_fval + 2),a
+        ld      SC_FVAL + 2(ix),a
         ld      a,h
-        ld      (__stdio_scan_fval + 3),a
+        ld      SC_FVAL + 3(ix),a
         exx
         ld      a,e
-        ld      (__stdio_scan_fval + 4),a
+        ld      SC_FVAL + 4(ix),a
         ld      a,d
-        ld      (__stdio_scan_fval + 5),a
+        ld      SC_FVAL + 5(ix),a
         ld      a,l
-        ld      (__stdio_scan_fval + 6),a
+        ld      SC_FVAL + 6(ix),a
         ld      a,h
-        ld      (__stdio_scan_fval + 7),a
+        ld      SC_FVAL + 7(ix),a
         exx
         ret
 
 __stdio_scan_store_float_value:
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         ret     nz
         call    __stdio_scan_fetch_ptr
-        ld      (__stdio_scan_dest),hl
-        ld      a,(__stdio_scan_length)
+        ld      SC_DEST_LO(ix),l
+        ld      SC_DEST_HI(ix),h
+        ld      a,SC_LENGTH(ix)
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_store_float_double
         cp      #SCAN_LEN_LDOUBLE
         jr      z,__stdio_scan_store_float_double
-        ld      hl,#__stdio_scan_fval
-        ld      de,(__stdio_scan_dest)
+        push    ix
+        pop     hl
+        ld      de,#SC_FVAL
+        add     hl,de
+        ld      e,SC_DEST_LO(ix)
+        ld      d,SC_DEST_HI(ix)
         ld      bc,#4
         ldir
         jp      __stdio_scan_inc_assigned
 __stdio_scan_store_float_double:
-        ld      hl,#__stdio_scan_fval
-        ld      de,(__stdio_scan_dest)
+        push    ix
+        pop     hl
+        ld      de,#SC_FVAL
+        add     hl,de
+        ld      e,SC_DEST_LO(ix)
+        ld      d,SC_DEST_HI(ix)
         ld      bc,#8
         ldir
         jp      __stdio_scan_inc_assigned
 
 __stdio_scan_call_signed:
-        ld      de,#__stdio_scan_tmp_end
+        push    hl
+        push    ix
+        pop     hl
+        ld      de,#SC_TMP_END_LO
+        add     hl,de
+        ex      de,hl
+        push    de
+        push    ix
+        pop     hl
+        ld      de,#SC_UVAL
+        add     hl,de
+        push    hl
+        pop     iy
+        pop     de
+        pop     hl
         call    __strtox_core
-        ld      a,(__sx_neg)
-        or      a
-        call    nz,__sx_negate
-        call    __stdio_scan_copy_acc
+        bit     1,a
+        ret     z
+        push    ix
+        pop     hl
+        ld      de,#SC_UVAL
+        add     hl,de
+        call    __sx_negate
         ret
 
 __stdio_scan_call_unsigned:
-        ld      de,#__stdio_scan_tmp_end
+        push    hl
+        push    ix
+        pop     hl
+        ld      de,#SC_TMP_END_LO
+        add     hl,de
+        ex      de,hl
+        push    de
+        push    ix
+        pop     hl
+        ld      de,#SC_UVAL
+        add     hl,de
+        push    hl
+        pop     iy
+        pop     de
+        pop     hl
         call    __strtox_core
-        ld      a,(__sx_neg)
-        or      a
-        call    nz,__sx_negate
-        call    __stdio_scan_copy_acc
+        bit     1,a
+        ret     z
+        push    ix
+        pop     hl
+        ld      de,#SC_UVAL
+        add     hl,de
+        call    __sx_negate
         ret
 
 __stdio_scan_match_fail:
-        ld      a,(__stdio_scan_eof)
+        ld      a,SC_EOF(ix)
         or      a
         jr      z,__stdio_scan_match_fail_count
-        ld      hl,(__stdio_scan_assigned)
+        ld      l,SC_ASSIGNED_LO(ix)
+        ld      h,SC_ASSIGNED_HI(ix)
         ld      a,h
         or      l
         jr      nz,__stdio_scan_match_fail_count
         ld      hl,#0xffff
         ret
 __stdio_scan_match_fail_count:
-        ld      hl,(__stdio_scan_assigned)
+        ld      l,SC_ASSIGNED_LO(ix)
+        ld      h,SC_ASSIGNED_HI(ix)
         ret
 
         ;; Decimal float token collector.
@@ -889,12 +969,18 @@ __stdio_scan_match_fail_count:
         ;;   carry set on success, clear on matching failure
         ;;   __stdio_scan_token contains a NUL-terminated token
 __stdio_scan_collect_float:
-        ld      (__stdio_scan_width),bc
+        ld      SC_WIDTH_LO(ix),c
+        ld      SC_WIDTH_HI(ix),b
         call    __stdio_scan_token_width
-        ld      (__stdio_scan_width),bc
-        ld      de,#__stdio_scan_token
+        ld      SC_WIDTH_LO(ix),c
+        ld      SC_WIDTH_HI(ix),b
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
+        ex      de,hl
         xor     a
-        ld      (__stdio_scan_float_any),a
+        ld      SC_FLOAT_ANY(ix),a
 
         ;; Optional sign is part of the token, but it does not by itself make
         ;; the input item valid.
@@ -931,7 +1017,7 @@ __stdio_scan_collect_float_integer:
         inc     de
         call    __stdio_scan_width_dec
         ld      a,#1
-        ld      (__stdio_scan_float_any),a
+        ld      SC_FLOAT_ANY(ix),a
         jr      __stdio_scan_collect_float_integer
 __stdio_scan_collect_float_integer_back:
         call    __stdio_scan_ungetc
@@ -966,7 +1052,7 @@ __stdio_scan_collect_float_frac:
         inc     de
         call    __stdio_scan_width_dec
         ld      a,#1
-        ld      (__stdio_scan_float_any),a
+        ld      SC_FLOAT_ANY(ix),a
         jr      __stdio_scan_collect_float_frac
 __stdio_scan_collect_float_frac_back:
         call    __stdio_scan_ungetc
@@ -975,7 +1061,7 @@ __stdio_scan_collect_float_dot_back:
         call    __stdio_scan_ungetc
 
 __stdio_scan_collect_float_after_mantissa:
-        ld      a,(__stdio_scan_float_any)
+        ld      a,SC_FLOAT_ANY(ix)
         or      a
         jp      z,__stdio_scan_collect_fail
 
@@ -983,7 +1069,8 @@ __stdio_scan_collect_float_after_mantissa:
         ;; exponent digit follows the marker (and any optional sign).
         call    __stdio_scan_width_is_zero
         jp      z,__stdio_scan_collect_float_ok
-        ld      (__stdio_scan_saved_width),bc
+        ld      SC_SAVED_WIDTH_LO(ix),c
+        ld      SC_SAVED_WIDTH_HI(ix),b
         call    __stdio_scan_getc
         ld      a,h
         cp      #0xff
@@ -1081,8 +1168,10 @@ __stdio_scan_collect_float_exp_fail_marker:
         ld      l,b
         ld      h,#0x00
         call    __stdio_scan_ungetc
-        ld      bc,(__stdio_scan_saved_width)
-        ld      (__stdio_scan_width),bc
+        ld      c,SC_SAVED_WIDTH_LO(ix)
+        ld      b,SC_SAVED_WIDTH_HI(ix)
+        ld      SC_WIDTH_LO(ix),c
+        ld      SC_WIDTH_HI(ix),b
 
 __stdio_scan_collect_float_ok:
         xor     a
@@ -1093,7 +1182,8 @@ __stdio_scan_collect_float_ok:
         ;; Main scanner loop. Returns assignment count or EOF (-1).
 __stdio_scan_core::
 __stdio_scan_loop:
-        ld      hl,(__stdio_scan_fmt)
+        ld      l,SC_FMT_LO(ix)
+        ld      h,SC_FMT_HI(ix)
         ld      a,(hl)
         or      a
         jp      z,__stdio_scan_done
@@ -1101,7 +1191,8 @@ __stdio_scan_loop:
         jp      nz,__stdio_scan_not_format_ws
 __stdio_scan_format_ws:
         inc     hl
-        ld      (__stdio_scan_fmt),hl
+        ld      SC_FMT_LO(ix),l
+        ld      SC_FMT_HI(ix),h
         ld      a,(hl)
         call    __stdio_scan_isspace
         jp      z,__stdio_scan_format_ws
@@ -1112,7 +1203,8 @@ __stdio_scan_not_format_ws:
 
 __stdio_scan_literal:
         inc     hl
-        ld      (__stdio_scan_fmt),hl
+        ld      SC_FMT_LO(ix),l
+        ld      SC_FMT_HI(ix),h
         cp      #'%'
         jp      z,__stdio_scan_conv
         push    af
@@ -1133,30 +1225,36 @@ __stdio_scan_literal_fail_pop:
 
 __stdio_scan_conv:
         xor     a
-        ld      (__stdio_scan_suppress),a
+        ld      SC_SUPPRESS(ix),a
         call    __stdio_scan_parse_width
-        ld      (__stdio_scan_width),hl
+        ld      SC_WIDTH_LO(ix),l
+        ld      SC_WIDTH_HI(ix),h
         call    __stdio_scan_parse_length
-        ld      hl,(__stdio_scan_fmt)
+        ld      l,SC_FMT_LO(ix)
+        ld      h,SC_FMT_HI(ix)
         ld      a,(hl)
         or      a
         jp      z,__stdio_scan_done
         cp      #'*'
         jp      nz,__stdio_scan_conv_have_spec
         ld      a,#1
-        ld      (__stdio_scan_suppress),a
+        ld      SC_SUPPRESS(ix),a
         inc     hl
-        ld      (__stdio_scan_fmt),hl
+        ld      SC_FMT_LO(ix),l
+        ld      SC_FMT_HI(ix),h
         call    __stdio_scan_parse_width
-        ld      (__stdio_scan_width),hl
+        ld      SC_WIDTH_LO(ix),l
+        ld      SC_WIDTH_HI(ix),h
         call    __stdio_scan_parse_length
-        ld      hl,(__stdio_scan_fmt)
+        ld      l,SC_FMT_LO(ix)
+        ld      h,SC_FMT_HI(ix)
         ld      a,(hl)
         or      a
         jp      z,__stdio_scan_done
 __stdio_scan_conv_have_spec:
         inc     hl
-        ld      (__stdio_scan_fmt),hl
+        ld      SC_FMT_LO(ix),l
+        ld      SC_FMT_HI(ix),h
         cp      #'%'
         jp      z,__stdio_scan_conv_percent
         cp      #'n'
@@ -1211,17 +1309,19 @@ __stdio_scan_conv_n:
         jp      __stdio_scan_loop
 
 __stdio_scan_conv_c:
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         ld      a,b
         or      c
         jp      nz,__stdio_scan_conv_c_havew
         ld      bc,#0x0001
 __stdio_scan_conv_c_havew:
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         jp      nz,__stdio_scan_conv_c_loop
         call    __stdio_scan_fetch_ptr
-        ld      (__stdio_scan_dest),hl
+        ld      SC_DEST_LO(ix),l
+        ld      SC_DEST_HI(ix),h
 __stdio_scan_conv_c_loop:
         ld      a,b
         or      c
@@ -1230,19 +1330,21 @@ __stdio_scan_conv_c_loop:
         ld      a,h
         cp      #0xff
         jp      z,__stdio_scan_match_fail
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         jp      nz,__stdio_scan_conv_c_next
-        ld      de,(__stdio_scan_dest)
+        ld      e,SC_DEST_LO(ix)
+        ld      d,SC_DEST_HI(ix)
         ld      a,l
         ld      (de),a
         inc     de
-        ld      (__stdio_scan_dest),de
+        ld      SC_DEST_LO(ix),e
+        ld      SC_DEST_HI(ix),d
 __stdio_scan_conv_c_next:
         dec     bc
         jp      __stdio_scan_conv_c_loop
 __stdio_scan_conv_c_done:
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         jp      nz,__stdio_scan_loop
         call    __stdio_scan_inc_assigned
@@ -1250,20 +1352,22 @@ __stdio_scan_conv_c_done:
 
 __stdio_scan_conv_s:
         call    __stdio_scan_skip_input_ws
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         ld      a,b
         or      c
         jp      nz,__stdio_scan_conv_s_havew
         ld      bc,#0xffff
 __stdio_scan_conv_s_havew:
         xor     a
-        ld      (__stdio_scan_tmp_end),a
-        ld      (__stdio_scan_tmp_end + 1),a
-        ld      a,(__stdio_scan_suppress)
+        ld      SC_TMP_END_LO(ix),a
+        ld      SC_TMP_END_HI(ix),a
+        ld      a,SC_SUPPRESS(ix)
         or      a
         jp      nz,__stdio_scan_conv_s_loop
         call    __stdio_scan_fetch_ptr
-        ld      (__stdio_scan_dest),hl
+        ld      SC_DEST_LO(ix),l
+        ld      SC_DEST_HI(ix),h
 __stdio_scan_conv_s_loop:
         ld      a,b
         or      c
@@ -1275,31 +1379,37 @@ __stdio_scan_conv_s_loop:
         ld      a,l
         call    __stdio_scan_isspace
         jp      z,__stdio_scan_conv_s_back_done
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         jp      nz,__stdio_scan_conv_s_no_store
-        ld      de,(__stdio_scan_dest)
+        ld      e,SC_DEST_LO(ix)
+        ld      d,SC_DEST_HI(ix)
         ld      a,l
         ld      (de),a
         inc     de
-        ld      (__stdio_scan_dest),de
+        ld      SC_DEST_LO(ix),e
+        ld      SC_DEST_HI(ix),d
 __stdio_scan_conv_s_no_store:
         dec     bc
-        ld      hl,(__stdio_scan_tmp_end)
+        ld      l,SC_TMP_END_LO(ix)
+        ld      h,SC_TMP_END_HI(ix)
         inc     hl
-        ld      (__stdio_scan_tmp_end),hl
+        ld      SC_TMP_END_LO(ix),l
+        ld      SC_TMP_END_HI(ix),h
         jp      __stdio_scan_conv_s_loop
 __stdio_scan_conv_s_back_done:
         call    __stdio_scan_ungetc
 __stdio_scan_conv_s_done:
-        ld      hl,(__stdio_scan_tmp_end)
+        ld      l,SC_TMP_END_LO(ix)
+        ld      h,SC_TMP_END_HI(ix)
         ld      a,h
         or      l
         jp      z,__stdio_scan_match_fail
-        ld      a,(__stdio_scan_suppress)
+        ld      a,SC_SUPPRESS(ix)
         or      a
         jp      nz,__stdio_scan_conv_s_mark
-        ld      hl,(__stdio_scan_dest)
+        ld      l,SC_DEST_LO(ix)
+        ld      h,SC_DEST_HI(ix)
         xor     a
         ld      (hl),a
 __stdio_scan_conv_s_mark:
@@ -1313,11 +1423,15 @@ __stdio_scan_conv_s_empty_check:
 __stdio_scan_conv_signed:
         push    af
         call    __stdio_scan_skip_input_ws
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         pop     af
         call    __stdio_scan_collect_integer
         jp      nc,__stdio_scan_match_fail
-        ld      hl,#__stdio_scan_token
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
         call    __stdio_scan_call_signed
         call    __stdio_scan_store_integer
         jp      __stdio_scan_loop
@@ -1325,57 +1439,91 @@ __stdio_scan_conv_signed:
 __stdio_scan_conv_unsigned:
         push    af
         call    __stdio_scan_skip_input_ws
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         pop     af
         call    __stdio_scan_collect_integer
         jp      nc,__stdio_scan_match_fail
-        ld      hl,#__stdio_scan_token
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
         call    __stdio_scan_call_unsigned
         call    __stdio_scan_store_integer
         jp      __stdio_scan_loop
 
 __stdio_scan_conv_pointer:
         call    __stdio_scan_skip_input_ws
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         ld      a,#'p'
         call    __stdio_scan_collect_integer
         jp      nc,__stdio_scan_match_fail
-        ld      hl,#__stdio_scan_token
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
         call    __stdio_scan_call_unsigned
         call    __stdio_scan_store_pointer
         jp      __stdio_scan_loop
 
 __stdio_scan_conv_float:
         call    __stdio_scan_skip_input_ws
-        ld      bc,(__stdio_scan_width)
+        ld      c,SC_WIDTH_LO(ix)
+        ld      b,SC_WIDTH_HI(ix)
         call    __stdio_scan_collect_float
         jp      nc,__stdio_scan_match_fail
-        ld      a,(__stdio_scan_length)
+        ld      a,SC_LENGTH(ix)
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_conv_float_double
         cp      #SCAN_LEN_LDOUBLE
         jr      z,__stdio_scan_conv_float_ldouble
-        ld      hl,#__stdio_scan_token
-        ld      de,#__stdio_scan_tmp_end
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
+        push    ix
+        pop     de
+        ld      bc,#SC_TMP_END_LO
+        ex      de,hl
+        add     hl,bc
+        ex      de,hl
         call    _strtof
         call    __stdio_scan_capture_float
         call    __stdio_scan_store_float_value
         jp      __stdio_scan_loop
 __stdio_scan_conv_float_double:
-        ld      hl,#__stdio_scan_token
-        ld      de,#__stdio_scan_tmp_end
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
+        push    ix
+        pop     de
+        ld      bc,#SC_TMP_END_LO
+        ex      de,hl
+        add     hl,bc
+        ex      de,hl
         call    _strtod
         call    __stdio_scan_capture_double
         call    __stdio_scan_store_float_value
         jp      __stdio_scan_loop
 __stdio_scan_conv_float_ldouble:
-        ld      hl,#__stdio_scan_token
-        ld      de,#__stdio_scan_tmp_end
+        push    ix
+        pop     hl
+        ld      de,#SC_TOKEN
+        add     hl,de
+        push    ix
+        pop     de
+        ld      bc,#SC_TMP_END_LO
+        ex      de,hl
+        add     hl,bc
+        ex      de,hl
         call    _strtold
         call    __stdio_scan_capture_double
         call    __stdio_scan_store_float_value
         jp      __stdio_scan_loop
 
 __stdio_scan_done:
-        ld      hl,(__stdio_scan_assigned)
+        ld      l,SC_ASSIGNED_LO(ix)
+        ld      h,SC_ASSIGNED_HI(ix)
         ret

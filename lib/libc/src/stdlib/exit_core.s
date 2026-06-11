@@ -39,10 +39,6 @@ __libc_exit_status:
         .dw     0
 __libc_exit_kind:
         .dw     0
-__libc_handler_base:
-        .dw     0
-__libc_handler_count:
-        .dw     0
 
         .area   _CODE
 
@@ -50,24 +46,41 @@ __libc_handler_count:
 ;;   HL = handler table base
 ;;   DE = handler count
 __libc_run_handlers:
-        ld      (__libc_handler_base),hl
+        ld      b,h
+        ld      c,l                     ; BC = handler table base
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-4
+        add     hl,sp
+        ld      sp,hl
+        ld      -4(ix),c
+        ld      -3(ix),b
+        ld      -2(ix),e
+        ld      -1(ix),d
 run_handlers_loop:
-        ld      a,d
-        or      e
-        ret     z
+        ld      a,-1(ix)
+        or      -2(ix)
+        jr      z,run_handlers_done
+        ld      e,-2(ix)
+        ld      d,-1(ix)
         dec     de
-        ld      (__libc_handler_count),de
+        ld      -2(ix),e
+        ld      -1(ix),d
         ex      de,hl
         add     hl,hl                   ; offset = count * sizeof(void (*)(void))
-        ld      de,(__libc_handler_base)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
         add     hl,de
         ld      c,(hl)
         inc     hl
         ld      b,(hl)
         call    __sdcc_call_bc
-        ld      hl,(__libc_handler_base)
-        ld      de,(__libc_handler_count)
         jr      run_handlers_loop
+run_handlers_done:
+        ld      sp,ix
+        pop     ix
+        ret
 
 ;; Shared registration path for atexit() and at_quick_exit().
 ;;   HL = function pointer

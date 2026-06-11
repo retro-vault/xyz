@@ -21,16 +21,25 @@
         .globl  _sqrtf
         .globl  _logf
 
-        .area   _DATA
-__acoshf_x:      .ds 4
-__acoshf_xm1:    .ds 4
-__acoshf_tmp:    .ds 4
-
         .area   _CODE
 
 _acoshf::
-        ld      (__acoshf_x),de
-        ld      (__acoshf_x + 2),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      c,l
+        ld      b,h
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),c
+        ld      -9(ix),b                ; x
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___libc_fpclassifyf
         ld      a,e
         cp      #0                      ; NaN -> preserve payload/sign
@@ -43,11 +52,11 @@ _acoshf::
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__acoshf_x)
-        ld      hl,(__acoshf_x + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___fscmp
-        pop     bc
-        pop     bc
         ld      a,d
         cp      #0xff
         jp      z,acoshf_ret_nan
@@ -60,67 +69,95 @@ _acoshf::
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__acoshf_x)
-        ld      hl,(__acoshf_x + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___fssub
         pop     bc
         pop     bc
-        ld      (__acoshf_xm1),de
-        ld      (__acoshf_xm1 + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h                ; xm1
 
         ;; tmp = x + 1
         ld      hl,#0x3f80              ; 1.0f
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__acoshf_x)
-        ld      hl,(__acoshf_x + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__acoshf_tmp),de
-        ld      (__acoshf_tmp + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h                ; tmp
 
         ;; tmp = (x - 1) * (x + 1)
-        ld      hl,(__acoshf_tmp + 2)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        ld      hl,(__acoshf_tmp)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         push    hl
-        ld      de,(__acoshf_xm1)
-        ld      hl,(__acoshf_xm1 + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         call    ___fsmul
         pop     bc
         pop     bc
 
         ;; tmp = sqrt((x - 1) * (x + 1))
         call    _sqrtf
-        ld      (__acoshf_tmp),de
-        ld      (__acoshf_tmp + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
 
         ;; tmp = x + sqrt((x - 1) * (x + 1))
-        ld      hl,(__acoshf_tmp + 2)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        ld      hl,(__acoshf_tmp)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         push    hl
-        ld      de,(__acoshf_x)
-        ld      hl,(__acoshf_x + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___fsadd
         pop     bc
         pop     bc
 
+        ld      sp,ix
+        pop     ix
         jp      _logf
 
 acoshf_ret_zero:
         ld      hl,#0x0000
         ld      de,#0x0000
+        ld      sp,ix
+        pop     ix
         ret
 
 acoshf_ret_nan:
         ld      hl,#0x7fc0
         ld      de,#0x0000
+        ld      sp,ix
+        pop     ix
         ret
 
 acoshf_ret_x:
-        ld      de,(__acoshf_x)
-        ld      hl,(__acoshf_x + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
+        ld      sp,ix
+        pop     ix
         ret

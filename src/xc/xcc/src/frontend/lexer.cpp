@@ -239,8 +239,32 @@ void lexer::skip_whitespace_and_comments() {
 token lexer::lex_ident_or_keyword() {
     auto loc = make_loc();
     std::string s;
-    while (pos_ < src_.size() && (std::isalnum((unsigned char)cur()) || cur() == '_' || cur() == '$'))
-        s += advance();
+    auto is_ucn_hex = [&](int offset) -> bool {
+        char c = peek_char(offset);
+        return (c >= '0' && c <= '9') ||
+               (c >= 'a' && c <= 'f') ||
+               (c >= 'A' && c <= 'F');
+    };
+    while (pos_ < src_.size()) {
+        if (std::isalnum((unsigned char)cur()) || cur() == '_' || cur() == '$') {
+            s += advance();
+            continue;
+        }
+        if (cur() == '\\' &&
+            ((peek_char() == 'u' && is_ucn_hex(2) && is_ucn_hex(3) &&
+              is_ucn_hex(4) && is_ucn_hex(5)) ||
+             (peek_char() == 'U' && is_ucn_hex(2) && is_ucn_hex(3) &&
+              is_ucn_hex(4) && is_ucn_hex(5) && is_ucn_hex(6) &&
+              is_ucn_hex(7) && is_ucn_hex(8) && is_ucn_hex(9)))) {
+            s += advance();
+            char kind = advance();
+            s += kind;
+            int digits = (kind == 'u') ? 4 : 8;
+            for (int i = 0; i < digits; ++i) s += advance();
+            continue;
+        }
+        break;
+    }
     tk k = keyword_kind(s);
     return make(k, s, loc);
 }
@@ -376,7 +400,7 @@ char lexer::lex_escape() {
     return decode_escape(c);
 }
 
-token lexer::lex_char_literal() {
+token lexer::lex_char_literal(int char_width) {
     auto loc = make_loc();
     advance(); // consume '
     int64_t val = 0;
@@ -393,6 +417,7 @@ token lexer::lex_char_literal() {
         val = (int64_t)(int8_t)(uint8_t)val;
     token t = make(tk::CHAR_LIT, "", loc);
     t.ival = val;
+    t.char_width = char_width;
     return t;
 }
 
@@ -530,7 +555,7 @@ token lexer::lex_one() {
         return lex_one();
     }
 
-    if (c == '\'' ) return lex_char_literal();
+    if (c == '\'' ) return lex_char_literal(1);
     if (c == '"'  ) return lex_string_literal();
 
     // Unicode/wide string/char literal prefixes: u8"", L"", u"", U"", L'', u'', U''
@@ -542,13 +567,16 @@ token lexer::lex_one() {
     if ((c == 'U') && peek_char() == '"') { advance(); return lex_string_literal(4); }
     // C23: u8'A' — UTF-8 character literal (char8_t, value is single ASCII code unit)
     if (c == 'u' && peek_char() == '8' && peek_char(2) == '\'') {
-        advance(); advance(); return lex_char_literal();
+        advance(); advance(); return lex_char_literal(8);
     }
     if ((c == 'L' || c == 'u' || c == 'U') && peek_char() == '\'') {
-        advance(); return lex_char_literal();
+        int char_width = (c == 'U') ? 4 : 2;
+        advance(); return lex_char_literal(char_width);
     }
 
-    if (std::isalpha((unsigned char)c) || c == '_' || c == '$') return lex_ident_or_keyword();
+    if (std::isalpha((unsigned char)c) || c == '_' || c == '$' ||
+        (c == '\\' && (peek_char() == 'u' || peek_char() == 'U')))
+        return lex_ident_or_keyword();
     if (std::isdigit((unsigned char)c) ||
         (c == '.' && std::isdigit((unsigned char)peek_char())))
         return lex_number();

@@ -4,63 +4,81 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _strtol
         .globl  __strtox_core
-        .globl  __sx_acc, __sx_neg, __sx_ovf, __sx_any
         .globl  __errno_value
+SX_BUF  .equ -9
+SX_FLG  .equ -1
         .area   _CODE
         ; HL = nptr, DE = endptr, 4(ix) = base -> DE:HL = result
 _strtol::
+        ld      c,l
+        ld      b,h
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-9
+        add     hl,sp
+        ld      sp,hl
+        ld      l,c
+        ld      h,b
         ld      c,4(ix)
         ld      b,5(ix)
+        push    bc
+        push    ix
+        pop     iy
+        ld      bc,#SX_BUF
+        add     iy,bc
+        pop     bc
         call    __strtox_core
-        ld      a,(__sx_any)
-        or      a
+        ld      SX_FLG(ix),a
+        bit     0,a
         jr      z,stl_zero
-        ld      a,(__sx_ovf)
-        or      a
-        jr      nz,stl_range
+        bit     2,a
+        jp      nz,stl_range
         ; high 32 bits nonzero -> out of range
-        ld      a,(__sx_acc + 4)
+        ld      a,SX_BUF + 4(ix)
         ld      b,a
-        ld      a,(__sx_acc + 5)
+        ld      a,SX_BUF + 5(ix)
         or      b
         ld      b,a
-        ld      a,(__sx_acc + 6)
+        ld      a,SX_BUF + 6(ix)
         or      b
         ld      b,a
-        ld      a,(__sx_acc + 7)
+        ld      a,SX_BUF + 7(ix)
         or      b
-        jr      nz,stl_range
-        ld      a,(__sx_neg)
-        or      a
+        jp      nz,stl_range
+        ld      a,SX_FLG(ix)
+        bit     1,a
         jr      nz,stl_neg
         ; positive: value > 0x7FFFFFFF ? (bit31 set)
-        ld      a,(__sx_acc + 3)
+        ld      a,SX_BUF + 3(ix)
         bit     7,a
-        jr      nz,stl_range_max
-        ld      de,(__sx_acc)
-        ld      hl,(__sx_acc + 2)
+        jp      nz,stl_range_max
+        ld      e,SX_BUF(ix)
+        ld      d,SX_BUF + 1(ix)
+        ld      l,SX_BUF + 2(ix)
+        ld      h,SX_BUF + 3(ix)
+        ld      sp,ix
         pop     ix
         ret
 stl_neg:
-        ld      a,(__sx_acc + 3)
+        ld      a,SX_BUF + 3(ix)
         cp      #0x80
         jr      c,stl_neg_ok            ; < 0x80000000
-        jr      nz,stl_range_min        ; > 0x80xxxxxx
-        ld      a,(__sx_acc)
+        jp      nz,stl_range_min        ; > 0x80xxxxxx
+        ld      a,SX_BUF(ix)
         ld      b,a
-        ld      a,(__sx_acc + 1)
+        ld      a,SX_BUF + 1(ix)
         or      b
         ld      b,a
-        ld      a,(__sx_acc + 2)
+        ld      a,SX_BUF + 2(ix)
         or      b
-        jr      z,stl_long_min          ; exactly 0x80000000 -> LONG_MIN
-        jr      stl_range_min
+        jp      z,stl_long_min          ; exactly 0x80000000 -> LONG_MIN
+        jp      stl_range_min
 stl_neg_ok:
-        ld      de,(__sx_acc)
-        ld      hl,(__sx_acc + 2)
+        ld      e,SX_BUF(ix)
+        ld      d,SX_BUF + 1(ix)
+        ld      l,SX_BUF + 2(ix)
+        ld      h,SX_BUF + 3(ix)
         ld      a,e
         cpl
         ld      e,a
@@ -79,27 +97,31 @@ stl_neg_ok:
         jr      nz,stl_ret
         inc     hl
 stl_ret:
+        ld      sp,ix
         pop     ix
         ret
 stl_zero:
         ld      de,#0
         ld      hl,#0
+        ld      sp,ix
         pop     ix
         ret
 stl_long_min:
         ld      de,#0x0000
         ld      hl,#0x8000              ; LONG_MIN
+        ld      sp,ix
         pop     ix
         ret
 stl_range:
-        ld      a,(__sx_neg)
-        or      a
-        jr      nz,stl_range_min
+        ld      a,SX_FLG(ix)
+        bit     1,a
+        jp      nz,stl_range_min
 stl_range_max:
         ld      hl,#34
         ld      (__errno_value),hl
         ld      de,#0xffff
         ld      hl,#0x7fff              ; LONG_MAX
+        ld      sp,ix
         pop     ix
         ret
 stl_range_min:
@@ -107,5 +129,6 @@ stl_range_min:
         ld      (__errno_value),hl
         ld      de,#0x0000
         ld      hl,#0x8000              ; LONG_MIN
+        ld      sp,ix
         pop     ix
         ret

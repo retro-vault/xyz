@@ -142,6 +142,28 @@ TEST(area_placer_area_base_override) {
     ASSERT_EQ(ctx.code_size, 0x5B08);
 }
 
+TEST(area_placer_default_sdcc_order_keeps_heap_after_based_data) {
+    xld::link_context ctx;
+    ctx.area_bases["_CODE"] = 0x0100;
+    ctx.area_bases["_DATA"] = 0x5000;
+
+    auto mod = std::make_shared<xld::module>("test", "test.rel");
+    // Extraction order can surface _HEAP before _DATA when archive members
+    // are pulled in lazily; the placer should still honor the conventional
+    // SDCC area order.
+    mod->areas().emplace_back("_HEAP", 0x20, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_CODE", 0x10, xld::area_flags::none, 1);
+    mod->areas().emplace_back("_DATA", 0x08, xld::area_flags::none, 2);
+    ctx.modules.push_back(mod);
+
+    xld::area_placer::place(ctx);
+
+    ASSERT_EQ(mod->areas()[1].placed_addr().value(), 0x0100);
+    ASSERT_EQ(mod->areas()[2].placed_addr().value(), 0x5000);
+    ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x5008);
+    ASSERT_EQ(ctx.code_size, 0x5028);
+}
+
 TEST(area_placer_abs_overlap_error) {
     xld::link_context ctx;
 

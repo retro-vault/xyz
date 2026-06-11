@@ -467,7 +467,8 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
         break;
     }
     case operand_kind::LABEL_REF:
-        emit_line("ld\t%s, %s", r.name, asm_.imm_sym(op.name).c_str());
+        emit_line("ld\t%s, %s", r.name,
+                  asm_.imm_sym(asm_label_ref_name(op.name)).c_str());
         break;
     default:
         emit_comment("load_rr: unhandled operand_kind %d", (int)op.kind);

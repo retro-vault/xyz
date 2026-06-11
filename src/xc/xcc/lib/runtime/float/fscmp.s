@@ -59,6 +59,27 @@ ___fscmp::
         inc     l
 .eb_ok:
 
+        ; NaNs are unordered. Return a dedicated sentinel so equality is false
+        ; and higher layers can map all relational operators correctly.
+        ld      a, h
+        cp      #0xff
+        jr      nz, .a_not_nan
+        ld      a, c
+        and     #0x7f
+        or      d
+        or      e
+        jp      nz, .retu
+.a_not_nan:
+        ld      a, l
+        cp      #0xff
+        jr      nz, .b_not_nan
+        ld      a, 6(ix)
+        and     #0x7f
+        or      5(ix)
+        or      4(ix)
+        jp      nz, .retu
+.b_not_nan:
+
         ; denormals treated as 0 (exp==0)
         ld      a, h
         or      a
@@ -177,6 +198,10 @@ ___fscmp::
 
 .ret0:
         ld      de, #0x0000
+        jr      .ret
+
+.retu:
+        ld      de, #0x8000
         jr      .ret
 
 .retp1:

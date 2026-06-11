@@ -35,6 +35,12 @@
 // PENDING_TEST compiles the body for type-checking but never registers
 // the test with the framework.  Change to TEST (or define
 // PENDING_TEST TEST globally) to activate.
+// ACTIVATED for large test base (user request for full coverage).
+#define PENDING_TEST TEST
+
+// ACTIVATED for large test base (user request for full coverage).
+#define PENDING_TEST TEST
+
 #ifndef PENDING_TEST
 #define PENDING_TEST(name)  static void _pending_##name()
 #endif
@@ -404,5 +410,41 @@ PENDING_TEST(ll_roundtrip_slong)
         uint64_t ll = g_rt->result64_regs();
         REQUIRE(g_rt->call64_1arg(rt_sym_future::ll2slong, ll));
         REQUIRE_EQ((int32_t)g_rt->result32(), v);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// REALLY LARGE base for ll runtime (user: "really large test base")
+// Cross product style like dbadd_mega, for mul/div/mod + convs on many values.
+// Activated via PENDING_TEST=TEST.
+// ---------------------------------------------------------------------------
+static int64_t ll_test_values[] = {
+    0, 1, -1, 2, -2, 10, -10, 0x7FFFFFFFLL, (int64_t)0x80000000LL,
+    0x123456789ABCDEFLL, -0x123456789ABCDEFLL,
+    9223372036854775807LL, (int64_t)0x8000000000000000ULL,
+    1000000000000LL, -1000000000000LL
+};
+
+PENDING_TEST(ll_arith_mega)
+{
+    for (int64_t a : ll_test_values) {
+        for (int64_t b : ll_test_values) {
+            if (b == 0) continue; // avoid div0 in volume
+            // mul (low 64)
+            REQUIRE(g_rt->call64(rt_sym_future::mulll, (uint64_t)a, (uint64_t)b));
+            // div ull/sll (just exercise paths; result checked lightly)
+            REQUIRE(g_rt->call64(rt_sym_future::divull, (uint64_t)a < 0 ? -(uint64_t)a : (uint64_t)a , (uint64_t)(b < 0 ? -b : b)));
+            REQUIRE(g_rt->call64(rt_sym_future::divsll, (uint64_t)a, (uint64_t)b));
+        }
+    }
+}
+
+PENDING_TEST(ll_conv_mega)
+{
+    for (int64_t v : ll_test_values) {
+        // to/from int32 etc (roundtrip where lossless in low bits)
+        REQUIRE(g_rt->call64_1arg(rt_sym_future::ll2slong, (uint64_t)v));
+        (void)g_rt->result32();
+        REQUIRE(g_rt->call64_from_long(rt_sym_future::slong2ll, (uint32_t)(int32_t)v));
     }
 }

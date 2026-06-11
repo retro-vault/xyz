@@ -17,20 +17,15 @@
         .globl  _sinf
         .globl  ___fsmul
 
-        .area   _DATA
-__cexpf_exp:
-        .ds     4
-__cexpf_real:
-        .ds     4
-__cexpf_imag:
-        .ds     4
-
         .area   _CODE
 
 _cexpf::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
 
         ;; expx = expf(real(z))
         ld      e,4(ix)
@@ -38,8 +33,10 @@ _cexpf::
         ld      l,6(ix)
         ld      h,7(ix)
         call    _expf
-        ld      (__cexpf_exp),de
-        ld      (__cexpf_exp + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
 
         ;; real = expx * cosf(imag(z))
         ld      e,8(ix)
@@ -47,15 +44,19 @@ _cexpf::
         ld      l,10(ix)
         ld      h,11(ix)
         call    _cosf
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        push    de
-        ld      de,(__cexpf_exp)
-        ld      hl,(__cexpf_exp + 2)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        push    hl
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__cexpf_real),de
-        ld      (__cexpf_real + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
 
         ;; imag = expx * sinf(imag(z))
         ld      e,8(ix)
@@ -63,23 +64,32 @@ _cexpf::
         ld      l,10(ix)
         ld      h,11(ix)
         call    _sinf
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        push    de
-        ld      de,(__cexpf_exp)
-        ld      hl,(__cexpf_exp + 2)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        push    hl
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__cexpf_imag),de
-        ld      (__cexpf_imag + 2),hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
 
         ;; Return the packed complex result.
-        ld      de,(__cexpf_real)
-        ld      hl,(__cexpf_real + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         exx
-        ld      de,(__cexpf_imag)
-        ld      hl,(__cexpf_imag + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         exx
 
+        ld      sp,ix
         pop     ix
         ret

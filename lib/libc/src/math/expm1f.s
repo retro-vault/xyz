@@ -12,22 +12,14 @@
         .globl  ___fssub
         .globl  __libc_expf_core
 
-        .area   _DATA
-__expm1f_x:
-        .ds     4
-
         .area   _CODE
 
 _expm1f::
         call    __libc_expf_core
-        ld      (__expm1f_x),de
-        ld      (__expm1f_x + 2),hl
         ld      hl,#0x3f80              ; 1.0
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__expm1f_x)
-        ld      hl,(__expm1f_x + 2)
         call    ___fssub
         pop     bc
         pop     bc

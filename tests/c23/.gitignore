@@ -1,0 +1,40 @@
+# Build outputs
+/build/
+
+# Generated published matrix output
+/docs/dist/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Editor and OS noise
+*~
+.*.swp
+.DS_Store
+
+# Common log and temporary files
+*.log
+*.tmp
+*.bak
+
+# Common compiler byproducts
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+
+# SDCC and simulator byproducts when produced outside build/
+*.ihx
+*.lk
+*.lst
+*.map
+*.noi
+*.rel
+*.sym
+*.dumpcustom0
+*.dumpcustom1
+ucsim.stdout
+ucsim.log

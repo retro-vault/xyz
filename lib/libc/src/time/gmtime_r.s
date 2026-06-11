@@ -30,11 +30,6 @@
         .globl  __modulong
         .globl  __divuint
 
-        .area   _DATA
-__gm_secs:  .ds 4          ; working time_t / seconds-of-day
-__gm_days:  .ds 2          ; day count since 1970-01-01 (fits 16-bit)
-__gm_year:  .ds 2          ; full year
-
         .area   _CODE
 
 __time_mdays::
@@ -51,9 +46,8 @@ leap_no:
         xor     a
         ret
 
-        ; __gm_diy: BC = days in __gm_year (366 if leap else 365)
+        ; __gm_diy: HL = full year, BC = days in year (366 if leap else 365)
 __gm_diy:
-        ld      hl,(__gm_year)
         call    __time_leap
         ld      bc,#365
         or      a
@@ -66,21 +60,38 @@ __gm_diy:
         ; outputs: DE = result
 _localtime_r::
 _gmtime_r::
+        push    ix
+        push    iy
         push    de                      ; save result ptr
+        ld      b,h
+        ld      c,l                     ; BC = timer
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-8
+        add     hl,sp
+        ld      sp,hl
+        ld      e,0(ix)
+        ld      d,1(ix)
+        push    de
+        pop     iy                      ; IY = result
+        ld      h,b
+        ld      l,c
         ld      a,(hl)
-        ld      (__gm_secs),a
+        ld      -8(ix),a
         inc     hl
         ld      a,(hl)
-        ld      (__gm_secs + 1),a
+        ld      -7(ix),a
         inc     hl
         ld      a,(hl)
-        ld      (__gm_secs + 2),a
+        ld      -6(ix),a
         inc     hl
         ld      a,(hl)
-        ld      (__gm_secs + 3),a
+        ld      -5(ix),a
         ; days = secs / 86400 (toward zero)
-        ld      de,(__gm_secs)
-        ld      hl,(__gm_secs + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         ld      bc,#0x0001
         push    bc
         ld      bc,#0x5180
@@ -88,10 +99,13 @@ _gmtime_r::
         call    __divslong
         pop     bc
         pop     bc
-        ld      (__gm_days),de
+        ld      -4(ix),e
+        ld      -3(ix),d
         ; rem = secs % 86400 (sign of secs)
-        ld      de,(__gm_secs)
-        ld      hl,(__gm_secs + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         ld      bc,#0x0001
         push    bc
         ld      bc,#0x5180
@@ -113,17 +127,21 @@ _gmtime_r::
         ld      a,h
         adc     a,#0x00
         ld      h,a
-        ld      bc,(__gm_days)
+        ld      c,-4(ix)
+        ld      b,-3(ix)
         dec     bc
-        ld      (__gm_days),bc
+        ld      -4(ix),c
+        ld      -3(ix),b
 gm_rem_pos:
-        ld      (__gm_secs),de          ; seconds-of-day (0..86399)
-        ld      (__gm_secs + 2),hl
-        pop     ix                      ; IX = result
-        push    ix
+        ld      -8(ix),e                ; seconds-of-day (0..86399)
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
         ; hour = sod / 3600
-        ld      de,(__gm_secs)
-        ld      hl,(__gm_secs + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         ld      bc,#0
         push    bc
         ld      bc,#3600
@@ -131,11 +149,13 @@ gm_rem_pos:
         call    __divulong
         pop     bc
         pop     bc
-        ld      4(ix),e
-        ld      5(ix),d
+        ld      4(iy),e
+        ld      5(iy),d
         ; sod %= 3600
-        ld      de,(__gm_secs)
-        ld      hl,(__gm_secs + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         ld      bc,#0
         push    bc
         ld      bc,#3600
@@ -146,12 +166,13 @@ gm_rem_pos:
         ex      de,hl                   ; HL = dividend
         ld      de,#60
         call    __divuint               ; DE = min, HL = sec
-        ld      2(ix),e
-        ld      3(ix),d
-        ld      0(ix),l
-        ld      1(ix),h
+        ld      2(iy),e
+        ld      3(iy),d
+        ld      0(iy),l
+        ld      1(iy),h
         ; wday = ((days + 4) mod 7)
-        ld      hl,(__gm_days)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         ld      bc,#4
         add     hl,bc
         bit     7,h
@@ -161,50 +182,66 @@ gm_rem_pos:
 gm_wday_pos:
         ld      de,#7
         call    __divuint               ; HL = remainder
-        ld      12(ix),l
-        ld      13(ix),h
+        ld      12(iy),l
+        ld      13(iy),h
         ; year walk
         ld      bc,#1970
-        ld      (__gm_year),bc
+        ld      -2(ix),c
+        ld      -1(ix),b
 gm_year_neg:
-        ld      hl,(__gm_days)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         bit     7,h
         jr      z,gm_year_pos
-        ld      hl,(__gm_year)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         dec     hl
-        ld      (__gm_year),hl
+        ld      -2(ix),l
+        ld      -1(ix),h
         call    __gm_diy
-        ld      hl,(__gm_days)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         add     hl,bc
-        ld      (__gm_days),hl
+        ld      -4(ix),l
+        ld      -3(ix),h
         jr      gm_year_neg
 gm_year_pos:
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    __gm_diy                ; BC = days in current year (clobbers HL)
-        ld      hl,(__gm_days)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         or      a
         sbc     hl,bc
         jr      c,gm_year_done
-        ld      (__gm_days),hl
-        ld      hl,(__gm_year)
+        ld      -4(ix),l
+        ld      -3(ix),h
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         inc     hl
-        ld      (__gm_year),hl
+        ld      -2(ix),l
+        ld      -1(ix),h
         jr      gm_year_pos
 gm_year_done:
-        ld      hl,(__gm_days)          ; day-of-year
-        ld      14(ix),l
-        ld      15(ix),h
-        ld      hl,(__gm_year)
+        ld      l,-4(ix)                ; day-of-year
+        ld      h,-3(ix)
+        ld      14(iy),l
+        ld      15(iy),h
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         ld      bc,#1900
         or      a
         sbc     hl,bc
-        ld      10(ix),l
-        ld      11(ix),h
+        ld      10(iy),l
+        ld      11(iy),h
         ; month walk
-        ld      hl,(__gm_year)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    __time_leap
         ld      c,a                     ; leap
         ld      b,#0                    ; month
-        ld      hl,(__gm_days)          ; day-of-year
+        ld      l,-4(ix)
+        ld      h,-3(ix)                ; day-of-year
 gm_mon_loop:
         push    hl
         ld      hl,#__time_mdays
@@ -231,12 +268,15 @@ gm_mon_cmp:
 gm_mon_done:
         add     hl,de                   ; restore doy within month
         inc     hl                      ; mday = doy + 1
-        ld      6(ix),l
-        ld      7(ix),h
-        ld      8(ix),b
-        ld      9(ix),#0
+        ld      6(iy),l
+        ld      7(iy),h
+        ld      8(iy),b
+        ld      9(iy),#0
         xor     a
-        ld      16(ix),a
-        ld      17(ix),a
+        ld      16(iy),a
+        ld      17(iy),a
+        ld      sp,ix
         pop     de                      ; result ptr
+        pop     iy
+        pop     ix
         ret

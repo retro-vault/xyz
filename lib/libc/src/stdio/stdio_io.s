@@ -79,29 +79,11 @@ SEEK_CUR_V      .equ 0x0001
 SEEK_END_V      .equ 0x0002
 
         .area   _DATA
-__stdio_io_tmp_byte:
-        .db     0
-__stdio_io_stream:
-        .dw     0
-__stdio_io_size:
-        .dw     0
-__stdio_io_count:
-        .dw     0
-__stdio_io_ptr:
-        .dw     0
-__stdio_io_items:
-        .dw     0
-__stdio_io_flags:
-        .dw     0
-__stdio_io_whence:
-        .dw     0
 __stdio_io_file_pool:
         .db     FILE_FREE_FD,0,0,0
         .db     FILE_FREE_FD,0,0,0
         .db     FILE_FREE_FD,0,0,0
         .db     FILE_FREE_FD,0,0,0
-__stdio_io_tmp_slot:
-        .db     0
 __stdio_io_tmp_flags:
         .db     0,0,0,0
 __stdio_io_tmp_names:
@@ -227,14 +209,14 @@ __stdio_io_tmp_cleanup:
         push    hl
         call    __stdio_io_stream_slot
         jr      c,__stdio_io_tmp_cleanup_done
-        ld      (__stdio_io_tmp_slot),a
+        ld      c,a
         call    __stdio_io_slot_to_tmp_flag
         ld      a,(hl)
         or      a
         jr      z,__stdio_io_tmp_cleanup_done
         xor     a
         ld      (hl),a
-        ld      a,(__stdio_io_tmp_slot)
+        ld      a,c
         call    __stdio_io_slot_to_tmp_name
         call    __sys_unlink
 __stdio_io_tmp_cleanup_done:
@@ -255,8 +237,8 @@ __stdio_io_alloc_stream_loop:
         ld      hl,#0x0000
         ret
 
-        ;; Parse fopen() mode text at HL. On success store flags in
-        ;; __stdio_io_flags and return HL = 0. On failure return 0xFFFF.
+        ;; Parse fopen() mode text at HL. On success return DE = open flags
+        ;; and HL = 0. On failure return HL = 0xFFFF.
 __stdio_io_parse_mode:
         ld      a,h
         or      l
@@ -270,21 +252,13 @@ __stdio_io_parse_mode:
         jr      z,__stdio_io_mode_a
         jr      __stdio_io_parse_mode_fail
 __stdio_io_mode_r:
-        xor     a
-        ld      (__stdio_io_flags),a
-        ld      (__stdio_io_flags + 1),a
+        ld      de,#0x0000
         jr      __stdio_io_mode_scan
 __stdio_io_mode_w:
-        ld      a,#O_WRONLY_V
-        ld      (__stdio_io_flags),a
-        ld      a,#(O_CREAT_HI | O_TRUNC_HI)
-        ld      (__stdio_io_flags + 1),a
+        ld      de,#((O_CREAT_HI | O_TRUNC_HI) << 8) | O_WRONLY_V
         jr      __stdio_io_mode_scan
 __stdio_io_mode_a:
-        ld      a,#O_WRONLY_V
-        ld      (__stdio_io_flags),a
-        ld      a,#(O_CREAT_HI | O_APPEND_HI)
-        ld      (__stdio_io_flags + 1),a
+        ld      de,#((O_CREAT_HI | O_APPEND_HI) << 8) | O_WRONLY_V
 __stdio_io_mode_scan:
         inc     hl
 __stdio_io_mode_scan_loop:
@@ -299,8 +273,7 @@ __stdio_io_mode_scan_loop:
         jr      z,__stdio_io_mode_next
         jr      __stdio_io_parse_mode_fail
 __stdio_io_mode_plus:
-        ld      a,#O_RDWR_V
-        ld      (__stdio_io_flags),a
+        ld      e,#O_RDWR_V
 __stdio_io_mode_next:
         inc     hl
         jr      __stdio_io_mode_scan_loop
@@ -333,16 +306,23 @@ __stdio_io_getc_core:
 __stdio_io_getc_read:
         pop     hl
         call    __stdio_io_clear_flags
-        push    hl
+        ld      b,h
+        ld      c,l
         ld      a,(hl)
+        push    bc
+        ld      de,#0x0000
+        push    de
+        ld      hl,#0x0000
+        add     hl,sp
+        ex      de,hl
         ld      l,a
         ld      h,#0x00
-        ld      de,#__stdio_io_tmp_byte
         ld      bc,#0x0001
         push    bc
         call    _read
         pop     bc
         pop     hl
+        pop     bc
         ld      a,d
         cp      #0xff
         jr      nz,__stdio_io_getc_count
@@ -353,11 +333,11 @@ __stdio_io_getc_count:
         ld      a,d
         or      e
         jr      z,__stdio_io_getc_eof
-        ld      a,(__stdio_io_tmp_byte)
-        ld      l,a
         ld      h,#0x00
         ret
 __stdio_io_getc_eof:
+        ld      h,b
+        ld      l,c
         inc     hl
         ld      a,(hl)
         or      #FILE_FLAG_EOF
@@ -365,6 +345,8 @@ __stdio_io_getc_eof:
         ld      hl,#0xffff
         ret
 __stdio_io_getc_err:
+        ld      h,b
+        ld      l,c
         inc     hl
         ld      a,(hl)
         or      #FILE_FLAG_ERR
@@ -381,18 +363,23 @@ __stdio_io_putc_core:
         push    de
         call    __stdio_io_clear_flags
         pop     de
-        push    hl
-        ld      a,e
-        ld      (__stdio_io_tmp_byte),a
-        ld      a,(hl)
+        ld      b,h
+        ld      c,l
+        ld      d,#0x00
+        push    bc
+        push    de
+        ld      hl,#0x0000
+        add     hl,sp
+        ex      de,hl
+        ld      a,(bc)
         ld      l,a
         ld      h,#0x00
-        ld      de,#__stdio_io_tmp_byte
         ld      bc,#0x0001
         push    bc
         call    _write
         pop     bc
         pop     hl
+        pop     bc
         ld      a,d
         cp      #0xff
         jr      nz,__stdio_io_putc_count
@@ -403,11 +390,11 @@ __stdio_io_putc_count:
         ld      a,d
         or      e
         jr      z,__stdio_io_putc_err
-        ld      a,(__stdio_io_tmp_byte)
-        ld      l,a
         ld      h,#0x00
         ret
 __stdio_io_putc_err:
+        ld      h,b
+        ld      l,c
         inc     hl
         ld      a,(hl)
         or      #FILE_FLAG_ERR
@@ -503,46 +490,52 @@ _fgets::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__stdio_io_ptr),hl
+        push    hl
+        push    hl
+        ld      hl,#0x0000
+        push    hl
+        push    hl
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         ld      a,h
         or      l
-        jr      z,__stdio_io_fgets_fail
+        jp      z,__stdio_io_fgets_fail_s
         ld      c,e
         ld      b,d
         ld      a,b
         or      c
-        jr      z,__stdio_io_fgets_fail
+        jp      z,__stdio_io_fgets_fail_n
         ld      l,4(ix)
         ld      h,5(ix)
         call    __stdio_io_require_stream
         ld      a,h
         cp      #0xff
-        jr      z,__stdio_io_fgets_fail
-        ld      (__stdio_io_stream),hl
-        ld      hl,(__stdio_io_ptr)
+        jp      z,__stdio_io_fgets_fail_stream
+        ld      -8(ix),l
+        ld      -7(ix),h
         dec     bc
-        jr      z,__stdio_io_fgets_empty
-        xor     a
-        ld      (__stdio_io_items),a
-        ld      (__stdio_io_items + 1),a
+        jp      z,__stdio_io_fgets_empty
 __stdio_io_fgets_loop:
         push    bc
-        ld      bc,(__stdio_io_stream)
-        ld      h,b
-        ld      l,c
+        ld      l,-8(ix)
+        ld      h,-7(ix)
         call    __stdio_io_getc_core
         pop     bc
         ld      a,h
         cp      #0xff
-        jr      z,__stdio_io_fgets_eof
-        ld      de,(__stdio_io_ptr)
+        jp      z,__stdio_io_fgets_eof
+        ld      e,-4(ix)
+        ld      d,-3(ix)
         ld      a,l
         ld      (de),a
         inc     de
-        ld      (__stdio_io_ptr),de
-        ld      hl,(__stdio_io_items)
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         inc     hl
-        ld      (__stdio_io_items),hl
+        ld      -6(ix),l
+        ld      -5(ix),h
         cp      #'\n'
         jr      z,__stdio_io_fgets_done_store
         dec     bc
@@ -551,42 +544,54 @@ __stdio_io_fgets_loop:
         jr      nz,__stdio_io_fgets_loop
 __stdio_io_fgets_done_store:
         xor     a
-        ld      de,(__stdio_io_ptr)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
         ld      (de),a
-        ld      hl,(__stdio_io_ptr)
-        ld      de,(__stdio_io_items)
+        ld      a,-6(ix)
+        ld      d,a
+        ld      a,-5(ix)
+        ld      e,a
         ld      a,d
         or      e
         jr      nz,__stdio_io_fgets_return_ptr
         ld      hl,#0x0000
+        ld      sp,ix
         pop     ix
         ret
 __stdio_io_fgets_return_ptr:
-        ld      hl,(__stdio_io_ptr)
-        ld      de,(__stdio_io_items)
-        or      a
-        sbc     hl,de
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
         pop     de
+        ld      sp,ix
         pop     ix
         ret
 __stdio_io_fgets_eof:
-        ld      hl,(__stdio_io_items)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         ld      a,h
         or      l
         jr      nz,__stdio_io_fgets_done_store
+__stdio_io_fgets_fail_s:
+__stdio_io_fgets_fail_n:
+__stdio_io_fgets_fail_stream:
 __stdio_io_fgets_fail:
         ld      hl,#0x0000
         push    hl
         pop     de
+        ld      sp,ix
         pop     ix
         ret
 __stdio_io_fgets_empty:
         xor     a
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         ld      (hl),a
-        ld      hl,(__stdio_io_ptr)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
         pop     de
+        ld      sp,ix
         pop     ix
         ret
 
@@ -595,62 +600,71 @@ _fread::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__stdio_io_ptr),hl
-        ld      c,e
-        ld      b,d
-        ld      (__stdio_io_size),bc
+        push    hl
+        ld      hl,#0x0000
+        push    hl
+        push    de
         ld      c,4(ix)
         ld      b,5(ix)
-        ld      (__stdio_io_count),bc
+        push    bc
+        ld      hl,#0x0000
+        push    hl
         ld      l,6(ix)
         ld      h,7(ix)
         call    __stdio_io_require_stream
         ld      a,h
         cp      #0xff
         jp      z,__stdio_io_rw_zero
-        ld      (__stdio_io_stream),hl
-        xor     a
-        ld      (__stdio_io_items),a
-        ld      (__stdio_io_items + 1),a
-        ld      bc,(__stdio_io_count)
+        ld      -4(ix),l
+        ld      -3(ix),h
 __stdio_io_fread_item:
+        ld      c,-8(ix)
+        ld      b,-7(ix)
         ld      a,b
         or      c
         jr      z,__stdio_io_fread_done
-        push    bc
-        ld      bc,(__stdio_io_size)
+        ld      c,-6(ix)
+        ld      b,-5(ix)
 __stdio_io_fread_byte:
         ld      a,b
         or      c
         jr      z,__stdio_io_fread_item_done
         push    bc
-        ld      hl,(__stdio_io_stream)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         call    __stdio_io_getc_core
         pop     bc
         ld      a,h
         cp      #0xff
         jr      z,__stdio_io_fread_abort
-        ld      de,(__stdio_io_ptr)
+        ld      e,-2(ix)
+        ld      d,-1(ix)
         ld      a,l
         ld      (de),a
         inc     de
-        ld      (__stdio_io_ptr),de
+        ld      -2(ix),e
+        ld      -1(ix),d
         dec     bc
         jr      __stdio_io_fread_byte
 __stdio_io_fread_item_done:
-        pop     bc
-        dec     bc
-        ld      (__stdio_io_count),bc
-        ld      hl,(__stdio_io_items)
+        ld      l,-8(ix)
+        ld      h,-7(ix)
+        dec     hl
+        ld      -8(ix),l
+        ld      -7(ix),h
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         inc     hl
-        ld      (__stdio_io_items),hl
+        ld      -10(ix),l
+        ld      -9(ix),h
         jr      __stdio_io_fread_item
 __stdio_io_fread_abort:
-        pop     bc
 __stdio_io_fread_done:
-        ld      hl,(__stdio_io_items)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
         pop     de
+        ld      sp,ix
         pop     ix
         ret
 
@@ -658,40 +672,44 @@ _fwrite::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__stdio_io_ptr),hl
-        ld      c,e
-        ld      b,d
-        ld      (__stdio_io_size),bc
+        push    hl
+        ld      hl,#0x0000
+        push    hl
+        push    de
         ld      c,4(ix)
         ld      b,5(ix)
-        ld      (__stdio_io_count),bc
+        push    bc
+        ld      hl,#0x0000
+        push    hl
         ld      l,6(ix)
         ld      h,7(ix)
         call    __stdio_io_require_stream
         ld      a,h
         cp      #0xff
         jp      z,__stdio_io_rw_zero
-        ld      (__stdio_io_stream),hl
-        xor     a
-        ld      (__stdio_io_items),a
-        ld      (__stdio_io_items + 1),a
-        ld      bc,(__stdio_io_count)
+        ld      -4(ix),l
+        ld      -3(ix),h
 __stdio_io_fwrite_item:
+        ld      c,-8(ix)
+        ld      b,-7(ix)
         ld      a,b
         or      c
         jr      z,__stdio_io_fwrite_done
-        push    bc
-        ld      bc,(__stdio_io_size)
+        ld      c,-6(ix)
+        ld      b,-5(ix)
 __stdio_io_fwrite_byte:
         ld      a,b
         or      c
         jr      z,__stdio_io_fwrite_item_done
         push    bc
-        ld      hl,(__stdio_io_ptr)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         ld      e,(hl)
         inc     hl
-        ld      (__stdio_io_ptr),hl
-        ld      hl,(__stdio_io_stream)
+        ld      -2(ix),l
+        ld      -1(ix),h
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         call    __stdio_io_putc_core
         pop     bc
         ld      a,h
@@ -700,24 +718,30 @@ __stdio_io_fwrite_byte:
         dec     bc
         jr      __stdio_io_fwrite_byte
 __stdio_io_fwrite_item_done:
-        pop     bc
-        dec     bc
-        ld      (__stdio_io_count),bc
-        ld      hl,(__stdio_io_items)
+        ld      l,-8(ix)
+        ld      h,-7(ix)
+        dec     hl
+        ld      -8(ix),l
+        ld      -7(ix),h
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         inc     hl
-        ld      (__stdio_io_items),hl
+        ld      -10(ix),l
+        ld      -9(ix),h
         jr      __stdio_io_fwrite_item
 __stdio_io_fwrite_abort:
-        pop     bc
 __stdio_io_fwrite_done:
-        ld      hl,(__stdio_io_items)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
         pop     de
+        ld      sp,ix
         pop     ix
         ret
 
 __stdio_io_rw_zero:
         ld      hl,#0x0000
+        ld      sp,ix
         pop     ix
         ret
 
@@ -783,15 +807,14 @@ _fopen::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__stdio_io_ptr),hl
+        push    hl
         push    de
         pop     hl
         call    __stdio_io_parse_mode
         ld      a,h
         cp      #0xff
-        jr      z,__stdio_io_fopen_fail
-        ld      hl,(__stdio_io_ptr)
-        ld      de,(__stdio_io_flags)
+        jr      z,__stdio_io_fopen_fail_saved_path
+        pop     hl
         ld      bc,#0x0000
         push    bc
         call    _open
@@ -822,6 +845,8 @@ __stdio_io_fopen_have_slot:
         pop     de
         pop     ix
         ret
+__stdio_io_fopen_fail_saved_path:
+        pop     bc
 __stdio_io_fopen_fail:
         ld      hl,#0x0000
         push    hl
@@ -873,10 +898,11 @@ __stdio_io_tmpfile_core::
         ld      a,h
         or      l
         ret     z
-        ld      (__stdio_io_stream),hl
+        push    hl
         call    __stdio_io_stream_slot
-        jr      c,__stdio_io_tmpfile_fail
-        ld      (__stdio_io_tmp_slot),a
+        jr      c,__stdio_io_tmpfile_fail_nobc
+        ld      c,a
+        push    bc
         call    __stdio_io_slot_to_tmp_name
         call    _tmpnam
         ld      a,#(O_CREAT_HI | O_TRUNC_HI)
@@ -893,22 +919,31 @@ __stdio_io_tmpfile_core::
         cp      #0xff
         jr      z,__stdio_io_tmpfile_fail
 __stdio_io_tmpfile_have_fd:
-        ld      hl,(__stdio_io_stream)
+        pop     hl
+        pop     bc
         ld      a,e
         push    hl
         call    __stdio_io_reset_stream
         pop     hl
-        ld      a,(__stdio_io_tmp_slot)
+        push    hl
+        ld      a,c
         call    __stdio_io_slot_to_tmp_flag
         ld      (hl),#1
-        ld      hl,(__stdio_io_stream)
+        pop     hl
         push    hl
         pop     de
         ret
 __stdio_io_tmpfile_fail:
-        ld      hl,(__stdio_io_stream)
+        pop     hl
+        pop     bc
         call    __stdio_io_tmp_clear
         call    __stdio_io_invalidate_stream
+        jr      __stdio_io_tmpfile_fail_return
+__stdio_io_tmpfile_fail_nobc:
+        pop     hl
+        call    __stdio_io_tmp_clear
+        call    __stdio_io_invalidate_stream
+__stdio_io_tmpfile_fail_return:
         ld      hl,#0x0000
         push    hl
         pop     de
@@ -920,20 +955,20 @@ __stdio_io_freopen_core::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__stdio_io_ptr),hl
+        push    hl
         push    de
         pop     hl
         call    __stdio_io_parse_mode
         ld      a,h
         cp      #0xff
         jr      z,__stdio_io_freopen_fail
+        push    de
         ld      l,4(ix)
         ld      h,5(ix)
         call    __stdio_io_require_stream
         ld      a,h
         cp      #0xff
-        jr      z,__stdio_io_freopen_fail
-        ld      (__stdio_io_stream),hl
+        jr      z,__stdio_io_freopen_fail_flags
         push    hl
         ld      a,(hl)
         cp      #FILE_FREE_FD
@@ -948,8 +983,8 @@ __stdio_io_freopen_skip_close:
         pop     hl
         call    __stdio_io_tmp_clear
 __stdio_io_freopen_open:
-        ld      hl,(__stdio_io_ptr)
-        ld      de,(__stdio_io_flags)
+        pop     de
+        pop     hl
         ld      bc,#0x0000
         push    bc
         call    _open
@@ -961,7 +996,8 @@ __stdio_io_freopen_open:
         cp      #0xff
         jr      z,__stdio_io_freopen_open_fail
 __stdio_io_freopen_gotfd:
-        ld      hl,(__stdio_io_stream)
+        ld      l,4(ix)
+        ld      h,5(ix)
         ld      a,e
         push    hl
         call    __stdio_io_reset_stream
@@ -971,9 +1007,15 @@ __stdio_io_freopen_gotfd:
         pop     ix
         ret
 __stdio_io_freopen_open_fail:
-        ld      hl,(__stdio_io_stream)
+        ld      l,4(ix)
+        ld      h,5(ix)
         call    __stdio_io_invalidate_stream
+        jr      __stdio_io_freopen_fail_done
+__stdio_io_freopen_fail_flags:
+        pop     bc
 __stdio_io_freopen_fail:
+        pop     bc
+__stdio_io_freopen_fail_done:
         ld      hl,#0x0000
         push    hl
         pop     de
@@ -988,7 +1030,7 @@ _fseek::
         ld      a,h
         cp      #0xff
         jr      z,__stdio_io_fseek_fail
-        ld      (__stdio_io_stream),hl
+        push    hl
         ld      a,(hl)
         cp      #FILE_FREE_FD
         jr      z,__stdio_io_fseek_err
@@ -1020,7 +1062,7 @@ _fseek::
         cp      #0xff
         jr      z,__stdio_io_fseek_err
 __stdio_io_fseek_ok:
-        ld      hl,(__stdio_io_stream)
+        pop     hl
         ld      a,(hl)
         call    __stdio_io_reset_stream
         ld      hl,#0x0000
@@ -1029,7 +1071,7 @@ __stdio_io_fseek_ok:
         pop     ix
         ret
 __stdio_io_fseek_err:
-        ld      hl,(__stdio_io_stream)
+        pop     hl
         ld      a,#FILE_FLAG_ERR
         call    __stdio_io_set_flags
 __stdio_io_fseek_fail:
@@ -1044,18 +1086,21 @@ _ftell::
         ld      a,h
         cp      #0xff
         jr      z,__stdio_io_ftell_fail
-        ld      (__stdio_io_stream),hl
+        ld      c,l
+        ld      b,h
         ld      a,(hl)
         cp      #FILE_FREE_FD
         jr      z,__stdio_io_ftell_err
         ld      l,a
         ld      h,#0x00
+        push    bc
         ld      bc,#SEEK_CUR_V
         push    bc
         ld      bc,#0x0000
         push    bc
         push    bc
         call    _lseek
+        pop     bc
         pop     bc
         pop     bc
         pop     bc
@@ -1074,7 +1119,8 @@ _ftell::
 __stdio_io_ftell_swap:
         push    hl
         push    de
-        ld      hl,(__stdio_io_stream)
+        ld      h,b
+        ld      l,c
         ld      de,#FILE_OFF_PUSHV
         add     hl,de
         ld      a,(hl)
@@ -1090,7 +1136,8 @@ __stdio_io_ftell_swap:
 __stdio_io_ftell_done:
         ret
 __stdio_io_ftell_err:
-        ld      hl,(__stdio_io_stream)
+        ld      h,b
+        ld      l,c
         ld      a,#FILE_FLAG_ERR
         call    __stdio_io_set_flags
 __stdio_io_ftell_fail:
@@ -1103,7 +1150,7 @@ _rewind::
         ld      a,h
         cp      #0xff
         jr      z,__stdio_io_rewind_done
-        ld      (__stdio_io_stream),hl
+        push    hl
         ld      a,(hl)
         cp      #FILE_FREE_FD
         jr      z,__stdio_io_rewind_err
@@ -1131,12 +1178,12 @@ _rewind::
         cp      #0xff
         jr      z,__stdio_io_rewind_err
 __stdio_io_rewind_ok:
-        ld      hl,(__stdio_io_stream)
+        pop     hl
         ld      a,(hl)
         call    __stdio_io_reset_stream
         jr      __stdio_io_rewind_done
 __stdio_io_rewind_err:
-        ld      hl,(__stdio_io_stream)
+        pop     hl
         ld      a,#FILE_FLAG_ERR
         call    __stdio_io_set_flags
 __stdio_io_rewind_done:

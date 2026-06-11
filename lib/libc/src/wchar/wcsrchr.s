@@ -3,12 +3,13 @@
         .module wcsrchr
         .optsdcc -mz80 sdcccall(1)
         .globl  _wcsrchr
-        .area   _DATA
-__wcsrchr_c: .dw 0
         .area   _CODE
         ; HL = s, DE = c -> DE = pointer or 0
 _wcsrchr::
-        ld      (__wcsrchr_c),de        ; target
+        push    ix
+        push    de
+        ld      ix,#0
+        add     ix,sp
         ld      de,#0                   ; match = NULL
 wcr_loop:
         ld      a,(hl)
@@ -20,10 +21,10 @@ wcr_loop:
         ld      a,b
         or      c
         jr      z,wcr_done              ; end of string
-        ld      a,(__wcsrchr_c)
+        ld      a,0(ix)
         cp      c
         jr      nz,wcr_adv
-        ld      a,(__wcsrchr_c + 1)
+        ld      a,1(ix)
         cp      b
         jr      nz,wcr_adv
         ld      d,h
@@ -33,12 +34,18 @@ wcr_adv:
         inc     hl
         jr      wcr_loop
 wcr_done:
-        ld      a,(__wcsrchr_c)
+        ld      a,0(ix)
         ld      c,a
-        ld      a,(__wcsrchr_c + 1)
+        ld      a,1(ix)
         or      c
         jr      nz,wcr_ret              ; c != 0 -> return match
         ex      de,hl                   ; c == 0 -> return terminator
+        ld      sp,ix
+        pop     bc                      ; discard saved search code unit
+        pop     ix
         ret
 wcr_ret:
+        ld      sp,ix
+        pop     bc                      ; discard saved search code unit
+        pop     ix
         ret

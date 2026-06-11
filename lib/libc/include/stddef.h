@@ -24,6 +24,9 @@
 typedef int ptrdiff_t;
 typedef unsigned int size_t;
 typedef int wchar_t;
+typedef typeof(nullptr) nullptr_t;
+
+#define PTRDIFF_WIDTH 16
 
 /* Compute the byte offset of a member within a structure type. */
 #define offsetof(type, member) ((size_t)(&((type *)0)->member))

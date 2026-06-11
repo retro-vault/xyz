@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Alex Gilding (Perforce UK)" />
+  <meta name="author" content="Jens Gustedt (INRIA France)" />
+  <meta name="dcterms.date" content="2022-06-10" />
+  <title>Underspecified object declarations</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        background-color: #ffffff;
+        color: #a0a0a0;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #a0a0a0;  padding-left: 4px; }
+    div.sourceCode
+      { color: #1f1c1b; background-color: #ffffff; }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #1f1c1b; } /* Normal */
+    code span.al { color: #bf0303; background-color: #f7e6e6; font-weight: bold; } /* Alert */
+    code span.an { color: #ca60ca; } /* Annotation */
+    code span.at { color: #0057ae; } /* Attribute */
+    code span.bn { color: #b08000; } /* BaseN */
+    code span.bu { color: #644a9b; font-weight: bold; } /* BuiltIn */
+    code span.cf { color: #1f1c1b; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #924c9d; } /* Char */
+    code span.cn { color: #aa5500; } /* Constant */
+    code span.co { color: #898887; } /* Comment */
+    code span.cv { color: #0095ff; } /* CommentVar */
+    code span.do { color: #607880; } /* Documentation */
+    code span.dt { color: #0057ae; } /* DataType */
+    code span.dv { color: #b08000; } /* DecVal */
+    code span.er { color: #bf0303; text-decoration: underline; } /* Error */
+    code span.ex { color: #0095ff; font-weight: bold; } /* Extension */
+    code span.fl { color: #b08000; } /* Float */
+    code span.fu { color: #644a9b; } /* Function */
+    code span.im { color: #ff5500; } /* Import */
+    code span.in { color: #b08000; } /* Information */
+    code span.kw { color: #1f1c1b; font-weight: bold; } /* Keyword */
+    code span.op { color: #1f1c1b; } /* Operator */
+    code span.ot { color: #006e28; } /* Other */
+    code span.pp { color: #006e28; } /* Preprocessor */
+    code span.re { color: #0057ae; background-color: #e0e9f8; } /* RegionMarker */
+    code span.sc { color: #3daee9; } /* SpecialChar */
+    code span.ss { color: #ff5500; } /* SpecialString */
+    code span.st { color: #bf0303; } /* String */
+    code span.va { color: #0057ae; } /* Variable */
+    code span.vs { color: #bf0303; } /* VerbatimString */
+    code span.wa { color: #bf0303; } /* Warning */
+  </style>
+  <!-- (A) TOGGLE PROPERTY WITH JAVASCRIPT -->
+  <script>
+  function hideDel () {
+      var block = document.getElementsByTagName("del");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "none";
+      }
+  }
+  function hideIns () {
+      var block = document.getElementsByTagName("ins");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "none";
+      }
+  }
+  function showDel () {
+      var block = document.getElementsByTagName("del");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "";
+      }
+  }
+  function showIns () {
+      var block = document.getElementsByTagName("ins");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "";
+      }
+  }
+  function showOrig () {
+      hideIns();
+      showDel();
+  }
+  function showNew () {
+      showIns();
+      hideDel();
+  }
+  function showBoth () {
+      showIns();
+      showDel();
+  }
+  function toggleToc () {
+      var block = document.getElementById("TOC");
+      let fLen = block.length;
+      if (block.style.display == "") {
+          block.style.display = "none";
+      } else {
+          block.style.display = "";
+      }
+  }
+  </script>
+  <!-- (B) TEST BLOCK OF TEXT -->
+  <table id="diffToggles" style="position: fixed; top: 0; right: 0; z-index: 1"/>
+  <tbody>
+  <tr><td><input type="button" value="toggle toc" onclick="toggleToc()"/></td><tr>
+  <tr><td><input type="button" value="show orig" onclick="showOrig()"/></td><tr>
+  <tr><td><input type="button" value="show new" onclick="showNew()"/></td><tr>
+  <tr><td><input type="button" value="show both" onclick="showBoth()"/></td><tr>
+  </tbody>
+  </table>
+  <style>
+    /*
+      Buttondown
+      A Markdown/MultiMarkdown/Pandoc HTML output CSS stylesheet
+      Author: Ryan Gray
+      Date: 15 Feb 2011
+      Revised: 21 Feb 2012
+     
+      General style is clean, with minimal re-definition of the defaults or 
+      overrides of user font settings. The body text and header styles are 
+      left alone except title, author and date classes are centered. A Pandoc TOC 
+      is not printed, URLs are printed after hyperlinks in parentheses. 
+      Block quotes are italicized. Tables are lightly styled with lines above 
+      and below the table and below the header with a boldface header. Code 
+      blocks are line wrapped. 
+
+      All elements that Pandoc and MultiMarkdown use should be listed here, even 
+      if the style is empty so you can easily add styling to anything.
+      
+      There are some elements in here for HTML5 output of Pandoc, but I have not 
+      gotten around to testing that yet.
+  */
+
+  /* NOTES:
+
+      Stuff tried and failed:
+      
+      It seems that specifying font-family:serif in Safari will always use 
+      Times New Roman rather than the user's preferences setting.
+      
+      Making the font size different or a fixed value for print in case the screen 
+      font size is making the print font too big: Making font-size different for 
+      print than for screen causes horizontal lines to disappear in math when using 
+      MathJax under Safari.
+  */
+
+  /* ---- Front Matter ---- */
+
+  /* Pandoc header DIV. Contains .title, .author and .date. Comes before div#TOC. 
+     Only appears if one of those three are in the document.
+  */
+
+  body {counter-reset: h2}
+    h2 {counter-reset: h3}
+    h2 {counter-reset: h3}
+    h3 {counter-reset: h4}
+    h4 {counter-reset: h5}
+    h5 {counter-reset: h6}
+
+    h2:before {counter-increment: h2; content: counter(h2) ". "}
+    h3:before {counter-increment: h3; content: counter(h2) "." counter(h3) ". "}
+    h4:before {counter-increment: h4; content: counter(h2) "." counter(h3) "." counter(h4) ". "}
+    h5:before {counter-increment: h5; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) ". "}
+    h6:before {counter-increment: h6; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) "." counter(h6) ". "}
+
+    h2.nocount:before, h3.nocount:before, h4.nocount:before, h5.nocount:before, h6.nocount:before { content: ""; counter-increment: none }
+    
+  div#header, header
+      {
+      /* Put border on bottom. Separates it from TOC or body that comes after it. */
+      border-bottom: 1px solid #aaa;
+      margin-bottom: 0.5em;
+      }
+
+  .title /* Pandoc title header (h1.title) */
+      {
+      text-align: center;
+      }
+
+  .author, .date /* Pandoc author(s) and date headers (h2.author and h3.date) */
+  {
+      font-size: 3ex;
+      text-align: center;
+      }
+
+  /* Pandoc table of contents DIV when using the --toc option.
+     NOTE: this doesn't support Pandoc's --id-prefix option for #TOC and #header. 
+     Probably would need to use div[id$='TOC'] and div[id$='header'] as selectors.
+  */
+
+  div#TOC, nav#TOC
+      {
+      /* Put border on bottom to separate it from body. */
+      border-bottom: 1px solid #aaa;
+      margin-bottom: 0.5em;
+      }
+
+  ins {
+      color: green
+  }
+
+  del {
+      color: red
+  }
+
+  #diffToggles {
+      display: none
+  }
+
+  @media screen
+  {
+      #TOC
+      {
+          width: 35%;
+  	float: left;
+  	overflow: hidden;
+      }
+      #diffToggles {
+          display: block
+      }
+  }
+
+  @media print
+      {
+      div#TOC, nav#TOC
+          {
+          /* Don't display TOC in print */
+          display: none;
+          }
+      }
+
+  /* ---- Headers and sections ---- */
+
+  h1, h2, h3, h4, h5, h6
+  {
+      font-family: "Helvetica Neue", Helvetica, "Liberation Sans", Calibri, Arial, sans-serif; /* Sans-serif headers */
+
+      /* font-family: "Liberation Serif", "Georgia", "Times New Roman", serif; /* Serif headers */
+
+      page-break-after: avoid; /* Firefox, Chrome, and Safari do not support the property value "avoid" */
+  }
+
+  /* Pandoc with --section-divs option */
+
+  div div, section section /* Nested sections */
+      {
+      margin-left: 2em; /* This will increasingly indent nested header sections */
+      }
+
+  p {}
+
+  blockquote
+      { 
+      font-style: italic;
+      }
+
+  li /* All list items */
+      {
+      }
+
+  li > p /* Loosely spaced list item */
+      {
+      margin-top: 1em; /* IE: lack of space above a <li> when the item is inside a <p> */
+      }
+
+  ul /* Whole unordered list */
+      {
+      }
+
+  ul li /* Unordered list item */
+      {
+      }
+
+  ol /* Whole ordered list */
+      {
+      }
+
+  ol li /* Ordered list item */
+      {
+      }
+
+  hr {}
+
+  /* ---- Some span elements --- */
+
+  sub /* Subscripts. Pandoc: H~2~O */
+      {
+      }
+
+  sup /* Superscripts. Pandoc: The 2^nd^ try. */
+      {
+      }
+      
+  em /* Emphasis. Markdown: *emphasis* or _emphasis_ */
+      {
+      }
+      
+  em > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > p > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > * > p > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > p > ins > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > * > p > ins > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  /* ---- Links (anchors) ---- */
+
+  a /* All links */
+      {
+      /* Keep links clean. On screen, they are colored; in print, they do nothing anyway. */
+      text-decoration: none;
+      }
+
+  @media screen
+      {
+      a:hover
+          {
+          /* On hover, we indicate a bit more that it is a link. */
+          text-decoration: underline;
+          }
+      }
+
+  @media print
+      {
+      a   {
+          /* In print, a colored link is useless, so un-style it. */
+          color: black;
+          background: transparent;
+          }
+          
+      a[href^="http://"]:after, a[href^="https://"]:after
+          {
+          /* However, links that go somewhere else, might be useful to the reader,
+             so for http and https links, print the URL after what was the link 
+             text in parens
+          */
+          content: " (" attr(href) ") ";
+          font-size: 90%;
+          }
+      }
+
+  /* ---- Images ---- */
+
+  img
+      {
+      /* Let it be inline left/right where it wants to be, but verticality make 
+         it in the middle to look nicer, but opinions differ, and if in a multi-line 
+         paragraph, it might not be so great. 
+      */
+      vertical-align: middle;
+      }
+
+  div.figure /* Pandoc figure-style image */
+      {
+      /* Center the image and caption */
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+      font-style: italic;
+      }
+
+  p.caption /* Pandoc figure-style caption within div.figure */
+      {
+      /* Inherits div.figure props by default */
+      }
+
+  /* ---- Code blocks and spans ---- */
+
+  pre, code 
+      {
+      background-color: #fdf7ee;
+      /* BEGIN word wrap */
+      /* Need all the following to word wrap instead of scroll box */
+      /* This will override the overflow:auto if present */
+      white-space: pre-wrap; /* css-3 */
+      white-space: -moz-pre-wrap !important; /* Mozilla, since 1999 */
+      white-space: -pre-wrap; /* Opera 4-6 */
+      white-space: -o-pre-wrap; /* Opera 7 */
+      word-wrap: break-word; /* Internet Explorer 5.5+ */
+      /* END word wrap */
+      }
+
+  pre /* Code blocks */
+      {
+      /* Distinguish pre blocks from other text by more than the font with a background tint. */
+      padding: 0.5em; /* Since we have a background color */
+      border-radius: 5px; /* Softens it */
+      /* Give it a some definition */
+      border: 1px solid #aaa;
+      /* Set it off left and right, seems to look a bit nicer when we have a background */
+      margin-left:  0.5em;
+      margin-right: 0.5em;
+      }
+
+  @media screen
+      {
+      pre
+          {
+          /* On screen, use an auto scroll box for long lines, unless word-wrap is enabled */
+          white-space: pre;
+          overflow: auto;
+          /* Dotted looks better on screen and solid seems to print better. */
+          border: 1px dotted #777;
+          }
+      }
+
+  code /* All inline code spans */
+      {
+      }
+
+  p > code, li > code /* Code spans in paragraphs and tight lists */
+      {
+      /* Pad a little from adjacent text */
+      padding-left:  2px;
+      padding-right: 2px;
+      }
+      
+  li > p code /* Code span in a loose list */
+      {
+      /* We have room for some more background color above and below */
+      padding: 2px;
+      }
+
+  span.option
+      {
+          color: blue;
+          text-decoration: underline;
+      }
+
+
+  /* ---- Math ---- */
+
+  span.math /* Pandoc inline math default and --jsmath inline math */
+      {
+      /* Tried font-style:italic here, and it messed up MathJax rendering in some browsers. Maybe don't mess with at all. */
+      }
+      
+  div.math /* Pandoc --jsmath display math */
+      {
+      }
+      
+  span.LaTeX /* Pandoc --latexmathml math */
+      {
+      } 
+
+  eq /* Pandoc --gladtex math */
+      {
+      } 
+
+  /* ---- Tables ---- */
+
+  /*  A clean textbook-like style with horizontal lines above and below and under 
+      the header. Rows highlight on hover to help scanning the table on screen.
+  */
+
+  table
+      {
+      border-collapse: collapse;
+      border-spacing: 0; /* IE 6 */
+
+      border-bottom: 2pt solid #000;
+      border-top: 2pt solid #000; /* The caption on top will not have a bottom-border */
+
+      /* Center */
+      margin-left: auto;
+      margin-right: auto;
+      }
+      
+  thead /* Entire table header */
+      {
+      border-bottom: 1pt solid #000;
+      background-color: #eee; /* Does this BG print well? */
+      }
+
+  tr.header /* Each header row */
+      {
+      } 
+
+  tbody /* Entire table  body */
+      {
+      }
+
+  /* Table body rows */
+
+  tr  {
+      }
+  tr.odd:hover, tr.even:hover /* Use .odd and .even classes to avoid styling rows in other tables */
+      {
+      background-color: #eee;
+      }
+      
+  /* Odd and even rows */
+  tr.odd {}
+  tr.even {}
+
+  td, th /* Table cells and table header cells */
+      { 
+      vertical-align: top; /* Word */
+      vertical-align: baseline; /* Others */
+      padding-left:   0.5em;
+      padding-right:  0.5em;
+      padding-top:    0.2em;
+      padding-bottom: 0.2em;
+      }
+      
+  /* Removes padding on left and right of table for a tight look. Good if thead has no background color*/
+  /*
+  tr td:last-child, tr th:last-child
+      {
+      padding-right: 0;
+      }
+  tr td:first-child, tr th:first-child 
+      {
+      padding-left: 0;
+      }
+  */
+
+  th /* Table header cells */
+      {
+      font-weight: bold; 
+      }
+
+  tfoot /* Table footer (what appears here if caption is on top?) */
+      {
+      }
+
+  caption /* This is for a table caption tag, not the p.caption Pandoc uses in a div.figure */
+      {
+      caption-side: top;
+      border: none;
+      font-size: 0.9em;
+      font-style: italic;
+      text-align: center;
+      margin-bottom: 0.3em; /* Good for when on top */
+      padding-bottom: 0.2em;
+      }
+
+  /* ---- Definition lists ---- */
+
+  dl /* The whole list */
+      {
+      border-top: 2pt solid black;
+      padding-top: 0.5em;
+      border-bottom: 2pt solid black;
+      }
+
+  dt /* Definition term */
+      {
+      font-weight: bold;
+      }
+
+  dd+dt /* 2nd or greater term in the list */
+      {
+      border-top: 1pt solid black;
+      padding-top: 0.5em;
+      }
+      
+  dd /* A definition */
+      {
+      margin-bottom: 0.5em;
+      }
+
+  dd+dd /* 2nd or greater definition of a term */
+      {
+      border-top: 1px solid black; /* To separate multiple definitions */
+      }
+      
+  /* ---- Footnotes ---- */
+
+  a.footnote, a.footnoteRef { /* Pandoc, MultiMarkdown footnote links */
+      font-size: small; 
+      vertical-align: text-top;
+  }
+
+  a[href^="#fnref"], a.reversefootnote /* Pandoc, MultiMarkdown, ?? footnote back links */
+      {
+      }
+
+  @media print
+      {
+      a[href^="#fnref"], a.reversefootnote /* Pandoc, MultiMarkdown */
+          {
+          /* Don't display these at all in print since the arrow is only something to click on */
+          display: none;
+          }
+      }
+      
+  div.footnotes /* Pandoc footnotes div at end of the document */
+      {
+      }
+      
+  div.footnotes li[id^="fn"] /* A footnote item within that div */
+      {
+      }
+
+  /* You can class stuff as "noprint" to not print. 
+     Useful since you can't set this media conditional inside an HTML element's 
+     style attribute (I think), and you don't want to make another stylesheet that 
+     imports this one and adds a class just to do this.
+  */
+
+  @media print
+      {
+      .noprint
+          {
+          display:none;
+          }
+      }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Underspecified object declarations</h1>
+<p class="author">Alex Gilding (Perforce UK)</p>
+<p class="author">Jens Gustedt (INRIA France)</p>
+<p class="date">2022-06-10</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#revision-history">Revision history</a></li>
+<li><a href="#introduction">Introduction</a>
+<ul>
+<li><a href="#examples">Examples</a></li>
+</ul></li>
+<li><a href="#common-syntax-requirements">Common syntax requirements</a></li>
+<li><a href="#interaction-between-storage-class-specifiers">Interaction between storage-class specifiers</a></li>
+<li><a href="#design">Design</a>
+<ul>
+<li><a href="#terminology">Terminology</a></li>
+<li><a href="#scope-of-identifiers">Scope of identifiers</a></li>
+<li><a href="#other-identifiers">Other identifiers</a></li>
+<li><a href="#storage-class-specifiers-6.7.1">Storage-class specifiers (6.7.1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<table>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">org:</td>
+<td style="text-align: left;">ISO/IEC JCT1/SC22/WG14</td>
+<td>document:</td>
+<td>N3006</td>
+<td></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">target:</td>
+<td style="text-align: left;">IS 9899:2023</td>
+<td>version:</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">date:</td>
+<td style="text-align: left;">2022-06-10</td>
+<td>license:</td>
+<td><a href="https://creativecommons.org/licenses/by/4.0/" title="Distributed under a Creative Commons Attribution 4.0 International License">CC BY</a></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="revision-history">Revision history</h2>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 34%" />
+<col style="width: 45%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Paper number</th>
+<th style="text-align: left;">Title</th>
+<th style="text-align: left;">Changes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">N3006</td>
+<td style="text-align: left;">Underspecified object declarations</td>
+<td style="text-align: left;">wording improvements</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">N2952</td>
+<td style="text-align: left;">Underspecified object declarations</td>
+<td style="text-align: left;">common introduction replacing previous</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">N2890 type-generic programming</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">N2917 The <code class="sourceCode c"><span class="kw">constexpr</span></code> specifier</td>
+</tr>
+</tbody>
+</table>
+<h2 id="introduction">Introduction</h2>
+<p>N2890 (type-generic programming) and N2917 (the <code class="sourceCode c"><span class="kw">constexpr</span></code> specifier) proposed new features to C that are already much experienced in other programming languages. Whereas WG14 found current integration of the proposed features for functional extension into C insufficient, we voted in favor of an integration of features when they reduced to object declarations:</p>
+<ul>
+<li>11/4/8 WG14 wants the <code class="sourceCode c"><span class="kw">constexpr</span></code> object features for C23</li>
+<li>10/6/1 WG14 wants something along the lines of N2923 for auto objects in C23</li>
+</ul>
+<p>These features are syntactically and semantically closely related and so we decided to join efforts such that we may provide a seamless integration of both into C23.</p>
+<ul>
+<li><p><a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n3006.htm">N3006</a>: <em>Underspecified object declarations</em></p>
+<p>This paper. It provides an introduction and proposes a common syntactic feature that serves for the introduction of both target features, namely <em>underspecified declarations</em>.</p></li>
+<li><p><a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n3007.htm">N3007</a>: <em>Type inference for object definitions</em></p>
+<p>This proposes type inference for object declarations, by either using the existing <code class="sourceCode c"><span class="kw">__auto_type</span></code> extension (gcc, clang) or the portage of the extension to the <code class="sourceCode c"><span class="kw">auto</span></code> keyword as imported from C++ (clang).</p></li>
+<li><p><a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n3008.htm">N3008</a>: <em>The constexpr specifier for object definitions</em></p>
+<p>This reduces the proposed <code class="sourceCode c"><span class="kw">constexpr</span></code> feature to objects and resolves some issues that remained with the specification of such a feature.</p></li>
+<li><p><a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n2955.htm">N2955</a>: <em>Introduce storage-class specifiers for compound literals</em></p>
+<p>This adds the possibility to add storage-class specifiers such as <code class="sourceCode c"><span class="kw">constexpr</span></code> and <code class="sourceCode c"><span class="kw">static</span></code> to compound literals.</p></li>
+</ul>
+<p>The later three become thus much simpler and hopefully less contested.</p>
+<h3 id="examples">Examples</h3>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;tgmath.h&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true"></a><span class="kw">constexpr</span> <span class="kw">double</span> π <span class="op">=</span> <span class="fl">3.1415926536</span><span class="op">;</span> <span class="co">// floating point constants</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true"></a><span class="kw">constexpr</span> <span class="kw">char</span> <span class="kw">const</span> empty<span class="op">[]</span> <span class="op">=</span> <span class="st">&quot;&quot;</span><span class="op">;</span> <span class="co">// named string constants</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true"></a><span class="kw">auto</span> n <span class="op">=</span> <span class="dv">4294967296</span><span class="bu">u</span><span class="op">;</span>              <span class="co">// obtain implementation-defined type</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true"></a><span class="kw">auto</span> r <span class="op">=</span> cos<span class="op">(</span>x<span class="op">);</span>                   <span class="co">// infer consistent type</span></span></code></pre></div>
+<h2 id="common-syntax-requirements">Common syntax requirements</h2>
+<p>The features have several properties in common</p>
+<ul>
+<li><p>they need an initializer before the object can be used in any way</p></li>
+<li><p>use of the declared identifier within the initializer causes a cycle in the type or value dependency</p></li>
+<li><p>using them with several declarators in the same declaration could cause unnecessary ambiguity that is best avoided</p></li>
+<li><p>declaring non-ordinary identifiers such as tags or member names would complexify specification</p>
+<h3 id="examples-1">Examples</h3></li>
+</ul>
+<div class="sourceCode" id="cb2"><pre class="sourceCode C"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="kw">auto</span> n <span class="op">=</span> <span class="dv">4294967296</span><span class="bu">u</span><span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a><span class="kw">int</span> main<span class="op">()</span> <span class="op">{</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a>  <span class="kw">auto</span> k<span class="op">;</span>                  <span class="co">// invalid</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true"></a>  <span class="kw">auto</span> <span class="kw">alignof</span><span class="op">(</span>n<span class="op">)</span> n <span class="op">=</span> <span class="dv">44</span><span class="op">;</span>  <span class="co">// valid, refers to outer</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true"></a>  <span class="kw">auto</span> n <span class="op">=</span> n<span class="op">;</span>              <span class="co">// invalid, refers to inner, cyclic</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true"></a>  <span class="kw">auto</span> n <span class="op">=</span> <span class="dv">4294967296</span><span class="bu">u</span><span class="op">,</span> m <span class="op">=</span> <span class="dv">4294967297</span><span class="bu">u</span><span class="op">;</span> <span class="co">// same types ?</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true"></a>  <span class="kw">auto</span> x <span class="op">=</span> <span class="op">(</span><span class="kw">struct</span> s <span class="op">{</span><span class="kw">int</span> a<span class="op">;</span> <span class="op">}){</span> <span class="op">};</span> <span class="co">// confusion of scope for struct s</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true"></a>  <span class="kw">struct</span> s <span class="op">{</span><span class="kw">int</span> a<span class="op">;</span> <span class="op">}</span> x<span class="op">;</span>             <span class="co">// clearly a local type definition</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="interaction-between-storage-class-specifiers">Interaction between storage-class specifiers</h2>
+<p>Storage-class specifier as a term becomes even more a misnomer with the features that are introduced in this series of papers. In fact they then specify</p>
+<ul>
+<li>storage duration (<code class="sourceCode c"><span class="kw">static</span></code> in block scope, <code class="sourceCode c"><span class="kw">auto</span></code>, <code class="sourceCode c"><span class="kw">register</span></code>, <code class="sourceCode c"><span class="kw">thread_local</span></code>)</li>
+<li>linkage (<code class="sourceCode c"><span class="kw">static</span></code> in file scope, <code class="sourceCode c"><span class="kw">extern</span></code>)</li>
+<li>addressablity (<code class="sourceCode c"><span class="kw">register</span></code>)</li>
+<li>compile time determination (<code class="sourceCode c"><span class="kw">constexpr</span></code>)</li>
+<li>types (<code class="sourceCode c"><span class="kw">typedef</span></code>, <code class="sourceCode c"><span class="kw">__auto_type</span></code> or <code class="sourceCode c"><span class="kw">auto</span></code>)</li>
+</ul>
+<p>Their possible combination is as indicated in the following table:</p>
+<table>
+<thead>
+<tr class="header">
+<th></th>
+<th>co</th>
+<th>at</th>
+<th>au</th>
+<th>re</th>
+<th>tl</th>
+<th>st</th>
+<th>ex</th>
+<th>il</th>
+<th>td</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code class="sourceCode c"><span class="kw">constexpr</span></code></td>
+<td></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code class="sourceCode c"><span class="kw">__auto_type</span></code></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code class="sourceCode c"><span class="kw">auto</span></code></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code class="sourceCode c"><span class="kw">register</span></code></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code class="sourceCode c"><span class="kw">thread_local</span></code></td>
+<td></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td><strong>✅</strong></td>
+<td><strong>✅</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code class="sourceCode c"><span class="kw">static</span></code></td>
+<td><strong>➕</strong></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+<td><strong>✅</strong></td>
+<td></td>
+<td></td>
+<td><strong>✅</strong></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code class="sourceCode c"><span class="kw">extern</span></code></td>
+<td></td>
+<td><strong>➕</strong></td>
+<td></td>
+<td></td>
+<td><strong>✅</strong></td>
+<td></td>
+<td></td>
+<td><strong>✅</strong></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code class="sourceCode c"><span class="kw">inline</span></code></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td><strong>✅</strong></td>
+<td><strong>✅</strong></td>
+<td><strong>✅</strong></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code class="sourceCode c"><span class="kw">typedef</span></code></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>It might be worth considering to rename the term “storage-class specifier” editorially to something that fits better, such as “declaration feature” or “feature specifier”, and to fuse it with the term “function specifier” (<code class="sourceCode c"><span class="kw">inline</span></code> and <code class="sourceCode c"><span class="kw">_Noreturn</span></code>).</p>
+<h2 id="design">Design</h2>
+<p>WG14 would not have to vote on the proposed changes individually, but only in combination with N3007 and N3008.</p>
+<h3 id="terminology">Terminology</h3>
+<p>The term <em>underspecified declaration</em> is introduced in a new paragraph at the end of 6.7. Depending on the features that WG14 accepts for C23 one of the following three alternatives should be used.</p>
+<dl>
+<dt>Alternatives:</dt>
+<dd><ins>
+A declaration such that the declaration specifiers contain no type specifier or that is declared with <code class="sourceCode c"><span class="kw">constexpr</span></code> is said to be <em>underspecified</em>.
+</ins>
+</dd>
+<dd><ins>
+A declaration such that the declaration specifiers contain no type specifier is said to be <em>underspecified</em>.
+</ins>
+</dd>
+<dd><ins>
+A declaration with <code class="sourceCode c"><span class="kw">constexpr</span></code> is said to be <em>underspecified</em>.
+</ins>
+</dd>
+</dl>
+<h3 id="scope-of-identifiers">Scope of identifiers</h3>
+<p>The property that the identifier under declaration should not be visible within the initializer is best modeled by adjusting the scope in which it is visible. Therefore we amend 6.2.1 p7 with special rules that ensure that</p>
+<ul>
+<li><p>Identifiers of a surrounding scope remain visible until the end of the declarator (that is up to the <code class="sourceCode c"><span class="op">=</span></code> of the initializer)</p></li>
+<li><p>The declared initializer is only visible after the whole declaration is completed.</p></li>
+</ul>
+<blockquote>
+<p>7 Structure, union, and enumeration tags have scope that begins just after the appearance of the tag in a type specifier that declares the tag. Each enumeration constant has scope that begins just after the appearance of its defining enumerator in an enumerator list. <ins>An ordinary identifier that has an underspecified definition has scope that starts when the definition is completed; if the same ordinary identifier declares another entity with a scope that encloses the current block, that declaration is hidden as soon as the inner declarator is completed.FNT)</ins> Any other identifier has scope that begins just after the completion of its declarator.</p>
+</blockquote>
+<blockquote>
+<ins>
+FNT) That means, that the outer declaration is not visible for the initializer.
+</ins>
+</blockquote>
+<h3 id="other-identifiers">Other identifiers</h3>
+<p>An underspecified declaration should declare exactly one ordinary identifier, no structure ore union tags or members or any other collaterals such as enumeration constants. This is achieved by two additions.</p>
+<ul>
+<li>A constraint that forbids to declare identifiers from any other name space than the ordinary identifier name space (6.7 new para after p4)</li>
+</ul>
+<blockquote>
+<ins>
+4’ In an underspecified declaration all declared identifiers that do not have a prior declaration shall be ordinary identifiers.
+</ins>
+</blockquote>
+<ul>
+<li>UB that forces a definition of an object and forbids to have other than exactly one identifier declared (appended to the new para at the end of 6.7)</li>
+</ul>
+<blockquote>
+<ins>
+If such a declaration is not a definition, if it declares no or more than one ordinary identifier, if the declared identifier already has a declaration in the same scope, or if the declared entity is not an object, the behavior is undefined.
+</ins>
+</blockquote>
+<p>For the latter the choice is to go with UB, because there are already extensions that go beyond the definitions as given here, such as <code class="sourceCode c"><span class="kw">auto</span></code> declarations of several variables or <code class="sourceCode c"><span class="kw">constexpr</span></code> functions.</p>
+<h3 id="storage-class-specifiers-6.7.1">Storage-class specifiers (6.7.1)</h3>
+<p>Adapt p6 such that it better reflects on the effective role of storage-class specifiers</p>
+<blockquote>
+<p>6 <del>The <code class="sourceCode c"><span class="kw">typedef</span></code> specifier is called a “storage-class specifier” for syntactic convenience only; it is discussed in 6.7.8.</del><ins>Storage-class specifiers specify various properties of identifiers and declared features; storage duration (<code class="sourceCode c"><span class="kw">static</span></code> in block scope, <code class="sourceCode c"><span class="kw">thread_local</span></code>, <code class="sourceCode c"><span class="kw">auto</span></code>, <code class="sourceCode c"><span class="kw">register</span></code>), linkage (<code class="sourceCode c"><span class="kw">extern</span></code>, <code class="sourceCode c"><span class="kw">static</span></code> in file scope, <code class="sourceCode c"><span class="kw">typedef</span></code>) and type (<code class="sourceCode c"><span class="kw">typedef</span></code>).</ins> The meanings of the various linkages and storage durations were discussed in 6.2.2 and 6.2.4<ins>, <code class="sourceCode c"><span class="kw">typedef</span></code> is discussed in 6.7.8</ins>.</p>
+</blockquote>
+</body>
+</html>

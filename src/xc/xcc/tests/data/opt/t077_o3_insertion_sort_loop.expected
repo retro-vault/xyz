@@ -55,7 +55,7 @@ __xcc_L3:
 	xor	a
 	ld	e, a
 	ld	d, #0
-	ld	hl, #data
+	ld	hl, #_data
 	add	hl, de
 	ld	a, (hl)
 	ld	-4(ix), a

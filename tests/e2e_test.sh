@@ -3,13 +3,13 @@
 #
 # End-to-end regression test for the XYZ toolchain.
 # Runs in phases: build, xz80 tests, xcc unit + execution tests,
-# xld tests, xas parity, xar smoke tests, xgdb tests,
+# xcc C23 compile matrix, xld tests, xas parity, xar smoke tests, xgdb tests,
 # mdr-emu end-to-end tests, and full-chain integration.
 #
 # Usage: ./tests/e2e_test.sh [--no-build] [--phase <name>]
 #   --no-build   skip the build step (assume binaries are current)
 #   --phase      run only the named phase
-#                (build|xz80|xcc|xcc-exec|xld|xas|xar|xgdb|mdr|chain)
+#                (build|xz80|xcc|xcc-exec|c23|xld|xas|xar|xgdb|mdr|chain)
 #
 # Exit: 0 if all selected phases pass, 1 otherwise.
 
@@ -143,6 +143,15 @@ phase_xcc_exec() {
     fi
 
     bash "$ROOT/src/xc/xcc/tests/run_exec_tests.sh" "$XCC"
+}
+
+# ---------------------------------------------------------------------------
+# Phase: xcc C23 compatibility compile matrix
+# ---------------------------------------------------------------------------
+phase_c23() {
+    make -C "$ROOT/tests/c23" matrix \
+        PROFILE=setups/xcc-z80/profile-xcc-z80.json \
+        RUN_MODE=never
 }
 
 # ---------------------------------------------------------------------------
@@ -340,6 +349,7 @@ fi
 run_phase "xz80"     "xz80 unit tests"             phase_xz80
 run_phase "xcc"      "xcc unit tests"              phase_xcc
 run_phase "xcc-exec" "xcc execution tests"         phase_xcc_exec
+run_phase "c23"      "xcc C23 compile matrix"      phase_c23
 run_phase "xld"      "xld unit tests"              phase_xld
 run_phase "xas"      "xas parity (vs sdasz80)"     phase_xas
 run_phase "xar"      "xar smoke tests"             phase_xar

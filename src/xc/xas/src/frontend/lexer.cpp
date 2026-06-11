@@ -186,6 +186,13 @@ namespace xas {
 
         bool is_dir = (src_[pos_] == '.');
         size_t start = pos_;
+        auto is_ucn_hex = [&](size_t idx) -> bool {
+            if (idx >= src_.size()) return false;
+            char c = src_[idx];
+            return std::isdigit(static_cast<unsigned char>(c))
+                || (c >= 'a' && c <= 'f')
+                || (c >= 'A' && c <= 'F');
+        };
 
         // Allow letters, digits, underscores, dots in identifiers.
         while (pos_ < src_.size()) {
@@ -193,6 +200,14 @@ namespace xas {
             if (std::isalnum(static_cast<unsigned char>(c)) || c == '_'
                 || c == '.' || c == '$' || c == '\'' || c == '!')
                 ++pos_;
+            else if (c == '\\' &&
+                     ((peek(1) == 'u' && is_ucn_hex(pos_ + 2) && is_ucn_hex(pos_ + 3) &&
+                       is_ucn_hex(pos_ + 4) && is_ucn_hex(pos_ + 5)) ||
+                      (peek(1) == 'U' && is_ucn_hex(pos_ + 2) && is_ucn_hex(pos_ + 3) &&
+                       is_ucn_hex(pos_ + 4) && is_ucn_hex(pos_ + 5) &&
+                       is_ucn_hex(pos_ + 6) && is_ucn_hex(pos_ + 7) &&
+                       is_ucn_hex(pos_ + 8) && is_ucn_hex(pos_ + 9))))
+                pos_ += (peek(1) == 'u') ? 6 : 10;
             else
                 break;
         }
@@ -318,7 +333,8 @@ namespace xas {
             return read_ident_or_directive();
         }
 
-        if (c == '.' || c == '_') return read_ident_or_directive();
+        if (c == '.' || c == '_' || (c == '\\' && (peek(1) == 'u' || peek(1) == 'U')))
+            return read_ident_or_directive();
         if (c == '$' || c == '@') {
             token t; t.kind = (c == '$') ? token_kind::dollar : token_kind::at;
             t.text = std::string(1, c); t.file = file_; t.line = line_;

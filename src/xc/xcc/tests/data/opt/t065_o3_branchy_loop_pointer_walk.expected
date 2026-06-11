@@ -16,10 +16,10 @@ _f:
 	ld	sp, hl
 	xor	a
 	ld	-6(ix), a
-	ld	hl, #dst
+	ld	hl, #_dst
 	ld	-5(ix), l
 	ld	-4(ix), h
-	ld	hl, #src
+	ld	hl, #_src
 	ld	-3(ix), l
 	ld	-2(ix), h
 __xcc_L0:

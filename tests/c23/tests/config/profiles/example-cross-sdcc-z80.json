@@ -1,0 +1,23 @@
+{
+  "compiler": "sdcc",
+  "label": "example-sdcc-z80",
+  "std_flag": "",
+  "artifact_name": "case.ihx",
+  "compile_flags": [
+    "-mz80"
+  ],
+  "compile_template": [
+    "{compiler}",
+    "{profile_flags}",
+    "{include_flags}",
+    "{extra_cflags}",
+    "-o",
+    "{executable}",
+    "{source}"
+  ],
+  "run_template": [
+    "{root}/tests/tools/run_sdcc_z80.sh",
+    "{executable}",
+    "{build_dir}"
+  ]
+}

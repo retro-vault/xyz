@@ -52,6 +52,11 @@ void *calloc(size_t count, size_t size);
 void *realloc(void *ptr, size_t size);
 void free(void *ptr);
 void *aligned_alloc(size_t alignment, size_t size);
+size_t memalignment(const void *ptr);
+
+/* C23 sized/aligned free (new) */
+void free_sized(void *ptr, size_t size);
+void free_aligned(void *ptr, size_t alignment);
 
 int abs(int value);
 long labs(long value);
@@ -72,6 +77,11 @@ long strtol(const char *restrict nptr, char **restrict endptr, int base);
 unsigned long strtoul(const char *restrict nptr, char **restrict endptr, int base);
 long long strtoll(const char *restrict nptr, char **restrict endptr, int base);
 unsigned long long strtoull(const char *restrict nptr, char **restrict endptr, int base);
+
+/* C23 float-to-string formatting (new) */
+int strfromf(char *restrict s, size_t n, const char *restrict format, float fp);
+int strfromd(char *restrict s, size_t n, const char *restrict format, double fp);
+int strfroml(char *restrict s, size_t n, const char *restrict format, long double fp);
 
 int rand(void);
 void srand(unsigned int seed);

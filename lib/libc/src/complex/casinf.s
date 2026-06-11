@@ -16,12 +16,6 @@
         .globl  _casinf
         .globl  _casinhf
 
-        .area   _DATA
-__casinf_asinh_re:
-        .ds     4
-__casinf_asinh_im:
-        .ds     4
-
         .area   _CODE
 
 _casinf::
@@ -74,19 +68,8 @@ casinf_nonzero:
         inc     sp
         inc     sp
         inc     sp
-        ld      (__casinf_asinh_re),de
-        ld      (__casinf_asinh_re + 2),hl
-        exx
-        ld      (__casinf_asinh_im),de
-        ld      (__casinf_asinh_im + 2),hl
-        exx
 
         ;; -i * (u + i v) = v - i u
-        ld      de,(__casinf_asinh_im)
-        ld      hl,(__casinf_asinh_im + 2)
-        exx
-        ld      de,(__casinf_asinh_re)
-        ld      hl,(__casinf_asinh_re + 2)
         ld      a,h
         xor     #0x80
         ld      h,a

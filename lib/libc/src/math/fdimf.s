@@ -16,9 +16,6 @@
         .globl  _fdimf
         .globl  ___fssub
 
-        .area   _DATA
-__fdim_x:   .ds 4                       ; saved x while building the y operand
-
         .area   _CODE
 
         ;; HL:DE carries x. The second float, y, is stacked at 4(ix)..7(ix)
@@ -27,8 +24,8 @@ _fdimf::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__fdim_x),de           ; save x low word
-        ld      (__fdim_x + 2),hl       ; save x high word
+        push    hl                      ; save x high word at -2(ix),-1(ix)
+        push    de                      ; save x low word at -4(ix),-3(ix)
         ;; Repack y in the order expected by ___fssub:
         ;; high word first, then low word.
         ld      a,7(ix)
@@ -41,18 +38,22 @@ _fdimf::
         ld      c,a                     ; BC = y low word
         push    hl
         push    bc
-        ld      de,(__fdim_x)           ; restore x low word
-        ld      hl,(__fdim_x + 2)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)                ; restore x after using HL for y packing
         call    ___fssub                ; compute x - y
         pop     bc
         pop     bc                      ; drop y's temporary stack copy
         ;; Exact equality is already +0. Only negative results collapse.
         bit     7,h                     ; negative sign means x < y
         jr      nz,fdim_zero
+        ld      sp,ix
         pop     ix
         ret                             ; positive difference survives unchanged
 fdim_zero:
         ld      hl,#0
         ld      de,#0                   ; +0.0
+        ld      sp,ix
         pop     ix
         ret

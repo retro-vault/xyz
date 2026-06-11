@@ -19,67 +19,86 @@
         .globl  ___fsmul
         .globl  ___fssub
 
-        .area   _DATA
-__tanhf_x:     .ds 4
-__tanhf_tmp:   .ds 4
-__tanhf_sign:  .ds 1
-
         .area   _CODE
 
 _tanhf::
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      c,l
+        ld      b,h
+        ld      hl,#-9
+        add     hl,sp
+        ld      sp,hl
         ;; Save sign(x), then continue with |x| so the exponential path only
         ;; has to reason about non-negative magnitudes.
-        ld      a,h
+        ld      a,b
         and     #0x80
-        ld      (__tanhf_sign),a
-        res     7,h
-        ld      (__tanhf_x),de
-        ld      (__tanhf_x + 2),hl
+        ld      -1(ix),a
+        res     7,b
+        ld      -9(ix),e
+        ld      -8(ix),d
+        ld      -7(ix),c
+        ld      -6(ix),b
 
         ;; exp(2*|x|)
         ld      hl,#0x4000              ; 2.0f
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__tanhf_x)
-        ld      hl,(__tanhf_x + 2)
+        ld      e,-9(ix)
+        ld      d,-8(ix)
+        ld      l,-7(ix)
+        ld      h,-6(ix)
         call    ___fsmul
         pop     bc
         pop     bc
         call    _expf
-        ld      (__tanhf_tmp),de
-        ld      (__tanhf_tmp + 2),hl
+        ld      -5(ix),e
+        ld      -4(ix),d
+        ld      -3(ix),l
+        ld      -2(ix),h
 
         ;; denom = exp(2*|x|) + 1
         ld      hl,#0x3f80              ; 1.0f
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__tanhf_tmp)
-        ld      hl,(__tanhf_tmp + 2)
+        ld      e,-5(ix)
+        ld      d,-4(ix)
+        ld      l,-3(ix)
+        ld      h,-2(ix)
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tanhf_tmp),de
-        ld      (__tanhf_tmp + 2),hl
+        ld      -5(ix),e
+        ld      -4(ix),d
+        ld      -3(ix),l
+        ld      -2(ix),h
 
         ;; frac = 2 / denom
-        ld      hl,(__tanhf_tmp + 2)
+        ld      l,-3(ix)
+        ld      h,-2(ix)
         push    hl
-        ld      hl,(__tanhf_tmp)
+        ld      l,-5(ix)
+        ld      h,-4(ix)
         push    hl
         ld      de,#0x0000
         ld      hl,#0x4000              ; 2.0f
         call    ___fsdiv
         pop     bc
         pop     bc
-        ld      (__tanhf_tmp),de
-        ld      (__tanhf_tmp + 2),hl
+        ld      -5(ix),e
+        ld      -4(ix),d
+        ld      -3(ix),l
+        ld      -2(ix),h
 
         ;; 1 - frac
-        ld      hl,(__tanhf_tmp + 2)
+        ld      l,-3(ix)
+        ld      h,-2(ix)
         push    hl
-        ld      hl,(__tanhf_tmp)
+        ld      l,-5(ix)
+        ld      h,-4(ix)
         push    hl
         ld      de,#0x0000
         ld      hl,#0x3f80              ; 1.0f
@@ -88,9 +107,11 @@ _tanhf::
         pop     bc
 
         ;; Restore the original sign. This also turns +0 into -0 for tanh(-0).
-        ld      a,(__tanhf_sign)
+        ld      a,-1(ix)
         or      a
-        ret     z
+        jr      z,__tanhf_finish
         set     7,h
+__tanhf_finish:
+        ld      sp,ix
+        pop     ix
         ret
-

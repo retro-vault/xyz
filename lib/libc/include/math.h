@@ -183,6 +183,11 @@ long double copysignl(long double mag, long double sign);
 float       nextafterf(float x, float y);
 double      nextafter(double x, double y);
 long double nextafterl(long double x, long double y);
+
+/* C23 next representable value (new) */
+float       nextupf(float x);   double      nextup(double x);   long double nextupl(long double x);
+float       nextdownf(float x); double      nextdown(double x); long double nextdownl(long double x);
+
 float       nanf(const char *tag);
 double      nan(const char *tag);
 long double nanl(const char *tag);
@@ -215,5 +220,65 @@ long double fminl(long double x, long double y);
 float       fdimf(float x, float y);
 double      fdim(double x, double y);
 long double fdiml(long double x, long double y);
+
+/* C23 additional math functions (new) */
+float       fromfpf(float x, int round, int width);
+double      fromfp(double x, int round, int width);
+long double fromfpl(long double x, int round, int width);
+float       ufromfpf(float x, int round, int width);
+double      ufromfp(double x, int round, int width);
+long double ufromfpl(long double x, int round, int width);
+float       fromfpxf(float x, int round, int width);
+double      fromfpx(double x, int round, int width);
+long double fromfpxl(long double x, int round, int width);
+float       ufromfpxf(float x, int round, int width);
+double      ufromfpx(double x, int round, int width);
+long double ufromfpxl(long double x, int round, int width);
+
+float       roundevenf(float x);
+double      roundeven(double x);
+long double roundevenl(long double x);
+
+float       fmaximumf(float x, float y);
+double      fmaximum(double x, double y);
+long double fmaximuml(long double x, long double y);
+float       fminimumf(float x, float y);
+double      fminimum(double x, double y);
+long double fminimuml(long double x, long double y);
+float       fmaximum_magf(float x, float y);
+double      fmaximum_mag(double x, double y);
+long double fmaximum_magl(long double x, long double y);
+float       fminimum_magf(float x, float y);
+double      fminimum_mag(double x, double y);
+long double fminimum_magl(long double x, long double y);
+float       fmaximum_numf(float x, float y);
+double      fmaximum_num(double x, double y);
+long double fmaximum_numl(long double x, long double y);
+float       fminimum_numf(float x, float y);
+double      fminimum_num(double x, double y);
+long double fminimum_numl(long double x, long double y);
+float       fmaximum_mag_numf(float x, float y);
+double      fmaximum_mag_num(double x, double y);
+long double fmaximum_mag_numl(long double x, long double y);
+float       fminimum_mag_numf(float x, float y);
+double      fminimum_mag_num(double x, double y);
+long double fminimum_mag_numl(long double x, long double y);
+
+float       getpayloadf(const float *x);
+double      getpayload(const double *x);
+long double getpayloadl(const long double *x);
+int         setpayloadf(float *x, float payload);
+int         setpayload(double *x, double payload);
+int         setpayloadl(long double *x, long double payload);
+int         setpayloadsigf(float *x, float payload);
+int         setpayloadsig(double *x, double payload);
+int         setpayloadsigl(long double *x, long double payload);
+
+int         totalorderf(float x, float y);
+int         totalorder(double x, double y);
+int         totalorderl(long double x, long double y);
+int         totalordermagf(float x, float y);
+int         totalordermag(double x, double y);
+int         totalordermagl(long double x, long double y);
 
 #endif /* _MATH_H */

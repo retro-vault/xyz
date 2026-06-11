@@ -12,9 +12,8 @@
         ;;   s = (m - 1) / (m + 1), z = s^2
         ;; on a compact interval.
         ;;
-        ;; These helpers are intentionally non-reentrant and reuse a small
-        ;; shared scratch area, just like the rest of the handwritten math
-        ;; slice in this libc.
+        ;; Keep the helper structure, but move every temporary into one
+        ;; IX-framed local block so concurrent calls do not alias each other.
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
@@ -38,56 +37,67 @@
         .globl  _frexpf
         .globl  _ldexpf
 
-        .area   _DATA
-__tf_x:   .ds 4
-__tf_y:   .ds 4
-__tf_u:   .ds 4
-__tf_v:   .ds 4
-__tf_qf:  .ds 4
-__tf_qi:  .ds 4
-__tf_exp: .ds 2
+TF_XLO  .equ -26
+TF_XHI  .equ -24
+TF_YLO  .equ -22
+TF_YHI  .equ -20
+TF_ULO  .equ -18
+TF_UHI  .equ -16
+TF_VLO  .equ -14
+TF_VHI  .equ -12
+TF_QFLO .equ -10
+TF_QFHI .equ -8
+TF_QILO .equ -6
+TF_QIHI .equ -4
+TF_EXP  .equ -2
 
         .area   _CODE
 
 __tf_load_x:
-        ld      de,(__tf_x)
-        ld      hl,(__tf_x + 2)
+        ld      e,TF_XLO(ix)
+        ld      d,TF_XLO + 1(ix)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         ret
 
 __tf_load_y:
-        ld      de,(__tf_y)
-        ld      hl,(__tf_y + 2)
+        ld      e,TF_YLO(ix)
+        ld      d,TF_YLO + 1(ix)
+        ld      l,TF_YHI(ix)
+        ld      h,TF_YHI + 1(ix)
         ret
 
 __tf_load_u:
-        ld      de,(__tf_u)
-        ld      hl,(__tf_u + 2)
+        ld      e,TF_ULO(ix)
+        ld      d,TF_ULO + 1(ix)
+        ld      l,TF_UHI(ix)
+        ld      h,TF_UHI + 1(ix)
         ret
 
 __tf_ret_nan:
         ld      hl,#0x7fc0
         ld      de,#0x0000
-        ret
+        jp      __tf_leave
 
 __tf_ret_pinf:
         ld      hl,#0x7f80
         ld      de,#0x0000
-        ret
+        jp      __tf_leave
 
 __tf_ret_ninf:
         ld      hl,#0xff80
         ld      de,#0x0000
-        ret
+        jp      __tf_leave
 
 __tf_ret_zero:
         ld      hl,#0x0000
         ld      de,#0x0000
-        ret
+        jp      __tf_leave
 
 __tf_ret_one:
         ld      hl,#0x3f80
         ld      de,#0x0000
-        ret
+        jp      __tf_leave
 
 __tf_neg_hlde:
         ld      a,h
@@ -95,12 +105,28 @@ __tf_neg_hlde:
         ld      h,a
         ret
 
+__tf_leave:
+        ld      sp,ix
+        pop     ix
+        ret
+
         ;; __libc_expf_core
         ;; input:  HL:DE = x
         ;; output: HL:DE = expf(x)
 __libc_expf_core::
-        ld      (__tf_x),de
-        ld      (__tf_x + 2),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      c,l                     ; preserve x.high while allocating locals
+        ld      b,h
+        ld      hl,#-26
+        add     hl,sp
+        ld      sp,hl
+        ld      TF_XLO(ix),e
+        ld      TF_XLO + 1(ix),d
+        ld      TF_XHI(ix),c
+        ld      TF_XHI + 1(ix),b
+        call    __tf_load_x
         call    ___libc_fpclassifyf
         ld      a,e
         cp      #0                      ; FP_NAN
@@ -147,52 +173,70 @@ tf_exp_chk_lo:
         pop     bc
         pop     bc
         call    _roundf
-        ld      (__tf_qf),de
-        ld      (__tf_qf + 2),hl
+        ld      TF_QFLO(ix),e
+        ld      TF_QFLO + 1(ix),d
+        ld      TF_QFHI(ix),l
+        ld      TF_QFHI + 1(ix),h
         call    ___fs2slong
-        ld      (__tf_qi),de
-        ld      (__tf_qi + 2),hl
+        ld      TF_QILO(ix),e
+        ld      TF_QILO + 1(ix),d
+        ld      TF_QIHI(ix),l
+        ld      TF_QIHI + 1(ix),h
 
         ;; r = x - qf * ln(2)
-        ld      hl,(__tf_qf + 2)
+        ld      l,TF_QFHI(ix)
+        ld      h,TF_QFHI + 1(ix)
         push    hl
-        ld      hl,(__tf_qf)
+        ld      l,TF_QFLO(ix)
+        ld      h,TF_QFLO + 1(ix)
         push    hl
         ld      de,#0x7218              ; ln(2)
         ld      hl,#0x3f31
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_y),de
-        ld      (__tf_y + 2),hl
-        ld      hl,(__tf_y + 2)
+        ld      TF_YLO(ix),e
+        ld      TF_YLO + 1(ix),d
+        ld      TF_YHI(ix),l
+        ld      TF_YHI + 1(ix),h
+        ld      l,TF_YHI(ix)
+        ld      h,TF_YHI + 1(ix)
         push    hl
-        ld      hl,(__tf_y)
+        ld      l,TF_YLO(ix)
+        ld      h,TF_YLO + 1(ix)
         push    hl
         call    __tf_load_x
         call    ___fssub
         pop     bc
         pop     bc
-        ld      (__tf_x),de             ; reuse X scratch for reduced r
-        ld      (__tf_x + 2),hl
+        ld      TF_XLO(ix),e            ; reuse X scratch for reduced r
+        ld      TF_XLO + 1(ix),d
+        ld      TF_XHI(ix),l
+        ld      TF_XHI + 1(ix),h
 
         ;; Horner form for:
         ;;   exp(r) ≈ 1 + r*(1 + r*(1/2 + r*(1/6 + r*(1/24 + r*(1/120)))))
         ld      de,#0x8889              ; 1/120
         ld      hl,#0x3c08
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_x + 2)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3d2a              ; +1/24
         push    hl
         ld      hl,#0xaaab
@@ -201,19 +245,25 @@ tf_exp_chk_lo:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_x + 2)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3e2a              ; +1/6
         push    hl
         ld      hl,#0xaaab
@@ -222,19 +272,25 @@ tf_exp_chk_lo:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_x + 2)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3f00              ; +1/2
         push    hl
         ld      hl,#0x0000
@@ -243,19 +299,25 @@ tf_exp_chk_lo:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_x + 2)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3f80              ; +1
         push    hl
         ld      hl,#0x0000
@@ -264,19 +326,25 @@ tf_exp_chk_lo:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_x + 2)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3f80              ; +1
         push    hl
         ld      hl,#0x0000
@@ -287,11 +355,12 @@ tf_exp_chk_lo:
         pop     bc
 
         ;; scale the polynomial by 2^q
-        ld      de,(__tf_qi)            ; low 16 bits are enough after guards
+        ld      e,TF_QILO(ix)           ; low 16 bits are enough after guards
+        ld      d,TF_QILO + 1(ix)
         push    de
         call    _ldexpf
         pop     bc
-        ret
+        jp      __tf_leave
 
 tf_exp_inf:
         call    __tf_load_x
@@ -305,8 +374,19 @@ tf_exp_inf:
         ;; input:  HL:DE = x
         ;; output: HL:DE = logf(x)
 __libc_logf_core::
-        ld      (__tf_x),de
-        ld      (__tf_x + 2),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      c,l
+        ld      b,h
+        ld      hl,#-26
+        add     hl,sp
+        ld      sp,hl
+        ld      TF_XLO(ix),e
+        ld      TF_XLO + 1(ix),d
+        ld      TF_XHI(ix),c
+        ld      TF_XHI + 1(ix),b
+        call    __tf_load_x
         call    ___libc_fpclassifyf
         ld      a,e
         cp      #0                      ; FP_NAN
@@ -324,13 +404,20 @@ __libc_logf_core::
         jp      nz,__tf_ret_nan
 
         ;; m = frexpf(x, &e)
-        ld      bc,#__tf_exp
+        push    ix
+        pop     hl
+        ld      de,#TF_EXP
+        add     hl,de
+        push    hl
+        pop     bc
         push    bc
         call    __tf_load_x
         call    _frexpf
         pop     bc
-        ld      (__tf_x),de
-        ld      (__tf_x + 2),hl
+        ld      TF_XLO(ix),e
+        ld      TF_XLO + 1(ix),d
+        ld      TF_XHI(ix),l
+        ld      TF_XHI + 1(ix),h
 
         ;; Ensure m lies in [sqrt(1/2), sqrt(2)) for the atanh series.
         ld      hl,#0x3f35              ; sqrt(1/2)
@@ -350,11 +437,15 @@ __libc_logf_core::
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_x),de
-        ld      (__tf_x + 2),hl
-        ld      hl,(__tf_exp)
+        ld      TF_XLO(ix),e
+        ld      TF_XLO + 1(ix),d
+        ld      TF_XHI(ix),l
+        ld      TF_XHI + 1(ix),h
+        ld      l,TF_EXP(ix)
+        ld      h,TF_EXP + 1(ix)
         dec     hl
-        ld      (__tf_exp),hl
+        ld      TF_EXP(ix),l
+        ld      TF_EXP + 1(ix),h
 
 tf_log_ratio:
         ;; s = (m - 1) / (m + 1)
@@ -366,8 +457,10 @@ tf_log_ratio:
         call    ___fssub
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl         ; numerator
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h        ; numerator
 
         ld      hl,#0x3f80              ; + 1
         push    hl
@@ -377,49 +470,65 @@ tf_log_ratio:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_y),de
-        ld      (__tf_y + 2),hl         ; denominator
+        ld      TF_YLO(ix),e
+        ld      TF_YLO + 1(ix),d
+        ld      TF_YHI(ix),l
+        ld      TF_YHI + 1(ix),h        ; denominator
 
-        ld      hl,(__tf_y + 2)
+        ld      l,TF_YHI(ix)
+        ld      h,TF_YHI + 1(ix)
         push    hl
-        ld      hl,(__tf_y)
+        ld      l,TF_YLO(ix)
+        ld      h,TF_YLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsdiv
         pop     bc
         pop     bc
-        ld      (__tf_x),de
-        ld      (__tf_x + 2),hl         ; s
+        ld      TF_XLO(ix),e
+        ld      TF_XLO + 1(ix),d
+        ld      TF_XHI(ix),l
+        ld      TF_XHI + 1(ix),h        ; s
 
         ;; z = s*s
-        ld      hl,(__tf_x + 2)
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_x
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_y),de
-        ld      (__tf_y + 2),hl
+        ld      TF_YLO(ix),e
+        ld      TF_YLO + 1(ix),d
+        ld      TF_YHI(ix),l
+        ld      TF_YHI + 1(ix),h
 
         ;; Horner form for:
         ;;   1 + z/3 + z^2/5 + z^3/7
         ld      de,#0x4925              ; 1/7
         ld      hl,#0x3e12
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_y + 2)
+        ld      l,TF_YHI(ix)
+        ld      h,TF_YHI + 1(ix)
         push    hl
-        ld      hl,(__tf_y)
+        ld      l,TF_YLO(ix)
+        ld      h,TF_YLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3e4c              ; +1/5
         push    hl
         ld      hl,#0xcccd
@@ -428,19 +537,25 @@ tf_log_ratio:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_y + 2)
+        ld      l,TF_YHI(ix)
+        ld      h,TF_YHI + 1(ix)
         push    hl
-        ld      hl,(__tf_y)
+        ld      l,TF_YLO(ix)
+        ld      h,TF_YLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3eaa              ; +1/3
         push    hl
         ld      hl,#0xaaab
@@ -449,19 +564,25 @@ tf_log_ratio:
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
-        ld      hl,(__tf_y + 2)
+        ld      l,TF_YHI(ix)
+        ld      h,TF_YHI + 1(ix)
         push    hl
-        ld      hl,(__tf_y)
+        ld      l,TF_YLO(ix)
+        ld      h,TF_YLO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
         ld      hl,#0x3f80              ; +1
         push    hl
         ld      hl,#0x0000
@@ -472,34 +593,47 @@ tf_log_ratio:
         pop     bc
 
         ;; log(m) = 2 * s * poly
-        ld      (__tf_v),de
-        ld      (__tf_v + 2),hl
-        ld      hl,(__tf_x + 2)
+        ld      TF_VLO(ix),e
+        ld      TF_VLO + 1(ix),d
+        ld      TF_VHI(ix),l
+        ld      TF_VHI + 1(ix),h
+        ld      l,TF_XHI(ix)
+        ld      h,TF_XHI + 1(ix)
         push    hl
-        ld      hl,(__tf_x)
+        ld      l,TF_XLO(ix)
+        ld      h,TF_XLO + 1(ix)
         push    hl
         call    __tf_load_v
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
-        ld      hl,(__tf_u + 2)
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
+        ld      l,TF_UHI(ix)
+        ld      h,TF_UHI + 1(ix)
         push    hl
-        ld      hl,(__tf_u)
+        ld      l,TF_ULO(ix)
+        ld      h,TF_ULO + 1(ix)
         push    hl
         call    __tf_load_u
         call    ___fsadd                ; 2 * s * poly
         pop     bc
         pop     bc
-        ld      (__tf_u),de
-        ld      (__tf_u + 2),hl
+        ld      TF_ULO(ix),e
+        ld      TF_ULO + 1(ix),d
+        ld      TF_UHI(ix),l
+        ld      TF_UHI + 1(ix),h
 
         ;; e*ln(2)
-        ld      hl,(__tf_exp)
+        ld      l,TF_EXP(ix)
+        ld      h,TF_EXP + 1(ix)
         call    ___sint2fs
-        ld      (__tf_v),de
-        ld      (__tf_v + 2),hl
+        ld      TF_VLO(ix),e
+        ld      TF_VLO + 1(ix),d
+        ld      TF_VHI(ix),l
+        ld      TF_VHI + 1(ix),h
         ld      hl,#0x3f31              ; ln(2)
         push    hl
         ld      hl,#0x7218
@@ -508,21 +642,27 @@ tf_log_ratio:
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__tf_v),de
-        ld      (__tf_v + 2),hl
+        ld      TF_VLO(ix),e
+        ld      TF_VLO + 1(ix),d
+        ld      TF_VHI(ix),l
+        ld      TF_VHI + 1(ix),h
 
         ;; log(x) = e*ln(2) + log(m)
-        ld      hl,(__tf_u + 2)
+        ld      l,TF_UHI(ix)
+        ld      h,TF_UHI + 1(ix)
         push    hl
-        ld      hl,(__tf_u)
+        ld      l,TF_ULO(ix)
+        ld      h,TF_ULO + 1(ix)
         push    hl
         call    __tf_load_v
         call    ___fsadd
         pop     bc
         pop     bc
-        ret
+        jp      __tf_leave
 
 __tf_load_v:
-        ld      de,(__tf_v)
-        ld      hl,(__tf_v + 2)
+        ld      e,TF_VLO(ix)
+        ld      d,TF_VLO + 1(ix)
+        ld      l,TF_VHI(ix)
+        ld      h,TF_VHI + 1(ix)
         ret

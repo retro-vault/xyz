@@ -36,6 +36,9 @@ jobs:
       - name: Build staged distribution
         run: make all
 
+      - name: Run C23 compatibility matrix
+        run: make -C tests/c23 matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json RUN_MODE=never
+
       - name: Archive release payload
         run: tar -czf xyz-release.tar.gz -C bin .
 

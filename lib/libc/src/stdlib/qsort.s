@@ -15,26 +15,6 @@
         .globl  __mul16
         .globl  __sdcc_call_bc
 
-        .area   _DATA
-__qsort_base:
-        .dw     0
-__qsort_count:
-        .dw     0
-__qsort_size:
-        .dw     0
-__qsort_cmp:
-        .dw     0
-__qsort_i:
-        .dw     0
-__qsort_j:
-        .dw     0
-__qsort_lhs:
-        .dw     0
-__qsort_rhs:
-        .dw     0
-__qsort_tmp:
-        .db     0
-
         .area   _CODE
 
 ;; Swap size bytes between lhs and rhs.
@@ -47,10 +27,10 @@ __qsort_swap_bytes:
         ret     z
 qsort_swap_loop:
         ld      a,(de)
-        ld      (__qsort_tmp),a
+        push    af
         ld      a,(hl)
         ld      (de),a
-        ld      a,(__qsort_tmp)
+        pop     af
         ld      (hl),a
         inc     hl
         inc     de
@@ -82,50 +62,74 @@ _qsort::
         jp      c,qsort_done
 
 qsort_setup:
-        ld      (__qsort_base),hl
-        ld      (__qsort_count),de
+        ld      bc,#-16
+        add     ix,bc
+        ld      sp,ix
+        ld      bc,#16
+        add     ix,bc
+        ld      -16(ix),l
+        ld      -15(ix),h
+        ld      -14(ix),e
+        ld      -13(ix),d
         ld      l,4(ix)
         ld      h,5(ix)
-        ld      (__qsort_size),hl
+        ld      -12(ix),l
+        ld      -11(ix),h
         ld      l,6(ix)
         ld      h,7(ix)
-        ld      (__qsort_cmp),hl
+        ld      -10(ix),l
+        ld      -9(ix),h
         ld      hl,#1
-        ld      (__qsort_i),hl
+        ld      -8(ix),l
+        ld      -7(ix),h
 
 qsort_outer:
-        ld      de,(__qsort_i)
-        ld      hl,(__qsort_count)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         or      a
         sbc     hl,de                   ; count - i
-        jr      z,qsort_done
-        jr      c,qsort_done
+        jp      z,qsort_done
+        jp      c,qsort_done
         ex      de,hl                   ; DE = remaining span (unused), HL = i
-        ld      hl,(__qsort_i)
-        ld      (__qsort_j),hl
+        ld      l,-8(ix)
+        ld      h,-7(ix)
+        ld      -6(ix),l
+        ld      -5(ix),h
 
 qsort_inner:
-        ld      hl,(__qsort_j)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         ld      a,h
         or      l
         jr      z,qsort_next_i
 
-        ld      de,(__qsort_size)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
         call    __mul16                 ; DE = j * size
         ex      de,hl
-        ld      de,(__qsort_base)
+        ld      e,-16(ix)
+        ld      d,-15(ix)
         add     hl,de
-        ld      (__qsort_rhs),hl
+        ld      -2(ix),l
+        ld      -1(ix),h
 
-        ld      hl,(__qsort_rhs)
-        ld      de,(__qsort_size)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
         or      a
         sbc     hl,de
-        ld      (__qsort_lhs),hl
+        ld      -4(ix),l
+        ld      -3(ix),h
 
-        ld      bc,(__qsort_cmp)
-        ld      hl,(__qsort_lhs)
-        ld      de,(__qsort_rhs)
+        ld      c,-10(ix)
+        ld      b,-9(ix)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        ld      e,-2(ix)
+        ld      d,-1(ix)
         call    __sdcc_call_bc
         bit     7,d
         jr      nz,qsort_next_i         ; compar(lhs,rhs) < 0
@@ -134,21 +138,29 @@ qsort_inner:
         jr      z,qsort_next_i          ; compar(lhs,rhs) <= 0, inner loop done
 
 qsort_do_swap:
-        ld      hl,(__qsort_lhs)
-        ld      de,(__qsort_rhs)
-        ld      bc,(__qsort_size)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        ld      e,-2(ix)
+        ld      d,-1(ix)
+        ld      c,-12(ix)
+        ld      b,-11(ix)
         call    __qsort_swap_bytes
-        ld      hl,(__qsort_j)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         dec     hl
-        ld      (__qsort_j),hl
-        jr      qsort_inner
+        ld      -6(ix),l
+        ld      -5(ix),h
+        jp      qsort_inner
 
 qsort_next_i:
-        ld      hl,(__qsort_i)
+        ld      l,-8(ix)
+        ld      h,-7(ix)
         inc     hl
-        ld      (__qsort_i),hl
-        jr      qsort_outer
+        ld      -8(ix),l
+        ld      -7(ix),h
+        jp      qsort_outer
 
 qsort_done:
+        ld      sp,ix
         pop     ix
         ret

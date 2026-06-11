@@ -22,14 +22,6 @@
         .globl  _strtod
         .globl  __db_zero
 
-        .area   _DATA
-__wcsfp_nptr:      .ds 2
-__wcsfp_endp:      .ds 2
-__wcsfp_buf:       .ds 2
-__wcsfp_char_end:  .ds 2
-__wcsfp_len:       .ds 2
-__wcsfp_result:    .ds 8
-
         .area   _CODE
 
         ;; __wcstod_core
@@ -40,8 +32,18 @@ __wcsfp_result:    .ds 8
         ;;   DE:HL:DE':HL' = parsed double
         ;;   *endptr updated to the first unparsed wchar_t when endptr != NULL
 __wcstod_core::
-        ld      (__wcsfp_nptr),hl
-        ld      (__wcsfp_endp),de
+        ld      b,h
+        ld      c,l
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-18
+        add     hl,sp
+        ld      sp,hl
+        ld      -18(ix),c
+        ld      -17(ix),b
+        ld      -16(ix),e
+        ld      -15(ix),d
 
         ;; Count the contiguous byte-range wchar_t prefix. The parser only
         ;; needs a narrow mirror up to the first non-byte code unit or NUL.
@@ -64,9 +66,9 @@ wcstod_count:
 
 wcstod_alloc:
         ld      a,c
-        ld      (__wcsfp_len),a
+        ld      -10(ix),a
         ld      a,b
-        ld      (__wcsfp_len + 1),a
+        ld      -9(ix),a
         ld      h,b
         ld      l,c
         inc     hl                      ; include terminating narrow NUL
@@ -78,18 +80,23 @@ wcstod_alloc:
         ;; Out-of-memory: surface an empty parse result and leave endptr at
         ;; the original source pointer.
         call    wcstod_store_nptr_end
-        jp      __db_zero
+        call    __db_zero
+        jp      wcstod_ret
 
 wcstod_have_buf:
         push    de
         pop     hl
-        ld      (__wcsfp_buf),hl
+        ld      -14(ix),l
+        ld      -13(ix),h
 
         ;; Transcode the counted byte-range prefix into the temporary narrow
         ;; buffer and append a terminating NUL for strtod().
-        ld      hl,(__wcsfp_nptr)
-        ld      de,(__wcsfp_buf)
-        ld      bc,(__wcsfp_len)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
+        ld      e,-14(ix)
+        ld      d,-13(ix)
+        ld      c,-10(ix)
+        ld      b,-9(ix)
         ld      a,b
         or      c
         jr      z,wcstod_term
@@ -109,43 +116,65 @@ wcstod_term:
 
         ;; Run the proven narrow parser and preserve its double result across
         ;; the temporary buffer teardown.
-        ld      hl,(__wcsfp_buf)
-        ld      de,#__wcsfp_char_end
+        ld      l,-14(ix)
+        ld      h,-13(ix)
+        push    ix
+        pop     de
+        ld      bc,#-12
+        add     ix,bc
+        push    ix
+        pop     de
+        ld      bc,#12
+        add     ix,bc
         call    _strtod
-        ld      (__wcsfp_result),de
-        ld      (__wcsfp_result + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
         exx
-        ld      (__wcsfp_result + 4),de
-        ld      (__wcsfp_result + 6),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         exx
 
         ;; Map the returned byte end pointer back to the original wide source.
-        ld      hl,(__wcsfp_char_end)
-        ld      de,(__wcsfp_buf)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
+        ld      e,-14(ix)
+        ld      d,-13(ix)
         or      a
         sbc     hl,de                   ; HL = consumed narrow bytes
         add     hl,hl                   ; widen byte count -> wchar_t bytes
-        ld      de,(__wcsfp_nptr)
+        ld      e,-18(ix)
+        ld      d,-17(ix)
         add     hl,de                   ; HL = resulting wchar_t *
         call    wcstod_store_hl_end
 
         ;; Free the temporary buffer, then restore the parsed double result.
-        ld      hl,(__wcsfp_buf)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         call    _free
-        ld      de,(__wcsfp_result)
-        ld      hl,(__wcsfp_result + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         exx
-        ld      de,(__wcsfp_result + 4)
-        ld      hl,(__wcsfp_result + 6)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         exx
-        ret
+        jr      wcstod_ret
 
 wcstod_store_nptr_end:
-        ld      hl,(__wcsfp_nptr)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
         ;; fall through
 
 wcstod_store_hl_end:
-        ld      de,(__wcsfp_endp)
+        ld      e,-16(ix)
+        ld      d,-15(ix)
         ld      a,d
         or      e
         ret     z
@@ -154,4 +183,8 @@ wcstod_store_hl_end:
         inc     de
         ld      a,h
         ld      (de),a
+        ret
+wcstod_ret:
+        ld      sp,ix
+        pop     ix
         ret

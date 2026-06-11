@@ -10,6 +10,11 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include <wchar.h>
+#include <fenv.h>
 
 extern void __sys_putchar_reset(void);
 extern int  __sys_putchar_getcount(void);
@@ -304,6 +309,8 @@ int stdio_freopen_case(void) {
     return 0;
 }
 
+static int c23_and_more_calls_case(void);
+
 int stdio_cases(void) {
     FILE *in;
     FILE *out;
@@ -323,5 +330,41 @@ int stdio_cases(void) {
     rc = stdio_misc_cases(out);
     if (rc != 0) return rc;
 
+    // C-driven expansion for "both" (xcc compiled calls to more libc fns incl C23)
+    rc = c23_and_more_calls_case();
+    if (rc != 0) return rc + 5000;
+
+    return 0;
+}
+
+// C-DRIVEN BOTH EXPANSION (see plan): C that xcc lowers to calls of
+// strfrom*, C23 math, qsort/bsearch, time, fenv, mb, extra string etc.
+static int qsort_cmp(const void *a, const void *b) {
+    int ia = *(const int*)a, ib = *(const int*)b;
+    return (ia > ib) - (ia < ib);
+}
+
+static int c23_and_more_calls_case(void) {
+    char buf[96];
+    int n = strfromd(buf, sizeof(buf), "%g", 3.14159);
+    if (n <= 0) return 1;
+    float fmaxv = fmaximumf(2.0f, -5.0f);
+    float fr = fromfpf(1.7f, 0, 32);
+    (void)fmaxv; (void)fr;
+    int data[8] = {7,1,4,3,8,2,5,6};
+    qsort(data, 8, sizeof(int), qsort_cmp);
+    int key = 4;
+    void *hit = bsearch(&key, data, 8, sizeof(int), qsort_cmp);
+    if (!hit) return 2;
+    wchar_t wc; mbtowc(&wc, "X", 1);
+    char mb[8]; wctomb(mb, L'Y');
+    time_t now = 1700000000;
+    struct tm *tm = gmtime(&now);
+    if (tm) strftime(buf, sizeof(buf), "%Y-%m-%d", tm);
+    feclearexcept(FE_ALL_EXCEPT);
+    fesetround(0);
+    char *dup = strdup("both");
+    if (dup) free(dup);
+    strfromf(buf, 16, "%.2f", 0.5f);
     return 0;
 }

@@ -12,6 +12,12 @@ described as a broadly usable C23 library for `xcc`.
   `complex.h`.
 - The staged archive is `bin/lib/z80/libc.a`.
 - The staged public headers live in `bin/include/z80/`.
+- The assembly libc no longer depends on ad-hoc writable module scratchpads
+  for ordinary per-call workspace. Remaining writable objects are intentional
+  shared state or API-defined static-return storage such as `errno`,
+  `rand`, `atexit` tables, heap metadata, signal tables, `FILE` pools,
+  `strtok` continuation state, `tmpnam` state, and the static buffers behind
+  `asctime`, `ctime`, and `gmtime`.
 
 ## Implemented But Partial
 

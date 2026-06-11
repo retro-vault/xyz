@@ -36,15 +36,92 @@ int main(int argc, char* argv[])
     runtime_machine rt(std::span<const uint8_t>(code_image.data(),
                                                 code_image.size()));
     g_rt = &rt;
-    if (!rt.call16(rt_sym::stdio_wide_cases, 0, 0)) {
-        std::fprintf(stderr, "error: emulator call failed\n");
+    if (!rt.call16(rt_sym::stdio_wide_putwchar_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_putwchar_case\n");
         return 2;
     }
 
     if (rt.snap().de != 0) {
-        std::fprintf(stderr, "error: stdio_wide_cases returned %u\n",
+        std::fprintf(stderr, "error: stdio_wide_putwchar_case returned %u\n",
                      static_cast<unsigned>(rt.snap().de));
         return 3;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_fputwc_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_fputwc_case\n");
+        return 4;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_fputwc_case returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 5;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_putwc_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_putwc_case\n");
+        return 6;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_putwc_case returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 7;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_fputws_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_fputws_case\n");
+        return 8;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_fputws_case returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 9;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_input_cases, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_input_cases\n");
+        return 10;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_input_cases returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 11;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_file_open_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_file_open_case\n");
+        return 12;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_file_open_case returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 13;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_file_write_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_file_write_case\n");
+        return 14;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_file_write_case returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 15;
+    }
+
+    if (!rt.call16(rt_sym::stdio_wide_file_read_case, 0, 0)) {
+        std::fprintf(stderr, "error: emulator call failed in stdio_wide_file_read_case\n");
+        return 16;
+    }
+
+    if (rt.snap().de != 0) {
+        std::fprintf(stderr, "error: stdio_wide_file_read_case returned %u\n",
+                     static_cast<unsigned>(rt.snap().de));
+        return 17;
     }
 
     return 0;

@@ -14,18 +14,27 @@
         .globl  _clock
         .globl  ___sys_gettimeofday
 
-        .area   _DATA
-__clock_ts:
-        .ds     8                       ; scratch struct timespec for the hook
-
         .area   _CODE
 
         ; _clock
         ; outputs: DE:HL = wall seconds (CLOCKS_PER_SEC == 1)
         ; clobbers: AF, BC, DE, HL
 _clock::
-        ld      hl,#__clock_ts
+        push    ix
+        ld      hl,#0
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        ld      ix,#0
+        add     ix,sp
+        push    ix
+        pop     hl
         call    ___sys_gettimeofday
-        ld      de,(__clock_ts)
-        ld      hl,(__clock_ts + 2)
+        ld      e,0(ix)
+        ld      d,1(ix)
+        ld      l,2(ix)
+        ld      h,3(ix)
+        ld      sp,ix
+        pop     ix
         ret

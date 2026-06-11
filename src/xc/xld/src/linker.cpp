@@ -284,6 +284,14 @@ namespace xld {
     void linker::find_entry_point(link_context& ctx) {
         auto it = ctx.global_symbols.find(ctx.entry_name);
         if (it == ctx.global_symbols.end()) {
+            if (ctx.format != output_format::xl) {
+                ctx.entry_point = 0;
+                if (ctx.verbose) {
+                    std::cout << "Entry point: " << ctx.entry_name
+                              << " not found, defaulting to 0x0000 for flat output\n";
+                }
+                return;
+            }
             throw symbol_error(
                 "entry point symbol '" + ctx.entry_name + "' not found");
         }

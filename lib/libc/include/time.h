@@ -55,6 +55,7 @@ time_t  time(time_t *timer);
 double  difftime(time_t end, time_t beginning);
 time_t  mktime(struct tm *timeptr);
 int     timespec_get(struct timespec *ts, int base);
+int     timespec_getres(struct timespec *ts, int base);
 
 /* ------------------------------------------------------------------------- */
 /* Conversion to broken-down and textual forms                               */

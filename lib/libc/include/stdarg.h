@@ -17,9 +17,14 @@
 
 typedef char *va_list;
 
-/* Initialize a variadic cursor just past the last named argument. */
-#define va_start(ap, last) \
-    ((ap) = (va_list)((char *)(&(last)) + sizeof(last)))
+/*
+ * Initialize a variadic cursor.
+ *
+ * xcc lowers this through a dedicated builtin so both the traditional
+ * va_start(ap, last) form and the C23 va_start(ap) bare-ellipsis form
+ * can share one front-end implementation.
+ */
+#define va_start(...) __builtin_va_start(__VA_ARGS__)
 
 /* Read the current argument as type T and advance the cursor. */
 #define va_arg(ap, T) \

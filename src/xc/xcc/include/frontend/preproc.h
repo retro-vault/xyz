@@ -77,7 +77,8 @@ private:
                                                size_t &pos);
 
     // Evaluate a #if / #elif expression (returns 0 or non-zero).
-    long long eval_if(const std::string &expr) const;
+    long long eval_if(const std::string &expr,
+                      const std::string &current_dir) const;
 
     // Find an include file; returns "" if not found.
     std::string find_include(const std::string &name,

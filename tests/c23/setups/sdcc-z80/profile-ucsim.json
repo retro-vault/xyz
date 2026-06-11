@@ -1,0 +1,30 @@
+{
+  "compiler": "sdcc",
+  "label": "sdcc-z80-ucsim",
+  "std_flag": "",
+  "artifact_name": "case.ihx",
+  "common_flags": [],
+  "compile_flags": [
+    "-mz80"
+  ],
+  "compile_template": [
+    "{root}/setups/sdcc-z80/bin/sdcc_z80_driver.sh",
+    "--compiler",
+    "{compiler}",
+    "--source",
+    "{source}",
+    "--support",
+    "{root}/setups/sdcc-z80/support/simif_stdio.c",
+    "--output",
+    "{executable}",
+    "--",
+    "{profile_flags}",
+    "{include_flags}",
+    "{extra_cflags}"
+  ],
+  "run_template": [
+    "{root}/setups/sdcc-z80/bin/run_ucsim_z80.sh",
+    "{executable}",
+    "{build_dir}"
+  ]
+}

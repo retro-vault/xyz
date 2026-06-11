@@ -315,11 +315,52 @@ public:
         analyse_sections(stmts);
         formatted_document document;
         document.reserve(stmts.size() + gnu_section_break_before_.size());
+        bool emitted_section = false;
+        std::string current_output_section;
         for (size_t i = 0; i < stmts.size(); ++i) {
             if (format_ == output_format::gnu) {
                 if (auto it = gnu_section_break_before_.find(i);
                     it != gnu_section_break_before_.end()) {
-                    document.push_back(emit_synthetic_section_stmt(it->second));
+                    std::string mapped = map_section_to_gnu(it->second);
+                    if (auto ov = gnu_section_overrides_.find(it->second);
+                        ov != gnu_section_overrides_.end()) {
+                        mapped = ov->second;
+                    }
+                    if (!emitted_section || current_output_section != mapped) {
+                        document.push_back(emit_synthetic_section_stmt(it->second));
+                        emitted_section = true;
+                        current_output_section = mapped;
+                    }
+                }
+
+                std::string section_name;
+                if (is_section_directive(stmts[i], &section_name)) {
+                    std::string mapped = map_section_to_gnu(section_name);
+                    if (auto ov = gnu_section_overrides_.find(section_name);
+                        ov != gnu_section_overrides_.end()) {
+                        mapped = ov->second;
+                    }
+                    if (emitted_section && current_output_section == mapped)
+                        continue;
+                    document.push_back(emit_stmt(stmts[i]));
+                    emitted_section = true;
+                    current_output_section = mapped;
+                    continue;
+                }
+
+                if (!emitted_section) {
+                    const auto& stmt = stmts[i];
+                    const bool needs_default_text =
+                        stmt.kind == stmt_kind::instruction
+                        || stmt.kind == stmt_kind::label
+                        || (stmt.kind == stmt_kind::directive
+                            && (stmt.directive_name == "globl"
+                                || stmt.directive_name == "global"));
+                    if (needs_default_text) {
+                        document.push_back(emit_synthetic_section_stmt("_CODE"));
+                        emitted_section = true;
+                        current_output_section = ".text";
+                    }
                 }
             }
             document.push_back(emit_stmt(stmts[i]));

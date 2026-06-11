@@ -76,4 +76,12 @@ extern char *strsep(char **stringp, const char *delim);
 extern char *strcasestr(const char *haystack, const char *needle);
 extern char *strsignal(int sig);
 
+#define memchr(s, c, n) _Generic((s), \
+    const void *: (const void *)memchr((const void *)(s), (c), (n)), \
+    default:     (void *)memchr((const void *)(s), (c), (n)))
+
+#define strchr(s, c) _Generic((s), \
+    const char *: (const char *)strchr((const char *)(s), (c)), \
+    default:      (char *)strchr((const char *)(s), (c)))
+
 #endif /* __STRING_H__ */

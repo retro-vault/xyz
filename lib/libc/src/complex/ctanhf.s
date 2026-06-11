@@ -20,24 +20,15 @@
         .globl  ___fsadd
         .globl  ___fsdiv
 
-        .area   _DATA
-__ctanhf_two_x:
-        .ds     4
-__ctanhf_two_y:
-        .ds     4
-__ctanhf_denom:
-        .ds     4
-__ctanhf_real:
-        .ds     4
-__ctanhf_imag:
-        .ds     4
-
         .area   _CODE
 
 _ctanhf::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-20
+        add     hl,sp
+        ld      sp,hl
 
         ;; 2x = x + x
         ld      l,6(ix)
@@ -53,8 +44,10 @@ _ctanhf::
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__ctanhf_two_x),de
-        ld      (__ctanhf_two_x + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
 
         ;; 2y = y + y
         ld      l,10(ix)
@@ -70,61 +63,90 @@ _ctanhf::
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__ctanhf_two_y),de
-        ld      (__ctanhf_two_y + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
 
         ;; denom = cosh(2x) + cos(2y)
-        ld      de,(__ctanhf_two_x)
-        ld      hl,(__ctanhf_two_x + 2)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    _coshf
-        ld      (__ctanhf_denom),de
-        ld      (__ctanhf_denom + 2),hl
-        ld      de,(__ctanhf_two_y)
-        ld      hl,(__ctanhf_two_y + 2)
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         call    _cosf
-        ld      hl,(__ctanhf_denom + 2)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
-        ld      hl,(__ctanhf_denom)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
         push    hl
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__ctanhf_denom),de
-        ld      (__ctanhf_denom + 2),hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
 
         ;; real = sinh(2x) / denom
-        ld      de,(__ctanhf_two_x)
-        ld      hl,(__ctanhf_two_x + 2)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    _sinhf
-        ld      hl,(__ctanhf_denom + 2)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
-        ld      hl,(__ctanhf_denom)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
         push    hl
         call    ___fsdiv
         pop     bc
         pop     bc
-        ld      (__ctanhf_real),de
-        ld      (__ctanhf_real + 2),hl
+        ld      -16(ix),e
+        ld      -15(ix),d
+        ld      -14(ix),l
+        ld      -13(ix),h
 
         ;; imag = sin(2y) / denom
-        ld      de,(__ctanhf_two_y)
-        ld      hl,(__ctanhf_two_y + 2)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         call    _sinf
-        ld      hl,(__ctanhf_denom + 2)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
-        ld      hl,(__ctanhf_denom)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
         push    hl
         call    ___fsdiv
         pop     bc
         pop     bc
-        ld      (__ctanhf_imag),de
-        ld      (__ctanhf_imag + 2),hl
+        ld      -20(ix),e
+        ld      -19(ix),d
+        ld      -18(ix),l
+        ld      -17(ix),h
 
-        ld      de,(__ctanhf_real)
-        ld      hl,(__ctanhf_real + 2)
+        ld      e,-16(ix)
+        ld      d,-15(ix)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         exx
-        ld      de,(__ctanhf_imag)
-        ld      hl,(__ctanhf_imag + 2)
+        ld      e,-20(ix)
+        ld      d,-19(ix)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
         exx
+        ld      sp,ix
         pop     ix
         ret

@@ -4,6 +4,9 @@
 __str_0:
 	.db 104, 101, 108, 108, 111, 0
 
+	.globl ___sclit0
+	.globl ___sclit1
+
 
 	.area _CODE
 

@@ -11,6 +11,14 @@ RT_SRC      := $(ROOT)/src/xc/xcc/lib/runtime
 XZ80_SRC    := $(ROOT)/lib/xz80/src
 XZ80_INC    := $(ROOT)/lib/xz80/include
 RT_TESTS    := $(ROOT)/tests/runtime
+LIBC_ARCHIVE := $(ROOT)/build/lib/libc.a
+LIBC_ARCHIVE_SRCS := $(sort \
+  $(wildcard $(ROOT)/lib/libc/src/*.c) \
+  $(wildcard $(ROOT)/lib/libc/src/*/*.c) \
+  $(wildcard $(ROOT)/lib/libc/src/*.s) \
+  $(wildcard $(ROOT)/lib/libc/src/*/*.s) \
+  $(wildcard $(ROOT)/lib/sys/none/*.c) \
+  $(wildcard $(ROOT)/lib/sys/none/*.s))
 
 CXX         := g++
 CXXFLAGS    := -std=c++20 -Wall -Wextra -g -I$(XZ80_INC) -I$(BUILD) -I$(RT_TESTS) -I.
@@ -18,11 +26,15 @@ C8C         ?= $(ROOT)/bin/bin/xcc
 C8FLAGS     ?= -I$(ROOT)/lib/libc/include
 
 # The real libc/sys/runtime builds already assemble with xas, and the direct
-# harness now follows that same default. Keep the knobs overridable for parity
-# comparisons against sdasz80.
+# harness now follows that same default. Link with xld so the libc surface is
+# exercised through the in-tree linker too.
 ASM         ?= $(ROOT)/bin/bin/xas
 ASMFLAGS    ?= --mode=sdcc
-LINK        ?= sdldz80
+LINK        ?= $(ROOT)/bin/bin/xld
+# Keep only text anchored for the host-driven libc images. Some split test
+# images legitimately grow past 0xF000 before RAM areas begin, so forcing a
+# fixed -Tdata there creates a false linker failure.
+LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000
 
 # Hand-written libc functions under test, plus the runtime signed-divide core
 # that div() tail-calls.
@@ -48,12 +60,17 @@ SRCS := \
   $(LIBC_SRC)/stdlib/strtof.s \
   $(LIBC_SRC)/stdlib/strtod.s \
   $(LIBC_SRC)/stdlib/strtold.s \
+  $(LIBC_SRC)/stdlib/heap_core.s \
+  $(LIBC_SRC)/stdlib/aligned_alloc.s \
+  $(LIBC_SRC)/stdlib/bsearch.s \
+  $(LIBC_SRC)/stdlib/qsort.s \
   $(LIBC_SRC)/stdlib/mblen.s \
   $(LIBC_SRC)/stdlib/mbtowc.s \
   $(LIBC_SRC)/stdlib/wctomb.s \
   $(LIBC_SRC)/stdlib/mbstowcs.s \
   $(LIBC_SRC)/stdlib/wcstombs.s \
   $(LIBC_SRC)/stdlib/getenv.s \
+  $(LIBC_SRC)/stdlib/exit_core.s \
   $(LIBC_SRC)/stdlib/system.s \
   $(LIBC_SRC)/inttypes/imaxabs.s \
   $(LIBC_SRC)/string/string_common.s \
@@ -77,8 +94,15 @@ SRCS := \
   $(LIBC_SRC)/string/bcmp.s \
   $(LIBC_SRC)/string/strchr.s \
   $(LIBC_SRC)/string/strrchr.s \
+  $(LIBC_SRC)/string/memchr.s \
   $(LIBC_SRC)/string/memcmp.s \
+  $(LIBC_SRC)/string/memcpy.s \
   $(LIBC_SRC)/string/memmove.s \
+  $(LIBC_SRC)/string/memset.s \
+  $(LIBC_SRC)/string/strlen.s \
+  $(LIBC_SRC)/string/strnlen.s \
+  $(LIBC_SRC)/string/strcpy.s \
+  $(LIBC_SRC)/string/strncpy.s \
   $(LIBC_SRC)/string/ffs.s \
   $(LIBC_SRC)/string/ffsl.s \
   $(LIBC_SRC)/string/ffsll.s \
@@ -110,6 +134,7 @@ SRCS := \
   $(LIBC_SRC)/math/ceilf.s \
   $(LIBC_SRC)/math/roundf.s \
   $(LIBC_SRC)/math/logbf.s \
+  $(LIBC_SRC)/math/db1argf_common.s \
   $(LIBC_SRC)/math/legacymathd.s \
   $(LIBC_SRC)/math/moremathf.s \
   $(LIBC_SRC)/math/moremathd.s \
@@ -152,6 +177,8 @@ SRCS := \
   $(ROOT)/lib/sys/none/lseek.s \
   $(ROOT)/lib/sys/none/read.s \
   $(ROOT)/lib/sys/none/write.s \
+  $(ROOT)/lib/sys/none/sys_exit.s \
+  $(ROOT)/lib/sys/none/sys_sbrk.s \
   $(ROOT)/lib/sys/none/sys_unlink.s \
   $(ROOT)/lib/sys/none/sys_rename.s \
   $(ROOT)/lib/sys/none/sys_getchar.s \
@@ -167,6 +194,7 @@ SRCS := \
   $(RT_SRC)/int32/fs2slong.s \
   $(RT_SRC)/int32/fs2u32mag.s \
   $(RT_SRC)/int32/mullong.s \
+  $(RT_SRC)/int32/mulsint2slong.s \
   $(RT_SRC)/int32/muluint2slong.s \
   $(RT_SRC)/int16/sint2fs.s \
   $(RT_SRC)/int16/uint2fs.s \
@@ -227,6 +255,9 @@ SRCS := \
   $(LIBC_SRC)/math/fabsf.s \
   $(LIBC_SRC)/math/copysignf.s \
   $(LIBC_SRC)/math/sqrtf.s \
+  $(LIBC_SRC)/math/sinhf.s \
+  $(LIBC_SRC)/math/coshf.s \
+  $(LIBC_SRC)/math/tanhf.s \
   $(LIBC_SRC)/math/libc_fpclassifyf.s \
   $(LIBC_SRC)/math/libc_signbitf.s \
   $(LIBC_SRC)/math/libc_isnanf.s \
@@ -294,22 +325,114 @@ SRCS := \
   $(LIBC_SRC)/wchar/wmemcmp.s \
   $(LIBC_SRC)/wchar/wmemcpy.s \
   $(LIBC_SRC)/wchar/wmemmove.s \
-  $(LIBC_SRC)/wchar/wmemset.s
+  $(LIBC_SRC)/wchar/wmemset.s \
+  $(LIBC_SRC)/assert/assert_fail.s \
+  $(LIBC_SRC)/complex/cabsf.s \
+  $(LIBC_SRC)/complex/cacosf.s \
+  $(LIBC_SRC)/complex/cacoshf.s \
+  $(LIBC_SRC)/complex/cargf.s \
+  $(LIBC_SRC)/complex/casinf.s \
+  $(LIBC_SRC)/complex/casinhf.s \
+  $(LIBC_SRC)/complex/catanf.s \
+  $(LIBC_SRC)/complex/catanhf.s \
+  $(LIBC_SRC)/complex/ccosf.s \
+  $(LIBC_SRC)/complex/ccoshf.s \
+  $(LIBC_SRC)/complex/cexpf.s \
+  $(LIBC_SRC)/complex/clogf.s \
+  $(LIBC_SRC)/complex/cmplxf.s \
+  $(LIBC_SRC)/complex/cpowf.s \
+  $(LIBC_SRC)/complex/cprojf.s \
+  $(LIBC_SRC)/complex/csinf.s \
+  $(LIBC_SRC)/complex/csinhf.s \
+  $(LIBC_SRC)/complex/csqrtf.s \
+  $(LIBC_SRC)/complex/ctanf.s \
+  $(LIBC_SRC)/complex/ctanhf.s \
+  $(LIBC_SRC)/setjmp/setjmp.s \
+  $(LIBC_SRC)/setjmp/longjmp.s \
+  $(LIBC_SRC)/threads/call_once.s \
+  $(LIBC_SRC)/threads/cnd_broadcast.s \
+  $(LIBC_SRC)/threads/cnd_destroy.s \
+  $(LIBC_SRC)/threads/cnd_init.s \
+  $(LIBC_SRC)/threads/cnd_signal.s \
+  $(LIBC_SRC)/threads/cnd_timedwait.s \
+  $(LIBC_SRC)/threads/cnd_wait.s \
+  $(LIBC_SRC)/threads/mtx_destroy.s \
+  $(LIBC_SRC)/threads/mtx_init.s \
+  $(LIBC_SRC)/threads/mtx_lock.s \
+  $(LIBC_SRC)/threads/mtx_timedlock.s \
+  $(LIBC_SRC)/threads/mtx_trylock.s \
+  $(LIBC_SRC)/threads/mtx_unlock.s \
+  $(LIBC_SRC)/threads/thrd_create.s \
+  $(LIBC_SRC)/threads/thrd_current.s \
+  $(LIBC_SRC)/threads/thrd_detach.s \
+  $(LIBC_SRC)/threads/thrd_equal.s \
+  $(LIBC_SRC)/threads/thrd_exit.s \
+  $(LIBC_SRC)/threads/thrd_join.s \
+  $(LIBC_SRC)/threads/thrd_sleep.s \
+  $(LIBC_SRC)/threads/thrd_yield.s \
+  $(LIBC_SRC)/threads/tss_create.s \
+  $(LIBC_SRC)/threads/tss_delete.s \
+  $(LIBC_SRC)/threads/tss_get.s \
+  $(LIBC_SRC)/threads/tss_set.s \
+  $(LIBC_SRC)/threads/threads_common.s \
+  $(LIBC_SRC)/string/strcoll.s \
+  $(LIBC_SRC)/string/strdup.s \
+  $(LIBC_SRC)/string/strndup.s \
+  $(LIBC_SRC)/string/strerror.s \
+  $(LIBC_SRC)/string/strtok.s \
+  $(LIBC_SRC)/string/strxfrm.s \
+  $(LIBC_SRC)/string/memccpy.s \
+  $(LIBC_SRC)/math/acoshf.s \
+  $(LIBC_SRC)/math/asinhf.s \
+  $(LIBC_SRC)/math/atanhf.s \
+  $(LIBC_SRC)/math/cosh.s \
+  $(LIBC_SRC)/math/sinh.s \
+  $(LIBC_SRC)/math/tanh.s \
+  $(LIBC_SRC)/math/erf.s \
+  $(LIBC_SRC)/math/erff.s \
+  $(LIBC_SRC)/math/erff_core.s \
+  $(LIBC_SRC)/math/lgammaf.s \
+  $(LIBC_SRC)/math/gammaf_core.s \
+  $(LIBC_SRC)/math/tgammaf.s
 
-RELS := $(patsubst %.s,$(BUILD)/objs/%.rel,$(notdir $(SRCS)))
-RELS += $(BUILD)/objs/stdio_cases.rel
-RELS += $(BUILD)/objs/stdio_scan_cases.rel
+RUNTIME_SRCS := $(filter $(RT_SRC)/%,$(SRCS))
+DIRECT_RELS := $(patsubst %.s,$(BUILD)/objs/%.rel,$(notdir $(RUNTIME_SRCS)))
+CORE_RELS := $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel
+CORE_RELS += $(BUILD)/objs/core_force_refs.rel
+SCAN_RELS := $(DIRECT_RELS) $(BUILD)/objs/stdio_scan_cases.rel
 
-IHX  := $(BUILD)/libc.ihx
-MAP  := $(BUILD)/libc.map
-BIN  := $(BUILD)/libc.bin
-HDR  := $(BUILD)/libc_symbols.hpp
-TST  := $(BUILD)/libc_tests
+CORE_PARTS := 1 2 3
+CORE_CPP_1 := $(BUILD)/test_main_core_1.cpp
+CORE_CPP_2 := $(BUILD)/test_main_core_2.cpp
+CORE_CPP_3 := $(BUILD)/test_main_core_3.cpp
+CORE_IHX_1 := $(BUILD)/libc_core_1.ihx
+CORE_IHX_2 := $(BUILD)/libc_core_2.ihx
+CORE_IHX_3 := $(BUILD)/libc_core_3.ihx
+CORE_MAP_1 := $(BUILD)/libc_core_1.map
+CORE_MAP_2 := $(BUILD)/libc_core_2.map
+CORE_MAP_3 := $(BUILD)/libc_core_3.map
+CORE_BIN_1 := $(BUILD)/libc_core_1.bin
+CORE_BIN_2 := $(BUILD)/libc_core_2.bin
+CORE_BIN_3 := $(BUILD)/libc_core_3.bin
+CORE_HDR_1 := $(BUILD)/libc_core_symbols_1.hpp
+CORE_HDR_2 := $(BUILD)/libc_core_symbols_2.hpp
+CORE_HDR_3 := $(BUILD)/libc_core_symbols_3.hpp
+CORE_TST_1 := $(BUILD)/libc_core_tests_1
+CORE_TST_2 := $(BUILD)/libc_core_tests_2
+CORE_TST_3 := $(BUILD)/libc_core_tests_3
+
+SCAN_IHX := $(BUILD)/libc_scan.ihx
+SCAN_MAP := $(BUILD)/libc_scan.map
+SCAN_BIN := $(BUILD)/libc_scan.bin
+SCAN_HDR := $(BUILD)/libc_scan_symbols.hpp
+SCAN_TST := $(BUILD)/libc_scan_tests
 
 WIDE_SRCS := \
   $(LIBC_SRC)/stdio/printf.s \
   $(LIBC_SRC)/stdio/stdio_io.s \
   $(LIBC_SRC)/stdio/tmpnam.s \
+  $(LIBC_SRC)/stdlib/strtod_core.s \
+  $(LIBC_SRC)/errno/errno.s \
   $(LIBC_SRC)/wchar/btowc.s \
   $(LIBC_SRC)/wchar/wctob.s \
   $(LIBC_SRC)/wchar/fgetwc.s \
@@ -334,11 +457,17 @@ WIDE_SRCS := \
   $(RT_SRC)/int16/divunsigned.s \
   $(RT_SRC)/int32/divulong.s \
   $(RT_SRC)/int32/modulong.s \
+  $(RT_SRC)/double/db2fs.s \
+  $(RT_SRC)/double/dbadd.s \
+  $(RT_SRC)/double/dbdiv.s \
+  $(RT_SRC)/double/dbmul.s \
+  $(RT_SRC)/double/dbneg.s \
+  $(RT_SRC)/double/db_zero.s \
+  $(RT_SRC)/double/ull2db.s \
   $(RT_SRC)/int64/divull.s \
   $(RT_SRC)/int64/modull.s
 
-WIDE_RELS := $(patsubst %.s,$(BUILD)/objs/wide_%.rel,$(notdir $(WIDE_SRCS)))
-WIDE_RELS += $(BUILD)/objs/wide_stdio_wide_cases.rel
+WIDE_RELS := $(DIRECT_RELS) $(BUILD)/objs/wide_stdio_wide_cases.rel
 
 WIDE_IHX := $(BUILD)/libc_wide.ihx
 WIDE_MAP := $(BUILD)/libc_wide.map
@@ -348,42 +477,90 @@ WIDE_TST := $(BUILD)/libc_wide_tests
 
 XZ80_SRCS := $(XZ80_SRC)/cpu.cpp $(XZ80_SRC)/memory.cpp $(XZ80_SRC)/disassembler.cpp
 
-.PHONY: all test core-test wide-test clean
+.PHONY: all test core-test core1-test core2-test core3-test scan-test wide-test clean
 all: test
 
-test: core-test wide-test
+test: core-test scan-test wide-test
 
-core-test: $(TST)
-	$(TST) $(BIN)
+core-test: core1-test core2-test core3-test
+
+core1-test: $(CORE_TST_1)
+	$(CORE_TST_1) $(CORE_BIN_1)
+
+core2-test: $(CORE_TST_2)
+	$(CORE_TST_2) $(CORE_BIN_2)
+
+core3-test: $(CORE_TST_3)
+	$(CORE_TST_3) $(CORE_BIN_3)
+
+scan-test: $(SCAN_TST)
+	$(SCAN_TST) $(SCAN_BIN)
 
 wide-test: $(WIDE_TST)
 	$(WIDE_TST) $(WIDE_BIN)
 
-$(TST): $(HDR) $(BIN) test_main.cpp $(RT_TESTS)/runtime_machine.hpp
-	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) test_main.cpp -o $@
+$(CORE_TST_1): $(CORE_HDR_1) $(CORE_BIN_1) $(CORE_CPP_1) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_1) -o $@
+
+$(CORE_TST_2): $(CORE_HDR_2) $(CORE_BIN_2) $(CORE_CPP_2) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_2) -o $@
+
+$(CORE_TST_3): $(CORE_HDR_3) $(CORE_BIN_3) $(CORE_CPP_3) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_3) -o $@
+
+$(SCAN_TST): $(SCAN_HDR) $(SCAN_BIN) test_main_scan.cpp $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) test_main_scan.cpp -o $@
 
 $(WIDE_TST): $(WIDE_HDR) $(WIDE_BIN) test_main_wide.cpp $(RT_TESTS)/runtime_machine.hpp
 	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) test_main_wide.cpp -o $@
 
-$(HDR): $(IHX)
-	python3 $(RT_TESTS)/tools/gen_symbols.py $(MAP) $@
+$(CORE_HDR_1): $(CORE_IHX_1)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_1) $@
+
+$(CORE_HDR_2): $(CORE_IHX_2)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_2) $@
+
+$(CORE_HDR_3): $(CORE_IHX_3)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_3) $@
+
+$(SCAN_HDR): $(SCAN_IHX)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(SCAN_MAP) $@
 
 $(WIDE_HDR): $(WIDE_IHX)
 	python3 $(RT_TESTS)/tools/gen_symbols.py $(WIDE_MAP) $@
 
-$(BIN): $(IHX)
+$(CORE_BIN_1): $(CORE_IHX_1)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_2): $(CORE_IHX_2)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_3): $(CORE_IHX_3)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(SCAN_BIN): $(SCAN_IHX)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
 $(WIDE_BIN): $(WIDE_IHX)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
-$(IHX): $(RELS)
-	$(LINK) -n -m -j -i $@ -b _CODE=0x0000 $^ 2>/dev/null || \
-	  $(LINK) -n -m -j -i $@ -b _CODE=0x0000 $^
+$(LIBC_ARCHIVE): $(LIBC_ARCHIVE_SRCS)
+	$(MAKE) -C $(ROOT)/lib/libc/src ROOT=$(abspath $(ROOT)) SYS=none AR8FLAGS="--mode=gnu rcs" -j1
 
-$(WIDE_IHX): $(WIDE_RELS)
-	$(LINK) -n -m -j -i $@ -b _CODE=0x0000 $^ 2>/dev/null || \
-	  $(LINK) -n -m -j -i $@ -b _CODE=0x0000 $^
+$(CORE_IHX_1): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_1.rel $(LIBC_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_1) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_1.rel $(LIBC_ARCHIVE)
+
+$(CORE_IHX_2): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_2.rel $(LIBC_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_2) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_2.rel $(LIBC_ARCHIVE)
+
+$(CORE_IHX_3): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_3.rel $(LIBC_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_3) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_3.rel $(LIBC_ARCHIVE)
+
+$(SCAN_IHX): $(SCAN_RELS) $(LIBC_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(SCAN_MAP) -o $@ $(SCAN_RELS) $(LIBC_ARCHIVE)
+
+$(WIDE_IHX): $(WIDE_RELS) $(LIBC_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(WIDE_MAP) -o $@ $(WIDE_RELS) $(LIBC_ARCHIVE)
 
 # Pattern rules: each .rel comes from one of the source directories.
 $(BUILD)/objs/%.rel: $(LIBC_SRC)/stdlib/%.s | $(BUILD)/objs
@@ -405,6 +582,8 @@ $(BUILD)/objs/%.rel: $(ROOT)/lib/sys/none/%.s | $(BUILD)/objs
 $(BUILD)/objs/%.rel: $(RT_SRC)/int32/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(RT_SRC)/int16/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/%.rel: $(LIBC_SRC)/complex/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(RT_SRC)/float/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
@@ -428,10 +607,20 @@ $(BUILD)/objs/%.rel: $(LIBC_SRC)/wctype/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(LIBC_SRC)/wchar/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/%.rel: $(LIBC_SRC)/assert/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/%.rel: $(LIBC_SRC)/setjmp/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/%.rel: $(LIBC_SRC)/threads/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(BUILD)/objs/%.s | $(BUILD)/objs
 	$(ASM) -o $@ $<
 
 $(BUILD)/objs/wide_%.rel: $(LIBC_SRC)/stdio/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/wide_%.rel: $(LIBC_SRC)/stdlib/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/wide_%.rel: $(LIBC_SRC)/errno/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/wide_%.rel: $(LIBC_SRC)/wchar/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
@@ -441,6 +630,8 @@ $(BUILD)/objs/wide_%.rel: $(RT_SRC)/int16/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/wide_%.rel: $(RT_SRC)/int32/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/wide_%.rel: $(RT_SRC)/double/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/wide_%.rel: $(RT_SRC)/int64/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/wide_%.rel: $(BUILD)/objs/wide_%.s | $(BUILD)/objs
@@ -448,6 +639,33 @@ $(BUILD)/objs/wide_%.rel: $(BUILD)/objs/wide_%.s | $(BUILD)/objs
 
 $(BUILD)/objs/stdio_cases.s: stdio_cases.c | $(BUILD)/objs
 	$(C8C) -S $(C8FLAGS) -o $@ $<
+
+$(BUILD)/objs/c23_cases.s: c23_cases.c | $(BUILD)/objs
+	$(C8C) -S $(C8FLAGS) -o $@ $<
+
+$(CORE_CPP_1): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< 3 1 $@
+
+$(CORE_CPP_2): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< 3 2 $@
+
+$(CORE_CPP_3): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< 3 3 $@
+
+$(BUILD)/objs/core_force_refs_1.s: $(CORE_CPP_1) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_2.s: $(CORE_CPP_2) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_3.s: $(CORE_CPP_3) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+# Also ensure it is part of the core image for the "another test" (compiler C23 focus)
+# (already in CORE_RELS from previous edit)
+
+$(BUILD)/objs/stdio_cases_dispatch.s: stdio_cases_dispatch.s | $(BUILD)/objs
+	cp $< $@
 
 $(BUILD)/objs/stdio_scan_cases.s: stdio_scan_cases.c | $(BUILD)/objs
 	$(C8C) -S $(C8FLAGS) -o $@ $<

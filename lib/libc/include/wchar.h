@@ -85,4 +85,8 @@ wint_t putwc(wchar_t c, FILE *stream);
 wint_t putwchar(wchar_t c);
 wint_t ungetwc(wint_t c, FILE *stream);
 
+#define wcschr(s, c) _Generic((s), \
+    const wchar_t *: (const wchar_t *)wcschr((const wchar_t *)(s), (c)), \
+    default:         (wchar_t *)wcschr((const wchar_t *)(s), (c)))
+
 #endif /* _WCHAR_H */

@@ -5,7 +5,7 @@
         ; Copyright (C) 2026 tomaz stih
 
         .module complex_i
-        .area   _DATA
+        .area   _CONST
         .globl  __complex_I
 
         ; __complex_I

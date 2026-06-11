@@ -15,14 +15,6 @@
 
         SEEK_SET_V      .equ 0x0000
 
-        .area   _DATA
-__stdio_fsetpos_lo:
-        .dw     0
-__stdio_fsetpos_hi:
-        .dw     0
-__stdio_fsetpos_stream:
-        .dw     0
-
         .area   _CODE
 
         ;; _fsetpos
@@ -32,7 +24,16 @@ __stdio_fsetpos_stream:
         ;;
         ;; Return 0 on success, -1 on error.
 _fsetpos::
-        ld      (__stdio_fsetpos_stream),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      b,h
+        ld      c,l
+        ld      hl,#-6
+        add     hl,sp
+        ld      sp,hl
+        ld      -6(ix),c
+        ld      -5(ix),b
         ld      a,d
         or      e
         jr      z,__stdio_fsetpos_fail ; Null source position is treated as failure.
@@ -41,26 +42,35 @@ _fsetpos::
         inc     hl
         ld      d,(hl)
         inc     hl
-        ld      (__stdio_fsetpos_lo),de
+        ld      -4(ix),e
+        ld      -3(ix),d
         ld      e,(hl)
         inc     hl
         ld      d,(hl)
-        ld      (__stdio_fsetpos_hi),de
+        ld      -2(ix),e
+        ld      -1(ix),d
 
         ld      bc,#SEEK_SET_V
         push    bc
-        ld      de,(__stdio_fsetpos_hi)
-        push    de
-        ld      de,(__stdio_fsetpos_lo)
-        push    de
-        ld      hl,(__stdio_fsetpos_stream)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
+        push    hl
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        push    hl
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         call    _fseek
         pop     bc
         pop     bc
         pop     bc
+        ld      sp,ix
+        pop     ix
         ret
 
 __stdio_fsetpos_fail:
+        ld      sp,ix
+        pop     ix
         ld      hl,#0xffff
         push    hl
         pop     de

@@ -32,15 +32,55 @@ ___dbcmp:
         ld      -7(ix), d
         ld      -6(ix), l
         ld      -5(ix), h
-        exx
-        ld      -4(ix), e
-        ld      -3(ix), d
-        ld      -2(ix), l
-        ld      -1(ix), h
-        exx
+	        exx
+	        ld      -4(ix), e
+	        ld      -3(ix), d
+	        ld      -2(ix), l
+	        ld      -1(ix), h
+	        exx
 
-        ; sign_a = bit7 of a7 (ix-1), sign_b = bit7 of b7 (ix+11)
-        ; magnitude_a == 0 ?  (mask sign bit of a7)
+	        ; NaNs are unordered. Return a dedicated sentinel so equality is
+	        ; false and higher layers can map all relational operators
+	        ; correctly.
+	        ld      a, -1(ix)
+	        and     #0x7F
+	        cp      #0x7F
+	        jr      nz, .a_not_nan
+	        ld      a, -2(ix)
+	        and     #0xF0
+	        cp      #0xF0
+	        jr      nz, .a_not_nan
+	        ld      a, -2(ix)
+	        and     #0x0F
+	        or      -3(ix)
+	        or      -4(ix)
+	        or      -5(ix)
+	        or      -6(ix)
+	        or      -7(ix)
+	        or      -8(ix)
+	        jp      nz, .ret_u
+.a_not_nan:
+	        ld      a, 11(ix)
+	        and     #0x7F
+	        cp      #0x7F
+	        jr      nz, .b_not_nan
+	        ld      a, 10(ix)
+	        and     #0xF0
+	        cp      #0xF0
+	        jr      nz, .b_not_nan
+	        ld      a, 10(ix)
+	        and     #0x0F
+	        or      9(ix)
+	        or      8(ix)
+	        or      7(ix)
+	        or      6(ix)
+	        or      5(ix)
+	        or      4(ix)
+	        jp      nz, .ret_u
+.b_not_nan:
+
+	        ; sign_a = bit7 of a7 (ix-1), sign_b = bit7 of b7 (ix+11)
+	        ; magnitude_a == 0 ?  (mask sign bit of a7)
         ld      a, -1(ix)
         and     #0x7F
         or      -2(ix)
@@ -160,6 +200,10 @@ ___dbcmp:
         jp      .done
 .ret_p1:
         ld      de, #1
+        jp      .done
+.ret_u:
+        ld      de, #0x8000
+        jp      .done
 .done:
         ld      sp, ix
         pop     ix

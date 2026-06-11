@@ -117,12 +117,14 @@
         .globl  _significandf
         .globl  ___fssub
 
-        .area   _DATA
-__lgd_x: .ds 4
-__lgd_y: .ds 4
-__lgd_i: .ds 4
-
         .area   _CODE
+
+LGD_XLO .equ -12
+LGD_XHI .equ -10
+LGD_YLO .equ -8
+LGD_YHI .equ -6
+LGD_ILO .equ -4
+LGD_IHI .equ -2
 
 __lgd_load_arg0_raw:
         ld      a,4(ix)
@@ -292,22 +294,34 @@ _atan2l::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         call    __lgd_load_arg1_fs
-        ld      (__lgd_y),de
-        ld      (__lgd_y + 2),hl
-        ld      hl,(__lgd_y + 2)
+        ld      LGD_YLO(ix),e
+        ld      LGD_YLO+1(ix),d
+        ld      LGD_YHI(ix),l
+        ld      LGD_YHI+1(ix),h
+        ld      l,LGD_YHI(ix)
+        ld      h,LGD_YHI+1(ix)
         push    hl
-        ld      hl,(__lgd_y)
-        push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_YLO(ix)
+        ld      d,LGD_YLO+1(ix)
+        push    de
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _atan2f
         pop     bc
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -459,22 +473,34 @@ _powl::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         call    __lgd_load_arg1_fs
-        ld      (__lgd_y),de
-        ld      (__lgd_y + 2),hl
-        ld      hl,(__lgd_y + 2)
+        ld      LGD_YLO(ix),e
+        ld      LGD_YLO+1(ix),d
+        ld      LGD_YHI(ix),l
+        ld      LGD_YHI+1(ix),h
+        ld      l,LGD_YHI(ix)
+        ld      h,LGD_YHI+1(ix)
         push    hl
-        ld      hl,(__lgd_y)
-        push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_YLO(ix)
+        ld      d,LGD_YLO+1(ix)
+        push    de
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _powf
         pop     bc
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -494,19 +520,27 @@ _ldexpl::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         ld      a,13(ix)
         ld      h,a
         ld      a,12(ix)
         ld      l,a
         push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _ldexpf
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -515,19 +549,27 @@ _scalbnl::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         ld      a,13(ix)
         ld      h,a
         ld      a,12(ix)
         ld      l,a
         push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _scalbnf
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -577,26 +619,38 @@ _modfl::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         call    _truncf
-        ld      (__lgd_i),de
-        ld      (__lgd_i + 2),hl
+        ld      LGD_ILO(ix),e
+        ld      LGD_ILO+1(ix),d
+        ld      LGD_IHI(ix),l
+        ld      LGD_IHI+1(ix),h
         call    ___fs2db
         ld      c,12(ix)
         ld      b,13(ix)
         call    __lgd_store_result_at_bc
-        ld      hl,(__lgd_i + 2)
+        ld      l,LGD_IHI(ix)
+        ld      h,LGD_IHI+1(ix)
         push    hl
-        ld      hl,(__lgd_i)
-        push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_ILO(ix)
+        ld      d,LGD_ILO+1(ix)
+        push    de
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    ___fssub
         pop     bc
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -625,22 +679,34 @@ _fmaxl::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         call    __lgd_load_arg1_fs
-        ld      (__lgd_y),de
-        ld      (__lgd_y + 2),hl
-        ld      hl,(__lgd_y + 2)
+        ld      LGD_YLO(ix),e
+        ld      LGD_YLO+1(ix),d
+        ld      LGD_YHI(ix),l
+        ld      LGD_YHI+1(ix),h
+        ld      l,LGD_YHI(ix)
+        ld      h,LGD_YHI+1(ix)
         push    hl
-        ld      hl,(__lgd_y)
-        push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_YLO(ix)
+        ld      d,LGD_YLO+1(ix)
+        push    de
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _fmaxf
         pop     bc
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -649,22 +715,34 @@ _fminl::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         call    __lgd_load_arg1_fs
-        ld      (__lgd_y),de
-        ld      (__lgd_y + 2),hl
-        ld      hl,(__lgd_y + 2)
+        ld      LGD_YLO(ix),e
+        ld      LGD_YLO+1(ix),d
+        ld      LGD_YHI(ix),l
+        ld      LGD_YHI+1(ix),h
+        ld      l,LGD_YHI(ix)
+        ld      h,LGD_YHI+1(ix)
         push    hl
-        ld      hl,(__lgd_y)
-        push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_YLO(ix)
+        ld      d,LGD_YLO+1(ix)
+        push    de
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _fminf
         pop     bc
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 
@@ -673,22 +751,34 @@ _fdiml::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-12
+        add     hl,sp
+        ld      sp,hl
         call    __lgd_load_arg0_fs
-        ld      (__lgd_x),de
-        ld      (__lgd_x + 2),hl
+        ld      LGD_XLO(ix),e
+        ld      LGD_XLO+1(ix),d
+        ld      LGD_XHI(ix),l
+        ld      LGD_XHI+1(ix),h
         call    __lgd_load_arg1_fs
-        ld      (__lgd_y),de
-        ld      (__lgd_y + 2),hl
-        ld      hl,(__lgd_y + 2)
+        ld      LGD_YLO(ix),e
+        ld      LGD_YLO+1(ix),d
+        ld      LGD_YHI(ix),l
+        ld      LGD_YHI+1(ix),h
+        ld      l,LGD_YHI(ix)
+        ld      h,LGD_YHI+1(ix)
         push    hl
-        ld      hl,(__lgd_y)
-        push    hl
-        ld      de,(__lgd_x)
-        ld      hl,(__lgd_x + 2)
+        ld      e,LGD_YLO(ix)
+        ld      d,LGD_YLO+1(ix)
+        push    de
+        ld      e,LGD_XLO(ix)
+        ld      d,LGD_XLO+1(ix)
+        ld      l,LGD_XHI(ix)
+        ld      h,LGD_XHI+1(ix)
         call    _fdimf
         pop     bc
         pop     bc
         call    ___fs2db
+        ld      sp,ix
         pop     ix
         ret
 

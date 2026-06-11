@@ -1,122 +1,133 @@
-        ; strtox_core.s
-        ;
-        ; Shared string->integer parser for strtol/strtoul/strtoll/strtoull.
-        ; Parses an optional sign, an optional 0x/0 base prefix, and a run of
-        ; base-N digits into a 64-bit unsigned accumulator, tracking sign,
-        ; overflow and whether any digit was seen.  The width-specific wrappers
-        ; apply per-type range limits and signs.
-        ;
-        ; Outputs (statics):
-        ;   __sx_acc[8]  unsigned magnitude (little-endian)
-        ;   __sx_neg     1 if a '-' sign was present
-        ;   __sx_ovf     1 if the value overflowed 64 bits
-        ;   __sx_any     1 if at least one valid digit was consumed
-        ; and *endptr is set (to the first unparsed char, or to nptr on failure).
-        ;
-        ; MIT License (see: LICENSE)
-        ; Copyright (C) 2026 tomaz stih
+        ;; strtox_core.s
+        ;;
+        ;; Shared string->integer parser for strtol/strtoul/strtoll/strtoull.
+        ;; The parser now writes its 64-bit magnitude into a caller-provided
+        ;; buffer so the libc stays reentrant: no module-global scratch remains.
+        ;;
+        ;; Calling convention:
+        ;;   HL = nptr
+        ;;   DE = endptr (char **, may be NULL)
+        ;;   BC = base
+        ;;   IY = destination buffer for the 8-byte little-endian magnitude
+        ;;
+        ;; Return flags in A:
+        ;;   bit 0 = at least one digit consumed
+        ;;   bit 1 = leading '-' sign present
+        ;;   bit 2 = 64-bit overflow occurred while accumulating
+        ;;
+        ;; MIT License (see: LICENSE)
+        ;; Copyright (C) 2026 tomaz stih
 
         .module strtox_core
         .optsdcc -mz80 sdcccall(1)
-        .globl  __strtox_core
-        .globl  __sx_acc
-        .globl  __sx_neg
-        .globl  __sx_ovf
-        .globl  __sx_any
-        .globl  __sx_negate
 
-        .area   _DATA
-__sx_acc::  .ds 8
-__sx_tmp:   .ds 8
-__sx_neg::  .ds 1
-__sx_ovf::  .ds 1
-__sx_any::  .ds 1
-__sx_base:  .ds 1
-__sx_dig:   .ds 1
-__sx_endp:  .ds 2          ; char ** endptr (may be 0)
-__sx_nptr:  .ds 2          ; original nptr
+        .globl  __strtox_core
+        .globl  __sx_negate
+        .globl  ___mulsint2slong
+
+SX_FLAG_ANY     .equ 0x01
+SX_FLAG_NEG     .equ 0x02
+SX_FLAG_OVF     .equ 0x04
+
+SX_TMP          .equ -15               ; 8-byte local tmp at -15..-8
+SX_NPTR         .equ -7                ; original nptr
+SX_ENDP         .equ -5                ; endptr
+SX_FLAGS        .equ -3                ; parser flags
+SX_BASE         .equ -2                ; base (low byte only)
+SX_DIG          .equ -1                ; current digit
 
         .area   _CODE
 
-        ; __strtox_core
-        ; inputs: HL = nptr, DE = endptr (char**), BC = base
-        ; clobbers: everything; results in statics
 __strtox_core::
-        ld      (__sx_nptr),hl
-        ld      (__sx_endp),de
         ld      a,c
-        ld      (__sx_base),a           ; base (low byte; 0..36)
-        ; clear acc[8], neg/ovf/any
-        push    hl
-        ld      hl,#__sx_acc
+        ld      c,l
+        ld      b,h
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-15
+        add     hl,sp
+        ld      sp,hl
+        ld      l,c
+        ld      h,b
+
+        ld      SX_NPTR(ix),l
+        ld      SX_NPTR + 1(ix),h
+        ld      SX_ENDP(ix),e
+        ld      SX_ENDP + 1(ix),d
+        ld      SX_BASE(ix),a
+        xor     a
+        ld      SX_FLAGS(ix),a
+        ld      SX_DIG(ix),a
+
+        ;; Zero the caller-provided 64-bit accumulator.
+        push    iy
+        pop     hl
         ld      d,h
         ld      e,l
         inc     de
         ld      (hl),#0
         ld      bc,#7
-        ldir                            ; acc = 0
-        xor     a
-        ld      (__sx_neg),a
-        ld      (__sx_ovf),a
-        ld      (__sx_any),a
-        pop     hl                      ; HL = p = nptr
-        ; --- skip whitespace ---
+        ldir
+        ld      l,SX_NPTR(ix)
+        ld      h,SX_NPTR + 1(ix)
+
 sx_ws:
         ld      a,(hl)
-        cp      #0x20                   ; space
+        cp      #0x20
         jr      z,sx_ws_next
         cp      #0x09
-        jr      c,sx_ws_done            ; < TAB -> not space
+        jr      c,sx_ws_done
         cp      #0x0e
-        jr      nc,sx_ws_done           ; > CR  -> not space
+        jr      nc,sx_ws_done
 sx_ws_next:
         inc     hl
         jr      sx_ws
 sx_ws_done:
-        ; --- sign ---
+
         ld      a,(hl)
-        cp      #0x2b                   ; '+'
+        cp      #0x2b
         jr      z,sx_sign_skip
-        cp      #0x2d                   ; '-'
+        cp      #0x2d
         jr      nz,sx_base
-        ld      a,#1
-        ld      (__sx_neg),a
+        ld      a,SX_FLAGS(ix)
+        or      #SX_FLAG_NEG
+        ld      SX_FLAGS(ix),a
 sx_sign_skip:
         inc     hl
+
 sx_base:
-        ; --- base detection / prefix ---
-        ld      a,(__sx_base)
+        ld      a,SX_BASE(ix)
         or      a
-        jr      z,sx_base0              ; base == 0 : auto
+        jr      z,sx_base0
         cp      #16
         jr      nz,sx_base_ok
-        ; base 16: optional 0x prefix
         ld      a,(hl)
-        cp      #0x30                   ; '0'
+        cp      #0x30
         jr      nz,sx_base_ok
         push    hl
         inc     hl
         ld      a,(hl)
-        cp      #0x78                   ; 'x'
+        cp      #0x78
         jr      z,sx_b16_x
-        cp      #0x58                   ; 'X'
+        cp      #0x58
         jr      nz,sx_b16_no
 sx_b16_x:
         inc     hl
         ld      a,(hl)
         call    sx_digitval
         cp      #16
-        jr      nc,sx_b16_no            ; not a hex digit after 0x
-        pop     bc                      ; discard saved
-        jr      sx_loop                 ; HL already past "0x"
+        jr      nc,sx_b16_no
+        pop     bc
+        jr      sx_loop
 sx_b16_no:
-        pop     hl                      ; restore
+        pop     hl
         jr      sx_base_ok
+
 sx_base0:
         ld      a,(hl)
-        cp      #0x30                   ; '0' ?
+        cp      #0x30
         jr      nz,sx_base0_dec
-        ; leading 0: check for 0x
         push    hl
         inc     hl
         ld      a,(hl)
@@ -129,94 +140,96 @@ sx_b0_x:
         ld      a,(hl)
         call    sx_digitval
         cp      #16
-        jr      nc,sx_b0_oct            ; "0x" not followed by hex -> octal
+        jr      nc,sx_b0_oct
         pop     bc
         ld      a,#16
-        ld      (__sx_base),a
-        jr      sx_loop                 ; HL past "0x"
+        ld      SX_BASE(ix),a
+        jr      sx_loop
 sx_b0_oct:
         pop     hl
         ld      a,#8
-        ld      (__sx_base),a
+        ld      SX_BASE(ix),a
         jr      sx_loop
 sx_base0_dec:
         ld      a,#10
-        ld      (__sx_base),a
+        ld      SX_BASE(ix),a
         jr      sx_loop
+
 sx_base_ok:
-        ; validate 2..36
-        ld      a,(__sx_base)
+        ld      a,SX_BASE(ix)
         cp      #2
-        jr      c,sx_done               ; < 2 invalid -> no digits
+        jr      c,sx_done
         cp      #37
-        jr      nc,sx_done              ; > 36 invalid
+        jr      nc,sx_done
+
 sx_loop:
         ld      a,(hl)
-        call    sx_digitval             ; A = digit or >=37 (0xFF)
+        call    sx_digitval
         ld      b,a
-        ld      a,(__sx_base)
+        ld      a,SX_BASE(ix)
         cp      b
-        jr      c,sx_loop_end           ; base <= digit -> stop  (digit invalid)
-        jr      z,sx_loop_end           ; base == digit -> stop
-        ; valid digit in B
-        ld      a,#1
-        ld      (__sx_any),a
-        ld      a,(__sx_ovf)
-        or      a
-        jr      nz,sx_loop_adv          ; already overflowed: just consume
+        jr      c,sx_loop_end
+        jr      z,sx_loop_end
+        ld      a,SX_FLAGS(ix)
+        or      #SX_FLAG_ANY
+        ld      SX_FLAGS(ix),a
+        bit     2,a
+        jr      nz,sx_loop_adv
         ld      a,b
-        ld      (__sx_dig),a
+        ld      SX_DIG(ix),a
         push    hl
-        call    sx_accum                ; acc = acc*base + digit
+        call    sx_accum
         pop     hl
 sx_loop_adv:
         inc     hl
         jr      sx_loop
+
 sx_loop_end:
-        ld      a,(__sx_any)
-        or      a
-        jr      z,sx_done               ; no digits: endptr = nptr
-        ; endptr = p (HL)
-        ld      a,(__sx_endp)
-        ld      c,a
-        ld      a,(__sx_endp + 1)
-        ld      b,a
+        ld      a,SX_FLAGS(ix)
+        bit     0,a
+        jr      z,sx_done
+        ld      c,SX_ENDP(ix)
+        ld      b,SX_ENDP + 1(ix)
+        ld      a,b
         or      c
-        ret     z                       ; endptr == NULL
+        jr      z,sx_return
         ld      a,l
         ld      (bc),a
         inc     bc
         ld      a,h
         ld      (bc),a
-        ret
+        jr      sx_return
+
 sx_done:
-        ; failure: *endptr = nptr (if endptr != 0)
-        ld      a,(__sx_endp)
-        ld      c,a
-        ld      a,(__sx_endp + 1)
-        ld      b,a
+        ld      c,SX_ENDP(ix)
+        ld      b,SX_ENDP + 1(ix)
+        ld      a,b
         or      c
-        ret     z
-        ld      a,(__sx_nptr)
+        jr      z,sx_return
+        ld      a,SX_NPTR(ix)
         ld      (bc),a
         inc     bc
-        ld      a,(__sx_nptr + 1)
+        ld      a,SX_NPTR + 1(ix)
         ld      (bc),a
+
+sx_return:
+        ld      a,SX_FLAGS(ix)
+        ld      sp,ix
+        pop     ix
         ret
 
-        ; sx_digitval: A = char -> A = 0..35, or 0xFF if not a digit/letter
 sx_digitval:
         cp      #0x30
         jr      c,sx_dv_bad
-        cp      #0x3a                   ; '9'+1
+        cp      #0x3a
         jr      c,sx_dv_dig
-        cp      #0x41                   ; 'A'
+        cp      #0x41
         jr      c,sx_dv_bad
-        cp      #0x5b                   ; 'Z'+1
+        cp      #0x5b
         jr      c,sx_dv_up
-        cp      #0x61                   ; 'a'
+        cp      #0x61
         jr      c,sx_dv_bad
-        cp      #0x7b                   ; 'z'+1
+        cp      #0x7b
         jr      c,sx_dv_lo
 sx_dv_bad:
         ld      a,#0xff
@@ -225,40 +238,50 @@ sx_dv_dig:
         sub     #0x30
         ret
 sx_dv_up:
-        sub     #0x37                   ; 'A'(0x41) - 10
+        sub     #0x37
         ret
 sx_dv_lo:
-        sub     #0x57                   ; 'a'(0x61) - 10
+        sub     #0x57
         ret
 
-        ; sx_accum: __sx_acc = __sx_acc * base + digit (digit in __sx_dig),
-        ; setting __sx_ovf on 64-bit overflow.  clobbers AF,BC,DE,HL.
+        ;; Multiply the current magnitude by BASE and add DIG, both held in the
+        ;; local frame. IY still points at the 8-byte destination buffer.
 sx_accum:
-        ; __sx_tmp = 0
-        ld      hl,#__sx_tmp
+        push    ix
+        pop     hl
+        ld      bc,#SX_TMP
+        add     hl,bc
         ld      d,h
         ld      e,l
         inc     de
         ld      (hl),#0
         ld      bc,#7
         ldir
-        ; repeat 'base' times: tmp += acc
-        ld      a,(__sx_base)
+
+        ld      a,SX_BASE(ix)
         ld      b,a
 sx_mul:
         push    bc
-        ld      hl,#__sx_tmp
-        ld      de,#__sx_acc
-        call    sx_add64                ; tmp += acc ; CF = carry out
+        push    ix
+        pop     hl
+        ld      bc,#SX_TMP
+        add     hl,bc
+        push    iy
+        pop     de
+        call    sx_add64
         jr      nc,sx_mul_nc
-        ld      a,#1
-        ld      (__sx_ovf),a
+        ld      a,SX_FLAGS(ix)
+        or      #SX_FLAG_OVF
+        ld      SX_FLAGS(ix),a
 sx_mul_nc:
         pop     bc
         djnz    sx_mul
-        ; tmp += digit
-        ld      hl,#__sx_tmp
-        ld      a,(__sx_dig)
+
+        push    ix
+        pop     hl
+        ld      bc,#SX_TMP
+        add     hl,bc
+        ld      a,SX_DIG(ix)
         add     a,(hl)
         ld      (hl),a
         ld      b,#7
@@ -269,18 +292,23 @@ sx_dcarry:
         ld      (hl),a
         djnz    sx_dcarry
         jr      nc,sx_acc_copy
-        ld      a,#1
-        ld      (__sx_ovf),a
+        ld      a,SX_FLAGS(ix)
+        or      #SX_FLAG_OVF
+        ld      SX_FLAGS(ix),a
 sx_acc_copy:
-        ld      hl,#__sx_tmp
-        ld      de,#__sx_acc
+        push    ix
+        pop     hl
+        ld      bc,#SX_TMP
+        add     hl,bc
+        push    iy
+        pop     de
         ld      bc,#8
         ldir
         ret
 
-        ; sx_add64: (HL)[8] += (DE)[8] ; returns CF = carry out of bit 63
+        ;; (HL)[8] += (DE)[8], carry set on overflow out of bit 63.
 sx_add64:
-        or      a                       ; clear carry
+        or      a
         ld      b,#8
 sx_add64_l:
         ld      a,(de)
@@ -291,10 +319,8 @@ sx_add64_l:
         djnz    sx_add64_l
         ret
 
-        ; __sx_negate: two's-complement negate __sx_acc[8] in place.
-        ; clobbers AF, B, HL
+        ;; Two's-complement negate the 8-byte little-endian buffer at HL.
 __sx_negate::
-        ld      hl,#__sx_acc
         ld      b,#8
 sxn_cpl:
         ld      a,(hl)
@@ -302,7 +328,8 @@ sxn_cpl:
         ld      (hl),a
         inc     hl
         djnz    sxn_cpl
-        ld      hl,#__sx_acc
+        ld      bc,#-8
+        add     hl,bc
         ld      b,#8
         scf
 sxn_inc:
@@ -311,4 +338,46 @@ sxn_inc:
         ld      (hl),a
         inc     hl
         djnz    sxn_inc
+        ret
+
+        ;; C23 checked-int helpers kept here for now because the header already
+        ;; targets these symbols. They do not depend on the parser locals.
+
+        .globl  __ckd_add_sint
+        .globl  __ckd_sub_sint
+        .globl  __ckd_mul_sint
+
+__ckd_add_sint::
+        add     hl,de
+        ld      a,h
+        xor     b
+        ld      c,a
+        ld      a,h
+        xor     d
+        and     c
+        and     #0x80
+        ret
+
+__ckd_sub_sint::
+        or      a
+        sbc     hl,de
+        ld      a,h
+        xor     b
+        ld      c,a
+        ld      a,h
+        xor     d
+        and     c
+        and     #0x80
+        ret
+
+__ckd_mul_sint::
+        push    de
+        call    ___mulsint2slong
+        pop     bc
+        ld      a,h
+        rla
+        sbc     a,a
+        cp      e
+        ret     nz
+        cp      d
         ret

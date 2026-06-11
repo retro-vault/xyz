@@ -171,3 +171,24 @@ TEST(cli_linker_script_cli_options_override_script) {
     ASSERT_EQ(opts.area_bases[".data"], 0x4100);
     ASSERT_EQ(static_cast<int>(opts.reserved_ranges.size()), 1);
 }
+
+TEST(cli_supports_ihx_output_and_map_file) {
+    std::vector<std::string> args = {
+        "xld",
+        "--mode=sdcc",
+        "--oformat=ihx",
+        "-Map=out.map",
+        "main.rel"
+    };
+
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (auto& arg : args)
+        argv.push_back(arg.data());
+
+    auto opts = xld::cli::parse(static_cast<int>(argv.size()), argv.data());
+
+    ASSERT_EQ(opts.format, xld::output_format::ihx);
+    ASSERT(opts.map_file.has_value());
+    ASSERT_EQ(opts.map_file->string(), std::string("out.map"));
+}

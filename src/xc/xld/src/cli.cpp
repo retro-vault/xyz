@@ -65,8 +65,9 @@ namespace xld {
             return xld::output_format::xl;
         case xbfd::lscript_output_format::bin:
             return xld::output_format::bin;
-        case xbfd::lscript_output_format::elf:
         case xbfd::lscript_output_format::ihx:
+            return xld::output_format::ihx;
+        case xbfd::lscript_output_format::elf:
             throw xld_error("linker script '" + script_path.string()
                             + "' requests an output format not implemented by xld");
         default:
@@ -219,7 +220,10 @@ namespace xld {
                        && arg.rfind("-Tbss=", 0) != 0) {
                 continue;
             } else if (arg.rfind("-Map=", 0) == 0) {
-                throw xld_error("-Map is not implemented yet");
+                opts.map_file = std::filesystem::path(arg.substr(5));
+            } else if (arg == "-Map") {
+                opts.map_file = std::filesystem::path(
+                    require_arg(argc, argv, i, arg));
             } else if (arg == "-o") {
                 opts.output_file = require_arg(argc, argv, i, arg);
             } else if (arg.rfind("-o", 0) == 0 && arg.size() > 2) {
@@ -257,7 +261,9 @@ namespace xld {
                     opts.format = output_format::xl;
                 } else if (format == "bin" || format == "binary") {
                     opts.format = output_format::bin;
-                } else if (format == "elf" || format == "ihx") {
+                } else if (format == "ihx") {
+                    opts.format = output_format::ihx;
+                } else if (format == "elf") {
                     throw xld_error("output format '" + format
                                       + "' is not implemented yet");
                 } else {
@@ -269,7 +275,9 @@ namespace xld {
                     opts.format = output_format::xl;
                 } else if (format == "binary") {
                     opts.format = output_format::bin;
-                } else if (format == "elf" || format == "ihx") {
+                } else if (format == "ihx") {
+                    opts.format = output_format::ihx;
+                } else if (format == "elf") {
                     throw xld_error("output format '" + format
                                       + "' is not implemented yet");
                 } else {

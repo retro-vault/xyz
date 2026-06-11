@@ -500,6 +500,14 @@ private:
     //
     std::string mangle(const std::string &name) const;
 
+    //
+    // Resolve a label-reference operand name for assembly emission.
+    // Real code labels already arrive mangled (e.g. "__xcc_L1"), but some
+    // IR transforms also use LABEL_REF for static data symbols by their C
+    // source names. Those need the normal platform mangling before emission.
+    //
+    std::string asm_label_ref_name(const std::string &name) const;
+
 
     //
     // Return the IX-relative byte offset for a parameter operand.

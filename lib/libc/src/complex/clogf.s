@@ -16,12 +16,6 @@
         .globl  _cargf
         .globl  _logf
 
-        .area   _DATA
-__clogf_real:
-        .ds     4
-__clogf_imag:
-        .ds     4
-
         .area   _CODE
 
 _clogf::
@@ -52,8 +46,8 @@ _clogf::
         inc     sp
         inc     sp
         call    _logf
-        ld      (__clogf_real),de
-        ld      (__clogf_real + 2),hl
+        push    hl
+        push    de
 
         ;; imag = cargf(z)
         ld      l,10(ix)
@@ -77,16 +71,9 @@ _clogf::
         inc     sp
         inc     sp
         inc     sp
-        ld      (__clogf_imag),de
-        ld      (__clogf_imag + 2),hl
-
-        ;; Return the packed complex result.
-        ld      de,(__clogf_real)
-        ld      hl,(__clogf_real + 2)
         exx
-        ld      de,(__clogf_imag)
-        ld      hl,(__clogf_imag + 2)
-        exx
+        pop     de
+        pop     hl
 
         pop     ix
         ret

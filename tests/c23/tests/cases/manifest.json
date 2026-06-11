@@ -1,0 +1,1096 @@
+[
+  {
+    "id": "stdc_version_202311",
+    "category": "core-language",
+    "title": "__STDC_VERSION__ reports a C23 language mode.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.10.10.2"
+    ],
+    "path": "tests/cases/core-language/stdc_version_202311",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK stdc_version_202311\n"
+    ]
+  },
+  {
+    "id": "keywords_core",
+    "category": "core-language",
+    "title": "Promoted keywords such as bool, thread_local, alignas, and alignof work as core syntax.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.4.1",
+      "N3220 6.7.2",
+      "N3220 6.7.6"
+    ],
+    "path": "tests/cases/core-language/keywords_core",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK keywords_core\n"
+    ]
+  },
+  {
+    "id": "static_assert_single_argument",
+    "category": "core-language",
+    "title": "The one-argument static_assert form is accepted.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.11"
+    ],
+    "path": "tests/cases/core-language/static_assert_single_argument",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK static_assert_single_argument\n"
+    ]
+  },
+  {
+    "id": "empty_parameter_list_is_void",
+    "category": "core-language",
+    "title": "Function declarations with an empty parameter list behave like (void).",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.7.4"
+    ],
+    "path": "tests/cases/core-language/empty_parameter_list_is_void",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK empty_parameter_list_is_void\n"
+    ]
+  },
+  {
+    "id": "labels_before_declarations",
+    "category": "core-language",
+    "title": "Labels may appear before declarations and at the end of compound statements.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.8"
+    ],
+    "path": "tests/cases/core-language/labels_before_declarations",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK labels_before_declarations\n"
+    ]
+  },
+  {
+    "id": "empty_initializer",
+    "category": "initialization",
+    "title": "Objects can be initialized with empty braces.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.10"
+    ],
+    "path": "tests/cases/initialization/empty_initializer",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK empty_initializer\n"
+    ]
+  },
+  {
+    "id": "compound_literal_storage_class",
+    "category": "initialization",
+    "title": "Compound literals accept storage-class specifiers such as static.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.5.3.6"
+    ],
+    "path": "tests/cases/initialization/compound_literal_storage_class",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK compound_literal_storage_class\n"
+    ]
+  },
+  {
+    "id": "constexpr_objects",
+    "category": "initialization",
+    "title": "constexpr object definitions participate in constant-expression contexts.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.2",
+      "N3220 6.6"
+    ],
+    "path": "tests/cases/initialization/constexpr_objects",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK constexpr_objects\n"
+    ]
+  },
+  {
+    "id": "typeof_and_typeof_unqual",
+    "category": "types",
+    "title": "typeof and typeof_unqual deduce qualified and unqualified forms as specified.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.5.1.1"
+    ],
+    "path": "tests/cases/types/typeof_and_typeof_unqual",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK typeof_and_typeof_unqual\n"
+    ]
+  },
+  {
+    "id": "auto_type_inference",
+    "category": "types",
+    "title": "The enhanced auto specifier infers object types from initializers.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N2891",
+      "N3220 6.7.2"
+    ],
+    "path": "tests/cases/types/auto_type_inference",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK auto_type_inference\n"
+    ]
+  },
+  {
+    "id": "unnamed_parameters_in_definition",
+    "category": "functions",
+    "title": "Function definitions may omit parameter names.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3006",
+      "N3220 6.9.1"
+    ],
+    "path": "tests/cases/functions/unnamed_parameters_in_definition",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK unnamed_parameters_in_definition\n"
+    ]
+  },
+  {
+    "id": "bare_ellipsis_va_start",
+    "category": "functions",
+    "title": "Variadic functions may use a bare ellipsis and call va_start without a named parameter.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.7.4",
+      "N3220 7.16.1.4"
+    ],
+    "path": "tests/cases/functions/bare_ellipsis_va_start",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK bare_ellipsis_va_start\n"
+    ]
+  },
+  {
+    "id": "vm_types_mandatory",
+    "category": "functions",
+    "title": "Variably modified types are supported independently of VLA objects.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N2992",
+      "N3220 6.7.7"
+    ],
+    "path": "tests/cases/functions/vm_types_mandatory",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK vm_types_mandatory\n"
+    ]
+  },
+  {
+    "id": "unicode_identifiers",
+    "category": "lexical",
+    "title": "Identifiers can use Unicode character names that conform to the C23 rules.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N2836",
+      "N3220 6.4.2.1"
+    ],
+    "path": "tests/cases/lexical/unicode_identifiers",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK unicode_identifiers\n"
+    ]
+  },
+  {
+    "id": "nullptr_and_nullptr_t",
+    "category": "types",
+    "title": "The nullptr constant and nullptr_t type behave as null pointer values.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3042",
+      "N3220 6.3.2.4",
+      "N3220 7.21"
+    ],
+    "path": "tests/cases/types/nullptr_and_nullptr_t",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK nullptr_and_nullptr_t\n"
+    ]
+  },
+  {
+    "id": "bit_precise_integers",
+    "category": "types",
+    "title": "Signed _BitInt and BITINT_MAXWIDTH are available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3035",
+      "N3220 6.2.6.2"
+    ],
+    "path": "tests/cases/types/bit_precise_integers",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK bit_precise_integers\n"
+    ]
+  },
+  {
+    "id": "bitint_literal_suffixes",
+    "category": "types",
+    "title": "The wb and uwb literal suffixes produce bit-precise integer constants.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 6.4.4.2",
+      "N3035"
+    ],
+    "path": "tests/cases/types/bitint_literal_suffixes",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK bitint_literal_suffixes\n"
+    ]
+  },
+  {
+    "id": "enhanced_enums_large_values",
+    "category": "types",
+    "title": "Normal enumerations can represent values outside the old int-only range.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3029",
+      "N3220 6.7.3.3"
+    ],
+    "path": "tests/cases/types/enhanced_enums_large_values",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK enhanced_enums_large_values\n"
+    ]
+  },
+  {
+    "id": "fixed_underlying_enums",
+    "category": "types",
+    "title": "Enumerations may specify a fixed underlying type with colon syntax.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3030",
+      "N3220 6.7.3.3"
+    ],
+    "path": "tests/cases/types/fixed_underlying_enums",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK fixed_underlying_enums\n"
+    ]
+  },
+  {
+    "id": "tag_redeclaration_same_scope",
+    "category": "types",
+    "title": "A tagged type may be redeclared with the same content in the same scope.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3037",
+      "N3220 6.2.7",
+      "N3220 6.7.3"
+    ],
+    "path": "tests/cases/types/tag_redeclaration_same_scope",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK tag_redeclaration_same_scope\n"
+    ]
+  },
+  {
+    "id": "kandr_definition_removed",
+    "category": "removed-or-incompatible",
+    "title": "Identifier-list function definitions are no longer supported.",
+    "kind": "negative-compile",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.9.1"
+    ],
+    "path": "tests/cases/removed-or-incompatible/kandr_definition_removed",
+    "source_file": "fail.c",
+    "cflags": []
+  },
+  {
+    "id": "integer_model_probe",
+    "category": "implementation-model",
+    "title": "The suite probes the C23 integer model assumptions that removed legacy sign representations.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.2.6.2"
+    ],
+    "path": "tests/cases/implementation-model/integer_model_probe",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK integer_model_probe\n"
+    ]
+  },
+  {
+    "id": "ptrdiff_width_floor",
+    "category": "implementation-model",
+    "title": "PTRDIFF_WIDTH reflects the C23 minimum width rule.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.21"
+    ],
+    "path": "tests/cases/implementation-model/ptrdiff_width_floor",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK ptrdiff_width_floor\n"
+    ]
+  },
+  {
+    "id": "has_c_attribute_operator",
+    "category": "attributes",
+    "title": "__has_c_attribute exposes the standard attribute revisions.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.1",
+      "N3220 6.10.2"
+    ],
+    "path": "tests/cases/attributes/has_c_attribute_operator",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK has_c_attribute_operator\n"
+    ]
+  },
+  {
+    "id": "attr_maybe_unused",
+    "category": "attributes",
+    "title": "The [[maybe_unused]] attribute is accepted.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.2"
+    ],
+    "path": "tests/cases/attributes/attr_maybe_unused",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK attr_maybe_unused\n"
+    ]
+  },
+  {
+    "id": "attr_deprecated",
+    "category": "attributes",
+    "title": "The [[deprecated]] attribute is accepted.",
+    "kind": "compile",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.1"
+    ],
+    "path": "tests/cases/attributes/attr_deprecated",
+    "source_file": "pass.c",
+    "cflags": []
+  },
+  {
+    "id": "attr_fallthrough",
+    "category": "attributes",
+    "title": "The [[fallthrough]] attribute is accepted in switch statements.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.3"
+    ],
+    "path": "tests/cases/attributes/attr_fallthrough",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK attr_fallthrough\n"
+    ]
+  },
+  {
+    "id": "attr_nodiscard",
+    "category": "attributes",
+    "title": "The [[nodiscard]] attribute is accepted on functions.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.4"
+    ],
+    "path": "tests/cases/attributes/attr_nodiscard",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK attr_nodiscard\n"
+    ]
+  },
+  {
+    "id": "attr_noreturn",
+    "category": "attributes",
+    "title": "The [[noreturn]] attribute is accepted on functions.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.5"
+    ],
+    "path": "tests/cases/attributes/attr_noreturn",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK attr_noreturn\n"
+    ]
+  },
+  {
+    "id": "attr_reproducible",
+    "category": "attributes",
+    "title": "The [[reproducible]] attribute is accepted on function declarators.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.8"
+    ],
+    "path": "tests/cases/attributes/attr_reproducible",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK attr_reproducible\n"
+    ]
+  },
+  {
+    "id": "attr_unsequenced",
+    "category": "attributes",
+    "title": "The [[unsequenced]] attribute is accepted on function declarators.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.7.13.8"
+    ],
+    "path": "tests/cases/attributes/attr_unsequenced",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK attr_unsequenced\n"
+    ]
+  },
+  {
+    "id": "va_opt",
+    "category": "preprocessor",
+    "title": "The __VA_OPT__ preprocessor feature handles optional commas.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.10.5"
+    ],
+    "path": "tests/cases/preprocessor/va_opt",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK va_opt\n"
+    ]
+  },
+  {
+    "id": "has_include",
+    "category": "preprocessor",
+    "title": "The __has_include conditional inclusion operator works in preprocessing expressions.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.10.2"
+    ],
+    "path": "tests/cases/preprocessor/has_include",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK has_include\n"
+    ]
+  },
+  {
+    "id": "elifdef_elifndef",
+    "category": "preprocessor",
+    "title": "The #elifdef and #elifndef directives work as conditional branches.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.10.2"
+    ],
+    "path": "tests/cases/preprocessor/elifdef_elifndef",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK elifdef_elifndef\n"
+    ]
+  },
+  {
+    "id": "warning_directive",
+    "category": "preprocessor",
+    "title": "The #warning directive is accepted.",
+    "kind": "compile",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.10.8"
+    ],
+    "path": "tests/cases/preprocessor/warning_directive",
+    "source_file": "pass.c",
+    "cflags": []
+  },
+  {
+    "id": "embed",
+    "category": "preprocessor",
+    "title": "The #embed directive and __has_embed operator can embed binary payloads.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3017",
+      "N3220 6.10.10"
+    ],
+    "path": "tests/cases/preprocessor/embed",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK embed\n"
+    ]
+  },
+  {
+    "id": "binary_integer_literals",
+    "category": "lexical",
+    "title": "Binary integer literals with 0b and 0B prefixes are accepted.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.4.4.2"
+    ],
+    "path": "tests/cases/lexical/binary_integer_literals",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK binary_integer_literals\n"
+    ]
+  },
+  {
+    "id": "digit_separators",
+    "category": "lexical",
+    "title": "Digit separators with the single quote character are accepted in integer literals.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.4.4.2"
+    ],
+    "path": "tests/cases/lexical/digit_separators",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK digit_separators\n"
+    ]
+  },
+  {
+    "id": "char8_t_and_u8_char",
+    "category": "unicode",
+    "title": "u8 character literals and char8_t are supported.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.4.4.4",
+      "N3220 7.30"
+    ],
+    "path": "tests/cases/unicode/char8_t_and_u8_char",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK char8_t_and_u8_char\n"
+    ]
+  },
+  {
+    "id": "utf_string_encodings",
+    "category": "unicode",
+    "title": "u8, u, and U string literals use UTF-8, UTF-16, and UTF-32 code units.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.4.5"
+    ],
+    "path": "tests/cases/unicode/utf_string_encodings",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK utf_string_encodings\n"
+    ]
+  },
+  {
+    "id": "mbrtoc8_c8rtomb",
+    "category": "unicode",
+    "title": "The mbrtoc8 and c8rtomb functions are available in <uchar.h>.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3031",
+      "N3220 7.30.1"
+    ],
+    "path": "tests/cases/unicode/mbrtoc8_c8rtomb",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK mbrtoc8_c8rtomb\n"
+    ]
+  },
+  {
+    "id": "mixed_string_concatenation",
+    "category": "unicode",
+    "title": "Mixed wide and narrow literal concatenation is supported.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 6.4.5"
+    ],
+    "path": "tests/cases/unicode/mixed_string_concatenation",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK mixed_string_concatenation\n"
+    ]
+  },
+  {
+    "id": "basic_character_set_additions",
+    "category": "lexical",
+    "title": "The basic source character set additions can appear in character and string literals.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 5.2.1"
+    ],
+    "path": "tests/cases/lexical/basic_character_set_additions",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK basic_character_set_additions\n"
+    ]
+  },
+  {
+    "id": "header_version_macros",
+    "category": "library",
+    "title": "Changed library headers define their C23 version macros.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 Clause 7"
+    ],
+    "path": "tests/cases/library/header_version_macros",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK header_version_macros\n"
+    ]
+  },
+  {
+    "id": "qualifier_preserving_library_functions",
+    "category": "library",
+    "title": "Qualifier-preserving search functions retain const qualification in their return types.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3020",
+      "N3220 7.24.5",
+      "N3220 7.31.5"
+    ],
+    "path": "tests/cases/library/qualifier_preserving_library_functions",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK qualifier_preserving_library_functions\n"
+    ]
+  },
+  {
+    "id": "stdbit_header",
+    "category": "library",
+    "title": "The new <stdbit.h> header exposes C23 bit utilities.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3001",
+      "N3220 7.18"
+    ],
+    "path": "tests/cases/library/stdbit_header",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK stdbit_header\n"
+    ]
+  },
+  {
+    "id": "stdckdint_header",
+    "category": "library",
+    "title": "The new <stdckdint.h> header exposes checked integer operations.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.20"
+    ],
+    "path": "tests/cases/library/stdckdint_header",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK stdckdint_header\n"
+    ]
+  },
+  {
+    "id": "memset_explicit",
+    "category": "library",
+    "title": "The memset_explicit function is available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.24.6.1"
+    ],
+    "path": "tests/cases/library/memset_explicit",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK memset_explicit\n"
+    ]
+  },
+  {
+    "id": "memalignment",
+    "category": "library",
+    "title": "The memalignment function reports pointer alignment.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3044",
+      "N3220 7.24.3"
+    ],
+    "path": "tests/cases/library/memalignment",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK memalignment\n"
+    ]
+  },
+  {
+    "id": "free_sized_and_free_aligned_sized",
+    "category": "library",
+    "title": "free_sized and free_aligned_sized are available in <stdlib.h>.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.24.3"
+    ],
+    "path": "tests/cases/library/free_sized_and_free_aligned_sized",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK free_sized_and_free_aligned_sized\n"
+    ]
+  },
+  {
+    "id": "unreachable_macro",
+    "category": "library",
+    "title": "The unreachable feature is available through <stddef.h>.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N2826",
+      "N3220 7.21"
+    ],
+    "path": "tests/cases/library/unreachable_macro",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK unreachable_macro\n"
+    ]
+  },
+  {
+    "id": "memccpy",
+    "category": "library",
+    "title": "The memccpy function is available through <string.h>.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.24.2.1"
+    ],
+    "path": "tests/cases/library/memccpy",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK memccpy\n"
+    ]
+  },
+  {
+    "id": "strdup_strndup",
+    "category": "library",
+    "title": "The strdup and strndup functions are available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.24.6"
+    ],
+    "path": "tests/cases/library/strdup_strndup",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK strdup_strndup\n"
+    ]
+  },
+  {
+    "id": "gmtime_r_localtime_r",
+    "category": "time",
+    "title": "The gmtime_r and localtime_r functions are available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.29.3"
+    ],
+    "path": "tests/cases/time/gmtime_r_localtime_r",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK gmtime_r_localtime_r\n"
+    ]
+  },
+  {
+    "id": "strftime_extended_month_formats",
+    "category": "time",
+    "title": "Extended month-name formats added through POSIX harmonization are available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.29.3.5"
+    ],
+    "path": "tests/cases/time/strftime_extended_month_formats",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK strftime_extended_month_formats\n"
+    ]
+  },
+  {
+    "id": "timespec_getres",
+    "category": "time",
+    "title": "timespec_getres and the additional time-base hooks are available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.29.2.6",
+      "N3220 7.29.2.7"
+    ],
+    "path": "tests/cases/time/timespec_getres",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK timespec_getres\n"
+    ]
+  },
+  {
+    "id": "timegm",
+    "category": "time",
+    "title": "The timegm function is available.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.29.3"
+    ],
+    "path": "tests/cases/time/timegm",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK timegm\n"
+    ]
+  },
+  {
+    "id": "call_once_mandated",
+    "category": "threads",
+    "title": "call_once support is mandated and usable.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.28.2.1"
+    ],
+    "path": "tests/cases/threads/call_once_mandated",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK call_once_mandated\n"
+    ]
+  },
+  {
+    "id": "printf_scanf_binary_and_width_modifiers",
+    "category": "io",
+    "title": "Binary formatting and the wN length modifiers are available for printf and scanf.",
+    "kind": "run",
+    "support": "required",
+    "references": [
+      "N3220 Annex M.2",
+      "N3016",
+      "N3220 7.23.6.1",
+      "N3220 7.23.6.2",
+      "N3220 7.22.1"
+    ],
+    "path": "tests/cases/io/printf_scanf_binary_and_width_modifiers",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK printf_scanf_binary_and_width_modifiers\n"
+    ]
+  },
+  {
+    "id": "iec60559_binary_types",
+    "category": "iec-60559",
+    "title": "Binary floating-point TS integration exposes _FloatN types when claimed.",
+    "kind": "run",
+    "support": "conditional",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 5.2.5.3.3"
+    ],
+    "path": "tests/cases/iec-60559/iec60559_binary_types",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK iec60559_binary_types\n",
+      "NOT-CLAIMED iec60559_binary_types\n"
+    ]
+  },
+  {
+    "id": "iec60559_decimal_types",
+    "category": "iec-60559",
+    "title": "Decimal floating-point TS integration exposes _DecimalN types when claimed.",
+    "kind": "run",
+    "support": "conditional",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 5.2.5.3.4",
+      "N3220 6.4.4.3"
+    ],
+    "path": "tests/cases/iec-60559/iec60559_decimal_types",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK iec60559_decimal_types\n",
+      "NOT-CLAIMED iec60559_decimal_types\n"
+    ]
+  },
+  {
+    "id": "iec60559_fromfp",
+    "category": "iec-60559",
+    "title": "The fromfp and ufromfp functions are available when IEC 60559 binary floating-point is claimed.",
+    "kind": "run",
+    "support": "conditional",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.12.9.10"
+    ],
+    "path": "tests/cases/iec-60559/iec60559_fromfp",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK iec60559_fromfp\n",
+      "NOT-CLAIMED iec60559_fromfp\n"
+    ]
+  },
+  {
+    "id": "iec60559_minmax",
+    "category": "iec-60559",
+    "title": "The new IEC 60559 minimum and maximum functions are available when claimed.",
+    "kind": "run",
+    "support": "conditional",
+    "references": [
+      "N3220 Annex M.2",
+      "N3220 7.12.12"
+    ],
+    "path": "tests/cases/iec-60559/iec60559_minmax",
+    "source_file": "run.c",
+    "cflags": [],
+    "allowed_stdout": [
+      "OK iec60559_minmax\n",
+      "NOT-CLAIMED iec60559_minmax\n"
+    ]
+  }
+]

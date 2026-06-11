@@ -18,26 +18,15 @@
         .globl  ___fsadd
         .globl  ___fssub
 
-        .area   _DATA
-__cpowf_log_re:
-        .ds     4
-__cpowf_log_im:
-        .ds     4
-__cpowf_tmp0:
-        .ds     4
-__cpowf_tmp1:
-        .ds     4
-__cpowf_prod_re:
-        .ds     4
-__cpowf_prod_im:
-        .ds     4
-
         .area   _CODE
 
 _cpowf::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-24
+        add     hl,sp
+        ld      sp,hl
 
         ;; log(a)
         ld      l,10(ix)
@@ -61,11 +50,15 @@ _cpowf::
         inc     sp
         inc     sp
         inc     sp
-        ld      (__cpowf_log_re),de
-        ld      (__cpowf_log_re + 2),hl
+        ld      -24(ix),e
+        ld      -23(ix),d
+        ld      -22(ix),l
+        ld      -21(ix),h
         exx
-        ld      (__cpowf_log_im),de
-        ld      (__cpowf_log_im + 2),hl
+        ld      -20(ix),e
+        ld      -19(ix),d
+        ld      -18(ix),l
+        ld      -17(ix),h
         exx
 
         ;; tmp0 = log_re * b_re
@@ -75,13 +68,17 @@ _cpowf::
         ld      l,12(ix)
         ld      h,13(ix)
         push    hl
-        ld      de,(__cpowf_log_re)
-        ld      hl,(__cpowf_log_re + 2)
+        ld      e,-24(ix)
+        ld      d,-23(ix)
+        ld      l,-22(ix)
+        ld      h,-21(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__cpowf_tmp0),de
-        ld      (__cpowf_tmp0 + 2),hl
+        ld      -16(ix),e
+        ld      -15(ix),d
+        ld      -14(ix),l
+        ld      -13(ix),h
 
         ;; tmp1 = log_im * b_im
         ld      l,18(ix)
@@ -90,26 +87,36 @@ _cpowf::
         ld      l,16(ix)
         ld      h,17(ix)
         push    hl
-        ld      de,(__cpowf_log_im)
-        ld      hl,(__cpowf_log_im + 2)
+        ld      e,-20(ix)
+        ld      d,-19(ix)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__cpowf_tmp1),de
-        ld      (__cpowf_tmp1 + 2),hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
 
         ;; prod_re = tmp0 - tmp1
-        ld      hl,(__cpowf_tmp1 + 2)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
-        ld      hl,(__cpowf_tmp1)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
         push    hl
-        ld      de,(__cpowf_tmp0)
-        ld      hl,(__cpowf_tmp0 + 2)
+        ld      e,-16(ix)
+        ld      d,-15(ix)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         call    ___fssub
         pop     bc
         pop     bc
-        ld      (__cpowf_prod_re),de
-        ld      (__cpowf_prod_re + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
 
         ;; tmp0 = log_re * b_im
         ld      l,18(ix)
@@ -118,13 +125,17 @@ _cpowf::
         ld      l,16(ix)
         ld      h,17(ix)
         push    hl
-        ld      de,(__cpowf_log_re)
-        ld      hl,(__cpowf_log_re + 2)
+        ld      e,-24(ix)
+        ld      d,-23(ix)
+        ld      l,-22(ix)
+        ld      h,-21(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__cpowf_tmp0),de
-        ld      (__cpowf_tmp0 + 2),hl
+        ld      -16(ix),e
+        ld      -15(ix),d
+        ld      -14(ix),l
+        ld      -13(ix),h
 
         ;; tmp1 = log_im * b_re
         ld      l,14(ix)
@@ -133,35 +144,49 @@ _cpowf::
         ld      l,12(ix)
         ld      h,13(ix)
         push    hl
-        ld      de,(__cpowf_log_im)
-        ld      hl,(__cpowf_log_im + 2)
+        ld      e,-20(ix)
+        ld      d,-19(ix)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__cpowf_tmp1),de
-        ld      (__cpowf_tmp1 + 2),hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
 
         ;; prod_im = tmp0 + tmp1
-        ld      hl,(__cpowf_tmp1 + 2)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         push    hl
-        ld      hl,(__cpowf_tmp1)
+        ld      l,-12(ix)
+        ld      h,-11(ix)
         push    hl
-        ld      de,(__cpowf_tmp0)
-        ld      hl,(__cpowf_tmp0 + 2)
+        ld      e,-16(ix)
+        ld      d,-15(ix)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__cpowf_prod_im),de
-        ld      (__cpowf_prod_im + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
 
         ;; cexp(prod_re + i prod_im)
-        ld      hl,(__cpowf_prod_im + 2)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        ld      hl,(__cpowf_prod_im)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
         push    hl
-        ld      hl,(__cpowf_prod_re + 2)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         push    hl
-        ld      hl,(__cpowf_prod_re)
+        ld      l,-8(ix)
+        ld      h,-7(ix)
         push    hl
         call    _cexpf
         inc     sp
@@ -172,5 +197,6 @@ _cpowf::
         inc     sp
         inc     sp
         inc     sp
+        ld      sp,ix
         pop     ix
         ret

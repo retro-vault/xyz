@@ -1,9 +1,11 @@
         ;; lldiv.s
         ;;
         ;; libc lldiv() for the xcc Z80 libc.
-        ;; xcc currently lowers 16-byte aggregate returns through a pointer-like
-        ;; ABI, so this routine writes the result into a static lldiv_t cell and
-        ;; returns its address in DE.
+        ;; xcc currently materializes 16-byte aggregate returns by having the
+        ;; caller copy from a callee-returned pointer.  To keep that ABI while
+        ;; avoiding shared writable scratch, this routine reuses the caller's
+        ;; own 16-byte argument block as transient result storage and returns a
+        ;; pointer to that stack region in DE.
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
@@ -15,16 +17,15 @@
         .globl  __divsll
         .globl  __modsll
 
-        .area   _DATA
-__lldiv_result:
-        .ds     16
-
         .area   _CODE
 
 _lldiv::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-8
+        add     hl,sp
+        ld      sp,hl                   ; local quotient spill [ix-8..ix-1]
 
         ;; Numerator arrives on stack at ix+4..11, denominator at ix+12..19.
         ld      l,18(ix)
@@ -63,24 +64,18 @@ _lldiv::
         pop     bc
         pop     bc
 
-        ;; Quotient into bytes [0..7].
-        ld      a,e
-        ld      (__lldiv_result + 0),a
-        ld      a,d
-        ld      (__lldiv_result + 1),a
-        ld      a,l
-        ld      (__lldiv_result + 2),a
-        ld      a,h
-        ld      (__lldiv_result + 3),a
+        ;; Spill quotient locally so the original arguments remain intact for
+        ;; the remainder helper.  We later copy quotient+remainder into the
+        ;; caller's outgoing argument block at ix+4..ix+19.
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
         exx
-        ld      a,e
-        ld      (__lldiv_result + 4),a
-        ld      a,d
-        ld      (__lldiv_result + 5),a
-        ld      a,l
-        ld      (__lldiv_result + 6),a
-        ld      a,h
-        ld      (__lldiv_result + 7),a
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         exx
 
         ;; Rebuild the arguments for the remainder helper.
@@ -120,25 +115,49 @@ _lldiv::
         pop     bc
         pop     bc
 
+        ;; Quotient occupies bytes [0..7] of the caller-visible result.
+        ld      a,-8(ix)
+        ld      4(ix),a
+        ld      a,-7(ix)
+        ld      5(ix),a
+        ld      a,-6(ix)
+        ld      6(ix),a
+        ld      a,-5(ix)
+        ld      7(ix),a
+        ld      a,-4(ix)
+        ld      8(ix),a
+        ld      a,-3(ix)
+        ld      9(ix),a
+        ld      a,-2(ix)
+        ld      10(ix),a
+        ld      a,-1(ix)
+        ld      11(ix),a
+
+        ;; Remainder occupies bytes [8..15].
         ld      a,e
-        ld      (__lldiv_result + 8),a
+        ld      12(ix),a
         ld      a,d
-        ld      (__lldiv_result + 9),a
+        ld      13(ix),a
         ld      a,l
-        ld      (__lldiv_result + 10),a
+        ld      14(ix),a
         ld      a,h
-        ld      (__lldiv_result + 11),a
+        ld      15(ix),a
         exx
         ld      a,e
-        ld      (__lldiv_result + 12),a
+        ld      16(ix),a
         ld      a,d
-        ld      (__lldiv_result + 13),a
+        ld      17(ix),a
         ld      a,l
-        ld      (__lldiv_result + 14),a
+        ld      18(ix),a
         ld      a,h
-        ld      (__lldiv_result + 15),a
+        ld      19(ix),a
         exx
 
-        ld      de,#__lldiv_result
+        push    ix
+        pop     hl
+        ld      de,#4
+        add     hl,de
+        ex      de,hl                   ; DE = caller argument block / result
+        ld      sp,ix
         pop     ix
         ret

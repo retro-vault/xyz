@@ -13,10 +13,6 @@
         .globl  _time
         .globl  ___sys_gettimeofday
 
-        .area   _DATA
-__time_ts:
-        .ds     8                       ; scratch struct timespec for the hook
-
         .area   _CODE
 
         ; _time
@@ -24,27 +20,40 @@ __time_ts:
         ; outputs: DE:HL = current time (DE = low16, HL = high16); *timer set
         ; clobbers: AF, BC, DE, HL
 _time::
+        push    ix
+        ld      hl,#0
+        push    hl
+        push    hl
+        push    hl
+        push    hl
+        ld      ix,#0
+        add     ix,sp
         ld      a,h
         or      l
         push    af                      ; remember whether timer == NULL (Z)
         push    hl                      ; save timer
-        ld      hl,#__time_ts
+        push    ix
+        pop     hl
         call    ___sys_gettimeofday           ; __time_ts.tv_sec = current seconds
         pop     hl                      ; HL = timer
         pop     af                      ; Z set if timer was NULL
         jr      z,time_no_store
-        ld      a,(__time_ts)
+        ld      a,0(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__time_ts + 1)
+        ld      a,1(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__time_ts + 2)
+        ld      a,2(ix)
         ld      (hl),a
         inc     hl
-        ld      a,(__time_ts + 3)
+        ld      a,3(ix)
         ld      (hl),a
 time_no_store:
-        ld      de,(__time_ts)
-        ld      hl,(__time_ts + 2)
+        ld      e,0(ix)
+        ld      d,1(ix)
+        ld      l,2(ix)
+        ld      h,3(ix)
+        ld      sp,ix
+        pop     ix
         ret

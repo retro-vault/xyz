@@ -475,6 +475,14 @@ std::string z80_gen::mangle(const std::string &name) const {
     return "_" + name;
 }
 
+std::string z80_gen::asm_label_ref_name(const std::string &name) const {
+    if (name.empty())
+        return name;
+    if (name[0] == '_' || name[0] == '.')
+        return name;
+    return mangle(name);
+}
+
 // ----- Function emission ---------------------------------------------
 
 void z80_gen::emit_function(const ir_function &fn) {

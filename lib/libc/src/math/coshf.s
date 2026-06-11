@@ -16,50 +16,57 @@
         .globl  ___fsadd
         .globl  ___fsmul
 
-        .area   _DATA
-__coshf_x:   .ds 4
-__coshf_ep:  .ds 4
-__coshf_en:  .ds 4
-
         .area   _CODE
 
 _coshf::
-        ld      (__coshf_x),de
-        ld      (__coshf_x + 2),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        push    hl                      ; save x high word at -2(ix),-1(ix)
+        push    de                      ; save x low word at -4(ix),-3(ix)
 
         ;; exp(+x)
         call    _expf
-        ld      (__coshf_ep),de
-        ld      (__coshf_ep + 2),hl
+        push    hl                      ; save exp(+x) high word at -6(ix),-5(ix)
+        push    de                      ; save exp(+x) low word at -8(ix),-7(ix)
 
         ;; exp(-x)
-        ld      de,(__coshf_x)
-        ld      hl,(__coshf_x + 2)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         ld      a,h
         xor     #0x80
         ld      h,a
         call    _expf
-        ld      (__coshf_en),de
-        ld      (__coshf_en + 2),hl
 
         ;; exp(x) + exp(-x)
-        ld      hl,(__coshf_en + 2)
         push    hl
-        ld      hl,(__coshf_en)
-        push    hl
-        ld      de,(__coshf_ep)
-        ld      hl,(__coshf_ep + 2)
+        push    de                      ; stack operand = exp(-x)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)                ; a = exp(+x)
         call    ___fsadd
         pop     bc
         pop     bc
 
         ;; Scale the symmetric sum by 1/2.
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
         ld      hl,#0x3f00              ; 0.5f
         push    hl
         ld      hl,#0x0000
         push    hl
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         call    ___fsmul
         pop     bc
         pop     bc
+        ld      sp,ix
+        pop     ix
         ret
-

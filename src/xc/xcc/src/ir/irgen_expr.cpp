@@ -505,7 +505,9 @@ void ir_gen::visit(sizeof_expr &e) {
     if (e.sizeof_type)
         sz = e.is_alignof ? e.sizeof_type->align() : e.sizeof_type->size();
     else if (e.sizeof_expr_op && e.sizeof_expr_op->type)
-        sz = e.is_alignof ? e.sizeof_expr_op->type->align() : e.sizeof_expr_op->type->size();
+        sz = e.is_alignof ? (e.align_override > 0 ? e.align_override
+                                                  : e.sizeof_expr_op->type->align())
+                          : e.sizeof_expr_op->type->size();
     expr_result_ = operand::make_int(sz, type::make_int());
 }
 

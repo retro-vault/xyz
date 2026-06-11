@@ -8,6 +8,12 @@ recommended next steps see [LIBC-GAPS.md](LIBC-GAPS.md). For the planned
 `long long` / `double` runtime helpers (which back the wide-integer and
 floating-point library entry points) see [BIG-NUMBERS.md](BIG-NUMBERS.md).
 
+The current asm libc no longer uses hidden writable module scratchpads for
+ordinary per-call helper state. The writable objects that remain are deliberate
+library state or API-defined static-return storage, for example `errno`,
+`rand`, `atexit` tables, heap metadata, signal tables, `FILE` pools, `strtok`,
+`tmpnam`, and the standard time-string buffers.
+
 Legend:
 
 - **asm** — hand-written Z80 assembly in `lib/libc/src/<area>/`
@@ -279,6 +285,9 @@ Current model:
 - `FILE` is a tiny unbuffered fd-backed descriptor layered over platform
   `open/read/write/lseek/close`
 - the `none` backend ships an in-memory fake filesystem used by the libc tests
+- the remaining writable stdio globals are intentional library state: the
+  standard streams, the fixed `FILE` pool, tmpfile bookkeeping, and `tmpnam`'s
+  API-defined static buffer/counter
 
 Still missing:
 
@@ -394,6 +403,8 @@ Current model:
   that return `thrd_error`
 - mutexes, once-flags, and TLS are usable by single-threaded portable code
 - condition variables are local signal/timed-out shims, not blocking waits
+- the writable thread objects that remain are the intended single-thread
+  fallback state, not per-call scratch storage
 
 ## Missing headers (entire)
 

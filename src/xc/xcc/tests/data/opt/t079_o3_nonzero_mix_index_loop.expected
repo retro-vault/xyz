@@ -14,7 +14,7 @@ _main:
 	ld	sp, hl
 	xor	a
 	ld	-5(ix), a
-	ld	hl, #data
+	ld	hl, #_data
 	ld	-4(ix), l
 	ld	-3(ix), h
 __xcc_L0:
@@ -51,7 +51,7 @@ __xcc_L4:
 __xcc_L5:
 	ld	e, -5(ix)
 	ld	d, #0
-	ld	hl, #data
+	ld	hl, #_data
 	add	hl, de
 	ld	a, (hl)
 	ld	l, a

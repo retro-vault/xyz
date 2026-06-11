@@ -5,20 +5,33 @@
         .globl  _wcsstr
         .globl  _wcslen
         .globl  _wcsncmp
-        .area   _DATA
-__wcsstr_ndl: .dw 0
-__wcsstr_len: .dw 0
+
+WCSSTR_NDL  .equ -4
+WCSSTR_LEN  .equ -2
+
         .area   _CODE
         ; HL = haystack, DE = needle -> DE = pointer or 0
 _wcsstr::
-        ld      (__wcsstr_ndl),de
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      c,l                     ; preserve haystack across frame setup
+        ld      b,h
+        ld      hl,#-4
+        add     hl,sp
+        ld      sp,hl
+        ld      WCSSTR_NDL(ix),e
+        ld      WCSSTR_NDL + 1(ix),d
+        ld      l,c
+        ld      h,b
         push    hl                      ; haystack
         ex      de,hl                   ; HL = needle
         call    _wcslen                 ; DE = needle length
         ld      a,d
         or      e
         jr      z,wcst_ret_h            ; empty needle -> haystack
-        ld      (__wcsstr_len),de
+        ld      WCSSTR_LEN(ix),e
+        ld      WCSSTR_LEN + 1(ix),d
         pop     hl                      ; haystack
 wcst_loop:
         ld      a,(hl)
@@ -27,9 +40,11 @@ wcst_loop:
         dec     hl
         jr      z,wcst_nf               ; end of haystack
         push    hl
-        ld      de,(__wcsstr_len)
+        ld      e,WCSSTR_LEN(ix)
+        ld      d,WCSSTR_LEN + 1(ix)
         push    de                      ; stacked count for wcsncmp
-        ld      de,(__wcsstr_ndl)
+        ld      e,WCSSTR_NDL(ix)
+        ld      d,WCSSTR_NDL + 1(ix)
         call    _wcsncmp
         pop     bc                      ; clean count
         ld      a,d
@@ -41,11 +56,14 @@ wcst_loop:
         jr      wcst_loop
 wcst_found:
         ex      de,hl
-        ret
+        jr      wcst_leave
 wcst_nf:
         ld      de,#0
-        ret
+        jr      wcst_leave
 wcst_ret_h:
         pop     hl
         ex      de,hl
+wcst_leave:
+        ld      sp,ix
+        pop     ix
         ret

@@ -21,6 +21,17 @@
 typedef unsigned short char16_t;
 typedef unsigned long  char32_t;
 
+/* C23 UTF-8 support (char8_t and conversion functions).
+ * On this target the execution charset is single-byte, so these are
+ * essentially 1:1 mappings for values in [0,255]. */
+typedef unsigned char char8_t;
+
+size_t mbrtoc8(char8_t *restrict pc8,
+               const char *restrict s,
+               size_t n,
+               mbstate_t *restrict ps);
+size_t c8rtomb(char *restrict s, char8_t c8, mbstate_t *restrict ps);
+
 size_t mbrtoc16(char16_t *restrict pc16,
                 const char *restrict s,
                 size_t n,

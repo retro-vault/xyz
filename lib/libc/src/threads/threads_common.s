@@ -55,8 +55,6 @@ __threads_tss_used:
         .ds     THREADS_TSS_SLOTS
 __threads_tss_values:
         .ds     (THREADS_TSS_SLOTS * 2)
-__threads_tss_tmp:
-        .dw     0
 
         .area   _CODE
 
@@ -402,13 +400,13 @@ threads_tss_get_fail:
         ret
 
 __threads_tss_set_core:
-        ld      (__threads_tss_tmp),de
+        push    de
         call    __threads_key_to_slot
-        jp      c,threads_mtx_err_plain
+        jr      c,threads_tss_set_fail
         ld      a,(hl)
         or      a
-        jp      z,threads_mtx_err_plain
-        ld      hl,(__threads_tss_tmp)
+        jr      z,threads_tss_set_fail
+        pop     hl
         ld      a,l
         ld      (de),a
         inc     de
@@ -416,3 +414,6 @@ __threads_tss_set_core:
         ld      (de),a
         ld      de,#THRD_SUCCESS
         ret
+threads_tss_set_fail:
+        pop     bc
+        jp      threads_mtx_err_plain

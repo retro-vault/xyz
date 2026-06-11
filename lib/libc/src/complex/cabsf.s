@@ -16,16 +16,15 @@
         .globl  ___fsadd
         .globl  _sqrtf
 
-        .area   _DATA
-__cabsf_real_sq:
-        .ds     4
-
         .area   _CODE
 
 _cabsf::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-4
+        add     hl,sp
+        ld      sp,hl
 
         ;; real*real
         ld      e,4(ix)
@@ -37,8 +36,10 @@ _cabsf::
         call    ___fsmul
         pop     af
         pop     af
-        ld      (__cabsf_real_sq),de
-        ld      (__cabsf_real_sq + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
 
         ;; imag*imag
         ld      e,8(ix)
@@ -52,14 +53,18 @@ _cabsf::
         pop     af
 
         ;; real*real + imag*imag
-        ld      bc,(__cabsf_real_sq)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         push    hl
-        push    bc
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        push    hl
         call    ___fsadd
         pop     bc
         pop     bc
 
         ;; sqrtf(sum)
         call    _sqrtf
+        ld      sp,ix
         pop     ix
         ret

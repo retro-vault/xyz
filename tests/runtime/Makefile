@@ -2,7 +2,7 @@
 #
 # Build flow:
 #   1. Assemble all runtime .s files with the selected assembler
-#   2. Link at 0x0000 with sdldz80, producing runtime.ihx + runtime.map
+#   2. Link at 0x0000 with xld, producing runtime.ihx + runtime.map
 #   3. Convert to flat binary (tools/ihx2bin.py)
 #   4. Generate C++ symbol header (tools/gen_symbols.py)
 #   5. Compile & run C++ test binary (uses libxz80 from the repo)
@@ -20,7 +20,8 @@ CXXFLAGS    := -std=c++20 -Wall -Wextra -g -I$(XZ80_INC) -I$(BUILD) -I.
 # Keep both knobs overridable for parity debugging.
 ASM         ?= $(ROOT)/bin/bin/xas
 ASMFLAGS    ?= --mode=sdcc
-LINK        ?= sdldz80
+LINK        ?= $(ROOT)/bin/bin/xld
+LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000
 
 RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(BUILD)/objs/%.rel,$(RUNTIME_SRCS))
@@ -63,8 +64,7 @@ $(RUNTIME_BIN): $(RUNTIME_IHX)
 
 # Link all assembled .rel files into one image
 $(RUNTIME_IHX): $(RUNTIME_RELS)
-	$(LINK) -n -m -j -i $@ -b _CODE=0x0000 $^ 2>/dev/null || \
-	  $(LINK) -n -m -j -i $@ -b _CODE=0x0000 $^
+	$(LINK) $(LINKFLAGS) -Map=$(RUNTIME_MAP) -o $@ $^
 
 # Assemble each .s file
 $(BUILD)/objs/%.rel: $(RUNTIME_DIR)/%.s | $(BUILD)/objs

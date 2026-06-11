@@ -19,6 +19,8 @@
         .globl  _calloc
         .globl  _realloc
         .globl  _free
+        .globl  _free_sized
+        .globl  _free_aligned
         .globl  _memcpy
         .globl  ___sys_sbrk
         .globl  __mul16
@@ -35,22 +37,28 @@ HEAP_ARENA_SIZE .equ 8192
 ALIGNED_MAGIC_LO .equ 0x6c
 ALIGNED_MAGIC_HI .equ 0xa1
 
+CALLOC_COUNT_LO  .equ -6
+CALLOC_COUNT_HI  .equ -5
+CALLOC_SIZE_LO   .equ -4
+CALLOC_SIZE_HI   .equ -3
+CALLOC_TOTAL_LO  .equ -2
+CALLOC_TOTAL_HI  .equ -1
+
+REALLOC_PTR_LO   .equ -8
+REALLOC_PTR_HI   .equ -7
+REALLOC_USER_LO  .equ -6
+REALLOC_USER_HI  .equ -5
+REALLOC_SIZE_LO  .equ -4
+REALLOC_SIZE_HI  .equ -3
+REALLOC_AUX_LO   .equ -2
+REALLOC_AUX_HI   .equ -1
+
         .area   _DATA
 
 __libc_heap_head:
         .dw     0
 __libc_heap_ready:
         .db     0
-__libc_heap_tmp_tail:
-        .dw     0
-__libc_heap_saved_ptr:
-        .dw     0
-__libc_heap_saved_user:
-        .dw     0
-__libc_heap_saved_size:
-        .dw     0
-__libc_heap_saved_aux:
-        .dw     0
 
         .area   _CODE
 
@@ -175,7 +183,7 @@ __libc_heap_split:
         ld      de,#BLOCK_HDR_SIZE
         add     hl,de
         add     hl,bc                   ; HL = tail header address
-        ld      (__libc_heap_tmp_tail),hl
+        push    hl                      ; keep tail header address live
 
         ld      l,BLOCK_SIZE_LO(ix)
         ld      h,BLOCK_SIZE_HI(ix)
@@ -184,8 +192,9 @@ __libc_heap_split:
         ld      de,#BLOCK_HDR_SIZE
         or      a
         sbc     hl,de                   ; HL = tail->size
-        ld      de,(__libc_heap_tmp_tail)
         ex      de,hl
+        pop     hl                      ; HL = tail header address
+        push    hl                      ; preserve for block->next update
         ld      (hl),e
         inc     hl
         ld      (hl),d
@@ -203,7 +212,7 @@ __libc_heap_split:
 
         ld      BLOCK_SIZE_LO(ix),c
         ld      BLOCK_SIZE_HI(ix),b
-        ld      hl,(__libc_heap_tmp_tail)
+        pop     hl
         ld      BLOCK_NEXT_LO(ix),l
         ld      BLOCK_NEXT_HI(ix),h
 
@@ -275,15 +284,17 @@ heap_coalesce_advance:
 
 ;; malloc(size): first-fit search, split on success, return payload pointer or 0.
 _malloc::
+        push    ix
         ld      a,h
         or      l
         jr      nz,malloc_have_size
         ld      de,#0
-        ret
+        jr      malloc_return
 
 malloc_have_size:
         call    __libc_align_size
-        ld      (__libc_heap_saved_size),hl
+        ld      b,h
+        ld      c,l                     ; BC = requested payload size
         call    __libc_heap_init
         ld      hl,(__libc_heap_head)
 malloc_loop:
@@ -291,7 +302,7 @@ malloc_loop:
         or      l
         jr      nz,malloc_check_block
         ld      de,#0
-        ret
+        jr      malloc_return
 
 malloc_check_block:
         push    hl
@@ -300,14 +311,14 @@ malloc_check_block:
         or      BLOCK_FREE_HI(ix)
         jr      z,malloc_next_block
 
-        ld      de,(__libc_heap_saved_size)
         ld      a,BLOCK_SIZE_LO(ix)
-        sub     e
+        sub     c
         ld      a,BLOCK_SIZE_HI(ix)
-        sbc     a,d
+        sbc     a,b
         jr      c,malloc_next_block
 
-        ld      hl,(__libc_heap_saved_size)
+        ld      h,b
+        ld      l,c
         call    __libc_heap_split
         xor     a
         ld      BLOCK_FREE_LO(ix),a
@@ -317,12 +328,16 @@ malloc_check_block:
         ld      de,#BLOCK_HDR_SIZE
         add     hl,de
         ex      de,hl
-        ret
+        jr      malloc_return
 
 malloc_next_block:
         ld      l,BLOCK_NEXT_LO(ix)
         ld      h,BLOCK_NEXT_HI(ix)
         jr      malloc_loop
+
+malloc_return:
+        pop     ix
+        ret
 
 ;; calloc(count, size): overflow-check count*size, malloc it, then zero it.
 _calloc::
@@ -333,14 +348,29 @@ _calloc::
         or      e
         jr      z,calloc_zero_request
 
-        ld      (__libc_heap_saved_ptr),hl     ; saved count
-        ld      (__libc_heap_saved_size),de    ; saved element size
+        ld      b,h
+        ld      c,l                     ; BC = element count
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-6
+        add     hl,sp
+        ld      sp,hl
+        ld      CALLOC_COUNT_LO(ix),c
+        ld      CALLOC_COUNT_HI(ix),b
+        ld      CALLOC_SIZE_LO(ix),e
+        ld      CALLOC_SIZE_HI(ix),d
+        ld      h,b
+        ld      l,c
         call    __mul16                        ; DE = count * size (mod 65536)
-        ld      (__libc_heap_saved_aux),de     ; saved total bytes
+        ld      CALLOC_TOTAL_LO(ix),e
+        ld      CALLOC_TOTAL_HI(ix),d
         ex      de,hl                          ; HL = wrapped product
-        ld      de,(__libc_heap_saved_ptr)     ; DE = count
+        ld      e,CALLOC_COUNT_LO(ix)
+        ld      d,CALLOC_COUNT_HI(ix)
         call    __divuint                      ; DE = product / count
-        ld      hl,(__libc_heap_saved_size)
+        ld      l,CALLOC_SIZE_LO(ix)
+        ld      h,CALLOC_SIZE_HI(ix)
         ld      a,e
         cp      l
         jr      nz,calloc_fail
@@ -348,20 +378,22 @@ _calloc::
         cp      h
         jr      nz,calloc_fail
 
-        ld      hl,(__libc_heap_saved_aux)
+        ld      l,CALLOC_TOTAL_LO(ix)
+        ld      h,CALLOC_TOTAL_HI(ix)
         call    _malloc
         ld      a,d
         or      e
-        ret     z
+        jr      z,calloc_return
 
         push    de
         ex      de,hl                          ; HL = allocated block
-        ld      bc,(__libc_heap_saved_aux)
+        ld      c,CALLOC_TOTAL_LO(ix)
+        ld      b,CALLOC_TOTAL_HI(ix)
         ld      a,b
         or      c
         jr      z,calloc_zero_done
-        xor     a
 calloc_zero_loop:
+        xor     a
         ld      (hl),a
         inc     hl
         dec     bc
@@ -370,6 +402,9 @@ calloc_zero_loop:
         jr      nz,calloc_zero_loop
 calloc_zero_done:
         pop     de
+calloc_return:
+        ld      sp,ix
+        pop     ix
         ret
 
 calloc_zero_request:
@@ -378,7 +413,7 @@ calloc_zero_request:
 
 calloc_fail:
         ld      de,#0
-        ret
+        jr      calloc_return
 
 ;; realloc(ptr, size): shrink in place when possible, otherwise allocate/copy/free.
 _realloc::
@@ -389,91 +424,129 @@ _realloc::
         jp      _malloc
 
 realloc_have_ptr:
-        ld      (__libc_heap_saved_ptr),hl     ; original user pointer
-        ld      (__libc_heap_saved_user),hl    ; copy source for grow path
+        ld      b,h
+        ld      c,l
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-8
+        add     hl,sp
+        ld      sp,hl
+        ld      REALLOC_PTR_LO(ix),c
+        ld      REALLOC_PTR_HI(ix),b
+        ld      REALLOC_USER_LO(ix),c
+        ld      REALLOC_USER_HI(ix),b
+        ld      REALLOC_SIZE_LO(ix),e
+        ld      REALLOC_SIZE_HI(ix),d
         ld      a,d
         or      e
         jr      nz,realloc_have_size
+        ld      l,REALLOC_PTR_LO(ix)
+        ld      h,REALLOC_PTR_HI(ix)
         call    _free
         ld      de,#0
-        ret
+        jp      realloc_return
 
 realloc_have_size:
-        ld      (__libc_heap_saved_ptr),hl     ; original pointer for free()
-        ld      (__libc_heap_saved_user),hl    ; visible user bytes for memcpy()
-        ld      (__libc_heap_saved_size),de    ; requested new size
+        ld      l,REALLOC_PTR_LO(ix)
+        ld      h,REALLOC_PTR_HI(ix)
         call    __libc_heap_unwrap_user
-        jr      c,realloc_aligned_ptr
+        jp      c,realloc_aligned_ptr
         push    hl
         ex      de,hl
         call    __libc_align_size
-        ld      (__libc_heap_saved_size),hl
+        ld      REALLOC_SIZE_LO(ix),l
+        ld      REALLOC_SIZE_HI(ix),h
         pop     hl
         call    __libc_ptr_to_block
+        ld      e,REALLOC_SIZE_LO(ix)
+        ld      d,REALLOC_SIZE_HI(ix)
+        ld      b,d
+        ld      c,e
+        push    ix
         push    hl
         pop     ix
-
-        ld      de,(__libc_heap_saved_size)
         ld      a,BLOCK_SIZE_LO(ix)
         sub     e
         ld      a,BLOCK_SIZE_HI(ix)
         sbc     a,d
-        jr      c,realloc_allocate_new
+        jr      c,realloc_allocate_new_with_block
 
-        ld      hl,(__libc_heap_saved_size)
+        ld      h,b
+        ld      l,c
         call    __libc_heap_split
-        ld      de,(__libc_heap_saved_ptr)
-        ret
+        pop     ix
+        ld      e,REALLOC_PTR_LO(ix)
+        ld      d,REALLOC_PTR_HI(ix)
+        jp      realloc_return
 
-realloc_allocate_new:
+realloc_allocate_new_with_block:
         ld      l,BLOCK_SIZE_LO(ix)
         ld      h,BLOCK_SIZE_HI(ix)
-        ld      (__libc_heap_saved_aux),hl     ; old payload length
+        pop     ix
+        ld      REALLOC_AUX_LO(ix),l
+        ld      REALLOC_AUX_HI(ix),h           ; old payload length
 realloc_allocate_common:
-        ld      hl,(__libc_heap_saved_size)
+        ld      l,REALLOC_SIZE_LO(ix)
+        ld      h,REALLOC_SIZE_HI(ix)
         call    _malloc
         ld      a,d
         or      e
-        ret     z
+        jr      z,realloc_return
 
-        ld      (__libc_heap_tmp_tail),de      ; replacement pointer
-        ld      hl,(__libc_heap_saved_aux)
-        ld      de,(__libc_heap_saved_size)
+        ld      l,REALLOC_AUX_LO(ix)
+        ld      h,REALLOC_AUX_HI(ix)
+        ld      e,REALLOC_SIZE_LO(ix)
+        ld      d,REALLOC_SIZE_HI(ix)
         xor     a
         sbc     hl,de
         jr      c,realloc_copy_old
-        ld      bc,(__libc_heap_saved_size)
+        ld      c,REALLOC_SIZE_LO(ix)
+        ld      b,REALLOC_SIZE_HI(ix)
         jr      realloc_copy_have_len
 realloc_copy_old:
-        ld      bc,(__libc_heap_saved_aux)
+        ld      c,REALLOC_AUX_LO(ix)
+        ld      b,REALLOC_AUX_HI(ix)
 realloc_copy_have_len:
         push    bc
-        ld      hl,(__libc_heap_tmp_tail)      ; destination
-        ld      de,(__libc_heap_saved_user)    ; source visible to the caller
+        push    de
+        ex      de,hl                          ; HL = destination
+        ld      e,REALLOC_USER_LO(ix)
+        ld      d,REALLOC_USER_HI(ix)         ; source visible to the caller
         call    _memcpy
+        pop     de
         pop     bc
-        ld      hl,(__libc_heap_saved_ptr)
+        push    de
+        ld      l,REALLOC_PTR_LO(ix)
+        ld      h,REALLOC_PTR_HI(ix)
         call    _free
-        ld      de,(__libc_heap_tmp_tail)
-        ret
+        pop     de
+        jp      realloc_return
 
 realloc_aligned_ptr:
-        ld      (__libc_heap_saved_aux),hl     ; save original malloc() pointer
-        ld      hl,(__libc_heap_saved_user)
+        ld      l,REALLOC_USER_LO(ix)
+        ld      h,REALLOC_USER_HI(ix)
         ld      de,#6
         or      a
         sbc     hl,de
         ld      e,(hl)
         inc     hl
         ld      d,(hl)
-        ld      (__libc_heap_saved_aux),de     ; old user-visible size
+        ld      REALLOC_AUX_LO(ix),e
+        ld      REALLOC_AUX_HI(ix),d           ; old user-visible size
         jp      realloc_allocate_common
+
+realloc_return:
+        ld      sp,ix
+        pop     ix
+        ret
 
 ;; free(ptr): mark the block free and eagerly coalesce adjacent blocks.
 _free::
         ld      a,h
         or      l
         ret     z
+        push    ix
         call    __libc_heap_unwrap_user
         call    __libc_ptr_to_block
         push    hl
@@ -481,4 +554,26 @@ _free::
         ld      BLOCK_FREE_LO(ix),#1
         xor     a
         ld      BLOCK_FREE_HI(ix),a
-        jp      __libc_heap_coalesce
+        call    __libc_heap_coalesce
+        pop     ix
+        ret
+
+;; C23 free_sized and free_aligned (new functions).
+;; Implemented in pure assembler in this existing file only.
+;; free_sized: size is a hint (ignored here); behaves as free.
+;; free_aligned: alignment is the one from aligned_alloc (current free
+;; already handles the metadata via unwrap, so we delegate).
+;; No additional static data; thread-safe (uses only the existing heap state
+;; and caller registers).
+
+_free_sized::
+        ld      a,h
+        or      l
+        ret     z
+        jp      _free
+
+_free_aligned::
+        ld      a,h
+        or      l
+        ret     z
+        jp      _free

@@ -311,6 +311,32 @@ void abi_convention::emit_modern_return_value(z80_gen &g, const operand &value)
     if (value.is_none()) return;
 
     int sz = g.op_size(value);
+    if (sz > 8) {
+        if (g.cur_fn_ && g.cur_fn_->stack_param_bytes > 0) {
+            for (int w = 0; w < sz / 2; ++w) {
+                g.load_hl_word(value, w);
+                g.store_frame_word(z80_gen::reg_pair{"hl", 'l', 'h', false},
+                                   4 + (w * 2));
+            }
+            if (sz & 1) {
+                operand tail = value;
+                tail.byte_offset += (sz - 1);
+                tail.type = type::make_char();
+                g.load_a(tail);
+                g.store_frame_byte(4 + (sz - 1), 'a');
+            }
+            g.emit_line("push\tix");
+            g.emit_line("pop\thl");
+            g.emit_line("ld\tde, %s", g.asm_.imm(4).c_str());
+            g.emit_line("add\thl, de");
+            g.emit_line("ex\tde, hl");
+        } else {
+            g.load_hl(value);
+            g.emit_line("ex\tde, hl");
+        }
+        return;
+    }
+
     if (sz == 1) {
         g.load_a(value);
     } else if (sz == 8) {

@@ -100,19 +100,20 @@ void z80_gen::gen_get_value_at(const icode &ic) {
     if (ic.left.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         op_size(ic.result) == 1) {
+        const std::string label_sym = asm_label_ref_name(ic.left.name);
         operand byte_src;
         if (get_zero_extended_u8_source(ic.right, byte_src)) {
             load_a(byte_src);
             emit_line("ld\te, a");
             emit_line("ld\td, %s", asm_.imm(0).c_str());
-            emit_line("ld\thl, %s", asm_.imm_sym(ic.left.name).c_str());
+            emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
             emit_line("add\thl, de");
             emit_line("ld\ta, (hl)");
             store_a(ic.result);
             return;
         }
         load_de(ic.right);
-        emit_line("ld\thl, %s", asm_.imm_sym(ic.left.name).c_str());
+        emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
         emit_line("add\thl, de");
         emit_line("ld\ta, (hl)");
         store_a(ic.result);
@@ -301,12 +302,13 @@ void z80_gen::gen_set_value_at(const icode &ic) {
     if (ic.result.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         op_size(ic.left) == 1) {
+        const std::string label_sym = asm_label_ref_name(ic.result.name);
         operand byte_src;
         if (get_zero_extended_u8_source(ic.right, byte_src)) {
             load_a(byte_src);
             emit_line("ld\te, a");
             emit_line("ld\td, %s", asm_.imm(0).c_str());
-            emit_line("ld\thl, %s", asm_.imm_sym(ic.result.name).c_str());
+            emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
             emit_line("add\thl, de");
             if (!byte_load_preserves_hl_here(ic.left))
                 emit_line("push\thl");
@@ -317,7 +319,7 @@ void z80_gen::gen_set_value_at(const icode &ic) {
             return;
         }
         load_de(ic.right);
-        emit_line("ld\thl, %s", asm_.imm_sym(ic.result.name).c_str());
+        emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
         emit_line("add\thl, de");
         if (!byte_load_preserves_hl_here(ic.left))
             emit_line("push\thl");

@@ -69,7 +69,8 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
         if (sz->sizeof_type)
             return sz->is_alignof ? sz->sizeof_type->align() : sz->sizeof_type->size();
         if (sz->sizeof_expr_op && sz->sizeof_expr_op->type)
-            return sz->is_alignof ? sz->sizeof_expr_op->type->align()
+            return sz->is_alignof ? (sz->align_override > 0 ? sz->align_override
+                                                            : sz->sizeof_expr_op->type->align())
                                   : sz->sizeof_expr_op->type->size();
         return std::nullopt;
     }

@@ -1,0 +1,3777 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!doctype html>
+
+<html class="rwd geo-override no-js vis no-rtl headerfooter-menu3 " lang="en">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<head>
+    <meta charset="UTF-8"/>
+    
+
+
+
+
+
+<title>C23 Features Supported by Intel Compiler</title>
+    
+    
+    
+
+
+
+
+
+
+
+
+
+<link rel="preconnect" href="//intelcorp.scene7.com/">
+<link rel="dns-prefetch" href="//intelcorp.scene7.com/">
+
+    <link rel="preconnect" href="//cane.intel.com/">
+    <link rel="dns-prefetch" href="//cane.intel.com/">
+
+    <link rel="preconnect" href="//dogo.intel.com/">
+    <link rel="dns-prefetch" href="//dogo.intel.com/">
+
+
+
+
+
+    <link rel="preload" href="/content/dam/www/global/wap/performance-config.js" as="script" type="text/javascript">
+    <script type="text/javascript" src='/content/dam/www/global/wap/performance-config.js'></script>
+    <link rel="preload" href="/content/dam/www/global/wap/at-config.js" as="script" type="text/javascript">
+    <script type="text/javascript" src='/content/dam/www/global/wap/at-config.js'></script>
+    <link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/global/targetDataCookie.min.js" as="script" type="text/javascript">
+    <script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/global/targetDataCookie.min.js"></script>
+
+
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+    
+
+
+
+
+    
+    
+    
+    
+    
+        
+    
+
+
+    
+        
+    
+    
+
+
+    
+    
+        
+    
+
+<script type="text/javascript">
+    var cq_tms = {
+        wa_emtcontenttype: "emtcontenttype:customercommunications/productupdates",
+        wa_rsoftware: "rsoftware:inteloneapitoolkits2000000146",
+        
+        wa_industry_type: "",
+        wa_subject: "",
+        wa_emt_org: "",
+        wa_emt_intel: "",
+        wa_programidentifier: "ude",
+        wa_location: "us",
+        wa_language: "en",
+        wa_english_title: "C23 Features Supported by Intel Compiler",
+        wa_content_type: "productupdates",
+        wa_intel_platform: "",
+        wa_applications: "",
+        wa_local: "en_US",
+        wa_intel_technology: "",
+        wa_system_type: "",
+        wa_product_name: "",
+        wa_audience: "",
+        wa_life_cycle: "",
+        wa_cq_url: "/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html",
+        wa_page_type_micro: "mf-article-long",
+        wa_env: "prd",
+        wa_cq_pub_env: "publish",
+        wa_transl_status: "",
+        wa_product_id: "2000000146",
+        wa_software: "rsoftware:inteloneapitoolkits2000000146",
+        wa_reference_design: "",
+        wa_codename: "",
+        wa_created_date: "1700222580000",
+        wa_modified_date: "1699451011721",
+        wa_off_time: "1924992000000",
+        wa_ownedby: "",
+        wa_managedby: "",
+        wa_idz_nid : "",
+        wa_event_type: "",
+        wa_idz_custom_tags: "",
+        wa_programming_language: "",
+        wa_skill_level: "",
+        wa_solution: "",
+        wa_product_formFactor: "",
+        wa_operating_system: "",
+        wa_marketing_products: "",
+        wa_ssg_third_party_prod_sys_sol: "",
+        wa_upeNamespace: "",
+        wa_doc_id:"",
+        wa_doc_version:"",
+        wa_doc_publishdate:"",
+        eloqua_disabled:"false",
+        
+        
+        
+        
+        
+        wa_uam_secondary_id: "",
+
+        
+        
+        wa_secondary_content_type: ""
+        
+        
+    };
+
+    
+    
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/virtual-assistant-services.min.js"></script>
+<script type="text/javascript">
+    var chatContextObj = {};
+    chatContextObj["locale"] = 'en-US';
+    chatContextObj["app"] = 'SATG';
+    chatContextObj["supportProductMap"] = 'NA';
+</script>
+
+<script type="text/javascript">
+    var chatConfigObj = {};
+    var cq_tms = cq_tms || {};
+    chatConfigObj["virtualAssistantName"] = '';
+    chatConfigObj["virtualAssistantUid"] = '';
+    chatConfigObj["virtualAssistantDomain"] = 'https://c0.avaamo.com';
+    if (chatConfigObj["virtualAssistantName"] !== '') {
+        cq_tms.wa_avaamo_project = "Avaamo-" + chatConfigObj.virtualAssistantName.replaceAll("Virtual Assistant", "").trim();
+    }
+</script>
+<script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/purify.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/virtual-assistant.min.js" defer></script>
+
+
+
+
+
+    <script type="text/javascript" src="/content/dam/www/global/wap/main/wap.js" async></script>
+
+
+    
+    
+    
+
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/us/en/Fonts/resources/intelone-display-light.woff2" as="font" type="font/woff2" crossorigin="true">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/us/en/Fonts/resources/intelone-display-regular.woff2" as="font" type="font/woff2" crossorigin="true">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/us/en/Fonts/resources/intel-clear-latin.woff2" as="font" type="font/woff2" crossorigin="true">
+
+<link rel="preload" href="/content/dam/logos/intel-header-logo.svg" as="image">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/intc-core.min.css" as="style">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/nav.min.css" as="style" type="text/css">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/secondaryNav.min.css" as="style" type="text/css">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/intc-core.min.js" as="script">
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/site-global-icons/resources/font/site-global-icons.woff2?14825464" as="font" type="font/woff2" crossorigin="true">
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<meta http-equiv="X-UA-Compatible" content="IE=Edge"/>
+<!--[if lte IE 9]>
+<meta http-equiv="X-UA-Compatible" content="IE=9"/>
+<![endif]-->
+
+
+    <meta name="twitter:card" content="summary_large_image"/>
+
+    <meta name="keywords" content="C23 Features, compilers"/>
+
+    <meta name="description" content="C23 Features Supported by Intel Compiler"/>
+
+    <meta name="language" content="en"/>
+
+    <meta name="location" content="us"/>
+
+    <meta name="robots" content="follow,index,noarchive"/>
+
+    <meta name="X-Server" content="INTE-35"/>
+
+    <meta name="twitter:image" content="https://www.intel.com/content/dam/develop/public/us/en/images/thumbnails/fallback-icons-articles.png"/>
+
+
+    <meta property="og:image" content="https://www.intel.com/content/dam/develop/public/us/en/images/thumbnails/fallback-icons-articles.png"/>
+
+    <meta property="og:type" content="company"/>
+
+    <meta property="og:site_name" content="Intel"/>
+
+    <meta property="og:title" content="C23 Features Supported by Intel Compiler"/>
+
+    <meta property="fb:admins" content="267985180046218"/>
+
+    <meta property="og:url" content="https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html"/>
+
+    <meta property="og:description" content="C23 Features Supported by Intel Compiler"/>
+
+<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+
+    <meta name="emtcontenttype" content="Content Type|Communications|Product Updates;"/>
+
+    <meta name="contentpath" content="/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler"/>
+
+    <meta name="authoreddate" content="2022-12-22T19:57:00.000+08:00"/>
+
+    <meta name="software" content="Software|Intel® oneAPI Toolkits;"/>
+
+    <meta name="localecode" content="en_US"/>
+
+    <meta name="reimaginetoplevelcategory" content="Audience|Academic|Educator;Audience|Academic|Student;"/>
+
+    <meta name="mime" content="text/html"/>
+
+    <meta name="format" content="article-long"/>
+
+    <meta name="localizedtagname" content="Product Updates"/>
+
+    <meta name="excludefromviews" content="false"/>
+
+    <meta name="taxonomy" content="etm-7e9bc9e210d94596a7d2356de5c4f53f;etm-e6b580ad9329453d8537b872d8e3d63d;etm-506a18338ce543dd843a764e2cdc2d4d;"/>
+
+    <meta name="title" content="C23 Features Supported by Intel Compiler"/>
+
+    <meta name="mintoread" content="0"/>
+
+    <meta name="menu" content="Developer Sub Navigation Breadcrumb"/>
+
+    <meta name="reimaginefilters" content="Software|Intel® oneAPI Toolkits;"/>
+
+    <meta name="generic1" content="true"/>
+
+    <meta name="emtaudience" content="Audience|Academic|Educator;Audience|Academic|Student;"/>
+
+    <meta name="intelkeywords" content="C23 Features, compilers"/>
+
+    <meta name="lastModifieddate" content="2022-12-22T20:03:00.000+08:00"/>
+
+    <meta name="thumbnailurl" content="https://www.intel.com/content/dam/develop/public/us/en/images/thumbnails/fallback-icons-articles.png"/>
+
+
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+
+
+
+
+
+<link rel="icon" type="image/png" sizes="32x32" href="/etc.clientlibs/settings/wcm/designs/intel/default/resources/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/etc.clientlibs/settings/wcm/designs/intel/default/resources/favicon-16x16.png">
+<link rel="shortcut icon" href="/etc.clientlibs/settings/wcm/designs/intel/default/resources/favicon.ico">
+    
+
+
+
+
+
+<link rel="canonical" href="https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html"/>
+<link rel="alternate" hreflang="en-us" href="https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html"/>
+            <link rel="alternate" hreflang="x-default" href="https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html"/>
+                
+    
+
+    
+        
+        
+            
+                
+                
+                    <link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/bootstrap-css.min.css" as="style"><link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/bootstrap-css.min.css" type="text/css"><link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/intc-core.min.css" as="style"><link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/intc-core.min.css" type="text/css"><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery-standalone-3_6_0.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/us/en/clientlibs/jquery-3_6_0.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/us/en/clientlibs/legacy-libs.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/modernizr.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/picturefill-js.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/handlebars.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/html5-js.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery-cookie-2_1_3.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/detectizr.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery.matchHeight.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/bootstrap-js.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/bootstrap-affix.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/moment.locales.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/scrollToPlugin.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/slick-js.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery.scrollTo.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/fastclick.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery.resize.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery.touchswipe.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/overthrow-detect.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/overthrow-polyfill.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/overthrow-init.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/jquery-ezmark.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/owl.carousel.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/polyfills.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/purify.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/intc-core.min.js" defer></script>
+                
+            
+        
+    
+
+</head>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+    
+
+<body class="page-is-published global-nav">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="skip-to-main-content">
+    <div class="sb-skipLinkWrapper invisible">
+        <a href="#primary-content" class="inline-block bg-greenDarkApron color-textWhite text-bold text-noUnderline sb-skipLink visible">Skip To Main Content</a>
+    </div>
+</div>
+
+<div class="promo-banner-content"></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script>
+    var isLoggedin = (document.cookie.indexOf('IGHFLoggedIn') != -1);
+    var currentURL = window.location.href;
+    if (currentURL.startsWith("https://isvc--isvcqa24.sandbox.my.site.com")) {
+        isLoggedin = true;
+        if (currentURL.includes("/onlinecasemgmt/warrantyinfo")) {
+            isLoggedin = false;
+        }
+    }
+</script>
+
+
+
+
+
+    
+        <div class="global">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/nav.min.css" type="text/css">
+<link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/secondaryNav.min.css" type="text/css">
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+    
+
+
+
+    
+    
+        <div class="global-nav-redesign global component" data-component="global-nav-redesign" data-component-id="1">
+            <header role="banner">
+                <nav class="intel-navbar advanced-search" role="navigation" aria-label="Main Navigation" data-igm="">
+                    <!-- Brand and toggle get grouped for better mobile display -->
+                    <div class="navbar-wraper">
+
+                        <div class="navbar-logo">
+                            <a href="/content/www/us/en/homepage.html" alt="Intel homepage" class="intel-logo-rebrand">
+                                    
+                                <img src="/content/dam/logos/intel-header-logo.svg" height="300" width="118" alt="Intel logo - Return to the home page">
+                            </a>
+                        </div>
+
+                        <div class="navbar-left">
+                            <!-- mobile: menu toggle, sign in -->
+                            <div class="d-block d-sm-none">
+                                <button type="button"
+                                        data-wap="{&quot;linktype&quot;:&quot;level1&quot;}"
+                                        class="mega-hamburger nav-link-icon nav-link-icon-toggle collapsed"
+                                        data-bs-target="#primary-nav" aria-expanded="false" aria-controls="primary-nav"
+                                        data-mega-control="hamburger">
+                                    <span class="visually-hidden">Toggle Navigation</span>
+                                    <span class="fa-intel-menu icon-toggle-off"></span>
+                                    <span class="fa-cancel-thin icon-toggle-on"></span>
+                                </button>
+                            </div>
+
+                            <!-- START DYNAMIC NAVIGATION MENEU -->
+                            <div class="collapse mega-menu-collapse" id="primary-nav">
+                                <div class="mega-menu-wrap">
+                                    <ol class="mega-navbar unique-container-global-nav-items">
+                                        <!-- Start: Primary Nav Items -->
+
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- START MOBLE TOGGLE buttons -->
+                        <div class="navbar-right">
+
+
+                            <!-- START: NON-signed in panel -->
+                            <span id="not-logged-in-scenario" class="d-none">
+
+         <button type="button" title="Sign In"
+                 class="nav-link-icon nav-link-icon-toggle collapsed"
+                 data-wap="{&quot;linktype&quot;:&quot;level1&quot;}"
+                 aria-expanded="false" aria-controls="panel-signin"
+                 onclick="intel.mytools.unifiedLogin();"
+                 data-mega-control="signin">
+            <span class="visually-hidden">Sign In</span>
+            <span class="fa-intel-user-o icon-toggle-off"></span>
+            <span class="fa-intel-user icon-toggle-on"></span>
+        </button>
+</span>
+
+<script>
+    var intel = intel || {};
+    intel.signinsimplifyConfig = {
+        authorizationUrl: '/content/dam/intel/authorization/authorization.html',
+        locale: '',
+        messages: {
+            InvalidCredential: 'The username or password you entered was invalid.',
+            InvalidField: 'The username or password you entered was invalid.',
+            AccountDisabled: 'For security reasons, your account has been disabled. For help, <a href=\"#\" class=\"contactLink new-tab-link\" target=\"_blank\" rel=\"noopener noreferrer\" >contact us<\/a>.',
+            AccountLocked: 'Your account has been locked. For help, please read the <a href=\"#\" class=\"faqsLink new-tab-link\" target=\"_blank\" rel=\"noopener noreferrer\" >Sign In FAQ<\/a>.',
+            UserNotFound: 'The username or password you entered was invalid.',
+            Unknown: 'An unexpected error occurred. Try it again. For help, use the contact or support options below.',
+            PasswordExpired: 'Your password is expired. Please change your password.',
+            LoginAssistLink: 'https://signin.intel.com/ContactUs.aspx',
+            faqsLink: '/content/www/us/en/my-intel/sign-in-help.html'
+        },
+        nameField: 'Username',
+        passField: 'Password',
+        isPopup: true,
+        responseHref: 'https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html' + window.location.search + window.location.hash, 
+        sslDomainUrl: 'www.intel.com',
+        loginUrl: 'https://welcome.intel.com/login.aspx?appid=258&qlogin=true',
+        ssoUri: '',
+        logoutUrl: 'https://welcome.intel.com/logout.aspx',
+        logoutHref: 'https://signin.intel.com/Logout?RedirectURL=https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html',
+        logoutIGHFHref: 'https://signin.intel.com/Logout?RedirectURL=',
+        loginErrorID: '#login-error',
+        usernameID: '#username',
+        remembermeId: '#cbRememberMe',
+        formID: '#igm-form-signin',
+        unameErrorID: '#uname-error',
+        passID: '#password',
+        passError: '#pwd-error',
+        changePasswordUrl: '/content/www/us/en/my-intel/change-password.html',
+        emailVerificationUrl: '/content/www/us/en/my-intel/email-verification.external.html',
+        aboutToExpireEmailUrl: '/content/www/us/en/my-intel/email-verification.html',
+        renewalUrl: '/content/www/us/en/secure/technology-provider/forms/renew-technology-provider-membership.html',
+        limitedUrl: '/content/www/us/en/resellers/limited-status-secondary.html',
+        isaPRMDashBoardURL: '/content/www/us/en/secure/partner/solutions-alliance/overview.html',
+        itpPRMDashBoardURL: '/content/www/us/en/secure/partner/technology-provider/iot/overview.html',
+        itpisaPRMDashBoardURL: '/content/www/us/en/secure/partner/iot-itp-isa/overview.html',
+        isaRenewalURL: '/content/www/us/en/secure/partner/forms/solutions-alliance-renewal.html',
+        primaryPostLaunchURL: 'https://partner.intel.com/s/post-launch-primary',
+        nonPrimaryPostLaunchURL: 'https://partner.intel.com/s/post-launch-non-primary',
+        idpUrl: 'https://consumer.intel.com/intelcorpb2c.onmicrosoft.com/B2C_1A_UnifiedLogin_SISU_CML_SAML/generic/login?entityId=www.intel.com',
+        headerSignInIdpUrl: 'https://consumer.intel.com/intelcorpb2c.onmicrosoft.com/B2C_1A_UnifiedLogin_SISU_CML_SAML/generic/login?entityId=www.intel.com&ui_locales=en',
+        headerSignOutIdpUrlB2B:'https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html' + window.location.search + window.location.hash,
+        headerSignOutIdpIGHFUrlB2B:'https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=',
+        headerSignOutIdpUrlB2C:'https://consumer.intel.com/intelcorpb2c.onmicrosoft.com/B2C_1A_UNIFIEDLOGIN_SISU_STD_OIDC/oauth2/v2.0/logout?id_token_hint=$TOKEN$%26post_logout_redirect_uri=https://www.intel.com/apps/intel/services/unifiedlogout.json',
+        sessionAuthorizeUrlB2C:'https://consumer.intel.com/intelcorpb2c.onmicrosoft.com/B2C_1A_UNIFIEDLOGIN_SISU_STD_OIDC/oauth2/v2.0/authorize?client_id=8b32f2f3-7a32-4902-8821-1df682b7043b%26scope=profile%20offline_access%208b32f2f3-7a32-4902-8821-1df682b7043b%20openid%26response_mode=fragment%26response_type=token%26prompt=none%26redirect_uri=',
+        sessionAuthorizeUrlB2B:'https://login.microsoftonline.com/46c98d88-e344-4ed4-8496-4ed7712e255d/oauth2/v2.0/authorize?client_id=cb0ec60b-608b-4e76-9d69-1e5e0afb3456%26scope=openid%20profile%20offline_access%26response_mode=fragment%26response_type=token%26prompt=none%26redirect_uri=',
+        sessionInitUrl:'https://www.intel.com/content/www/us/en/secure/my-intel/dashboard.html',
+        azureLocaleCode:'en',
+        allowedPathRegx:'^(.*intel.com.*$)|^(/content/.*$)',
+        signOutTokenGenB2C:'https://consumer.intel.com/intelcorpb2c.onmicrosoft.com/B2C_1A_UNIFIEDLOGIN_SISU_STD_OIDC/oauth2/v2.0/authorize?client_id=8b32f2f3-7a32-4902-8821-1df682b7043b%26scope=profile offline_access+8b32f2f3-7a32-4902-8821-1df682b7043b+openid%26response_type=id_token%26prompt=none%26redirect_uri=',
+        validTargetURL:'https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html' + window.location.search + window.location.hash
+    };
+
+    function clearB2CIFrame(interval, iFrame) {
+        clearInterval(interval);
+        iFrame.parentNode.removeChild(iFrame);
+    }
+
+    function clearIFrame(interval, iFrame) {
+        clearInterval(interval);
+        iFrame.parentNode.removeChild(iFrame);
+    }
+    function createB2CIFrame(id, src) {
+        var authIFrame = document.createElement("iframe");
+        authIFrame.id = "sso-b2c-" + id;
+        authIFrame.hidden = "hidden";
+        authIFrame.src = src;
+        document.body.appendChild(authIFrame);
+        return authIFrame;
+    }
+    function createIFrame(id, src) {
+        var authIFrame = document.createElement("iframe");
+        authIFrame.id = "sso-" + id;
+        authIFrame.hidden = "hidden";
+        authIFrame.src = src;
+        document.body.appendChild(authIFrame);
+        return authIFrame;
+    }
+
+    function animateHumanoidIcon() {
+    	$("#not-logged-in-scenario").css("cursor", "not-allowed");
+    	$("#not-logged-in-scenario button").css("pointer-events", "none");
+    	$("#not-logged-in-scenario button span.icon-toggle-off").addClass('iia-beat-fade');
+	}
+
+    function resetHumanoidIcon() {
+    	$("#not-logged-in-scenario").css("cursor", "");
+        $("#not-logged-in-scenario button").css("pointer-events", "");
+    	$("#not-logged-in-scenario button span.icon-toggle-off").removeClass('iia-beat-fade');
+	}
+
+    function initiateB2CLogoutToken(type) {
+        return new Promise(function (resolve, reject) {
+            function authIFrameB2CIntervalWrapper(authIFrame) {
+                var authIFrameInterval = setInterval(function () {
+                    var authIFrameWindow = authIFrame.contentWindow;
+                    if (authIFrameWindow) {
+                        try {
+                            var authIFrameURL = authIFrameWindow.location.href;
+
+                            if (authIFrameURL) {
+                                if (authIFrameURL.includes("#id_token=")) {
+                                    clearB2CIFrame(authIFrameInterval, authIFrame);
+                                    return resolve({
+                                        id: authIFrame.id,
+                                        msg: "SUCCESS!" + "--" + authIFrame.id,
+                                        code: "SUCCESS",
+                                        id_token_hint:authIFrameURL.split("#id_token=")[1]
+                                    });
+                                } else if (authIFrameURL.includes("#error=")) {
+                                    clearB2CIFrame(authIFrameInterval, authIFrame);
+                                    return reject({
+                                        id: authIFrame.id,
+                                        msg: "FAILURE!" + "--" + authIFrame.id,
+                                        code: "FAILURE",
+                                    });
+                                } else {
+                                    authIFrameAttempts++;
+                                    if (
+                                        authIFrameAttempts ===
+                                        AUTH_IFRAME_MAX_ATTEMPTS
+                                    ) {
+                                        clearB2CIFrame(authIFrameInterval, authIFrame);
+                                        return reject({
+                                            id: authIFrame.id,
+                                            msg:
+                                                "ERROR - MAX (TIMING)!" +
+                                                "--" +
+                                                authIFrame.id,
+                                            code: "ERROR",
+                                        });
+                                    }
+                                }
+                            } else {
+                                clearB2CIFrame(authIFrameInterval, authIFrame);
+                                return reject({
+                                    id: authIFrame.id,
+                                    msg: "ERROR - URL!" + "--" + authIFrame.id,
+                                    code: "ERROR",
+                                });
+                            }
+                        } catch (err) {
+                            if (authIFrameAttempts === AUTH_IFRAME_MAX_ATTEMPTS) {
+                                clearB2CIFrame(authIFrameInterval, authIFrame);
+                                return reject({
+                                    id: authIFrame.id,
+                                    msg:
+                                        "ERROR - MAX (CORS)!" +
+                                        "--" +
+                                        authIFrame.id,
+                                    code: "ERROR",
+                                });
+                            }
+                            authIFrameAttempts++;
+                        }
+                    } else {
+                        clearB2CIFrame(authIFrameInterval, authIFrame);
+                        return reject({
+                            id: authIFrame.id,
+                            msg: "ERROR - DOM!" + "--" + authIFrame.id,
+                            code: "ERROR",
+                        });
+                    }
+                }, 500);
+            }
+
+            var AUTH_IFRAME_MAX_ATTEMPTS = 80;
+            var authIFrameAttempts = 0;
+
+            var currentOrigin = encodeURIComponent(window.location.origin + ((intel.isIGHFCall === false && !/mark.intel.com/.test(window.location.hostname)) ? "/content/www/us/en/homepage.html" : "/"));
+            var redirectURI = currentOrigin;
+
+            var matchedSite =
+                window.INTELNAV &&
+                window.INTELNAV.CIDAAS &&
+                window.INTELNAV.CIDAAS.customRedirectSites.find((site) =>
+                    site.host.includes(window.location.host)
+                );
+            if (matchedSite) {
+                redirectURI += matchedSite.redirectURI;
+            }
+
+            var authURL = decodeURIComponent(intel.signinsimplifyConfig.signOutTokenGenB2C + redirectURI);
+            var authIFrame = createB2CIFrame(type, authURL);
+            authIFrameB2CIntervalWrapper(authIFrame);
+        });
+    }
+
+    function initiateAuth(type) {
+        return new Promise(function (resolve, reject) {
+            function authIFrameIntervalWrapper(authIFrame) {
+                let authIFrameInterval = setInterval(function () {
+                    let authIFrameWindow = authIFrame.contentWindow;
+                    if (authIFrameWindow) {
+                        try {
+                            let authIFrameURL = authIFrameWindow.location.href;
+                            if (authIFrameURL) {
+                                if (authIFrameURL.includes("#access_token=")) {
+                                    clearIFrame(authIFrameInterval, authIFrame);
+                                    return resolve({
+                                        id: authIFrame.id,
+                                        msg: "SUCCESS!" + "--" + authIFrame.id,
+                                        code: "SUCCESS",
+                                    });
+                                } else if (authIFrameURL.includes("#error=")) {
+                                    clearIFrame(authIFrameInterval, authIFrame);
+                                    return reject({
+                                        id: authIFrame.id,
+                                        msg: "FAILURE!" + "--" + authIFrame.id,
+                                        code: "FAILURE",
+                                    });
+                                } else {
+                                    authIFrameAttempts++;
+                                    if (
+                                        authIFrameAttempts ===
+                                        AUTH_IFRAME_MAX_ATTEMPTS
+                                    ) {
+                                        clearIFrame(authIFrameInterval, authIFrame);
+                                        return reject({
+                                            id: authIFrame.id,
+                                            msg:
+                                                "ERROR - MAX (TIMING)!" +
+                                                "--" +
+                                                authIFrame.id,
+                                            code: "ERROR",
+                                        });
+                                    }
+                                }
+                            } else {
+                                clearIFrame(authIFrameInterval, authIFrame);
+                                return reject({
+                                    id: authIFrame.id,
+                                    msg: "ERROR - URL!" + "--" + authIFrame.id,
+                                    code: "ERROR",
+                                });
+                            }
+                        } catch (err) {
+                            if (authIFrameAttempts === AUTH_IFRAME_MAX_ATTEMPTS) {
+                                clearIFrame(authIFrameInterval, authIFrame);
+                                return reject({
+                                    id: authIFrame.id,
+                                    msg:
+                                        "ERROR - MAX (CORS)!" +
+                                        "--" +
+                                        authIFrame.id,
+                                    code: "ERROR",
+                                });
+                            }
+                            authIFrameAttempts++;
+                        }
+                    } else {
+                        clearIFrame(authIFrameInterval, authIFrame);
+                        return reject({
+                            id: authIFrame.id,
+                            msg: "ERROR - DOM!" + "--" + authIFrame.id,
+                            code: "ERROR",
+                        });
+                    }
+                }, 500);
+            }
+
+            var AUTH_IFRAME_MAX_ATTEMPTS = 40;
+            var authIFrameAttempts = 0;
+
+            var authURL;
+            let tempIsIGHFCall = document.querySelectorAll('#recode50header').length > 0;
+            var currentOrigin =  encodeURIComponent(window.location.origin + ((!tempIsIGHFCall && !/mark.intel.com/.test(window.location.hostname)) ? intel.signinsimplifyConfig.authorizationUrl : "/"));
+            var redirectURI = currentOrigin;
+            var matchedSite =
+                window.INTELNAV &&
+                window.INTELNAV.CIDAAS &&
+                window.INTELNAV.CIDAAS.customRedirectSites.find((site) =>
+                    site.host.includes(window.location.host)
+                );
+            if (matchedSite) {
+                redirectURI += matchedSite.redirectURI;
+            }
+
+            if (type === "b2c") {
+                authURL = decodeURIComponent(
+                    intel.signinsimplifyConfig.sessionAuthorizeUrlB2C + redirectURI
+                );
+            } else {
+                authURL = decodeURIComponent(
+                    intel.signinsimplifyConfig.sessionAuthorizeUrlB2B + redirectURI
+                );
+            }
+
+            let authIFrame = createIFrame(type, authURL);
+            authIFrameIntervalWrapper(authIFrame);
+        });
+    }
+
+    function initiateIntelAuth() {
+        return new Promise(function (resolve, reject) {
+            function authIntelIFrameIntervalWrapper(authIntelIFrame) {
+                let authIntelIFrameInterval = setInterval(function () {
+                    let authIntelIFrameWindow = authIntelIFrame.contentWindow;
+                    if (authIntelIFrameWindow) {
+                        try {
+                            let authIntelIFrameURL = authIntelIFrameWindow.location.href;
+
+                            if (authIntelIFrameURL) {
+                                if (
+                                    authIntelIFrameURL.includes(
+                                        window.location.href
+                                    )
+                                ) {
+                                    clearIFrame(
+                                        authIntelIFrameInterval,
+                                        authIntelIFrame
+                                    );
+                                    return resolve({
+                                        id: authIntelIFrame.id,
+                                        msg: "SUCCESS!" + "--" + authIntelIFrame.id,
+                                        code: "SUCCESS",
+                                    });
+                                } else {
+                                    authIntelIFrameAttempts++;
+                                    if (
+                                        authIntelIFrameAttempts ===
+                                        AUTH_INTEL_IFRAME_MAX_ATTEMPTS
+                                    ) {
+                                        clearIFrame(
+                                            authIntelIFrameInterval,
+                                            authIntelIFrame
+                                        );
+                                        return reject({
+                                            id: authIntelIFrame.id,
+                                            msg:
+                                                "ERROR - MAX (TIMING)!" +
+                                                "--" +
+                                                authIntelIFrame.id,
+                                            code: "ERROR",
+                                        });
+                                    }
+                                }
+                            } else {
+                                clearIFrame(
+                                    authIntelIFrameInterval,
+                                    authIntelIFrame
+                                );
+                                return reject({
+                                    id: authIntelIFrame.id,
+                                    msg: "ERROR - URL!" + "--" + authIntelIFrame.id,
+                                    code: "ERROR",
+                                });
+                            }
+                        } catch (err) {
+                            if (
+                                authIntelIFrameAttempts ===
+                                AUTH_INTEL_IFRAME_MAX_ATTEMPTS
+                            ) {
+                                clearIFrame(
+                                    authIntelIFrameInterval,
+                                    authIntelIFrame
+                                );
+                                return reject({
+                                    id: authIntelIFrame.id,
+                                    msg:
+                                        "ERROR - MAX (CORS)!" +
+                                        "--" +
+                                        authIntelIFrame.id,
+                                    code: "ERROR",
+                                });
+                            }
+                            authIntelIFrameAttempts++;
+                        }
+                    } else {
+                        clearIFrame(authIntelIFrameInterval, authIntelIFrame);
+                        return reject({
+                            id: authIntelIFrame.id,
+                            msg: "ERROR - DOM!" + "--" + authIntelIFrame.id,
+                            code: "ERROR",
+                        });
+                    }
+                }, 500);
+            }
+
+            let AUTH_INTEL_IFRAME_MAX_ATTEMPTS = 80;
+            let authIntelIFrameAttempts = 0;
+
+            let authIntelIFrame = createIFrame(
+                "sso-intel-b2c",
+                intel.signinsimplifyConfig.sessionInitUrl
+            );
+            authIntelIFrameIntervalWrapper(authIntelIFrame);
+        });
+	}
+
+    function getAuthenticationStatus() {
+        return new Promise(function (resolve, reject) {
+            initiateAuth("b2c")
+                .then(function (b2cSuccessRes) {
+                    return resolve(b2cSuccessRes);
+                })
+                .catch(function (b2cFailureRes) {
+                    var isB2BSite =
+                        window.INTELNAV &&
+                        window.INTELNAV.CIDAAS &&
+                        window.INTELNAV.CIDAAS.B2BSites.some((site) =>
+                            site.includes(window.location.host)
+                        );
+                    if (isB2BSite) {
+                        initiateAuth("b2b")
+                            .then(function (b2bSuccessRes) {
+                                return resolve(b2bSuccessRes);
+                            })
+                            .catch(function (b2bFailureRes) {
+                                return reject(b2bFailureRes);
+                            });
+                    } else {
+                        return reject(b2cFailureRes);
+                    }
+                });
+        });
+    }
+
+    function checkAEMSession(){
+        let isSessionExist = false;
+        if(!tempIsIGHF){
+            $.ajax({
+                url: "/libs/apps/intel/myintel/agsroles.json?validateAEMSession=Y",
+                async: false,
+                success: function (data) {
+                    if (data && data["isValidAEMSession"]) {
+                        document.cookie = "IGHFLoggedIn=true;domain=.intel.com;path=/";
+                        isLoggedin = true;
+                        isSessionExist = true;
+                    }
+                }
+            });
+        }
+        return isSessionExist;
+    }
+
+    if (
+        !isLoggedin &&
+        ((document.domain.indexOf("thailand") == -1 &&
+                document.domain.endsWith(".intel.com")) ||
+            document.getElementById("recode50header") != null) &&
+        navigator != null &&
+        navigator.userAgent.indexOf("CloudManagerTest") == -1
+    ) {
+        var tempIsIGHF = document.getElementById("recode50header");
+        if (tempIsIGHF) animateHumanoidIcon();
+        getAuthenticationStatus()
+            .then(function (res) {
+                let isSessionExist = checkAEMSession();
+                if(isSessionExist){
+                    intel.signinHeaderSimplify.initialize();
+                }else {
+                    var currentUrl = window.location.href;
+                    if (currentUrl.indexOf("service-maintenance-notice") === -1) {
+                        if (res.id === "sso-b2c") {
+                            var cookiename = "IGHFtarget";
+                        var samlcookieValue =
+                            cookiename +
+                            "=" +
+                            encodeURIComponent(currentUrl) +
+                            ";secure;path=/;domain=.intel.com";
+                        document.cookie = samlcookieValue;
+                        if (intel.isIGHFCall) {
+                            initiateIntelAuth().then(() => {
+                                isLoggedin = true;
+                                intel.signinHeaderSimplify.initialize();
+                            }).catch(() => {
+                                window.location.href = intel.signinsimplifyConfig.sessionInitUrl;
+                            });
+                        } else {
+                            window.location.href = intel.signinsimplifyConfig.sessionInitUrl;
+                        }
+                    } else {
+                        document.cookie = "IGHFLoggedIn=true;domain=.intel.com;path=/";
+                        if (intel.isIGHFCall) {
+                            isLoggedin = true;
+                            intel.signinHeaderSimplify.initialize();
+                        } else {
+                            window.location.reload();
+                        }
+                    }
+                }
+                }
+            })
+            .catch(()=>{
+				if (tempIsIGHF) resetHumanoidIcon();
+            });
+    }
+
+</script>
+                            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script id="myinteldrpdown-template" type="text/x-handlebars-template">
+    <section class="myintel-tools-content" role="region"
+             aria-label="My Intel">
+        
+        <div class="card-header force-background solid brand-very-dark-gray my-intel-menu">
+            <button type="button" class="icon close float-end" data-igm-search-toggle="" aria-label="Close"
+                    tabindex="0" data-wap="" data-wap_ref="myintel-navmenu-closing">
+                <span></span>
+            </button>
+            <ul class="nav nav-tabs component">
+                
+                    
+                    
+                        
+                    
+                    
+                    
+                    
+                
+                <li role="presentation" class="active" data-step='1'  data-title='My Intel Dashboard and My Tools'  data-intro='<p>Click here to access the My Intel Dashboard from any Intel.com page. From here you can also access your Subscriptions page, as well as your personalized list of tools.</p>'>
+                    <a href="#my-intel" role="tab" tabindex="0">My Intel<span
+                            class="fa fa-user"></span></a>
+                </li>
+            </ul>
+        </div>
+        
+
+        <div class="my-intel-panel-body tab-content">
+            
+            <div role="tabpanel" class="tab-pane fade show active" id="my-intel">
+                <ul class="myintel-links">
+                    {{#each myintelpagelinks}}
+                    <li data-agsrole="{{{agsrole}}}"
+                        data-blacklistedagsrole="{{{blacklistedagsgroupname}}}"
+                        data-isinternal="{{{displayOnlyInternal}}}"
+                        data-isexternal="{{{displayOnlyExternal}}}"
+                        class="{{{class}}}">
+                        <a target="{{{target}}}"
+                           href="{{{href}}}" tabindex="0">{{{label}}}</a>
+                    </li>
+                    {{/each}}
+                </ul>
+                <div class="tools-pane component" data-component="myintel-tools" data-component-id="1">
+                    <h5 class="my-intel-tools">My Tools</h5>
+                    
+                    <ul class="myintel-links">
+                        {{#each mytoollinks}}
+                        <li class="myintellink"
+                            data-isinternal="{{{displayOnlyInternal}}}"
+                            data-isexternal="{{{displayOnlyExternal}}}">
+                            <h3 style="display:none;">{{{agsgroupname}}}</h3>
+                            <h4 style="display:none;">{{{blacklistedagsgroupname}}}</h4>
+                            <a tabindex="0" href="{{{linkurl}}}" target="_blank" rel="noopener noreferrer" title="">{{{linktext}}}</a>
+                            {{#if tooltip}}
+                            <a class="fa fa-help-circled" tabindex="0" data-bs-toggle="tooltip" data-html="true"
+                                  data-title="{{tooltip}}" data-placement="bottom" data-wap_ref="tooltip:{{{linktext}}}"><span class="visually-hidden">{{tooltip}}</span></a>
+                            {{/if}}
+                        </li>
+                        {{/each}}
+                    </ul>
+                </div>
+            </div>
+            
+        </div>
+    </section>
+</script>
+
+
+<span id="logged-in-scenario" class="d-none">
+
+<button type="button" title="My Intel"
+        data-wap="{&quot;linktype&quot;:&quot;level1&quot;}"
+        class="nav-link-icon nav-link-icon-toggle collapsed" data-bs-target="#panel-signedin" aria-expanded="false"
+        aria-controls="panel-signedin" data-mega-control="signedin">
+    <span class="visually-hidden">My Intel</span>
+    <span class="fa-intel-user-checked-o icon-toggle-off"></span>
+    <span class="fa-intel-user-checked icon-toggle-on"></span>
+</button>
+
+<div class="mega-panel panel-layout-signed-in collapse" id="panel-signedin">
+    <div class="mega-panel-wrap">
+        <div class="mega-panel-body">
+            <div class="panel-content flex-content-wrap">
+
+                <!-- MyIntel Section -->
+                <!-- -------------------------------------------------------------- -->
+                <div class="panel-item d-none" id="myIntelPageLinks">
+                    <a id="myIntelPageLinksHeader" class="nav-l3 has-border has-link"></a> <!-- {{#if heading.onState}} selected{{/if}} {{#if heading.onStateParent}} selected-parent{{/if}} -->
+                    <div class="panel-item-content">
+                        <ul id="myIntelPageLinksItemList" class="panel-links nav-l4-list list-unstyled">
+
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- My Tools Section -->
+                <!-- -------------------------------------------------------------- -->
+                <div class="panel-item col-span-2" id="myIntelTools">
+                    
+                    <div class="nav-l3">
+                        My Tools
+                    </div>
+
+                    <div class="panel-item-content">
+                        <!--
+                            Note: right now this panel (myTools) has only one column/ul
+                            if more columns are needed, remove below's 'w-auto' class
+                        -->
+                        <ul class="panel-links nav-l4-list list-unstyled w-auto" id="mytools-ul">
+
+                            <!-- this 'li' will be used as the template to populate this section from the js -->
+                            <li class="d-none">
+                                <a class="nav-l4"></a>
+
+                                <button class="btn-tooltip-trigger d-none" data-bs-toggle="tooltip" data-placement="bottom"
+                                        title="">
+                                    <span>?</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="item-actions">
+               <button type="button" class="btn btn-primary"
+                       data-sso-uri=''
+                       data-logout-uri="" data-wap="{&quot;linktype&quot;:&quot;logout&quot;}"
+                       onclick="intel.signinsimplify.signOut()">Sign Out</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+</span>
+
+                            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+<button type="button" title="Language Selector"
+        data-wap="{&quot;linktype&quot;:&quot;level1&quot;}"
+        class="nav-link-icon nav-link-icon-toggle collapsed"
+        data-bs-target="#panel-language-selector" aria-label="English"
+        aria-expanded="false" aria-controls="panel-language-selector"
+        data-mega-control="language-selector">
+    <span class="fa-intel-globe-o icon-toggle-off"></span>
+    <span class="fa-intel-globe icon-toggle-on"></span>
+    <span class="nav-link-icon-label">English</span>
+</button>
+
+<div class="mega-panel panel-layout-language collapse" id="panel-language-selector"
+     aria-expanded="false" aria-selected="false">
+    <div class="mega-panel-wrap">
+        <div class="mega-panel-body">
+            <div class="mega-panel-heading">
+                <h2 class="nav-l2">
+                    
+                        
+                            Select Your Language
+                        
+                        
+                    
+                </h2>
+            </div>
+            <div class="panel-content flex-content-wrap">
+                
+                    <div class="panel-item">
+                        <!-- region.countryName is actually region name -->
+                        
+                        <ul class="list-unstyled panel-links nav-l4-list">
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="id_id" href="https://www.intel.co.id/content/www/id/id/homepage.html">
+                                            Bahasa Indonesia
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="de_de" href="https://www.intel.de/content/www/de/de/homepage.html">
+                                            Deutsch
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                    <li class="selected lang-option">
+                                
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="en_us" href="https://www.intel.com/content/www/us/en/homepage.html">
+                                            English
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="es_xl" href="https://www.intel.la/content/www/xl/es/homepage.html">
+                                            Español
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="fr_fr" href="https://www.intel.fr/content/www/fr/fr/homepage.html">
+                                            Français
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="pt_br" href="https://www.intel.com.br/content/www/br/pt/homepage.html">
+                                            Português
+                                    </a>
+                                </li>
+                            
+                        </ul>
+                    </div>
+                
+                    <div class="panel-item">
+                        <!-- region.countryName is actually region name -->
+                        
+                        <ul class="list-unstyled panel-links nav-l4-list">
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="vi_vn" href="https://www.intel.vn/content/www/vn/vi/homepage.html">
+                                            Tiếng Việt
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="th_th" href="https://www.thailand.intel.com/content/www/th/th/homepage.html">
+                                            ไทย
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="ko_kr" href="https://www.intel.co.kr/content/www/kr/ko/homepage.html">
+                                            한국어
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="ja_jp" href="https://www.intel.co.jp/content/www/jp/ja/homepage.html">
+                                            日本語
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="zh_cn" href="https://www.intel.cn/content/www/cn/zh/homepage.html">
+                                            简体中文
+                                    </a>
+                                </li>
+                            
+                                
+                                
+                                
+                                    <li class="lang-option">
+                                
+                                
+                                    
+                                    
+                                        
+                                    
+                                
+                                    <a class="nav-l4" data-locale="zh_tw" href="https://www.intel.com.tw/content/www/tw/zh/homepage.html">
+                                            繁體中文
+                                    </a>
+                                </li>
+                            
+                        </ul>
+                    </div>
+                
+            </div>
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+    var newLangSelector = true;
+</script>
+
+                            <!-- END: NON-sign in panel -->
+                            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+
+
+
+    
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+        
+    
+
+
+    <button type="button" title="Search intel.com" class="nav-link-icon toggle-search collapsed"
+            data-bs-target="#simplify-search" aria-expanded="false"
+            aria-controls="simplify-search" data-mega-control="global-search">
+        <span class="visually-hidden">Toggle Search</span>
+        <span class="fa-global-search"></span>
+    </button>
+    <div class="mega-panel mega-search-panel collapse" id="simplify-search"
+         document-height="true">
+        <div class="mega-panel-wrap">
+            <div class="mega-panel-body">
+                <div class="panel-content">
+                    <div class="search-component search-component"
+                         data-igm-search-content="">
+                        <form class="mega-search-form search item" data-igm-search-control="" name="hpsform-new" id="hpsform-new" action="/content/www/us/en/search.html" role="search" onsubmit="return inputSearch()">
+                            <button type="submit" class="btn-mega-search icon"
+                                    aria-label="Search" tabindex="-1">
+                                <span class="visually-hidden">Search</span>
+                                <span class="fa-global-search"></span>
+                            </button>
+
+                            
+                                
+                                
+                                    <label for="mobile-search">
+                                        <span class="visually-hidden"><</span>
+                                        <input id="toplevelcategory" name="toplevelcategory" type="hidden" value="none">
+                                        <input id="query" name="query" type="hidden" value="">
+                                        <input data-tabindex="1" class="form-control" data-search-input
+                                               id="mobile-search" name="keyword" type="text"
+                                               data-igm-search-input title="Search" autocomplete="off"
+                                               data-target-result="#igm-search-result" aria-controls="mega-results-overlay" aria-label="Search Intel.com" placeholder="Search Intel.com">
+                                    </label>
+                                
+                            
+                            
+                            <button type="button" id="cls-btn-advanced" class="btn-mega-close fa-cancel-1 hide-flyout" aria-label="Clear Search Term" data-clear-input="clear-input">
+									<span class="visually-hidden">Close Search Panel</span>
+							</button>
+                                <button type="button" id="advanced-btn" class="btn-advance-filter fa-sliders hide-flyout" aria-label="Advanced Search Panel" data-mega-advanced-search="advanced-search">
+                                            <span class="visually-hidden">Advanced Search</span>
+                                </button>
+                            
+                            
+
+                        </form>
+                        <!-- 
+                            'hidden' class is conditionally removed on load @ intel.search-dropdown.js
+                         -->
+                        <div class="results-overlay mega-results-overlay search-quick-links "  aria-live="off"
+                             id="mega-results-overlay" data-component="wa_skip_track">
+                             
+                                 <div class="mega-close-container">
+									<button aria-label="Close search panel" class="btn-icon no-style close-result-toggle flyout-close" data-mega-close="global-search">
+									close
+									</button>
+								</div>
+                            
+                            <!-- Search Result Typeahead -->
+                            <div class="results-typeahead collapse" id="igm-search-result"
+                                 data-igm-search-results="">
+                                <div class="overlay-content">
+                                    <!--<h3>Top Results </h3>-->
+                                    <!-- added content-quick-search class -->
+                                    <div class="content-quick-search">
+                                    </div>
+                                </div>
+                                <div class="search-info">
+                                    <a href="javascript:void();" class="login-toggle" data-activate-mega-control="signin">
+                                        Sign In</a> to access restricted content
+                                </div>
+                            </div>
+                            <!-- Recent Searches: 1) display default search info if no search terms is available  -->
+                            <!-- Recent Searches: 2) display recenter terms when available and hide default search info  -->
+                            <div class="results-recent collapse" data-igm-search-related="">
+                                <div>
+                                    <!-- default search info -->
+                                    <div class="content-search-block content-search-info">
+                                        <h3>Using Intel.com Search</h3>
+                                        <p>You can easily search the entire Intel.com site in several ways.</p>
+                                        <ul>
+                                            <li>
+                                                Brand Name:
+                                                <strong>
+                                                    Core i9
+                                                </strong>
+                                            </li>
+                                            <li>
+                                                Document Number:
+                                                <strong>
+                                                    123456
+                                                </strong>
+                                            </li>
+                                            <li>
+                                                Code Name:
+                                                <strong>
+                                                    Emerald Rapids
+                                                </strong>
+                                            </li>
+                                            <li>
+                                                Special Operators:
+                                                <strong>
+                                                    “Ice Lake”, Ice AND Lake, Ice OR Lake, Ice*
+                                                </strong>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <!-- quick links is always visible on the recents overlay -->
+                                    <div class="content-search-block content-quick-links">
+                                        <h3>Quick Links</h3>
+                                        <p>You can also try the quick links below to see results for most popular searches.</p>
+                                        <ul>
+                                            <li>
+                                                <a class="quick-link" rel="noopener noreferrer" href="https://www.intel.com/content/www/us/en/products/overview.html?wapkw=quicklink:products">
+                                                    Product Information
+                                                </a>
+                                            </li>
+                                            <li><a class="quick-link" rel="noopener noreferrer" href="https://www.intel.com/content/www/us/en/support.html?wapkw=quicklink:support">
+                                                Support
+                                            </a>
+                                            </li>
+                                            <li>
+                                                <a class="quick-link" rel="noopener noreferrer" href="https://downloadcenter.intel.com?wapkw=quicklink:download-center">
+                                                    Drivers & Software
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <!-- recent search terms -->
+                                    <div class="results-overlay results-recent results component content-search-block content-recent" data-component="wa_skip_track"
+                                         data-component-id="1">
+                                        <div class="overlay-content recent-searches-terms">
+                                            <h3>Recent Searches</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="search-info">
+                                    <a href="javascript:void();" class="login-toggle" data-activate-mega-control="signin">
+                                        Sign In</a> to access restricted content
+                                </div>
+                            </div>
+                            
+                                 <div class="results-advanced collapse" data-igm-advanced-search="">
+											<div class="overlay-content">
+												<!-- default search info -->
+												<div class="content-search-block content-search-info component" data-component="wa_skip_track" data-component-id="1">
+													<h3>Advanced Search</h3>
+													<div class="controls-wrapper">
+														<div class="controls">
+															<div class="input-group select-control">
+																<select class="documentation-card-version-select" name="find-results" id="find-results">
+																	<option value="All of these terms" selected="">All of these terms</option>
+																	<option value="Any of these terms">Any of these terms</option>
+																	<option value="Exact term only">Exact term only</option>
+																</select>
+																<label class="select-label" for="find-results">Find results with</label>
+															</div>
+
+															<div class="input-group select-control">
+                                                                <select class="selectAdvanced" name="show-results-from" id="show-results-from">
+                                                                    <option value="allResults" selected="" aria-label="all Results">
+                                                                        All Results
+                                                                    </option>
+                                                                    <option value="Products" aria-label="Products">
+                                                                        Product Information
+                                                                    </option>
+                                                                    <option value="Support">
+                                                                        Support
+                                                                    </option>
+                                                                    <option value="Downloads">
+                                                                        Drivers & Software
+                                                                    </option>
+                                                                    <option value="Developers">
+                                                                        Documentation & Resources
+                                                                    </option>
+                                                                    <!-- <option value="Solutions">Solutions</option>-->
+                                                                    <option value="Partners">
+                                                                        Partners
+                                                                    </option>
+                                                                    <option value="forums">
+                                                                        Communities
+                                                                    </option>
+                                                                    <option value="Corporate">
+                                                                        Corporate
+                                                                    </option>
+                                                                </select>
+																<label class="select-label" for="show-results-from">Show results from</label>
+															</div>
+														</div>
+
+														<div class="controls">
+															<h3 
+                                                            >Only search in</h3>
+															<div class="input-group" aria-label="Only Search In">
+																<label for="search_title">
+																	<input name="search_title" id="search_title" type="checkbox">
+																	Title</label>
+
+																	<label for="search_description">
+																	<input name="search_description" id="search_description" type="checkbox">
+																Description</label>
+
+																	<label for="search_id">
+																	<input name="search_id" id="search_id" type="checkbox">Content ID</label>
+															</div>
+
+															<button role="button" type="button" class="btn btn-primary" id="advanced-search-submit" data-wap data-wap-ref="search-button">
+																Search
+															</button>
+														</div>
+													</div>
+												</div>
+											</div>
+											<div class="search-info">
+												<a href="javascript:void();" class="login-toggle" data-activate-mega-control="signin">Sign in</a> to access
+												restricted content.
+											</div>
+										</div>
+                                    
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script type="text/javascript">
+    var global_config = {
+        "icsUrl": "https://supporttickets.intel.com/services/oauth2/authorize?response_type=token&client_id=3MVG9QDx8IX8nP5Rh0X3B7gohGtUh8sjFQ8Tw_U8sS9_PoVrupDFwZ_nwLcze2n64lGBbGchyUb7_9W8n8pAV&redirect_uri=https%3A%2F%2Fwww.intel.com%2Fcontent%2Fwww%2Fus%2Fen%2Fsecure%2Fmy-intel%2Ftoken.html",
+        "ipsUrl": "https://premiersupport.intel.com/IPS/services/oauth2/authorize?response_type=token&client_id=3MVG9xOCXq4ID1uEa5F2lCYAp6mmKvTMlKbMIrsMKShY2oOqs1ETvPRjwmhoPivHd9_U53EzmiyYxn3nVpA9J&redirect_uri=https%3A%2F%2Fwww.intel.com%2Fcontent%2Fwww%2Fus%2Fen%2Fsecure%2Fmy-intel%2Ftoken.html"
+    };
+
+
+    function inputSearch() {
+    if (globalSearch.advancedSearchFlag == 'true') {
+        var findResults = $("#find-results").val();
+        var showResults = $("#show-results-from").val();
+        var titleIsChecked = $("#search_title").is(":checked");
+        var descriptionIsChecked = $("#search_description").is(":checked");
+        var idIsChecked = $("#search_id").is(":checked");
+        var searchInputValue = $("#mobile-search").val();
+
+        if (findResults != 'All of these terms' || showResults != "allResults" || titleIsChecked || descriptionIsChecked || idIsChecked) {
+            if (searchInputValue) {
+                return advancedSearch();
+            }
+            else {
+                return INTEL_TYPE_AHEAD.onSubmitHps('Search', '/content/www/us/en', 'en_US');
+            }
+        }
+
+        else {
+            return INTEL_TYPE_AHEAD.onSubmitHps('Search', '/content/www/us/en', 'en_US');
+        }
+    }
+    return INTEL_TYPE_AHEAD.onSubmitHps('Search', '/content/www/us/en', 'en_US');
+
+}
+
+
+    var globalSearch = globalSearch || {};
+    globalSearch = {
+        searchProvider: 'coveo',
+        baseSearchQuery: 'localecode:"en_US" NOT generic1:"false" ',
+        langRootPath: '/content/www/us/en',
+        headingTxt: 'Best Match',
+        locale: 'en_US',
+        typeAheadUrl: 'http://search.intel.com/SearchLookup/DataProvider.ashx',
+        bestMatchUrl: 'https://intelcorporationproductione78n25s6.org.coveo.com/rest/search/v2/querySuggest',
+        searchRealm: 'Default',
+        bestMatchQ1: 'NAR',
+        bestMatchQ2: 'en',
+        bestMatchQ11: 'sptitle,description,url,thumbnailurl,reimaginerootlevel',
+        progId: 'ude',
+        useEMTTags: true,
+        defaultPage: 'search.html',
+        ighfToken: 'xx6e698e8b-65ad-446c-9030-666d0ec92d15',
+        searchHub: 'entepriseSearch',
+        newNavRedesign: true,
+        advancedSearchFlag :'true',
+        gtvLabels: {
+            suggested: "",
+            products: "Product Information",
+            support: "Support",
+            developers: "Developers",
+            drivers: "Drivers",
+            forums: "Forums",
+            specifications: "Specifications",
+            download: "",
+            searchesRelatedTo: "",
+            search: "Search Intel.com",
+            inLabel: "in",
+            searchSupport: "Search Intel® Support",
+            intelcom: "",
+            forLabel: "for",
+            allResults: "All Results",
+            show: "Show",
+            results: "Results"
+        },
+        mobileResults: "5",
+        laptopResults: "10",
+        EDCProgramIdentifier: "false"
+    };
+</script>
+                        </div>
+                        <!-- END MOBILE TOGGLE buttons -->
+                    </div>
+                </nav>
+            </header>
+        </div>
+
+        
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+    
+    
+    
+    
+
+
+
+
+
+<div id="secondary-nav-1" class="component secondary-nav" data-component="subnavigation-breadcrumb"
+     data-component-id="1">
+    
+</div>
+
+
+    
+    
+        
+        
+            
+            <script type="application/ld+json">
+            
+ </script>
+        
+    
+
+
+
+<script type="text/javascript">
+    intel = intel || {};
+    intel.utils = intel.utils || {};
+    intel.utils.breadcrumbSource = "";
+    intel.utils.isDefaultSecondaryNavNeeded = "false";
+    intel.utils.displayTitle = "C23 Features Supported by Intel Compiler";
+    intel.utils.template = "/apps/intel/commons/templates/mobileFirst/mf-article-long";
+</script>
+
+        
+        <script type="text/javascript">
+            
+            var globalHeader = globalHeader || {};
+            globalHeader = {
+                currentPath: "https://www.intel.com/content/www/us/en/developer/articles/technical/c23-features-supported-by-intel-compiler.html",
+                lanloc: "/us/en",
+                lanLoc: "US/en",
+                helpformurl: "",
+                intelHeaderFooterVersion: "menu3",
+                megaMenuPath: "/content/data/globalelements/US/en/globalnav4",
+                subMenuPath: "/content/data/globalelements/US/en/sub-navigation/idz/developer-sub-navigation-breadcrumb",
+                isCHF:false,
+                secureRedirectURL: "",
+                excludeGlobalNav4: "false",
+                allowSubNavigationBreadcrumb: "true",
+                breadcrumbParentPagePath: "/content/www/us/en/developer/tools/oneapi/dpc-compiler",
+                myintelHeaderLinkAgs: "RDC Basic View,RDC Privileged Full,RDC Privileged Entitlement-AZAD,Intel Registration Center Access~RDC Privileged Full,Sales-PRM-External-Customers Employee-User~RDC Basic View,RDC Privileged Full",
+            }
+        </script>
+    
+
+
+<script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/in-viewport.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/nav.min.js" defer></script>
+<script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/secondaryNav.min.js" defer></script>
+</div>
+
+    
+    
+
+
+<section data-scroll-track="false">
+    <div class="container">
+        <div class="row">
+            <div class="col-xs-12 pull-right persistent-cta-integration-globalNav" id="alertMsg">
+                <div id="alertSupport">
+                    <div class="browser_detect" id="browserdetectid" style="display:none;">
+                        <p>The browser version you are using is not recommended for this site.<br/>Please consider upgrading to the latest version of your browser by clicking one of the following links.</p>
+                        <div class="browser_types">
+                            <ul>
+                                
+                                    <li><a href="https://support.apple.com/downloads/safari">Safari</a></li>
+                                
+                                    <li><a href="https://support.google.com/chrome/answer/95346?hl=en">Chrome</a></li>
+                                
+                                    <li><a href="https://www.microsoft.com/en-us/edge">Edge</a></li>
+                                
+                                    <li><a href="https://www.mozilla.org/en-US/firefox/new/">Firefox</a></li>
+                                
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+
+<main id="primary-content">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js" integrity="sha384-M5jmNxKC9EVnuqeMwRHvFuYUE8Hhp0TgBruj/GZRkYtiMrCRgH7yvv5KY+Owi7TW" crossorigin="anonymous">
+</script>
+
+<script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/supportLibs/resources/js/SupportPageTool.js" type="text/javascript" defer></script>
+
+
+
+<div class="targetParsys intelparsys">
+</div>
+
+
+    
+        <link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/salesForceArticleLibs.min.css" type="text/css"><link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/articleNewUxLibs.min.css" type="text/css"><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/salesForceArticleLibs.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/waypoints.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/sticky.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/prism.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/articleNewUxLibs.min.js" defer></script>
+        <link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/articleIdzLibs.min.css" type="text/css"><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/showdown.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/externallibs/waypoints.min.js" defer></script><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/articleIdzLibs.min.js" defer></script>
+        <div class="aggregation">
+            <div class="aggregation">
+
+
+
+
+
+    
+</div>
+
+        </div>
+        <main id="primary-content-main">
+            <div class="promotionsBanner marketingbanner">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/upeMarketingBanner.min.css" type="text/css">
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+    
+    
+        
+    
+</div>
+
+            <div class="articlehero">
+                <div class="articlehero">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+        
+            
+                
+            
+            
+            
+            
+            
+            
+            
+        
+        
+            
+            
+                
+            
+        
+        
+        
+            
+                
+            
+            
+        
+        
+        
+
+        <div class="masthead-component article-marquee-component intel-brand-ux component"
+             data-component="articleHero" id="articleHero-1" data-component-id="1">
+            
+            
+                
+                    
+                        
+                        
+                        
+                        
+                    
+                    <div class="content-marquee-1_0_0 intel-ws solid blade theme-dark-default brand-classic-blue color-block  no-image">
+                        <div class="color-block-lighter">
+                            <div class="container">
+                                <div id="document">
+                                    <div class="marquee-heading-section">
+                                        <h1 class="h3">C23 Features Supported by Intel® Compiler</h1>
+                                    </div>
+                                    <div class="documentDetails">
+                                        <div class="document id">
+                                            
+                                                <span> ID </span>
+                                                <span class="idValue">767374</span>
+                                            
+                                        </div>
+                                        <div class="document update">
+                                            
+                                                <span> Updated </span>
+                                                <span class="UpdatedValue">11/17/2023</span>
+                                            
+                                        </div>
+                                        <div class="document version">
+                                            
+                                                <span> Version </span>
+                                                <span class="versionValue">
+                                                
+                                                    
+                                                        Latest
+                                                    
+                                                    
+                                                
+                                            </span>
+                                            
+                                        </div>
+                                        <!--Based on the feature flag/dialog checkbox, display the below div text -->
+                                        
+                                            
+                                            
+                                                <div class="public">Public</div>
+                                            
+                                        
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+                
+            
+        </div>
+        </div>
+        <!--Based on if the version is not latest, below alert text is displayed -->
+        
+            
+        
+    
+</div>
+
+            </div>
+            <article class="article article-long component developer-article" data-component-id="1"
+                     data-component="articletemplate">
+                <div class="container takeaway-container">
+                    <div class="component-padding">
+                        <div class="row">
+                            <div class="left-side col-md-4 col-lg-3">
+
+                                <div class="article-actions-mobile d-block d-md-none"></div>
+
+                                <!-- duplicated from articlehero for vertical layout -->
+                                
+                                    
+                                    
+                                        <div class="jumplinksContainer vertical set1 row" style="display:none;"></div>
+                                    
+                                
+
+                                <p class="author"></p>
+                                <!-- BUILT IN - ARTICLE INTRO COMPONENT -->
+                                <!-- duplicated from right column for mobile layout -->
+                                <div class="article-intro-first mobile row section d-block d-md-none"></div>
+                                <!-- END IN - ARTICLE INTRO COMPONENT -->
+
+                                <!-- BUILT IN - ARTICLE TAKEAWAY COMPONENT -->
+
+                                <div class="articletakeaway parbase">
+                                    <div class="articletakeaway parbase">
+
+
+
+
+
+
+
+
+
+
+    
+        
+    
+    
+
+
+
+    
+</div>
+
+                                </div>
+
+                                <div class="article-intro-second">
+                                    <div class="articleintro1 articleintro">
+                                        <div>
+                                            <!--  BUILT IN - ARTICLE INTRO SECOND COMPONENT -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- only display this for authored pages and not salesforce pages-->
+                                <div class="authorcontainer">
+                                    <div>
+                                        <div class="no-author-img"></div>
+                                        <img class="author-img" src="" alt="author-image">
+                                    </div>
+                                    <div class="authordetails">
+                                        <div class="singleauthordetails">
+                                            <p id="singleauthorname" class="authorname"></p>
+                                            <p id="singleauthorbio" class="authorbio"></p>
+                                        </div>
+                                        <p id="coauthordetails"></p>
+                                        <p id="ldapauthordetails"><span>By</span></p>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div class="right-side col-md-8 col-lg-9">
+                                <div class="article-content">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <!-- BEGIN NEW BUILD IN - Article Actions - DESKTOP -->
+                                            <div class="article-actions section d-none d-sm-block" role="toolbar">
+                                                <!-- NEW Download PDF link - migrated from .article-intro byline
+                                                    Hide this link if no PDF configured for this article
+                                                -->
+                                                <p class="articleDate"></p>
+
+                                                <button id="linkToPrintArticle"
+                                                        class="article-action linkToPrintArticle fa fa-print"
+                                                        data-bs-toogle="tooltip" data-bs-placement="bottom"
+                                                        title="Print"
+                                                        data-content-element="#primary-content-main"
+                                                        data-print-modal-name="PRINT"
+                                                        data-print-modal-style="height=400,width=800,scrollbars=yes"
+                                                        data-print-modal-title="C23 Features Supported by Intel Compiler"
+                                                        data-include-page-title="true"
+                                                        onclick="printArticle('#linkToPrintArticle');"
+                                                        aria-label="Print Article"></button>
+
+                                                <button id="linkToEmailArticle"
+                                                        class="article-action linkToEmailArticlefa fa-mail-1"
+                                                        data-bs-toogle="tooltip" data-bs-placement="bottom"
+                                                        title="Email"
+                                                        data-modal-title="C23 Features Supported by Intel Compiler"
+                                                        data-modal-subject="Link to the Intel Article"
+                                                        data-modal-body="Intel Article Link"
+                                                        onclick="emailArticle('#linkToEmailArticle');"
+                                                        aria-label="Email Article"></button>
+
+                                                <!--
+                                                    This will be for a future project
+                                                    <button id="linkBookMark" class="article-action fa fa-bookmark-empty" data-tooltip="tooltip" data-placement="top" data-container="body" title="BookMark"></button>
+                                                -->
+                                            </div>
+                                            <div class="article-intro-first section d-none d-sm-block">
+                                                <div class="articleintro">
+                                                    <div class="articleintro">
+
+
+
+
+
+
+
+        
+        
+
+
+
+
+
+
+
+<div class="container article-intro-first-child" id="articleintro" data-component="articleintro" data-component-id="1">
+
+    <div class="component-padding article-intro-padding">
+        <div class="article-intro byline">
+            
+            <div class="intropdf">
+                
+
+            </div>
+            
+            
+            
+
+            
+
+            
+                <div id="ldapauthorinfo" class="articleIntroAuthor">
+                    
+                    
+                        <a href="https://community.intel.com/cipcp26785/plugins/custom/intel/intel/custom.userprofile?id=Icw%2BrED%2FujMeZiyR8T5pYyBjyvVJTj5l&iv=a%2FEB1An8AECEWlVQ">Subarnarekha Ghosal</a>
+                    
+                </div>
+            
+        </div>
+    </div>
+</div>
+
+</div>
+
+                                                </div>
+
+                                            </div>
+
+                                            <div class="articlebladepar intelparsys">
+<div class="articleParagraph parbase section">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+            <div id="articleparagraph-1" class="component" data-component="articleparagraph"
+                 data-component-id="1">
+                <div >
+                    
+                    
+
+
+
+
+
+
+
+    
+    <div class="container">
+        <div class="component-padding">
+            <div class="row">
+                <div class="col-md-4 takeaway-placeholder">
+                </div>
+                <div class="col-md-8 paragraph-placeholder">
+                    <div class="article-content">
+                        <div class="row">
+                            <div class="col-12 articlepara">
+                                <div class="modal fade modal-image" id="image-expand-modal" tabindex="-1" role="dialog">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <button type="button" class="close icon" data-bs-dismiss="modal"
+                                                        aria-label="Close">
+                                                    <span></span></button>
+                                            </div>
+                                            <div class="modal-body"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                    
+                                    
+                                        <p><h2>C23 Features</h2>
+
+<p>Following is the status and version of compiler support for C23 Features:</p>
+
+<table cellspacing="0" style="border-collapse:collapse; width:788px">
+	<thead>
+		<tr>
+			<th scope="col"><strong>Language Feature</strong></th>
+			<th scope="col"><strong>Standard #</strong></th>
+			<th scope="col" style="width:125px"><strong>ICX 2023.2&nbsp;(oneAPI 2023.2)</strong></th>
+			<th scope="col" style="width:125px">ICX 2024.0 (oneAPI 2024.0)</th>
+			<th scope="col" style="width:125px">&nbsp;</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>Harmonizing static_assert with C++</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2265.pdf">N2665</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>nodiscard attribute</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2267.pdf">N2267</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>maybe_unused attribute</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2270.pdf">N2270</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>TS 18661 Integration: Remove conditional &ldquo;WANT&rdquo; macros from numbered clauses</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2359.pdf">N2359</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Preprocessor line numbers unspecified</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2322.htm">N2322</a></td>
+			<td>Partial</td>
+			<td>Partial</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>deprecated attribute</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2334.pdf">N2334</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Attribute: Adding attribute</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2335.pdf">N2335</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Attribite: Minor attribute wording cleanups</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2554.pdf">N2554</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Defining new types in offsetof</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2350.htm">N2350</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>fallthrough attribute</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2408.pdf">N2408</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Two&#39;s complement sign representation</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2412.pdf">N2412</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Adding the u8 character prefix</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2418.pdf">N2418</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Remove support for function definitions with identifier lists</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2432.pdf">N2432</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>[[nodiscard(&quot;should have a reason&quot;)]]</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2448.pdf">N2448</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Allowing unnamed parameters in function definitions</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2480.pdf">N2480</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Free positioning of labels inside compound statements</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2508.pdf">N2508</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Clarification request for C17 example of undefined behavior</td>
+			<td>N2517</td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Querying attribute support</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2553.pdf">N2553</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Binary literals</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2549.pdf">N2549</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Allow duplicate attributes</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2557.pdf">N2557</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Character encoding of diagnostic text</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2563.pdf">N2563</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>What we think we reserve</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2572.pdf">N2572</a></td>
+			<td>Partial</td>
+			<td>Partial</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Remove mixed wide string literal concatenation</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2594.htm">N2594</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Compatibility of Pointers to Arrays with Qualifiers</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2607.pdf">N2607</a></td>
+			<td>Partial</td>
+			<td>Partial</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Unclear type relationship between a format specifier and its argument</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2562.pdf">N2562</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>String functions for freestanding implementations</td>
+			<td>N2524</td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Digit separators</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2626.pdf">N2626</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Missing +(x) in table</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2641.htm">N2641</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Add support for preprocessing directives elifdef and elifndef</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2645.pdf">N2645</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>[[maybe_unused]] for labels</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2662.pdf">N2662</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Zeros compare equal</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2670.pdf">N2670</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Negative values</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2671.pdf">N2671</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>5.2.4.2.2 cleanup</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2672.pdf">N2672</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Adding Fundamental Type for N-bit Integers</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2763.pdf">N2763</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Adding Fundamental Type for N-bit Integers: Literal suffixes for bit-precise integers</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2775.pdf">N2775</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Adding Fundamental Type for N-bit Integers: bit-precise bit-fields</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2969.htm">N2969</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>#warning directive</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2686.pdf">N2686</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Sterile characters</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2688.pdf">N2686</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Integer constant expressions</td>
+			<td>N2713</td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Numerically equal</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2716.htm">N2716</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>__has_include for C</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2799.pdf">N2799</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Annex F overflow and underflow</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2747.pdf">N2747</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Remove UB from Incomplete Types in Function Parameters</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2770.pdf">N2770</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Variably-modified types</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2778.pdf">N2778</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Types do not have types</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2781.pdf">N2781</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>5.2.4.2.2 cleanup (N2672 update)</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2806.pdf">N2806</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Allow 16-bit ptrdiff_t</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2808.htm">N2808</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Clarifying integer terms</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2837.pdf">N2837</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Require exact-width integer type interfaces</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2872.htm">N2872</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>@, $, and &lsquo; in the source/execution character set</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2701.htm">N2701</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>The noreturn attribute</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2764.pdf">N2764</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>*_HAS_SUBNORM==0 implies what?</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2797.htm">N2797</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Add annotations for unreachable control flow v2</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2826.pdf">N2826</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Unicode Sequences More Than 21 Bits are a Constraint Violation r0</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2828.htm">N2828</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Make assert() macro user friendly for C and C++ v2</td>
+			<td>N2829</td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Identifier Syntax using Unicode Standard Annex 31</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2836.pdf">N2836</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>No function declarators without prototypes</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2841.htm">N2841</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Revised Suggestions of Change for Numerically Equal/Equivalent</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2847.pdf">N2847</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>5.2.4.2.2 Cleanup, Again Again (N2806 update)</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2879.pdf">N2879</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>char8_t: A type for UTF-8 characters and strings</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2653.htm">N2653</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Consistent, Warningless, and Intuitive Initialization with {}</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2900.htm">N2900</a></td>
+			<td>No</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Compound Literals with Empty Initializers</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3011.htm">N3011</a></td>
+			<td>No</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Not-so-magic - typeof for C</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2927.htm">N2927</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Consider renaming remove_quals</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2930.pdf">N2930</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Revice spelling of keywords v7</td>
+			<td>N2934</td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Make false and true first-class language features v8</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2935.pdf">N2935</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Properly define blocks as part of the grammar v3</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2937.pdf">N2937</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Annex X (replacing Annex H) for IEC 60559 interchange</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2601.pdf">N2601</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Indeterminate Values and Trap Representations</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2861.pdf">N2861</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Remove ATOMIC_VAR_INIT v2</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2886.htm">N2886</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Require exact-width integer type interfaces v2</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2888.htm">N2888</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Wording Change for Variably-Modified Types</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2992.pdf">N2992</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Remove trigraphs??!</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2940.pdf">N2940</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Relax requirements for variadic parameter lists, V3</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2975.pdf">N2975</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Unsequenced functions</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2956.htm">N2956</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Type inference for object declarations</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3007.htm">N3007</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>constexpr for object definitions</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3018.htm">N3018</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Introduce storage class specifiers for compound literals</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3038.htm">N3038</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Identifier primary expressions</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3034.pdf">N3034</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Introduce the nullptr constant</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3042.htm">N3042</a></td>
+			<td>Partial</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Memory layout of unions</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2929.pdf">N2929</a></td>
+			<td>Yes</td>
+			<td>Yes</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>Improved tag compatibility</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3037.pdf">N3037</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td>#embed</td>
+			<td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3017.htm">N3017</a></td>
+			<td>No</td>
+			<td>No</td>
+			<td>&nbsp;</td>
+		</tr>
+	</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p>&nbsp;</p>
+</p>
+                                    
+                                
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+                    
+
+
+
+                </div>
+            </div>
+        
+    
+</div>
+</div>
+
+
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="article-tags-first section d-none d-sm-block">
+                                    <div class="article-tags-component">
+                                        <div class="articletags parbase">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                    <div class="d-none">
+                        
+                        <sup>1</sup>
+                    </div>
+                
+
+                <div class="big-parser">
+                    <!-- BEGIN NEW BUILT IN - ARTICLE BLADE PARSYS4 - DRAG COMPONENTS HERE - 2 Column -->
+                    <div class="automatedbladepar4">
+                        <div class="container">
+                            <div class="row">
+                                <div class="left-side col-sm-8 col-md-6">
+                                    <div class="relatedArticles">
+                                        <div class="articlebladepar4 detailText">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        <div id="detailtext-1" class="l3-detail-text-component intel-brand-ux has-rte-buttons" role="region" aria-label="Detail Text 1" data-component="detailtext" data-component-id="1">
+            
+            
+            
+            
+
+            <div class="container">
+                <div class="row">
+                    <div class="col-12 col-md-10 col-xl-8 detail-blockquote">
+                            
+                    </div>
+                </div>
+            </div>
+            </div>
+    
+
+</div>
+
+                                    </div>
+                                </div>
+                                <div class="left-side col-sm-8 col-md-6">
+                                    <div class="recentlyViewedPages">
+                                        <div class="articlebladepar5 intelparsys">
+</div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="big-parser">
+                    <div class="articlebladepar1 intelparsys">
+</div>
+
+
+                    
+
+                    
+                    <div class="articlebladepar3 intelparsys">
+</div>
+
+                    <div class="contactUs contact">
+
+
+
+
+
+
+
+
+
+
+
+<link rel="preload" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/contact-us.min.css" as="style">
+<link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/contact-us.min.css" type="text/css"><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/contact-us.min.js" defer></script>
+
+
+</div>
+
+                </div>
+                
+                    
+
+
+
+
+
+
+
+
+
+
+<div class="jumplinks jumplink rwd-jumplinks d-none">
+    <style>
+        .has-jumplinks:not(.left-side) .jumplinksContainer {
+            min-height: 60px;
+            width: 100%;
+            height: auto
+        }
+    </style>
+    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+<div class="nav-overflower spynav nav-spy component" data-component="jumplink" data-component-id="1">
+    <div class="wrap-1  nav-affixer off-screen">
+        <div class="wrap-2 overflower">
+            <ul class="nav overflower-inner">
+                
+            </ul>
+        </div>
+    </div>
+    <div class="paddlesJumplink">
+        <button class="left-paddle-jumplink paddle">
+            <span aria-hidden="true" class="fa fa-angle-left"></span>
+        </button>
+        <button class="right-paddle-jumplink paddle">
+            <span aria-hidden="true" class="fa fa-angle-right"></span>
+        </button>
+    </div>
+</div>
+
+</div>
+
+
+                
+                
+                    
+                        <div id="contextualFooter-PlaceHolder" class="contextualFooter"></div>
+                    
+                
+
+            </article>
+        </main>
+    
+    
+
+
+
+
+
+    <div class="disclaimer parbase">
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+        
+        
+            <div class="disclaimer-component intel-ws link-default theme-light-default">
+                <div class="container disclaimer-container ws-comp-standard-padding">
+                    <h4 class="h6">Product and Performance Information</h4>
+                    
+                    
+                    
+                        
+                            <div class="disclaimer"><sup>1</sup><p>Performance varies by use, configuration and other factors. Learn more at&nbsp;<a href="http://www.intel.com/PerformanceIndex" title="Follow link">www.Intel.com/PerformanceIndex</a>.</p>
+</div>
+                        
+                    
+                    
+                    
+                </div>
+            </div>
+        
+    
+
+<div class="translationDisclaimer parbase">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+    
+
+
+</div>
+
+</div>
+
+
+
+
+    <div class="helpModule getHelpComponent parbase">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+        
+            
+            <div id="getHelpComponent-1" class="component get-help-module" data-component="getHelpComponent"
+                 data-component-id="1">
+                <aside id="gethelp" class="right d-none" role="dialog" data-help-config-url = "/libs/intel/get-help.us_en.default">
+                    <div class="wrapper">
+                        
+                        <div class="navbar-gh" aria-label="Get Help Dialog Header">
+                            <a name="gethelp_button" id="gethelp_button"></a>
+                            
+                            <button class="navbar-toggler btn btn-primary collapsed justify-content-between"
+                                    type="button" data-bs-toggle="collapse" data-target="#gethelp-accordion"
+                                    aria-controls="gethelp-accordion" aria-expanded="false"
+                                    aria-label="Get Help Dialog" data-btn-ref="get-help" data-wap="" data-wap_ref="get-help-collapsed">
+                <span class="navbar-toggler-icon-gethelp  chat-icon icon align-icons fa-user-headset" aria-hidden="true"
+                      title=""></span>
+                                <span id="gethelp-heading" class="navbar-toggler-title" aria-hidden="true">Get Help</span>
+                                
+                                <span class="navbar-toggler-icon-close icon align-icons fa-cancel-thin" aria-hidden="true"
+                                      title="Close Get Help Dialog"></span>
+                            </button>
+                        </div>
+
+                        <ul id="gethelp-accordion" class="accordion panel-group collapse" data-allow-toggle=""
+                            aria-label="Accordion">
+                        </ul>
+
+                    </div>
+
+                </aside>
+            </div>
+            <textarea id="get-help-stylesheet-path" title="" style="display:none;">
+                
+                <link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/get-help.min.css" type="text/css">
+            </textarea>
+            <script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/get-help.min.js" defer></script>
+        
+    
+
+</div>
+
+
+</main>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<footer class="global blade solid brand-lighter-gray theme-light-2 component" data-component-id="1"
+        data-component="footer" role="contentinfo" data-wap_type="wa_skip_track" id="skip-footer">
+    <div class="container">
+        <div class="content-footer">
+            <div class="content">
+                
+                    
+                        
+                            <ul class="footer-links">
+                                
+                                    <li>
+                                        <a href="/content/www/us/en/company-overview/company-overview.html">Company Overview</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="/content/www/us/en/support/contact-us.html">Contact Intel</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="https://newsroom.intel.com/">Newsroom</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="https://www.intc.com/">Investors</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="/content/www/us/en/jobs/life-at-intel.html">Careers</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="/content/www/us/en/corporate-responsibility/corporate-responsibility.html">Corporate Responsibility</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="/content/www/us/en/inclusion/inclusion-at-intel.html">Inclusion</a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="/content/www/us/en/company-overview/public-policy.html">Public Policy</a>
+                                    </li>
+                                
+                            </ul>
+                        
+                        
+                        
+                    
+                
+                    
+                        
+                        
+                            <ul class="footer-links social">
+                                
+                                    <li>
+                                        <a href="https://www.facebook.com/Intel" target="" aria-label="Intel on Facebook" data-wap="{&quot;linktype&quot;:&quot;footersocial&quot;}">
+                                            <i aria-hidden="true" class="fa-facebook"></i>
+                                        </a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="https://twitter.com/intel" target="" aria-label="Intel on Twitter" data-wap="{&quot;linktype&quot;:&quot;footersocial&quot;}">
+                                            <i aria-hidden="true" class="fa-twitter"></i>
+                                        </a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="https://www.linkedin.com/company/intel-corporation" target="" aria-label="Intel on LinkedIn" data-wap="{&quot;linktype&quot;:&quot;footersocial&quot;}">
+                                            <i aria-hidden="true" class="fa-linkedin"></i>
+                                        </a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="https://www.youtube.com/user/channelintel?sub_confirmation=1" target="" aria-label="Intel on YouTube" data-wap="{&quot;linktype&quot;:&quot;footersocial&quot;}">
+                                            <i aria-hidden="true" class="fa-youtube"></i>
+                                        </a>
+                                    </li>
+                                
+                                    <li>
+                                        <a href="https://www.instagram.com/intel/" target="" aria-label="Intel on Instagram" data-wap="{&quot;linktype&quot;:&quot;footersocial&quot;}">
+                                            <i aria-hidden="true" class="fa-instagram"></i>
+                                        </a>
+                                    </li>
+                                
+                            </ul>
+                        
+                        
+                    
+                
+                    
+                        
+                        
+                        
+                            <ul class="footer-links secondary-links" id="footerSecondaryLinks">
+                                
+                                    <li>
+                                        
+                                            
+                                            
+                                                <small>© Intel Corporation</small>
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                    
+                                                        <a href="/content/www/us/en/legal/terms-of-use.html">
+                                                            <small>Terms of Use</small>
+                                                        </a>
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                    
+                                                        <a href="/content/www/us/en/legal/trademarks.html">
+                                                            <small>*Trademarks</small>
+                                                        </a>
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                        <a href="/content/www/us/en/privacy/intel-cookie-notice.html" data-cookie-notice="true">
+                                                                    <small>Cookies</small>
+                                                                    
+                                                                
+                                                        </a>
+                                                    
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                    
+                                                        <a href="/content/www/us/en/privacy/intel-privacy-notice.html">
+                                                            <small>Privacy</small>
+                                                        </a>
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                    
+                                                        <a href="/content/www/us/en/corporate-responsibility/statement-combating-modern-slavery.html">
+                                                            <small>Supply Chain Transparency </small>
+                                                        </a>
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                    
+                                                        <a href="/content/www/us/en/siteindex.html">
+                                                            <small>Site Map</small>
+                                                        </a>
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                    
+                                                        <a href="/content/www/us/en/support/articles/000098122/services.html">
+                                                            <small>Recycling</small>
+                                                        </a>
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                        <a href="/#" data-wap_ref="dns" id="wap_dns">
+                                                                    <small>Your Privacy Choices</small>
+                                                                    
+                                                                        <span style="height:10px;width:28px;display:inline-block;position:relative;"><svg style="position:absolute;width:28px;bottom:-2px;" version="1.1" id="Layer_1" xmlns=http://www.w3.org/2000/svg xmlns:xlink=http://www.w3.org/1999/xlink x="0px" y="0px" viewBox="0 0 30 14" xml:space="preserve"><title>California Consumer Privacy Act (CCPA) Opt-Out Icon</title><style type="text/css">.st0{fill-rule:evenodd;clip-rule:evenodd;fill:#FFFFFF;}.st1{fill-rule:evenodd;clip-rule:evenodd;fill:#0066FF;}.st2{fill:#FFFFFF;}.st3{fill:#0066FF;}</style><g><g id="final---dec.11-2020_1_"><g id="_x30_208-our-toggle_2_" transform="translate(-1275.000000, -200.000000)"><g id="Final-Copy-2_2_" transform="translate(1275.000000, 200.000000)"><path class="st0" d="M7.4,12.8h6.8l3.1-11.6H7.4C4.2,1.2,1.6,3.8,1.6,7S4.2,12.8,7.4,12.8z"></path></g></g></g><g id="final---dec.11-2020"><g id="_x30_208-our-toggle" transform="translate(-1275.000000, -200.000000)"><g id="Final-Copy-2" transform="translate(1275.000000, 200.000000)"><path class="st1" d="M22.6,0H7.4c-3.9,0-7,3.1-7,7s3.1,7,7,7h15.2c3.9,0,7-3.1,7-7S26.4,0,22.6,0z M1.6,7c0-3.2,2.6-5.8,5.8-5.8 h9.9l-3.1,11.6H7.4C4.2,12.8,1.6,10.2,1.6,7z"></path><path id="x" class="st2" d="M24.6,4c0.2,0.2,0.2,0.6,0,0.8l0,0L22.5,7l2.2,2.2c0.2,0.2,0.2,0.6,0,0.8c-0.2,0.2-0.6,0.2-0.8,0 l0,0l-2.2-2.2L19.5,10c-0.2,0.2-0.6,0.2-0.8,0c-0.2-0.2-0.2-0.6,0-0.8l0,0L20.8,7l-2.2-2.2c-0.2-0.2-0.2-0.6,0-0.8 c0.2-0.2,0.6-0.2,0.8,0l0,0l2.2,2.2L23.8,4C24,3.8,24.4,3.8,24.6,4z"></path><path id="y" class="st3" d="M12.7,4.1c0.2,0.2,0.3,0.6,0.1,0.8l0,0L8.6,9.8C8.5,9.9,8.4,10,8.3,10c-0.2,0.1-0.5,0.1-0.7-0.1l0,0 L5.4,7.7c-0.2-0.2-0.2-0.6,0-0.8c0.2-0.2,0.6-0.2,0.8,0l0,0L8,8.6l3.8-4.5C12,3.9,12.4,3.9,12.7,4.1z"></path></g></g></g></g></svg></span>
+                                                                    
+                                                                
+                                                        </a>
+                                                    
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                                    <li>
+                                        
+                                            
+                                                
+                                                    
+                                                        <a href="/content/www/us/en/privacy/privacy-residents-certain-states.html" data-wap_ref="nac" id="wap_nac">
+                                                                    <small>Notice at Collection</small>
+                                                                    
+                                                                
+                                                        </a>
+                                                    
+                                                    
+                                                
+                                            
+                                            
+                                        
+                                    </li>
+                                
+                            </ul>
+                        
+                    
+                
+                
+                    <div class="footer-disclaimer">
+                            <p>Intel technologies may require enabled hardware, software or service activation. // No product or component can be absolutely secure. // Your costs and results may vary. // Performance varies by use, configuration, and other factors. Learn more at <a href="https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/"><u>intel.com/performanceindex</u></a>. // See our complete legal <u><a href="https://edc.intel.com/content/www/us/en/products/performance/benchmarks/overview/#GUID-26B0C71C-25E9-477D-9007-52FCA56EE18C">Notices and Disclaimers</a></u>. // Intel is committed to respecting human rights and avoiding causing or contributing to adverse impacts on human rights. See Intel’s <u><a href="/content/www/us/en/policy/policy-human-rights.html">Global Human Rights Principles</a></u>. Intel’s products and software are intended only to be used in applications that do not cause or contribute to adverse impacts on human rights.</p>
+
+                    </div>
+                
+            </div>
+            <div class="logo-container">
+                <a href="/content/www/us/en/homepage.html" class="footer-logo-rebrand" aria-label="Intel Footer Logo" title="Intel Footer Logo">
+                    <img src="/content/dam/logos/intel-footer-logo.svg" height="300" width="118" class="footer-logo-rebrand" alt="Intel Footer Logo" title="Intel Footer Logo">
+                </a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+
+
+
+
+
+
+
+
+
+
+
+    <textarea id="defers" title="" style="display:none;">
+    <link rel="stylesheet" href="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/commons-page.min.css" type="text/css"><script src="/etc.clientlibs/settings/wcm/designs/ver/260203/intel/clientlibs/pages/commons-page.min.js" defer></script>
+
+
+<script>!function(){var e=setInterval(function(){"undefined"!=typeof $CQ&&($CQ(function(){CQ_Analytics.SegmentMgr.loadSegments("/etc/segmentation"),CQ_Analytics.ClientContextUtils.init("/etc/clientcontext/intel",window.location.pathname.substr(0,window.location.pathname.indexOf(".")))}),clearInterval(e))},100)}();</script>
+
+
+
+
+
+
+
+
+
+
+</textarea>
+
+
+</body>
+
+</html>
+
+

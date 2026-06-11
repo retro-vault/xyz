@@ -18,7 +18,7 @@ _f:
 	ld	sp, hl
 	ld	a, (#65296)
 	ld	-8(ix), a
-	ld	hl, #input
+	ld	hl, #_input
 	ld	(hl), a
 	; O3 byte zero loop (count=16)
 	ld	hl, #count
@@ -76,7 +76,7 @@ __xcc_L11:
 	xor	a
 	ld	e, a
 	ld	d, #0
-	ld	hl, #output
+	ld	hl, #_output
 	add	hl, de
 	ld	a, (hl)
 	ld	-8(ix), a

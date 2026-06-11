@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Jens Gustedt (INRIA France)" />
+  <meta name="author" content="JeanHeyd Meneide (https://thephd.dev)" />
+  <meta name="dcterms.date" content="2022-07-22" />
+  <title>Introduce the nullptr constant</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        background-color: #ffffff;
+        color: #a0a0a0;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #a0a0a0;  padding-left: 4px; }
+    div.sourceCode
+      { color: #1f1c1b; background-color: #ffffff; }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #1f1c1b; } /* Normal */
+    code span.al { color: #bf0303; background-color: #f7e6e6; font-weight: bold; } /* Alert */
+    code span.an { color: #ca60ca; } /* Annotation */
+    code span.at { color: #0057ae; } /* Attribute */
+    code span.bn { color: #b08000; } /* BaseN */
+    code span.bu { color: #644a9b; font-weight: bold; } /* BuiltIn */
+    code span.cf { color: #1f1c1b; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #924c9d; } /* Char */
+    code span.cn { color: #aa5500; } /* Constant */
+    code span.co { color: #898887; } /* Comment */
+    code span.cv { color: #0095ff; } /* CommentVar */
+    code span.do { color: #607880; } /* Documentation */
+    code span.dt { color: #0057ae; } /* DataType */
+    code span.dv { color: #b08000; } /* DecVal */
+    code span.er { color: #bf0303; text-decoration: underline; } /* Error */
+    code span.ex { color: #0095ff; font-weight: bold; } /* Extension */
+    code span.fl { color: #b08000; } /* Float */
+    code span.fu { color: #644a9b; } /* Function */
+    code span.im { color: #ff5500; } /* Import */
+    code span.in { color: #b08000; } /* Information */
+    code span.kw { color: #1f1c1b; font-weight: bold; } /* Keyword */
+    code span.op { color: #1f1c1b; } /* Operator */
+    code span.ot { color: #006e28; } /* Other */
+    code span.pp { color: #006e28; } /* Preprocessor */
+    code span.re { color: #0057ae; background-color: #e0e9f8; } /* RegionMarker */
+    code span.sc { color: #3daee9; } /* SpecialChar */
+    code span.ss { color: #ff5500; } /* SpecialString */
+    code span.st { color: #bf0303; } /* String */
+    code span.va { color: #0057ae; } /* Variable */
+    code span.vs { color: #bf0303; } /* VerbatimString */
+    code span.wa { color: #bf0303; } /* Warning */
+  </style>
+  <!-- (A) TOGGLE PROPERTY WITH JAVASCRIPT -->
+  <script>
+  function hideDel () {
+      var block = document.getElementsByTagName("del");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "none";
+      }
+  }
+  function hideIns () {
+      var block = document.getElementsByTagName("ins");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "none";
+      }
+  }
+  function showDel () {
+      var block = document.getElementsByTagName("del");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "";
+      }
+  }
+  function showIns () {
+      var block = document.getElementsByTagName("ins");
+      let fLen = block.length;
+      for (let i = 0; i < fLen; i++) {
+          block[i].style.display = "";
+      }
+  }
+  function showOrig () {
+      hideIns();
+      showDel();
+  }
+  function showNew () {
+      showIns();
+      hideDel();
+  }
+  function showBoth () {
+      showIns();
+      showDel();
+  }
+  function toggleToc () {
+      var block = document.getElementById("TOC");
+      let fLen = block.length;
+      if (block.style.display == "") {
+          block.style.display = "none";
+      } else {
+          block.style.display = "";
+      }
+  }
+  </script>
+  <!-- (B) TEST BLOCK OF TEXT -->
+  <table id="diffToggles" style="position: fixed; top: 0; right: 0; z-index: 1"/>
+  <tbody>
+  <tr><td><input type="button" value="toggle toc" onclick="toggleToc()"/></td><tr>
+  <tr><td><input type="button" value="show orig" onclick="showOrig()"/></td><tr>
+  <tr><td><input type="button" value="show new" onclick="showNew()"/></td><tr>
+  <tr><td><input type="button" value="show both" onclick="showBoth()"/></td><tr>
+  </tbody>
+  </table>
+  <style>
+    /*
+      Buttondown
+      A Markdown/MultiMarkdown/Pandoc HTML output CSS stylesheet
+      Author: Ryan Gray
+      Date: 15 Feb 2011
+      Revised: 21 Feb 2012
+     
+      General style is clean, with minimal re-definition of the defaults or 
+      overrides of user font settings. The body text and header styles are 
+      left alone except title, author and date classes are centered. A Pandoc TOC 
+      is not printed, URLs are printed after hyperlinks in parentheses. 
+      Block quotes are italicized. Tables are lightly styled with lines above 
+      and below the table and below the header with a boldface header. Code 
+      blocks are line wrapped. 
+
+      All elements that Pandoc and MultiMarkdown use should be listed here, even 
+      if the style is empty so you can easily add styling to anything.
+      
+      There are some elements in here for HTML5 output of Pandoc, but I have not 
+      gotten around to testing that yet.
+  */
+
+  /* NOTES:
+
+      Stuff tried and failed:
+      
+      It seems that specifying font-family:serif in Safari will always use 
+      Times New Roman rather than the user's preferences setting.
+      
+      Making the font size different or a fixed value for print in case the screen 
+      font size is making the print font too big: Making font-size different for 
+      print than for screen causes horizontal lines to disappear in math when using 
+      MathJax under Safari.
+  */
+
+  /* ---- Front Matter ---- */
+
+  /* Pandoc header DIV. Contains .title, .author and .date. Comes before div#TOC. 
+     Only appears if one of those three are in the document.
+  */
+
+  body {counter-reset: h2}
+    h2 {counter-reset: h3}
+    h2 {counter-reset: h3}
+    h3 {counter-reset: h4}
+    h4 {counter-reset: h5}
+    h5 {counter-reset: h6}
+
+    h2:before {counter-increment: h2; content: counter(h2) ". "}
+    h3:before {counter-increment: h3; content: counter(h2) "." counter(h3) ". "}
+    h4:before {counter-increment: h4; content: counter(h2) "." counter(h3) "." counter(h4) ". "}
+    h5:before {counter-increment: h5; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) ". "}
+    h6:before {counter-increment: h6; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) "." counter(h6) ". "}
+
+    h2.nocount:before, h3.nocount:before, h4.nocount:before, h5.nocount:before, h6.nocount:before { content: ""; counter-increment: none }
+
+  div#header, header
+      {
+      /* Put border on bottom. Separates it from TOC or body that comes after it. */
+      border-bottom: 1px solid #aaa;
+      margin-bottom: 0.5em;
+      }
+
+  .title /* Pandoc title header (h1.title) */
+      {
+      text-align: center;
+      }
+
+  .author, .date /* Pandoc author(s) and date headers (h2.author and h3.date) */
+  {
+      font-size: 3ex;
+      text-align: center;
+      }
+
+  /* Pandoc table of contents DIV when using the --toc option.
+     NOTE: this doesn't support Pandoc's --id-prefix option for #TOC and #header. 
+     Probably would need to use div[id$='TOC'] and div[id$='header'] as selectors.
+  */
+
+  div#TOC, nav#TOC
+      {
+      /* Put border on bottom to separate it from body. */
+      border-bottom: 1px solid #aaa;
+      margin-bottom: 0.5em;
+      }
+
+  ins {
+      color: green
+  }
+
+  del {
+      color: red
+  }
+
+  #diffToggles {
+      display: none
+  }
+
+  @media screen
+  {
+      #TOC
+      {
+          width: 35%;
+  	float: left;
+  	overflow: hidden;
+      }
+      #diffToggles {
+          display: block
+      }
+  }
+
+  @media print
+      {
+      div#TOC, nav#TOC
+          {
+          /* Don't display TOC in print */
+          display: none;
+          }
+      }
+
+  /* ---- Headers and sections ---- */
+
+  h1, h2, h3, h4, h5, h6
+  {
+      font-family: "Helvetica Neue", Helvetica, "Liberation Sans", Calibri, Arial, sans-serif; /* Sans-serif headers */
+
+      /* font-family: "Liberation Serif", "Georgia", "Times New Roman", serif; /* Serif headers */
+
+      page-break-after: avoid; /* Firefox, Chrome, and Safari do not support the property value "avoid" */
+  }
+
+  /* Pandoc with --section-divs option */
+
+  div div, section section /* Nested sections */
+      {
+      margin-left: 2em; /* This will increasingly indent nested header sections */
+      }
+
+  p {}
+
+  blockquote
+      { 
+      font-style: italic;
+      }
+
+  li /* All list items */
+      {
+      }
+
+  li > p /* Loosely spaced list item */
+      {
+      margin-top: 1em; /* IE: lack of space above a <li> when the item is inside a <p> */
+      }
+
+  ul /* Whole unordered list */
+      {
+      }
+
+  ul li /* Unordered list item */
+      {
+      }
+
+  ol /* Whole ordered list */
+      {
+      }
+
+  ol li /* Ordered list item */
+      {
+      }
+
+  hr {}
+
+  /* ---- Some span elements --- */
+
+  sub /* Subscripts. Pandoc: H~2~O */
+      {
+      }
+
+  sup /* Superscripts. Pandoc: The 2^nd^ try. */
+      {
+      }
+      
+  em /* Emphasis. Markdown: *emphasis* or _emphasis_ */
+      {
+      }
+      
+  em > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > p > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > * > p > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > p > ins > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  blockquote > * > p > ins > em /* Emphasis within emphasis: *This is all *emphasized* except that* */
+      {
+      font-style: normal;
+      }
+
+  /* ---- Links (anchors) ---- */
+
+  a /* All links */
+      {
+      /* Keep links clean. On screen, they are colored; in print, they do nothing anyway. */
+      text-decoration: none;
+      }
+
+  @media screen
+      {
+      a:hover
+          {
+          /* On hover, we indicate a bit more that it is a link. */
+          text-decoration: underline;
+          }
+      }
+
+  @media print
+      {
+      a   {
+          /* In print, a colored link is useless, so un-style it. */
+          color: black;
+          background: transparent;
+          }
+          
+      a[href^="http://"]:after, a[href^="https://"]:after
+          {
+          /* However, links that go somewhere else, might be useful to the reader,
+             so for http and https links, print the URL after what was the link 
+             text in parens
+          */
+          content: " (" attr(href) ") ";
+          font-size: 90%;
+          }
+      }
+
+  /* ---- Images ---- */
+
+  img
+      {
+      /* Let it be inline left/right where it wants to be, but verticality make 
+         it in the middle to look nicer, but opinions differ, and if in a multi-line 
+         paragraph, it might not be so great. 
+      */
+      vertical-align: middle;
+      }
+
+  div.figure /* Pandoc figure-style image */
+      {
+      /* Center the image and caption */
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+      font-style: italic;
+      }
+
+  p.caption /* Pandoc figure-style caption within div.figure */
+      {
+      /* Inherits div.figure props by default */
+      }
+
+  /* ---- Code blocks and spans ---- */
+
+  pre, code 
+      {
+      background-color: #fdf7ee;
+      /* BEGIN word wrap */
+      /* Need all the following to word wrap instead of scroll box */
+      /* This will override the overflow:auto if present */
+      white-space: pre-wrap; /* css-3 */
+      white-space: -moz-pre-wrap !important; /* Mozilla, since 1999 */
+      white-space: -pre-wrap; /* Opera 4-6 */
+      white-space: -o-pre-wrap; /* Opera 7 */
+      word-wrap: break-word; /* Internet Explorer 5.5+ */
+      /* END word wrap */
+      }
+
+  pre /* Code blocks */
+      {
+      /* Distinguish pre blocks from other text by more than the font with a background tint. */
+      padding: 0.5em; /* Since we have a background color */
+      border-radius: 5px; /* Softens it */
+      /* Give it a some definition */
+      border: 1px solid #aaa;
+      /* Set it off left and right, seems to look a bit nicer when we have a background */
+      margin-left:  0.5em;
+      margin-right: 0.5em;
+      }
+
+  pre.yacc, code.yacc
+      {
+      background-color: #f0f0f0;
+      }
+
+  pre.yacc /* Code blocks */
+      {
+      /* Distinguish pre blocks from other text by more than the font with a background tint. */
+      padding: 0.0em; /* Since we have a background color */
+      border-radius: 5px; /* Softens it */
+      /* Give it a some definition */
+      border: 0px solid #aaa;
+      /* Set it off left and right, seems to look a bit nicer when we have a background */
+      margin-left:  0.0em;
+      margin-right: 0.0em;
+      }
+
+
+
+  @media screen
+      {
+      pre
+          {
+          /* On screen, use an auto scroll box for long lines, unless word-wrap is enabled */
+          white-space: pre;
+          overflow: auto;
+          /* Dotted looks better on screen and solid seems to print better. */
+          border: 1px dotted #777;
+          }
+      }
+
+  code /* All inline code spans */
+      {
+      }
+
+  p > code, li > code /* Code spans in paragraphs and tight lists */
+      {
+      /* Pad a little from adjacent text */
+      padding-left:  2px;
+      padding-right: 2px;
+      }
+      
+  li > p code /* Code span in a loose list */
+      {
+      /* We have room for some more background color above and below */
+      padding: 2px;
+      }
+
+  span.option
+      {
+          color: blue;
+          text-decoration: underline;
+      }
+
+
+  /* ---- Math ---- */
+
+  span.math /* Pandoc inline math default and --jsmath inline math */
+      {
+      /* Tried font-style:italic here, and it messed up MathJax rendering in some browsers. Maybe don't mess with at all. */
+      }
+      
+  div.math /* Pandoc --jsmath display math */
+      {
+      }
+      
+  span.LaTeX /* Pandoc --latexmathml math */
+      {
+      } 
+
+  eq /* Pandoc --gladtex math */
+      {
+      } 
+
+  /* ---- Tables ---- */
+
+  /*  A clean textbook-like style with horizontal lines above and below and under 
+      the header. Rows highlight on hover to help scanning the table on screen.
+  */
+
+  table
+      {
+      border-collapse: collapse;
+      border-spacing: 0; /* IE 6 */
+
+      border-bottom: 2pt solid #000;
+      border-top: 2pt solid #000; /* The caption on top will not have a bottom-border */
+
+      /* Center */
+      margin-left: auto;
+      margin-right: auto;
+      }
+      
+  thead /* Entire table header */
+      {
+      border-bottom: 1pt solid #000;
+      background-color: #eee; /* Does this BG print well? */
+      }
+
+  tr.header /* Each header row */
+      {
+      } 
+
+  tbody /* Entire table  body */
+      {
+      }
+
+  /* Table body rows */
+
+  tr  {
+      }
+  tr.odd:hover, tr.even:hover /* Use .odd and .even classes to avoid styling rows in other tables */
+      {
+      background-color: #eee;
+      }
+      
+  /* Odd and even rows */
+  tr.odd {}
+  tr.even {}
+
+  td, th /* Table cells and table header cells */
+      { 
+      vertical-align: top; /* Word */
+      vertical-align: baseline; /* Others */
+      padding-left:   0.5em;
+      padding-right:  0.5em;
+      padding-top:    0.2em;
+      padding-bottom: 0.2em;
+      }
+      
+  /* Removes padding on left and right of table for a tight look. Good if thead has no background color*/
+  /*
+  tr td:last-child, tr th:last-child
+      {
+      padding-right: 0;
+      }
+  tr td:first-child, tr th:first-child 
+      {
+      padding-left: 0;
+      }
+  */
+
+  th /* Table header cells */
+      {
+      font-weight: bold; 
+      }
+
+  tfoot /* Table footer (what appears here if caption is on top?) */
+      {
+      }
+
+  caption /* This is for a table caption tag, not the p.caption Pandoc uses in a div.figure */
+      {
+      caption-side: top;
+      border: none;
+      font-size: 0.9em;
+      font-style: italic;
+      text-align: center;
+      margin-bottom: 0.3em; /* Good for when on top */
+      padding-bottom: 0.2em;
+      }
+
+  /* ---- Definition lists ---- */
+
+  dl /* The whole list */
+      {
+      border-top: 2pt solid black;
+      padding-top: 0.5em;
+      border-bottom: 2pt solid black;
+      }
+
+  dt /* Definition term */
+      {
+      font-weight: bold;
+      }
+
+  dd+dt /* 2nd or greater term in the list */
+      {
+      border-top: 1pt solid black;
+      padding-top: 0.5em;
+      }
+      
+  dd /* A definition */
+      {
+      margin-bottom: 0.5em;
+      }
+
+  dd+dd /* 2nd or greater definition of a term */
+      {
+      border-top: 1px solid black; /* To separate multiple definitions */
+      }
+      
+  /* ---- Footnotes ---- */
+
+  a.footnote, a.footnoteRef { /* Pandoc, MultiMarkdown footnote links */
+      font-size: small; 
+      vertical-align: text-top;
+  }
+
+  a[href^="#fnref"], a.reversefootnote /* Pandoc, MultiMarkdown, ?? footnote back links */
+      {
+      }
+
+  @media print
+      {
+      a[href^="#fnref"], a.reversefootnote /* Pandoc, MultiMarkdown */
+          {
+          /* Don't display these at all in print since the arrow is only something to click on */
+          display: none;
+          }
+      }
+      
+  div.footnotes /* Pandoc footnotes div at end of the document */
+      {
+      }
+      
+  div.footnotes li[id^="fn"] /* A footnote item within that div */
+      {
+      }
+
+  /* You can class stuff as "noprint" to not print. 
+     Useful since you can't set this media conditional inside an HTML element's 
+     style attribute (I think), and you don't want to make another stylesheet that 
+     imports this one and adds a class just to do this.
+  */
+
+  @media print
+      {
+      .noprint
+          {
+          display:none;
+          }
+      }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Introduce the nullptr constant</h1>
+<p class="author">Jens Gustedt (INRIA France)</p>
+<p class="author">JeanHeyd Meneide (https://thephd.dev)</p>
+<p class="date">2022-07-22</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#abstract">Abstract</a></li>
+<li><a href="#summary-of-changes">Summary of Changes</a></li>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#rationale">Rationale</a>
+<ul>
+<li><a href="#why-do-we-need-a-specific-nullptr-constant">Why do we need a specific <code class="sourceCode c"><span class="kw">nullptr</span></code> constant?</a></li>
+<li><a href="#why-do-we-need-a-specific-nullptr_t-type-different-from-void">Why do we need a specific <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type different from <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>?</a></li>
+</ul></li>
+<li><a href="#design-choices">Design choices</a>
+<ul>
+<li><a href="#a-null-pointer-constant-of-its-own-right">A null pointer constant of its own right</a></li>
+<li><a href="#a-complete-object-type-with-fixed-representation">A complete object type with fixed representation</a></li>
+<li><a href="#enable-nullptr-in-boolean-contexts">Enable <code class="sourceCode c"><span class="kw">nullptr</span></code> in “Boolean” contexts</a></li>
+</ul></li>
+<li><a href="#impact">Impact</a></li>
+<li><a href="#prior-art">Prior art</a></li>
+<li><a href="#proposed-wording">Proposed wording</a>
+<ul>
+<li><a href="#types-6.2.5">Types (6.2.5)</a></li>
+<li><a href="#boolean-type-6.3.1.2">Boolean type (6.3.1.2)</a></li>
+<li><a href="#pointers-6.3.2.3">Pointers (6.3.2.3)</a></li>
+<li><a href="#nullptr_t-6.3.2.4-new-clause"><code class="sourceCode c"><span class="dt">nullptr_t</span></code> (6.3.2.4, new clause)</a></li>
+<li><a href="#keywords-6.4.1">Keywords (6.4.1)</a></li>
+<li><a href="#predefined-constants-6.4.4.5">Predefined constants (6.4.4.5)</a></li>
+<li><a href="#cast-operators-6.5.5">Cast operators (6.5.5)</a></li>
+<li><a href="#equality-operators-6.5.9">Equality operators (6.5.9)</a></li>
+<li><a href="#contexts-that-interpret-an-expression-as-boolean">Contexts that interpret an expression as Boolean</a></li>
+<li><a href="#conditional-operator-6.5.15">Conditional operator (6.5.15)</a></li>
+<li><a href="#simple-assignment-6.5.16.1">Simple assignment (6.5.16.1)</a></li>
+<li><a href="#the-nullptr_t-type-7.19.x">The <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type (7.19.x)</a></li>
+<li><a href="#the-va_arg-macro-7.16.1.1">The <code class="sourceCode c">va_arg</code> macro (7.16.1.1)</a></li>
+<li><a href="#editorial-changes">Editorial changes</a></li>
+</ul></li>
+<li><a href="#questions-to-wg14">Questions to WG14</a></li>
+<li><a href="#acknowledgements">Acknowledgements</a></li>
+</ul>
+</nav>
+<table>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">org:</td>
+<td style="text-align: left;">ISO/IEC JCT1/SC22/WG14</td>
+<td>document:</td>
+<td>N3042</td>
+<td></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"></td>
+<td style="text-align: left;">… WG21 C and C++ liaison</td>
+<td></td>
+<td>P2312</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">target:</td>
+<td style="text-align: left;">IS 9899:2023</td>
+<td>version:</td>
+<td>8</td>
+<td></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">date:</td>
+<td style="text-align: left;">2022-07-22</td>
+<td>license:</td>
+<td><a href="https://creativecommons.org/licenses/by/4.0/" title="Distributed under a Creative Commons Attribution 4.0 International License">CC BY</a></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="abstract">Abstract</h3>
+<p>Since more than a decade C++ has already replaced the problematic definition of <code class="sourceCode c">NULL</code> which might be either of integer type or <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>. By using a new constant <code class="sourceCode c"><span class="kw">nullptr</span></code>, they achieve a more constrained specification, that allows much better diagnosis of user code. We propose to integrate this concept into C as far as possible by imposing only minimal ABI additions.</p>
+<h3 id="summary-of-changes">Summary of Changes</h3>
+<ul>
+<li><p><strong>v8</strong> wording changes as agreed in session on 2022-7-22</p></li>
+<li><p><strong>v7</strong> wording additions for simple assignment as agreed in session on 2022-7-21</p></li>
+<li><p><strong>v6</strong></p>
+<ul>
+<li>Add an explicit clause that treats conversions from and to <code class="sourceCode c"><span class="dt">nullptr_t</span></code></li>
+<li>Add a constraint that forbids casts from and to <code class="sourceCode c"><span class="dt">nullptr_t</span></code> in most cases.</li>
+<li>Suggest to the editors to introduce the term “default initialization”.</li>
+</ul></li>
+<li><p><strong>v5</strong> Add <code class="sourceCode c"><span class="dt">nullptr_t</span></code> to the scalar types. Now most of the desired features follow directly.</p></li>
+<li><p><strong>v4/R2:</strong> Build back for simplicity</p>
+<ul>
+<li>have <code class="sourceCode c"><span class="dt">nullptr_t</span></code> as a complete object type that has the same representation as <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> and <code class="sourceCode c"><span class="kw">char</span><span class="op">*</span></code> but only one value, <code class="sourceCode c"><span class="kw">nullptr</span></code></li>
+<li>for “Boolean” use cases of <code class="sourceCode c"><span class="dt">nullptr_t</span></code> only explicitly formulate conversion to <code class="sourceCode c"><span class="kw">bool</span></code> and test for equality</li>
+<li>add <code class="sourceCode c"><span class="dt">nullptr_t</span></code> to all places that do “Boolean” evaluation, they are currently formulated as comparison to <code class="sourceCode c"><span class="dv">0</span></code></li>
+<li>add <code class="sourceCode c"><span class="dt">nullptr_t</span></code> to the set of possible argument types of <code class="sourceCode c"><span class="op">...</span></code> lists, and make them compatible with <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> and <code class="sourceCode c"><span class="kw">char</span><span class="op">*</span></code> interpretation by <code class="sourceCode c">va_arg</code>.</li>
+</ul></li>
+<li><p><strong>v3/R1:</strong> integrating feedback from different sources</p>
+<ul>
+<li>make the type of <code class="sourceCode c"><span class="kw">nullptr</span></code> incomplete and incompletable</li>
+<li>move most of the type information to <code class="sourceCode c"><span class="kw">nullptr</span></code> itself and insist that it has as type that is different from any other standard type or type that could be defined by users code</li>
+<li>since <code class="sourceCode c"><span class="kw">nullptr</span></code> does not have a scalar type, add it explicitly to contexts such as or similar that so far only had scalars</li>
+<li>change the adjustment rules to result in <code class="sourceCode c"><span class="kw">int</span></code> of value <code class="sourceCode c"><span class="dv">0</span></code> and <code class="sourceCode c"><span class="dv">1</span></code> for contexts where logical evaluation still has that type</li>
+<li>insist that the first operand of a ternary or comma expression is evaluated</li>
+<li>insist that primary expressions such as () or <code class="sourceCode c"><span class="cf">_Generic</span></code> also are constant expressions or null pointer constants if the respective operands are</li>
+<li>add <code class="sourceCode c"><span class="kw">nullptr</span></code> to generic selection</li>
+<li>don’t allow <code class="sourceCode c"><span class="kw">nullptr</span></code> as the last parameter before a <code class="sourceCode c"><span class="op">...</span></code></li>
+<li>only allow <code class="sourceCode c"><span class="kw">nullptr</span></code> parameters without names</li>
+</ul></li>
+<li><p><strong>v2/R0:</strong> a complete rewrite as a proper language feature instead of a shallow macro solution</p></li>
+</ul>
+<h2 id="introduction">Introduction</h2>
+<p>The macro <code class="sourceCode c">NULL</code>, that goes back quite early, was meant to provide a tool to specify a null pointer constant such that it is easily visible and such that it makes the intention of the programmer to specifier a pointer value clear. Unfortunately, the definition as it is given in the standard misses that goal, because the constant that is hidden behind the macro can be of very different nature.</p>
+<p>A <em>null pointer constant</em> can be any integer constant of value 0 or such a constant converted to <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>. Thereby several types are possible for <code class="sourceCode c">NULL</code>. Commonly used are <code class="sourceCode c"><span class="dv">0</span></code> with <code class="sourceCode c"><span class="kw">int</span></code>, <code class="sourceCode c"><span class="dv">0</span><span class="bu">L</span></code> with <code class="sourceCode c"><span class="kw">long</span></code> and <code class="sourceCode c"><span class="op">(</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span></code> with <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>.</p>
+<ol>
+<li><p>This may lead to surprises when invoking a type-generic macro with an <code class="sourceCode c">NULL</code> argument.</p></li>
+<li><p>Conditional expressions such as <code class="sourceCode c"><span class="op">(</span><span class="kw">true</span> <span class="op">?</span> <span class="dv">0</span> <span class="op">:</span> NULL<span class="op">)</span></code> and <code class="sourceCode c"><span class="op">(</span><span class="kw">true</span> <span class="op">?</span>  <span class="dv">1</span> <span class="op">:</span> NULL<span class="op">)</span></code> have different status depending how <code class="sourceCode c">NULL</code> is defined. Whereas the first is always defined, the second is a constraint violation if <code class="sourceCode c">NULL</code> has type <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>, and defined otherwise. In particular, the second happens to work in C++ but most of the times not in C.</p></li>
+<li><p>A <code class="sourceCode c">NULL</code> argument that is passed as a sentinel to a <code class="sourceCode c"><span class="op">...</span></code> function that expects a pointer can have severe consequences. On many architectures nowadays <code class="sourceCode c"><span class="kw">int</span></code> and <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> have different sizes, and so if <code class="sourceCode c">NULL</code> is just <code class="sourceCode c"><span class="dv">0</span></code>, a wrongly sized argument is passed to the function.</p></li>
+<li><p>In particular, C++ can’t have <code class="sourceCode c">NULL</code> as <code class="sourceCode c"><span class="op">(</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span></code> because <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> does not implicitly convert to other pointer types. Thus it is usually an integer constant of value zero. On the C side (e.g by <code class="sourceCode c">printf</code>) such a passed integer constant is then interpreted as <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> or <code class="sourceCode c"><span class="kw">char</span><span class="op">*</span></code>; such a re-interpretation has undefined behavior.</p></li>
+</ol>
+<h2 id="rationale">Rationale</h2>
+<h3 id="why-do-we-need-a-specific-nullptr-constant">Why do we need a specific <code class="sourceCode c"><span class="kw">nullptr</span></code> constant?</h3>
+<p>Null pointer constants in C are a feature that is somewhat defined orthogonal to the type system. They are based on the concept of “integer constant expressions” and may in fact have any integer type (even <code class="sourceCode c"><span class="kw">bool</span></code>, enumerations, character constants or expressions such as <code class="sourceCode c">x<span class="op">-</span>x</code> are possible) as long as the value can be determined at translation time <em>and</em> happens to be zero. On top of that ambiguity concerning integer types, it is even permitted to use an explicit cast to <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> and to still obtain null pointer constant.</p>
+<p>The standard macro <code class="sourceCode c">NULL</code> inherits from these confusing definitions and has no standardized type and no standardized behavior in contexts that are different from simple conversion to a pointer type. For example a use of <code class="sourceCode c">NULL</code> as an argument to a <code class="sourceCode c"><span class="op">...</span></code> function is not guaranteed to work.</p>
+<ul>
+<li><p>If <code class="sourceCode c">NULL</code> has integer type but different alignment or size than <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> any access with <code class="sourceCode c">va_arg</code> that interprets such an argument could crash the program.</p></li>
+<li><p>If <code class="sourceCode c">NULL</code> has integer type and null pointers are not represented as all-bit zero, such a transferred integer cannot be reinterpreted as a pointer value that would be a null pointer.</p></li>
+<li><p>If <code class="sourceCode c">NULL</code> has integer type (and not <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>) and if even the integer type, say <code class="sourceCode c"><span class="kw">long</span></code>, has the correct size and alignment, an interpretation of that past-in integer in the form</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a><span class="kw">char</span><span class="op">*</span> a <span class="op">=</span> va_arg<span class="op">(</span>ap<span class="op">,</span> <span class="kw">char</span><span class="op">*);</span></span></code></pre></div>
+<p>has undefined behavior. As an exception <code class="sourceCode c">va_arg</code> allows the reinterpretation between <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> and <code class="sourceCode c"><span class="kw">char</span><span class="op">*</span></code>, for example, but not from integer type to pointer type.</p></li>
+</ul>
+<p>Also, it is not easy to detect if an argument to a function or even macro is a null pointer constant or only an arbitrary null pointer value. In C, compile time code distinction is usually done in the preprocessor or by <code class="sourceCode c"><span class="cf">_Generic</span></code>. The preprocessor doesn’t work with <code class="sourceCode c">NULL</code> because it might not even be a preprocessor constant. <code class="sourceCode c"><span class="cf">_Generic</span></code> is difficult to use because it is based on types and not values, although there are ways to abuse properties of conditional expressions, integer constant expressions, null pointer constants and <code class="sourceCode c"><span class="cf">_Generic</span></code> to do so.</p>
+<p>Another reason to strengthen the definition of null pointer constants in C is the common confusion between a null pointer and a pointer that points to the zero address in the OS, as is suggested by using integer literals such as <code class="sourceCode c"><span class="dv">0</span></code> to express null pointer constants. Also, the fact that on some architectures a null pointer is not necessarily represented with a all-zero bit-pattern always needs special attention when teaching C and is quite surprising for beginners. If it were that these sophistic distinctions would be necessary for the expressiveness of the language, that could perhaps be acceptable, but here it clearly is a random burden that is imposed on generations of teachers and students that is only rooted in history and has no reason d’être as of today; all other programming languages that have concepts similar to pointers in C do quite well without this ambiguity between numbers and pointers.</p>
+<p>The idea of <code class="sourceCode c"><span class="kw">nullptr</span></code> is to end this ambiguity and to provide a keyword with a value and a portable type that can be used anywhere where a null pointer constant is needed.</p>
+<p>The <code class="sourceCode c"><span class="kw">nullptr</span></code> feature presented in this paper has the following properties.</p>
+<ul>
+<li>It has a complete object type.</li>
+<li>It does not have scalar type, so it is forbidden in arithmetic.</li>
+<li>It converts to any pointer type.</li>
+<li>It converts to <code class="sourceCode c"><span class="kw">bool</span></code> by always evaluating to <code class="sourceCode c"><span class="kw">false</span></code>.</li>
+<li>In memory, <code class="sourceCode c"><span class="kw">nullptr</span></code> is represented with the same bit-pattern as a null pointer constant of type <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>.</li>
+<li><code class="sourceCode c"><span class="kw">nullptr</span></code> is permitted in all “Boolean” contexts such as <code class="sourceCode c"><span class="op">&amp;&amp;</span></code> operators or <code class="sourceCode c"><span class="cf">if</span></code> statements.</li>
+<li><code class="sourceCode c"><span class="kw">nullptr</span></code> is permitted as argument to <code class="sourceCode c"><span class="op">...</span></code>, as long as the function interprets it as pointer to <code class="sourceCode c"><span class="kw">void</span></code> or character type.</li>
+</ul>
+<p>The aim is that this feature has exactly the same behavior as the corresponding feature in C++.</p>
+<h3 id="why-do-we-need-a-specific-nullptr_t-type-different-from-void">Why do we need a specific <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type different from <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>?</h3>
+<p>The secondary feature proposed in this paper is the the type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> with the intent to allow better diagnostics for functions that possibly receive a null pointer argument and to potentially optimize the case where a null pointer constant is received.</p>
+<p>Consider a function <code class="sourceCode c">func</code> that receives a pointer parameter that can either be valid or a null pointer to indicate a default choice.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a><span class="co">// header &quot;func.h&quot;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true"></a><span class="kw">void</span> func_general<span class="op">(</span>toto<span class="op">*);</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true"></a><span class="co">// define a default action</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true"></a><span class="co">// no parameter name, parameter is never read</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true"></a><span class="kw">inline</span> <span class="kw">void</span> func_default<span class="op">(</span><span class="dt">nullptr_t</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true"></a>  <span class="op">...</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true"></a><span class="op">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true"></a><span class="pp">#define func(P)                     \</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true"></a><span class="pp">   _Generic((P),                    \</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true"></a><span class="pp">         nullptr_t: func_default,   \</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true"></a><span class="pp">         default:   func_general)(P)</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true"></a><span class="co">// one translation unit</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&quot;func.h&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true"></a><span class="co">// emit an external definition</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true"></a><span class="kw">extern</span> <span class="kw">void</span> func_default<span class="op">(</span><span class="dt">nullptr_t</span><span class="op">);</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true"></a><span class="co">// define the general action</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true"></a><span class="kw">void</span> func_general<span class="op">(</span>toto<span class="op">*</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true"></a>  <span class="co">// p may still have value null</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true"></a>  <span class="cf">if</span> <span class="op">(!</span>p<span class="op">)</span> func_default<span class="op">(</span><span class="kw">nullptr</span><span class="op">);</span>    <span class="co">// may only be called with nullptr</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true"></a>  <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true"></a>    <span class="op">...</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true"></a>  <span class="op">}</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true"></a><span class="op">}</span></span></code></pre></div>
+<p>Here, a function <code class="sourceCode c">func_default</code> is defined that receives a <code class="sourceCode c"><span class="kw">nullptr</span></code>. The function needs no access to the parameter, since that parameter can only hold one specific value. A type-generic macro <code class="sourceCode c">func</code> then chooses this function or the general function <code class="sourceCode c">func_general</code>. The translation unit that defines <code class="sourceCode c">func_general</code> may then emit an external definition of <code class="sourceCode c">func_default</code> and also use it within the definition for the case that <code class="sourceCode c">func_general</code> receives a parameter value that is null without being recognized as such at translation time of the call.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&quot;func.h&quot;</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true"></a><span class="op">...</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true"></a>   func<span class="op">(</span><span class="dv">0</span><span class="op">);</span>        <span class="co">// ok, but uses the general function and may issue a diagnostic</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true"></a>   func<span class="op">((</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span><span class="op">);</span> <span class="co">// ok, but uses the general function, no diagnostic</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true"></a>   func<span class="op">(</span>NULL<span class="op">);</span>     <span class="co">// ok, but uses the general function, diagnostic or not</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true"></a>   func<span class="op">((</span>toto<span class="op">*)</span><span class="dv">0</span><span class="op">);</span> <span class="co">// ok, but uses the general function, no diagnostic</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true"></a>   func<span class="op">(</span><span class="kw">nullptr</span><span class="op">);</span>  <span class="co">// uses default action directly</span></span></code></pre></div>
+<p>The use of the macro with a null pointer constant of integer type then uses the general function and sets the parameter to null; implementations that chose to diagnose the use of null pointer constants of integer type may do so for this call.</p>
+<p>In contrast to that, a call that uses <code class="sourceCode c"><span class="kw">nullptr</span></code> as an argument directly resolves to <code class="sourceCode c">func_default</code>, may or may not inline the corresponding action, and will not trigger such a diagnosis.</p>
+<p>The emission of a diagnosis can be forced by restricting the admissible type as shown in the definition of <code class="sourceCode c">func_strict</code>.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true"></a><span class="pp">#define func_strict(P)              \</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true"></a><span class="pp">   _Generic((P),                    \</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true"></a><span class="pp">         nullptr_t: func_default,   \</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true"></a><span class="pp">         toto*:     func_general)(P)</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true"></a><span class="op">...</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true"></a>   func_strict<span class="op">(</span><span class="dv">0</span><span class="op">);</span>        <span class="co">// invalid, int argument is not a valid choice, constraint violation</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true"></a>   func_strict<span class="op">((</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span><span class="op">);</span> <span class="co">// invalid, void* argument is not a valid choice, constraint violation</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true"></a>   func_strict<span class="op">(</span>NULL<span class="op">);</span>     <span class="co">// invalid, void* or integer argument is not a valid choice, constraint violation</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true"></a>   func_strict<span class="op">((</span>toto<span class="op">*)</span><span class="dv">0</span><span class="op">);</span> <span class="co">// ok, but uses the general function, no diagnostic</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true"></a>   func_strict<span class="op">(</span><span class="kw">nullptr</span><span class="op">);</span>  <span class="co">// uses default action directly</span></span></code></pre></div>
+<h2 id="design-choices">Design choices</h2>
+<p>After WG14 refused a specification for a simple macro with value <code class="sourceCode c"><span class="op">(</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span></code>, as well as a sophisticated version with an incomplete type and with a rewriting approach for many contexts, this new version tries a middle ground.</p>
+<h3 id="a-null-pointer-constant-of-its-own-right">A null pointer constant of its own right</h3>
+<p>The principal property of <code class="sourceCode c"><span class="kw">nullptr</span></code> is that it is a null pointer constant. But it is one of its own right, not deduced from a property of any other feature. From the existing text it then basically follows that it can be used everywhere where a pointer is to be initialized or assigned to a null pointer value.</p>
+<p>It has a type that is different from all other null pointer constants, in particular the type is neither an integer nor a pointer type. So in any context where type plays a role, it cannot be confused with an expression with a type of any of these.</p>
+<h3 id="a-complete-object-type-with-fixed-representation">A complete object type with fixed representation</h3>
+<p>Other than in previous versions of this paper, we now have <code class="sourceCode c"><span class="dt">nullptr_t</span></code> as a new scalar type, one that is different from all pointer and all arithmetic types.</p>
+<p>The type of <code class="sourceCode c"><span class="kw">nullptr</span></code> is a complete object type that not an array, or arithmetic and has exactly one value, namely <code class="sourceCode c"><span class="kw">nullptr</span></code>. For C, this directly disallows the use of the type (and thus <code class="sourceCode c"><span class="kw">nullptr</span></code>) in most other expressions, in particular in arithmetic.</p>
+<p>Because we want to be able to use this type also for parameters, as members of unions (for type punning), and as argument to <code class="sourceCode c"><span class="op">...</span></code> functions, we have to prescribe a representation that makes it admissible to these sorts of contexts. The only possible choice for this is to have the same alignment, size and representation as <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> and to force the representation of <code class="sourceCode c"><span class="kw">nullptr</span></code> to the same bit-pattern as null pointers of type <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>.</p>
+<p>To enable the use for <code class="sourceCode c"><span class="op">...</span></code> functions, we then just add another exception for <code class="sourceCode c">va_arg</code>, namely that the behavior is well-defined if an object of <code class="sourceCode c"><span class="dt">nullptr_t</span></code> is re-interpreted as <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> or <code class="sourceCode c"><span class="kw">char</span><span class="op">*</span></code>, for example. Because of our choice for the representation, this is easily possible.</p>
+<h3 id="enable-nullptr-in-boolean-contexts">Enable <code class="sourceCode c"><span class="kw">nullptr</span></code> in “Boolean” contexts</h3>
+<p>Pointers are often used in contexts that have a “Boolean” interpretation, such as <code class="sourceCode c"><span class="cf">if</span></code> statements, ternary expressions or conversions to <code class="sourceCode c"><span class="kw">bool</span></code>. In C++ this is also possible for <code class="sourceCode c"><span class="kw">nullptr</span></code> so we enable this feature for all contexts that have such a “Boolean” interpretation. Note that for C++ this is a bit easier, because there these context are all handled by implicit conversion to <code class="sourceCode c"><span class="kw">bool</span></code>.</p>
+<p>Here, for C, we have to do a little bit more work and have to define conversion to <code class="sourceCode c"><span class="kw">bool</span></code> and equality comparison separately.</p>
+<h2 id="impact">Impact</h2>
+<p>Since <code class="sourceCode c"><span class="kw">nullptr</span></code> and <code class="sourceCode c"><span class="dt">nullptr_t</span></code> are new features, there is no impact for existing code that does not use them.</p>
+<p>Code that starts using <code class="sourceCode c"><span class="dt">nullptr_t</span></code> for interfaces (either as function parameters or via <code class="sourceCode c"><span class="cf">_Generic</span></code>) will not encounter direct incompatibilities with existing code, because the type didn’t exist before.</p>
+<p>Using <code class="sourceCode c"><span class="kw">nullptr</span></code> itself for the assignment or initialization of variables or as arguments to pointer parameters will work seamlessly; <code class="sourceCode c"><span class="kw">nullptr</span></code> converts implicitly to any pointer type, much as <code class="sourceCode c">NULL</code> or any of the current null pointer constants. Eventually, changing the use of <code class="sourceCode c">NULL</code> for <code class="sourceCode c"><span class="kw">nullptr</span></code> might detect the misuse of that feature in a context where an integer is expected. This is intended and considered to be an improvement.</p>
+<p>Using <code class="sourceCode c"><span class="kw">nullptr</span></code> for calls into macros that implement type-generic interfaces may encounter incompatibilities. In particular, for interfaces that perform type inspection by means of <code class="sourceCode c"><span class="cf">_Generic</span></code> the new type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> of the constant may not fit any of the choices. But, in general this means that the code was not robust when presented with null pointer constants of varying type (integer type, <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>) before. In general these problems will result in constraint violations, and thereby give the opportunity to improve the code receiving the <code class="sourceCode c"><span class="kw">nullptr</span></code> argument with respect to these aspects. This is consistent with the Charter, which states that if there are to be changes, they should strive to be diagnosed rather than perform silent changes in behavior.</p>
+<p>Using <code class="sourceCode c"><span class="kw">nullptr</span></code> for calls into functions with <code class="sourceCode c"><span class="op">...</span></code> will improve situations that had been undefined before. In particular, <code class="sourceCode c"><span class="kw">nullptr</span></code> can be used as a sentinel for a list of pointers to <code class="sourceCode c"><span class="kw">void</span></code> or character type, which is not portable when using <code class="sourceCode c">NULL</code>.</p>
+<p>C library implementors would have to add the type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> to their <em>&lt;stddef.h&gt;</em> header. This can be achieved similar to the following, where <code class="sourceCode c"><span class="dv">2023</span><span class="er">MML</span></code> is the <code class="sourceCode c">__STDC_VERSION__</code> number chosen for C23.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true"></a><span class="pp">#if __STDC_VERSION__ &gt;= 2023MML</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true"></a><span class="kw">typedef</span> <span class="kw">typeof</span><span class="op">(</span><span class="kw">nullptr</span><span class="op">)</span> <span class="dt">nullptr_t</span><span class="op">;</span> <span class="co">// C23 supports typeof and nullptr</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true"></a><span class="pp"># define __STDC_VERSION_STDDEF_H__ 2023MML</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true"></a><span class="pp">#endif</span></span></code></pre></div>
+<h2 id="prior-art">Prior art</h2>
+<p>The concept to present a null pointer constant as a keyword that is tightly integrated into the language as is proposed here is present in most other programming languages that have the concept of pointers, for example Pascal, Lisp, Smalltalk, Ruby, Objective-C, Lua, Scala, or Go, often with other spellings such as <code class="sourceCode commonlisp"><span class="kw">nil</span></code>, <code class="sourceCode pascal"><span class="kw">NIL</span></code>, <code class="sourceCode python"><span class="va">None</span></code>, <code class="sourceCode java"><span class="kw">null</span></code> or <code class="sourceCode ruby"><span class="dt">Null</span></code>. The fact that C still does express this concept with other language features is a rare exception in this picture and only a historic artifact and not a necessity.</p>
+<p>The <code class="sourceCode c"><span class="kw">nullptr</span></code> feature together with <code class="sourceCode c"><span class="dt">nullptr_t</span></code> is present in C++ since C++11 and has extensive implementation and application experience in that framework. This feature is also given under a different name in the Plan 9 C compiler, named <code class="sourceCode commonlisp"><span class="kw">nil</span></code>. It approximates some of the features provided below, but not all of them.</p>
+<p>C users often shift between using literal <code class="sourceCode c"><span class="dv">0</span></code> versus <code class="sourceCode c"><span class="op">(</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span></code> for a library-deployed, macro-based definition. There are various trade-offs for doing this (discussed as part of the design decisions above) that can make this have undesirable behaviors and qualities. Recently, users have tried to move <a href="https://gitlab.com/graphviz/graphviz/-/commit/f1a7592d324b5e6fa70c5dc3a646017f9454613b">away from their own personal definitions</a> for portability and correctness reasons.</p>
+<h2 id="proposed-wording">Proposed wording</h2>
+<p>Changes are proposed against the wording in C23 draft n2912. Green and underlined text is new text.</p>
+<h3 id="types-6.2.5">Types (6.2.5)</h3>
+<p>The <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type is added to the set of scalar types and thereby inherits all the properties that C has for these</p>
+<blockquote>
+<p>24 Arithmetic types<ins>,</ins><del> and</del> pointer types <ins>and the <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type</ins> are collectively called scalar types. Array and structure types are collectively called aggregate types.<sup>51)</sup></p>
+</blockquote>
+<h3 id="boolean-type-6.3.1.2">Boolean type (6.3.1.2)</h3>
+<p>Modify p1</p>
+<blockquote>
+<p>When any scalar value is converted to <code class="sourceCode c"><span class="kw">bool</span></code>, the result is <code class="sourceCode c"><span class="kw">false</span></code> if the value is a zero (for arithmetic types)<ins>,</ins><del> or</del> null (for pointer types)<ins> or the scalar has type <code class="sourceCode c"><span class="dt">nullptr_t</span></code></ins>; otherwise, the result is <code class="sourceCode c"><span class="kw">true</span></code>.</p>
+</blockquote>
+<h3 id="pointers-6.3.2.3">Pointers (6.3.2.3)</h3>
+<p>Change p3</p>
+<blockquote>
+<p>3 An integer constant expression with the value <code class="sourceCode c"><span class="dv">0</span></code>, <del>or</del> such an expression cast to type <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>, <ins>or the predefined constant <code class="sourceCode c"><span class="kw">nullptr</span></code>,</ins> <del>is called</del><ins>are</ins> a <em>null pointer constant</em>.<sup>68)</sup> If a null pointer constant <ins>or a value of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> (which is necessarily the value <code class="sourceCode c"><span class="kw">nullptr</span></code>)</ins> is converted to a pointer type, the resulting pointer, called a <em>null pointer</em>, is guaranteed to compare unequal to a pointer to any object or function.</p>
+</blockquote>
+<h3 id="nullptr_t-6.3.2.4-new-clause"><code class="sourceCode c"><span class="dt">nullptr_t</span></code> (6.3.2.4, new clause)</h3>
+<blockquote>
+<p><ins>1 The type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> may be converted to <code class="sourceCode c"><span class="kw">bool</span></code> or to a pointer type. The result is <code class="sourceCode c"><span class="kw">false</span></code> or a null pointer value, respectively.</ins></p>
+</blockquote>
+<blockquote>
+<p><ins>2 The type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> may be converted to itself.</ins></p>
+</blockquote>
+<h3 id="keywords-6.4.1">Keywords (6.4.1)</h3>
+<p>Add <code class="sourceCode c"><span class="kw">nullptr</span></code> to the lists in p1.</p>
+<h3 id="predefined-constants-6.4.4.5">Predefined constants (6.4.4.5)</h3>
+<p>Add <code class="sourceCode c"><span class="kw">nullptr</span></code> to the list of predefined constants and a new paragraph to the description</p>
+<blockquote>
+<ins>
+<p>The keyword <code class="sourceCode c"><span class="kw">nullptr</span></code> represents a null pointer constant. Details of its type are described in 7.19.x.</p>
+</blockquote>
+<h3 id="cast-operators-6.5.5">Cast operators (6.5.5)</h3>
+<blockquote>
+<p>4 A pointer type shall not be converted to any floating type. A floating type shall not be converted to any pointer type. <ins>The type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> shall not be converted to any type other than <code class="sourceCode c"><span class="kw">bool</span></code> or a pointer type. No type other than <code class="sourceCode c"><span class="dt">nullptr_t</span></code> shall be converted to <code class="sourceCode c"><span class="dt">nullptr_t</span></code>.</ins></p>
+</blockquote>
+<h3 id="equality-operators-6.5.9">Equality operators (6.5.9)</h3>
+<p>Add two items to the list of constraints in p2</p>
+<blockquote>
+<ins>
+<p>– both operands have type <code class="sourceCode c"><span class="dt">nullptr_t</span></code>;</p>
+</blockquote>
+<blockquote>
+<ins>
+<p>– one operand has type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> and the other is a null pointer constant;</p>
+</blockquote>
+<p>Add to the end of p5</p>
+<blockquote>
+<ins>
+<p>If both operands have type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> or one operand has type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> and the other is a null pointer constant, they compare equal.</p>
+</blockquote>
+<p>By that a comparison of values of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> to <code class="sourceCode c"><span class="dv">0</span></code> (similar as for pointers seen as null pointer constant) is always well defined.</p>
+<h3 id="contexts-that-interpret-an-expression-as-boolean">Contexts that interpret an expression as Boolean</h3>
+<p>To be easily compatible to current uses of <code class="sourceCode c">NULL</code> , <code class="sourceCode c"><span class="dt">nullptr_t</span></code> can be used in all contexts that traditionally allow to interpret a pointer as a Boolean value. The particular result for using <code class="sourceCode c"><span class="kw">nullptr</span></code> or an lvalue of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> (that might not be a null pointer constant but just a null pointer) can then be deduced from the equality operators much as this is done for pointer types.</p>
+<p>Other than in previous versions of this paper, the addition of <code class="sourceCode c"><span class="dt">nullptr_t</span></code> to the scalars avoids us to make any changes from the text, here.</p>
+<h3 id="conditional-operator-6.5.15">Conditional operator (6.5.15)</h3>
+<p>With this version, we don’t have to change how <code class="sourceCode c"><span class="dt">nullptr_t</span></code> behaves as the controlling expression of a conditional operand. Nevertheless we have to describe the behavior for the case that it appears in second and/or third position.</p>
+<blockquote>
+<p>3 One of the following shall hold for the second and third operands:<ins><sup>FNT1)</sup></ins></p>
+</blockquote>
+<blockquote>
+<ul>
+<li>both operands have arithmetic type;</li>
+<li>both operands have the same structure or union type;</li>
+<li>both operands have void type</li>
+<li>both operands are pointers to qualified or unqualified versions of compatible types;</li>
+<li><ins>
+both operands have <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type
+</ins></li>
+<li>one operand is a pointer and the other is a null pointer constant<ins> or has type <code class="sourceCode c"><span class="dt">nullptr_t</span></code></ins>; or</li>
+<li>one operand is a pointer to an object type and the other is a pointer to a qualified or unqualified version of void.</li>
+</ul>
+</blockquote>
+<blockquote>
+<ins>
+<sup>FNT1)</sup> If a second or third operand of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> is used that is not a null pointer constant and the other operand is not a pointer or does not have itself <code class="sourceCode c"><span class="dt">nullptr_t</span></code>, a constraint is violated even if that other operand is a null pointer constant such as <code class="sourceCode c"><span class="dv">0</span></code>.
+</ins>
+</blockquote>
+<blockquote>
+<p>…</p>
+</blockquote>
+<blockquote>
+<p>7 If both the second and third operands are pointers<del> or one is a null pointer constant and the other is a pointer</del>, the result type is a pointer to a type qualified with all the type qualifiers of the types referenced by both operands<del>.</del> <ins>; if one is a null pointer constant (other than a pointer) or has type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> and the other is a pointer, the result type is the pointer type; if both the second and third operands have <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type, the result also has that type. </ins> Furthermore, if both operands are pointers to compatible types or to differently qualified versions of compatible types, the result type is a pointer to an appropriately qualified version of the composite type; if one operand is a null pointer constant, the result has the type of the other operand; otherwise, one operand is a pointer to void or a qualified version of void, in which case the result type is a pointer to an appropriately qualified version of void.</p>
+</blockquote>
+<h3 id="simple-assignment-6.5.16.1">Simple assignment (6.5.16.1)</h3>
+<p>Add an item to the list of permissible types and a footnote in the constraints p1:</p>
+<blockquote>
+<ins>
+– the left operand has an atomic, qualified, or unqualified version of the <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type and the type of the right is <code class="sourceCode c"><span class="dt">nullptr_t</span></code>;<sup>FNT2)</sup>
+</ins>
+</blockquote>
+<blockquote>
+<ins>
+– the left operand is an atomic, qualified, or unqualified pointer, and the type of the right is <code class="sourceCode c"><span class="dt">nullptr_t</span></code>;
+</ins>
+</blockquote>
+<blockquote>
+<ins>
+– the left operand is an atomic, qualified, or unqualified <code class="sourceCode c"><span class="kw">bool</span></code>, and the type of the right is <code class="sourceCode c"><span class="dt">nullptr_t</span></code>;
+</ins>
+</blockquote>
+<blockquote>
+<ins>
+<sup>FNT2)</sup> The assignment of an object of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> with a value of another type, even if the value is a null pointer constant, is a constraint violation.
+</ins>
+</blockquote>
+<h3 id="the-nullptr_t-type-7.19.x">The <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type (7.19.x)</h3>
+<p>Add to 7.19 p2</p>
+<blockquote>
+<ins>
+<div class="sourceCode" id="cb7"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true"></a><span class="dt">nullptr_t</span></span></code></pre></div>
+</blockquote>
+<blockquote>
+<ins>
+<p>which is the type of the <code class="sourceCode c"><span class="kw">nullptr</span></code> predefined constant, see below;</p>
+</blockquote>
+<p>And add a new clause 7.19.x to the <em>&lt;stddef.h&gt;</em> header</p>
+<blockquote>
+<ins>
+<p><strong>7.19.x The <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type</strong></p>
+</blockquote>
+<blockquote>
+<ins>
+<p><strong>Description</strong></p>
+</blockquote>
+<!-- values -->
+<blockquote>
+<ins>
+<p>1 The <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type is the type of the <code class="sourceCode c"><span class="kw">nullptr</span></code> predefined constant. It has only a very limited use in contexts where this type is needed to distinguish <code class="sourceCode c"><span class="kw">nullptr</span></code> from other expression types. It is an unqualified complete scalar type that is different from all pointer or arithmetic types and is neither an atomic or array type and has exactly one value, <code class="sourceCode c"><span class="kw">nullptr</span></code>. Default initialization of an object of this type is equivalent to an initialization by <code class="sourceCode c"><span class="kw">nullptr</span></code>.</p>
+</blockquote>
+<!-- representation -->
+<blockquote>
+<ins>
+<p>2 The size and alignment of <code class="sourceCode c"><span class="dt">nullptr_t</span></code> is the same as for a pointer to character type. An object representation of the value <code class="sourceCode c"><span class="kw">nullptr</span></code> is the same as the object representation of a null pointer value of type <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code>. An lvalue conversion of an object of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> with such an object representation has the value <code class="sourceCode c"><span class="kw">nullptr</span></code>; if the object representation is different, the behavior is undefined.<sup>FNT0)</sup></p>
+</blockquote>
+<blockquote>
+<ins>
+<p><sup>FNT0)</sup> Thus, during the whole program execution an object of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> evaluates to the assumed value <code class="sourceCode c"><span class="kw">nullptr</span></code>.</p>
+</blockquote>
+<!-- valid contexts -->
+<blockquote>
+<ins>
+<p>3 <strong>NOTE</strong> Because it is considered to be a scalar type, <code class="sourceCode c"><span class="dt">nullptr_t</span></code> may appear in many context where <code class="sourceCode c"><span class="op">(</span><span class="kw">void</span><span class="op">*)</span><span class="dv">0</span></code> would be valid, for example,</p>
+</blockquote>
+<blockquote>
+<ins>
+<ul>
+<li>as the operand of <code class="sourceCode c"><span class="kw">alignas</span></code>, <code class="sourceCode c"><span class="kw">sizeof</span></code> or typeof operators,</li>
+<li>as the operand of an implicit or explicit conversion to a pointer type,</li>
+<li>as the assignment expression in an assignment or initialization of an object of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code>,</li>
+<li>as an argument to a parameter of type <code class="sourceCode c"><span class="dt">nullptr_t</span></code> or in a variable argument list,</li>
+<li>as a <code class="sourceCode c"><span class="kw">void</span></code> expression,</li>
+<li>as the operand of an implicit or explicit conversion to <code class="sourceCode c"><span class="kw">bool</span></code>,</li>
+<li>as an operand of a <code class="sourceCode c"><span class="cf">_Generic</span></code> primary expression,</li>
+<li>as an operand of the <code class="sourceCode c"><span class="op">!</span></code>, <code class="sourceCode c"><span class="op">&amp;&amp;</span></code>, <code class="sourceCode c"><span class="op">||</span></code> or conditional operators, or</li>
+<li>as the controlling expression of an <code class="sourceCode c"><span class="cf">if</span></code> or iteration statement.</li>
+</ul>
+</blockquote>
+<h3 id="the-va_arg-macro-7.16.1.1">The <code class="sourceCode c">va_arg</code> macro (7.16.1.1)</h3>
+<p>Modify the end of p2</p>
+<blockquote>
+<p>If <em>type</em> is not compatible with the type of the actual next argument (as promoted according to the default argument promotions), the behavior is undefined, except for the following cases:</p>
+</blockquote>
+<blockquote>
+<blockquote>
+<p>– both types are pointers to qualified or unqualified versions of compatible types;</p>
+</blockquote>
+</blockquote>
+<blockquote>
+<blockquote>
+<p>– one type is a signed integer type, the other type is the corresponding unsigned integer type, and the value is representable in both types;</p>
+</blockquote>
+</blockquote>
+<blockquote>
+<blockquote>
+<p>– one type is pointer to qualified or unqualified <code class="sourceCode c"><span class="kw">void</span></code> and the other is a pointer to a qualified or unqualified character type<del>.</del>;</p>
+</blockquote>
+</blockquote>
+<blockquote>
+<blockquote>
+<ins>
+<p>– the type of the next argument is <code class="sourceCode c"><span class="dt">nullptr_t</span></code> and <em>type</em> is a pointer type that has the same representation and alignment requirements as a pointer to a character type.<sup>FNT1)</sup></p>
+</blockquote>
+</blockquote>
+<blockquote>
+<blockquote>
+<ins>
+<p><sup>FNT1)</sup> Such types are in particular pointers to qualified or unqualified versions of <code class="sourceCode c"><span class="kw">void</span></code>.</p>
+</blockquote>
+</blockquote>
+<p><strong>Note to the editors:</strong> The readability of 7.16.1.1 could gain by renaming the macro parameter <em>type</em> to something like <em>T</em>.</p>
+<h3 id="editorial-changes">Editorial changes</h3>
+<p>There are several other editorial changes that can be done in that context. We leave them discretion of the editors.</p>
+<h4 id="default-initialization">Default initialization</h4>
+<p>Although this term is used in the C standard (for atomics) and found in the index, this term is actually never defined explicitly. This could be changed non-normatively by changing phrase of 6.7.9 p11 that introduces the item list</p>
+<blockquote>
+<p>If an object that has static or thread storage duration is not initialized explicitly, or is initialized with an empty initializer, then<ins> <em>default initialization</em> is applied</ins>:</p>
+</blockquote>
+<h4 id="usage-of-null">Usage of <code class="sourceCode c">NULL</code></h4>
+<p>There are several usages of the macro <code class="sourceCode c">NULL</code> throughout the library clause of the form <code class="sourceCode c"><span class="op">(</span><span class="kw">char</span><span class="op">**)</span>NULL</code> which would probably better be replaced by <code class="sourceCode c"><span class="kw">nullptr</span></code> without cast.</p>
+<h4 id="forward-references">Forward references</h4>
+<p>For several of the places where this document proposes changes, forward references to 7.19.x either directly in the text or as separate paragraph at the end of the respective clause could be needed.</p>
+<h4 id="undefined-behavior-annex-j">Undefined behavior – Annex J</h4>
+<ul>
+<li><p>Using a null pointer constant in form of an integer expression as argument to a <code class="sourceCode c"><span class="op">...</span></code> function and then interpret it as <code class="sourceCode c"><span class="kw">void</span><span class="op">*</span></code> or <code class="sourceCode c"><span class="kw">char</span><span class="op">*</span></code> is undefined behavior. This could be added to Annex J as entry for <code class="sourceCode c">va_arg</code> (7.16.1.1)</p></li>
+<li><p>A specific entry for <code class="sourceCode c"><span class="dt">nullptr_t</span></code> (7.19.x) could be made that stipulates that arbitrarily changing or copying from a non-null pointer value into a <code class="sourceCode c"><span class="dt">nullptr_t</span></code> object and then reading that object has UB.</p></li>
+</ul>
+<h4 id="feature-test-macro">Feature test macro</h4>
+<p>This paper proposes a change to the <em>&lt;stddef.h&gt;</em> header, so this header now needs a test macro <code class="sourceCode c">__STDC_VERSION_STDDEF_H__</code>. During the transition to C23, this would help users to determine if the <code class="sourceCode c"><span class="dt">nullptr_t</span></code> type is available for their current version of the C library:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true"></a><span class="pp">#include </span><span class="im">&lt;stddef.h&gt;</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true"></a><span class="pp">#if __STDC_VERSION_STDDEF_H__ &gt; 0</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true"></a><span class="co">/* all is fine, we should also have have nullptr */</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true"></a><span class="pp">#elif __STDC_VERSION__ &gt; 202300L</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true"></a><span class="kw">typedef</span> <span class="kw">typeof</span><span class="op">(</span><span class="kw">nullptr</span><span class="op">)</span> <span class="dt">nullptr_t</span><span class="op">;</span> <span class="co">// C23 supports typeof and nullptr</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true"></a><span class="pp">#else</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true"></a><span class="pp"># error &quot;nullptr_t is missing&quot;</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true"></a><span class="pp">#endif</span></span></code></pre></div>
+<h2 id="questions-to-wg14">Questions to WG14</h2>
+<blockquote>
+<p>Does WG14 want to integrate the changes of N3042 into C23?</p>
+</blockquote>
+<h2 id="acknowledgements">Acknowledgements</h2>
+<p>Many thanks to Joseph Myers for the very detailed review and feedback.</p>
+</body>
+</html>

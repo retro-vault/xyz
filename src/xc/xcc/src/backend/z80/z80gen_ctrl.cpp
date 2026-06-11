@@ -89,6 +89,8 @@ void z80_gen::gen_call(const icode &ic) {
     direct_call_return_pending_ = false;
     direct_call_return_value_ = operand{};
     auto &conv = get_abi_convention(ic.callee_abi);
+    const bool large_indirect_result =
+        !ic.result.is_none() && op_size(ic.result) > 8;
 
     // Emit the CALL instruction.
     if (!ic.func_name.empty()) {
@@ -99,9 +101,6 @@ void z80_gen::gen_call(const icode &ic) {
         conv.emit_indirect_call(*this, ic);
     }
 
-    // Stack cleanup via the callee's convention (only pops stack-passed args).
-    conv.emit_call_cleanup(*this, ic);
-
     bool direct_return = false;
     if (cur_fn_ && !ic.result.is_none() &&
         cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
@@ -109,12 +108,25 @@ void z80_gen::gen_call(const icode &ic) {
         direct_return = next.op == icode_op::RETURN &&
                         same_call_result_operand(next.left, ic.result);
     }
+    if (large_indirect_result)
+        direct_return = false;
 
-    if (direct_return) {
-        direct_call_return_pending_ = true;
-        direct_call_return_value_ = ic.result;
-    } else {
+    if (large_indirect_result) {
+        // Large aggregate results currently come back as a pointer into
+        // stack-backed storage. Copy them out before caller-side stack cleanup
+        // so argument popping cannot trample the pointed result image.
         conv.emit_store_call_result(*this, ic);
+        conv.emit_call_cleanup(*this, ic);
+    } else {
+        // Stack cleanup via the callee's convention (only pops stack-passed
+        // args).
+        conv.emit_call_cleanup(*this, ic);
+        if (direct_return) {
+            direct_call_return_pending_ = true;
+            direct_call_return_value_ = ic.result;
+        } else {
+            conv.emit_store_call_result(*this, ic);
+        }
     }
 }
 

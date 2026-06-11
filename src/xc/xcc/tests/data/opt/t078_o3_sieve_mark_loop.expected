@@ -14,7 +14,7 @@ _main:
 	ld	sp, hl
 	xor	a
 	ld	-4(ix), a
-	ld	hl, #prime
+	ld	hl, #_prime
 	ld	-3(ix), l
 	ld	-2(ix), h
 __xcc_L0:
@@ -37,10 +37,10 @@ __xcc_L2:
 	ld	-2(ix), h
 	jr	__xcc_L0
 __xcc_L3:
-	ld	hl, #prime
+	ld	hl, #_prime
 	xor	a
 	ld	(hl), a
-	ld	hl, #prime
+	ld	hl, #_prime
 	inc	hl
 	ld	(hl), a
 	; O3 sieve mark loop
@@ -79,7 +79,7 @@ __xcc_L7:
 	ld	a, #127
 	ld	e, a
 	ld	d, #0
-	ld	hl, #prime
+	ld	hl, #_prime
 	add	hl, de
 	ld	a, (hl)
 	ld	l, a

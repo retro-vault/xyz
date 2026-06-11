@@ -33,7 +33,7 @@ __xcc_L3:
 	xor	a
 	ld	e, a
 	ld	d, #0
-	ld	hl, #next_buf
+	ld	hl, #_next_buf
 	add	hl, de
 	ld	a, (hl)
 	ld	-5(ix), a

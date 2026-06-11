@@ -51,7 +51,7 @@ namespace xld {
         std::vector<uint8_t> code_buffer;
         std::vector<output_reloc> reloc_table;
         uint16_t entry_point = 0;
-        uint16_t code_size = 0;
+        uint32_t code_size = 0;
 
         // Verbose flag.
         bool verbose = false;

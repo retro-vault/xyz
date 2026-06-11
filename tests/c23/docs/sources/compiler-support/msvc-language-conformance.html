@@ -1,0 +1,3659 @@
+ <!DOCTYPE html>
+		<html
+			class="layout layout-holy-grail   show-table-of-contents conceptual show-breadcrumb default-focus"
+			lang="en-us"
+			dir="ltr"
+			data-authenticated="false"
+			data-auth-status-determined="false"
+			data-target="docs"
+			x-ms-format-detection="none"
+		>
+			
+		<head>
+			<title>Microsoft C/C++ language conformance | Microsoft Learn</title>
+			<meta charset="utf-8" />
+			<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+			<meta name="color-scheme" content="light dark" />
+
+			<meta name="description" content="Microsoft C and C++ conformance updates by Visual Studio version." />
+			<link rel="canonical" href="https://learn.microsoft.com/en-us/cpp/overview/visual-cpp-language-conformance?view=msvc-170" /> 
+
+			<!-- Non-customizable open graph and sharing-related metadata -->
+			<meta name="twitter:card" content="summary_large_image" />
+			<meta name="twitter:site" content="@MicrosoftLearn" />
+			<meta property="og:type" content="website" />
+			<meta property="og:image:alt" content="Microsoft Learn" />
+			<meta property="og:image" content="https://learn.microsoft.com/en-us/media/open-graph-image.png" />
+			<!-- Page specific open graph and sharing-related metadata -->
+			<meta property="og:title" content="Microsoft C/C++ language conformance" />
+			<meta property="og:url" content="https://learn.microsoft.com/en-us/cpp/overview/visual-cpp-language-conformance?view=msvc-170" />
+			<meta property="og:description" content="Microsoft C and C++ conformance updates by Visual Studio version." />
+			<meta name="platform_id" content="c87c74c0-d37e-f072-7355-0a7ed0ac7ebd" /> <meta name="scope" content="C++" />
+			<meta name="locale" content="en-us" />
+			 
+			<meta name="uhfHeaderId" content="MSDocsHeader-CPP" />
+
+			<meta name="page_type" content="conceptual" />
+
+			<!--page specific meta tags-->
+			
+
+			<!-- custom meta tags -->
+			
+		<meta name="breadcrumb_path" content="../_breadcrumb/toc.json" />
+	
+		<meta name="ROBOTS" content="INDEX,FOLLOW" />
+	
+		<meta name="manager" content="coxford" />
+	
+		<meta name="ms.date" content="2026-03-10T00:00:00Z" />
+	
+		<meta name="ms.topic" content="overview" />
+	
+		<meta name="audience" content="developer" />
+	
+		<meta name="ms.service" content="visual-cpp" />
+	
+		<meta name="ms.tgt_pltfrm" content="Windows" />
+	
+		<meta name="ms.workload" content="cplusplus" />
+	
+		<meta name="feedback_system" content="Standard" />
+	
+		<meta name="feedback_product_url" content="https://developercommunity.visualstudio.com/cpp/" />
+	
+		<meta name="feedback_help_link_url" content="https://learn.microsoft.com/en-us/answers/tags/314/cpp" />
+	
+		<meta name="feedback_help_link_type" content="get-help-at-qna" />
+	
+		<meta name="ms.subservice" content="cpp-lang" />
+	
+		<meta name="author" content="TylerMSFT" />
+	
+		<meta name="ms.author" content="twhitney" />
+	
+		<meta name="document_id" content="d606e0aa-36fd-97f2-6e65-af0f9b05b24c" />
+	
+		<meta name="document_version_independent_id" content="207d361a-397e-d687-8828-a152ebc4e572" />
+	
+		<meta name="updated_at" content="2026-03-11T17:37:00Z" />
+	
+		<meta name="original_content_git_url" content="https://github.com/MicrosoftDocs/cpp-docs-pr/blob/live/docs/overview/visual-cpp-language-conformance.md" />
+	
+		<meta name="gitcommit" content="https://github.com/MicrosoftDocs/cpp-docs-pr/blob/d7e3b64284455bb06e2a860f8725197db17b7941/docs/overview/visual-cpp-language-conformance.md" />
+	
+		<meta name="git_commit_id" content="d7e3b64284455bb06e2a860f8725197db17b7941" />
+	
+		<meta name="monikers" content="msvc-140" />
+	
+		<meta name="monikers" content="msvc-150" />
+	
+		<meta name="monikers" content="msvc-160" />
+	
+		<meta name="monikers" content="msvc-170" />
+	
+		<meta name="monikers" content="msvc-180" />
+	
+		<meta name="default_moniker" content="msvc-170" />
+	
+		<meta name="site_name" content="Docs" />
+	
+		<meta name="depot_name" content="VS.vcppdocs" />
+	
+		<meta name="schema" content="Conceptual" />
+	
+		<meta name="toc_rel" content="toc.json" />
+	
+		<meta name="pdf_url_template" content="https://learn.microsoft.com/pdfstore/en-us/VS.vcppdocs/{branchName}{pdfName}" />
+	
+		<meta name="search.mshattr.devlang" content="cpp" />
+	
+		<meta name="word_count" content="6851" />
+	
+		<meta name="config_moniker_range" content="&gt;= msvc-140" />
+	
+		<meta name="asset_id" content="overview/visual-cpp-language-conformance" />
+	
+		<meta name="moniker_range_name" content="4581682a33ffa46eb75263dee4d6680e" />
+	
+		<meta name="item_type" content="Content" />
+	
+		<meta name="source_path" content="docs/overview/visual-cpp-language-conformance.md" />
+	
+		<meta name="previous_tlsh_hash" content="FB2C1313B50897C1AB93475A21E2FF849090DCC87EAC4AC9F727A6A3664F7E3E077F63E5A66D23051A39D3C223E6A1560D56FB6530F82323784F544DC2842247584FBBFD64" />
+	
+		<meta name="github_feedback_content_git_url" content="https://github.com/MicrosoftDocs/cpp-docs/blob/main/docs/overview/visual-cpp-language-conformance.md" />
+	
+		<meta name="markdown_url" content="https://learn.microsoft.com/en-us/cpp/overview/visual-cpp-language-conformance?view=msvc-170&amp;accept=text/markdown" />
+	 
+		<meta name="cmProducts" content="https://authoring-docs-microsoft.poolparty.biz/devrel/4628cbd9-6f47-4ae1-b371-d34636609eaf" data-source="generated" />
+	
+		<meta name="spProducts" content="https://authoring-docs-microsoft.poolparty.biz/devrel/be21deb8-8c64-44b0-b71f-2dc56ca7364f" data-source="generated" />
+	
+
+			<script id="atlas-layout-preferences">
+				(function () {
+			try {
+				var state = JSON.parse(localStorage.getItem('atlas-layout-preferences') || '{}');
+				var view = state["docs-layout-persistence"] || {};
+				var excludesKey = "";
+				var blocked = {};
+				if (excludesKey) {
+					var exclusions = JSON.parse(localStorage.getItem('atlas-layout-exclusions') || '{}');
+					if (Object.prototype.hasOwnProperty.call(exclusions, excludesKey)) {
+						var scoped = exclusions[excludesKey];
+						if (scoped) {
+							if (typeof scoped === 'object') blocked = scoped;
+						}
+					}
+				}
+				var html = document.documentElement;
+				for (var c in view) {
+					if (Object.prototype.hasOwnProperty.call(blocked, c)) continue;
+					if (view[c]) html.classList.add(c);
+					else html.classList.remove(c);
+				}
+			} catch (e) {}
+		})();;
+			</script>
+
+			<!-- assets and js globals -->
+			
+			<link rel="stylesheet" href="/static/assets/0.4.03441.7899-5b334d58/styles/site.css" />
+			
+			<script src="https://wcpstatic.microsoft.com/mscc/lib/v2/wcp-consent.js"></script>
+			<script src="https://js.monitor.azure.com/scripts/c/ms.jsll-4.min.js"></script>
+			<script src="/_themes/docs.theme/master/en-us/_themes/global/deprecation.js"></script>
+
+			<!-- msdocs global object -->
+			<script id="msdocs-script">
+		var msDocs = {
+  "environment": {
+    "accessLevel": "online",
+    "azurePortalHostname": "portal.azure.com",
+    "reviewFeatures": false,
+    "supportLevel": "production",
+    "systemContent": true,
+    "siteName": "learn",
+    "legacyHosting": false
+  },
+  "data": {
+    "contentLocale": "en-us",
+    "contentDir": "ltr",
+    "userLocale": "en-us",
+    "userDir": "ltr",
+    "pageTemplate": "Conceptual",
+    "layoutStateStorageKey": "docs-layout-persistence",
+    "brand": "",
+    "context": {},
+    "standardFeedback": true,
+    "showFeedbackReport": false,
+    "feedbackHelpLinkType": "get-help-at-qna",
+    "feedbackHelpLinkUrl": "https://learn.microsoft.com/en-us/answers/tags/314/cpp",
+    "feedbackSystem": "Standard",
+    "feedbackGitHubRepo": "MicrosoftDocs/cpp-docs",
+    "feedbackProductUrl": "https://developercommunity.visualstudio.com/cpp/",
+    "extendBreadcrumb": false,
+    "isEditDisplayable": true,
+    "isPrivateUnauthorized": false,
+    "hideViewSource": false,
+    "isPermissioned": false,
+    "hasRecommendations": true,
+    "contributors": [
+      {
+        "name": "TylerMSFT",
+        "url": "https://github.com/TylerMSFT"
+      },
+      {
+        "name": "Rageking8",
+        "url": "https://github.com/Rageking8"
+      },
+      {
+        "name": "fsb4000",
+        "url": "https://github.com/fsb4000"
+      },
+      {
+        "name": "colin-home",
+        "url": "https://github.com/colin-home"
+      },
+      {
+        "name": "CaseyCarter",
+        "url": "https://github.com/CaseyCarter"
+      },
+      {
+        "name": "nschonni",
+        "url": "https://github.com/nschonni"
+      },
+      {
+        "name": "john-par",
+        "url": "https://github.com/john-par"
+      },
+      {
+        "name": "mikeblome",
+        "url": "https://github.com/mikeblome"
+      }
+    ]
+  },
+  "functions": {}
+};;
+	</script>
+
+			<!-- base scripts, msdocs global should be before this -->
+			<script src="/static/assets/0.4.03441.7899-5b334d58/scripts/en-us/index-docs.js"></script>
+			
+
+			<!-- json-ld -->
+			
+		</head>
+	
+			<body
+				id="body"
+				data-bi-name="body"
+				class="layout-body "
+				lang="en-us"
+				dir="ltr"
+			>
+				<header class="layout-body-header background-color-body-medium">
+		<div class="header-holder has-default-focus">
+			
+		<a
+			href="#main"
+			
+			style="z-index: 1070"
+			class="outline-color-text visually-hidden-until-focused position-fixed inner-focus focus-visible top-0 left-0 right-0 padding-xs text-align-center background-color-body"
+			
+		>
+			Skip to main content
+		</a>
+	
+		<a
+			href="#"
+			data-skip-to-ask-learn
+			style="z-index: 1070"
+			class="outline-color-text visually-hidden-until-focused position-fixed inner-focus focus-visible top-0 left-0 right-0 padding-xs text-align-center background-color-body"
+			hidden
+		>
+			Skip to Ask Learn chat experience
+		</a>
+	
+
+			<div hidden id="cookie-consent-holder" data-test-id="cookie-consent-container"></div>
+			<!-- Unsupported browser warning -->
+			<div
+				id="unsupported-browser"
+				style="background-color: white; color: black; padding: 16px; border-bottom: 1px solid grey;"
+				hidden
+			>
+				<div style="max-width: 800px; margin: 0 auto;">
+					<p style="font-size: 24px">This browser is no longer supported.</p>
+					<p style="font-size: 16px; margin-top: 16px;">
+						Upgrade to Microsoft Edge to take advantage of the latest features, security updates, and technical support.
+					</p>
+					<div style="margin-top: 12px;">
+						<a
+							href="https://go.microsoft.com/fwlink/p/?LinkID=2092881 "
+							style="background-color: #0078d4; border: 1px solid #0078d4; color: white; padding: 6px 12px; border-radius: 2px; display: inline-block;"
+						>
+							Download Microsoft Edge
+						</a>
+						<a
+							href="https://learn.microsoft.com/en-us/lifecycle/faq/internet-explorer-microsoft-edge"
+							style="background-color: white; padding: 6px 12px; border: 1px solid #505050; color: #171717; border-radius: 2px; display: inline-block;"
+						>
+							More info about Internet Explorer and Microsoft Edge
+						</a>
+					</div>
+				</div>
+			</div>
+			<!-- site header -->
+			<div
+				id="ms--site-header"
+				data-test-id="site-header-wrapper"
+				itemscope="itemscope"
+				itemtype="http://schema.org/Organization"
+			>
+				<div
+					id="ms--mobile-nav"
+					class="site-header display-none-tablet padding-inline-none gap-none"
+					data-bi-name="mobile-header"
+					data-test-id="mobile-header"
+				></div>
+				<div
+					id="ms--primary-nav"
+					class="site-header display-none display-flex-tablet"
+					data-bi-name="L1-header"
+					data-test-id="primary-header"
+				></div>
+				<div
+					id="ms--secondary-nav"
+					class="site-header display-none display-flex-tablet"
+					data-bi-name="L2-header"
+					data-test-id="secondary-header"
+					
+				></div>
+			</div>
+			
+		<!-- banner -->
+		<div data-banner>
+			<div id="disclaimer-holder"></div>
+			
+		</div>
+		<!-- banner end -->
+	
+		</div>
+	</header>
+				 <section
+					id="layout-body-menu"
+					class="layout-body-menu border-right display-flex background-color-body-medium"
+					data-bi-name="menu"
+			  >
+					
+		<div
+			id="left-container"
+			class="left-container display-none padding-none display-block-tablet width-full display-none-until-layout-restored"
+			data-toc-container="true"
+		>
+			<div
+				id="ms--toc-content"
+				class="padding-left-sm padding-right-none padding-bottom-sm height-full"
+			>
+				<nav
+					id="affixed-left-container"
+					class="margin-top-xxs-tablet position-sticky display-flex flex-direction-column width-full"
+					aria-label="Primary"
+					data-bi-name="left-toc"
+					role="navigation"
+				>
+					<div
+						id="ms--collapsible-toc-header"
+						class="display-flex flex-direction-row-reverse justify-content-center align-items-center margin-bottom-xxs margin-right-xxs"
+					>
+						<button
+							type="button"
+							class="button button-clear inner-focus"
+							data-collapsible-toc-toggle
+							aria-expanded="true"
+							hidden
+							aria-controls="ms--toc-content"
+							aria-label="Table of contents"
+						>
+							<span class="icon icon-mirrored-rtl font-size-md" aria-hidden="true">
+								<span
+									class="docon docon-panel-left-contract display-none-layout-menu-collapsed"
+								></span>
+								<span
+									class="docon docon-panel-left-expand display-none display-inline-layout-menu-collapsed"
+								></span>
+							</span>
+						</button>
+						<div
+							id="ms--collapsible-toc-moniker-slot"
+							class="flex-grow-1 display-none-layout-menu-collapsed"
+						></div>
+					</div>
+				</nav>
+			</div>
+		</div>
+	
+			  </section>
+
+				<main
+					id="main"
+					role="main"
+					class="layout-body-main "
+					data-bi-name="content"
+					lang="en-us"
+					dir="ltr"
+				>
+					
+			<div
+		id="ms--content-header"
+		class="content-header default-focus border-bottom-none"
+		data-bi-name="content-header"
+	>
+		<div class="content-header-controls margin-xxs margin-inline-sm-tablet">
+			<button
+				type="button"
+				class="contents-button button button-sm margin-right-xxs"
+				data-bi-name="contents-expand"
+				aria-haspopup="true"
+				data-contents-button
+			>
+				<span class="icon" aria-hidden="true"><span class="docon docon-menu"></span></span>
+				<span class="contents-expand-title"> Table of contents </span>
+			</button>
+			<button
+				type="button"
+				class="ap-collapse-behavior ap-expanded button button-sm"
+				data-bi-name="ap-collapse"
+				aria-controls="action-panel"
+			>
+				<span class="icon" aria-hidden="true"><span class="docon docon-exit-mode"></span></span>
+				<span>Exit editor mode</span>
+			</button>
+		</div>
+	</div>
+			<div
+				data-main-column
+				class="reading-width margin-inline-auto layout-padding padding-top-none padding-top-sm-tablet padding-bottom-sm"
+			>
+				<div>
+					
+		<div id="article-header" class="background-color-body margin-bottom-xs display-none-print">
+			<div class="display-flex align-items-center justify-content-space-between">
+				
+		<details
+			id="article-header-breadcrumbs-overflow-popover"
+			class="popover popover-left"
+			data-for="article-header-breadcrumbs"
+		>
+			<summary
+				class="button button-clear button-primary button-sm inner-focus"
+				aria-label="All breadcrumbs"
+			>
+				<span class="icon" aria-hidden="true">
+					<span class="docon docon-more"></span>
+				</span>
+			</summary>
+			<div id="article-header-breadcrumbs-overflow" class="popover-content"></div>
+		</details>
+
+		<bread-crumbs
+			id="article-header-breadcrumbs"
+			role="group"
+			aria-label="Breadcrumbs"
+			data-test-id="article-header-breadcrumbs"
+			class="overflow-hidden flex-grow-1 margin-right-sm margin-right-md-tablet margin-right-lg-desktop margin-left-negative-xxs padding-left-xxs"
+		></bread-crumbs>
+	 
+		<div
+			id="article-header-page-actions"
+			class="opacity-none margin-left-auto display-flex flex-wrap-no-wrap align-items-stretch"
+		>
+			
+		<button
+			class="button button-sm border-none inner-focus display-none-tablet flex-shrink-0 "
+			data-bi-name="ask-learn-assistant-entry"
+			data-test-id="ask-learn-assistant-modal-entry-mobile"
+			data-ask-learn-modal-entry
+			
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			aria-label="Ask Learn"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+		</button>
+		<button
+			class="button button-sm display-none display-inline-flex-tablet display-none-desktop flex-shrink-0 margin-right-xxs border-color-ask-learn "
+			data-bi-name="ask-learn-assistant-entry"
+			
+			data-test-id="ask-learn-assistant-modal-entry-tablet"
+			data-ask-learn-modal-entry
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+			<span>Ask Learn</span>
+		</button>
+		<button
+			class="button button-sm display-none flex-shrink-0 display-inline-flex-desktop margin-right-xxs border-color-ask-learn "
+			data-bi-name="ask-learn-assistant-entry"
+			
+			data-test-id="ask-learn-assistant-flyout-entry"
+			data-ask-learn-flyout-entry
+			data-flyout-button="toggle"
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			aria-controls="ask-learn-flyout"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+			<span>Ask Learn</span>
+		</button>
+	 
+
+			<details class="popover popover-right" id="article-header-page-actions-overflow">
+				<summary
+					class="justify-content-flex-start button button-clear button-sm button-primary inner-focus"
+					aria-label="More actions"
+					title="More actions"
+				>
+					<span class="icon" aria-hidden="true">
+						<span class="docon docon-more-vertical"></span>
+					</span>
+				</summary>
+				<div class="popover-content">
+					
+		<button
+			type="button"
+			id="ms--focus-mode-button"
+			data-focus-mode
+			data-bi-name="focus-mode-entry"
+			data-page-action-item="overflow-all"
+			data-popover-close
+			class="button button-clear button-sm button-block justify-content-flex-start text-align-left inner-focus display-none display-inline-flex-tablet"
+		>
+			<span class="icon" aria-hidden="true">
+				<span class="docon docon-glasses"></span>
+			</span>
+			<span>Reading mode</span>
+		</button>
+	 
+		<button
+			data-page-action-item="overflow-mobile"
+			type="button"
+			class="display-block-layout-menu-collapsed button-block button-sm inner-focus button button-clear display-none-tablet justify-content-flex-start text-align-left"
+			data-bi-name="contents-expand"
+			data-contents-button
+			data-popover-close
+		>
+			<span class="icon" aria-hidden="true"
+				><span class="docon docon-editor-list-bullet"></span
+			></span>
+			<span class="contents-expand-title">Table of contents</span>
+		</button>
+	 
+		<a
+			id="lang-link-overflow"
+			class="button-sm inner-focus button button-clear button-block justify-content-flex-start text-align-left"
+			data-bi-name="language-toggle"
+			data-page-action-item="overflow-all"
+			data-check-hidden="true"
+			data-read-in-link
+			href="#"
+			hidden
+		>
+			<span class="icon" aria-hidden="true" data-read-in-link-icon>
+				<span class="docon docon-locale-globe"></span>
+			</span>
+			<span data-read-in-link-text>Read in English</span>
+		</a>
+	
+					
+		<button
+			type="button"
+			class="collection button button-clear button-sm button-block justify-content-flex-start text-align-left inner-focus"
+			data-list-type="collection"
+			data-bi-name="collection"
+			data-page-action-item="overflow-all"
+			data-check-hidden="true"
+			data-popover-close
+		>
+			<span class="icon" aria-hidden="true">
+				<span class="docon docon-circle-addition"></span>
+			</span>
+			<span class="collection-status">Add</span>
+		</button>
+	 
+		<button
+			type="button"
+			class="collection button button-block button-clear button-sm justify-content-flex-start text-align-left inner-focus"
+			data-list-type="plan"
+			data-bi-name="plan"
+			data-page-action-item="overflow-all"
+			data-check-hidden="true"
+			data-popover-close
+			hidden
+		>
+			<span class="icon" aria-hidden="true">
+				<span class="docon docon-circle-addition"></span>
+			</span>
+			<span class="plan-status">Add to plan</span>
+		</button>
+	 
+					
+		<a
+			data-contenteditbtn
+			class="button button-clear button-block button-sm inner-focus justify-content-flex-start text-align-left text-decoration-none"
+			data-bi-name="edit"
+			data-page-action-item="overflow-all"
+			data-check-hidden="true"
+			
+			href="https://github.com/MicrosoftDocs/cpp-docs/blob/main/docs/overview/visual-cpp-language-conformance.md"
+			data-original_content_git_url="https://github.com/MicrosoftDocs/cpp-docs-pr/blob/live/docs/overview/visual-cpp-language-conformance.md"
+			data-original_content_git_url_template="{repo}/blob/{branch}/docs/overview/visual-cpp-language-conformance.md"
+			data-pr_repo=""
+			data-pr_branch=""
+		>
+			<span class="icon" aria-hidden="true">
+				<span class="docon docon-edit-outline"></span>
+			</span>
+			<span>Edit</span>
+		</a>
+	  
+		<hr class="margin-block-xxs" />
+		
+				<button
+					class="button button-block button-clear button-sm justify-content-flex-start text-align-left inner-focus"
+					type="button"
+					data-bi-name="copy-markdown"
+					data-page-action-item="overflow-all"
+					data-copy-markdown
+					data-copy-state="idle"
+					data-check-hidden="true"
+				>
+					<span class="icon color-primary" aria-hidden="true">
+						<span data-show-when="idle" class="docon docon-code-lang"></span>
+						<span data-show-when="loading" class="loader" hidden></span>
+						<span data-show-when="success" class="docon docon-check-mark" hidden></span>
+					</span>
+					<span>Copy Markdown</span>
+				</button>
+		   
+				<button
+					class="button button-block button-clear button-sm justify-content-flex-start text-align-left inner-focus"
+					type="button"
+					data-bi-name="print"
+					data-page-action-item="overflow-all"
+					data-popover-close
+					data-print-page
+					data-check-hidden="true"
+				>
+					<span class="icon color-primary" aria-hidden="true">
+						<span class="docon docon-print"></span>
+					</span>
+					<span>Print</span>
+				</button>
+		  
+	
+				</div>
+			</details>
+		</div>
+	
+			</div>
+		</div>
+	  
+		<!-- privateUnauthorizedTemplate is hidden by default -->
+		<div unauthorized-private-section data-bi-name="permission-content-unauthorized-private" hidden>
+			<hr class="hr margin-top-xs margin-bottom-sm" />
+			<div class="notification notification-info">
+				<div class="notification-content">
+					<p class="margin-top-none notification-title">
+						<span class="icon" aria-hidden="true"
+							><span class="docon docon-exclamation-circle-solid"></span
+						></span>
+						<span>Note</span>
+					</p>
+					<p class="margin-top-none authentication-determined not-authenticated">
+						Access to this page requires authorization. You can try <a class="docs-sign-in" href="#" data-bi-name="permission-content-sign-in">signing in</a> or <a  class="docs-change-directory" data-bi-name="permisson-content-change-directory">changing directories</a>.
+					</p>
+					<p class="margin-top-none authentication-determined authenticated">
+						Access to this page requires authorization. You can try <a class="docs-change-directory" data-bi-name="permisson-content-change-directory">changing directories</a>.
+					</p>
+				</div>
+			</div>
+		</div>
+	
+					<div class="content"><h1 id="microsoft-cc-language-conformance-by-visual-studio-version">Microsoft C/C++ language conformance by Visual Studio version</h1></div>
+					
+		<div
+			id="article-metadata"
+			data-bi-name="article-metadata"
+			data-test-id="article-metadata"
+			class="page-metadata-container display-flex gap-xxs justify-content-space-between align-items-center flex-wrap-wrap"
+		>
+			 
+				<div
+					id="user-feedback"
+					class="margin-block-xxs display-none display-none-print"
+					hidden
+					data-hide-on-archived
+				>
+					
+		<button
+			id="user-feedback-button"
+			data-test-id="conceptual-feedback-button"
+			class="button button-sm button-clear button-primary display-none"
+			type="button"
+			data-bi-name="user-feedback-button"
+			data-user-feedback-button
+			hidden
+		>
+			<span class="icon" aria-hidden="true">
+				<span class="docon docon-like"></span>
+			</span>
+			<span>Feedback</span>
+		</button>
+	
+				</div>
+		  
+		</div>
+	 
+		<div data-id="ai-summary" class="display-none-print">
+			<div id="ms--ai-summary-cta" class="margin-top-xs display-flex align-items-center">
+				<span class="icon" aria-hidden="true">
+					<span class="docon docon-sparkle-fill gradient-text-vivid"></span>
+				</span>
+				<button
+					id="ms--ai-summary"
+					type="button"
+					class="tag tag-sm tag-suggestion margin-left-xxs"
+					data-test-id="ai-summary-cta"
+					data-bi-name="ai-summary-cta"
+					data-an="ai-summary"
+				>
+					<span class="ai-summary-cta-text">
+						Summarize this article for me
+					</span>
+				</button>
+			</div>
+			<!-- Slot where the client will render the summary card after the user clicks the CTA -->
+			<div id="ms--ai-summary-header" class="margin-top-xs"></div>
+		</div>
+	 
+		<nav
+			id="center-doc-outline"
+			class="doc-outline display-none-desktop display-none-print margin-bottom-sm"
+			data-bi-name="intopic toc"
+			aria-label="In this article"
+		>
+			<h2 id="ms--in-this-article" class="title is-6 margin-block-xs">
+				In this article
+			</h2>
+		</nav>
+	
+					<div class="content"><p>Standards conformance for the Microsoft C/C++ compiler in Visual Studio (MSVC) is a work in progress. Here's a summary of ISO Standard C and C++ language and library conformance by Visual Studio version. Each C++ compiler and standard library feature name has a link to the ISO Standard C++ proposal paper that describes the feature, when one is available at publication time. The <strong>Supported</strong> column lists the Visual Studio version in which support for the feature first appeared.</p>
+<p>For details on conformance improvements, see <a href="cpp-conformance-improvements?view=msvc-170" data-linktype="relative-path">C++ conformance improvements in Visual Studio</a>. For a list of other changes, see <a href="what-s-new-for-visual-cpp-in-visual-studio?view=msvc-170" data-linktype="relative-path">What's New for Microsoft C++ in Visual Studio</a>. For conformance changes in earlier versions, see <a href="../porting/visual-cpp-change-history-2003-2015?view=msvc-170" data-linktype="relative-path">Visual C++ change history</a> and <a href="../porting/visual-cpp-what-s-new-2003-through-2015?view=msvc-170" data-linktype="relative-path">Visual C++ What's New 2003 through 2015</a>. For current news from the C++ team, visit the <a href="https://devblogs.microsoft.com/cppblog/" data-linktype="external">C++ team blog</a>.</p>
+<div class="NOTE">
+<p>Note</p>
+<p>There are no binary breaking changes between Visual Studio 2015, 2017, 2019, and 2022. For more information, see <a href="../porting/binary-compat-2015-2017?view=msvc-170" data-linktype="relative-path">C++ binary compatibility between Visual Studio versions</a></p>
+</div>
+<h2 id="c-compiler-features">C++ compiler features</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Supported</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>C++03/11 Core language features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> Everything else</td>
+<td>VS 2015 <sup><a href="#note_A" data-linktype="self-bookmark">A</a></sup></td>
+</tr>
+<tr>
+<td> Two-phase name lookup</td>
+<td>VS 2017 15.7 <sup><a href="#note_B" data-linktype="self-bookmark">B</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://cplusplus.github.io/CWG/issues/1213.html" data-linktype="external"><code>CWG 1213 Value category of arrays and subscripts</code></a></td>
+<td>VS 2022 17.14</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/N2634" data-linktype="external"><code>N2634 Expression SFINAE</code></a></td>
+<td>VS 2017 15.7</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/N1653" data-linktype="external"><code>N1653 C99 preprocessor</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_C" data-linktype="self-bookmark">C</a></sup></td>
+</tr>
+<tr>
+<td><strong>C++03/11 Core language features (Defect reports)</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td><strong>C++14 Core language features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/N3323" data-linktype="external"><code>N3323 Tweaked wording for contextual conversions</code></a></td>
+<td>VS 2013</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/N3472" data-linktype="external"><code>N3472 Binary literals</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3638" data-linktype="external"><code>N3638 auto and decltype(auto) return types</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3648" data-linktype="external"><code>N3648 init-captures</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3649" data-linktype="external"><code>N3649 Generic lambdas</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3760" data-linktype="external"><code>N3760 [[deprecated]] attribute</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3778" data-linktype="external"><code>N3778 Sized deallocation</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3781" data-linktype="external"><code>N3781 Digit separators</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3651" data-linktype="external"><code>N3651 Variable templates</code></a></td>
+<td>VS 2015 Update 2</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3652" data-linktype="external"><code>N3652 Extended constexpr</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3653" data-linktype="external"><code>N3653 Default member initializers for aggregates</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td><strong>C++17 Core language features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4086" data-linktype="external"><code>N4086 Removing trigraphs</code></a></td>
+<td>VS 2010 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3922" data-linktype="external"><code>N3922 New rules for auto with braced-init-lists</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4051" data-linktype="external"><code>N4051 typename in template template-parameters</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4266" data-linktype="external"><code>N4266 Attributes for namespaces and enumerators</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4267" data-linktype="external"><code>N4267 u8 character literals</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4230" data-linktype="external"><code>N4230 Nested namespace definitions</code></a></td>
+<td>VS 2015.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3928" data-linktype="external"><code>N3928 Terse static_assert</code></a></td>
+<td>VS 2017 15.0 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0184r0" data-linktype="external"><code>P0184R0 Generalized range-based for-loops</code></a></td>
+<td>VS 2017 15.0 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0188r1" data-linktype="external"><code>P0188R1 [[fallthrough]] attribute</code></a></td>
+<td>VS 2017 15.0 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0001r1" data-linktype="external"><code>P0001R1 Removing the register keyword</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0002r1" data-linktype="external"><code>P0002R1 Removing operator++ for bool</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0018r3" data-linktype="external"><code>P0018R3 Capturing *this by value</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0028r4" data-linktype="external"><code>P0028R4 Using attribute namespaces without repetition</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0061r1" data-linktype="external"><code>P0061R1 __has_include</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0138r2" data-linktype="external"><code>P0138R2 Direct-list-init of fixed enums from integers</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0170r1" data-linktype="external"><code>P0170R1 constexpr lambdas</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0189r1" data-linktype="external"><code>P0189R1 [[nodiscard]] attribute</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0212r1" data-linktype="external"><code>P0212R1 [[maybe_unused]] attribute</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0217r3" data-linktype="external"><code>P0217R3 Structured bindings</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0292r2" data-linktype="external"><code>P0292R2 constexpr if-statements</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_D" data-linktype="self-bookmark">D</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0305r1" data-linktype="external"><code>P0305R1 Selection statements with initializers</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1381R1" data-linktype="external"><code>P1381R1 Reference capture of structured bindings</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0245r1" data-linktype="external"><code>P0245R1 Hexfloat literals</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4268" data-linktype="external"><code>N4268 Allowing more non-type template args</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4295" data-linktype="external"><code>N4295 Fold expressions</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0003r5" data-linktype="external"><code>P0003R5 Removing dynamic-exception-specifications</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0012r1" data-linktype="external"><code>P0012R1 Adding noexcept to the type system</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0035r4" data-linktype="external"><code>P0035R4 Over-aligned dynamic memory allocation</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0386r2" data-linktype="external"><code>P0386R2 Inline variables</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0522r0" data-linktype="external"><code>P0522R0 Matching template template-parameters to compatible arguments</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0036r0" data-linktype="external"><code>P0036R0 Removing some empty unary folds</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4261" data-linktype="external"><code>N4261 Fixing qualification conversions</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0017r1" data-linktype="external"><code>P0017R1 Extended aggregate initialization</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0091r3" data-linktype="external"><code>P0091R3 Template argument deduction for class templates</code></a><br> <a href="https://wg21.link/p0512r0" data-linktype="external"><code>P0512R0 Class template argument deduction issues</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0127r2" data-linktype="external"><code>P0127R2 Declaring non-type template parameters with auto</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0135r1" data-linktype="external"><code>P0135R1 Guaranteed copy elision</code></a></td>
+<td>VS 2017 15.6</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0136r1" data-linktype="external"><code>P0136R1 Rewording inheriting constructors</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0137r1" data-linktype="external"><code>P0137R1 std::launder</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0145r3" data-linktype="external"><code>P0145R3 Refining expression evaluation order</code></a><br> <a href="https://wg21.link/p0400r0" data-linktype="external"><code>P0400R0 Order of evaluation of function arguments</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0195r2" data-linktype="external"><code>P0195R2 Pack expansions in using-declarations</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0283r2" data-linktype="external"><code>P0283R2 Ignoring unrecognized attributes</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td><strong>C++17 Core language features (Defect reports)</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0702r1" data-linktype="external"><code>P0702R1 Fixing class template argument deduction for initializer-list ctors</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0961r1" data-linktype="external"><code>P0961R1 Relaxing the structured bindings customization point finding rules</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0969r0" data-linktype="external"><code>P0969R0 Allowing structured bindings to accessible members</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0588r1" data-linktype="external"><code>P0588R1 Simplifying implicit lambda capture</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1771r1" data-linktype="external"><code>P1771R1 [[nodiscard]] for constructors</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1825r0" data-linktype="external"><code>P1825R0 Merged wording for P0527R1 and P1155R3, more implicit moves</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0929R2" data-linktype="external"><code>P0929R2 Checking for abstract class types</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0962r1" data-linktype="external"><code>P0962R1 Relaxing the range-for loop customization point finding rules</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0859r0" data-linktype="external"><code>P0859R0 CWG 1581: When are constexpr member functions defined</code></a></td>
+<td>Partial in VS 2019 16.7 <sup><a href="#note_E" data-linktype="self-bookmark">E</a></sup>, Full in VS 2022 17.1</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1009R2" data-linktype="external"><code>P1009R2 Array size deduction in new-expressions</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1286R2" data-linktype="external"><code>P1286R2 Contra CWG DR1778</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td><strong>C++20 Core language features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0641R2" data-linktype="external"><code>P0641R2 const mismatch with defaulted copy constructor</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0704r1" data-linktype="external"><code>P0704R1 Fixing const lvalue ref-qualified pointers to members</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1041R4" data-linktype="external"><code>P1041R4 Make char16_t/char32_t string literals be UTF-16/32</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1330R0" data-linktype="external"><code>P1330R0 Changing the active member of a union inside constexpr</code></a></td>
+<td>VS 2017 15.0 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0972R0" data-linktype="external"><code>P0972R0 noexcept For &lt;chrono&gt; zero(), min(), max()</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0515R3" data-linktype="external"><code>P0515R3 Three-way (spaceship) comparison operator &lt;=&gt;</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0941R2" data-linktype="external"><code>P0941R2 Feature-test macros</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1008R1" data-linktype="external"><code>P1008R1 Prohibiting aggregates with user-declared constructors</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0329r4" data-linktype="external"><code>P0329R4 Designated initialization</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0846R0" data-linktype="external"><code>P0846R0 ADL and function templates that are not visible</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0409r2" data-linktype="external"><code>P0409R2 Allowing lambda-capture [=, this]</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0428r2" data-linktype="external"><code>P0428R2 Familiar template syntax for generic lambdas</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0624R2" data-linktype="external"><code>P0624R2 Default constructible and assignable stateless lambdas</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0780R2" data-linktype="external"><code>P0780R2 Allowing pack expansion in lambda init-capture</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0806R2" data-linktype="external"><code>P0806R2 Deprecate implicit capture of this via [=]</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1120R0" data-linktype="external"><code>P1120R0 Consistency improvements for &lt;=&gt; and other comparison operators</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1185R2" data-linktype="external"><code>P1185R2 &lt;=&gt; != ==</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0734R0" data-linktype="external"><code>P0734R0 Concepts</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0857R0" data-linktype="external"><code>P0857R0 Fixing functionality gaps in constraints</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1084R2" data-linktype="external"><code>P1084R2 Today's return-type-requirements are insufficient</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0892R2" data-linktype="external"><code>P0892R2 Conditional explicit</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1091R3" data-linktype="external"><code>P1091R3 Extending structured bindings to be more like variable declarations</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1099R5" data-linktype="external"><code>P1099R5 Using enum</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1186R3" data-linktype="external"><code>P1186R3 When do you actually use &lt;=&gt;</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1630R1" data-linktype="external"><code>P1630R1 Spaceship needs a tune-up</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0306R4" data-linktype="external"><code>P0306R4 Adding __VA_OPT__ for comma omission and comma deletion</code></a></td>
+<td>VS 2019 16.5. To provide better backward compatibility, <code>__VA_OPT__</code> is enabled under <code>/Zc:preprocessor</code> across all language versions.</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0614R1" data-linktype="external"><code>P0614R1 Range-based for-loops with initializers</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0683R1" data-linktype="external"><code>P0683R1 Default member initializers for bit-fields</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1002R1" data-linktype="external"><code>P1002R1 try-catch blocks in constexpr functions</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1161R3" data-linktype="external"><code>P1161R3 Deprecate uses of the comma operator in subscripting expressions</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1301R4" data-linktype="external"><code>P1301R4 [[nodiscard("message")]]</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1703R1" data-linktype="external"><code>P1703R1 Recognizing header unit imports requires full preprocessing</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1946R0" data-linktype="external"><code>P1946R0 Allow defaulting comparisons by value</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0479R5" data-linktype="external"><code>P0479R5 [[likely]] and [[unlikely]] attributes</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0692R1" data-linktype="external"><code>P0692R1 Relaxing access checking on specializations</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0732R2" data-linktype="external"><code>P0732R2 Class types in non-type template parameters</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1139R2" data-linktype="external"><code>P1139R2 Address wording issues related to ISO 10646</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1907R1" data-linktype="external"><code>P1907R1 Inconsistencies with non-type template parameters</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1971R0" data-linktype="external"><code>P1971R0 US053: Mandate the return type for return_void and return_value to be void</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1971R0" data-linktype="external"><code>P1971R0 US065: Apply Coroutines issue 24 from P0664R8</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1979R0" data-linktype="external"><code>P1979R0 Resolution to US086</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0388R4" data-linktype="external"><code>P0388R4 Permit conversions to arrays of unknown bound</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0466R5" data-linktype="external"><code>P0466R5 Layout-compatibility and Pointer-interconvertibility Traits</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0722R3" data-linktype="external"><code>P0722R3 Efficient sized delete for variable sized classes</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1094R2" data-linktype="external"><code>P1094R2 Nested inline namespaces</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1152R4" data-linktype="external"><code>P1152R4 Deprecating volatile</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1331R2" data-linktype="external"><code>P1331R2 Permitting trivial default initialization in constexpr contexts</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1358R0" data-linktype="external"><code>P1358R0 2310: Type completeness and derived-to-base pointer conversions</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1452R2" data-linktype="external"><code>P1452R2 On the non-uniform semantics of return-type-requirements</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1616R1" data-linktype="external"><code>P1616R1 Using unconstrained TTPs with constrained templates</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1814R0" data-linktype="external"><code>P1814R0 CTAD for alias templates</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1816R0" data-linktype="external"><code>P1816R0 CTAD for aggregates</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1957R1" data-linktype="external"><code>P1957R1 Converting from T* to bool should be considered narrowing (re: US 212)</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_DR" data-linktype="self-bookmark">DR</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1968R0#2282" data-linktype="external"><code>P1968R0 CWG 2282: Consistency with mismatched aligned/non-over-aligned allocation/deallocation functions</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/CWG2280" data-linktype="external"><code>P1969R0 CWG 2280: Matching a usual deallocation function with placement new</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1969r0#2382" data-linktype="external"><code>P1969R0 CWG 2382: Array allocation overhead for non-allocating placement new</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1969r0#2441" data-linktype="external"><code>P1969R0 CWG 2441: Inline function parameters</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1971R0" data-linktype="external"><code>P1971R0 US052: Non-executed return statements in coroutines</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1972R0" data-linktype="external"><code>P1972R0 US105: Check satisfaction of constraints for non-templates when forming pointer to function</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1980R0" data-linktype="external"><code>P1980R0 CA096: Declaration matching for non-dependent requires-clauses</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2082R1" data-linktype="external"><code>P2082R1 Fixing CTAD for aggregates</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2085R0" data-linktype="external"><code>P2085R0 Consistent defaulted comparisons</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2103R0" data-linktype="external"><code>P2103R0 US033: Allow "import" inside linkage-specifications</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2107R0" data-linktype="external"><code>P2107R0 US064: Copy semantics of coroutine parameters</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0912R5" data-linktype="external"><code>P0912R5 Coroutines</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1103R3" data-linktype="external"><code>P1103R3 Modules</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0315R4" data-linktype="external"><code>P0315R4 Allowing lambdas in unevaluated contexts</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0848R3" data-linktype="external"><code>P0848R3 Conditionally trivial special member functions</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0960R3" data-linktype="external"><code>P0960R3 Allow initializing aggregates from a parenthesized list of values</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1766R1" data-linktype="external"><code>P1766R1 Mitigating minor modules maladies</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1811R0" data-linktype="external"><code>P1811R0 Relaxing redefinition restrictions for re-exportation robustness</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1874R1" data-linktype="external"><code>P1874R1 Dynamic Initialization Order of Non-Local Variables in Modules</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1975R0" data-linktype="external"><code>P1975R0 Fixing the wording of parenthesized aggregate-initialization</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0634R3" data-linktype="external"><code>P0634R3 Down with typename!</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0784R7" data-linktype="external"><code>P0784R7 More constexpr containers</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0840R2" data-linktype="external"><code>P0840R2 [[no_unique_address]] attribute</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1064R0" data-linktype="external"><code>P1064R0 Allowing virtual function calls in constant expressions</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1141R2" data-linktype="external"><code>P1141R2 Yet another approach for constrained declarations</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1327R1" data-linktype="external"><code>P1327R1 Allowing dynamic_cast, polymorphic typeid in constant expressions</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1668R1" data-linktype="external"><code>P1668R1 Permitting unevaluated inline assembly in constexpr functions</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1073R3" data-linktype="external"><code>P1073R3 Immediate functions</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1143R2" data-linktype="external"><code>P1143R2 constinit</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1353R0" data-linktype="external"><code>P1353R0 Missing feature-test macros</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0735R1" data-linktype="external"><code>P0735R1 Interaction of memory_order_consume with release sequences</code></a></td>
+<td>VS 2022 v17.14</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1236R1" data-linktype="external"><code>P1236R1 Signed integers are two's complement</code></a></td>
+<td>VS 2022 v17.14</td>
+</tr>
+<tr>
+<td><strong>C++23 Core language features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0330r8" data-linktype="external"><code>P0330R8 Literal Suffix for (signed) size_t</code></a></td>
+<td>VS 2022 17.13 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0847r7" data-linktype="external"><code>P0847R7 Deducing this</code></a></td>
+<td>VS 2022 17.13 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0849r8" data-linktype="external"><code>P0849R8 auto(x): decay-copy in the language</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1102r2" data-linktype="external"><code>P1102R2 Down with ()!</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1169r4" data-linktype="external"><code>P1169R4 static operator()</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1401r5" data-linktype="external"><code>P1401R5 Narrowing contextual conversions to bool</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1467r9" data-linktype="external"><code>P1467R9 Extended floating-point types and standard names</code></a></td>
+<td>No <sup><a href="#note_U" data-linktype="self-bookmark">U</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1774r8" data-linktype="external"><code>P1774R8 Portable assumptions</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1787r6" data-linktype="external"><code>P1787R6 Declarations and where to find them</code></a></td>
+<td>No change required</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1847r4" data-linktype="external"><code>P1847R4 Make declaration order layout mandated</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1938r3" data-linktype="external"><code>P1938R3 if consteval</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1949r7" data-linktype="external"><code>P1949R7 C++ Identifier Syntax using Unicode Standard Annex 31</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2029r4" data-linktype="external"><code>P2029R4 Proposed resolution for core issues 411, 1656, and 2333; numeric and universal character escapes in character and string literals</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2036r3" data-linktype="external"><code>P2036R3 Change scope of lambda trailing-return-type</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2071r2" data-linktype="external"><code>P2071R2 Named universal character escapes</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2128r6" data-linktype="external"><code>P2128R6 Multidimensional subscript operator</code></a></td>
+<td>VS 2022 17.12 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2156r1" data-linktype="external"><code>P2156R1 Allow Duplicate Attributes</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2173r1" data-linktype="external"><code>P2173R1 Attributes on Lambda-Expressions</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2186r2" data-linktype="external"><code>P2186R2 Remove Garbage Collection Support</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2201r1" data-linktype="external"><code>P2201R1 Mixed string literal concatenation</code></a></td>
+<td>VS 2022 17.14</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2223r2" data-linktype="external"><code>P2223R2 Trimming whitespaces before line splicing</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2242r3" data-linktype="external"><code>P2242R3 Non-literal variables (and labels and gotos) in constexpr functions</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2246r1" data-linktype="external"><code>P2246R1 Character encoding of diagnostic text</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2266r3" data-linktype="external"><code>P2266R3 Simpler implicit move</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2280r4" data-linktype="external"><code>P2280R4 Using unknown pointers and references in constant expressions</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2290r3" data-linktype="external"><code>P2290R3 Delimited escape sequences</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2295r6" data-linktype="external"><code>P2295R6 Support for UTF-8 as a portable source file encoding</code></a></td>
+<td><sup><a href="#note_V" data-linktype="self-bookmark">V</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2314r4" data-linktype="external"><code>P2314R4 Character sets and encodings</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2316r2" data-linktype="external"><code>P2316R2 Consistent character literal encoding</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2324r2" data-linktype="external"><code>P2324R2 Labels at the end of compound statements (C compatibility)</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2327r1" data-linktype="external"><code>P2327R1 De-deprecating volatile compound operations</code></a></td>
+<td>VS 2022 v17.14</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2334r1" data-linktype="external"><code>P2334R1 preprocessing directives elifdef and elifndef</code></a></td>
+<td>VS 2022 17.10 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2360r0" data-linktype="external"><code>P2360R0 Extend init-statement to allow alias-declaration</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2362r3" data-linktype="external"><code>P2362R3 Remove non-encodable wide character literals and multicharacter wide character literals</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2437r1" data-linktype="external"><code>P2437R1 Support for #warning</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2448r2" data-linktype="external"><code>P2448R2 Relaxing some constexpr restrictions</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2460r2" data-linktype="external"><code>P2460R2 Relax requirements on wchar_t to match existing practices</code></a></td>
+<td>VS 2022 v17.14</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2468r2" data-linktype="external"><code>P2468R2 The Equality Operator You Are Looking For</code></a></td>
+<td>VS 2022 17.6 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2493r0" data-linktype="external"><code>P2493R0 Missing feature test macros for C++20 core papers</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2513r4" data-linktype="external"><code>P2513R4 char8_t Compatibility and Portability Fix</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_DR" data-linktype="self-bookmark">DR</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2579r0" data-linktype="external"><code>P2579R0 Mitigation strategies for P2036 "Changing scope for lambda trailing-return-type"</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2582r1" data-linktype="external"><code>P2582R1 Wording for class template argument deduction from inherited constructors</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2589r1" data-linktype="external"><code>P2589R1 static operator[]</code></a></td>
+<td>VS 2022 17.14 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+</tbody>
+</table>
+<h2 id="c-standard-library-features">C++ Standard library features</h2>
+<p>A more detailed listing of Standard Library features and bug fixes by product version is available on the <a href="https://github.com/microsoft/STL/wiki/Changelog" data-linktype="external">GitHub Microsoft STL wiki Changelog</a> page.</p>
+<p>For the latest information about ongoing conformance work, see:</p>
+<ul>
+<li><a href="https://github.com/orgs/microsoft/projects/1142/views/2" data-linktype="external">STL C++23 Features</a>.</li>
+<li><a href="https://github.com/orgs/microsoft/projects/1143/views/2" data-linktype="external">STL C++26 Features</a>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Supported</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>C++14 Standard library features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3462" data-linktype="external"><code>N3462 SFINAE-Friendly result_of</code></a></td>
+<td>VS 2015.2</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3302" data-linktype="external"><code>N3302 constexpr For &lt;complex&gt;</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3469" data-linktype="external"><code>N3469 constexpr For &lt;chrono&gt;</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3470" data-linktype="external"><code>N3470 constexpr For &lt;array&gt;</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3471" data-linktype="external"><code>N3471 constexpr For &lt;initializer_list&gt;, &lt;tuple&gt;, &lt;utility&gt;</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3545" data-linktype="external"><code>N3545 integral_constant::operator()()</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3642" data-linktype="external"><code>N3642 UDLs For &lt;chrono&gt;, &lt;string&gt; (1729ms, "meow"s, etc.)</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3644" data-linktype="external"><code>N3644 Null Forward Iterators</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3654" data-linktype="external"><code>N3654 quoted()</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3657" data-linktype="external"><code>N3657 Heterogeneous Associative Lookup</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3658" data-linktype="external"><code>N3658 integer_sequence</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3659" data-linktype="external"><code>N3659 shared_mutex (Timed)</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3668" data-linktype="external"><code>N3668 exchange()</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3669" data-linktype="external"><code>N3669 Fixing constexpr Member Functions Without const</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3670" data-linktype="external"><code>N3670 get&lt;T&gt;()</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3671" data-linktype="external"><code>N3671 Dual-Range equal(), is_permutation(), mismatch()</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3778" data-linktype="external"><code>N3778 Sized Deallocation</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3779" data-linktype="external"><code>N3779 UDLs For &lt;complex&gt; (3.14i, etc.)</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3789" data-linktype="external"><code>N3789 constexpr For &lt;functional&gt;</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3887" data-linktype="external"><code>N3887 tuple_element_t</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3891" data-linktype="external"><code>N3891 Renaming shared_mutex (Timed) To shared_timed_mutex</code></a></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3346" data-linktype="external"><code>N3346 Minimal Container Element Requirements</code></a></td>
+<td>VS 2013</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3421" data-linktype="external"><code>N3421 Transparent Operator Functors (less&lt;&gt;, etc.)</code></a></td>
+<td>VS 2013</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3655" data-linktype="external"><code>N3655 Alias Templates For &lt;type_traits&gt; (decay_t, etc.)</code></a></td>
+<td>VS 2013</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3656" data-linktype="external"><code>N3656 make_unique()</code></a></td>
+<td>VS 2013</td>
+</tr>
+<tr>
+<td><strong>C++17 Standard library features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n3911" data-linktype="external"><code>N3911 void_t</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4089" data-linktype="external"><code>N4089 Safe Conversions In unique_ptr&lt;T[]&gt;</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4169" data-linktype="external"><code>N4169 invoke()</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4190" data-linktype="external"><code>N4190 Removing auto_ptr, random_shuffle(), And Old &lt;functional&gt; Stuff</code></a></td>
+<td>VS 2015 <sup><a href="#note_F" data-linktype="self-bookmark">F</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4258" data-linktype="external"><code>N4258 noexcept Cleanups</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4259" data-linktype="external"><code>N4259 uncaught_exceptions()</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4277" data-linktype="external"><code>N4277 Trivially Copyable reference_wrapper</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4279" data-linktype="external"><code>N4279 insert_or_assign()/try_emplace() For map/unordered_map</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4280" data-linktype="external"><code>N4280 size(), empty(), data()</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4366" data-linktype="external"><code>N4366 Precisely Constraining unique_ptr Assignment</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4387" data-linktype="external"><code>N4387 Improving pair And tuple</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4389" data-linktype="external"><code>N4389 bool_constant</code></a></td>
+<td>VS 2015 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4508" data-linktype="external"><code>N4508 shared_mutex (Untimed)</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4510" data-linktype="external"><code>N4510 Supporting Incomplete Types In vector/list/forward_list</code></a></td>
+<td>VS 2013 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#alg.random.sample" data-linktype="external"><code>N4562 Library Fundamentals: &lt;algorithm&gt; sample()</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#any" data-linktype="external"><code>N4562 Library Fundamentals: &lt;any&gt;</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#memory.resource.synop" data-linktype="external"><code>N4562 Library Fundamentals: &lt;memory_resource&gt;</code></a><br> <a href="https://wg21.link/p0337r0" data-linktype="external"><code>P0337R0 Deleting polymorphic_allocator Assignment</code></a></td>
+<td>VS 2017 15.6</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#optional" data-linktype="external"><code>N4562 Library Fundamentals: &lt;optional&gt;</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#string.view" data-linktype="external"><code>N4562 Library Fundamentals: &lt;string_view&gt;</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#tuple" data-linktype="external"><code>N4562 Library Fundamentals: &lt;tuple&gt; apply()</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/n4562#func.searchers.boyer_moore" data-linktype="external"><code>N4562 Library Fundamentals: Boyer-Moore search()</code></a><br> <a href="https://wg21.link/p0253r1" data-linktype="external"><code>P0253R1 Fixing Searcher Return Types</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0003r5" data-linktype="external"><code>P0003R5 Removing Dynamic Exception Specifications</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0004r1" data-linktype="external"><code>P0004R1 Removing Deprecated Iostreams Aliases</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_F" data-linktype="self-bookmark">F</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0005r4" data-linktype="external"><code>P0005R4 not_fn()</code></a><br> <a href="https://wg21.link/p0358r1" data-linktype="external"><code>P0358R1 Fixes For not_fn()</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0006r0" data-linktype="external"><code>P0006R0 Variable Templates For Type Traits (is_same_v, etc.)</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0007r1" data-linktype="external"><code>P0007R1 as_const()</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0013r1" data-linktype="external"><code>P0013R1 Logical Operator Type Traits (conjunction, etc.)</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0024r2" data-linktype="external"><code>P0024R2 Parallel Algorithms</code></a><br> <a href="https://wg21.link/p0336r1" data-linktype="external"><code>P0336R1 Renaming Parallel Execution Policies</code></a><br> <a href="https://wg21.link/p0394r4" data-linktype="external"><code>P0394R4 Parallel Algorithms Should terminate() For Exceptions</code></a><br> <a href="https://wg21.link/p0452r1" data-linktype="external"><code>P0452R1 Unifying &lt;numeric&gt; Parallel Algorithms</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_G" data-linktype="self-bookmark">G</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0025r1" data-linktype="external"><code>P0025R1 clamp()</code></a></td>
+<td>VS 2015.3</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0030r1" data-linktype="external"><code>P0030R1 hypot(x, y, z)</code></a></td>
+<td>VS 2017 15.7</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0031r0" data-linktype="external"><code>P0031R0 constexpr For &lt;array&gt; (Again) And &lt;iterator&gt;</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0032r3" data-linktype="external"><code>P0032R3 Homogeneous Interface For variant/any/optional</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0033r1" data-linktype="external"><code>P0033R1 Rewording enable_shared_from_this</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0040r3" data-linktype="external"><code>P0040R3 Extending Memory Management Tools</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0063r3" data-linktype="external"><code>P0063R3 C11 Standard Library</code></a></td>
+<td>VS 2015 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a>, <a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0067r5" data-linktype="external"><code>P0067R5 Elementary String Conversions</code></a></td>
+<td>VS 2019 16.4</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0074r0" data-linktype="external"><code>P0074R0 owner_less&lt;&gt;</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0077r2" data-linktype="external"><code>P0077R2 is_callable, is_nothrow_callable</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0083r3" data-linktype="external"><code>P0083R3 Splicing Maps And Sets</code></a><br> <a href="https://wg21.link/p0508r0" data-linktype="external"><code>P0508R0 Clarifying insert_return_type</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0084r2" data-linktype="external"><code>P0084R2 Emplace Return Type</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0088r3" data-linktype="external"><code>P0088R3 &lt;variant&gt;</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0092r1" data-linktype="external"><code>P0092R1 &lt;chrono&gt; floor(), ceil(), round(), abs()</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0152r1" data-linktype="external"><code>P0152R1 atomic::is_always_lock_free</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0154r1" data-linktype="external"><code>P0154R1 hardware_destructive_interference_size, etc.</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0156r0" data-linktype="external"><code>P0156R0 Variadic lock_guard</code></a></td>
+<td>VS 2015.2 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0156r2" data-linktype="external"><code>P0156R2 Renaming Variadic lock_guard to scoped_lock</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0163r0" data-linktype="external"><code>P0163R0 shared_ptr::weak_type</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0174r2" data-linktype="external"><code>P0174R2 Deprecating Vestigial Library Parts</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0185r1" data-linktype="external"><code>P0185R1 is_swappable, is_nothrow_swappable</code></a></td>
+<td>VS 2015.3</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0209r2" data-linktype="external"><code>P0209R2 make_from_tuple()</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0218r1" data-linktype="external"><code>P0218R1 &lt;filesystem&gt;</code></a><br> <a href="https://wg21.link/p0219r1" data-linktype="external"><code>P0219R1 Relative Paths For Filesystem</code></a><br> <a href="https://wg21.link/p0317r1" data-linktype="external"><code>P0317R1 Directory Entry Caching For Filesystem</code></a><br> <a href="https://wg21.link/p0392r0" data-linktype="external"><code>P0392R0 Supporting string_view In Filesystem Paths</code></a><br> <a href="https://wg21.link/p0430r2" data-linktype="external"><code>P0430R2 Supporting Non-POSIX Filesystems</code></a><br> <a href="https://wg21.link/p0492r2" data-linktype="external"><code>P0492R2 Resolving NB Comments for Filesystem</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_H" data-linktype="self-bookmark">H</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0220r1" data-linktype="external"><code>P0220R1 Library Fundamentals V1</code></a></td>
+<td>VS 2017 15.6</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0226r1" data-linktype="external"><code>P0226R1 Mathematical Special Functions</code></a></td>
+<td>VS 2017 15.7</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0254r2" data-linktype="external"><code>P0254R2 Integrating string_view And std::string</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0258r2" data-linktype="external"><code>P0258R2 has_unique_object_representations</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_I" data-linktype="self-bookmark">I</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0272r1" data-linktype="external"><code>P0272R1 Non-const basic_string::data()</code></a></td>
+<td>VS 2015.3</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0295r0" data-linktype="external"><code>P0295R0 gcd(), lcm()</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0298r3" data-linktype="external"><code>P0298R3 std::byte</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a>,&nbsp;<a href="#note_J" data-linktype="self-bookmark">J</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0302r1" data-linktype="external"><code>P0302R1 Removing Allocator Support In std::function</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0307r2" data-linktype="external"><code>P0307R2 Making Optional Greater Equal Again</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0393r3" data-linktype="external"><code>P0393R3 Making Variant Greater Equal</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0403r1" data-linktype="external"><code>P0403R1 UDLs For &lt;string_view&gt; ("meow"sv, etc.)</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0414r2" data-linktype="external"><code>P0414R2 shared_ptr&lt;T[]&gt;, shared_ptr&lt;T[N]&gt;</code></a><br> <a href="https://wg21.link/p0497r0" data-linktype="external"><code>P0497R0 Fixing shared_ptr For Arrays</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0418r2" data-linktype="external"><code>P0418R2 atomic compare_exchange memory_order Requirements</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0426r1" data-linktype="external"><code>P0426R1 constexpr For char_traits</code></a></td>
+<td>VS 2017 15.7</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0433r2" data-linktype="external"><code>P0433R2 Integrating template deduction for class templates into the standard library</code></a><br> <a href="https://wg21.link/p0739r0" data-linktype="external"><code>P0739R0 Improving class template argument deduction integration into the standard library</code></a></td>
+<td>VS 2017 15.7</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0435r1" data-linktype="external"><code>P0435R1 Overhauling common_type</code></a><br> <a href="https://wg21.link/p0548r1" data-linktype="external"><code>P0548R1 Tweaking common_type and duration</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0504r0" data-linktype="external"><code>P0504R0 Revisiting in_place_t/in_place_type_t&lt;T&gt;/in_place_index_t&lt;I&gt;</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0505r0" data-linktype="external"><code>P0505R0 constexpr For &lt;chrono&gt; (Again)</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0510r0" data-linktype="external"><code>P0510R0 Rejecting variants Of Nothing, Arrays, References, And Incomplete Types</code></a></td>
+<td>VS 2017 15.0</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0513r0" data-linktype="external"><code>P0513R0 Poisoning hash</code></a><br> <a href="https://wg21.link/p0599r1" data-linktype="external"><code>P0599R1 noexcept hash</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0516r0" data-linktype="external"><code>P0516R0 Marking shared_future Copying As noexcept</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0517r0" data-linktype="external"><code>P0517R0 Constructing future_error From future_errc</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0521r0" data-linktype="external"><code>P0521R0 Deprecating shared_ptr::unique()</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0558r1" data-linktype="external"><code>P0558R1 Resolving atomic&lt;T&gt; Named Base Class Inconsistencies</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0595R2" data-linktype="external"><code>P0595R2 std::is_constant_evaluated()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0602R4" data-linktype="external"><code>P0602R4 Propagating Copy/Move Triviality In variant/optional</code></a></td>
+<td>VS 2017 15.3<sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0604r0" data-linktype="external"><code>P0604R0 Changing is_callable/result_of To invoke_result, is_invocable, is_nothrow_invocable</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0607r0" data-linktype="external"><code>P0607R0 Inline Variables for the Standard Library</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0618r0" data-linktype="external"><code>P0618R0 Deprecating &lt;codecvt&gt;</code></a></td>
+<td>VS 2017 15.5 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td><strong>C++17 Standard library features (Defect reports)</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0682R1" data-linktype="external"><code>P0682R1 Repairing Elementary String Conversions</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1164R1" data-linktype="external"><code>P1164R1 Making create_directory() Intuitive</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td><strong>C++20 Standard library features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0809r0" data-linktype="external"><code>P0809R0 Comparing Unordered Containers</code></a></td>
+<td>VS 2010 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0858r0" data-linktype="external"><code>P0858R0 Constexpr Iterator Requirements</code></a></td>
+<td>VS 2017 15.3 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0777r1" data-linktype="external"><code>P0777R1 Avoiding Unnecessary Decay</code></a></td>
+<td>VS 2017 15.7 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0550r2" data-linktype="external"><code>P0550R2 remove_cvref</code></a></td>
+<td>VS 2019 16.0 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0318r1" data-linktype="external"><code>P0318R1 unwrap_reference, unwrap_ref_decay</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0457r2" data-linktype="external"><code>P0457R2 starts_with()/ends_with() For basic_string/basic_string_view</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0458r2" data-linktype="external"><code>P0458R2 contains() For Ordered And Unordered Associative Containers</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0646r1" data-linktype="external"><code>P0646R1 list/forward_list remove()/remove_if()/unique() Return size_type</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0769r2" data-linktype="external"><code>P0769R2 shift_left(), shift_right()</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0887r1" data-linktype="external"><code>P0887R1 type_identity</code></a></td>
+<td>VS 2019 16.1 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0020r6" data-linktype="external"><code>P0020R6 atomic&lt;float&gt;, atomic&lt;double&gt;, atomic&lt;long double&gt;</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0463r1" data-linktype="external"><code>P0463R1 endian</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0482R6" data-linktype="external"><code>P0482R6 char8_t: A type for UTF-8 characters and strings</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0600r1" data-linktype="external"><code>P0600R1 [[nodiscard]] For The STL, Part 1</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0653r2" data-linktype="external"><code>P0653R2 to_address()</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0754r2" data-linktype="external"><code>P0754R2 &lt;version&gt;</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0771R1" data-linktype="external"><code>P0771R1 noexcept For std::function's Move Constructor</code></a></td>
+<td>VS 2019 16.2 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0487R1" data-linktype="external"><code>P0487R1 Fixing operator&gt;&gt;(basic_istream&amp;, CharT*)</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0616r0" data-linktype="external"><code>P0616R0 Using move() In &lt;numeric&gt;</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0758R1" data-linktype="external"><code>P0758R1 is_nothrow_convertible</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0898R3" data-linktype="external"><code>P0898R3 Standard Library Concepts</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0919R3" data-linktype="external"><code>P0919R3 Heterogeneous Lookup For Unordered Containers</code></a></td>
+<td>VS 2019 16.3 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1754R1" data-linktype="external"><code>P1754R1 Rename Concepts to standard_case</code></a></td>
+<td>VS 2019 16.4 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0325R4" data-linktype="external"><code>P0325R4 to_array from LFTS with updates</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0340R3" data-linktype="external"><code>P0340R3 SFINAE-Friendly underlying_type</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0356R5" data-linktype="external"><code>P0356R5 bind_front()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0439r0" data-linktype="external"><code>P0439R0 enum class memory_order</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0553R4" data-linktype="external"><code>P0553R4 &lt;bit&gt; Rotating And Counting Functions</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0556R3" data-linktype="external"><code>P0556R3 &lt;bit&gt; ispow2(), ceil2(), floor2(), log2p1()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0595R2" data-linktype="external"><code>P0595R2 is_constant_evaluated()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0631R8" data-linktype="external"><code>P0631R8 &lt;numbers&gt; Math Constants</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0655R1" data-linktype="external"><code>P0655R1 visit&lt;R&gt;()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0738R2" data-linktype="external"><code>P0738R2 istream_iterator Cleanup</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0767R1" data-linktype="external"><code>P0767R1 Deprecating is_pod</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0966R1" data-linktype="external"><code>P0966R1 string::reserve() Should Not Shrink</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1209R0" data-linktype="external"><code>P1209R0 erase_if(), erase()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1227R2" data-linktype="external"><code>P1227R2 Signed std::ssize(), Unsigned span::size()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1355R2" data-linktype="external"><code>P1355R2 Narrow Contract For ceil2()</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1357R1" data-linktype="external"><code>P1357R1 is_bounded_array, is_unbounded_array</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1612R1" data-linktype="external"><code>P1612R1 Relocating endian To &lt;bit&gt;</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1651R0" data-linktype="external"><code>P1651R0 bind_front() Should Not Unwrap reference_wrapper</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1690R1" data-linktype="external"><code>P1690R1 Refining Heterogeneous Lookup For Unordered Containers</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1902R1" data-linktype="external"><code>P1902R1 Missing Feature-Test Macros 2017-2019</code></a></td>
+<td>VS 2019 16.5 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0122r7" data-linktype="external"><code>P0122R7 &lt;span&gt;</code></a><br> <a href="https://wg21.link/p1024r3" data-linktype="external"><code>P1024R3 Enhancing span usability</code></a><br> <a href="https://wg21.link/p1085r2" data-linktype="external"><code>P1085R2 Removing span comparisons</code></a><br> <a href="https://wg21.link/p1394r4" data-linktype="external"><code>P1394R4 Range constructor for span</code></a><br> <a href="https://wg21.link/p1872r0" data-linktype="external"><code>P1872R0 span should have size_type, not index_type</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0202r3" data-linktype="external"><code>P0202R3 constexpr for &lt;algorithm&gt; and exchange()</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0357R3" data-linktype="external"><code>P0357R3 Supporting Incomplete Types In reference_wrapper</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0619R4" data-linktype="external"><code>P0619R4 Removing C++17-Deprecated Features In C++20</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0879R0" data-linktype="external"><code>P0879R0 constexpr for swapping functions</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0883R2" data-linktype="external"><code>P0883R2 Fixing atomic initialization</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0935R0" data-linktype="external"><code>P0935R0 Eradicating Unnecessarily Explicit Default Constructors</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1006R1" data-linktype="external"><code>P1006R1 constexpr For pointer_traits&lt;T*&gt;::pointer_to()</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1165R1" data-linktype="external"><code>P1165R1 Consistently Propagating Stateful Allocators In basic_string's operator+()</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_14" data-linktype="self-bookmark">14</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1423R3" data-linktype="external"><code>P1423R3 char8_t backward compatibility remediation</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1645R1" data-linktype="external"><code>P1645R1 constexpr for &lt;numeric&gt; algorithms</code></a></td>
+<td>VS 2019 16.6 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0415r1" data-linktype="external"><code>P0415R1 constexpr For &lt;complex&gt; (Again)</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0476R2" data-linktype="external"><code>P0476R2 &lt;bit&gt; bit_cast</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0528R3" data-linktype="external"><code>P0528R3 Atomic Compare-And-Exchange With Padding Bits</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0586R2" data-linktype="external"><code>P0586R2 Integer comparison functions</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0674r1" data-linktype="external"><code>P0674R1 make_shared() For Arrays</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0718r2" data-linktype="external"><code>P0718R2 atomic&lt;shared_ptr&lt;T&gt;&gt;, atomic&lt;weak_ptr&lt;T&gt;&gt;</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1023R0" data-linktype="external"><code>P1023R0 constexpr For std::array Comparisons</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1115R3" data-linktype="external"><code>P1115R3 erase()/erase_if() Return size_type</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1831R1" data-linktype="external"><code>P1831R1 Deprecating volatile in the standard library</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1871R1" data-linktype="external"><code>P1871R1 Concept traits should be named after concepts</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1956R1" data-linktype="external"><code>P1956R1 &lt;bit&gt; has_single_bit(), bit_ceil(), bit_floor(), bit_width()</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1964R2" data-linktype="external"><code>P1964R2 Replacing boolean With boolean-testable</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1976R2" data-linktype="external"><code>P1976R2 Fixed-size span construction from dynamic range</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2091R0" data-linktype="external"><code>P2091R0 Issues with range access CPOs</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2102R0" data-linktype="external"><code>P2102R0 Make "implicit expression variations" more explicit</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2116R0" data-linktype="external"><code>P2116R0 Remove tuple-like protocol support from fixed-extent span</code></a></td>
+<td>VS 2019 16.7 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0019R8" data-linktype="external"><code>P0019R8 atomic_ref</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0528R3" data-linktype="external"><code>P0528R3 Library support for atomic compare-and-exchange with padding bits</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0811R3" data-linktype="external"><code>P0811R3 midpoint(), lerp()</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0912R5" data-linktype="external"><code>P0912R5 Library Support For Coroutines</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1001R2" data-linktype="external"><code>P1001R2 execution::unseq</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1032R1" data-linktype="external"><code>P1032R1 Miscellaneous constexpr</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1065R2" data-linktype="external"><code>P1065R2 constexpr INVOKE</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1123R0" data-linktype="external"><code>P1123R0 Editorial Guidance for merging P0019r8 and P0528r3</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1960R0" data-linktype="external"><code>P1960R0 NB Comment Changes Reviewed by SG1</code></a></td>
+<td>VS 2019 16.8 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0339R6" data-linktype="external"><code>P0339R6 polymorphic_allocator&lt;&gt;</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0660r10" data-linktype="external"><code>P0660R10 &lt;stop_token&gt; and jthread</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0768r1" data-linktype="external"><code>P0768R1 Library Support For The Spaceship Comparison Operator &lt;=&gt;</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1007R3" data-linktype="external"><code>P1007R3 assume_aligned()</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1020R1" data-linktype="external"><code>P1020R1 Smart Pointer Creation With Default Initialization</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1135R6" data-linktype="external"><code>P1135R6 The C++20 Synchronization Library</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1771R1" data-linktype="external"><code>P1771R1 Library support for [[nodiscard]] for constructors</code></a></td>
+<td>VS 2019 16.9 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0053r7" data-linktype="external"><code>P0053R7 &lt;syncstream&gt;</code></a><br> <a href="https://wg21.link/p0753r2" data-linktype="external"><code>P0753R2 osyncstream Manipulators</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0355r7" data-linktype="external"><code>P0355R7 &lt;chrono&gt; Calendars And Time Zones</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20abi" data-linktype="self-bookmark">20abi</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0408r7" data-linktype="external"><code>P0408R7 Efficient access To basic_stringbuf's buffer</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0466r5" data-linktype="external"><code>P0466R5 Library support for layout-compatibility and pointer-interconvertibility traits</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0475R1" data-linktype="external"><code>P0475R1 Guaranteed Copy Elision For Piecewise Construction</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0591R4" data-linktype="external"><code>P0591R4 Utility Functions For Uses-Allocator Construction</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0608R3" data-linktype="external"><code>P0608R3 Improving variant's Converting Constructor/Assignment</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0645r10" data-linktype="external"><code>P0645R10 &lt;format&gt; Text Formatting</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20abi" data-linktype="self-bookmark">20abi</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0784R7" data-linktype="external"><code>P0784R7 Library support for more constexpr containers</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0896R4" data-linktype="external"><code>P0896R4 &lt;ranges&gt;</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20abi" data-linktype="self-bookmark">20abi</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P0980R1" data-linktype="external"><code>P0980R1 constexpr std::string</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a>, <a href="#note_P" data-linktype="self-bookmark">P</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1004R2" data-linktype="external"><code>P1004R2 constexpr std::vector</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a>, <a href="#note_P" data-linktype="self-bookmark">P</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1208R6" data-linktype="external"><code>P1208R6 &lt;source_location&gt;</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1502R1" data-linktype="external"><code>P1502R1 Standard Library Header Units</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1614R2" data-linktype="external"><code>P1614R2 Adding Spaceship &lt;=&gt; To The Library</code></a></td>
+<td>VS 2019 16.10 <sup><a href="#note_20" data-linktype="self-bookmark">20</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P1285R0" data-linktype="external"><code>P1285R0 Improving Completeness Requirements For Type Traits</code></a></td>
+<td>VS 2022 v17.14</td>
+</tr>
+<tr>
+<td><strong>C++20 Standard library features (Defect reports)</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2325r3" data-linktype="external"><code>P2325R3 Views Should Not Be Required To Be Default Constructible</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_20abi" data-linktype="self-bookmark">20abi</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2328R1" data-linktype="external"><code>P2328R1 join_view should join all views of ranges</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_20abi" data-linktype="self-bookmark">20abi</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2367R0" data-linktype="external"><code>P2367R0 Remove misuses of list-initialization from clause 24 ranges</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_20abi" data-linktype="self-bookmark">20abi</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2259R1" data-linktype="external"><code>P2259R1 Partial LWG issue resolution: repairing Input Range Adaptors and counted_iterator</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td><strong>C++23 Standard library features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0288r9" data-linktype="external"><code>P0288R9 move_only_function</code></a></td>
+<td>VS 2022 17.2 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0323r12" data-linktype="external"><code>P0323R12 &lt;expected&gt;</code></a></td>
+<td>VS 2022 17.3 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0401r6" data-linktype="external"><code>P0401R6 Providing Size Feedback In The Allocator Interface</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0448r4" data-linktype="external"><code>P0448R4 &lt;spanstream&gt;</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0627r6" data-linktype="external"><code>P0627R6 unreachable()</code></a></td>
+<td>VS 2022 17.2 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0798r8" data-linktype="external"><code>P0798R8 Monadic Operations For optional</code></a></td>
+<td>VS 2022 17.2 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0849r8" data-linktype="external"><code>P0849R8 auto(x): decay-copy In The Language</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0881r7" data-linktype="external"><code>P0881R7 &lt;stacktrace&gt;</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p0943r6" data-linktype="external"><code>P0943R6 Supporting C Atomics In C++</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1048r1" data-linktype="external"><code>P1048R1 is_scoped_enum</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1072r10" data-linktype="external"><code>P1072R10 basic_string::resize_and_overwrite</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1132r7" data-linktype="external"><code>P1132R7 out_ptr(), inout_ptr()</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1147r1" data-linktype="external"><code>P1147R1 Printing volatile Pointers</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1206r7" data-linktype="external"><code>P1206R7 Conversions From Ranges To Containers</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1272r4" data-linktype="external"><code>P1272R4 byteswap()</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1328r1" data-linktype="external"><code>P1328R1 constexpr type_info::operator==()</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1413r3" data-linktype="external"><code>P1413R3 Deprecate aligned_storage And aligned_union</code></a></td>
+<td>VS 2022 17.3 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1425r4" data-linktype="external"><code>P1425R4 Iterator Pair Constructors For stack And queue</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1518r2" data-linktype="external"><code>P1518R2 Stop Overconstraining Allocators In Container Deduction Guides</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1659r3" data-linktype="external"><code>P1659R3 ranges::starts_with, ranges::ends_with</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1679r3" data-linktype="external"><code>P1679R3 contains() For basic_string/basic_string_view</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1682r3" data-linktype="external"><code>P1682R3 to_underlying() For Enumerations</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1899r3" data-linktype="external"><code>P1899R3 views::stride</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1951r1" data-linktype="external"><code>P1951R1 Default Template Arguments For pair's Forwarding Constructor</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p1989r2" data-linktype="external"><code>P1989R2 Range Constructor For string_view</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2077r3" data-linktype="external"><code>P2077R3 Heterogeneous Erasure Overloads For Associative Containers</code></a></td>
+<td>VS 2022 17.2 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2136r3" data-linktype="external"><code>P2136R3 invoke_r()</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2162R2" data-linktype="external"><code>P2162R2 Inheriting from std::variant</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_17" data-linktype="self-bookmark">17</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2166R1" data-linktype="external"><code>P2166R1 Prohibit basic_string and basic_string_view from being constructed from nullptr</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a>, <a href="#note_R" data-linktype="self-bookmark">R</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/P2186R2" data-linktype="external"><code>P2186R2 Removed garbage collection support</code></a></td>
+<td>VS 2022 17.0 <sup><a href="#note_23" data-linktype="self-bookmark">23</a>, <a href="#note_Q" data-linktype="self-bookmark">Q</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2251r1" data-linktype="external"><code>P2251R1 Require span And basic_string_view To Be Trivially Copyable</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2273r3" data-linktype="external"><code>P2273R3 constexpr unique_ptr</code></a></td>
+<td>VS 2022 17.3 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2280r4" data-linktype="external"><code>P2280R4 Using unknown pointers and references in constant expressions</code></a></td>
+<td>MSVC Build Tools version 14.5 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2290r3" data-linktype="external"><code>P2290R3 Delimited escape sequences</code></a></td>
+<td>MSVC Build Tools version 14.5 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2291r3" data-linktype="external"><code>P2291R3 constexpr Integral &lt;charconv&gt;</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2302r4" data-linktype="external"><code>P2302R4 ranges::contains, ranges::contains_subrange</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2321r2" data-linktype="external"><code>P2321R2 std::zip</code></a></td>
+<td>partial in VS 2022 17.5 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2322r6" data-linktype="external"><code>P2322R6 ranges::fold_left, ranges::fold_right, etc.</code></a></td>
+<td>VS 2022 17.5 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2360r0" data-linktype="external"><code>P2360R0 Extend init-statement to allow alias-declaration</code></a></td>
+<td>MSVC Build Tools version 14.5 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2387r3" data-linktype="external"><code>P2387R3 Pipe Support For User-Defined Range Adaptors</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2393r1" data-linktype="external"><code>P2393R1 Cleaning Up Integer-Class Types</code></a></td>
+<td>VS 2022 17.2 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2401r0" data-linktype="external"><code>P2401R0 Conditional noexcept For exchange()</code></a></td>
+<td>VS 2022 17.1 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2408r5" data-linktype="external"><code>P2408R5 Ranges Iterators As Inputs To Non-Ranges Algorithms</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2417r2" data-linktype="external"><code>P2417R2 More constexpr bitset</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2419r2" data-linktype="external"><code>P2419R2 Clarify Handling Of Encodings In Localized Formatting Of chrono Types</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2437r1" data-linktype="external"><code>P2437R1 Support for #warning</code></a></td>
+<td>MSVC Build Tools version 14.50 <sup><a href="#note_24" data-linktype="self-bookmark">24</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2438r2" data-linktype="external"><code>P2438R2 string::substr() &amp;&amp;</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2440r1" data-linktype="external"><code>P2440R1 ranges::iota, ranges::shift_left, ranges::shift_right</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2441r2" data-linktype="external"><code>P2441R2 views::join_with</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2442r1" data-linktype="external"><code>P2442R1 Windowing Range Adaptors: views::chunk, views::slide</code></a></td>
+<td>VS 2022 17.3 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2443r1" data-linktype="external"><code>P2443R1 views::chunk_by</code></a></td>
+<td>VS 2022 17.3 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2445r1" data-linktype="external"><code>P2445R1 forward_like()</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2446r2" data-linktype="external"><code>P2446R2 views::as_rvalue</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2465r3" data-linktype="external"><code>P2465R3 Standard Library Modules std And std.compat</code></a></td>
+<td>no</td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2494r2" data-linktype="external"><code>P2494R2 Relaxing Range Adaptors To Allow Move-Only Types</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2499r0" data-linktype="external"><code>P2499R0 string_view Range Constructor Should Be explicit</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2508r1" data-linktype="external"><code>P2508R1 basic_format_string, format_string, wformat_string</code></a></td>
+<td>VS 2022 17.5 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2517r1" data-linktype="external"><code>P2517R1 Conditional noexcept For apply()</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2520r0" data-linktype="external"><code>P2520R0 move_iterator&lt;T*&gt; Should Be A Random-Access Iterator</code></a></td>
+<td>VS 2022 17.4 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+<tr>
+<td> <a href="https://wg21.link/p2549r1" data-linktype="external"><code>P2549R1 unexpected&lt;E&gt;::error()</code></a></td>
+<td>VS 2022 17.3 <sup><a href="#note_23" data-linktype="self-bookmark">23</a></sup></td>
+</tr>
+</tbody>
+</table>
+<p>A group of papers listed together indicates a Standard feature along with one or more approved improvements or expansions. These features are implemented together.</p>
+<h2 id="c-standard-library-features-1">C Standard library features</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Supported</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>C99 Standard library features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> Alternative spellings macros <code>&lt;iso646.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Wide character support <code>&lt;wchar.h&gt;</code> and <code>&lt;wctype.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Complex support in <code>&lt;complex.h&gt;</code></td>
+<td>Partial in VS 2015 <sup><a href="#note_K" data-linktype="self-bookmark">K</a></sup></td>
+</tr>
+<tr>
+<td> Type generic math functions <code>&lt;tgmath.h&gt;</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_2104" data-linktype="self-bookmark">2104</a></sup></td>
+</tr>
+<tr>
+<td> Additional floating point characteristics <code>&lt;float.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Hexadecimal float printf specifiers <code>%A</code>, <code>%a</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Extended integers types <code>&lt;inttypes.h&gt;</code>, <code>&lt;stdint.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <code>vscanf</code> family in <code>&lt;stdio.h&gt;</code> and <code>&lt;wchar.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> New math functions in <code>&lt;math.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Treatment of math library error conditions (<code>math_errhandling</code>)</td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Floating point environment access <code>&lt;fenv.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <code>%lf</code> conversion specifier for <code>printf</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <code>snprintf</code> family of functions in <code>&lt;stdio.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <code>boolean</code> type in <code>&lt;stdbool.h&gt;</code></td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> <code>va_copy</code> macro</td>
+<td>VS 2015</td>
+</tr>
+<tr>
+<td> Additional <code>strftime</code> conversion specifiers</td>
+<td>Partial in VS 2015 <sup><a href="#note_L" data-linktype="self-bookmark">L</a></sup></td>
+</tr>
+<tr>
+<td><strong>C11 Standard library features</strong></td>
+<td><strong>Supported</strong></td>
+</tr>
+<tr>
+<td> Alignment specifiers <code>&lt;stdalign.h&gt;</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a>, <a href="#note_2104" data-linktype="self-bookmark">2104</a></sup></td>
+</tr>
+<tr>
+<td> <code>aligned_alloc</code></td>
+<td>No <sup><a href="#note_M" data-linktype="self-bookmark">M</a></sup></td>
+</tr>
+<tr>
+<td> No return specifiers <code>&lt;stdnoreturn.h&gt;</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a>, <a href="#note_2104" data-linktype="self-bookmark">2104</a></sup></td>
+</tr>
+<tr>
+<td> Threading support <code>&lt;threads.h&gt;</code></td>
+<td>yes</td>
+</tr>
+<tr>
+<td> Atomic support <code>&lt;stdatomic.h&gt;</code></td>
+<td>experimental</td>
+</tr>
+<tr>
+<td> <code>char16_t</code>, <code>char32_t</code> <code>&lt;uchar.h&gt;</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+<tr>
+<td> <code>gets()</code> removed</td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a>, <a href="#note_N" data-linktype="self-bookmark">N</a></sup></td>
+</tr>
+<tr>
+<td> <code>gets_s()</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+<tr>
+<td> Bounds-checking interfaces (<code>*_s</code> APIs)</td>
+<td>Partial in VS 2015 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a>, <a href="#note_O" data-linktype="self-bookmark">O</a></sup></td>
+</tr>
+<tr>
+<td> <code>fopen</code> <code>"x"</code> option</td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+<tr>
+<td> Static assertions</td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a>, <a href="#note_2104" data-linktype="self-bookmark">2104</a></sup></td>
+</tr>
+<tr>
+<td> <code>quick_exit</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+<tr>
+<td> <code>&lt;complex.h&gt;</code> macros</td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+<tr>
+<td> floating point characteristics <code>&lt;float.h&gt;</code></td>
+<td>VS 2019 16.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+<tr>
+<td> C11 threads <code>&lt;threads.h&gt;</code></td>
+<td>VS 2022 17.8 <sup><a href="#note_C11" data-linktype="self-bookmark">C11</a></sup></td>
+</tr>
+</tbody>
+</table>
+<h3 id="supported-values">Supported values</h3>
+<p><strong>No</strong> Not yet implemented.<br>
+<strong>Partial</strong> The implementation is incomplete. For more information, see the <a href="#notes" data-linktype="self-bookmark">Notes</a> section.<br>
+<strong>VS 2010</strong> Supported in Visual Studio 2010.<br>
+<strong>VS 2013</strong> Supported in Visual Studio 2013.<br>
+<strong>VS 2015</strong> Supported in Visual Studio 2015 (RTW).<br>
+<strong>VS 2015.2</strong> and <strong>VS 2015.3</strong> indicate features that are supported in Visual Studio 2015 Update 2 and Visual Studio 2015 Update 3, respectively.<br>
+<strong>VS 2017 15.0</strong> Supported in Visual Studio 2017 version 15.0 (RTW).<br>
+<strong>VS 2017 15.3</strong> Supported in Visual Studio 2017 version 15.3.<br>
+<strong>VS 2017 15.5</strong> Supported in Visual Studio 2017 version 15.5.<br>
+<strong>VS 2017 15.7</strong> Supported in Visual Studio 2017 version 15.7.<br>
+<strong>VS 2019 16.0</strong> Supported in Visual Studio 2019 version 16.0 (RTW).<br>
+<strong>VS 2019 16.1</strong> Supported in Visual Studio 2019 version 16.1.<br>
+<strong>VS 2019 16.2</strong> Supported in Visual Studio 2019 version 16.2.<br>
+<strong>VS 2019 16.3</strong> Supported in Visual Studio 2019 version 16.3.<br>
+<strong>VS 2019 16.4</strong> Supported in Visual Studio 2019 version 16.4.<br>
+<strong>VS 2019 16.5</strong> Supported in Visual Studio 2019 version 16.5.<br>
+<strong>VS 2019 16.6</strong> Supported in Visual Studio 2019 version 16.6.<br>
+<strong>VS 2019 16.7</strong> Supported in Visual Studio 2019 version 16.7.<br>
+<strong>VS 2019 16.8</strong> Supported in Visual Studio 2019 version 16.8.<br>
+<strong>VS 2019 16.9</strong> Supported in Visual Studio 2019 version 16.9.<br>
+<strong>VS 2019 16.10</strong> Supported in Visual Studio 2019 version 16.10.<br>
+<strong>VS 2022 17.0</strong> Supported in Visual Studio 2022 version 17.0.<br>
+<strong>VS 2022 17.1</strong> Supported in Visual Studio 2022 version 17.1.<br>
+<strong>VS 2022 17.2</strong> Supported in Visual Studio 2022 version 17.2.<br>
+<strong>VS 2022 17.3</strong> Supported in Visual Studio 2022 version 17.3.<br>
+<strong>VS 2022 17.4</strong> Supported in Visual Studio 2022 version 17.4.<br>
+<strong>VS 2022 17.5</strong> Supported in Visual Studio 2022 version 17.5.<br>
+<strong>MSVC Build Tools version 14.50</strong> Supported in Visual Studio 2026 18.0 (MSVC compiler version 19.50) and up.</p>
+<h3 id="notes">Notes</h3>
+<p><a name="note_A"></a> <strong>A</strong> In <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++14</code></a> mode, the compiler leaves dynamic exception specifications unimplemented, and treats <code>throw()</code> as a synonym for <code>__declspec(nothrow)</code>. In C++17, P0003R5 removed most dynamic exception specifications, except for one vestige: the standard deprecated <code>throw()</code> and requires it to behave as a synonym for <strong><code>noexcept</code></strong>. In <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++17</code></a> mode, MSVC now conforms to the Standard by giving <code>throw()</code> the same behavior as <strong><code>noexcept</code></strong>, that is, enforcement via termination.</p>
+<p>The compiler option <a href="../build/reference/zc-noexcepttypes?view=msvc-170" data-linktype="relative-path"><code>/Zc:noexceptTypes</code></a> requests the old behavior of <code>__declspec(nothrow)</code>. It's likely that <code>throw()</code> will be removed in a future version of C++. To help with migrating code in response to these changes in the Standard and the Microsoft implementation, new compiler warnings for exception specification issues are added under <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++17</code></a> and <a href="../build/reference/permissive-standards-conformance?view=msvc-170" data-linktype="relative-path"><code>/permissive-</code></a>.</p>
+<p><a name="note_B"></a> <strong>B</strong> Supported in <a href="../build/reference/permissive-standards-conformance?view=msvc-170" data-linktype="relative-path"><code>/permissive-</code></a> mode in Visual Studio 2017 version 15.7. For more information, see <a href="https://devblogs.microsoft.com/cppblog/two-phase-name-lookup-support-comes-to-msvc/" data-linktype="external"><code>Two-phase name lookup support comes to MSVC</code></a>.</p>
+<p><a name="note_C"></a> <strong>C</strong> In Visual Studio 2019 version 16.6 and later versions, the compiler fully implements the standard C99 preprocessor via the <a href="../build/reference/zc-conformance?view=msvc-170" data-linktype="relative-path"><code>/Zc:preprocessor</code></a> option. (In Visual Studio 2017 versions 15.8 through 16.5, the compiler supports the standard C99 preprocessor via the <a href="../build/reference/experimental-preprocessor?view=msvc-170" data-linktype="relative-path"><code>/experimental:preprocessor</code></a> compiler option.) This option is on by default when the compiler option <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c11</code></a> or <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c17</code></a> is specified.</p>
+<p><a name="note_D"></a> <strong>D</strong> Supported under <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++14</code></a> with a suppressible warning, <a href="../error-messages/compiler-warnings/compiler-warning-c4984?view=msvc-170" data-linktype="relative-path"><code>C4984</code></a>.</p>
+<p><a name="note_E"></a> <strong>E</strong> The implementation is sufficient to support the C++20 Standard Library. A complete implementation requires a binary breaking change.</p>
+<p><a name="note_F"></a> <strong>F</strong> Features removed when the <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++17</code></a> or later compiler option is specified. To re-enable these features (to ease the transition to newer language modes), use these macros: <code>_HAS_AUTO_PTR_ETC</code>, <code>_HAS_FUNCTION_ALLOCATOR_SUPPORT</code>, <code>_HAS_OLD_IOSTREAMS_MEMBERS</code>, and <code>_HAS_UNEXPECTED</code>.</p>
+<p><a name="note_G"></a> <strong>G</strong> C++17's parallel algorithms library is complete. Complete doesn't mean that every algorithm is parallelized in every case. The most important algorithms are parallelized. Execution policy signatures are provided even where the implementation doesn't parallelize algorithms. The central internal header, <code>&lt;yvals_core.h&gt;</code>, contains the following "Parallel Algorithms Notes": C++ allows an implementation to implement parallel algorithms as calls to the serial algorithms. This implementation parallelizes several common algorithm calls, but not all.</p>
+<p>The following algorithms are parallelized:</p>
+<ul>
+<li><code>adjacent_difference</code>, <code>adjacent_find</code>, <code>all_of</code>, <code>any_of</code>, <code>count</code>, <code>count_if</code>, <code>equal</code>, <code>exclusive_scan</code>, <code>find</code>, <code>find_end</code>, <code>find_first_of</code>, <code>find_if</code>, <code>find_if_not</code>, <code>for_each</code>, <code>for_each_n</code>, <code>inclusive_scan</code>, <code>is_heap</code>, <code>is_heap_until</code>, <code>is_partitioned</code>, <code>is_sorted</code>, <code>is_sorted_until</code>, <code>mismatch</code>, <code>none_of</code>, <code>partition</code>, <code>reduce</code>, <code>remove</code>, <code>remove_if</code>, <code>replace</code>, <code>replace_if</code>, <code>search</code>, <code>search_n</code>, <code>set_difference</code>, <code>set_intersection</code>, <code>sort</code>, <code>stable_sort</code>, <code>transform</code>, <code>transform_exclusive_scan</code>, <code>transform_inclusive_scan</code>, <code>transform_reduce</code></li>
+</ul>
+<p>These algorithms aren't presently parallelized:</p>
+<ul>
+<li>These algorithms show no noticeable parallelism performance improvement on target hardware. All algorithms that merely copy or permute elements with no branches are typically memory bandwidth limited:
+<ul>
+<li><code>copy</code>, <code>copy_n</code>, <code>fill</code>, <code>fill_n</code>, <code>move</code>, <code>reverse</code>, <code>reverse_copy</code>, <code>rotate</code>, <code>rotate_copy</code>, <code>shift_left</code>, <code>shift_right</code>, <code>swap_ranges</code></li>
+</ul>
+</li>
+<li>Confusion over user parallelism requirements exists for these algorithms, which are likely in the above category anyway:
+<ul>
+<li><code>generate</code>, <code>generate_n</code></li>
+</ul>
+</li>
+<li>Effective parallelism of these algorithms might be infeasible:
+<ul>
+<li><code>partial_sort</code>, <code>partial_sort_copy</code></li>
+</ul>
+</li>
+<li>These algorithms aren't evaluated yet. The library might implement parallelism in a future release:
+<ul>
+<li><code>copy_if</code>, <code>includes</code>, <code>inplace_merge</code>, <code>lexicographical_compare</code>, <code>max_element</code>, <code>merge</code>, <code>min_element</code>, <code>minmax_element</code>, <code>nth_element</code>, <code>partition_copy</code>, <code>remove_copy</code>, <code>remove_copy_if</code>, <code>replace_copy</code>, <code>replace_copy_if</code>, <code>set_symmetric_difference</code>, <code>set_union</code>, <code>stable_partition</code>, <code>unique</code>, <code>unique_copy</code></li>
+</ul>
+</li>
+</ul>
+<p><a name="note_H"></a> <strong>H</strong> This is a wholly new implementation, incompatible with the previous <code>std::experimental</code> version, made necessary by symlink support, bug fixes, and changes in standard-required behavior. Currently, <code>&lt;filesystem&gt;</code> provides both the new <code>std::filesystem</code> and the previous <code>std::experimental::filesystem</code>. The <code>&lt;experimental/filesystem&gt;</code> header provides only the old experimental implementation. Expect removal of the experimental implementation in the next ABI-breaking release of the libraries.</p>
+<p><a name="note_I"></a> <strong>I</strong> Supported by a compiler intrinsic.</p>
+<p><a name="note_J"></a> <strong>J</strong> <code>std::byte</code> is enabled by <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++17</code></a> or later, but because it can conflict with the Windows SDK headers in some cases, it has a fine-grained opt-out macro. To disable it, define <code>_HAS_STD_BYTE</code> as <code>0</code>.</p>
+<p><a name="note_K"></a> <strong>K</strong> MSVC doesn't support the <code>_Complex</code> keyword or native complex types. The Universal CRT <code>&lt;complex.h&gt;</code> uses implementation-specific macros to achieve the same effect. For more information, see <a href="../c-runtime-library/complex-math-support?view=msvc-170" data-linktype="relative-path">C complex math support</a>.</p>
+<p><a name="note_L"></a> <strong>L</strong> The Universal CRT doesn't implement the <code>strftime</code> <code>E</code> and <code>O</code> alternative conversion modifiers. These modifiers are ignored (for example, <code>%Oe</code> behaves the same as <code>%e</code>). The underlying locale APIs don’t support the modifiers.</p>
+<p><a name="note_M"></a> <strong>M</strong> The Universal CRT doesn't implement C11 <code>aligned_alloc</code>, but does provide <a href="../c-runtime-library/reference/aligned-malloc?view=msvc-170" data-linktype="relative-path"><code>_aligned_malloc</code></a> and <a href="../c-runtime-library/reference/aligned-free?view=msvc-170" data-linktype="relative-path"><code>_aligned_free</code></a>. Because the Windows operating system doesn't support aligned allocations, this function is unlikely to be implemented.</p>
+<p><a name="note_N"></a> <strong>N</strong> The declaration is removed, but the export for the function remains for backward compatibility.</p>
+<p><a name="note_O"></a> <strong>O</strong> Certain bounds-checking functions are unimplemented, or have different signatures, or aren't part of the C11 or C17 standard. These functions are unimplemented: <code>abort_handler_s</code>, <code>ignore_handler_s</code>, <code>memset_s</code>, <code>set_constraint_handler_s</code>, <code>snprintf_s</code>, <code>snwprintf_s</code>, <code>strerrorlen_s</code>, <code>vsnwprintf_s</code>. These functions have different signatures: <code>gmtime_s</code>, <code>localtime_s</code>, <code>qsort_s</code>, <code>strtok_s</code>, <code>vsnprintf_s</code>, <code>wcstok_s</code>. These functions don't appear in the standard: <code>clearerr_s</code>, <code>fread_s</code>.</p>
+<p><a name="note_P"></a> <strong>P</strong> Support was added in Visual Studio 2019 version 16.10. Support for Clang was added in Visual Studio 2022 version 17.0.</p>
+<p><a name="note_Q"></a> <strong>Q</strong> This removes <code>declare_reachable</code>, <code>undeclare_reachable</code>, <code>declare_no_pointers</code>, <code>undeclare_no_pointers</code>, <code>get_pointer_safety</code>. Previously, these functions had no effect.</p>
+<p><a name="note_R"></a> <strong>R</strong> This is a common <strong>source-breaking</strong> change. However, code that previously had undefined behavior at runtime is now rejected with compiler errors.</p>
+<p><a name="note_S"></a> <strong>S</strong> Input range adaptors and <code>counted_iterator</code> are implemented in VS 2022 17.0. A future update to Visual Studio 2019 version 16.11 is planned to incorporate these changes.</p>
+<p><a name="note_T"></a> <strong>T</strong> <code>&lt;stdatomic.h&gt;</code> is currently supported when compiled as C++ (<code>/std:c++latest</code>). It isn't yet supported when compiled as C (<code>/std:c11</code> and <code>/std:c17</code>)</p>
+<p><a name="note_U"></a> <strong>U</strong> Extended floating-point types are an optional C++23 feature. This feature won't be implemented until C++23 standardization is finalized.</p>
+<p><a name="note_V"></a> <strong>V</strong> Use the compiler options <code>/source-charset:utf-8</code> and <code>/we4828</code> to treat source files as UTF-8 encoded.</p>
+<p><a name="note_14"></a> <strong>14</strong> These C++17 and C++20 features are always enabled, even when <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++14</code></a> (the default) is specified. The reason is either because the feature was implemented before the introduction of the <strong><code>/std</code></strong> options, or because conditional implementation was undesirably complex.</p>
+<p><a name="note_17"></a> <strong>17</strong> These features are enabled by the <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++17</code></a> or later compiler option.</p>
+<p><a name="note_20"></a> <strong>20</strong> In versions through Visual Studio 2019 version 16.10, these features are enabled by the <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++latest</code></a> compiler option. Visual Studio 2019 version 16.11 added the <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++20</code></a> compiler option to enable these features.</p>
+<p><a name="note_20abi"></a> <strong>20abi</strong> Because of ongoing post-release work on the C++20 standard, <code>&lt;format&gt;</code>, the formatting parts of <code>&lt;chrono&gt;</code> (which rely on <code>&lt;format&gt;</code>), and the range factories and range adaptors from <code>&lt;ranges&gt;</code> (everything that needs the <code>view</code> concept) are only available under <strong><code>/std:c++latest</code></strong>. Expect these features under <strong><code>/std:c++20</code></strong> after agreement is reached with WG21 that no further ABI-breaking changes are necessary. The remaining parts of <code>&lt;chrono&gt;</code> and the algorithms that apply to ranges are enabled under the <strong><code>/std:c++20</code></strong> compiler option in Visual Studio 2019 version 16.11 and later versions.</p>
+<p><a name="note_23"></a> <strong>23</strong> In Visual Studio 2022 version 17.0 and up, these features are enabled by the <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++latest</code></a> compiler option.</p>
+<p><a name="note_24"></a> <strong>24</strong> In MSVC Build Tools version 14.50 and up (first shipped with Visual Studio 2026 version 18.0), these features are enabled by the <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std:c++latest</code></a> compiler option.</p>
+<p><a name="note_C11"></a> <strong>C11</strong> Compiler support for C11 and C17 requires Visual Studio 2019 version 16.8 or higher. Except as noted, C11 and C17 library support requires Windows SDK build 10.0.20211.0 or higher. For more information on how to install support for C11 and C17, see <a href="install-c17-support?view=msvc-170" data-linktype="relative-path">Install C11 and C17 support in Visual Studio</a>.</p>
+<p><a name="note_DR"></a> <strong>DR</strong> These features are enabled in all C++ <a href="../build/reference/std-specify-language-standard-version?view=msvc-170" data-linktype="relative-path"><code>/std</code></a> compiler option modes. The C++ Standard committee adopted this change as a retroactive Defect Report to C++11 and all later versions.</p>
+<p><a name="note_2104"></a> <strong>2104</strong> C11 library support for this feature requires Windows SDK build 10.0.20348.0 (version 2104) or higher.</p>
+<h2 id="see-also">See also</h2>
+<p><a href="../cpp/cpp-language-reference?view=msvc-170" data-linktype="relative-path">C++ Language Reference</a><br>
+<a href="../standard-library/cpp-standard-library-reference?view=msvc-170" data-linktype="relative-path">C++ Standard Library</a><br>
+<a href="cpp-conformance-improvements?view=msvc-170" data-linktype="relative-path">C++ conformance improvements in Visual Studio</a><br>
+<a href="what-s-new-for-visual-cpp-in-visual-studio?view=msvc-170" data-linktype="relative-path">What's New for Microsoft C++ in Visual Studio</a><br>
+<a href="../porting/visual-cpp-change-history-2003-2015?view=msvc-170" data-linktype="relative-path">Visual C++ change history 2003 through 2015</a><br>
+<a href="../porting/visual-cpp-what-s-new-2003-through-2015?view=msvc-170" data-linktype="relative-path">Visual C++ What's New 2003 through 2015</a><br>
+<a href="https://devblogs.microsoft.com/cppblog/" data-linktype="external">C++ team blog</a></p>
+</div>
+					
+		<div
+			id="ms--inline-notifications"
+			class="margin-block-xs"
+			data-bi-name="inline-notification"
+		></div>
+	 
+		<div
+			id="assertive-live-region"
+			role="alert"
+			aria-live="assertive"
+			class="visually-hidden"
+			aria-relevant="additions"
+			aria-atomic="true"
+		></div>
+		<div
+			id="polite-live-region"
+			role="status"
+			aria-live="polite"
+			class="visually-hidden"
+			aria-relevant="additions"
+			aria-atomic="true"
+		></div>
+	
+					
+		<!-- feedback section -->
+		<section
+			id="site-user-feedback-footer"
+			class="font-size-sm margin-top-md display-none-print display-none-desktop"
+			data-test-id="site-user-feedback-footer"
+			data-bi-name="site-feedback-section"
+		>
+			<hr class="hr" />
+			<h2 id="ms--feedback" class="title is-3">Feedback</h2>
+			<div class="display-flex flex-wrap-wrap align-items-center">
+				<p class="font-weight-semibold margin-xxs margin-left-none">
+					Was this page helpful?
+				</p>
+				<div class="buttons">
+					<button
+						class="thumb-rating-button like button button-primary button-sm"
+						data-test-id="footer-rating-yes"
+						data-binary-rating-response="rating-yes"
+						type="button"
+						title="This article is helpful"
+						data-bi-name="button-rating-yes"
+						aria-pressed="false"
+					>
+						<span class="icon" aria-hidden="true">
+							<span class="docon docon-like"></span>
+						</span>
+						<span>Yes</span>
+					</button>
+					<button
+						class="thumb-rating-button dislike button button-primary button-sm"
+						id="standard-rating-no-button"
+						hidden
+						data-test-id="footer-rating-no"
+						data-binary-rating-response="rating-no"
+						type="button"
+						title="This article is not helpful"
+						data-bi-name="button-rating-no"
+						aria-pressed="false"
+					>
+						<span class="icon" aria-hidden="true">
+							<span class="docon docon-dislike"></span>
+						</span>
+						<span>No</span>
+					</button>
+					<details
+						class="popover popover-top"
+						id="mobile-help-popover"
+						data-test-id="footer-feedback-popover"
+					>
+						<summary
+							class="thumb-rating-button dislike button button-primary button-sm"
+							data-test-id="details-footer-rating-no"
+							data-binary-rating-response="rating-no"
+							title="This article is not helpful"
+							data-bi-name="button-rating-no"
+							aria-pressed="false"
+							data-bi-an="feedback-unhelpful-popover"
+						>
+							<span class="icon" aria-hidden="true">
+								<span class="docon docon-dislike"></span>
+							</span>
+							<span>No</span>
+						</summary>
+						<div
+							class="popover-content width-200 width-300-tablet"
+							role="dialog"
+							aria-labelledby="popover-heading"
+							aria-describedby="popover-description"
+						>
+							<p id="popover-heading" class="font-size-lg margin-bottom-xxs font-weight-semibold">
+								Need help with this topic?
+							</p>
+							<p id="popover-description" class="font-size-sm margin-bottom-xs">
+								Want to try using Ask Learn to clarify or guide you through this topic?
+							</p>
+							
+		<div class="buttons flex-direction-row flex-wrap justify-content-center gap-xxs">
+			<div>
+		<button
+			class="button button-sm border inner-focus display-none margin-right-xxs"
+			data-bi-name="ask-learn-assistant-entry-troubleshoot"
+			data-test-id="ask-learn-assistant-modal-entry-mobile-feedback"
+			data-ask-learn-modal-entry-feedback
+			data-bi-an=feedback-unhelpful-popover
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			aria-label="Ask Learn"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+		</button>
+		<button
+			class="button button-sm display-inline-flex display-none-desktop flex-shrink-0 margin-right-xxs border-color-ask-learn margin-right-xxs"
+			data-bi-name="ask-learn-assistant-entry-troubleshoot"
+			data-bi-an=feedback-unhelpful-popover
+			data-test-id="ask-learn-assistant-modal-entry-tablet-feedback"
+			data-ask-learn-modal-entry-feedback
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+			<span>Ask Learn</span>
+		</button>
+		<button
+			class="button button-sm display-none flex-shrink-0 display-inline-flex-desktop margin-right-xxs border-color-ask-learn margin-right-xxs"
+			data-bi-name="ask-learn-assistant-entry-troubleshoot"
+			data-bi-an=feedback-unhelpful-popover
+			data-test-id="ask-learn-assistant-flyout-entry-feedback"
+			data-ask-learn-flyout-entry-show-only
+			data-flyout-button="toggle"
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			aria-controls="ask-learn-flyout"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+			<span>Ask Learn</span>
+		</button>
+	</div>
+			<button
+				type="button"
+				class="button button-sm margin-right-xxs"
+				data-help-option="suggest-fix"
+				data-bi-name="feedback-suggest"
+				data-bi-an="feedback-unhelpful-popover"
+				data-test-id="suggest-fix"
+			>
+				<span class="icon" aria-hidden="true">
+					<span class="docon docon-feedback"></span>
+				</span>
+				<span> Suggest a fix? </span>
+			</button>
+		</div>
+	
+						</div>
+					</details>
+				</div>
+			</div>
+		</section>
+		<!-- end feedback section -->
+	
+				</div>
+				
+		<div id="ms--additional-resources-mobile" class="display-none-print">
+			<hr class="hr" hidden />
+			<h2 id="ms--additional-resources-mobile-heading" class="title is-3" hidden>
+				Additional resources
+			</h2>
+			
+		<section
+			id="right-rail-recommendations-mobile"
+			class=""
+			data-bi-name="recommendations"
+			hidden
+		></section>
+	 
+		<section
+			id="right-rail-training-mobile"
+			class=""
+			data-bi-name="learning-resource-card"
+			hidden
+		></section>
+	 
+		<section
+			id="right-rail-events-mobile"
+			class=""
+			data-bi-name="events-card"
+			hidden
+		></section>
+	
+		</div>
+	 
+		<div
+			id="article-metadata-footer"
+			data-bi-name="article-metadata-footer"
+			data-test-id="article-metadata-footer"
+			class="page-metadata-container"
+		>
+			<hr class="hr" />
+			<ul class="metadata page-metadata" data-bi-name="page info" lang="en-us" dir="ltr">
+				<li class="visibility-hidden-visual-diff">
+			<span class="badge badge-sm text-wrap-pretty">
+				<span>Last updated on <local-time format="twoDigitNumeric"
+		datetime="2026-03-10T08:00:00.000Z"
+		data-article-date-source="calculated"
+		class="is-invisible"
+	>
+		2026-03-10
+	</local-time></span>
+			</span>
+		</li>
+			</ul>
+		</div>
+	
+			</div>
+			
+		<div
+			id="action-panel"
+			role="region"
+			aria-label="Action Panel"
+			class="action-panel"
+			tabindex="-1"
+		></div>
+	
+		
+				</main>
+				<aside
+					id="layout-body-aside"
+					class="layout-body-aside  "
+					data-bi-name="aside"
+					aria-label="Additional resources"
+			  >
+					
+		<div
+			id="ms--additional-resources"
+			class="right-container padding-sm display-none display-block-desktop height-full"
+			data-bi-name="pageactions"
+		>
+			<div id="affixed-right-container" data-bi-name="right-column">
+				
+		<nav
+			id="side-doc-outline"
+			class="doc-outline border-bottom padding-bottom-xs margin-bottom-xs scrollbar-width-thin"
+			data-bi-name="intopic toc"
+			aria-label="In this article"
+		>
+			<h3>In this article</h3>
+		</nav>
+	
+				<!-- Feedback -->
+				
+		<section
+			id="ms--site-user-feedback-right-rail"
+			class="font-size-sm display-none-print"
+			data-test-id="site-user-feedback-right-rail"
+			data-bi-name="site-feedback-right-rail"
+		>
+			<div class="display-flex flex-wrap-wrap align-items-center">
+				<p class="font-weight-semibold margin-xxs margin-left-none">
+					Was this page helpful?
+				</p>
+				<div class="display-flex flex-wrap-nowrap">
+					<button
+						class="thumb-rating-button like inner-focus"
+						data-test-id="right-rail-rating-yes"
+						data-binary-rating-response="rating-yes"
+						type="button"
+						title="This article is helpful"
+						aria-label="This article is helpful"
+						data-bi-name="button-rating-yes"
+						aria-pressed="false"
+					>
+						<span class="icon" aria-hidden="true">
+							<span class="docon docon-like"></span>
+						</span>
+					</button>
+					<button
+						class="thumb-rating-button dislike inner-focus"
+						id="right-rail-no-button"
+						hidden
+						data-test-id="right-rail-rating-no"
+						data-binary-rating-response="rating-no"
+						type="button"
+						title="This article is not helpful"
+						aria-label="This article is not helpful"
+						data-bi-name="button-rating-no"
+						aria-pressed="false"
+					>
+						<span class="icon" aria-hidden="true">
+							<span class="docon docon-dislike"></span>
+						</span>
+					</button>
+					<details class="popover popover-right" id="help-popover" data-test-id="feedback-popover">
+						<summary
+							tabindex="0"
+							class="thumb-rating-button dislike inner-focus"
+							data-test-id="details-right-rail-rating-no"
+							data-binary-rating-response="rating-no"
+							title="This article is not helpful"
+							aria-label="This article is not helpful"
+							data-bi-name="button-rating-no"
+							aria-pressed="false"
+							data-bi-an="feedback-unhelpful-popover"
+						>
+							<span class="icon" aria-hidden="true">
+								<span class="docon docon-dislike"></span>
+							</span>
+						</summary>
+						<div
+							class="popover-content width-200 width-300-tablet"
+							role="dialog"
+							aria-labelledby="popover-heading-right-rail"
+							aria-describedby="popover-description-right-rail"
+						>
+							<p
+								id="popover-heading-right-rail"
+								class="font-size-lg margin-bottom-xxs font-weight-semibold"
+							>
+								Need help with this topic?
+							</p>
+							<p id="popover-description-right-rail" class="font-size-sm margin-bottom-xs">
+								Want to try using Ask Learn to clarify or guide you through this topic?
+							</p>
+							
+		<div class="buttons flex-direction-row flex-wrap justify-content-center gap-xxs">
+			<div>
+		<button
+			class="button button-sm border inner-focus display-none margin-right-xxs"
+			data-bi-name="ask-learn-assistant-entry-troubleshoot"
+			data-test-id="ask-learn-assistant-modal-entry-mobile-feedback"
+			data-ask-learn-modal-entry-feedback
+			data-bi-an=feedback-unhelpful-popover
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			aria-label="Ask Learn"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+		</button>
+		<button
+			class="button button-sm display-inline-flex display-none-desktop flex-shrink-0 margin-right-xxs border-color-ask-learn margin-right-xxs"
+			data-bi-name="ask-learn-assistant-entry-troubleshoot"
+			data-bi-an=feedback-unhelpful-popover
+			data-test-id="ask-learn-assistant-modal-entry-tablet-feedback"
+			data-ask-learn-modal-entry-feedback
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+			<span>Ask Learn</span>
+		</button>
+		<button
+			class="button button-sm display-none flex-shrink-0 display-inline-flex-desktop margin-right-xxs border-color-ask-learn margin-right-xxs"
+			data-bi-name="ask-learn-assistant-entry-troubleshoot"
+			data-bi-an=feedback-unhelpful-popover
+			data-test-id="ask-learn-assistant-flyout-entry-feedback"
+			data-ask-learn-flyout-entry-show-only
+			data-flyout-button="toggle"
+			type="button"
+			style="min-width: max-content;"
+			aria-expanded="false"
+			aria-controls="ask-learn-flyout"
+			hidden
+		>
+			<span class="icon font-size-lg" aria-hidden="true">
+				<span class="docon docon-chat-sparkle-fill gradient-ask-learn-logo"></span>
+			</span>
+			<span>Ask Learn</span>
+		</button>
+	</div>
+			<button
+				type="button"
+				class="button button-sm margin-right-xxs"
+				data-help-option="suggest-fix"
+				data-bi-name="feedback-suggest"
+				data-bi-an="feedback-unhelpful-popover"
+				data-test-id="suggest-fix"
+			>
+				<span class="icon" aria-hidden="true">
+					<span class="docon docon-feedback"></span>
+				</span>
+				<span> Suggest a fix? </span>
+			</button>
+		</div>
+	
+						</div>
+					</details>
+				</div>
+			</div>
+		</section>
+	
+			</div>
+		</div>
+	
+			  </aside> <section
+					id="layout-body-flyout"
+					class="layout-body-flyout "
+					data-bi-name="flyout"
+			  >
+					 <div
+	class="height-full border-left background-color-body-medium"
+	id="ask-learn-flyout"
+></div>
+			  </section> <div class="layout-body-footer " data-bi-name="layout-footer">
+		<footer
+			id="footer"
+			data-test-id="footer"
+			data-bi-name="footer"
+			class="footer-layout padding-xs padding-sm-desktop has-default-focus border-top"
+			role="contentinfo"
+		>
+			<div class="display-flex gap-xs flex-wrap-wrap is-full-height padding-right-lg-desktop">
+				
+		<a
+			data-mscc-ic="false"
+			href="#"
+			data-bi-name="select-locale"
+			class="locale-selector-link flex-shrink-0 button button-sm button-clear external-link-indicator"
+			id=""
+			title=""
+			><span class="icon" aria-hidden="true"
+				><span class="docon docon-world"></span></span
+			><span class="local-selector-link-text">en-us</span></a
+		>
+	 <div class="ccpa-privacy-link" data-ccpa-privacy-link hidden>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://aka.ms/yourcaliforniaprivacychoices"
+			data-bi-name="your-privacy-choices"
+			class="button button-sm button-clear flex-shrink-0 external-link-indicator"
+			id=""
+			title=""
+			>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			viewBox="0 0 30 14"
+			xml:space="preserve"
+			height="16"
+			width="43"
+			aria-hidden="true"
+			focusable="false"
+		>
+			<path
+				d="M7.4 12.8h6.8l3.1-11.6H7.4C4.2 1.2 1.6 3.8 1.6 7s2.6 5.8 5.8 5.8z"
+				style="fill-rule:evenodd;clip-rule:evenodd;fill:#fff"
+			></path>
+			<path
+				d="M22.6 0H7.4c-3.9 0-7 3.1-7 7s3.1 7 7 7h15.2c3.9 0 7-3.1 7-7s-3.2-7-7-7zm-21 7c0-3.2 2.6-5.8 5.8-5.8h9.9l-3.1 11.6H7.4c-3.2 0-5.8-2.6-5.8-5.8z"
+				style="fill-rule:evenodd;clip-rule:evenodd;fill:#06f"
+			></path>
+			<path
+				d="M24.6 4c.2.2.2.6 0 .8L22.5 7l2.2 2.2c.2.2.2.6 0 .8-.2.2-.6.2-.8 0l-2.2-2.2-2.2 2.2c-.2.2-.6.2-.8 0-.2-.2-.2-.6 0-.8L20.8 7l-2.2-2.2c-.2-.2-.2-.6 0-.8.2-.2.6-.2.8 0l2.2 2.2L23.8 4c.2-.2.6-.2.8 0z"
+				style="fill:#fff"
+			></path>
+			<path
+				d="M12.7 4.1c.2.2.3.6.1.8L8.6 9.8c-.1.1-.2.2-.3.2-.2.1-.5.1-.7-.1L5.4 7.7c-.2-.2-.2-.6 0-.8.2-.2.6-.2.8 0L8 8.6l3.8-4.5c.2-.2.6-.2.9 0z"
+				style="fill:#06f"
+			></path>
+		</svg>
+	
+			<span>Your Privacy Choices</span></a
+		>
+	
+	</div>
+				<div class="flex-shrink-0">
+		<div class="dropdown has-caret-up">
+			<button
+				data-test-id="theme-selector-button"
+				class="dropdown-trigger button button-clear button-sm inner-focus theme-dropdown-trigger"
+				aria-controls="{{ themeMenuId }}"
+				aria-expanded="false"
+				title="Theme"
+				data-bi-name="theme"
+			>
+				<span class="icon" aria-hidden="true"><span class="docon docon-sun"></span></span>
+				<span>Theme</span>
+				<span class="icon expanded-indicator" aria-hidden="true">
+					<span class="docon docon-chevron-down-light"></span>
+				</span>
+			</button>
+			<div class="dropdown-menu" id="{{ themeMenuId }}" role="menu">
+				<ul class="theme-selector padding-xxs" data-test-id="theme-dropdown-menu">
+					<li class="theme display-block">
+						<button
+							class="button button-clear button-sm theme-control button-block justify-content-flex-start text-align-left"
+							data-theme-to="light"
+						>
+							<span class="theme-light margin-right-xxs">
+								<span
+									class="theme-selector-icon border display-inline-block has-body-background"
+									aria-hidden="true"
+								>
+									<svg class="svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 14">
+										<rect width="22" height="14" class="has-fill-body-background" />
+										<rect x="5" y="5" width="12" height="4" class="has-fill-secondary" />
+										<rect x="5" y="2" width="2" height="1" class="has-fill-secondary" />
+										<rect x="8" y="2" width="2" height="1" class="has-fill-secondary" />
+										<rect x="11" y="2" width="3" height="1" class="has-fill-secondary" />
+										<rect x="1" y="1" width="2" height="2" class="has-fill-secondary" />
+										<rect x="5" y="10" width="7" height="2" rx="0.3" class="has-fill-primary" />
+										<rect x="19" y="1" width="2" height="2" rx="1" class="has-fill-secondary" />
+									</svg>
+								</span>
+							</span>
+							<span role="menuitem"> Light </span>
+						</button>
+					</li>
+					<li class="theme display-block">
+						<button
+							class="button button-clear button-sm theme-control button-block justify-content-flex-start text-align-left"
+							data-theme-to="dark"
+						>
+							<span class="theme-dark margin-right-xxs">
+								<span
+									class="border theme-selector-icon display-inline-block has-body-background"
+									aria-hidden="true"
+								>
+									<svg class="svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 14">
+										<rect width="22" height="14" class="has-fill-body-background" />
+										<rect x="5" y="5" width="12" height="4" class="has-fill-secondary" />
+										<rect x="5" y="2" width="2" height="1" class="has-fill-secondary" />
+										<rect x="8" y="2" width="2" height="1" class="has-fill-secondary" />
+										<rect x="11" y="2" width="3" height="1" class="has-fill-secondary" />
+										<rect x="1" y="1" width="2" height="2" class="has-fill-secondary" />
+										<rect x="5" y="10" width="7" height="2" rx="0.3" class="has-fill-primary" />
+										<rect x="19" y="1" width="2" height="2" rx="1" class="has-fill-secondary" />
+									</svg>
+								</span>
+							</span>
+							<span role="menuitem"> Dark </span>
+						</button>
+					</li>
+					<li class="theme display-block">
+						<button
+							class="button button-clear button-sm theme-control button-block justify-content-flex-start text-align-left"
+							data-theme-to="high-contrast"
+						>
+							<span class="theme-high-contrast margin-right-xxs">
+								<span
+									class="border theme-selector-icon display-inline-block has-body-background"
+									aria-hidden="true"
+								>
+									<svg class="svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 14">
+										<rect width="22" height="14" class="has-fill-body-background" />
+										<rect x="5" y="5" width="12" height="4" class="has-fill-secondary" />
+										<rect x="5" y="2" width="2" height="1" class="has-fill-secondary" />
+										<rect x="8" y="2" width="2" height="1" class="has-fill-secondary" />
+										<rect x="11" y="2" width="3" height="1" class="has-fill-secondary" />
+										<rect x="1" y="1" width="2" height="2" class="has-fill-secondary" />
+										<rect x="5" y="10" width="7" height="2" rx="0.3" class="has-fill-primary" />
+										<rect x="19" y="1" width="2" height="2" rx="1" class="has-fill-secondary" />
+									</svg>
+								</span>
+							</span>
+							<span role="menuitem"> High contrast </span>
+						</button>
+					</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+			</div>
+			<ul class="links" data-bi-name="footerlinks">
+				<li class="manage-cookies-holder" hidden=""></li>
+				<li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://learn.microsoft.com/en-us/principles-for-ai-generated-content"
+			data-bi-name="aiDisclaimer"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>AI Disclaimer</a
+		>
+	
+	</li><li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://learn.microsoft.com/en-us/previous-versions/"
+			data-bi-name="archivelink"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Previous Versions</a
+		>
+	
+	</li> <li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://techcommunity.microsoft.com/t5/microsoft-learn-blog/bg-p/MicrosoftLearnBlog"
+			data-bi-name="bloglink"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Blog</a
+		>
+	
+	</li> <li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://learn.microsoft.com/en-us/contribute"
+			data-bi-name="contributorGuide"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Contribute</a
+		>
+	
+	</li><li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://go.microsoft.com/fwlink/?LinkId=521839"
+			data-bi-name="privacy"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Privacy</a
+		>
+	
+	</li><li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://go.microsoft.com/fwlink/?linkid=2259814"
+			data-bi-name="consumer-health-privacy"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Consumer Health Privacy</a
+		>
+	
+	</li><li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://learn.microsoft.com/en-us/legal/termsofuse"
+			data-bi-name="termsofuse"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Terms of Use</a
+		>
+	
+	</li><li>
+		
+		<a
+			data-mscc-ic="false"
+			href="https://www.microsoft.com/legal/intellectualproperty/Trademarks/"
+			data-bi-name="trademarks"
+			class=" external-link-indicator"
+			id=""
+			title=""
+			>Trademarks</a
+		>
+	
+	</li>
+				<li>&copy; Microsoft 2026</li>
+			</ul>
+		</footer>
+	</footer>
+			</body>
+		</html>

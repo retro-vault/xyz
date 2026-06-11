@@ -46,6 +46,7 @@ struct decl_spec {
     bool          is_tls       = false;
     bool          is_constexpr = false; // C23 constexpr: object with constant initializer
     bool          is_deduced   = false; // C23 auto: type inferred from initializer
+    int           align_req    = 0;     // requested _Alignas/alignas byte alignment
     attr_list     attrs;
 };
 

@@ -22,17 +22,25 @@
         .globl  ___fsmul
         .globl  _logf
 
-        .area   _DATA
-__atanhf_x:      .ds 4
-__atanhf_abs:    .ds 4
-__atanhf_tmp:    .ds 4
-__atanhf_sign:   .ds 1
-
         .area   _CODE
 
 _atanhf::
-        ld      (__atanhf_x),de
-        ld      (__atanhf_x + 2),hl
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      c,l
+        ld      b,h
+        ld      hl,#-13
+        add     hl,sp
+        ld      sp,hl
+        ld      -13(ix),e
+        ld      -12(ix),d
+        ld      -11(ix),c
+        ld      -10(ix),b              ; x
+        ld      e,-13(ix)
+        ld      d,-12(ix)
+        ld      l,-11(ix)
+        ld      h,-10(ix)
         call    ___libc_fpclassifyf
         ld      a,e
         cp      #0                      ; NaN -> preserve payload/sign
@@ -42,30 +50,36 @@ _atanhf::
         cp      #1                      ; +/-Inf -> outside domain
         jp      z,atanhf_ret_nan
 
-        ld      a,h
+        ld      a,-10(ix)
         and     #0x80
-        ld      (__atanhf_sign),a
-        res     7,h
-        ld      (__atanhf_abs),de
-        ld      (__atanhf_abs + 2),hl
+        ld      -1(ix),a                ; sign
+        ld      a,-10(ix)
+        and     #0x7f
+        ld      -6(ix),a
+        ld      a,-13(ix)
+        ld      -9(ix),a
+        ld      a,-12(ix)
+        ld      -8(ix),a
+        ld      a,-11(ix)
+        ld      -7(ix),a                ; abs
 
         ;; Compare |x| with 1 to split the finite domain.
         ld      hl,#0x3f80              ; 1.0f
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__atanhf_abs)
-        ld      hl,(__atanhf_abs + 2)
+        ld      e,-9(ix)
+        ld      d,-8(ix)
+        ld      l,-7(ix)
+        ld      h,-6(ix)
         call    ___fscmp
-        pop     bc
-        pop     bc
         ld      a,d
         cp      #0xff
-        jr      z,atanhf_domain_ok      ; |x| < 1
+        jp      z,atanhf_domain_ok      ; |x| < 1
         ld      a,d
         or      e
-        jr      z,atanhf_ret_inf        ; |x| == 1
-        jr      atanhf_ret_nan          ; |x| > 1
+        jp      z,atanhf_ret_inf        ; |x| == 1
+        jp      atanhf_ret_nan          ; |x| > 1
 
 atanhf_domain_ok:
         ;; tmp = 1 + |x|
@@ -73,18 +87,24 @@ atanhf_domain_ok:
         push    hl
         ld      hl,#0x0000
         push    hl
-        ld      de,(__atanhf_abs)
-        ld      hl,(__atanhf_abs + 2)
+        ld      e,-9(ix)
+        ld      d,-8(ix)
+        ld      l,-7(ix)
+        ld      h,-6(ix)
         call    ___fsadd
         pop     bc
         pop     bc
-        ld      (__atanhf_tmp),de
-        ld      (__atanhf_tmp + 2),hl
+        ld      -5(ix),e
+        ld      -4(ix),d
+        ld      -3(ix),l
+        ld      -2(ix),h                ; tmp
 
         ;; (1 + |x|) / (1 - |x|)
-        ld      hl,(__atanhf_abs + 2)
+        ld      l,-7(ix)
+        ld      h,-6(ix)
         push    hl
-        ld      hl,(__atanhf_abs)
+        ld      l,-9(ix)
+        ld      h,-8(ix)
         push    hl
         ld      de,#0x0000
         ld      hl,#0x3f80              ; 1.0f
@@ -93,43 +113,67 @@ atanhf_domain_ok:
         pop     bc
         push    hl
         push    de
-        ld      de,(__atanhf_tmp)
-        ld      hl,(__atanhf_tmp + 2)
+        ld      e,-5(ix)
+        ld      d,-4(ix)
+        ld      l,-3(ix)
+        ld      h,-2(ix)
         call    ___fsdiv
         pop     bc
         pop     bc
 
         ;; 0.5 * log(...)
         call    _logf
+        ld      -5(ix),e
+        ld      -4(ix),d
+        ld      -3(ix),l
+        ld      -2(ix),h
         ld      hl,#0x3f00              ; 0.5f
         push    hl
         ld      hl,#0x0000
         push    hl
+        ld      e,-5(ix)
+        ld      d,-4(ix)
+        ld      l,-3(ix)
+        ld      h,-2(ix)
         call    ___fsmul
         pop     bc
         pop     bc
 
-        ld      a,(__atanhf_sign)
+        ld      a,-1(ix)
         or      a
-        ret     z
+        jr      z,atanhf_ret_value
         set     7,h
+
+atanhf_ret_value:
+        ld      sp,ix
+        pop     ix
         ret
 
 atanhf_ret_inf:
         ld      hl,#0x7f80
         ld      de,#0x0000
-        ld      a,(__atanhf_sign)
+        ld      a,-1(ix)
         or      a
-        ret     z
+        jr      z,atanhf_ret_inf_done
         set     7,h
+
+atanhf_ret_inf_done:
+        ld      sp,ix
+        pop     ix
         ret
 
 atanhf_ret_nan:
         ld      hl,#0x7fc0
         ld      de,#0x0000
+        ld      sp,ix
+        pop     ix
         ret
 
 atanhf_ret_x:
-        ld      de,(__atanhf_x)
-        ld      hl,(__atanhf_x + 2)
+        ld      e,-13(ix)
+        ld      d,-12(ix)
+        ld      l,-11(ix)
+        ld      h,-10(ix)
+        ld      sp,ix
+        pop     ix
         ret

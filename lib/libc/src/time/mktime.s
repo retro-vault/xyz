@@ -19,12 +19,12 @@
         .globl  __time_mdays
         .globl  __mullong
 
-        .area   _DATA
-__mk_secs:  .ds 4          ; mktime result seconds
-__mk_days:  .ds 2          ; mktime day accumulator
-__mk_year:  .ds 2          ; mktime target full year
-__mk_iter:  .ds 2          ; mktime year iterator
-__mk_mon:   .ds 1          ; mktime normalized month
+MK_SECS_LO  .equ -11       ; low 16 bits of the accumulating time_t
+MK_SECS_HI  .equ -9        ; high 16 bits of the accumulating time_t
+MK_DAYS     .equ -7        ; signed day accumulator
+MK_YEAR     .equ -5        ; normalized full year
+MK_ITER     .equ -3        ; year iterator for the 1970 walk
+MK_MON      .equ -1        ; normalized month in [0,11]
 
         .area   _CODE
 
@@ -33,26 +33,38 @@ __mk_mon:   .ds 1          ; mktime normalized month
         ; outputs: DE:HL = time_t (DE=low16, HL=high16); *t normalized
         ; clobbers: AF, BC, DE, HL, IX, runtime-helper registers
 _mktime::
-        push    hl
-        pop     ix                      ; IX = t
+        push    ix
+        push    iy
+        ld      b,h
+        ld      c,l                     ; BC = t
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-11
+        add     hl,sp
+        ld      sp,hl
+        push    bc
+        pop     iy                      ; IY = t
         ; full year = tm_year + 1900
-        ld      l,10(ix)
-        ld      h,11(ix)
+        ld      l,10(iy)
+        ld      h,11(iy)
         ld      bc,#1900
         add     hl,bc
-        ld      (__mk_year),hl
+        ld      MK_YEAR(ix),l
+        ld      MK_YEAR + 1(ix),h
         ; normalize month into [0,11]
-        ld      l,8(ix)
-        ld      h,9(ix)
+        ld      l,8(iy)
+        ld      h,9(iy)
 mk_mneg:
         bit     7,h
         jr      z,mk_mpos
         ld      bc,#12
         add     hl,bc
         push    hl
-        ld      hl,(__mk_year)
+        ld      l,MK_YEAR(ix)
+        ld      h,MK_YEAR + 1(ix)
         dec     hl
-        ld      (__mk_year),hl
+        ld      MK_YEAR(ix),l
+        ld      MK_YEAR + 1(ix),h
         pop     hl
         jr      mk_mneg
 mk_mpos:
@@ -66,53 +78,69 @@ mk_msub:
         ld      bc,#-12
         add     hl,bc
         push    hl
-        ld      hl,(__mk_year)
+        ld      l,MK_YEAR(ix)
+        ld      h,MK_YEAR + 1(ix)
         inc     hl
-        ld      (__mk_year),hl
+        ld      MK_YEAR(ix),l
+        ld      MK_YEAR + 1(ix),h
         pop     hl
         jr      mk_mpos
 mk_mdone:
         ld      a,l
-        ld      (__mk_mon),a
+        ld      MK_MON(ix),a
         ; --- day count from 1970 to (year, month, mday) ---
         ld      hl,#1970
-        ld      (__mk_iter),hl
+        ld      MK_ITER(ix),l
+        ld      MK_ITER + 1(ix),h
         ld      hl,#0
-        ld      (__mk_days),hl
+        ld      MK_DAYS(ix),l
+        ld      MK_DAYS + 1(ix),h
 mk_yloop:
-        ld      hl,(__mk_iter)
-        ld      de,(__mk_year)
+        ld      l,MK_ITER(ix)
+        ld      h,MK_ITER + 1(ix)
+        ld      e,MK_YEAR(ix)
+        ld      d,MK_YEAR + 1(ix)
         or      a
         sbc     hl,de
         jr      z,mk_ydone
         jr      c,mk_yup
         ; iter > target: iter--; days -= diy(iter)
-        ld      hl,(__mk_iter)
+        ld      l,MK_ITER(ix)
+        ld      h,MK_ITER + 1(ix)
         dec     hl
-        ld      (__mk_iter),hl
+        ld      MK_ITER(ix),l
+        ld      MK_ITER + 1(ix),h
         call    mk_diy_iter
-        ld      hl,(__mk_days)
+        ld      l,MK_DAYS(ix)
+        ld      h,MK_DAYS + 1(ix)
         or      a
         sbc     hl,bc
-        ld      (__mk_days),hl
+        ld      MK_DAYS(ix),l
+        ld      MK_DAYS + 1(ix),h
         jr      mk_yloop
 mk_yup:
         call    mk_diy_iter             ; BC = diy(iter) (clobbers HL)
-        ld      hl,(__mk_days)
+        ld      l,MK_DAYS(ix)
+        ld      h,MK_DAYS + 1(ix)
         add     hl,bc
-        ld      (__mk_days),hl
-        ld      hl,(__mk_iter)
+        ld      MK_DAYS(ix),l
+        ld      MK_DAYS + 1(ix),h
+        ld      l,MK_ITER(ix)
+        ld      h,MK_ITER + 1(ix)
         inc     hl
-        ld      (__mk_iter),hl
+        ld      MK_ITER(ix),l
+        ld      MK_ITER + 1(ix),h
         jr      mk_yloop
 mk_ydone:
         ; add month offsets within the target year
-        ld      hl,(__mk_year)
+        ld      l,MK_YEAR(ix)
+        ld      h,MK_YEAR + 1(ix)
         call    __time_leap
         ld      c,a                     ; C = leap
-        ld      a,(__mk_mon)
+        ld      a,MK_MON(ix)
         ld      b,a                     ; B = months to add
-        ld      hl,(__mk_days)
+        ld      l,MK_DAYS(ix)
+        ld      h,MK_DAYS + 1(ix)
 mk_moff:
         ld      a,b
         or      a
@@ -139,45 +167,58 @@ mk_moffadd:
         jr      mk_moff
 mk_moffdone:
         ; + (mday - 1)
-        ld      e,6(ix)
-        ld      d,7(ix)
+        ld      e,6(iy)
+        ld      d,7(iy)
         add     hl,de
         dec     hl
-        ld      (__mk_days),hl
+        ld      MK_DAYS(ix),l
+        ld      MK_DAYS + 1(ix),h
         ; --- seconds = ((days*24 + hour)*60 + min)*60 + sec ---
         ; secs = sign-extend(days)
-        ld      hl,(__mk_days)
+        ld      l,MK_DAYS(ix)
+        ld      h,MK_DAYS + 1(ix)
         ld      a,h
         rla
         sbc     a,a
         ld      d,a
         ld      e,a
-        ld      (__mk_secs),hl
-        ld      (__mk_secs + 2),de
-        ld      l,4(ix)
-        ld      h,5(ix)
+        ld      MK_SECS_LO(ix),l
+        ld      MK_SECS_LO + 1(ix),h
+        ld      MK_SECS_HI(ix),e
+        ld      MK_SECS_HI + 1(ix),d
+        ld      l,4(iy)
+        ld      h,5(iy)
         ld      a,#24
         call    mk_muladd
-        ld      l,2(ix)
-        ld      h,3(ix)
+        ld      l,2(iy)
+        ld      h,3(iy)
         ld      a,#60
         call    mk_muladd
-        ld      l,0(ix)
-        ld      h,1(ix)
+        ld      l,0(iy)
+        ld      h,1(iy)
         ld      a,#60
         call    mk_muladd
         ; normalize *t from the result seconds, then return them
-        ld      hl,#__mk_secs
         push    ix
+        pop     hl
+        ld      de,#MK_SECS_LO
+        add     hl,de                   ; HL = &secs
+        push    iy
         pop     de                      ; DE = t (struct tm *)
         call    _gmtime_r
-        ld      de,(__mk_secs)
-        ld      hl,(__mk_secs + 2)
+        ld      e,MK_SECS_LO(ix)
+        ld      d,MK_SECS_LO + 1(ix)
+        ld      l,MK_SECS_HI(ix)
+        ld      h,MK_SECS_HI + 1(ix)
+        ld      sp,ix
+        pop     iy
+        pop     ix
         ret
 
         ; mk_diy_iter: BC = days in __mk_iter (365/366)
 mk_diy_iter:
-        ld      hl,(__mk_iter)
+        ld      l,MK_ITER(ix)
+        ld      h,MK_ITER + 1(ix)
         call    __time_leap
         ld      bc,#365
         or      a
@@ -190,8 +231,10 @@ mk_diy_iter:
         ; clobbers AF, BC, DE, HL
 mk_muladd:
         push    hl                      ; save term
-        ld      de,(__mk_secs)
-        ld      hl,(__mk_secs + 2)
+        ld      e,MK_SECS_LO(ix)
+        ld      d,MK_SECS_LO + 1(ix)
+        ld      l,MK_SECS_HI(ix)
+        ld      h,MK_SECS_HI + 1(ix)
         ld      bc,#0
         push    bc                      ; multiplier high word
         ld      c,a
@@ -199,8 +242,10 @@ mk_muladd:
         call    __mullong
         pop     bc
         pop     bc
-        ld      (__mk_secs),de
-        ld      (__mk_secs + 2),hl
+        ld      MK_SECS_LO(ix),e
+        ld      MK_SECS_LO + 1(ix),d
+        ld      MK_SECS_HI(ix),l
+        ld      MK_SECS_HI + 1(ix),h
         pop     hl                      ; HL = term
         ld      a,h
         rla
@@ -208,15 +253,19 @@ mk_muladd:
         ld      c,l
         ld      b,h                     ; BC = term low 16
         ld      d,a                     ; D = sign byte
-        ld      hl,(__mk_secs)
+        ld      l,MK_SECS_LO(ix)
+        ld      h,MK_SECS_LO + 1(ix)
         add     hl,bc
-        ld      (__mk_secs),hl
-        ld      hl,(__mk_secs + 2)
+        ld      MK_SECS_LO(ix),l
+        ld      MK_SECS_LO + 1(ix),h
+        ld      l,MK_SECS_HI(ix)
+        ld      h,MK_SECS_HI + 1(ix)
         ld      a,l
         adc     a,d
         ld      l,a
         ld      a,h
         adc     a,d
         ld      h,a
-        ld      (__mk_secs + 2),hl
+        ld      MK_SECS_HI(ix),l
+        ld      MK_SECS_HI + 1(ix),h
         ret

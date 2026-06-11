@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,37 @@
 #include <xld/errors.h>
 
 namespace xld {
+
+    static std::optional<int> default_area_priority(const std::string& name)
+    {
+        // Keep common SDCC/GNU ROM/code sections ahead of RAM sections when
+        // no linker-script ordering was provided. This prevents "first seen"
+        // extraction order from placing _HEAP/_BSS before an explicitly based
+        // _DATA area.
+        static const std::map<std::string, int> priorities = {
+            {"_HEADER", 0},
+            {"_HOME", 10},
+            {"_CODE", 20},
+            {".text", 20},
+            {"_CONST", 30},
+            {".rodata", 30},
+            {".vectors", 35},
+            {"_INITIALIZER", 40},
+            {"_GSINIT", 50},
+            {"_GSFINAL", 60},
+            {"_DATA", 70},
+            {".data", 70},
+            {"_INITIALIZED", 80},
+            {"_BSS", 90},
+            {".bss", 90},
+            {"_HEAP", 100}
+        };
+
+        auto it = priorities.find(name);
+        if (it == priorities.end())
+            return std::nullopt;
+        return it->second;
+    }
 
     static bool ranges_overlap(uint16_t start_a, uint16_t end_a,
                                uint16_t start_b, uint16_t end_b)
@@ -27,7 +59,8 @@ namespace xld {
         const link_context& ctx)
     {
         std::vector<address_range> holes = ctx.holes;
-        if (ctx.format != output_format::bin)
+        if (ctx.format != output_format::bin
+            && ctx.format != output_format::ihx)
             return holes;
 
         const uint16_t emit_start = ctx.output_range.has_value()
@@ -135,6 +168,19 @@ namespace xld {
             }
 
             groups = std::move(ordered);
+        } else {
+            std::stable_sort(groups.begin(), groups.end(),
+                             [](const area_group& a, const area_group& b) {
+                auto pa = default_area_priority(a.name);
+                auto pb = default_area_priority(b.name);
+                if (pa.has_value() && pb.has_value())
+                    return *pa < *pb;
+                if (pa.has_value())
+                    return true;
+                if (pb.has_value())
+                    return false;
+                return false;
+            });
         }
 
         // Place areas group by group.
@@ -247,7 +293,7 @@ namespace xld {
             }
         }
 
-        ctx.code_size = static_cast<uint16_t>(max_end);
+        ctx.code_size = max_end;
 
         // Print memory map if requested.
         if (ctx.print_map) {

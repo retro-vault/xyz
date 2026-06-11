@@ -53,7 +53,7 @@ __xcc_L1:
 	inc	hl
 	djnz	__xcc_L1
 __xcc_L3:
-	ld	hl, #nodes
+	ld	hl, #_nodes
 	inc	hl
 	ld	a, (hl)
 	ld	l, a

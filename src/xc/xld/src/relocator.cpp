@@ -39,7 +39,7 @@ namespace xld {
                 if (dest + tr.data.size() > ctx.code_buffer.size()) {
                     // Grow buffer if needed.
                     ctx.code_buffer.resize(dest + tr.data.size(), 0x00);
-                    ctx.code_size = static_cast<uint16_t>(
+                    ctx.code_size = static_cast<uint32_t>(
                         ctx.code_buffer.size());
                 }
                 std::memcpy(&ctx.code_buffer[dest],

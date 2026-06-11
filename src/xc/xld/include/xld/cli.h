@@ -29,6 +29,7 @@ namespace xld {
         std::filesystem::path output_file = "a.out";
         std::optional<std::filesystem::path> script_file;
         std::optional<std::filesystem::path> cdb_file;
+        std::optional<std::filesystem::path> map_file;
         std::optional<std::filesystem::path> sdcc_runtime_dir;
         std::string entry_symbol = "_main";
         link_mode mode = link_mode::sdcc;

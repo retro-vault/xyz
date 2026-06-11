@@ -15,12 +15,6 @@
         .globl  _catanf
         .globl  _catanhf
 
-        .area   _DATA
-__catanf_atanh_re:
-        .ds     4
-__catanf_atanh_im:
-        .ds     4
-
         .area   _CODE
 
 _catanf::
@@ -73,19 +67,8 @@ catanf_nonzero:
         inc     sp
         inc     sp
         inc     sp
-        ld      (__catanf_atanh_re),de
-        ld      (__catanf_atanh_re + 2),hl
-        exx
-        ld      (__catanf_atanh_im),de
-        ld      (__catanf_atanh_im + 2),hl
-        exx
 
         ;; -i * (u + i v) = v - i u
-        ld      de,(__catanf_atanh_im)
-        ld      hl,(__catanf_atanh_im + 2)
-        exx
-        ld      de,(__catanf_atanh_re)
-        ld      hl,(__catanf_atanh_re + 2)
         ld      a,h
         xor     #0x80
         ld      h,a

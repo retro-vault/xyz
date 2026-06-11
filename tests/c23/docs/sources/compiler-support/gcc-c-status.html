@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+   <head>
+ 
+ 
+ <link rel="shortcut icon" href="https://gcc.gnu.org/favicon.ico">
+ <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>
+C Standards Support in GCC
+- GNU Project</title>
+<link rel="stylesheet" type="text/css" href="https://gcc.gnu.org/gcc.css">
+   </head>
+ 
+
+<body>
+
+
+
+<h1>C Standards Support in GCC</h1>
+
+GCC supports different dialects of C, corresponding to the multiple
+published ISO standards.  A particular standard can be selected using
+the <code>-std=</code> command-line option.
+
+<ul>
+  <li><a href="#c90">C90</a></li>
+  <li><a href="#c99">C99</a></li>
+  <li><a href="#c11">C11</a></li>
+  <li><a href="#c17">C17</a></li>
+  <li><a href="#c23">C23</a></li>
+  <li><a href="#c2y">C2y</a></li>
+</ul>
+
+<h2 id="c2y"><a href="#c2y">C2y Support in GCC</a></h2>
+
+GCC has experimental and incomplete support for ISO C2y.
+
+<p>C2y can be explicitly selected with the <code>-std=c2y</code>
+command-line flag, or <code>-std=gnu2y</code> to enable GNU extensions
+as well.</p>
+
+<table class="cxxstatus">
+  <tr class="separator">
+    <th>Feature</th>
+    <th>Proposal</th>
+    <th>Version</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <!-- r15-1190-g0cf68222d2df3a -->
+    <td>Generic selection expression with a type operand</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3260.pdf">N3260</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-1300-g3bb21028698be3 -->
+    <td>Support ++ and -- on complex values</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3259.pdf">N3259</a></td>
+    <td class="supported">3.0</td>
+    <td><code>_Complex</code> added in 3.0</td>
+  </tr>
+  <tr>
+    <!-- r15-2690-g4b9ba9cee95119 -->
+    <td>Accessing byte arrays</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3254.pdf">N3254</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-1382-gedf514f83fa410 -->
+    <td><code>alignof</code> of an incomplete array type.</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3273.pdf">N3273</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-4403-ge020116db05635 -->
+    <td>Obsolete implicitly octal literals</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3353.htm">N3353</a></td>
+    <td class="partial"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td>support for new syntax added but nothing deprecated yet
+	(<a href="https://gcc.gnu.org/PR117028">PR117028</a>)</td>
+  </tr>
+  <tr>
+    <!-- r15-4369-g50f27896adb272 -->
+    <td>Named loops</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3355.htm">N3355</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-4766-gabcfe1e51c18b1 -->
+    <td>Case range expressions</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3370.htm">N3370</a></td>
+    <td class="supported">2.0</td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-5053-g440be01b079415 -->
+    <td><code>if</code> declarations</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3356.htm">N3356</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-5189-geb45d151fa1780 -->
+    <td>Introduce complex literals</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3298.htm">N3298</a></td>
+    <td class="supported">2.5</td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- see patches in https://gcc.gnu.org/PR117023 -->
+    <td rowspan=2>Allow zero length operations on null pointers</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3322.pdf">N3322</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td rowspan=2>compiler side only</td>
+  </tr>
+  <tr>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3466.pdf">N3466</a></td>
+    <td class="supported center"><a href="../gcc-16/changes.html#c">16</a></td>
+  </tr>
+  <tr>
+    <!-- r16-916-g517c9487f8fdc4 -->
+    <td><code>_Countof</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3369.pdf">N3369</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3469.htm">N3469</a></td>
+    <td class="supported"><a href="../gcc-16/changes.html#c">16</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Restartable Functions for Efficient Character Conversions</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3366.htm">N3366</a></td>
+    <td class="unsupported"> <a href="https://gcc.gnu.org/PR117020">No</a></td>
+    <td>Library issue; some predefined macros needed in the compiler</td>
+  </tr>
+  <tr>
+    <!-- r15-5555-g7272e09c9b1bd3 -->
+    <td>Abs Without Undefined Behavior</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3349.pdf">N3349</a></td>
+    <td class="other">N/A</td>
+    <td>Library issue</td>
+  </tr>
+  <tr>
+    <!-- r15-4729-g972f653cad2aed -->
+    <td>More Modern Bit Utilities</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3367.htm">N3367</a></td>
+    <td class="other">N/A</td>
+    <td>Library issue; <code>__builtin_stdc_rotate_left</code> and
+	<code>__builtin_stdc_rotate_right</code> builtins added in
+	<a href="../gcc-15/changes.html#c">GCC 15</a></td>
+  </tr>
+</table>
+
+<h2 id="c23"><a href="#c23">C23 Support in GCC</a></h2>
+
+GCC has support for ISO C23, the 2023 revision of the ISO C standard
+(published in 2024).
+
+<p>C23 mode is <a href="../gcc-15/porting_to.html#c23">the default</a>
+since GCC 15; it can be explicitly selected with the
+<code>-std=c23</code> command-line flag, or <code>-std=gnu23</code>
+to enable GNU extensions as well.</p>
+
+<table class="cxxstatus">
+  <tr class="separator">
+    <th>Feature</th>
+    <th>Proposal</th>
+    <th>Version</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <!-- r13-2520-g0a91bdaf177409 -->
+    <td>New keywords <code>alignas</code>, <code>alignof</code>,
+	<code>bool</code>, <code>false</code>, <code>static_assert</code>,
+	<code>thread_local</code>, <code>true</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2934.pdf">N2934</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2935.pdf">N2935</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r9-3505-g9f936c861383dc -->
+    <td><code>_Static_assert</code> with no message</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2265.pdf">N2665</a></td>
+    <td class="supported"><a href="../gcc-9/changes.html#c">9</a></td>
+    <td>support for <code>_Static_assert</code> with two arguments was added
+	in C11 and <a href="../gcc-4.6/changes.html#c">GCC 4.6</a></td>
+  </tr>
+  <tr>
+    <!-- r10-4466-g017c6491077bee -->
+    <!-- r12-244-gcc806126215c3f -->
+    <td>Removed support for function definitions with identifier lists</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2432.pdf">N2432</a></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a></td>
+    <td>removal of old-style function definitions</td>
+  </tr>
+  <tr>
+    <!-- r13-2349-g0a4b219d39c74a -->
+    <td>Removal of unprototyped functions</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2841.htm">N2841</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td>function declarations whose parameter list is empty are treated the
+	same as a parameter list which only contain a single <code>void</code></td>
+  </tr>
+  <tr>
+    <!-- r10-3658-g843f104d5bc6d1 -->
+    <td><code>strftime</code> supports <code>%OB</code> and <code>%Ob</code>
+	formats</td>
+    <td></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a> (format
+	checking)</td>
+    <td>harmonization with ISO/IEC 9945; glibc support for these formats
+	was added in glibc 2.27</td>
+  </tr>
+  <tr>
+    <td>IEEE 754 decimal floating-point types (Optional)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2341.pdf">N2341</a></td>
+    <td class="supported"><a href="../gcc-4.3/changes.html#c">4.3</a>
+      (IA-32, x86-64, PowerPC, S/390) <br>
+      <a href="../gcc-13/changes.html#c">13</a> (aarch64)</td>
+    <!-- r10-3790-g27dfdc0f92850a -->
+    <td><code>DEC*_TRUE_MIN</code> macros added in
+	<a href="../gcc-10/changes.html#c">GCC 10</a></td>
+  </tr>
+  <tr>
+    <td>IEEE 754 interchange and extended types (Optional)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2601.pdf">N2601</a></td>
+    <td class="supported"><a href="../gcc-7/changes.html#c">7</a> (binary types) <br>
+      <a href="../gcc-15/changes.html#c">15</a> (Annex H suffixes for decimal types and
+      <code>_Decimal64x</code>)</td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r10-4613-g00be2a5f394119 -->
+    <td>Add <code>*_NORM_MAX</code> constants to <code>&lt;float.h&gt;</code></td>
+    <td></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r11-5070 -->
+    <td>NaN and Inf macros in <code>&lt;float.h&gt;</code></td>
+    <td></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td>corresponding built-in functions <code>__builtin_nansdN</code> added</td>
+  </tr>
+  <tr>
+    <!-- r11-5102 -->
+    <td><code>*_IS_IEC_60559</code> macros in <code>&lt;float.h&gt;</code></td>
+    <td></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r11-5103 -->
+    <td><code>__STDC_WANT_IEC_60559_EXT__</code> supported by <code>&lt;float.h&gt;</code></td>
+    <td></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-3939-g9a265c974cd85b -->
+    <td><code>__STDC_VERSION_*_H__</code> header version macros</td>
+    <td></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r11-4813 -->
+    <td>Labels before declarations and end of blocks</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2508.pdf">N2508</a></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r10-4633-g4e03c3a7c1149a -->
+    <td><code>[[]]</code> attribute syntax</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2335.pdf">N2335</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2554.pdf">N2554</a></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r11-4953 -->
+    <td><code>__has_c_attribute</code> preprocessor operator</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2553.pdf">N2553</a></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r10-4694-g2cc94aa8d817ba -->
+    <td><code>[[deprecated]]</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2334.pdf">N2334</a></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r10-4633-g4e03c3a7c1149a -->
+    <td><code>[[fallthrough]]</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2408.pdf">N2408</a></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r10-4729-g97cc11871e3988 -->
+    <!-- r13-2324-g2eca4ff4e867eb (labels) -->
+    <td><code>[[maybe_unused]]</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2270.pdf">N2270</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2662.pdf">N2662</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td>support other than on labels added in <a href="../gcc-10/changes.html#c">
+	GCC 10</a></td>
+  </tr>
+  <tr>
+    <!-- r11-4705 -->
+    <td><code>[[nodiscard]]</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2267.pdf">N2267</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2448.pdf">N2448</a></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-2976-g3a3516bc4a0a03 -->
+    <td><code>[[noreturn]]</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2764.pdf">N2764</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-3330-gdd346b613886ae -->
+    <td><code>[[unsequenced]]</code> and <code>[[reproducible]]</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2956.htm">N2956</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r10-4691-g7c5890cc0a0ece -->
+    <td><code>u8</code> character constants</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2418.pdf">N2418</a></td>
+    <td class="supported"><a href="../gcc-10/changes.html#c">10</a></td>
+    <td>for <code>char8_t</code> see
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2653.htm">N2653</a></td>
+  </tr>
+  <tr>
+    <td>Type change of <code>u8</code> string literals</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2653.htm">N2653</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-3289-g18981635127c67 -->
+    <td>Introduce storage-class specifiers for compound literals</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3038.htm">N3038</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-3930-gb556d1773db717 -->
+    <td>The <code>constexpr</code> specifier for object definitions</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3018.htm">N3018</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-2205-g14cfa01755a66a -->
+    <td>Support for empty initializer braces</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2900.htm">N2900</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td>some cases were already supported, but not scalars and VLAs</td>
+  </tr>
+  <tr>
+    <!-- r13-3135-gfa258f6894801a -->
+    <td><code>typeof</code>, <code>typeof_unqual</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2927.htm">N2927</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2930.pdf">N2930</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td><code>typeof</code> was previously supported as an extension</td>
+  </tr>
+  <tr>
+    <!-- r14-6770-g23fee88f84873b -->
+    <td>Improved tag compatibility</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3037.pdf">N3037</a></td>
+    <td class="supported"><a href="../gcc-14/changes.html#c">14</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Bit-precise integer types (<code>_BitInt</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2763.pdf">N2763</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2775.pdf">N2775</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2969.htm">N2969</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3035.pdf">N3035</a></td>
+    <td class="supported"><a href="../gcc-14/changes.html#c">14</a>
+      (IA-32, x86-64 and AArch64 (little-endian) only)</td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-3360-g3b3083a598ca3f -->
+    <td>Improved rules for handling enumerations without underlying types</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3029.htm">N3029</a></td>
+    <td class="supported">3.0</td>
+    <td>allows enums wider than int; adjusted in
+	<a href="../gcc-13/changes.html#c">GCC 13</a></td>
+  </tr>
+  <tr>
+    <!-- r13-3534-ge0997c14af5e8b -->
+    <td>Enhanced Enumerations (fixed underlying types)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3030.htm">N3030</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r15-3599-geba6d2aa71a9b5 and many more -->
+    <td><code>#embed</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3017.htm">N3017</a></td>
+    <td class="supported"><a href="../gcc-15/changes.html#c">15</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-2206-g60d84e82639e25 -->
+    <td><code>nullptr</code> constant</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3042.htm">N3042</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-4541-gce53cf7b61ea6b -->
+    <td><code>__VA_OPT__</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3033.htm">N3033</a></td>
+    <td class="supported"><a href="../gcc-8/changes.html#c">8</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r11-4494 -->
+    <td>Parameter names may be omitted in function definitions</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2480.pdf">N2480</a></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-3549-g4fe34cdcc80ac2 -->
+    <td>Relax requirements for variadic parameter lists</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2975.pdf">N2975</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Identifier Syntax using Unicode Standard Annex 31</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2836.pdf">N2836</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>__has_include</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2799.pdf">N2799</a></td>
+    <td class="supported"><a href="../gcc-5/changes.html#c">5</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-3620-ge3c898e12d0ace -->
+    <td>Type inference for object definitions (<code>auto</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3007.htm">N3007</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r12-730 -->
+    <td><code>#elifdef</code>, <code>#elifndef</code> preprocessor directives</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2645.pdf">N2645</a></td>
+    <td class="supported"><a href="../gcc-12/changes.html#c">12</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>#warning</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2686.pdf">N2686</a></td>
+    <td class="supported">2.0</td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r0-81205-gf7fd775f0203c5 -->
+    <td>Binary integer literals</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2549.pdf">N2549</a></td>
+    <td class="supported"><a href="../gcc-4.3/changes.html#c">4.3</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Formatting for input/output of binary integer numbers</td>
+    <td></td>
+    <td class="supported"><a href="../gcc-12/changes.html#c">12</a></td>
+    <!-- Formatted input/output should be remarked as mainly a glibc
+	 feature (printf support in glibc 2.35, scanf support in 2.38;
+	 PRIb*, PRIB* and SCNb* macros in inttypes.h also in 2.38) but
+	 also with GCC format checking support.  And the integer literals
+	 have a secondary library part (strtol etc), also in glibc 2.38.  -->
+    <td>mainly a glibc feature; GCC format checking support present</td>
+  </tr>
+  <tr>
+    <!-- r12-722 -->
+    <td>Digit separators</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2626.pdf">N2626</a></td>
+    <td class="supported"><a href="../gcc-12/changes.html#c">12</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-2563-ga1a53dc7d87969 -->
+    <td><code>unreachable</code> macro in <code>&lt;stddef.h&gt;</code></td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2826.pdf">N2826</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r11-2030 -->
+    <td><code>BOOL_MAX</code> and <code>BOOL_WIDTH</code> macros in
+	<code>&lt;limits.h&gt;</code></td>
+    <td></td>
+    <td class="supported"><a href="../gcc-11/changes.html#c">11</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-2626-g2e7bc76d84f0aa -->
+    <td><code>ATOMIC_VAR_INIT</code> removed</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2886.htm">N2886</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <!-- r13-2451-g5f38bf14bcb3ff -->
+    <td>Removal of trigraphs</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2940.pdf">N2940</a></td>
+    <td class="supported"><a href="../gcc-13/changes.html#c">13</a></td>
+    <td>can still be enabled using <code>-trigraphs</code></td>
+  </tr>
+  <tr>
+    <!-- r14-3178-g8441841a1b985d -->
+    <td><code>&lt;stdckdint.h&gt;</code> header for checked integer arithmetic</td>
+    <td></td>
+    <td class="supported"><a href="../gcc-14/changes.html#c">14</a></td>
+    <td></td>
+  </tr>
+</table>
+
+<h2 id="c17"><a href="#c17">C17 Support in GCC</a></h2>
+
+C17 brings no major changes, only technical corrections and clarifications.
+
+<p>C17 can be explicitly selected with the <code>-std=c17</code>
+command-line flag, or <code>-std=gnu17</code> to enable GNU extensions
+as well.</p>
+
+<p>This was the default mode from GCC 8 to GCC 14 (including).</p>
+
+<h2 id="c11"><a href="#c11">C11 Support in GCC</a></h2>
+
+GCC has support for ISO C11, the 2011 revision of the ISO C standard.
+This standard is substantially completely supported (but refer to
+<a href="https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html#index-ISO-support">
+the manual</a> for details) since GCC 4.9.
+
+<p>C11 can be explicitly selected with the <code>-std=c11</code>
+command-line flag, or <code>-std=gnu11</code> to enable GNU extensions
+as well.</p>
+
+<table class="cxxstatus">
+  <tr class="separator">
+    <th>Feature</th>
+    <th>Proposal</th>
+    <th>Version</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>Atomics (<code>_Atomic</code>, <code>&lt;stdatomic.h&gt;</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1485.pdf">N1485</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1482.htm">N1482</a></td>
+    <td class="supported"><a href="../gcc-4.9/changes.html#c">4.9</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Thread-local storage (<code>_Thread_local</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1364.htm">N1364</a></td>
+    <td class="supported"><a href="../gcc-4.9/changes.html#c">4.9</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Additional floating-point characteristic macros (<code>&lt;float.h&gt;</code>)</td>
+    <td></td>
+    <td class="supported"><a href="../gcc-4.6/changes.html#c">4.6</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Alignment support (<code>_Alignas</code>, <code>_Alignof</code>,
+	<code>max_align_t</code>, <code>&lt;stdalign.h&gt;</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1397.htm">N1397</a>,
+	<a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1447.htm">N1447</a></td>
+    <td class="supported"><a href="../gcc-4.7/changes.html#c">4.7</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Unicode characters and strings (<code>&lt;uchar.h&gt;</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1488.htm">N1488</a></td>
+    <td class="supported"><a href="../gcc-4.7/changes.html#c">4.7</a></td>
+    <td>library part: glibc 2.16; originally specified in ISO/IEC TR
+	19769:2004; previously supported only with options such as
+	<code>-std=gnu11</code></td>
+  </tr>
+  <tr>
+    <td>Type-generic expressions (<code>_Generic</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1441.htm">N1441</a></td>
+    <td class="supported"><a href="../gcc-4.9/changes.html#c">4.9</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Static assertions (<code>_Static_assert</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1330.pdf">N1330</a></td>
+    <td class="supported"><a href="../gcc-4.6/changes.html#c">4.6</a></td>
+    <td><code>static_assert</code> in <code>&lt;assert.h&gt;</code>:
+	glibc 2.16</td>
+  </tr>
+  <tr>
+    <td>Anonymous structures and unions</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1406.pdf">N1406</a></td>
+    <td class="supported"><a href="../gcc-4.6/changes.html#c">4.6</a></td>
+    <td>the basics were first added in GCC 3.0</td>
+  </tr>
+  <tr>
+    <td>Typedef redefinition</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1360.htm">N1360</a></td>
+    <td class="supported"><a href="../gcc-4.6/changes.html#c">4.6</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Nonreturning functions (<code>_Noreturn</code> and
+	<code>&lt;stdnoreturn.h&gt;</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1478.htm">N1478</a></td>
+    <td class="supported"><a href="../gcc-4.7/changes.html#c">4.7</a></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Macros to create complex numbers (<code>&lt;complex.h&gt;</code>)</td>
+    <td><a href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1464.htm">N1464</a></td>
+    <td class="supported"><a href="../gcc-4.7/changes.html#c">4.7</a></td>
+    <td>library part: glibc 2.16</td>
+  </tr>
+  <tr>
+    <td>Support for opening files for exclusive access</td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td>Library issue (glibc 2.x) </td>
+  </tr>
+  <tr>
+    <td>Remove the <code>gets</code> function (<code>&lt;stdio.h&gt;</code>)</td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td>Library issue (glibc 2.16)</td>
+  </tr>
+  <tr>
+    <td><code>aligned_alloc</code>, <code>at_quick_exit</code>, and
+	<code>quick_exit</code> functions (<code>&lt;stdlib.h&gt;</code>)</td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td>Library issue (glibc 2.16)</td>
+  </tr>
+  <tr>
+    <td><code>struct timespec</code>, <code>timespec_get</code> function
+	in <code>&lt;time.h&gt;</code></td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td>Library issue (glibc 2.16)</td>
+  </tr>
+  <tr>
+    <td>Threading, <code>&lt;threads.h&gt;</code> (Optional)</td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td>Library issue (glibc 2.28)</td>
+  </tr>
+  <tr>
+    <td>Support for bounds-checking interfaces (Annex K, Optional)</td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td>Library issue (not implemented)</td>
+  </tr>
+  <tr>
+    <td>Support for analyzability (Annex L, Optional)</td>
+    <td></td>
+    <td class="other">N/A</td>
+    <td></td>
+  </tr>
+</table>
+
+<h2 id="c99"><a href="#c99">C99 Support in GCC</a></h2>
+
+<p>C99 is substantially completely supported as of GCC 4.5
+(with <code>-std=c99 -pedantic-errors</code> used;
+<code>-fextended-identifiers</code> also needed to enable extended
+identifiers before GCC 5), modulo bugs and floating-point
+issues (mainly but not entirely relating to optional C99 features from
+Annexes F and G).  The following table gives more details of the C99
+support in different GCC versions.</p>
+
+<p>This table is based on the list in the foreword to <a
+href="https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1256.pdf">N1256</a>
+(ISO/IEC 9899:1999 (E), consolidated with ISO/IEC 9899:1999/Cor.1:2001
+(E), ISO/IEC 9899:1999/Cor.2:2004 (E) and ISO/IEC 9899:1999/Cor.3:2007
+(E)).</p>
+
+<p>The "Version" column indicates the first GCC version in which
+support for the relevant feature was substantially present; some bugs
+or corner cases may have been fixed in later versions; this column is
+"N/A" if nothing is needed from the compiler for the feature to be
+substantially supported (for example, if the feature refers to
+addition of new library functions rather than language features), even
+if additional compiler features could be useful in conjunction with
+it.  It is assumed that GCC is used with <code>-std=c99
+-pedantic-errors</code> (for versions 3.0 and later), as well
+as <code>-fextended-identifiers</code> in the case of that feature
+before GCC 5.
+Where library cooperation is required, it is assumed that a recent
+version of the GNU C Library is in use, and support with other C
+libraries may be less good.  Where the version listed is before GCC
+3.0, it should not be assumed that all corner cases follow C99 before
+GCC 3.0, even if there is no specific note regarding corner cases.</p>
+
+<p>See below the table for further notes on some issues.</p>
+
+<table class="cxxstatus">
+  <tr class="separator">
+    <th>Feature</th>
+    <th>Version</th>
+    <th>Notes</th>
+  </tr>
+
+<tr><td><em>restricted character set support via digraphs and
+    <code>&lt;iso646.h&gt;</code> (originally specified in AMD1)</em></td>
+    <td class="supported">GCC 2.7</td>
+    <td></td>
+</tr>
+
+<tr><td><em>wide character library support in
+    <code>&lt;wchar.h&gt;</code> and <code>&lt;wctype.h&gt;</code>
+    (originally specified in AMD1)</em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required.  GCC doesn't
+    have <code>wprintf</code>, <code>wscanf</code> and
+    <code>wcsftime</code> format checking support.</td>
+</tr>
+
+<tr><td><em>more precise aliasing rules via effective type</em></td>
+    <td class="other">N/A</td>
+    <td>Optimization, no compiler support required.  GCC has
+    optimized based on aliasing rules since GCC 2.95.</td>
+</tr>
+
+<tr><td><em>restricted pointers</em></td>
+    <td class="supported">GCC 2.95</td>
+    <td></td>
+</tr>
+
+<tr><td><em>variable length arrays</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td>Various corner cases fixed in GCC 4.5.</td>
+</tr>
+
+<tr><td><em>flexible array members</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em><code>static</code> and type qualifiers in parameter array declarators</em></td>
+    <td class="supported">GCC 3.1</td>
+    <td></td>
+</tr>
+
+<tr><td><em>complex (and imaginary) support in <code>&lt;complex.h&gt;</code></em></td>
+    <td class="supported">GCC 3.0</td>
+    <td>New functions are a library issue not requiring much compiler
+    support (some built-in functions present).  Complex numbers are
+    supported with <code>__complex__</code> since GCC 2.5, and with
+    C99 <code>_Complex</code> since GCC 3.0.  Complex multiplication
+    and division support C99 special cases since GCC 4.0.  Various
+    corner cases were fixed in GCC 4.5.  GCC does not support the
+    Annex G imaginary types, but this support is optional, and complex
+    multiplication and division have excess overflows at runtime
+    (although not beyond those permitted by C99).</td>
+</tr>
+
+<tr><td><em>type-generic math macros in <code>&lt;tgmath.h&gt;</code></em></td>
+    <td class="other">N/A</td>
+    <td>Library feature; GCC built-in functions may be used in
+    implementing it.</td>
+</tr>
+
+<tr><td><em>the <code>long long int</code> type and library functions</em></td>
+    <td class="supported">&le; GCC 1.27</td>
+    <td>New functions are a library issue not requiring much compiler
+    support (some built-in functions present).</td>
+</tr>
+
+<tr><td><em>increased minimum translation limits</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td>GNU policy has always avoided arbitrary limits.</td>
+</tr>
+
+<tr><td><em>additional floating-point characteristics in <code>&lt;float.h&gt;</code></em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>remove implicit <code>int</code></em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>reliable integer division</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td></td>
+</tr>
+
+<tr><td><em>universal character names (<code>\u</code> and <code>\U</code>)</em></td>
+    <td class="supported">GCC 3.1</td>
+    <td></td>
+</tr>
+
+<tr><td><em>extended identifiers</em></td>
+    <td class="supported">GCC 4.1</td>
+    <td>Some corner cases were fixed in GCC 5;
+    <code>-fextended-identifiers</code> was needed to enable this
+    feature before that version.</td>
+</tr>
+
+<tr><td><em>hexadecimal floating-point constants and
+    <code>%a</code> and <code>%A</code>
+    <code>printf</code>/<code>scanf</code> conversion specifiers</em></td>
+    <td class="supported">GCC 2.8</td>
+    <td>Conversion specifiers are a library issue (format checking
+    support present).</td>
+</tr>
+
+<tr><td><em>compound literals</em></td>
+    <td class="supported">GCC 3.1</td>
+    <td>The syntax was supported by GCC by version 1.21, but with
+    significant differences from C99 requirements until GCC 3.1.</td>
+</tr>
+
+<tr><td><em>designated initializers</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td>The syntax was supported since GCC 2.5, but with significant
+    differences from C99 requirements until GCC 3.0.</td>
+</tr>
+
+<tr><td><em><code>//</code> comments</em></td>
+    <td class="supported">GCC 2.7</td>
+    <td></td>
+</tr>
+
+<tr><td><em>extended integer types and library functions
+    in <code>&lt;inttypes.h&gt;</code>
+    and <code>&lt;stdint.h&gt;</code></em></td>
+    <td class="other">N/A</td>
+    <td>All of this can be provided by the library rather than the
+    compiler (some built-in function support also
+    present).  <code>&lt;stdint.h&gt;</code> is provided by GCC (as of
+    version 4.5), or fixed where the system headers provide a
+    nonconforming version, on some but not yet all systems.  On
+    systems where types in this header have been defined
+    as <code>char</code>, GCC retains this definition although it is
+    not permitted by C99.</td>
+</tr>
+
+<tr><td><em>remove implicit function declaration</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>preprocessor arithmetic done in <code>intmax_t</code>/<code>uintmax_t</code></em></td>
+    <td class="supported">GCC 3.3</td>
+    <td></td>
+</tr>
+
+<tr><td><em>mixed declarations and code</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>new block scopes for selection and iteration statements</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>integer constant type rules</em></td>
+    <td class="supported">GCC 3.3</td>
+    <td></td>
+</tr>
+
+<tr><td><em>integer promotion rules</em></td>
+    <td class="supported">GCC 4.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>macros with a variable number of arguments</em></td>
+    <td class="supported">GCC 2.95</td>
+    <td></td>
+</tr>
+
+<tr><td><em>the <code>vscanf</code> family of functions
+    in <code>&lt;stdio.h&gt;</code> and <code>&lt;wchar.h&gt;</code></em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required (format checking
+    support present).</td>
+</tr>
+
+<tr><td><em>additional math library functions in <code>&lt;math.h&gt;</code></em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required (various
+    built-in functions present).</td>
+</tr>
+
+<tr><td><em>treatment of error conditions by math library functions (<code>math_errhandling</code>)</em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required.</td>
+</tr>
+
+<tr><td><em>floating-point environment access in <code>&lt;fenv.h&gt;</code></em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required.</td>
+</tr>
+
+<tr><td><em>IEC 60559 (also known as IEC 559 or IEEE arithmetic) support</em></td>
+    <td class="other"></td>
+    <td>Optional feature, not properly supported in GCC.</td>
+</tr>
+
+<tr><td><em>trailing comma allowed in <code>enum</code> declaration</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td></td>
+</tr>
+
+<tr><td><em><code>%lf</code> conversion specifier allowed in <code>printf</code></em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required (format checking
+    support present).</td>
+</tr>
+
+<tr><td><em>inline functions</em></td>
+    <td class="supported">GCC 4.3</td>
+    <td>Inline function support present since at least GCC 1.21, but
+    with major differences from C99 semantics until 4.3.</td>
+</tr>
+
+<tr><td><em>the <code>snprintf</code> family of functions in <code>&lt;stdio.h&gt;</code></em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required (format checking
+    support present).</td>
+</tr>
+
+<tr><td><em>boolean type in <code>&lt;stdbool.h&gt;</code></em></td>
+    <td class="supported">GCC 3.0</td>
+    <td>GCC 2.95 had <code>&lt;stdbool.h&gt;</code>, but based on an
+    early draft with major differences from C99 semantics.</td>
+</tr>
+
+<tr><td><em>idempotent type qualifiers</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td>Always has been allowed, with a warning as required by C90
+    depending on GCC version.</td>
+</tr>
+
+<tr><td><em>empty macro arguments</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td>Undefined behavior in C90, but GCC not known ever to have
+    handled them contrary to C99.</td>
+</tr>
+
+<tr><td><em>new structure type compatibility rules (tag compatibility)</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td>This relates to compatibility between translation units.</td>
+</tr>
+
+<tr><td><em>additional predefined macro names</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td>Support for the compiler to implicitly preinclude a
+    file <code>stdc-predef.h</code> provided by the C library, and so
+    predefine macros relating to library properties for the whole
+    translation unit, is new in GCC 4.8.</td>
+</tr>
+
+<tr><td><em><code>_Pragma</code> preprocessing operator</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>standard pragmas</em></td>
+    <td class="other"></td>
+    <td>Not implemented.  Associated command-line options to control
+    the state of the pragmas for the whole translation unit are
+    available.</td>
+</tr>
+
+<tr><td><em><code>__func__</code> predefined identifier</em></td>
+    <td class="supported">GCC 2.95</td>
+    <td></td>
+</tr>
+
+<tr><td><em><code>va_copy</code> macro</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+<tr><td><em>additional <code>strftime</code> conversion specifiers</em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required (format checking
+    support present).</td>
+</tr>
+
+<tr><td><em>LIA compatibility annex</em></td>
+    <td class="other">N/A</td>
+    <td>This annex describes how C relates to another standard, and
+    does not impose any requirements on C implementations.</td>
+</tr>
+
+<tr><td><em>deprecate <code>ungetc</code> at the beginning of a binary file</em></td>
+    <td class="other">N/A</td>
+    <td>Library feature, no compiler support required.</td>
+</tr>
+
+<tr><td><em>remove deprecation of aliased array parameters</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td>GCC has never done anything regarding this deprecation.</td>
+</tr>
+
+<tr><td><em>conversion of array to pointer not limited to lvalues</em></td>
+    <td class="supported">GCC 3.1</td>
+    <td>Some support since GCC 2.0, but with major differences from
+    C99 requirements before GCC 3.1.</td>
+</tr>
+
+<tr><td><em>relaxed constraints on aggregate and union initialization</em></td>
+    <td class="supported">&le; GCC 1.21</td>
+    <td></td>
+</tr>
+
+<tr><td><em>relaxed restrictions on portable header names</em></td>
+    <td class="supported">GCC 0.9</td>
+    <td>GCC has never had such restrictions itself.</td>
+</tr>
+
+<tr><td><em><code>return</code> without expression not permitted
+    in function that returns a value (and vice versa)</em></td>
+    <td class="supported">GCC 3.0</td>
+    <td></td>
+</tr>
+
+</table>
+
+<h2 id="c90"><a href="#c90">C90 Support in GCC</a></h2>
+
+GCC has support for ISO C90; it can be explicitly selected with the
+<code>-std=c90</code> command-line flag, or <code>-std=gnu90</code>
+to enable GNU extensions as well.
+
+<h2>Further notes</h2>
+
+<ul>
+
+<li>cpp has limited support for multibyte character sets.</li>
+
+<li>IEC 60559 is IEEE 754 floating point.  This works if and only if
+the hardware is perfectly compliant, but GCC does not define
+<code>__STDC_IEC_559__</code> or implement the associated standard
+pragmas; nor do some options such as <code>-frounding-math</code> to
+enable the pragmas globally work in all cases (for example, required
+exceptions may not be generated) and contracting expressions (e.g.,
+using fused multiply-add) is not restricted to source-language
+expressions as required by C99.</li>
+
+<li>For thorough support of <code>math_errhandling</code> the
+compiler needs to mark its output from compilations using
+<code>-fno-trapping-math</code> or <code>-fno-math-errno</code>,
+possibly using
+the <code>.gnu_attribute</code> mechanism, to indicate that built-in
+function optimizations may have been applied that mean that not all
+calls report error status in a particular way; the static linker
+needs to put this information in executables and shared libraries and
+the C library needs to use it to set <code>math_errhandling</code> at
+startup to a conservatively correct value based on the information
+from the compiler.  There is currently some limited GNU C Library
+support that only conforms as long as the above options are not used
+anywhere in the program.</li>
+
+<li><code>const</code>-qualified compound literals could share storage
+with each other and with string literals, but currently don't.</li>
+
+<li>The information provided by <code>static</code> in parameter array
+declarators is not used for optimization.  It might make sense to use
+it in future in conjunction with <a href="prefetch.html">work
+on prefetching</a>.</li>
+
+</ul>
+
+
+
+
+<!-- ==================================================================== -->
+
+<div class="copyright">
+
+<address>For questions related to the use of GCC,
+please consult these web pages and the
+<a href="https://gcc.gnu.org/onlinedocs/">GCC manuals</a>. If that fails,
+the <a href="mailto:gcc-help@gcc.gnu.org">gcc-help@gcc.gnu.org</a>
+mailing list might help.
+Comments on these web pages and the development of GCC are welcome on our
+developer list at <a href="mailto:gcc@gcc.gnu.org">gcc@gcc.gnu.org</a>.
+All of <a href="https://gcc.gnu.org/lists.html">our lists</a>
+have public archives.
+</address>
+
+<p>Copyright (C)
+<a href="https://www.fsf.org">Free Software Foundation, Inc.</a>
+Verbatim copying and distribution of this entire article is
+permitted in any medium, provided this notice is preserved.</p>
+
+<p>These pages are
+<a href="https://gcc.gnu.org/about.html">maintained by the GCC team</a>.
+Last modified 2026-05-19.</p><!-- IGNORE DIFF -->
+
+</div>
+
+<!-- ==================================================================== -->
+
+</body>
+</html>

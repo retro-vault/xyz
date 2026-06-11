@@ -12,9 +12,6 @@
         .globl  _raise
         .globl  __signal_handlers
         .globl  _abort
-        .area   _DATA
-__raise_sig:
-        .dw     0
         .area   _CODE
 
         ; _raise
@@ -29,12 +26,14 @@ _raise::
         jr      z,raise_bad
         cp      #7
         jr      nc,raise_bad
-        ld      (__raise_sig),hl        ; remember sig for the handler call
+        ld      b,h                     ; BC = validated signal value
+        ld      c,l
+        ld      a,c
         add     a,a
-        ld      c,a
-        ld      b,#0
-        ld      hl,#__signal_handlers
-        add     hl,bc
+        ld      l,a
+        ld      h,#0
+        ld      de,#__signal_handlers
+        add     hl,de
         ld      e,(hl)
         inc     hl
         ld      d,(hl)                  ; DE = handler
@@ -50,7 +49,8 @@ raise_call:
         ld      hl,#raise_after
         push    hl                      ; return address for the handler
         push    de                      ; handler address
-        ld      hl,(__raise_sig)        ; HL = sig (argument)
+        ld      l,c
+        ld      h,b                     ; HL = sig (argument)
         ret                             ; jump into handler; it returns to raise_after
 raise_after:
         ld      de,#0

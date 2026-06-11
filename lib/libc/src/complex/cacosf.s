@@ -16,12 +16,6 @@
         .globl  _casinf
         .globl  ___fssub
 
-        .area   _DATA
-__cacosf_asin_re:
-        .ds     4
-__cacosf_asin_im:
-        .ds     4
-
         .area   _CODE
 
 _cacosf::
@@ -76,32 +70,23 @@ cacosf_generic:
         inc     sp
         inc     sp
         inc     sp
-        ld      (__cacosf_asin_re),de
-        ld      (__cacosf_asin_re + 2),hl
+
+        ;; The alternate bank already holds asin.imag, so negate it there
+        ;; before computing pi/2 - asin.real in the primary bank.
         exx
-        ld      (__cacosf_asin_im),de
-        ld      (__cacosf_asin_im + 2),hl
+        ld      a,h
+        xor     #0x80
+        ld      h,a
         exx
 
         ;; real = pi/2 - asin.real
-        ld      hl,(__cacosf_asin_re + 2)
         push    hl
-        ld      hl,(__cacosf_asin_re)
-        push    hl
+        push    de
         ld      de,#0x0fdb
         ld      hl,#0x3fc9              ; pi/2
         call    ___fssub
         pop     bc
         pop     bc
-
-        ;; imag = -asin.imag
-        exx
-        ld      de,(__cacosf_asin_im)
-        ld      hl,(__cacosf_asin_im + 2)
-        ld      a,h
-        xor     #0x80
-        ld      h,a
-        exx
 
         pop     ix
         ret

@@ -17,23 +17,24 @@
         .globl  ___fsmul
         .globl  ___fssub
 
-        .area   _DATA
-__it_x: .ds 4
-__it_t: .ds 4
-
         .area   _CODE
+
+IT_XLO  .equ -8
+IT_XHI  .equ -6
+IT_TLO  .equ -4
+IT_THI  .equ -2
 
         ;; atanf(x) is routed through atan2f(x, 1.0f) so the quadrant logic
         ;; stays in one proven kernel.
 _atanf::
-        ld      (__it_x),de
-        ld      (__it_x + 2),hl
+        ld      b,h
+        ld      c,l
         ld      hl,#0x3f80              ; 1.0f high word
         push    hl
-        ld      hl,#0x0000              ; 1.0f low word
-        push    hl
-        ld      de,(__it_x)
-        ld      hl,(__it_x + 2)
+        ld      hl,#0x0000
+        push    hl                      ; 1.0f low word
+        ld      h,b
+        ld      l,c
         call    _atan2f
         pop     bc
         pop     bc
@@ -41,25 +42,35 @@ _atanf::
 
         ;; asinf(x) = atan2f(x, sqrtf(1 - x*x))
 _asinf::
-        ld      (__it_x),de
-        ld      (__it_x + 2),hl
+        ld      b,h
+        ld      c,l
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-8
+        add     hl,sp
+        ld      sp,hl
+        ld      IT_XLO(ix),e
+        ld      IT_XLO+1(ix),d
+        ld      IT_XHI(ix),c
+        ld      IT_XHI+1(ix),b
         ;; Form x*x first so the domain check naturally falls out of sqrtf.
-        ld      hl,(__it_x + 2)
-        ld      bc,(__it_x)
+        ld      l,IT_XHI(ix)
+        ld      h,IT_XHI+1(ix)
         push    hl
-        push    bc
-        ld      de,(__it_x)
-        ld      hl,(__it_x + 2)
+        ld      e,IT_XLO(ix)
+        ld      d,IT_XLO+1(ix)
+        push    de
+        ld      e,IT_XLO(ix)
+        ld      d,IT_XLO+1(ix)
+        ld      l,IT_XHI(ix)
+        ld      h,IT_XHI+1(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__it_t),de
-        ld      (__it_t + 2),hl
         ;; Transform to 1 - x*x for the sqrtf leg of the identity.
-        ld      hl,(__it_t + 2)
-        ld      bc,(__it_t)
         push    hl
-        push    bc
+        push    de
         ld      de,#0x0000
         ld      hl,#0x3f80              ; 1.0f
         call    ___fssub
@@ -69,49 +80,71 @@ _asinf::
         ;; atan2f takes y in HL:DE and x on the stack.
         push    hl
         push    de
-        ld      de,(__it_x)
-        ld      hl,(__it_x + 2)
+        ld      e,IT_XLO(ix)
+        ld      d,IT_XLO+1(ix)
+        ld      l,IT_XHI(ix)
+        ld      h,IT_XHI+1(ix)
         call    _atan2f
         pop     bc
         pop     bc
+        ld      sp,ix
+        pop     ix
         ret
 
         ;; acosf(x) = atan2f(sqrtf(1 - x*x), x)
 _acosf::
-        ld      (__it_x),de
-        ld      (__it_x + 2),hl
+        ld      b,h
+        ld      c,l
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-8
+        add     hl,sp
+        ld      sp,hl
+        ld      IT_XLO(ix),e
+        ld      IT_XLO+1(ix),d
+        ld      IT_XHI(ix),c
+        ld      IT_XHI+1(ix),b
         ;; Reuse the same 1 - x*x reduction as asinf.
-        ld      hl,(__it_x + 2)
-        ld      bc,(__it_x)
+        ld      l,IT_XHI(ix)
+        ld      h,IT_XHI+1(ix)
         push    hl
-        push    bc
-        ld      de,(__it_x)
-        ld      hl,(__it_x + 2)
+        ld      e,IT_XLO(ix)
+        ld      d,IT_XLO+1(ix)
+        push    de
+        ld      e,IT_XLO(ix)
+        ld      d,IT_XLO+1(ix)
+        ld      l,IT_XHI(ix)
+        ld      h,IT_XHI+1(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__it_t),de
-        ld      (__it_t + 2),hl
-        ld      hl,(__it_t + 2)
-        ld      bc,(__it_t)
         push    hl
-        push    bc
+        push    de
         ld      de,#0x0000
         ld      hl,#0x3f80              ; 1.0f
         call    ___fssub
         pop     bc
         pop     bc
         call    _sqrtf
-        ld      (__it_t),de
-        ld      (__it_t + 2),hl
+        ld      IT_TLO(ix),e
+        ld      IT_TLO+1(ix),d
+        ld      IT_THI(ix),l
+        ld      IT_THI+1(ix),h
         ;; For acosf the reduced root becomes y and the original x is stacked.
-        ld      hl,(__it_x + 2)
-        ld      bc,(__it_x)
+        ld      l,IT_XHI(ix)
+        ld      h,IT_XHI+1(ix)
         push    hl
-        push    bc
-        ld      de,(__it_t)
-        ld      hl,(__it_t + 2)
+        ld      e,IT_XLO(ix)
+        ld      d,IT_XLO+1(ix)
+        push    de
+        ld      e,IT_TLO(ix)
+        ld      d,IT_TLO+1(ix)
+        ld      l,IT_THI(ix)
+        ld      h,IT_THI+1(ix)
         call    _atan2f
         pop     bc
         pop     bc
+        ld      sp,ix
+        pop     ix
         ret

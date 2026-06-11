@@ -27,6 +27,7 @@ typedef struct imaxdiv_t {
 /* fprintf / printf format macros. */
 #define PRId8   "d"
 #define PRIi8   "i"
+#define PRIb8   "b"
 #define PRIo8   "o"
 #define PRIu8   "u"
 #define PRIx8   "x"
@@ -34,6 +35,7 @@ typedef struct imaxdiv_t {
 
 #define PRId16  "d"
 #define PRIi16  "i"
+#define PRIb16  "b"
 #define PRIo16  "o"
 #define PRIu16  "u"
 #define PRIx16  "x"
@@ -41,6 +43,7 @@ typedef struct imaxdiv_t {
 
 #define PRId32  "ld"
 #define PRIi32  "li"
+#define PRIb32  "lb"
 #define PRIo32  "lo"
 #define PRIu32  "lu"
 #define PRIx32  "lx"
@@ -48,6 +51,7 @@ typedef struct imaxdiv_t {
 
 #define PRId64  "lld"
 #define PRIi64  "lli"
+#define PRIb64  "llb"
 #define PRIo64  "llo"
 #define PRIu64  "llu"
 #define PRIx64  "llx"
@@ -55,24 +59,28 @@ typedef struct imaxdiv_t {
 
 #define PRIdLEAST8   PRId8
 #define PRIiLEAST8   PRIi8
+#define PRIbLEAST8   PRIb8
 #define PRIoLEAST8   PRIo8
 #define PRIuLEAST8   PRIu8
 #define PRIxLEAST8   PRIx8
 #define PRIXLEAST8   PRIX8
 #define PRIdLEAST16  PRId16
 #define PRIiLEAST16  PRIi16
+#define PRIbLEAST16  PRIb16
 #define PRIoLEAST16  PRIo16
 #define PRIuLEAST16  PRIu16
 #define PRIxLEAST16  PRIx16
 #define PRIXLEAST16  PRIX16
 #define PRIdLEAST32  PRId32
 #define PRIiLEAST32  PRIi32
+#define PRIbLEAST32  PRIb32
 #define PRIoLEAST32  PRIo32
 #define PRIuLEAST32  PRIu32
 #define PRIxLEAST32  PRIx32
 #define PRIXLEAST32  PRIX32
 #define PRIdLEAST64  PRId64
 #define PRIiLEAST64  PRIi64
+#define PRIbLEAST64  PRIb64
 #define PRIoLEAST64  PRIo64
 #define PRIuLEAST64  PRIu64
 #define PRIxLEAST64  PRIx64
@@ -80,24 +88,28 @@ typedef struct imaxdiv_t {
 
 #define PRIdFAST8    PRId8
 #define PRIiFAST8    PRIi8
+#define PRIbFAST8    PRIb8
 #define PRIoFAST8    PRIo8
 #define PRIuFAST8    PRIu8
 #define PRIxFAST8    PRIx8
 #define PRIXFAST8    PRIX8
 #define PRIdFAST16   PRId16
 #define PRIiFAST16   PRIi16
+#define PRIbFAST16   PRIb16
 #define PRIoFAST16   PRIo16
 #define PRIuFAST16   PRIu16
 #define PRIxFAST16   PRIx16
 #define PRIXFAST16   PRIX16
 #define PRIdFAST32   PRId32
 #define PRIiFAST32   PRIi32
+#define PRIbFAST32   PRIb32
 #define PRIoFAST32   PRIo32
 #define PRIuFAST32   PRIu32
 #define PRIxFAST32   PRIx32
 #define PRIXFAST32   PRIX32
 #define PRIdFAST64   PRId64
 #define PRIiFAST64   PRIi64
+#define PRIbFAST64   PRIb64
 #define PRIoFAST64   PRIo64
 #define PRIuFAST64   PRIu64
 #define PRIxFAST64   PRIx64
@@ -105,6 +117,7 @@ typedef struct imaxdiv_t {
 
 #define PRIdMAX "lld"
 #define PRIiMAX "lli"
+#define PRIbMAX "llb"
 #define PRIoMAX "llo"
 #define PRIuMAX "llu"
 #define PRIxMAX "llx"
@@ -112,6 +125,7 @@ typedef struct imaxdiv_t {
 
 #define PRIdPTR "d"
 #define PRIiPTR "i"
+#define PRIbPTR "b"
 #define PRIoPTR "o"
 #define PRIuPTR "u"
 #define PRIxPTR "x"

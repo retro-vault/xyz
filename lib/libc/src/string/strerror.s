@@ -27,7 +27,7 @@ _strerror::
         ld      de,#_strerror_none
         ret
 
-        .area   _DATA
+        .area   _CONST
 _strerror_none:
         .ascii  "No error"
         .db     0

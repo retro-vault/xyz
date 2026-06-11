@@ -18,6 +18,7 @@
 #include <xld/debug_emitter.h>
 #include <xld/elf_debug_emitter.h>
 #include <xld/errors.h>
+#include <xld/map_emitter.h>
 #include <xld/runtime.h>
 
 #define XLD_VERSION "1.0.0"
@@ -63,6 +64,13 @@ int main(int argc, char* argv[]) {
         xld::linker::link(ctx, opts);
         xld::binary_emitter::emit(opts.output_file, ctx);
 
+        if (opts.print_map) {
+            xld::map_emitter::emit(std::cout, ctx);
+        }
+        if (opts.map_file.has_value()) {
+            xld::map_emitter::emit(opts.map_file.value(), ctx);
+        }
+
         if (opts.debug_info) {
             opts.cdb_file = replace_extension(
                 opts.output_file,
@@ -91,7 +99,9 @@ int main(int argc, char* argv[]) {
                 output_size = static_cast<uint32_t>(
                     ctx.output_range->end - ctx.output_range->start + 1);
             } else {
-                output_size = ctx.code_size;
+                output_size = ctx.code_size > 0x10000u
+                    ? 0x10000u
+                    : ctx.code_size;
             }
             std::cout << "Output: " << opts.output_file << " ("
                       << output_size << " bytes)\n";

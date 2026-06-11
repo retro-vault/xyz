@@ -1623,7 +1623,77 @@ void z80_gen::gen_rotate(const icode &ic, bool right) {
 void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                                   const std::string &true_lbl,
                                   const std::string &false_lbl) {
-    if (is_real_float_op(ic.left)) {
+    if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
+        auto load_operand_as_double64 = [&](const operand &op) {
+            if (op.kind == operand_kind::FLOAT_CONST) {
+                if (op.type && op.type->kind == type_kind::FLOAT &&
+                    op.type->size() == 4) {
+                    asm_.global_decl("___fs2db");
+                    load_hl_lo32(op);
+                    emit_line("push\thl");
+                    load_hl_hi32(op);
+                    emit_line("pop\tde");
+                    emit_line("call\t___fs2db");
+                    return;
+                }
+                operand dbl = op;
+                dbl.type = type::make_double();
+                load_reg64(dbl);
+                return;
+            }
+            if (is_double64_op(op)) {
+                load_reg64(op);
+                return;
+            }
+            if (is_float32_op(op)) {
+                asm_.global_decl("___fs2db");
+                load_hl_lo32(op);
+                emit_line("push\thl");
+                load_hl_hi32(op);
+                emit_line("pop\tde");
+                emit_line("call\t___fs2db");
+                return;
+            }
+            if (is_llong_op(op)) {
+                const char *helper =
+                    op.type && op.type->is_unsigned()
+                        ? "___ull2db"
+                        : "___sll2db";
+                asm_.global_decl(helper);
+                load_reg64(op);
+                emit_line("call\t%s", helper);
+                return;
+            }
+            if (op_size(op) <= 2) {
+                const char *helper =
+                    op.type && op.type->is_unsigned()
+                        ? "___uint2db"
+                        : "___sint2db";
+                asm_.global_decl(helper);
+                load_hl(op);
+                emit_line("call\t%s", helper);
+                return;
+            }
+            const char *helper =
+                op.type && op.type->is_unsigned()
+                    ? "___ulong2db"
+                    : "___slong2db";
+            asm_.global_decl(helper);
+            load_hl_lo32(op);
+            emit_line("push\thl");
+            load_hl_hi32(op);
+            emit_line("pop\tde");
+            emit_line("call\t%s", helper);
+        };
+        auto push_double_stack_arg = [&](const operand &op) {
+            load_operand_as_double64(op);
+            emit_line("exx");
+            emit_line("push\thl");
+            emit_line("push\tde");
+            emit_line("exx");
+            emit_line("push\thl");
+            emit_line("push\tde");
+        };
         auto emit_de_cmp_branch = [&](icode_op op) {
             std::string skip_lbl;
             switch (op) {
@@ -1640,16 +1710,35 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                     emit_line("jp\tnz, %s", true_lbl.c_str());
                 break;
             case icode_op::LT:
-                if (!true_lbl.empty())
-                    emit_line("bit\t7, d"), emit_line("jp\tnz, %s", true_lbl.c_str());
+                if (!true_lbl.empty()) {
+                    skip_lbl = "__fcmp_skip_" + std::to_string(rand() % 100000);
+                    emit_line("ld\ta, d");
+                    emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                    emit_line("jp\tnz, %s",
+                              false_lbl.empty() ? skip_lbl.c_str() : false_lbl.c_str());
+                    emit_line("ld\ta, e");
+                    emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                    if (false_lbl.empty())
+                        asm_.label(skip_lbl, false);
+                }
                 break;
             case icode_op::LE:
-                emit_line("ld\ta, d");
-                emit_line("or\te");
                 if (!true_lbl.empty()) {
+                    std::string le_check_lbl =
+                        "__fcmp_le_check_" + std::to_string(rand() % 100000);
+                    emit_line("ld\ta, d");
+                    emit_line("or\te");
                     emit_line("jp\tz, %s", true_lbl.c_str());
-                    emit_line("bit\t7, d");
-                    emit_line("jp\tnz, %s", true_lbl.c_str());
+                    emit_line("ld\ta, d");
+                    emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                    emit_line("jp\tnz, %s",
+                              false_lbl.empty() ? le_check_lbl.c_str() : false_lbl.c_str());
+                    emit_line("ld\ta, e");
+                    emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                    if (false_lbl.empty())
+                        asm_.label(le_check_lbl, false);
                 }
                 break;
             case icode_op::GT:
@@ -1676,13 +1765,10 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 emit_line("jp\t%s", false_lbl.c_str());
         };
 
-        if (is_double64_op(ic.left)) {
+        if (is_double64_op(ic.left) || is_double64_op(ic.right)) {
             asm_.global_decl("___dbcmp");
-            for (int w = 3; w >= 0; --w) {
-                load_hl_word(ic.right, w);
-                emit_line("push\thl");
-            }
-            load_reg64(ic.left);
+            push_double_stack_arg(ic.right);
+            load_operand_as_double64(ic.left);
             emit_line("call\t___dbcmp");
             emit_line("pop\tbc");
             emit_line("pop\tbc");
@@ -2164,7 +2250,77 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
     };
 
-    if (is_real_float_op(ic.left)) {
+    if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
+        auto load_operand_as_double64 = [&](const operand &op) {
+            if (op.kind == operand_kind::FLOAT_CONST) {
+                if (op.type && op.type->kind == type_kind::FLOAT &&
+                    op.type->size() == 4) {
+                    asm_.global_decl("___fs2db");
+                    load_hl_lo32(op);
+                    emit_line("push\thl");
+                    load_hl_hi32(op);
+                    emit_line("pop\tde");
+                    emit_line("call\t___fs2db");
+                    return;
+                }
+                operand dbl = op;
+                dbl.type = type::make_double();
+                load_reg64(dbl);
+                return;
+            }
+            if (is_double64_op(op)) {
+                load_reg64(op);
+                return;
+            }
+            if (is_float32_op(op)) {
+                asm_.global_decl("___fs2db");
+                load_hl_lo32(op);
+                emit_line("push\thl");
+                load_hl_hi32(op);
+                emit_line("pop\tde");
+                emit_line("call\t___fs2db");
+                return;
+            }
+            if (is_llong_op(op)) {
+                const char *helper =
+                    op.type && op.type->is_unsigned()
+                        ? "___ull2db"
+                        : "___sll2db";
+                asm_.global_decl(helper);
+                load_reg64(op);
+                emit_line("call\t%s", helper);
+                return;
+            }
+            if (op_size(op) <= 2) {
+                const char *helper =
+                    op.type && op.type->is_unsigned()
+                        ? "___uint2db"
+                        : "___sint2db";
+                asm_.global_decl(helper);
+                load_hl(op);
+                emit_line("call\t%s", helper);
+                return;
+            }
+            const char *helper =
+                op.type && op.type->is_unsigned()
+                    ? "___ulong2db"
+                    : "___slong2db";
+            asm_.global_decl(helper);
+            load_hl_lo32(op);
+            emit_line("push\thl");
+            load_hl_hi32(op);
+            emit_line("pop\tde");
+            emit_line("call\t%s", helper);
+        };
+        auto push_double_stack_arg = [&](const operand &op) {
+            load_operand_as_double64(op);
+            emit_line("exx");
+            emit_line("push\thl");
+            emit_line("push\tde");
+            emit_line("exx");
+            emit_line("push\thl");
+            emit_line("push\tde");
+        };
         auto store_bool_from_de_cmp = [&](icode_op op) {
             std::string true_lbl = "__fcmp_true_" + std::to_string(rand() % 100000);
             std::string end_lbl = "__fcmp_end_" + std::to_string(rand() % 100000);
@@ -2182,15 +2338,23 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
                 emit_line("jp\tnz, %s", true_lbl.c_str());
                 break;
             case icode_op::LT:
-                emit_line("bit\t7, d");
-                emit_line("jp\tnz, %s", true_lbl.c_str());
+                emit_line("ld\ta, d");
+                emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                emit_line("jp\tnz, %s", end_lbl.c_str());
+                emit_line("ld\ta, e");
+                emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                emit_line("jp\tz, %s", true_lbl.c_str());
                 break;
             case icode_op::LE:
                 emit_line("ld\ta, d");
                 emit_line("or\te");
                 emit_line("jp\tz, %s", true_lbl.c_str());
-                emit_line("bit\t7, d");
-                emit_line("jp\tnz, %s", true_lbl.c_str());
+                emit_line("ld\ta, d");
+                emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                emit_line("jp\tnz, %s", end_lbl.c_str());
+                emit_line("ld\ta, e");
+                emit_line("cp\t%s", asm_.imm(0xff).c_str());
+                emit_line("jp\tz, %s", true_lbl.c_str());
                 break;
             case icode_op::GT:
                 emit_line("bit\t7, d");
@@ -2213,13 +2377,10 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             store_hl(ic.result);
         };
 
-        if (is_double64_op(ic.left)) {
+        if (is_double64_op(ic.left) || is_double64_op(ic.right)) {
             asm_.global_decl("___dbcmp");
-            for (int w = 3; w >= 0; --w) {
-                load_hl_word(ic.right, w);
-                emit_line("push\thl");
-            }
-            load_reg64(ic.left);
+            push_double_stack_arg(ic.right);
+            load_operand_as_double64(ic.left);
             emit_line("call\t___dbcmp");
             emit_line("pop\tbc");
             emit_line("pop\tbc");

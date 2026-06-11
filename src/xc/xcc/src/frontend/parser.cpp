@@ -162,7 +162,7 @@ bool parser::is_type_start() const {
     case tk::KW__ATOMIC:
     case tk::KW_AUTO: case tk::KW_EXTERN: case tk::KW_REGISTER:
     case tk::KW_STATIC: case tk::KW_TYPEDEF: case tk::KW__THREAD_LOCAL:
-    case tk::KW_INLINE: case tk::KW__NORETURN:
+    case tk::KW_INLINE: case tk::KW__NORETURN: case tk::KW__ALIGNAS:
     case tk::KW___TYPEOF__: case tk::KW_TYPEOF_UNQUAL:
     case tk::KW_BOOL: case tk::KW_CONSTEXPR: case tk::KW__BITINT: case tk::KW_CHAR8_T:
         return true;
@@ -323,6 +323,7 @@ decl_ptr parser::parse_external_declaration() {
                 auto esym = std::make_shared<symbol>();
                 esym->name = edi.name; esym->kind = sym_kind::VAR;
                 esym->type = edi.type; esym->storage = ds.sc; esym->is_global = true;
+                esym->requested_align = ds.align_req;
                 syms_.insert(esym); evd->sym = esym;
                 pending_decls_.push_back(std::move(evd));
             }
@@ -384,6 +385,7 @@ decl_ptr parser::parse_external_declaration() {
     sym->storage   = ds.sc;
     sym->is_global = true;
     sym->is_tls    = ds.is_tls;
+    sym->requested_align = ds.align_req;
     syms_.insert(sym);
     vd->sym = sym;
     if (sym->type && sym->type->is_const && sym->type->is_integer() && vd->init) {
@@ -409,6 +411,7 @@ decl_ptr parser::parse_external_declaration() {
         esym->storage   = ds.sc;
         esym->is_global = true;
         esym->is_tls    = ds.is_tls;
+        esym->requested_align = ds.align_req;
         syms_.insert(esym);
         evd->sym = esym;
         pending_decls_.push_back(std::move(evd));

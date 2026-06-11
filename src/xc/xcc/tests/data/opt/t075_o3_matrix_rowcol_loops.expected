@@ -77,13 +77,13 @@ __xcc_L12:
 __xcc_L13:
 	ld	e, -1(ix)
 	ld	d, #0
-	ld	hl, #row_sum
+	ld	hl, #_row_sum
 	add	hl, de
 	ld	a, (hl)
 	ld	-13(ix), a
 	ld	e, -1(ix)
 	ld	d, #0
-	ld	hl, #col_sum
+	ld	hl, #_col_sum
 	add	hl, de
 	ld	a, (hl)
 	ld	-14(ix), a

@@ -86,7 +86,9 @@ namespace xld {
                 if (start > end)
                     throw xld_error("invalid binary output range");
             } else if (!ctx.code_buffer.empty()) {
-                end = static_cast<uint16_t>(ctx.code_buffer.size() - 1);
+                end = ctx.code_buffer.size() > 0x10000u
+                    ? 0xFFFF
+                    : static_cast<uint16_t>(ctx.code_buffer.size() - 1u);
             }
 
             result.start = start;

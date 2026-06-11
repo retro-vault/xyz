@@ -1,16 +1,19 @@
         ;; wcstox_core.s
         ;;
-        ;; Shared wide-string-to-integer parser for the target's single-byte
-        ;; execution charset carried in 16-bit wchar_t code units.
+        ;; Wide-string-to-integer parser matching the narrow strtox_core
+        ;; contract, but walking 16-bit wchar_t code units that carry the
+        ;; single-byte execution charset in their low byte.
         ;;
-        ;; The accepted syntax mirrors strtox_core:
-        ;;   - leading ASCII whitespace
-        ;;   - optional sign
-        ;;   - base-0 autodetection with 0 / 0x prefixes
-        ;;   - digit runs for bases 2..36
+        ;; Calling convention:
+        ;;   HL = nptr
+        ;;   DE = endptr (wchar_t **, may be NULL)
+        ;;   BC = base
+        ;;   IY = destination buffer for the 8-byte little-endian magnitude
         ;;
-        ;; Any wchar_t whose high byte is non-zero terminates the parse the same
-        ;; way a non-digit byte would in the narrow parser.
+        ;; Return flags in A:
+        ;;   bit 0 = at least one digit consumed
+        ;;   bit 1 = leading '-' sign present
+        ;;   bit 2 = 64-bit overflow occurred while accumulating
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
@@ -19,60 +22,54 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __wcstox_core
-        .globl  __wsx_acc
-        .globl  __wsx_neg
-        .globl  __wsx_ovf
-        .globl  __wsx_any
         .globl  __wsx_negate
 
-        .area   _DATA
-__wsx_acc:: .ds 8
-__wsx_tmp:  .ds 8
-__wsx_neg:: .ds 1
-__wsx_ovf:: .ds 1
-__wsx_any:: .ds 1
-__wsx_base: .ds 1
-__wsx_dig:  .ds 1
-__wsx_endp: .ds 2          ; wchar_t ** endptr (may be NULL)
-__wsx_nptr: .ds 2          ; original nptr
+WSX_FLAG_ANY    .equ 0x01
+WSX_FLAG_NEG    .equ 0x02
+WSX_FLAG_OVF    .equ 0x04
+
+WSX_TMP         .equ -15
+WSX_NPTR        .equ -7
+WSX_ENDP        .equ -5
+WSX_FLAGS       .equ -3
+WSX_BASE        .equ -2
+WSX_DIG         .equ -1
 
         .area   _CODE
 
-        ;; __wcstox_core
-        ;; inputs:
-        ;;   HL = nptr
-        ;;   DE = endptr (wchar_t **)
-        ;;   BC = base
-        ;; outputs (statics):
-        ;;   __wsx_acc[8]  parsed magnitude, little-endian
-        ;;   __wsx_neg     1 when a '-' sign was present
-        ;;   __wsx_ovf     1 when 64-bit overflow occurred
-        ;;   __wsx_any     1 when at least one digit was consumed
-        ;; and *endptr is updated to the first unparsed wchar_t (or nptr on
-        ;; total matching failure).
 __wcstox_core::
-        ld      (__wsx_nptr),hl
-        ld      (__wsx_endp),de
         ld      a,c
-        ld      (__wsx_base),a
+        ld      c,l
+        ld      b,h
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      hl,#-15
+        add     hl,sp
+        ld      sp,hl
+        ld      l,c
+        ld      h,b
 
-        ;; Reset accumulator and parser flags before walking the source.
-        push    hl
-        ld      hl,#__wsx_acc
+        ld      WSX_NPTR(ix),l
+        ld      WSX_NPTR + 1(ix),h
+        ld      WSX_ENDP(ix),e
+        ld      WSX_ENDP + 1(ix),d
+        ld      WSX_BASE(ix),a
+        xor     a
+        ld      WSX_FLAGS(ix),a
+        ld      WSX_DIG(ix),a
+
+        push    iy
+        pop     hl
         ld      d,h
         ld      e,l
         inc     de
         ld      (hl),#0
         ld      bc,#7
         ldir
-        xor     a
-        ld      (__wsx_neg),a
-        ld      (__wsx_ovf),a
-        ld      (__wsx_any),a
-        pop     hl
+        ld      l,WSX_NPTR(ix)
+        ld      h,WSX_NPTR + 1(ix)
 
-        ;; Skip leading ASCII whitespace only when the wide code unit is still
-        ;; byte-range. Any non-ASCII wchar_t terminates the whitespace scan.
 wsx_ws:
         ld      a,(hl)
         ld      e,a
@@ -94,7 +91,6 @@ wsx_ws_next:
         jr      wsx_ws
 wsx_ws_done:
 
-        ;; Optional sign.
         ld      a,(hl)
         ld      e,a
         inc     hl
@@ -107,16 +103,15 @@ wsx_ws_done:
         jr      z,wsx_sign_skip
         cp      #0x2d
         jr      nz,wsx_base
-        ld      a,#1
-        ld      (__wsx_neg),a
+        ld      a,WSX_FLAGS(ix)
+        or      #WSX_FLAG_NEG
+        ld      WSX_FLAGS(ix),a
 wsx_sign_skip:
         inc     hl
         inc     hl
 
 wsx_base:
-        ;; Base 0 follows the usual 0 / 0x rules. Base 16 also accepts an
-        ;; optional 0x prefix when a real hex digit follows.
-        ld      a,(__wsx_base)
+        ld      a,WSX_BASE(ix)
         or      a
         jp      z,wsx_base0
         cp      #16
@@ -211,20 +206,20 @@ wsx_b0_x:
         jr      nc,wsx_b0_oct
         pop     bc
         ld      a,#16
-        ld      (__wsx_base),a
+        ld      WSX_BASE(ix),a
         jr      wsx_loop
 wsx_b0_oct:
         pop     hl
         ld      a,#8
-        ld      (__wsx_base),a
+        ld      WSX_BASE(ix),a
         jr      wsx_loop
 wsx_base0_dec:
         ld      a,#10
-        ld      (__wsx_base),a
+        ld      WSX_BASE(ix),a
         jr      wsx_loop
 
 wsx_base_ok:
-        ld      a,(__wsx_base)
+        ld      a,WSX_BASE(ix)
         cp      #2
         jr      c,wsx_done
         cp      #37
@@ -241,18 +236,17 @@ wsx_loop:
         ld      a,e
         call    wsx_digitval
         ld      b,a
-        ld      a,(__wsx_base)
+        ld      a,WSX_BASE(ix)
         cp      b
         jr      c,wsx_loop_end
         jr      z,wsx_loop_end
-
-        ld      a,#1
-        ld      (__wsx_any),a
-        ld      a,(__wsx_ovf)
-        or      a
+        ld      a,WSX_FLAGS(ix)
+        or      #WSX_FLAG_ANY
+        ld      WSX_FLAGS(ix),a
+        bit     2,a
         jr      nz,wsx_loop_adv
         ld      a,b
-        ld      (__wsx_dig),a
+        ld      WSX_DIG(ix),a
         push    hl
         call    wsx_accum
         pop     hl
@@ -262,37 +256,39 @@ wsx_loop_adv:
         jr      wsx_loop
 
 wsx_loop_end:
-        ld      a,(__wsx_any)
-        or      a
+        ld      a,WSX_FLAGS(ix)
+        bit     0,a
         jr      z,wsx_done
-        ld      a,(__wsx_endp)
-        ld      c,a
-        ld      a,(__wsx_endp + 1)
-        ld      b,a
+        ld      c,WSX_ENDP(ix)
+        ld      b,WSX_ENDP + 1(ix)
+        ld      a,b
         or      c
-        ret     z
+        jr      z,wsx_return
         ld      a,l
         ld      (bc),a
         inc     bc
         ld      a,h
         ld      (bc),a
-        ret
+        jr      wsx_return
 
 wsx_done:
-        ld      a,(__wsx_endp)
-        ld      c,a
-        ld      a,(__wsx_endp + 1)
-        ld      b,a
+        ld      c,WSX_ENDP(ix)
+        ld      b,WSX_ENDP + 1(ix)
+        ld      a,b
         or      c
-        ret     z
-        ld      a,(__wsx_nptr)
+        jr      z,wsx_return
+        ld      a,WSX_NPTR(ix)
         ld      (bc),a
         inc     bc
-        ld      a,(__wsx_nptr + 1)
+        ld      a,WSX_NPTR + 1(ix)
         ld      (bc),a
+
+wsx_return:
+        ld      a,WSX_FLAGS(ix)
+        ld      sp,ix
+        pop     ix
         ret
 
-        ;; A = ASCII byte -> A = 0..35, or 0xFF for non-digit.
 wsx_digitval:
         cp      #0x30
         jr      c,wsx_dv_bad
@@ -319,9 +315,11 @@ wsx_dv_lo:
         sub     #0x57
         ret
 
-        ;; __wsx_acc = __wsx_acc * base + digit
 wsx_accum:
-        ld      hl,#__wsx_tmp
+        push    ix
+        pop     hl
+        ld      bc,#WSX_TMP
+        add     hl,bc
         ld      d,h
         ld      e,l
         inc     de
@@ -329,22 +327,30 @@ wsx_accum:
         ld      bc,#7
         ldir
 
-        ld      a,(__wsx_base)
+        ld      a,WSX_BASE(ix)
         ld      b,a
 wsx_mul:
         push    bc
-        ld      hl,#__wsx_tmp
-        ld      de,#__wsx_acc
+        push    ix
+        pop     hl
+        ld      bc,#WSX_TMP
+        add     hl,bc
+        push    iy
+        pop     de
         call    wsx_add64
         jr      nc,wsx_mul_nc
-        ld      a,#1
-        ld      (__wsx_ovf),a
+        ld      a,WSX_FLAGS(ix)
+        or      #WSX_FLAG_OVF
+        ld      WSX_FLAGS(ix),a
 wsx_mul_nc:
         pop     bc
         djnz    wsx_mul
 
-        ld      hl,#__wsx_tmp
-        ld      a,(__wsx_dig)
+        push    ix
+        pop     hl
+        ld      bc,#WSX_TMP
+        add     hl,bc
+        ld      a,WSX_DIG(ix)
         add     a,(hl)
         ld      (hl),a
         ld      b,#7
@@ -355,11 +361,16 @@ wsx_dcarry:
         ld      (hl),a
         djnz    wsx_dcarry
         jr      nc,wsx_acc_copy
-        ld      a,#1
-        ld      (__wsx_ovf),a
+        ld      a,WSX_FLAGS(ix)
+        or      #WSX_FLAG_OVF
+        ld      WSX_FLAGS(ix),a
 wsx_acc_copy:
-        ld      hl,#__wsx_tmp
-        ld      de,#__wsx_acc
+        push    ix
+        pop     hl
+        ld      bc,#WSX_TMP
+        add     hl,bc
+        push    iy
+        pop     de
         ld      bc,#8
         ldir
         ret
@@ -376,9 +387,7 @@ wsx_add64_l:
         djnz    wsx_add64_l
         ret
 
-        ;; Two's-complement negate __wsx_acc[8] in place.
 __wsx_negate::
-        ld      hl,#__wsx_acc
         ld      b,#8
 wsxn_cpl:
         ld      a,(hl)
@@ -386,7 +395,8 @@ wsxn_cpl:
         ld      (hl),a
         inc     hl
         djnz    wsxn_cpl
-        ld      hl,#__wsx_acc
+        ld      bc,#-8
+        add     hl,bc
         ld      b,#8
         scf
 wsxn_inc:

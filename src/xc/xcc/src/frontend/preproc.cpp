@@ -504,10 +504,31 @@ struct eval_ctx {
     const std::string &expr;
     size_t pos;
     const std::unordered_map<std::string, macro_def> &macros;
+    const std::vector<std::string> *include_paths = nullptr;
+    const std::string *current_dir = nullptr;
 
     void skip_ws() {
         while (pos < expr.size() && (expr[pos] == ' ' || expr[pos] == '\t'))
             ++pos;
+    }
+
+    bool try_open(const std::string &p) const {
+        std::ifstream f(p);
+        return f.good();
+    }
+
+    bool has_include_file(const std::string &name, bool system_include) const {
+        if (!name.empty() && (name[0] == '/' || try_open(name))) return true;
+        if (!system_include && current_dir) {
+            std::string rel = current_dir->empty() ? name : (*current_dir + "/" + name);
+            if (try_open(rel)) return true;
+        }
+        if (include_paths) {
+            for (auto &dir : *include_paths) {
+                if (try_open(dir + "/" + name)) return true;
+            }
+        }
+        return false;
     }
 
     long long parse_primary() {
@@ -530,17 +551,26 @@ struct eval_ctx {
         if (expr[pos] == '+') { ++pos; return  parse_primary(); }
 
         // C23: __has_include("file") / __has_include(<file>)
-        // Returns 1 optimistically (include search paths are configured correctly).
         if (expr.substr(pos, 13) == "__has_include") {
             pos += 13;
-            int depth = 0;
-            while (pos < expr.size() && !(depth == 0 && expr[pos] == ')')) {
-                if (expr[pos] == '(') depth++;
-                else if (expr[pos] == ')') depth--;
+            skip_ws();
+            if (pos < expr.size() && expr[pos] == '(') ++pos;
+            skip_ws();
+            bool system_include = false;
+            std::string name;
+            if (pos < expr.size() && expr[pos] == '"') {
                 ++pos;
+                while (pos < expr.size() && expr[pos] != '"') name += expr[pos++];
+                if (pos < expr.size() && expr[pos] == '"') ++pos;
+            } else if (pos < expr.size() && expr[pos] == '<') {
+                system_include = true;
+                ++pos;
+                while (pos < expr.size() && expr[pos] != '>') name += expr[pos++];
+                if (pos < expr.size() && expr[pos] == '>') ++pos;
             }
-            if (pos < expr.size()) ++pos; // consume ')'
-            return 1; // optimistic: assume include is available
+            skip_ws();
+            if (pos < expr.size() && expr[pos] == ')') ++pos;
+            return has_include_file(name, system_include) ? 1 : 0;
         }
 
         // C23: __has_c_attribute([[ns::name]]) — 0 for unknown, 1 for known C23 attrs
@@ -783,8 +813,9 @@ struct eval_ctx {
 
 } // anonymous namespace
 
-long long preprocessor::eval_if(const std::string &expr) const {
-    eval_ctx ctx{expr, 0, macros_};
+long long preprocessor::eval_if(const std::string &expr,
+                                const std::string &current_dir) const {
+    eval_ctx ctx{expr, 0, macros_, &include_paths_, &current_dir};
     return ctx.parse_ternary();
 }
 
@@ -939,7 +970,7 @@ void preprocessor::process_text(const std::string &source,
                 if (emitting()) {
                     std::vector<std::string> guard;
                     std::string expanded = expand(rest, guard);
-                    act = (eval_if(expanded) != 0);
+                    act = (eval_if(expanded, cur_dir) != 0);
                 }
                 cond_stack.push_back({act, act, false});
                 continue;
@@ -960,7 +991,7 @@ void preprocessor::process_text(const std::string &source,
                     if (parent_emit) {
                         std::vector<std::string> guard;
                         std::string expanded = expand(rest, guard);
-                        bool act = (eval_if(expanded) != 0);
+                        bool act = (eval_if(expanded, cur_dir) != 0);
                         f.active = act;
                         f.branch_taken = act;
                     }

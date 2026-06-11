@@ -15,16 +15,6 @@
         .globl  __sdiv32
         .globl  __smod32
 
-        .area   _DATA
-__ldiv_numer_lo:
-        .dw     0
-__ldiv_numer_hi:
-        .dw     0
-__ldiv_quot_lo:
-        .dw     0
-__ldiv_quot_hi:
-        .dw     0
-
         .area   _CODE
 
 _ldiv::
@@ -33,8 +23,18 @@ _ldiv::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__ldiv_numer_lo),de
-        ld      (__ldiv_numer_hi),hl
+        ;;
+        ;; Match the compiler's sdcccall(1) frame shape for mixed
+        ;; register/stack-parameter functions: the register-passed first
+        ;; argument is homed in the top four bytes below IX before the local
+        ;; frame is extended.
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
+        ld      hl,#-8
+        add     hl,sp
+        ld      sp,hl
 
         ld      l,6(ix)
         ld      h,7(ix)
@@ -42,13 +42,24 @@ _ldiv::
         ld      l,4(ix)
         ld      h,5(ix)
         push    hl                      ; denom low
-        ld      de,(__ldiv_numer_lo)
-        ld      hl,(__ldiv_numer_hi)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        push    hl
+        ld      l,-2(ix)
+        ld      h,-1(ix)
+        pop     de
         call    __sdiv32                ; DE:HL = quotient (lo:hi)
-        ld      (__ldiv_quot_lo),de
-        ld      (__ldiv_quot_hi),hl
-        pop     af
-        pop     af
+        pop     bc
+        pop     bc
+        ld      b,h
+        ld      c,l
+        ex      de,hl
+        ld      -8(ix),l
+        ld      -7(ix),h               ; quotient low
+        ld      h,b
+        ld      l,c
+        ld      -6(ix),l
+        ld      -5(ix),h               ; quotient high
 
         ld      l,6(ix)
         ld      h,7(ix)
@@ -56,19 +67,31 @@ _ldiv::
         ld      l,4(ix)
         ld      h,5(ix)
         push    hl
-        ld      de,(__ldiv_numer_lo)
-        ld      hl,(__ldiv_numer_hi)
+        ld      l,-4(ix)
+        ld      h,-3(ix)
+        push    hl
+        ld      l,-2(ix)
+        ld      h,-1(ix)
+        pop     de
         call    __smod32                ; DE:HL = remainder (lo:hi)
-        pop     af
-        pop     af
+        pop     bc
+        pop     bc
 
         push    hl                      ; rem high
-        push    de                      ; rem low
-        ld      de,(__ldiv_quot_lo)     ; DE = quotient low
-        ld      hl,(__ldiv_quot_hi)     ; HL = quotient high
+        ex      de,hl
+        push    hl                      ; rem low
+        ld      l,-6(ix)
+        ld      h,-5(ix)
+        push    hl                      ; quot high
+        ld      l,-8(ix)
+        ld      h,-7(ix)
+        push    hl                      ; quot low
+        pop     de
+        pop     hl
         exx
-        pop     de                      ; DE' = rem low
-        pop     hl                      ; HL' = rem high
+        pop     de
+        pop     hl
         exx
+        ld      sp,ix
         pop     ix
         ret

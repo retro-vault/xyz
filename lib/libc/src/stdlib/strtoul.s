@@ -4,39 +4,54 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _strtoul
         .globl  __strtox_core
-        .globl  __sx_acc, __sx_neg, __sx_ovf, __sx_any
         .globl  __errno_value
+SX_BUF  .equ -9
+SX_FLG  .equ -1
         .area   _CODE
         ; HL = nptr, DE = endptr, 4(ix) = base -> DE:HL = result
 _strtoul::
+        ld      c,l
+        ld      b,h
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-9
+        add     hl,sp
+        ld      sp,hl
+        ld      l,c
+        ld      h,b
         ld      c,4(ix)
         ld      b,5(ix)
+        push    bc
+        push    ix
+        pop     iy
+        ld      bc,#SX_BUF
+        add     iy,bc
+        pop     bc
         call    __strtox_core
-        ld      a,(__sx_any)
-        or      a
+        ld      SX_FLG(ix),a
+        bit     0,a
         jr      z,sul_zero
-        ld      a,(__sx_ovf)
-        or      a
-        jr      nz,sul_range
+        bit     2,a
+        jp      nz,sul_range
         ; high 32 bits nonzero -> out of unsigned-long range
-        ld      a,(__sx_acc + 4)
+        ld      a,SX_BUF + 4(ix)
         ld      b,a
-        ld      a,(__sx_acc + 5)
+        ld      a,SX_BUF + 5(ix)
         or      b
         ld      b,a
-        ld      a,(__sx_acc + 6)
+        ld      a,SX_BUF + 6(ix)
         or      b
         ld      b,a
-        ld      a,(__sx_acc + 7)
+        ld      a,SX_BUF + 7(ix)
         or      b
-        jr      nz,sul_range
-        ld      de,(__sx_acc)
-        ld      hl,(__sx_acc + 2)
-        ld      a,(__sx_neg)
-        or      a
+        jp      nz,sul_range
+        ld      e,SX_BUF(ix)
+        ld      d,SX_BUF + 1(ix)
+        ld      l,SX_BUF + 2(ix)
+        ld      h,SX_BUF + 3(ix)
+        ld      a,SX_FLG(ix)
+        bit     1,a
         jr      z,sul_ret
         ; negate 32-bit (0 - value)
         ld      a,e
@@ -57,11 +72,13 @@ _strtoul::
         jr      nz,sul_ret
         inc     hl
 sul_ret:
+        ld      sp,ix
         pop     ix
         ret
 sul_zero:
         ld      de,#0
         ld      hl,#0
+        ld      sp,ix
         pop     ix
         ret
 sul_range:
@@ -69,5 +86,6 @@ sul_range:
         ld      (__errno_value),hl
         ld      de,#0xffff
         ld      hl,#0xffff              ; ULONG_MAX
+        ld      sp,ix
         pop     ix
         ret

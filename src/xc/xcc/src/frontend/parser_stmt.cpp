@@ -19,6 +19,16 @@ namespace xcc {
 stmt_ptr parser::parse_statement() {
     tk k = peek().kind;
 
+    if (k == tk::LATTR) {
+        auto attrs = parse_attr_list();
+        (void)attrs;
+        if (check(tk::SEMICOLON)) {
+            auto s = std::make_unique<expr_stmt>();
+            s->loc = consume().loc;
+            return s;
+        }
+    }
+
     if (k == tk::KW__STATIC_ASSERT) return parse_static_assert();
     if (k == tk::KW___ASM__)        return parse_asm_statement();
     if (k == tk::KW__PRAGMA) {
@@ -87,11 +97,24 @@ stmt_ptr parser::parse_compound_statement() {
     scope_guard sg{syms_};
 
     while (!check(tk::RBRACE) && !check(tk::END_OF_FILE)) {
-        if (is_type_start()) {
+        if (check(tk::LATTR) || is_type_start()) {
             // Declaration inside compound statement
             auto ds = std::make_unique<decl_stmt>();
             ds->loc = peek().loc;
+            attr_list leading_attrs = parse_attr_list();
+            if (!leading_attrs.empty() && !is_type_start()) {
+                if (check(tk::SEMICOLON)) {
+                    auto s = std::make_unique<expr_stmt>();
+                    s->loc = consume().loc;
+                    stmt->body.push_back(std::move(s));
+                    continue;
+                }
+                error("expected declaration after attribute specifier");
+                sync_to_semicolon();
+                continue;
+            }
             decl_spec dspec = parse_declaration_specifiers();
+            for (auto &a : leading_attrs) dspec.attrs.push_back(std::move(a));
 
             if (check(tk::SEMICOLON)) { consume(); continue; } // bare type decl
 
@@ -108,6 +131,7 @@ stmt_ptr parser::parse_compound_statement() {
                 vd->name    = vname;
                 vd->type    = vtype;
                 vd->storage = dspec.sc;
+                vd->attrs   = dspec.attrs;
 
                 if (dspec.sc == storage_class::TYPEDEF) {
                     make_type_sym(vname, vtype);
@@ -119,6 +143,7 @@ stmt_ptr parser::parse_compound_statement() {
                     auto ptr_type      = type::make_pointer(vtype->base);
                     auto vsym          = make_local_sym(vname, ptr_type, dspec.sc);
                     vsym->vla_size_sym = sz_sym;
+                    vsym->requested_align = dspec.align_req;
                     vd->sym      = vsym;
                     vd->type     = ptr_type;
                     vd->vla_size = std::move(last_vla_size_);
@@ -127,6 +152,7 @@ stmt_ptr parser::parse_compound_statement() {
                     std::string mangled = make_static_sym(vsym, vname, vtype);
                     vd->sym  = vsym;
                     vd->name = mangled; // irgen uses this for global emission
+                    if (vsym) vsym->requested_align = dspec.align_req;
                     if (match(tk::EQ)) {
                         vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
                                                       : parse_assignment_expression();
@@ -143,6 +169,7 @@ stmt_ptr parser::parse_compound_statement() {
                     vsym->type      = vtype;
                     vsym->storage   = dspec.sc;
                     vsym->is_global = true;
+                    vsym->requested_align = dspec.align_req;
                     syms_.insert(vsym);
                     vd->sym = vsym;
                 } else {
@@ -150,6 +177,7 @@ stmt_ptr parser::parse_compound_statement() {
                     // then fix up after parsing the initializer.
                     type_ptr alloc_type = dspec.is_deduced ? type::make_int() : vtype;
                     vd->sym = make_local_sym(vname, alloc_type, dspec.sc);
+                    vd->sym->requested_align = dspec.align_req;
                     if (match(tk::EQ)) {
                         vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
                                                       : parse_assignment_expression();
@@ -252,6 +280,7 @@ stmt_ptr parser::parse_for_statement() {
             auto vsym = std::make_shared<symbol>();
             vsym->name = vname; vsym->kind = sym_kind::VAR;
             vsym->type = vtype; vsym->storage = fdspec.sc;
+            vsym->requested_align = fdspec.align_req;
             vsym->stack_offset = alloc_local(vtype->size());
             syms_.insert(vsym);
             vd->sym = vsym;

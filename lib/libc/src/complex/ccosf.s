@@ -18,26 +18,15 @@
         .globl  _coshf
         .globl  ___fsmul
 
-        .area   _DATA
-__ccosf_cosx:
-        .ds     4
-__ccosf_coshy:
-        .ds     4
-__ccosf_sinx:
-        .ds     4
-__ccosf_sinhy:
-        .ds     4
-__ccosf_real:
-        .ds     4
-__ccosf_imag:
-        .ds     4
-
         .area   _CODE
 
 _ccosf::
         push    ix
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-24
+        add     hl,sp
+        ld      sp,hl
 
         ;; cos(x)
         ld      e,4(ix)
@@ -45,8 +34,10 @@ _ccosf::
         ld      l,6(ix)
         ld      h,7(ix)
         call    _cosf
-        ld      (__ccosf_cosx),de
-        ld      (__ccosf_cosx + 2),hl
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
 
         ;; cosh(y)
         ld      e,8(ix)
@@ -54,21 +45,29 @@ _ccosf::
         ld      l,10(ix)
         ld      h,11(ix)
         call    _coshf
-        ld      (__ccosf_coshy),de
-        ld      (__ccosf_coshy + 2),hl
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
 
         ;; real = cos(x) * cosh(y)
-        ld      hl,(__ccosf_coshy + 2)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         push    hl
-        ld      hl,(__ccosf_coshy)
+        ld      l,-8(ix)
+        ld      h,-7(ix)
         push    hl
-        ld      de,(__ccosf_cosx)
-        ld      hl,(__ccosf_cosx + 2)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    ___fsmul
         pop     bc
         pop     bc
-        ld      (__ccosf_real),de
-        ld      (__ccosf_real + 2),hl
+        ld      -20(ix),e
+        ld      -19(ix),d
+        ld      -18(ix),l
+        ld      -17(ix),h
 
         ;; sin(x)
         ld      e,4(ix)
@@ -76,8 +75,10 @@ _ccosf::
         ld      l,6(ix)
         ld      h,7(ix)
         call    _sinf
-        ld      (__ccosf_sinx),de
-        ld      (__ccosf_sinx + 2),hl
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
 
         ;; sinh(y)
         ld      e,8(ix)
@@ -85,30 +86,43 @@ _ccosf::
         ld      l,10(ix)
         ld      h,11(ix)
         call    _sinhf
-        ld      (__ccosf_sinhy),de
-        ld      (__ccosf_sinhy + 2),hl
+        ld      -16(ix),e
+        ld      -15(ix),d
+        ld      -14(ix),l
+        ld      -13(ix),h
 
         ;; imag = -(sin(x) * sinh(y))
-        ld      hl,(__ccosf_sinhy + 2)
+        ld      l,-14(ix)
+        ld      h,-13(ix)
         push    hl
-        ld      hl,(__ccosf_sinhy)
+        ld      l,-16(ix)
+        ld      h,-15(ix)
         push    hl
-        ld      de,(__ccosf_sinx)
-        ld      hl,(__ccosf_sinx + 2)
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___fsmul
         pop     bc
         pop     bc
         ld      a,h
         xor     #0x80
         ld      h,a
-        ld      (__ccosf_imag),de
-        ld      (__ccosf_imag + 2),hl
+        ld      -24(ix),e
+        ld      -23(ix),d
+        ld      -22(ix),l
+        ld      -21(ix),h
 
-        ld      de,(__ccosf_real)
-        ld      hl,(__ccosf_real + 2)
+        ld      e,-20(ix)
+        ld      d,-19(ix)
+        ld      l,-18(ix)
+        ld      h,-17(ix)
         exx
-        ld      de,(__ccosf_imag)
-        ld      hl,(__ccosf_imag + 2)
+        ld      e,-24(ix)
+        ld      d,-23(ix)
+        ld      l,-22(ix)
+        ld      h,-21(ix)
         exx
+        ld      sp,ix
         pop     ix
         ret

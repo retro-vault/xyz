@@ -18,64 +18,80 @@
         .globl  __libc_logf_core
         .globl  __libc_expf_core
 
-        .area   _DATA
-__powf_x:
-        .ds     4
-__powf_y:
-        .ds     4
-__powf_t:
-        .ds     4
-__powf_odd:
-        .ds     1
-
         .area   _CODE
+
+POW_XLO  .equ -13
+POW_XHI  .equ -11
+POW_YLO  .equ -9
+POW_YHI  .equ -7
+POW_TLO  .equ -5
+POW_THI  .equ -3
+POW_ODD  .equ -1
 
 _powf::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      (__powf_x),de
-        ld      (__powf_x + 2),hl
+        ld      b,h
+        ld      c,l
+        ld      hl,#-13
+        add     hl,sp
+        ld      sp,hl
+        ld      POW_XLO(ix),e
+        ld      POW_XLO+1(ix),d
+        ld      POW_XHI(ix),c
+        ld      POW_XHI+1(ix),b
         ld      a,4(ix)
-        ld      (__powf_y),a
+        ld      POW_YLO(ix),a
         ld      a,5(ix)
-        ld      (__powf_y + 1),a
+        ld      POW_YLO+1(ix),a
         ld      a,6(ix)
-        ld      (__powf_y + 2),a
+        ld      POW_YHI(ix),a
         ld      a,7(ix)
-        ld      (__powf_y + 3),a
+        ld      POW_YHI+1(ix),a
 
         ;; Compare x with 0.
         ld      hl,#0x0000
         push    hl
         push    hl
-        ld      de,(__powf_x)
-        ld      hl,(__powf_x + 2)
+        ld      e,POW_XLO(ix)
+        ld      d,POW_XLO+1(ix)
+        ld      l,POW_XHI(ix)
+        ld      h,POW_XHI+1(ix)
         call    ___fscmp
         ld      a,d
         cp      #0xff
-        jr      z,powf_neg_base
+        jp      z,powf_neg_base
         ld      a,d
         or      e
         jr      z,powf_zero_base
 
         ;; Positive base: exp(y * log(x))
 powf_pos_base:
-        ld      de,(__powf_x)
-        ld      hl,(__powf_x + 2)
+        ld      e,POW_XLO(ix)
+        ld      d,POW_XLO+1(ix)
+        ld      l,POW_XHI(ix)
+        ld      h,POW_XHI+1(ix)
         call    __libc_logf_core
-        ld      (__powf_t),de
-        ld      (__powf_t + 2),hl
-        ld      hl,(__powf_y + 2)
+        ld      POW_TLO(ix),e
+        ld      POW_TLO+1(ix),d
+        ld      POW_THI(ix),l
+        ld      POW_THI+1(ix),h
+        ld      l,POW_YHI(ix)
+        ld      h,POW_YHI+1(ix)
         push    hl
-        ld      hl,(__powf_y)
-        push    hl
-        ld      de,(__powf_t)
-        ld      hl,(__powf_t + 2)
+        ld      e,POW_YLO(ix)
+        ld      d,POW_YLO+1(ix)
+        push    de
+        ld      e,POW_TLO(ix)
+        ld      d,POW_TLO+1(ix)
+        ld      l,POW_THI(ix)
+        ld      h,POW_THI+1(ix)
         call    ___fsmul
         pop     bc
         pop     bc
         call    __libc_expf_core
+        ld      sp,ix
         pop     ix
         ret
 
@@ -84,8 +100,10 @@ powf_zero_base:
         ld      hl,#0x0000
         push    hl
         push    hl
-        ld      de,(__powf_y)
-        ld      hl,(__powf_y + 2)
+        ld      e,POW_YLO(ix)
+        ld      d,POW_YLO+1(ix)
+        ld      l,POW_YHI(ix)
+        ld      h,POW_YHI+1(ix)
         call    ___fscmp
         ld      a,d
         cp      #0xff
@@ -95,33 +113,44 @@ powf_zero_base:
         jr      z,powf_zero_zero
         ld      hl,#0x0000
         ld      de,#0x0000
+        ld      sp,ix
         pop     ix
         ret
 powf_zero_zero:
         ld      hl,#0x3f80
         ld      de,#0x0000
+        ld      sp,ix
         pop     ix
         ret
 powf_zero_neg:
         ld      hl,#0x7f80
         ld      de,#0x0000
+        ld      sp,ix
         pop     ix
         ret
 
 powf_neg_base:
         ;; Accept negative bases only for integral exponents.
-        ld      de,(__powf_y)
-        ld      hl,(__powf_y + 2)
+        ld      e,POW_YLO(ix)
+        ld      d,POW_YLO+1(ix)
+        ld      l,POW_YHI(ix)
+        ld      h,POW_YHI+1(ix)
         call    _truncf
-        ld      (__powf_t),de
-        ld      (__powf_t + 2),hl
+        ld      POW_TLO(ix),e
+        ld      POW_TLO+1(ix),d
+        ld      POW_THI(ix),l
+        ld      POW_THI+1(ix),h
 
-        ld      hl,(__powf_y + 2)
+        ld      l,POW_YHI(ix)
+        ld      h,POW_YHI+1(ix)
         push    hl
-        ld      hl,(__powf_y)
-        push    hl
-        ld      de,(__powf_t)
-        ld      hl,(__powf_t + 2)
+        ld      e,POW_YLO(ix)
+        ld      d,POW_YLO+1(ix)
+        push    de
+        ld      e,POW_TLO(ix)
+        ld      d,POW_TLO+1(ix)
+        ld      l,POW_THI(ix)
+        ld      h,POW_THI+1(ix)
         call    ___fscmp
         ld      a,d
         cp      #0xff
@@ -131,44 +160,56 @@ powf_neg_base:
         jr      nz,powf_domain
 
         ;; Record whether the integral exponent is odd.
-        ld      de,(__powf_t)
-        ld      hl,(__powf_t + 2)
+        ld      e,POW_TLO(ix)
+        ld      d,POW_TLO+1(ix)
+        ld      l,POW_THI(ix)
+        ld      h,POW_THI+1(ix)
         call    ___fs2slong
         ld      a,e
         and     #1
-        ld      (__powf_odd),a
+        ld      POW_ODD(ix),a
 
         ;; log(|x|), then exp(y * log(|x|)).
-        ld      de,(__powf_x)
-        ld      hl,(__powf_x + 2)
+        ld      e,POW_XLO(ix)
+        ld      d,POW_XLO+1(ix)
+        ld      l,POW_XHI(ix)
+        ld      h,POW_XHI+1(ix)
         ld      a,h
         xor     #0x80
         ld      h,a
         call    __libc_logf_core
-        ld      (__powf_t),de
-        ld      (__powf_t + 2),hl
-        ld      hl,(__powf_y + 2)
+        ld      POW_TLO(ix),e
+        ld      POW_TLO+1(ix),d
+        ld      POW_THI(ix),l
+        ld      POW_THI+1(ix),h
+        ld      l,POW_YHI(ix)
+        ld      h,POW_YHI+1(ix)
         push    hl
-        ld      hl,(__powf_y)
-        push    hl
-        ld      de,(__powf_t)
-        ld      hl,(__powf_t + 2)
+        ld      e,POW_YLO(ix)
+        ld      d,POW_YLO+1(ix)
+        push    de
+        ld      e,POW_TLO(ix)
+        ld      d,POW_TLO+1(ix)
+        ld      l,POW_THI(ix)
+        ld      h,POW_THI+1(ix)
         call    ___fsmul
         pop     bc
         pop     bc
         call    __libc_expf_core
-        ld      a,(__powf_odd)
+        ld      a,POW_ODD(ix)
         or      a
         jr      z,powf_ret
         ld      a,h
         xor     #0x80
         ld      h,a
 powf_ret:
+        ld      sp,ix
         pop     ix
         ret
 
 powf_domain:
         ld      hl,#0x7fc0
         ld      de,#0x0000
+        ld      sp,ix
         pop     ix
         ret
