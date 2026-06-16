@@ -18,26 +18,26 @@
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
 
+
+
+
+
         .module strtox_core
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __strtox_core
-        .globl  __sx_negate
-        .globl  ___mulsint2slong
 
+SX_BASE         .equ -2                ; base (low byte only)
+SX_DIG          .equ -1                ; current digit
+SX_ENDP         .equ -5                ; endptr
+SX_FLAGS        .equ -3                ; parser flags
 SX_FLAG_ANY     .equ 0x01
 SX_FLAG_NEG     .equ 0x02
 SX_FLAG_OVF     .equ 0x04
-
-SX_TMP          .equ -15               ; 8-byte local tmp at -15..-8
 SX_NPTR         .equ -7                ; original nptr
-SX_ENDP         .equ -5                ; endptr
-SX_FLAGS        .equ -3                ; parser flags
-SX_BASE         .equ -2                ; base (low byte only)
-SX_DIG          .equ -1                ; current digit
+SX_TMP          .equ -15               ; 8-byte local tmp at -15..-8
 
         .area   _CODE
-
 __strtox_core::
         ld      a,c
         ld      c,l
@@ -320,64 +320,3 @@ sx_add64_l:
         ret
 
         ;; Two's-complement negate the 8-byte little-endian buffer at HL.
-__sx_negate::
-        ld      b,#8
-sxn_cpl:
-        ld      a,(hl)
-        cpl
-        ld      (hl),a
-        inc     hl
-        djnz    sxn_cpl
-        ld      bc,#-8
-        add     hl,bc
-        ld      b,#8
-        scf
-sxn_inc:
-        ld      a,(hl)
-        adc     a,#0
-        ld      (hl),a
-        inc     hl
-        djnz    sxn_inc
-        ret
-
-        ;; C23 checked-int helpers kept here for now because the header already
-        ;; targets these symbols. They do not depend on the parser locals.
-
-        .globl  __ckd_add_sint
-        .globl  __ckd_sub_sint
-        .globl  __ckd_mul_sint
-
-__ckd_add_sint::
-        add     hl,de
-        ld      a,h
-        xor     b
-        ld      c,a
-        ld      a,h
-        xor     d
-        and     c
-        and     #0x80
-        ret
-
-__ckd_sub_sint::
-        or      a
-        sbc     hl,de
-        ld      a,h
-        xor     b
-        ld      c,a
-        ld      a,h
-        xor     d
-        and     c
-        and     #0x80
-        ret
-
-__ckd_mul_sint::
-        push    de
-        call    ___mulsint2slong
-        pop     bc
-        ld      a,h
-        rla
-        sbc     a,a
-        cp      e
-        ret     nz
-        cp      d
-        ret

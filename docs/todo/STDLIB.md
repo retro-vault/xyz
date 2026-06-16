@@ -28,7 +28,7 @@ Legend:
 ## Header inventory
 
 All headers live in `lib/libc/include/` and are staged to
-`bin/include/z80/`.
+`bin/x/z80/include/`.
 
 | Header | State |
 |--------|-------|

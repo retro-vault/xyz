@@ -12,8 +12,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-XAS="${XAS:-$ROOT/bin/bin/xas}"
-XOBJCOPY="${XOBJCOPY:-$ROOT/bin/bin/xobjcopy}"
+XAS="${XAS:-$ROOT/bin/x/bin/xas}"
+XOBJCOPY="${XOBJCOPY:-$ROOT/bin/x/bin/xobjcopy}"
 SDAS="${SDAS:-sdasz80}"
 GNU_PREFIX="${Z80_GNU_PREFIX:-/usr/local/z80-elf/bin/z80-unknown-elf-}"
 GAS="${GAS:-${GNU_PREFIX}as}"

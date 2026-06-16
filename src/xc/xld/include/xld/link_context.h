@@ -52,6 +52,9 @@ namespace xld {
         std::vector<output_reloc> reloc_table;
         uint16_t entry_point = 0;
         uint32_t code_size = 0;
+        // Lowest placed address of any non-empty area; binary/ihx output
+        // starts here when no explicit output range is given.
+        uint32_t image_base = 0;
 
         // Verbose flag.
         bool verbose = false;

@@ -10,7 +10,7 @@
 //   --mode=gnu    GNU gas directives; emit ELF32 z80-elf object
 //   --format=sdcc Pretty-print / emit SDCC-style source
 //   --format=gnu  Pretty-print / emit GNU-style source
-//                 Supported source subset excludes assembler macros
+//                 (macros are expanded by the preprocessor before emission)
 //   -o <file>     Output file (default: input stem + .rel or .o)
 //   -g            Emit debug information
 //   -I <dir>      Add include search directory

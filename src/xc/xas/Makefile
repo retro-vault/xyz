@@ -1,6 +1,6 @@
 ROOT ?= ../../..
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 CXXFLAGS ?= -std=c++2a -Wall -Wextra -Wpedantic -g
@@ -21,8 +21,12 @@ SRCS := \
     src/main.cpp \
     src/cli.cpp \
     src/frontend/lexer.cpp \
+    src/frontend/macro.cpp \
+    src/frontend/macro_dialect_gnu.cpp \
+    src/frontend/macro_dialect_sdas.cpp \
     src/frontend/parser.cpp \
     src/backend/codegen.cpp \
+    src/backend/macro_translate.cpp \
     src/backend/source_emitter.cpp \
     src/backend/rel_emitter.cpp \
     src/backend/elf_emitter.cpp
@@ -56,6 +60,8 @@ $(HOST_BIN_DIR):
 
 test: all
 	bash ./tests/format_test.sh
+	bash ./tests/macro_test.sh
+	bash ./tests/macro_convert_test.sh
 
 test-libs: all
 	bash ./tests/library_format_roundtrip_test.sh

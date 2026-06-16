@@ -18,10 +18,10 @@ CXXFLAGS    := -std=c++20 -Wall -Wextra -g -I$(XZ80_INC) -I$(BUILD) -I.
 
 # Default to xas now that the runtime REL output matches sdasz80 byte-for-byte.
 # Keep both knobs overridable for parity debugging.
-ASM         ?= $(ROOT)/bin/bin/xas
+ASM         ?= $(ROOT)/bin/x/bin/xas
 ASMFLAGS    ?= --mode=sdcc
-LINK        ?= $(ROOT)/bin/bin/xld
-LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000
+LINK        ?= $(ROOT)/bin/x/bin/xld
+LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000 -nostdlib
 
 RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(BUILD)/objs/%.rel,$(RUNTIME_SRCS))

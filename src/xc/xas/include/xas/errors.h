@@ -57,6 +57,20 @@ namespace xas {
         int line_;
     };
 
+    // Raised by the macro preprocessor (definition / expansion errors).
+    class macro_error : public asm_error {
+    public:
+        macro_error(const std::string& file, int line, const std::string& msg)
+            : asm_error(file + ":" + std::to_string(line) + ": error: " + msg),
+              file_(file), line_(line) {}
+
+        const std::string& file() const { return file_; }
+        int line() const { return line_; }
+    private:
+        std::string file_;
+        int line_;
+    };
+
 } // namespace xas
 
 #endif // XAS_ERRORS_HPP

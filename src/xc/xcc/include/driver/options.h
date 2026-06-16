@@ -36,14 +36,16 @@ enum class asm_dialect {
 // Output mode selected by the driver flag.
 //
 enum class output_mode {
-    ASSEMBLY,    // -S: emit .s file (default and only mode)
+    ASSEMBLY,    // -S: stop after compilation, emit .s
+    OBJECT,      // -c: compile and assemble (via xas), emit .rel
+    LINK,        // default: compile, assemble, and link (via xld)
 };
 
 struct options {
     // Input / output
     std::vector<std::string> input_files;
     std::string              output_file;
-    output_mode              mode      = output_mode::ASSEMBLY;
+    output_mode              mode      = output_mode::LINK;
 
     // Optimization
     opt_level                opt       = opt_level::O0;
@@ -54,6 +56,8 @@ struct options {
 
     // Language standard (only C11 is supported)
     bool                     std_c11   = true;
+    std::string              invocation_target;
+    std::string              platform_name;
 
     // Include paths and defines forwarded to the external preprocessor
     std::vector<std::string> include_paths;
@@ -67,6 +71,14 @@ struct options {
 
     bool                     verbose   = false;
     int                      max_errors = 20;
+
+    // Flags forwarded verbatim to xld in link mode (-L, -l, -nostdlib,
+    // -Wl,... and friends), in command-line order.
+    std::vector<std::string> linker_args;
+
+    // Directory containing the xcc executable; xas and xld are looked
+    // up here first, then in PATH.
+    std::string              driver_dir;
 
     //
     // Parse command-line arguments and return a populated options.

@@ -10,8 +10,11 @@
 //         .org, .equ, .set, .include, .if/.else/.endif
 //
 // Both modes accept the same Z80 instruction mnemonics.
-// The supported source subset intentionally excludes assembler macro
-// directives such as .macro/.endm and .rept.
+// Macro and repeat directives (.macro/.endm/.exitm, .rept, .irp, .irpc, and
+// the sdas .mexit/.narg/.nchr/.nval) are handled earlier by the macro
+// preprocessor (see frontend/macro.h); by the time the parser runs they have
+// already been expanded away.  A macro/repeat directive reaching the parser is
+// therefore treated as an unbalanced-directive error.
 //
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih

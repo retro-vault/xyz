@@ -74,8 +74,8 @@ make -C src/xc/xas test-libs
 make -C src/xc/xld test
 make -C lib/xgdb test
 make -C tests/mdr-emu test
-bash src/xc/xcc/tests/run_tests.sh ./bin/bin/xcc
-bash src/xc/xcc/tests/run_exec_tests.sh ./bin/bin/xcc
+bash src/xc/xcc/tests/run_tests.sh ./bin/x/bin/xcc
+bash src/xc/xcc/tests/run_exec_tests.sh ./bin/x/bin/xcc
 make -C src/xc/xcc bench
 ```
 
@@ -85,7 +85,7 @@ For a repeatable compiler-size benchmark against SDCC that measures only
 generated translation-unit code, use:
 
 ```sh
-bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc
+bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc
 ```
 
 By default this benchmarks the `exec/int` suite with `sdcccall(1)` and
@@ -107,7 +107,7 @@ The benchmark writes:
 To cover all exec suites instead of only integer tests:
 
 ```sh
-bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc --suite all
+bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc --suite all
 ```
 
 ## Practical Refactoring Checklist

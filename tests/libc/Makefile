@@ -11,30 +11,30 @@ RT_SRC      := $(ROOT)/src/xc/xcc/lib/runtime
 XZ80_SRC    := $(ROOT)/lib/xz80/src
 XZ80_INC    := $(ROOT)/lib/xz80/include
 RT_TESTS    := $(ROOT)/tests/runtime
-LIBC_ARCHIVE := $(ROOT)/build/lib/libc.a
+LIBC_ARCHIVE := $(BUILD)/sys-none/lib/libc.a
 LIBC_ARCHIVE_SRCS := $(sort \
   $(wildcard $(ROOT)/lib/libc/src/*.c) \
   $(wildcard $(ROOT)/lib/libc/src/*/*.c) \
   $(wildcard $(ROOT)/lib/libc/src/*.s) \
   $(wildcard $(ROOT)/lib/libc/src/*/*.s) \
-  $(wildcard $(ROOT)/lib/sys/none/*.c) \
-  $(wildcard $(ROOT)/lib/sys/none/*.s))
+  $(wildcard $(ROOT)/tests/sysmock/*.c) \
+  $(wildcard $(ROOT)/tests/sysmock/*.s))
 
 CXX         := g++
 CXXFLAGS    := -std=c++20 -Wall -Wextra -g -I$(XZ80_INC) -I$(BUILD) -I$(RT_TESTS) -I.
-C8C         ?= $(ROOT)/bin/bin/xcc
+C8C         ?= $(ROOT)/bin/x/bin/xcc
 C8FLAGS     ?= -I$(ROOT)/lib/libc/include
 
 # The real libc/sys/runtime builds already assemble with xas, and the direct
 # harness now follows that same default. Link with xld so the libc surface is
 # exercised through the in-tree linker too.
-ASM         ?= $(ROOT)/bin/bin/xas
+ASM         ?= $(ROOT)/bin/x/bin/xas
 ASMFLAGS    ?= --mode=sdcc
-LINK        ?= $(ROOT)/bin/bin/xld
+LINK        ?= $(ROOT)/bin/x/bin/xld
 # Keep only text anchored for the host-driven libc images. Some split test
 # images legitimately grow past 0xF000 before RAM areas begin, so forcing a
 # fixed -Tdata there creates a false linker failure.
-LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000
+LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000 -nostdlib
 
 # Hand-written libc functions under test, plus the runtime signed-divide core
 # that div() tail-calls.
@@ -171,20 +171,20 @@ SRCS := \
   $(LIBC_SRC)/stdio/tmpfile.s \
   $(LIBC_SRC)/stdio/tmpnam.s \
   $(LIBC_SRC)/stdio/perror.s \
-  $(ROOT)/lib/sys/none/fileio.s \
-  $(ROOT)/lib/sys/none/open.s \
-  $(ROOT)/lib/sys/none/close.s \
-  $(ROOT)/lib/sys/none/lseek.s \
-  $(ROOT)/lib/sys/none/read.s \
-  $(ROOT)/lib/sys/none/write.s \
-  $(ROOT)/lib/sys/none/sys_exit.s \
-  $(ROOT)/lib/sys/none/sys_sbrk.s \
-  $(ROOT)/lib/sys/none/sys_unlink.s \
-  $(ROOT)/lib/sys/none/sys_rename.s \
-  $(ROOT)/lib/sys/none/sys_getchar.s \
-  $(ROOT)/lib/sys/none/sys_putchar.s \
-  $(ROOT)/lib/sys/none/sys_gettimeofday.s \
-  $(ROOT)/lib/sys/none/sys_settimeofday.s \
+  $(ROOT)/tests/sysmock/fileio.s \
+  $(ROOT)/tests/sysmock/open.s \
+  $(ROOT)/tests/sysmock/close.s \
+  $(ROOT)/tests/sysmock/lseek.s \
+  $(ROOT)/tests/sysmock/read.s \
+  $(ROOT)/tests/sysmock/write.s \
+  $(ROOT)/tests/sysmock/_exit.s \
+  $(ROOT)/tests/sysmock/heap_region.s \
+  $(ROOT)/tests/sysmock/unlink.s \
+  $(ROOT)/tests/sysmock/rename.s \
+  $(ROOT)/tests/sysmock/sys_getchar.s \
+  $(ROOT)/tests/sysmock/sys_putchar.s \
+  $(ROOT)/tests/sysmock/gettimeofday.s \
+  $(ROOT)/tests/sysmock/settimeofday.s \
   $(RT_SRC)/int32/divslong.s \
   $(RT_SRC)/int32/modslong.s \
   $(RT_SRC)/int32/divulong.s \
@@ -444,16 +444,16 @@ WIDE_SRCS := \
   $(LIBC_SRC)/wchar/putwc.s \
   $(LIBC_SRC)/wchar/putwchar.s \
   $(LIBC_SRC)/wchar/ungetwc.s \
-  $(ROOT)/lib/sys/none/fileio.s \
-  $(ROOT)/lib/sys/none/open.s \
-  $(ROOT)/lib/sys/none/close.s \
-  $(ROOT)/lib/sys/none/lseek.s \
-  $(ROOT)/lib/sys/none/read.s \
-  $(ROOT)/lib/sys/none/write.s \
-  $(ROOT)/lib/sys/none/sys_unlink.s \
-  $(ROOT)/lib/sys/none/sys_rename.s \
-  $(ROOT)/lib/sys/none/sys_getchar.s \
-  $(ROOT)/lib/sys/none/sys_putchar.s \
+  $(ROOT)/tests/sysmock/fileio.s \
+  $(ROOT)/tests/sysmock/open.s \
+  $(ROOT)/tests/sysmock/close.s \
+  $(ROOT)/tests/sysmock/lseek.s \
+  $(ROOT)/tests/sysmock/read.s \
+  $(ROOT)/tests/sysmock/write.s \
+  $(ROOT)/tests/sysmock/unlink.s \
+  $(ROOT)/tests/sysmock/rename.s \
+  $(ROOT)/tests/sysmock/sys_getchar.s \
+  $(ROOT)/tests/sysmock/sys_putchar.s \
   $(RT_SRC)/int16/divunsigned.s \
   $(RT_SRC)/int32/divulong.s \
   $(RT_SRC)/int32/modulong.s \
@@ -545,7 +545,7 @@ $(WIDE_BIN): $(WIDE_IHX)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
 $(LIBC_ARCHIVE): $(LIBC_ARCHIVE_SRCS)
-	$(MAKE) -C $(ROOT)/lib/libc/src ROOT=$(abspath $(ROOT)) SYS=none AR8FLAGS="--mode=gnu rcs" -j1
+	$(MAKE) -C $(ROOT)/lib/libc/src ROOT=$(abspath $(ROOT)) BUILD_DIR=$(abspath $(BUILD))/sys-none SYS=none AR8FLAGS="--mode=gnu rcs" -j1
 
 $(CORE_IHX_1): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_1.rel $(LIBC_ARCHIVE)
 	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_1) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_1.rel $(LIBC_ARCHIVE)
@@ -577,7 +577,7 @@ $(BUILD)/objs/%.rel: $(LIBC_SRC)/math/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(LIBC_SRC)/stdio/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
-$(BUILD)/objs/%.rel: $(ROOT)/lib/sys/none/%.s | $(BUILD)/objs
+$(BUILD)/objs/%.rel: $(ROOT)/tests/sysmock/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(RT_SRC)/int32/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
@@ -624,7 +624,7 @@ $(BUILD)/objs/wide_%.rel: $(LIBC_SRC)/errno/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/wide_%.rel: $(LIBC_SRC)/wchar/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
-$(BUILD)/objs/wide_%.rel: $(ROOT)/lib/sys/none/%.s | $(BUILD)/objs
+$(BUILD)/objs/wide_%.rel: $(ROOT)/tests/sysmock/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/wide_%.rel: $(RT_SRC)/int16/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<

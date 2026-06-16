@@ -16,7 +16,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/bin/bin"
+BIN="$ROOT/bin/x/bin"
 XCC="$BIN/xcc"
 XAS="$BIN/xas"
 XAR="$BIN/xar"
@@ -235,7 +235,7 @@ _main:
 EOF
     "$XAS" --mode=sdcc "$tmpdir/main.s" -o "$tmpdir/main.rel" 2>/dev/null \
         || { echo "  xas failed on main.s"; return 1; }
-    "$XLD" -e _main -o "$tmpdir/out.bin" "$tmpdir/main.rel" "$tmpdir/test.lib" 2>/dev/null \
+    "$XLD" -nostdlib -e _main -o "$tmpdir/out.bin" "$tmpdir/main.rel" "$tmpdir/test.lib" 2>/dev/null \
         || { echo "  xld failed to link against archive"; return 1; }
     [[ -f "$tmpdir/out.bin" ]] || { rm -rf "$tmpdir"; echo "  no output binary"; return 1; }
     echo "  ${GREEN}link-with-archive${RESET}: ok"
@@ -301,7 +301,7 @@ phase_chain() {
         if ! "$XAS" --mode=sdcc "$dir/${name}.s" -o "$dir/${name}.rel" 2>/dev/null; then
             echo "  ${RED}FAIL${RESET} $name [xas]"; return 1
         fi
-        if ! "$XLD" -e _main -o "$dir/${name}.bin" "$dir/${name}.rel" "$rtlib" 2>/dev/null; then
+        if ! "$XLD" -nostdlib -e _main -o "$dir/${name}.bin" "$dir/${name}.rel" "$rtlib" 2>/dev/null; then
             echo "  ${RED}FAIL${RESET} $name [xld]"; return 1
         fi
         local magic

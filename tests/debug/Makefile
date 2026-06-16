@@ -1,8 +1,8 @@
 ROOT      ?= $(realpath ../..)
 BUILD_DIR := $(ROOT)/build/debug
-DIST_DIR  ?= $(ROOT)/bin
+DIST_DIR  ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
-Z80_BIN_DIR ?= $(DIST_DIR)/z80/bin
+Z80_BIN_DIR ?= $(ROOT)/bin/z/z80/bin
 Z80_APPS_DIR ?= $(Z80_BIN_DIR)/apps
 BIN_DIR   := $(Z80_APPS_DIR)/debug
 RUNTIME_DIR := $(ROOT)/src/xc/xcc/lib/runtime
@@ -19,7 +19,7 @@ RUNTIME_LIB := $(RT_BUILD_DIR)/runtime.lib
 
 XCCFLAGS ?= -S -g -O0
 XASFLAGS ?= --mode=sdcc -g
-XLDFLAGS ?= -f bin -e _entry -b _CODE=0100 -x 0100-0FFF -g
+XLDFLAGS ?= -f bin -nostdlib -e _entry -b _CODE=0100 -x 0100-0FFF -g
 
 .PHONY: all clean
 

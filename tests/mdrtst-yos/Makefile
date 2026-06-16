@@ -5,10 +5,10 @@
 ROOT      ?= $(realpath ../..)
 THIS_DIR  := $(realpath .)
 BUILD_DIR := $(ROOT)/build/mdrtst-yos
-DIST_DIR  ?= $(ROOT)/bin
+DIST_DIR  ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
-ZX_APPS_DIR ?= $(DIST_DIR)/z80/spectrum/bin/apps
-ZX_MDR_DIR ?= $(DIST_DIR)/z80/spectrum/bin/mdr
+ZX_APPS_DIR ?= $(ROOT)/bin/z/z80/spectrum/bin/apps
+ZX_MDR_DIR ?= $(ROOT)/bin/z/z80/spectrum/bin/mdr
 BIN_DIR   := $(ZX_APPS_DIR)/mdrtst-yos
 XLD     := $(HOST_BIN_DIR)/xld
 MDR_TOOL  := $(HOST_BIN_DIR)/microdrive
@@ -33,7 +33,7 @@ all:
 	    -w $(THIS_DIR) \
 	    $(DOCKER_IMAGE) \
 	    make IN_DOCKER=1 ROOT=$(ROOT)
-	$(XLD) -v -m -e _entry \
+	$(XLD) -v -m -nostdlib -e _entry \
 	    -o $(BIN_DIR)/mdrtst.app \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/mdrtst.rel

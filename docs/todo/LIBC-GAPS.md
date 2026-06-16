@@ -11,7 +11,7 @@ described as a broadly usable C23 library for `xcc`.
   `fenv.h`, `inttypes.h`, `stdbit.h`, `stdatomic.h`, `math.h`, and
   `complex.h`.
 - The staged archive is `bin/lib/z80/libc.a`.
-- The staged public headers live in `bin/include/z80/`.
+- The staged public headers live in `bin/x/z80/include/`.
 - The assembly libc no longer depends on ad-hoc writable module scratchpads
   for ordinary per-call workspace. Remaining writable objects are intentional
   shared state or API-defined static-return storage such as `errno`,

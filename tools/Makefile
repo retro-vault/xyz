@@ -4,18 +4,33 @@
 # ---------------------------------------------------------------------------
 
 ROOT ?= $(realpath ..)
+X_DIST_DIR ?= $(ROOT)/bin/x
+Y_DIST_DIR ?= $(ROOT)/bin/y
 
-SUBDIRS := serial microdrive appmake xgdb-vsix
+Y_SUBDIRS := serial microdrive appmake
+X_SUBDIRS := xgdb-vsix
 
 .PHONY: all
 all:
-	@for d in $(SUBDIRS); do \
+	@for d in $(Y_SUBDIRS); do \
 	    echo "==> tools/$$d"; \
-	    $(MAKE) -C $$d || exit 1; \
+	    $(MAKE) -C $$d \
+	        DIST_DIR=$(Y_DIST_DIR) \
+	        HOST_BIN_DIR=$(Y_DIST_DIR)/bin \
+	        PUBLIC_LIB_DIR=$(Y_DIST_DIR)/lib \
+	        PUBLIC_INCLUDE_DIR=$(Y_DIST_DIR)/include || exit 1; \
+	done
+	@for d in $(X_SUBDIRS); do \
+	    echo "==> tools/$$d"; \
+	    $(MAKE) -C $$d \
+	        DIST_DIR=$(X_DIST_DIR) \
+	        HOST_BIN_DIR=$(X_DIST_DIR)/bin \
+	        PUBLIC_LIB_DIR=$(X_DIST_DIR)/lib \
+	        VSIX_STAGE_DIR=$(X_DIST_DIR)/pkg/vsix || exit 1; \
 	done
 
 .PHONY: clean
 clean:
-	@for d in $(SUBDIRS); do \
+	@for d in $(Y_SUBDIRS) $(X_SUBDIRS); do \
 	    $(MAKE) -C $$d clean; \
 	done

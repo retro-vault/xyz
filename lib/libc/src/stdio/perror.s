@@ -8,7 +8,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _perror
-        .globl  _write
+        .globl  __stdio_emit_bytes
         .globl  __errno_value
 
         .area   _CONST
@@ -44,7 +44,7 @@ __perror_len_done:
         ret     z
         push    bc
         ld      hl,#0x0002
-        call    _write
+        call    __stdio_emit_bytes
         pop     bc
         ret
 

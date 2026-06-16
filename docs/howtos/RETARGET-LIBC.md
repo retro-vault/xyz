@@ -11,13 +11,22 @@ This document lists the hooks the platform layer must provide, grouped by the
 standard-library feature they unlock:
 
 1. **Clock** — two hooks, and the whole of `<time.h>` works. *(Implemented.)*
-2. **Heap** — one hook (or two symbols) gives the program its dynamic memory,
-   and `malloc`/`calloc`/`realloc`/`free` work.
+2. **Heap** — one hook reports the default heap's region, and
+   `malloc`/`calloc`/`realloc`/`free` (plus multi-heap `allocate`/`deallocate`)
+   work.
 3. **Console character I/O** — output and input of one byte, and
    `putchar`/`getchar`/`puts`/`printf`/`scanf` work.
 4. **File / disk I/O** — a handful of stream calls, and the rest of `<stdio.h>`
    (`fopen`/`fread`/`fwrite`/`fseek`/…) works.
 5. **Startup** — `crt0` and process exit.
+
+> **Quick start.** The complete contract is declared in
+> [`lib/sys/include/sys.h`](../../lib/sys/include/sys.h). The
+> [`none`](../../lib/sys/none/) backend is an empty-shell **template**: copy it to
+> `lib/sys/<your-target>/`, implement the hooks, and build with
+> `PLATFORM=<your-target>`. Its [README](../../lib/sys/none/README.md) lists every
+> function with **reference empty C implementations**. The sections below explain
+> the design behind each group; `cpm3` is the worked, fully-implemented example.
 
 ---
 
@@ -70,18 +79,18 @@ The entire `<time.h>` — `time`, `clock`, `difftime`, `mktime`,
 `timespec_get` — is built **in assembly** on top of exactly two hooks:
 
 ```c
-int __sys_gettimeofday(struct timespec *tv);        /* read the wall clock */
-int __sys_settimeofday(const struct timespec *tv);  /* set  the wall clock */
+int gettimeofday(struct timespec *tv);        /* read the wall clock */
+int settimeofday(const struct timespec *tv);  /* set  the wall clock */
 ```
 
-(All sys-layer hooks carry the `__sys_` prefix; the assembly labels are
-`___sys_gettimeofday::` / `___sys_settimeofday::`.)
+(Platform hooks use plain POSIX-style names — no special prefix — so the
+assembly labels are simply `_gettimeofday::` / `_settimeofday::`.)
 
 `struct timespec { time_t tv_sec; long tv_nsec; }` (8 bytes: seconds at offset
 0, nanoseconds at offset 4; both 32-bit). The hook writes/reads the whole
 struct; on a seconds-only clock just set `tv_nsec = 0`.
 
-See `lib/sys/none/sys_gettimeofday.s` / `sys_settimeofday.s` for the stub shape. An OS
+See `lib/sys/none/gettimeofday.s` / `settimeofday.s` for the stub shape. An OS
 replaces them to read its RTC, and every calendar/formatting function comes to
 life with no other change. This two-hook design is the template the rest of
 this document follows.
@@ -95,66 +104,85 @@ this document follows.
 
 Dynamic allocation needs one target-specific decision: **where the heap lives
 and how big it is**. The allocator itself — the free-list bookkeeping, block
-splitting and coalescing behind `malloc`/`calloc`/`realloc`/`free` — is
-target-independent and stays in libc; the platform only provides the raw
-memory.
-
-The recommended hook is the classic break-pointer call:
+splitting and coalescing — is target-independent and stays in libc. Memory
+management is expressed in terms of a **heap descriptor** (the "heap handle"):
 
 ```c
-void *__sys_sbrk(int increment);   /* grow the heap by `increment` bytes;
-                                      returns the PREVIOUS break, or
-                                      (void *)-1 if the request cannot be met */
+typedef struct { unsigned char _opaque[8]; } heap_t;  /* { head, base, limit, bank, flags } */
+
+void *allocate(heap_t *heap, size_t size);            /* generic primitive   */
+void  deallocate(heap_t *heap, void *ptr);
+void  heap_init_arena(heap_t *heap, void *base, void *limit);
+
+void *malloc(size_t size);   /* == allocate(&__libc_default_heap, size) */
+void  free(void *ptr);       /* owning heap recovered from the block    */
 ```
 
-`malloc` calls `__sys_sbrk` to obtain memory in coarse chunks and then hands out
-sub-blocks from them; `free` returns blocks to libc's internal free list (it
-does not shrink the system break). `increment` is a signed 16-bit byte count, so
-a backend may also support handing memory back with a negative argument, but it
-is not required — returning `(void *)-1` for any shrink request is fine.
+`allocate`/`deallocate` work on a caller-supplied descriptor, so a program may
+keep several heaps — banked-memory blocks, or a separate OS heap and per-process
+heaps. Each block stores a back-pointer to its owning heap, so plain `free(ptr)`
+(and `realloc`) works regardless of which heap the pointer came from. There is no
+`sbrk`: a heap is built directly over a memory region with `heap_init_arena`.
+
+The only target-specific hook is **where the default heap's region is**:
+
+```c
+void heap_region(void);   /* returns HL = base, DE = limit (one past end) */
+```
+
+`malloc` lazily creates `__libc_default_heap` over that region on first use.
 
 ```
-malloc / calloc / realloc ─►  (libc free-list allocator)  ──► __sys_sbrk(+n)
-free                       ─►  (returns to the free list)
+malloc / calloc / realloc / aligned_alloc ─► allocate(&__libc_default_heap, n)
+free / free_sized / free_aligned          ─► deallocate(block->heap, p)
+__libc_default_heap created once from ───► heap_region()
 ```
 
 ### `none` backend: a fixed static arena
 
-With no OS there is no real memory manager, so the bare-metal `__sys_sbrk` bumps
-a pointer through a statically reserved block and reports exhaustion once it is
-used up:
+With no OS there is no transient program area to size against, so the bare-metal
+region is a statically reserved block:
 
-```c
-/* lib/sys/none/sys_sbrk.s — contract shown in C */
-#define __SYS_HEAP_SIZE 8192U
-static unsigned char __sys_heap[__SYS_HEAP_SIZE];
-static unsigned char *__sys_brk = __sys_heap;
-
-void *__sys_sbrk(int increment) {
-    unsigned char *prev = __sys_brk;
-    unsigned char *next = prev + increment;
-    if (next < __sys_heap || next > __sys_heap + __SYS_HEAP_SIZE)
-        return (void *)-1;            /* out of heap */
-    __sys_brk = next;
-    return prev;
-}
+```asm
+;; lib/sys/none/heap_region.s
+SYS_HEAP_SIZE   .equ 8192
+        .area   _HEAP
+__sys_heap:     .ds  SYS_HEAP_SIZE
+__sys_heap_end:
+        .area   _CODE
+_heap_region::                 ; -> HL = base, DE = limit
+        ld      hl,#__sys_heap
+        ld      de,#__sys_heap_end
+        ret
 ```
 
-Change `__SYS_HEAP_SIZE` to size the arena for the board.
+Change `SYS_HEAP_SIZE` to size the arena for the board, or create extra heaps
+explicitly with `heap_init_arena` over known regions.
 
-### Alternative: linker-defined bounds
+### `cpm3` backend: the whole transient program area
 
-If you would rather have the **linker/`crt0`** place the heap (typically the gap
-between the end of `.bss` and the stack), expose two symbols instead of a hook —
-`__heap_start` and `__heap_top` — and let `__sys_sbrk` bump between them. This
-keeps the heap out of the static image (it costs no ROM/file size, only RAM) and
-lets each link decide the size. Either approach satisfies the allocator; pick
-whichever matches how the target lays out memory.
+A hosted target reports a dynamic region instead of a static reservation. The
+CP/M 3 backend grows the heap from the end of the program image (`__sys_heap`,
+the base of the last `_HEAP` link area) up to the BDOS base (the word at
+`0x0006`), less a fixed reserve for the descending stack:
 
-> Current state: the in-tree `malloc` (still C, in `stdlib.c`) uses a baked-in
-> 8 KB static arena rather than this hook. Routing it through `__sys_sbrk` is
-> part of the pending `stdlib.c` → assembly conversion; the hook above is the
-> intended retargeting surface.
+```asm
+;; lib/sys/cpm3/heap_region.s
+SYS_STACK_RESERVE .equ 0x0200
+        .area   _HEAP
+__sys_heap:                          ; heap base = top of program image
+        .area   _CODE
+_heap_region::
+        ld      hl,(0x0006)          ; BDOS base (top of TPA)
+        ld      de,#SYS_STACK_RESERVE
+        or      a
+        sbc     hl,de                ; HL = limit
+        ex      de,hl                ; DE = limit
+        ld      hl,#__sys_heap       ; HL = base
+        ret
+```
+
+Nothing is statically reserved, so the heap scales to the whole TPA.
 
 ---
 
@@ -278,7 +306,7 @@ The process-exit path also expects a way to stop. `exit`/`_Exit`/`abort` (in
 `none` this is a `HALT`. If you want a distinct hook, expose:
 
 ```c
-void __sys_exit(int status);   /* never returns */
+void _exit(int status);   /* never returns */
 ```
 
 and have `crt0`/`_Exit` tail-call it.
@@ -291,13 +319,13 @@ Create `lib/sys/<youros>/` and provide, as needed:
 
 | Feature you want | Hooks to implement |
 |------------------|--------------------|
-| `<time.h>` | `__sys_gettimeofday`, `__sys_settimeofday` |
+| `<time.h>` | `gettimeofday`, `settimeofday` |
 | `malloc`/`calloc`/`realloc`/`free` | `__sys_sbrk` (or `__heap_start`/`__heap_top`) |
 | program output (`printf`, `putchar`, `puts`) | `__sys_write` (fd 1/2) |
 | program input (`scanf`, `getchar`) | `__sys_read` (fd 0) |
 | file reading | `__sys_open`, `__sys_read`, `__sys_lseek`, `__sys_close` |
 | file writing | the above + `__sys_write` (fd ≥ 3) |
-| clean exit | `__sys_exit` (or rely on the `crt0` `HALT`) |
+| clean exit | `_exit` (or rely on the `crt0` `HALT`) |
 
 Then build with `make -C lib/libc/src SYS=<youros>`. Anything you omit can stay
 as the `none` stub, so a board can start with just `__sys_write` and grow from
@@ -309,11 +337,11 @@ there.
 
 | Layer | Hooks | State |
 |-------|-------|-------|
-| Clock (`<time.h>`) | `__sys_gettimeofday`, `__sys_settimeofday` | **implemented** (`lib/sys/none/`) |
+| Clock (`<time.h>`) | `gettimeofday`, `settimeofday` | **implemented** (`lib/sys/none/`) |
 | Heap (`malloc`/…) | `__sys_sbrk` | **proposed** — `malloc` still uses a fixed static arena |
 | Console (`printf`/`scanf`) | `__sys_write`, `__sys_read` | **proposed** — `<stdio.h>` not yet built |
 | Files (`fopen`/`fread`/…) | `__sys_open`/`close`/`lseek` | **proposed** — `<stdio.h>` not yet built |
-| Startup / exit | `crt0`, `__sys_exit` | per-target `crt0` exists; exit hook proposed |
+| Startup / exit | `crt0`, `_exit` | per-target `crt0` exists; exit hook proposed |
 
 The clock layer is the reference implementation: study `lib/sys/none/` and the
 `lib/libc/src/time/` modules to see how a tiny platform surface supports an

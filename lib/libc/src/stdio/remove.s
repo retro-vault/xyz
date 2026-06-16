@@ -8,12 +8,12 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _remove
-        .globl  __sys_unlink
+        .globl  _unlink
 
         .area   _CODE
 
 _remove::
-        call    __sys_unlink
+        call    _unlink
         ex      de,hl
         push    hl
         pop     de

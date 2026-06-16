@@ -31,6 +31,8 @@ namespace xld {
         std::optional<std::filesystem::path> cdb_file;
         std::optional<std::filesystem::path> map_file;
         std::optional<std::filesystem::path> sdcc_runtime_dir;
+        std::string invocation_target;
+        std::optional<std::string> platform_name;
         std::string entry_symbol = "_main";
         link_mode mode = link_mode::sdcc;
         std::vector<address_range> reserved_ranges;
@@ -41,6 +43,7 @@ namespace xld {
         bool debug_info = false;
         bool no_startfiles = false;
         bool no_stdlib = false;
+        bool disable_default_sdcc_runtime = false;
         bool verbose = false;
         bool print_map = false;
         bool show_help = false;

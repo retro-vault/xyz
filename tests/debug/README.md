@@ -43,8 +43,8 @@ make -C tests/debug all
 
 That produces:
 
-- `bin/z80/bin/apps/debug/sieve.bin`
-- `bin/z80/bin/apps/debug/sieve.cdb`
+- `bin/z/z80/bin/apps/debug/sieve.bin`
+- `bin/z/z80/bin/apps/debug/sieve.cdb`
 
 The build path is:
 
@@ -63,9 +63,9 @@ The build path is:
 In one terminal:
 
 ```sh
-bin/bin/xgdb-z80 \
+bin/x/bin/xgdb-z80 \
     --listen 127.0.0.1:9000 \
-    --load-bin bin/z80/bin/apps/debug/sieve.bin \
+    --load-bin bin/z/z80/bin/apps/debug/sieve.bin \
     --origin 0x0100 \
     --pc 0x0100 \
     --sp 0xFFFE
@@ -79,9 +79,9 @@ provides a remote debug target on TCP port `9000`.
 In a second terminal:
 
 ```sh
-bin/bin/xgdb \
-    --exec bin/z80/bin/apps/debug/sieve.bin \
-    --cdb bin/z80/bin/apps/debug/sieve.cdb \
+bin/x/bin/xgdb \
+    --exec bin/z/z80/bin/apps/debug/sieve.bin \
+    --cdb bin/z/z80/bin/apps/debug/sieve.cdb \
     --remote 127.0.0.1:9000 \
     -d tests/debug
 ```
@@ -93,9 +93,9 @@ You can also point GNU DDD at `xgdb` as a custom debugger command.
 Start `xgdb-z80` first:
 
 ```sh
-bin/bin/xgdb-z80 \
+bin/x/bin/xgdb-z80 \
     --listen 127.0.0.1:9000 \
-    --load-bin bin/z80/bin/apps/debug/sieve.bin \
+    --load-bin bin/z/z80/bin/apps/debug/sieve.bin \
     --origin 0x0100 \
     --pc 0x0100 \
     --sp 0xFFFE
@@ -104,7 +104,7 @@ bin/bin/xgdb-z80 \
 Then, from the repo root, launch DDD like this:
 
 ```sh
-ddd --debugger "bin/bin/xgdb --quiet --exec bin/z80/bin/apps/debug/sieve.bin --cdb bin/z80/bin/apps/debug/sieve.cdb --remote 127.0.0.1:9000 -d tests/debug"
+ddd --debugger "bin/x/bin/xgdb --quiet --exec bin/z/z80/bin/apps/debug/sieve.bin --cdb bin/z/z80/bin/apps/debug/sieve.cdb --remote 127.0.0.1:9000 -d tests/debug"
 ```
 
 Once DDD opens:
@@ -239,9 +239,9 @@ This is the supported VS Code workflow today. After the target is running,
 connect from another terminal with:
 
 ```sh
-bin/bin/xgdb \
-    --exec bin/z80/bin/apps/debug/sieve.bin \
-    --cdb bin/z80/bin/apps/debug/sieve.cdb \
+bin/x/bin/xgdb \
+    --exec bin/z/z80/bin/apps/debug/sieve.bin \
+    --cdb bin/z/z80/bin/apps/debug/sieve.cdb \
     --remote 127.0.0.1:9000 \
     -d tests/debug
 ```

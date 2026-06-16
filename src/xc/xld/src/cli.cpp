@@ -20,6 +20,28 @@ namespace xld {
         return static_cast<uint16_t>(std::stoul(s, nullptr, 16));
     }
 
+    static std::string normalize_target_name(std::string target_name) {
+        if (target_name.empty())
+            throw xld_error("platform name cannot be empty");
+        if (target_name.rfind("z80-", 0) == 0)
+            return target_name;
+        return "z80-" + target_name;
+    }
+
+    static std::string detect_invocation_target(const char* argv0,
+                                                const char* tool_name) {
+        if (argv0 == nullptr || *argv0 == '\0')
+            return {};
+
+        const std::string base = std::filesystem::path(argv0).filename().string();
+        const std::string suffix = std::string("-") + tool_name;
+        if (base.size() <= suffix.size())
+            return {};
+        if (base.compare(base.size() - suffix.size(), suffix.size(), suffix) != 0)
+            return {};
+        return base.substr(0, base.size() - suffix.size());
+    }
+
     static address_range parse_range_arg(const std::string& arg_name,
                                          const std::string& range_str)
     {
@@ -114,6 +136,8 @@ namespace xld {
 
     cli_options cli::parse(int argc, char* argv[]) {
         cli_options opts;
+        opts.invocation_target = detect_invocation_target(
+            argc > 0 ? argv[0] : nullptr, "xld");
         bool entry_explicit = false;
         bool entry_from_script = false;
         std::optional<uint16_t> text_base_alias;
@@ -206,6 +230,14 @@ namespace xld {
                 opts.no_startfiles = true;
             } else if (arg == "-nostdlib") {
                 opts.no_stdlib = true;
+            } else if (arg == "--platform") {
+                opts.platform_name = normalize_target_name(
+                    require_arg(argc, argv, i, arg));
+            } else if (arg.rfind("--platform=", 0) == 0) {
+                opts.platform_name = normalize_target_name(
+                    arg.substr(std::string("--platform=").size()));
+            } else if (arg == "--no-default-runtime") {
+                opts.disable_default_sdcc_runtime = true;
             } else if (arg == "-L" || arg.rfind("-L", 0) == 0) {
                 throw xld_error("-L is not implemented yet");
             } else if (arg == "-l" || arg.rfind("-l", 0) == 0) {
@@ -339,8 +371,10 @@ namespace xld {
             << "  -B <prefix>                Add startup/runtime/toolchain search prefix\n"
             << "  -L<dir>                    Add library search directory\n"
             << "  -l<name>                   Link against library\n"
+            << "  --platform=<name>          Select a staged target platform\n"
             << "  -nostartfiles              Do not use implicit startup files\n"
             << "  -nostdlib                  Do not use implicit startup files or default libs\n"
+            << "  --no-default-runtime       Do not auto-probe ../lib for runtime assets\n"
             << "  --oformat=xl               Emit XL relocatable image (default)\n"
             << "  --oformat=binary           Emit flat binary image\n"
             << "  --oformat=elf              Emit ELF image\n"

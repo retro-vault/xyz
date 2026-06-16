@@ -58,6 +58,28 @@ size_t memalignment(const void *ptr);
 void free_sized(void *ptr, size_t size);
 void free_aligned(void *ptr, size_t alignment);
 
+/*
+ * Multi-heap allocator (xyz extension).
+ *
+ * Memory management lives in the platform layer: malloc()/free() are just
+ * allocate()/deallocate() on the process-wide default heap, but a program may
+ * create and use additional heaps (e.g. banked-memory blocks, or a separate OS
+ * heap).  A heap is described by an 8-byte heap_t; pass its address as the
+ * handle.  free() recovers a block's owning heap automatically, so a pointer
+ * obtained from allocate(h, n) may be released with either deallocate(h, p) or
+ * plain free(p).
+ *
+ * Create a heap over a memory region [base, limit) with heap_init_arena(); the
+ * platform builds the default heap the same way on first malloc().
+ */
+typedef struct { unsigned char _opaque[8]; } heap_t;
+
+extern heap_t __libc_default_heap;
+
+void *allocate(heap_t *heap, size_t size);
+void  deallocate(heap_t *heap, void *ptr);
+void  heap_init_arena(heap_t *heap, void *base, void *limit);
+
 int abs(int value);
 long labs(long value);
 long long llabs(long long value);

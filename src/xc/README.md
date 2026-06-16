@@ -2,7 +2,7 @@
 
 `xc` is the active Z80 toolchain in this repository.
 
-Today it builds these host-side tools into `bin/bin/`:
+Today it builds these host-side tools into `bin/x/bin/`:
 
 - `xcc` — C compiler for Z80 targets
 - `xas` — assembler plus assembly pretty-printer / dialect converter
@@ -31,10 +31,12 @@ make -C src/xc all
 
 The wider repository build stages the results under:
 
-- `bin/bin/` for host executables
-- `bin/include/z80/` for target headers
-- `bin/lib/z80/` for target libraries
-- `bin/libexec/xcc/` for compiler-private runtime and include support
+- `bin/x/bin/` for host executables
+- `bin/x/include/` and `bin/x/lib/` for host SDK headers and libraries
+- `bin/x/z80/include/` and `bin/x/z80/lib/` for libc headers and the
+  runtime, startup, libc, and platform archives
+- `bin/y/` for YOS images
+- `bin/z/` for staged target apps and media
 
 ## Where To Read Next
 

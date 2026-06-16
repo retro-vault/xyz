@@ -9,20 +9,19 @@
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
 
+
+
         .module casinhf
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _casinhf
-        .globl  _casinh
-        .globl  _casinhl
-        .globl  _csqrtf
-        .globl  _clogf
-        .globl  ___fsmul
         .globl  ___fsadd
+        .globl  ___fsmul
         .globl  ___fssub
+        .globl  _clogf
+        .globl  _csqrtf
 
         .area   _CODE
-
 _casinhf::
         push    ix
         ld      ix,#0
@@ -235,6 +234,3 @@ casinhf_nonzero:
 
 ;; C23 double/long double aliases for complex inverse (new, in existing file).
 ;; Basic forward to f version (consistent with other float-first in complex and math).
-_casinh::
-_casinhl::
-        jp      _casinhf

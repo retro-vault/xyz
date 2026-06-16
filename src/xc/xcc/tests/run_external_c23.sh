@@ -8,7 +8,7 @@
 
 # Note: no set -e here — we need to handle non-zero exit from xcc ourselves
 
-XCC=/home/tstih/data/retro-vault/xyz/bin/bin/xcc
+XCC=/home/tstih/data/retro-vault/xyz/bin/x/bin/xcc
 C23_DIR=/home/tstih/data/retro-vault/xyz/src/xc/xcc/tests/data/external/C23
 C2Y_DIR=/home/tstih/data/retro-vault/xyz/src/xc/xcc/tests/data/external/C2y
 INCLUDE_DIR=/home/tstih/data/retro-vault/xyz/lib/libc/include

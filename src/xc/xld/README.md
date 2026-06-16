@@ -979,7 +979,7 @@ make clean
 This builds:
 
 ```text
-bin/bin/xld
+bin/x/bin/xld
 ```
 
 The test suite covers:

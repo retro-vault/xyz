@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
+#include <system_error>
 
 namespace xcc {
 
@@ -71,6 +73,74 @@ static bool apply_opt_flag(options &opts, const char *name, bool enabled) {
     return false;
 }
 
+static std::filesystem::path normalize_path(const std::filesystem::path &path) {
+    std::error_code ec;
+    auto normalized = std::filesystem::weakly_canonical(path, ec);
+    if (!ec)
+        return normalized;
+    return path.lexically_normal();
+}
+
+static std::filesystem::path resolve_process_executable(const char *argv0) {
+    std::error_code ec;
+    auto proc_self = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec && !proc_self.empty())
+        return normalize_path(proc_self);
+
+    std::filesystem::path executable = (argv0 && *argv0) ? argv0 : "xcc";
+    if (executable.is_relative()) {
+        executable = std::filesystem::absolute(executable, ec);
+        if (ec)
+            executable = std::filesystem::path((argv0 && *argv0) ? argv0 : "xcc");
+    }
+    return normalize_path(executable);
+}
+
+static std::string normalize_target_name(std::string target_name) {
+    if (target_name.empty())
+        return target_name;
+    if (target_name.rfind("z80-", 0) == 0)
+        return target_name;
+    return "z80-" + target_name;
+}
+
+static std::string detect_invocation_target(const char *argv0,
+                                            const char *tool_name) {
+    if (argv0 == nullptr || *argv0 == '\0')
+        return {};
+
+    const std::string base = std::filesystem::path(argv0).filename().string();
+    const std::string suffix = std::string("-") + tool_name;
+    if (base.size() <= suffix.size())
+        return {};
+    if (base.compare(base.size() - suffix.size(), suffix.size(), suffix) != 0)
+        return {};
+    return base.substr(0, base.size() - suffix.size());
+}
+
+static void add_default_include_path(options &opts,
+                                     const std::filesystem::path &path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || !std::filesystem::is_directory(path, ec))
+        return;
+
+    const auto normalized = normalize_path(path).string();
+    for (const auto &existing : opts.include_paths) {
+        if (existing == normalized)
+            return;
+    }
+    opts.include_paths.push_back(normalized);
+}
+
+static void add_default_include_paths(options &opts, const char *argv0) {
+    const auto executable = resolve_process_executable(argv0);
+    const auto prefix = executable.parent_path().parent_path();
+
+    // GNU cross-toolchain prefix layout: target headers live under
+    // <prefix>/z80/include; <prefix>/include holds host SDK headers only.
+    add_default_include_path(opts, prefix / "z80" / "include");
+}
+
 } // namespace
 
 static bool apply_asm_dialect_option(options& opts, const char *mode) {
@@ -87,13 +157,14 @@ static bool apply_asm_dialect_option(options& opts, const char *mode) {
 
 void options::usage(const char *argv0) {
     fprintf(stderr,
-        "Usage: %s [options] <input.c> [-o <output>]\n"
+        "Usage: %s [options] <input>... [-o <output>]\n"
         "\n"
-        "X C Compiler (xcc) — C11 compiler for Z80\n"
+        "X C Compiler (xcc) — C11 compiler driver for Z80\n"
         "\n"
         "options:\n"
-        "  -o <file>         Output file (default: <input>.s)\n"
-        "  -S                Emit assembly (default)\n"
+        "  -o <file>         Output file\n"
+        "  -c                Compile and assemble only, emit .rel\n"
+        "  -S                Compile only, emit assembly\n"
         "  -O0               No optimization (default)\n"
         "  -O1               Enable peephole optimizer\n"
         "  -O2               Enable general optimization\n"
@@ -106,10 +177,17 @@ void options::usage(const char *argv0) {
         "  -D<macro>[=val]   Define preprocessor macro\n"
         "  -std=c11          Language standard (only c11 supported)\n"
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
+        "  --platform=<name> Select target platform include defaults\n"
         "  -g                Emit debug info\n"
         "  --dump-ir         Dump lowered IR to stderr\n"
         "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
         "  --mode=gnu        Output for GNU binutils assembler\n"
+        "  -L<dir>, -l<name> Forwarded to the linker\n"
+        "  -nostdlib         Forwarded to the linker\n"
+        "  -nostartfiles     Forwarded to the linker\n"
+        "  --oformat=<fmt>   Forwarded to the linker (xl, binary, elf, ihx)\n"
+        "  -T*, -e <sym>     Forwarded to the linker\n"
+        "  -Wl,<args>        Forward comma-separated args to the linker\n"
         "  -v                Verbose output\n"
         "  --version         Print version\n"
         "  --help            Print this help\n",
@@ -118,6 +196,8 @@ void options::usage(const char *argv0) {
 
 options options::parse(int argc, char **argv) {
     options opts;
+    opts.invocation_target = detect_invocation_target(
+        argc > 0 ? argv[0] : nullptr, "xcc");
 
     if (argc < 2) {
         opts.usage(argv[0]);
@@ -137,6 +217,42 @@ options options::parse(int argc, char **argv) {
         }
         if (strcmp(a, "-S") == 0) {
             opts.mode = output_mode::ASSEMBLY;
+        } else if (strcmp(a, "-c") == 0) {
+            opts.mode = output_mode::OBJECT;
+        } else if (strncmp(a, "-Wl,", 4) == 0) {
+            // Comma-separated arguments forwarded verbatim to the linker.
+            const char *p = a + 4;
+            while (*p) {
+                const char *comma = strchr(p, ',');
+                if (!comma) {
+                    opts.linker_args.emplace_back(p);
+                    break;
+                }
+                opts.linker_args.emplace_back(p, comma - p);
+                p = comma + 1;
+            }
+        } else if (strncmp(a, "-L", 2) == 0 || strncmp(a, "-l", 2) == 0
+                   || strcmp(a, "-nostdlib") == 0
+                   || strcmp(a, "-nostartfiles") == 0
+                   || strcmp(a, "--no-default-runtime") == 0
+                   || strncmp(a, "--oformat=", 10) == 0
+                   || strncmp(a, "-Ttext=", 7) == 0
+                   || strncmp(a, "-Tdata=", 7) == 0
+                   || strncmp(a, "-Tbss=", 6) == 0
+                   || strncmp(a, "--section-start=", 16) == 0
+                   || strncmp(a, "--script=", 9) == 0
+                   || strncmp(a, "-Map=", 5) == 0
+                   || strncmp(a, "--binary-range=", 15) == 0
+                   || strncmp(a, "--reserve=", 10) == 0) {
+            opts.linker_args.emplace_back(a);
+        } else if (strcmp(a, "-T") == 0 || strcmp(a, "-e") == 0
+                   || strcmp(a, "-B") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "xcc: error: %s requires an argument\n", a);
+                exit(1);
+            }
+            opts.linker_args.emplace_back(a);
+            opts.linker_args.emplace_back(argv[++i]);
         } else if (strncmp(a, "-o", 2) == 0) {
             if (a[2] != '\0') {
                 opts.output_file = a + 2;
@@ -176,6 +292,14 @@ options options::parse(int argc, char **argv) {
             opts.include_paths.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
         } else if (strncmp(a, "-D", 2) == 0) {
             opts.defines.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
+        } else if (strcmp(a, "--platform") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "xcc: error: --platform requires a value\n");
+                exit(1);
+            }
+            opts.platform_name = normalize_target_name(argv[++i]);
+        } else if (strncmp(a, "--platform=", 11) == 0) {
+            opts.platform_name = normalize_target_name(a + 11);
         } else if (strncmp(a, "-std=", 5) == 0) {
             // We only support c11; silently accept c99/c11/gnu11 etc.
         } else if (strncmp(a, "-masm=", 6) == 0) {
@@ -212,6 +336,9 @@ options options::parse(int argc, char **argv) {
         fprintf(stderr, "xcc: error: no input files\n");
         exit(1);
     }
+
+    add_default_include_paths(opts, argv[0]);
+    opts.driver_dir = resolve_process_executable(argv[0]).parent_path().string();
 
     return opts;
 }

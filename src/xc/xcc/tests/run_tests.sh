@@ -33,11 +33,14 @@ run_test() {
     local actual
     local tmpfile
 
-    # Per-test compiler flags: read from .opts file if present (one line, space-separated)
-    local opts="-S -O0"
+    # Per-test compiler flags: read from .opts file if present (one line,
+    # space-separated). -S is always forced: this harness compares the
+    # generated assembly, never the linked output.
+    local opts="-O0"
     if [[ -f "${base}.opts" ]]; then
         opts="$(cat "${base}.opts")"
     fi
+    opts="-S $opts"
 
     # Warning tests: compiler must succeed AND stderr must contain expected pattern.
     local warn_pat="${base}.warning"

@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 
 ROOT      ?= $(realpath ../..)
-DIST_DIR  ?= $(ROOT)/bin
+DIST_DIR  ?= $(ROOT)/bin/y
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 BUILD_DIR :=  $(ROOT)/build/tools/serial

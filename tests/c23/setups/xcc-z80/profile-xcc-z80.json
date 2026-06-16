@@ -1,5 +1,5 @@
 {
-  "compiler": "../../bin/bin/xcc",
+  "compiler": "../../bin/x/bin/xcc",
   "label": "xcc-z80",
   "std_flag": "",
   "artifact_name": "case.ihx",
@@ -22,7 +22,7 @@
     "{build_dir}"
   ],
   "version_command": [
-    "../../bin/bin/xcc",
+    "../../bin/x/bin/xcc",
     "--version"
   ]
 }

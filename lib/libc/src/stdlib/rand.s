@@ -11,14 +11,12 @@
 
         .module rand
         .optsdcc -mz80 sdcccall(1)
+
         .globl  _rand
-        .globl  __rand_state
         .globl  __mullong
-        .area   _DATA
-__rand_state::
-        .dw     1, 0                    ; initial state = 1 (as in C)
+        .globl  __rand_state
+
         .area   _CODE
-        ; -> DE = pseudo-random int in [0, RAND_MAX]
 _rand::
         ld      de,(__rand_state)       ; DE = low16
         ld      hl,(__rand_state + 2)   ; HL = high16

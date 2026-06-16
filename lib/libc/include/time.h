@@ -7,8 +7,8 @@
  * entirely on top of two platform hooks supplied by the selected sys backend
  * (lib/sys/<backend>/):
  *
- *     int __sys_gettimeofday(struct timespec *tv);        // read wall clock
- *     int __sys_settimeofday(const struct timespec *tv);  // set  wall clock
+ *     int gettimeofday(struct timespec *tv);        // read wall clock
+ *     int settimeofday(const struct timespec *tv);  // set  wall clock
  *
  * The "none" backend provides empty shells (epoch 0); an operating system
  * replaces them to wire in a real clock, after which the whole of <time.h>
@@ -77,7 +77,7 @@ size_t strftime(char *restrict s, size_t maxsize,
 /* ------------------------------------------------------------------------- */
 /* Platform clock hooks (supplied by the sys backend)                        */
 /* ------------------------------------------------------------------------- */
-int __sys_gettimeofday(struct timespec *tv);
-int __sys_settimeofday(const struct timespec *tv);
+int gettimeofday(struct timespec *tv);
+int settimeofday(const struct timespec *tv);
 
 #endif /* _TIME_H */

@@ -1,7 +1,7 @@
         ; time.s
         ;
         ; time() for the xcc Z80 libc, in assembly.  Reads the wall clock via
-        ; the platform hook __sys_gettimeofday and returns the whole-seconds field.
+        ; the platform hook gettimeofday and returns the whole-seconds field.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -11,7 +11,7 @@
 
 
         .globl  _time
-        .globl  ___sys_gettimeofday
+        .globl  _gettimeofday
 
         .area   _CODE
 
@@ -34,7 +34,7 @@ _time::
         push    hl                      ; save timer
         push    ix
         pop     hl
-        call    ___sys_gettimeofday           ; __time_ts.tv_sec = current seconds
+        call    _gettimeofday           ; __time_ts.tv_sec = current seconds
         pop     hl                      ; HL = timer
         pop     af                      ; Z set if timer was NULL
         jr      z,time_no_store

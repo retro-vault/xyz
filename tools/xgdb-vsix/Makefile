@@ -1,6 +1,6 @@
 ROOT ?= ../..
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin/x
 VSIX_STAGE_DIR ?= $(DIST_DIR)/pkg/vsix
 VSIX_VERSION ?= 0.1.0
 

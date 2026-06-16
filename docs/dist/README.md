@@ -1,122 +1,68 @@
-# Distribution Layout
+# xtools — Z80 toolchain
 
-This directory contains the staged build output for `xyz`.
+A complete C toolchain for the Z80: compiler, assembler, linker,
+archiver, object converter, and source-level debugger.
 
-It is arranged so selected subdirectories can be copied directly into a
-system prefix such as `/usr`:
+## Installation
 
-- `bin/` for host-side executables
-- `include/` for public headers, with Z80 target headers under `include/z80/`
-- `lib/` for host-side static libraries, with Z80 target libraries under
-  `lib/z80/`
-- `libexec/xcc/` for compiler-private runtime and include support
-- `share/xtools/` for staged documentation, examples, and templates
-- `pkg/` for generated package artifacts
+The directory this README sits in is a self-contained, relocatable
+install prefix. Copy it anywhere and add `bin/` to your PATH:
 
-It also contains target-specific output that is not part of a normal
-host `/usr` layout:
+```bash
+sudo cp -R . /opt/xtools
+echo 'export PATH=/opt/xtools/bin:$PATH' >> ~/.bashrc
+```
 
-- `z80/` for generated generic and platform-specific target deliverables
+No environment variables or configuration files are needed — the tools
+find their headers, runtime, and libraries relative to their own
+location.
 
-## Top-Level Contents
+Alternatively, install the Debian package from `pkg/deb/`:
 
-### `bin/bin`
+```bash
+sudo dpkg -i pkg/deb/xtools_*.deb
+```
 
-Host-side command-line programs:
+## Quick start
 
-- `appmake` converts tape and snapshot input into application payloads
-- `microdrive` creates and edits `.mdr` cartridge images
-- `serial` transfers data over a serial link
-- `xas` assembler for Z80 build products
-- `xar` archive tool for `.rel` libraries
-- `xcc` C compiler for Z80 targets
-- `xgdb` debugger frontend
-- `xgdb-z80` local Z80 debug target
-- `xld` linker for Z80 build products
+```bash
+# Compile, assemble, and link in one step
+xcc hello.c -o hello.xl
 
-### `bin/include`
+# Several files, with optimization
+xcc -Os main.c util.c -o app.xl
 
-Public host-side library headers staged from the repository root `include/`
-tree and library public include trees.
+# Flat binary at a fixed address
+xcc main.c --oformat=binary -Ttext=0x8000 -o app.bin
 
-Current host-side headers include:
+# Debug a program
+xcc -g main.c -o app.xl
+xgdb-z80 --listen 127.0.0.1:9000 &
+xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
+```
 
-- `microdrive/` for the microdrive library API
-- `rsp/` for the remote-serial-protocol library API
-- `xbfd/` for the binary/debug-info library API
-- `xgdb/` for the debugger library API
+## The tools
 
-### `bin/include/z80`
+| Tool | Purpose | Manual |
+|---|---|---|
+| `xcc` | C11 compiler driver (GNU-style: drives xas and xld) | `share/doc/XCC.md` |
+| `xas` | Assembler (SDCC and GNU dialects) | `share/doc/XAS.md` |
+| `xld` | Linker (XL, flat binary, Intel HEX, ELF output) | `share/doc/XLD.md` |
+| `xar` | Static library archiver | `share/doc/XAR.md` |
+| `xobjcopy` | Object/archive format conversion | `share/doc/XOBJCOPY.md` |
+| `xgdb`, `xgdb-z80` | Source-level debugger and Z80 gdbserver | `share/doc/XGDB.md` |
 
-Public target-side headers for Z80 programs.
+## Prefix layout
 
-Current Z80 headers include:
+```text
+bin/          the tools
+lib/          host SDK libraries (libxbfd, librsp, libxgdb)
+include/      host SDK headers (xbfd/, rsp/, xgdb/)
+z80/include/  C library headers for the target
+z80/lib/      crt0, linker scripts, libc, runtime, platform libraries
+share/doc/    tool manuals
+pkg/          installable packages (.deb, .vsix)
+```
 
-- the staged C23 libc work under `lib/libc/include/`
-- `platform/yos.h` for the YOS platform interface
-
-### `bin/lib`
-
-Host-side static libraries:
-
-- `libmicrodrive.a`
-- `librsp.a`
-- `libxbfd.a`
-- `libxgdb.a`
-- `libxgdb_cli.a`
-- `libxgdb_mi.a`
-
-### `bin/lib/z80`
-
-Target-side Z80 libraries:
-
-- `libc.a` for the current standard C library work
-
-### `bin/lib/z80/spectrum`
-
-Reserved for ZX Spectrum-specific target libraries such as `crt0` or platform
-overrides.
-
-### `bin/libexec/xcc`
-
-Compiler-private support files used by the Z80 toolchain:
-
-- `include/` as a compatibility mirror of the staged Z80 libc headers
-- `runtime/` for assembled `.rel` helpers and `z80.lib` / `runtime.lib`
-
-### `bin/share/xtools/docs`
-
-Mirrored project documentation staged from the repository `docs/` tree.
-The staged layout keeps the same categories:
-
-- `README.md` as the documentation index
-- `dist/` for distribution-layout documentation
-- `howtos/` for workflow guides
-- `research/` for imported reference material
-- `standards/` for coding and assembly standards
-- `todo/` for current gap analyses
-- `components/` for staged README files owned by individual tools and
-  subprojects
-
-Current staged component documents include:
-
-- `components/APPMAKE.md`
-- `components/MICRODRIVE.md`
-- `components/SERIAL.md`
-- `components/XLD.md`
-- `components/YOS.md`
-
-### `bin/z80/spectrum`
-
-ZX Spectrum target deliverables:
-
-- `bin/` for ROM images, staged application payloads, and `.mdr` media
-- `include/` reserved for extra platform headers
-- `lib/` reserved for extra platform libraries
-
-### `bin/pkg`
-
-Generated package artifacts:
-
-- `deb/` for Debian package outputs
-- `vsix/` for staged VS Code extension packages
+The default target platform is CP/M 3 (`libcpm3.a`); select another
+with `--platform=<name>` if it is staged under `z80/lib/`.

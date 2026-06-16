@@ -51,7 +51,7 @@ xyz/
 ├── libc/                     # C library (usable by tools and by OS)
 │   ├── include/
 │   ├── src/
-│   ├── sys/                  # none/, z80/, cpm/, spectrum backends, etc.
+│   ├── sys/                  # none/, cpm3/, spectrum backends, etc.
 │   ├── tests/                # local libc tests (moved from tests/libc/)
 │   └── Makefile
 │
@@ -128,6 +128,23 @@ When adding tests for new C23 features (or anything else):
   - Build the toolchain product.
   - Stage the necessary headers and runtime libraries.
   - Package via `pkg/` (separate xtools packaging recipe is desirable).
+- The current staged xtools layout is now prefix-rooted and relocatable:
+  - `bin/x/` is the standalone xtools install prefix.
+  - `bin/x/bin/` contains the installed executables.
+  - `bin/x/include/` and `bin/x/lib/` hold host SDK headers and libraries
+    (`xbfd`, `rsp`, `xgdb`).
+  - `bin/x/z80/include/` stages the target libc headers and `yos.h`.
+  - `bin/x/z80/lib/` stages `crt0`, linker scripts, `libruntime.a`, `libc.a`,
+    and a single default platform archive such as `libcpm3.a`.
+  - `bin/y/` holds YOS build outputs plus YOS-adjacent host tools and support
+    libraries.
+  - `bin/z/` holds staged target assets, apps, and media.
+- Default probing is GCC-style and driven by the executable install location:
+  - `xcc` probes relative to its prefix for headers.
+  - `xld` probes relative to its prefix for runtime/startup libraries.
+  - The common standard library and runtime stay shared under
+    `bin/x/z80/lib/`.
+  - The current default staged platform payload is CP/M 3.
 - The resulting xtools package should be usable with different sysroots (bare metal, YOS, future GUI system, third-party OS, etc.).
 
 ## Migration Path (Incremental)

@@ -1,11 +1,11 @@
 _THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT ?= $(abspath $(_THIS_DIR)/../..)
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
-PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
-TARGET_INCLUDE_DIR ?= $(DIST_DIR)/include/z80
-TARGET_LIB_DIR ?= $(DIST_DIR)/lib/z80
+TARGET_DIR ?= $(DIST_DIR)/z80
+TARGET_LIB_DIR ?= $(TARGET_DIR)/lib
+TARGET_INCLUDE_DIR ?= $(TARGET_DIR)/include
 
 BUILD_TARGET := $(BUILD_DIR)/lib/libc.a
 DIST_TARGET  := $(TARGET_LIB_DIR)/libc.a
@@ -15,10 +15,9 @@ DIST_TARGET  := $(TARGET_LIB_DIR)/libc.a
 all: $(DIST_TARGET) stage-headers
 
 build:
-	$(MAKE) -C src ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(HOST_BIN_DIR)
+	$(MAKE) -C src ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(HOST_BIN_DIR) WITH_SYS=0 AR8FLAGS="--mode=gnu rcs"
 
 $(DIST_TARGET): build | $(TARGET_LIB_DIR)
-	rm -f $(PUBLIC_LIB_DIR)/libc.a
 	cp $(BUILD_TARGET) $@
 
 stage-headers: | $(TARGET_INCLUDE_DIR)

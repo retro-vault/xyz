@@ -7,19 +7,16 @@
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
 
+
+
+
         .module ffs
         .optsdcc -mz80 sdcccall(1)
-
 
         .globl  _ffs
         .globl  __ffs_scan_byte
 
         .area   _CODE
-
-        ; _ffs
-        ; inputs:  HL = int value
-        ; outputs: DE = 1-based index of the lowest set bit, or 0
-        ; clobbers: AF, BC
 _ffs::
         ld      a,l
         or      a
@@ -46,12 +43,3 @@ ffs_none:
         ; inputs:  A = non-zero byte
         ; outputs: B = 1-based index of the lowest set bit (1..8)
         ; clobbers: AF
-__ffs_scan_byte::
-        ld      b,#1
-ffs_scan_byte_loop:
-        rra
-        jr      c,ffs_scan_byte_done
-        inc     b
-        jr      ffs_scan_byte_loop
-ffs_scan_byte_done:
-        ret

@@ -13,6 +13,9 @@ namespace xld {
 
     class runtime {
     public:
+        static std::optional<std::filesystem::path> find_default_sdcc_runtime_dir(
+            const cli_options& opts,
+            const std::filesystem::path& executable_path);
         static void apply_sdcc_runtime(cli_options& opts);
     };
 

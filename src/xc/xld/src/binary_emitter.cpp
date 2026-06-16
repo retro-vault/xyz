@@ -31,7 +31,10 @@ namespace xld {
         const uint16_t end = ctx.code_buffer.size() > 0x10000u
             ? 0xFFFF
             : static_cast<uint16_t>(ctx.code_buffer.size() - 1u);
-        return {0x0000, end};
+        const uint16_t start = ctx.image_base <= end
+            ? static_cast<uint16_t>(ctx.image_base)
+            : 0x0000;
+        return {start, end};
     }
 
     // Helper: write uint16_t in little-endian.

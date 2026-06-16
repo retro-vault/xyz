@@ -20,8 +20,8 @@
 #     work/...
 #
 # Usage:
-#   bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc
-#   bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc --suite all
+#   bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc
+#   bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc --suite all
 #
 set -euo pipefail
 
@@ -29,7 +29,7 @@ XCC_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$XCC_ROOT/../../.." && pwd)"
 TEST_ROOT="$XCC_ROOT/tests/data/exec"
 INCLUDE_DIR="$TEST_ROOT/include"
-DEFAULT_XCC="$REPO_ROOT/bin/bin/xcc"
+DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
 
 XCC="$DEFAULT_XCC"
 SUITE="int"

@@ -254,6 +254,7 @@ namespace xld {
 
         std::vector<placed_area_ref> placed_areas;
         uint32_t max_end = 0;
+        uint32_t min_start = UINT32_MAX;
 
         for (const auto& mod : ctx.modules) {
             for (const auto& a : mod->areas()) {
@@ -290,10 +291,13 @@ namespace xld {
                 placed_areas.push_back({&a, mod.get()});
                 max_end = std::max<uint32_t>(max_end,
                     static_cast<uint32_t>(start) + a.size());
+                if (a.size() > 0)
+                    min_start = std::min<uint32_t>(min_start, start);
             }
         }
 
         ctx.code_size = max_end;
+        ctx.image_base = (min_start == UINT32_MAX) ? 0 : min_start;
 
         // Print memory map if requested.
         if (ctx.print_map) {

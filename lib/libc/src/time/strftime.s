@@ -14,21 +14,24 @@
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
 
+
+
+
+
         .module strftime
         .optsdcc -mz80 sdcccall(1)
 
-
         .globl  _strftime
+        .globl  __sf_emit
 
-SF_OUT      .equ -10       ; current output pointer
-SF_START    .equ -8        ; original output base
-SF_REM      .equ -6        ; bytes remaining (excludes the NUL slot)
 SF_FMT      .equ -4        ; current format pointer
 SF_LEAD     .equ -2        ; leading-zero suppression flag for %Y
+SF_OUT      .equ -10       ; current output pointer
+SF_REM      .equ -6        ; bytes remaining (excludes the NUL slot)
+SF_START    .equ -8        ; original output base
 SF_TRUNC    .equ -1        ; set when output was truncated
 
         .area   _CODE
-
 __sf_wabbr: .ascii  "SunMonTueWedThuFriSat"
 __sf_mabbr: .ascii  "JanFebMarAprMayJunJulAugSepOctNovDec"
 
@@ -145,35 +148,6 @@ sf_ret0:
 
         ; __sf_emit: emit the char in A if room remains
         ; clobbers AF; preserves BC, DE, HL, IX
-__sf_emit::
-        push    hl
-        push    de
-        ld      l,SF_REM(ix)
-        ld      h,SF_REM + 1(ix)
-        ld      d,a
-        ld      a,h
-        or      l
-        jp      z,sf_emit_full          ; no room -> mark truncation
-        dec     hl
-        ld      SF_REM(ix),l
-        ld      SF_REM + 1(ix),h
-        ld      l,SF_OUT(ix)
-        ld      h,SF_OUT + 1(ix)
-        ld      (hl),d
-        inc     hl
-        ld      SF_OUT(ix),l
-        ld      SF_OUT + 1(ix),h
-        pop     de
-        pop     hl
-        ret
-sf_emit_full:
-        ld      a,#1
-        ld      SF_TRUNC(ix),a
-        pop     de
-        pop     hl
-        ret
-
-        ; sf_emit2z: emit A (0..99) as two zero-padded digits
 sf_emit2z:
         ld      c,#0x30
         jr      sf_emit2

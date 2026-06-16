@@ -7,20 +7,31 @@ C++17 with a hand-written parser, typed IR, and GCC-compatible command line.
 
 ## Quick start
 
+xcc is a GNU-style compiler driver: it compiles C itself and spawns
+`xas` to assemble and `xld` to link, exactly like gcc drives `as`/`ld`.
+
 ```bash
 # Build
 make
 
-# Compile a C file to Z80 assembly
-./build/bin/xcc hello.c -o hello.s
+# Compile, assemble, and link in one step (default output: a.out)
+xcc hello.c -o hello.xl
 
-# Link and assemble
-sdasz80 -o hello.rel hello.s
-sdldz80 -i hello.ihx /usr/local/lib/xcc/crt0.rel hello.rel \
-        /usr/local/lib/xcc/runtime/*.rel
+# Multiple translation units, mixed input kinds
+xcc main.c util.s extra.rel -o app.xl
 
-# Or just inspect the assembly on stdout
-./build/bin/xcc hello.c -o -
+# Compile and assemble only (-c), emit hello.rel
+xcc -c hello.c
+
+# Compile only (-S), emit hello.s
+xcc -S hello.c
+
+# Inspect the assembly on stdout
+xcc -S hello.c -o -
+
+# Forward flags to the linker
+xcc hello.c --oformat=binary -Ttext=0x8000 -o hello.bin
+xcc hello.c -nostdlib -Wl,-Map=hello.map -o bare.xl
 ```
 
 ---
@@ -36,7 +47,7 @@ build/dist/
     xcc                  <- the compiler binary
   lib/xcc/runtime/
     *.rel                <- per-helper Z80 runtime objects
-  include/z80/
+  z80/include/
     *.h                  <- canonical target-side libc headers
 ```
 
@@ -47,8 +58,8 @@ make dist
 sudo cp build/dist/bin/xcc                /usr/local/bin/
 sudo mkdir -p /usr/local/lib/xcc/runtime
 sudo cp build/dist/lib/xcc/runtime/*.rel  /usr/local/lib/xcc/runtime/
-sudo mkdir -p /usr/local/include/z80
-sudo cp -r build/dist/include/z80/.       /usr/local/include/z80/
+sudo mkdir -p /usr/local/z80/include
+sudo cp -r build/dist/z80/include/.       /usr/local/z80/include/
 ```
 
 ---

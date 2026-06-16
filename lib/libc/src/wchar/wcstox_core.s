@@ -18,25 +18,26 @@
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
 
+
+
+
+
         .module wcstox_core
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __wcstox_core
-        .globl  __wsx_negate
 
+WSX_BASE        .equ -2
+WSX_DIG         .equ -1
+WSX_ENDP        .equ -5
+WSX_FLAGS       .equ -3
 WSX_FLAG_ANY    .equ 0x01
 WSX_FLAG_NEG    .equ 0x02
 WSX_FLAG_OVF    .equ 0x04
-
-WSX_TMP         .equ -15
 WSX_NPTR        .equ -7
-WSX_ENDP        .equ -5
-WSX_FLAGS       .equ -3
-WSX_BASE        .equ -2
-WSX_DIG         .equ -1
+WSX_TMP         .equ -15
 
         .area   _CODE
-
 __wcstox_core::
         ld      a,c
         ld      c,l
@@ -387,22 +388,3 @@ wsx_add64_l:
         djnz    wsx_add64_l
         ret
 
-__wsx_negate::
-        ld      b,#8
-wsxn_cpl:
-        ld      a,(hl)
-        cpl
-        ld      (hl),a
-        inc     hl
-        djnz    wsxn_cpl
-        ld      bc,#-8
-        add     hl,bc
-        ld      b,#8
-        scf
-wsxn_inc:
-        ld      a,(hl)
-        adc     a,#0
-        ld      (hl),a
-        inc     hl
-        djnz    wsxn_inc
-        ret

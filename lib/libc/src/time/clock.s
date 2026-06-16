@@ -2,7 +2,7 @@
         ;
         ; clock() for the xcc Z80 libc, in assembly.  With CLOCKS_PER_SEC == 1
         ; the processor-time clock is simply the wall clock read through the
-        ; platform hook __sys_gettimeofday.
+        ; platform hook gettimeofday.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -12,7 +12,7 @@
 
 
         .globl  _clock
-        .globl  ___sys_gettimeofday
+        .globl  _gettimeofday
 
         .area   _CODE
 
@@ -30,7 +30,7 @@ _clock::
         add     ix,sp
         push    ix
         pop     hl
-        call    ___sys_gettimeofday
+        call    _gettimeofday
         ld      e,0(ix)
         ld      d,1(ix)
         ld      l,2(ix)

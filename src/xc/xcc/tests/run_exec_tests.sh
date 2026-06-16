@@ -54,7 +54,7 @@ if [[ -z "$XAS" ]]; then
     if [[ -x "$(dirname "$XCC")/xas" ]]; then
         XAS="$(dirname "$XCC")/xas"
     else
-        XAS="$REPO_ROOT/bin/bin/xas"
+        XAS="$REPO_ROOT/bin/x/bin/xas"
     fi
 fi
 
@@ -865,18 +865,77 @@ resolve_modules() {
     done
 }
 
+# Generic fallback resolver: index every exported symbol in the library
+# trees to the file defining it, then pull in files for still-unresolved
+# references. Keeps the harness working as library files are split into
+# one-routine-per-module granularity.
+SYMBOL_INDEX_FILE=""
+
+exported_symbols_of() {
+    # exported = label:: definitions, plus .globl-declared symbols that
+    # the same file defines with a single-colon label
+    {
+        grep -oE '^[A-Za-z_][A-Za-z0-9_]*::' "$1" 2>/dev/null | sed 's/::$//'
+        comm -12 \
+            <(grep -oE '^[[:space:]]*\.globl[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' "$1" 2>/dev/null | awk '{print $2}' | sort -u) \
+            <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*:' "$1" 2>/dev/null | sed 's/:$//' | sort -u)
+    } | sort -u
+}
+
+build_symbol_index() {
+    [[ -n "$SYMBOL_INDEX_FILE" ]] && return
+    SYMBOL_INDEX_FILE="$(mktemp /tmp/xcc_exec_symidx_XXXXXX)"
+    local f sym
+    while IFS= read -r f; do
+        exported_symbols_of "$f" | while IFS= read -r sym; do
+            printf '%s %s\n' "$sym" "$f"
+        done
+    done < <(find "$LIBC_SRC_DIR" "$SYS_NONE_DIR" "$RUNTIME_DIR" \
+                  "$ROOT_DIR/tests/tools/z80emu" -name '*.s' 2>/dev/null) \
+        >> "$SYMBOL_INDEX_FILE"
+    sort -u -o "$SYMBOL_INDEX_FILE" "$SYMBOL_INDEX_FILE"
+}
+
+resolve_index_modules() {
+    build_symbol_index
+    local defined refs ref file f
+    defined="$( { for f in "${MODULES[@]}" "$@"; do
+                      [[ -f "$f" ]] || continue
+                      grep -oE '^[A-Za-z_][A-Za-z0-9_]*::?' "$f" 2>/dev/null \
+                          | sed 's/:*$//'
+                  done; } | sort -u)"
+    refs="$(cat /dev/null "${MODULES[@]}" "$@" 2>/dev/null \
+        | sed 's/;.*//' \
+        | grep -vE '^[[:space:]]*\.(module|file|globl|global|optsdcc|area|title)' \
+        | grep -oE '[A-Za-z_][A-Za-z0-9_]*' | sort -u)"
+    while IFS= read -r ref; do
+        [[ -n "$ref" ]] || continue
+        grep -qx "$ref" <<< "$defined" && continue
+        file="$(grep -m1 "^$ref " "$SYMBOL_INDEX_FILE" | cut -d' ' -f2-)"
+        [[ -n "$file" ]] && add_module "$file"
+    done <<< "$refs"
+}
+
 resolve_module_closure() {
     local roots=("$@")
     local before after
 
     while :; do
+        # explicit symbol maps first, to a fixed point
+        while :; do
+            before=${#MODULES[@]}
+            resolve_modules "${roots[@]}"
+            resolve_libc_modules "${roots[@]}"
+            if [[ ${#MODULES[@]} -gt 0 ]]; then
+                resolve_modules "${MODULES[@]}"
+                resolve_libc_modules "${MODULES[@]}"
+            fi
+            after=${#MODULES[@]}
+            [[ $after -eq $before ]] && break
+        done
+        # index-based fallback for anything the maps do not know
         before=${#MODULES[@]}
-        resolve_modules "${roots[@]}"
-        resolve_libc_modules "${roots[@]}"
-        if [[ ${#MODULES[@]} -gt 0 ]]; then
-            resolve_modules "${MODULES[@]}"
-            resolve_libc_modules "${MODULES[@]}"
-        fi
+        resolve_index_modules "${roots[@]}"
         after=${#MODULES[@]}
         [[ $after -eq $before ]] && break
     done

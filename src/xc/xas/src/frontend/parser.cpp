@@ -103,14 +103,20 @@ namespace xas {
         return false;
     }
 
+    // Macro / repeat directives are consumed by the macro preprocessor before
+    // parsing.  If one reaches the parser it is unbalanced (e.g. a stray .endm
+    // or an opener the preprocessor never saw), which is a hard error.
     static bool is_unsupported_macro_directive(const std::string& s)
     {
         return s == "macro"
             || s == "endm"
             || s == "mend"
+            || s == "mexit"
             || s == "rept"
             || s == "irp"
-            || s == "irpc";
+            || s == "irpc"
+            || s == "endr"
+            || s == "exitm";
     }
 
     // -------------------------------------------------------------------------
@@ -357,7 +363,8 @@ namespace xas {
         if (is_unsupported_macro_directive(name)) {
             throw parse_error(peek().file,
                               s.source_line,
-                              "macro directives are not supported in xas source mode");
+                              "unbalanced macro/repeat directive '." + name +
+                              "' (no matching definition or terminator)");
         }
 
         // .module / .file — just a module name string

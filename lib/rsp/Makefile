@@ -1,6 +1,6 @@
 ROOT        ?= ../..
 BUILD_DIR   ?= $(ROOT)/build
-DIST_DIR    ?= $(ROOT)/bin
+DIST_DIR    ?= $(ROOT)/bin/x
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX         ?= g++
 CXXFLAGS    ?= -std=c++20 -g

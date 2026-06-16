@@ -1,6 +1,10 @@
-        ;; close.s  (sys backend: none / bare metal)
+        ;; close.s  (sys backend: none — template)
         ;;
-        ;; Thin entry wrapper around the shared simple-buffer file backend.
+        ;; int close(int fd)
+        ;;   HL = fd                            (sdcccall(1))
+        ;;   returns DE = 0 on success, 0xFFFF (-1) on error.
+        ;;
+        ;; No filesystem here, so there is nothing to release: report success.
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
@@ -9,9 +13,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _close
-        .globl  __sys_none_close
 
         .area   _CODE
-
 _close::
-        jp      __sys_none_close
+        ld      de,#0                   ; success
+        ret

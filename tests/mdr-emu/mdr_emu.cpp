@@ -44,8 +44,8 @@ constexpr uint16_t kDirAddr = 0xC100;
 constexpr uint16_t kLoadAddr = 0xC400;
 constexpr uint16_t kSaveAddr = 0xD000;
 constexpr std::size_t kDirEntrySize = 14;
-const fs::path kYosRomRelativePath = "bin/z80/spectrum/bin/yos.rom";
-const fs::path kYosCdbRelativePath = "bin/z80/spectrum/bin/yos.cdb";
+const fs::path kYosRomRelativePath = "bin/y/z80/spectrum/bin/yos.rom";
+const fs::path kYosCdbRelativePath = "bin/y/z80/spectrum/bin/yos.cdb";
 
 bool g_strict_timing = false;
 bool g_trace_writes = false;

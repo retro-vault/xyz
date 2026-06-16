@@ -18,7 +18,7 @@ EXPECTED_CSV="$BENCH_ROOT/expected.csv"
 CRT0_S="$REPO_ROOT/src/xc/xcc/tests/tools/z80emu/crt0_sdasz80.s"
 IHX2BIN="$REPO_ROOT/tests/runtime/tools/ihx2bin.py"
 RUNNER_BIN="$REPO_ROOT/build/bin/z80_exec"
-DEFAULT_XCC="$REPO_ROOT/bin/bin/xcc"
+DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
 
 XCC="$DEFAULT_XCC"
 OUTDIR="$REPO_ROOT/build/benchmarks"

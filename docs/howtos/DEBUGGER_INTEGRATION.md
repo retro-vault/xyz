@@ -195,7 +195,7 @@ Start the emulator-side RSP server first:
 Then connect with `xgdb`:
 
 ```sh
-bin/bin/xgdb --exec program.bin --cdb program.cdb --map program.map --remote 127.0.0.1:9000
+bin/x/bin/xgdb --exec program.bin --cdb program.cdb --map program.map --remote 127.0.0.1:9000
 ```
 
 Useful notes:

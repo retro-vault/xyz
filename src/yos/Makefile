@@ -14,7 +14,7 @@
 ROOT     ?= $(realpath ../..)
 THIS_DIR := $(realpath .)
 BUILD_DIR := $(ROOT)/build/yos
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin/y
 ZX_ROMS_DIR ?= $(DIST_DIR)/z80/spectrum/bin
 BIN_DIR   := $(ZX_ROMS_DIR)
 TARGET :=  yos

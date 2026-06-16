@@ -1,19 +1,18 @@
-        ;; read.s  (sys backend: none / bare metal)
+        ;; read.s  (sys backend: none — template)
         ;;
-        ;; Thin entry wrapper around the shared simple-buffer file backend.
-        ;; fd 0 reads from the synthetic console stream; fd >= 3 reads from
-        ;; mounted in-memory files.
+        ;; int read(int fd, void *buf, unsigned len) — DISK block read.
+        ;;   HL = fd, DE = buf, BC = len    returns DE = bytes read, 0=EOF, -1.
         ;;
-        ;; MIT License (see: LICENSE)
-        ;; Copyright (C) 2026 tomaz stih
+        ;; Console input is getchar(); this handles file descriptors (>= 3).
+        ;; The template has no filesystem, so it returns EOF.
 
         .module read
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _read
-        .globl  __sys_none_read
 
         .area   _CODE
-
 _read::
-        jp      __sys_none_read
+        ;; TODO: read BC bytes from file fd (HL) into (DE); return count.
+        ld      de,#0                   ; EOF: no filesystem
+        ret

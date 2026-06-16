@@ -4,7 +4,7 @@
 _THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT      ?= $(abspath $(_THIS_DIR)/../../..)
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR  ?= $(ROOT)/bin
+DIST_DIR  ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 CXX ?= g++
@@ -34,7 +34,7 @@ RUNTIME_SOURCES := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
 DISTDIR := $(PROJECT_BUILD_DIR)/dist
 DIST_BINDIR := $(DISTDIR)/bin
 DIST_LIBDIR := $(DISTDIR)/lib/xcc/runtime
-DIST_INCDIR := $(DISTDIR)/include/z80
+DIST_INCDIR := $(DISTDIR)/z80/include
 
 SRCS := \
   $(SRCDIR)/frontend/diag.cpp \
@@ -130,7 +130,7 @@ dist: $(TARGET)
 	@echo "Staged:"
 	@echo "  $(DIST_BINDIR)/xcc         -> /usr/local/bin/xcc"
 	@echo "  $(DIST_LIBDIR)/*.rel -> /usr/local/lib/xcc/runtime/"
-	@echo "  $(DIST_INCDIR)        -> /usr/local/include/z80/"
+	@echo "  $(DIST_INCDIR)        -> /usr/local/z80/include/"
 
 # Static analysis. Requires cppcheck in PATH; set LINT=1 to enable.
 # Example: make lint  or  LINT=1 make lint

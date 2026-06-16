@@ -5,8 +5,8 @@ reference remote target.
 
 Built binaries:
 
-- `bin/bin/xgdb`
-- `bin/bin/xgdb-z80`
+- `bin/x/bin/xgdb`
+- `bin/x/bin/xgdb-z80`
 
 ## Components
 
@@ -39,7 +39,7 @@ make -C src/xc/xgdb all
 Basic form:
 
 ```sh
-bin/bin/xgdb --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
+bin/x/bin/xgdb --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
 ```
 
 Supported startup switches:
@@ -66,7 +66,7 @@ but the current `xgdb` entry point does not yet expose
 For DDD integration use `xgdb` directly:
 
 ```sh
-ddd --debugger bin/bin/xgdb
+ddd --debugger bin/x/bin/xgdb
 ```
 
 DDD classifies debuggers partly by executable name. Now that the real
@@ -125,13 +125,13 @@ Address expressions currently supported by `break`, `disassemble`, and
 Start the reference target:
 
 ```sh
-bin/bin/xgdb-z80 --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
+bin/x/bin/xgdb-z80 --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
 ```
 
 Connect with the debugger:
 
 ```sh
-bin/bin/xgdb --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
+bin/x/bin/xgdb --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
 ```
 
 Then inside `xgdb`:
@@ -179,7 +179,7 @@ previous source file just to keep source stepping alive.
 Basic form:
 
 ```sh
-bin/bin/xgdb-z80 --listen 127.0.0.1:9000 --load-bin test.bin --origin 0x0000 --pc 0x0000 --sp 0xFFFF
+bin/x/bin/xgdb-z80 --listen 127.0.0.1:9000 --load-bin test.bin --origin 0x0000 --pc 0x0000 --sp 0xFFFF
 ```
 
 Supported switches:

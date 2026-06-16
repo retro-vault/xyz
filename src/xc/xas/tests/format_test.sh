@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-XAS="${XAS:-$ROOT/bin/bin/xas}"
+XAS="${XAS:-$ROOT/bin/x/bin/xas}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -74,30 +74,37 @@ need_line $'ld\t5(ix), a' "$tmpdir/out.sdcc"
 need_line ".dw start" "$tmpdir/out.sdcc"
 "$XAS" --mode=sdcc -o "$tmpdir/out.rel" "$tmpdir/out.sdcc"
 
+# Macros are expanded by the preprocessor before parsing.  A defined-but-called
+# macro must assemble cleanly (the body lands in the output).  Dedicated macro
+# behaviour is covered exhaustively in macro_test.sh.
 cat > "$tmpdir/in.macro.gnu" <<'EOF'
-.macro demo
-    nop
-.endm
+        .section .text
+        .macro demo
+        nop
+        .endm
+        demo
 EOF
-
-if "$XAS" --mode=gnu -o "$tmpdir/macro.o" "$tmpdir/in.macro.gnu" \
-        >"$tmpdir/macro.out" 2>"$tmpdir/macro.err"; then
-    fail "GNU macro source unexpectedly accepted"
-fi
-grep -Fq "macro directives are not supported" "$tmpdir/macro.err" \
-    || fail "missing GNU macro rejection diagnostic"
+"$XAS" --mode=gnu -o "$tmpdir/macro.o" "$tmpdir/in.macro.gnu" \
+        >"$tmpdir/macro.out" 2>"$tmpdir/macro.err" \
+    || { cat "$tmpdir/macro.err"; fail "GNU macro source rejected"; }
 
 cat > "$tmpdir/in.macro.sdcc" <<'EOF'
-.macro demo
-    nop
-.endm
+        .area _CODE
+        .macro demo
+        nop
+        .endm
+        demo
 EOF
+"$XAS" --mode=sdcc -o "$tmpdir/macro.rel" "$tmpdir/in.macro.sdcc" \
+        >"$tmpdir/macro_sdcc.out" 2>"$tmpdir/macro_sdcc.err" \
+    || { cat "$tmpdir/macro_sdcc.err"; fail "SDCC macro source rejected"; }
 
-if "$XAS" --mode=sdcc -o "$tmpdir/macro.rel" "$tmpdir/in.macro.sdcc" \
-        >"$tmpdir/macro_sdcc.out" 2>"$tmpdir/macro_sdcc.err"; then
-    fail "SDCC macro source unexpectedly accepted"
+# An unbalanced macro directive that survives preprocessing is still a hard
+# error (the parser safety net).
+printf '        .area _CODE\n        .endm\n' > "$tmpdir/in.stray.sdcc"
+if "$XAS" --mode=sdcc -o "$tmpdir/stray.rel" "$tmpdir/in.stray.sdcc" \
+        >"$tmpdir/stray.out" 2>"$tmpdir/stray.err"; then
+    fail "stray .endm unexpectedly accepted"
 fi
-grep -Fq "macro directives are not supported" "$tmpdir/macro_sdcc.err" \
-    || fail "missing SDCC macro rejection diagnostic"
 
 echo "${GREEN}PASS${RESET}: xas format conversion"

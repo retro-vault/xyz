@@ -1,6 +1,6 @@
 ROOT ?= ../../..
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 CXXFLAGS ?= -std=c++2a -Wall -Wextra -Wpedantic -g

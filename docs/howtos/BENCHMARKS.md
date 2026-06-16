@@ -17,7 +17,7 @@ linker layout, or startup code are mixed in.
 Run it with:
 
 ```sh
-bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/bin/xcc
+bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc
 ```
 
 Important properties:
@@ -48,15 +48,15 @@ Use this when you want something closer to a real tiny-Z80 program:
 Run it with:
 
 ```sh
-bash tests/run_benchmarks.sh ./bin/bin/xcc
+bash tests/run_benchmarks.sh ./bin/x/bin/xcc
 ```
 
 Useful options:
 
 ```sh
-bash tests/run_benchmarks.sh ./bin/bin/xcc --filter 'crc16|vm_dispatch'
-bash tests/run_benchmarks.sh ./bin/bin/xcc --cycles 10000000
-bash tests/run_benchmarks.sh ./bin/bin/xcc --outdir /tmp/xyz-bench
+bash tests/run_benchmarks.sh ./bin/x/bin/xcc --filter 'crc16|vm_dispatch'
+bash tests/run_benchmarks.sh ./bin/x/bin/xcc --cycles 10000000
+bash tests/run_benchmarks.sh ./bin/x/bin/xcc --outdir /tmp/xyz-bench
 ```
 
 Default output:

@@ -11,12 +11,15 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 
 #include <xas/cli.h>
 #include <xas/errors.h>
 #include <xas/backend/source_emitter.h>
+#include <xas/backend/macro_translate.h>
 #include <xas/frontend/lexer.h>
+#include <xas/frontend/macro.h>
 #include <xas/frontend/parser.h>
 #include <xas/backend/emitter.h>
 
@@ -44,15 +47,50 @@ int main(int argc, char** argv)
             return 1;
         }
 
-        // Lex.
-        xas::lexer lex;
-        auto tokens = lex.tokenise(opts.input, in);
+        // Slurp the whole source.
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        std::string source = buffer.str();
 
-        // Parse.
-        xas::parser par;
-        auto stmts = par.parse(tokens, opts.mode);
+        const bool has_macros =
+            xas::macro_processor::has_macro_directives(source);
 
+        // Split source into physical lines (origin tracking for diagnostics).
+        auto split_lines = [&](const std::string& s) {
+            xas::src_lines lines;
+            int lineno = 1;
+            for (size_t i = 0; i < s.size(); ) {
+                size_t nl = s.find('\n', i);
+                std::string text = (nl == std::string::npos)
+                                       ? s.substr(i) : s.substr(i, nl - i);
+                lines.push_back({ text, opts.input, lineno++ });
+                if (nl == std::string::npos) break;
+                i = nl + 1;
+            }
+            return lines;
+        };
+
+        // --- Source-to-source conversion (--format) --------------------------
         if (opts.format.has_value()) {
+            std::string document_text;
+            if (has_macros) {
+                // Translate compatible macros to the target dialect; expand the
+                // rest so the converted output still assembles.
+                xas::macro_translator tr(opts.mode, *opts.format);
+                document_text = tr.translate(split_lines(source));
+                std::ofstream out(opts.output);
+                if (!out.is_open()) {
+                    std::cerr << "xas: error: cannot create '" << opts.output << "'\n";
+                    return 1;
+                }
+                out << document_text;
+                return 0;
+            }
+            std::istringstream lex_in(source);
+            xas::lexer lex;
+            auto tokens = lex.tokenise(opts.input, lex_in);
+            xas::parser par;
+            auto stmts = par.parse(tokens, opts.mode);
             auto emit = xas::make_source_emitter(*opts.format);
             auto document = emit->emit(stmts);
             std::ofstream out(opts.output);
@@ -61,7 +99,33 @@ int main(int argc, char** argv)
                 return 1;
             }
             xas::write_formatted_document(out, document);
-        } else {
+            return 0;
+        }
+
+        // --- Assembly path: fully expand macros first ------------------------
+        if (has_macros) {
+            xas::macro_processor mp(xas::make_macro_dialect(opts.mode));
+            for (const std::string& d : opts.defines) {
+                size_t eq = d.find('=');
+                if (eq == std::string::npos) mp.add_define(d, "1");
+                else mp.add_define(d.substr(0, eq), d.substr(eq + 1));
+            }
+            xas::src_lines expanded = mp.run(split_lines(source));
+            std::string out;
+            for (const xas::src_line& sl : expanded) { out += sl.text; out += '\n'; }
+            source = std::move(out);
+        }
+
+        // Lex.
+        std::istringstream lex_in(source);
+        xas::lexer lex;
+        auto tokens = lex.tokenise(opts.input, lex_in);
+
+        // Parse.
+        xas::parser par;
+        auto stmts = par.parse(tokens, opts.mode);
+
+        {
             // Choose emitter.
             std::unique_ptr<xas::emitter> emit;
             if (opts.mode == xas::asm_mode::gnu)

@@ -8,18 +8,15 @@
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
 
+
+
         .module fenv_common
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __fe_current_env
-        .globl  __fe_dfl_env
 
         .area   _DATA
 __fe_current_env::
         .dw     0                       ; excepts
         .dw     0                       ; rounding (FE_TONEAREST)
 
-        .area   _CODE
-__fe_dfl_env::
-        .dw     0                       ; excepts
-        .dw     0                       ; rounding (FE_TONEAREST)

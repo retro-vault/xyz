@@ -2,12 +2,14 @@
 // main.cpp — xcc compiler driver.
 //
 // Entry point for the xcc compiler.  Parses command-line options,
-// then for each input file: reads it, runs the lexer, parser, IR
-// generator, and Z80 code generator in sequence, optionally applies
-// the peephole optimizer, and writes the output assembly file.
+// then drives the toolchain like the GNU C driver: each .c input is
+// compiled to assembly in-process, assembled by spawning xas, and the
+// resulting objects are linked by spawning xld.  -S stops after
+// compilation, -c stops after assembly, and the default mode links
+// everything into an executable (a.out unless -o is given).
 //
-// The pipeline is intentionally linear with no shared state between
-// files, so multiple input files are just processed in a loop.
+// The compile pipeline is intentionally linear with no shared state
+// between files, so multiple input files are just processed in a loop.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
@@ -30,11 +32,17 @@
 
 #include <cstdlib>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <exception>
+#include <system_error>
 #include <unordered_map>
+
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace xcc {
 
@@ -57,23 +65,36 @@ static call_abi from_xbfd_calling_convention(xbfd::calling_convention cc) {
     }
 }
 
-static bool is_source_input(const std::string &path) {
+// Input classification, GNU-driver style: C sources are compiled,
+// assembly sources are assembled, everything else is handed to the
+// linker untouched.
+enum class input_kind {
+    C_SOURCE,    // .c
+    ASM_SOURCE,  // .s / .asm
+    OBJECT,      // .rel / .lib / .o / .a / anything else
+};
+
+static std::string lower_extension(const std::string &path) {
     const auto dot = path.rfind('.');
     if (dot == std::string::npos)
-        return false;
+        return {};
     std::string ext = path.substr(dot);
     for (auto &ch : ext)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    return ext == ".c";
+    return ext;
+}
+
+static input_kind classify_input(const std::string &path) {
+    const std::string ext = lower_extension(path);
+    if (ext == ".c")
+        return input_kind::C_SOURCE;
+    if (ext == ".s" || ext == ".asm")
+        return input_kind::ASM_SOURCE;
+    return input_kind::OBJECT;
 }
 
 static bool is_metadata_input(const std::string &path) {
-    const auto dot = path.rfind('.');
-    if (dot == std::string::npos)
-        return false;
-    std::string ext = path.substr(dot);
-    for (auto &ch : ext)
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    const std::string ext = lower_extension(path);
     return ext == ".rel" || ext == ".lib" || ext == ".o" || ext == ".a";
 }
 
@@ -171,23 +192,24 @@ static void import_abi_metadata(
 // ----- Read entire file into string ----------------------------------
 static std::string read_file(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
-    if (!f) {
-        fprintf(stderr, "xcc: error: cannot open '%s'\n", path.c_str());
-        exit(1);
-    }
+    if (!f)
+        throw std::runtime_error("cannot open '" + path + "'");
     std::ostringstream ss;
     ss << f.rdbuf();
     return ss.str();
 }
 
 // ----- Derive output filename ----------------------------------------
-static std::string derive_output(const std::string &input, output_mode mode) {
-    // Strip extension and add appropriate one
-    std::string base = input;
+static std::string strip_extension(const std::string &path) {
+    std::string base = path;
     size_t dot = base.rfind('.');
     if (dot != std::string::npos) base = base.substr(0, dot);
-    (void)mode;
-    return base + ".s";
+    return base;
+}
+
+static std::string derive_output(const std::string &input, output_mode mode) {
+    return strip_extension(input)
+         + (mode == output_mode::OBJECT ? ".rel" : ".s");
 }
 
 // ----- Compile one file ----------------------------------------------
@@ -282,82 +304,328 @@ static int compile_file_to_text(const std::string &input_path,
     return 0;
 }
 
-// ----- Compile one file ----------------------------------------------
-static int compile_file(const std::string &input_path,
-                        const options &opts,
-                        const std::unordered_map<std::string, call_abi> *imported_abis = nullptr) {
-    std::string out_path = opts.output_file.empty()
-                           ? derive_output(input_path, opts.mode)
-                           : opts.output_file;
-    std::string asm_text;
-    int rc = compile_file_to_text(input_path, opts, out_path, asm_text, imported_abis);
-    if (rc != 0)
-        return rc;
-
-    // ----- 6. Write output -------------------------------------------
+// ----- Write compiled assembly to a file or stdout --------------------
+static int write_asm_output(const std::string &asm_text,
+                            const std::string &out_path,
+                            const options &opts) {
     if (out_path == "-") {
-        // Write to stdout
         fputs(asm_text.c_str(), stdout);
-    } else {
-        std::ofstream out(out_path);
-        if (!out) {
-            fprintf(stderr, "xcc: error: cannot write '%s'\n", out_path.c_str());
-            return 1;
-        }
-        out << asm_text;
-        if (opts.verbose)
-            fprintf(stderr, "xcc: wrote %s\n", out_path.c_str());
+        return 0;
     }
-
+    std::ofstream out(out_path);
+    if (!out) {
+        fprintf(stderr, "xcc: error: cannot write '%s'\n", out_path.c_str());
+        return 1;
+    }
+    out << asm_text;
+    if (opts.verbose)
+        fprintf(stderr, "xcc: wrote %s\n", out_path.c_str());
     return 0;
 }
+
+// ----- Compile one file, with diagnostics caught ----------------------
+// adb_base_path is only used to derive the .adb side-file name when -g
+// is active; asm text is returned through asm_text.
+static int compile_file_checked(const std::string &input_path,
+                                const options &opts,
+                                const std::string &adb_base_path,
+                                std::string &asm_text,
+                                const std::unordered_map<std::string, call_abi> *imported_abis) {
+    try {
+        return compile_file_to_text(input_path, opts, adb_base_path,
+                                    asm_text, imported_abis);
+    } catch (const fatal_error &) {
+        // fatal diagnostic already printed by diag_engine::fatal()
+    } catch (const std::exception &e) {
+        fprintf(stderr, "xcc: error: %s\n", e.what());
+    }
+    return 1;
+}
+
+// ----- Subprocess helpers ----------------------------------------------
+static int run_tool(const std::vector<std::string> &args, bool verbose) {
+    if (verbose) {
+        std::string line;
+        for (const auto &a : args) {
+            if (!line.empty()) line += ' ';
+            line += a;
+        }
+        fprintf(stderr, "xcc: %s\n", line.c_str());
+    }
+
+    std::vector<char *> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto &a : args)
+        argv.push_back(const_cast<char *>(a.c_str()));
+    argv.push_back(nullptr);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "xcc: error: fork failed\n");
+        return 1;
+    }
+    if (pid == 0) {
+        execvp(argv[0], argv.data());
+        fprintf(stderr, "xcc: error: cannot execute '%s'\n", args[0].c_str());
+        _exit(127);
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) {
+        fprintf(stderr, "xcc: error: waitpid failed\n");
+        return 1;
+    }
+    if (WIFEXITED(status))
+        return WEXITSTATUS(status);
+    fprintf(stderr, "xcc: error: '%s' terminated abnormally\n", args[0].c_str());
+    return 1;
+}
+
+// xas/xld live next to the xcc executable in an installed prefix;
+// fall back to PATH lookup for development setups.
+static std::string find_tool(const options &opts, const char *name) {
+    if (!opts.driver_dir.empty()) {
+        std::filesystem::path candidate =
+            std::filesystem::path(opts.driver_dir) / name;
+        std::error_code ec;
+        if (std::filesystem::exists(candidate, ec))
+            return candidate.string();
+    }
+    return name;
+}
+
+static const char *tool_mode_flag(const options &opts) {
+    return opts.dialect == asm_dialect::GNUAS ? "--mode=gnu" : "--mode=sdcc";
+}
+
+static int assemble_file(const options &opts, const std::string &xas,
+                         const std::string &src, const std::string &out) {
+    std::vector<std::string> args = {xas, tool_mode_flag(opts)};
+    if (opts.debug)
+        args.push_back("-g");
+    for (const auto &dir : opts.include_paths) {
+        args.push_back("-I");
+        args.push_back(dir);
+    }
+    for (const auto &def : opts.defines) {
+        args.push_back("-D");
+        args.push_back(def);
+    }
+    args.push_back(src);
+    args.push_back("-o");
+    args.push_back(out);
+    return run_tool(args, opts.verbose);
+}
+
+static int link_files(const options &opts, const std::string &xld,
+                      const std::vector<std::string> &inputs,
+                      const std::string &out) {
+    std::vector<std::string> args = {xld, tool_mode_flag(opts)};
+    if (opts.debug)
+        args.push_back("-g");
+    if (!opts.platform_name.empty())
+        args.push_back("--platform=" + opts.platform_name);
+    for (const auto &arg : opts.linker_args)
+        args.push_back(arg);
+    args.push_back("-o");
+    args.push_back(out);
+    for (const auto &input : inputs)
+        args.push_back(input);
+    return run_tool(args, opts.verbose);
+}
+
+// Scratch directory for intermediate .s/.rel files, removed on exit.
+struct temp_dir {
+    std::filesystem::path path;
+    bool valid = false;
+
+    bool create() {
+        std::error_code ec;
+        auto base = std::filesystem::temp_directory_path(ec);
+        if (ec)
+            base = "/tmp";
+        std::string tmpl = (base / "xcc-XXXXXX").string();
+        std::vector<char> buf(tmpl.begin(), tmpl.end());
+        buf.push_back('\0');
+        if (mkdtemp(buf.data()) == nullptr) {
+            fprintf(stderr, "xcc: error: cannot create temporary directory\n");
+            return false;
+        }
+        path = buf.data();
+        valid = true;
+        return true;
+    }
+
+    std::string make_name(int index, const std::string &input,
+                          const char *ext) const {
+        const auto stem = std::filesystem::path(input).stem().string();
+        return (path / (std::to_string(index) + "-" + stem + ext)).string();
+    }
+
+    ~temp_dir() {
+        if (valid) {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    }
+};
 
 } // namespace xcc
 
 // ----- main ----------------------------------------------------------
 int main(int argc, char **argv) {
-    xcc::options opts = xcc::options::parse(argc, argv);
+    using namespace xcc;
 
-    std::vector<std::string> source_inputs;
-    std::unordered_map<std::string, xcc::abi_import_record> imported_records;
-    for (const auto &input : opts.input_files) {
-        if (xcc::is_source_input(input)) {
-            source_inputs.push_back(input);
+    options opts = options::parse(argc, argv);
+
+    struct input_item {
+        input_kind kind;
+        std::string path;
+    };
+    std::vector<input_item> inputs;
+    inputs.reserve(opts.input_files.size());
+    for (const auto &input : opts.input_files)
+        inputs.push_back({classify_input(input), input});
+
+    // Import calling-convention metadata from object/archive inputs so
+    // compiled calls match what the libraries were built with.
+    std::unordered_map<std::string, abi_import_record> imported_records;
+    for (const auto &item : inputs) {
+        if (item.kind != input_kind::OBJECT || !is_metadata_input(item.path))
             continue;
+        try {
+            import_abi_metadata(item.path, imported_records);
+        } catch (const std::exception &e) {
+            fprintf(stderr, "xcc: warning: failed to import ABI metadata from '%s': %s\n",
+                    item.path.c_str(), e.what());
         }
-        if (xcc::is_metadata_input(input)) {
-            try {
-                xcc::import_abi_metadata(input, imported_records);
-            } catch (const std::exception &e) {
-                fprintf(stderr, "xcc: warning: failed to import ABI metadata from '%s': %s\n",
-                        input.c_str(), e.what());
-            }
-            continue;
-        }
-        source_inputs.push_back(input);
     }
+    std::unordered_map<std::string, call_abi> imported_abis;
+    for (const auto &[name, record] : imported_records)
+        imported_abis.emplace(name, record.abi);
+    const auto *abis = imported_abis.empty() ? nullptr : &imported_abis;
 
-    if (source_inputs.empty()) {
-        fprintf(stderr, "xcc: error: no C source input files\n");
+    // GNU semantics: -o with -c or -S only makes sense for one input.
+    size_t compiled_count = 0;
+    for (const auto &item : inputs) {
+        if (item.kind == input_kind::C_SOURCE)
+            ++compiled_count;
+        else if (item.kind == input_kind::ASM_SOURCE
+                 && opts.mode == output_mode::OBJECT)
+            ++compiled_count;
+    }
+    if (opts.mode != output_mode::LINK && !opts.output_file.empty()
+        && compiled_count > 1) {
+        fprintf(stderr,
+                "xcc: error: cannot specify -o with -c or -S with multiple files\n");
         return 1;
     }
 
-    std::unordered_map<std::string, xcc::call_abi> imported_abis;
-    for (const auto &[name, record] : imported_records)
-        imported_abis.emplace(name, record.abi);
-
-    int status = 0;
-    for (auto &input : source_inputs) {
-        int r = 1;
-        try {
-            r = xcc::compile_file(input, opts,
-                                  imported_abis.empty() ? nullptr : &imported_abis);
-        } catch (const xcc::fatal_error &) {
-            // fatal diagnostic already printed by diag_engine::fatal()
-        } catch (const std::exception &e) {
-            fprintf(stderr, "xcc: error: %s\n", e.what());
+    // ----- -S: compile only -------------------------------------------
+    if (opts.mode == output_mode::ASSEMBLY) {
+        if (compiled_count == 0) {
+            fprintf(stderr, "xcc: error: no C source input files\n");
+            return 1;
         }
-        if (r != 0) status = r;
+        int status = 0;
+        for (const auto &item : inputs) {
+            if (item.kind != input_kind::C_SOURCE) {
+                fprintf(stderr,
+                        "xcc: warning: input '%s' unused because compilation stops at -S\n",
+                        item.path.c_str());
+                continue;
+            }
+            std::string out = opts.output_file.empty()
+                              ? derive_output(item.path, opts.mode)
+                              : opts.output_file;
+            std::string asm_text;
+            int r = compile_file_checked(item.path, opts, out, asm_text, abis);
+            if (r == 0)
+                r = write_asm_output(asm_text, out, opts);
+            if (r != 0) status = r;
+        }
+        return status;
     }
-    return status;
+
+    const std::string xas = find_tool(opts, "xas");
+
+    // ----- -c: compile and assemble -------------------------------------
+    if (opts.mode == output_mode::OBJECT) {
+        if (compiled_count == 0) {
+            fprintf(stderr, "xcc: error: no input files to assemble\n");
+            return 1;
+        }
+        temp_dir scratch;
+        int status = 0;
+        int index = 0;
+        for (const auto &item : inputs) {
+            ++index;
+            if (item.kind == input_kind::OBJECT) {
+                fprintf(stderr,
+                        "xcc: warning: input '%s' unused because linking is not done\n",
+                        item.path.c_str());
+                continue;
+            }
+            std::string out = opts.output_file.empty()
+                              ? derive_output(item.path, opts.mode)
+                              : opts.output_file;
+            if (item.kind == input_kind::ASM_SOURCE) {
+                int r = assemble_file(opts, xas, item.path, out);
+                if (r != 0) status = r;
+                continue;
+            }
+            if (!scratch.valid && !scratch.create())
+                return 1;
+            // Anchor the -g .adb side file next to the final .rel.
+            std::string tmp_s = scratch.make_name(index, item.path, ".s");
+            std::string asm_text;
+            int r = compile_file_checked(item.path, opts, out, asm_text, abis);
+            if (r == 0)
+                r = write_asm_output(asm_text, tmp_s, opts);
+            if (r == 0)
+                r = assemble_file(opts, xas, tmp_s, out);
+            if (r != 0) status = r;
+        }
+        return status;
+    }
+
+    // ----- default: compile, assemble, and link -------------------------
+    temp_dir scratch;
+    std::vector<std::string> link_inputs;
+    link_inputs.reserve(inputs.size());
+    int index = 0;
+    for (const auto &item : inputs) {
+        ++index;
+        if (item.kind == input_kind::OBJECT) {
+            link_inputs.push_back(item.path);
+            continue;
+        }
+        if (!scratch.valid && !scratch.create())
+            return 1;
+        std::string src_s = item.path;
+        if (item.kind == input_kind::C_SOURCE) {
+            // Keep .s/.adb/.rel side by side in the scratch dir so xld
+            // picks up the debug records when -g is active.
+            src_s = scratch.make_name(index, item.path, ".s");
+            std::string asm_text;
+            int r = compile_file_checked(item.path, opts, src_s, asm_text, abis);
+            if (r == 0)
+                r = write_asm_output(asm_text, src_s, opts);
+            if (r != 0)
+                return r;
+        }
+        std::string tmp_rel = scratch.make_name(index, item.path, ".rel");
+        int r = assemble_file(opts, xas, src_s, tmp_rel);
+        if (r != 0)
+            return r;
+        link_inputs.push_back(tmp_rel);
+    }
+
+    if (link_inputs.empty()) {
+        fprintf(stderr, "xcc: error: no input files\n");
+        return 1;
+    }
+
+    const std::string xld = find_tool(opts, "xld");
+    std::string out = opts.output_file.empty() ? "a.out" : opts.output_file;
+    return link_files(opts, xld, link_inputs, out);
 }

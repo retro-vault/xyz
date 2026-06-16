@@ -12,9 +12,9 @@
 
 set -euo pipefail
 
-XCC="${1:-$(dirname "$0")/../../../../bin/bin/xcc}"
-XAS="${2:-$(dirname "$0")/../../../../bin/bin/xas}"
-XLD="${3:-$(dirname "$0")/../../../../bin/bin/xld}"
+XCC="${1:-$(dirname "$0")/../../../../bin/x/bin/xcc}"
+XAS="${2:-$(dirname "$0")/../../../../bin/x/bin/xas}"
+XLD="${3:-$(dirname "$0")/../../../../bin/x/bin/xld}"
 SDAS="${SDAS:-sdasz80}"
 TESTS_DIR="$(dirname "$0")/../../xcc/tests/data/core"
 RUNTIME_DIR="$(dirname "$0")/../../xcc/lib/runtime"
@@ -29,7 +29,7 @@ FAIL=0
 SKIP=0
 XCC_ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 
-XAR="${XAR:-$(dirname "$0")/../../../../bin/bin/xar}"
+XAR="${XAR:-$(dirname "$0")/../../../../bin/x/bin/xar}"
 
 run_xcc() {
     env ASAN_OPTIONS="$XCC_ASAN_OPTIONS" "$XCC" "$@"

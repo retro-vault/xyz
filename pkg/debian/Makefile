@@ -1,6 +1,6 @@
 ROOT ?= $(realpath ../..)
 BUILD_DIR ?= $(ROOT)/build
-DIST_DIR ?= $(ROOT)/bin
+DIST_DIR ?= $(ROOT)/bin/x
 PACKAGE_NAME ?= xtools
 PACKAGE_VERSION ?= 0.1.0
 PACKAGE_RELEASE ?= 1
@@ -120,8 +120,7 @@ $(PKG_OUTPUT): $(DIST_DIR)/README.md $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(X
 	cp $(XCC_RUNTIME_ARCHIVE) $(PKG_STAGING_DIR)/usr/lib/xcc/runtime/
 	cp $(XCC_RUNTIME_COMPAT_ARCHIVE) $(PKG_STAGING_DIR)/usr/lib/xcc/runtime/
 	cp $(DIST_DIR)/README.md $(PKG_STAGING_DIR)/usr/share/doc/$(PACKAGE_NAME)/README.md
-	cp $(ROOT)/src/xc/xcc/README.md $(PKG_STAGING_DIR)/usr/share/doc/$(PACKAGE_NAME)/XCC.md
-	if [ -d "$(DIST_DIR)/share/xtools/docs" ]; then cp -R $(DIST_DIR)/share/xtools/docs/. $(PKG_STAGING_DIR)/usr/share/doc/$(PACKAGE_NAME)/; fi
+	if [ -d "$(DIST_DIR)/share/doc" ]; then cp -R $(DIST_DIR)/share/doc/. $(PKG_STAGING_DIR)/usr/share/doc/$(PACKAGE_NAME)/; fi
 	if [ -d "$(DIST_DIR)/pkg/vsix" ]; then \
 		mkdir -p $(PKG_STAGING_DIR)/usr/share/$(PACKAGE_NAME)/pkg/vsix; \
 		cp -R $(DIST_DIR)/pkg/vsix/. $(PKG_STAGING_DIR)/usr/share/$(PACKAGE_NAME)/pkg/vsix/; \

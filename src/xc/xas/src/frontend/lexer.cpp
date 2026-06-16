@@ -281,9 +281,14 @@ namespace xas {
                 if (ch == '\\' && pos_ < src_.size()) {
                     char esc = src_[pos_++];
                     switch (esc) {
-                        case 'n': ch = '\n'; break;
-                        case 't': ch = '\t'; break;
-                        default:  ch = esc;  break;
+                        case 'n':  ch = '\n'; break;
+                        case 't':  ch = '\t'; break;
+                        case 'r':  ch = '\r'; break;
+                        case '\\': ch = '\\'; break;
+                        case '\'': ch = '\''; break;
+                        case '"':  ch = '"';  break;
+                        case '0':  ch = '\0'; break;
+                        default:   ch = esc;  break;
                     }
                 }
                 t.int_val = static_cast<int64_t>(

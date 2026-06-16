@@ -26,13 +26,15 @@ The subfolders are organized by purpose:
   aspirational future state.
 
 Component-specific README files still live with their owning tool or library.
-When the distribution tree is staged, those documents are collected under
-`bin/share/xtools/docs/components/`.
+When the distribution tree is staged, only the compiler tool manuals are
+collected, under `bin/x/share/doc/`.
 
 ## Current Key Documents
 
 - [dist/README.md](/home/tstih/data/retro-vault/xyz/docs/dist/README.md)
-  Staged distribution layout under `bin/`.
+  User-facing xtools README staged as `bin/x/README.md` (install and usage).
+- [dist/man/](/home/tstih/data/retro-vault/xyz/docs/dist/man)
+  User-facing tool manuals staged into `bin/x/share/doc/`.
 
 - [howtos/HOW-TO-TEST.md](/home/tstih/data/retro-vault/xyz/docs/howtos/HOW-TO-TEST.md)
   End-to-end and focused regression test workflows.

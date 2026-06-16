@@ -2,7 +2,7 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: during the C23 completion + repo structure discussion.
+Last updated: during the C23 completion, repo structure discussion, and xtools prefix-layout work.
 
 ## Major Recent Work
 
@@ -49,6 +49,28 @@ The project was recognized as becoming complex (toolchain + libc + runtime + ful
 - Still support genuine end-to-end tests that cross components.
 
 A full restructuring proposal was developed (see `docs/ARCHITECTURE.md` for the detailed target layout, migration steps, and rationale).
+
+### 5. Prefix-Rooted XtTools Staging
+The xtools staging layout has now started moving toward a real standalone
+compiler-suite install tree:
+
+- Root `Makefile` has a dedicated `make xtools` path that builds the core
+  compiler suite without requiring the whole OS build.
+- Output is now split into `bin/x/`, `bin/y/`, and `bin/z/`.
+- `bin/x/` is the xtools install prefix:
+  - `bin/x/bin/` for host executables
+  - `bin/x/include/` and `bin/x/lib/` for host SDK headers and libraries
+  - `bin/x/z80/include/` for staged target libc headers
+  - `bin/x/z80/lib/` for `crt0`, linker scripts, `libruntime.a`, `libc.a`,
+    and the default platform archive (`libcpm3.a` at the moment)
+- `bin/y/` carries YOS outputs plus YOS-adjacent host tools such as
+  `appmake`, `microdrive`, `serial`, and `libmicrodrive.a`.
+- `bin/z/` carries staged target assets such as Spectrum app payloads and
+  `.mdr` media.
+- `xcc` now probes its install prefix for default headers, and `xld` probes
+  its install prefix for default runtime/startup archives.
+- The copied runtime `.rel` staging tree was removed from the public install
+  layout; runtime helpers are now shipped as `libruntime.a`.
 
 ## Current High-Level Layout (Pre-Restructuring)
 
