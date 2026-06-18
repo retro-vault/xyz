@@ -7,8 +7,6 @@ _bench_seed_word:
 	; sdcccall(1) prologue: bench_seed_word (locals=0, temp_frame=0, stack_params=0)
 	; frameless function: no IX frame needed
 	ld	hl, (#65296)
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __bench_seed_word_end:
 	; epilogue: bench_seed_word
@@ -19,9 +17,8 @@ _bench_seed_byte:
 	push	bc
 	call	_bench_seed_word
 	pop	bc
-	ld	l, c
 	ld	a, e
-	xor	a, l
+	xor	c
 	ld	l, a
 	ld	h, d
 	ld	e, l
@@ -35,17 +32,26 @@ _bench_seed_byte:
 	ld	a, h
 	xor	a, d
 	ld	d, a
+	rlca
+	rlca
+	rlca
+	and	#248
+	ld	l, a
 	ld	a, e
-	ld	l, d
-	ld	b, #5
-__bench_seed_byte_seed_shift:
-	srl	l
-	rr	a
-	djnz	__bench_seed_byte_seed_shift
-	xor	a, e
+	rlca
+	rlca
+	rlca
+	and	#7
+	or	l
+	xor	e
 	ld	e, a
-	ld	a, l
-	xor	a, d
+	ld	a, d
+	rlca
+	rlca
+	rlca
+	and	#7
+	ld	l, a
+	xor	d
 	ld	d, a
 	ld	b, #0
 	ld	hl, #49
@@ -82,11 +88,10 @@ __xcc_L4:
 	add	a, a
 	xor	c
 	ld	d, a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
+	rlca
+	rlca
+	rlca
+	and	#7
 	xor	d
 	add	a, #34
 	add	a, b
@@ -99,8 +104,7 @@ __xcc_L4:
 __xcc_L2:
 	; O3 crc16 loop (count=96)
 	call	_bench_seed_word
-	push	de
-	pop	hl
+	ex	de, hl
 	ld	a, l
 	xor	#33
 	ld	l, a
@@ -179,8 +183,6 @@ __xcc_L14:
 __xcc_L10:
 	ld	-11(ix), l
 	ld	-10(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __f_end:
 	; epilogue: f

@@ -19,17 +19,26 @@ _f:
 	ld	a, h
 	xor	a, d
 	ld	d, a
+	rlca
+	rlca
+	rlca
+	and	#248
+	ld	l, a
 	ld	a, e
-	ld	l, d
-	ld	b, #5
-__f_seed_shift:
-	srl	l
-	rr	a
-	djnz	__f_seed_shift
-	xor	a, e
+	rlca
+	rlca
+	rlca
+	and	#7
+	or	l
+	xor	e
 	ld	e, a
-	ld	a, l
-	xor	a, d
+	ld	a, d
+	rlca
+	rlca
+	rlca
+	and	#7
+	ld	l, a
+	xor	d
 	ld	d, a
 	ld	b, #0
 	ld	hl, #49

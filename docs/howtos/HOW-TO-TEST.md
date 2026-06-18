@@ -89,8 +89,9 @@ bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc
 ```
 
 By default this benchmarks the `exec/int` suite with `sdcccall(1)` and
-records `xcc -O0/-O1/-O2/-Os` against SDCC `--opt-code-size` and
-`--opt-code-speed`.
+records `xcc -O0/-O1/-O2/-Of/-O3/-Os` against SDCC `--opt-code-size`
+and `--opt-code-speed`. If SDCC cannot compile an xcc-specific probe,
+that row is recorded as `n/a` for SDCC and kept in the xcc totals.
 
 Outputs land under:
 
@@ -101,7 +102,8 @@ build/xc/xcc/bench/codegen/int/
 The benchmark writes:
 
 - `results.csv` with per-test byte counts
-- `summary.md` with totals, deltas, and the `-Os` versus `-O2` comparison
+- `summary.md` with totals, deltas, `-Os` versus `-O2`, and `-O3` versus
+  `-Os` comparisons
 - `versions.txt` with the exact tool versions used
 
 To cover all exec suites instead of only integer tests:

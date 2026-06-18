@@ -46,7 +46,7 @@ xcc -g main.c -o app.xl
 | `-I<dir>` | Add include directory |
 | `-D<macro>[=val]` | Define preprocessor macro |
 | `-g` | Emit debug info (for `xgdb`) |
-| `--platform=<name>` | Select target platform (default `cpm3`) |
+| `--platform=<name>` | Select target platform (default `none`) |
 | `-masm=<dialect>` | Assembler dialect: `sdasz80` (default) or `gnuas` |
 | `-L<dir>`, `-l<name>` | Forwarded to the linker |
 | `-nostdlib`, `-nostartfiles` | Forwarded to the linker |

@@ -23,17 +23,26 @@ _bench_seed_byte:
 	ld	a, h
 	xor	a, d
 	ld	d, a
+	rlca
+	rlca
+	rlca
+	and	#248
+	ld	l, a
 	ld	a, e
-	ld	l, d
-	ld	b, #5
-__bench_seed_byte_seed_shift:
-	srl	l
-	rr	a
-	djnz	__bench_seed_byte_seed_shift
-	xor	a, e
+	rlca
+	rlca
+	rlca
+	and	#7
+	or	l
+	xor	e
 	ld	e, a
-	ld	a, l
-	xor	a, d
+	ld	a, d
+	rlca
+	rlca
+	rlca
+	and	#7
+	ld	l, a
+	xor	d
 	ld	d, a
 	ld	b, #0
 	ld	hl, #49
@@ -48,13 +57,12 @@ _bench_mix16:
 	ld	hl, #40503
 	add	hl, de
 	ld	a, c
-	xor	a, l
-	ld	c, a
+	xor	l
+	ld	l, a
 	ld	a, b
-	xor	a, h
+	xor	h
 	ld	b, a
-	ld	l, c
-	ld	h, b
+	ld	h, a
 	add	hl, hl
 	add	hl, hl
 	add	hl, hl
@@ -88,18 +96,7 @@ __xcc_vm_fill_code:
 	ld	a, b
 	cp	#96
 	jr	nc, __xcc_vm_fill_code_end
-	ld	a, c
-	add	a, a
-	add	a, a
-	add	a, a
-	xor	c
-	ld	d, a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	xor	d
+	call	__xopt_spaghetti_2
 	add	a, #109
 	add	a, b
 	ld	c, a
@@ -118,18 +115,7 @@ __xcc_vm_fill_mem:
 	ld	a, b
 	cp	#16
 	jr	nc, __xcc_vm_fill_mem_end
-	ld	a, c
-	add	a, a
-	add	a, a
-	add	a, a
-	xor	c
-	ld	d, a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	xor	d
+	call	__xopt_spaghetti_2
 	add	a, #126
 	add	a, b
 	ld	c, a
@@ -160,11 +146,7 @@ __xcc_vm_outer:
 	jp	nc, __xcc_vm_done
 	push	de
 	push	hl
-	ld	l, c
-	ld	h, #0
-	ld	de, #_main__code_0
-	add	hl, de
-	ld	a, (hl)
+	call	__xopt_spaghetti_1
 	pop	hl
 	pop	de
 	and	#7
@@ -186,21 +168,13 @@ __xcc_vm_outer:
 __xcc_vm_case0:
 	push	de
 	push	hl
-	ld	l, c
-	ld	h, #0
-	ld	de, #_main__code_0
-	add	hl, de
-	ld	a, (hl)
+	call	__xopt_spaghetti_1
 	pop	hl
 	pop	de
 	and	#15
 	push	de
 	push	hl
-	ld	l, a
-	ld	h, #0
-	ld	de, #_main__mem_1
-	add	hl, de
-	ld	a, (hl)
+	call	__xopt_spaghetti_0
 	pop	hl
 	pop	de
 	add	a, e
@@ -209,22 +183,14 @@ __xcc_vm_case0:
 __xcc_vm_case1:
 	push	de
 	push	hl
-	ld	l, c
-	ld	h, #0
-	ld	de, #_main__code_0
-	add	hl, de
-	ld	a, (hl)
+	call	__xopt_spaghetti_1
 	pop	hl
 	pop	de
 	srl	a
 	and	#15
 	push	de
 	push	hl
-	ld	l, a
-	ld	h, #0
-	ld	de, #_main__mem_1
-	add	hl, de
-	ld	a, (hl)
+	call	__xopt_spaghetti_0
 	pop	hl
 	pop	de
 	xor	e
@@ -247,11 +213,7 @@ __xcc_vm_case4:
 	and	#15
 	push	de
 	push	hl
-	ld	l, a
-	ld	h, #0
-	ld	de, #_main__mem_1
-	add	hl, de
-	ld	a, (hl)
+	call	__xopt_spaghetti_0
 	add	a, b
 	ld	(hl), a
 	pop	hl
@@ -295,4 +257,37 @@ __xcc_vm_after_case:
 	jp	__xcc_vm_outer
 __xcc_vm_done:
 	ex	de, hl
+	ret
+	; xopt: spaghetti outlined duplicate kernel
+	.area	_CODE
+__xopt_spaghetti_0:
+	ld	l, a
+	ld	h, #0
+	ld	de, #_main__mem_1
+	add	hl, de
+	ld	a, (hl)
+	ret
+	; xopt: spaghetti outlined duplicate kernel
+	.area	_CODE
+__xopt_spaghetti_1:
+	ld	l, c
+	ld	h, #0
+	ld	de, #_main__code_0
+	add	hl, de
+	ld	a, (hl)
+	ret
+	; xopt: spaghetti outlined duplicate kernel
+	.area	_CODE
+__xopt_spaghetti_2:
+	ld	a, c
+	add	a, a
+	add	a, a
+	add	a, a
+	xor	c
+	ld	d, a
+	rlca
+	rlca
+	rlca
+	and	#7
+	xor	d
 	ret

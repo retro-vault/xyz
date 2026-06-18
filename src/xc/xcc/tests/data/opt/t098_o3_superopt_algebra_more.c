@@ -1,0 +1,27 @@
+void dragon_algebra_more(void) {
+    __asm__(
+        "and #240\n"
+        "and #15\n"
+        "or #16\n"
+        "or #1\n"
+        "xor #85\n"
+        "xor #170\n"
+        "xor b\n"
+        "xor b\n"
+        "cpl\n"
+        "xor #255\n"
+        "ld a, #85\n"
+        "and #15\n"
+        "ld a, #16\n"
+        "or #1\n"
+        "ld a, #170\n"
+        "xor #170\n"
+        "res 3, a\n"
+        "and #255\n"
+        "set 4, a\n"
+        "or #1\n"
+        "set 2, b\n"
+        "res 2, b\n"
+        "res 5, c\n"
+        "res 5, c");
+}

@@ -10,7 +10,7 @@
         .globl  _close
         .globl  __cpm3_close_file_vec
 
-FD_FILE_BASE    .equ 3
+        .equ    FD_FILE_BASE,3
 
         .area   _CODE
 _close::

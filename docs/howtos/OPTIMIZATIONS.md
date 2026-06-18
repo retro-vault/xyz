@@ -5,7 +5,15 @@ today.
 
 There is no separate active backend-codegen backlog document right now.
 When a new structural code-emission problem is found, it should be
-described here or added as a fresh research note at that point.
+described here or added as a fresh research note at that point.  External
+optimizer and superoptimizer references for the experimental lane are kept
+in [O3_RESEARCH_SOURCES.md](O3_RESEARCH_SOURCES.md).
+
+The Z80 assembly peephole layer is shared through `libxopt`, and can
+also be run directly on `.s` files with the standalone `xopt` tool.
+`xcc` still owns the IR-level and whole-function C-shape optimizations,
+but both `xcc` and `xopt` use the same assembly optimizer
+implementation.
 
 ## Public Levels
 
@@ -25,21 +33,24 @@ That baseline includes the helper-inline budget, denser switch lowering,
 the structured-loop pipeline, and the benchmark-proven direct emitters
 that survived the full execution and benchmark oracle.
 
-`-O3` is intentionally still the experimental lane, but it is no longer
-better on the current benchmark suite because of hidden extra default
-work. Instead, it is now free again to host the next wave of genuinely
-new experiments without leaving `-Of` / `-Os` behind on the already
-validated code-shape wins.
+`-Os` is deliberately conservative: it keeps that current record-setting
+size baseline intact. New tricks that are not explicitly size-policy
+neutral should land in `-O3` or `-Of` first, not in `-Os`.
+
+`-O3` is intentionally the experimental playground: here be dragons.
+It keeps the proven baseline, then layers speed, size, and shape-changing
+experiments that are allowed to trade one goal for another. The protected
+size-record lane is `-Os`, not `-O3`.
 
 The newer generic structured-loop pipeline is now in the stable presets
 too: direct control-condition lowering, counted-byte-loop narrowing,
 pointer-walk canonicalization, and the generic walked-loop backend
 emitters that feed from those shapes all run under `-O2` / `-Of` / `-Os`.
 
-On the current bare-metal executable benchmark suite, the promoted
-baseline means `-Of`, `-O3`, and `-Os` now land on the same measured
-totals. That is deliberate: the proven size/speed wins are no longer
-stuck behind the experimental preset.
+On the current bare-metal executable benchmark suite, `-Of`, `-O3`, and
+`-Os` start from the same promoted baseline, but `-Of` and `-O3` now
+diverge through speed-biased work. `-Os` is the lane we protect for the
+size record.
 
 ## Fine-Grained Flags
 
@@ -88,16 +99,18 @@ right and the last relevant setting wins.
 - `prealloc-temp-frame`
 - `switch-jump-tables`
 
-Most of these are enabled through `-O2`, `-O3`, or `-Os`. The
+Most of these are enabled through `-O2`, `-O3`, `-Of`, or `-Os`. The
 `-fprealloc-temp-frame` switch still exists for targeted experiments,
 but it now mainly serves to force wider TEMP preallocation than the
 default optimized heuristic uses. `-fregalloc` is still available for
 targeted bisects and for forcing it on from lower presets, but the
 bounded stable allocator is now part of the normal `-O2` / `-Os`
-pipeline. `-fduplicate-block-merge` is in a different category now: it remains
-available for experimentation, but it is no longer part of the stable
-`-O2` / `-Os` presets after a benchmark-driven wrong-code regression in
-`state_machine`.
+pipeline. `-fduplicate-block-merge` is in a different category now: it
+is enabled by the experimental `-O3` preset, but it is not part of the
+stable `-O2` / `-Os` presets. The public O3 form is intentionally
+hardened: whole-block merging now requires exact temporary operands, so
+two similar tails that read different incoming temps are not redirected
+into one shared block.
 
 ## `-O1`: Peephole Optimization
 
@@ -356,22 +369,105 @@ The main extra behavior today is:
 - the same generic structured-loop pipeline that stable `-O2` already
   uses, but paired with the more aggressive speed-biased helper-inline
   thresholds
+- speed-biased constant 16-bit shifts: `-Of` unrolls shifts by 6 and 7
+  to avoid the `DJNZ` loop overhead, accepting a small size increase for
+  fewer cycles
+- speed-biased constant accumulator logical-right shifts, where repeated
+  `srl a` trains become a shorter rotate-and-mask sequence when flags
+  are overwritten before they can be observed, or when the mask can be
+  folded into a following `and #imm`
+- speed-biased count-5 two-register right-shift loop unrolling for
+  hot `srl l; rr a; djnz` loops when the private loop label has no
+  other users and `B` is dead until an overwrite. This is deliberately
+  a speed-for-bytes dragon and is not enabled for `-Os`
+- speed-biased loop-invariant `ld d,#0` hoisting for simple
+  single-backedge byte-index loops that use `DE` only as
+  `D=0, E=index` before `add hl,de`; this keeps the same payload size
+  and removes one zero-high-byte load from every loop trip after the
+  first
+- speed-biased same-size pair-copy peepholes, shared with `-O3`, such as
+  `push de; pop hl` becoming `ld h,d; ld l,e`, and
+  `ld h,d; ld l,e` becoming `ex de,hl` when all following paths prove
+  `DE` is overwritten before it is read
+- speed-biased dead return-copy cleanup, where
+  `ld b,h; ld c,l; ex de,hl; <epilogue>` becomes
+  `ex de,hl; <epilogue>` because `BC` is caller-saved and not part of
+  the modern 16-bit return value
+- the O3 superoptimizer-inspired adjacent peepholes, including exact
+  accumulator identities, low-bit pair arithmetic shortcuts, and short
+  straight-line dead-flag-setter removal
+- speed-biased register-move cleanup for round-trips and pure dead loads
+  exposed by the other peepholes, such as `ld a,h; ld h,a; ld a,#3`
+  becoming just `ld a,#3`
+- speed-biased zero-extend cleanup for byte indexes, such as
+  `ld l,a; ld h,#0; ld b,h; ld c,l` becoming `ld c,a; ld b,#0`
+  when the following short straight-line span proves `HL` is dead
+- speed-biased generalized zero-extend cleanup, where the same direct
+  `BC = zero_extend(X)` collapse also applies to register, immediate,
+  `(HL)`, and indexed sources that can be loaded directly into `C`
+- speed-biased zero-extend truth-test cleanup, where the exposed
+  `BC = zero_extend(A); HL = BC; A = H; A |= L` test collapses to
+  `or a,a`; a small CFG-aware liveness proof can then remove the
+  `HL = BC` copy, and even the original `BC = zero_extend(A)`, when
+  every branch path overwrites the relevant pair before reading it
+- speed-biased zero-extend pair-test shortcut, where
+  `HL = zero_extend(X); BC = HL; HL = BC; A = H; A |= L` becomes
+  `HL = zero_extend(X); BC = HL; A = L; A |= A`, preserving both pairs
+  while removing the redundant copy-back before the byte zero test
+- speed-biased separated byte-immediate pair folding, where independent
+  setup such as `ld b,#hi; <safe span>; ld c,#lo` becomes one
+  `ld bc,#hilo` when the intervening span does not read or write the
+  delayed byte or full pair
+- speed-biased direct IX word increments, where a stack-local
+  load/`inc hl`/store round trip becomes
+  `inc N(ix); jr nz,L; inc N+1(ix); L:` when the following path proves
+  flags are overwritten before any observer can read them
+- speed-biased direct IX byte increments, where a stack-local
+  `ld a,N(ix); add a,#1; ld N(ix),a` round trip becomes `inc N(ix)`
+  when both `A` and flags are proven dead along the following path
+- speed-biased IX byte load forwarding, where `ld a,N(ix); ld r,a`
+  becomes `ld r,N(ix)` when a path-sensitive proof shows the
+  accumulator is overwritten before any later read
+- speed-biased accumulator liveness through 16-bit pair arithmetic, so
+  safe rewrites can cross `add hl,bc`, `adc hl,de`, and similar
+  non-accumulator arithmetic instead of treating every `add`/`adc`/`sbc`
+  as an `A` read
+- speed-biased compare fallthrough reload cleanup, where
+  `ld a,X; cp #n; jr cc,T; ld a,X` loses the second load when only
+  unreferenced fallthrough labels sit between the branch and reload
+- speed-biased transformed-compare fallthrough cleanup, where
+  `ld a,X; xor #k; cp #n; jr cc,T; ld a,X; xor #k` loses the repeated
+  load and transform on the fallthrough path because `cp` and the
+  branch preserve the transformed accumulator value
+- speed-biased zero-store chain cleanup, where
+  `xor a; ld dst,a; xor a` becomes `xor a; ld dst,a` because the store
+  preserves both the zero accumulator and the flags from the first
+  zeroing instruction
+- speed-biased stack-discard cleanup, where `inc sp; inc sp` becomes
+  `pop rr` when every following path overwrites that register pair before
+  reading it
+- speed-biased long stack-discard cleanup, where long `inc sp` runs can
+  become `ld hl,#N; add hl,sp; ld sp,hl` when `HL` and flags both die
+  before observation
 
 On the current executable benchmark suite, that split now looks like:
 
-- `xcc -O2`: `14382` payload bytes, `4874191` cycles
-- `xcc -Of`: `12099` payload bytes, `4456408` cycles
+- `xcc -O2`: `14318` payload bytes, `4867429` cycles, `20 / 20`
+  correct
+- `xcc -Of`: `8146` payload bytes, `2622214` cycles, `20 / 20`
+  correct
 
-So `-Of` is currently about `15.87%` smaller and `8.57%` fewer cycles
-than `-O2` on the full benchmark oracle, while still staying `20 / 20`
-correct there.
+So `-Of` is currently about `43.10%` smaller and `46.12%` fewer cycles
+than `-O2` on the full benchmark oracle. It is currently 540 payload bytes
+smaller than `-Os` and runs about `5.02%` fewer cycles because the
+backend speed-biased lane can choose faster or smaller proven forms.
 
 ## `-O3`: Experimental Optimization
 
-`-O3` currently starts from the same promoted aggressive baseline as
-`-Of` and `-Os`. That is deliberate: already-proven loop emitters,
-helper fast paths, and other benchmark-clean structural wins are no
-longer hidden behind the experimental preset.
+`-O3` currently starts from the same promoted aggressive size baseline
+as `-Os`. That is deliberate: already-proven loop emitters, helper fast
+paths, and other benchmark-clean structural wins remain available while
+`-Os` stays the protected record path.
 
 So the role of `-O3` now is simpler:
 
@@ -380,20 +476,248 @@ So the role of `-O3` now is simpler:
 - successful experiments should eventually graduate down into `-Of`,
   `-Os`, or even `-O2`
 
-At the moment there is no additional always-on `-O3` pass beyond that
-shared aggressive baseline, which is exactly what frees it for the next
-experimental wave.
+Current always-on `-O3` experiments include:
 
-On the current executable benchmark suite, that shared promoted baseline
-means:
+- duplicate-block merging, which redirects equivalent basic blocks with
+  exact temporary operands to a canonical copy before later cleanup and
+  inlining have their turn
+- speed-biased adjacent stack-pair copies, where `push de; pop hl`
+  becomes the same-size but much faster `ld h,d; ld l,e`
+- speed-biased dead-source pair copies, where `ld h,d; ld l,e` becomes
+  `ex de,hl` when a small CFG-aware liveness proof shows every later
+  path overwrites `DE` before reading it
+- speed-biased dead return-copy cleanup, where `BC = HL` setup is
+  removed immediately before `ex de,hl` and the function epilogue.
+  The supporting `BC` liveness proof also understands that `ret` kills
+  caller-saved `BC`, and that `ex de,hl` does not touch `BC`.
+- speed-biased constant 16-bit shift unrolling for counts 6 and 7,
+  spending a few bytes to avoid the `DJNZ` loop overhead
+- speed-biased constant accumulator logical-right shifts, where
+  `srl a` repeated `N` times becomes `rrca` or `rlca` plus an exact
+  low-bit `and` mask. A following `and #imm` is folded into that mask,
+  so `srl a` five times followed by `and #1` becomes
+  `rlca; rlca; rlca; and #1`.
+- speed-biased count-5 two-register shift-loop unrolling, where a
+  private `ld b,#5; L: srl l; rr a; djnz L` loop becomes five explicit
+  `srl l; rr a` pairs if the loop label has no other users and `B` is
+  dead until an overwrite
+- stack-backed `HL ^= HL >> 5` xorshift cleanup, where O3 keeps the
+  original IX spill stores for safety but synthesizes `BC = HL >> 5`
+  with rotate/mask instructions while leaving `HL` live, removing the
+  destructive five-step `srl h; rr l` chain and the reload
+- speed-biased high-byte zero hoisting in simple byte-index loops,
+  where loop-invariant `ld d,#0` moves before the loop label if the
+  body has one backedge and does not otherwise read or write `D`/`DE`
+- superoptimizer-inspired accumulator rewrites such as
+  `and #0; neg` to `sub a`, `and #255; rr a` to `srl a`,
+  `scf; adc a,#0` to `add a,#1`,
+  `xor #255; sbc a,#255` to `neg`, `cpl; neg` to `sub #255`,
+  and several shift/rotate identity collapses
+- a tiny exact boolean-algebra superoptimizer for adjacent accumulator
+  immediates, such as `and #240; and #15` to `and #0`,
+  `or #16; or #1` to `or #17`, and
+  `xor #85; xor #170` to `xor #255`
+- constant-loaded accumulator folding for logical immediates, such as
+  `ld a,#85; and #15` to `ld a,#5; and a`, with later fixed-point
+  passes able to delete the folded load if a following `xor a` makes it
+  dead
+- accumulator bit-mask collapses such as `res 7,a; and a` to
+  `and #127`, `res 3,a; and #255` to `and #247`,
+  `set 0,a; or a` to `or #1`, and `set 4,a; or #1` to `or #17`
+- same-bit register `set` / `res` chain cleanup, where the second
+  operation completely overwrites the first without touching flags
+- low-bit pair arithmetic shortcuts such as
+  `set 0,l; dec hl` to `res 0,l`, with equivalent `DE` and `BC`
+  forms, plus the inverse `res 0,l; inc hl` to `set 0,l`
+- dead-flag-setter removal when a flag-only instruction such as
+  `ccf`, `scf`, `or a`, `and a`, register/immediate `cp`, register
+  `bit`, or a no-op accumulator ALU instruction is followed in the same
+  short straight-line block by an instruction that overwrites the
+  relevant flags before any branch, carry read, label, or `push af`
+- register-move cleanup for speed-biased code, such as removing the
+  second half of `ld a,e; ld e,a`, or removing a pure `ld b,#1` when it
+  is immediately overwritten by `ld b,c`
+- zero-extend cleanup for byte indexes and tests, where `A -> HL -> BC`
+  shuttles collapse directly to `BC` if a nearby overwrite proves `HL`
+  is only a transient staging register, and where `HL = BC` copies are
+  removed from zero-tests when both branch paths overwrite `HL` before
+  reading it.  The same CFG-aware liveness proof also removes dead
+  `BC = zero_extend(A)` setup before zero-tests when all paths overwrite
+  `BC` before any read. The direct `BC` collapse also handles non-`A`
+  byte sources when Z80 can load the source straight into `C`. A second
+  local form preserves both `HL` and `BC` but tests the known low byte
+  directly, turning `ld a,h; or a,l` into `ld a,l; or a,a` after `H` is
+  known zero.
+- separated byte-immediate pair folding, where register-coverage style
+  local liveness lets O3 turn independent high/low byte setup for
+  `BC`, `DE`, or `HL` into a single 16-bit immediate load even when a
+  short safe instruction span sits between the two byte loads
+- direct IX word increment folding, where O3 replaces
+  `ld l,N(ix); ld h,N+1(ix); inc hl; ld N(ix),l; ld N+1(ix),h` with a
+  direct low-byte memory increment and conditional high-byte carry
+  increment when a CFG-following flag proof shows the changed
+  non-carry flags die before observation
+- direct IX byte increment folding, where O3 replaces
+  `ld a,N(ix); add a,#1; ld N(ix),a` with `inc N(ix)` when a
+  path-sensitive proof shows both the accumulator result and the changed
+  flags die before observation
+- IX byte load forwarding, where O3 replaces `ld a,N(ix); ld r,a`
+  with `ld r,N(ix)` once the register-coverage/liveness proof shows
+  that the temporary accumulator value dies on every following path
+- HL byte load forwarding, where O3 replaces `ld a,(hl); ld r,a` with
+  `ld r,(hl)` when `A` is dead, while deliberately standing down before
+  zero-extension truth-test cascades so the larger cleanup can still fire
+- accumulator liveness through 16-bit pair arithmetic, so O3 can keep
+  proving `A` dead across address arithmetic such as `add hl,bc`
+  without mistaking that pair operation for an accumulator read
+- compare fallthrough reload cleanup, where O3 removes a repeated
+  `ld a,X` after `ld a,X; cp #n; jr cc,T` when any intervening labels
+  are proven not to be alternate branch or call entries
+- transformed-compare fallthrough reload cleanup, where O3 removes the
+  second `ld a,X; xor #k` in generated signed-range checks after proving
+  fallthrough labels are not alternate entries
+- zero-store chain cleanup, where repeated `xor a` instructions between
+  accumulator-preserving stores collapse to one zeroing instruction
+- modern-ABI constant return direct loads, where generated
+  `sdcccall(1)` functions that return a 16-bit constant through
+  `ld hl,#imm; ex de,hl; <return tail>` become `ld de,#imm; <return tail>`.
+  The rule is deliberately guarded by xcc's `sdcccall(1)` prologue marker
+  so standalone `xopt` does not rewrite unmarked legacy-HL-return assembly
+- alternate-register-bank cancellation, where adjacent `exx; exx` pairs
+  with no labels are removed. This mostly cleans up aggressive O3/Of
+  outlining and helper-call shuffles, and deliberately stays out of `-Os`
+- call-argument DE direct loads, where `ld hl,A; push hl; ld hl,B;
+  ex de,hl; ld hl,C` becomes `ld hl,A; push hl; ld de,B; ld hl,C` when
+  the final load overwrites the swapped-back `HL`. If `A == B`, O3/Of use
+  the stronger `ld de,A; push de; ld hl,C` form
+- dead-HL exchange direct loads, where `ld hl,A; ex de,hl` becomes
+  `ld de,A` for immediate or symbol constants when every following CFG
+  path overwrites `HL` before reading it. This generalizes the guarded
+  constant-return case without changing legacy-HL-return assembly.
+- dead-pair stack-discard cleanup, where `inc sp; inc sp` becomes
+  `pop rr` after proving that `rr` dies on every following CFG path. This
+  saves one byte and is faster, prefers `BC`, and can fall back to `DE`
+  or `HL` when those pairs are dead instead. It deliberately stays out
+  of `-Os`.
+- dead restored-pair cleanup, where `pop rr; push rr` is removed after
+  proving the restored pair dies before any read. This catches standalone
+  `xopt` assembly cases even though the current xcc benchmark suite keeps
+  those restored `HL` values live.
+- long stack-discard cleanup, where long `inc sp` runs can become
+  `ld hl,#N; add hl,sp; ld sp,hl` after proving both `HL` and the changed
+  flags die before any observation. The current xcc benchmark suite mostly
+  rejects this shape because either `HL` or flags remain live, but the
+  rule is useful for standalone `xopt` input.
+- equal-pair exchange cleanup, where exact proofs that `HL == DE` remove a
+  following `ex de,hl`. Current proofs cover direct `DE -> HL` copies,
+  `DE -> BC -> HL` copies, and the IX-temp shape
+  `ld N(ix),e; ld N+1(ix),d; ld l,N(ix); ld h,N+1(ix); ex de,hl`.
+- exchange-sandwich direct loads, where
+  `ex de,hl; ld hl,#K; ex de,hl` becomes `ld de,#K`. The sandwich only
+  loads `DE` and restores the original `HL`, so the direct load is exact.
+- Spaghetti flag-helper inlining, where tiny Spaghetti zero-test helpers
+  can be inlined at `call helper; jr cc,L` sites if every call observes
+  only the flags and liveness proves the helper's changed output pairs die.
+  The current generated runtime corpus often keeps those pairs
+  conservatively live across external calls, so this mostly benefits
+  standalone `xopt` inputs and future helper shapes.
+- Spaghetti outlining, an O3-only whole-file `libxopt` pass that slides a
+  vertical kernel over the final Z80 stream, finds profitable duplicate
+  straight-line instruction runs, extracts one shared helper, and replaces
+  each occurrence with a call or tail jump.  The current vector is dynamic
+  over profitable 3- to 12-instruction kernels and runs several bounded
+  extraction rounds so large islands are peeled first and smaller leftovers
+  can still be harvested.  A follow-up tail-threading pass rewrites helpers
+  whose callers all share the same continuation.  Spaghetti refuses labels,
+  branches, calls, returns, `SP` users, push/pop, helper bodies, data
+  sections, and pure shift/rotate trains.  It is intentionally a
+  size-for-speed dragon, not part of `-Of` or protected `-Os`.
+- Spaghetti helper ABI sinking, where O3 can rewrite exact outlined helper
+  families after proving every call site has the same wrapper contract. For
+  load helpers, `push af; push bc; setup; call; pop bc; pop af` becomes a
+  preserving helper with the save/restore paid once. For store helpers,
+  the exact `push af/bc/de`, `DE <- HL`, `IX -> HL`, call, restore wrapper
+  is similarly sunk into the helper. Mixed wrapped/unwrapped helpers are
+  rejected.
 
-- `xcc -Of`: `8686` payload bytes, `2760674` cycles
-- `xcc -O3`: `8686` payload bytes, `2760674` cycles
-- `xcc -Os`: `8686` payload bytes, `2760674` cycles
+On the current executable benchmark suite, the split between the safe
+speed lane, the dragon lane, and the protected size lane is:
 
-So the promoted aggressive pipeline is currently about `21.86%` smaller
-and `20.71%` fewer cycles than `sdcc --opt-code-size` on the common
-successful-and-correct benchmark subset.
+- `xcc -Of`: `8146` payload bytes, `2622214` cycles, `20 / 20`
+  correct
+- `xcc -O3`: `7649` payload bytes, `2776428` cycles, `20 / 20`
+  correct
+- `xcc -Os`: `8686` payload bytes, `2760674` cycles, `20 / 20`
+  correct
+
+Against `sdcc --opt-code-size`, on the `19` benchmarks where both
+compilers produce correct executable results, `xcc -Of` is currently
+`26.64%` smaller and `24.66%` fewer cycles, while `xcc -O3` is
+`31.11%` smaller and `20.32%` fewer cycles. Against
+`sdcc --opt-code-speed`, on all `20` benchmarks, `xcc -Of` is
+`28.25%` smaller and `25.78%` fewer cycles, while `xcc -O3` is
+`32.63%` smaller and `21.42%` fewer cycles.
+
+Compared with the previous `o3-zero-store-chain-1` checkpoint, the first
+Spaghetti pass saved `389` payload bytes in `-O3` and kept `20 / 20`
+correct executable results, but it also added `121834` benchmark cycles.
+That tradeoff is accepted only in `-O3`: `-Of` and `-Os` remained
+unchanged at this checkpoint.
+
+The follow-up Spaghetti tail-threading round saved another `8` payload
+bytes and `563` cycles.  The later micro-Spaghetti / pair-test round saved
+`109` more O3 payload bytes versus that tail-threading checkpoint, while
+adding `38950` cycles; the shared speed-biased zero-extend pair-test rule
+also improved `-Of` by `8` payload bytes and `824` cycles.  `-Os` remained
+unchanged through these rounds.
+
+The generalized zero-extend source-to-`BC` round then saved another `23`
+O3 payload bytes and `8207` cycles, and improved `-Of` by `34` payload
+bytes and `1376` cycles.  `-Os` remained unchanged again.
+
+The modern-ABI constant return round is measured on the 52-file integer
+codegen-only suite because it targets final assembly shape rather than
+linked benchmark kernels. It saved `80` translation-unit bytes in `-O3`
+(`2836` to `2756`, `2.82%`) and `79` bytes in `-Of` (`2876` to `2797`,
+`2.75%`), while `-Os` remained unchanged at `2965`. On that same suite,
+`xcc -O3` is `34.10%` smaller than `sdcc --opt-code-size` (`4182` bytes)
+and `34.95%` smaller than `sdcc --opt-code-speed` (`4237` bytes).
+
+The full codegen-all superoptimizer round then used all `110` exec-suite
+translation units. The benchmark runner now records `n/a` instead of
+aborting when SDCC cannot compile xcc-specific float/runtime probes, so
+SDCC totals are over the `82` common inputs. Adjacent `exx; exx`
+cancellation saved `244` bytes in both `-O3` and `-Of`; the follow-up
+call-argument DE direct-load rewrite saved another `115` O3 bytes and
+`114` Of bytes; the dead-HL exchange direct-load rewrite saved another
+`388` O3 bytes and `392` Of bytes; the first dead-BC stack-discard
+rewrite saved another `279` O3 bytes and `278` Of bytes; generalizing it
+to any dead pair saved another `8` bytes in both `-O3` and `-Of`.
+Spaghetti load-helper ABI sinking then saved `3576` more O3 bytes, and
+Spaghetti store-helper ABI sinking saved another `1078` O3 bytes. The
+later exact exchange round removed no-op `ex de,hl` instructions after
+proved-equal copies, saving `71` O3 bytes and `109` Of bytes; the
+exchange-sandwich direct-load round saved another `85` O3 bytes and `86`
+Of bytes. Cumulatively, `-O3` moved from `70093` to `64249`
+translation-unit bytes (`5844` saved), `-Of` moved from `75903` to
+`74672` (`1231` saved), and `-Os` stayed fixed at `76573`.
+
+On the common SDCC subset, final `xcc -O3` is `9483` bytes versus
+`12430` for `sdcc --opt-code-size` (`23.71%` smaller) and `12608` for
+`sdcc --opt-code-speed` (`24.79%` smaller). `xcc -Of` is `9962` bytes on
+the same subset, `19.86%` smaller than SDCC size mode and `20.99%`
+smaller than SDCC speed mode. The executable benchmark suite was
+unchanged by these codegen-only rules because its linked kernels did not
+contain the targeted shuffle patterns; it remains `20 / 20` correct for
+xcc, while SDCC size mode remains `19 / 20` and SDCC speed mode remains
+`20 / 20`.
+
+The earlier O3 wrong-code case in `state_machine` was traced to
+duplicate-block merging comparing block bodies after locally renaming
+temporary IDs. That was too optimistic because the pass did not also
+rewrite operands in the merged body. O3 now requires exact temp IDs for
+whole-block merging, and the executable benchmark suite is back to
+`20 / 20` correct checksums.
 
 One of the bigger current O3-only wins is a very narrow SDCC-style leaf
 fast path in the Z80 backend. When a tiny straight-line helper matches a
@@ -604,10 +928,11 @@ for the local pointer anymore.
 
 ### Experimental Manual Passes
 
-Some aggressive IR passes are still available, but they are no longer
-part of the public `-O3` preset because the executable benchmark suite
-still catches wrong-code regressions in kernels such as `sieve_bits`
-and `state_machine`.
+Some aggressive IR passes are still available, but their broadest forms
+remain outside the public stable presets because the executable
+benchmark suite has caught wrong-code regressions in kernels such as
+`sieve_bits` and `state_machine`. Public `-O3` only carries the
+benchmark-clean subset, such as exact-temp duplicate-block merging.
 
 Today those passes are manual `-f...` toggles:
 
@@ -949,7 +1274,7 @@ inlining is now smaller than `-O2` on every benchmark in the executable
 suite, but it still stays out of stable presets until it proves itself
 on a broader mix of code.
 
-`-O2`, `-O3`, and `-Os` now pre-reserve TEMP spill space automatically when the
+`-O2`, `-O3`, `-Of`, and `-Os` now pre-reserve TEMP spill space automatically when the
 function was already going to need an IX frame anyway, such as for
 stack parameters, fixed locals, or stack-shape hazards. The older
 `-fprealloc-temp-frame` flag is still available when you want to force
@@ -1146,7 +1471,7 @@ function has no locals, no stack parameters, and no stack temps.
 
 ### Example: Automatic TEMP Preallocation In An Existing IX Frame
 
-When `-O2`, `-O3`, or `-Os` compiles a function that already needs an IX frame,
+When `-O2`, `-O3`, `-Of`, or `-Os` compiles a function that already needs an IX frame,
 `xcc` now pre-reserves the needed TEMP spill space in the prologue
 instead of growing it later with repeated `dec sp` instructions inside
 the function body.
@@ -1176,12 +1501,12 @@ the lazy spill path.
 - compare-to-branch fusion is now handled directly in the backend for
   immediate compare-plus-`IFX` pairs, and the older peephole cleanup
   remains as a backstop for legacy shapes
-- `-Of` is now the public speed-oriented lane between `-O2` and `-O3`.
-- `-O3` is explicitly experimental, but it now shares the promoted
-  aggressive baseline with `-Of` and `-Os` so it can be used for new
-  experiments without hoarding old proven wins.
-- `-Os` is the dedicated size-oriented public preset, but today it also
-  shares that same promoted aggressive baseline.
+- `-Of` is the public speed-oriented lane; it starts from the proven
+  aggressive baseline and may spend a little code size for fewer cycles.
+- `-O3` is explicitly experimental. It keeps the proven `-Os` baseline,
+  then adds experiments that should not disturb the protected size lane.
+- `-Os` is the dedicated size-oriented public preset and is treated as
+  the protected record-setting baseline.
 - The runtime helper library is also split more finely now for signed
   byte divide/mod front-ends and float zero helpers, so linked programs
   do not pull those entry points in as part of larger mixed helper
@@ -1195,7 +1520,7 @@ the lazy spill path.
   `src/xc/xcc/src/opt/iromod.cpp`
 - Z80 backend:
   `src/xc/xcc/src/backend/z80/`
-- peephole rules:
-  `src/xc/xcc/src/backend/z80/z80peep.cpp`
+- shared assembly-level optimizer:
+  `lib/xopt/src/z80peep.cpp`
 - driver option parsing:
   `src/xc/xcc/src/driver/options.cpp`

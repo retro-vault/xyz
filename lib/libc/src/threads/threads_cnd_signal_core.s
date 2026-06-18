@@ -16,8 +16,7 @@ __threads_cnd_signal_core:
 __threads_cnd_broadcast_core:
         ld      a,h
         or      l
-        jr      z,threads_cnd_err
+        jp      z,threads_cnd_err
         ld      (hl),#1
         ld      de,#THRD_SUCCESS
         ret
-

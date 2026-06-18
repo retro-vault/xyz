@@ -7,6 +7,7 @@
 
         .globl  _roundeven
         .globl  _roundevenl
+        .globl  _roundevenf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
 
@@ -25,4 +26,3 @@ _roundevenl::
         ld      sp,ix
         pop     ix
         ret
-

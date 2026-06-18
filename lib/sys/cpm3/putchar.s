@@ -7,7 +7,9 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _putchar
-        .globl  __cpm3_console_putchar
+
+        .equ    BDOS,5
+        .equ    C_WRITE,2
 
         .area   _CODE
 _putchar::
@@ -25,4 +27,19 @@ __cpm3_putchar_emit:
         ld      e,a
         call    __cpm3_console_putchar
         ld      d,#0x00
+        ret
+
+__cpm3_console_putchar:
+        push    ix
+        push    iy
+        push    bc
+        push    de
+        push    hl
+        ld      c,#C_WRITE
+        call    BDOS
+        pop     hl
+        pop     de
+        pop     bc
+        pop     iy
+        pop     ix
         ret

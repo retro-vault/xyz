@@ -12,9 +12,9 @@
         .globl  __exit
         .globl  __exit_status
 
-BDOS            .equ 5
-P_CODE          .equ 108
-P_TERMCPM       .equ 0
+        .equ    BDOS,5
+        .equ    P_CODE,108
+        .equ    P_TERMCPM,0
 
         .area   _CODE
 __exit::

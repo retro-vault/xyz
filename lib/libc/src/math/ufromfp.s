@@ -9,6 +9,7 @@
         .globl  _ufromfpl
         .globl  _ufromfpx
         .globl  _ufromfpxl
+        .globl  _ufromfpf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
 
@@ -29,4 +30,3 @@ _ufromfpxl::
         ld      sp,ix
         pop     ix
         ret
-

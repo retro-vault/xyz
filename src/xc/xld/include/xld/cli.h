@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,8 @@ namespace xld {
 
     struct cli_options {
         std::vector<std::filesystem::path> input_files;
+        std::vector<std::filesystem::path> library_search_paths;
+        std::vector<std::string> libraries;
         std::filesystem::path output_file = "a.out";
         std::optional<std::filesystem::path> script_file;
         std::optional<std::filesystem::path> cdb_file;
@@ -40,6 +43,10 @@ namespace xld {
         std::vector<std::string> area_order;
         std::optional<address_range> output_range;
         output_format format = output_format::xl;
+        std::set<std::string> explicit_area_bases;
+        bool entry_symbol_explicit = false;
+        bool output_range_explicit = false;
+        bool format_explicit = false;
         bool debug_info = false;
         bool no_startfiles = false;
         bool no_stdlib = false;
@@ -53,6 +60,7 @@ namespace xld {
     class cli {
     public:
         static cli_options parse(int argc, char* argv[]);
+        static void resolve_libraries(cli_options& opts);
         static void print_usage(const char* argv0);
     };
 

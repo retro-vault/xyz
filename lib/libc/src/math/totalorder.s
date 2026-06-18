@@ -7,6 +7,7 @@
 
         .globl  _totalorder
         .globl  _totalorderl
+        .globl  _totalorderf
         .globl  __db_load_arg0_fs
         .globl  __db_load_arg1_fs
 
@@ -26,4 +27,3 @@ _totalorderl::
         ld      sp,ix
         pop     ix
         ret
-

@@ -1,5 +1,5 @@
 # Host-side libraries.  xbfd must build first (tools depend on it).
-SUBDIRS = xbfd xgdb rsp
+SUBDIRS = xbfd xopt xgdb rsp
 
 # Rules.
 .PHONY: all

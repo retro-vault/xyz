@@ -13,9 +13,9 @@
         .globl  __cpm3_tmp_saved_user
         .globl  __cpm3_tmp_user
 
-BDOS            .equ 5
-BDOS_SUCCESS    .equ 0
-F_DELETE        .equ 19
+        .equ    BDOS,5
+        .equ    BDOS_SUCCESS,0
+        .equ    F_DELETE,19
 
         .area   _CODE
 _unlink::

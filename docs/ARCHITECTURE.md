@@ -6,7 +6,7 @@ This document describes the current state of the repository and the target struc
 
 The project is a single monorepo containing several related but conceptually distinct products:
 
-- **Toolchain ("X Tools")**: xcc (C compiler), xas (assembler), xld (linker), xar, xobjcopy, xgdb, plus supporting bits (some runtime code, bfd, etc.). Located primarily under `src/xc/`.
+- **Toolchain ("X Tools")**: xcc (C compiler), xas (assembler), xld (linker), xopt (standalone Z80 assembly optimizer), xar, xobjcopy, xgdb, plus supporting bits (some runtime code, bfd, etc.). Located primarily under `src/xc/`.
 - **C Library**: Hand-written Z80 assembler implementation of (mostly) C23 libc. Located in `lib/libc/`. Must be usable both by the toolchain (for testing) and by the OS.
 - **Low-level Runtime**: SDCC-compatible helpers for 64-bit integers, double, float, etc. (`src/xc/xcc/lib/runtime/` + `tests/runtime/`).
 - **Operating System**: YOS kernel, drivers, basic applications (`src/yos/` and related directories).
@@ -41,6 +41,7 @@ xyz/
 │   ├── xcc/
 │   ├── xas/
 │   ├── xld/
+│   ├── xopt/
 │   ├── xar/
 │   ├── xobjcopy/
 │   ├── xgdb/
@@ -135,7 +136,7 @@ When adding tests for new C23 features (or anything else):
     (`xbfd`, `rsp`, `xgdb`).
   - `bin/x/z80/include/` stages the target libc headers and `yos.h`.
   - `bin/x/z80/lib/` stages `crt0`, linker scripts, `libruntime.a`, `libc.a`,
-    and a single default platform archive such as `libcpm3.a`.
+    the default `libnone.a`, and named platform payloads such as `libcpm3.a`.
   - `bin/y/` holds YOS build outputs plus YOS-adjacent host tools and support
     libraries.
   - `bin/z/` holds staged target assets, apps, and media.
@@ -144,7 +145,8 @@ When adding tests for new C23 features (or anything else):
   - `xld` probes relative to its prefix for runtime/startup libraries.
   - The common standard library and runtime stay shared under
     `bin/x/z80/lib/`.
-  - The current default staged platform payload is CP/M 3.
+  - The current default staged platform payload is bare-metal `none`; CP/M 3
+    is selected explicitly with `--platform=cpm3`.
 - The resulting xtools package should be usable with different sysroots (bare metal, YOS, future GUI system, third-party OS, etc.).
 
 ## Migration Path (Incremental)

@@ -396,7 +396,9 @@ SRCS := \
   $(LIBC_SRC)/math/tgammaf.s
 
 RUNTIME_SRCS := $(filter $(RT_SRC)/%,$(SRCS))
-DIRECT_RELS := $(patsubst %.s,$(BUILD)/objs/%.rel,$(notdir $(RUNTIME_SRCS)))
+SYSMOCK_SRCS := $(sort $(wildcard $(ROOT)/tests/sysmock/*.s))
+SYSMOCK_RELS := $(patsubst $(ROOT)/tests/sysmock/%.s,$(BUILD)/objs/sysmock_%.rel,$(SYSMOCK_SRCS))
+DIRECT_RELS := $(patsubst %.s,$(BUILD)/objs/%.rel,$(notdir $(RUNTIME_SRCS))) $(SYSMOCK_RELS)
 CORE_RELS := $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel
 CORE_RELS += $(BUILD)/objs/core_force_refs.rel
 SCAN_RELS := $(DIRECT_RELS) $(BUILD)/objs/stdio_scan_cases.rel
@@ -578,6 +580,8 @@ $(BUILD)/objs/%.rel: $(LIBC_SRC)/math/%.s | $(BUILD)/objs
 $(BUILD)/objs/%.rel: $(LIBC_SRC)/stdio/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(ROOT)/tests/sysmock/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/sysmock_%.rel: $(ROOT)/tests/sysmock/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(RT_SRC)/int32/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<

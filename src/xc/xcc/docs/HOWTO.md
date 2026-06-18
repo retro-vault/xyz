@@ -31,9 +31,9 @@
 | `-O0`       | No optimisation (default). |
 | `-O1`       | Enable peephole optimiser. Removes redundant loads, dead jumps, temp store/reload pairs. The simplest fixed-window peepholes are now table-driven; the more context-sensitive ones still use custom matchers. |
 | `-O2`       | Enable general optimisation: module-level dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested private-helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same safe subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, IR constant-fold/DCE, strength reduction (multiply/divide/mod by power-of-two → shift), conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, dead-local frame compaction, the bounded stable temp register allocator for short straight-line 16-bit temp windows, automatic TEMP preallocation inside functions that already need an IX frame, smaller nearby `&local` / `&temp` address materialization, frameless zero-frame functions when safe, plus all `-O1` peephole rules. |
-| `-Of`       | Enable speed optimisation: the promoted aggressive baseline that currently beats SDCC on the executable benchmark suite. |
-| `-O3`       | Enable experimental optimisation: it currently starts from the same promoted aggressive baseline as `-Of` / `-Os`, so it is free to host genuinely new experiments without hoarding already-proven wins. |
-| `-Os`       | Enable size optimisation: it currently shares the same promoted aggressive baseline as `-Of` / `-O3`. |
+| `-Of`       | Enable speed optimisation: the promoted aggressive baseline plus speed-biased codegen choices and O3-proven peepholes that may spend a little size for fewer cycles. |
+| `-O3`       | Enable experimental optimisation: the same proven baseline as `-Os`, plus speed, size, shape-changing, and superoptimizer-inspired peephole experiments. Here be dragons. |
+| `-Os`       | Enable size optimisation: the protected record-setting aggressive size baseline. |
 
 `xcc` also supports fine-grained overrides with `-f<name>` and
 `-fno-<name>`. Current names include:

@@ -18,7 +18,7 @@ Final matrix result at the end of this pass:
 
 One compiler-side issue was fixed instead of being hidden in tests:
 
-- `src/backend/z80/z80peep.cpp`
+- `lib/xopt/src/z80peep.cpp`
   - The `jp` to `jr` peephole was disabled.
   - The old rule guessed jump range from nearby source lines instead of
     real encoded byte distance.

@@ -1154,9 +1154,11 @@ static std::string block_body_signature(const ir_function &fn,
         return {};
 
     std::string sig;
-    std::unordered_map<int, int> temp_ids;
     for (size_t i = first; i < body_end; ++i) {
-        sig += icode_signature(fn.icodes[i], &temp_ids);
+        // Whole-block merging does not rewrite operands, so temp IDs must be
+        // exact.  Renaming them here can redirect a branch into a block that
+        // reads a different incoming temporary.
+        sig += icode_signature(fn.icodes[i]);
         sig.push_back('\n');
     }
     return sig;

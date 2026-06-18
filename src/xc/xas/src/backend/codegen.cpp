@@ -231,6 +231,7 @@ namespace xas {
     }
 
     static std::optional<int64_t> eval_expr_symbol_zero(const expr& e,
+                                                        const sym_table& syms,
                                                         uint32_t cur_addr)
     {
         switch (e.kind) {
@@ -240,11 +241,16 @@ namespace xas {
             case expr_kind::current_addr:
                 return static_cast<int64_t>(cur_addr);
 
-            case expr_kind::symbol:
+            case expr_kind::symbol: {
+                auto it = syms.find(e.name);
+                if (it != syms.end() && it->second.defined
+                    && it->second.section_name.empty())
+                    return static_cast<int64_t>(it->second.value);
                 return 0;
+            }
 
             case expr_kind::unary: {
-                auto v = eval_expr_symbol_zero(*e.lhs, cur_addr);
+                auto v = eval_expr_symbol_zero(*e.lhs, syms, cur_addr);
                 if (!v) return std::nullopt;
                 if (e.op == '-') return -*v;
                 if (e.op == '~') return ~*v;
@@ -252,8 +258,8 @@ namespace xas {
             }
 
             case expr_kind::binary: {
-                auto lv = eval_expr_symbol_zero(*e.lhs, cur_addr);
-                auto rv = eval_expr_symbol_zero(*e.rhs, cur_addr);
+                auto lv = eval_expr_symbol_zero(*e.lhs, syms, cur_addr);
+                auto rv = eval_expr_symbol_zero(*e.rhs, syms, cur_addr);
                 if (!lv || !rv) return std::nullopt;
                 switch (e.op) {
                     case '+': return *lv + *rv;
@@ -273,23 +279,33 @@ namespace xas {
         return std::nullopt;
     }
 
-    static int symbol_ref_count(const expr& e)
+    static bool is_relocatable_symbol(const std::string& name,
+                                      const sym_table& syms)
+    {
+        auto it = syms.find(name);
+        if (it == syms.end() || !it->second.defined)
+            return true;
+        return !it->second.section_name.empty();
+    }
+
+    static int symbol_ref_count(const expr& e, const sym_table& syms)
     {
         switch (e.kind) {
             case expr_kind::integer:
             case expr_kind::current_addr:
                 return 0;
             case expr_kind::symbol:
-                return 1;
+                return is_relocatable_symbol(e.name, syms) ? 1 : 0;
             case expr_kind::unary:
-                return symbol_ref_count(*e.lhs);
+                return symbol_ref_count(*e.lhs, syms);
             case expr_kind::binary:
-                return symbol_ref_count(*e.lhs) + symbol_ref_count(*e.rhs);
+                return symbol_ref_count(*e.lhs, syms)
+                     + symbol_ref_count(*e.rhs, syms);
         }
         return 0;
     }
 
-    static std::string reloc_symbol_name(const expr& e);
+    static std::string reloc_symbol_name(const expr& e, const sym_table& syms);
 
     // Returns true if the expression should carry a relocation record.
     // For relocatable objects, even same-section absolute symbol references
@@ -300,13 +316,13 @@ namespace xas {
     static bool needs_reloc(const expr& e, const sym_table& syms,
                              const std::string&)
     {
-        const int sym_count = symbol_ref_count(e);
+        const int sym_count = symbol_ref_count(e, syms);
         if (sym_count == 0)
             return false;
         if (sym_count != 1)
             return false;
 
-        const auto name = reloc_symbol_name(e);
+        const auto name = reloc_symbol_name(e, syms);
         if (name.empty())
             return false;
 
@@ -324,13 +340,13 @@ namespace xas {
     static bool needs_pcrel_reloc(const expr& e, const sym_table& syms,
                                   const std::string& cur_section)
     {
-        const int sym_count = symbol_ref_count(e);
+        const int sym_count = symbol_ref_count(e, syms);
         if (sym_count == 0)
             return false;
         if (sym_count != 1)
             return false;
 
-        const auto name = reloc_symbol_name(e);
+        const auto name = reloc_symbol_name(e, syms);
         if (name.empty())
             return false;
 
@@ -342,14 +358,15 @@ namespace xas {
         return it->second.section_name != cur_section;
     }
 
-    static std::string reloc_symbol_name(const expr& e)
+    static std::string reloc_symbol_name(const expr& e, const sym_table& syms)
     {
-        if (e.kind == expr_kind::symbol) return e.name;
-        if (e.kind == expr_kind::unary) return reloc_symbol_name(*e.lhs);
+        if (e.kind == expr_kind::symbol)
+            return is_relocatable_symbol(e.name, syms) ? e.name : "";
+        if (e.kind == expr_kind::unary) return reloc_symbol_name(*e.lhs, syms);
         if (e.kind == expr_kind::binary) {
-            std::string n = reloc_symbol_name(*e.lhs);
+            std::string n = reloc_symbol_name(*e.lhs, syms);
             if (!n.empty()) return n;
-            return reloc_symbol_name(*e.rhs);
+            return reloc_symbol_name(*e.rhs, syms);
         }
         return {};
     }
@@ -363,7 +380,7 @@ namespace xas {
     static reloc_target pick_reloc_target(const expr& e, const sym_table& syms,
                                           const std::string&)
     {
-        const auto name = reloc_symbol_name(e);
+        const auto name = reloc_symbol_name(e, syms);
         if (name.empty())
             return {};
 
@@ -381,11 +398,11 @@ namespace xas {
                                  const reloc_target& target)
     {
         auto value = eval_expr(e, syms, cur_offset);
-        auto relaxed = value ? value : eval_expr_symbol_zero(e, cur_offset);
+        auto relaxed = value ? value : eval_expr_symbol_zero(e, syms, cur_offset);
         if (!relaxed)
             return 0;
 
-        const auto name = reloc_symbol_name(e);
+        const auto name = reloc_symbol_name(e, syms);
         if (name.empty() || !target.valid)
             return static_cast<uint32_t>(*relaxed);
 
@@ -424,6 +441,126 @@ namespace xas {
 
         codegen(emitter& e, const std::string& src)
             : emit_(e), src_file_(src) {}
+
+        void install_predefines(const std::vector<std::string>& defines)
+        {
+            for (const std::string& def : defines) {
+                size_t eq = def.find('=');
+                std::string name = eq == std::string::npos
+                    ? def
+                    : def.substr(0, eq);
+                std::string text = eq == std::string::npos
+                    ? "1"
+                    : def.substr(eq + 1);
+                if (name.empty())
+                    throw codegen_error(src_file_, 0, "empty -D symbol");
+
+                int64_t value = 0;
+                try {
+                    size_t consumed = 0;
+                    value = std::stoll(text, &consumed, 0);
+                    if (consumed != text.size())
+                        throw std::invalid_argument("trailing characters");
+                } catch (...) {
+                    throw codegen_error(src_file_, 0,
+                        "non-integer -D value for '" + name + "': " + text);
+                }
+
+                syms_[name].value = static_cast<uint32_t>(value);
+                syms_[name].defined = true;
+            }
+        }
+
+        bool conditional_symbol_defined(const stmt& s) const
+        {
+            if (s.args.empty() || s.args[0]->kind != expr_kind::symbol)
+                throw codegen_error(s.source_file.empty() ? src_file_ : s.source_file,
+                    s.source_line, "." + s.directive_name + " expects a symbol");
+            auto it = syms_.find(s.args[0]->name);
+            return it != syms_.end() && it->second.defined;
+        }
+
+        bool conditional_value(const stmt& s)
+        {
+            const std::string file =
+                s.source_file.empty() ? src_file_ : s.source_file;
+            if (s.directive_name == "ifdef")
+                return conditional_symbol_defined(s);
+            if (s.directive_name == "ifndef")
+                return !conditional_symbol_defined(s);
+            if (s.args.empty())
+                throw codegen_error(file, s.source_line,
+                    ".if expects an absolute expression");
+            auto value = eval_expr(*s.args[0], syms_, cur_offset_);
+            if (!value)
+                throw codegen_error(file, s.source_line,
+                    ".if expression is not an absolute known value");
+            return *value != 0;
+        }
+
+        std::vector<const stmt*> filter_conditionals(const stmt_list& stmts)
+        {
+            struct frame {
+                bool parent_active = true;
+                bool condition_true = false;
+                bool in_else = false;
+                bool active = true;
+            };
+
+            std::vector<frame> stack;
+            std::vector<const stmt*> active;
+
+            auto current_active = [&]() {
+                return stack.empty() ? true : stack.back().active;
+            };
+
+            for (const stmt& s : stmts) {
+                if (s.kind == stmt_kind::directive
+                    && (s.directive_name == "if"
+                        || s.directive_name == "ifdef"
+                        || s.directive_name == "ifndef")) {
+                    const bool parent = current_active();
+                    const bool condition = parent ? conditional_value(s) : false;
+                    stack.push_back({ parent, condition, false,
+                                      parent && condition });
+                    continue;
+                }
+
+                if (s.kind == stmt_kind::directive
+                    && s.directive_name == "else") {
+                    if (stack.empty())
+                        throw codegen_error(
+                            s.source_file.empty() ? src_file_ : s.source_file,
+                            s.source_line, ".else without matching .if");
+                    frame& top = stack.back();
+                    if (top.in_else)
+                        throw codegen_error(
+                            s.source_file.empty() ? src_file_ : s.source_file,
+                            s.source_line, "duplicate .else");
+                    top.in_else = true;
+                    top.active = top.parent_active && !top.condition_true;
+                    continue;
+                }
+
+                if (s.kind == stmt_kind::directive
+                    && s.directive_name == "endif") {
+                    if (stack.empty())
+                        throw codegen_error(
+                            s.source_file.empty() ? src_file_ : s.source_file,
+                            s.source_line, ".endif without matching .if");
+                    stack.pop_back();
+                    continue;
+                }
+
+                if (current_active())
+                    active.push_back(&s);
+            }
+
+            if (!stack.empty())
+                throw codegen_error(src_file_, 0, "unterminated .if block");
+
+            return active;
+        }
 
         void note_section_offset()
         {
@@ -528,14 +665,26 @@ namespace xas {
                 ensure_section();
                 if (needs_pcrel_reloc(e, syms_, cur_section_)) {
                     const auto target = pick_reloc_target(e, syms_, cur_section_);
-                    const auto addend = reloc_addend(e, syms_, cur_offset_, target);
+                    const auto target_addend =
+                        static_cast<int32_t>(reloc_addend(e, syms_, cur_offset_, target));
+                    auto reloc_addend = target_addend;
+                    auto encoded_addend = target_addend;
+                    if (emit_.gnu_pcrel8_relocations()) {
+                        // ELF Z80 PC-relative relocations are applied at the
+                        // displacement byte.  Z80 branches are relative to the
+                        // following instruction, so unresolved targets need the
+                        // same -1 bias GNU as emits for `jr external`.
+                        reloc_addend = target_addend - 1;
+                        encoded_addend =
+                            target_addend - static_cast<int32_t>(cur_offset_ + 1);
+                    }
                     if (is_external_target(target, syms_))
                         emit_.refer_symbol(target.name);
                     emit_.emit_reloc(target.name,
                                      bfd::reloc_type::z80_pc8,
                                      target.sym_relative,
-                                     static_cast<int32_t>(addend));
-                    emit_.emit_byte(static_cast<uint8_t>(addend & 0xFF));
+                                     reloc_addend);
+                    emit_.emit_byte(static_cast<uint8_t>(encoded_addend & 0xFF));
                 } else {
                     // cur_offset_ is after the opcode byte but before the offset.
                     int32_t off = v ? static_cast<int32_t>(*v)
@@ -1700,8 +1849,12 @@ namespace xas {
         // -----------------------------------------------------------------------
 
         void run(const stmt_list& stmts, const std::string& module_name,
-                 asm_mode mode)
+                 asm_mode mode, const std::vector<std::string>& defines)
         {
+            install_predefines(defines);
+            const std::vector<const stmt*> active_stmts =
+                filter_conditionals(stmts);
+
             // Initialise emitter.
             emit_.begin_module(module_name);
 
@@ -1716,7 +1869,8 @@ namespace xas {
             pass_ = 1;
             cur_offset_ = 0;
             section_ready_ = false;
-            for (const auto& s : stmts) {
+            for (const stmt* sp : active_stmts) {
+                const stmt& s = *sp;
                 if (s.kind == stmt_kind::comment)
                     continue;
                 if (s.kind == stmt_kind::directive
@@ -1791,7 +1945,8 @@ namespace xas {
             }
 
             // Mark .globl symbols as referenced-but-possibly-external.
-            for (const auto& s : stmts) {
+            for (const stmt* sp : active_stmts) {
+                const stmt& s = *sp;
                 if (s.kind == stmt_kind::comment)
                     continue;
                 if (s.kind == stmt_kind::directive
@@ -1814,7 +1969,8 @@ namespace xas {
 
             // Emit undefined globals in declaration order before codegen so
             // the REL symbol table matches SDCC's .globl-driven ordering.
-            for (const auto& s : stmts) {
+            for (const stmt* sp : active_stmts) {
+                const stmt& s = *sp;
                 if (s.kind == stmt_kind::comment)
                     continue;
                 if (s.kind != stmt_kind::directive)
@@ -1828,9 +1984,8 @@ namespace xas {
                 }
             }
 
-            for (size_t i = 0; i < stmts.size(); ++i) {
-                process_stmt(stmts[i]);
-            }
+            for (const stmt* sp : active_stmts)
+                process_stmt(*sp);
 
             if (!emitted_sections_.count(default_sec)) {
                 bfd::section_flags sf = classify_section_flags(default_sec);
@@ -1849,10 +2004,11 @@ namespace xas {
     void assemble(const stmt_list& stmts, emitter& emit,
                   const std::string& module_name,
                   const std::string& src_file,
-                  asm_mode mode)
+                  asm_mode mode,
+                  const std::vector<std::string>& defines)
     {
         codegen cg(emit, src_file);
-        cg.run(stmts, module_name, mode);
+        cg.run(stmts, module_name, mode, defines);
     }
 
 } // namespace xas

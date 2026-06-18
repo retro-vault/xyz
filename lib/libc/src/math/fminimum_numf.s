@@ -6,8 +6,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _fminimum_numf
+        .globl  _fminf
 
         .area   _CODE
 _fminimum_numf::
         jp      _fminf
-

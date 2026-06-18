@@ -18,14 +18,14 @@
         .globl  __cpm3_tmp_saved_user
         .globl  __cpm3_zero_tmprec
 
-FD_OFF_BUFVALID .equ 4
-FD_OFF_DIRTY    .equ 3
-FD_OFF_FPOS0    .equ 5
-FD_OFF_FSIZE0   .equ 9
-FD_OFF_USER     .equ 2
-SEEK_CUR_V      .equ 1
-SEEK_END_V      .equ 2
-SEEK_SET_V      .equ 0
+        .equ    FD_OFF_BUFVALID,4
+        .equ    FD_OFF_DIRTY,3
+        .equ    FD_OFF_FPOS0,5
+        .equ    FD_OFF_FSIZE0,9
+        .equ    FD_OFF_USER,2
+        .equ    SEEK_CUR_V,1
+        .equ    SEEK_END_V,2
+        .equ    SEEK_SET_V,0
 
         .area   _CODE
 _lseek::

@@ -6,9 +6,10 @@
 # xas: Z80 assembler (uses libxbfd)
 # xar: archive tool (uses libxbfd)
 # xobjcopy: object/archive conversion tool (uses libxbfd)
+# xopt: standalone assembly optimizer (uses libxopt)
 # ---------------------------------------------------------------------------
 
-SUBDIRS := xld xgdb xcc xas xar xobjcopy
+SUBDIRS := xld xgdb xcc xopt xas xar xobjcopy
 
 .PHONY: all
 all:

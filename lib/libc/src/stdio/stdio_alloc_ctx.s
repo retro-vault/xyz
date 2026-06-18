@@ -12,7 +12,7 @@
         .globl  __stdio_set_count_zero
         .globl  __stdio_store_sink_ptr_hl
         .globl  __stdio_store_sink_room_hl
-        .globl  _putchar
+        .globl  __stdio_emit_bytes
 
 CTX_COUNT       .equ 18
 CTX_EMIT_BYTE   .equ 72
@@ -109,12 +109,24 @@ __stdio_emit_a::
         call    __stdio_store_sink_room_hl
         jr      __stdio_emit_done
 __stdio_emit_console:
-        ;; Console streams go to the platform putchar hook (not write(),
-        ;; which is for disk block I/O only).
+        ;; Formatter-backed FILE output stores the fd in the context.  Route
+        ;; fd 0..2 through putchar and fd >= 3 through write() via the shared
+        ;; byte emitter, so fprintf/fputs work for file streams too.
         push    iy
-        ld      l,b
+        ld      hl,#0x0000
+        push    hl
+        ld      hl,#0x0000
+        add     hl,sp
+        ld      (hl),b
+        ex      de,hl
+        ld      a,CTX_SINK_FD(iy)
+        ld      l,a
         ld      h,#0x00
-        call    _putchar
+        ld      bc,#0x0001
+        push    bc
+        call    __stdio_emit_bytes
+        pop     bc
+        pop     bc
         pop     iy
         jr      __stdio_emit_done
 __stdio_emit_string:
@@ -128,4 +140,3 @@ __stdio_emit_done:
         pop     de
         pop     bc
         ret
-

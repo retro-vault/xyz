@@ -36,6 +36,23 @@ std::string sdcc_debug_emitter::module_stem(const std::string &source_file) {
     return std::filesystem::path(source_file).stem().string();
 }
 
+static std::string source_label_name(const std::string& source_file) {
+    std::string name = std::filesystem::path(source_file).filename().string();
+    if (name.empty())
+        name = "source";
+
+    for (char& ch : name) {
+        const bool keep = (ch >= 'a' && ch <= 'z')
+            || (ch >= 'A' && ch <= 'Z')
+            || (ch >= '0' && ch <= '9')
+            || ch == '_'
+            || ch == '.';
+        if (!keep)
+            ch = '_';
+    }
+    return name;
+}
+
 // Return the CDB base type string (no {N} prefix).
 // Used recursively for derived types (arrays, pointers, functions).
 std::string sdcc_debug_emitter::cdb_base_type(const type *t) {
@@ -103,7 +120,7 @@ void sdcc_debug_emitter::emit_location(int line) {
     //   C$sieve.c$12$1_0$7:
     //   .globl C$sieve.c$12$1_0$7
     const int blk = cur_fn_ ? cur_fn_->block : block_ctr_;
-    const std::string sym = "C$" + source_file_
+    const std::string sym = "C$" + source_label_name(source_file_)
                           + "$" + std::to_string(line)
                           + "$1_0$" + std::to_string(blk);
     out_ << sym << ":\n"

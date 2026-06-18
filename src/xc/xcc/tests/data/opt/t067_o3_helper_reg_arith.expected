@@ -8,13 +8,12 @@ _f:
 	ld	hl, #40503
 	add	hl, de
 	ld	a, c
-	xor	a, l
-	ld	c, a
+	xor	l
+	ld	l, a
 	ld	a, b
-	xor	a, h
+	xor	h
 	ld	b, a
-	ld	l, c
-	ld	h, b
+	ld	h, a
 	add	hl, hl
 	add	hl, hl
 	add	hl, hl

@@ -6,7 +6,7 @@
   "common_flags": [],
   "compile_flags": [],
   "compile_template": [
-    "./setups/xcc-z80/bin/xcc_z80_driver.sh",
+    "{root}/setups/xcc-z80/bin/xcc_z80_driver.sh",
     "--source",
     "{source}",
     "--output",
@@ -17,7 +17,7 @@
     "{extra_cflags}"
   ],
   "run_template": [
-    "./setups/xcc-z80/bin/run_xcc_z80.sh",
+    "{root}/setups/xcc-z80/bin/run_xcc_z80.sh",
     "{executable}",
     "{build_dir}"
   ],

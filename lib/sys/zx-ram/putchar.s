@@ -9,11 +9,9 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _putchar
-        .globl  _putchar
 
         .area   _CODE
 
-_putchar:
 _putchar::
         ld      a,l
         rst     0x10

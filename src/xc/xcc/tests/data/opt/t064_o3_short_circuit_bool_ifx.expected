@@ -18,7 +18,6 @@ _classify:
 	cp	#32
 	jr	z, __xcc_L0
 __xcc_L3:
-	ld	a, -2(ix)
 	cp	#44
 	jr	z, __xcc_L0
 	jr	__xcc_L2
@@ -30,7 +29,6 @@ __xcc_L2:
 	cp	#2
 	jr	z, __xcc_L4
 __xcc_L8:
-	ld	a, -1(ix)
 	cp	#4
 	jr	z, __xcc_L4
 __xcc_L7:
@@ -46,7 +44,6 @@ __xcc_L6:
 	cp	#97
 	jr	c, __xcc_L12
 __xcc_L13:
-	ld	a, -2(ix)
 	cp	#122
 	jr	z, __xcc_L9
 	jr	c, __xcc_L9

@@ -13,7 +13,7 @@ The compiler should prefer:
 
 This document is based on the current optimizer/backend structure in
 `src/opt/iropt.cpp`, `src/backend/z80/z80gen.cpp`,
-`src/backend/z80/z80gen_arith.cpp`, `src/backend/z80/z80peep.cpp`, and
+`src/backend/z80/z80gen_arith.cpp`, `lib/xopt/src/z80peep.cpp`, and
 `lib/runtime.s`.
 
 ## Current Baseline

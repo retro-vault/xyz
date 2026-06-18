@@ -1,0 +1,28 @@
+	.module	xcc_output
+	.area	_DATA
+	.globl	_tame_hoist_buf
+_tame_hoist_buf:
+	.ds	16
+	.area	_CODE
+	.globl	_tame_hoist_d_zero
+_tame_hoist_d_zero:
+	; sdcccall(1) prologue: tame_hoist_d_zero (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	e, #0
+hoist_d_zero_loop_os:
+	ld	a, e
+	ld	hl, #_tame_hoist_buf
+	ld	d, #0
+	add	hl, de
+	ld	(hl), a
+	inc	e
+	ld	a, e
+	sub	#16
+	jr	c, hoist_d_zero_loop_os
+__tame_hoist_d_zero_end:
+	; epilogue: tame_hoist_d_zero
+	ld	sp, ix
+	pop	ix
+	ret

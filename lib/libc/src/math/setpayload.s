@@ -7,6 +7,7 @@
 
         .globl  _setpayload
         .globl  _setpayloadl
+        .globl  _setpayloadf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
 
@@ -25,4 +26,3 @@ _setpayloadl::
         ld      sp,ix
         pop     ix
         ret
-

@@ -9,6 +9,7 @@
         .globl  _fminimum_num
         .globl  _fminimum_numl
         .globl  _fminimuml
+        .globl  _fminimumf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
         .globl  __db_load_arg1_fs
@@ -31,4 +32,3 @@ _fminimum_numl::
         ld      sp,ix
         pop     ix
         ret
-

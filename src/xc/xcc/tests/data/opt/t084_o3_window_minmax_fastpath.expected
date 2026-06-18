@@ -10,13 +10,12 @@ _bench_mix16:
 	ld	hl, #40503
 	add	hl, de
 	ld	a, c
-	xor	a, l
-	ld	c, a
+	xor	l
+	ld	l, a
 	ld	a, b
-	xor	a, h
+	xor	h
 	ld	b, a
-	ld	l, c
-	ld	h, b
+	ld	h, a
 	add	hl, hl
 	add	hl, hl
 	add	hl, hl
@@ -56,16 +55,25 @@ _main:
 	ld	a, d
 	xor	h
 	ld	d, a
+	rlca
+	rlca
+	rlca
+	and	#248
+	ld	l, a
 	ld	a, e
-	ld	l, d
-	ld	b, #5
-__xcc_wm_seed_shr:
-	srl	l
-	rr	a
-	djnz	__xcc_wm_seed_shr
+	rlca
+	rlca
+	rlca
+	and	#7
+	or	l
 	xor	e
 	ld	e, a
-	ld	a, l
+	ld	a, d
+	rlca
+	rlca
+	rlca
+	and	#7
+	ld	l, a
 	xor	d
 	ld	d, a
 	ld	hl, #66
@@ -83,11 +91,10 @@ __xcc_wm_fill:
 	add	a, a
 	xor	c
 	ld	d, a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
+	rlca
+	rlca
+	rlca
+	and	#7
 	xor	d
 	add	a, #92
 	add	a, b
@@ -138,7 +145,6 @@ __xcc_wm_skip_max:
 	pop	de
 	push	de
 	ld	a, e
-	ld	e, a
 	ld	d, #0
 	call	_bench_mix16
 	ex	de, hl

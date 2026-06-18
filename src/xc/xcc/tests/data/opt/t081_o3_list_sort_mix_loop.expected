@@ -17,13 +17,12 @@ _bench_mix16:
 	ld	hl, #40503
 	add	hl, de
 	ld	a, c
-	xor	a, l
-	ld	c, a
+	xor	l
+	ld	l, a
 	ld	a, b
-	xor	a, h
+	xor	h
 	ld	b, a
-	ld	l, c
-	ld	h, b
+	ld	h, a
 	add	hl, hl
 	add	hl, hl
 	add	hl, hl
@@ -90,8 +89,6 @@ __xcc_L1:
 __xcc_L2:
 	ld	-5(ix), l
 	ld	-4(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __main_end:
 	; epilogue: main

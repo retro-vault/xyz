@@ -1,0 +1,25 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_dragon_shift5_pair
+_dragon_shift5_pair:
+	; sdcccall(1) prologue: dragon_shift5_pair (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	srl	l
+	rr	a
+	srl	l
+	rr	a
+	srl	l
+	rr	a
+	srl	l
+	rr	a
+	srl	l
+	rr	a
+	xor	e
+	ld	b, #0
+__dragon_shift5_pair_end:
+	; epilogue: dragon_shift5_pair
+	ld	sp, ix
+	pop	ix
+	ret

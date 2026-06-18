@@ -6,8 +6,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _fmaximumf
+        .globl  _fmaxf
 
         .area   _CODE
 _fmaximumf::
         jp      _fmaxf
-

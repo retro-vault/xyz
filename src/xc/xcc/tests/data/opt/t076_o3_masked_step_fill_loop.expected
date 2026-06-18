@@ -13,8 +13,7 @@ _f:
 	add	hl, sp
 	ld	sp, hl
 	; O3 masked step-fill loop (count=64)
-	ld	c, #18
-	ld	b, #0
+	ld	bc, #18
 	ld	hl, #next_buf
 __xcc_L0:
 	ld	a, b

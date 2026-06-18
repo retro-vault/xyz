@@ -12,9 +12,10 @@
 
 #include <xld/runtime.h>
 #include <xld/errors.h>
+#include <xbfd/lscript.h>
 
 #ifndef XLD_DEFAULT_PLATFORM
-#define XLD_DEFAULT_PLATFORM "cpm3"
+#define XLD_DEFAULT_PLATFORM "none"
 #endif
 
 namespace xld {
@@ -55,6 +56,28 @@ namespace xld {
     static bool is_target_runtime_dir(const std::filesystem::path& runtime_dir);
     static std::filesystem::path resolve_shared_library_dir(
         const std::filesystem::path& runtime_dir);
+    static std::optional<std::string> selected_target_name(
+        const cli_options& opts);
+    static std::string strip_target_arch_prefix(std::string target_name);
+
+    static output_format to_xld_output_format(
+        xbfd::lscript_output_format fmt,
+        const std::filesystem::path& script_path)
+    {
+        switch (fmt) {
+        case xbfd::lscript_output_format::xl:
+            return output_format::xl;
+        case xbfd::lscript_output_format::bin:
+            return output_format::bin;
+        case xbfd::lscript_output_format::ihx:
+            return output_format::ihx;
+        case xbfd::lscript_output_format::elf:
+            throw xld_error("linker script '" + script_path.string()
+                            + "' requests an output format not implemented by xld");
+        default:
+            return output_format::xl;
+        }
+    }
 
     static std::string strip_target_arch_prefix(std::string target_name)
     {
@@ -64,11 +87,27 @@ namespace xld {
     }
 
     static std::filesystem::path resolve_crt0(
-        const std::filesystem::path& runtime_dir)
+        const std::filesystem::path& runtime_dir,
+        const cli_options& opts)
     {
-        auto preferred = runtime_dir / "crt0.rel";
-        if (std::filesystem::exists(preferred))
-            return preferred;
+        std::vector<std::filesystem::path> preferred;
+        auto add_named_candidate = [&](const std::string& target_name) {
+            const auto short_name = strip_target_arch_prefix(target_name);
+            if (!short_name.empty())
+                preferred.push_back(runtime_dir / ("crt0-" + short_name + ".rel"));
+        };
+
+        if (auto selected = selected_target_name(opts))
+            add_named_candidate(*selected);
+        else
+            add_named_candidate(XLD_DEFAULT_PLATFORM);
+
+        preferred.push_back(runtime_dir / "crt0.rel");
+
+        for (const auto& candidate : preferred) {
+            if (std::filesystem::exists(candidate))
+                return candidate;
+        }
 
         std::vector<std::filesystem::path> candidates;
         for (const auto& entry : std::filesystem::directory_iterator(runtime_dir)) {
@@ -150,6 +189,102 @@ namespace xld {
         return std::nullopt;
     }
 
+    static std::optional<std::filesystem::path> resolve_default_linker_script(
+        const std::filesystem::path& runtime_dir,
+        const cli_options& opts)
+    {
+        std::vector<std::filesystem::path> candidates;
+        const char* default_name =
+            opts.mode == link_mode::gnu ? "linker.ld" : "linker.lk";
+        const char* platform_name =
+            opts.mode == link_mode::gnu ? "platform.ld" : "platform.lk";
+        const char* ext = opts.mode == link_mode::gnu ? ".ld" : ".lk";
+
+        auto add_named_candidates = [&](const std::string& target_name) {
+            const auto short_name = strip_target_arch_prefix(target_name);
+            if (short_name.empty())
+                return;
+            candidates.push_back(runtime_dir / ("linker-" + short_name + ext));
+            candidates.push_back(runtime_dir / (short_name + ext));
+        };
+
+        if (auto selected = selected_target_name(opts))
+            add_named_candidates(*selected);
+        else
+            add_named_candidates(XLD_DEFAULT_PLATFORM);
+
+        candidates.push_back(runtime_dir / default_name);
+        candidates.push_back(runtime_dir / platform_name);
+
+        for (const auto& candidate : candidates) {
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec)
+                && std::filesystem::is_regular_file(candidate, ec)) {
+                return normalize_path(candidate);
+            }
+        }
+        return std::nullopt;
+    }
+
+    static void apply_default_linker_script(cli_options& opts,
+                                            const std::filesystem::path& runtime_dir)
+    {
+        if (opts.script_file.has_value())
+            return;
+
+        auto script_path = resolve_default_linker_script(runtime_dir, opts);
+        if (!script_path.has_value())
+            return;
+
+        try {
+            auto script = xbfd::lscript::open(
+                *script_path,
+                opts.mode == link_mode::gnu
+                    ? xbfd::lscript_mode::gnu
+                    : xbfd::lscript_mode::sdcc);
+
+            opts.script_file = *script_path;
+
+            if (script->entry_symbol().has_value()
+                && !opts.entry_symbol_explicit) {
+                opts.entry_symbol = *script->entry_symbol();
+            }
+            if (script->output_format().has_value()
+                && !opts.format_explicit) {
+                opts.format = to_xld_output_format(*script->output_format(),
+                                                   *script_path);
+            }
+            if (script->output_range().has_value()
+                && !opts.output_range_explicit) {
+                opts.output_range = xld::address_range{
+                    script->output_range()->start,
+                    script->output_range()->end
+                };
+            }
+            for (const auto& [area_name, base] : script->area_bases()) {
+                if (opts.explicit_area_bases.find(area_name)
+                    == opts.explicit_area_bases.end()) {
+                    opts.area_bases[area_name] = base;
+                }
+            }
+            for (const auto& area_name : script->area_order()) {
+                if (std::find(opts.area_order.begin(),
+                              opts.area_order.end(),
+                              area_name) == opts.area_order.end()) {
+                    opts.area_order.push_back(area_name);
+                }
+            }
+            for (const auto& range : script->reserved_ranges()) {
+                opts.reserved_ranges.push_back(xld::address_range{
+                    range.start,
+                    range.end
+                });
+            }
+        } catch (const xbfd::lscript_error& e) {
+            throw xld_error(e.what());
+        }
+    }
+
     static std::optional<std::string> selected_target_name(
         const cli_options& opts)
     {
@@ -202,7 +337,7 @@ namespace xld {
 
         if (!opts.no_stdlib && !opts.no_startfiles) {
             try {
-                (void)resolve_crt0(runtime_dir);
+                (void)resolve_crt0(runtime_dir, opts);
             } catch (const xld_error&) {
                 return false;
             }
@@ -285,8 +420,10 @@ namespace xld {
                               + runtime_dir.string());
         }
 
+        apply_default_linker_script(opts, runtime_dir);
+
         if (!opts.no_stdlib && !opts.no_startfiles) {
-            auto crt0 = resolve_crt0(runtime_dir);
+            auto crt0 = resolve_crt0(runtime_dir, opts);
             opts.input_files.insert(opts.input_files.begin(), crt0);
         }
 
@@ -295,6 +432,17 @@ namespace xld {
                 opts.input_files.push_back(*platform);
 
             const auto shared_library_dir = resolve_shared_library_dir(runtime_dir);
+            auto add_library_search_path = [&](const std::filesystem::path& path) {
+                auto normalized = normalize_path(path);
+                for (const auto& existing : opts.library_search_paths) {
+                    if (existing == normalized)
+                        return;
+                }
+                opts.library_search_paths.push_back(std::move(normalized));
+            };
+            add_library_search_path(shared_library_dir);
+            add_library_search_path(runtime_dir);
+
             if (auto stdlib = resolve_optional_stdlib_lib(shared_library_dir))
                 opts.input_files.push_back(*stdlib);
 

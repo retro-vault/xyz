@@ -36,6 +36,23 @@ std::optional<std::vector<std::string>> read_lines(const std::string& path) {
     return lines;
 }
 
+std::string source_label_name(const std::string& source_file) {
+    std::string name = std::filesystem::path(source_file).filename().string();
+    if (name.empty())
+        name = "source";
+
+    for (char& ch : name) {
+        const bool keep = (ch >= 'a' && ch <= 'z')
+            || (ch >= 'A' && ch <= 'Z')
+            || (ch >= '0' && ch <= '9')
+            || ch == '_'
+            || ch == '.';
+        if (!keep)
+            ch = '_';
+    }
+    return name;
+}
+
 std::string_view trim(std::string_view str) {
     const auto first = str.find_first_not_of(" \t\r\n");
     if (first == std::string_view::npos)
@@ -571,7 +588,9 @@ void cdb::on_function_end(const std::string&) { cur_ = nullptr; line_ = -1; }
 void cdb::on_source_line(int l) {
     if (!out_ || l <= 0 || l == line_ || !cur_) return;
     line_ = l;
-    const std::string s = "C$" + src_ + "$" + std::to_string(l) + "$1_0$" + std::to_string(cur_->blk);
+    const std::string s = "C$" + source_label_name(src_)
+                        + "$" + std::to_string(l)
+                        + "$1_0$" + std::to_string(cur_->blk);
     *out_ << s << ":\n\t.globl\t" << s << "\n";
 }
 

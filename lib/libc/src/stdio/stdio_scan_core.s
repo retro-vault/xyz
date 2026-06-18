@@ -11,9 +11,13 @@
         .globl  __strtox_core
         .globl  __sx_negate
         .globl  _fgetc
+        .if     __XCC_LIBC_DOUBLE
         .globl  _strtod
-        .globl  _strtof
         .globl  _strtold
+        .endif
+        .if     __XCC_LIBC_FLOAT
+        .globl  _strtof
+        .endif
         .globl  _ungetc
 
 SCAN_KIND_STRING        .equ 2
@@ -628,10 +632,14 @@ __stdio_scan_store_n:
         ld      SC_DEST_LO(ix),l
         ld      SC_DEST_HI(ix),h
         ld      a,SC_LENGTH(ix)
+        .if     __XCC_LIBC_LONG
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_store_n_long
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #SCAN_LEN_LLONG
         jr      z,__stdio_scan_store_n_llong
+        .endif
         ld      e,SC_COUNT_LO(ix)
         ld      d,SC_COUNT_HI(ix)
         ld      a,SC_LENGTH(ix)
@@ -648,6 +656,7 @@ __stdio_scan_store_n_char:
         ld      h,SC_DEST_HI(ix)
         ld      (hl),e
         ret
+        .if     __XCC_LIBC_LONG
 __stdio_scan_store_n_long:
         ld      l,SC_DEST_LO(ix)
         ld      h,SC_DEST_HI(ix)
@@ -662,6 +671,8 @@ __stdio_scan_store_n_long:
         inc     hl
         ld      (hl),a
         ret
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_scan_store_n_llong:
         ld      l,SC_DEST_LO(ix)
         ld      h,SC_DEST_HI(ix)
@@ -678,6 +689,7 @@ __stdio_scan_store_n_llong_zero:
         inc     hl
         djnz    __stdio_scan_store_n_llong_zero
         ret
+        .endif
 
         ;; Store __stdio_scan_uval into the destination selected by the current
         ;; length modifier. For signed conversions the parse helper has already
@@ -692,10 +704,14 @@ __stdio_scan_store_integer:
         ld      a,SC_LENGTH(ix)
         cp      #SCAN_LEN_CHAR
         jr      z,__stdio_scan_store_integer_char
+        .if     __XCC_LIBC_LONG
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_store_integer_long
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #SCAN_LEN_LLONG
         jr      z,__stdio_scan_store_integer_llong
+        .endif
         ld      l,SC_DEST_LO(ix)
         ld      h,SC_DEST_HI(ix)
         ld      a,SC_UVAL(ix)
@@ -710,6 +726,7 @@ __stdio_scan_store_integer_char:
         ld      a,SC_UVAL(ix)
         ld      (hl),a
         jp      __stdio_scan_inc_assigned
+        .if     __XCC_LIBC_LONG
 __stdio_scan_store_integer_long:
         ld      l,SC_DEST_LO(ix)
         ld      h,SC_DEST_HI(ix)
@@ -725,6 +742,8 @@ __stdio_scan_store_integer_long:
         ld      a,SC_UVAL + 3(ix)
         ld      (hl),a
         jp      __stdio_scan_inc_assigned
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_scan_store_integer_llong:
         ld      l,SC_DEST_LO(ix)
         ld      h,SC_DEST_HI(ix)
@@ -742,6 +761,7 @@ __stdio_scan_store_integer_llong_loop:
         inc     hl
         djnz    __stdio_scan_store_integer_llong_loop
         jp      __stdio_scan_inc_assigned
+        .endif
 
 __stdio_scan_store_pointer:
         ld      a,SC_SUPPRESS(ix)
@@ -763,6 +783,7 @@ __stdio_scan_inc_assigned:
         ld      SC_ASSIGNED_HI(ix),h
         ret
 
+        .if     __XCC_LIBC_FLOAT
 __stdio_scan_capture_float:
         ld      a,e
         ld      SC_FVAL(ix),a
@@ -774,6 +795,7 @@ __stdio_scan_capture_float:
         ld      SC_FVAL + 3(ix),a
         ret
 
+        .if     __XCC_LIBC_DOUBLE
 __stdio_scan_capture_double:
         ld      a,e
         ld      SC_FVAL(ix),a
@@ -794,6 +816,7 @@ __stdio_scan_capture_double:
         ld      SC_FVAL + 7(ix),a
         exx
         ret
+        .endif
 
 __stdio_scan_store_float_value:
         ld      a,SC_SUPPRESS(ix)
@@ -803,10 +826,12 @@ __stdio_scan_store_float_value:
         ld      SC_DEST_LO(ix),l
         ld      SC_DEST_HI(ix),h
         ld      a,SC_LENGTH(ix)
+        .if     __XCC_LIBC_DOUBLE
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_store_float_double
         cp      #SCAN_LEN_LDOUBLE
         jr      z,__stdio_scan_store_float_double
+        .endif
         push    ix
         pop     hl
         ld      de,#SC_FVAL
@@ -816,6 +841,7 @@ __stdio_scan_store_float_value:
         ld      bc,#4
         ldir
         jp      __stdio_scan_inc_assigned
+        .if     __XCC_LIBC_DOUBLE
 __stdio_scan_store_float_double:
         push    ix
         pop     hl
@@ -826,6 +852,8 @@ __stdio_scan_store_float_double:
         ld      bc,#8
         ldir
         jp      __stdio_scan_inc_assigned
+        .endif
+        .endif
 
 __stdio_scan_call_signed:
         push    hl
@@ -901,6 +929,7 @@ __stdio_scan_match_fail_count:
         ;; Output:
         ;;   carry set on success, clear on matching failure
         ;;   __stdio_scan_token contains a NUL-terminated token
+        .if     __XCC_LIBC_FLOAT
 __stdio_scan_collect_float:
         ld      SC_WIDTH_LO(ix),c
         ld      SC_WIDTH_HI(ix),b
@@ -1111,6 +1140,7 @@ __stdio_scan_collect_float_ok:
         ld      (de),a
         scf
         ret
+        .endif
 
         ;; Main scanner loop. Returns assignment count or EOF (-1).
 __stdio_scan_core::
@@ -1210,6 +1240,7 @@ __stdio_scan_conv_have_spec:
         jp      z,__stdio_scan_conv_unsigned
         cp      #'p'
         jp      z,__stdio_scan_conv_pointer
+        .if     __XCC_LIBC_FLOAT
         cp      #'f'
         jp      z,__stdio_scan_conv_float
         cp      #'F'
@@ -1222,6 +1253,7 @@ __stdio_scan_conv_have_spec:
         jp      z,__stdio_scan_conv_float
         cp      #'G'
         jp      z,__stdio_scan_conv_float
+        .endif
         jp      __stdio_scan_match_fail
 
 __stdio_scan_conv_percent:
@@ -1395,6 +1427,7 @@ __stdio_scan_conv_pointer:
         call    __stdio_scan_store_pointer
         jp      __stdio_scan_loop
 
+        .if     __XCC_LIBC_FLOAT
 __stdio_scan_conv_float:
         call    __stdio_scan_skip_input_ws
         ld      c,SC_WIDTH_LO(ix)
@@ -1402,10 +1435,17 @@ __stdio_scan_conv_float:
         call    __stdio_scan_collect_float
         jp      nc,__stdio_scan_match_fail
         ld      a,SC_LENGTH(ix)
+        .if     __XCC_LIBC_DOUBLE
         cp      #SCAN_LEN_LONG
         jr      z,__stdio_scan_conv_float_double
         cp      #SCAN_LEN_LDOUBLE
         jr      z,__stdio_scan_conv_float_ldouble
+        .else
+        cp      #SCAN_LEN_LONG
+        jp      z,__stdio_scan_match_fail
+        cp      #SCAN_LEN_LDOUBLE
+        jp      z,__stdio_scan_match_fail
+        .endif
         push    ix
         pop     hl
         ld      de,#SC_TOKEN
@@ -1420,6 +1460,7 @@ __stdio_scan_conv_float:
         call    __stdio_scan_capture_float
         call    __stdio_scan_store_float_value
         jp      __stdio_scan_loop
+        .if     __XCC_LIBC_DOUBLE
 __stdio_scan_conv_float_double:
         push    ix
         pop     hl
@@ -1450,6 +1491,8 @@ __stdio_scan_conv_float_ldouble:
         call    __stdio_scan_capture_double
         call    __stdio_scan_store_float_value
         jp      __stdio_scan_loop
+        .endif
+        .endif
 
 __stdio_scan_done:
         ld      l,SC_ASSIGNED_LO(ix)

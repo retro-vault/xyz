@@ -481,7 +481,7 @@ SDAS Z80 assembler source.  Link with every xcc-compiled program.
 1. Add the opcode to `icode_op` in `include/ir/icode.h`.
 2. Emit it in `ir_gen` at the appropriate AST visitor (`src/ir/irgen.cpp`).
 3. Handle it in `z80_gen`'s main dispatch switch (`src/backend/z80/z80gen.cpp`).
-4. Optionally add a peephole rule in `src/backend/z80/z80peep.cpp`.
+4. Optionally add a peephole rule in `lib/xopt/src/z80peep.cpp`.
 5. Add or update a test in `tests/data/core/`.
 
 ### Add a new statement

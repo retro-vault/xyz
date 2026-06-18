@@ -94,6 +94,8 @@ namespace xas {
             sec->relocs.push_back(r);
         }
 
+        bool gnu_pcrel8_relocations() const override { return true; }
+
         void define_symbol(const std::string& name,
                             uint64_t value,
                             const std::string& section_name,

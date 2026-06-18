@@ -15,10 +15,10 @@ THRD_TIMEDOUT     .equ 4
 __threads_cnd_timedwait_core:
         ld      a,h
         or      l
-        jr      z,threads_cnd_err
+        jp      z,threads_cnd_err
         ld      a,d
         or      e
-        jr      z,threads_cnd_err
+        jp      z,threads_cnd_err
         ld      a,(hl)
         or      a
         jr      z,threads_cnd_timeout
@@ -29,4 +29,3 @@ __threads_cnd_timedwait_core:
 threads_cnd_timeout:
         ld      de,#THRD_TIMEDOUT
         ret
-

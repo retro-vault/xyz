@@ -13,5 +13,4 @@ THRD_BUSY         .equ 1
         .area   _CODE
 __threads_mtx_trylock_core:
         ld      c,#THRD_BUSY
-        jr      threads_mtx_acquire
-
+        jp      threads_mtx_acquire

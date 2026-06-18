@@ -87,9 +87,13 @@ __stdio_io_getc_err:
         ld      hl,#0xffff
         ret
 
-        ;; Console source (fd 0/1/2): read one byte via the platform getchar
-        ;; hook.  BC = FILE* on entry.
+        ;; Console source: stdin (fd 0) reads via the platform getchar hook.
+        ;; stdout/stderr are output streams, so reads fail with ferror set.
+        ;; BC = FILE* on entry.
 __stdio_io_getc_console:
+        ld      a,(bc)
+        or      a
+        jr      nz,__stdio_io_getc_console_err
         push    bc                      ; preserve FILE* across the hook
         call    _getchar                ; DE = byte, or 0xFFFF on EOF
         pop     bc
@@ -109,6 +113,15 @@ __stdio_io_getc_console_eof:
         inc     hl
         ld      a,(hl)
         or      #FILE_FLAG_EOF
+        ld      (hl),a
+        ld      hl,#0xffff
+        ret
+__stdio_io_getc_console_err:
+        ld      h,b
+        ld      l,c
+        inc     hl
+        ld      a,(hl)
+        or      #FILE_FLAG_ERR
         ld      (hl),a
         ld      hl,#0xffff
         ret

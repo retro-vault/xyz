@@ -4,7 +4,9 @@
 # Test suites are discovered automatically from subdirectories of tests/data/.
 
 XCC="${1:-./build/bin/xcc}"
-TESTS_ROOT="$(dirname "$0")/data"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TESTS_ROOT="$SCRIPT_DIR/data"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 PASS=0
 FAIL=0
 SKIP=0
@@ -19,6 +21,11 @@ if [[ ! -x "$XCC" ]]; then
     echo "${RED}ERROR: xcc not found at '$XCC'${RESET}"
     exit 1
 fi
+if [[ "$XCC" != /* ]]; then
+    XCC="$(pwd)/$XCC"
+fi
+
+cd "$REPO_ROOT"
 
 run_xcc() {
     env ASAN_OPTIONS="$XCC_ASAN_OPTIONS" "$XCC" "$@"

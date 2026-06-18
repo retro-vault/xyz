@@ -119,7 +119,7 @@ struct optimization_settings {
             break;
 
         case opt_level::Of:
-            s = for_level(opt_level::O3);
+            s = for_level(opt_level::Os);
             s.level = level;
             break;
 
@@ -127,11 +127,13 @@ struct optimization_settings {
             s = for_level(opt_level::O2);
             s.level = level;
             s.inline_static_functions = true;
+            s.duplicate_block_merge = true;
             break;
 
         case opt_level::Os:
-            s = for_level(opt_level::O3);
+            s = for_level(opt_level::O2);
             s.level = level;
+            s.inline_static_functions = true;
             break;
 
         }

@@ -59,22 +59,27 @@ compiler-suite install tree:
 - Output is now split into `bin/x/`, `bin/y/`, and `bin/z/`.
 - `bin/x/` is the xtools install prefix:
   - `bin/x/bin/` for host executables
-  - `bin/x/include/` and `bin/x/lib/` for host SDK headers and libraries
+  - `bin/x/include/` and `bin/x/lib/` for host SDK headers and libraries,
+    including the shared `libxopt` assembly optimizer
   - `bin/x/z80/include/` for staged target libc headers
   - `bin/x/z80/lib/` for `crt0`, linker scripts, `libruntime.a`, `libc.a`,
-    and the default platform archive (`libcpm3.a` at the moment)
+    the default platform archive (`libnone.a`), and named payloads such as
+    `libcpm3.a`
 - `bin/y/` carries YOS outputs plus YOS-adjacent host tools such as
   `appmake`, `microdrive`, `serial`, and `libmicrodrive.a`.
 - `bin/z/` carries staged target assets such as Spectrum app payloads and
   `.mdr` media.
 - `xcc` now probes its install prefix for default headers, and `xld` probes
   its install prefix for default runtime/startup archives.
+- Z80 assembly peepholes now live in shared `lib/xopt`; `xcc` links
+  `libxopt.a`, and the standalone `xopt` tool can optimize `.s` files
+  directly.
 - The copied runtime `.rel` staging tree was removed from the public install
   layout; runtime helpers are now shipped as `libruntime.a`.
 
 ## Current High-Level Layout (Pre-Restructuring)
 
-- `src/xc/` — the x tools (xcc, xas, xld, ...)
+- `src/xc/` — the x tools (xcc, xas, xld, xopt, ...)
 - `lib/libc/` — the assembler C library
 - `src/xc/xcc/lib/runtime/` + related — low-level runtime
 - `src/yos/` — the OS

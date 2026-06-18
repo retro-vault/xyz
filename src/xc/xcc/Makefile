@@ -12,7 +12,10 @@ XAS ?= $(HOST_BIN_DIR)/xas
 XASFLAGS ?= --mode=sdcc
 
 XBFD_LIB := $(DIST_DIR)/lib/libxbfd.a
-CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src  -I$(ROOT)/include -I$(ROOT)/lib/xbfd/include
+XOPT_DIR := $(ROOT)/lib/xopt
+XOPT_INC := $(XOPT_DIR)/include
+XOPT_LIB := $(BUILD_DIR)/lib/libxopt.a
+CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src  -I$(ROOT)/include -I$(ROOT)/lib/xbfd/include -I$(XOPT_INC)
 DBGFLAGS ?= -g3 -O0 -DDEBUG -fsanitize=address,undefined
 RELFLAGS ?= -O2 -DNDEBUG
 LDFLAGS ?=
@@ -70,7 +73,6 @@ SRCS := \
   $(SRCDIR)/backend/z80/z80gen_mem.cpp \
   $(SRCDIR)/backend/z80/z80gen_arith.cpp \
   $(SRCDIR)/backend/z80/z80gen_regalloc.cpp \
-  $(SRCDIR)/backend/z80/z80peep.cpp \
   $(SRCDIR)/driver/options.cpp \
   $(SRCDIR)/driver/main.cpp
 
@@ -84,7 +86,10 @@ all: $(TARGET)
 $(XBFD_LIB):
 	$(MAKE) -C $(ROOT)/lib/xbfd
 
-$(TARGET): $(OBJS) $(XBFD_LIB) | $(HOST_BIN_DIR)
+$(XOPT_LIB):
+	$(MAKE) -C $(XOPT_DIR)
+
+$(TARGET): $(OBJS) $(XOPT_LIB) $(XBFD_LIB) | $(HOST_BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp | dirs

@@ -9,6 +9,7 @@
         .globl  _fminimum_mag_num
         .globl  _fminimum_mag_numl
         .globl  _fminimum_magl
+        .globl  _fminimum_magf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
         .globl  __db_load_arg1_fs
@@ -31,4 +32,3 @@ _fminimum_mag_numl::
         ld      sp,ix
         pop     ix
         ret
-

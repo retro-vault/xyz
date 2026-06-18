@@ -1,0 +1,17 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_dragon_register_moves
+_dragon_register_moves:
+	; sdcccall(1) prologue: dragon_register_moves (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	a, #3
+	ld	b, c
+	ld	d, e
+	ld	b, #7
+__dragon_register_moves_end:
+	; epilogue: dragon_register_moves
+	ld	sp, ix
+	pop	ix
+	ret

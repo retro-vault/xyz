@@ -64,8 +64,6 @@ enum class temp_home {
     alt_hl,   // (reserved) 16-bit temp in HL' within an EXX region
 };
 
-class z80_peep;
-
 // Forward-declare concrete convention classes so z80_gen can grant them friendship.
 struct stack_linkage_convention;
 struct cc_sdcccall0;
@@ -197,6 +195,10 @@ private:
     bool temp_frame_prealloc_enabled() const { return opt_settings_.prealloc_temp_frame; }
     bool switch_jump_tables_enabled() const { return opt_settings_.switch_jump_tables; }
     bool size_opt_enabled() const { return opt_settings_.level == opt_level::Os; }
+    bool speed_opt_enabled() const {
+        return opt_settings_.level == opt_level::Of ||
+               opt_settings_.level == opt_level::O3;
+    }
     bool o3_baseline_enabled() const {
         return opt_settings_.level == opt_level::Of ||
                opt_settings_.level == opt_level::O3 ||

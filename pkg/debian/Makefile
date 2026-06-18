@@ -6,6 +6,7 @@ PACKAGE_VERSION ?= 0.1.0
 PACKAGE_RELEASE ?= 1
 DEB_ARCH ?= $(shell dpkg --print-architecture)
 XGDB_INCLUDE_DIR := $(ROOT)/lib/xgdb/include/xgdb
+XOPT_INCLUDE_DIR := $(ROOT)/lib/xopt/include/xopt
 RSP_INCLUDE_DIR := $(ROOT)/lib/rsp/include/rsp
 XBFD_INCLUDE_DIR := $(ROOT)/lib/xbfd/include/xbfd
 XLINK_INCLUDE_DIR := $(ROOT)/src/xc/xld/include/xld
@@ -16,7 +17,10 @@ PKG_STAGING_DIR := $(PKG_BUILD_ROOT)/$(PACKAGE_NAME)_$(PACKAGE_VERSION)-$(PACKAG
 PKG_OUTPUT_DIR := $(DIST_DIR)/pkg/deb
 PKG_OUTPUT := $(PKG_OUTPUT_DIR)/$(PACKAGE_NAME)_$(PACKAGE_VERSION)-$(PACKAGE_RELEASE)_$(DEB_ARCH).deb
 CONTROL_TEMPLATE := $(ROOT)/pkg/debian/control.in
+DIST_DOC_SOURCES := $(ROOT)/docs/dist/README.md $(wildcard $(ROOT)/docs/dist/man/*.md)
+DIST_DOC_STAMP := $(DIST_DIR)/.stage-dist-docs.stamp
 XBFD_LIB := $(BUILD_DIR)/lib/libxbfd.a
+XOPT_LIB := $(DIST_DIR)/lib/libxopt.a
 XCC_PACKAGE_BUILD_DIR := $(PKG_BUILD_ROOT)/xcc-build
 XCC_PACKAGE_DIST_DIR := $(PKG_BUILD_ROOT)/xcc-dist
 XCC_PACKAGE_BIN := $(XCC_PACKAGE_DIST_DIR)/bin/xcc
@@ -30,7 +34,9 @@ HOST_TOOLS := \
 	$(DIST_DIR)/bin/xgdb \
 	$(DIST_DIR)/bin/xgdb-z80 \
 	$(DIST_DIR)/bin/xas \
-	$(DIST_DIR)/bin/xar
+	$(DIST_DIR)/bin/xar \
+	$(DIST_DIR)/bin/xobjcopy \
+	$(DIST_DIR)/bin/xopt
 DEBUG_LIBS := \
 	$(DIST_DIR)/lib/libxgdb.a \
 	$(DIST_DIR)/lib/libxgdb_cli.a \
@@ -41,8 +47,9 @@ DEBUG_LIBS := \
 
 all: $(PKG_OUTPUT)
 
-$(DIST_DIR)/README.md:
+$(DIST_DOC_STAMP): $(DIST_DOC_SOURCES)
 	$(MAKE) -C $(ROOT) stage-dist-docs
+	@touch $@
 
 $(DIST_DIR)/bin/xld:
 	$(MAKE) -C $(ROOT)/src/xc/xld
@@ -52,6 +59,12 @@ $(DIST_DIR)/bin/xas:
 
 $(DIST_DIR)/bin/xar:
 	$(MAKE) -C $(ROOT)/src/xc/xar
+
+$(DIST_DIR)/bin/xobjcopy:
+	$(MAKE) -C $(ROOT)/src/xc/xobjcopy
+
+$(DIST_DIR)/bin/xopt $(XOPT_LIB):
+	$(MAKE) -C $(ROOT)/src/xc/xopt
 
 $(DIST_DIR)/bin/xgdb $(DIST_DIR)/bin/xgdb-z80 $(DEBUG_LIBS):
 	$(MAKE) -C $(ROOT)/src/xc/xgdb
@@ -77,7 +90,7 @@ $(XCC_RUNTIME_ARCHIVE): $(XCC_RUNTIME_RELS) $(DIST_DIR)/bin/xar | $(XCC_RUNTIME_
 $(XCC_RUNTIME_COMPAT_ARCHIVE): $(XCC_RUNTIME_ARCHIVE)
 	cp $< $@
 
-$(PKG_OUTPUT): $(DIST_DIR)/README.md $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(XCC_PACKAGE_BIN) $(XCC_RUNTIME_RELS) $(XCC_RUNTIME_ARCHIVE) $(XCC_RUNTIME_COMPAT_ARCHIVE) $(CONTROL_TEMPLATE)
+$(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(XOPT_LIB) $(XCC_PACKAGE_BIN) $(XCC_RUNTIME_RELS) $(XCC_RUNTIME_ARCHIVE) $(XCC_RUNTIME_COMPAT_ARCHIVE) $(CONTROL_TEMPLATE)
 	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb not found. Please install dpkg-dev or dpkg."; exit 1; }
 	rm -rf $(PKG_STAGING_DIR)
 	mkdir -p $(PKG_STAGING_DIR)/DEBIAN
@@ -99,13 +112,17 @@ $(PKG_OUTPUT): $(DIST_DIR)/README.md $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(X
 	cp $(DIST_DIR)/bin/xgdb-z80 $(PKG_STAGING_DIR)/usr/bin/
 	cp $(DIST_DIR)/bin/xas $(PKG_STAGING_DIR)/usr/bin/
 	cp $(DIST_DIR)/bin/xar $(PKG_STAGING_DIR)/usr/bin/
+	cp $(DIST_DIR)/bin/xobjcopy $(PKG_STAGING_DIR)/usr/bin/
+	cp $(DIST_DIR)/bin/xopt $(PKG_STAGING_DIR)/usr/bin/
 	cp $(XCC_PACKAGE_BIN) $(PKG_STAGING_DIR)/usr/bin/xcc
 	mkdir -p $(PKG_STAGING_DIR)/usr/include/xgdb
+	mkdir -p $(PKG_STAGING_DIR)/usr/include/xopt
 	mkdir -p $(PKG_STAGING_DIR)/usr/include/rsp
 	
 	mkdir -p $(PKG_STAGING_DIR)/usr/include/xld
 	mkdir -p $(PKG_STAGING_DIR)/usr/include/xbfd
 	cp -R $(XGDB_INCLUDE_DIR)/. $(PKG_STAGING_DIR)/usr/include/xgdb/
+	cp -R $(XOPT_INCLUDE_DIR)/. $(PKG_STAGING_DIR)/usr/include/xopt/
 	cp -R $(RSP_INCLUDE_DIR)/. $(PKG_STAGING_DIR)/usr/include/rsp/
 	cp -R $(XLINK_INCLUDE_DIR)/. $(PKG_STAGING_DIR)/usr/include/xld/
 	cp -R $(XBFD_INCLUDE_DIR)/. $(PKG_STAGING_DIR)/usr/include/xbfd/
@@ -116,6 +133,7 @@ $(PKG_OUTPUT): $(DIST_DIR)/README.md $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(X
 	cp $(DIST_DIR)/lib/libxgdb_mi.a $(PKG_STAGING_DIR)/usr/lib/
 	cp $(DIST_DIR)/lib/librsp.a $(PKG_STAGING_DIR)/usr/lib/
 	cp $(XBFD_LIB) $(PKG_STAGING_DIR)/usr/lib/
+	cp $(XOPT_LIB) $(PKG_STAGING_DIR)/usr/lib/
 	cp $(XCC_RUNTIME_RELS) $(PKG_STAGING_DIR)/usr/lib/xcc/runtime/
 	cp $(XCC_RUNTIME_ARCHIVE) $(PKG_STAGING_DIR)/usr/lib/xcc/runtime/
 	cp $(XCC_RUNTIME_COMPAT_ARCHIVE) $(PKG_STAGING_DIR)/usr/lib/xcc/runtime/

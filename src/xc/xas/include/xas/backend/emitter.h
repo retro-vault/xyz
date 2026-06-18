@@ -72,6 +72,13 @@ namespace xas {
                                   int32_t addend = 0) = 0;
 
         //
+        // GNU ELF Z80 PC-relative branch relocations encode an additional
+        // byte-position bias. SDCC REL keeps the ASxxxx placeholder/addend
+        // form, so codegen asks the emitter which policy to use.
+        //
+        virtual bool gnu_pcrel8_relocations() const { return false; }
+
+        //
         // Define a symbol at the current section offset.
         //
         virtual void define_symbol(const std::string& name,

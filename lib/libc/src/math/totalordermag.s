@@ -7,6 +7,7 @@
 
         .globl  _totalordermag
         .globl  _totalordermagl
+        .globl  _totalordermagf
         .globl  __db_load_arg0_fs
         .globl  __db_load_arg1_fs
 

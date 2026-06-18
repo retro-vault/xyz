@@ -44,7 +44,7 @@ _nextupf::
         ld      a,MF_XHI+1(ix)
         and     #0x7f
         cp      #0x7f
-        jr      z,nextupf_ret_x
+        jp      z,nextupf_ret_x
 
         ld      a,MF_XHI+1(ix)
         bit     7,a
@@ -63,7 +63,7 @@ _nextupf::
         ld      a,MF_XHI+1(ix)
         adc     a,#0
         ld      MF_XHI+1(ix),a
-        jr      nextupf_ret_x
+        jp      nextupf_ret_x
 
 nextupf_dec:
         ld      a,MF_XLO(ix)
@@ -78,7 +78,7 @@ nextupf_dec:
         ld      a,MF_XHI+1(ix)
         sbc     a,#0
         ld      MF_XHI+1(ix),a
-        jr      nextupf_ret_x
+        jp      nextupf_ret_x
 
 nextupf_zero:
         ; nextup(±0) = smallest positive subnormal
@@ -89,4 +89,3 @@ nextupf_zero:
         ld      sp,ix
         pop     ix
         ret
-

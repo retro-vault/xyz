@@ -1,0 +1,20 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_tame_shift5_pair
+_tame_shift5_pair:
+	; sdcccall(1) prologue: tame_shift5_pair (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	b, #5
+shift5_pair_loop_os:
+	srl	l
+	rr	a
+	djnz	shift5_pair_loop_os
+	xor	e
+	ld	b, #0
+__tame_shift5_pair_end:
+	; epilogue: tame_shift5_pair
+	ld	sp, ix
+	pop	ix
+	ret

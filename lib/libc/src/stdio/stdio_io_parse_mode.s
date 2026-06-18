@@ -12,6 +12,8 @@ O_CREAT_HI      .equ 0x01
 O_RDWR_V        .equ 0x0002
 O_TRUNC_HI      .equ 0x02
 O_WRONLY_V      .equ 0x0001
+O_WRONLY_APPEND .equ 0x0501
+O_WRONLY_TRUNC  .equ 0x0301
 
         .area   _CODE
 __stdio_io_parse_mode::
@@ -30,10 +32,10 @@ __stdio_io_mode_r:
         ld      de,#0x0000
         jr      __stdio_io_mode_scan
 __stdio_io_mode_w:
-        ld      de,#((O_CREAT_HI | O_TRUNC_HI) << 8) | O_WRONLY_V
+        ld      de,#O_WRONLY_TRUNC
         jr      __stdio_io_mode_scan
 __stdio_io_mode_a:
-        ld      de,#((O_CREAT_HI | O_APPEND_HI) << 8) | O_WRONLY_V
+        ld      de,#O_WRONLY_APPEND
 __stdio_io_mode_scan:
         inc     hl
 __stdio_io_mode_scan_loop:

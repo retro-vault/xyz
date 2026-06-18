@@ -3,7 +3,7 @@ BUILD_DIR ?= $(ROOT)/build
 DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
-DEFAULT_PLATFORM ?= cpm3
+DEFAULT_PLATFORM ?= none
 CXXFLAGS ?= -std=c++2a -g -DXLD_DEFAULT_PLATFORM=\"$(DEFAULT_PLATFORM)\"
 
 XBFD_DIR  := $(ROOT)/lib/xbfd

@@ -146,6 +146,94 @@ TEST(runtime_apply_sdcc_runtime_injects_optional_platform_lib) {
     std::filesystem::remove_all(dir);
 }
 
+TEST(runtime_apply_sdcc_runtime_applies_default_linker_script) {
+    auto dir = make_temp_dir("/tmp/xld-runtime-XXXXXX");
+    auto crt0 = dir / "crt0.rel";
+    auto script = dir / "linker.lk";
+    auto platform = dir / "libcpm3.a";
+    auto libc = dir / "libc.a";
+    auto lib = dir / "libruntime.a";
+
+    {
+        std::ofstream(crt0) << "XL\nM crt0\n";
+        std::ofstream(script)
+            << "ENTRY _entry\n"
+            << "FORMAT binary\n"
+            << "AREA _CODE = 0x0100\n";
+        std::ofstream(platform) << "!<arch>\n";
+        std::ofstream(libc) << "!<arch>\n";
+        std::ofstream(lib) << "# runtime library index\nhelper.rel\n";
+    }
+
+    xld::cli_options opts;
+    opts.sdcc_runtime_dir = dir;
+    opts.platform_name = std::string("z80-cpm3");
+    opts.input_files = {"main.rel"};
+
+    xld::runtime::apply_sdcc_runtime(opts);
+
+    ASSERT(opts.script_file.has_value());
+    ASSERT_EQ(*opts.script_file, script);
+    ASSERT_EQ(opts.entry_symbol, std::string("_entry"));
+    ASSERT_EQ(opts.format, xld::output_format::bin);
+    ASSERT_EQ(opts.area_bases["_CODE"], 0x0100);
+    ASSERT_EQ(static_cast<int>(opts.input_files.size()), 5);
+    ASSERT_EQ(opts.input_files[0], crt0);
+    ASSERT_EQ(opts.input_files[1], std::filesystem::path("main.rel"));
+    ASSERT_EQ(opts.input_files[2], platform);
+    ASSERT_EQ(opts.input_files[3], libc);
+    ASSERT_EQ(opts.input_files[4], lib);
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(runtime_apply_sdcc_runtime_default_linker_script_preserves_cli_overrides) {
+    auto dir = make_temp_dir("/tmp/xld-runtime-XXXXXX");
+    auto crt0 = dir / "crt0.rel";
+    auto script = dir / "linker.lk";
+    auto platform = dir / "libcpm3.a";
+    auto libc = dir / "libc.a";
+    auto lib = dir / "libruntime.a";
+
+    {
+        std::ofstream(crt0) << "XL\nM crt0\n";
+        std::ofstream(script)
+            << "ENTRY _entry\n"
+            << "FORMAT binary\n"
+            << "RANGE 0x0100-0x3FFF\n"
+            << "AREA _CODE = 0x0100\n";
+        std::ofstream(platform) << "!<arch>\n";
+        std::ofstream(libc) << "!<arch>\n";
+        std::ofstream(lib) << "# runtime library index\nhelper.rel\n";
+    }
+
+    xld::cli_options opts;
+    opts.sdcc_runtime_dir = dir;
+    opts.platform_name = std::string("z80-cpm3");
+    opts.input_files = {"main.rel"};
+    opts.entry_symbol = "_main";
+    opts.entry_symbol_explicit = true;
+    opts.format = xld::output_format::ihx;
+    opts.format_explicit = true;
+    opts.output_range = xld::address_range{0x0200, 0x02FF};
+    opts.output_range_explicit = true;
+    opts.area_bases["_CODE"] = 0x0200;
+    opts.explicit_area_bases.insert("_CODE");
+
+    xld::runtime::apply_sdcc_runtime(opts);
+
+    ASSERT(opts.script_file.has_value());
+    ASSERT_EQ(*opts.script_file, script);
+    ASSERT_EQ(opts.entry_symbol, std::string("_main"));
+    ASSERT_EQ(opts.format, xld::output_format::ihx);
+    ASSERT(opts.output_range.has_value());
+    ASSERT_EQ(opts.output_range->start, 0x0200);
+    ASSERT_EQ(opts.output_range->end, 0x02FF);
+    ASSERT_EQ(opts.area_bases["_CODE"], 0x0200);
+
+    std::filesystem::remove_all(dir);
+}
+
 TEST(runtime_apply_sdcc_runtime_requires_runtime_dir_to_exist) {
     auto missing = make_temp_dir("/tmp/xld-missing-runtime-XXXXXX");
     std::filesystem::remove_all(missing);

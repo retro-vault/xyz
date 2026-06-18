@@ -28,11 +28,10 @@ __xcc_L1:
 	add	a, a
 	xor	c
 	ld	d, a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
-	srl	a
+	rlca
+	rlca
+	rlca
+	and	#7
 	xor	d
 	add	a, #29
 	add	a, b

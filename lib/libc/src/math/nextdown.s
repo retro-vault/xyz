@@ -11,6 +11,7 @@
         .globl  _fromfpxl
         .globl  _nextdown
         .globl  _nextdownl
+        .globl  _nextdownf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
         .globl  _fmaximum
@@ -41,6 +42,7 @@
         .globl  _totalorderl
         .globl  _totalordermag
         .globl  _totalordermagl
+        .globl  _fromfpf
         .globl  _ufromfp
         .globl  _ufromfpl
         .globl  _ufromfpx
@@ -117,4 +119,3 @@ _fromfpxl::
         ld      sp,ix
         pop     ix
         ret
-

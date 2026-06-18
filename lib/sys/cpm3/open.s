@@ -26,32 +26,32 @@
         .globl  __cpm3_tmp_user
         .globl  __cpm3_zero_tmprec
 
-ACC_MASK        .equ 3
-APPEND_FLAG     .equ 0x80
-BDOS            .equ 5
-BDOS_SUCCESS    .equ 0
-DMA_SIZE        .equ 128
-FCB_OFF_RREC0   .equ 33
-FCB_OFF_RREC1   .equ 34
-FCB_OFF_RREC2   .equ 35
-FCB_OFF_SEQREQ  .equ 32
-FCB_SIZE        .equ 36
-FD_FILE_BASE    .equ 3
-FD_OFF_ACTIVE   .equ 0
-FD_OFF_BUFVALID .equ 4
-FD_OFF_DIRTY    .equ 3
-FD_OFF_FLAGS    .equ 1
-FD_OFF_FPOS0    .equ 5
-FD_OFF_FSIZE0   .equ 9
-FD_OFF_USER     .equ 2
-F_DELETE        .equ 19
-F_MAKE          .equ 22
-F_OPEN          .equ 15
-F_SIZE          .equ 35
-OPEN_COUNT      .equ 16
-O_APPEND_HI     .equ 0x04
-O_CREAT_HI      .equ 0x01
-O_TRUNC_HI      .equ 0x02
+        .equ    ACC_MASK,3
+        .equ    APPEND_FLAG,0x80
+        .equ    BDOS,5
+        .equ    BDOS_SUCCESS,0
+        .equ    DMA_SIZE,128
+        .equ    FCB_OFF_RREC0,33
+        .equ    FCB_OFF_RREC1,34
+        .equ    FCB_OFF_RREC2,35
+        .equ    FCB_OFF_SEQREQ,32
+        .equ    FCB_SIZE,36
+        .equ    FD_FILE_BASE,3
+        .equ    FD_OFF_ACTIVE,0
+        .equ    FD_OFF_BUFVALID,4
+        .equ    FD_OFF_DIRTY,3
+        .equ    FD_OFF_FLAGS,1
+        .equ    FD_OFF_FPOS0,5
+        .equ    FD_OFF_FSIZE0,9
+        .equ    FD_OFF_USER,2
+        .equ    F_DELETE,19
+        .equ    F_MAKE,22
+        .equ    F_OPEN,15
+        .equ    F_SIZE,35
+        .equ    OPEN_COUNT,16
+        .equ    O_APPEND_HI,0x04
+        .equ    O_CREAT_HI,0x01
+        .equ    O_TRUNC_HI,0x02
 
         .area   _DATA
 __cpm3_tmp_flags:

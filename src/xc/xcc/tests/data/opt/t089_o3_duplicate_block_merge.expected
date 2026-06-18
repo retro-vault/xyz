@@ -1,0 +1,19 @@
+	.module	xcc_output
+	.area	_DATA
+_sink:
+	.ds	2
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=0, stack_params=0)
+	; frameless function: no IX frame needed
+a:
+	ld	hl, #5
+	ld	(_sink), hl
+done:
+	ld	hl, (_sink)
+	inc	hl
+	ex	de, hl
+__f_end:
+	; epilogue: f
+	ret

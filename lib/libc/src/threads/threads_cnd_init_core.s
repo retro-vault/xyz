@@ -14,8 +14,7 @@ THRD_SUCCESS      .equ 0
 __threads_cnd_init_core:
         ld      a,h
         or      l
-        jr      z,threads_cnd_err
+        jp      z,threads_cnd_err
         ld      (hl),#0
         ld      de,#THRD_SUCCESS
         ret
-

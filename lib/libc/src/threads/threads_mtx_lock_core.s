@@ -13,5 +13,4 @@ THRD_ERROR        .equ 2
         .area   _CODE
 __threads_mtx_lock_core:
         ld      c,#THRD_ERROR
-        jr      threads_mtx_acquire
-
+        jp      threads_mtx_acquire

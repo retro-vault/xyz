@@ -7,6 +7,7 @@
 
         .globl  _nextup
         .globl  _nextupl
+        .globl  _nextupf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
 
@@ -25,4 +26,3 @@ _nextupl::
         ld      sp,ix
         pop     ix
         ret
-

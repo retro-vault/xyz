@@ -128,9 +128,9 @@ Important options today:
 - `-O0`: no optimization
 - `-O1`: peephole optimizer after assembly generation; the simplest fixed-window peepholes are now table-driven while the more contextual ones still use custom matchers
 - `-O2`: general optimization, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, direct control-condition lowering, counted-byte-loop narrowing, loop pointer-walk canonicalization, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; the core local algebraic identities are now shared through one small declarative rule table instead of duplicated `switch` logic
-- `-Of`: speed optimization; it now shares the current proven aggressive baseline with `-O3` and `-Os`
-- `-O3`: experimental optimization; it currently starts from the same promoted baseline as `-Of` / `-Os`, so it is free again to host genuinely new experiments rather than just hoarding already-proven wins
-- `-Os`: size optimization; it now also shares that same promoted aggressive baseline, while still allowing size-biased backend choices where they exist
+- `-Of`: speed optimization; it shares the current proven aggressive baseline and may spend a little size for fewer cycles, including O3-proven speed-biased peepholes
+- `-O3`: experimental optimization; it keeps the proven `-Os` baseline, then adds speed, size, shape-changing, and superoptimizer-inspired peephole experiments. Here be dragons
+- `-Os`: size optimization; it is the protected record-setting aggressive size baseline
 - `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info
 - `-masm=sdasz80` or `-masm=gnuas`: choose assembly dialect
@@ -375,7 +375,8 @@ code.
 
 ### 6.14 Peephole Optimizer
 
-After assembly is generated, `src/backend/z80/z80peep.cpp` runs.
+After assembly is generated, the shared `libxopt` peephole optimizer
+(`lib/xopt/src/z80peep.cpp`) runs.
 
 This pass is purely textual and very Z80-specific.
 
@@ -495,7 +496,7 @@ Recommended reading order:
 4. `include/ir/icode.h`
 5. `src/ir/irgen.cpp`
 6. `src/backend/z80/z80gen.cpp`
-7. `src/backend/z80/z80peep.cpp`
+7. `lib/xopt/src/z80peep.cpp`
 8. `lib/runtime.s`
 
 If you want to add a language feature, the usual path is:

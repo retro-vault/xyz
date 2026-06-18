@@ -9,10 +9,17 @@
         .globl  __stdio_store_fmt_hl
         .globl  __stdio_vformat
         .globl  __divuint
+        .if     __XCC_LIBC_LONGLONG
         .globl  __divull
-        .globl  __divulong
         .globl  __modull
+        .endif
+        .if     __XCC_LIBC_LONG
+        .globl  __divulong
         .globl  __modulong
+        .endif
+        .if     __XCC_LIBC_FLOAT
+        .globl  __strfromd_core
+        .endif
         .globl  __stdio_emit_a
         .globl  __stdio_emit_padding
         .globl  __stdio_emit_string_field
@@ -217,10 +224,14 @@ __stdio_fetch_ptr_hl:
 
 __stdio_load_uval:
         ld      a,CTX_LENGTH(iy)
+        .if     __XCC_LIBC_LONG
         cp      #LEN_LONG
         jr      z,__stdio_load_uval_32
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #LEN_LLONG
         jr      z,__stdio_load_uval_64
+        .endif
         call    __stdio_fetch_u16_hl
         call    __stdio_store_uval0_hl
         xor     a
@@ -231,6 +242,7 @@ __stdio_load_uval:
         ld      CTX_UVAL6(iy),a
         ld      CTX_UVAL7(iy),a
         ret
+        .if     __XCC_LIBC_LONG
 __stdio_load_uval_32:
         call    __stdio_load_ap_hl
         ld      a,(hl)
@@ -252,6 +264,8 @@ __stdio_load_uval_32:
         ld      CTX_UVAL6(iy),a
         ld      CTX_UVAL7(iy),a
         ret
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_load_uval_64:
         call    __stdio_load_ap_hl
         ld      a,(hl)
@@ -280,18 +294,24 @@ __stdio_load_uval_64:
         inc     hl
         call    __stdio_store_ap_hl
         ret
+        .endif
 
 __stdio_uval_is_zero:
         ld      a,CTX_LENGTH(iy)
+        .if     __XCC_LIBC_LONG
         cp      #LEN_LONG
         jr      z,__stdio_uval_is_zero_32
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #LEN_LLONG
         jr      z,__stdio_uval_is_zero_64
+        .endif
         ld      a,CTX_UVAL0(iy)
         ld      b,a
         ld      a,CTX_UVAL1(iy)
         or      b
         ret
+        .if     __XCC_LIBC_LONG
 __stdio_uval_is_zero_32:
         ld      a,CTX_UVAL0(iy)
         ld      b,a
@@ -304,6 +324,8 @@ __stdio_uval_is_zero_32:
         ld      a,CTX_UVAL3(iy)
         or      b
         ret
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_uval_is_zero_64:
         ld      a,CTX_UVAL0(iy)
         ld      b,a
@@ -328,6 +350,7 @@ __stdio_uval_is_zero_64:
         ld      a,CTX_UVAL7(iy)
         or      b
         ret
+        .endif
 
 __stdio_note_zero_state:
         call    __stdio_uval_is_zero
@@ -340,10 +363,14 @@ __stdio_note_zero_store:
 
 __stdio_negate_uval:
         ld      a,CTX_LENGTH(iy)
+        .if     __XCC_LIBC_LONG
         cp      #LEN_LONG
         jr      z,__stdio_negate_uval_32
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #LEN_LLONG
         jr      z,__stdio_negate_uval_64
+        .endif
         call    __stdio_load_uval0_hl
         ld      a,l
         cpl
@@ -354,6 +381,7 @@ __stdio_negate_uval:
         inc     hl
         call    __stdio_store_uval0_hl
         ret
+        .if     __XCC_LIBC_LONG
 __stdio_negate_uval_32:
         ld      a,CTX_UVAL0(iy)
         cpl
@@ -377,6 +405,8 @@ __stdio_negate_uval_32:
         inc     hl
         call    __stdio_store_uval2_hl
         ret
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_negate_uval_64:
         ld      a,CTX_UVAL0(iy)
         cpl
@@ -424,6 +454,7 @@ __stdio_negate_uval_64:
         inc     hl
         call    __stdio_store_uval6_hl
         ret
+        .endif
 
 __stdio_digit_char:
         cp      #10
@@ -456,10 +487,14 @@ __stdio_push_digit_a:
 
 __stdio_divmod_uval:
         ld      a,CTX_LENGTH(iy)
+        .if     __XCC_LIBC_LONG
         cp      #LEN_LONG
         jp      z,__stdio_divmod_uval_32
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #LEN_LLONG
         jp      z,__stdio_divmod_uval_64
+        .endif
         call    __stdio_load_uval0_hl
         ld      a,CTX_BASE(iy)
         ld      e,a
@@ -473,6 +508,7 @@ __stdio_divmod_uval:
         ld      CTX_UVAL1(iy),a
         ld      a,l
         ret
+        .if     __XCC_LIBC_LONG
 __stdio_divmod_uval_32:
         push    iy
         ld      hl,#0
@@ -526,6 +562,8 @@ __stdio_divmod_uval_32:
         ld      CTX_UVAL7(iy),a
         ld      a,CTX_REMAINDER(iy)
         ret
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_divmod_uval_64:
         push    iy
         ld      hl,#0
@@ -609,6 +647,7 @@ __stdio_divmod_uval_64:
         exx
         ld      a,CTX_REMAINDER(iy)
         ret
+        .endif
 
 __stdio_build_digits:
         push    iy
@@ -833,14 +872,19 @@ __stdio_store_count_ptr:
         ld      e,CTX_COUNT(iy)
         ld      d,CTX_COUNT+1(iy)
         ld      a,CTX_LENGTH(iy)
+        .if     __XCC_LIBC_LONG
         cp      #LEN_LONG
         jr      z,__stdio_store_count_ptr_32
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #LEN_LLONG
         jr      z,__stdio_store_count_ptr_64
+        .endif
         ld      (hl),e
         inc     hl
         ld      (hl),d
         ret
+        .if     __XCC_LIBC_LONG
 __stdio_store_count_ptr_32:
         ld      (hl),e
         inc     hl
@@ -851,6 +895,8 @@ __stdio_store_count_ptr_32:
         inc     hl
         ld      (hl),a
         ret
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_store_count_ptr_64:
         ld      (hl),e
         inc     hl
@@ -869,6 +915,7 @@ __stdio_store_count_ptr_64:
         inc     hl
         ld      (hl),a
         ret
+        .endif
 
 __stdio_parse_length:
         ld      a,#LEN_WORD
@@ -1069,6 +1116,7 @@ __stdio_vformat_length:
         jp      z,__stdio_vformat_binary
         cp      #'B'
         jp      z,__stdio_vformat_binary
+        .if     __XCC_LIBC_FLOAT
         cp      #'f'
         jp      z,__stdio_vformat_float
         cp      #'e'
@@ -1097,6 +1145,7 @@ __stdio_vformat_length:
         jp      z,__stdio_vformat_float
         cp      #'A'
         jp      z,__stdio_vformat_float
+        .endif
         push    af
         ld      a,#'%'
         call    __stdio_emit_a
@@ -1163,10 +1212,14 @@ __stdio_vformat_signed:
         call    __stdio_load_uval
         call    __stdio_note_zero_state
         ld      a,CTX_LENGTH(iy)
+        .if     __XCC_LIBC_LONG
         cp      #LEN_LONG
         jr      z,__stdio_vformat_signed_32
+        .endif
+        .if     __XCC_LIBC_LONGLONG
         cp      #LEN_LLONG
         jr      z,__stdio_vformat_signed_64
+        .endif
         ld      a,CTX_UVAL1(iy)
         bit     7,a
         jr      z,__stdio_vformat_signed_nonneg
@@ -1174,6 +1227,7 @@ __stdio_vformat_signed:
         ld      CTX_SIGN(iy),a
         call    __stdio_negate_uval
         jr      __stdio_vformat_signed_ready
+        .if     __XCC_LIBC_LONG
 __stdio_vformat_signed_32:
         ld      a,CTX_UVAL3(iy)
         bit     7,a
@@ -1182,6 +1236,8 @@ __stdio_vformat_signed_32:
         ld      CTX_SIGN(iy),a
         call    __stdio_negate_uval
         jr      __stdio_vformat_signed_ready
+        .endif
+        .if     __XCC_LIBC_LONGLONG
 __stdio_vformat_signed_64:
         ld      a,CTX_UVAL7(iy)
         bit     7,a
@@ -1190,6 +1246,7 @@ __stdio_vformat_signed_64:
         ld      CTX_SIGN(iy),a
         call    __stdio_negate_uval
         jr      __stdio_vformat_signed_ready
+        .endif
 __stdio_vformat_signed_nonneg:
         xor     a
         ld      CTX_SIGN(iy),a
@@ -1297,6 +1354,7 @@ __stdio_vformat_binary:
         call    __stdio_emit_number
         jp      __stdio_vformat_loop
 
+        .if     __XCC_LIBC_FLOAT
 __stdio_vformat_float:
         ; Hardened C23 float formatting: use stack buffer + call __strfromd_core (reuses the new strfrom assembler, thread safe).
         ; For demo fp in regs (real would fetch double from va using existing fetch logic in this file).
@@ -1315,9 +1373,9 @@ __stdio_vformat_float:
         add     hl,sp
         ld      sp,hl
         jp      __stdio_vformat_loop
+        .endif
 
 __stdio_vformat_done:
         call    __stdio_finish_sink
         call    __stdio_load_count_hl
         ret
-

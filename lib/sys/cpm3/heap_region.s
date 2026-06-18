@@ -18,7 +18,7 @@
         .globl  _heap_region
 
         ;; Bytes held below the BDOS for the descending stack.  Tunable.
-SYS_STACK_RESERVE   .equ 0x0200
+        .equ    SYS_STACK_RESERVE,0x0200
 
         .area   _HEAP
 __heap_base:                             ; heap base = top of program image

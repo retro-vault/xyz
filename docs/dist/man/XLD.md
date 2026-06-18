@@ -41,7 +41,7 @@ xld -T layout.ld main.rel -o app.xl
 | `-e <symbol>` | Entry symbol (default `_main` in sdcc mode, `_start` in gnu mode) |
 | `--mode=sdcc` / `--mode=gnu` | Input flavor (default `sdcc`) |
 | `-L<dir>`, `-l<name>` | Library search directory / library |
-| `--platform=<name>` | Select target platform library (default `cpm3`) |
+| `--platform=<name>` | Select target platform library (default `none`) |
 | `-nostartfiles` | No implicit startup file |
 | `-nostdlib` | No implicit startup file or default libraries |
 | `--no-default-runtime` | Do not auto-probe the install prefix for runtime assets |

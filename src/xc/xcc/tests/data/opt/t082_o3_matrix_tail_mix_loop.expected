@@ -14,13 +14,12 @@ _bench_mix16:
 	ld	hl, #40503
 	add	hl, de
 	ld	a, c
-	xor	a, l
-	ld	c, a
+	xor	l
+	ld	l, a
 	ld	a, b
-	xor	a, h
+	xor	h
 	ld	b, a
-	ld	l, c
-	ld	h, b
+	ld	h, a
 	add	hl, hl
 	add	hl, hl
 	add	hl, hl
@@ -65,11 +64,7 @@ __xcc_L1:
 	add	a, c
 	ld	e, a
 	ld	a, #>(_main__row_sum_1)
-	adc	a, #0
-	ld	d, a
-	ld	a, (de)
-	ld	e, a
-	ld	d, #0
+	call	__xopt_spaghetti_0
 	push	bc
 	call	_bench_mix16
 	ex	de, hl
@@ -78,11 +73,7 @@ __xcc_L1:
 	add	a, c
 	ld	e, a
 	ld	a, #>(_main__col_sum_2)
-	adc	a, #0
-	ld	d, a
-	ld	a, (de)
-	ld	e, a
-	ld	d, #0
+	call	__xopt_spaghetti_0
 	push	bc
 	call	_bench_mix16
 	ex	de, hl
@@ -95,11 +86,7 @@ __xcc_L1:
 	add	a, #<(_main__dst_0)
 	ld	e, a
 	ld	a, #>(_main__dst_0)
-	adc	a, #0
-	ld	d, a
-	ld	a, (de)
-	ld	e, a
-	ld	d, #0
+	call	__xopt_spaghetti_0
 	push	bc
 	call	_bench_mix16
 	ex	de, hl
@@ -109,11 +96,18 @@ __xcc_L1:
 __xcc_L3:
 	ld	-7(ix), l
 	ld	-6(ix), h
-	ld	b, h
-	ld	c, l
 	ex	de, hl
 __main_end:
 	; epilogue: main
 	ld	sp, ix
 	pop	ix
+	ret
+	; xopt: spaghetti outlined duplicate kernel
+	.area	_CODE
+__xopt_spaghetti_0:
+	adc	a, #0
+	ld	d, a
+	ld	a, (de)
+	ld	e, a
+	ld	d, #0
 	ret

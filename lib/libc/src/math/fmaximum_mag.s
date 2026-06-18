@@ -9,6 +9,7 @@
         .globl  _fmaximum_mag_num
         .globl  _fmaximum_mag_numl
         .globl  _fmaximum_magl
+        .globl  _fmaximum_magf
         .globl  ___fs2db
         .globl  __db_load_arg0_fs
         .globl  __db_load_arg1_fs
@@ -31,4 +32,3 @@ _fmaximum_mag_numl::
         ld      sp,ix
         pop     ix
         ret
-

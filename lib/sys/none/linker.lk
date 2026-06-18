@@ -4,4 +4,4 @@
 ; explicit entry symbol if needed.
 
 -b _CODE = 0x0000
--e
+ENTRY _entry

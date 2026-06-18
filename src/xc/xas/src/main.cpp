@@ -28,7 +28,8 @@ namespace xas {
     void assemble(const stmt_list& stmts, emitter& emit,
                   const std::string& module_name,
                   const std::string& src_file,
-                  asm_mode mode);
+                  asm_mode mode,
+                  const std::vector<std::string>& defines);
 
     // Defined in rel_emitter.cpp / elf_emitter.cpp.
     std::unique_ptr<emitter> make_rel_emitter(const std::string& path);
@@ -135,7 +136,8 @@ int main(int argc, char** argv)
 
             // Code generation (two-pass).
             std::string module = std::filesystem::path(opts.input).stem().string();
-            xas::assemble(stmts, *emit, module, opts.input, opts.mode);
+            xas::assemble(stmts, *emit, module, opts.input, opts.mode,
+                          opts.defines);
         }
 
         return 0;

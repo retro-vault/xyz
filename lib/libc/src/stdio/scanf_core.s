@@ -36,7 +36,7 @@
         .area   _CODE
 __stdio_scan_init_stdin::
         ld      hl,(_stdin)
-        jr      __stdio_scan_init_stream_shared
+        jp      __stdio_scan_init_stream_shared
 
 __stdio_scan_digit_for_base:
         call    __stdio_scan_digitval

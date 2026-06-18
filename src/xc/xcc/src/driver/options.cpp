@@ -169,7 +169,7 @@ void options::usage(const char *argv0) {
         "  -O1               Enable peephole optimizer\n"
         "  -O2               Enable general optimization\n"
         "  -Of               Enable speed optimization\n"
-        "  -O3               Enable experimental optimization\n"
+        "  -O3               Enable experimental optimization (Here be dragons)\n"
         "  -Os               Enable size optimization\n"
         "  -f<name>          Enable one optimization family\n"
         "  -fno-<name>       Disable one optimization family\n"

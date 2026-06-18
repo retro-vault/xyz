@@ -9,9 +9,9 @@
         .globl  _gettimeofday
         .globl  __mullong
 
-T_GET           .equ 105
-BDOS            .equ 5
-CPM_EPOCH_ADJ   .equ 2921
+        .equ    T_GET,105
+        .equ    BDOS,5
+        .equ    CPM_EPOCH_ADJ,2921
 
         .area   _DATA
 __cpm3_gtod_ct:

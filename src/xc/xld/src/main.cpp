@@ -47,6 +47,7 @@ int main(int argc, char* argv[]) {
 
         if (opts.mode == xld::link_mode::sdcc)
             xld::runtime::apply_sdcc_runtime(opts);
+        xld::cli::resolve_libraries(opts);
 
         xld::link_context ctx;
         ctx.entry_name = opts.entry_symbol;

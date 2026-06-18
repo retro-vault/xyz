@@ -14,11 +14,11 @@
         .globl  __cpm3_tmp_saved_user
         .globl  __cpm3_tmp_user
 
-BDOS            .equ 5
-BDOS_SUCCESS    .equ 0
-FCB_OFF_DRIVE   .equ 0
-FCB_SIZE        .equ 36
-F_RENAME        .equ 23
+        .equ    BDOS,5
+        .equ    BDOS_SUCCESS,0
+        .equ    FCB_OFF_DRIVE,0
+        .equ    FCB_SIZE,36
+        .equ    F_RENAME,23
 
         .area   _DATA
 __cpm3_tmp_fcb2:

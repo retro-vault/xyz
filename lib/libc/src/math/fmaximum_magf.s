@@ -7,10 +7,10 @@
 
         .globl  _fmaximum_mag_numf
         .globl  _fmaximum_magf
+        .globl  _fmaxf
 
         .area   _CODE
 _fmaximum_magf::
 _fmaximum_mag_numf::
         ; mag version basic alias
         jp      _fmaxf
-

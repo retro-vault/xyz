@@ -9,6 +9,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 #include <xld/cli.h>
 #include <xld/errors.h>
@@ -76,6 +77,26 @@ namespace xld {
         if (++i >= argc)
             throw xld_error(arg_name + " requires an argument");
         return argv[i];
+    }
+
+    static std::filesystem::path normalize_path(const std::filesystem::path& path)
+    {
+        std::error_code ec;
+        auto normalized = std::filesystem::weakly_canonical(path, ec);
+        if (!ec)
+            return normalized;
+        return path.lexically_normal();
+    }
+
+    static void add_library_search_path(cli_options& opts,
+                                        std::filesystem::path path)
+    {
+        auto normalized = normalize_path(path);
+        for (const auto& existing : opts.library_search_paths) {
+            if (existing == normalized)
+                return;
+        }
+        opts.library_search_paths.push_back(std::move(normalized));
     }
 
     static xld::output_format to_xld_output_format(
@@ -238,10 +259,16 @@ namespace xld {
                     arg.substr(std::string("--platform=").size()));
             } else if (arg == "--no-default-runtime") {
                 opts.disable_default_sdcc_runtime = true;
-            } else if (arg == "-L" || arg.rfind("-L", 0) == 0) {
-                throw xld_error("-L is not implemented yet");
-            } else if (arg == "-l" || arg.rfind("-l", 0) == 0) {
-                throw xld_error("-l is not implemented yet");
+            } else if (arg == "-L") {
+                add_library_search_path(
+                    opts, std::filesystem::path(require_arg(argc, argv, i, arg)));
+            } else if (arg.rfind("-L", 0) == 0) {
+                add_library_search_path(
+                    opts, std::filesystem::path(arg.substr(2)));
+            } else if (arg == "-l") {
+                opts.libraries.push_back(require_arg(argc, argv, i, arg));
+            } else if (arg.rfind("-l", 0) == 0) {
+                opts.libraries.push_back(arg.substr(2));
             } else if (arg == "-T" || arg == "--script") {
                 ++i;
             } else if (arg.rfind("--script=", 0) == 0) {
@@ -262,6 +289,7 @@ namespace xld {
                 opts.output_file = arg.substr(2);
             } else if (arg == "-e") {
                 opts.entry_symbol = require_arg(argc, argv, i, arg);
+                opts.entry_symbol_explicit = true;
                 entry_explicit = true;
             } else if (arg == "-r") {
                 opts.reserved_ranges.push_back(parse_range_arg(
@@ -273,11 +301,13 @@ namespace xld {
                 auto [area_name, base] = parse_area_base_arg(
                     arg, require_arg(argc, argv, i, arg));
                 opts.area_bases[area_name] = base;
+                opts.explicit_area_bases.insert(area_name);
             } else if (arg.rfind("--section-start=", 0) == 0) {
                 auto [area_name, base] = parse_area_base_arg(
                     "--section-start",
                     arg.substr(std::string("--section-start=").size()));
                 opts.area_bases[area_name] = base;
+                opts.explicit_area_bases.insert(area_name);
             } else if (arg.rfind("-Ttext=", 0) == 0) {
                 text_base_alias =
                     parse_hex16(arg.substr(std::string("-Ttext=").size()));
@@ -301,6 +331,7 @@ namespace xld {
                 } else {
                     throw xld_error("unsupported output format: " + format);
                 }
+                opts.format_explicit = true;
             } else if (arg.rfind("--oformat=", 0) == 0) {
                 std::string format = arg.substr(std::string("--oformat=").size());
                 if (format == "xl") {
@@ -315,13 +346,16 @@ namespace xld {
                 } else {
                     throw xld_error("unsupported output format: " + format);
                 }
+                opts.format_explicit = true;
             } else if (arg == "-x") {
                 opts.output_range = parse_range_arg(
                     arg, require_arg(argc, argv, i, arg));
+                opts.output_range_explicit = true;
             } else if (arg.rfind("--binary-range=", 0) == 0) {
                 opts.output_range = parse_range_arg(
                     "--binary-range",
                     arg.substr(std::string("--binary-range=").size()));
+                opts.output_range_explicit = true;
             } else if (arg == "-m" || arg == "-M" || arg == "--print-map") {
                 opts.print_map = true;
             } else if (arg == "-v" || arg == "--verbose") {
@@ -339,20 +373,69 @@ namespace xld {
         if (text_base_alias.has_value()) {
             opts.area_bases[opts.mode == link_mode::gnu ? ".text" : "_CODE"] =
                 text_base_alias.value();
+            opts.explicit_area_bases.insert(
+                opts.mode == link_mode::gnu ? ".text" : "_CODE");
         }
         if (data_base_alias.has_value()) {
             opts.area_bases[opts.mode == link_mode::gnu ? ".data" : "_DATA"] =
                 data_base_alias.value();
+            opts.explicit_area_bases.insert(
+                opts.mode == link_mode::gnu ? ".data" : "_DATA");
         }
         if (bss_base_alias.has_value()) {
             opts.area_bases[opts.mode == link_mode::gnu ? ".bss" : "_BSS"] =
                 bss_base_alias.value();
+            opts.explicit_area_bases.insert(
+                opts.mode == link_mode::gnu ? ".bss" : "_BSS");
         }
 
         if (!opts.show_help && !opts.show_version && opts.input_files.empty())
             throw xld_error("no input files");
 
         return opts;
+    }
+
+    void cli::resolve_libraries(cli_options& opts) {
+        for (const auto& lib : opts.libraries) {
+            std::vector<std::filesystem::path> candidates;
+            auto add_candidates = [&](const std::filesystem::path& dir) {
+                candidates.push_back(dir / ("lib" + lib + ".a"));
+                candidates.push_back(dir / ("lib" + lib + ".lib"));
+                candidates.push_back(dir / (lib + ".a"));
+                candidates.push_back(dir / (lib + ".lib"));
+            };
+
+            if (std::filesystem::path(lib).has_parent_path()) {
+                candidates.push_back(lib);
+            } else {
+                for (const auto& dir : opts.library_search_paths)
+                    add_candidates(dir);
+            }
+
+            for (const auto& candidate : candidates) {
+                std::error_code ec;
+                if (std::filesystem::exists(candidate, ec)
+                    && std::filesystem::is_regular_file(candidate, ec)) {
+                    opts.input_files.push_back(normalize_path(candidate));
+                    goto next_library;
+                }
+            }
+
+            {
+                std::ostringstream os;
+                os << "cannot find -l" << lib;
+                if (!opts.library_search_paths.empty()) {
+                    os << " (searched";
+                    for (const auto& dir : opts.library_search_paths)
+                        os << " " << dir.string();
+                    os << ")";
+                }
+                throw xld_error(os.str());
+            }
+
+next_library:
+            continue;
+        }
     }
 
     void cli::print_usage(const char* argv0) {

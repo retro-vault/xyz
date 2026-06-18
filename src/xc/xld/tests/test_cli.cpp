@@ -7,6 +7,7 @@
 #include <xbfd/lscript.h>
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -191,4 +192,33 @@ TEST(cli_supports_ihx_output_and_map_file) {
     ASSERT_EQ(opts.format, xld::output_format::ihx);
     ASSERT(opts.map_file.has_value());
     ASSERT_EQ(opts.map_file->string(), std::string("out.map"));
+}
+
+TEST(cli_resolves_dash_l_against_dash_L_paths) {
+    auto dir = std::filesystem::temp_directory_path() / "xld-cli-dash-l-test";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    auto lib = dir / "libfixed.a";
+    std::ofstream(lib) << "!<arch>\n";
+
+    std::vector<std::string> args = {
+        "xld",
+        "-L" + dir.string(),
+        "-lfixed",
+        "main.rel"
+    };
+
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (auto& arg : args)
+        argv.push_back(arg.data());
+
+    auto opts = xld::cli::parse(static_cast<int>(argv.size()), argv.data());
+    xld::cli::resolve_libraries(opts);
+
+    ASSERT_EQ(static_cast<int>(opts.input_files.size()), 2);
+    ASSERT_EQ(opts.input_files[0].string(), std::string("main.rel"));
+    ASSERT_EQ(opts.input_files[1], std::filesystem::weakly_canonical(lib));
+
+    std::filesystem::remove_all(dir);
 }

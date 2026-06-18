@@ -7,7 +7,9 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _getchar
-        .globl  __cpm3_console_getchar
+
+        .equ    BDOS,5
+        .equ    C_READ,1
 
         .area   _CODE
 _getchar::
@@ -19,4 +21,19 @@ _getchar::
         ret
 __cpm3_getchar_eof:
         ld      de,#0xffff
+        ret
+
+__cpm3_console_getchar:
+        push    ix
+        push    iy
+        push    bc
+        push    de
+        push    hl
+        ld      c,#C_READ
+        call    BDOS
+        pop     hl
+        pop     de
+        pop     bc
+        pop     iy
+        pop     ix
         ret

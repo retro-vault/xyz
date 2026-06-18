@@ -10,11 +10,9 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _getchar
-        .globl  _getchar
 
         .area   _CODE
 
-_getchar:
 _getchar::
         ld      de,#0xffff
         ret

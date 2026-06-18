@@ -10,9 +10,9 @@
         .globl  __modulong
         .globl  __divuint
 
-T_SET           .equ 104
-BDOS            .equ 5
-CPM_EPOCH_ADJ   .equ 2921
+        .equ    T_SET,104
+        .equ    BDOS,5
+        .equ    CPM_EPOCH_ADJ,2921
 
         .area   _DATA
 __cpm3_stod_ct:

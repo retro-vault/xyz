@@ -24,9 +24,13 @@ Important properties:
 
 - input suite: `src/xc/xcc/tests/data/exec/<suite>`
 - metrics: object `_CODE` bytes only
+- xcc modes: `-O0`, `-O1`, `-O2`, `-Of`, `-O3`, `-Os`
+- SDCC modes: `--opt-code-size`, `--opt-code-speed`
 - no CRT
 - no runtime helper objects
 - no emulator execution
+- SDCC-inapplicable xcc-specific probes are recorded as `n/a`, and SDCC
+  totals are computed over the common compiled subset
 
 Default output:
 
@@ -169,8 +173,8 @@ So the benchmark story has changed a lot:
 
 - `xcc` is now functionally correct on the full benchmark oracle set
 - `-Of`, `-O3`, and `-Os` are all benchmark-clean on this suite
-- the proven aggressive baseline has now been promoted, so `-Of`, `-O3`,
-  and `-Os` currently measure the same on the executable benchmark set
+- the proven aggressive baseline has now been promoted, while `-Of` and
+  `-O3` can pull ahead of protected `-Os` through speed-biased peepholes
 - `-O2` is still the more conservative general preset
 - the remaining benchmark problem is no longer correctness
 - the next benchmark task is to keep `-O3` available for new

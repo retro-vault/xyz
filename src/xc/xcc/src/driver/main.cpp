@@ -26,8 +26,8 @@
 #include "backend/sdasz80_emitter.h"
 #include "backend/gnuas_emitter.h"
 #include "backend/z80/z80gen.h"
-#include "backend/z80/z80peep.h"
 #include "backend/z80/debug_info.h"
+#include <xopt/xopt.h>
 #include <xbfd/xbfd.h>
 
 #include <cstdlib>
@@ -298,7 +298,28 @@ static int compile_file_to_text(const std::string &input_path,
 
     // ----- 5. Peephole optimization ----------------------------------
     if (opts.opt_settings.peephole) {
-        asm_text = z80_peep::optimize(asm_text);
+        xopt::optimizer_options xopt_opts;
+        switch (opts.opt_settings.level) {
+        case opt_level::O0:
+            xopt_opts.level = xopt::optimization_level::none;
+            break;
+        case opt_level::O1:
+            xopt_opts.level = xopt::optimization_level::o1;
+            break;
+        case opt_level::O2:
+            xopt_opts.level = xopt::optimization_level::o2;
+            break;
+        case opt_level::Os:
+            xopt_opts.level = xopt::optimization_level::os;
+            break;
+        case opt_level::Of:
+            xopt_opts.level = xopt::optimization_level::of;
+            break;
+        case opt_level::O3:
+            xopt_opts.level = xopt::optimization_level::o3;
+            break;
+        }
+        asm_text = xopt::optimize_assembly(asm_text, xopt_opts);
     }
 
     return 0;
