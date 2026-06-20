@@ -40,6 +40,13 @@ bin
 build
 orig
 
+# Keep the C23 suite's checked-in setup drivers trackable even though their
+# directories are named "bin".
+!tests/c23/setups/sdcc-z80/bin/
+!tests/c23/setups/sdcc-z80/bin/*.sh
+!tests/c23/setups/xcc-z80/bin/
+!tests/c23/setups/xcc-z80/bin/*.sh
+
 # Project related
 project
 
