@@ -43,8 +43,8 @@ namespace {
             << "  --cdb <file>            SDCC CDB debug information file\n"
             << "  --map <file>            SDCC MAP linker output file (optional)\n"
             << "  --remote <host:port>    connect to remote target\n"
-            << "  --interpreter <mode>    frontend mode: cli or mi\n"
-            << "  --interpreter=<mode>    frontend mode: cli or mi\n"
+            << "  --interpreter <mode>    frontend mode: cli, mi, or mi2\n"
+            << "  --interpreter=<mode>    frontend mode: cli, mi, or mi2\n"
             << "  --mi                    shorthand for --interpreter=mi\n"
             << "  -ex <command>           execute debugger command\n"
             << "  -h, --help              show this help\n";

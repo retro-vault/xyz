@@ -34,6 +34,12 @@ to give the debugger stack a known-good target for bring-up and tests.
 make -C src/xc/xgdb all
 ```
 
+Run the MI smoke test:
+
+```sh
+make -C src/xc/xgdb test
+```
+
 ## xgdb Usage
 
 Basic form:
@@ -58,6 +64,13 @@ tries `foo.bin.cdb` and `foo.bin.map` as sidecars.
 For machine-interface (IDE) integration use:
 
 - `--interpreter=mi` or `--mi`
+- `--interpreter=mi2`
+
+Example:
+
+```sh
+bin/x/bin/xgdb --interpreter=mi --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
+```
 
 The protocol abstraction layer also has a DAP-shaped direction in the code,
 but the current `xgdb` entry point does not yet expose

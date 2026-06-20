@@ -27,6 +27,8 @@ CLI_PROTOCOL_OBJECT = $(OUTPUT_DIR)/frontends.o
 MI_PROTOCOL_OBJECT = $(OUTPUT_DIR)/mi_frontend.o
 CLI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxgdb_cli.a
 MI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxgdb_mi.a
+TEST_DIR = tests
+MI_SMOKE_TEST = $(TEST_DIR)/mi_smoke_test.sh
 
 .PHONY: all test clean
 
@@ -73,6 +75,9 @@ $(MI_PROTOCOL_LIB): $(LIB_OUTPUT) $(MI_PROTOCOL_OBJECT)
 
 $(BIN_OUTPUT):
 	mkdir -p $(BIN_OUTPUT)
+
+test: all
+	bash $(MI_SMOKE_TEST) $(XGDB_TARGET)
 
 clean:
 	rm -rf $(OUTPUT_DIR)

@@ -25,31 +25,39 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
-          cache-dependency-path: tools/xdbg-vsix/package-lock.json
+          cache-dependency-path: tools/xgdb-vsix/package-lock.json
 
-      - name: Install xdbg VSIX dependencies
+      - name: Install xgdb VSIX dependencies
         run: npm ci
-        working-directory: tools/xdbg-vsix
+        working-directory: tools/xgdb-vsix
 
-      - name: Build staged distribution
-        run: make all
+      - name: Build staged x distribution
+        run: |
+          make -C lib all
+          make -C tools/xgdb-vsix all ROOT="$PWD" DIST_DIR="$PWD/bin/x" VSIX_STAGE_DIR="$PWD/bin/x/pkg/vsix"
+          make -C src/xc all
+          make stage-includes
+          make stage-layout-cleanup
+          make stage-xcc-support
+          make stage-dist-docs
+          make -C pkg all
 
       - name: Run C23 compatibility matrix
         run: make -C tests/c23 matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json RUN_MODE=never
 
-      - name: Archive release payload
-        run: tar -czf xyz-release.tar.gz -C bin .
+      - name: Archive x release payload
+        run: tar -czf x.tar.gz -C bin x
 
-      - name: Upload artifact
+      - name: Upload x artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xyz-release
-          path: xyz-release.tar.gz
+          name: x
+          path: x.tar.gz
 
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: xyz-release.tar.gz
+          files: x.tar.gz
