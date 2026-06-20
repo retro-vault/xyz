@@ -7,6 +7,8 @@
   "compile_flags": [],
   "compile_template": [
     "{root}/setups/xcc-z80/bin/xcc_z80_driver.sh",
+    "--compiler",
+    "{compiler}",
     "--source",
     "{source}",
     "--output",
