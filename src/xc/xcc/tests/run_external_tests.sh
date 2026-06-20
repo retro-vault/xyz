@@ -5,7 +5,7 @@
 
 XCC="${1:-./build/bin/xcc}"
 EXT_ROOT="$(dirname "$0")/data/external"
-COMMON_INC="-Itests/data/external/include"
+COMMON_INC="-I$EXT_ROOT/include"
 PASS=0
 FAIL=0
 SKIP=0

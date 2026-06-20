@@ -52,6 +52,7 @@ struct asm_line {
     bool        is_comment = false;
     bool        is_label   = false;
     bool        is_global_label = false;
+    bool        label_has_colon = true;
 
     //
     // Parse a raw assembly text line into an asm_line.

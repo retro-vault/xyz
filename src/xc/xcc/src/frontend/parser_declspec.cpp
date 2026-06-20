@@ -141,9 +141,20 @@ decl_spec parser::parse_declaration_specifiers() {
 
             type_ptr stype;
             if (peek().kind == tk::LBRACE) {
-                stype = is_union ? type::make_union(tag) : type::make_struct(tag);
+                if (!tag.empty())
+                    stype = syms_.lookup_tag(tag);
+                if (!stype ||
+                    (is_union && stype->kind != type_kind::UNION) ||
+                    (!is_union && stype->kind != type_kind::STRUCT)) {
+                    stype = is_union ? type::make_union(tag) : type::make_struct(tag);
+                    if (!tag.empty()) syms_.insert_tag(tag, stype);
+                } else {
+                    // Complete the existing forward declaration in place so
+                    // typedefs and self-references keep pointing at this type.
+                    stype->fields.clear();
+                    stype->complete = false;
+                }
                 parse_struct_body(stype, is_union);
-                if (!tag.empty()) syms_.insert_tag(tag, stype);
             } else if (!tag.empty()) {
                 stype = syms_.lookup_tag(tag);
                 if (!stype) {
@@ -224,7 +235,7 @@ decl_spec parser::parse_declaration_specifiers() {
             }
             if (width > 64) {
                 // C23 allows arbitrary widths; xcc caps at 64 on Z80.
-                diag_.warning(peek().loc,
+                diag_.warning(warning_group::BITINT_WIDTH, peek().loc,
                     "_BitInt(%d) exceeds xcc maximum (64); capped at 64", width);
                 width = 64;
             }
@@ -272,10 +283,18 @@ decl_spec parser::parse_declaration_specifiers() {
     if (is_deduced) sc = storage_class::NONE;
 
     if (!is_deduced) {
-        base = base->unqual();
-        base->is_const    = is_const;
-        base->is_volatile = is_volatile;
-        base->is_restrict = is_restrict;
+        bool preserves_tag_identity =
+            explicit_type &&
+            (base->kind == type_kind::STRUCT ||
+             base->kind == type_kind::UNION ||
+             base->kind == type_kind::ENUM) &&
+            !is_const && !is_volatile && !is_restrict;
+        if (!preserves_tag_identity) {
+            base = base->unqual();
+            base->is_const    = is_const;
+            base->is_volatile = is_volatile;
+            base->is_restrict = is_restrict;
+        }
     }
 
     decl_spec ds;
@@ -327,6 +346,7 @@ void parser::parse_struct_body(type_ptr stype, bool is_union) {
             auto     fdi   = parse_declarator(fbase);
             auto     fname = fdi.name;
             type_ptr ftype = fdi.type;
+            apply_call_abi_attrs_to_type(ftype, fds.attrs);
 
             // Unnamed embedded struct/union (anonymous member).
             if (fname.empty() && (ftype->kind == type_kind::STRUCT ||

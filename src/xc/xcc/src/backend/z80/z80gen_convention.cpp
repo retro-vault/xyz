@@ -659,21 +659,24 @@ void abi_convention::std_epilogue_frame(z80_gen &g, const ir_function &fn)
 void abi_convention::std_send_push(z80_gen &g, const icode &ic)
 {
     int sz = g.op_size(ic.left);
+    auto push_byte = [&](int byte_offset) {
+        operand byte = ic.left;
+        byte.byte_offset += byte_offset;
+        byte.type = type::make_uchar();
+        g.load_a(byte);
+        g.emit_line("push\taf");
+        g.emit_line("inc\tsp");
+    };
+
     if (sz == 1) {
-        g.load_a(ic.left);
-        g.emit_line("ld\tl, a");
-        g.emit_line("ld\th, %s", g.asm_.imm(0).c_str());
-        g.emit_line("push\thl");
-    } else if (sz == 8) {
-        for (int w = 3; w >= 0; --w) {
-            g.load_hl_word(ic.left, w);
+        push_byte(0);
+    } else if (sz > 2) {
+        if (sz & 1)
+            push_byte(sz - 1);
+        for (int byte = (sz / 2) * 2 - 2; byte >= 0; byte -= 2) {
+            g.load_hl_word(ic.left, byte / 2);
             g.emit_line("push\thl");
         }
-    } else if (sz == 4) {
-        g.load_hl_hi32(ic.left);
-        g.emit_line("push\thl");
-        g.load_hl_lo32(ic.left);
-        g.emit_line("push\thl");
     } else {
         g.load_hl(ic.left);
         g.emit_line("push\thl");

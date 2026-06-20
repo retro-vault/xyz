@@ -205,6 +205,10 @@ void z80_gen::emit_label(const std::string &name, bool global) {
     asm_.label(name, global);
 }
 
+std::string z80_gen::fresh_local_label(const char *prefix) {
+    return std::string(prefix) + "_" + std::to_string(local_label_counter_++);
+}
+
 void z80_gen::emit_comment(const char *fmt, ...) {
     char buf[256];
     va_list ap;

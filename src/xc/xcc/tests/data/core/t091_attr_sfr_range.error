@@ -1,0 +1,1 @@
+[[sdcc::sfr]]: port '0x10000' is outside 16-bit range

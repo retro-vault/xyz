@@ -85,6 +85,13 @@ private:
     void emit(icode ic);
 
     //
+    // Convert a constant operand to target type using the same storage
+    // narrowing rules as runtime casts.  Non-constant operands are returned
+    // unchanged so callers can decide whether to emit an explicit CAST.
+    //
+    operand coerce_const_operand(operand op, const type_ptr &target);
+
+    //
     // Visit e through the expr_visitor interface and return the result
     // operand.  After this call expr_result_ holds the same value.
     //

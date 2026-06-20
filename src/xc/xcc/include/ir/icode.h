@@ -184,13 +184,13 @@ struct operand {
     }
 
     //
-    // Factory: construct a float constant (type = double).
+    // Factory: construct a floating constant.
     //
-    static operand make_float(double v) {
+    static operand make_float(double v, type_ptr t = nullptr) {
         operand o;
         o.kind = operand_kind::FLOAT_CONST;
         o.fval = v;
-        o.type = type::make_double();
+        o.type = t ? t : type::make_double();
         return o;
     }
 
@@ -308,8 +308,9 @@ struct ir_module {
         int64_t at_address = -1;   // [[sdcc::at(N)]]: emit as absolute symbol (not in _DATA)
         int     sfr_port   = -1;   // [[sdcc::sfr(N)]]: no data emitted, reads/writes use IN/OUT
 
-        // Each entry is (value, byte_size); non-empty for aggregate {…} inits.
-        struct init_elem { int64_t value = 0; int size = 2; };
+        // Each entry is (value, byte_size), or label if non-empty for pointer
+        // initializers such as static char *v[] = {"x"}.
+        struct init_elem { int64_t value = 0; int size = 2; std::string label; };
         std::vector<init_elem> init_vals;
     };
 

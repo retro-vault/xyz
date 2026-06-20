@@ -37,6 +37,7 @@ run_test() {
     local name="$(basename "$base")"
     local expected="${base}.expected"
     local error_pat="${base}.error"
+    local no_warn_pat="${base}.nowarning"
     local actual
     local tmpfile
 
@@ -63,12 +64,42 @@ run_test() {
             return
         fi
         if grep -qF "$pat" /tmp/xcc_err_$$.txt; then
-            echo "${GREEN}PASS${RESET} $name"
-            PASS=$((PASS + 1))
+            if [[ -f "$no_warn_pat" ]] && grep -qF "$(cat "$no_warn_pat")" /tmp/xcc_err_$$.txt; then
+                echo "${RED}FAIL${RESET} $name  [unexpected warning found: '$(cat "$no_warn_pat")']"
+                head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
+                FAIL=$((FAIL + 1))
+            else
+                echo "${GREEN}PASS${RESET} $name"
+                PASS=$((PASS + 1))
+            fi
         else
             echo "${RED}FAIL${RESET} $name  [warning not found: '$pat']"
             head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
             FAIL=$((FAIL + 1))
+        fi
+        rm -f "$tmpfile" /tmp/xcc_err_$$.txt
+        return
+    fi
+
+    # No-warning tests: compiler must succeed AND stderr must not contain pattern.
+    if [[ -f "$no_warn_pat" ]]; then
+        local pat
+        pat="$(cat "$no_warn_pat")"
+        tmpfile=$(mktemp /tmp/xcc_test_XXXXXX.s)
+        if ! run_xcc $opts "$c_file" -o "$tmpfile" 2>/tmp/xcc_err_$$.txt; then
+            echo "${RED}FAIL${RESET} $name  [unexpected compile error]"
+            head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
+            rm -f "$tmpfile" /tmp/xcc_err_$$.txt
+            FAIL=$((FAIL + 1))
+            return
+        fi
+        if grep -qF "$pat" /tmp/xcc_err_$$.txt; then
+            echo "${RED}FAIL${RESET} $name  [unexpected warning found: '$pat']"
+            head -5 /tmp/xcc_err_$$.txt | sed 's/^/       /'
+            FAIL=$((FAIL + 1))
+        else
+            echo "${GREEN}PASS${RESET} $name"
+            PASS=$((PASS + 1))
         fi
         rm -f "$tmpfile" /tmp/xcc_err_$$.txt
         return

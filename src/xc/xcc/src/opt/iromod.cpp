@@ -1021,13 +1021,469 @@ static bool evaluate_const_binary(const icode &ic, int64_t lhs, int64_t rhs,
 
 static bool is_supported_const_runtime_helper(const std::string &name) {
     return name == "__mul16" || name == "__div16" || name == "__mod16" ||
-           name == "__mul32" || name == "__div32" || name == "__mod32";
+           name == "__mul32" || name == "__div32" || name == "__mod32" ||
+           name.rfind("fixed8_8_", 0) == 0 ||
+           name.rfind("fixed16_16_", 0) == 0 ||
+           name.rfind("fixed24_8_", 0) == 0 ||
+           name.rfind("_fixed8_8_", 0) == 0 ||
+           name.rfind("_fixed16_16_", 0) == 0 ||
+           name.rfind("_fixed24_8_", 0) == 0;
+}
+
+struct fixed_helper_info {
+    enum class format {
+        NONE,
+        F8_8,
+        F16_16,
+        F24_8,
+    };
+
+    format fmt = format::NONE;
+    std::string op;
+};
+
+static fixed_helper_info parse_fixed_helper(const std::string &name) {
+    struct prefix_info {
+        const char *prefix;
+        fixed_helper_info::format fmt;
+    };
+    static const prefix_info prefixes[] = {
+        {"fixed8_8_", fixed_helper_info::format::F8_8},
+        {"fixed16_16_", fixed_helper_info::format::F16_16},
+        {"fixed24_8_", fixed_helper_info::format::F24_8},
+        {"_fixed8_8_", fixed_helper_info::format::F8_8},
+        {"_fixed16_16_", fixed_helper_info::format::F16_16},
+        {"_fixed24_8_", fixed_helper_info::format::F24_8},
+    };
+
+    for (const auto &entry : prefixes) {
+        const std::string prefix(entry.prefix);
+        if (name.rfind(prefix, 0) == 0) {
+            fixed_helper_info info;
+            info.fmt = entry.fmt;
+            info.op = name.substr(prefix.size());
+            return info;
+        }
+    }
+    return {};
+}
+
+static int fixed_fraction_bits(fixed_helper_info::format fmt) {
+    switch (fmt) {
+    case fixed_helper_info::format::F8_8:
+    case fixed_helper_info::format::F24_8:
+        return 8;
+    case fixed_helper_info::format::F16_16:
+        return 16;
+    default:
+        return 0;
+    }
+}
+
+static int fixed_raw_bits(fixed_helper_info::format fmt) {
+    return fmt == fixed_helper_info::format::F8_8 ? 16 : 32;
+}
+
+static uint64_t fixed_mask_for_bits(int bits) {
+    if (bits <= 0 || bits >= 64)
+        return ~0ULL;
+    return (1ULL << bits) - 1ULL;
+}
+
+static int64_t normalize_fixed_raw(int64_t value, int bits) {
+    const uint64_t mask = fixed_mask_for_bits(bits);
+    uint64_t raw = static_cast<uint64_t>(value) & mask;
+    if (bits > 0 && bits < 64) {
+        const uint64_t sign_bit = 1ULL << (bits - 1);
+        if ((raw & sign_bit) != 0)
+            raw |= ~mask;
+    }
+    return static_cast<int64_t>(raw);
+}
+
+static int64_t abs_fixed_raw(int64_t value, int bits) {
+    value = normalize_fixed_raw(value, bits);
+    return value < 0 ? -value : value;
+}
+
+static int64_t arithmetic_shift_right_value(int64_t value, int shift) {
+    if (shift <= 0)
+        return value;
+    if (value >= 0)
+        return value >> shift;
+    const int64_t bias = (1LL << shift) - 1;
+    return -(((-value) + bias) >> shift);
+}
+
+static int fixed_compare(int64_t lhs, int64_t rhs) {
+    if (lhs < rhs)
+        return -1;
+    if (lhs > rhs)
+        return 1;
+    return 0;
+}
+
+static int64_t fixed_mul_result_raw(fixed_helper_info::format fmt,
+                                    int64_t lhs,
+                                    int64_t rhs) {
+    const int raw_bits = fixed_raw_bits(fmt);
+    const int frac_bits = fixed_fraction_bits(fmt);
+    lhs = normalize_fixed_raw(lhs, raw_bits);
+    rhs = normalize_fixed_raw(rhs, raw_bits);
+    if (fmt == fixed_helper_info::format::F8_8) {
+        const bool neg = (lhs < 0) != (rhs < 0);
+        int64_t product = (abs_fixed_raw(lhs, raw_bits) *
+                           abs_fixed_raw(rhs, raw_bits)) >> frac_bits;
+        return neg ? -product : product;
+    }
+    return arithmetic_shift_right_value(lhs * rhs, frac_bits);
+}
+
+static int64_t fixed_div_result_raw(fixed_helper_info::format fmt,
+                                    int64_t lhs,
+                                    int64_t rhs) {
+    const int raw_bits = fixed_raw_bits(fmt);
+    const int frac_bits = fixed_fraction_bits(fmt);
+    lhs = normalize_fixed_raw(lhs, raw_bits);
+    rhs = normalize_fixed_raw(rhs, raw_bits);
+    if (rhs == 0)
+        return 0;
+    const bool neg = (lhs < 0) != (rhs < 0);
+    int64_t quotient =
+        (abs_fixed_raw(lhs, raw_bits) << frac_bits) /
+        abs_fixed_raw(rhs, raw_bits);
+    return neg ? -quotient : quotient;
+}
+
+static bool evaluate_const_fixed_helper_call(const icode &call_ic,
+                                             const std::vector<const_eval_value> &args,
+                                             int64_t &ret_value,
+                                             bool &has_ret_value) {
+    const fixed_helper_info helper = parse_fixed_helper(call_ic.func_name);
+    if (helper.fmt == fixed_helper_info::format::NONE)
+        return false;
+    for (const auto &arg : args)
+        if (!arg.is_int())
+            return false;
+
+    const int raw_bits = fixed_raw_bits(helper.fmt);
+    const int frac_bits = fixed_fraction_bits(helper.fmt);
+    auto raw = [&](size_t index) {
+        return normalize_fixed_raw(args[index].int_value, raw_bits);
+    };
+    auto finish_raw = [&](int64_t value) {
+        ret_value = normalize_fixed_raw(value, raw_bits);
+        has_ret_value = true;
+        return true;
+    };
+    auto integer_divisor = [&](int divisor) {
+        return finish_raw(fixed_div_result_raw(
+            helper.fmt, raw(0), static_cast<int64_t>(divisor) << frac_bits));
+    };
+    auto raw_multiplier = [&](int64_t multiplier) {
+        return finish_raw(fixed_mul_result_raw(helper.fmt, raw(0), multiplier));
+    };
+
+    if (helper.op == "from_int") {
+        if (args.size() != 1)
+            return false;
+        return finish_raw(args[0].int_value << frac_bits);
+    }
+    if (helper.op == "to_int") {
+        if (args.size() != 1)
+            return false;
+        ret_value = normalize_integer_value(
+            arithmetic_shift_right_value(raw(0), frac_bits), type::make_int());
+        has_ret_value = true;
+        return true;
+    }
+    if (helper.op == "neg") {
+        if (args.size() != 1)
+            return false;
+        return finish_raw(-raw(0));
+    }
+    if (helper.op == "abs") {
+        if (args.size() != 1)
+            return false;
+        const int64_t value = raw(0);
+        return finish_raw(value < 0 ? -value : value);
+    }
+
+    if (helper.op == "to_8_8") {
+        if (args.size() != 1)
+            return false;
+        int64_t converted = 0;
+        if (helper.fmt == fixed_helper_info::format::F16_16) {
+            converted = arithmetic_shift_right_value(raw(0), 8);
+        } else if (helper.fmt == fixed_helper_info::format::F24_8) {
+            converted = raw(0);
+        } else {
+            return false;
+        }
+        ret_value = normalize_fixed_raw(converted, 16);
+        has_ret_value = true;
+        return true;
+    }
+    if (helper.op == "to_16_16") {
+        if (args.size() != 1)
+            return false;
+        int64_t converted = 0;
+        if (helper.fmt == fixed_helper_info::format::F8_8 ||
+            helper.fmt == fixed_helper_info::format::F24_8) {
+            converted = raw(0) << 8;
+        } else {
+            return false;
+        }
+        ret_value = normalize_fixed_raw(converted, 32);
+        has_ret_value = true;
+        return true;
+    }
+    if (helper.op == "to_24_8") {
+        if (args.size() != 1)
+            return false;
+        int64_t converted = 0;
+        if (helper.fmt == fixed_helper_info::format::F8_8) {
+            converted = raw(0);
+        } else if (helper.fmt == fixed_helper_info::format::F16_16) {
+            converted = arithmetic_shift_right_value(raw(0), 8);
+        } else {
+            return false;
+        }
+        ret_value = normalize_fixed_raw(converted, 32);
+        has_ret_value = true;
+        return true;
+    }
+
+    if (args.size() == 1) {
+        if (helper.op == "div2")
+            return integer_divisor(2);
+        if (helper.op == "div3")
+            return integer_divisor(3);
+        if (helper.op == "div4")
+            return integer_divisor(4);
+        if (helper.op == "div8")
+            return integer_divisor(8);
+        if (helper.op == "mul1_2")
+            return raw_multiplier(1LL << (frac_bits - 1));
+        if (helper.op == "mul1_4")
+            return raw_multiplier(1LL << (frac_bits - 2));
+        if (helper.op == "mul1_8")
+            return raw_multiplier(1LL << (frac_bits - 3));
+        if (helper.op == "mul3_2")
+            return raw_multiplier(3LL << (frac_bits - 1));
+        if (helper.op == "mul5_4")
+            return raw_multiplier(5LL << (frac_bits - 2));
+    }
+
+    if (args.size() != 2)
+        return false;
+
+    const int64_t lhs = raw(0);
+    const int64_t rhs = raw(1);
+    if (helper.op == "add")
+        return finish_raw(lhs + rhs);
+    if (helper.op == "sub")
+        return finish_raw(lhs - rhs);
+    if (helper.op == "cmp") {
+        ret_value = fixed_compare(lhs, rhs);
+        has_ret_value = true;
+        return true;
+    }
+    if (helper.op == "mul")
+        return finish_raw(fixed_mul_result_raw(helper.fmt, lhs, rhs));
+    if (helper.op == "div")
+        return finish_raw(fixed_div_result_raw(helper.fmt, lhs, rhs));
+
+    return false;
+}
+
+static bool fixed_div_specialized_target(const std::string &func_name,
+                                         int64_t denominator,
+                                         std::string &target) {
+    const fixed_helper_info helper = parse_fixed_helper(func_name);
+    if (helper.fmt == fixed_helper_info::format::NONE || helper.op != "div")
+        return false;
+
+    const int raw_bits = fixed_raw_bits(helper.fmt);
+    const int frac_bits = fixed_fraction_bits(helper.fmt);
+    const int64_t raw_denominator = normalize_fixed_raw(denominator, raw_bits);
+
+    int divisor = 0;
+    for (int candidate : {2, 3, 4, 8}) {
+        if (raw_denominator == (static_cast<int64_t>(candidate) << frac_bits)) {
+            divisor = candidate;
+            break;
+        }
+    }
+    if (divisor == 0)
+        return false;
+
+    switch (helper.fmt) {
+    case fixed_helper_info::format::F8_8:
+        target = "fixed8_8_div" + std::to_string(divisor);
+        return true;
+    case fixed_helper_info::format::F16_16:
+        target = "fixed16_16_div" + std::to_string(divisor);
+        return true;
+    case fixed_helper_info::format::F24_8:
+        target = "fixed24_8_div" + std::to_string(divisor);
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool fixed_mul_specialized_target(const std::string &func_name,
+                                         int64_t multiplier,
+                                         std::string &target) {
+    const fixed_helper_info helper = parse_fixed_helper(func_name);
+    if (helper.fmt == fixed_helper_info::format::NONE || helper.op != "mul")
+        return false;
+
+    const int raw_bits = fixed_raw_bits(helper.fmt);
+    const int frac_bits = fixed_fraction_bits(helper.fmt);
+    const int64_t raw_multiplier = normalize_fixed_raw(multiplier, raw_bits);
+
+    auto make_target = [&](const std::string &suffix) {
+        switch (helper.fmt) {
+        case fixed_helper_info::format::F8_8:
+            target = "fixed8_8_" + suffix;
+            return true;
+        case fixed_helper_info::format::F16_16:
+            target = "fixed16_16_" + suffix;
+            return true;
+        case fixed_helper_info::format::F24_8:
+            target = "fixed24_8_" + suffix;
+            return true;
+        default:
+            return false;
+        }
+    };
+
+    auto make_fraction_target = [&](const std::string &div_suffix,
+                                    const std::string &mul_suffix) {
+        if (helper.fmt == fixed_helper_info::format::F8_8)
+            return make_target(div_suffix);
+        return make_target(mul_suffix);
+    };
+
+    if (raw_multiplier == (1LL << (frac_bits - 1)))
+        return make_fraction_target("div2", "mul1_2");
+    if (raw_multiplier == (1LL << (frac_bits - 2)))
+        return make_fraction_target("div4", "mul1_4");
+    if (raw_multiplier == (1LL << (frac_bits - 3)))
+        return make_fraction_target("div8", "mul1_8");
+    if (raw_multiplier == (3LL << (frac_bits - 1)))
+        return make_target("mul3_2");
+    if (raw_multiplier == (5LL << (frac_bits - 2)))
+        return make_target("mul5_4");
+    return false;
+}
+
+static bool rewrite_fixed_unary_specialized_call(ir_function &caller,
+                                                 size_t call_idx,
+                                                 size_t send_begin,
+                                                 const operand &arg,
+                                                 const std::string &target) {
+    const icode &call_ic = caller.icodes[call_idx];
+    if (effective_call_abi(call_ic.callee_abi) != call_abi::SDCCCALL1)
+        return false;
+
+    type_ptr arg_type = arg.type ? arg.type :
+                        (call_ic.result.type ? call_ic.result.type : type::make_int());
+    const auto &conv = get_abi_convention(call_ic.callee_abi);
+    std::vector<type_ptr> arg_types = {arg_type};
+    auto arg_locs = conv.classify_args(arg_types);
+    if (arg_locs.empty())
+        return false;
+
+    const int total_arg_bytes = conv.stack_arg_bytes(arg_type, arg_locs[0]);
+
+    std::vector<icode> replacement;
+    replacement.reserve(2);
+
+    icode send;
+    send.op = icode_op::SEND;
+    send.left = arg;
+    send.argreg = 0;
+    send.arg_loc = arg_locs[0];
+    send.callee_abi = call_ic.callee_abi;
+    send.line = call_ic.line;
+    replacement.push_back(std::move(send));
+
+    icode new_call = call_ic;
+    new_call.func_name = target;
+    new_call.num_params = 1;
+    new_call.arg_bytes = total_arg_bytes;
+    replacement.push_back(std::move(new_call));
+
+    auto erase_begin =
+        caller.icodes.begin() + static_cast<std::ptrdiff_t>(send_begin);
+    auto erase_end =
+        caller.icodes.begin() + static_cast<std::ptrdiff_t>(call_idx + 1);
+    caller.icodes.erase(erase_begin, erase_end);
+    caller.icodes.insert(
+        caller.icodes.begin() + static_cast<std::ptrdiff_t>(send_begin),
+        replacement.begin(), replacement.end());
+    return true;
+}
+
+static bool fixed_raw_binary_opcode(const std::string &func_name,
+                                    icode_op &op) {
+    const fixed_helper_info helper = parse_fixed_helper(func_name);
+    if (helper.fmt == fixed_helper_info::format::NONE)
+        return false;
+    if (helper.op == "add") {
+        op = icode_op::ADD;
+        return true;
+    }
+    if (helper.op == "sub") {
+        op = icode_op::SUB;
+        return true;
+    }
+    return false;
+}
+
+static bool rewrite_fixed_raw_binary_call(ir_function &caller,
+                                          size_t call_idx,
+                                          size_t send_begin,
+                                          const std::vector<operand> &args,
+                                          icode_op op) {
+    if (args.size() != 2)
+        return false;
+
+    const icode &call_ic = caller.icodes[call_idx];
+    std::vector<icode> replacement;
+    replacement.reserve(1);
+
+    if (!call_ic.result.is_none()) {
+        icode repl;
+        repl.op = op;
+        repl.result = call_ic.result;
+        repl.left = args[0];
+        repl.right = args[1];
+        repl.line = call_ic.line;
+        replacement.push_back(std::move(repl));
+    }
+
+    auto erase_begin =
+        caller.icodes.begin() + static_cast<std::ptrdiff_t>(send_begin);
+    auto erase_end =
+        caller.icodes.begin() + static_cast<std::ptrdiff_t>(call_idx + 1);
+    caller.icodes.erase(erase_begin, erase_end);
+    caller.icodes.insert(
+        caller.icodes.begin() + static_cast<std::ptrdiff_t>(send_begin),
+        replacement.begin(), replacement.end());
+    return true;
 }
 
 static bool evaluate_const_runtime_helper_call(const icode &call_ic,
                                                const std::vector<const_eval_value> &args,
                                                int64_t &ret_value,
                                                bool &has_ret_value) {
+    if (evaluate_const_fixed_helper_call(call_ic, args, ret_value, has_ret_value))
+        return true;
+
     if (!is_supported_const_runtime_helper(call_ic.func_name) || args.size() != 2)
         return false;
     if (!args[0].is_int() || !args[1].is_int())
@@ -2186,6 +2642,113 @@ static void update_straight_const_env(const icode &ic, straight_const_env &env) 
     }
 }
 
+struct single_const_symbol {
+    operand value = operand::make_none();
+    bool have_value = false;
+    bool invalid = false;
+};
+
+static bool is_single_const_local_symbol(const operand &op) {
+    if (!op.is_symbol() || op.is_global || op.is_func ||
+        op.is_tls || op.is_sfr || op.is_param) {
+        return false;
+    }
+    if (op.byte_offset != 0)
+        return false;
+    if (op.type && op.type->is_volatile)
+        return false;
+    return is_const_eval_integer_type(op.type);
+}
+
+static bool is_local_symbol_base(const operand &op) {
+    return op.is_symbol() &&
+           !op.is_global &&
+           !op.is_func &&
+           !op.is_tls &&
+           !op.is_sfr &&
+           !op.is_param;
+}
+
+static void invalidate_const_symbol(
+    const operand &op,
+    std::unordered_map<std::string, single_const_symbol> &symbols)
+{
+    if (!is_local_symbol_base(op))
+        return;
+    symbols[base_symbol_key(op)].invalid = true;
+}
+
+static void invalidate_partial_symbol_use(
+    const operand &op,
+    std::unordered_map<std::string, single_const_symbol> &symbols)
+{
+    if (!is_local_symbol_base(op) || op.byte_offset == 0)
+        return;
+    symbols[base_symbol_key(op)].invalid = true;
+}
+
+static bool collect_single_const_local_replacements(
+    const ir_function &fn,
+    std::unordered_map<std::string, operand> &replacements)
+{
+    std::unordered_map<std::string, single_const_symbol> symbols;
+    straight_const_env env;
+
+    for (const auto &ic : fn.icodes) {
+        invalidate_partial_symbol_use(ic.result, symbols);
+        invalidate_partial_symbol_use(ic.left, symbols);
+        invalidate_partial_symbol_use(ic.right, symbols);
+
+        if (ic.op == icode_op::SET_VALUE_AT)
+            return false;
+
+        if (ic.op == icode_op::ADDRESS_OF) {
+            invalidate_const_symbol(ic.left, symbols);
+            update_straight_const_env(ic, env);
+            continue;
+        }
+
+        if (!op_writes_result_symbol(ic.op) || !ic.result.is_symbol()) {
+            update_straight_const_env(ic, env);
+            continue;
+        }
+
+        const std::string key = base_symbol_key(ic.result);
+        if (!is_single_const_local_symbol(ic.result)) {
+            invalidate_const_symbol(ic.result, symbols);
+            update_straight_const_env(ic, env);
+            continue;
+        }
+
+        auto &entry = symbols[key];
+        operand resolved;
+        if (ic.op != icode_op::ASSIGN ||
+            !resolve_straight_const(ic.left, env, resolved) ||
+            resolved.kind != operand_kind::INT_CONST) {
+            entry.invalid = true;
+            update_straight_const_env(ic, env);
+            continue;
+        }
+        if (entry.have_value) {
+            entry.invalid = true;
+            update_straight_const_env(ic, env);
+            continue;
+        }
+
+        entry.value = operand::make_int(
+            normalize_integer_value(resolved.ival, ic.result.type),
+            ic.result.type ? ic.result.type : resolved.type);
+        entry.have_value = true;
+        update_straight_const_env(ic, env);
+    }
+
+    for (const auto &[key, entry] : symbols) {
+        if (!entry.invalid && entry.have_value)
+            replacements.emplace(key, entry.value);
+    }
+    return !replacements.empty();
+}
+
 static bool rewrite_function_as_const_return(ir_function &fn,
                                              int64_t ret_value,
                                              bool has_ret_value) {
@@ -2496,6 +3059,9 @@ public:
 
 class const_call_eval_pass final : public ir_module_pass {
 public:
+    explicit const_call_eval_pass(bool fixed_specialization)
+        : fixed_specialization_(fixed_specialization) {}
+
     const char *name() const override { return "const_call_eval"; }
 
     bool run(ir_module &mod) override {
@@ -2521,6 +3087,58 @@ public:
                 if (!collect_call_args(caller.icodes, i, ic, send_begin, args)) {
                     update_straight_const_env(ic, env);
                     continue;
+                }
+
+                icode_op raw_binary_op = icode_op::ASSIGN;
+                if (fixed_specialization_ &&
+                    fixed_raw_binary_opcode(ic.func_name, raw_binary_op) &&
+                    rewrite_fixed_raw_binary_call(caller, i, send_begin,
+                                                  args, raw_binary_op)) {
+                    return true;
+                }
+
+                operand resolved_num;
+                operand resolved_den;
+                std::string div_target;
+                const bool numerator_const =
+                    args.size() == 2 &&
+                    resolve_straight_const(args[0], env, resolved_num) &&
+                    resolved_num.kind == operand_kind::INT_CONST;
+                if (fixed_specialization_ &&
+                    !numerator_const &&
+                    args.size() == 2 &&
+                    resolve_straight_const(args[1], env, resolved_den) &&
+                    resolved_den.kind == operand_kind::INT_CONST &&
+                    fixed_div_specialized_target(ic.func_name, resolved_den.ival,
+                                                 div_target)) {
+                    if (rewrite_fixed_unary_specialized_call(caller, i, send_begin,
+                                                             args[0], div_target)) {
+                        return true;
+                    }
+                }
+
+                operand resolved_left;
+                operand resolved_right;
+                std::string mul_target;
+                const bool left_const =
+                    args.size() == 2 &&
+                    resolve_straight_const(args[0], env, resolved_left) &&
+                    resolved_left.kind == operand_kind::INT_CONST;
+                const bool right_const =
+                    args.size() == 2 &&
+                    resolve_straight_const(args[1], env, resolved_right) &&
+                    resolved_right.kind == operand_kind::INT_CONST;
+                if (fixed_specialization_ && left_const != right_const) {
+                    const operand &dynamic_arg = left_const ? args[1] : args[0];
+                    const int64_t multiplier =
+                        left_const ? resolved_left.ival : resolved_right.ival;
+                    if (fixed_mul_specialized_target(ic.func_name, multiplier,
+                                                     mul_target) &&
+                        rewrite_fixed_unary_specialized_call(caller, i, send_begin,
+                                                             dynamic_arg,
+                                                             mul_target)) {
+                        return true;
+                    }
                 }
 
                 bool all_int_consts = true;
@@ -2581,6 +3199,25 @@ public:
         }
 
         return false;
+    }
+
+private:
+    bool fixed_specialization_ = false;
+};
+
+class single_const_local_propagation_pass final : public ir_module_pass {
+public:
+    const char *name() const override { return "single_const_local_propagation"; }
+
+    bool run(ir_module &mod) override {
+        bool changed = false;
+        for (auto &fn : mod.functions) {
+            std::unordered_map<std::string, operand> replacements;
+            if (!collect_single_const_local_replacements(fn, replacements))
+                continue;
+            changed = apply_constant_arg_replacements(fn, replacements) || changed;
+        }
+        return changed;
     }
 };
 
@@ -2869,10 +3506,18 @@ private:
 std::vector<std::unique_ptr<ir_module_pass>>
 ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
     std::vector<std::unique_ptr<ir_module_pass>> passes;
+    if (settings.dead_static_functions)
+        passes.push_back(std::make_unique<dead_internal_function_pass>());
     if (settings.const_arg_propagation)
         passes.push_back(std::make_unique<constant_arg_propagation_pass>());
-    if (settings.const_call_eval)
-        passes.push_back(std::make_unique<const_call_eval_pass>());
+    if (settings.const_call_eval) {
+        const bool experimental_fixed_specialization =
+            settings.level == opt_level::O3 || settings.level == opt_level::Of;
+        passes.push_back(
+            std::make_unique<const_call_eval_pass>(experimental_fixed_specialization));
+        if (experimental_fixed_specialization)
+            passes.push_back(std::make_unique<single_const_local_propagation_pass>());
+    }
     if (settings.function_const_eval)
         passes.push_back(std::make_unique<function_const_eval_pass>());
     if (settings.dead_params)

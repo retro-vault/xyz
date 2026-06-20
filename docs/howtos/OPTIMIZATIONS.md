@@ -181,6 +181,35 @@ constant-valued locals or temporaries rather than raw literal `SEND`
 operands. That includes nested calls through other eligible private
 helpers and a small whitelist of pure runtime helpers such as
 `__mul16`, `__div16`, `__mod16`, `__mul32`, `__div32`, and `__mod32`.
+The same constant-call evaluator now also understands the pure fixed-point
+runtime helper families for 8.8, 16.16, and 24.8 arithmetic, conversion,
+comparison, negation, and absolute value, so fixed expressions such as
+`fixed16_16_div(fixed16_16_from_int(3), fixed16_16_from_int(2))`
+collapse to raw immediates before code generation.
+In the `-O3`/`-Of` module pipeline, when only the fixed-point divisor is
+constant, the module optimizer can also retarget exact positive integer
+divisors `2`, `3`, `4`, and `8` to
+small one-argument helpers such as `fixed16_16_div4`. That lets the
+linker avoid pulling the full generic restoring divider for common
+constant-divisor code while preserving signed truncation-toward-zero
+semantics.
+Constant fixed-point multipliers are handled the same way for common
+fractions and ratios: `1/2`, `1/4`, `1/8`, `3/2`, and `5/4` become
+tiny one-argument helpers. The 32-bit fixed formats use arithmetic-shift
+multiply helpers for fractional multipliers so negative sub-unit values
+match the generic multiply routines exactly.
+The same evaluator recognizes those specialized helper names too, so a
+private helper that was simplified to `fixed16_16_div4(x)` can still be
+folded when its argument is constant. After constant-call folding, a
+conservative single-assignment local propagation pass can replace stable
+local integer constants across labels and loops, which lets code such as
+`half = bench_frac(1, 2); ... fixed16_16_mul(x, half)` reach the
+constant-multiplier retargeter.
+Also in that experimental lane, calls to `fixed*_add` and `fixed*_sub`
+are rewritten back to raw IR `ADD`/`SUB`, because those helpers are
+defined as two's-complement wrapping integer arithmetic. This removes
+call overhead and often avoids linking the add/sub helper archive
+members for fixed-point-heavy loops.
 And when a whole zero-argument integer function stays inside that same
 safe subset, `-O2` can collapse the entire function body to one
 constant return. That now includes straightforward 32-bit integer code

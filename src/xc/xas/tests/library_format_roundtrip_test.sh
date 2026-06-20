@@ -24,6 +24,12 @@ YELLOW=$'\033[0;33m'
 RESET=$'\033[0m'
 
 LIMIT="${LIMIT:-0}"
+LIBC_DEFINES=(
+    -D__XCC_LIBC_FLOAT="${LIBC_FLOAT:-1}"
+    -D__XCC_LIBC_DOUBLE="${LIBC_DOUBLE:-1}"
+    -D__XCC_LIBC_LONG="${LIBC_LONG:-1}"
+    -D__XCC_LIBC_LONGLONG="${LIBC_LONGLONG:-1}"
+)
 
 if ! command -v "$SDAS" >/dev/null 2>&1; then
     echo "${YELLOW}SKIP${RESET}: sdasz80 not found"
@@ -222,7 +228,7 @@ compare_one() {
     local sdas_canon="$workdir/sdas.canon"
     local xas_sdcc_canon="$workdir/xas_sdcc.canon"
 
-    if ! "$XAS" --mode=sdcc --format=gnu -o "$gnu_src" "$src_rel" \
+    if ! "$XAS" --mode=sdcc --format=gnu "${LIBC_DEFINES[@]}" -o "$gnu_src" "$src_rel" \
             >"$workdir/xas_fmt_gnu.out" 2>"$workdir/xas_fmt_gnu.err"; then
         echo "${RED}FAIL${RESET} $rel_path [xas sdcc->gnu format]"
         sed -n '1,20p' "$workdir/xas_fmt_gnu.err"

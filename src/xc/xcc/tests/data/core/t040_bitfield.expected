@@ -143,9 +143,9 @@ _main:
 	ld	l, -28(ix)
 	ld	h, -27(ix)
 	ld	b, #7
-__shift_9383:
+__shift_0:
 	add	hl, hl
-	djnz	__shift_9383
+	djnz	__shift_0
 	ld	-30(ix), l
 	ld	-29(ix), h
 	ld	l, -26(ix)
@@ -217,9 +217,9 @@ __shift_9383:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_30886
+	jp	nz, __cmp_e_89383
 	dec	hl
-__cmp_e_30886:
+__cmp_e_89383:
 	ld	-44(ix), l
 	ld	-43(ix), h
 	ld	l, -44(ix)
@@ -279,9 +279,9 @@ __xcc_L2:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_92777
+	jp	nz, __cmp_e_30886
 	dec	hl
-__cmp_e_92777:
+__cmp_e_30886:
 	ld	-56(ix), l
 	ld	-55(ix), h
 	ld	l, -56(ix)
@@ -316,10 +316,10 @@ __xcc_L5:
 	ld	l, -62(ix)
 	ld	h, -61(ix)
 	ld	b, #7
-__shift_6915:
+__shift_1:
 	srl	h
 	rr	l
-	djnz	__shift_6915
+	djnz	__shift_1
 	ld	-64(ix), l
 	ld	-63(ix), h
 	ld	l, -64(ix)
@@ -340,9 +340,9 @@ __shift_6915:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_47793
+	jp	nz, __cmp_e_92777
 	dec	hl
-__cmp_e_47793:
+__cmp_e_92777:
 	ld	-68(ix), l
 	ld	-67(ix), h
 	ld	l, -68(ix)
@@ -445,9 +445,9 @@ __xcc_L8:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_38335
+	jp	nz, __cmp_e_36915
 	dec	hl
-__cmp_e_38335:
+__cmp_e_36915:
 	ld	-88(ix), l
 	ld	-87(ix), h
 	ld	l, -88(ix)
@@ -507,9 +507,9 @@ __xcc_L11:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_85386
+	jp	nz, __cmp_e_47793
 	dec	hl
-__cmp_e_85386:
+__cmp_e_47793:
 	ld	-100(ix), l
 	ld	-99(ix), h
 	ld	l, -100(ix)
@@ -544,10 +544,10 @@ __xcc_L14:
 	ld	l, -106(ix)
 	ld	h, -105(ix)
 	ld	b, #7
-__shift_492:
+__shift_2:
 	srl	h
 	rr	l
-	djnz	__shift_492
+	djnz	__shift_2
 	ld	-108(ix), l
 	ld	-107(ix), h
 	ld	l, -108(ix)
@@ -568,9 +568,9 @@ __shift_492:
 	or	a, a
 	sbc	hl, de
 	ld	hl, #1
-	jp	nz, __cmp_e_16649
+	jp	nz, __cmp_e_38335
 	dec	hl
-__cmp_e_16649:
+__cmp_e_38335:
 	ld	-112(ix), l
 	ld	-111(ix), h
 	ld	l, -112(ix)

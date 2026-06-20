@@ -77,7 +77,8 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
             } else if (a.name == "reproducible") {
                 sym.attr_reproducible = true;
             } else {
-                diag_.warning(a.loc, "unknown standard attribute '[[%s]]' ignored",
+                diag_.warning(warning_group::ATTRIBUTES, a.loc,
+                              "unknown standard attribute '[[%s]]' ignored",
                               a.name.c_str());
             }
         }
@@ -114,14 +115,21 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
                     diag_.error(a.loc, "[[sdcc::sfr]] requires a port number argument");
                 } else {
                     try {
-                        sym.sfr_port = (int)std::stoull(a.args[0], nullptr, 0);
+                        unsigned long long port = std::stoull(a.args[0], nullptr, 0);
+                        if (port > 0xffffull) {
+                            diag_.error(a.loc, "[[sdcc::sfr]]: port '%s' is outside 16-bit range",
+                                        a.args[0].c_str());
+                        } else {
+                            sym.sfr_port = (int)port;
+                        }
                     } catch (...) {
                         diag_.error(a.loc, "[[sdcc::sfr]]: invalid port '%s'",
                                     a.args[0].c_str());
                     }
                 }
             } else {
-                diag_.warning(a.loc, "unknown sdcc attribute '[[sdcc::%s]]' ignored",
+                diag_.warning(warning_group::ATTRIBUTES, a.loc,
+                              "unknown sdcc attribute '[[sdcc::%s]]' ignored",
                               a.name.c_str());
             }
         }
@@ -132,7 +140,8 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
             } else if (a.name == "callee") {
                 sym.abi = call_abi::Z88DK_CALLEE;
             } else {
-                diag_.warning(a.loc, "unknown z88dk attribute '[[z88dk::%s]]' ignored",
+                diag_.warning(warning_group::ATTRIBUTES, a.loc,
+                              "unknown z88dk attribute '[[z88dk::%s]]' ignored",
                               a.name.c_str());
             }
         }
@@ -160,7 +169,7 @@ void sema::apply_imported_call_abi(symbol &sym,
 
     if (attrs_specify_call_abi(attrs)) {
         if (sym.abi != imported) {
-            diag_.warning(loc,
+            diag_.warning(warning_group::ABI, loc,
                           "declaration for '%s' overrides imported library calling convention %s",
                           sym.name.c_str(), call_abi_name(imported));
         }
@@ -183,6 +192,26 @@ void sema::normalize_variadic_call_abi(func_decl &d) {
     }
 
     d.sym->abi = call_abi::SDCCCALL0;
+}
+
+static void sync_nested_function_type_abi(type_ptr t, call_abi abi) {
+    if (!t)
+        return;
+    if (t->kind == type_kind::FUNCTION) {
+        t->func_abi = abi;
+        return;
+    }
+    if ((t->kind == type_kind::POINTER || t->kind == type_kind::ARRAY) && t->base)
+        sync_nested_function_type_abi(t->base, abi);
+}
+
+static void sync_function_symbol_abi_from_type(func_decl &d) {
+    if (!d.sym || !d.type || !d.type->is_func())
+        return;
+    if (d.sym->abi == call_abi::DEFAULT &&
+        d.type->func_abi != call_abi::DEFAULT) {
+        d.sym->abi = d.type->func_abi;
+    }
 }
 
 // ----- helpers -------------------------------------------------------
@@ -263,9 +292,11 @@ void sema::visit(call_expr &e) {
     if (callee_sym) {
         if (callee_sym->attr_deprecated) {
             if (callee_sym->deprecated_msg.empty())
-                diag_.warning(e.loc, "'%s' is deprecated", callee_sym->name.c_str());
+                diag_.warning(warning_group::DEPRECATED_DECLARATIONS, e.loc,
+                              "'%s' is deprecated", callee_sym->name.c_str());
             else
-                diag_.warning(e.loc, "'%s' is deprecated: %s",
+                diag_.warning(warning_group::DEPRECATED_DECLARATIONS, e.loc,
+                              "'%s' is deprecated: %s",
                               callee_sym->name.c_str(),
                               callee_sym->deprecated_msg.c_str());
         }
@@ -361,10 +392,12 @@ void sema::visit(expr_stmt &s) {
             if (auto *id = dynamic_cast<ident_expr*>(ce->callee.get())) {
                 if (id->sym && id->sym->attr_nodiscard) {
                     if (id->sym->nodiscard_msg.empty())
-                        diag_.warning(s.loc, "return value of '%s' should not be discarded",
+                        diag_.warning(warning_group::UNUSED_RESULT, s.loc,
+                                      "return value of '%s' should not be discarded",
                                       id->sym->name.c_str());
                     else
-                        diag_.warning(s.loc, "return value of '%s' should not be discarded: %s",
+                        diag_.warning(warning_group::UNUSED_RESULT, s.loc,
+                                      "return value of '%s' should not be discarded: %s",
                                       id->sym->name.c_str(),
                                       id->sym->nodiscard_msg.c_str());
                 }
@@ -449,16 +482,22 @@ void sema::visit(var_decl &d) {
     // constexpr requires a constant initializer.
     if (d.sym && d.sym->type && d.sym->type->is_const && d.init) {
         if (!const_expr_evaluator::evaluate(d.init.get()))
-            diag_.warning(d.loc, "constexpr / const initializer is not a constant expression");
+            diag_.warning(warning_group::CONSTEXPR_NOT_CONSTANT, d.loc,
+                          "constexpr / const initializer is not a constant expression");
     }
 }
 
 void sema::visit(func_decl &d) {
+    sync_function_symbol_abi_from_type(d);
     if (d.sym && !d.attrs.empty())
         apply_attrs(*d.sym, d.attrs, d.loc);
     if (d.sym)
         apply_imported_call_abi(*d.sym, d.attrs, d.loc);
     normalize_variadic_call_abi(d);
+    if (d.sym) {
+        sync_nested_function_type_abi(d.type, d.sym->abi);
+        sync_nested_function_type_abi(d.sym->type, d.sym->abi);
+    }
     if (d.sym && d.sym->abi == call_abi::Z88DK_FASTCALL) {
         if (d.params.size() != 1) {
             diag_.error(d.loc, "[[z88dk::fastcall]] requires exactly one parameter");

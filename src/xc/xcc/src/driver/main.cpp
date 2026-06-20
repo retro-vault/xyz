@@ -221,10 +221,13 @@ static int compile_file_to_text(const std::string &input_path,
     if (opts.verbose)
         fprintf(stderr, "xcc: compiling %s\n", input_path.c_str());
 
+    set_float_format(opts.float_fmt);
+
     std::string raw = read_file(input_path);
 
     // ----- 0. Preprocess ---------------------------------------------
     diag_engine diag;
+    diag.set_options(opts.diagnostics);
     preprocessor pp(diag, opts.include_paths, opts.defines);
     std::string src = pp.process(raw, input_path);
 
@@ -447,6 +450,8 @@ static int link_files(const options &opts, const std::string &xld,
         args.push_back("--platform=" + opts.platform_name);
     for (const auto &arg : opts.linker_args)
         args.push_back(arg);
+    if (opts.float_fmt != float_format::IEEE32)
+        args.push_back("-lfixed");
     args.push_back("-o");
     args.push_back(out);
     for (const auto &input : inputs)

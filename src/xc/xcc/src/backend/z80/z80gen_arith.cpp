@@ -28,7 +28,19 @@ static bool is_llong_op(const operand &op) {
 }
 
 static bool is_float32_op(const operand &op) {
-    return op.type && op.type->kind == type_kind::FLOAT && op.type->size() == 4;
+    return op.type && op.type->kind == type_kind::FLOAT &&
+           get_float_format() == float_format::IEEE32 &&
+           op.type->size() == 4;
+}
+
+static bool is_fixed_float_op(const operand &op) {
+    return op.type && op.type->kind == type_kind::FLOAT &&
+           get_float_format() != float_format::IEEE32;
+}
+
+static bool is_fixed_float_type(type_ptr type) {
+    return type && type->kind == type_kind::FLOAT &&
+           get_float_format() != float_format::IEEE32;
 }
 
 static bool is_double64_op(const operand &op) {
@@ -37,6 +49,21 @@ static bool is_double64_op(const operand &op) {
 
 static bool is_real_float_op(const operand &op) {
     return is_float32_op(op) || is_double64_op(op);
+}
+
+static const char *fixed_helper_prefix() {
+    switch (get_float_format()) {
+    case float_format::FIXED8_8:   return "_fixed8_8";
+    case float_format::FIXED16_16: return "_fixed16_16";
+    case float_format::FIXED24_8:  return "_fixed24_8";
+    case float_format::IEEE32:
+        return "";
+    }
+    return "";
+}
+
+static std::string fixed_helper_name(const char *suffix) {
+    return std::string(fixed_helper_prefix()) + suffix;
 }
 
 static bool is_matching_shift_op(const icode &ic, bool right, bool arithmetic) {
@@ -947,6 +974,19 @@ void z80_gen::gen_band(const icode &ic) {
         return;
     }
 
+    if (op_size(ic.result) == 4) {
+        for (int w = 0; w < 2; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ld\ta, l"); emit_line("and\ta, e"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -1079,6 +1119,19 @@ void z80_gen::gen_bor(const icode &ic) {
             emit_line("pop\tde");
             emit_line("ld\ta, l"); emit_line("or\te"); emit_line("ld\tl, a");
             emit_line("ld\ta, h"); emit_line("or\td"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
+    if (op_size(ic.result) == 4) {
+        for (int w = 0; w < 2; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ld\ta, l"); emit_line("or\ta, e"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("or\ta, d"); emit_line("ld\th, a");
             store_hl_word(ic.result, w);
         }
         return;
@@ -1228,6 +1281,19 @@ void z80_gen::gen_bxor(const icode &ic) {
         return;
     }
 
+    if (op_size(ic.result) == 4) {
+        for (int w = 0; w < 2; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ld\ta, l"); emit_line("xor\ta, e"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("xor\ta, d"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -1361,6 +1427,16 @@ void z80_gen::gen_bnot(const icode &ic) {
         return;
     }
 
+    if (op_size(ic.result) == 4) {
+        for (int w = 0; w < 2; ++w) {
+            load_hl_word(ic.left, w);
+            emit_line("ld\ta, l"); emit_line("cpl"); emit_line("ld\tl, a");
+            emit_line("ld\ta, h"); emit_line("cpl"); emit_line("ld\th, a");
+            store_hl_word(ic.result, w);
+        }
+        return;
+    }
+
     if (op_size(ic.result) == 1) {
         load_a(ic.left);
         emit_line("cpl");
@@ -1390,6 +1466,96 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         emit_line("call\t%s", helper);
         emit_line("pop\tbc");
         store_reg64(ic.result);
+        return;
+    }
+
+    if (op_size(ic.result) == 4 && op_size(ic.left) == 4) {
+        auto load_32_to_dehl = [&]() {
+            load_hl_lo32(ic.left);
+            emit_line("push\thl");
+            load_hl_hi32(ic.left);
+            emit_line("ex\tde, hl");
+            emit_line("pop\thl");
+        };
+        auto store_dehl_32 = [&]() {
+            emit_line("push\tde");
+            store_hl_lo32(ic.result);
+            emit_line("pop\thl");
+            store_hl_hi32(ic.result);
+        };
+        auto emit_zero_32 = [&]() {
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            store_hl_lo32(ic.result);
+            store_hl_hi32(ic.result);
+        };
+        auto emit_sign_fill_32 = [&]() {
+            load_hl_hi32(ic.left);
+            emit_line("ld\ta, h");
+            emit_line("rlca");
+            emit_line("sbc\ta, a");
+            emit_line("ld\tl, a");
+            emit_line("ld\th, a");
+            store_hl_lo32(ic.result);
+            store_hl_hi32(ic.result);
+        };
+        auto emit_one = [&]() {
+            if (!right) {
+                emit_line("add\thl, hl");
+                emit_line("rl\te");
+                emit_line("rl\td");
+            } else if (arithmetic) {
+                emit_line("sra\td");
+                emit_line("rr\te");
+                emit_line("rr\th");
+                emit_line("rr\tl");
+            } else {
+                emit_line("srl\td");
+                emit_line("rr\te");
+                emit_line("rr\th");
+                emit_line("rr\tl");
+            }
+        };
+
+        if (ic.right.kind == operand_kind::INT_CONST) {
+            int count = static_cast<int>(ic.right.ival & 0xff);
+            if (count == 0) {
+                load_32_to_dehl();
+                store_dehl_32();
+                return;
+            }
+            if (count >= 32) {
+                if (right && arithmetic)
+                    emit_sign_fill_32();
+                else
+                    emit_zero_32();
+                return;
+            }
+            load_32_to_dehl();
+            for (int k = 0; k < count; ++k)
+                emit_one();
+            store_dehl_32();
+            return;
+        }
+
+        load_hl_lo32(ic.left);
+        emit_line("push\thl");
+        load_hl_hi32(ic.left);
+        emit_line("push\thl");
+        load_hl(ic.right);
+        emit_line("ld\tb, l");
+        emit_line("pop\tde");
+        emit_line("pop\thl");
+
+        std::string done_lbl = fresh_local_label("__sh32_done");
+        std::string loop_lbl = fresh_local_label("__sh32");
+        emit_line("ld\ta, b");
+        emit_line("or\ta, a");
+        emit_line("jp\tz, %s", done_lbl.c_str());
+        emit_label(loop_lbl, false);
+        emit_one();
+        emit_line("djnz\t%s", loop_lbl.c_str());
+        emit_label(done_lbl, false);
+        store_dehl_32();
         return;
     }
 
@@ -1430,8 +1596,8 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
             }
 
             emit_line("ld\tb, %s", asm_.imm(count).c_str());
-            std::string shift_lbl = "__shiftb_" + std::to_string(rand() % 10000);
-            asm_.label(shift_lbl, false);
+            std::string shift_lbl = fresh_local_label("__shiftb");
+            emit_label(shift_lbl, false);
             if (!right)
                 emit_line("add\ta, a");
             else if (arithmetic)
@@ -1448,8 +1614,8 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         emit_line("ld\tb, a");
         emit_line("ld\ta, e");
 
-        std::string shift_lbl = "__shiftb_" + std::to_string(rand() % 10000);
-        std::string done_lbl  = "__sbdone_" + std::to_string(rand() % 10000);
+        std::string shift_lbl = fresh_local_label("__shiftb");
+        std::string done_lbl  = fresh_local_label("__sbdone");
 
         emit_line("ld\td, a");
         emit_line("ld\ta, b");
@@ -1457,7 +1623,7 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         emit_line("jp\tz, %s", done_lbl.c_str());
         emit_line("ld\ta, d");
 
-        asm_.label(shift_lbl, false);
+        emit_label(shift_lbl, false);
         if (!right)
             emit_line("add\ta, a");
         else if (arithmetic)
@@ -1465,7 +1631,7 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         else
             emit_line("srl\ta");
         emit_line("djnz\t%s", shift_lbl.c_str());
-        asm_.label(done_lbl, false);
+        emit_label(done_lbl, false);
         store_a(ic.result);
         return;
     }
@@ -1518,8 +1684,8 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         }
 
         emit_line("ld\tb, %s", asm_.imm(count).c_str());
-        std::string shift_lbl = "__shift_" + std::to_string(rand() % 10000);
-        asm_.label(shift_lbl, false);
+        std::string shift_lbl = fresh_local_label("__shift");
+        emit_label(shift_lbl, false);
         if (!right)
             emit_line("add\thl, hl");
         else if (arithmetic) {
@@ -1553,14 +1719,14 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
     emit_line("ld\tb, l");
     emit_line("pop\thl");
 
-    std::string shift_lbl = "__shift_" + std::to_string(rand() % 10000);
-    std::string done_lbl  = "__sdone_" + std::to_string(rand() % 10000);
+    std::string shift_lbl = fresh_local_label("__shift");
+    std::string done_lbl  = fresh_local_label("__sdone");
 
     emit_line("ld\ta, b");
     emit_line("or\ta, a");
     emit_line("jp\tz, %s", done_lbl.c_str());
 
-    asm_.label(shift_lbl, false);
+    emit_label(shift_lbl, false);
     if (!right)
         emit_line("add\thl, hl");
     else if (arithmetic) {
@@ -1569,7 +1735,7 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         emit_line("srl\th"); emit_line("rr\tl");
     }
     emit_line("djnz\t%s", shift_lbl.c_str());
-    asm_.label(done_lbl, false);
+    emit_label(done_lbl, false);
     store_hl(ic.result);
 }
 
@@ -2822,11 +2988,15 @@ void z80_gen::gen_cast(const icode &ic) {
     }
 
     const bool src_is_float32 = is_float32_op(ic.left);
+    const bool src_is_fixed_float = is_fixed_float_op(ic.left);
     const bool src_is_double64 = is_double64_op(ic.left);
     const bool src_is_real_float = src_is_float32 || src_is_double64;
     const bool src_is_llong = is_llong_op(ic.left);
     const bool dst_is_float32 =
-        ic.result.type->kind == type_kind::FLOAT && ic.result.type->size() == 4;
+        ic.result.type->kind == type_kind::FLOAT &&
+        get_float_format() == float_format::IEEE32 &&
+        ic.result.type->size() == 4;
+    const bool dst_is_fixed_float = is_fixed_float_type(ic.result.type);
     const bool dst_is_double64 =
         ic.result.type->kind == type_kind::DOUBLE && ic.result.type->size() == 8;
     const bool dst_is_real_float = dst_is_float32 || dst_is_double64;
@@ -2865,6 +3035,62 @@ void z80_gen::gen_cast(const icode &ic) {
             store_hl_hi32(ic.result);
         }
     };
+
+    auto load_fixed32_dehl = [&](const operand &op) {
+        load_hl_hi32(op);
+        emit_line("push\thl");
+        load_hl_lo32(op);
+        emit_line("ex\tde, hl");
+        emit_line("pop\thl");
+    };
+
+    if (dst_is_fixed_float && !src_is_fixed_float) {
+        if (ic.left.kind == operand_kind::FLOAT_CONST ||
+            ic.left.kind == operand_kind::INT_CONST) {
+            operand packed = ic.left.kind == operand_kind::FLOAT_CONST
+                ? operand::make_float(ic.left.fval, ic.result.type)
+                : operand::make_float(static_cast<double>(ic.left.ival), ic.result.type);
+            if (dst_sz == 2) {
+                load_hl(packed);
+                store_hl(ic.result);
+            } else {
+                load_hl_lo32(packed);
+                store_hl_lo32(ic.result);
+                load_hl_hi32(packed);
+                store_hl_hi32(ic.result);
+            }
+            return;
+        }
+
+        if (!src_is_real_float && !src_is_llong) {
+            const std::string helper = fixed_helper_name("_from_int");
+            asm_.global_decl(helper);
+            load_hl(ic.left);
+            emit_line("call\t%s", helper.c_str());
+            if (dst_sz == 2)
+                store_de_as_int(2);
+            else
+                store_dehl32();
+            return;
+        }
+    }
+
+    if (src_is_fixed_float && !dst_is_fixed_float) {
+        if (ic.result.type->is_integer() && !dst_is_llong) {
+            const std::string helper = fixed_helper_name("_to_int");
+            asm_.global_decl(helper);
+            if (src_sz == 2)
+                load_hl(ic.left);
+            else
+                load_fixed32_dehl(ic.left);
+            emit_line("call\t%s", helper.c_str());
+            if (dst_sz <= 2)
+                store_de_as_int(dst_sz);
+            else
+                store_dehl32();
+            return;
+        }
+    }
 
     if (dst_is_real_float) {
         if (src_is_float32 && dst_is_double64) {
@@ -3149,6 +3375,94 @@ void z80_gen::gen_cast(const icode &ic) {
 // (lo word first); result returned in DE:HL (DE=hi, HL=lo).
 //
 void z80_gen::gen_float_arith(const icode &ic) {
+    if (is_fixed_float_op(ic.result) ||
+        is_fixed_float_op(ic.left) ||
+        is_fixed_float_op(ic.right)) {
+        auto store_de16 = [&]() {
+            emit_line("push\tde");
+            emit_line("pop\thl");
+            store_hl(ic.result);
+        };
+        auto store_dehl32 = [&]() {
+            emit_line("ld\tb, h");
+            emit_line("ld\tc, l");
+            emit_line("push\tde");
+            emit_line("pop\thl");
+            store_hl_lo32(ic.result);
+            emit_line("ld\th, b");
+            emit_line("ld\tl, c");
+            store_hl_hi32(ic.result);
+        };
+        auto load_fixed32_dehl = [&](const operand &op) {
+            load_hl_hi32(op);
+            emit_line("push\thl");
+            load_hl_lo32(op);
+            emit_line("ex\tde, hl");
+            emit_line("pop\thl");
+        };
+        auto push_fixed32_stack_arg = [&](const operand &op) {
+            load_hl_hi32(op);
+            emit_line("push\thl");
+            load_hl_lo32(op);
+            emit_line("push\thl");
+        };
+        auto emit_fixed_call = [&](const std::string &helper) {
+            asm_.global_decl(helper);
+            if (op_size(ic.result) == 2) {
+                load_de(ic.right);
+                load_hl(ic.left);
+                emit_line("call\t%s", helper.c_str());
+                store_de16();
+                return;
+            }
+            push_fixed32_stack_arg(ic.right);
+            load_fixed32_dehl(ic.left);
+            emit_line("call\t%s", helper.c_str());
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+            store_dehl32();
+        };
+
+        switch (ic.op) {
+        case icode_op::FADD:
+            emit_fixed_call(fixed_helper_name("_add"));
+            return;
+        case icode_op::FSUB:
+            emit_fixed_call(fixed_helper_name("_sub"));
+            return;
+        case icode_op::FMUL:
+            emit_fixed_call(fixed_helper_name("_mul"));
+            return;
+        case icode_op::FDIV:
+            emit_fixed_call(fixed_helper_name("_div"));
+            return;
+        case icode_op::FITOSF: {
+            const std::string helper = fixed_helper_name("_from_int");
+            asm_.global_decl(helper);
+            load_hl(ic.left);
+            emit_line("call\t%s", helper.c_str());
+            if (op_size(ic.result) == 2)
+                store_de16();
+            else
+                store_dehl32();
+            return;
+        }
+        case icode_op::FSTOI: {
+            const std::string helper = fixed_helper_name("_to_int");
+            asm_.global_decl(helper);
+            if (op_size(ic.left) == 2)
+                load_hl(ic.left);
+            else
+                load_fixed32_dehl(ic.left);
+            emit_line("call\t%s", helper.c_str());
+            store_de16();
+            return;
+        }
+        default:
+            break;
+        }
+    }
+
     if (op_size(ic.result) == 8 ||
         is_double64_op(ic.left) ||
         is_double64_op(ic.right)) {

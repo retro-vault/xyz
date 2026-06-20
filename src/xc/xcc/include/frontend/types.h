@@ -10,7 +10,7 @@
 //   short / int              2 bytes
 //   long                     4 bytes
 //   long long                8 bytes
-//   float                    4 bytes  (IEEE 754 single)
+//   float                    selected by --float-format
 //   double                   8 bytes  (IEEE 754 double)
 //   pointer                  2 bytes  (16-bit near)
 //
@@ -28,11 +28,49 @@
 
 #pragma once
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace xcc {
+
+struct type;
+using type_ptr = std::shared_ptr<type>;
+
+// The storage and arithmetic ABI used for the C `float` type.  `double`
+// remains the existing 64-bit software double; this setting only changes
+// scalar float.
+enum class float_format : uint8_t {
+    IEEE32,
+    FIXED8_8,
+    FIXED16_16,
+    FIXED24_8,
+};
+
+void set_float_format(float_format format);
+float_format get_float_format();
+const char *float_format_name(float_format format);
+int float_format_size(float_format format);
+int float_format_fraction_bits(float_format format);
+int64_t encode_float_constant(double value, type_ptr target_type);
+
+// ----- call_abi ------------------------------------------------------
+//
+// Calling convention for a function type or symbol, set by vendor attributes
+// such as [[sdcc::sdccall(N)]] or [[z88dk::fastcall]] / [[z88dk::callee]].
+// DEFAULT maps to SDCCCALL1, matching modern SDCC's z80 default ABI.
+
+enum class call_abi : uint8_t {
+    DEFAULT,     // same as SDCCCALL1 — register-based ABI, current xcc default
+    SDCCCALL0,   // [[sdcc::sdccall(0)]] — explicit stack-based ABI
+    SDCCCALL1,   // [[sdcc::sdccall(1)]] — SDCC 4.3+ register-based ABI
+    Z88DK_FASTCALL, // [[z88dk::fastcall]] — one arg in L/HL/DEHL, std return regs
+    Z88DK_CALLEE,   // [[z88dk::callee]]   — stack args, callee repairs stack
+    NAKED,       // [[sdcc::naked]]      — no prologue/epilogue emitted
+    INTERRUPT,   // [[sdcc::interrupt]]  — ISR: save all regs, reti
+    CRITICAL,    // [[sdcc::critical]]   — wrap body with di/ei
+};
 
 // ----- type_kind -----------------------------------------------------
 
@@ -61,9 +99,6 @@ enum class type_kind : uint8_t {
     BITINT,         // _BitInt(N): bit-precise integer, backed by nearest 1/2/4-byte type
     CHAR8T,         // char8_t: distinct unsigned-char-sized type for UTF-8 (C23)
 };
-
-struct type;
-using type_ptr = std::shared_ptr<type>;
 
 // ----- struct_field --------------------------------------------------
 
@@ -99,6 +134,7 @@ struct type {
     std::vector<type_ptr> params;
     bool                  variadic     = false;
     bool                  is_prototyped = false; // true for f(void)/f(T)/f() in C23
+    call_abi              func_abi      = call_abi::DEFAULT;
 
     // STRUCT / UNION: tag name, field list, and completeness flag
     std::string                tag;
@@ -168,7 +204,7 @@ struct type {
     static type_ptr make_ullong() { return std::make_shared<type>(type_kind::ULLONG); }
 
     //
-    // Return a new float type (4-byte IEEE 754 single).
+    // Return a new float type (storage selected by --float-format).
     //
     static type_ptr make_float()  { return std::make_shared<type>(type_kind::FLOAT);  }
 
@@ -203,11 +239,13 @@ struct type {
     //
     static type_ptr make_function(type_ptr ret,
                                   std::vector<type_ptr> params,
-                                  bool variadic = false) {
+                                  bool variadic = false,
+                                  call_abi abi = call_abi::DEFAULT) {
         auto t = std::make_shared<type>(type_kind::FUNCTION);
-        t->ret      = std::move(ret);
-        t->params   = std::move(params);
-        t->variadic = variadic;
+        t->ret       = std::move(ret);
+        t->params    = std::move(params);
+        t->variadic  = variadic;
+        t->func_abi  = abi;
         return t;
     }
 

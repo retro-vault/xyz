@@ -50,9 +50,8 @@ _main:
 	ld	hl, #10
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	hl, #200
-	ld	-3(ix), l
-	ld	-2(ix), h
+	ld	a, #200
+	ld	-3(ix), a
 	ld	de, #3
 	ld	l, -2(ix)
 	ld	h, -1(ix)

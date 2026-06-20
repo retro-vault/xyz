@@ -16,7 +16,33 @@ namespace xcc {
 
 // ----- Global aggregate init helpers ---------------------------------
 
+static bool is_char_pointer_type(type_ptr ty)
+{
+    if (!ty || ty->kind != type_kind::POINTER || !ty->base)
+        return false;
+    type_kind elem = ty->base->unqual()->kind;
+    return elem == type_kind::CHAR ||
+           elem == type_kind::UCHAR ||
+           elem == type_kind::CHAR8T;
+}
+
+static std::string add_global_string_literal(ir_module &mod, int &next_lbl,
+                                             const string_literal_expr &str)
+{
+    std::string lbl = "__str_" + std::to_string(next_lbl++);
+    ir_module::global_var gv;
+    gv.name       = lbl;
+    gv.type       = type::make_array(type::make_char(),
+                    static_cast<int>(str.value.size()) + 1);
+    gv.str_init   = str.value;
+    gv.char_width = str.char_width;
+    gv.has_init   = true;
+    mod.string_literals.push_back(std::move(gv));
+    return lbl;
+}
+
 static void collect_global_inits(const init_list_expr &il, type_ptr agg_type,
+                                  ir_module &mod, int &next_lbl,
                                   std::vector<ir_module::global_var::init_elem> &out)
 {
     type_ptr elem_type;
@@ -44,15 +70,33 @@ static void collect_global_inits(const init_list_expr &il, type_ptr agg_type,
         }
 
         if (auto *sub = dynamic_cast<const init_list_expr*>(elem)) {
-            collect_global_inits(*sub, et, out);
+            collect_global_inits(*sub, et, mod, next_lbl, out);
         } else if (auto *lit = dynamic_cast<const int_literal_expr*>(elem)) {
             int sz = et ? et->size() : 2;
             out.push_back({lit->value, sz});
+        } else if (auto *flit = dynamic_cast<const float_literal_expr*>(elem)) {
+            type_ptr ft = et ? et : (flit->type ? flit->type : type::make_double());
+            int sz = ft ? ft->size() : 4;
+            out.push_back({encode_float_constant(flit->value, ft), sz});
+        } else if (auto *str = dynamic_cast<const string_literal_expr*>(elem);
+                   str && is_char_pointer_type(et)) {
+            out.push_back({0, et ? et->size() : 2,
+                           add_global_string_literal(mod, next_lbl, *str)});
         } else {
             int sz = et ? et->size() : 2;
             out.push_back({0, sz});
         }
     }
+}
+
+static bool is_char_array_type(type_ptr ty)
+{
+    if (!ty || ty->kind != type_kind::ARRAY || !ty->base)
+        return false;
+    type_kind elem = ty->base->unqual()->kind;
+    return elem == type_kind::CHAR ||
+           elem == type_kind::UCHAR ||
+           elem == type_kind::CHAR8T;
 }
 
 // ----- Declaration visitors ------------------------------------------
@@ -63,6 +107,28 @@ void ir_gen::visit(param_decl   &) {}
 
 void ir_gen::visit(var_decl &vd) {
     if (!vd.sym) return;
+
+    auto coerce_for_decl_store = [&](operand value, const type_ptr &target) -> operand {
+        if (!target)
+            return value;
+        if (!value.type) {
+            value.type = target;
+            return value;
+        }
+        bool same_type =
+            value.type->kind == target->kind &&
+            value.type->size() == target->size() &&
+            value.type->is_unsigned() == target->is_unsigned();
+        if (same_type) {
+            value.type = target;
+            return value;
+        }
+        value = coerce_const_operand(value, target);
+        if (value.kind == operand_kind::INT_CONST ||
+            value.kind == operand_kind::FLOAT_CONST)
+            return value;
+        return emit_unop(icode_op::CAST, value, target);
+    };
 
     if (vd.vla_size && cur_fn_) {
         operand count = gen_expr(*vd.vla_size);
@@ -129,10 +195,30 @@ void ir_gen::visit(var_decl &vd) {
         gv.at_address = vd.sym->at_address;
         gv.sfr_port   = vd.sym->sfr_port;
         if (vd.init) {
-            if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
-                collect_global_inits(*il, vd.type, gv.init_vals);
+            if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
+                str && is_char_array_type(vd.type)) {
+                int n = vd.type ? vd.type->size() : 0;
+                int init_bytes = static_cast<int>(str->value.size()) + 1;
+                if (n > 0 && init_bytes > n)
+                    init_bytes = n;
+                for (int i = 0; i < init_bytes; ++i) {
+                    int ch = 0;
+                    if (i < static_cast<int>(str->value.size()))
+                        ch = static_cast<unsigned char>(str->value[i]);
+                    gv.init_vals.push_back({ch, 1});
+                }
+                for (int i = init_bytes; i < n; ++i)
+                    gv.init_vals.push_back({0, 1});
+            } else if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
+                collect_global_inits(*il, vd.type, *mod_, next_lbl_, gv.init_vals);
             } else if (auto *lit = dynamic_cast<int_literal_expr*>(vd.init.get())) {
                 gv.init_val = lit->value;
+            } else if (auto *flit = dynamic_cast<float_literal_expr*>(vd.init.get())) {
+                gv.init_val = encode_float_constant(flit->value, vd.type);
+            } else if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
+                       str && is_char_pointer_type(vd.type)) {
+                gv.init_vals.push_back({0, vd.type ? vd.type->size() : 2,
+                                         add_global_string_literal(*mod_, next_lbl_, *str)});
             }
         }
         mod_->globals.push_back(std::move(gv));
@@ -140,11 +226,28 @@ void ir_gen::visit(var_decl &vd) {
     }
 
     if (vd.init && cur_fn_) {
-        if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
+        if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
+            str && is_char_array_type(vd.type)) {
+            operand base = sym_to_operand(*vd.sym, vd.type->base);
+            int n = vd.type->size();
+            int init_bytes = static_cast<int>(str->value.size()) + 1;
+            if (init_bytes > n)
+                init_bytes = n;
+            for (int i = 0; i < init_bytes; ++i) {
+                int ch = 0;
+                if (i < static_cast<int>(str->value.size()))
+                    ch = static_cast<unsigned char>(str->value[i]);
+                operand dst = base;
+                dst.byte_offset += i;
+                dst.type = vd.type->base;
+                emit_assign(dst, operand::make_int(ch, vd.type->base));
+            }
+        } else if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
             gen_init_list(*vd.sym, vd.type, *il);
         } else {
             operand dst = sym_to_operand(*vd.sym, vd.type);
             operand src = gen_expr(*vd.init);
+            src = coerce_for_decl_store(src, dst.type);
             emit_assign(dst, src);
         }
     }

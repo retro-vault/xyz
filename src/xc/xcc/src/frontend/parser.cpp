@@ -147,6 +147,116 @@ attr_list parser::parse_attr_list() {
     return result;
 }
 
+static bool attr_to_call_abi(const attr &a, call_abi &abi) {
+    if (a.ns == "sdcc") {
+        if (a.name == "naked") {
+            abi = call_abi::NAKED;
+            return true;
+        }
+        if (a.name == "interrupt") {
+            abi = call_abi::INTERRUPT;
+            return true;
+        }
+        if (a.name == "critical") {
+            abi = call_abi::CRITICAL;
+            return true;
+        }
+        if (a.name == "sdccall" && !a.args.empty()) {
+            try {
+                int n = std::stoi(a.args[0], nullptr, 0);
+                if (n == 0) {
+                    abi = call_abi::SDCCCALL0;
+                    return true;
+                }
+                if (n == 1) {
+                    abi = call_abi::SDCCCALL1;
+                    return true;
+                }
+            } catch (...) {
+                return false;
+            }
+        }
+    } else if (a.ns == "z88dk") {
+        if (a.name == "fastcall") {
+            abi = call_abi::Z88DK_FASTCALL;
+            return true;
+        }
+        if (a.name == "callee") {
+            abi = call_abi::Z88DK_CALLEE;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool apply_call_abi_to_nested_function(type_ptr t, call_abi abi) {
+    if (!t)
+        return false;
+    if (t->kind == type_kind::FUNCTION) {
+        t->func_abi = abi;
+        return true;
+    }
+    if ((t->kind == type_kind::POINTER || t->kind == type_kind::ARRAY) && t->base)
+        return apply_call_abi_to_nested_function(t->base, abi);
+    return false;
+}
+
+void parser::apply_call_abi_attrs_to_type(type_ptr t, const attr_list &attrs) {
+    call_abi abi = call_abi::DEFAULT;
+    bool found = false;
+    for (const auto &a : attrs) {
+        call_abi attr_abi = call_abi::DEFAULT;
+        if (attr_to_call_abi(a, attr_abi)) {
+            abi = attr_abi;
+            found = true;
+        }
+    }
+    if (found)
+        apply_call_abi_to_nested_function(t, abi);
+}
+
+void parser::complete_unsized_char_array_from_string(type_ptr t,
+                                                     const expr_ptr &init) {
+    if (!t || t->kind != type_kind::ARRAY || t->array_size != 0 || !t->base || !init)
+        return;
+    type_kind elem = t->base->unqual()->kind;
+    if (elem != type_kind::CHAR && elem != type_kind::UCHAR && elem != type_kind::CHAR8T)
+        return;
+    auto *str = dynamic_cast<string_literal_expr*>(init.get());
+    if (!str) {
+        if (auto *il = dynamic_cast<init_list_expr*>(init.get());
+            il && il->elements.size() == 1) {
+            str = dynamic_cast<string_literal_expr*>(il->elements[0].value.get());
+        }
+    }
+    if (!str || str->char_width != 1)
+        return;
+    t->array_size = static_cast<int>(str->value.size()) + 1;
+}
+
+void parser::complete_unsized_array_from_initializer(type_ptr t,
+                                                     const expr_ptr &init) {
+    complete_unsized_char_array_from_string(t, init);
+
+    if (!t || t->kind != type_kind::ARRAY || t->array_size != 0 || !t->base || !init)
+        return;
+
+    auto *il = dynamic_cast<init_list_expr*>(init.get());
+    if (!il)
+        return;
+
+    int64_t next_idx = 0;
+    int64_t max_idx = -1;
+    for (auto &elem : il->elements) {
+        int64_t idx = elem.array_index ? *elem.array_index : next_idx;
+        if (idx > max_idx)
+            max_idx = idx;
+        next_idx = idx + 1;
+    }
+    if (max_idx >= 0 && max_idx < 0x7fffffffLL)
+        t->array_size = static_cast<int>(max_idx + 1);
+}
+
 
 // ----- type helpers --------------------------------------------------
 
@@ -248,6 +358,33 @@ decl_ptr parser::parse_external_declaration() {
     auto di = parse_declarator(ds.base_type);
     const std::string &name      = di.name;
     type_ptr           decl_type = di.type;
+    apply_call_abi_attrs_to_type(decl_type, ds.attrs);
+
+    // Typedef at file scope: register as TYPE symbol, no variable emitted.
+    // Function typedefs are valid C (`typedef int cb(int);`) and must be
+    // handled before the function-declaration path below.
+    if (ds.sc == storage_class::TYPEDEF) {
+        apply_call_abi_attrs_to_type(decl_type, ds.attrs);
+        auto tsym = std::make_shared<symbol>();
+        tsym->name = name;
+        tsym->kind = sym_kind::TYPE;
+        tsym->type = decl_type;
+        syms_.insert(tsym);
+        auto td = std::make_unique<typedef_decl>();
+        td->loc  = loc;
+        td->name = name;
+        td->type = decl_type;
+        // Handle comma-separated typedef names: typedef int a, b; (rare but valid)
+        while (match(tk::COMMA)) {
+            auto edi = parse_declarator(ds.base_type);
+            apply_call_abi_attrs_to_type(edi.type, ds.attrs);
+            auto esym = std::make_shared<symbol>();
+            esym->name = edi.name; esym->kind = sym_kind::TYPE; esym->type = edi.type;
+            syms_.insert(esym);
+        }
+        expect(tk::SEMICOLON);
+        return td;
+    }
 
     if (decl_type->is_func()) {
         std::vector<std::unique_ptr<param_decl>> params = std::move(di.params);
@@ -264,11 +401,13 @@ decl_ptr parser::parse_external_declaration() {
         if (check(tk::LBRACE)) {
             return parse_function_definition(decl_type->ret, name, ds.sc,
                                               std::move(params),
-                                              variadic, loc, ds.attrs);
+                                              variadic, loc, ds.attrs,
+                                              decl_type->func_abi);
         }
         // Prototype — also pick up [[attrs]] that follow the declarator
         attr_list post_attrs = parse_attr_list();
         for (auto &a : post_attrs) ds.attrs.push_back(std::move(a));
+        apply_call_abi_attrs_to_type(decl_type, ds.attrs);
 
         auto fd = std::make_unique<func_decl>();
         fd->loc        = loc;
@@ -295,6 +434,7 @@ decl_ptr parser::parse_external_declaration() {
         // Handle comma-separated declarations: int f(int), g(int), a;
         while (match(tk::COMMA)) {
             auto edi = parse_declarator(ds.base_type);
+            apply_call_abi_attrs_to_type(edi.type, ds.attrs);
             if (edi.type->is_func()) {
                 auto efd = std::make_unique<func_decl>();
                 efd->loc = loc; efd->name = edi.name; efd->type = edi.type;
@@ -332,31 +472,10 @@ decl_ptr parser::parse_external_declaration() {
         return fd;
     }
 
-    // Typedef at file scope: register as TYPE symbol, no variable emitted.
-    if (ds.sc == storage_class::TYPEDEF) {
-        auto tsym = std::make_shared<symbol>();
-        tsym->name = name;
-        tsym->kind = sym_kind::TYPE;
-        tsym->type = decl_type;
-        syms_.insert(tsym);
-        auto td = std::make_unique<typedef_decl>();
-        td->loc  = loc;
-        td->name = name;
-        td->type = decl_type;
-        // Handle comma-separated typedef names: typedef int a, b; (rare but valid)
-        while (match(tk::COMMA)) {
-            auto edi = parse_declarator(ds.base_type);
-            auto esym = std::make_shared<symbol>();
-            esym->name = edi.name; esym->kind = sym_kind::TYPE; esym->type = edi.type;
-            syms_.insert(esym);
-        }
-        expect(tk::SEMICOLON);
-        return td;
-    }
-
     // Global variable declaration — pick up trailing [[attrs]] before '='
     attr_list post_var_attrs = parse_attr_list();
     for (auto &a : post_var_attrs) ds.attrs.push_back(std::move(a));
+    apply_call_abi_attrs_to_type(decl_type, ds.attrs);
 
     auto vd = std::make_unique<var_decl>();
     vd->loc     = loc;
@@ -368,6 +487,7 @@ decl_ptr parser::parse_external_declaration() {
     if (match(tk::EQ)) {
         vd->init = check(tk::LBRACE) ? parse_initializer(decl_type)
                                       : parse_assignment_expression();
+        complete_unsized_array_from_initializer(decl_type, vd->init);
         // C23 auto deduction: resolve type from initializer now that we have it.
         if (ds.is_deduced && vd->init && vd->init->type) {
             vd->type  = vd->init->type->unqual();
@@ -395,6 +515,7 @@ decl_ptr parser::parse_external_declaration() {
     // Handle comma-separated declarators: int a, b, c;
     while (match(tk::COMMA)) {
         auto edi = parse_declarator(ds.base_type);
+        apply_call_abi_attrs_to_type(edi.type, ds.attrs);
         auto evd = std::make_unique<var_decl>();
         evd->loc     = loc;
         evd->name    = edi.name;
@@ -403,6 +524,7 @@ decl_ptr parser::parse_external_declaration() {
         if (match(tk::EQ)) {
             evd->init = check(tk::LBRACE) ? parse_initializer(edi.type)
                                            : parse_assignment_expression();
+            complete_unsized_array_from_initializer(edi.type, evd->init);
         }
         auto esym = std::make_shared<symbol>();
         esym->name      = edi.name;
@@ -426,7 +548,7 @@ decl_ptr parser::parse_external_declaration() {
 decl_ptr parser::parse_function_definition(
     type_ptr ret, std::string name, storage_class sc,
     std::vector<std::unique_ptr<param_decl>> params,
-    bool variadic, source_loc loc, attr_list attrs)
+    bool variadic, source_loc loc, attr_list attrs, call_abi abi)
 {
     auto fd = std::make_unique<func_decl>();
     fd->loc        = loc;
@@ -438,7 +560,8 @@ decl_ptr parser::parse_function_definition(
     // Build function type
     std::vector<type_ptr> ptypes;
     for (auto &p : params) ptypes.push_back(p->type);
-    fd->type = type::make_function(ret, ptypes, variadic);
+    fd->type = type::make_function(ret, ptypes, variadic, abi);
+    apply_call_abi_attrs_to_type(fd->type, fd->attrs);
 
     // Register the function symbol
     auto fsym = syms_.lookup_current(name);
@@ -448,6 +571,11 @@ decl_ptr parser::parse_function_definition(
         fsym->kind      = sym_kind::FUNC;
         fsym->is_global = true;
         syms_.insert(fsym);
+    }
+    if (fd->type->func_abi == call_abi::DEFAULT &&
+        fsym->type && fsym->type->is_func() &&
+        fsym->type->func_abi != call_abi::DEFAULT) {
+        fd->type->func_abi = fsym->type->func_abi;
     }
     fsym->type    = fd->type;
     fsym->storage = sc;

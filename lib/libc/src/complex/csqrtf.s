@@ -101,10 +101,18 @@ csqrtf_nonzero:
         call    ___fssub
         pop     bc
         pop     bc
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         ld      hl,#0x3f00              ; 0.5f
         push    hl
         ld      hl,#0x0000
         push    hl
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    ___fsmul
         pop     bc
         pop     bc
@@ -165,7 +173,7 @@ csqrtf_nonzero:
         ld      -11(ix),d
         ld      -10(ix),l
         ld      -9(ix),h
-        jr      csqrtf_done
+        jp      csqrtf_done
 
 csqrtf_real_nonneg:
         ;; real = sqrt((|z| + x) / 2)
@@ -182,10 +190,18 @@ csqrtf_real_nonneg:
         call    ___fsadd
         pop     bc
         pop     bc
+        ld      -4(ix),e
+        ld      -3(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         ld      hl,#0x3f00              ; 0.5f
         push    hl
         ld      hl,#0x0000
         push    hl
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      l,-2(ix)
+        ld      h,-1(ix)
         call    ___fsmul
         pop     bc
         pop     bc

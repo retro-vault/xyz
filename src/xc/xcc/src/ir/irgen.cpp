@@ -16,6 +16,7 @@
 #include "ir/irgen.h"
 #include "backend/z80/convention.h"
 #include <cassert>
+#include <cmath>
 
 namespace xcc {
 
@@ -35,6 +36,41 @@ void ir_gen::emit(icode ic) {
     assert(cur_fn_ && "emit outside function");
     ic.line = cur_line_;
     cur_fn_->icodes.push_back(std::move(ic));
+}
+
+operand ir_gen::coerce_const_operand(operand op, const type_ptr &target) {
+    if (!target)
+        return op;
+
+    auto narrow_int = [](int64_t value, const type_ptr &ty) -> int64_t {
+        if (!ty)
+            return value;
+        if (ty->kind == type_kind::BOOL)
+            return value != 0 ? 1 : 0;
+        int bytes = ty->size();
+        if (bytes <= 0 || bytes >= 8)
+            return value;
+        uint64_t mask = (uint64_t{1} << (bytes * 8)) - 1;
+        return static_cast<int64_t>(static_cast<uint64_t>(value) & mask);
+    };
+
+    if (op.kind == operand_kind::INT_CONST &&
+        (target->kind == type_kind::FLOAT ||
+         target->kind == type_kind::DOUBLE)) {
+        return operand::make_float(static_cast<double>(op.ival), target);
+    }
+    if (op.kind == operand_kind::FLOAT_CONST && target->is_integer()) {
+        return operand::make_int(
+            narrow_int(static_cast<int64_t>(op.fval), target), target);
+    }
+    if (op.kind == operand_kind::INT_CONST && target->is_integer()) {
+        return operand::make_int(narrow_int(op.ival, target), target);
+    }
+    if (op.kind == operand_kind::INT_CONST ||
+        op.kind == operand_kind::FLOAT_CONST) {
+        op.type = target;
+    }
+    return op;
 }
 
 operand ir_gen::gen_expr(expr &e) {

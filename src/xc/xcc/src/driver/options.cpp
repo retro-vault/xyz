@@ -10,6 +10,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "driver/options.h"
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -155,6 +156,201 @@ static bool apply_asm_dialect_option(options& opts, const char *mode) {
     return false;
 }
 
+static bool apply_float_format_option(options &opts, const char *format) {
+    if (strcmp(format, "ieee32") == 0 || strcmp(format, "ieee") == 0 ||
+        strcmp(format, "float") == 0 || strcmp(format, "soft") == 0) {
+        opts.float_fmt = float_format::IEEE32;
+        return true;
+    }
+    if (strcmp(format, "fixed8_8") == 0 || strcmp(format, "8_8") == 0 ||
+        strcmp(format, "fixed8.8") == 0 || strcmp(format, "8.8") == 0) {
+        opts.float_fmt = float_format::FIXED8_8;
+        return true;
+    }
+    if (strcmp(format, "fixed16_16") == 0 || strcmp(format, "16_16") == 0 ||
+        strcmp(format, "fixed16.16") == 0 || strcmp(format, "16.16") == 0) {
+        opts.float_fmt = float_format::FIXED16_16;
+        return true;
+    }
+    if (strcmp(format, "fixed24_8") == 0 || strcmp(format, "24_8") == 0 ||
+        strcmp(format, "fixed24.8") == 0 || strcmp(format, "24.8") == 0) {
+        opts.float_fmt = float_format::FIXED24_8;
+        return true;
+    }
+    return false;
+}
+
+static void add_float_format_defines(options &opts) {
+    const int format_id =
+        opts.float_fmt == float_format::IEEE32 ? 0 :
+        opts.float_fmt == float_format::FIXED8_8 ? 1 :
+        opts.float_fmt == float_format::FIXED16_16 ? 2 : 3;
+    opts.defines.push_back(std::string("__XCC_FLOAT_FORMAT_") +
+                           (opts.float_fmt == float_format::IEEE32 ? "IEEE32" :
+                            opts.float_fmt == float_format::FIXED8_8 ? "FIXED8_8" :
+                            opts.float_fmt == float_format::FIXED16_16 ? "FIXED16_16" :
+                            "FIXED24_8") + "=1");
+    opts.defines.push_back(std::string("__XCC_FLOAT_FORMAT__=") +
+                           std::to_string(format_id));
+    opts.defines.push_back(std::string("__XCC_FLOAT_SIZE__=") +
+                           std::to_string(float_format_size(opts.float_fmt)));
+    opts.defines.push_back(std::string("__XCC_FLOAT_FRACTION_BITS__=") +
+                           std::to_string(float_format_fraction_bits(opts.float_fmt)));
+}
+
+static void driver_warning(const options &opts, warning_group group,
+                           const char *fmt, ...) {
+    if (!opts.diagnostics.group_enabled(group))
+        return;
+
+    char msg[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+
+    const bool promoted = opts.diagnostics.group_as_error(group);
+    fprintf(stderr, "xcc: %s: %s [-W%s%s]\n",
+            promoted ? "error" : "warning",
+            msg,
+            promoted ? "error=" : "",
+            warning_group_name(group));
+    if (promoted)
+        exit(1);
+}
+
+static void apply_warning_level(options &opts, int level) {
+    opts.diagnostics.set_defaults();
+    if (level == 0) {
+        opts.diagnostics.disable_all();
+    } else if (level == 2) {
+        opts.diagnostics.enable_wall();
+    } else if (level >= 3) {
+        opts.diagnostics.enable_wall();
+        opts.diagnostics.enable_wextra();
+        opts.diagnostics.enable_pedantic();
+    }
+}
+
+static bool apply_warning_group_option(options &opts,
+                                       const std::string &name,
+                                       bool enabled) {
+    if (name == "all") {
+        if (enabled)
+            opts.diagnostics.enable_wall();
+        else
+            opts.diagnostics.disable_all();
+        return true;
+    }
+    if (name == "extra") {
+        if (enabled)
+            opts.diagnostics.enable_wextra();
+        else {
+            opts.diagnostics.set_group(warning_group::OLD_STYLE_DEFINITION, false);
+            opts.diagnostics.set_group(warning_group::ABI, false);
+            opts.diagnostics.set_group(warning_group::CONSTEXPR_NOT_CONSTANT, false);
+            opts.diagnostics.set_group(warning_group::BITINT_WIDTH, false);
+        }
+        return true;
+    }
+    if (name == "pedantic") {
+        if (enabled)
+            opts.diagnostics.enable_pedantic();
+        else {
+            opts.diagnostics.set_group(warning_group::C23_EXTENSIONS, false);
+            opts.diagnostics.set_group(warning_group::BITINT_WIDTH, false);
+        }
+        return true;
+    }
+
+    warning_group group;
+    if (!warning_group_from_name(name, group))
+        return false;
+    opts.diagnostics.set_group(group, enabled);
+    if (!enabled)
+        opts.diagnostics.set_group_error(group, false);
+    return true;
+}
+
+static bool apply_warning_error_option(options &opts,
+                                       const std::string &name,
+                                       bool enabled) {
+    if (name == "all") {
+        opts.diagnostics.all_warnings_as_errors = enabled;
+        return true;
+    }
+    warning_group group;
+    if (!warning_group_from_name(name, group))
+        return false;
+    opts.diagnostics.set_group_error(group, enabled);
+    return true;
+}
+
+static bool apply_warning_option(options &opts, const char *arg) {
+    if (strcmp(arg, "-w") == 0) {
+        opts.diagnostics.disable_all();
+        return true;
+    }
+    if (strcmp(arg, "-W0") == 0 || strcmp(arg, "-W1") == 0 ||
+        strcmp(arg, "-W2") == 0 || strcmp(arg, "-W3") == 0) {
+        apply_warning_level(opts, arg[2] - '0');
+        return true;
+    }
+    if (strcmp(arg, "-Wall") == 0) {
+        opts.diagnostics.enable_wall();
+        return true;
+    }
+    if (strcmp(arg, "-Wextra") == 0) {
+        opts.diagnostics.enable_wextra();
+        return true;
+    }
+    if (strcmp(arg, "-Wpedantic") == 0 || strcmp(arg, "-pedantic") == 0) {
+        opts.diagnostics.enable_pedantic();
+        return true;
+    }
+    if (strcmp(arg, "-Werror") == 0) {
+        opts.diagnostics.all_warnings_as_errors = true;
+        return true;
+    }
+    if (strcmp(arg, "-Wno-error") == 0) {
+        opts.diagnostics.all_warnings_as_errors = false;
+        return true;
+    }
+    if (strncmp(arg, "-Werror=", 8) == 0) {
+        const std::string name = arg + 8;
+        if (!apply_warning_error_option(opts, name, true)) {
+            driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                           "unknown warning option '-Werror=%s'", name.c_str());
+        }
+        return true;
+    }
+    if (strncmp(arg, "-Wno-error=", 11) == 0) {
+        const std::string name = arg + 11;
+        if (!apply_warning_error_option(opts, name, false)) {
+            driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                           "unknown warning option '-Wno-error=%s'", name.c_str());
+        }
+        return true;
+    }
+    if (strncmp(arg, "-Wno-", 5) == 0) {
+        const std::string name = arg + 5;
+        if (!apply_warning_group_option(opts, name, false)) {
+            driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                           "unknown warning option '%s'", arg);
+        }
+        return true;
+    }
+    if (strncmp(arg, "-W", 2) == 0 && arg[2] != '\0') {
+        const std::string name = arg + 2;
+        if (!apply_warning_group_option(opts, name, true)) {
+            driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                           "unknown warning option '%s'", arg);
+        }
+        return true;
+    }
+    return false;
+}
+
 void options::usage(const char *argv0) {
     fprintf(stderr,
         "Usage: %s [options] <input>... [-o <output>]\n"
@@ -173,11 +369,21 @@ void options::usage(const char *argv0) {
         "  -Os               Enable size optimization\n"
         "  -f<name>          Enable one optimization family\n"
         "  -fno-<name>       Disable one optimization family\n"
+        "  -w                Disable all warnings\n"
+        "  -W0..-W3          Warning levels (none, default, Wall, Wall+extra)\n"
+        "  -Wall, -Wextra    Enable grouped warnings\n"
+        "  -W<name>          Enable one warning group\n"
+        "  -Wno-<name>       Disable one warning group\n"
+        "  -Werror[=<name>]  Promote warnings to errors\n"
+        "  -Wno-error[=<name>]\n"
+        "                    Stop promoting warnings to errors\n"
         "  -I<dir>           Add include directory\n"
         "  -D<macro>[=val]   Define preprocessor macro\n"
         "  -std=c11          Language standard (only c11 supported)\n"
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  --platform=<name> Select target platform include defaults\n"
+        "  --float-format=<fmt>\n"
+        "                    Float ABI: ieee32, fixed8_8, fixed16_16, fixed24_8\n"
         "  -g                Emit debug info\n"
         "  --dump-ir         Dump lowered IR to stderr\n"
         "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
@@ -231,6 +437,8 @@ options options::parse(int argc, char **argv) {
                 opts.linker_args.emplace_back(p, comma - p);
                 p = comma + 1;
             }
+        } else if (apply_warning_option(opts, a)) {
+            // Handled above so -Wl,<...> remains a linker option.
         } else if (strncmp(a, "-L", 2) == 0 || strncmp(a, "-l", 2) == 0
                    || strcmp(a, "-nostdlib") == 0
                    || strcmp(a, "-nostartfiles") == 0
@@ -283,11 +491,13 @@ options options::parse(int argc, char **argv) {
         } else if (strncmp(a, "-fno-", 5) == 0) {
             const char *name = a + 5;
             if (!apply_opt_flag(opts, name, false))
-                fprintf(stderr, "xcc: warning: unknown optimization flag '%s'\n", a);
+                driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                               "unknown optimization flag '%s'", a);
         } else if (strncmp(a, "-f", 2) == 0 && a[2] != '\0') {
             const char *name = a + 2;
             if (!apply_opt_flag(opts, name, true))
-                fprintf(stderr, "xcc: warning: unknown optimization flag '%s'\n", a);
+                driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                               "unknown optimization flag '%s'", a);
         } else if (strncmp(a, "-I", 2) == 0) {
             opts.include_paths.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
         } else if (strncmp(a, "-D", 2) == 0) {
@@ -300,12 +510,29 @@ options options::parse(int argc, char **argv) {
             opts.platform_name = normalize_target_name(argv[++i]);
         } else if (strncmp(a, "--platform=", 11) == 0) {
             opts.platform_name = normalize_target_name(a + 11);
+        } else if (strcmp(a, "--float-format") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "xcc: error: --float-format requires a value\n");
+                exit(1);
+            }
+            const char *format = argv[++i];
+            if (!apply_float_format_option(opts, format)) {
+                fprintf(stderr, "xcc: error: unknown float format '%s'\n", format);
+                exit(1);
+            }
+        } else if (strncmp(a, "--float-format=", 15) == 0) {
+            const char *format = a + 15;
+            if (!apply_float_format_option(opts, format)) {
+                fprintf(stderr, "xcc: error: unknown float format '%s'\n", format);
+                exit(1);
+            }
         } else if (strncmp(a, "-std=", 5) == 0) {
             // We only support c11; silently accept c99/c11/gnu11 etc.
         } else if (strncmp(a, "-masm=", 6) == 0) {
             const char *mode = a + 6;
             if (!apply_asm_dialect_option(opts, mode))
-                fprintf(stderr, "xcc: warning: unknown assembler dialect '%s'\n", mode);
+                driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                               "unknown assembler dialect '%s'", mode);
         } else if (strcmp(a, "-masm") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "xcc: error: -masm requires a dialect\n");
@@ -313,11 +540,13 @@ options options::parse(int argc, char **argv) {
             }
             const char *mode = argv[++i];
             if (!apply_asm_dialect_option(opts, mode))
-                fprintf(stderr, "xcc: warning: unknown assembler dialect '%s'\n", mode);
+                driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                               "unknown assembler dialect '%s'", mode);
         } else if (strncmp(a, "--mode=", 7) == 0) {
             const char *mode = a + 7;
             if (!apply_asm_dialect_option(opts, mode))
-                fprintf(stderr, "xcc: warning: unknown mode '%s'\n", mode);
+                driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                               "unknown mode '%s'", mode);
         } else if (strcmp(a, "-g") == 0) {
             opts.debug = true;
         } else if (strcmp(a, "--dump-ir") == 0) {
@@ -326,7 +555,8 @@ options options::parse(int argc, char **argv) {
             opts.verbose = true;
         } else if (a[0] == '-') {
             // Unknown flag — warn but continue (gcc-compatible)
-            fprintf(stderr, "xcc: warning: unrecognized option '%s'\n", a);
+            driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
+                           "unrecognized option '%s'", a);
         } else {
             opts.input_files.push_back(a);
         }
@@ -338,6 +568,7 @@ options options::parse(int argc, char **argv) {
     }
 
     add_default_include_paths(opts, argv[0]);
+    add_float_format_defines(opts);
     opts.driver_dir = resolve_process_executable(argv[0]).parent_path().string();
 
     return opts;

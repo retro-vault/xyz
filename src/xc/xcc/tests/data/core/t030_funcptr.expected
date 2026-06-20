@@ -250,14 +250,18 @@ __pick_end:
 	ret
 	.globl _main
 _main:
-	; sdcccall(1) prologue: main (locals=4, temp_frame=52, stack_params=0)
+	; sdcccall(1) prologue: main (locals=4, temp_frame=54, stack_params=0)
 	push	ix
 	ld	ix, #0
 	add	ix, sp
-	ld	hl, #-56
+	ld	hl, #-58
 	add	hl, sp
 	ld	sp, hl
 	ld	hl, #_add
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	de, #4
@@ -276,10 +280,10 @@ _main:
 	call	__sdcc_call_bc
 	push	de
 	pop	hl
-	ld	-6(ix), l
-	ld	-5(ix), h
-	ld	l, -6(ix)
-	ld	h, -5(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
 	push	hl
 	ld	hl, #7
 	pop	de
@@ -289,29 +293,29 @@ _main:
 	jp	nz, __cmp_e_92777
 	dec	hl
 __cmp_e_92777:
-	ld	-8(ix), l
-	ld	-7(ix), h
-	ld	l, -8(ix)
-	ld	h, -7(ix)
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -10(ix)
+	ld	h, -9(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L6
 	jp	__xcc_L8
 __xcc_L6:
 	ld	hl, #0
-	ld	-10(ix), l
-	ld	-9(ix), h
-	ld	l, -10(ix)
-	ld	h, -9(ix)
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L8
 __xcc_L8:
 	ld	hl, #_sub
-	ld	-12(ix), l
-	ld	-11(ix), h
-	ld	l, -12(ix)
-	ld	h, -11(ix)
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
 	ld	-2(ix), l
 	ld	-1(ix), h
 	ld	de, #3
@@ -330,10 +334,10 @@ __xcc_L8:
 	call	__sdcc_call_bc
 	push	de
 	pop	hl
-	ld	-14(ix), l
-	ld	-13(ix), h
-	ld	l, -14(ix)
-	ld	h, -13(ix)
+	ld	-16(ix), l
+	ld	-15(ix), h
+	ld	l, -16(ix)
+	ld	h, -15(ix)
 	push	hl
 	ld	hl, #7
 	pop	de
@@ -343,20 +347,20 @@ __xcc_L8:
 	jp	nz, __cmp_e_36915
 	dec	hl
 __cmp_e_36915:
-	ld	-16(ix), l
-	ld	-15(ix), h
-	ld	l, -16(ix)
-	ld	h, -15(ix)
+	ld	-18(ix), l
+	ld	-17(ix), h
+	ld	l, -18(ix)
+	ld	h, -17(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L9
 	jp	__xcc_L11
 __xcc_L9:
 	ld	hl, #0
-	ld	-18(ix), l
-	ld	-17(ix), h
-	ld	l, -18(ix)
-	ld	h, -17(ix)
+	ld	-20(ix), l
+	ld	-19(ix), h
+	ld	l, -20(ix)
+	ld	h, -19(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L11
@@ -369,10 +373,10 @@ __xcc_L11:
 	call	_apply
 	push	de
 	pop	hl
-	ld	-20(ix), l
-	ld	-19(ix), h
-	ld	l, -20(ix)
-	ld	h, -19(ix)
+	ld	-22(ix), l
+	ld	-21(ix), h
+	ld	l, -22(ix)
+	ld	h, -21(ix)
 	push	hl
 	ld	hl, #12
 	pop	de
@@ -382,20 +386,20 @@ __xcc_L11:
 	jp	nz, __cmp_e_47793
 	dec	hl
 __cmp_e_47793:
-	ld	-22(ix), l
-	ld	-21(ix), h
-	ld	l, -22(ix)
-	ld	h, -21(ix)
+	ld	-24(ix), l
+	ld	-23(ix), h
+	ld	l, -24(ix)
+	ld	h, -23(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L12
 	jp	__xcc_L14
 __xcc_L12:
 	ld	hl, #0
-	ld	-24(ix), l
-	ld	-23(ix), h
-	ld	l, -24(ix)
-	ld	h, -23(ix)
+	ld	-26(ix), l
+	ld	-25(ix), h
+	ld	l, -26(ix)
+	ld	h, -25(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L14
@@ -408,10 +412,10 @@ __xcc_L14:
 	call	_apply
 	push	de
 	pop	hl
-	ld	-26(ix), l
-	ld	-25(ix), h
-	ld	l, -26(ix)
-	ld	h, -25(ix)
+	ld	-28(ix), l
+	ld	-27(ix), h
+	ld	l, -28(ix)
+	ld	h, -27(ix)
 	push	hl
 	ld	hl, #11
 	pop	de
@@ -421,20 +425,20 @@ __xcc_L14:
 	jp	nz, __cmp_e_38335
 	dec	hl
 __cmp_e_38335:
-	ld	-28(ix), l
-	ld	-27(ix), h
-	ld	l, -28(ix)
-	ld	h, -27(ix)
+	ld	-30(ix), l
+	ld	-29(ix), h
+	ld	l, -30(ix)
+	ld	h, -29(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L15
 	jp	__xcc_L17
 __xcc_L15:
 	ld	hl, #0
-	ld	-30(ix), l
-	ld	-29(ix), h
-	ld	l, -30(ix)
-	ld	h, -29(ix)
+	ld	-32(ix), l
+	ld	-31(ix), h
+	ld	l, -32(ix)
+	ld	h, -31(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L17
@@ -444,10 +448,10 @@ __xcc_L17:
 	call	_pick
 	push	de
 	pop	hl
-	ld	-32(ix), l
-	ld	-31(ix), h
-	ld	l, -32(ix)
-	ld	h, -31(ix)
+	ld	-34(ix), l
+	ld	-33(ix), h
+	ld	l, -34(ix)
+	ld	h, -33(ix)
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ld	de, #3
@@ -466,10 +470,10 @@ __xcc_L17:
 	call	__sdcc_call_bc
 	push	de
 	pop	hl
-	ld	-34(ix), l
-	ld	-33(ix), h
-	ld	l, -34(ix)
-	ld	h, -33(ix)
+	ld	-36(ix), l
+	ld	-35(ix), h
+	ld	l, -36(ix)
+	ld	h, -35(ix)
 	push	hl
 	ld	hl, #5
 	pop	de
@@ -479,20 +483,20 @@ __xcc_L17:
 	jp	nz, __cmp_e_85386
 	dec	hl
 __cmp_e_85386:
-	ld	-36(ix), l
-	ld	-35(ix), h
-	ld	l, -36(ix)
-	ld	h, -35(ix)
+	ld	-38(ix), l
+	ld	-37(ix), h
+	ld	l, -38(ix)
+	ld	h, -37(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L18
 	jp	__xcc_L20
 __xcc_L18:
 	ld	hl, #0
-	ld	-38(ix), l
-	ld	-37(ix), h
-	ld	l, -38(ix)
-	ld	h, -37(ix)
+	ld	-40(ix), l
+	ld	-39(ix), h
+	ld	l, -40(ix)
+	ld	h, -39(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L20
@@ -502,10 +506,10 @@ __xcc_L20:
 	call	_pick
 	push	de
 	pop	hl
-	ld	-40(ix), l
-	ld	-39(ix), h
-	ld	l, -40(ix)
-	ld	h, -39(ix)
+	ld	-42(ix), l
+	ld	-41(ix), h
+	ld	l, -42(ix)
+	ld	h, -41(ix)
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ld	de, #4
@@ -524,10 +528,10 @@ __xcc_L20:
 	call	__sdcc_call_bc
 	push	de
 	pop	hl
-	ld	-42(ix), l
-	ld	-41(ix), h
-	ld	l, -42(ix)
-	ld	h, -41(ix)
+	ld	-44(ix), l
+	ld	-43(ix), h
+	ld	l, -44(ix)
+	ld	h, -43(ix)
 	push	hl
 	ld	hl, #5
 	pop	de
@@ -537,20 +541,20 @@ __xcc_L20:
 	jp	nz, __cmp_e_60492
 	dec	hl
 __cmp_e_60492:
-	ld	-44(ix), l
-	ld	-43(ix), h
-	ld	l, -44(ix)
-	ld	h, -43(ix)
+	ld	-46(ix), l
+	ld	-45(ix), h
+	ld	l, -46(ix)
+	ld	h, -45(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L21
 	jp	__xcc_L23
 __xcc_L21:
 	ld	hl, #0
-	ld	-46(ix), l
-	ld	-45(ix), h
-	ld	l, -46(ix)
-	ld	h, -45(ix)
+	ld	-48(ix), l
+	ld	-47(ix), h
+	ld	l, -48(ix)
+	ld	h, -47(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L23
@@ -560,10 +564,10 @@ __xcc_L23:
 	call	_pick
 	push	de
 	pop	hl
-	ld	-48(ix), l
-	ld	-47(ix), h
-	ld	l, -48(ix)
-	ld	h, -47(ix)
+	ld	-50(ix), l
+	ld	-49(ix), h
+	ld	l, -50(ix)
+	ld	h, -49(ix)
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ld	de, #4
@@ -582,10 +586,10 @@ __xcc_L23:
 	call	__sdcc_call_bc
 	push	de
 	pop	hl
-	ld	-50(ix), l
-	ld	-49(ix), h
-	ld	l, -50(ix)
-	ld	h, -49(ix)
+	ld	-52(ix), l
+	ld	-51(ix), h
+	ld	l, -52(ix)
+	ld	h, -51(ix)
 	push	hl
 	ld	hl, #12
 	pop	de
@@ -595,29 +599,29 @@ __xcc_L23:
 	jp	nz, __cmp_e_16649
 	dec	hl
 __cmp_e_16649:
-	ld	-52(ix), l
-	ld	-51(ix), h
-	ld	l, -52(ix)
-	ld	h, -51(ix)
+	ld	-54(ix), l
+	ld	-53(ix), h
+	ld	l, -54(ix)
+	ld	h, -53(ix)
 	ld	a, h
 	or	a, l
 	jp	nz, __xcc_L24
 	jp	__xcc_L26
 __xcc_L24:
 	ld	hl, #0
-	ld	-54(ix), l
-	ld	-53(ix), h
-	ld	l, -54(ix)
-	ld	h, -53(ix)
+	ld	-56(ix), l
+	ld	-55(ix), h
+	ld	l, -56(ix)
+	ld	h, -55(ix)
 	ex	de, hl
 	jp	__main_end
 	jp	__xcc_L26
 __xcc_L26:
 	ld	hl, #1
-	ld	-56(ix), l
-	ld	-55(ix), h
-	ld	l, -56(ix)
-	ld	h, -55(ix)
+	ld	-58(ix), l
+	ld	-57(ix), h
+	ld	l, -58(ix)
+	ld	h, -57(ix)
 	ex	de, hl
 	jp	__main_end
 __main_end:

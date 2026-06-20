@@ -21,6 +21,13 @@ static bool is_direct_data_symbol(const operand &op) {
            !op.is_param;
 }
 
+static bool is_direct_array_symbol(const operand &op) {
+    return is_direct_data_symbol(op) &&
+           op.type &&
+           op.type->unqual() &&
+           op.type->unqual()->kind == type_kind::ARRAY;
+}
+
 static bool load_word_preserves_hl(const operand &op) {
     return op.kind == operand_kind::INT_CONST ||
            op.kind == operand_kind::LABEL_REF;
@@ -130,10 +137,10 @@ void z80_gen::gen_get_value_at(const icode &ic) {
 
         const operand *base = nullptr;
         const operand *index = nullptr;
-        if (is_direct_data_symbol(def->left)) {
+        if (is_direct_array_symbol(def->left)) {
             base = &def->left;
             index = &def->right;
-        } else if (is_direct_data_symbol(def->right)) {
+        } else if (is_direct_array_symbol(def->right)) {
             base = &def->right;
             index = &def->left;
         } else {
@@ -157,19 +164,22 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         if (op_size(ic.result) == 1) {
             emit_line("ld\ta, %s", abs.c_str());
             store_a(ic.result);
-        } else if (op_size(ic.result) == 8) {
-            for (int w = 0; w < 4; ++w) {
+        } else if (op_size(ic.result) > 2) {
+            int sz = op_size(ic.result);
+            for (int w = 0; w < sz / 2; ++w) {
                 const std::string wadd =
                     "(" + asm_.imm(ic.left.ival + (w * 2)) + ")";
                 emit_line("ld\thl, %s", wadd.c_str());
                 store_hl_word(ic.result, w);
             }
-        } else if (op_size(ic.result) == 4) {
-            for (int w = 0; w < 2; ++w) {
-                const std::string wadd =
-                    "(" + asm_.imm(ic.left.ival + (w * 2)) + ")";
-                emit_line("ld\thl, %s", wadd.c_str());
-                store_hl_word(ic.result, w);
+            if (sz & 1) {
+                operand tail = ic.result;
+                tail.byte_offset += (sz - 1);
+                tail.type = type::make_uchar();
+                const std::string badd =
+                    "(" + asm_.imm(ic.left.ival + (sz - 1)) + ")";
+                emit_line("ld\ta, %s", badd.c_str());
+                store_a(tail);
             }
         } else {
             emit_line("ld\thl, %s", abs.c_str());
@@ -189,8 +199,9 @@ void z80_gen::gen_get_value_at(const icode &ic) {
     if (op_size(ic.result) == 1) {
         emit_line("ld\ta, (hl)");
         store_a(ic.result);
-    } else if (op_size(ic.result) == 8) {
-        for (int w = 0; w < 4; ++w) {
+    } else if (op_size(ic.result) > 2) {
+        int sz = op_size(ic.result);
+        for (int w = 0; w < sz / 2; ++w) {
             emit_line("ld\te, (hl)");
             emit_line("inc\thl");
             emit_line("ld\td, (hl)");
@@ -200,16 +211,12 @@ void z80_gen::gen_get_value_at(const icode &ic) {
             store_hl_word(ic.result, w);
             emit_line("pop\thl");
         }
-    } else if (op_size(ic.result) == 4) {
-        for (int w = 0; w < 2; ++w) {
-            emit_line("ld\te, (hl)");
-            emit_line("inc\thl");
-            emit_line("ld\td, (hl)");
-            emit_line("inc\thl");
-            emit_line("push\thl");
-            emit_line("ex\tde, hl");
-            store_hl_word(ic.result, w);
-            emit_line("pop\thl");
+        if (sz & 1) {
+            operand tail = ic.result;
+            tail.byte_offset += (sz - 1);
+            tail.type = type::make_uchar();
+            emit_line("ld\ta, (hl)");
+            store_a(tail);
         }
     } else {
         emit_line("ld\te, (hl)");
@@ -340,10 +347,10 @@ void z80_gen::gen_set_value_at(const icode &ic) {
 
         const operand *base = nullptr;
         const operand *index = nullptr;
-        if (is_direct_data_symbol(def->left)) {
+        if (is_direct_array_symbol(def->left)) {
             base = &def->left;
             index = &def->right;
-        } else if (is_direct_data_symbol(def->right)) {
+        } else if (is_direct_array_symbol(def->right)) {
             base = &def->right;
             index = &def->left;
         } else {
@@ -367,19 +374,22 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         if (op_size(ic.left) == 1) {
             load_a(ic.left);
             emit_line("ld\t%s, a", abs.c_str());
-        } else if (op_size(ic.left) == 8) {
-            for (int w = 0; w < 4; ++w) {
+        } else if (op_size(ic.left) > 2) {
+            int sz = op_size(ic.left);
+            for (int w = 0; w < sz / 2; ++w) {
                 const std::string wadd =
                     "(" + asm_.imm(ic.result.ival + (w * 2)) + ")";
                 load_hl_word(ic.left, w);
                 emit_line("ld\t%s, hl", wadd.c_str());
             }
-        } else if (op_size(ic.left) == 4) {
-            for (int w = 0; w < 2; ++w) {
-                const std::string wadd =
-                    "(" + asm_.imm(ic.result.ival + (w * 2)) + ")";
-                load_hl_word(ic.left, w);
-                emit_line("ld\t%s, hl", wadd.c_str());
+            if (sz & 1) {
+                operand tail = ic.left;
+                tail.byte_offset += (sz - 1);
+                tail.type = type::make_uchar();
+                const std::string badd =
+                    "(" + asm_.imm(ic.result.ival + (sz - 1)) + ")";
+                load_a(tail);
+                emit_line("ld\t%s, a", badd.c_str());
             }
         } else {
             load_hl(ic.left);
@@ -403,27 +413,29 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         if (!byte_load_preserves_hl_here(ic.left))
             emit_line("pop\thl");
         emit_line("ld\t(hl), a");
-    } else if (op_size(ic.left) == 8) {
-        for (int w = 0; w < 4; ++w) {
+    } else if (op_size(ic.left) > 2) {
+        int sz = op_size(ic.left);
+        int words = sz / 2;
+        for (int w = 0; w < words; ++w) {
             emit_line("push\thl");
             load_de_word(ic.left, w);
             emit_line("pop\thl");
             emit_line("ld\t(hl), e");
             emit_line("inc\thl");
             emit_line("ld\t(hl), d");
-            if (w != 3)
+            if (w != words - 1 || (sz & 1))
                 emit_line("inc\thl");
         }
-    } else if (op_size(ic.left) == 4) {
-        for (int w = 0; w < 2; ++w) {
-            emit_line("push\thl");
-            load_de_word(ic.left, w);
-            emit_line("pop\thl");
-            emit_line("ld\t(hl), e");
-            emit_line("inc\thl");
-            emit_line("ld\t(hl), d");
-            if (w != 1)
-                emit_line("inc\thl");
+        if (sz & 1) {
+            operand tail = ic.left;
+            tail.byte_offset += (sz - 1);
+            tail.type = type::make_uchar();
+            if (!byte_load_preserves_hl_here(tail))
+                emit_line("push\thl");
+            load_a(tail);
+            if (!byte_load_preserves_hl_here(tail))
+                emit_line("pop\thl");
+            emit_line("ld\t(hl), a");
         }
     } else {
         if (!word_load_preserves_hl_here(ic.left))

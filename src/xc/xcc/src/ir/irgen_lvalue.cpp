@@ -36,11 +36,10 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
             value.type = target;
             return value;
         }
+        value = coerce_const_operand(value, target);
         if (value.kind == operand_kind::INT_CONST ||
-            value.kind == operand_kind::FLOAT_CONST) {
-            value.type = target;
+            value.kind == operand_kind::FLOAT_CONST)
             return value;
-        }
         return emit_unop(icode_op::CAST, value, target);
     };
 

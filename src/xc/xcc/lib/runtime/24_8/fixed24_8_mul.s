@@ -3,9 +3,13 @@
         ; Signed 24.8 fixed-point multiply:
         ;   result = (a * b) >> 8
         ;
-        ; Public ABI is int32 raw fixed (DE low16, HL high16).  The wider
-        ; product is held only as local byte scratch, so libfixed does not
-        ; depend on the generic wide-integer runtime helpers.
+        ; Uses 16-bit partial products:
+        ;   a = ah * 65536 + al
+        ;   b = bh * 65536 + bl
+        ;   (a*b)>>8 = (al*bl >> 8) + ((ah*bl + bh*al) << 8)
+        ;              + (low8(ah*bh) << 24)
+        ;
+        ; Public ABI is int32 raw fixed (DE low16, HL high16).
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -18,10 +22,11 @@
         .area   _CODE
 
         ; locals:
-        ;   -25        sign flag
-        ;   -24..-17   multiplicand64, low..high
-        ;   -16..-13   multiplier32, low..high
-        ;   -12..-5    product64, low..high
+        ;   -12..-9    acc32, low..high
+        ;   -8..-7     a low word
+        ;   -6..-5     a high word
+        ;   -4..-3     b low word
+        ;   -2..-1     b high word
 
         ; inputs:  DE:HL = a, 4(ix)..7(ix) = b
         ; outputs: DE:HL = signed ((a * b) >> 8)
@@ -32,18 +37,96 @@ _fixed24_8_mul::
 
         ld      b,h
         ld      c,l
-        ld      hl,#-25
+        ld      hl,#-12
         add     hl,sp
         ld      sp,hl
         ld      h,b
         ld      l,c
 
-        xor     a
-        ld      -25(ix),a
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
+        ld      a,4(ix)
+        ld      -4(ix),a
+        ld      a,5(ix)
+        ld      -3(ix),a
+        ld      a,6(ix)
+        ld      -2(ix),a
+        ld      a,7(ix)
+        ld      -1(ix),a
 
+        ; acc = (al * bl) >> 8
+        ld      l,-8(ix)
+        ld      h,-7(ix)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        call    .mul_u16
+        ld      -12(ix),d
+        ld      -11(ix),l
+        ld      -10(ix),h
+        xor     a
+        ld      -9(ix),a
+
+        ; acc += (ah * bl) << 8
+        ld      l,-6(ix)
+        ld      h,-5(ix)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        call    .mul_su16
+        call    .add_dehl_shift8_to_acc
+
+        ; acc += (bh * al) << 8
+        ld      l,-2(ix)
+        ld      h,-1(ix)
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        call    .mul_su16
+        call    .add_dehl_shift8_to_acc
+
+        ; acc += low8(ah * bh) << 24
+        ld      l,-6(ix)
+        ld      h,-5(ix)
+        ld      e,-2(ix)
+        ld      d,-1(ix)
+        call    .mul_u16
+        ld      a,-9(ix)
+        add     a,e
+        ld      -9(ix),a
+
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
+        ld      sp,ix
+        pop     ix
+        ret
+
+.add_dehl_shift8_to_acc:
+        ld      a,-11(ix)
+        add     a,e
+        ld      -11(ix),a
+        ld      a,-10(ix)
+        adc     a,d
+        ld      -10(ix),a
+        ld      a,-9(ix)
+        adc     a,l
+        ld      -9(ix),a
+        ret
+
+        ; Signed-by-unsigned 16x16 -> signed 32.
+        ; inputs: HL = signed, DE = unsigned
+        ; output: DE:HL = low:high product
+.mul_su16:
         bit     7,h
-        jr      z,.a_abs_done
-        ld      -25(ix),#1
+        jr      z,.mul_u16
+        xor     a
+        sub     a,l
+        ld      l,a
+        ld      a,#0
+        sbc     a,h
+        ld      h,a
+        call    .mul_u16
         xor     a
         sub     a,e
         ld      e,a
@@ -56,163 +139,23 @@ _fixed24_8_mul::
         ld      a,#0
         sbc     a,h
         ld      h,a
-.a_abs_done:
+        ret
 
-        ld      a,4(ix)
-        ld      -16(ix),a
-        ld      a,5(ix)
-        ld      -15(ix),a
-        ld      a,6(ix)
-        ld      -14(ix),a
-        ld      a,7(ix)
-        ld      -13(ix),a
-
-        bit     7,-13(ix)
-        jr      z,.b_abs_done
-        ld      a,-25(ix)
-        xor     #1
-        ld      -25(ix),a
-        xor     a
-        sub     a,-16(ix)
-        ld      -16(ix),a
-        ld      a,#0
-        sbc     a,-15(ix)
-        ld      -15(ix),a
-        ld      a,#0
-        sbc     a,-14(ix)
-        ld      -14(ix),a
-        ld      a,#0
-        sbc     a,-13(ix)
-        ld      -13(ix),a
-.b_abs_done:
-
-        ld      -24(ix),e
-        ld      -23(ix),d
-        ld      -22(ix),l
-        ld      -21(ix),h
-        xor     a
-        ld      -20(ix),a
-        ld      -19(ix),a
-        ld      -18(ix),a
-        ld      -17(ix),a
-
-        ld      -12(ix),a
-        ld      -11(ix),a
-        ld      -10(ix),a
-        ld      -9(ix),a
-        ld      -8(ix),a
-        ld      -7(ix),a
-        ld      -6(ix),a
-        ld      -5(ix),a
-
-        ld      b,#32
-.mul_loop:
-        bit     0,-16(ix)
-        jr      z,.skip_add
-
-        ld      a,-12(ix)
-        add     a,-24(ix)
-        ld      -12(ix),a
-        ld      a,-11(ix)
-        adc     a,-23(ix)
-        ld      -11(ix),a
-        ld      a,-10(ix)
-        adc     a,-22(ix)
-        ld      -10(ix),a
-        ld      a,-9(ix)
-        adc     a,-21(ix)
-        ld      -9(ix),a
-        ld      a,-8(ix)
-        adc     a,-20(ix)
-        ld      -8(ix),a
-        ld      a,-7(ix)
-        adc     a,-19(ix)
-        ld      -7(ix),a
-        ld      a,-6(ix)
-        adc     a,-18(ix)
-        ld      -6(ix),a
-        ld      a,-5(ix)
-        adc     a,-17(ix)
-        ld      -5(ix),a
-
-.skip_add:
-        sla     -24(ix)
-        rl      -23(ix)
-        rl      -22(ix)
-        rl      -21(ix)
-        rl      -20(ix)
-        rl      -19(ix)
-        rl      -18(ix)
-        rl      -17(ix)
-
-        srl     -13(ix)
-        rr      -14(ix)
-        rr      -15(ix)
-        rr      -16(ix)
-
-        djnz    .mul_loop
-
-        ld      a,-25(ix)
-        or      a
-        jr      z,.shift_result
-        xor     a
-        sub     a,-12(ix)
-        ld      -12(ix),a
-        ld      a,#0
-        sbc     a,-11(ix)
-        ld      -11(ix),a
-        ld      a,#0
-        sbc     a,-10(ix)
-        ld      -10(ix),a
-        ld      a,#0
-        sbc     a,-9(ix)
-        ld      -9(ix),a
-        ld      a,#0
-        sbc     a,-8(ix)
-        ld      -8(ix),a
-        ld      a,#0
-        sbc     a,-7(ix)
-        ld      -7(ix),a
-        ld      a,#0
-        sbc     a,-6(ix)
-        ld      -6(ix),a
-        ld      a,#0
-        sbc     a,-5(ix)
-        ld      -5(ix),a
-
-.shift_result:
-        ld      b,#8
-.shift_loop:
-        ld      a,-5(ix)
-        sra     a
-        ld      -5(ix),a
-        ld      a,-6(ix)
-        rra
-        ld      -6(ix),a
-        ld      a,-7(ix)
-        rra
-        ld      -7(ix),a
-        ld      a,-8(ix)
-        rra
-        ld      -8(ix),a
-        ld      a,-9(ix)
-        rra
-        ld      -9(ix),a
-        ld      a,-10(ix)
-        rra
-        ld      -10(ix),a
-        ld      a,-11(ix)
-        rra
-        ld      -11(ix),a
-        ld      a,-12(ix)
-        rra
-        ld      -12(ix),a
-        djnz    .shift_loop
-
-        ld      e,-12(ix)
-        ld      d,-11(ix)
-        ld      l,-10(ix)
-        ld      h,-9(ix)
-        ld      sp,ix
-        pop     ix
+        ; Unsigned 16x16 -> 32.
+        ; inputs: HL = multiplier, DE = multiplicand
+        ; output: DE:HL = low:high product
+.mul_u16:
+        ld      iy,#0
+        ld      b,#16
+.mul_u16_loop:
+        add     iy,iy
+        adc     hl,hl
+        jr      nc,.mul_u16_skip
+        add     iy,de
+        jr      nc,.mul_u16_skip
+        inc     hl
+.mul_u16_skip:
+        djnz    .mul_u16_loop
+        push    iy
+        pop     de
         ret

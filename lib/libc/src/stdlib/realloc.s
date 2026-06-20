@@ -63,7 +63,8 @@ realloc_have_size:
         call    __libc_heap_unwrap_user
         jp      c,realloc_aligned_ptr
         push    hl
-        ex      de,hl
+        ld      l,REALLOC_SIZE_LO(ix)
+        ld      h,REALLOC_SIZE_HI(ix)
         call    __libc_align_size
         ld      REALLOC_SIZE_LO(ix),l
         ld      REALLOC_SIZE_HI(ix),h
@@ -103,6 +104,7 @@ realloc_allocate_common:
         ld      a,d
         or      e
         jr      z,realloc_return
+        push    de                              ; keep the newly allocated block
 
         ld      l,REALLOC_AUX_LO(ix)
         ld      h,REALLOC_AUX_HI(ix)
@@ -118,13 +120,11 @@ realloc_copy_old:
         ld      c,REALLOC_AUX_LO(ix)
         ld      b,REALLOC_AUX_HI(ix)
 realloc_copy_have_len:
-        push    bc
-        push    de
-        ex      de,hl                          ; HL = destination
+        pop     hl                              ; HL = destination
         ld      e,REALLOC_USER_LO(ix)
         ld      d,REALLOC_USER_HI(ix)         ; source visible to the caller
+        push    bc                              ; memcpy byte count argument
         call    _memcpy
-        pop     de
         pop     bc
         push    de
         ld      l,REALLOC_PTR_LO(ix)

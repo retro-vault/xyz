@@ -1,0 +1,114 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _root_abs
+_root_abs:
+	; sdcccall(1) prologue: root_abs (locals=4, temp_frame=12, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-16
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param x at -4(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	pop	de
+	.globl _fixed16_16_abs
+	call	_fixed16_16_abs
+	ld	b, h
+	ld	c, l
+	push	de
+	pop	hl
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	h, b
+	ld	l, c
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	push	hl
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	pop	de
+	.globl _fixed16_16_sqrt
+	call	_fixed16_16_sqrt
+	ld	b, h
+	ld	c, l
+	push	de
+	pop	hl
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	h, b
+	ld	l, c
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	ld	-16(ix), l
+	ld	-15(ix), h
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	l, -16(ix)
+	ld	h, -15(ix)
+	push	hl
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	pop	de
+	jp	__root_abs_end
+__root_abs_end:
+	; epilogue: root_abs
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _finite
+_finite:
+	; sdcccall(1) prologue: finite (locals=4, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param x at -4(ix)
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	pop	de
+	.globl _fixed16_16_isfinite
+	call	_fixed16_16_isfinite
+	push	de
+	pop	hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ex	de, hl
+	jp	__finite_end
+__finite_end:
+	; epilogue: finite
+	ld	sp, ix
+	pop	ix
+	ret

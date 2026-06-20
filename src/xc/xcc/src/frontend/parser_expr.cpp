@@ -12,6 +12,7 @@
 //
 #include "frontend/parser.h"
 #include <cctype>
+#include <limits>
 
 namespace xcc {
 
@@ -174,12 +175,24 @@ expr_ptr parser::parse_binary_expression(int min_prec) {
         bin->op    = op;
         bin->left  = std::move(lhs);
         bin->right = std::move(rhs);
-        // Set result type for arithmetic ops (needed by _Generic and type propagation).
+        // Set result type (needed by _Generic and type propagation).
         {
             type_ptr lt = bin->left  ? bin->left->type  : nullptr;
             type_ptr rt = bin->right ? bin->right->type : nullptr;
-            if (lt && rt && op != bin_op::COMMA)
-                bin->type = usual_arith_conv(lt->unqual(), rt->unqual());
+            if (lt && rt && op != bin_op::COMMA) {
+                lt = lt->unqual();
+                rt = rt->unqual();
+                if (op == bin_op::ADD && lt->is_ptr() && rt->is_integer())
+                    bin->type = lt;
+                else if (op == bin_op::ADD && lt->is_integer() && rt->is_ptr())
+                    bin->type = rt;
+                else if (op == bin_op::SUB && lt->is_ptr() && rt->is_integer())
+                    bin->type = lt;
+                else if (op == bin_op::SUB && lt->is_ptr() && rt->is_ptr())
+                    bin->type = type::make_int();
+                else
+                    bin->type = usual_arith_conv(lt, rt);
+            }
         }
         lhs = std::move(bin);
     }
@@ -579,7 +592,8 @@ expr_ptr parser::parse_primary_expression() {
         token t = consume();
         if (t.text == "__func__") {
             if (!cur_func_)
-                diag_.warning(t.loc, "'__func__' used outside a function");
+                diag_.warning(warning_group::C23_EXTENSIONS, t.loc,
+                              "'__func__' used outside a function");
             auto e = std::make_unique<string_literal_expr>();
             e->loc   = t.loc;
             e->value = cur_func_ ? cur_func_->name : "";
@@ -594,6 +608,33 @@ expr_ptr parser::parse_primary_expression() {
             expect(tk::COMMA);
             parse_assignment_expression(); // discard hint
             expect(tk::RPAREN);
+            return e;
+        }
+        if (t.text == "__builtin_inf" || t.text == "__builtin_inff" ||
+            t.text == "__builtin_infl") {
+            // GCC-compatible floating infinity builtins used by libc headers.
+            expect(tk::LPAREN);
+            expect(tk::RPAREN);
+            auto e = std::make_unique<float_literal_expr>();
+            e->loc   = t.loc;
+            e->value = std::numeric_limits<double>::infinity();
+            e->type  = (t.text == "__builtin_inff") ? type::make_float()
+                                                     : type::make_double();
+            return e;
+        }
+        if (t.text == "__builtin_nan" || t.text == "__builtin_nanf" ||
+            t.text == "__builtin_nanl") {
+            // Payload string is accepted and ignored for now; the target
+            // runtime only needs a quiet NaN bit-pattern.
+            expect(tk::LPAREN);
+            if (!check(tk::RPAREN))
+                parse_assignment_expression();
+            expect(tk::RPAREN);
+            auto e = std::make_unique<float_literal_expr>();
+            e->loc   = t.loc;
+            e->value = std::numeric_limits<double>::quiet_NaN();
+            e->type  = (t.text == "__builtin_nanf") ? type::make_float()
+                                                     : type::make_double();
             return e;
         }
         if (t.text == "__builtin_va_start") {
@@ -709,7 +750,8 @@ expr_ptr parser::parse_primary_expression() {
         if (!e->sym) {
             // C23: implicit function declaration is not permitted.
             // Emit a warning and create a variadic-int placeholder for error recovery.
-            diag_.warning(t.loc, "implicit declaration of function '%s'", t.text.c_str());
+            diag_.warning(warning_group::IMPLICIT_FUNCTION_DECLARATION, t.loc,
+                          "implicit declaration of function '%s'", t.text.c_str());
             auto sym = std::make_shared<symbol>();
             sym->name      = t.text;
             sym->kind      = sym_kind::FUNC;
@@ -781,6 +823,7 @@ expr_ptr parser::parse_primary_expression() {
                     cl->sym = sym;
                 }
                 cl->init     = parse_initializer(tname);
+                complete_unsized_array_from_initializer(tname, cl->init);
                 cl->is_lvalue = true;
                 return cl;
             }
@@ -843,16 +886,46 @@ expr_ptr parser::parse_primary_expression() {
 
 // ----- _Generic type matching ----------------------------------------
 
-static bool types_compatible(type_ptr a, type_ptr b) {
+static type_ptr generic_match_type(type_ptr t, bool decay) {
+    if (!t)
+        return nullptr;
+    t = t->unqual();
+    if (!t)
+        return nullptr;
+    if (decay && t->kind == type_kind::ARRAY && t->base)
+        return type::make_pointer(t->base);
+    if (decay && t->is_func())
+        return type::make_pointer(t);
+    return t;
+}
+
+static bool types_compatible_impl(type_ptr a, type_ptr b, bool decay) {
+    a = generic_match_type(a, decay);
+    b = generic_match_type(b, decay);
     if (!a || !b) return false;
     if (a->kind != b->kind) return false;
     if (a->kind == type_kind::POINTER)
-        return types_compatible(a->base, b->base);
+        return types_compatible_impl(a->base, b->base, false);
     if (a->kind == type_kind::ARRAY)
-        return a->array_size == b->array_size && types_compatible(a->base, b->base);
+        return a->array_size == b->array_size &&
+               types_compatible_impl(a->base, b->base, false);
+    if (a->kind == type_kind::FUNCTION) {
+        if (!types_compatible_impl(a->ret, b->ret, false) ||
+            a->params.size() != b->params.size() ||
+            a->variadic != b->variadic)
+            return false;
+        for (size_t i = 0; i < a->params.size(); ++i)
+            if (!types_compatible_impl(a->params[i], b->params[i], false))
+                return false;
+        return true;
+    }
     if (a->kind == type_kind::STRUCT || a->kind == type_kind::UNION)
         return a.get() == b.get() || (!a->tag.empty() && a->tag == b->tag);
     return true; // scalar: kind equality is sufficient
+}
+
+static bool types_compatible(type_ptr a, type_ptr b) {
+    return types_compatible_impl(a, b, true);
 }
 
 expr_ptr parser::parse_generic_selection() {
@@ -861,12 +934,7 @@ expr_ptr parser::parse_generic_selection() {
     expect(tk::LPAREN);
 
     auto ctrl   = parse_assignment_expression();
-    type_ptr ct = ctrl ? ctrl->type : nullptr;
-    // Standard conversions on the controlling type (C11 §6.5.1.1)
-    if (ct && ct->kind == type_kind::ARRAY)
-        ct = type::make_pointer(ct->base);
-    if (ct && ct->is_func())
-        ct = type::make_pointer(ct);
+    type_ptr ct = generic_match_type(ctrl ? ctrl->type : nullptr, true);
 
     expect(tk::COMMA);
 

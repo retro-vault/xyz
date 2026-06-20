@@ -22,6 +22,21 @@ if grep -q 'push	hl' "$TMPDIR/out.s"; then
     exit 1
 fi
 
+cat >"$TMPDIR/equ_case.s" <<'ASM'
+XLO     .equ    -6
+THI     .equ    -1
+_demo:
+        ld      XLO(ix),a
+        ld      h,THI(ix)
+        ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/equ_case.s" -o "$TMPDIR/equ_case.out.s"
+grep -q '^XLO[[:space:]]\.equ' "$TMPDIR/equ_case.out.s"
+grep -q '^THI[[:space:]]\.equ' "$TMPDIR/equ_case.out.s"
+grep -q 'XLO(ix)' "$TMPDIR/equ_case.out.s"
+grep -q 'THI(ix)' "$TMPDIR/equ_case.out.s"
+
 cat >"$TMPDIR/spaghetti.s" <<'ASM'
 _demo:
 	ld	a,#1

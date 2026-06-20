@@ -34,6 +34,12 @@ static std::string trim(const std::string &s) {
     return s.substr(b, e - b + 1);
 }
 
+static std::string lowercase_ascii(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    return s;
+}
+
 asm_line asm_line::parse(const std::string &raw) {
     asm_line al;
     std::string s = raw;
@@ -65,6 +71,29 @@ asm_line asm_line::parse(const std::string &raw) {
         if (s.empty()) return al;
     }
 
+    // SDCC-style equates are written as "NAME .equ value" without a colon.
+    // Preserve the symbol spelling because assembler symbols are case-sensitive.
+    size_t equ_space = s.find_first_of(" \t");
+    if (equ_space != std::string::npos) {
+        const std::string first = trim(s.substr(0, equ_space));
+        const std::string rest = trim(s.substr(equ_space));
+        size_t dir_space = rest.find_first_of(" \t");
+        const std::string directive = dir_space == std::string::npos
+            ? rest
+            : trim(rest.substr(0, dir_space));
+        const std::string directive_lower = lowercase_ascii(directive);
+        if (!first.empty() && first[0] != '.' &&
+            (directive_lower == ".equ" || directive_lower == "equ")) {
+            al.label = first;
+            al.is_label = true;
+            al.label_has_colon = false;
+            al.mnemonic = directive_lower;
+            if (dir_space != std::string::npos)
+                al.operands = trim(rest.substr(dir_space));
+            return al;
+        }
+    }
+
     // Mnemonic
     size_t space = s.find_first_of(" \t");
     if (space == std::string::npos) {
@@ -75,8 +104,7 @@ asm_line asm_line::parse(const std::string &raw) {
     }
 
     // Normalize mnemonic to lowercase
-    std::transform(al.mnemonic.begin(), al.mnemonic.end(),
-                   al.mnemonic.begin(), ::tolower);
+    al.mnemonic = lowercase_ascii(al.mnemonic);
 
     return al;
 }
@@ -84,10 +112,17 @@ asm_line asm_line::parse(const std::string &raw) {
 std::string asm_line::to_string() const {
     std::ostringstream os;
     if (!label.empty()) {
-        os << label << (is_global_label ? "::\n" : ":\n");
+        if (!label_has_colon) {
+            os << label;
+            if (!mnemonic.empty()) os << "\t";
+        } else {
+            os << label << (is_global_label ? "::\n" : ":\n");
+        }
     }
     if (!mnemonic.empty()) {
-        os << "\t" << mnemonic;
+        if (label.empty() || label_has_colon)
+            os << "\t";
+        os << mnemonic;
         if (!operands.empty()) os << "\t" << operands;
     }
     if (!comment.empty())  os << "\t; " << comment;

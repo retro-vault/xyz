@@ -18,6 +18,8 @@
 //
 
 #pragma once
+#include "frontend/diag.h"
+#include "frontend/types.h"
 #include "opt/opt_settings.h"
 #include <string>
 #include <vector>
@@ -51,6 +53,9 @@ struct options {
     opt_level                opt       = opt_level::O0;
     optimization_settings    opt_settings = optimization_settings::for_level(opt_level::O0);
 
+    // Diagnostics
+    diagnostic_options       diagnostics;
+
     // Assembler dialect
     asm_dialect              dialect   = asm_dialect::SDASZ80;
 
@@ -58,6 +63,7 @@ struct options {
     bool                     std_c11   = true;
     std::string              invocation_target;
     std::string              platform_name;
+    float_format             float_fmt = float_format::IEEE32;
 
     // Include paths and defines forwarded to the external preprocessor
     std::vector<std::string> include_paths;

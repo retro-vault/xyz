@@ -360,7 +360,6 @@ static char decode_escape(char c) {
     case '\\': return '\\';
     case '\'': return '\'';
     case '"':  return '"';
-    case '0':  return '\0';
     default:   return c;
     }
 }
@@ -376,7 +375,7 @@ char lexer::lex_escape() {
             val = val * 16 + hex_digit(advance());
         return static_cast<char>(val & 0xFF);
     }
-    if (c >= '1' && c <= '7') {
+    if (c >= '0' && c <= '7') {
         // Octal escape: \NNN (1-3 digits, first already in c)
         int val = c - '0';
         for (int i = 0; i < 2 && cur() >= '0' && cur() <= '7'; ++i)
@@ -455,10 +454,18 @@ token lexer::lex_operator() {
     case '{': return make(tk::LBRACE,    "{", loc);
     case '}': return make(tk::RBRACE,    "}", loc);
     case '[':
-        if (n == '[') { advance(); return make(tk::LATTR,   "[[", loc); }
+        if (n == '[') {
+            advance();
+            ++attr_depth_;
+            return make(tk::LATTR,   "[[", loc);
+        }
         return make(tk::LBRACKET,  "[", loc);
     case ']':
-        if (n == ']') { advance(); return make(tk::RATTR,   "]]", loc); }
+        if (n == ']' && attr_depth_ > 0) {
+            advance();
+            --attr_depth_;
+            return make(tk::RATTR,   "]]", loc);
+        }
         return make(tk::RBRACKET,  "]", loc);
     case '(': return make(tk::LPAREN,    "(", loc);
     case ')': return make(tk::RPAREN,    ")", loc);
@@ -539,7 +546,9 @@ token lexer::lex_one() {
         if (*p >= '1' && *p <= '9') {
             int lineno = 0;
             while (*p >= '0' && *p <= '9') lineno = lineno * 10 + (*p++ - '0');
-            line_ = lineno;
+            // Line markers describe the source line of the next token.
+            // advance() will consume the marker newline before lexing it.
+            line_ = lineno > 0 ? lineno - 1 : 0;
             col_  = 1;
             while (*p == ' ' || *p == '\t') ++p;
             if (*p == '"') {

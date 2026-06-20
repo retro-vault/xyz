@@ -64,20 +64,25 @@ type_ptr parser::parse_direct_declarator_suffix(type_ptr base, std::string &/*na
             // Function params: parse for both named and unnamed declarators.
             // Unnamed abstract declarators like int(*)(void) need this too.
             consume();
+            bool empty_param_list = check(tk::RPAREN);
             bool variadic = false;
             auto params   = parse_param_list(variadic);
             expect(tk::RPAREN);
             std::vector<type_ptr> ptypes;
             for (auto &p : params) ptypes.push_back(p->type);
             base = type::make_function(base, std::move(ptypes), variadic);
-            base->is_prototyped = true; // C23: all explicit param lists are prototyped
+            // Traditional C keeps f() as an old-style, non-prototype
+            // declaration.  f(void) also has an empty lowered parameter list,
+            // but empty_param_list is false before parsing it.
+            base->is_prototyped = !empty_param_list;
             // Save named params for parse_external_declaration to recover.
             last_params_   = std::move(params);
             last_variadic_ = variadic;
         } else if (check(tk::KW___ATTRIBUTE__)) {
             skip_attribute(); // __attribute__ on a declarator — ignore
         } else if (check(tk::LATTR)) {
-            parse_attr_list(); // [[...]] on a declarator suffix — ignore for now
+            attr_list attrs = parse_attr_list();
+            apply_call_abi_attrs_to_type(base, attrs);
         } else {
             break;
         }
@@ -138,13 +143,14 @@ declarator_info parser::parse_declarator(type_ptr base) {
             return di;
         } else if (is_type_start() || check(tk::RPAREN) || check(tk::ELLIPSIS)) {
             // Function-type parameter: int (int x, ...) or int (void)
+            bool empty_param_list = check(tk::RPAREN);
             bool inner_variadic = false;
             auto inner_params = parse_param_list(inner_variadic);
             expect(tk::RPAREN);
             std::vector<type_ptr> ptypes;
             for (auto &p : inner_params) ptypes.push_back(p->type);
             type_ptr func_type = type::make_function(base, std::move(ptypes), inner_variadic);
-            func_type->is_prototyped = true;
+            func_type->is_prototyped = !empty_param_list;
             di.type = parse_direct_declarator_suffix(func_type, di.name);
             last_params_   = std::move(inner_params);
             last_variadic_ = inner_variadic;
@@ -175,7 +181,9 @@ type_ptr parser::parse_abstract_declarator(type_ptr base) {
 
 type_ptr parser::parse_type_name() {
     decl_spec ds = parse_declaration_specifiers();
-    return parse_declarator(ds.base_type).type;
+    auto di = parse_declarator(ds.base_type);
+    apply_call_abi_attrs_to_type(di.type, ds.attrs);
+    return di.type;
 }
 
 // ----- parse_param_list ----------------------------------------------
@@ -218,10 +226,17 @@ parser::parse_param_list(bool &variadic) {
         if (ds.base_type->kind == type_kind::VOID && check(tk::RPAREN)) break;
 
         auto di = parse_declarator(ds.base_type);
+        apply_call_abi_attrs_to_type(di.type, ds.attrs);
 
         auto pd = std::make_unique<param_decl>();
         pd->name    = di.name;
         pd->type    = di.type;
+        // C parameter adjustment: T a[] is really T *a, and function
+        // parameters decay to pointers to function.
+        if (pd->type && pd->type->kind == type_kind::ARRAY && pd->type->base)
+            pd->type = type::make_pointer(pd->type->base);
+        else if (pd->type && pd->type->kind == type_kind::FUNCTION)
+            pd->type = type::make_pointer(pd->type);
         pd->storage = ds.sc;
         params.push_back(std::move(pd));
 

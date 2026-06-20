@@ -44,12 +44,20 @@ _cexpf::
         ld      l,10(ix)
         ld      h,11(ix)
         call    _cosf
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -6(ix),l
+        ld      -5(ix),h
         ld      l,-2(ix)
         ld      h,-1(ix)
         push    hl
         ld      l,-4(ix)
         ld      h,-3(ix)
         push    hl
+        ld      e,-8(ix)
+        ld      d,-7(ix)
+        ld      l,-6(ix)
+        ld      h,-5(ix)
         call    ___fsmul
         pop     bc
         pop     bc
@@ -64,12 +72,20 @@ _cexpf::
         ld      l,10(ix)
         ld      h,11(ix)
         call    _sinf
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
         ld      l,-2(ix)
         ld      h,-1(ix)
         push    hl
         ld      l,-4(ix)
         ld      h,-3(ix)
         push    hl
+        ld      e,-12(ix)
+        ld      d,-11(ix)
+        ld      l,-10(ix)
+        ld      h,-9(ix)
         call    ___fsmul
         pop     bc
         pop     bc

@@ -15,15 +15,9 @@ _main:
 	ld	hl, #0
 	ld	-4(ix), l
 	ld	-3(ix), h
-	ld	hl, #0
+	ld	hl, #16448
 	ld	-2(ix), l
 	ld	-1(ix), h
-	ld	hl, #0
-	ld	0(ix), l
-	ld	1(ix), h
-	ld	hl, #16392
-	ld	2(ix), l
-	ld	3(ix), h
 	.globl ___fs2slong
 	ld	l, -4(ix)
 	ld	h, -3(ix)
@@ -72,15 +66,9 @@ __xcc_L2:
 	ld	hl, #0
 	ld	-10(ix), l
 	ld	-9(ix), h
-	ld	hl, #0
+	ld	hl, #16256
 	ld	-8(ix), l
 	ld	-7(ix), h
-	ld	hl, #0
-	ld	-6(ix), l
-	ld	-5(ix), h
-	ld	hl, #16368
-	ld	-4(ix), l
-	ld	-3(ix), h
 	.globl ___fs2slong
 	ld	l, -10(ix)
 	ld	h, -9(ix)

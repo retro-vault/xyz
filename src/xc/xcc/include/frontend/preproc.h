@@ -6,7 +6,8 @@
 //   #include            both "file" and <file> forms
 //   #ifdef / #ifndef / #if / #elif / #else / #endif
 //   #error              emits a fatal diagnostic
-//   #pragma             silently ignored
+//   #pragma once        include-once header guard
+//   #pragma GCC diagnostic ...
 //   Predefined:         __FILE__, __LINE__, __DATE__, __TIME__
 //
 // The preprocessor runs as a text-to-text pass before the lexer.
@@ -22,6 +23,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace xcc {
 
@@ -54,6 +56,7 @@ private:
     diag_engine                                     &diag_;
     std::vector<std::string>                         include_paths_;
     std::unordered_map<std::string, macro_def>       macros_;
+    std::unordered_set<std::string>                  pragma_once_files_;
 
     // Set by process_text() before each expand() call so that __LINE__ and
     // __FILE__ inside macro bodies resolve to the call-site location.

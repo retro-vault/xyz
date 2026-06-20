@@ -552,8 +552,26 @@ namespace xas {
                     continue;
                 }
 
-                if (current_active())
+                if (current_active()) {
+                    if (s.kind == stmt_kind::equ && s.equ_value) {
+                        auto v = eval_expr(*s.equ_value, syms_, cur_offset_);
+                        if (v) {
+                            syms_[s.equ_name].value   = static_cast<uint32_t>(*v);
+                            syms_[s.equ_name].defined = true;
+                        }
+                    } else if (s.kind == stmt_kind::directive) {
+                        const std::string& dn = s.directive_name;
+                        if ((dn == "equ" || dn == "set" || dn == "define")
+                            && !s.string_arg.empty() && !s.args.empty()) {
+                            auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                            if (v) {
+                                syms_[s.string_arg].value   = static_cast<uint32_t>(*v);
+                                syms_[s.string_arg].defined = true;
+                            }
+                        }
+                    }
                     active.push_back(&s);
+                }
             }
 
             if (!stack.empty())

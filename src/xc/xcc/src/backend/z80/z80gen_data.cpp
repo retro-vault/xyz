@@ -39,7 +39,8 @@ void z80_gen::emit_module(const ir_module &mod) {
 void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template) {
     if (!g.init_vals.empty() && !tls_template) {
         for (auto &e : g.init_vals) {
-            if (e.size == 1)      asm_.db((int)e.value);
+            if (!e.label.empty()) asm_.dw_sym(mangle(e.label));
+            else if (e.size == 1) asm_.db((int)e.value);
             else if (e.size == 2) asm_.dw((int)(e.value & 0xFFFF));
             else if (e.size == 4) {
                 asm_.dw((int)(e.value & 0xFFFF));
@@ -51,7 +52,15 @@ void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template
         if (!tls_template && g.has_init && g.init_val != 0) {
             if (sz == 1)      asm_.db((int)g.init_val);
             else if (sz == 2) asm_.dw((int)g.init_val);
-            else              asm_.ds(sz > 0 ? sz : 2);
+            else if (sz == 4) {
+                asm_.dw((int)(g.init_val & 0xFFFF));
+                asm_.dw((int)((g.init_val >> 16) & 0xFFFF));
+            } else if (sz == 8) {
+                for (int w = 0; w < 4; ++w)
+                    asm_.dw((int)((g.init_val >> (w * 16)) & 0xFFFF));
+            } else {
+                asm_.ds(sz > 0 ? sz : 2);
+            }
         } else {
             asm_.ds(sz > 0 ? sz : 2);
         }

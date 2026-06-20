@@ -126,6 +126,7 @@ stmt_ptr parser::parse_compound_statement() {
                 auto      di    = parse_declarator(parse_base);
                 auto      vname = di.name;
                 type_ptr  vtype = di.type;
+                apply_call_abi_attrs_to_type(vtype, dspec.attrs);
                 auto vd = std::make_unique<var_decl>();
                 vd->loc     = peek().loc;
                 vd->name    = vname;
@@ -148,14 +149,21 @@ stmt_ptr parser::parse_compound_statement() {
                     vd->type     = ptr_type;
                     vd->vla_size = std::move(last_vla_size_);
                 } else if (dspec.sc == storage_class::STATIC) {
+                    expr_ptr pending_init;
+                    if (match(tk::EQ)) {
+                        pending_init = check(tk::LBRACE) ? parse_initializer(vtype)
+                                                          : parse_assignment_expression();
+                        complete_unsized_array_from_initializer(vtype, pending_init);
+                    }
+                    vd->type = vtype;
+
                     std::shared_ptr<symbol> vsym;
                     std::string mangled = make_static_sym(vsym, vname, vtype);
                     vd->sym  = vsym;
                     vd->name = mangled; // irgen uses this for global emission
                     if (vsym) vsym->requested_align = dspec.align_req;
-                    if (match(tk::EQ)) {
-                        vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
-                                                      : parse_assignment_expression();
+                    if (pending_init) {
+                        vd->init = std::move(pending_init);
                         if (vsym && vsym->type && vsym->type->is_const &&
                             vsym->type->is_integer() && vd->init) {
                             if (auto cv = const_expr_evaluator::evaluate(vd->init.get()))
@@ -175,12 +183,28 @@ stmt_ptr parser::parse_compound_statement() {
                 } else {
                     // C23 auto deduction: allocate with placeholder type,
                     // then fix up after parsing the initializer.
+                    expr_ptr pending_init;
+                    bool late_array_alloc = !dspec.is_deduced &&
+                                            vtype && vtype->kind == type_kind::ARRAY &&
+                                            vtype->array_size == 0;
+                    if (late_array_alloc && match(tk::EQ)) {
+                        pending_init = check(tk::LBRACE) ? parse_initializer(vtype)
+                                                          : parse_assignment_expression();
+                        complete_unsized_array_from_initializer(vtype, pending_init);
+                        vd->type = vtype;
+                    }
+
                     type_ptr alloc_type = dspec.is_deduced ? type::make_int() : vtype;
                     vd->sym = make_local_sym(vname, alloc_type, dspec.sc);
                     vd->sym->requested_align = dspec.align_req;
-                    if (match(tk::EQ)) {
-                        vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
-                                                      : parse_assignment_expression();
+                    if (pending_init || match(tk::EQ)) {
+                        if (!pending_init) {
+                            vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
+                                                          : parse_assignment_expression();
+                            complete_unsized_array_from_initializer(vtype, vd->init);
+                        } else {
+                            vd->init = std::move(pending_init);
+                        }
                         if (dspec.is_deduced && vd->init && vd->init->type) {
                             // Resolve deduced type from the initializer.
                             vtype        = vd->init->type->unqual();
@@ -275,6 +299,7 @@ stmt_ptr parser::parse_for_statement() {
             auto     fdi   = parse_declarator(fdspec.base_type);
             auto     vname = fdi.name;
             type_ptr vtype = fdi.type;
+            apply_call_abi_attrs_to_type(vtype, fdspec.attrs);
             auto vd = std::make_unique<var_decl>();
             vd->name  = vname; vd->type = vtype; vd->storage = fdspec.sc;
             auto vsym = std::make_shared<symbol>();

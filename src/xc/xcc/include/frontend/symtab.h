@@ -34,23 +34,6 @@ enum class storage_class {
     NONE, AUTO, EXTERN, STATIC, REGISTER, TYPEDEF
 };
 
-// ----- call_abi ------------------------------------------------------
-//
-// Calling convention for a function, set by vendor attributes such as
-// [[sdcc::sdccall(N)]] or [[z88dk::fastcall]] / [[z88dk::callee]].
-// DEFAULT maps to SDCCCALL1, matching modern SDCC's z80 default ABI.
-
-enum class call_abi {
-    DEFAULT,     // same as SDCCCALL1 — register-based ABI, current xcc default
-    SDCCCALL0,   // [[sdcc::sdccall(0)]] — explicit stack-based ABI
-    SDCCCALL1,   // [[sdcc::sdccall(1)]] — SDCC 4.3+ register-based ABI
-    Z88DK_FASTCALL, // [[z88dk::fastcall]] — one arg in L/HL/DEHL, std return regs
-    Z88DK_CALLEE,   // [[z88dk::callee]]   — stack args, callee repairs stack
-    NAKED,       // [[sdcc::naked]]      — no prologue/epilogue emitted
-    INTERRUPT,   // [[sdcc::interrupt]]  — ISR: save all regs, reti
-    CRITICAL,    // [[sdcc::critical]]   — wrap body with di/ei
-};
-
 // ----- sym_kind ------------------------------------------------------
 
 enum class sym_kind {

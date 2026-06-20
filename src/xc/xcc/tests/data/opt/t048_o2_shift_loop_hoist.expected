@@ -24,11 +24,11 @@ _shift_loop:
 	pop	hl
 	ld	a, b
 	or	a, a
-	jr	z, __sdone_886
-__shift_9383:
+	jr	z, __sdone_1
+__shift_0:
 	add	hl, hl
-	djnz	__shift_9383
-__sdone_886:
+	djnz	__shift_0
+__sdone_1:
 	ld	-4(ix), l
 	ld	-3(ix), h
 	ex	de, hl

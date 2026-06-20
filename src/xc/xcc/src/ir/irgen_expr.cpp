@@ -46,6 +46,96 @@ static icode_op float_op_to_icode(bin_op op) {
     }
 }
 
+static int pointer_step(type_ptr ty) {
+    if (!ty)
+        return 1;
+    type_ptr t = ty->unqual();
+    if (!t || !t->is_ptr() || !t->base)
+        return 1;
+    int step = t->base->size();
+    return step > 0 ? step : 1;
+}
+
+static const char *fixed_float_prefix() {
+    switch (get_float_format()) {
+    case float_format::FIXED8_8:   return "fixed8_8";
+    case float_format::FIXED16_16: return "fixed16_16";
+    case float_format::FIXED24_8:  return "fixed24_8";
+    case float_format::IEEE32:
+        return "";
+    }
+    return "";
+}
+
+static std::string fixed_float_call_name(const std::string &name) {
+    if (get_float_format() == float_format::IEEE32)
+        return name;
+
+    const char *prefix = fixed_float_prefix();
+    auto prefixed = [&](const char *suffix) {
+        return std::string(prefix) + suffix;
+    };
+
+    if (name == "__libc_fpclassifyf") return prefixed("_fpclassify");
+    if (name == "__libc_signbitf")    return prefixed("_signbit");
+    if (name == "__libc_isfinitef")   return prefixed("_isfinite");
+    if (name == "__libc_isinff")      return prefixed("_isinf");
+    if (name == "__libc_isnanf")      return prefixed("_isnan");
+    if (name == "fabsf")              return prefixed("_abs");
+    if (name == "sqrtf")              return prefixed("_sqrt");
+    if (name == "hypotf")             return prefixed("_hypot");
+    if (name == "ceilf")              return prefixed("_ceil");
+    if (name == "floorf")             return prefixed("_floor");
+    if (name == "truncf")             return prefixed("_trunc");
+    if (name == "roundf" ||
+        name == "roundevenf" ||
+        name == "nearbyintf" ||
+        name == "rintf")              return prefixed("_round");
+    if (name == "lroundf" ||
+        name == "lrintf")             return prefixed("_lround");
+    if (name == "llroundf")           return prefixed("_llround");
+    if (name == "llrintf")            return prefixed("_llrint");
+    if (name == "fmaxf")              return prefixed("_fmax");
+    if (name == "fminf")              return prefixed("_fmin");
+    if (name == "fdimf")              return prefixed("_fdim");
+    if (name == "fmodf")              return prefixed("_fmod");
+    if (name == "remainderf")         return prefixed("_remainder");
+    if (name == "remquof")            return prefixed("_remquo");
+    if (name == "fmaf")               return prefixed("_fma");
+    if (name == "frexpf")             return prefixed("_frexp");
+    if (name == "ldexpf")             return prefixed("_ldexp");
+    if (name == "modff")              return prefixed("_modf");
+    if (name == "scalbnf")            return prefixed("_scalbn");
+    if (name == "scalblnf")           return prefixed("_scalbln");
+    if (name == "ilogbf")             return prefixed("_ilogb");
+    if (name == "logbf")              return prefixed("_logb");
+    if (name == "significandf")       return prefixed("_significand");
+    if (name == "copysignf")          return prefixed("_copysign");
+    if (name == "nextafterf")         return prefixed("_nextafter");
+    if (name == "nextupf")            return prefixed("_nextup");
+    if (name == "nextdownf")          return prefixed("_nextdown");
+    if (name == "nanf")               return prefixed("_nan");
+    if (name == "fromfpf")            return prefixed("_fromfp");
+    if (name == "ufromfpf")           return prefixed("_ufromfp");
+    if (name == "fromfpxf")           return prefixed("_fromfpx");
+    if (name == "ufromfpxf")          return prefixed("_ufromfpx");
+    if (name == "fmaximumf")          return prefixed("_fmaximum");
+    if (name == "fminimumf")          return prefixed("_fminimum");
+    if (name == "fmaximum_magf")      return prefixed("_fmaximum_mag");
+    if (name == "fminimum_magf")      return prefixed("_fminimum_mag");
+    if (name == "fmaximum_numf")      return prefixed("_fmaximum_num");
+    if (name == "fminimum_numf")      return prefixed("_fminimum_num");
+    if (name == "fmaximum_mag_numf")  return prefixed("_fmaximum_mag_num");
+    if (name == "fminimum_mag_numf")  return prefixed("_fminimum_mag_num");
+    if (name == "getpayloadf")        return prefixed("_getpayload");
+    if (name == "setpayloadf")        return prefixed("_setpayload");
+    if (name == "setpayloadsigf")     return prefixed("_setpayloadsig");
+    if (name == "totalorderf")        return prefixed("_totalorder");
+    if (name == "totalordermagf")     return prefixed("_totalordermag");
+
+    return name;
+}
+
 // ----- Literal visitors ----------------------------------------------
 
 void ir_gen::visit(int_literal_expr &e) {
@@ -53,7 +143,8 @@ void ir_gen::visit(int_literal_expr &e) {
 }
 
 void ir_gen::visit(float_literal_expr &e) {
-    expr_result_ = operand::make_float(e.value);
+    expr_result_ = operand::make_float(e.value,
+                                       e.type ? e.type : type::make_double());
 }
 
 void ir_gen::visit(char_literal_expr &e) {
@@ -150,6 +241,47 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
     operand lhs = gen_expr(*e.left);
     operand rhs = gen_expr(*e.right);
 
+    auto scale_index = [&](operand index, int scale) -> operand {
+        if (scale <= 1)
+            return index;
+        type_ptr idx_type = index.type ? index.type : type::make_int();
+        if (index.kind == operand_kind::INT_CONST) {
+            index.ival *= scale;
+            index.type = idx_type;
+            return index;
+        }
+        return emit_binop(icode_op::MUL, index,
+                          operand::make_int(scale, idx_type), idx_type);
+    };
+
+    if (e.op == bin_op::ADD) {
+        if (lhs.type && lhs.type->is_ptr() && rhs.type && rhs.type->is_integer()) {
+            rhs = scale_index(rhs, pointer_step(lhs.type));
+            expr_result_ = emit_binop(icode_op::ADD, lhs, rhs, lhs.type);
+            return;
+        }
+        if (lhs.type && lhs.type->is_integer() && rhs.type && rhs.type->is_ptr()) {
+            lhs = scale_index(lhs, pointer_step(rhs.type));
+            expr_result_ = emit_binop(icode_op::ADD, rhs, lhs, rhs.type);
+            return;
+        }
+    } else if (e.op == bin_op::SUB) {
+        if (lhs.type && lhs.type->is_ptr() && rhs.type && rhs.type->is_integer()) {
+            rhs = scale_index(rhs, pointer_step(lhs.type));
+            expr_result_ = emit_binop(icode_op::SUB, lhs, rhs, lhs.type);
+            return;
+        }
+        if (lhs.type && lhs.type->is_ptr() && rhs.type && rhs.type->is_ptr()) {
+            operand raw = emit_binop(icode_op::SUB, lhs, rhs, type::make_int());
+            int scale = pointer_step(lhs.type);
+            if (scale > 1)
+                raw = emit_binop(icode_op::DIV, raw,
+                                 operand::make_int(scale, raw.type), raw.type);
+            expr_result_ = raw;
+            return;
+        }
+    }
+
     type_ptr expr_type = e.type;
     if (!expr_type && lhs.type && rhs.type &&
         lhs.type->is_arith() && rhs.type->is_arith())
@@ -174,6 +306,7 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
             op.type = target;
             return op;
         }
+        op = coerce_const_operand(op, target);
         if (op.kind == operand_kind::INT_CONST ||
             op.kind == operand_kind::FLOAT_CONST) {
             op.type = target;
@@ -219,6 +352,7 @@ void ir_gen::gen_binary_compare(binary_expr &e) {
             op.type = target;
             return op;
         }
+        op = coerce_const_operand(op, target);
         if (op.kind == operand_kind::INT_CONST ||
             op.kind == operand_kind::FLOAT_CONST) {
             op.type = target;
@@ -296,6 +430,7 @@ void ir_gen::gen_compound_assign(binary_expr &e) {
             op.type = target;
             return op;
         }
+        op = coerce_const_operand(op, target);
         if (op.kind == operand_kind::INT_CONST ||
             op.kind == operand_kind::FLOAT_CONST) {
             op.type = target;
@@ -311,7 +446,12 @@ void ir_gen::gen_compound_assign(binary_expr &e) {
         rhs_for_op = coerce_operand(rhs, op_type);
     }
 
-    operand tmp = emit_binop(bin_op_to_icode(e.op), lhs_for_op, rhs_for_op, op_type);
+    bool is_float = op_type &&
+                    (op_type->kind == type_kind::FLOAT ||
+                     op_type->kind == type_kind::DOUBLE);
+    operand tmp = emit_binop(is_float ? float_op_to_icode(e.op)
+                                      : bin_op_to_icode(e.op),
+                             lhs_for_op, rhs_for_op, op_type);
     expr_result_ = gen_lvalue_write(*e.left, tmp);
 }
 
@@ -405,6 +545,19 @@ void ir_gen::visit(cast_expr &e) {
 }
 
 void ir_gen::visit(call_expr &e) {
+    std::string direct_func_name;
+    operand indirect_callee;
+    if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
+        if (id->sym && id->sym->kind == sym_kind::FUNC)
+            direct_func_name = fixed_float_call_name(id->name);
+    }
+    if (direct_func_name.empty() && e.callee) {
+        // Evaluate an indirect callee before SENDs.  On register ABIs the SEND
+        // sequence materializes arguments in HL/DE/A, and evaluating a member
+        // function pointer afterwards would clobber those registers.
+        indirect_callee = gen_expr(*e.callee);
+    }
+
     std::vector<operand> arg_ops;
     for (auto &a : e.args)
         arg_ops.push_back(gen_expr(*a));
@@ -414,10 +567,6 @@ void ir_gen::visit(call_expr &e) {
     // no direct named callee symbol (for example, through a function
     // pointer), so the type-level variadic bit also participates here.
     call_abi c_abi = call_abi::DEFAULT;
-    if (auto *id = dynamic_cast<ident_expr*>(e.callee.get()))
-        if (id->sym && id->sym->kind == sym_kind::FUNC)
-            c_abi = id->sym->abi;
-
     const type *fn_type = nullptr;
     if (e.callee && e.callee->type) {
         if (e.callee->type->is_func())
@@ -425,6 +574,16 @@ void ir_gen::visit(call_expr &e) {
         else if (e.callee->type->is_ptr() && e.callee->type->base &&
                  e.callee->type->base->is_func())
             fn_type = e.callee->type->base.get();
+    }
+
+    if (fn_type && fn_type->func_abi != call_abi::DEFAULT)
+        c_abi = fn_type->func_abi;
+
+    if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
+        if (id->sym && id->sym->kind == sym_kind::FUNC &&
+            (id->sym->abi != call_abi::DEFAULT || c_abi == call_abi::DEFAULT)) {
+            c_abi = id->sym->abi;
+        }
     }
 
     if (fn_type && fn_type->variadic && c_abi == call_abi::DEFAULT)
@@ -479,14 +638,10 @@ void ir_gen::visit(call_expr &e) {
     ic.result     = result;
     ic.callee_abi = c_abi;
 
-    if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
-        if (id->sym && id->sym->kind == sym_kind::FUNC)
-            ic.func_name = id->name;
-        else
-            ic.left = gen_expr(*e.callee);
-    } else {
-        ic.left = gen_expr(*e.callee);
-    }
+    if (!direct_func_name.empty())
+        ic.func_name = direct_func_name;
+    else
+        ic.left = indirect_callee;
 
     emit(ic);
     expr_result_ = result;

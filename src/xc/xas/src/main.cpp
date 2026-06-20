@@ -36,6 +36,30 @@ namespace xas {
     std::unique_ptr<emitter> make_elf_emitter(const std::string& path);
 }
 
+namespace {
+
+    std::string format_predefines(const std::vector<std::string>& defines,
+                                  xas::output_format format)
+    {
+        std::string out;
+        for (const std::string& def : defines) {
+            if (def.empty())
+                continue;
+            size_t eq = def.find('=');
+            std::string name = eq == std::string::npos ? def : def.substr(0, eq);
+            std::string value = eq == std::string::npos ? "1" : def.substr(eq + 1);
+            if (name.empty())
+                continue;
+            if (format == xas::output_format::gnu)
+                out += ".set " + name + ", " + value + "\n";
+            else
+                out += ".define " + name + " = " + value + "\n";
+        }
+        return out;
+    }
+
+} // namespace
+
 int main(int argc, char** argv)
 {
     try {
@@ -84,6 +108,7 @@ int main(int argc, char** argv)
                     std::cerr << "xas: error: cannot create '" << opts.output << "'\n";
                     return 1;
                 }
+                out << format_predefines(opts.defines, *opts.format);
                 out << document_text;
                 return 0;
             }
@@ -99,6 +124,7 @@ int main(int argc, char** argv)
                 std::cerr << "xas: error: cannot create '" << opts.output << "'\n";
                 return 1;
             }
+            out << format_predefines(opts.defines, *opts.format);
             xas::write_formatted_document(out, document);
             return 0;
         }

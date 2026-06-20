@@ -12,12 +12,10 @@ _main:
 	ld	hl, #-14
 	add	hl, sp
 	ld	sp, hl
-	ld	hl, #65
-	ld	-1(ix), l
-	ld	0(ix), h
-	ld	hl, #65
-	ld	-2(ix), l
-	ld	-1(ix), h
+	ld	a, #65
+	ld	-1(ix), a
+	ld	a, #65
+	ld	-2(ix), a
 	ld	hl, #1
 	ld	-4(ix), l
 	ld	-3(ix), h

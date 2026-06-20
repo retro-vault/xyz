@@ -81,6 +81,7 @@ private:
     bool                     has_lookahead2_ = false;
     diag_engine             &diag_;
     std::vector<std::string> file_strings_; // persistent storage for #line filenames
+    int                      attr_depth_ = 0; // only combine ]] while inside [[...]]
 
     char cur()  const;
     char peek_char(int offset = 1) const;

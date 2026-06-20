@@ -10,10 +10,90 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "frontend/types.h"
+#include <cmath>
+#include <cstring>
+#include <cstdint>
 #include <stdexcept>
 #include <sstream>
 
 namespace xcc {
+
+namespace {
+
+float_format g_float_format = float_format::IEEE32;
+
+int64_t mask_to_bytes(int64_t value, int bytes) {
+    if (bytes <= 0 || bytes >= 8)
+        return value;
+    const uint64_t mask = (uint64_t{1} << (bytes * 8)) - 1;
+    return static_cast<int64_t>(static_cast<uint64_t>(value) & mask);
+}
+
+} // namespace
+
+void set_float_format(float_format format) {
+    g_float_format = format;
+}
+
+float_format get_float_format() {
+    return g_float_format;
+}
+
+const char *float_format_name(float_format format) {
+    switch (format) {
+    case float_format::IEEE32:     return "ieee32";
+    case float_format::FIXED8_8:   return "fixed8_8";
+    case float_format::FIXED16_16: return "fixed16_16";
+    case float_format::FIXED24_8:  return "fixed24_8";
+    }
+    return "ieee32";
+}
+
+int float_format_size(float_format format) {
+    switch (format) {
+    case float_format::IEEE32:     return 4;
+    case float_format::FIXED8_8:   return 2;
+    case float_format::FIXED16_16: return 4;
+    case float_format::FIXED24_8:  return 4;
+    }
+    return 4;
+}
+
+int float_format_fraction_bits(float_format format) {
+    switch (format) {
+    case float_format::FIXED8_8:   return 8;
+    case float_format::FIXED16_16: return 16;
+    case float_format::FIXED24_8:  return 8;
+    case float_format::IEEE32:
+        return 0;
+    }
+    return 0;
+}
+
+int64_t encode_float_constant(double value, type_ptr target_type) {
+    if (!target_type || target_type->kind == type_kind::DOUBLE ||
+        target_type->size() == 8) {
+        uint64_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return static_cast<int64_t>(bits);
+    }
+
+    const float_format format =
+        target_type->kind == type_kind::FLOAT ? get_float_format()
+                                              : float_format::IEEE32;
+    if (format == float_format::IEEE32) {
+        uint32_t bits = 0;
+        float narrowed = static_cast<float>(value);
+        std::memcpy(&bits, &narrowed, sizeof(bits));
+        return bits;
+    }
+
+    const int frac_bits = float_format_fraction_bits(format);
+    const int bytes = float_format_size(format);
+    const double scaled = std::ldexp(value, frac_bits);
+    const int64_t raw = static_cast<int64_t>(std::llround(scaled));
+    return mask_to_bytes(raw, bytes);
+}
 
 bool type::is_integer() const {
     switch (kind) {
@@ -70,7 +150,7 @@ int type::size() const {
     case type_kind::ULONG:   return 4;
     case type_kind::LLONG:   return 8;
     case type_kind::ULLONG:  return 8;
-    case type_kind::FLOAT:   return 4;
+    case type_kind::FLOAT:   return float_format_size(get_float_format());
     case type_kind::DOUBLE:  return 8;
     case type_kind::COMPLEX: return 8; // re+im, each a 4-byte soft-float
     case type_kind::POINTER: return 2;

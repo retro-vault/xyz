@@ -29,6 +29,7 @@ XAS="${XAS:-}"
 RUNTIME_DIR="$ROOT_DIR/lib/runtime"
 LIBC_SRC_DIR="$REPO_ROOT/lib/libc/src"
 SYS_NONE_DIR="$REPO_ROOT/lib/sys/none"
+SYS_EMU_DIR="$REPO_ROOT/lib/sys/emu"
 
 PASS=0
 FAIL=0
@@ -122,6 +123,10 @@ add_sys_none_module() {
     add_module "$SYS_NONE_DIR/$1"
 }
 
+add_sys_emu_module() {
+    add_module "$SYS_EMU_DIR/$1"
+}
+
 add_exec_tool_module() {
     add_module "$ROOT_DIR/tests/tools/z80emu/$1"
 }
@@ -138,14 +143,14 @@ resolve_libc_modules() {
             add_libc_module "stdlib/aligned_alloc.s"
             add_libc_module "stdlib/heap_core.s"
             add_libc_module "string/memcpy.s"
-            add_sys_none_module "sys_sbrk.s"
+            add_sys_none_module "heap_region.s"
             add_runtime_module "int16/mulint.s"
             add_runtime_module "int16/divunsigned.s"
             ;;
         _malloc|_calloc|_realloc|_free)
             add_libc_module "stdlib/heap_core.s"
             add_libc_module "string/memcpy.s"
-            add_sys_none_module "sys_sbrk.s"
+            add_sys_none_module "heap_region.s"
             add_runtime_module "int16/mulint.s"
             add_runtime_module "int16/divunsigned.s"
             ;;
@@ -171,7 +176,7 @@ resolve_libc_modules() {
             ;;
         _abort|_atexit|_exit|__Exit|_at_quick_exit|_quick_exit)
             add_libc_module "stdlib/exit_core.s"
-            add_exec_tool_module "sys_exit.s"
+            add_sys_emu_module "_exit.s"
             add_runtime_module "jumps/call_bc_runtime.s"
             ;;
         _atof)
@@ -569,7 +574,7 @@ resolve_libc_modules() {
             add_libc_module "threads/tss_get.s"
             add_libc_module "threads/tss_set.s"
             add_libc_module "stdlib/exit_core.s"
-            add_exec_tool_module "sys_exit.s"
+            add_sys_emu_module "_exit.s"
             add_runtime_module "jumps/call_bc_runtime.s"
             ;;
             esac
@@ -1074,6 +1079,9 @@ build_runner
 mkdir -p "$EXEC_BUILD"
 
 while IFS= read -r c_file; do
+    if [[ -n "${EXEC_TEST_FILTER:-}" && "$c_file" != *"$EXEC_TEST_FILTER"* ]]; then
+        continue
+    fi
     while IFS= read -r opt_level; do
         [[ -n "$opt_level" ]] || continue
         run_one "$c_file" "sdasz80" "$opt_level"

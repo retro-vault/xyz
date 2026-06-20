@@ -112,7 +112,7 @@ YOS_SUBDIR := src/yos
 XTOOLS_SUBDIRS := lib tools src/xc/xld src/xc/xgdb src/xc/xcc src/xc/xopt src/xc/xas src/xc/xar src/xc/xobjcopy lib/libc
 RUNTIME_ARCHIVE_NAME := libruntime.a
 FIXED_ARCHIVE_NAME := libfixed.a
-STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3)
+STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3 emu)
 PLATFORM_ARCHIVE_NAME := lib$(PLATFORM).a
 PLATFORM_SYS_DIR := $(ROOT)/lib/sys/$(PLATFORM)
 TOOLCHAIN_RUNTIME_BUILD_DIR := $(BUILD_DIR)/toolchain-runtime
@@ -223,8 +223,10 @@ stage-xcc-support:
 	        $(ROOT)/src/xc/xcc/lib/runtime/24_8 \
 	        -name '*.s' | sort); do \
 	    stem="$$(basename "$${src%.*}")"; \
+	    opt="$(TOOLCHAIN_FIXED_BUILD_DIR)/$$stem.opt.s"; \
 	    rel="$(TOOLCHAIN_FIXED_BUILD_DIR)/$$stem.rel"; \
-	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$src" -o "$$rel"; \
+	    $(HOST_BIN_DIR)/xopt -O3 "$$src" -o "$$opt"; \
+	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$opt" -o "$$rel"; \
 	done
 	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(FIXED_ARCHIVE_NAME) $(TOOLCHAIN_FIXED_BUILD_DIR)/*.rel
 	@for platform in $(STAGED_PLATFORMS); do \

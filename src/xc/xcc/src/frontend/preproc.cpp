@@ -11,9 +11,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 namespace xcc {
 
@@ -63,7 +65,27 @@ std::string preprocessor::read_file(const std::string &path) {
     if (!f) return "";
     std::ostringstream ss;
     ss << f.rdbuf();
-    return ss.str();
+    std::string text = ss.str();
+    if (text.size() >= 3 &&
+        (unsigned char)text[0] == 0xef &&
+        (unsigned char)text[1] == 0xbb &&
+        (unsigned char)text[2] == 0xbf) {
+        text.erase(0, 3);
+    }
+    return text;
+}
+
+static std::string canonical_include_key(const std::string &path) {
+    std::error_code ec;
+    auto canonical = std::filesystem::weakly_canonical(path, ec);
+    if (!ec)
+        return canonical.string();
+
+    auto absolute = std::filesystem::absolute(path, ec);
+    if (!ec)
+        return absolute.lexically_normal().string();
+
+    return std::filesystem::path(path).lexically_normal().string();
 }
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -79,6 +101,14 @@ preprocessor::preprocessor(diag_engine                   &diag,
     predef("__STDC__",                 "1");
     predef("__STDC_HOSTED__",          "1");
     predef("__STDC_VERSION__",         "202311L"); // C23
+    predef("__XCC__",                  "1");
+    predef("__xcc__",                  "1");
+    // xcc accepts the common GNU attributes and keywords used by portable C
+    // libraries, so advertise a conservative GCC-compatible preprocessor face.
+    predef("__GNUC__",                 "4");
+    predef("__GNUC_MINOR__",           "2");
+    predef("__GNUC_PATCHLEVEL__",      "1");
+    predef("__VERSION__",              "\"xcc\"");
     predef("__CHAR_BIT__",             "8");
     predef("__SCHAR_MAX__",            "127");
     predef("__SHRT_MAX__",             "32767");
@@ -118,8 +148,8 @@ preprocessor::preprocessor(diag_engine                   &diag,
     predef("__SIZE_MAX__",             "65535U");    // sizeof(size_t)=2 on Z80
     predef("__PTRDIFF_MAX__",          "32767");
     predef("__WCHAR_MAX__",            "32767");
-    // C23 feature-test macros
-    predef("__STDC_NO_VLA__",          "1");         // VLAs optional in C23
+    // C23 feature-test macros.  Do not define __STDC_NO_VLA__: xcc supports
+    // basic block-scope VLAs and VLA parameters.
     predef("__STDC_UTF_16__",          "1");
     predef("__STDC_UTF_32__",          "1");
 
@@ -829,6 +859,8 @@ void preprocessor::process_text(const std::string &source,
         diag_.fatal("#include too deeply nested (max 32)");
     }
 
+    const std::string file_key = canonical_include_key(filename);
+
     // Conditional stack: each entry = {active, branch_taken, has_else}
     struct cond_frame {
         bool active;       // are we currently emitting lines?
@@ -873,27 +905,35 @@ void preprocessor::process_text(const std::string &source,
 
     emit_line_marker(1, filename);
 
+    std::string input = source;
+    if (input.size() >= 3 &&
+        (unsigned char)input[0] == 0xef &&
+        (unsigned char)input[1] == 0xbb &&
+        (unsigned char)input[2] == 0xbf) {
+        input.erase(0, 3);
+    }
+
     // Strip multi-line block comments before line-by-line processing.
     // Replaces comment content with spaces, preserving newlines for line numbers.
     std::string stripped;
-    stripped.reserve(source.size());
+    stripped.reserve(input.size());
     {
-        size_t n = source.size();
+        size_t n = input.size();
         size_t i = 0;
         while (i < n) {
-            if (i + 1 < n && source[i] == '/' && source[i+1] == '*') {
+            if (i + 1 < n && input[i] == '/' && input[i+1] == '*') {
                 i += 2;
                 while (i < n) {
-                    if (i + 1 < n && source[i] == '*' && source[i+1] == '/') {
+                    if (i + 1 < n && input[i] == '*' && input[i+1] == '/') {
                         i += 2;
                         break;
                     }
-                    stripped += (source[i] == '\n') ? '\n' : ' ';
+                    stripped += (input[i] == '\n') ? '\n' : ' ';
                     ++i;
                 }
                 stripped += ' ';
             } else {
-                stripped += source[i++];
+                stripped += input[i++];
             }
         }
     }
@@ -942,10 +982,10 @@ void preprocessor::process_text(const std::string &source,
         // Preprocessor directive?
         if (!trimmed.empty() && trimmed[0] == '#') {
             size_t p = 1;
-            while (p < trimmed.size() && trimmed[p] == ' ') ++p;
+            while (p < trimmed.size() && (trimmed[p] == ' ' || trimmed[p] == '\t')) ++p;
             std::string dir = read_ident(trimmed, p);
             p += dir.size();
-            while (p < trimmed.size() && trimmed[p] == ' ') ++p;
+            while (p < trimmed.size() && (trimmed[p] == ' ' || trimmed[p] == '\t')) ++p;
             // For #define, preserve __LINE__/__FILE__ verbatim so they resolve
             // at expansion time; for all other directives, substitute now.
             std::string raw_rest = pp_trim(trimmed.substr(p));
@@ -1123,6 +1163,11 @@ void preprocessor::process_text(const std::string &source,
                 if (path.empty())
                     diag_.fatal(filename.c_str(), lineno,
                                 "cannot find include file '%s'", inc_name.c_str());
+                std::string include_key = canonical_include_key(path);
+                if (pragma_once_files_.count(include_key)) {
+                    emit_line_marker(lineno + 1, filename);
+                    continue;
+                }
                 std::string inc_src = read_file(path);
                 process_text(inc_src, path, out, depth + 1);
                 // Resume marker after return
@@ -1136,12 +1181,20 @@ void preprocessor::process_text(const std::string &source,
 
             // C23: #warning emits a diagnostic but continues compilation.
             if (dir == "warning") {
-                diag_.warning(filename.c_str(), lineno, "#warning %s", rest.c_str());
+                diag_.warning(warning_group::CPP, filename.c_str(), lineno,
+                              "#warning %s", rest.c_str());
+                if (emitting()) emit_line_marker(lineno + 1, filename);
                 continue;
             }
 
             if (dir == "pragma") {
-                // Silently ignored
+                if (pp_trim(rest) == "once") {
+                    pragma_once_files_.insert(file_key);
+                    if (emitting()) emit_line_marker(lineno + 1, filename);
+                    continue;
+                }
+                diag_.handle_pragma(filename.c_str(), lineno, rest);
+                if (emitting()) emit_line_marker(lineno + 1, filename);
                 continue;
             }
 
@@ -1161,7 +1214,7 @@ void preprocessor::process_text(const std::string &source,
             }
 
             // Unknown directive: warn and ignore
-            diag_.warning(filename.c_str(), lineno,
+            diag_.warning(warning_group::CPP, filename.c_str(), lineno,
                           "unknown preprocessor directive '#%s'", dir.c_str());
             continue;
         }

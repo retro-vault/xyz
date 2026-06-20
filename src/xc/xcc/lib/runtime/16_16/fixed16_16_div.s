@@ -31,6 +31,25 @@ _fixed16_16_div::
         ld      ix,#0
         add     ix,sp
 
+        ; Exact positive integer divisors 2, 3, 4, and 8 are common in fixed
+        ; code and do not need the full widened restoring divider.
+        ld      a,4(ix)
+        or      5(ix)
+        jr      nz,.check_zero
+        ld      a,7(ix)
+        or      a
+        jr      nz,.check_zero
+        ld      a,6(ix)
+        cp      #2
+        jp      z,.div_by_2
+        cp      #3
+        jp      z,.div_by_3
+        cp      #4
+        jp      z,.div_by_4
+        cp      #8
+        jp      z,.div_by_8
+
+.check_zero:
         ld      a,4(ix)
         or      5(ix)
         or      6(ix)
@@ -70,16 +89,19 @@ _fixed16_16_div::
         ld      h,a
 .a_abs_done:
 
-        ; q = abs(a) << 16
+        ; q = abs(a) << 32.  This pre-aligns the highest possible
+        ; (abs(a) << 16) numerator bit with the 64-bit divider's top bit,
+        ; letting the restoring divider run 48 useful iterations instead
+        ; of spending 16 cycles through leading zeros.
         xor     a
         ld      -9(ix),a
         ld      -8(ix),a
-        ld      -7(ix),e
-        ld      -6(ix),d
-        ld      -5(ix),l
-        ld      -4(ix),h
-        ld      -3(ix),a
-        ld      -2(ix),a
+        ld      -7(ix),a
+        ld      -6(ix),a
+        ld      -5(ix),e
+        ld      -4(ix),d
+        ld      -3(ix),l
+        ld      -2(ix),h
 
         ld      a,4(ix)
         ld      -17(ix),a
@@ -124,7 +146,7 @@ _fixed16_16_div::
         ld      -19(ix),a
         ld      -18(ix),a
 
-        ld      b,#64
+        ld      b,#48
 .div_loop:
         sla     -9(ix)
         rl      -8(ix)
@@ -207,7 +229,7 @@ _fixed16_16_div::
 
         ld      a,-1(ix)
         or      a
-        jr      nz,.ret_neg
+        jp      nz,.ret_neg
 
         ld      e,-9(ix)
         ld      d,-8(ix)
@@ -215,6 +237,106 @@ _fixed16_16_div::
         ld      h,-6(ix)
         ld      sp,ix
         pop     ix
+        ret
+
+.div_by_2:
+        bit     7,h
+        jr      z,.div_by_2_shift
+        call    .neg_dehl
+        call    .shr_dehl_1
+        call    .neg_dehl
+        pop     ix
+        ret
+.div_by_2_shift:
+        call    .shr_dehl_1
+        pop     ix
+        ret
+
+.div_by_4:
+        bit     7,h
+        jr      z,.div_by_4_shift
+        call    .neg_dehl
+        call    .shr_dehl_1
+        call    .shr_dehl_1
+        call    .neg_dehl
+        pop     ix
+        ret
+.div_by_4_shift:
+        call    .shr_dehl_1
+        call    .shr_dehl_1
+        pop     ix
+        ret
+
+.div_by_8:
+        bit     7,h
+        jr      z,.div_by_8_shift
+        call    .neg_dehl
+        call    .shr_dehl_1
+        call    .shr_dehl_1
+        call    .shr_dehl_1
+        call    .neg_dehl
+        pop     ix
+        ret
+.div_by_8_shift:
+        call    .shr_dehl_1
+        call    .shr_dehl_1
+        call    .shr_dehl_1
+        pop     ix
+        ret
+
+.div_by_3:
+        bit     7,h
+        jr      z,.div_by_3_unsigned
+        call    .neg_dehl
+        call    .u32_div3
+        call    .neg_dehl
+        pop     ix
+        ret
+.div_by_3_unsigned:
+        call    .u32_div3
+        pop     ix
+        ret
+
+.shr_dehl_1:
+        srl     h
+        rr      l
+        rr      d
+        rr      e
+        ret
+
+.u32_div3:
+        ld      c,#0
+        ld      b,#32
+.u32_div3_loop:
+        sla     e
+        rl      d
+        rl      l
+        rl      h
+        ld      a,c
+        rla
+        ld      c,a
+        cp      #3
+        jr      c,.u32_div3_next
+        sub     a,#3
+        ld      c,a
+        set     0,e
+.u32_div3_next:
+        djnz    .u32_div3_loop
+        ret
+
+.neg_dehl:
+        xor     a
+        sub     a,e
+        ld      e,a
+        ld      a,#0
+        sbc     a,d
+        ld      d,a
+        ld      a,#0
+        sbc     a,l
+        ld      l,a
+        ld      a,#0
+        sbc     a,h
+        ld      h,a
         ret
 
 .ret_neg:

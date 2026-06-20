@@ -28,6 +28,20 @@ _fixed8_8_div::
         ret
 
 .nonzero:
+        ld      a,e
+        or      a
+        jr      nz,.generic_div
+        ld      a,d
+        cp      #2
+        jp      z,.div_by_2
+        cp      #3
+        jp      z,.div_by_3
+        cp      #4
+        jp      z,.div_by_4
+        cp      #8
+        jp      z,.div_by_8
+
+.generic_div:
         push    ix
         ld      ix,#0
         add     ix,sp
@@ -120,4 +134,94 @@ _fixed8_8_div::
         ld      d,a
 .done:
         pop     ix
+        ret
+
+.div_by_2:
+        bit     7,h
+        jr      z,.div_by_2_shift
+        call    .neg_hl
+        call    .shr_hl_1
+        call    .neg_hl
+        ex      de,hl
+        ret
+.div_by_2_shift:
+        call    .shr_hl_1
+        ex      de,hl
+        ret
+
+.div_by_4:
+        bit     7,h
+        jr      z,.div_by_4_shift
+        call    .neg_hl
+        call    .shr_hl_1
+        call    .shr_hl_1
+        call    .neg_hl
+        ex      de,hl
+        ret
+.div_by_4_shift:
+        call    .shr_hl_1
+        call    .shr_hl_1
+        ex      de,hl
+        ret
+
+.div_by_8:
+        bit     7,h
+        jr      z,.div_by_8_shift
+        call    .neg_hl
+        call    .shr_hl_1
+        call    .shr_hl_1
+        call    .shr_hl_1
+        call    .neg_hl
+        ex      de,hl
+        ret
+.div_by_8_shift:
+        call    .shr_hl_1
+        call    .shr_hl_1
+        call    .shr_hl_1
+        ex      de,hl
+        ret
+
+.div_by_3:
+        bit     7,h
+        jr      z,.div_by_3_unsigned
+        call    .neg_hl
+        call    .u16_div3
+        call    .neg_hl
+        ex      de,hl
+        ret
+.div_by_3_unsigned:
+        call    .u16_div3
+        ex      de,hl
+        ret
+
+.shr_hl_1:
+        srl     h
+        rr      l
+        ret
+
+.u16_div3:
+        ld      c,#0
+        ld      b,#16
+.u16_div3_loop:
+        sla     l
+        rl      h
+        ld      a,c
+        rla
+        ld      c,a
+        cp      #3
+        jr      c,.u16_div3_next
+        sub     a,#3
+        ld      c,a
+        set     0,l
+.u16_div3_next:
+        djnz    .u16_div3_loop
+        ret
+
+.neg_hl:
+        xor     a
+        sub     a,l
+        ld      l,a
+        ld      a,#0
+        sbc     a,h
+        ld      h,a
         ret

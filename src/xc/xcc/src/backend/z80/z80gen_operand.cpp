@@ -12,21 +12,24 @@ namespace xcc {
 namespace {
 
 uint16_t fp_const_word(const operand &op, int word_index) {
-    if (op.type && op.type->size() == 8) {
+    const int size = op.type ? op.type->size() : 8;
+    if (size == 8) {
         if (word_index < 0 || word_index >= 4)
             return 0;
-        uint64_t bits = 0;
-        double value = op.fval;
-        std::memcpy(&bits, &value, sizeof(bits));
+        const uint64_t bits =
+            static_cast<uint64_t>(encode_float_constant(op.fval, op.type));
         return static_cast<uint16_t>((bits >> (word_index * 16)) & 0xffffu);
     }
 
     if (word_index < 0 || word_index >= 2)
         return 0;
-    uint32_t bits = 0;
-    float value = static_cast<float>(op.fval);
-    std::memcpy(&bits, &value, sizeof(bits));
+    const uint32_t bits =
+        static_cast<uint32_t>(encode_float_constant(op.fval, op.type));
     return static_cast<uint16_t>((bits >> (word_index * 16)) & 0xffffu);
+}
+
+bool is_16bit_sfr_port(const operand &op) {
+    return op.is_sfr && op.sfr_port > 0xff;
 }
 
 } // namespace
@@ -85,12 +88,16 @@ void z80_gen::store_frame_byte(int off, char src) {
         return;
     }
 
+    // Deep IX offsets need HL as an address scratch. Preserve it so callers can
+    // safely spill multi-byte register arguments one byte at a time.
     emit_line("push\taf");
     emit_line("push\tbc");
+    emit_line("push\thl");
     if (src != 'a')
         emit_line("ld\ta, %c", src);
     load_ix_addr_hl(off);
     emit_line("ld\t(hl), a");
+    emit_line("pop\thl");
     emit_line("pop\tbc");
     emit_line("pop\taf");
 }
@@ -352,6 +359,10 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
     case operand_kind::INT_CONST:
         emit_line("ld\t%s, %s", r.name, asm_.imm(op.ival).c_str());
         break;
+    case operand_kind::FLOAT_CONST:
+        emit_line("ld\t%s, %s", r.name,
+                  asm_.imm(encode_float_constant(op.fval, op.type) & 0xFFFF).c_str());
+        break;
     case operand_kind::SYMBOL:
         if (op.is_global && op.is_tls) {
             int off = tls_offsets_.count(mangle(op.name)) ? tls_offsets_.at(mangle(op.name)) : 0;
@@ -602,7 +613,14 @@ void z80_gen::load_a(const operand &op) {
 
     // [[sdcc::sfr(N)]]: read via IN instruction
     if (op.is_sfr && op.sfr_port >= 0) {
-        emit_line("in\ta, (%s)", asm_.imm(op.sfr_port).c_str());
+        if (is_16bit_sfr_port(op)) {
+            emit_line("push\tbc");
+            emit_line("ld\tbc, %s", asm_.imm(op.sfr_port).c_str());
+            emit_line("in\ta, (c)");
+            emit_line("pop\tbc");
+        } else {
+            emit_line("in\ta, (%s)", asm_.imm(op.sfr_port).c_str());
+        }
         invalidate_a_cache();
         return;
     }
@@ -715,7 +733,14 @@ void z80_gen::store_a(const operand &op) {
     const std::string cache_key = a_load_cache_key(op);
     // [[sdcc::sfr(N)]]: write via OUT instruction
     if (op.is_sfr && op.sfr_port >= 0) {
-        emit_line("out\t(%s), a", asm_.imm(op.sfr_port).c_str());
+        if (is_16bit_sfr_port(op)) {
+            emit_line("push\tbc");
+            emit_line("ld\tbc, %s", asm_.imm(op.sfr_port).c_str());
+            emit_line("out\t(c), a");
+            emit_line("pop\tbc");
+        } else {
+            emit_line("out\t(%s), a", asm_.imm(op.sfr_port).c_str());
+        }
         invalidate_a_cache();
         return;
     }

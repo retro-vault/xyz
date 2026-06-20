@@ -194,7 +194,8 @@ private:
     decl_ptr parse_function_definition(
         type_ptr ret, std::string name, storage_class sc,
         std::vector<std::unique_ptr<param_decl>> params,
-        bool variadic, source_loc loc, attr_list attrs = {});
+        bool variadic, source_loc loc, attr_list attrs = {},
+        call_abi abi = call_abi::DEFAULT);
     std::vector<decl_ptr> parse_declaration(
         bool allow_function_def = false);
     std::unique_ptr<var_decl> parse_var_decl(
@@ -218,6 +219,10 @@ private:
 
     // ----- initializer parsing ---------------------------------------
     expr_ptr parse_initializer(type_ptr type);
+    void complete_unsized_char_array_from_string(type_ptr t,
+                                                 const expr_ptr &init);
+    void complete_unsized_array_from_initializer(type_ptr t,
+                                                 const expr_ptr &init);
 
     // ----- expression parsing (precedence climbing) ------------------
     expr_ptr parse_expression();
@@ -254,6 +259,13 @@ private:
     // without consuming anything.
     //
     attr_list parse_attr_list();
+
+    //
+    // Apply ABI-bearing attributes such as [[sdcc::sdccall(N)]] to the
+    // nearest function type in a declarator.  This is what preserves the
+    // calling convention for function pointer typedefs and prototypes.
+    //
+    void apply_call_abi_attrs_to_type(type_ptr t, const attr_list &attrs);
 
     //
     // Return true if the current token can begin a type-specifier,

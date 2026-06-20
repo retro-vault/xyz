@@ -141,6 +141,7 @@ private:
     int temp_stack_bytes_ = 0;
     int temp_frame_bytes_ = 0;
     size_t cur_ic_index_ = 0;
+    size_t local_label_counter_ = 0;
     bool direct_call_return_pending_ = false;
     operand direct_call_return_value_;
     pair_cache_state hl_cache_;
@@ -177,6 +178,7 @@ private:
     // .globl to export the symbol to the linker.
     //
     void emit_label(const std::string &name, bool global = false);
+    std::string fresh_local_label(const char *prefix);
 
     void emit_comment(const char *fmt, ...);
     void invalidate_pair_cache();
