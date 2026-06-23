@@ -1,0 +1,43 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	b, h
+	ld	c, l
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) register param handled by prologue
+	ld	h, b
+	ld	l, c
+	add	hl, hl
+	add	hl, hl
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	h, b
+	ld	l, c
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	e, -4(ix)
+	ld	d, -3(ix)
+	add	hl, de
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

@@ -1,0 +1,86 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _zero_test
+_zero_test:
+	; sdcccall(1) prologue: zero_test (locals=10, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	hl, #-14
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param n at -10(ix)
+	.globl __mul16
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	push	hl
+	ld	hl, #2
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	ex	de, hl
+	ld	hl, #0
+	add	hl, sp
+	or	a, a
+	sbc	hl, de
+	ld	sp, hl
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	.globl __mul16
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	push	hl
+	ld	hl, #2
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	ex	de, hl
+	ld	hl, #0
+	add	hl, sp
+	or	a, a
+	sbc	hl, de
+	ld	sp, hl
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	-12(ix), l
+	ld	-11(ix), h
+__zero_test_end:
+	; epilogue: zero_test
+	ld	sp, ix
+	pop	ix
+	ret

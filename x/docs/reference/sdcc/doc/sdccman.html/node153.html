@@ -1,0 +1,87 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8.2 Adding New Devices to the Port </TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node154.html">
+<LINK REL="previous" HREF="node152.html">
+<LINK REL="next" HREF="node154.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node154.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node152.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1887"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1889"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node154.html">4.8.3 Interrupt Code</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node152.html">4.8.1 PIC Code Pages and</A>
+ &nbsp; <B>  <A ID="tex2html1888"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1890"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00582000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Adding New Devices to the Port </A>
+</H2>
+
+<P>
+Adding support for a new 14&nbsp;bit PIC MCU requires the following steps:
+
+<OL>
+<LI>Create a new device description.
+<BR>
+Each device is described in two files: pic16f*.h and pic16f*.c.
+These files primarily define SFRs, structs to access their bits, and
+symbolic configuration options. Both files can be generated from gputils'
+.inc files using the perl script <SPAN  CLASS="texttt">support/scripts/inc2h.pl</SPAN>.
+This file also contains further instructions on how to proceed.
+</LI>
+<LI>Copy the .h file into SDCC's include path and either add the .c file
+to your project or copy it to <SPAN  CLASS="texttt">device/lib/pic/libdev</SPAN>. Afterwards,
+rebuild and install the libraries.
+</LI>
+<LI>Edit pic14devices.txt in SDCC's include path (<SPAN  CLASS="texttt">device/include/pic/</SPAN>
+in the source tree or <SPAN  CLASS="texttt">/usr/local/share/sdcc/include/pic</SPAN> after
+installation).
+<BR>
+You need to add a device specification here to make the memory layout
+(code banks, RAM, aliased memory regions, ...) known to the compiler.
+Probably you can copy and modify an existing entry. The file format
+is documented at the top of the file.
+</LI>
+</OL>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

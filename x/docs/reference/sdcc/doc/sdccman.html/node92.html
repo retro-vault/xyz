@@ -1,0 +1,71 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.8.3 HC08 Interrupt Service Routines</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node93.html">
+<LINK REL="previous" HREF="node91.html">
+<LINK REL="next" HREF="node93.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node93.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node89.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node91.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1435"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1437"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node93.html">3.8.4 Z80, Z180 and eZ80</A>
+<B> Up:</B> <A
+ HREF="node89.html">3.8 Interrupt Service Routines</A>
+<B> Previous:</B> <A
+ HREF="node91.html">3.8.2 MCS51/DS390 Interrupt Service Routines</A>
+ &nbsp; <B>  <A ID="tex2html1436"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1438"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00483000000000000000"></A><A ID="1868"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> HC08 Interrupt Service Routines
+</H2>
+
+<P>
+Since the number of interrupts<A ID="1869"></A> available is
+chip specific and the interrupt vector table always ends at the last
+byte of memory, the interrupt numbers corresponds to the interrupt
+vectors in reverse order of address. For example, interrupt 1 will
+use the interrupt vector at 0xfffc, interrupt 2 will use the interrupt
+vector at 0xfffa, and so on. However, interrupt 0 (the reset vector
+at 0xfffe) is not redefinable in this way; instead see section <A HREF="node126.html#subsec:MCS51-Startup-Code">4.1.4</A>
+for details on customizing startup.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

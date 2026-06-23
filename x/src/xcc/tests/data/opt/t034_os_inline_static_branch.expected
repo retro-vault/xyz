@@ -1,0 +1,52 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_use_branch_helper
+_use_branch_helper:
+	; sdcccall(1) prologue: use_branch_helper (locals=0, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; keep incoming register arg t8 live in register for first use
+	ex	de, hl
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) register param handled by prologue
+	; materialize incoming arg temp t8 for later reuse
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, h
+	or	a, l
+	jr	z, __xcc_inl___xcc_L2_0
+__xcc_inl___xcc_L0_0:
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	inc	hl
+	ld	-2(ix), l
+	ld	-1(ix), h
+	jr	__xcc_inl_exit_0
+__xcc_inl___xcc_L2_0:
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	de, #2
+	add	hl, de
+	ld	-2(ix), l
+	ld	-1(ix), h
+__xcc_inl_exit_0:
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, l
+	xor	#3
+	ld	l, a
+	ld	a, h
+	xor	#0
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__use_branch_helper_end:
+	; epilogue: use_branch_helper
+	ld	sp, ix
+	pop	ix
+	ret

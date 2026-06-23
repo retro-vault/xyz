@@ -1,0 +1,87 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.9.3 Semaphore locking (mcs51/ds390)</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node99.html">
+<LINK REL="next" HREF="node101.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node101.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node97.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node99.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1470"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1472"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node101.html">3.10 Functions using private register</A>
+<B> Up:</B> <A
+ HREF="node97.html">3.9 Enabling and Disabling Interrupts</A>
+<B> Previous:</B> <A
+ HREF="node99.html">3.9.2 Enabling and Disabling Interrupts</A>
+ &nbsp; <B>  <A ID="tex2html1471"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1473"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00493000000000000000"></A><A ID="1946"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">3</SPAN> Semaphore locking (mcs51/ds390)
+</H2>
+
+<P>
+Some architectures (mcs51/ds390) have an atomic<A ID="1947"></A> bit
+test and clear instruction. These type of instructions are typically
+used in preemptive multitasking systems, where a routine f.e. claims
+the use of a data structure ('acquires a lock<A ID="1948"></A> on it'),
+makes some modifications and then releases the lock when the data
+structure is consistent again. The instruction may also be used if
+interrupt and non-interrupt code have to compete for a resource. With
+the atomic bit test and clear instruction interrupts<A ID="1949"></A>
+don't have to be disabled for the locking operation. 
+
+<P>
+SDCC generates this instruction if the source follows this pattern:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">volatile<A ID="1951"></A> bit resource_is_free;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">if (resource_is_free)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;resource_is_free=0;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;resource_is_free=1;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;} </SPAN>
+
+</BLOCKQUOTE>
+Note, mcs51 and ds390 support only an atomic<A ID="1960"></A> bit test
+and <SPAN  CLASS="textit">clear</SPAN> instruction (as opposed to atomic bit test and <SPAN  CLASS="textit">set).</SPAN>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

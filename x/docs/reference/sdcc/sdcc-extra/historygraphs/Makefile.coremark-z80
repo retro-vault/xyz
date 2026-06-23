@@ -1,0 +1,19 @@
+SOURCES = core_list_join.c core_main.c core_matrix.c core_state.c core_util.c core_portme.c
+OBJ = crt0.rel $(SOURCES:.c=.rel)
+SDCC = sdcc
+SDAS = sdas
+
+all: coremark
+
+clean:
+	rm -f *.ihx *.lnk *.lst *.noi *.rel *.sym *.size *.dot *.lk *.rst *.asm
+
+%.rel: %.c
+	$(SDCC) -c --std-c99 --fverbose-asm $(SDCCFLAGS) --fverbose-asm $< ||:
+
+crt0.rel: crt0.s
+	$(SDAS) -plosgff $<
+
+coremark: $(OBJ)
+	$(SDCC) $(SDCCFLAGS) --no-std-crt0 $(OBJ) -o image.ihx
+

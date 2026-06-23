@@ -1,0 +1,111 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.10 Adding New Devices to the Port</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node172.html">
+<LINK REL="previous" HREF="node170.html">
+<LINK REL="next" HREF="node172.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node172.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node170.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2006"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2008"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node172.html">4.9.11 Memory Models</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node170.html">4.9.9 Libraries</A>
+ &nbsp; <B>  <A ID="tex2html2007"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2009"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION005910000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">10</SPAN> Adding New Devices to the Port</A>
+</H2>
+
+<P>
+Adding support for a new 16&nbsp;bit PIC MCU requires the following steps:
+
+<OL>
+<LI>Create picDEVICE.c and picDEVICE.h from pDEVICE.inc using
+<BR><SPAN  CLASS="texttt">perl /path/to/sdcc/support/scripts/inc2h-pic16.pl \</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">/path/to/gputils/header/pDEVICE.inc</SPAN>
+</LI>
+<LI><SPAN  CLASS="texttt">mv picDEVICE.h /path/to/sdcc/device/non-free/include/pic16</SPAN>
+</LI>
+<LI><SPAN  CLASS="texttt">mv picDEVICE.c /path/to/sdcc/device/non-free/lib/pic16/libdev</SPAN>
+</LI>
+<LI>Either
+
+<P>
+
+<OL>
+<LI>add the new device to <SPAN  CLASS="texttt">/path/to/sdcc/device/lib/pic16/libio/*.ignore</SPAN>
+to suppress building any of the I/O libraries for the new device<A ID="tex2html71"
+  HREF="footnode.html#foot6302"><SUP><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN></SUP></A>, or
+</LI>
+<LI>add the device (family) to <SPAN  CLASS="texttt">/path/to/sdcc/support/scripts/pic18fam-h-gen.pl</SPAN>
+to assign I/O styles, run the <SPAN  CLASS="texttt">pic18fam-h-gen.pl</SPAN> script to
+generate <SPAN  CLASS="texttt">pic18fam.h.gen</SPAN>, replace your existing <SPAN  CLASS="texttt">pic18fam.h</SPAN>
+with the generated file, and (if required) implement new I/O styles
+in <SPAN  CLASS="texttt">/path/to/sdcc/device/include/pic16/{adc,i2c,usart}.h</SPAN>
+and <SPAN  CLASS="texttt">/path/to/sdcc/device/lib/pic16/libio/*/*.</SPAN>
+</LI>
+</OL>
+</LI>
+<LI>Edit <SPAN  CLASS="texttt">/path/to/sdcc/device/include/pic16/pic18fregs.h</SPAN>
+<BR>
+The file format is self-explanatory, just add
+<BR><SPAN  CLASS="texttt">#elif defined(picDEVICE)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">#  include &lt;picDEVICE.h&gt;</SPAN>
+<BR>
+at the right place (keep the file sorted, please).
+</LI>
+<LI>Edit <SPAN  CLASS="texttt">/path/to/sdcc/device/include/pic16devices.txt</SPAN>&nbsp;
+<BR>
+Copy and modify an existing entry or create a new one and insert it
+at the correct place (keep the file sorted, please).
+</LI>
+<LI><SPAN  CLASS="texttt">( cd /path/to/sdcc/device/non-free/lib/pic16 &amp;&amp; sh update.sh
+)</SPAN>
+</LI>
+<LI>Recompile the pic16 libraries as described in <A HREF="node170.html#subsec:pic16Libraries">4.9.9</A>
+or just configure and build sdcc again from scratch (recommended).
+</LI>
+</OL>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

@@ -1,0 +1,12 @@
+Package: @PACKAGE_NAME@
+Version: @PACKAGE_VERSION@
+Section: devel
+Priority: optional
+Architecture: @DEB_ARCH@
+Maintainer: xyz project <tomaz.stih@wischner.co.uk>
+Depends: libc6, libgcc-s1, libstdc++6
+Description: x compiler suite for z80
+ xcc, xas, xopt, xar, xld, xobjcopy, xgdb, xgdb-z80, compiler runtime
+ libraries, staged headers, static helper libraries, and documentation.
+ The package installs the suite under /opt/x and exposes /opt/x/bin through
+ /etc/profile.d/x.sh for new login shells.

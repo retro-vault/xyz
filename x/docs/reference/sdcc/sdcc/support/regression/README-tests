@@ -1,0 +1,40 @@
+File format for regression test cases in tests/:
+
+The filename shall end in .c or .c.in.
+
+The file shall start with a K&R-style multi-line comment.
+
+Example for .c:
+
+/* Maybe some text here
+   And some more text here
+*/
+
+Example for .c.in:
+
+/* Maybe some text here
+   And some more text here
+
+   var: value0, value1
+*/
+
+The file shall include the test framework early:
+
+#include <testfwk.h>
+
+There should be at least one test function. Test functions have a single void parameter and return void and their names start with "test", and the function name shall be at the start of the line.
+
+Example:
+void
+testFunc (void)
+{
+}
+
+There can be assertions:
+
+void
+testFunc (void)
+{
+  ASSERT (0); // This test always fails
+}
+

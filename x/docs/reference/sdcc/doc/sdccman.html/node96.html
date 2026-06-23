@@ -1,0 +1,73 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.8.7 STM8 Interrupt Service Routines</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node95.html">
+<LINK REL="next" HREF="node97.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node97.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node89.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node95.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1451"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1453"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node97.html">3.9 Enabling and Disabling Interrupts</A>
+<B> Up:</B> <A
+ HREF="node89.html">3.8 Interrupt Service Routines</A>
+<B> Previous:</B> <A
+ HREF="node95.html">3.8.6 SM83 and TLCS-90 Interrupt</A>
+ &nbsp; <B>  <A ID="tex2html1452"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1454"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00487000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> STM8 Interrupt Service Routines</A>
+</H2>
+
+<P>
+The STM8 interrupt table contains 31 entries: Reset (used by SDCC
+for program startup), trap and user interrupts 0 to 29. Where the
+keyword <SPAN  CLASS="textit">__interrupt<A ID="1895"></A></SPAN> is used for normal
+user interrupts, the <SPAN  CLASS="textit">__trap</SPAN> keyword is used for the trap
+handler:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">void handler (void) __trap</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

@@ -1,0 +1,10 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _x
+_x:
+	.ds 2
+
+
+	.area _CODE
+

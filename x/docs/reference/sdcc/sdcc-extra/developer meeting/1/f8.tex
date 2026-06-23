@@ -1,0 +1,65 @@
+\documentclass[xcolor=dvipsnames]{beamer}
+\usepackage{xltxtra}
+\usepackage[english]{babel}
+
+\xdefinecolor{thecolor}{rgb}{0.,0.0,0.0}
+
+\mode<presentation>
+{
+	\usetheme{Rochester}
+	\beamertemplatenavigationsymbolsempty
+	\usecolortheme[named=thecolor]{structure}
+	\setbeamercovered{transparent}
+}
+
+\title{f8}
+\subtitle{An 8-Bit architecture based on lessons learned from SDCC and the architectures it supports}
+
+\author{Philipp Klaus Krause}
+
+\subject{f8, computer architecture, instruction set, Small Device C Compiler, SDCC}
+
+\begin{document}
+
+\begin{frame}
+	\titlepage
+\end{frame}
+
+\begin{frame}
+	\frametitle{Lessons learned - big picture}
+	\begin{itemize}
+		\item An efficient stackpointer-relative addressing is essentiakl for reentrant functions
+		\item A unified address space is essential for efficient pointer access
+		\item Registers help
+		\item Hardware multithreading can replace peripheral hardware, but it needs good support for atomics, and thread-local storage
+		\item Irregular architectures can be very efficient with tree-decomposition-based register allocation
+		\item A good mixture of 8-bit and 16-bit operations helps
+		\item Pointers should be 16 bits
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Lessons learned - details}
+	\begin{itemize}
+		\item Zero-page, etc addressing isn't useful if we have efficient stackpointer-relative addressing
+		\item A index-pointer-relative read instruction for both 8 and 16 bits is important
+		\item Prefix bytes can be a good way to allow more operands (e.g. registers)
+		\item Hardware $8 \times 8 \to 16$ multiplication helps
+		\item Division is rare
+		\item Multiply-and-add helps speeds up wider multiplications
+		\item BCD support provides cheap printf without need for hardware division
+		\item Good shift and rotate support helps
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Where do we get}
+	\begin{itemize}
+		\item Irregular CISC architecture
+		\item The core becomes bigger than for RISC, but we save so much on code memory that it is worth it
+		\item Approx. 30\% lower code size than stm8 - in current very early experimental SDCC backend
+	\end{itemize}
+\end{frame}
+
+\end{document}
+

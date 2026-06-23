@@ -1,0 +1,192 @@
+# xcc — X C Compiler for Z80
+
+xcc is a clean-room C11 compiler targeting the Z80 processor, built from scratch
+in modern C++17, with a hand-written recursive descent parser, a typed three-address IR, and GCC-compatible command-line flags.
+
+---
+
+## Architecture
+
+```
+Source (.c)
+    │
+    ▼
+┌─────────────────────────────────────────────────┐
+│  Frontend                                        │
+│                                                  │
+│  Lexer          hand-written, no flex/bison      │
+│   → tokens                                       │
+│  Parser         recursive descent, C11           │
+│   → AST (typed node hierarchy)                   │
+│  Sema           type resolution, symbol table    │
+└──────────────────────────────┬──────────────────┘
+                               │ AST
+                               ▼
+┌─────────────────────────────────────────────────┐
+│  IR (three-address code)                         │
+│                                                  │
+│  IrGen          AST → ICode stream               │
+│  IRModOpt       TU-local static/helper cleanup   │
+│  IRModule       list of IRFunctions              │
+│  ICode ops:     ASSIGN, ADD, SUB, MUL, CALL,    │
+│                 IFX, GOTO, LABEL, SEND, RECEIVE  │
+└──────────────────────────────┬──────────────────┘
+                               │ IR
+                               ▼
+┌─────────────────────────────────────────────────┐
+│  Z80 Backend                                     │
+│                                                  │
+│  Z80Gen         IR → GNU-as assembly             │
+│  Z80Peep        peephole optimizer               │
+└──────────────────────────────┬──────────────────┘
+                               │ .s
+                               ▼
+                     z80-elf-as / sdas
+                               │ .o
+                               ▼
+                     z80-elf-ld / sdld
+```
+
+---
+
+## ABI: xcc Z80 calling convention
+
+| Item               | Convention                            |
+|--------------------|---------------------------------------|
+| Parameters         | Right-to-left push on stack           |
+| Return (8-bit)     | L register                            |
+| Return (16-bit)    | HL register                           |
+| Return (32-bit)    | DEHL (DE = high, HL = low)            |
+| Frame pointer      | IX                                    |
+| First param (stack)| IX+4                                  |
+| Second param       | IX+4+sizeof(param0)                   |
+| First local        | IX-2                                  |
+
+### Stack frame layout
+
+```
+[high addresses]
+  ... caller frame ...
+  paramN           (last pushed, highest addr)
+  ...
+  param1           (first pushed)
+  return_addr      [IX+2]
+  saved_IX         [IX+0]    ← IX points here
+  local_1          [IX-2]
+  local_2          [IX-4]
+  temp_1           [IX-6]    ← dynamically allocated
+  ...              ← SP
+[low addresses]
+```
+
+---
+
+## Type sizes (Z80 target)
+
+| Type               | Size  |
+|--------------------|-------|
+| `char`             | 1     |
+| `short`, `int`     | 2     |
+| `long`             | 4     |
+| `long long`        | 8     |
+| `float`, `double`  | 4     |
+| pointer            | 2     |
+
+`double` is IEEE 754 single precision (same as `float`) — no FPU on Z80.
+
+---
+
+## Command line (GCC-compatible)
+
+```
+xcc [options] <input.c> [-o output]
+
+  -o <file>          Output filename
+  -S                 Emit assembly (default)
+  -o <file>          Output filename
+  -S                 Emit assembly (default)
+  -O0                No optimization (default)
+  -O1                Enable peephole optimizer
+  -O2                Enable general optimization
+  -Os                Enable size optimization
+  -I<dir>            Add include directory
+  -D<macro>[=val]    Define macro
+  -std=c11           Language standard (only c11 supported)
+  -g                 Emit DWARF 2 debug info
+  -v                 Verbose
+  --version          Version
+  --help             Help
+```
+
+---
+
+## IR opcodes (src/ir/icode.h)
+
+xcc IR opcodes:
+
+| Op             | Meaning                          |
+|----------------|----------------------------------|
+| `LABEL`        | label:                           |
+| `GOTO`         | unconditional jump               |
+| `IFX`          | conditional branch               |
+| `FUNCTION`     | function prologue marker         |
+| `ENDFUNCTION`  | function epilogue marker         |
+| `RETURN`       | return [value]                   |
+| `SEND`         | push argument (param passing)    |
+| `RECEIVE`      | receive parameter into local     |
+| `CALL`         | call function                    |
+| `ASSIGN`       | result = left                    |
+| `ADDRESS_OF`   | result = &left                   |
+| `GET_VALUE_AT` | result = *left (load)            |
+| `SET_VALUE_AT` | *result = left (store)           |
+| `ADD/SUB/MUL`  | arithmetic                       |
+| `DIV/MOD`      | division (calls runtime helpers) |
+| `NEG`          | unary minus                      |
+| `BAND/BOR/BXOR`| bitwise                          |
+| `BNOT`         | bitwise complement               |
+| `SHL/SHR`      | shifts                           |
+| `EQ/NE/LT/LE/GT/GE` | comparisons (→ 0 or 1)    |
+| `CAST`         | type conversion                  |
+
+---
+
+## Runtime library (lib/runtime.s)
+
+| Symbol     | Purpose                    |
+|------------|----------------------------|
+| `__mul16`  | 16-bit unsigned multiply   |
+| `__div16`  | 16-bit unsigned divide     |
+| `__mod16`  | 16-bit unsigned modulo     |
+
+---
+
+## Building
+
+```bash
+make              # debug build
+make BUILD=release
+make test
+```
+
+Requirements: `g++` ≥ 7 with C++17 support.
+
+---
+
+## Adding a new codegen feature
+
+1. Add IR opcode to `src/ir/icode.h` if needed
+2. Add IrGen visitor in `src/ir/irgen.cpp`
+3. Add Z80Gen handler in `src/backend/z80/z80gen.cpp`
+4. Add a test in `tests/data/tNNN_feature.c`
+5. Run `make test`
+
+---
+
+## Limitations (initial version)
+
+- No integrated preprocessor (use `cpp` externally)
+- Struct/union member access code-gen is minimal
+- 32-bit arithmetic uses runtime helpers (not inline)
+- No register allocation (all temporaries spill to stack)
+- No link-time optimization
+- `switch` compiles as if/else chain (no jump tables yet)

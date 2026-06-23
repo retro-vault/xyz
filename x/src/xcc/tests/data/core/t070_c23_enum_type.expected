@@ -1,0 +1,63 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _get_status
+_get_status:
+	; sdcccall(1) prologue: get_status (locals=0, temp_frame=1, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-1
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #0
+	ld	a, l
+	ld	-1(ix), a
+	ld	a, -1(ix)
+	jp	__get_status_end
+__get_status_end:
+	; epilogue: get_status
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _is_ready
+_is_ready:
+	; sdcccall(1) prologue: is_ready (locals=2, temp_frame=4, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param f at -2(ix)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, l
+	and	#1
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ex	de, hl
+	jp	__is_ready_end
+__is_ready_end:
+	; epilogue: is_ready
+	ld	sp, ix
+	pop	ix
+	ret

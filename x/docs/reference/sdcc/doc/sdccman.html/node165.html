@@ -1,0 +1,117 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.4 Preprocessor Macros</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node166.html">
+<LINK REL="previous" HREF="node164.html">
+<LINK REL="next" HREF="node166.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node166.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node164.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1980"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1982"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node166.html">4.9.5 Directories</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node164.html">4.9.3 Environment Variables</A>
+ &nbsp; <B>  <A ID="tex2html1981"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1983"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00594000000000000000"></A><A ID="3344"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">4</SPAN> Preprocessor Macros
+</H2>
+
+<P>
+PIC16<A ID="3345"></A> port defines the following preprocessor macros
+while translating a source.
+
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Macro</TD>
+<TD CLASS="CENTER">Description</TD>
+</TR>
+<TR><TD CLASS="CENTER">__SDCC_pic16<A ID="3349"></A></TD>
+<TD CLASS="CENTER">Port identification</TD>
+</TR>
+<TR><TD CLASS="CENTER">pic18fxxxx<A ID="3350"></A></TD>
+<TD CLASS="CENTER">MCU Identification. <SPAN  CLASS="textit">xxxx</SPAN> is the microcontrol identification
+number, i.e. 452, 6620, etc</TD>
+</TR>
+<TR><TD CLASS="CENTER">__18Fxxxx<A ID="3352"></A></TD>
+<TD CLASS="CENTER">MCU Identification (same as above)</TD>
+</TR>
+<TR><TD CLASS="CENTER">STACK_MODEL_nnn<A ID="3353"></A></TD>
+<TD CLASS="CENTER">nnn = SMALL or LARGE respectively according to the stack model used</TD>
+</TR>
+</TABLE>
+</DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+In addition the following macros are defined when calling
+assembler:
+
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Macro</TD>
+<TD CLASS="CENTER">Description</TD>
+</TR>
+<TR><TD CLASS="CENTER">__18Fxxxx</TD>
+<TD CLASS="CENTER">MCU Identification. <SPAN  CLASS="textit">xxxx</SPAN> is the microcontrol identification
+number, i.e. 452, 6620, etc</TD>
+</TR>
+<TR><TD CLASS="CENTER">__SDCC_MODEL_nnn</TD>
+<TD CLASS="CENTER">nnn = SMALL or LARGE respectively according to the memory model used
+for SDCC</TD>
+</TR>
+<TR><TD CLASS="CENTER">STACK_MODEL_nnn</TD>
+<TD CLASS="CENTER">nnn = SMALL or LARGE respectively according to the stack model used</TD>
+</TR>
+</TABLE>
+</DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

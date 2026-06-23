@@ -1,0 +1,201 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.5.1 Calling conventions</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node142.html">
+<LINK REL="next" HREF="node144.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node144.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node142.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node142.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1821"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1823"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node144.html">4.6 The f8 port</A>
+<B> Up:</B> <A
+ HREF="node142.html">4.5 The STM8 port</A>
+<B> Previous:</B> <A
+ HREF="node142.html">4.5 The STM8 port</A>
+ &nbsp; <B>  <A ID="tex2html1822"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1824"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1825"
+  HREF="node143.html#SECTION00551100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1826"
+  HREF="node143.html#SECTION00551200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> SDCC calling convention, version 0</A>
+<LI><A ID="tex2html1827"
+  HREF="node143.html#SECTION00551300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> Raisonance calling convention</A>
+<LI><A ID="tex2html1828"
+  HREF="node143.html#SECTION00551400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> IAR calling convention</A>
+<LI><A ID="tex2html1829"
+  HREF="node143.html#SECTION00551500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> Cosmic calling convention</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00551000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> Calling conventions</A>
+</H2>
+
+<P>
+By default, the SDCC calling convention, version 1 is used. Using
+the option –sdcccall 0, the default can be changed to version 0.
+
+<P>
+Arguments are passed on the stack right-to-left. Return values are
+in a (8 bit), x (16 bit), xyl (24 bit), xy (32 bit) or use a hidden
+extra pointer parameter pointing to the location (anything wider than
+32 bit, and all struct / union).
+
+<P>
+
+<H3><A ID="SECTION00551100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> SDCC calling convention, version 1</A>
+</H3>
+
+<P>
+9#9
+
+<P>
+For functions that have variable arguments, all parameters are passed
+on the stack. For other functions, if the first parameter has 8 or
+16 bits, it is passed in a or x. If the first parameter is passed
+in a, and the second has 16 bits, the second is passed in x. If the
+first parameter is passed in x, and the second has 8 bits, the second
+is passed in a. All other parameters are passed on the stack. Independent
+of their size, struct / union parameters and all following parameters
+are always passed on the stack. If __z88dk_callee is specified,
+the stack is always adjusted by the callee. Otherwise, for the large
+memory model, the stack is always adjusted by the caller. For the
+medium memory model the stack is adjusted by the caller, with the
+following exceptions: functions that do not have variable arguments
+and return void or a type of at most 16 bits, or have both a first
+parameter of type float and a return value of type float.
+
+<P>
+
+<H3><A ID="SECTION00551200000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> SDCC calling convention, version 0</A>
+</H3>
+
+<P>
+This calling convention can be chosen per function via __sdcccall(0)
+(e.g. for compatibility with functions written in assembler for use
+with older versions of SDCC). All parameters are passed on the stack.
+The stack is not adjusted for the parameters by the callee (thus the
+caller has to do this instead), unless __z88dk_callee is specified.
+
+<P>
+
+<H3><A ID="SECTION00551300000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> Raisonance calling convention</A>
+</H3>
+
+<P>
+For compatibility with the britishRaisonance STM8
+compiler, the __raisonance calling convention is supported. If the
+first parameter is 8 or 16 bits, it is passed in a or x. If the first
+parameter is 8 bits, and the second 16 bits, the second is passed
+in x. If the first parameter is 16 bits, and the second is 8 bits,
+the second is passed in a. All other parameters are passed on the
+stack. If the return value is 8 bits, it is passed in a. If it is
+16 bits, it is passed in x. Raisonance passes larger return values
+in pseudoregisters, which is not supported by SDCC.
+
+<P>
+
+<H3><A ID="SECTION00551400000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> IAR calling convention</A>
+</H3>
+
+<P>
+For compatibility with the IAR STM8 compiler, the __iar calling
+convention is supported. The first 8-bit parameter is passed in a,
+the first 16-bit parameter in x, the second 16-bit parameter in y.
+Further parameters of up to 32 bits are passed in pseudoregisters,
+which is not supported by SDCC. All other parameters are passed on
+the stack. If the return value is 8 bits, it is passed in a. If it
+is 16 bits, it is passed in x. IAR passes larger return values in
+pseudoregisters, which is not supported by SDCC.
+
+<P>
+
+<H3><A ID="SECTION00551500000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> Cosmic calling convention</A>
+</H3>
+
+<P>
+For compatibility with the Cosmic STM8 compiler, the __cosmic calling
+convention is supported. If the first parameter is 8 or 16 bits, it
+is passed in a or x. If the return value is 8 bits, it is passed in
+a. If it is 16 bits, it is passed in x. Cosmic passes larger return
+values in pseudoregisters, which is not supported by SDCC. Even for
+the medium memory model, __cosmic functions use a 24-bit return
+address in their stack frame, and are called using callf.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node144.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node142.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node142.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1821"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1823"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node144.html">4.6 The f8 port</A>
+<B> Up:</B> <A
+ HREF="node142.html">4.5 The STM8 port</A>
+<B> Previous:</B> <A
+ HREF="node142.html">4.5 The STM8 port</A>
+ &nbsp; <B>  <A ID="tex2html1822"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1824"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

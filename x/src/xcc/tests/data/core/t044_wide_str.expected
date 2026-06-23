@@ -1,0 +1,164 @@
+	.module xcc_output
+
+	.area _CONST
+__str_0:
+	.dw 104
+	.dw 101
+	.dw 108
+	.dw 108
+	.dw 111
+	.dw 0
+__str_1:
+	.dl 119
+	.dl 111
+	.dl 114
+	.dl 108
+	.dl 100
+	.dl 0
+
+
+	.area _CODE
+
+	.globl _main
+_main:
+	; sdcccall(1) prologue: main (locals=4, temp_frame=28, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-32
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #__str_0
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #__str_1
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	.globl __mul16
+	ld	hl, #0
+	push	hl
+	ld	hl, #2
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	e, -10(ix)
+	ld	d, -9(ix)
+	add	hl, de
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-14(ix), e
+	ld	-13(ix), d
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	-16(ix), l
+	ld	-15(ix), h
+	ld	l, -16(ix)
+	ld	h, -15(ix)
+	push	hl
+	ld	hl, #104
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
+	ld	-18(ix), l
+	ld	-17(ix), h
+	ld	l, -18(ix)
+	ld	h, -17(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L2
+	jp	__xcc_L4
+__xcc_L2:
+	ld	hl, #0
+	ld	-20(ix), l
+	ld	-19(ix), h
+	ld	l, -20(ix)
+	ld	h, -19(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L4
+__xcc_L4:
+	.globl __mul16
+	ld	hl, #0
+	push	hl
+	ld	hl, #2
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-22(ix), l
+	ld	-21(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, -22(ix)
+	ld	d, -21(ix)
+	add	hl, de
+	ld	-24(ix), l
+	ld	-23(ix), h
+	ld	l, -24(ix)
+	ld	h, -23(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-26(ix), e
+	ld	-25(ix), d
+	ld	l, -26(ix)
+	ld	h, -25(ix)
+	push	hl
+	ld	hl, #119
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_30886
+	dec	hl
+__cmp_e_30886:
+	ld	-28(ix), l
+	ld	-27(ix), h
+	ld	l, -28(ix)
+	ld	h, -27(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L5
+	jp	__xcc_L7
+__xcc_L5:
+	ld	hl, #0
+	ld	-30(ix), l
+	ld	-29(ix), h
+	ld	l, -30(ix)
+	ld	h, -29(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L7
+__xcc_L7:
+	ld	hl, #1
+	ld	-32(ix), l
+	ld	-31(ix), h
+	ld	l, -32(ix)
+	ld	h, -31(ix)
+	ex	de, hl
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

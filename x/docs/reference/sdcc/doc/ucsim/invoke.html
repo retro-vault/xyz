@@ -1,0 +1,388 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="content-type" content="text/html; charset=ISO-8859-2">
+    <title>&micro;Csim: Invocation</title>
+  </head>
+  <body style=" background-color: white;">
+    
+    <h1>Starting the simulator</h1>
+    
+    There are separate programs to simulate different microcontroller
+    families:
+
+    <p>Intel MCS48 family is simulated by <b>ucsim_i8048</b> <br>
+      Intel MCS51 family is simulated by <b>ucsim_51</b> <br>
+      Intel MCS80/85 family is simulated by <b>ucsim_i8085</b> <br>
+      Philips XA processor is simulated by <b>ucsim_xa</b> <br>
+      Atmel AVR processor is simulated by <b>ucsim_avr</b> <br>
+      Zilog Z80 family is simulated by <b>ucsim_z80</b> <br>
+      Toshiba TLCS90 processor is simulated by <b>ucsim_tlcs</b> <br>
+      Rabbit family is simulated by <b>ucsim_rxk</b> <br>
+      Motorola M68HC08 processor is simulated by <b>ucsim_m68hc08</b> <br>
+      Motorola MC6800 processor is simulated by <b>ucsim_m6800</b> <br>
+      Motorola MC6809 processor family is simulated by <b>ucsim_m6809</b><br>
+      Motorola MC68HC11 processor is simulated by <b>ucsim_m68hc11</b> <br>
+      Motorola MC68HC12 processor is simulated by <b>ucsim_m68hc12</b> <br>
+      MOS MOS6502 processor is simulated by <b>ucsim_mos6502</b> <br>
+      ST ST7 processor is simulated by <b>ucsim_st7</b> <br>
+      ST STM8 family is simulated by <b>ucsim_stm8</b> <br>
+      Padauk family is simulated by <b>ucsim_pdk</b> <br>
+      PicoBlaze processor is simulated by <b>ucsim_pblaze</b> <br>
+      p1516 processor is simulated by <b>ucsim_p1516</b> <br>
+      f8 processor is simulated by <b>ucsim_f8</b> <br>
+      OISC processors are simulated ny <b>ucsim_oisc</b>
+    </p>
+
+    <p>The simulator can be started in the following way: </p>
+
+    <p><tt><font color="blue">$</font> ucsim_XXX [-bBEgGhHlPqVvw] [-a
+      nr] [-c file] [-C cfg_file] [-e command] [-I if_optionlist] [-k
+      portnum] [-o colorlist] [-p prompt] [-R seed]\n [-s file] [-S
+      optionlist] [-t CPU] [-U uartnr] [-u hw] [-X freq[k|M]]\n [-z
+      portnum] [-Z portnum] [files...]</tt> </p>
+    
+    <p>Specified files must be names of Intel hex or Motorola S19
+      files. Some simulators may accept some other file formats, for
+      example ucsim_p1516 accepts .p2h file which is internal format
+      of
+      the <a href="https://danieldrotos.github.io/p12dev/">development
+      system</a>. Simulator loads the files in the specified order
+      into the ROM of the simulated system. If the file is specified
+      without extension, the simulator will try to find intel hex file
+      (filename extended with .hex), omf file (with .omf) and cdb file
+      (with .cdb extension). Simulator can interpret content of
+      these <a href="https://sdcc.sourceforge.net/">SDCC</a> output
+      files and reads information from them.</p>
+    
+    <p>Options: </p>
+
+    <dl>
+
+      <dt><span style="font-family: monospace;"><b>-a
+	nr</b></span></dt>
+      
+      <dd>Set size of variable space. Default is 256.</dd>
+
+
+      <dt><b><span style="font-family: monospace;">-b</span></b></dt>
+
+      <dd>Black &amp; white (non-color) console.</dd>
+
+
+      <dt><tt><b>-B</b></tt></dt>
+
+      <dd>Beep on breakpoints. Print out a beep character to the
+	console when a breakpoint hits.</dd>
+
+
+      <dt><a name="lccoption"><tt><b>-c file</b></tt></a> </dt>
+
+      <dd>Open command console on <b>file</b>. Command consoles are on
+        standard input and output by default. Using this option the
+        console can be opened on any file for example on the serial
+        interface of the computer.</dd>
+
+      
+      <dt><span style="font-family: monospace;"><b>-C cfg_file</b></span></dt>
+
+      <dd>Read and execute initial commands from specified file
+      (before input files).</dd>
+
+      <!--       
+	   <dt><tt>-d portnum</tt></dt>
+
+	   <dd>Act as gdbserver, listen on <b>portnum</b> for gdb connections.</dd>
+	 -->
+      
+      <dt><b><tt>-e command</tt></b></dt>
+
+      <dd>Execute command at program startup (after config
+	file and input files).</dd>
+
+
+      <dt><tt><b>-E</b></tt></dt>
+
+      <dd>Start simulation when the program is loaded, but use
+	emulation mode instead of normal run mode.</dd>
+
+
+      <dt><tt><b>-g</b></tt></dt>
+
+      <dd>Go, start simulation when the program is loaded.</dd>
+
+      
+      <dt><tt><b>-G</b></tt></dt>
+
+      <dd>Start simulation when the program is loaded and terminate the
+        simulator when the simulation stops (maybe on breakpoint).</dd>
+
+
+
+      <dt><tt><b>-h</b></tt> </dt>
+
+      <dd>Print out a short help about the options and stop. </dd>
+      
+
+      <dt><tt><b><a name="H-option">-H</a></b></tt> </dt>
+
+      <dd>Print out types of known CPUs. Names printed out by this option can be
+        used to determine CPU type using <tt><b>-t</b></tt> option. </dd>
+
+
+      <dt><tt><b>-I if=memory[address],in=file,out=file</b></tt></dt>
+
+      <dd>Specify options (as comma separated list) for the simulator interface.
+        <b>if</b> option turns on the interface and specifies address
+        space and location for use by the interface. <b>in</b>
+        and <b>out</b> can be used to specify file names to use for
+        file IO.
+	<br>See <a href="simif.html">more about simulator interface</a>.</dd>
+
+
+      <dt><tt><b>-k portnum</b></tt></dt>
+
+      <dd>Listen for incoming connections on port <b>portnum</b>. When this
+        port connected, the connection will be attached to simulated UART0.This
+        option is not useful for other UARTs, so it is better to use the more
+        general -S option. </dd>
+
+
+      <dt><b><tt>-l</tt></b></dt>
+
+      <dd>Use colors of light theme (default is dark)</dd>
+
+
+      <dt><tt><b>-o colorsetting,...<br>
+      </b></tt></dt>
+
+      <dd>List of color settings in form: <tt>what=colspec,...</tt>
+        where <i>what</i> specifies object to be colored and <i>colspec</i> is
+        : separated list of color options e.g.: prompt=b:white:black (bold white
+        on black).<br>
+        <i>what</i> can be:<br>
+        <ul>
+	  <li><tt>bg</tt> default backgound color,</li>
+          <li><tt>prompt</tt> prompt color,</li>
+          <li><tt>prompt_console</tt> console number in front of the
+            prompt,</li>
+          <li><tt>command</tt> color of entered command,</li>
+          <li><tt>answer</tt> default color for answers printed by
+            commands,</li>
+          <li><tt>result</tt> color of expression result,</li>
+          <li><tt>dump_address</tt> address color in memory dump
+            (1<sup>st</sup> column)</li>
+          <li><tt>dump_label</tt> label color in memory dump
+            (2<sup>nd</sup> column)</li>
+          <li><tt>dump_number</tt> color of numerical part of the dump
+            (3<sup>rd</sup> column)</li>
+          <li><tt>dump_char</tt> color of textual part of the dump
+            (4<sup>th</sup> column)</li>
+	  <li><tt>comment</tt> comment color in disassembly</li>
+          <li><tt>error</tt> color of error messages</li>
+          <li><tt>debug</tt> color of debug messages</li>
+          <li><tt>ui_mkey</tt> menu-key color on UI display</li>
+          <li><tt>ui_mitem</tt> menu-item color on UI display</li>
+          <li><tt>ui_label</tt> label color on UI display</li>
+          <li><tt>ui_time</tt> color of time-value on UI display</li>
+          <li><tt>ui_title</tt> title color on UI display</li>
+          <li><tt>ui_run</tt> run-state color on UI display</li>
+	  <li><tt>bit0</tt> Bit 0 color on UI display</li>
+	  <li><tt>bit1</tt> Bit 1 color on UI display</li>
+          <li><tt>ui_stop</tt> stop-state color on UI display</li>
+	  <li><tt>led_on</tt> color of ON LEDS on FPGA display</li>
+	  <li><tt>led_off</tt> color of OFF LEDS on FPGA display</li>
+	  <li><tt>btn_on</tt> color of ON buttons on FPGA display</li>
+	  <li><tt>btn_off</tt> color of OFF buttons on FPGA display</li>
+	  <li><tt>sw_on</tt> color of ON switches on FPGA display</li>
+	  <li><tt>sw_off</tt> color of OFF switches on FPGA display</li>
+        </ul>
+        <i>colspec</i> can be a rendering option, or a color name. First color
+        name is used for foreground color and the last one will be the color of
+        background. Rendering options are:<br>
+        <ul>
+          <li><span style="font-family: monospace;">b</span> bold</li>
+          <li><span style="font-family: monospace;">f</span> faint</li>
+          <li><span style="font-family: monospace;">i</span> italic</li>
+          <li><span style="font-family: monospace;">u</span> undelined</li>
+          <li><span style="font-family: monospace;">d</span> double underlined</li>
+          <li><span style="font-family: monospace;">c</span> crossed over</li>
+          <li><span style="font-family: monospace;">o</span> overlined</li>
+          <li><span style="font-family: monospace;">k</span> or <span style="font-family: monospace;">l</span>
+            blink</li>
+        </ul>
+        Color name can be a predefined name, or an RGB value. Known names are:<br>
+        <ul>
+          <li><span style="font-family: monospace;">black</span></li>
+          <li><span style="font-family: monospace;">bblack</span> (bright black,
+            this is grey on some terminals)</li>
+          <li><span style="font-family: monospace;">red</span></li>
+          <li><span style="font-family: monospace;">bred</span> (bright red)</li>
+          <li><span style="font-family: monospace;">green</span></li>
+          <li><span style="font-family: monospace;">bgreen</span> (bright green)</li>
+          <li><span style="font-family: monospace;">yellow</span></li>
+          <li><span style="font-family: monospace;">byellow</span> (bright
+            yellow)</li>
+          <li><span style="font-family: monospace;">blue</span></li>
+          <li><span style="font-family: monospace;">bblue</span> (bright blue)</li>
+          <li><span style="font-family: monospace;">magenta</span></li>
+          <li><span style="font-family: monospace;">bmagenta</span> (bright
+            magenta)</li>
+          <li><span style="font-family: monospace;">cyan</span></li>
+          <li><span style="font-family: monospace;">bcyan</span> (bright cyan)</li>
+          <li><span style="font-family: monospace;">white</span></li>
+          <li><span style="font-family: monospace;">bwhite</span> (bright white)</li>
+        </ul>
+        How the named colors appear on the screen depends on the terminal
+        emulator program.<br>
+        RGB values can be specified as <span style="font-family: monospace;">#RRGGBB</span>
+        where components are two character hexadecimal values of the red, green
+        and blue.<br>
+        Example (set prompt to blinking bold white on green, and set command to
+        underlined bright green on black):<br>
+
+	<span style="font-family: monospace;">-o
+          prompt=lb:white:green,command=u:bgreen:black</span></dd>
+
+
+      <dt><tt><b>-p prompt</b></tt> </dt>
+
+      <dd>Using this option you can specify any string to be the prompt of
+        command interpreter, for example:
+        <pre><font color="blue">$</font> ucsim_51 -p "s51&gt; "
+	  <font color="green">ucsim 0.2.12, Copyright (C) 1997 Daniel Drotos, Talker Bt.
+	    ucsim comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
+	    This is free software, and you are welcome to redistribute it
+	    under certain conditions; type `show c' for details.
+	    0s51&gt; </font></pre>
+      </dd>
+
+      
+      <dt><tt><b>-P</b></tt> </dt>
+
+      <dd>Prompt will be a null ('\0') character. This feature can be useful for
+        programs which controls simulator through a pipe. </dd>
+
+
+      <dt><tt><b>-R seed</b></tt></dt>
+
+      <dd>Set seed value for the random number generator.</dd>
+      
+
+      <dt><tt><b>-s file</b></tt> </dt>
+
+      <dd>Connect serial interface (UART0) of the simulated microcontroller to
+        the <b>file</b>. Nothing is used by default which means that characters
+        transmitted by serial interface of the simulated microcontroller go to
+        nowhere and it will never receive anything. If you are going to
+        communicate with serial interface interactively the best idea is to
+        specify a terminal with -s option. </dd>
+
+      
+      <dt><tt><b>-S uart=nr,in=file,out=file,port=nr,iport=nr,oport=nr,raw</b></tt></dt>
+      
+      <dd>Using this option you can specify different files for input and output
+        streams that <i>&micro;Csim</i> uses to simulate microprocessor's serial
+        interface. <br>
+        See <a href="serial.html">more about serial interface simulation</a>. </dd>
+
+
+      <dt><tt><b>-t CPU</b></tt> </dt>
+
+      <dd>Type of CPU. Recognized types are different for different
+        simulators, for example MCS51 simulator recognizes 51, 8051,
+        8751, C51, 80C51, 87C51, 31, 8031, C31, 80C31, 52, 8052, 8752,
+        C52, 80C52, 87C52, 32, 8032, C32, 80C32, 51R, 51RA, 51RB,
+        51RC, C51R, C51RA, C51RB, C51RC, 89C51R, 251, C251, DS390,
+        DS390F. Note that recognition of a CPU type as option does not
+        mean that the simulator can simulate that kind of CPU.
+        Default type is C51. <br> DS390 supports Dallas DS80C390 24
+        bit flat mode, dual-dptr operations, etc. DS390F is the same
+        as DS390, but it starts already in 24 bit flat mode (ACON =
+        0xFA instead of 0xF8). DS390F is needed to run programs
+        compiled with sdcc -mds390.<br>
+        <tt>-H</tt> option can be used to list all of recognized CPU
+        types.<br>  See <a href="cpu_types.html">how to select CPU
+          type</a>. </dd>
+
+
+      <dt><tt><b>-U uartnr</b></tt></dt>
+
+      <dd>Connect console of standard io to uart as
+	a <a href="display.html#uart_display">display</a> of it. ID of
+	the uart must be specified as parameter to -U option.</dd>
+
+
+      <dt><tt><b>-u hw</b></tt></dt>
+
+      <dd>Connect console of standard io to a hardware element
+	specified as option parameter as
+	a <a href="display.html#uart_display">display</a>. Hardware
+	element can be specified in the same way as
+	in <a href="cmd_general.html#info_hardware">info hardware</a>
+	command.
+      </dd>
+
+      
+      <dt><tt><b>-v</b></tt> </dt>
+
+      <dd>Print out version number and stop. </dd>
+
+
+      <dt><tt><b>-V</b></tt> </dt>
+
+      <dd>Verbose mode. The simulator notifies you about some kind of
+        internal actions for example interrupts. Messages are printed
+        on command console.
+      </dd>
+
+
+      <dt><span style="font-family: monospace;"><b>-w</b></span></dt>
+
+      <dd>Writable flash.</dd>
+
+
+      <dt><tt><b>-X freq[k|M]</b></tt> </dt>
+
+      <dd>XTAL frequency is <b>freq</b> Hertz. <b>k</b> or <b>M</b>
+        can be used to specify frequency in kHZ or MHz. Space is not
+        allowed between the number and the <b>k</b>
+        or <b>M</b>. Default value is 11059200 Hz.
+        <a name="lccoption"></a></dd>
+
+      <dt><a name="lczoption"><tt><b>-z portnum</b></tt></a></dt>
+
+      <dd>If sockets are available on the system, <i>&micro;Csim</i>
+	listens on port <b>portnum</b> for incoming connections and
+	servs command consoles for clients. Port number can be changed
+	using this option.
+	<a href="cmd_general.html#q">quit</a> command
+	exits <i>&micro;Csim</i> only if not active connection is
+	opened to this port. <a href="cmd_general.html#kill">kill</a>
+	command can be used to close all connections and
+	quit <i>&micro;Csim</i> immediately.
+      </dd>
+      
+      <dt><a name="ucZoption"><tt><b>-Z portnum</b></tt></a> </dt>
+      
+      <dd>Listen for incoming connections on
+        port <b>portnum</b>. Using this option <i>&micro;Csim</i> can
+        serve multiple consoles. You can get a console by simply
+        telnet into machine running <i>&micro;Csim</i> to
+        port <b>portnumber</b>.  This option is not available on
+        platforms which doesn't support BSD networking. If -Z option
+        is used, instead of <a href="#lczoption">-z</a>, then default
+        console on stdio will not be opened, and the only way to open
+        a console is using telnet to portnum.
+
+	<br> See <a href="mulcons.html">how to use multiple
+	  consoles</a>. </dd>
+      
+
+      <!-- ----------------------------------------------------------------------------- -->
+
+
+    </dl>
+    <hr>
+  </body>
+</html>

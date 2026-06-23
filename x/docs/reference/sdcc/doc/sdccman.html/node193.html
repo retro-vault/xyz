@@ -1,0 +1,150 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>6.1 Porting code from or to other compilers</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node194.html">
+<LINK REL="previous" HREF="node192.html">
+<LINK REL="next" HREF="node194.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node194.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node192.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node192.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2172"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2174"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node194.html">6.2 Tools included in the</A>
+<B> Up:</B> <A
+ HREF="node192.html">6. TIPS</A>
+<B> Previous:</B> <A
+ HREF="node192.html">6. TIPS</A>
+ &nbsp; <B>  <A ID="tex2html2173"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2175"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00710000000000000000"></A><A ID="sec:Porting-code-to-other-compilers"></A>
+<BR>
+<SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">1</SPAN> Porting code from or to other compilers
+</H1>
+
+<UL>
+<LI>check whether endianness<A ID="3907"></A> of the compilers differs
+and adapt where needed.
+</LI>
+<LI>check the device specific header files<A ID="3908"></A><A ID="3909"></A>
+for compiler specific syntax. Eventually include the file &lt;compiler.h<A ID="3910"></A>&gt;
+<kbd><A ID="tex2html76"
+  HREF="http://svn.code.sf.net/p/sdcc/code/trunk/sdcc/device/include/mcs51/compiler.h">http://svn.code.sf.net/p/sdcc/code/trunk/sdcc/device/include/mcs51/compiler.h</A></kbd>
+to allow using common header files. (see f.e. cc2510fx.h <kbd><A ID="tex2html77"
+  HREF="http://svn.code.sf.net/p/sdcc/code/trunk/sdcc/device/include/mcs51/cc2510fx.h">http://svn.code.sf.net/p/sdcc/code/trunk/sdcc/device/include/mcs51/cc2510fx.h</A></kbd>).
+</LI>
+<LI>check whether the startup code contains the correct initialization
+(watchdog<A ID="3913"></A>, peripherals).
+</LI>
+<LI>check whether the sizes of short, int, long match.
+</LI>
+<LI>check if some 16 or 32 bit hardware registers require a specific addressing
+order (least significant or most significant byte first) and adapt
+if needed (<SPAN  CLASS="textit">first</SPAN> and <SPAN  CLASS="textit">last</SPAN> relate to time and not to
+lower/upper memory location here, so this is <SPAN  CLASS="textit">not</SPAN> the same as
+endianness).
+</LI>
+<LI>check whether the keyword <SPAN  CLASS="textit">volatile<A ID="3917"></A></SPAN> is used
+where needed. The compilers might differ in their optimization characteristics
+(as different versions of the same compiler might also use more clever
+optimizations this is good idea anyway). See section <A HREF="node90.html#subsec:Common-interrupt-pitfall-volatile">3.8.1.1</A>.
+</LI>
+<LI>check that the compilers are not told to suppress warnings.
+</LI>
+<LI>check and convert compiler specific extensions (interrupts, memory
+areas, pragmas etc.).
+</LI>
+<LI>check for differences in type promotion. Especially check for math
+operations on <SPAN  CLASS="texttt">char</SPAN> or <SPAN  CLASS="texttt">unsigned char</SPAN> variables. For
+the sake of C99 compatibility SDCC will probably promote these to
+<SPAN  CLASS="texttt">int</SPAN> more often than other compilers. Eventually insert explicit
+casts to <SPAN  CLASS="texttt">(char)</SPAN> or <SPAN  CLASS="texttt">(unsigned char)</SPAN>. Also check that
+the ~&nbsp;operator<A ID="6347"></A>
+is not used on <SPAN  CLASS="texttt">bit<A ID="3925"></A></SPAN> variables, use the !&nbsp;operator
+instead. See sections <A HREF="node192.html#type_promotion">6</A> and <A HREF="node7.html#sec:Compatibility-with-previous">1.5</A>.
+</LI>
+<LI>check the assembly code generated for interrupt routines (f.e. for
+calls to possibly non-reentrant library functions).
+</LI>
+<LI>check whether timing loops result in proper timing (or preferably
+consider a rewrite of the code with timer based delays instead).
+</LI>
+<LI>check for differences in printf parameters<A ID="3928"></A>
+(some compilers push (va_arg<A ID="3929"></A>)
+char variables as <SPAN  CLASS="texttt">int</SPAN> others push them as <SPAN  CLASS="texttt">char</SPAN>.
+See section <A HREF="node7.html#sec:Compatibility-with-previous">1.5</A>). Provide a putchar()<A ID="3933"></A>
+function if needed.
+</LI>
+<LI>check the resulting memory map<A ID="3934"></A>. Usage of different
+memory spaces: code, stack, data (for mcs51/ds390 additionally idata,
+pdata, xdata). Eventually check if unexpected library functions are
+included.
+</LI>
+</UL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node194.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node192.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node192.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2172"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2174"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node194.html">6.2 Tools included in the</A>
+<B> Up:</B> <A
+ HREF="node192.html">6. TIPS</A>
+<B> Previous:</B> <A
+ HREF="node192.html">6. TIPS</A>
+ &nbsp; <B>  <A ID="tex2html2173"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2175"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

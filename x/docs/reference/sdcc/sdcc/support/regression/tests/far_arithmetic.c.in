@@ -1,0 +1,127 @@
+/** far_arithmetic.c.in - test arithmetic on __far objects for __far space that contains generic space.
+
+    type: unsigned char, unsigned int, unsigned long, unsigned long long
+*/
+#include <testfwk.h>
+
+#if !defined(__SDCC_r2k) && !defined(__SDCC_r2ka) && !defined(__SDCC_r3ka) && !defined(__SDCC_r4k) && !defined(__SDCC_r5k) && !defined(__SDCC_r6k) /*&& !defined(__SDCC_tlcs90) && !defined(__SDCC_ez80) TODO bug #3882*/
+#define __far
+char farmemblock[2];
+#else
+#undef __far
+// Ensure that farmemblock and farmemblock+sizeof(farmemblock) differ in more than just the lowest 16 bits. Also gives further objects in __far an address > 2^16.
+char memblock[6000];
+__far char farmemblock[40000];
+#endif
+
+#define LEFT1 0x55
+#define LEFT2 0x5a
+#define RIGHT 0x03
+
+__far {type} i;
+__far {type} ii = LEFT1;
+__far {type} j;
+const __far {type} ci = LEFT2;
+
+void dummy (void);
+
+void testAnd (void)
+{
+	i = ii & RIGHT;
+	j = ci & RIGHT;
+	dummy ();
+	ASSERT (i == (ii & RIGHT));
+	ASSERT (j == (ci & RIGHT));
+	j = RIGHT;
+	dummy ();
+	i = ii & j;
+	dummy ();
+	ASSERT (i == (ii & RIGHT));
+}
+
+void testOr (void)
+{
+	i = ii | RIGHT;
+	j = ci | RIGHT;
+	dummy ();
+	ASSERT (i == (ii | RIGHT));
+	ASSERT (j == (ci | RIGHT));
+	j = RIGHT;
+	dummy ();
+	i = ii | j;
+	dummy ();
+	ASSERT (i == (ii | RIGHT));
+}
+
+void testXor (void)
+{
+	i = ii ^ RIGHT;
+	j = ci ^ RIGHT;
+	dummy ();
+	ASSERT (i == ii ^ RIGHT);
+	ASSERT (j == ci ^ RIGHT);
+	j = RIGHT;
+	dummy ();
+	i = ii ^ j;
+	dummy ();
+	ASSERT (i == (ii ^ RIGHT));
+}
+
+void testAdd (void)
+{
+	i = ii + RIGHT;
+	j = ci + RIGHT;
+	dummy ();
+	ASSERT (i == ii + RIGHT);
+	ASSERT (j == ci + RIGHT);
+	j = RIGHT;
+	dummy ();
+	i = ii + j;
+	dummy ();
+	ASSERT (i == (ii + RIGHT));
+}
+
+void testSub (void)
+{
+#ifndef __SDCC_pdk14 // Lack of memory
+	i = ii - RIGHT;
+	j = ci - RIGHT;
+	dummy ();
+	ASSERT (i == ii - RIGHT);
+	ASSERT (j == ci - RIGHT);
+	j = RIGHT;
+	dummy ();
+	i = ii - j;
+	dummy ();
+	ASSERT (i == (ii - RIGHT));
+#endif
+}
+
+void testShift (void)
+{
+#if !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) // Lack of memory
+	i = ii >> RIGHT;
+	j = ci >> RIGHT;
+	dummy ();
+	ASSERT (i == ii >> RIGHT);
+	ASSERT (j == ci >> RIGHT);
+	j = RIGHT;
+	dummy ();
+	i = ii >> j;
+	dummy ();
+	ASSERT (i == (ii >> RIGHT));
+#endif
+}
+
+void testMul (void)
+{
+#if !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15) // Lack of memory
+	ASSERT (ii * RIGHT == LEFT1 * RIGHT);
+	ASSERT (ci * RIGHT == LEFT2 * RIGHT);
+#endif
+}
+
+void dummy(void)
+{
+}
+

@@ -1,0 +1,142 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.5.9 Non-intrinsic named address spaces</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node79.html">
+<LINK REL="previous" HREF="node77.html">
+<LINK REL="next" HREF="node79.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node79.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node77.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1364"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1366"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node79.html">3.5.10 Absolute Addressing</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node77.html">3.5.8 MOS6502 intrinsic named address</A>
+ &nbsp; <B>  <A ID="tex2html1365"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1367"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00459000000000000000"></A><A ID="1605"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">9</SPAN> Non-intrinsic named address spaces
+</H2>
+
+<P>
+SDCC supports user-defined non-intrinsic named address spaces. So
+far SDCC only supports them for bank-switching. You need to have a
+function that switches to the desired memory bank and declare a corresponding
+named address space:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">void setb0(void); // The function that sets the currently
+active memory bank to b0</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">void setb1(void); // The function that sets the currently
+active memory bank to b1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__addressmod</SPAN><A ID="1610"></A><SPAN  CLASS="texttt">
+setb0 spaceb0; // Declare a named address space called spaceb0 that
+uses setb0()</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__addressmod setb1 spaceb1; // Declare a named address space
+called spaceb1 that uses setb1()</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">spaceb0 int x; // An int in address space spaceb0</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">spaceb1 int *y; // A pointer to an int in address space
+spaceb1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">spaceb0 int *spaceb1 z; // A pointer in address space spaceb1
+that points to an int in address space spaceb0</SPAN>
+
+</BLOCKQUOTE>
+Non-intrinsic named address spaces for data in ROM are declared using
+the const keyword:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">void setb0(void); // The function that sets the currently
+active memory bank to b0</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">void setb1(void); // The function that sets the currently
+active memory bank to b1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__addressmod</SPAN><A ID="1621"></A><SPAN  CLASS="texttt">
+setb0 const spaceb0; // Declare a named address space called spaceb0
+that uses setb0() and resides in ROM</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__addressmod setb1 spaceb1; // Declare a named address space
+called spaceb1 that uses setb1() and resides in RAM</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">const spaceb0 int x = 42; // An int in address space spaceb0</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">spaceb1 int *y; // A pointer to an int in address space
+spaceb1</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">const spaceb0 int *spaceb1 z; // A pointer in address space
+spaceb1 that points to a constant int in address space spaceb0</SPAN>
+
+</BLOCKQUOTE>
+Variables in non-intrinsic named address spaces will be placed in
+areas of the same name (this can be used for the placement of named
+address spaces in memory by the linker).
+
+<P>
+SDCC will automatically insert calls to the corresponding function
+before accessing the variable. SDCC inserts the minimum possible number
+calls to the bank selection functions. See Philipp Klaus Krause, &rdquo;Optimal
+Placement of Bank Selection Instructions in Polynomial Time&rdquo; for
+details on how this works.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node79.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node69.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node77.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1364"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1366"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node79.html">3.5.10 Absolute Addressing</A>
+<B> Up:</B> <A
+ HREF="node69.html">3.5 SDCC Language Extensions</A>
+<B> Previous:</B> <A
+ HREF="node77.html">3.5.8 MOS6502 intrinsic named address</A>
+ &nbsp; <B>  <A ID="tex2html1365"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1367"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

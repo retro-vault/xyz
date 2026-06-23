@@ -1,0 +1,150 @@
+\documentclass[xcolor=dvipsnames]{beamer}
+\usepackage{xltxtra}
+\usepackage[english]{babel}
+
+\xdefinecolor{thecolor}{rgb}{0.5,0.0,0.5}
+
+\mode<presentation>
+{
+	\usetheme{Rochester}
+	\beamertemplatenavigationsymbolsempty
+	\usecolortheme[named=thecolor]{structure}
+	\setbeamercovered{transparent}
+}
+
+\title{Small Device C Compiler: Standard Compliance}
+\subtitle{http://sdcc.sourceforge.net}
+
+\author{Philipp Klaus Krause}
+
+\subject{Small Device C Compiler, SDCC, ANSI C, ISO C, C89, C90, C94, C95, C99, C11, C17, C18, C2X, C2Y, C23, ELF, DWARF}
+
+\begin{document}
+
+\begin{frame}
+	\titlepage
+\end{frame}
+
+\section{Standards}
+
+\begin{frame}
+	\frametitle{Standards}
+	\begin{itemize}
+		\item C89 / C90
+		\item C94 / C95
+		\item C99
+		\item C11
+		\item C17 / C18
+		\item C2X
+		\item C2Y
+		\item Embedded C
+		\item ELF
+		\item DWARF
+	\end{itemize}
+\end{frame}
+
+\section{State as of SDCC 4.2.0}
+
+\begin{frame}
+	\frametitle{SDCC 4.2.0: C90 and C94}
+	\begin{itemize}
+		\item Nearly complete support
+		\item But
+		\begin{itemize}
+			\item Not K\&R style function definitions
+			\item structures and unions can not be assigned, passed as parameters, returned
+			\item No double or long double
+		\end{itemize}
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{SDCC 4.2.0: C99}
+	\begin{itemize}
+		\item Good support
+		\item But
+		\begin{itemize}
+			\item structures and unions can not be assigned, passed as parameters, returned
+			\item No double or long double
+			\item Not VLA types
+			\item Not VLA objects
+			\item No compound literals
+			\item ptrdiff\_t has 16 bits, while the standard requires at least 17 bits.
+		\end{itemize}
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{SDCC 4.2.0: C11 and C17}
+	\begin{itemize}
+		\item Nearly complete support
+		\item But
+		\begin{itemize}
+			\item structures and unions can not be assigned, passed as parameters, returned
+			\item No double or long double
+			\item ptrdiff\_t has 16 bits, while the standard requires at least 17 bits.
+		\end{itemize}
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{SDCC 4.2.0: C2X}
+	\begin{itemize}
+		\item Lots of missing features in SDCC
+		\item Final set of features likely to be decided in July 2022
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{SDCC 4.2.0: ELF and DWARF}
+	\begin{itemize}
+		\item ELF / DWARF supported for few backends only
+		\item DWARF broken for various corner cases
+		\item Register numbers: SDCC vs GNU tools
+	\end{itemize}
+\end{frame}
+
+\section{SDCC-STD-UX}
+
+\begin{frame}
+	\frametitle{SDCC-STD-UX}
+	\begin{itemize}
+		\item 6-month Project to improve standard compliance and usability in SDCC
+		\item Funded by BMBF, 47500 €
+		\item https://sourceforge.net/p/sdcc/wiki/SDCC-STD-UX/
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{SDCC-STD-UX: DONE}
+	\begin{itemize}
+		\item C90-C2X struct / union return
+		\item C90-C2X struct / union parameters
+		\item C11-C2X \_Generic fixes
+		\item C90-C2X type system fixes
+		\item C2X assert
+		\item C2X bit-precise integer types
+		\item C90-C17 GCC tests
+		\item C90-C99 QuickC tests
+		\item C90-C99 TinyCC tests
+		\item C23 char8\_t character literal
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{SDCC-STD-UX: TODO (selection)}
+	\begin{itemize}
+		\item C99-C2X compound literals
+		\item DWARF debug info fixes
+		\item C2X parser rewrite
+		\item C99-C2X VLA types
+		\item C2X new preprocessor
+		\item C90-C2X fix type range warnings
+		\item C2X typeof
+		\item C2X attributes
+		\item C2X some stuff that will be voted on in July
+	\end{itemize}
+\end{frame}
+
+\end{document}
+

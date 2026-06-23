@@ -1,0 +1,18 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_dragon_acc_more
+_dragon_acc_more:
+	; sdcccall(1) prologue: dragon_acc_more (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	neg
+	sub	#255
+	sla	a
+	and	#127
+	or	#1
+__dragon_acc_more_end:
+	; epilogue: dragon_acc_more
+	ld	sp, ix
+	pop	ix
+	ret

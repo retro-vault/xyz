@@ -1,0 +1,87 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.9.1 Critical Functions and Critical Statements</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node99.html">
+<LINK REL="previous" HREF="node97.html">
+<LINK REL="next" HREF="node99.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node99.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node97.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node97.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1462"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1464"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node99.html">3.9.2 Enabling and Disabling Interrupts</A>
+<B> Up:</B> <A
+ HREF="node97.html">3.9 Enabling and Disabling Interrupts</A>
+<B> Previous:</B> <A
+ HREF="node97.html">3.9 Enabling and Disabling Interrupts</A>
+ &nbsp; <B>  <A ID="tex2html1463"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1465"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00491000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> Critical Functions and Critical Statements</A>
+</H2>
+
+<P>
+A special keyword may be associated with a block or a function declaring
+it as <SPAN  CLASS="textit">__critical</SPAN>. SDCC will generate code to disable all
+interrupts<A ID="1906"></A> upon entry to a critical function and
+restore the interrupt enable to the previous state before returning
+(for architectures where there is no efficient way to do so (sm83,
+tlcs90, stm8), interrupts will be unconditionally enabled instead).
+Nesting critical functions will need one additional byte on the stack<A ID="1907"></A>
+for each call.
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">int foo () __critical<A ID="1909"></A><A ID="1910"></A></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+The critical attribute maybe used with other attributes like <SPAN  CLASS="textit">reentrant.</SPAN>
+<BR>
+The keyword <SPAN  CLASS="textit">__critical</SPAN> may also be used to disable interrupts
+more locally:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__critical{ i++; }</SPAN>
+
+</BLOCKQUOTE>
+More than one statement could have been included in the block.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

@@ -1,0 +1,66 @@
+	.module	xcc_output
+	.area	_DATA
+_data:
+	.ds	48
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=5, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-5
+	add	hl, sp
+	ld	sp, hl
+	; O3 insertion-sort loop (count=48)
+	ld	c, #1
+__xcc_L0:
+	ld	a, c
+	cp	#48
+	jr	nc, __xcc_L3
+__xcc_L1:
+	ld	hl, #data
+	ld	b, #0
+	add	hl, bc
+	ld	b, (hl)
+	ld	e, c
+__xcc_L4:
+	ld	a, e
+	or	a
+	jr	z, __f_ins0_zero_1
+__xcc_L7:
+	dec	e
+	ld	hl, #data
+	ld	d, #0
+	add	hl, de
+	ld	d, (hl)
+	ld	a, b
+	sub	d
+	jr	nc, __f_ins0_store_1
+__xcc_L5:
+	inc	hl
+	ld	(hl), d
+	jr	__xcc_L4
+__f_ins0_zero_1:
+	ld	hl, #data
+	ld	(hl), b
+	jr	__f_ins0_next_1
+__f_ins0_store_1:
+	inc	hl
+	ld	(hl), b
+__f_ins0_next_1:
+	inc	c
+	jr	__xcc_L0
+__xcc_L3:
+	xor	a
+	ld	e, a
+	ld	d, #0
+	ld	hl, #_data
+	add	hl, de
+	ld	a, (hl)
+	ld	-4(ix), a
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

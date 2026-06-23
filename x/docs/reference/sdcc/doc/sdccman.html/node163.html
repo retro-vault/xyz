@@ -1,0 +1,262 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.2 Port Specific Options</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node164.html">
+<LINK REL="previous" HREF="node162.html">
+<LINK REL="next" HREF="node164.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node164.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node162.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1967"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1969"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node164.html">4.9.3 Environment Variables</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node162.html">4.9.1 Global Options</A>
+ &nbsp; <B>  <A ID="tex2html1968"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1970"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1971"
+  HREF="node163.html#SECTION00592100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Code Generation Options</A>
+<LI><A ID="tex2html1972"
+  HREF="node163.html#SECTION00592200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Optimization Options</A>
+<LI><A ID="tex2html1973"
+  HREF="node163.html#SECTION00592300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembling Options</A>
+<LI><A ID="tex2html1974"
+  HREF="node163.html#SECTION00592400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN> Linking Options</A>
+<LI><A ID="tex2html1975"
+  HREF="node163.html#SECTION00592500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">5</SPAN> Debugging Options</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00592000000000000000"></A><A ID="3281"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Port Specific Options
+</H2>
+
+<P>
+The port specific options appear after the global options in the sdcc
+&mdash;help output.
+
+<P>
+
+<H3><A ID="SECTION00592100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Code Generation Options</A>
+</H3>
+
+<P>
+These options influence the generated assembler code.
+<DL>
+<DT><STRONG>&mdash;pstack-model=[model]</STRONG></DT>
+<DD>Used in conjunction with the command
+above. Defines the stack model to be used, valid stack models are:
+
+<P>
+
+<UL>
+<LI>[<SPAN  CLASS="textit">small</SPAN>] Selects small stack model. 8 bit stack and frame
+pointers. Supports 256 bytes stack size.
+</LI>
+<LI>[<SPAN  CLASS="textit">large</SPAN>] Selects large stack model. 16 bit stack and frame
+pointers. Supports 65536 bytes stack size.
+</LI>
+</UL>
+</DD>
+<DT><STRONG>&mdash;pno-banksel</STRONG></DT>
+<DD>Do not generate BANKSEL assembler directives.
+</DD>
+<DT><STRONG>&mdash;extended</STRONG></DT>
+<DD>Enable extended instruction set/literal offset
+addressing mode. Use with care!
+</DD>
+</DL>
+
+<P>
+
+<H3><A ID="SECTION00592200000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Optimization Options</A>
+</H3>
+<DL>
+<DT><STRONG>&mdash;obanksel=n</STRONG></DT>
+<DD>Set optimization level for inserting BANKSELs.
+<BR>
+<P>
+
+<UL>
+<LI>[0] no optimization
+</LI>
+<LI>[1] checks previous used register and if it is the same then does
+not emit BANKSEL, accounts only for labels.
+</LI>
+<LI>[2] tries to check the location of (even different) symbols and
+removes BANKSELs if they are in the same bank. 
+<BR><SPAN  CLASS="textit">Important: There might be problems if the linker script has
+data sections across bank borders!</SPAN>
+</LI>
+</UL>
+</DD>
+<DT><STRONG>&mdash;denable-peeps</STRONG></DT>
+<DD>Force the usage of peepholes. Use with care.
+</DD>
+<DT><STRONG>&mdash;no-optimize-goto</STRONG></DT>
+<DD>Do not use (conditional) BRA instead of
+GOTO.
+</DD>
+<DT><STRONG>&mdash;optimize-cmp</STRONG></DT>
+<DD>Try to optimize some compares.
+</DD>
+<DT><STRONG>&mdash;optimize-df</STRONG></DT>
+<DD>Analyze the dataflow of the generated code and
+improve it.
+</DD>
+</DL>
+
+<P>
+
+<H3><A ID="SECTION00592300000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembling Options</A>
+</H3>
+<DL>
+<DT><STRONG>&mdash;asm=</STRONG></DT>
+<DD>Sets the full path and name of an external assembler
+to call.
+</DD>
+<DT><STRONG>&mdash;mplab-comp</STRONG></DT>
+<DD>MPLAB<A ID="3313"></A> compatibility option.
+Currently only suppresses special gpasm directives.
+</DD>
+</DL>
+
+<P>
+
+<H3><A ID="SECTION00592400000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN> Linking Options</A>
+</H3>
+<DL>
+<DT><STRONG>&mdash;link=</STRONG></DT>
+<DD>Sets the full path and name of an external linker
+to call.
+</DD>
+<DT><STRONG>&mdash;preplace-udata-with=[kword]</STRONG></DT>
+<DD>Replaces the default udata
+keyword for allocating unitialized data variables with [kword].
+Valid keywords are: udata_acs, udata_shr,
+udata_ovr.
+</DD>
+<DT><STRONG>&mdash;ivt-loc=n</STRONG></DT>
+<DD>Place the interrupt vector table at address <SPAN  CLASS="textit">n</SPAN>.
+Useful for bootloaders.
+</DD>
+<DT><STRONG>&mdash;nodefaultlibs</STRONG></DT>
+<DD>Do not link default libraries when linking.
+</DD>
+<DT><STRONG>&mdash;use-crt=</STRONG></DT>
+<DD>Use a custom run-time module instead of the default
+(crt0i).
+</DD>
+<DT><STRONG>&mdash;no-crt</STRONG></DT>
+<DD>Don't link the default run-time modules
+</DD>
+</DL>
+
+<P>
+
+<H3><A ID="SECTION00592500000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">5</SPAN> Debugging Options</A>
+</H3>
+
+<P>
+Debugging options enable extra debugging information in the output
+files.
+<DL>
+<DT><STRONG>&mdash;debug-xtra</STRONG></DT>
+<DD>Similar to &mdash;debug<A ID="3331"></A>,
+but dumps more information.
+</DD>
+<DT><STRONG>&mdash;debug-ralloc</STRONG></DT>
+<DD>Force register allocator to dump &lt;source&gt;.d
+file with debugging information. &lt;source&gt; is the name of the file
+being compiled.
+</DD>
+<DT><STRONG>&mdash;pcode-verbose</STRONG></DT>
+<DD>Enable pcode debugging information in translation.
+</DD>
+<DT><STRONG>&mdash;calltree</STRONG></DT>
+<DD>Dump call tree in .calltree file.
+</DD>
+<DT><STRONG>&mdash;gstack</STRONG></DT>
+<DD>Trace push/pops for stack pointer overflow.
+</DD>
+</DL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node164.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node162.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1967"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1969"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node164.html">4.9.3 Environment Variables</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node162.html">4.9.1 Global Options</A>
+ &nbsp; <B>  <A ID="tex2html1968"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1970"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,43 @@
+	.module xcc_output
+
+	.globl _PORT_A
+_PORT_A = 63
+
+	.area _CODE
+
+	.globl _set_port
+_set_port:
+	; sdcccall(1) prologue: set_port (locals=1, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-1(ix), a
+	ld	hl, #-1
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param v at -1(ix)
+	ld	a, -1(ix)
+	out	(#63), a
+__set_port_end:
+	; epilogue: set_port
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _get_port
+_get_port:
+	; sdcccall(1) prologue: get_port (locals=0, temp_frame=1, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-1
+	add	hl, sp
+	ld	sp, hl
+	in	a, (#63)
+	ld	-1(ix), a
+	ld	a, -1(ix)
+	jp	__get_port_end
+__get_port_end:
+	; epilogue: get_port
+	ld	sp, ix
+	pop	ix
+	ret

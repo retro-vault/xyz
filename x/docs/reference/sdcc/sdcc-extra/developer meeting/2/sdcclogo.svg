@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+ <title>SDCC Logo</title>
+ <defs>
+  <linearGradient id="lg1" y2="1">
+   <stop stop-color="#404040" offset="0"/>
+   <stop stop-color="#fff" offset="1"/>
+  </linearGradient>
+  <linearGradient id="lg2" y2="1">
+   <stop stop-color="#ccc" offset="0"/>
+   <stop stop-color="#eee" offset=".45"/>
+   <stop stop-color="#383838" offset=".55"/>
+   <stop stop-color="#8c8c8c" offset="1"/>
+  </linearGradient>
+  <linearGradient id="lg3" x2="0" y2="1">
+   <stop stop-color="#b0b0b0" offset="0"/>
+   <stop stop-color="#bebebe" offset=".25"/>
+   <stop stop-color="#fff" offset=".35"/>
+   <stop stop-color="#e0e0e0" offset=".45"/>
+   <stop stop-color="#fff" offset=".55"/>
+   <stop stop-color="#c0c0c0" offset=".66"/>
+   <stop stop-color="#c8c8c8" offset="1"/>
+  </linearGradient>
+  <linearGradient id="lg4" x2="0" y2="1">
+   <stop stop-color="#808080" offset="0"/>
+   <stop stop-color="#f0f0f0" offset=".33"/>
+   <stop stop-color="#383838" offset=".5"/>
+   <stop stop-color="#e0e0e0" offset=".66"/>
+   <stop stop-color="#bebebe" offset="1"/>
+  </linearGradient>
+  <linearGradient id="lg5">
+   <stop stop-color="#bebebe" offset="0"/>
+   <stop stop-color="#fff" offset=".2"/>
+   <stop stop-color="#585858" offset=".8"/>
+   <stop stop-color="#8c8c8c" offset="1"/>
+  </linearGradient>
+  <linearGradient id="lg6">
+   <stop stop-color="#bebebe" offset="0"/>
+   <stop stop-color="#fff" offset=".2"/>
+   <stop stop-color="#383838" offset=".8"/>
+   <stop stop-color="#8c8c8c" offset="1"/>
+  </linearGradient>
+  <radialGradient id="rg1" r=".85">
+   <stop stop-color="#808080" offset="0"/>
+   <stop stop-color="#b0b0b0" offset="1"/>
+  </radialGradient>
+  <radialGradient id="rg2">
+   <stop stop-opacity=".5" offset="0"/>
+   <stop stop-opacity="0" offset="1"/>
+  </radialGradient>
+ </defs>
+ <pattern id="pat1" width="8" height="64" stroke-linejoin="round" patternTransform="translate(-4)" patternUnits="userSpaceOnUse">
+  <!-- shadows -->
+  <rect x="4" y="5" width="4" height="12" fill="url(#rg2)"/>
+  <rect x="4" y="49" width="4" height="12" fill="url(#rg2)"/>
+  <!-- 1 top & bottom row pin -->
+  <rect x="2" y="4" width="4" height="12" rx=".5" ry=".5" fill="url(#lg3)" stroke="url(#lg5)"/>
+  <rect x="2" y="48" width="4" height="12" rx=".5" ry=".5" fill="url(#lg4)" stroke="url(#lg6)"/>
+ </pattern>
+ <g stroke-linejoin="round">
+  <!-- shadows -->
+  <rect y="38" width="64" height="20" fill="url(#rg2)"/>
+  <rect x="60" y="15" width="4" height="35" fill="url(#rg2)"/>
+  <!-- pins and chip body -->
+  <rect x="4" width="56" height="64" fill="url(#pat1)"/>
+  <rect x="2" y="16" width="60" height="32" rx="2" ry="2" fill="url(#rg1)" stroke="url(#lg2)" stroke-width="2"/>
+ </g>
+ <text font-family="'DejaVu Sans',sans-serif" font-size="16px" font-style="oblique" font-weight="bold"><tspan x="8.5" y="33.5">SDCC</tspan><tspan x="7.75" y="32.75" fill="#ff80ff">SDCC</tspan><tspan x="8" y="33" fill="#800080">SDCC</tspan></text>
+ <text font-family="'OCR A Std','OCR A',monospace" font-size="5.3333px"><tspan x="13.2" y="40.2" fill="#c0c0c0">Small Device</tspan><tspan x="13" y="40">Small Device</tspan><tspan x="13.2" y="45.2" fill="#c0c0c0">C Compiler</tspan><tspan x="13" y="45">C Compiler</tspan></text>
+ <circle cx="8" cy="42" r="2" fill="none" stroke="url(#lg1)" stroke-width=".75"/>
+ <metadata>
+  <rdf:RDF>
+   <cc:Work rdf:about="">
+    <dc:title>SDCC Logo</dc:title>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+</svg>

@@ -1,0 +1,171 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.1.5 ISO C23</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node44.html">
+<LINK REL="previous" HREF="node42.html">
+<LINK REL="next" HREF="node44.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node44.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node38.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node42.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1128"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1130"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node44.html">3.1.6 ISO C2y preview</A>
+<B> Up:</B> <A
+ HREF="node38.html">3.1 Standard-Compliance</A>
+<B> Previous:</B> <A
+ HREF="node42.html">3.1.4 ISO C11 and ISO</A>
+ &nbsp; <B>  <A ID="tex2html1129"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1131"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1132"
+  HREF="node43.html#SECTION00415100000000000000">Deviations from standard compliance</A>
+<LI><A ID="tex2html1133"
+  HREF="node43.html#SECTION00415200000000000000">Features missing in some ports</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00415000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> ISO C23</A>
+</H2>
+
+<P>
+Use <SPAN  CLASS="textbf"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">--std-c23</SPAN></SPAN><A ID="686"></A></SPAN>
+to compile in this mode.
+
+<P>
+
+<H3><A ID="SECTION00415100000000000000">
+Deviations from standard compliance</A>
+</H3>
+
+<UL>
+<LI>initialization of structure arrays must be fully braced.
+
+<P>
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">struct s { char x } a[] = {1, 2};&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* invalid
+in SDCC */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">struct s { char x } a[] = {{1}, {2}}; /* OK
+*/</SPAN>
+
+</BLOCKQUOTE>
+</LI>
+<LI><SPAN  CLASS="texttt">float</SPAN><A ID="700"></A> is substituted for (<SPAN  CLASS="texttt">long</SPAN>)
+<SPAN  CLASS="texttt">double</SPAN><A ID="703"></A> and a warning is emitted.
+</LI>
+<LI>Support for attributes is slightly incomplete.
+</LI>
+<LI>Checked integer arithmetic is not supported for (<SPAN  CLASS="texttt">unsigned</SPAN>)
+<SPAN  CLASS="texttt">long long</SPAN>.
+</LI>
+<LI>Qualifier-preserving standard library functions are not implemented.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00415200000000000000">
+Features missing in some ports</A>
+</H3>
+
+<UL>
+<LI>pic14, pic16: structures<A ID="709"></A> and unions<A ID="710"></A> cannot
+be passed as function parameters
+</LI>
+<LI>hc08, s08, mos6502, pic14, pic16: they cannot be a return value<A ID="711"></A>
+from a function, e.g.:
+
+<P>
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">struct s { ... };</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">struct</SPAN></SPAN> <SPAN  CLASS="texttt">s foo1 (</SPAN><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">struct</SPAN></SPAN>
+<SPAN  CLASS="texttt">s parms) /* unsupported in these SDCC ports */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;struct s rets;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return rets; /* unsupported in these SDCC ports
+*/</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+</LI>
+<LI>mcs51, ds390, hc08, s08, pdk13, pdk14, pdk15 and mos6502 ports: functions
+are not reentrant unless explicitly declared as such or <SPAN  CLASS="textbf"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">--</SPAN>stack-auto</SPAN></SPAN>
+is specified.
+</LI>
+<LI>pic14: there is no support for 64 bit integer types. 
+</LI>
+<LI>pic14, pic16: <SPAN  CLASS="texttt">_BitInt</SPAN> is not supported.
+</LI>
+</UL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node44.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node38.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node42.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1128"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1130"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node44.html">3.1.6 ISO C2y preview</A>
+<B> Up:</B> <A
+ HREF="node38.html">3.1 Standard-Compliance</A>
+<B> Previous:</B> <A
+ HREF="node42.html">3.1.4 ISO C11 and ISO</A>
+ &nbsp; <B>  <A ID="tex2html1129"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1131"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

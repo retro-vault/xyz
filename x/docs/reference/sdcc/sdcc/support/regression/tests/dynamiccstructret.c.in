@@ -1,0 +1,67 @@
+/** dynamicc.c.in - test Dynamic C calling convention support.
+    AFAIK the original Dynamic C only supported Z180 and the Rabbits.
+    We support this calling convention for all Z80-like architectures, though.
+
+    rtype: signed char, unsigned char, signed int, unsigned int, signed long, unsigned long
+*/
+#include <testfwk.h>
+#include <stdarg.h>
+
+#define VAL1 0xaa55a55a
+#define VAL2 0xbb66b66b
+
+struct s1
+{
+  {rtype} i;
+};
+
+struct s2
+{
+  char c; // Mostly to invert even/odd size vs struct s1.
+  {rtype} i;
+};
+
+#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) // struct return not yet supported
+struct s1 fret1 ({rtype} p) __dynamicc
+{
+  struct s1 s;
+  s.i = p;
+  return s;
+}
+
+struct s2 fret2 ({rtype} p) __dynamicc
+{
+  struct s2 s;
+  s.i = p;
+  s.c = 'A';
+  return s;
+}
+
+struct s2 fret3 (struct s1 p) __dynamicc
+{
+  struct s2 s;
+  s.i = p.i;
+  s.c = 'B';
+  return s;
+}
+#endif
+
+void testDynamicC(void)
+{
+#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) // struct return not yet supported
+#if !defined(__SDCC_mcs51) || !defined(__SDCC_STACK_AUTO) // Bug #3885
+  struct s1 s1;
+  struct s2 s2;
+  fret1 (VAL2);
+  s1 = fret1 (VAL1);
+  ASSERT (s1.i == ({rtype})VAL1);
+  s2 = fret2 (VAL2);
+  ASSERT (s2.i == ({rtype})VAL2);
+  ASSERT (s2.c == 'A');
+  s2 = fret3 (s1);
+  ASSERT (s2.i == ({rtype})VAL1);
+  ASSERT (s2.c == 'B');
+#endif
+#endif
+}
+

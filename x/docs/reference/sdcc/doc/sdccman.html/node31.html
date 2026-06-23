@@ -1,0 +1,194 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>2.9 Components of SDCC</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node26.html">
+<LINK REL="next" HREF="node32.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node32.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node10.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node30.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html899"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html901"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node32.html">2.9.1 sdcc - The Compiler</A>
+<B> Up:</B> <A
+ HREF="node10.html">2. Installing SDCC</A>
+<B> Previous:</B> <A
+ HREF="node30.html">2.8.4 What the ''make install''</A>
+ &nbsp; <B>  <A ID="tex2html900"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html902"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00390000000000000000">
+<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">9</SPAN> Components of SDCC</A>
+</H1>
+
+<P>
+SDCC is not just a compiler, but a collection of tools by various
+developers. These include linkers, assemblers, simulators and other
+components. Here is a summary of some of the components. Note that
+the included simulator and assembler have separate documentation which
+you can find in the source package in their respective directories.
+As SDCC grows to include support for other processors, other packages
+from various developers are included and may have their own sets of
+documentation.
+<BR>
+<BR>
+You might want to look at the files which are installed in &lt;installdir&gt;.
+At the time of this writing, we find the following programs, among
+others, for gcc-builds:
+<BR> 
+<BR>
+In &lt;installdir&gt;/bin:
+
+<UL>
+<LI>sdcc - The compiler.
+</LI>
+<LI>sdcpp - The C preprocessor.
+</LI>
+<LI>sdas8051 - The assembler for 8051 type processors.
+</LI>
+<LI>sdas390 - The assembler for DS80C390 processor.
+</LI>
+<LI>sdasz80<SPAN  CLASS="textbf">,</SPAN> sdasgb - The Z80 and GameBoy Z80 assemblers.
+</LI>
+<LI>sdas6808 - The 6808 assembler.
+</LI>
+<LI>sdasstm8 - The STM8 assembler.
+</LI>
+<LI>sdld -The linker for 8051 and STM8 type processors.
+</LI>
+<LI>sdldz80<SPAN  CLASS="textbf">,</SPAN> sdldgb - The Z80 and GameBoy Z80 linkers.
+</LI>
+<LI>sdld6808 - The 6808 linker.
+</LI>
+<LI>ucsim_51, s51 - The ucSim 8051 simulator.
+</LI>
+<LI>ucsim_m68hc08 - The ucSim 6808 simulator.
+</LI>
+<LI>ucsim_stm8 - The ucSim STM8 simulator.
+</LI>
+<LI>ucsim_z80 - The ucSim Z80 simulator.
+</LI>
+<LI>sdcdb - The source debugger.
+</LI>
+<LI>sdar, sdranlib, sdnm, sdobjcopy - The sdcc archive managing and indexing
+utilites.
+</LI>
+<LI>packihx - A tool to pack (compress) Intel hex files.
+</LI>
+<LI>makebin - A tool to convert Intel Hex file to a binary and GameBoy
+binary image file format.
+</LI>
+</UL>
+In &lt;installdir&gt;/share/sdcc/include
+
+<UL>
+<LI>the include files
+</LI>
+</UL>
+In &lt;installdir&gt;/share/sdcc/non-free/include
+
+<UL>
+<LI>the non-free include files
+</LI>
+</UL>
+In &lt;installdir&gt;/share/sdcc/lib
+
+<UL>
+<LI>the src and target subdirectories with the precompiled relocatables.
+</LI>
+</UL>
+In &lt;installdir&gt;/share/sdcc/non-free/lib
+
+<UL>
+<LI>the src and target subdirectories with the non-free precompiled relocatables.
+</LI>
+</UL>
+In &lt;installdir&gt;/share/sdcc/doc
+
+<UL>
+<LI>the documentation
+</LI>
+</UL>
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html903"
+  HREF="node32.html"><SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> sdcc - The Compiler</A>
+<LI><A ID="tex2html904"
+  HREF="node33.html"><SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> sdcpp - The C-Preprocessor</A>
+<LI><A ID="tex2html905"
+  HREF="node34.html"><SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">3</SPAN> sdas, sdld - The Assemblers and Linkage Editors</A>
+<LI><A ID="tex2html906"
+  HREF="node35.html"><SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">4</SPAN> ucsim_51, ucsim_z80, ucsim_stm8 etc. - The Simulators</A>
+<LI><A ID="tex2html907"
+  HREF="node36.html"><SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">5</SPAN> sdcdb - Source Level Debugger</A>
+</UL>
+<!--End of Table of Child-Links-->
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node32.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node10.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node30.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html899"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html901"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node32.html">2.9.1 sdcc - The Compiler</A>
+<B> Up:</B> <A
+ HREF="node10.html">2. Installing SDCC</A>
+<B> Previous:</B> <A
+ HREF="node30.html">2.8.4 What the ''make install''</A>
+ &nbsp; <B>  <A ID="tex2html900"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html902"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,103 @@
+        .module xcc_output
+        .area   _CODE
+        .globl  _f8
+_f8:
+        ld      b, h
+        ld      c, l
+        ld      h, b
+        ld      l, c
+        .globl  _fixed8_8_div2
+        jp      _fixed8_8_div2
+__f8_end:
+        .globl  _f16
+_f16:
+        push    ix
+        ld      ix, #0
+        add     ix, sp
+        push    hl
+        call    __xopt_spaghetti_2
+        pop     hl
+        call    __xopt_spaghetti_1
+        add     hl, sp
+        ld      sp, hl
+        call    __xopt_spaghetti_0
+        .globl  _fixed16_16_mul3_2
+        call    _fixed16_16_mul3_2
+__f16_end:
+        ld      sp, ix
+        pop     ix
+        ret
+        .globl  _f24
+_f24:
+        push    ix
+        ld      ix, #0
+        add     ix, sp
+        push    hl
+        call    __xopt_spaghetti_2
+        pop     hl
+        call    __xopt_spaghetti_1
+        add     hl, sp
+        ld      sp, hl
+        call    __xopt_spaghetti_0
+        .globl  _fixed24_8_mul5_4
+        call    _fixed24_8_mul5_4
+__f24_end:
+        ld      sp, ix
+        pop     ix
+        ret
+        .globl  _f16_half
+_f16_half:
+        push    ix
+        ld      ix, #0
+        add     ix, sp
+        push    hl
+        call    __xopt_spaghetti_2
+        pop     hl
+        call    __xopt_spaghetti_1
+        add     hl, sp
+        ld      sp, hl
+        call    __xopt_spaghetti_0
+        .globl  _fixed16_16_mul1_2
+        call    _fixed16_16_mul1_2
+__f16_half_end:
+        ld      sp, ix
+        pop     ix
+        ret
+        .globl  _f24_quarter
+_f24_quarter:
+        push    ix
+        ld      ix, #0
+        add     ix, sp
+        push    hl
+        call    __xopt_spaghetti_2
+        pop     hl
+        call    __xopt_spaghetti_1
+        add     hl, sp
+        ld      sp, hl
+        call    __xopt_spaghetti_0
+        .globl  _fixed24_8_mul1_4
+        call    _fixed24_8_mul1_4
+__f24_quarter_end:
+        ld      sp, ix
+        pop     ix
+        ret
+        .area   _CODE
+__xopt_spaghetti_0:
+        ld      l, -8(ix)
+        ld      h, -7(ix)
+        ex      de, hl
+        ld      l, -6(ix)
+        ld      h, -5(ix)
+        ret
+        .area   _CODE
+__xopt_spaghetti_1:
+        ld      -6(ix), l
+        ld      -5(ix), h
+        ld      hl, #-8
+        ret
+        .area   _CODE
+__xopt_spaghetti_2:
+        ex      de, hl
+        ld      -8(ix), l
+        ld      -7(ix), h
+        ret

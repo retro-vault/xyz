@@ -1,0 +1,25 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_tame_srl_a
+_tame_srl_a:
+	; sdcccall(1) prologue: tame_srl_a (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	xor	d
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	and	#1
+__tame_srl_a_end:
+	; epilogue: tame_srl_a
+	ld	sp, ix
+	pop	ix
+	ret

@@ -1,0 +1,28 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_use_local_helper
+_use_local_helper:
+	; sdcccall(1) prologue: use_local_helper (locals=0, temp_frame=0, stack_params=0)
+	; frameless function: no IX frame needed
+	ld	a, #1
+	ld	e, a
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
+	ld	a, #3
+	ld	e, a
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__use_local_helper_end:
+	; epilogue: use_local_helper
+	ret

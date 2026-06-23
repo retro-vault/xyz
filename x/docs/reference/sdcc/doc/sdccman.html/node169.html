@@ -1,0 +1,78 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.8 Header Files</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node170.html">
+<LINK REL="previous" HREF="node168.html">
+<LINK REL="next" HREF="node170.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node170.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node168.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1996"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1998"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node170.html">4.9.9 Libraries</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node168.html">4.9.7 Header Files and Libraries</A>
+ &nbsp; <B>  <A ID="tex2html1997"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1999"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00598000000000000000"></A><A ID="subsec:PIC16_Header-Files"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">8</SPAN> Header Files
+</H2>
+
+<P>
+There is one main header file<A ID="3442"></A> that can
+be included to the source files using the pic16<A ID="3443"></A> port.
+That file is the <SPAN  CLASS="textbf">pic18fregs.h</SPAN>. This header file contains
+the definitions for the processor special registers, so it is necessary
+if the source accesses them. It can be included by adding the following
+line in the beginning of the file:
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>#include&nbsp;&lt;pic18fregs.h&gt;
+</DD>
+</DL>The specific microcontroller is selected within the pic18fregs.h automatically,
+so the same source can be used with a variety of devices.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

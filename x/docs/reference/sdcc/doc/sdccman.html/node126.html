@@ -1,0 +1,313 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.1.4 MCS51/DS390 Startup Code</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node127.html">
+<LINK REL="previous" HREF="node125.html">
+<LINK REL="next" HREF="node127.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node127.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node125.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1716"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1718"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node127.html">4.1.5 Interfacing with Assembler Code</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node125.html">4.1.3 Bankswitching</A>
+ &nbsp; <B>  <A ID="tex2html1717"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1719"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00514000000000000000"></A><A ID="subsec:MCS51-Startup-Code"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> MCS51/DS390 Startup Code
+</H2>
+
+<P>
+The compiler triggers the linker to link certain initialization modules
+from the runtime library<A ID="2700"></A> called crt&lt;something&gt;.
+Only the necessary ones are linked, for instance crtxstack.asm (GSINIT1,
+GSINIT5) is not linked unless the -<SPAN  CLASS="textbf"></SPAN>-xstack option is used.
+These modules are highly entangled by the use of special segments/areas,
+but a common layout is shown below:
+<BLOCKQUOTE>
+<SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(main.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area HOME (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__interrupt_vect:</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ljmp __sdcc_gsinit_startup</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtstart.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT0 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__sdcc_gsinit_startup::</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov sp,#__start__stack
+- 1</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtxstack.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT1 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__sdcc_init_xstack::</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">; Need to initialize in GSINIT1 in case the
+user's __sdcc_external_startup uses the xstack.</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov __XPAGE,#(__start__xstack
+» 8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov _spx,#__start__xstack</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtstart.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT2 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lcall ___sdcc_external_startup</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov a,dpl</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;jz __sdcc_init_data</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ljmp __sdcc_program_startup</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__sdcc_init_data:</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtxinit.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT3 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__mcs51_genXINIT::</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r1,#l_XINIT</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov a,r1</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;orl a,#(l_XINIT »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;jz 00003$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r2,#((l_XINIT+255) »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov dptr,#s_XINIT</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r0,#s_XISEG</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov __XPAGE,#(s_XISEG »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00001$:&nbsp;clr a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;movc a,@a+dptr</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;movx @r0,a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inc dptr</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inc r0</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cjne r0,#0,00002$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inc __XPAGE</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00002$:&nbsp;djnz r1,00001$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;djnz r2,00001$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov __XPAGE,#0xFF</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00003$:</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtclear.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT4 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__mcs51_genRAMCLEAR::</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;clr a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r0,#(l_IRAM-1)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00004$:&nbsp;mov @r0,a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;djnz r0,00004$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">; _mcs51_genRAMCLEAR() end</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtxclear.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT4 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__mcs51_genXRAMCLEAR::</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r0,#l_PSEG</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov a,r0</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;orl a,#(l_PSEG »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;jz 00006$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r1,#s_PSEG</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov __XPAGE,#(s_PSEG »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;clr a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00005$:&nbsp;movx @r1,a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inc r1</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;djnz r0,00005$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00006$:</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r0,#l_XSEG</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov a,r0</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;orl a,#(l_XSEG »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;jz 00008$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov r1,#((l_XSEG + 255) »
+8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov dptr,#s_XSEG</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;clr a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00007$:&nbsp;movx @dptr,a</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inc dptr</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;djnz r0,00007$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;djnz r1,00007$</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">00008$:</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(crtxstack.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT5 (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">; Need to initialize in GSINIT5 because __mcs51_genXINIT
+modifies __XPAGE</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">; and __mcs51_genRAMCLEAR modifies _spx.</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov __XPAGE,#(__start__xstack
+» 8)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mov _spx,#__start__xstack</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(application modules)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSINIT (CODE)</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">(main.asm)</SPAN></SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area GSFINAL (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ljmp __sdcc_program_startup</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">;--------------------------------------------------------</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">; Home</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">;--------------------------------------------------------</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area HOME (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.area CSEG (CODE)</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">__sdcc_program_startup:</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lcall _main</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">; return from main will lock up</SPAN></SPAN>&nbsp;
+<BR><SPAN CLASS="FOOTNOTESIZE"><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sjmp .</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN></BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+
+</BLOCKQUOTE>
+On some mcs51 variants __xdata<A ID="2929"></A>
+memory has to be explicitly enabled before it can be accessed or if
+the watchdog<A ID="2930"></A> needs to be disabled, this is the place
+to do it. The startup code clears all internal data memory, 256 bytes
+by default, but from 0 to n-1 if <SPAN  CLASS="textit">&mdash;iram-size<A ID="2931"></A>
+&lt;n&gt;</SPAN> is used. (recommended for Chipcon CC1010).
+
+<P>
+See also the compiler option <SPAN  CLASS="textit">&mdash;no-xinit</SPAN>-<SPAN  CLASS="textit">opt</SPAN><A ID="2934"></A>
+and section <A HREF="node122.html#subsec:MCS51-variants">4.1</A> about MCS51-variants.
+<BR>
+<P>
+While these initialization modules are meant as generic startup code
+there might be the need for customization. Let's assume the return
+value of <SPAN  CLASS="textit">__sdcc_external_startup()</SPAN> in <SPAN  CLASS="textit">crtstart.asm</SPAN>
+should not be checked (or <SPAN  CLASS="textit">__sdcc_external_startup()</SPAN> should
+not be called at all). The recommended way would be to copy <SPAN  CLASS="textit">crtstart.asm</SPAN>
+(f.e. from <kbd><A ID="tex2html62"
+  HREF="http://svn.code.sf.net/p/sdcc/code/trunk/sdcc/device/lib/mcs51/crtstart.asm">http://svn.code.sf.net/p/sdcc/code/trunk/sdcc/device/lib/mcs51/crtstart.asm</A></kbd>)
+into the source directory, adapt it there, then assemble it with <SPAN  CLASS="textit">sdas8051
+-plosgff</SPAN><A ID="tex2html63"
+  HREF="footnode.html#foot6245"><SUP><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN></SUP></A><SPAN  CLASS="textit">
+crtstart.asm</SPAN> and when linking your project explicitly specify <SPAN  CLASS="textit">crtstart.rel</SPAN>.
+As a bonus a listing of the relocated object file <SPAN  CLASS="textit">crtstart.rst</SPAN>
+is generated.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node127.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node125.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1716"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1718"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node127.html">4.1.5 Interfacing with Assembler Code</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node125.html">4.1.3 Bankswitching</A>
+ &nbsp; <B>  <A ID="tex2html1717"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1719"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

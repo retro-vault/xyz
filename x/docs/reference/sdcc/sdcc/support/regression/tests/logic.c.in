@@ -1,0 +1,140 @@
+/** Tests the basic logical operations.
+
+    type: char, int, long
+    storage: static, 
+    attr: volatile
+    values: 5, 350, 31734
+ */
+#include <testfwk.h>
+
+static {type}
+alwaysTrue(void)
+{
+    return ({type}){values};
+}
+
+static {type}
+alwaysFalse(void)
+{
+    return 0;
+}
+
+static {type}
+neverGetHere1(void)
+{
+    ASSERT (0);
+    return 0;
+}
+
+static {type}
+neverGetHere2(void)
+{
+    ASSERT (0);
+    return 0;
+}
+
+static {type}
+neverGetHere3(void)
+{
+    ASSERT (0);
+    return 0;
+}
+
+static int hit;
+
+static void
+resetGetHere(void)
+{
+    hit = 0;
+}
+
+static {type}
+alwaysGetHere(void)
+{
+    hit++;
+    return 1;
+}
+
+static void
+testLogicalAnd(void)
+{
+#if !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) // Lack of memory
+#if !(defined (__SDCC_pdk15) && defined(__SDCC_STACK_AUTO)) // Lack of code memory
+    {type} true_ = alwaysTrue();
+    {type} false_ = alwaysFalse();
+
+    ASSERT(true_);
+    ASSERT(!false_);
+    ASSERT(true_ && true_ && true_);
+    ASSERT(true_ && !false_);
+    ASSERT(!false_ && true_);
+
+    /* Test that the evaluation is aborted on the first false. */
+    if (true_ && false_ && neverGetHere1()) {
+        /* Tested using neverGetHere1() */
+    }
+
+    /* Alternate that is similar. */
+    if (true_ && false_) {
+        neverGetHere2();
+        /* Tested using neverGetHere2() */
+    }
+
+    resetGetHere();
+    /* Test that the evaluation is done left to right. */
+    if (alwaysGetHere() && true_ && false_) {
+        ASSERT(hit == 1);
+    }
+#endif
+#endif
+}
+
+static void
+testLogicalOr(void)
+{
+#if !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) // Lack of memory
+    {type} true_ = alwaysTrue();
+    {type} false_ = alwaysFalse();
+
+    ASSERT(true_);
+    ASSERT(!false_);
+    ASSERT(false_ || false_ || true_);
+    ASSERT(!true_ || !false_);
+    ASSERT(false_ || true_);
+
+    /* Test that the evaluation is aborted on the first hit. */
+    if (false_ || true_ || neverGetHere3()) {
+        /* Tested using neverGetHere3() */
+    }
+
+    resetGetHere();
+    /* Test that the evaluation is done left to right. */
+    if (alwaysGetHere() || true_ || false_) {
+        ASSERT(hit == 1);
+    }
+#endif
+}
+
+static void
+testNot(void)
+{
+    {type} true_ = alwaysTrue();
+    {type} false_ = alwaysFalse();
+
+    ASSERT(!false_);
+    ASSERT(!!true_);
+    ASSERT(!!!false_);
+}
+
+static void
+testFlagToVariable(void)
+{
+    {type} true_ = alwaysTrue();
+    {type} false_ = alwaysFalse();
+    {type} val = !true_;
+
+    ASSERT(!val);
+    val = !!false_;
+    ASSERT(!false_);
+}
+

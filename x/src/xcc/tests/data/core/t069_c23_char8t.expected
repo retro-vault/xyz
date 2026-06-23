@@ -1,0 +1,105 @@
+	.module xcc_output
+
+	.area _DATA
+	.globl _buf
+_buf:
+	.db 195
+	.db 169
+	.db 0
+	.db 0
+
+
+	.area _CODE
+
+	.globl _get_first
+_get_first:
+	; sdcccall(1) prologue: get_first (locals=0, temp_frame=9, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-9
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #_buf
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	a, #0
+	ld	e, a
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	a, (hl)
+	ld	-5(ix), a
+	ld	a, -5(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-7(ix), l
+	ld	-6(ix), h
+	ld	l, -7(ix)
+	ld	h, -6(ix)
+	ld	-9(ix), l
+	ld	-8(ix), h
+	ld	l, -9(ix)
+	ld	h, -8(ix)
+	ex	de, hl
+	jp	__get_first_end
+__get_first_end:
+	; epilogue: get_first
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _get_second
+_get_second:
+	; sdcccall(1) prologue: get_second (locals=0, temp_frame=9, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-9
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #_buf
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	a, #1
+	ld	e, a
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	a, (hl)
+	ld	-5(ix), a
+	ld	a, -5(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-7(ix), l
+	ld	-6(ix), h
+	ld	l, -7(ix)
+	ld	h, -6(ix)
+	ld	-9(ix), l
+	ld	-8(ix), h
+	ld	l, -9(ix)
+	ld	h, -8(ix)
+	ex	de, hl
+	jp	__get_second_end
+__get_second_end:
+	; epilogue: get_second
+	ld	sp, ix
+	pop	ix
+	ret

@@ -1,0 +1,99 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.1.8 Bit-shifting Operations.</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node222.html">
+<LINK REL="previous" HREF="node220.html">
+<LINK REL="next" HREF="node222.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node222.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node220.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2329"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2331"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node222.html">8.1.9 Bit-rotation</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node220.html">8.1.7 'switch' Statements</A>
+ &nbsp; <B>  <A ID="tex2html2330"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2332"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00918000000000000000"></A><A ID="4388"></A>
+<BR>
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN> Bit-shifting Operations.
+</H2>
+
+<P>
+Bit shifting is one of the most frequently used operation in embedded
+programming. SDCC tries to implement bit-shift operations in the most
+efficient way possible, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">unsigned char i;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">i »= 4;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">...</SPAN>
+
+</BLOCKQUOTE>
+generates the following code:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">mov&nbsp; a,_i</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">swap a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">anl&nbsp; a,#0x0f</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">mov&nbsp; _i,a</SPAN>
+
+</BLOCKQUOTE>
+Typically, SDCC will not setup a loop if the shift count is known.
+Another example:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">unsigned int i;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">i »= 9;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">...</SPAN>
+
+</BLOCKQUOTE>
+will generate:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">mov&nbsp;&nbsp;a,(_i + 1)</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">mov&nbsp;&nbsp;(_i + 1),#0x00</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">clr&nbsp;&nbsp;c</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">rrc&nbsp;&nbsp;a</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">mov&nbsp;&nbsp;_i,a</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

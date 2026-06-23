@@ -1,0 +1,469 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9 The PIC16 port</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node151.html">
+<LINK REL="next" HREF="node162.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node162.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node121.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node160.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1926"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1928"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node162.html">4.9.1 Global Options</A>
+<B> Up:</B> <A
+ HREF="node121.html">4. Notes on supported Processors</A>
+<B> Previous:</B> <A
+ HREF="node160.html">4.8.9 Known Bugs</A>
+ &nbsp; <B>  <A ID="tex2html1927"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1929"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00590000000000000000"></A><A ID="3268"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN> The PIC16 port
+</H1>
+
+<P>
+The PIC16 port adds support for Microchip<A ID="3269"></A><SPAN CLASS="MATH">10#10</SPAN>
+PIC<A ID="3271"></A><SPAN CLASS="MATH">10#10</SPAN> MCUs with 16 bit wide instructions.
+This port is not yet mature and still lacks many features. However,
+it can work for simple code. Currently this family of microcontrollers
+contains the PIC18Fxxx and PIC18Fxxxx; devices supported by the port
+include:
+
+<P>
+
+<P>
+<BR>
+
+
+<P>
+18F13K22 18F13K50
+
+<P>
+18F14K22 18F14K50
+
+<P>
+18F23K20 18F23K22
+
+<P>
+18F24J10 18F24J11 18F24J50 18F24K20 18F24K22 18F24K50
+
+<P>
+18F25J10 18F25J11 18F25J50 18F25K20 18F25K22 18F25K50 18F25K80
+
+<P>
+18F26J11 18F26J13 18F26J50 18F26J53 18F26K20 18F26K22 18F26K80
+
+<P>
+18F27J13 18F27J53
+
+<P>
+18F43K20 18F43K22
+
+<P>
+18F44J10 18F44J11 18F44J50 18F44K20 18F44K22
+
+<P>
+18F45J10 18F45J11 18F45J50 18F45K20 18F45K22 18F45K50 18F45K80
+
+<P>
+18F46J11 18F46J13 18F46J50 18F46J53 18F46K20 18F46K22 18F46K80
+
+<P>
+18F47J13 18F47J53
+
+<P>
+18F63J11 18F63J90
+
+<P>
+18F64J11 18F64J90
+
+<P>
+18F65J10 18F65J11 18F65J15 18F65J50 18F65J90 18F65J94 18F65K22 18F65K80
+18F65K90
+
+<P>
+18F66J10 18F66J11 18F66J15 18F66J16 18F66J50 18F66J55 18F66J60 18F66J65
+
+<P>
+18F66J90 18F66J93 18F66J94 18F66J99 18F66K22 18F66K80 18F66K90
+
+<P>
+18F67J10 18F67J11 18F67J50 18F67J60 18F67J90 18F67J93 18F67J94 18F67K22
+18F67K90
+
+<P>
+18F83J11 18F83J90
+
+<P>
+18F84J11 18F84J90
+
+<P>
+18F85J10 18F85J11 18F85J15 18F85J50 18F85J90 18F85J94 18F85K22 18F85K90
+
+<P>
+18F86J10 18F86J11 18F86J15 18F86J16 18F86J50 18F86J55 18F86J60 18F86J65
+
+<P>
+18F86J72 18F86J90 18F86J93 18F86J94 18F86J99 18F86K22 18F86K90
+
+<P>
+18F87J10 18F87J11 18F87J50 18F87J60 18F87J72 18F87J90 18F87J93 18F87J94
+18F87K22 18F87K90
+
+<P>
+18F95J94 18F96J60 18F96J65 18F96J94 18F96J99
+
+<P>
+18F97J60 18F97J94
+
+<P>
+18F242 18F248 18F252 18F258
+
+<P>
+18F442 18F448 18F452 18F458
+
+<P>
+18F1220 18F1230
+
+<P>
+18F1320 18F1330
+
+<P>
+18F2220 18F2221
+
+<P>
+18F2320 18F2321 18F2331
+
+<P>
+18F2410 18F2420 18F2423 18F2431 18F2439 18F2450 18F2455 18F2458 18F2480
+
+<P>
+18F2510 18F2515 18F2520 18F2523 18F2525 18F2539 18F2550 18F2553 18F2580
+18F2585
+
+<P>
+18F2610 18F2620 18F2680 18F2682 18F2685
+
+<P>
+18F4220 18F4221
+
+<P>
+18F4320 18F4321 18F4331
+
+<P>
+18F4410 18F4420 18F4423 18F4431 18F4439 18F4450 18F4455 18F4458 18F4480
+
+<P>
+18F4510 18F4515 18F4520 18F4523 18F4525 18F4539 18F4550 18F4553 18F4580
+18F4585
+
+<P>
+18F4610 18F4620 18F4680 18F4682 18F4685
+
+<P>
+18F6310 18F6390 18F6393
+
+<P>
+18F6410 18F6490 18F6493
+
+<P>
+18F6520 18F6525 18F6527 18F6585
+
+<P>
+18F6620 18F6621 18F6622 18F6627 18F6628 18F6680
+
+<P>
+18F6720 18F6722 18F6723
+
+<P>
+18F8310 18F8390 18F8393
+
+<P>
+18F8410 18F8490 18F8493
+
+<P>
+18F8520 18F8525 18F8527 18F8585
+
+<P>
+18F8620 18F8621 18F8622 18F8627 18F8628 18F8680
+
+<P>
+18F8720 18F8722 18F8723
+
+<P>
+18LF13K22 18LF13K50
+
+<P>
+18LF14K22 18LF14K50
+
+<P>
+18LF23K22 18LF24J10 18LF24J11 18LF24J50 18LF24K22 18LF24K50
+
+<P>
+18LF25J10 18LF25J11 18LF25J50 18LF25K22 18LF25K50 18LF25K80
+
+<P>
+18LF26J11 18LF26J13 18LF26J50 18LF26J53 18LF26K22 18LF26K80
+
+<P>
+18LF27J13 18LF27J53
+
+<P>
+18LF43K22
+
+<P>
+18LF44J10 18LF44J11 18LF44J50 18LF44K22
+
+<P>
+18LF45J10 18LF45J11 18LF45J50 18LF45K22 18LF45K50 18LF45K80
+
+<P>
+18LF46J11 18LF46J13 18LF46J50 18LF46J53 18LF46K22 18LF46K80
+
+<P>
+18LF47J13 18LF47J53
+
+<P>
+18LF65K80
+
+<P>
+18LF66K80
+
+<P>
+18LF242 18LF248 18LF252 18LF258
+
+<P>
+18LF442 18LF448 18LF452 18LF458
+
+<P>
+18LF1220 18LF1230
+
+<P>
+18LF1320 18LF1330
+
+<P>
+18LF2220 18LF2221
+
+<P>
+18LF2320 18LF2321 18LF2331
+
+<P>
+18LF2410 18LF2420 18LF2423 18LF2431 18LF2439 18LF2450 18LF2455 18LF2458
+18LF2480
+
+<P>
+18LF2510 18LF2515 18LF2520 18LF2523 18LF2525 18LF2539 18LF2550 18LF2553
+18LF2580 18LF2585
+
+<P>
+18LF2610 18LF2620 18LF2680 18LF2682 18LF2685
+
+<P>
+18LF4220 18LF4221
+
+<P>
+18LF4320 18LF4321 18LF4331
+
+<P>
+18LF4410 18LF4420 18LF4423 18LF4431 18LF4439 18LF4450 18LF4455 18LF4458
+18LF4480
+
+<P>
+18LF4510 18LF4515 18LF4520 18LF4523 18LF4525 18LF4539 18LF4550 18LF4553
+18LF4580 18LF4585
+
+<P>
+18LF4610 18LF4620 18LF4680 18LF4682 18LF4685
+
+<P>
+18LF6310 18LF6390 18LF6393
+
+<P>
+18LF6410 18LF6490 18LF6493
+
+<P>
+18LF6520 18LF6525 18LF6527 18LF6585
+
+<P>
+18LF6620 18LF6621 18LF6622 18LF6627 18LF6628 18LF6680
+
+<P>
+18LF6720 18LF6722 18LF6723
+
+<P>
+18LF8310 18LF8390 18LF8393
+
+<P>
+18LF8410 18LF8490 18LF8493
+
+<P>
+18LF8520 18LF8525 18LF8527 18LF8585
+
+<P>
+18LF8620 18LF8621 18LF8622 18LF8627 18LF8628 18LF8680
+
+<P>
+18LF8720 18LF8722 18LF8723 
+
+<P>
+
+<P>
+<BR>
+
+
+<P>
+An up-to-date list of supported devices is also available
+via '<SPAN  CLASS="texttt">sdcc -mpic16 -plist</SPAN>'.
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1930"
+  HREF="node162.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> Global Options</A>
+<LI><A ID="tex2html1931"
+  HREF="node163.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Port Specific Options</A>
+<UL>
+<LI><A ID="tex2html1932"
+  HREF="node163.html#SECTION00592100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Code Generation Options</A>
+<LI><A ID="tex2html1933"
+  HREF="node163.html#SECTION00592200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Optimization Options</A>
+<LI><A ID="tex2html1934"
+  HREF="node163.html#SECTION00592300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Assembling Options</A>
+<LI><A ID="tex2html1935"
+  HREF="node163.html#SECTION00592400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN> Linking Options</A>
+<LI><A ID="tex2html1936"
+  HREF="node163.html#SECTION00592500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">5</SPAN> Debugging Options</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1937"
+  HREF="node164.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">3</SPAN> Environment Variables</A>
+<LI><A ID="tex2html1938"
+  HREF="node165.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">4</SPAN> Preprocessor Macros</A>
+<LI><A ID="tex2html1939"
+  HREF="node166.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">5</SPAN> Directories</A>
+<LI><A ID="tex2html1940"
+  HREF="node167.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">6</SPAN> Pragmas</A>
+<LI><A ID="tex2html1941"
+  HREF="node168.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">7</SPAN> Header Files and Libraries</A>
+<LI><A ID="tex2html1942"
+  HREF="node169.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">8</SPAN> Header Files</A>
+<LI><A ID="tex2html1943"
+  HREF="node170.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">9</SPAN> Libraries</A>
+<UL>
+<LI><A ID="tex2html1944"
+  HREF="node170.html#SECTION00599100000000000000">Building the libraries</A>
+<LI><A ID="tex2html1945"
+  HREF="node170.html#SECTION00599200000000000000">Output of float values via printf()</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1946"
+  HREF="node171.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">10</SPAN> Adding New Devices to the Port</A>
+<LI><A ID="tex2html1947"
+  HREF="node172.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">11</SPAN> Memory Models</A>
+<LI><A ID="tex2html1948"
+  HREF="node173.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">12</SPAN> Stack</A>
+<LI><A ID="tex2html1949"
+  HREF="node174.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">13</SPAN> Functions</A>
+<LI><A ID="tex2html1950"
+  HREF="node175.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">14</SPAN> Function return values</A>
+<LI><A ID="tex2html1951"
+  HREF="node176.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">15</SPAN> Interrupts</A>
+<LI><A ID="tex2html1952"
+  HREF="node177.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">16</SPAN> Generic Pointers</A>
+<LI><A ID="tex2html1953"
+  HREF="node178.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">17</SPAN> Configuration Bits</A>
+<LI><A ID="tex2html1954"
+  HREF="node179.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN> PIC16 C Libraries</A>
+<UL>
+<LI><A ID="tex2html1955"
+  HREF="node179.html#SECTION005918100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN>.<SPAN CLASS="arabic">1</SPAN> Standard I/O Streams</A>
+<LI><A ID="tex2html1956"
+  HREF="node179.html#SECTION005918200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN>.<SPAN CLASS="arabic">2</SPAN> Printing functions</A>
+<LI><A ID="tex2html1957"
+  HREF="node179.html#SECTION005918300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">18</SPAN>.<SPAN CLASS="arabic">3</SPAN> Signals</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1958"
+  HREF="node180.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN> PIC16 Port – Tips</A>
+<UL>
+<LI><A ID="tex2html1959"
+  HREF="node180.html#SECTION005919100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN>.<SPAN CLASS="arabic">1</SPAN> Stack size</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1960"
+  HREF="node181.html"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">20</SPAN> Known Bugs</A>
+<UL>
+<LI><A ID="tex2html1961"
+  HREF="node181.html#SECTION005920100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">20</SPAN>.<SPAN CLASS="arabic">1</SPAN> Extended Instruction Set</A>
+<LI><A ID="tex2html1962"
+  HREF="node181.html#SECTION005920200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">20</SPAN>.<SPAN CLASS="arabic">2</SPAN> Regression Tests</A>
+</UL></UL>
+<!--End of Table of Child-Links-->
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node162.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node121.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node160.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1926"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1928"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node162.html">4.9.1 Global Options</A>
+<B> Up:</B> <A
+ HREF="node121.html">4. Notes on supported Processors</A>
+<B> Previous:</B> <A
+ HREF="node160.html">4.8.9 Known Bugs</A>
+ &nbsp; <B>  <A ID="tex2html1927"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1929"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

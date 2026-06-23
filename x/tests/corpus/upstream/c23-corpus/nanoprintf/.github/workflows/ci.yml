@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    tags:
+      - 'v*'
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly
+  workflow_dispatch:
+
+permissions:
+  packages: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/charlesnicholson/docker-image:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pyright
+        run: python -m pyright --warnings --pythonversion 3.13 build.py tests/gen_tests.py tests/size_report.py
+      - name: Ruff
+        run: python -m ruff check build.py tests/gen_tests.py tests/size_report.py
+
+  sanitizers:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/charlesnicholson/docker-image:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    strategy:
+      matrix:
+        sanitizer: [ubsan, asan]
+        architecture: [32, 64]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        env:
+          CC: /usr/bin/clang
+          CXX: /usr/bin/clang++
+        run: make -j$(nproc) ARCH=${{ matrix.architecture }} SAN=${{ matrix.sanitizer }} VERBOSE=1
+
+  linux-x64:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/charlesnicholson/docker-image:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        configuration: [Debug, Release]
+        architecture: [32, 64]
+        include:
+        - compiler: gcc
+          cc: gcc
+          cxx: g++
+        - compiler: clang
+          cc: clang
+          cxx: clang++
+        exclude:
+        - compiler: gcc
+          architecture: 32
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: make -j$(nproc) CFG=${{ matrix.configuration }} ARCH=${{ matrix.architecture }} VERBOSE=1
+
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
+
+    container:
+      image: ghcr.io/charlesnicholson/docker-image:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        configuration: [Debug, Release]
+        include:
+        - compiler: gcc
+          cc: gcc
+          cxx: g++
+        - compiler: clang
+          cc: clang
+          cxx: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: make -j$(nproc) CFG=${{ matrix.configuration }} ARCH=64 VERBOSE=1
+
+  macos:
+    runs-on: macos-latest
+
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: make -j$(sysctl -n hw.ncpu) CFG=${{ matrix.configuration }} VERBOSE=1
+
+  win:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+        architecture: [32, 64]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Build
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSPATH=%%i"
+          call "%VSPATH%\VC\Auxiliary\Build\vcvars${{ matrix.architecture }}.bat"
+          python.exe build.py --cfg ${{ matrix.configuration }} -v --arch ${{ matrix.architecture }}
+
+  size-reports:
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/charlesnicholson/docker-image:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: AVR2
+        shell: bash
+        run: python tests/size_report.py -p avr2
+
+      - name: AVR5
+        shell: bash
+        run: python tests/size_report.py -p avr5
+
+      - name: Cortex-M0
+        shell: bash
+        run: python tests/size_report.py -p cm0
+
+      - name: Cortex-M4
+        shell: bash
+        run: python tests/size_report.py -p cm4
+
+      - name: Linux x64
+        shell: bash
+        run: python tests/size_report.py -p host
+
+  all-checks-pass:
+    needs: [lint, sanitizers, linux-x64, linux-arm64, macos, win, size-reports]
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo Done
+
+  release:
+    needs: [all-checks-pass]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+
+          # Find the previous version tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]' | grep -v "^${TAG}$" | head -1)
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "nanoprintf ${TAG}:" > release_notes.txt
+          else
+            {
+              echo "nanoprintf ${TAG}:"
+              echo ""
+
+              # Extract unique PR numbers from commit messages between tags
+              git log "${PREV_TAG}..${TAG}" --oneline \
+                | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' | sort -un \
+                | while read -r PR; do
+                    TITLE=$(gh pr view "$PR" --json title --jq '.title' 2>/dev/null || true)
+                    if [ -n "$TITLE" ]; then
+                      echo "${TITLE} https://github.com/${GITHUB_REPOSITORY}/pull/${PR}"
+                    fi
+                  done
+            } > release_notes.txt
+          fi
+
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file release_notes.txt

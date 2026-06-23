@@ -16,13 +16,13 @@ endif
 $(if $(shell which docker),,$(error "docker not found. Please install Docker."))
 $(if $(shell which gcc),,$(error "gcc not found. Please install gcc."))
 
-# If HEAD is tagged as vX.Y.Z, use X.Y.Z as the default package version.
-GIT_EXACT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || true)
+# Use the latest reachable vX.Y.Z tag as the default package version.
+GIT_VERSION_TAG := $(shell git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
 
 # Repository root and shared output directories (exported for sub-makes).
-export PACKAGE_NAME       ?= xtools
-ifneq ($(filter v%,$(GIT_EXACT_TAG)),)
-export PACKAGE_VERSION    ?= $(patsubst v%,%,$(GIT_EXACT_TAG))
+export PACKAGE_NAME       ?= x
+ifneq ($(filter v%,$(GIT_VERSION_TAG)),)
+export PACKAGE_VERSION    ?= $(patsubst v%,%,$(GIT_VERSION_TAG))
 else
 export PACKAGE_VERSION    ?= 0.1.0
 endif
@@ -34,6 +34,9 @@ export OUT_DIR            := $(ROOT)/bin
 export X_DIST_DIR         := $(OUT_DIR)/x
 export Y_DIST_DIR         := $(OUT_DIR)/y
 export Z_DIST_DIR         := $(OUT_DIR)/z
+export X_ROOT            := $(ROOT)/x
+export Y_ROOT            := $(ROOT)/y
+export Z_ROOT            := $(ROOT)/z
 export PLATFORM           ?= none
 export DEFAULT_PLATFORM   := $(PLATFORM)
 export ZX_RAM_STORAGE     ?= plus3
@@ -77,7 +80,7 @@ ifeq ($(LIBC_LONGLONG),0)
 LIBC_FEATURE_DEFINES += -D__XCC_LIBC_NO_LONGLONG=1
 endif
 TARGET_FEATURE_DEFINES := $(LIBC_FEATURE_DEFINES) $(ZX_RAM_STORAGE_DEFINES)
-TARGET_C8FLAGS := -I$(ROOT)/lib/libc/include -I$(ROOT)/include $(TARGET_FEATURE_DEFINES)
+TARGET_C8FLAGS := -I$(X_ROOT)/libc/include -I$(X_ROOT)/platforms/include $(TARGET_FEATURE_DEFINES)
 TARGET_AS8FLAGS := --mode=sdcc $(TARGET_FEATURE_DEFINES)
 export TARGET_FEATURE_DEFINES TARGET_C8FLAGS TARGET_AS8FLAGS
 
@@ -105,197 +108,104 @@ export DOCS_DIR           := $(SHARE_DIR)/doc
 export PKG_DIR            := $(DIST_DIR)/pkg
 export VSIX_STAGE_DIR     := $(PKG_DIR)/vsix
 
-# Compilable sub-projects — order matters (dependencies first).
-# Add new entries here as sub-projects become ready; do not add make targets.
-SUBDIRS := lib tools src/xc lib/libc
-YOS_SUBDIR := src/yos
-XTOOLS_SUBDIRS := lib tools src/xc/xld src/xc/xgdb src/xc/xcc src/xc/xopt src/xc/xas src/xc/xar src/xc/xobjcopy lib/libc
-RUNTIME_ARCHIVE_NAME := libruntime.a
-FIXED_ARCHIVE_NAME := libfixed.a
-STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3 emu)
-PLATFORM_ARCHIVE_NAME := lib$(PLATFORM).a
-PLATFORM_SYS_DIR := $(ROOT)/lib/sys/$(PLATFORM)
-TOOLCHAIN_RUNTIME_BUILD_DIR := $(BUILD_DIR)/toolchain-runtime
-TOOLCHAIN_FIXED_BUILD_DIR := $(BUILD_DIR)/toolchain-fixed
-TOOLCHAIN_PLATFORM_BUILD_DIR := $(BUILD_DIR)/toolchain-platform/$(PLATFORM)
+.PHONY: all x clean help
+.PHONY: stage-includes stage-target-assets stage-xcc-support
+.PHONY: stage-layout-cleanup stage-toolchain-targets
+.PHONY: stage-toolchain-prefixes stage-dist-docs
 
-.PHONY: all
 all:
-	@for d in $(SUBDIRS); do \
-	    echo "==> $$d"; \
-	    $(MAKE) -C $$d || exit 1; \
-	done
-	@echo "==> include"
-	@$(MAKE) stage-includes
-	@echo "==> target assets"
-	@$(MAKE) stage-target-assets
-	@echo "==> layout cleanup"
-	@$(MAKE) stage-layout-cleanup
-	@echo "==> xcc support"
-	@$(MAKE) stage-xcc-support
-	@echo "==> dist docs"
-	@$(MAKE) stage-dist-docs
-	@echo "==> $(YOS_SUBDIR)"
-	@$(MAKE) -C $(YOS_SUBDIR) DIST_DIR=$(Y_DIST_DIR) ZX_ROMS_DIR=$(ZX_ROMS_DIR)
+	@echo "==> $(X_ROOT)"
+	@$(MAKE) -C $(X_ROOT) \
+		REPO_ROOT=$(ROOT) \
+		Y_ROOT=$(Y_ROOT) \
+		BUILD_DIR=$(BUILD_DIR) \
+		DIST_DIR=$(X_DIST_DIR) \
+		OUT_DIR=$(OUT_DIR) \
+		Z_DIST_DIR=$(Z_DIST_DIR) \
+		PLATFORM=$(PLATFORM) \
+		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) \
+		ZX_RAM_STORAGE=$(ZX_RAM_STORAGE) \
+		LIBC_PROFILE=$(LIBC_PROFILE) \
+		LIBC_FLOAT=$(LIBC_FLOAT) \
+		LIBC_DOUBLE=$(LIBC_DOUBLE) \
+		LIBC_LONG=$(LIBC_LONG) \
+		LIBC_LONGLONG=$(LIBC_LONGLONG)
+	@echo "==> $(Y_ROOT)"
+	@$(MAKE) -C $(Y_ROOT) \
+		REPO_ROOT=$(ROOT) \
+		X_ROOT=$(X_ROOT) \
+		BUILD_DIR=$(BUILD_DIR) \
+		DIST_DIR=$(Y_DIST_DIR) \
+		HOST_BIN_DIR=$(Y_DIST_DIR)/bin \
+		PUBLIC_LIB_DIR=$(Y_DIST_DIR)/lib \
+		PUBLIC_INCLUDE_DIR=$(Y_DIST_DIR)/include
 	@echo "==> packages"
-	@$(MAKE) -C pkg all
+	@$(MAKE) -C $(X_ROOT)/pkg all REPO_ROOT=$(ROOT) X_ROOT=$(X_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) VSIX_STAGE_DIR=$(VSIX_STAGE_DIR)
 
-.PHONY: xtools
-xtools:
-	@for d in $(XTOOLS_SUBDIRS); do \
-	    echo "==> $$d"; \
-	    $(MAKE) -C $$d || exit 1; \
-	done
-	@echo "==> include"
-	@$(MAKE) stage-includes
-	@echo "==> target assets"
-	@$(MAKE) stage-target-assets
-	@echo "==> layout cleanup"
-	@$(MAKE) stage-layout-cleanup
-	@echo "==> xcc support"
-	@$(MAKE) stage-xcc-support
-	@echo "==> dist docs"
-	@$(MAKE) stage-dist-docs
+x:
+	@$(MAKE) -C $(X_ROOT) x \
+		REPO_ROOT=$(ROOT) \
+		Y_ROOT=$(Y_ROOT) \
+		BUILD_DIR=$(BUILD_DIR) \
+		DIST_DIR=$(X_DIST_DIR) \
+		OUT_DIR=$(OUT_DIR) \
+		Z_DIST_DIR=$(Z_DIST_DIR) \
+		PLATFORM=$(PLATFORM) \
+		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) \
+		ZX_RAM_STORAGE=$(ZX_RAM_STORAGE) \
+		LIBC_PROFILE=$(LIBC_PROFILE) \
+		LIBC_FLOAT=$(LIBC_FLOAT) \
+		LIBC_DOUBLE=$(LIBC_DOUBLE) \
+		LIBC_LONG=$(LIBC_LONG) \
+		LIBC_LONGLONG=$(LIBC_LONGLONG)
 
-.PHONY: stage-includes
 stage-includes:
-	rm -rf $(PUBLIC_INCLUDE_DIR) $(TARGET_INCLUDE_DIR)
-	mkdir -p $(PUBLIC_INCLUDE_DIR) $(TARGET_INCLUDE_DIR)
-	cp -R $(ROOT)/lib/xbfd/include/. $(PUBLIC_INCLUDE_DIR)/
-	cp -R $(ROOT)/lib/xopt/include/. $(PUBLIC_INCLUDE_DIR)/
-	cp -R $(ROOT)/lib/rsp/include/. $(PUBLIC_INCLUDE_DIR)/
-	cp -R $(ROOT)/lib/xgdb/include/. $(PUBLIC_INCLUDE_DIR)/
-	cp -R $(ROOT)/lib/libc/include/. $(TARGET_INCLUDE_DIR)/
-	cp $(ROOT)/include/yos.h $(TARGET_INCLUDE_DIR)/yos.h
+	@$(MAKE) -C $(X_ROOT) stage-includes REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) OUT_DIR=$(OUT_DIR) Z_DIST_DIR=$(Z_DIST_DIR)
 
-.PHONY: stage-target-assets
 stage-target-assets:
-	rm -rf $(Z80_DIST_DIR)
-	mkdir -p $(Z80_BIN_DIR)
-	mkdir -p $(ZX_TARGET_BIN_DIR) $(ZX_TARGET_INCLUDE_DIR) $(ZX_TARGET_LIB_OUT_DIR)
-	mkdir -p $(ZX_APPS_DIR) $(ZX_MDR_DIR)
-	mkdir -p $(PKG_DIR)/deb $(PKG_DIR)/vsix
-	cp $(ROOT)/tests/microdrives/hello.mdr $(ZX_MDR_DIR)/
+	@$(MAKE) -C $(X_ROOT) stage-target-assets REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) OUT_DIR=$(OUT_DIR) Z_DIST_DIR=$(Z_DIST_DIR)
 
-.PHONY: stage-xcc-support
 stage-xcc-support:
-	rm -rf $(TOOLCHAIN_RUNTIME_BUILD_DIR) $(TOOLCHAIN_FIXED_BUILD_DIR) $(BUILD_DIR)/toolchain-platform
-	rm -f $(TARGET_LIB_DIR)/crt0.rel $(TARGET_LIB_DIR)/crt0.s \
-	      $(TARGET_LIB_DIR)/linker.lk $(TARGET_LIB_DIR)/linker.ld \
-	      $(TARGET_LIB_DIR)/$(RUNTIME_ARCHIVE_NAME) \
-	      $(TARGET_LIB_DIR)/$(FIXED_ARCHIVE_NAME) \
-	      $(TARGET_LIB_DIR)/crt0-*.rel $(TARGET_LIB_DIR)/crt0-*.s \
-	      $(TARGET_LIB_DIR)/linker-*.lk $(TARGET_LIB_DIR)/linker-*.ld
-	@for platform in $(STAGED_PLATFORMS); do \
-	    rm -f "$(TARGET_LIB_DIR)/lib$$platform.a"; \
-	done
-	mkdir -p $(TARGET_LIB_DIR) $(TOOLCHAIN_RUNTIME_BUILD_DIR) $(TOOLCHAIN_FIXED_BUILD_DIR) $(TOOLCHAIN_PLATFORM_BUILD_DIR)
-	@for src in $$(find $(ROOT)/src/xc/xcc/lib/runtime -name '*.s' \
-	        ! -path '*/8_8/*' \
-	        ! -path '*/16_16/*' \
-	        ! -path '*/24_8/*' | sort); do \
-	    rel="$(TOOLCHAIN_RUNTIME_BUILD_DIR)/$$(basename "$${src%.s}").rel"; \
-	    base="$$(basename "$${src%.s}")"; \
-	    skip=0; \
-	    case "$$base" in \
-	        fs*|*2fs|fs2*|fp*|fitosf|fstoi|cabsf|cargf|cimag|conjf|creal|complex_i) \
-	            if [ "$(LIBC_FLOAT)" = "0" ]; then skip=1; fi ;; \
-	    esac; \
-	    case "$$base" in \
-	        db*|*2db|db2*) \
-	            if [ "$(LIBC_DOUBLE)" = "0" ]; then skip=1; fi ;; \
-	    esac; \
-	    case "$$base" in \
-	        *long*) \
-	            if [ "$(LIBC_LONG)" = "0" ]; then skip=1; fi ;; \
-	    esac; \
-	    case "$$base" in \
-	        db2ll|divll|divsll|divull|ll2*|modll|modsll|modull|mulll|shl64|shr64s|shr64u|sint2ll|slong2ll|uint2ll|ull2db|ulong2ll) \
-	            if [ "$(LIBC_LONGLONG)" = "0" ]; then skip=1; fi ;; \
-	    esac; \
-	    if [ "$$skip" = "1" ]; then continue; fi; \
-	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$src" -o "$$rel"; \
-	done
-	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(RUNTIME_ARCHIVE_NAME) $(TOOLCHAIN_RUNTIME_BUILD_DIR)/*.rel
-	@for src in $$(find \
-	        $(ROOT)/src/xc/xcc/lib/runtime/8_8 \
-	        $(ROOT)/src/xc/xcc/lib/runtime/16_16 \
-	        $(ROOT)/src/xc/xcc/lib/runtime/24_8 \
-	        -name '*.s' | sort); do \
-	    stem="$$(basename "$${src%.*}")"; \
-	    opt="$(TOOLCHAIN_FIXED_BUILD_DIR)/$$stem.opt.s"; \
-	    rel="$(TOOLCHAIN_FIXED_BUILD_DIR)/$$stem.rel"; \
-	    $(HOST_BIN_DIR)/xopt -O3 "$$src" -o "$$opt"; \
-	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$opt" -o "$$rel"; \
-	done
-	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(FIXED_ARCHIVE_NAME) $(TOOLCHAIN_FIXED_BUILD_DIR)/*.rel
-	@for platform in $(STAGED_PLATFORMS); do \
-	    sysdir="$(ROOT)/lib/sys/$$platform"; \
-	    builddir="$(BUILD_DIR)/toolchain-platform/$$platform"; \
-	    mkdir -p "$$builddir"; \
-	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$sysdir/crt0.s" -o "$(TARGET_LIB_DIR)/crt0-$$platform.rel"; \
-	    cp "$$sysdir/crt0.s" "$(TARGET_LIB_DIR)/crt0-$$platform.s"; \
-	    cp "$$sysdir/linker.lk" "$(TARGET_LIB_DIR)/linker-$$platform.lk"; \
-	    cp "$$sysdir/linker.ld" "$(TARGET_LIB_DIR)/linker-$$platform.ld"; \
-	    for src in $$(find "$$sysdir" -maxdepth 1 \( -name '*.s' -o -name '*.c' \) ! -name 'crt0.s' | sort); do \
-	        stem="$$(basename "$${src%.*}")"; \
-	        rel="$$builddir/$$stem.rel"; \
-	        case "$$src" in \
-	            *.c) asm="$$builddir/$$stem.s"; \
-	                 $(HOST_BIN_DIR)/xcc -S $(TARGET_C8FLAGS) -o "$$asm" "$$src"; \
-	                 $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$asm" -o "$$rel" ;; \
-	            *.s) $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$src" -o "$$rel" ;; \
-	        esac; \
-	    done; \
-	    $(HOST_BIN_DIR)/xar --mode=gnu rcs "$(TARGET_LIB_DIR)/lib$$platform.a" "$$builddir"/*.rel; \
-	done
-	$(MAKE) -C $(ROOT)/lib/libc \
-	    C8FLAGS="$(TARGET_C8FLAGS)" \
-	    AS8FLAGS="$(TARGET_AS8FLAGS)" \
-	    LIBC_PROFILE="$(LIBC_PROFILE)" \
-	    LIBC_FLOAT="$(LIBC_FLOAT)" \
-	    LIBC_DOUBLE="$(LIBC_DOUBLE)" \
-	    LIBC_LONG="$(LIBC_LONG)" \
-	    LIBC_LONGLONG="$(LIBC_LONGLONG)"
-	cp $(TARGET_LIB_DIR)/crt0-$(PLATFORM).rel $(TARGET_LIB_DIR)/crt0.rel
-	cp $(TARGET_LIB_DIR)/crt0-$(PLATFORM).s $(TARGET_LIB_DIR)/crt0.s
-	cp $(TARGET_LIB_DIR)/linker-$(PLATFORM).lk $(TARGET_LIB_DIR)/linker.lk
-	cp $(TARGET_LIB_DIR)/linker-$(PLATFORM).ld $(TARGET_LIB_DIR)/linker.ld
+	@$(MAKE) -C $(X_ROOT) stage-xcc-support REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) OUT_DIR=$(OUT_DIR) Z_DIST_DIR=$(Z_DIST_DIR) PLATFORM=$(PLATFORM) DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) ZX_RAM_STORAGE=$(ZX_RAM_STORAGE) LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG)
 
-# Remove leftovers from the pre-z80/ mixed layout so an incremental build
-# converges to the clean prefix.
-.PHONY: stage-layout-cleanup
 stage-layout-cleanup:
-	rm -f $(X_DIST_DIR)/bin/appmake \
-	      $(X_DIST_DIR)/bin/microdrive \
-	      $(X_DIST_DIR)/bin/serial \
-	      $(X_DIST_DIR)/lib/libmicrodrive.a \
-	      $(X_DIST_DIR)/lib/libc.a \
-	      $(X_DIST_DIR)/lib/libruntime.a \
-	      $(X_DIST_DIR)/lib/lib$(PLATFORM).a \
-	      $(X_DIST_DIR)/lib/crt0.rel \
-	      $(X_DIST_DIR)/lib/crt0.s \
-	      $(X_DIST_DIR)/lib/linker.ld \
-	      $(X_DIST_DIR)/lib/linker.lk
+	@$(MAKE) -C $(X_ROOT) stage-layout-cleanup REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) OUT_DIR=$(OUT_DIR) Z_DIST_DIR=$(Z_DIST_DIR) PLATFORM=$(PLATFORM)
 
-.PHONY: stage-toolchain-targets
 stage-toolchain-targets:
 	@:
 
-.PHONY: stage-toolchain-prefixes
 stage-toolchain-prefixes:
 	@:
 
-# share/ carries only the compiler tool manuals.
-.PHONY: stage-dist-docs
 stage-dist-docs:
-	mkdir -p $(DIST_DIR)
-	rm -rf $(DIST_DIR)/doc $(DIST_DIR)/docs $(DIST_DIR)/extensions $(DIST_DIR)/share
-	mkdir -p $(DOCS_DIR) $(PKG_DIR)/deb $(PKG_DIR)/vsix
-	cp $(ROOT)/docs/dist/README.md $(DIST_DIR)/README.md
-	cp $(ROOT)/docs/dist/man/*.md $(DOCS_DIR)/
+	@$(MAKE) -C $(X_ROOT) stage-dist-docs REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) OUT_DIR=$(OUT_DIR) Z_DIST_DIR=$(Z_DIST_DIR)
 
-.PHONY: clean
+help:
+	@printf '%s\n' \
+		'Usage: make [target] [VARIABLE=value ...]' \
+		'' \
+		'Targets:' \
+		'  all                  Build x tools, y tools, and packages (default).' \
+		'  x                    Build only the x compiler suite distribution.' \
+		'  stage-includes       Stage host and target headers into bin/x.' \
+		'  stage-target-assets  Stage target output directories and assets.' \
+		'  stage-xcc-support    Build and stage runtime, libc, crt0, and linker files.' \
+		'  stage-dist-docs      Stage x distribution documentation.' \
+		'  clean                Remove bin/ and build/ outputs.' \
+		'  help                 Show this help.' \
+		'' \
+		'Common variables:' \
+		'  PLATFORM=none|cpm3|emu          Default target platform (default: none).' \
+		'  ZX_RAM_STORAGE=plus3|ide        ZX RAM storage backend (default: plus3).' \
+		'  LIBC_PROFILE=full|tiny          Libc feature profile (default: full).' \
+		'  LIBC_FLOAT=0|1                  Enable float libc/runtime support.' \
+		'  LIBC_DOUBLE=0|1                 Enable double libc/runtime support.' \
+		'  LIBC_LONG=0|1                   Enable long libc/runtime support.' \
+		'  LIBC_LONGLONG=0|1               Enable long long libc/runtime support.' \
+		'  PACKAGE_NAME=name               Package name (default: x).' \
+		'  PACKAGE_VERSION=x.y.z           Package version (default: latest vX.Y.Z tag).' \
+		'  PACKAGE_RELEASE=n               Package release number (default: 1).'
+
 clean:
 	rm -rf $(OUT_DIR) $(BUILD_DIR)
-	@$(MAKE) -C pkg clean
+	@$(MAKE) -C $(X_ROOT)/pkg clean REPO_ROOT=$(ROOT) X_ROOT=$(X_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) VSIX_STAGE_DIR=$(VSIX_STAGE_DIR)

@@ -1,0 +1,117 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.2 Cyclomatic Complexity</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node231.html">
+<LINK REL="previous" HREF="node213.html">
+<LINK REL="next" HREF="node231.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node231.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node212.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node229.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2365"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2367"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node231.html">8.3 Retargetting for other Processors</A>
+<B> Up:</B> <A
+ HREF="node212.html">8. SDCC Technical Data</A>
+<B> Previous:</B> <A
+ HREF="node229.html">8.1.16 Peephole Optimizer</A>
+ &nbsp; <B>  <A ID="tex2html2366"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2368"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00920000000000000000"></A><A ID="4633"></A>
+<BR>
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Cyclomatic Complexity
+</H1>
+
+<P>
+Cyclomatic complexity of a function is defined as the number of independent
+paths the program can take during execution of the function. This
+is an important number since it defines the number test cases you
+have to generate to validate the function. The accepted industry standard
+for complexity number is 10, if the cyclomatic complexity reported
+by SDCC exceeds 10 you should think about simplification of the function
+logic. Note that the complexity level is not related to the number
+of lines of code in a function. Large functions can have low complexity,
+and small functions can have large complexity levels. 
+<BR>
+<BR>
+SDCC uses the following formula to compute the complexity:
+<BR>
+<P>
+complexity = (number of edges in control flow graph) - (number of
+nodes in control flow graph) + 2;
+<BR>
+<BR>
+Having said that the industry standard is 10, you should be aware
+that in some cases it be may unavoidable to have a complexity level
+of less than 10. For example if you have switch statement with more
+than 10 case labels, each case label adds one to the complexity level.
+The complexity level is by no means an absolute measure of the algorithmic
+complexity of the function, it does however provide a good starting
+point for which functions you might look at for further optimization.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node231.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node212.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node229.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2365"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2367"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node231.html">8.3 Retargetting for other Processors</A>
+<B> Up:</B> <A
+ HREF="node212.html">8. SDCC Technical Data</A>
+<B> Previous:</B> <A
+ HREF="node229.html">8.1.16 Peephole Optimizer</A>
+ &nbsp; <B>  <A ID="tex2html2366"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2368"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

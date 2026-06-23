@@ -1,0 +1,113 @@
+	.module	xcc_output
+	.area	_DATA
+_main__dst_0:
+	.ds	64
+_main__row_sum_1:
+	.ds	8
+_main__col_sum_2:
+	.ds	8
+	.area	_CODE
+_bench_mix16:
+	; O3 sdcc-style leaf fast path: two-arg word mix helper
+	ld	c, l
+	ld	b, h
+	ld	hl, #40503
+	add	hl, de
+	ld	a, c
+	xor	l
+	ld	l, a
+	ld	a, b
+	xor	h
+	ld	b, a
+	ld	h, a
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	ld	a, b
+	rrca
+	rrca
+	rrca
+	and	#31
+	or	l
+	ld	l, a
+	ld	a, e
+	xor	#74
+	ld	c, a
+	ld	a, d
+	xor	#127
+	ld	b, a
+	add	hl, bc
+	ex	de, hl
+	ret
+	.globl	_main
+_main:
+	; sdcccall(1) prologue: main (locals=0, temp_frame=8, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #4887
+	ld	-7(ix), l
+	ld	-6(ix), h
+	; O3 matrix tail mix loop (count=8)
+	ld	c, #0
+__xcc_L0:
+	ld	a, c
+	cp	#8
+	jr	nc, __xcc_L3
+__xcc_L1:
+	ld	a, #<(_main__row_sum_1)
+	add	a, c
+	ld	e, a
+	ld	a, #>(_main__row_sum_1)
+	call	__xopt_spaghetti_0
+	push	bc
+	call	_bench_mix16
+	ex	de, hl
+	pop	bc
+	ld	a, #<(_main__col_sum_2)
+	add	a, c
+	ld	e, a
+	ld	a, #>(_main__col_sum_2)
+	call	__xopt_spaghetti_0
+	push	bc
+	call	_bench_mix16
+	ex	de, hl
+	pop	bc
+	ld	a, c
+	add	a, a
+	add	a, a
+	add	a, a
+	add	a, c
+	add	a, #<(_main__dst_0)
+	ld	e, a
+	ld	a, #>(_main__dst_0)
+	call	__xopt_spaghetti_0
+	push	bc
+	call	_bench_mix16
+	ex	de, hl
+	pop	bc
+	inc	c
+	jr	__xcc_L0
+__xcc_L3:
+	ld	-7(ix), l
+	ld	-6(ix), h
+	ex	de, hl
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret
+	; xopt: spaghetti outlined duplicate kernel
+	.area	_CODE
+__xopt_spaghetti_0:
+	adc	a, #0
+	ld	d, a
+	ld	a, (de)
+	ld	e, a
+	ld	d, #0
+	ret

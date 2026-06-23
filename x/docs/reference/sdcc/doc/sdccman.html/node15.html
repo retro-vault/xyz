@@ -1,0 +1,93 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>2.4.1 Building SDCC on Linux</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node16.html">
+<LINK REL="previous" HREF="node14.html">
+<LINK REL="next" HREF="node16.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node16.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node14.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node14.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html831"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html833"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node16.html">2.4.2 Building SDCC on Mac</A>
+<B> Up:</B> <A
+ HREF="node14.html">2.4 Building SDCC</A>
+<B> Previous:</B> <A
+ HREF="node14.html">2.4 Building SDCC</A>
+ &nbsp; <B>  <A ID="tex2html832"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html834"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00341000000000000000"></A><A ID="subsec:Building-SDCC-on-Linux"></A>
+<BR>
+<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> Building SDCC on Linux
+</H2>
+
+<OL>
+<LI>Download the source package either from the SDCC Subversion repository
+or from snapshot builds, it will be named something like sdcc-src-yyyymmdd-rrrr.tar.bz2
+<kbd><A ID="tex2html20"
+  HREF="http://sdcc.sourceforge.net/snap.php">http://sdcc.sourceforge.net/snap.php</A></kbd>.
+</LI>
+<LI>Bring up a command line terminal, such as xterm.
+</LI>
+<LI>Unpack the file using a command like: <SPAN  CLASS="textsf"><SPAN  CLASS="textbf">tar
+-xvjf sdcc-src-yyyymmdd-rrrr.tar.bz2&rdquo;</SPAN></SPAN>, this will create a sub-directory
+called sdcc with all of the sources.
+</LI>
+<LI>Change directory into the main SDCC directory, for example type: <SPAN  CLASS="textsf"><SPAN  CLASS="textbf">cd
+sdcc</SPAN></SPAN><SPAN  CLASS="textsf">.</SPAN>
+</LI>
+<LI>Type <SPAN  CLASS="textsf"><SPAN  CLASS="textbf">./configure</SPAN></SPAN>.
+This configures the package for compilation on your system. When the
+treedec library is available, it should be found and used automatically
+(improving the compilation time / code quality trade-off). As of SDCC
+3.7.0, the current develop branch from https://github.com/freetdi/tdlib
+is a suitable version of treedec.
+</LI>
+<LI>Type <SPAN  CLASS="textsf"><SPAN  CLASS="textbf">make</SPAN></SPAN>. All of
+the source packages will compile, this can take a while.
+</LI>
+<LI>Type <SPAN  CLASS="textsf"><SPAN  CLASS="textbf">make install</SPAN></SPAN>
+as root. This copies the binary executables, the include files, the
+libraries and the documentation to the install directories. Proceed
+with section <A HREF="node25.html#sec:Testing-the-SDCC">2.7</A>.
+</LI>
+</OL>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

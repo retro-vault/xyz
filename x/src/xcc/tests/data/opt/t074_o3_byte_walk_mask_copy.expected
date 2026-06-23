@@ -1,0 +1,51 @@
+	.module	xcc_output
+	.area	_DATA
+_a:
+	.ds	64
+_b:
+	.ds	64
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=6, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	; O3 byte mask walk loop (count=64)
+	ld	hl, #a
+	ld	b, #64
+__xcc_L0:
+__xcc_L1:
+	ld	a, (hl)
+	and	#1
+	ld	(hl), a
+	inc	hl
+	djnz	__xcc_L1
+__xcc_L3:
+	; O3 byte copy walk loop (count=64)
+	ld	hl, #b
+	ld	de, #a
+	ld	b, #64
+__xcc_L4:
+__xcc_L5:
+	ld	a, (hl)
+	ld	(de), a
+	inc	hl
+	inc	de
+	djnz	__xcc_L5
+__xcc_L7:
+	xor	a
+	ld	e, a
+	ld	d, #0
+	ld	hl, #_a
+	add	hl, de
+	ld	a, (hl)
+	ld	-6(ix), a
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

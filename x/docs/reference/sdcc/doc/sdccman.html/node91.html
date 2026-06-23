@@ -1,0 +1,157 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.8.2 MCS51/DS390 Interrupt Service Routines</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node92.html">
+<LINK REL="previous" HREF="node90.html">
+<LINK REL="next" HREF="node92.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node92.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node89.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node90.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1431"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1433"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node92.html">3.8.3 HC08 Interrupt Service Routines</A>
+<B> Up:</B> <A
+ HREF="node89.html">3.8 Interrupt Service Routines</A>
+<B> Previous:</B> <A
+ HREF="node90.html">3.8.1 General Information</A>
+ &nbsp; <B>  <A ID="tex2html1432"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1434"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00482000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> MCS51/DS390 Interrupt Service Routines</A>
+</H2>
+
+<P>
+Interrupt<A ID="1852"></A> numbers and the corresponding address
+&amp; descriptions for the Standard 8051/8052 are listed below. SDCC
+will automatically adjust the <A ID="1853"></A> to the
+maximum interrupt number specified.
+<BR>
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Interrupt #</TD>
+<TD CLASS="LEFT">Description</TD>
+<TD CLASS="LEFT">Vector Address</TD>
+</TR>
+<TR><TD CLASS="CENTER">0</TD>
+<TD CLASS="LEFT">External 0</TD>
+<TD CLASS="LEFT">0x0003</TD>
+</TR>
+<TR><TD CLASS="CENTER">1</TD>
+<TD CLASS="LEFT">Timer 0</TD>
+<TD CLASS="LEFT">0x000b</TD>
+</TR>
+<TR><TD CLASS="CENTER">2</TD>
+<TD CLASS="LEFT">External 1</TD>
+<TD CLASS="LEFT">0x0013</TD>
+</TR>
+<TR><TD CLASS="CENTER">3</TD>
+<TD CLASS="LEFT">Timer 1</TD>
+<TD CLASS="LEFT">0x001b</TD>
+</TR>
+<TR><TD CLASS="CENTER">4</TD>
+<TD CLASS="LEFT">Serial</TD>
+<TD CLASS="LEFT">0x0023</TD>
+</TR>
+<TR><TD CLASS="CENTER" COLSPAN=1><SPAN>5</SPAN></TD>
+<TD CLASS="LEFT">Timer 2 (8052)</TD>
+<TD CLASS="LEFT">0x002b</TD>
+</TR>
+<TR><TD CLASS="CENTER">...</TD>
+<TD CLASS="LEFT">&nbsp;</TD>
+<TD CLASS="LEFT">...</TD>
+</TR>
+<TR><TD CLASS="CENTER">n</TD>
+<TD CLASS="LEFT">&nbsp;</TD>
+<TD CLASS="LEFT">0x0003 + 8*n</TD>
+</TR>
+</TABLE>
+<BR></DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+If the interrupt service routine is defined without <SPAN  CLASS="textit">__using<A ID="1863"></A><A ID="1864"></A></SPAN>
+a register bank or with register bank 0 (<SPAN  CLASS="textit">__using</SPAN> (0)), the
+compiler will save the registers used by itself on the stack upon
+entry and restore them at exit, however if such an interrupt service
+routine calls another function then the entire register bank will
+be saved on the stack. This scheme may be advantageous for small interrupt
+service routines which have low register usage.
+
+<P>
+If the interrupt service routine is defined to be using a specific
+register bank then only <SPAN  CLASS="textit">a, b, dptr</SPAN> &amp; psw are saved and restored,
+if such an interrupt service routine calls another function (using
+another register bank) then the entire register bank of the called
+function will be saved on the stack<A ID="1867"></A>. This scheme is
+recommended for larger interrupt service routines.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node92.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node89.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node90.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1431"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1433"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node92.html">3.8.3 HC08 Interrupt Service Routines</A>
+<B> Up:</B> <A
+ HREF="node89.html">3.8 Interrupt Service Routines</A>
+<B> Previous:</B> <A
+ HREF="node90.html">3.8.1 General Information</A>
+ &nbsp; <B>  <A ID="tex2html1432"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1434"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

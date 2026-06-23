@@ -1,0 +1,3 @@
+#failif
+#...
+.* _?_(end|edata|_bss_start)

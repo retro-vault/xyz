@@ -1,0 +1,41 @@
+/* Test rotate right functions from stdbit.h - unsigned long long would work, too, except for running out of code memory on pdk15.
+
+   type: unsigned char, unsigned short, unsigned int, unsigned long, unsigned long long
+ */
+
+#include <testfwk.h>
+
+#pragma std_c23
+
+#if __STDC_VERSION__ > 202311L || defined(__SDCC)
+#include <stdbit.h>
+#endif
+
+volatile {type} i;
+
+{type} ror({type} v, unsigned int c)
+{
+  c %= sizeof({type}) * 8;
+  return(v >> c) | (v << (sizeof({type}) * 8 - c));
+}
+
+void
+testRotateRight(void)
+{
+#if __STDC_VERSION__ > 202311L || defined(__SDCC)
+  i = 0xa5;
+  ASSERT(stdc_rotate_right(i, 1) == ror(i, 1));
+#if !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15) && !(defined(__SDCC_mcs51) && defined(__SDCC_MODEL_SMALL)) // Lack of memory
+  ASSERT(stdc_rotate_right(i, 4) == ror(i, 4));
+  ASSERT(stdc_rotate_right(i, 7) == ror(i, 7));
+  ASSERT(stdc_rotate_right(i, 8) == ror(i, 8));
+  ASSERT(stdc_rotate_right(i, 9) == ror(i, 9));
+  ASSERT(stdc_rotate_right(i, 12) == ror(i, 12));
+  ASSERT(stdc_rotate_right(i, 15) == ror(i, 15));
+
+  ASSERT(stdc_rotate_right_uc(0xa5, 4) == 0x5a);
+  ASSERT(stdc_rotate_right_us(0xa5b6, 4) == 0x6a5b);
+#endif
+#endif
+}
+

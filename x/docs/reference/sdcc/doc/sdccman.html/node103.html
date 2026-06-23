@@ -1,0 +1,134 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.11.1 Inline Assembler Code Formats</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node104.html">
+<LINK REL="previous" HREF="node102.html">
+<LINK REL="next" HREF="node104.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node104.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node102.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node102.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1488"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1490"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node104.html">3.11.2 A Step by Step</A>
+<B> Up:</B> <A
+ HREF="node102.html">3.11 Inline Assembler Code</A>
+<B> Previous:</B> <A
+ HREF="node102.html">3.11 Inline Assembler Code</A>
+ &nbsp; <B>  <A ID="tex2html1489"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1491"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1492"
+  HREF="node103.html#SECTION004111100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Old __asm ... __endasm; Format</A>
+<LI><A ID="tex2html1493"
+  HREF="node103.html#SECTION004111200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> New __asm__ (''inline_assembler_code'')
+Format</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION004111000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN> Inline Assembler Code Formats</A>
+</H2>
+
+<P>
+SDCC supports two formats for inline assembler code definition:
+
+<P>
+
+<H3><A ID="SECTION004111100000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Old __asm ... __endasm; Format</A>
+</H3>
+
+<P>
+Most of inline assembler code examples in this manual use the old
+inline assembler code format, but the new format could be used equivalently.
+
+<P>
+Example:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__asm</SPAN>
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;; This is a comment</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;label:</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;nop</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">__endasm;</SPAN>
+
+</BLOCKQUOTE>
+Note: As of SDCC 4.2.9, assembler comments occurring in this type
+of inline assembler block are affected by macro expansion.
+
+<P>
+
+<H3><A ID="SECTION004111200000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> New __asm__ (''inline_assembler_code'')
+Format</A>
+</H3>
+
+<P>
+The __asm__ inline assembler code format was introduced in SDCC
+version 3.2.0. Its main advantage is that it is compatible with all
+standard compliant C preprocessors.
+
+<P>
+Example:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__asm__ (&rdquo;; This is a comment\nlabel:\n\tnop&rdquo;);</SPAN>
+
+</BLOCKQUOTE>
+Or for better readability:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__asm__ (</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">&rdquo;; This is a comment\n&rdquo;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">&rdquo;label:\n&rdquo;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">&rdquo;&nbsp;&nbsp;&nbsp;&nbsp;nop&rdquo;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">);</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

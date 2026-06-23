@@ -1,0 +1,130 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.2.3 Projects with Multiple Source Files</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node51.html">
+<LINK REL="previous" HREF="node49.html">
+<LINK REL="next" HREF="node51.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node51.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node47.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node49.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1177"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1179"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node51.html">3.2.4 Projects with Additional Libraries</A>
+<B> Up:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+<B> Previous:</B> <A
+ HREF="node49.html">3.2.2 Postprocessing the Intel Hex</A>
+ &nbsp; <B>  <A ID="tex2html1178"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1180"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00423000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Projects with Multiple Source Files</A>
+</H2>
+
+<P>
+SDCC can compile only ONE file at a time. Let us for example assume
+that you have a project containing the following files:
+<BR>
+<BR>
+foo1.c (contains some functions)
+<BR>
+foo2.c (contains some more functions)
+<BR>
+foomain.c (contains more functions and the function main)
+<BR><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+<BR>
+The first two files will need to be compiled separately with the commands:
+<BR>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc&nbsp;-c&nbsp;foo1.c</SPAN></SPAN><SPAN CLASS="FOOTNOTESIZE"></SPAN>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc&nbsp;-c&nbsp;foo2.c</SPAN></SPAN>
+<BR>
+<BR>
+Then compile the source file containing the <SPAN  CLASS="textit">main()</SPAN> function
+and link<A ID="870"></A> the files together with the following command:
+<BR>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc&nbsp;foomain.c&nbsp;foo1.rel&nbsp;foo2.rel</SPAN></SPAN><A ID="872"></A>
+<BR>
+<BR>
+Note that in this case, <SPAN  CLASS="textbf">the source file being compiled is always linked in first</SPAN>,
+regardless of its position in the command line. This can be problematic
+when a custom crt0 is supplied as object file. As an alternative to
+the above, <SPAN  CLASS="textit">foomain.c</SPAN> can be compiled separately, and the resulting
+object file can then be linked with the other object files using a
+separate command:<SPAN  CLASS="textsf"><SPAN  CLASS="textbf"></SPAN></SPAN>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf"></SPAN></SPAN>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc&nbsp;-c&nbsp;foomain.c</SPAN></SPAN>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc&nbsp;custom_crt0.rel&nbsp;foomain.rel&nbsp;foo1.rel&nbsp;foo2.rel</SPAN></SPAN>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf"></SPAN></SPAN>
+<BR><SPAN  CLASS="textbf">The file containing the <SPAN  CLASS="textit">main()</SPAN> function must be the first file
+specified in the command line</SPAN>, since the linkage editor processes object files in the order they
+are presented to it. The linker is invoked from SDCC using a script
+file with extension .lnk<A ID="881"></A>. You can view this file
+to troubleshoot linking problems such as those arising from missing
+libraries.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node51.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node47.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node49.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1177"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1179"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node51.html">3.2.4 Projects with Additional Libraries</A>
+<B> Up:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+<B> Previous:</B> <A
+ HREF="node49.html">3.2.2 Postprocessing the Intel Hex</A>
+ &nbsp; <B>  <A ID="tex2html1178"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1180"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

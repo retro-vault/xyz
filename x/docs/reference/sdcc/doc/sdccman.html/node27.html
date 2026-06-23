@@ -1,0 +1,76 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>2.8.1 If SDCC does not build correctly</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node28.html">
+<LINK REL="previous" HREF="node26.html">
+<LINK REL="next" HREF="node28.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node28.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node26.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node26.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html883"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html885"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node28.html">2.8.2 What the ''./configure'' does</A>
+<B> Up:</B> <A
+ HREF="node26.html">2.8 Install Trouble-shooting</A>
+<B> Previous:</B> <A
+ HREF="node26.html">2.8 Install Trouble-shooting</A>
+ &nbsp; <B>  <A ID="tex2html884"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html886"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00381000000000000000">
+<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> If SDCC does not build correctly</A>
+</H2>
+
+<P>
+A thing to try is starting from scratch by unpacking the .tgz source
+package again in an empty directory. Configure it like:
+<BR>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">./configure 2&gt;&amp;1 | tee configure.log</SPAN></SPAN>
+<BR>
+<BR>
+and build it like:
+<BR>
+<BR><SPAN  CLASS="textsf"><SPAN  CLASS="textbf">make 2&gt;&amp;1 | tee make.log</SPAN></SPAN>
+<BR>
+<BR>
+If anything goes wrong, you can review the log files to locate the
+problem. Or a relevant part of this can be attached to an email that
+could be helpful when requesting help from the mailing list.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

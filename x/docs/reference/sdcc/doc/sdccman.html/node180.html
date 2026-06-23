@@ -1,0 +1,99 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.19 PIC16 Port – Tips</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node181.html">
+<LINK REL="previous" HREF="node179.html">
+<LINK REL="next" HREF="node181.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node181.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node179.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2045"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2047"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node181.html">4.9.20 Known Bugs</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node179.html">4.9.18 PIC16 C Libraries</A>
+ &nbsp; <B>  <A ID="tex2html2046"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2048"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html2049"
+  HREF="node180.html#SECTION005919100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN>.<SPAN CLASS="arabic">1</SPAN> Stack size</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION005919000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN> PIC16 Port – Tips</A>
+</H2>
+
+<P>
+Here you can find some general tips for compiling programs with SDCC/pic16.
+
+<P>
+
+<H3><A ID="SECTION005919100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">19</SPAN>.<SPAN CLASS="arabic">1</SPAN> Stack size</A>
+</H3>
+
+<P>
+The default stack<A ID="3706"></A> size (that is 64 bytes) probably
+is enough for many programs. One must take care that when there are
+many levels of function nesting, or there is excessive usage of stack,
+its size should be extended. An example of such a case is the printf/sprintf
+family of functions. If you encounter problems like not being able
+to print integers, then you need to set the stack size around the
+maximum (256 for small stack model). The following diagram shows what
+happens when calling printf to print an integer:
+
+<P>
+
+<DL class="COMPACT">
+<DT>
+<DD>printf&nbsp;()&nbsp;--&gt;&nbsp;ltoa&nbsp;()&nbsp;--&gt;&nbsp;ultoa&nbsp;()&nbsp;--&gt;&nbsp;divschar&nbsp;()
+</DD>
+</DL>It is should be understood that stack is easily consumed when calling
+complicated functions. Using command line arguments like &mdash;fomit-frame-pointer
+might reduce stack usage by not creating unnecessary stack frames.
+Other ways to reduce stack usage may exist.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

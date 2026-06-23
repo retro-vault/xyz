@@ -1,0 +1,19 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_tame_os
+_tame_os:
+	; sdcccall(1) prologue: tame_os (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	and	#0
+	neg
+	set	0, l
+	dec	hl
+	ccf
+	cp	#42
+__tame_os_end:
+	; epilogue: tame_os
+	ld	sp, ix
+	pop	ix
+	ret

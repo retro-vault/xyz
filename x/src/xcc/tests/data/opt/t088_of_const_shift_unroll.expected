@@ -1,0 +1,65 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_shl7
+_shl7:
+	; sdcccall(1) prologue: shl7 (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; keep incoming register arg t2 live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) register param handled by prologue
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ex	de, hl
+__shl7_end:
+	; epilogue: shl7
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl	_shr7
+_shr7:
+	; sdcccall(1) prologue: shr7 (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; keep incoming register arg t4 live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) register param handled by prologue
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ex	de, hl
+__shr7_end:
+	; epilogue: shr7
+	ld	sp, ix
+	pop	ix
+	ret

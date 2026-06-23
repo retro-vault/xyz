@@ -1,0 +1,184 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>6. TIPS</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node201.html">
+<LINK REL="previous" HREF="node182.html">
+<LINK REL="next" HREF="node193.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node193.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="sdccman.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node191.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2160"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2162"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node193.html">6.1 Porting code from or</A>
+<B> Up:</B> <A
+ HREF="sdccman.html">SDCC Compiler User Guide</A>
+<B> Previous:</B> <A
+ HREF="node191.html">5.2 Debugging with other debuggers</A>
+ &nbsp; <B>  <A ID="tex2html2161"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2163"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00700000000000000000">
+<SPAN CLASS="arabic">6</SPAN>. TIPS</A>
+</H1>
+
+<P>
+Here are a few guidelines that will help the compiler generate more
+efficient code, some of the tips are specific to this compiler others
+are generally good programming practice.
+
+<UL>
+<LI>Use the smallest data type to represent your data-value. If it is
+known in advance that the value is going to be less than 256 then
+use an 'unsigned char' instead of a 'short' or 'int'. Please note,
+that ANSI C requires both signed and unsigned chars to be promoted
+to 'signed int'<A ID="3872"></A>
+before doing any operation. This promotion<A ID="3874"></A><A ID="type_promotion"></A>can be omitted, if the result is the same. The effect of the promotion
+rules together with the sign-extension is often surprising:
+
+<P>
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">unsigned char uc = 0xfe;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">if (uc * uc &lt; 0) /* this is true! */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">{</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;....</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+<SPAN  CLASS="texttt">uc * uc</SPAN> is evaluated as <SPAN  CLASS="texttt">(int) uc * (int) uc =
+(int) 0xfe * (int) 0xfe = (int) 0xfc04 = -1024</SPAN>.
+<BR>
+Another one:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">(unsigned char) -12 / (signed char) -3 = ...</SPAN>
+
+</BLOCKQUOTE>
+No, the result is not 4:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">(int) (unsigned char) -12 / (int) (signed char) -3 =</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">(int) (unsigned char) 0xf4 / (int) (signed char) 0xfd =</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">(int) 0x00f4 / (int) 0xfffd =</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">(int) 0x00f4 / (int) 0xfffd =</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">(int) 244 / (int) -3 =</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">(int) -81 = (int) 0xffaf;</SPAN>
+
+</BLOCKQUOTE>
+Don't complain, that gcc gives you a different result. gcc uses 32
+bit ints, while SDCC uses 16 bit ints. Therefore the results are different.
+<BR>
+From &rdquo;comp.lang.c FAQ&rdquo;:
+<BLOCKQUOTE>
+<SPAN  CLASS="textit">If well-defined overflow characteristics are important and negative
+values are not, or if you want to steer clear of sign-extension problems
+when manipulating bits or bytes, use one of the corresponding unsigned
+types. (Beware when mixing signed and unsigned values in expressions,
+though.)</SPAN>
+<BR><SPAN  CLASS="textit">Although character types (especially unsigned char) can be used
+as tiny integers, doing so is sometimes
+more trouble than it's worth, due to unpredictable sign extension
+and increased code size.</SPAN>
+
+</BLOCKQUOTE>
+</LI>
+<LI>Use unsigned when it is known in advance that the value is not going
+to be negative. This helps especially if you are doing division or
+multiplication, bit-shifting or are using an array index.
+</LI>
+<LI>NEVER jump into a LOOP.
+</LI>
+<LI>Declare the variables to be local<A ID="3903"></A> whenever
+possible, especially loop control variables (induction).
+</LI>
+<LI>Have a look at the assembly listing to get a &rdquo;feeling&rdquo; for the
+code generation.
+</LI>
+</UL>
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html2164"
+  HREF="node193.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">1</SPAN> Porting code from or to other compilers</A>
+<LI><A ID="tex2html2165"
+  HREF="node194.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">2</SPAN> Tools included in the distribution</A>
+<LI><A ID="tex2html2166"
+  HREF="node195.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">3</SPAN> Documentation included in the distribution</A>
+<LI><A ID="tex2html2167"
+  HREF="node196.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">4</SPAN> Communication online at SourceForge</A>
+<LI><A ID="tex2html2168"
+  HREF="node197.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">5</SPAN> Related open source tools</A>
+<LI><A ID="tex2html2169"
+  HREF="node198.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">6</SPAN> Related documentation / recommended reading</A>
+<LI><A ID="tex2html2170"
+  HREF="node199.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">7</SPAN> Application notes specifically for SDCC</A>
+<LI><A ID="tex2html2171"
+  HREF="node200.html"><SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">8</SPAN> Some Questions</A>
+</UL>
+<!--End of Table of Child-Links-->
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node193.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="sdccman.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node191.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2160"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2162"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node193.html">6.1 Porting code from or</A>
+<B> Up:</B> <A
+ HREF="sdccman.html">SDCC Compiler User Guide</A>
+<B> Previous:</B> <A
+ HREF="node191.html">5.2 Debugging with other debuggers</A>
+ &nbsp; <B>  <A ID="tex2html2161"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2163"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

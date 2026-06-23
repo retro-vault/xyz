@@ -1,0 +1,105 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.11 Memory Models</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node173.html">
+<LINK REL="previous" HREF="node171.html">
+<LINK REL="next" HREF="node173.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node173.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node171.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2010"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2012"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node173.html">4.9.12 Stack</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node171.html">4.9.10 Adding New Devices to</A>
+ &nbsp; <B>  <A ID="tex2html2011"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2013"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION005911000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">11</SPAN> Memory Models</A>
+</H2>
+
+<P>
+The following memory models are supported by the PIC16 port:
+
+<UL>
+<LI>small model
+</LI>
+<LI>large model
+</LI>
+</UL>
+Memory model affects the default size of pointers within the source.
+The sizes are shown in the next table:
+
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Pointer sizes according to memory model</TD>
+<TD CLASS="CENTER">small model</TD>
+<TD CLASS="CENTER">large model</TD>
+</TR>
+<TR><TD CLASS="CENTER">code pointers</TD>
+<TD CLASS="CENTER" COLSPAN=1><SPAN>16-bits</SPAN></TD>
+<TD CLASS="CENTER">24-bits</TD>
+</TR>
+<TR><TD CLASS="CENTER">data pointers</TD>
+<TD CLASS="CENTER" COLSPAN=1><SPAN>16-bits</SPAN></TD>
+<TD CLASS="CENTER">16-bits</TD>
+</TR>
+</TABLE>
+</DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+It is advisable that all sources within a project are compiled with
+the same memory model. If one wants to override the default memory
+model, this can be done by declaring a pointer as <SPAN  CLASS="textbf">far</SPAN> or
+<SPAN  CLASS="textbf">near</SPAN>. Far selects large memory model's pointers, while near
+selects small memory model's pointers.
+
+<P>
+The standard device libraries (see <A HREF="node169.html#subsec:PIC16_Header-Files">4.9.8</A>)
+contain no reference to pointers, so they can be used with both memory
+models.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

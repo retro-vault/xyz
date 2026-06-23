@@ -1,0 +1,159 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.3.5 SM83 calling conventions</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node135.html">
+<LINK REL="previous" HREF="node133.html">
+<LINK REL="next" HREF="node135.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node135.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node129.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node133.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1776"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1778"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node135.html">4.3.6 Small-C calling convention</A>
+<B> Up:</B> <A
+ HREF="node129.html">4.3 The Z80, Z80N, Z180,</A>
+<B> Previous:</B> <A
+ HREF="node133.html">4.3.4 Rabbit 2000, Rabbit 2000A,</A>
+ &nbsp; <B>  <A ID="tex2html1777"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1779"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1780"
+  HREF="node134.html#SECTION00535100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> SM83 SDCC calling convention, version 1</A>
+<LI><A ID="tex2html1781"
+  HREF="node134.html#SECTION00535200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> SM83 SDCC calling convention, version 0</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00535000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN> SM83 calling conventions</A>
+</H2>
+
+<P>
+The current default is the SDCC calling convention, version 1. Using
+the command-line option –sdcccall 0, the default can be changed to
+version 0. There is another calling conventions supported, which can
+be specified using the keyword __dynamicc.
+
+<P>
+
+<H3><A ID="SECTION00535100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> SM83 SDCC calling convention, version 1</A>
+</H3>
+
+<P>
+This calling convention can be chosen per function via __sdcccall(1).
+
+<P>
+8-bit return values are passed in a, 16-bit values in bc, 32-bit values
+in debc. Larger return values (as well as struct and union independent
+of their size) are passed in memory in a location specified by the
+caller through a hidden pointer argument.
+
+<P>
+For functions that have variable arguments: All parameters are passed
+on the stack. The stack is not adjusted for the parameters by the
+callee (thus the caller has to do this instead).
+
+<P>
+8#8
+
+<P>
+For Functions that do not have variable arguments: the first parameter
+is passed in a if it has 8 bits. If it has 16 bits it is passed in
+de. If it has 32 bits, it is passed in debc. If the first parameter
+is in a, and the second has 8 bits, it is passed in e; if the first
+is in bc or debc, and the second has 8 bits, it is passed in a; if
+the first is passed in a, and the second has 16 bits, it is passed
+in bc; if the first is passed in de, and the second has 16 bits, it
+is passed in bc; all other parameters are passed on the stack, right-to-left.
+Independent of their size, struct / union parameters and all following
+parameters are always passed on the stack. The stack is adjusted by
+the callee (thus explicitly specifying __z88dk_callee does not
+make a difference), unless the functionhas variable arguments.
+
+<P>
+
+<H3><A ID="SECTION00535200000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> SM83 SDCC calling convention, version 0</A>
+</H3>
+
+<P>
+This calling convention can be chosen per function via __sdcccall(0).
+8-bit return values are passed in e, 16-bit values in de, 32-bit values
+in hlde. Larger return values (as well as struct and union independent
+of their size) are passed in memory in a location specified by the
+caller through a hidden pointer argument. All parameters are passed
+on the stack. The stack is not adjusted for the parameters by the
+callee (thus the caller has to do this instead), unless __z88dk_callee
+is specified. __sdcccall(0) can be combined with __z88dk_callee.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node135.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node129.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node133.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1776"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1778"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node135.html">4.3.6 Small-C calling convention</A>
+<B> Up:</B> <A
+ HREF="node129.html">4.3 The Z80, Z80N, Z180,</A>
+<B> Previous:</B> <A
+ HREF="node133.html">4.3.4 Rabbit 2000, Rabbit 2000A,</A>
+ &nbsp; <B>  <A ID="tex2html1777"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1779"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

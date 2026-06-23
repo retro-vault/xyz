@@ -1,0 +1,361 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.1.8 Implementation-defined behavior</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node45.html">
+<LINK REL="next" HREF="node47.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node47.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node38.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node45.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1143"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1145"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+<B> Up:</B> <A
+ HREF="node38.html">3.1 Standard-Compliance</A>
+<B> Previous:</B> <A
+ HREF="node45.html">3.1.7 Embedded C</A>
+ &nbsp; <B>  <A ID="tex2html1144"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1146"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1147"
+  HREF="node46.html#SECTION00418100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Translation</A>
+<LI><A ID="tex2html1148"
+  HREF="node46.html#SECTION00418200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Environment</A>
+<LI><A ID="tex2html1149"
+  HREF="node46.html#SECTION00418300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Identifiers</A>
+<LI><A ID="tex2html1150"
+  HREF="node46.html#SECTION00418400000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Characters</A>
+<LI><A ID="tex2html1151"
+  HREF="node46.html#SECTION00418500000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Integers</A>
+<LI><A ID="tex2html1152"
+  HREF="node46.html#SECTION00418600000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> Floating point</A>
+<LI><A ID="tex2html1153"
+  HREF="node46.html#SECTION00418700000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> Arrays and Pointers</A>
+<LI><A ID="tex2html1154"
+  HREF="node46.html#SECTION00418800000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN> Hints</A>
+<LI><A ID="tex2html1155"
+  HREF="node46.html#SECTION00418900000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN> Structures, unions, enumerations and bit-fields</A>
+<LI><A ID="tex2html1156"
+  HREF="node46.html#SECTION004181000000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">10</SPAN> Qualifiers</A>
+<LI><A ID="tex2html1157"
+  HREF="node46.html#SECTION004181100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">11</SPAN> Preprocessing directives</A>
+<LI><A ID="tex2html1158"
+  HREF="node46.html#SECTION004181200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">12</SPAN> Library functions</A>
+<LI><A ID="tex2html1159"
+  HREF="node46.html#SECTION004181300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">13</SPAN> Architecture</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00418000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN> Implementation-defined behavior</A>
+</H2>
+
+<P>
+
+<H3><A ID="SECTION00418100000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Translation</A>
+</H3>
+
+<UL>
+<LI>Diagnostics are output to stderr, in the format &lt;filename&gt;:&lt;line-number&gt;:
+&lt;warning|error&gt; &lt;diagnostic-number&gt;: &lt;diagnostic-description&gt;
+</LI>
+<LI>Nonempty sequences of white-space are retained in translation phase
+3.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418200000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Environment</A>
+</H3>
+
+<UL>
+<LI>When no custom crt0 is used (i.e. the port does not support a custom
+crt0, or the option <SPAN  CLASS="textbf"><A ID="764"></A></SPAN>
+is not used), the name and type of the function called at program
+startup is <SPAN  CLASS="texttt">void main(void)</SPAN> or <SPAN  CLASS="texttt">int main(void)</SPAN>. Otherwise
+the name and type depends on the custom crt0.
+</LI>
+<LI>See SDCC source (and your own code if you use a custom crt0 for a
+target that supports it) for any other information on the environment.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418300000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Identifiers</A>
+</H3>
+
+<UL>
+<LI>See the compiler and assembler source for information on characters
+that may appear in identifiers and on the number of significant initial
+characters.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418400000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Characters</A>
+</H3>
+
+<UL>
+<LI>There are 8 bits in a byte.
+</LI>
+<LI>Values of members of the execution character set: TODO.
+</LI>
+<LI>Values of members of the execution character set for escape sequences:
+TODO.
+</LI>
+<LI>Value of char with something weird stored in it: TODO.
+</LI>
+<LI>unsigned char has the same range, representation and behavior as &rdquo;plain&rdquo;
+char (unless -<SPAN  CLASS="textbf"></SPAN>-fsigned-char<SPAN  CLASS="textbf"><A ID="774"></A></SPAN>
+is used).
+</LI>
+<LI>See the SDCC source for further information on character sets.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418500000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Integers</A>
+</H3>
+
+<UL>
+<LI>There are no extended integer types.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418600000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> Floating point</A>
+</H3>
+
+<UL>
+<LI>See the implementation (soft float library) for any information on
+floating point.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418700000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> Arrays and Pointers</A>
+</H3>
+
+<UL>
+<LI>For the result of converting between pointers and integers see the
+SDCC source code.
+</LI>
+<LI>For the size of the result of subtracting two pointers to elements
+of the same array see the SDCC source code.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418800000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN> Hints</A>
+</H3>
+
+<UL>
+<LI>The extend to which suggestions made by register are effective depends
+on the target.
+</LI>
+<LI>SDCC will inline functions if and only if they are declared using
+inline and do not have variable arguments.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION00418900000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN> Structures, unions, enumerations and bit-fields</A>
+</H3>
+
+<UL>
+<LI>A plain int bit-field is treated as an unsigned int bit-field.
+</LI>
+<LI>There are no allowed bit-field types other than _Bool, int, signed
+int, unsigned int and the bit-precise integer types.
+</LI>
+<LI>Atomic types are not permitted for bit-fields.
+</LI>
+<LI>If a bit-fields does not fit into the same byte as the previous bit-fields,
+it starts on the next byte.
+</LI>
+<LI>bit-fields are allocated in the same order as they appear in the source.
+</LI>
+<LI>Non-bit-field members of structures are aligned on byte boundaries
+(i.e. there are no padding bytes).
+</LI>
+<LI>structures do not need to have named members.
+</LI>
+<LI>For enumerations, the compatible type is the first from the following
+list that fits the constants: unsigned char, signed char, unsigned
+int, signed int, unsigned long int, signed long int, unsigned long
+long int, signed long long int.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION004181000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">10</SPAN> Qualifiers</A>
+</H3>
+
+<UL>
+<LI>SDCC shall preserve all volatile reads and writes, but does not guarantee
+them to be atomic (except for atomic types and volatile sig_atomic_t).
+</LI>
+<LI>Function types may not be qualified.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION004181100000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">11</SPAN> Preprocessing directives</A>
+</H3>
+
+<UL>
+<LI>See the preprocessor source for information on preprocessing directives.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION004181200000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">12</SPAN> Library functions</A>
+</H3>
+
+<UL>
+<LI>See the respective library headers for the library functions available.
+</LI>
+<LI>See assert.h and library source for the format of the diagnostic printed
+by the assert macro.
+</LI>
+<LI>There is no fegetexceptflag function.
+</LI>
+<LI>There is no feraiseexcept function.
+</LI>
+<LI>There is no setlocale function.
+</LI>
+<LI>There is no FLT_EVAL_METHOD macro.
+</LI>
+<LI>There is no DEC_EVAL_METHOD macro.
+</LI>
+<LI>There are no non-required domain errors for mathematics functions.
+</LI>
+<LI>See library source for the values returned by mathematical functions
+on domain error and pole error (and anything else on mathematical
+functions and floating type encodings).
+</LI>
+<LI>calloc, malloc and realloc return a pointer to an allocated object
+when the requested size is zero.
+</LI>
+<LI>See library headers for the null-pointer constant to which NULL expands.
+</LI>
+<LI>See library headers and source for anything else about the library.
+</LI>
+</UL>
+
+<P>
+
+<H3><A ID="SECTION004181300000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">13</SPAN> Architecture</A>
+</H3>
+
+<UL>
+<LI>See the respective library headers for the values or expressions for
+macros specified in float.h, limits.h, stdint.h.
+</LI>
+<LI>Multithreading is not supported.
+</LI>
+<LI>The number of bytes in any object is the minimum allowed (except for
+some padding bits on bit-fields), byte order depends on the target.
+</LI>
+<LI>No extended alignments are supported.
+</LI>
+<LI>There are no valid alignments other than those returned by _Alignof.
+</LI>
+<LI>sizeof always returns the smallest value allowed assuming an 8-bit
+char. _Alignof always returns 0.
+</LI>
+</UL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node47.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node38.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node45.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1143"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1145"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+<B> Up:</B> <A
+ HREF="node38.html">3.1 Standard-Compliance</A>
+<B> Previous:</B> <A
+ HREF="node45.html">3.1.7 Embedded C</A>
+ &nbsp; <B>  <A ID="tex2html1144"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1146"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

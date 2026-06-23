@@ -1,0 +1,202 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.8.8 The Library</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node160.html">
+<LINK REL="previous" HREF="node158.html">
+<LINK REL="next" HREF="node160.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node160.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node158.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1911"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1913"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node160.html">4.8.9 Known Bugs</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node158.html">4.8.7 Environment Variables</A>
+ &nbsp; <B>  <A ID="tex2html1912"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1914"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1915"
+  HREF="node159.html#SECTION00588100000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Enhanced cores</A>
+<LI><A ID="tex2html1916"
+  HREF="node159.html#SECTION00588200000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Accessing bits of special function registers</A>
+<LI><A ID="tex2html1917"
+  HREF="node159.html#SECTION00588300000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Naming of special function registers</A>
+<LI><A ID="tex2html1918"
+  HREF="node159.html#SECTION00588400000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> error: missing definition for symbol &ldquo;__gptrget1&rdquo;</A>
+<LI><A ID="tex2html1919"
+  HREF="node159.html#SECTION00588500000000000000"><SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Processor mismatch in file &ldquo;XXX&rdquo;.</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION00588000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN> The Library</A>
+</H2>
+
+<P>
+The PIC14 library currently only contains support routines required
+by the compiler to implement multiplication, division, and floating
+point support. No libc-like replacement is available at the moment,
+though many of the common sdcc library sources (in <SPAN  CLASS="texttt">device/lib</SPAN>)
+should also compile with the PIC14 port.
+
+<P>
+
+<H3><A ID="SECTION00588100000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Enhanced cores</A>
+</H3>
+
+<P>
+SDCC/PIC14 has experimental support for devices with the enhanced
+14-bit cores (such as pic12f1822). Due to differences in required
+code, the libraries provided with SDCC (<SPAN  CLASS="texttt">libm.lib</SPAN> and <SPAN  CLASS="texttt">libsdcc.lib</SPAN>)
+are now provided in two variants: <SPAN  CLASS="texttt">libm.lib</SPAN> and <SPAN  CLASS="texttt">libsdcc.lib</SPAN>
+are compiled for the regular, non-enhanced devices. <SPAN  CLASS="texttt">libme.lib</SPAN>
+and <SPAN  CLASS="texttt">libsdcce.lib</SPAN> (note the trailing '<SPAN  CLASS="texttt">e</SPAN>') are compiled
+for enhanced devices. When linking manually, make sure to select the
+proper variant!
+
+<P>
+When SDCC is used to invoke the linker, SDCC will automatically select
+the <SPAN  CLASS="texttt">libsdcc.lib</SPAN>-variant suitable for the target device. However,
+no such magic has been conjured up for <SPAN  CLASS="texttt">libm.lib</SPAN>!
+
+<P>
+
+<H3><A ID="SECTION00588200000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Accessing bits of special function registers</A>
+</H3>
+
+<P>
+Individual bits within SFRs can be accessed either using <SPAN  CLASS="texttt">&lt;sfrname&gt;bits.&lt;bitname&gt;</SPAN>
+or using a shorthand <SPAN  CLASS="texttt">&lt;bitname&gt;</SPAN>, which is defined in the respective
+device header for all <SPAN  CLASS="texttt">&lt;bitname&gt;</SPAN>s. In order to avoid polluting
+the global namespace with the names of all the bits, you can <SPAN  CLASS="texttt">#define
+NO_BIT_DEFINES</SPAN> before inclusion of the device header file.
+
+<P>
+
+<H3><A ID="SECTION00588300000000000000"></A><A ID="subsec:Naming-of-special"></A>
+<BR>
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Naming of special function registers
+</H3>
+
+<P>
+If <SPAN  CLASS="texttt">NO_BIT_DEFINES</SPAN> is used, individual bits of the SFRs
+can be accessed as <SPAN  CLASS="texttt">&lt;sfrname&gt;bits.&lt;bitname&gt;</SPAN>. With the 3.1.0
+release, the previously used <SPAN  CLASS="texttt">&lt;sfrname&gt;_bits.&lt;bitname&gt;</SPAN> (note
+the underscore) is deprecated. This was done to align the naming conventions
+with the PIC16 port and competing compiler vendors. To avoid polluting
+the global namespace with the legacy names, you can prevent their
+definition using <SPAN  CLASS="texttt">#define NO_LEGACY_NAMES</SPAN> prior to the
+inclusion of the device header.
+
+<P>
+You <SPAN  CLASS="texttt"><SPAN  CLASS="textbf">must</SPAN></SPAN> also <SPAN  CLASS="texttt">#define NO_BIT_DEFINES</SPAN>
+in order to access SFRs as <SPAN  CLASS="texttt">&lt;sfrname&gt;bits.&lt;bitname&gt;</SPAN>, otherwise
+<SPAN  CLASS="texttt">&lt;bitname&gt;</SPAN> will expand to <SPAN  CLASS="texttt">&lt;sfrname&gt;bits.&lt;bitname&gt;</SPAN>,
+yielding the undefined expression <SPAN  CLASS="texttt">&lt;sfrname&gt;bits.&lt;sfrname&gt;bits.&lt;bitname&gt;</SPAN>.
+
+<P>
+
+<H3><A ID="SECTION00588400000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> error: missing definition for symbol &ldquo;__gptrget1&rdquo;</A>
+</H3>
+
+<P>
+The PIC14 port uses library routines to provide more complex operations
+like multiplication, division/modulus and (generic) pointer dereferencing.
+In order to add these routines to your project, you must link with
+PIC14's <SPAN  CLASS="texttt">libsdcc.lib</SPAN>. For single source file projects this
+is done automatically, more complex projects must add <SPAN  CLASS="texttt">libsdcc.lib</SPAN>
+to the linker's arguments. Make sure you also add an include path
+for the library (using the -I switch to the linker)!
+
+<P>
+
+<H3><A ID="SECTION00588500000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Processor mismatch in file &ldquo;XXX&rdquo;.</A>
+</H3>
+
+<P>
+This warning can usually be ignored due to the very good compatibility
+amongst 14&nbsp;bit PIC<A ID="3262"></A> devices.
+
+<P>
+You might also consider recompiling the library for your specific
+device by changing the ARCH=p16f877 (default target) entry in <SPAN  CLASS="texttt">device/lib/pic/Makefile.in</SPAN>
+and <SPAN  CLASS="texttt">device/lib/pic/Makefile</SPAN> to reflect your device. This
+might even improve performance for smaller devices as unnecessary
+BANKSELs might be removed.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node160.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node151.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node158.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1911"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1913"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node160.html">4.8.9 Known Bugs</A>
+<B> Up:</B> <A
+ HREF="node151.html">4.8 The PIC14 port</A>
+<B> Previous:</B> <A
+ HREF="node158.html">4.8.7 Environment Variables</A>
+ &nbsp; <B>  <A ID="tex2html1912"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1914"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

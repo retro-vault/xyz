@@ -1,0 +1,151 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.9.12 Stack</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node174.html">
+<LINK REL="previous" HREF="node172.html">
+<LINK REL="next" HREF="node174.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node174.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node172.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2014"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2016"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node174.html">4.9.13 Functions</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node172.html">4.9.11 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html2015"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2017"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION005912000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">12</SPAN> Stack</A>
+</H2>
+
+<P>
+The stack<A ID="3514"></A> implementation for the PIC16 port uses
+two indirect registers, FSR1 and FSR2.
+<DL>
+<DT><STRONG>FSR1</STRONG></DT>
+<DD>is assigned as stack pointer
+</DD>
+<DT><STRONG>FSR2</STRONG></DT>
+<DD>is assigned as frame pointer
+</DD>
+</DL>
+The following stack models are supported by the PIC16 port
+
+<UL>
+<LI><SMALL>SMALL</SMALL> model
+</LI>
+<LI><SMALL>LARGE</SMALL> model
+</LI>
+</UL>
+S<SMALL>MALL</SMALL> model means that only the FSRxL byte is used to access
+stack and frame, while <SPAN  CLASS="textit"><SMALL>LARGE</SMALL></SPAN> uses both FSRxL and FSRxH
+registers. The following table shows the stack/frame pointers sizes
+according to stack model and the maximum space they can address:
+
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Stack &amp; Frame pointer sizes according to stack model</TD>
+<TD CLASS="CENTER">small</TD>
+<TD CLASS="CENTER">large</TD>
+</TR>
+<TR><TD CLASS="CENTER">Stack pointer FSR1</TD>
+<TD CLASS="CENTER">8-bits</TD>
+<TD CLASS="CENTER">16-bits</TD>
+</TR>
+<TR><TD CLASS="CENTER">Frame pointer FSR2</TD>
+<TD CLASS="CENTER">8-bits</TD>
+<TD CLASS="CENTER">16-bits</TD>
+</TR>
+</TABLE>
+</DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+L<SMALL>ARGE </SMALL>stack model is currently not working properly
+throughout the code generator. So its use is not advised. Also there
+are some other points that need special care:
+
+<OL>
+<LI>Do not create stack sections with size more than one physical bank
+(that is 256 bytes)
+</LI>
+<LI>Stack sections should no cross physical bank limits (i.e. #pragma
+stack 0x50 0x100)
+</LI>
+</OL>
+These limitations are caused by the fact that only FSRxL is modified
+when using SMALL stack model, so no more than 256 bytes of stack can
+be used. This problem will disappear after LARGE model is fully implemented.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node174.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node161.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node172.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2014"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2016"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node174.html">4.9.13 Functions</A>
+<B> Up:</B> <A
+ HREF="node161.html">4.9 The PIC16 port</A>
+<B> Previous:</B> <A
+ HREF="node172.html">4.9.11 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html2015"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2017"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

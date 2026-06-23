@@ -1,0 +1,510 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+_feq:
+	; sdcccall(1) prologue: feq (locals=4, temp_frame=4, stack_params=4)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-4(ix), e
+	ld	-3(ix), d
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) param a at -4(ix)
+	; receive (sdcccall1) param b at 4(ix)
+	.globl ___fscmp
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	push	hl
+	ld	l, 4(ix)
+	ld	h, 5(ix)
+	push	hl
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	pop	de
+	call	___fscmp
+	ld	hl, #0
+	ld	a, d
+	or	e
+	jp	z, __fcmp_true_89383
+	jp	__fcmp_end_30886
+__fcmp_true_89383:
+	inc	l
+__fcmp_end_30886:
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ex	de, hl
+	jp	__feq_end
+__feq_end:
+	; epilogue: feq
+	ld	sp, ix
+	pop	ix
+	pop	bc
+	inc	sp
+	inc	sp
+	inc	sp
+	inc	sp
+	push	bc
+	ret
+	.globl _test_complex_add
+_test_complex_add:
+	; sdcccall(1) prologue: test_complex_add (locals=30, temp_frame=70, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-100
+	add	hl, sp
+	ld	sp, hl
+	push	ix
+	pop	hl
+	ld	bc, #-8
+	add	hl, bc
+	ld	-32(ix), l
+	ld	-31(ix), h
+	ld	l, -32(ix)
+	ld	h, -31(ix)
+	ld	-34(ix), l
+	ld	-33(ix), h
+	ld	l, -34(ix)
+	ld	h, -33(ix)
+	ld	-26(ix), l
+	ld	-25(ix), h
+	push	ix
+	pop	hl
+	ld	bc, #-16
+	add	hl, bc
+	ld	-36(ix), l
+	ld	-35(ix), h
+	ld	l, -36(ix)
+	ld	h, -35(ix)
+	ld	-38(ix), l
+	ld	-37(ix), h
+	ld	l, -38(ix)
+	ld	h, -37(ix)
+	ld	-28(ix), l
+	ld	-27(ix), h
+	.globl __mul16
+	ld	hl, #0
+	push	hl
+	ld	hl, #4
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-40(ix), l
+	ld	-39(ix), h
+	ld	l, -26(ix)
+	ld	h, -25(ix)
+	ld	e, -40(ix)
+	ld	d, -39(ix)
+	add	hl, de
+	ld	-42(ix), l
+	ld	-41(ix), h
+	ld	l, -42(ix)
+	ld	h, -41(ix)
+	push	hl
+	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16256
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	.globl __mul16
+	ld	hl, #1
+	push	hl
+	ld	hl, #4
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-44(ix), l
+	ld	-43(ix), h
+	ld	l, -26(ix)
+	ld	h, -25(ix)
+	ld	e, -44(ix)
+	ld	d, -43(ix)
+	add	hl, de
+	ld	-46(ix), l
+	ld	-45(ix), h
+	ld	l, -46(ix)
+	ld	h, -45(ix)
+	push	hl
+	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16384
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	.globl __mul16
+	ld	hl, #0
+	push	hl
+	ld	hl, #4
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-48(ix), l
+	ld	-47(ix), h
+	ld	l, -28(ix)
+	ld	h, -27(ix)
+	ld	e, -48(ix)
+	ld	d, -47(ix)
+	add	hl, de
+	ld	-50(ix), l
+	ld	-49(ix), h
+	ld	l, -50(ix)
+	ld	h, -49(ix)
+	push	hl
+	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16448
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	.globl __mul16
+	ld	hl, #1
+	push	hl
+	ld	hl, #4
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-52(ix), l
+	ld	-51(ix), h
+	ld	l, -28(ix)
+	ld	h, -27(ix)
+	ld	e, -52(ix)
+	ld	d, -51(ix)
+	add	hl, de
+	ld	-54(ix), l
+	ld	-53(ix), h
+	ld	l, -54(ix)
+	ld	h, -53(ix)
+	push	hl
+	ld	de, #0
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	inc	hl
+	push	hl
+	ld	de, #16512
+	pop	hl
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	.globl __fsadd
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	push	hl
+	ld	l, -16(ix)
+	ld	h, -15(ix)
+	push	hl
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	push	hl
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	pop	de
+	call	__fsadd
+	pop	bc
+	pop	bc
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+	ld	-58(ix), l
+	ld	-57(ix), h
+	ld	h, b
+	ld	l, c
+	ld	-56(ix), l
+	ld	-55(ix), h
+	.globl __fsadd
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	push	hl
+	ld	l, -12(ix)
+	ld	h, -11(ix)
+	push	hl
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	pop	de
+	call	__fsadd
+	pop	bc
+	pop	bc
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+	ld	-62(ix), l
+	ld	-61(ix), h
+	ld	h, b
+	ld	l, c
+	ld	-60(ix), l
+	ld	-59(ix), h
+	ld	l, -58(ix)
+	ld	h, -57(ix)
+	ld	-70(ix), l
+	ld	-69(ix), h
+	ld	l, -56(ix)
+	ld	h, -55(ix)
+	ld	-68(ix), l
+	ld	-67(ix), h
+	ld	l, -62(ix)
+	ld	h, -61(ix)
+	ld	-66(ix), l
+	ld	-65(ix), h
+	ld	l, -60(ix)
+	ld	h, -59(ix)
+	ld	-64(ix), l
+	ld	-63(ix), h
+	ld	l, -70(ix)
+	ld	h, -69(ix)
+	ld	-24(ix), l
+	ld	-23(ix), h
+	ld	l, -68(ix)
+	ld	h, -67(ix)
+	ld	-22(ix), l
+	ld	-21(ix), h
+	ld	l, -66(ix)
+	ld	h, -65(ix)
+	ld	-20(ix), l
+	ld	-19(ix), h
+	ld	l, -64(ix)
+	ld	h, -63(ix)
+	ld	-18(ix), l
+	ld	-17(ix), h
+	push	ix
+	pop	hl
+	ld	bc, #-24
+	add	hl, bc
+	ld	-72(ix), l
+	ld	-71(ix), h
+	ld	l, -72(ix)
+	ld	h, -71(ix)
+	ld	-74(ix), l
+	ld	-73(ix), h
+	ld	l, -74(ix)
+	ld	h, -73(ix)
+	ld	-30(ix), l
+	ld	-29(ix), h
+	.globl __mul16
+	ld	hl, #0
+	push	hl
+	ld	hl, #4
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-76(ix), l
+	ld	-75(ix), h
+	ld	l, -30(ix)
+	ld	h, -29(ix)
+	ld	e, -76(ix)
+	ld	d, -75(ix)
+	add	hl, de
+	ld	-78(ix), l
+	ld	-77(ix), h
+	ld	l, -78(ix)
+	ld	h, -77(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-82(ix), l
+	ld	-81(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-80(ix), l
+	ld	-79(ix), h
+	pop	hl
+	ld	hl, #16512
+	push	hl
+	ld	hl, #0
+	push	hl
+	ld	l, -82(ix)
+	ld	h, -81(ix)
+	push	hl
+	ld	l, -80(ix)
+	ld	h, -79(ix)
+	pop	de
+	.globl _feq
+	call	_feq
+	push	de
+	pop	hl
+	ld	-84(ix), l
+	ld	-83(ix), h
+	ld	l, -84(ix)
+	ld	h, -83(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L2
+	jp	__xcc_L0
+__xcc_L0:
+	ld	hl, #0
+	ld	-86(ix), l
+	ld	-85(ix), h
+	ld	l, -86(ix)
+	ld	h, -85(ix)
+	ex	de, hl
+	jp	__test_complex_add_end
+	jp	__xcc_L2
+__xcc_L2:
+	.globl __mul16
+	ld	hl, #1
+	push	hl
+	ld	hl, #4
+	pop	de
+	call	__mul16
+	ex	de, hl
+	ld	-88(ix), l
+	ld	-87(ix), h
+	ld	l, -30(ix)
+	ld	h, -29(ix)
+	ld	e, -88(ix)
+	ld	d, -87(ix)
+	add	hl, de
+	ld	-90(ix), l
+	ld	-89(ix), h
+	ld	l, -90(ix)
+	ld	h, -89(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-94(ix), l
+	ld	-93(ix), h
+	pop	hl
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	inc	hl
+	push	hl
+	ex	de, hl
+	ld	-92(ix), l
+	ld	-91(ix), h
+	pop	hl
+	ld	hl, #16576
+	push	hl
+	ld	hl, #0
+	push	hl
+	ld	l, -94(ix)
+	ld	h, -93(ix)
+	push	hl
+	ld	l, -92(ix)
+	ld	h, -91(ix)
+	pop	de
+	.globl _feq
+	call	_feq
+	push	de
+	pop	hl
+	ld	-96(ix), l
+	ld	-95(ix), h
+	ld	l, -96(ix)
+	ld	h, -95(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L5
+	jp	__xcc_L3
+__xcc_L3:
+	ld	hl, #0
+	ld	-98(ix), l
+	ld	-97(ix), h
+	ld	l, -98(ix)
+	ld	h, -97(ix)
+	ex	de, hl
+	jp	__test_complex_add_end
+	jp	__xcc_L5
+__xcc_L5:
+	ld	hl, #1
+	ld	-100(ix), l
+	ld	-99(ix), h
+	ld	l, -100(ix)
+	ld	h, -99(ix)
+	ex	de, hl
+	jp	__test_complex_add_end
+__test_complex_add_end:
+	; epilogue: test_complex_add
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _main
+_main:
+	; sdcccall(1) prologue: main (locals=0, temp_frame=6, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-6
+	add	hl, sp
+	ld	sp, hl
+	.globl _test_complex_add
+	call	_test_complex_add
+	push	de
+	pop	hl
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L8
+	jp	__xcc_L6
+__xcc_L6:
+	ld	hl, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L8
+__xcc_L8:
+	ld	hl, #1
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ex	de, hl
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

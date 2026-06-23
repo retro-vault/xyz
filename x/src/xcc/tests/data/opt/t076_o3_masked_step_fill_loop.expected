@@ -1,0 +1,43 @@
+	.module	xcc_output
+	.area	_DATA
+_next_buf:
+	.ds	64
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=0, temp_frame=5, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-5
+	add	hl, sp
+	ld	sp, hl
+	; O3 masked step-fill loop (count=64)
+	ld	bc, #18
+	ld	hl, #next_buf
+__xcc_L0:
+	ld	a, b
+	cp	#64
+	jr	nc, __xcc_L3
+__xcc_L1:
+	ld	a, c
+	add	a, #5
+	and	#63
+	ld	c, a
+	ld	(hl), a
+	inc	b
+	inc	hl
+	jr	__xcc_L0
+__xcc_L3:
+	xor	a
+	ld	e, a
+	ld	d, #0
+	ld	hl, #_next_buf
+	add	hl, de
+	ld	a, (hl)
+	ld	-5(ix), a
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

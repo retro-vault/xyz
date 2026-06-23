@@ -1,0 +1,86 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.1.10 Nibble and Byte Swapping</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node224.html">
+<LINK REL="previous" HREF="node222.html">
+<LINK REL="next" HREF="node224.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node224.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node222.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2337"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2339"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node224.html">8.1.11 Getting a Bit</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node222.html">8.1.9 Bit-rotation</A>
+ &nbsp; <B>  <A ID="tex2html2338"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2340"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION009110000000000000000">
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">10</SPAN> Nibble and Byte Swapping</A>
+</H2>
+
+<P>
+Other special cases of the bit-shift operations are nibble or byte
+swapping<A ID="4434"></A>, SDCC recognizes the following
+expressions:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt"><SPAN  CLASS="textbf">unsigned</SPAN></SPAN><SPAN  CLASS="texttt">&nbsp;&nbsp;char i;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt"><SPAN  CLASS="textbf">unsigned</SPAN></SPAN><SPAN  CLASS="texttt">&nbsp;&nbsp;int j;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">...</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">i = ((i « 4) | (i »
+4));</SPAN> 
+<BR><SPAN  CLASS="texttt">j = ((j « 8) | (j »
+8)); </SPAN>
+
+</BLOCKQUOTE>
+and generates a swap instruction for the nibble swapping<A ID="4444"></A>
+or move instructions for the byte swapping<A ID="4445"></A>.
+The &rdquo;j&rdquo; example can be used to convert from little to big-endian
+or vice versa. If you want to change the endianness of a <SPAN  CLASS="textit">signed</SPAN>
+integer you have to cast to <SPAN  CLASS="texttt">(unsigned int)</SPAN> first.
+
+<P>
+Note that SDCC stores numbers in little-endian<A ID="tex2html145"
+  HREF="footnode.html#foot6424"><SUP><SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN></SUP></A><A ID="4450"></A><A ID="4451"></A> format (i.e. lowest order
+first) for most backends. However, the hc08, s08 and stm8 backends
+are big-endian.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

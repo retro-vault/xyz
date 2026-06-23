@@ -1,0 +1,133 @@
+\documentclass[xcolor=dvipsnames]{beamer}
+\usepackage{xltxtra}
+\usepackage[english]{babel}
+
+\xdefinecolor{thecolor}{rgb}{0.5,0.0,0.5}
+
+\mode<presentation>
+{
+	\usetheme{Rochester}
+	\beamertemplatenavigationsymbolsempty
+	\usecolortheme[named=thecolor]{structure}
+	\setbeamercovered{transparent}
+}
+
+\title{Rabbits}
+\subtitle{and the rest of the Z80 family}
+\date{2025-04-11}
+
+\author{Philipp Klaus Krause}
+
+\subject{Small Device C Compiler, SDCC, C, Rabbit, Z80, eZ80}
+
+\begin{document}
+
+\begin{frame}
+	\titlepage
+\end{frame}
+
+\begin{frame}
+	\frametitle{Z80 family}
+	\begin{itemize}
+		\item Zilog Z80 - derived from Intel 8080
+		\item Z80N - ZX Spectrum Next softcore
+		\item Sharp SM83
+		\item ASCII R800
+		\item Zilog Z180
+		\item Zilog Z380
+		\item Zilog eZ80
+		\item Rabbit 2000 (further derivatives: Rabbit family)
+		\item Toshiba TLCS-90 (further derivatives: TLCS-870 and TLCS-900 families)
+		\item NEC 78K (GCC)
+		\item Renesas RL78 (GCC)
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Z80 family TODO}
+	\begin{itemize}
+		\item Better handling of global variables
+		\item Pointers into \_\_sfr named address space for I/O
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{eZ80}
+	\begin{itemize}
+		\item Z180 derivative
+		\item Additional instructions, registers extended to 24 bits
+		\item Z80 mode: registers handled as 16 bits, ADL mode: registers handled as 24 bit; separate stacks
+		\item Mode can be switched persistently, but also for individual instructions with prefix byte
+		\item LLVM port uses ADL mode
+		\item SDCC port uses Z80 mode (more efficient when handling 8/16 bit data)
+		\item SDCC port limited to 16 bit address space
+		\item TODO: \_\_far intrinsic named address space to allow use of 24-bit addresses for data using ADL mode prefix
+		\item Mixing use of 16-bit and 24-bit register accesses complicates interrupt handling
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Rabbit family}
+	\begin{itemize}
+		\item Z80 derivative, inspired by Z180
+		\item Rabbit 2000: additional instructions
+		\item Rabbit 3000A: additional instructions
+		\item Rabbit 4000: additional instructions and registers
+		\item Rabbit 6000: additional instructions
+		\item From Rabbit 4000: 4 modes: Default (better 8-bit support), Enhanced (better 16/32-bit support), 2 undocumented
+		\item SDCC ports for Rabbit 2000, Rabbit 2000A, Rabbit 3000A
+		\item SDCC ports limited to 16 bit address space
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Rabbit family TODO}
+	\begin{itemize}
+		\item SDCC ports for Rabbit 4000, Rabbit 5000, Rabbit 6000 (assembler, compiler, simulator) using one of the undocumented modes
+		\item Use JK register pair - first time new register allocator is used for more than 9 registers.
+		\item No plans to support the PW, PX, PY, PZ 32-bit registers
+		\item \_\_far intrinsic named address space to allow use of 20-bit addresses
+		\item medium and large memory models to allow use of 20/24 bit and 24/32 bit addresses for code
+		\item Better flash tool and on-target debugging
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{TLCS family}
+	\begin{itemize}
+		\item TLCS-90: Z80 with additional instructions, different opcode map
+		\item TLCS-870: TLCS-90 with additional and removed instructions, unknown opcode map
+		\item TLCS-870/X: TLCS-870 with additional instructions, unknown opcode map
+		\item TLCS-870/C: TLCS-870 with additional instructions, different opcode map
+		\item TLCS-870/C1 and TLCS-870/C1E: TLCS-870/C with additional instruction, different timing
+		\item TLCS-900 family: 32-bit registers
+		\item SDCC port for TLCS-90
+		\item SDCC port limited to 16 bit address space
+		\item Lack of documentation
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{TLCS family TODO}
+	\begin{itemize}
+		\item SDCC ports for TLCS-870, TLCS-870/C, TLCS-870/C1
+		\item Handle different code size in cost function
+		\item \_\_far intrinsic named address space to allow use of 20-bit addresses for TLCS-90
+		\item No plans to support TLCS-870/X, TLCS-900 family
+		\item Free flash tool
+	\end{itemize}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Summary}
+	\begin{itemize}
+		\item Additional ports to better support Rabbit 4000, Rabbit 5000, Rabbit 6000, TLCS-870, TLCS-870/C, TLCS-870/C1 (assembler, compiler, simulator)
+		\item \_\_far for eZ80 and Rabbits
+		\item Larger address space for code for Rabbits
+		\item Various smaller improvements
+		\item Work on eZ80 and Rabbit this year (i.e. in time for SDCC 4.6.0), TLCS-870 family later
+	\end{itemize}
+\end{frame}
+
+\end{document}
+

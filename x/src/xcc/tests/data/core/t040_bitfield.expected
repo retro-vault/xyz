@@ -1,0 +1,603 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _main
+_main:
+	; sdcccall(1) prologue: main (locals=2, temp_frame=114, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-116
+	add	hl, sp
+	ld	sp, hl
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, #5
+	ld	a, l
+	and	#7
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-8(ix), e
+	ld	-7(ix), d
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	a, l
+	and	#248
+	ld	l, a
+	ld	a, h
+	and	#255
+	ld	h, a
+	ld	-10(ix), l
+	ld	-9(ix), h
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	push	hl
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	pop	de
+	ld	a, l
+	or	a, e
+	ld	l, a
+	ld	a, h
+	or	a, d
+	ld	h, a
+	ld	-12(ix), l
+	ld	-11(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, -12(ix)
+	ld	d, -11(ix)
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-14(ix), l
+	ld	-13(ix), h
+	ld	hl, #9
+	ld	a, l
+	and	#15
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-16(ix), l
+	ld	-15(ix), h
+	ld	l, -16(ix)
+	ld	h, -15(ix)
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	ld	-18(ix), l
+	ld	-17(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-20(ix), e
+	ld	-19(ix), d
+	ld	l, -20(ix)
+	ld	h, -19(ix)
+	ld	a, l
+	and	#135
+	ld	l, a
+	ld	a, h
+	and	#255
+	ld	h, a
+	ld	-22(ix), l
+	ld	-21(ix), h
+	ld	l, -22(ix)
+	ld	h, -21(ix)
+	push	hl
+	ld	l, -18(ix)
+	ld	h, -17(ix)
+	pop	de
+	ld	a, l
+	or	a, e
+	ld	l, a
+	ld	a, h
+	or	a, d
+	ld	h, a
+	ld	-24(ix), l
+	ld	-23(ix), h
+	ld	l, -14(ix)
+	ld	h, -13(ix)
+	ld	e, -24(ix)
+	ld	d, -23(ix)
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-26(ix), l
+	ld	-25(ix), h
+	ld	hl, #1
+	ld	a, l
+	and	#1
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-28(ix), l
+	ld	-27(ix), h
+	ld	l, -28(ix)
+	ld	h, -27(ix)
+	ld	b, #7
+__shift_0:
+	add	hl, hl
+	djnz	__shift_0
+	ld	-30(ix), l
+	ld	-29(ix), h
+	ld	l, -26(ix)
+	ld	h, -25(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-32(ix), e
+	ld	-31(ix), d
+	ld	l, -32(ix)
+	ld	h, -31(ix)
+	ld	a, l
+	and	#127
+	ld	l, a
+	ld	a, h
+	and	#255
+	ld	h, a
+	ld	-34(ix), l
+	ld	-33(ix), h
+	ld	l, -34(ix)
+	ld	h, -33(ix)
+	push	hl
+	ld	l, -30(ix)
+	ld	h, -29(ix)
+	pop	de
+	ld	a, l
+	or	a, e
+	ld	l, a
+	ld	a, h
+	or	a, d
+	ld	h, a
+	ld	-36(ix), l
+	ld	-35(ix), h
+	ld	l, -26(ix)
+	ld	h, -25(ix)
+	ld	e, -36(ix)
+	ld	d, -35(ix)
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-38(ix), l
+	ld	-37(ix), h
+	ld	l, -38(ix)
+	ld	h, -37(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-40(ix), e
+	ld	-39(ix), d
+	ld	l, -40(ix)
+	ld	h, -39(ix)
+	ld	a, l
+	and	#7
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-42(ix), l
+	ld	-41(ix), h
+	ld	l, -42(ix)
+	ld	h, -41(ix)
+	push	hl
+	ld	hl, #5
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_89383
+	dec	hl
+__cmp_e_89383:
+	ld	-44(ix), l
+	ld	-43(ix), h
+	ld	l, -44(ix)
+	ld	h, -43(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L0
+	jp	__xcc_L2
+__xcc_L0:
+	ld	hl, #0
+	ld	-46(ix), l
+	ld	-45(ix), h
+	ld	l, -46(ix)
+	ld	h, -45(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L2
+__xcc_L2:
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-48(ix), l
+	ld	-47(ix), h
+	ld	l, -48(ix)
+	ld	h, -47(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-50(ix), e
+	ld	-49(ix), d
+	ld	l, -50(ix)
+	ld	h, -49(ix)
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	ld	-52(ix), l
+	ld	-51(ix), h
+	ld	l, -52(ix)
+	ld	h, -51(ix)
+	ld	a, l
+	and	#15
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-54(ix), l
+	ld	-53(ix), h
+	ld	l, -54(ix)
+	ld	h, -53(ix)
+	push	hl
+	ld	hl, #9
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_30886
+	dec	hl
+__cmp_e_30886:
+	ld	-56(ix), l
+	ld	-55(ix), h
+	ld	l, -56(ix)
+	ld	h, -55(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L3
+	jp	__xcc_L5
+__xcc_L3:
+	ld	hl, #0
+	ld	-58(ix), l
+	ld	-57(ix), h
+	ld	l, -58(ix)
+	ld	h, -57(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L5
+__xcc_L5:
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-60(ix), l
+	ld	-59(ix), h
+	ld	l, -60(ix)
+	ld	h, -59(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-62(ix), e
+	ld	-61(ix), d
+	ld	l, -62(ix)
+	ld	h, -61(ix)
+	ld	b, #7
+__shift_1:
+	srl	h
+	rr	l
+	djnz	__shift_1
+	ld	-64(ix), l
+	ld	-63(ix), h
+	ld	l, -64(ix)
+	ld	h, -63(ix)
+	ld	a, l
+	and	#1
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-66(ix), l
+	ld	-65(ix), h
+	ld	l, -66(ix)
+	ld	h, -65(ix)
+	push	hl
+	ld	hl, #1
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_92777
+	dec	hl
+__cmp_e_92777:
+	ld	-68(ix), l
+	ld	-67(ix), h
+	ld	l, -68(ix)
+	ld	h, -67(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L6
+	jp	__xcc_L8
+__xcc_L6:
+	ld	hl, #0
+	ld	-70(ix), l
+	ld	-69(ix), h
+	ld	l, -70(ix)
+	ld	h, -69(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L8
+__xcc_L8:
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-72(ix), l
+	ld	-71(ix), h
+	ld	hl, #3
+	ld	a, l
+	and	#7
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-74(ix), l
+	ld	-73(ix), h
+	ld	l, -72(ix)
+	ld	h, -71(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-76(ix), e
+	ld	-75(ix), d
+	ld	l, -76(ix)
+	ld	h, -75(ix)
+	ld	a, l
+	and	#248
+	ld	l, a
+	ld	a, h
+	and	#255
+	ld	h, a
+	ld	-78(ix), l
+	ld	-77(ix), h
+	ld	l, -78(ix)
+	ld	h, -77(ix)
+	push	hl
+	ld	l, -74(ix)
+	ld	h, -73(ix)
+	pop	de
+	ld	a, l
+	or	a, e
+	ld	l, a
+	ld	a, h
+	or	a, d
+	ld	h, a
+	ld	-80(ix), l
+	ld	-79(ix), h
+	ld	l, -72(ix)
+	ld	h, -71(ix)
+	ld	e, -80(ix)
+	ld	d, -79(ix)
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-82(ix), l
+	ld	-81(ix), h
+	ld	l, -82(ix)
+	ld	h, -81(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-84(ix), e
+	ld	-83(ix), d
+	ld	l, -84(ix)
+	ld	h, -83(ix)
+	ld	a, l
+	and	#7
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-86(ix), l
+	ld	-85(ix), h
+	ld	l, -86(ix)
+	ld	h, -85(ix)
+	push	hl
+	ld	hl, #3
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_36915
+	dec	hl
+__cmp_e_36915:
+	ld	-88(ix), l
+	ld	-87(ix), h
+	ld	l, -88(ix)
+	ld	h, -87(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L9
+	jp	__xcc_L11
+__xcc_L9:
+	ld	hl, #0
+	ld	-90(ix), l
+	ld	-89(ix), h
+	ld	l, -90(ix)
+	ld	h, -89(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L11
+__xcc_L11:
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-92(ix), l
+	ld	-91(ix), h
+	ld	l, -92(ix)
+	ld	h, -91(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-94(ix), e
+	ld	-93(ix), d
+	ld	l, -94(ix)
+	ld	h, -93(ix)
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	srl	h
+	rr	l
+	ld	-96(ix), l
+	ld	-95(ix), h
+	ld	l, -96(ix)
+	ld	h, -95(ix)
+	ld	a, l
+	and	#15
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-98(ix), l
+	ld	-97(ix), h
+	ld	l, -98(ix)
+	ld	h, -97(ix)
+	push	hl
+	ld	hl, #9
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_47793
+	dec	hl
+__cmp_e_47793:
+	ld	-100(ix), l
+	ld	-99(ix), h
+	ld	l, -100(ix)
+	ld	h, -99(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L12
+	jp	__xcc_L14
+__xcc_L12:
+	ld	hl, #0
+	ld	-102(ix), l
+	ld	-101(ix), h
+	ld	l, -102(ix)
+	ld	h, -101(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L14
+__xcc_L14:
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	-104(ix), l
+	ld	-103(ix), h
+	ld	l, -104(ix)
+	ld	h, -103(ix)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-106(ix), e
+	ld	-105(ix), d
+	ld	l, -106(ix)
+	ld	h, -105(ix)
+	ld	b, #7
+__shift_2:
+	srl	h
+	rr	l
+	djnz	__shift_2
+	ld	-108(ix), l
+	ld	-107(ix), h
+	ld	l, -108(ix)
+	ld	h, -107(ix)
+	ld	a, l
+	and	#1
+	ld	l, a
+	ld	a, h
+	and	#0
+	ld	h, a
+	ld	-110(ix), l
+	ld	-109(ix), h
+	ld	l, -110(ix)
+	ld	h, -109(ix)
+	push	hl
+	ld	hl, #1
+	pop	de
+	or	a, a
+	sbc	hl, de
+	ld	hl, #1
+	jp	nz, __cmp_e_38335
+	dec	hl
+__cmp_e_38335:
+	ld	-112(ix), l
+	ld	-111(ix), h
+	ld	l, -112(ix)
+	ld	h, -111(ix)
+	ld	a, h
+	or	a, l
+	jp	nz, __xcc_L15
+	jp	__xcc_L17
+__xcc_L15:
+	ld	hl, #0
+	ld	-114(ix), l
+	ld	-113(ix), h
+	ld	l, -114(ix)
+	ld	h, -113(ix)
+	ex	de, hl
+	jp	__main_end
+	jp	__xcc_L17
+__xcc_L17:
+	ld	hl, #1
+	ld	-116(ix), l
+	ld	-115(ix), h
+	ld	l, -116(ix)
+	ld	h, -115(ix)
+	ex	de, hl
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

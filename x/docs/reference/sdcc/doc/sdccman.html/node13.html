@@ -1,0 +1,323 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>2.3 Search Paths</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node14.html">
+<LINK REL="previous" HREF="node12.html">
+<LINK REL="next" HREF="node14.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node14.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node10.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node12.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html815"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html817"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node14.html">2.4 Building SDCC</A>
+<B> Up:</B> <A
+ HREF="node10.html">2. Installing SDCC</A>
+<B> Previous:</B> <A
+ HREF="node12.html">2.2 Install paths</A>
+ &nbsp; <B>  <A ID="tex2html816"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html818"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00330000000000000000"></A><A ID="subsec:Search-Paths"></A><A ID="358"></A>
+<BR>
+<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Search Paths
+</H1>
+
+<P>
+Some search paths or parts of them are determined by configure variables
+(in <SPAN  CLASS="textit">italics</SPAN>, see section above). Further search paths are determined
+by environment variables during runtime. 
+<BR>
+The paths searched when running the compiler are as follows (the first
+catch wins):
+<BR>
+<BR>
+1. Binary files (preprocessor, assembler and linker)
+<BR>
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">Search path</TD>
+<TD CLASS="CENTER">default</TD>
+<TD CLASS="CENTER">Win32 builds</TD>
+</TR>
+<TR><TD CLASS="CENTER">$SDCC_HOME/<SPAN  CLASS="textit">$PPREFIX2BIN_DIR</SPAN></TD>
+<TD CLASS="CENTER">$SDCC_HOME/bin</TD>
+<TD CLASS="CENTER">$SDCC_HOME\bin</TD>
+</TR>
+<TR><TD CLASS="CENTER">Path of argv[0] (if available)</TD>
+<TD CLASS="CENTER">Path of argv[0]</TD>
+<TD CLASS="CENTER">Path of argv[0]</TD>
+</TR>
+<TR><TD CLASS="CENTER">$PATH</TD>
+<TD CLASS="CENTER">$PATH</TD>
+<TD CLASS="CENTER">$PATH</TD>
+</TR>
+</TABLE> 
+<BR></DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+2. Include files
+<BR>
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>#</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>Search path</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>default</TD>
+<TD CLASS="CENTER">Win32 builds</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>1</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>&mdash;I dir</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>&mdash;I dir</TD>
+<TD CLASS="CENTER">&mdash;I dir</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>2</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>$SDCC_INCLUDE</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>$SDCC_INCLUDE</TD>
+<TD CLASS="CENTER">$SDCC_INCLUDE</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>3</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>$SDCC_HOME/
+<BR><SPAN  CLASS="textit">$PREFIX2DATA_DIR/</SPAN>
+<BR><SPAN  CLASS="textit">$INCLUDE_DIR_SUFFIX</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>$SDCC_HOME/
+<BR>
+share/sdcc/include</TD>
+<TD CLASS="CENTER">$SDCC_HOME\include</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>4</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>path(argv[0])/
+<BR><SPAN  CLASS="textit">$BIN2DATADIR/</SPAN>
+<BR><SPAN  CLASS="textit">$INCLUDE_DIR_SUFFIX</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>path(argv[0])/../
+<BR>
+sdcc/include</TD>
+<TD CLASS="CENTER">path(argv[0])\..\include</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>5</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174><SPAN  CLASS="textit">$DATADIR/</SPAN>
+<BR><SPAN  CLASS="textit">$INCLUDE_DIR_SUFFIX</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>/usr/local/share/
+<BR>
+sdcc/include</TD>
+<TD CLASS="CENTER">(not on Win32)</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>6</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>$SDCC_HOME/
+<BR><SPAN  CLASS="textit">$PREFIX2DATA_DIR/</SPAN>
+<BR><SPAN  CLASS="textit">non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$INCLUDE_DIR_SUFFIX</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>$SDCC_HOME/share/
+<BR>
+sdcc/non-free/include</TD>
+<TD CLASS="CENTER">$SDCC_HOME\non-free\include</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>7</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>path(argv[0])/
+<BR><SPAN  CLASS="textit">$BIN2DATADIR/</SPAN>
+<BR><SPAN  CLASS="textit">non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$INCLUDE_DIR_SUFFIX</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>path(argv[0])/../
+<BR>
+sdcc/non-free/include</TD>
+<TD CLASS="CENTER">path(argv[0])\..\non-free\include</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>8</TD>
+<TD CLASS="LEFT TOP"  WIDTH=174><SPAN  CLASS="textit">$DATADIR/</SPAN>
+<BR><SPAN  CLASS="textit">non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$INCLUDE_DIR_SUFFIX</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=174>/usr/local/share/
+<BR>
+sdcc/non-free/include</TD>
+<TD CLASS="CENTER">(not on Win32)</TD>
+</TR>
+</TABLE> 
+<BR></DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+The option &mdash;nostdinc disables all search paths except
+#1 and #2.
+<BR>
+<BR>
+3. Library files
+<BR>
+<P>
+With the exception of &rdquo;&mdash;L dir&rdquo; the <SPAN  CLASS="textit">model</SPAN> is auto-appended
+by the compiler (e.g. small, large, z80, ds390 etc.).
+<BR>
+<P>
+<DIV class="CENTER">
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>#</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>Search path</TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>default</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>Win32 builds</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>1</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>&mdash;L dir</TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>&mdash;L dir</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>&mdash;L dir</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>2</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_LIB/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>$SDCC_LIB/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_LIB/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>3</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_LIB</TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>$SDCC_LIB</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_LIB</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>4</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_HOME/
+<BR><SPAN  CLASS="textit">$PREFIX2DATA_DIR/</SPAN>
+<BR><SPAN  CLASS="textit">$LIB_DIR_SUFFIX/</SPAN>
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>$SDCC_HOME/
+<BR>
+share/sdcc/lib/&lt;<SPAN  CLASS="textit">model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_HOME\
+<BR>
+lib\<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>5</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>path(argv[0])/
+<BR><SPAN  CLASS="textit">$BIN2DATADIR/</SPAN>
+<BR><SPAN  CLASS="textit">$LIB_DIR_SUFFIX/</SPAN>
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>path(argv[0])/../sdcc/
+<BR>
+lib/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>path(argv[0])\
+<BR>..\lib\
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>6</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163><SPAN  CLASS="textit">$DATADIR/non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$LIB_DIR_SUFFIX/</SPAN>
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>/usr/local/share/sdcc/
+<BR>
+lib/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>(not on Win32)</TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>7</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_HOME/
+<BR><SPAN  CLASS="textit">$PREFIX2DATA_DIR/</SPAN>
+<BR><SPAN  CLASS="textit">non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$LIB_DIR_SUFFIX/</SPAN>
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>$SDCC_HOME/share/sdcc/
+<BR>
+non-free/lib/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>$SDCC_HOME\
+<BR>
+lib\non-free<SPAN  CLASS="textit">\&lt;model&gt;</SPAN></TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>8</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>path(argv[0])/
+<BR><SPAN  CLASS="textit">$BIN2DATADIR/</SPAN>
+<BR><SPAN  CLASS="textit">non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$LIB_DIR_SUFFIX/</SPAN>
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>path(argv[0])/../sdcc/
+<BR>
+non-free/lib/<SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>path(argv[0])\..\
+<BR>
+lib\non-free<SPAN  CLASS="textit">\&lt;model&gt;</SPAN></TD>
+</TR>
+<TR><TD CLASS="LEFT TOP"  WIDTH=18>9</TD>
+<TD CLASS="LEFT TOP"  WIDTH=163><SPAN  CLASS="textit">$DATADIR/non-free/</SPAN>
+<BR><SPAN  CLASS="textit">$LIB_DIR_SUFFIX/</SPAN>
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=181>/usr/local/share/sdcc/
+<BR>
+non-free/lib/
+<BR><SPAN  CLASS="textit">&lt;model&gt;</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=163>(not on Win32)</TD>
+</TR>
+</TABLE>
+<BR></DIV>
+<P>
+<DIV class="CENTER">
+</DIV>
+
+<P>
+&nbsp;
+<BR>
+The option &mdash;nostdlib disables all search paths except #1 and
+#2.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node14.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node10.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node12.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html815"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html817"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node14.html">2.4 Building SDCC</A>
+<B> Up:</B> <A
+ HREF="node10.html">2. Installing SDCC</A>
+<B> Previous:</B> <A
+ HREF="node12.html">2.2 Install paths</A>
+ &nbsp; <B>  <A ID="tex2html816"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html818"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,8 @@
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+tags
+*.[ao]
+*.dylib
+*.so
+.vscode

@@ -1,0 +1,4877 @@
+/*
+   asconaead128.c.in
+   op: encrypt, decrypt
+   impl: ref, opt32_lowsize, opt8, bi8, opt8_lowsize, opt8_mylowsize
+
+   Ascon is a family of lightweight cryptographic algorithms.
+   It won the CAESAR and NIST Lightweight Cryptography competitions.
+
+   The test is based on the reference implementations of Ascon-AEAD128
+   by Christoph Dobraunig and Martin Schläffer of the variants from the
+   NIST SP 800-232 standard, which are licensed under CC0 1.0 Universal.
+*/
+
+#include <testfwk.h>
+
+#define OP_{op}
+#define IMPL_{impl}
+
+// SDCC issue/bug: compilation becomes extremely slow when the functions are inlined (1h vs 1min); also code size becomes so big that only stm8 --model-large can handle it.
+#if defined(IMPL_ref) && defined(__SDCC)
+#define inline 
+#endif
+
+// Implementation does an ugly cast and uses implementation-defined endiannness check instead of standard one
+#if defined(IMPL_opt32_lowsize) && defined(__SDCC) || defined(IMPL_opt8) && defined(__SDCC) || defined(IMPL_bi8) && defined(__SDCC) || defined(IMPL_opt8_lowsize) && defined(__SDCC)
+#pragma disable_warning 196
+#include <stdbit.h>
+#define __BYTE_ORDER__ __STDC_ENDIAN_NATIVE__
+#define __ORDER_LITTLE_ENDIAN__ __STDC_ENDIAN_LITTLE__
+#define __ORDER_BIG_ENDIAN__ __STDC_ENDIAN_BIG__
+#endif
+
+// Implementation uses implementation-defined endiannness check instead of standard one
+#if defined(IMPL_opt8_mylowsize) && defined(__SDCC)
+#include <stdbit.h>
+#define __BYTE_ORDER__ __STDC_ENDIAN_NATIVE__
+#define __ORDER_LITTLE_ENDIAN__ __STDC_ENDIAN_LITTLE__
+#define __ORDER_BIG_ENDIAN__ __STDC_ENDIAN_BIG__
+#endif
+
+
+// Lack of memory. TODO: Check again once we have better optimizations for these targets.
+#if defined(__SDCC_mcs51) || defined(__SDCC_pdk14) || defined(__SDCC_pdk14) || defined(__SDCC_pdk15) || defined(__SDCC_mos6502) || defined(__SDCC_mos65c02)
+#undef OP_{op}
+#undef IMPL_{impl}
+#endif
+
+
+// Bug #3919 - fails test
+#if defined(__SDCC_ds390) && defined(IMPL_ref) && defined(OP_encrypt)
+#undef OP_encrypt
+#endif
+
+// Bug #3920 - fails test
+#if defined(IMPL_opt32_lowsize) && __STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_BIG__
+#undef OP_encrypt
+#undef OP_decrypt
+#endif
+
+// Bug #3920 - fails test
+#if defined(IMPL_opt8) && __STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_BIG__
+#undef OP_encrypt
+#undef OP_decrypt
+#endif
+
+// Bug #3920 - fails test
+#if defined(IMPL_bi8) && (__STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_BIG__ || defined (__SDCC))
+#undef OP_encrypt
+#undef OP_decrypt
+#endif
+
+// Bug #3920 - fails test
+#if defined(IMPL_opt8_lowsize) && __STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_BIG__
+#undef OP_encrypt
+#undef OP_decrypt
+#endif
+
+// Bug #3920 - fails test
+#if defined(IMPL_opt8_mylowsize) && __STDC_ENDIAN_NATIVE__ == __STDC_ENDIAN_BIG__
+#undef OP_encrypt
+#undef OP_decrypt
+#endif
+
+
+// crypto_aead.h
+int crypto_aead_encrypt(unsigned char *c, unsigned long long *clen,
+                        const unsigned char *m, unsigned long long mlen,
+                        const unsigned char *ad, unsigned long long adlen,
+                        const unsigned char *nsec, const unsigned char *npub,
+                        const unsigned char *k);
+
+int crypto_aead_decrypt(unsigned char *m, unsigned long long *mlen,
+                        unsigned char *nsec, const unsigned char *c,
+                        unsigned long long clen, const unsigned char *ad,
+                        unsigned long long adlen, const unsigned char *npub,
+                        const unsigned char *k);
+
+
+// api.h
+#define CRYPTO_VERSION "1.3.0"
+#define CRYPTO_KEYBYTES 16
+#define CRYPTO_NSECBYTES 0
+#define CRYPTO_NPUBBYTES 16
+#define CRYPTO_ABYTES 16
+#define CRYPTO_NOOVERLAP 1
+#define ASCON_AEAD_RATE 16
+#define ASCON_VARIANT 1
+
+
+#ifdef IMPL_ref
+
+// ascon.h
+#ifndef ASCON_H_
+#define ASCON_H_
+
+#include <stdint.h>
+
+typedef struct {
+  uint64_t x[5];
+} ascon_state_t;
+
+#endif /* ASCON_H_ */
+
+
+// constants.h
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+
+#include <stdint.h>
+
+#define ASCON_80PQ_VARIANT 0
+#define ASCON_AEAD_VARIANT 1
+#define ASCON_HASH_VARIANT 2
+#define ASCON_XOF_VARIANT 3
+#define ASCON_CXOF_VARIANT 4
+#define ASCON_MAC_VARIANT 5
+#define ASCON_PRF_VARIANT 6
+#define ASCON_PRFS_VARIANT 7
+
+#define ASCON_TAG_SIZE 16
+#define ASCON_HASH_SIZE 32
+
+#define ASCON_128_RATE 8
+#define ASCON_128A_RATE 16
+#define ASCON_HASH_RATE 8
+#define ASCON_PRF_IN_RATE 32
+#define ASCON_PRFA_IN_RATE 40
+#define ASCON_PRF_OUT_RATE 16
+
+#define ASCON_PA_ROUNDS 12
+#define ASCON_128_PB_ROUNDS 6
+#define ASCON_128A_PB_ROUNDS 8
+#define ASCON_HASH_PB_ROUNDS 12
+#define ASCON_HASHA_PB_ROUNDS 8
+#define ASCON_PRF_PB_ROUNDS 12
+#define ASCON_PRFA_PB_ROUNDS 8
+
+#define ASCON_128_IV                         \
+  (((uint64_t)(ASCON_AEAD_VARIANT) << 0) |   \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |     \
+   ((uint64_t)(ASCON_128_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_TAG_SIZE * 8) << 24) |  \
+   ((uint64_t)(ASCON_128_RATE) << 40))
+
+#define ASCON_128A_IV                         \
+  (((uint64_t)(ASCON_AEAD_VARIANT) << 0) |    \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |      \
+   ((uint64_t)(ASCON_128A_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_TAG_SIZE * 8) << 24) |   \
+   ((uint64_t)(ASCON_128A_RATE) << 40))
+
+#define ASCON_80PQ_IV                                                          \
+  (((uint64_t)(ASCON_80PQ_VARIANT) << 0) | ((uint64_t)(ASCON_128_RATE) << 8) | \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |                                       \
+   ((uint64_t)(ASCON_128_PB_ROUNDS) << 20) |                                   \
+   ((uint64_t)(ASCON_TAG_SIZE * 8) << 24))
+
+#define ASCON_HASH_IV                         \
+  (((uint64_t)(ASCON_HASH_VARIANT) << 0) |    \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |      \
+   ((uint64_t)(ASCON_HASH_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_HASH_SIZE * 8) << 24) |  \
+   ((uint64_t)(ASCON_HASH_RATE) << 40))
+
+#define ASCON_HASHA_IV                         \
+  (((uint64_t)(ASCON_HASH_VARIANT) << 0) |     \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |       \
+   ((uint64_t)(ASCON_HASHA_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_HASH_SIZE * 8) << 24) |   \
+   ((uint64_t)(ASCON_HASH_RATE) << 40))
+
+#define ASCON_XOF_IV                          \
+  (((uint64_t)(ASCON_XOF_VARIANT) << 0) |     \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |      \
+   ((uint64_t)(ASCON_HASH_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_HASH_RATE) << 40))
+
+#define ASCON_XOFA_IV                          \
+  (((uint64_t)(ASCON_XOF_VARIANT) << 0) |      \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |       \
+   ((uint64_t)(ASCON_HASHA_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_HASH_RATE) << 40))
+
+#define ASCON_CXOF_IV                         \
+  (((uint64_t)(ASCON_CXOF_VARIANT) << 0) |    \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |      \
+   ((uint64_t)(ASCON_HASH_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_HASH_RATE) << 40))
+
+#define ASCON_CXOFA_IV                         \
+  (((uint64_t)(ASCON_CXOF_VARIANT) << 0) |     \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |       \
+   ((uint64_t)(ASCON_HASHA_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_HASH_RATE) << 40))
+
+#define ASCON_MAC_IV                         \
+  (((uint64_t)(ASCON_MAC_VARIANT) << 0) |    \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |     \
+   ((uint64_t)(ASCON_PRF_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_TAG_SIZE * 8) << 24) |  \
+   ((uint64_t)(ASCON_PRF_IN_RATE) << 40) |   \
+   ((uint64_t)(ASCON_PRF_OUT_RATE) << 48))
+
+#define ASCON_MACA_IV                         \
+  (((uint64_t)(ASCON_MAC_VARIANT) << 0) |     \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |      \
+   ((uint64_t)(ASCON_PRFA_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_TAG_SIZE * 8) << 24) |   \
+   ((uint64_t)(ASCON_PRFA_IN_RATE) << 40) |   \
+   ((uint64_t)(ASCON_PRF_OUT_RATE) << 48))
+
+#define ASCON_PRF_IV                         \
+  (((uint64_t)(ASCON_PRF_VARIANT) << 0) |    \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |     \
+   ((uint64_t)(ASCON_PRF_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_PRF_IN_RATE) << 40) |   \
+   ((uint64_t)(ASCON_PRF_OUT_RATE) << 48))
+
+#define ASCON_PRFA_IV                         \
+  (((uint64_t)(ASCON_PRF_VARIANT) << 0) |     \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |      \
+   ((uint64_t)(ASCON_PRFA_PB_ROUNDS) << 20) | \
+   ((uint64_t)(ASCON_PRFA_IN_RATE) << 40) |   \
+   ((uint64_t)(ASCON_PRF_OUT_RATE) << 48))
+
+#define ASCON_PRFS_IV                      \
+  (((uint64_t)(ASCON_PRFS_VARIANT) << 0) | \
+   ((uint64_t)(ASCON_PA_ROUNDS) << 16) |   \
+   ((uint64_t)(ASCON_TAG_SIZE * 8) << 24))
+
+#endif /* CONSTANTS_H_ */
+
+
+// word.h
+#ifndef WORD_H_
+#define WORD_H_
+
+#include <stdint.h>
+
+/* get byte from 64-bit Ascon word */
+#define GETBYTE(x, i) ((uint8_t)((uint64_t)(x) >> (8 * (i))))
+
+/* set byte in 64-bit Ascon word */
+#define SETBYTE(b, i) ((uint64_t)(b) << (8 * (i)))
+
+/* set padding byte in 64-bit Ascon word */
+#define PAD(i) SETBYTE(0x01, i)
+
+/* define domain separation bit in 64-bit Ascon word */
+#define DSEP() SETBYTE(0x80, 7)
+
+/* load bytes into 64-bit Ascon word */
+static inline uint64_t LOADBYTES(const uint8_t* bytes, int n) {
+  int i;
+  uint64_t x = 0;
+  for (i = 0; i < n; ++i) x |= SETBYTE(bytes[i], i);
+  return x;
+}
+
+/* store bytes from 64-bit Ascon word */
+static inline void STOREBYTES(uint8_t* bytes, uint64_t x, int n) {
+  int i;
+  for (i = 0; i < n; ++i) bytes[i] = GETBYTE(x, i);
+}
+
+/* clear bytes in 64-bit Ascon word */
+static inline uint64_t CLEARBYTES(uint64_t x, int n) {
+  int i;
+  for (i = 0; i < n; ++i) x &= ~SETBYTE(0xff, i);
+  return x;
+}
+
+#endif /* WORD_H_ */
+
+
+// printstate.h
+#ifndef PRINTSTATE_H_
+#define PRINTSTATE_H_
+
+#ifdef ASCON_PRINT_STATE
+
+//#include "ascon.h"
+//#include "word.h"
+
+void print(const char* text);
+void printbytes(const char* text, const uint8_t* b, uint64_t len);
+void printword(const char* text, const uint64_t x);
+void printstate(const char* text, const ascon_state_t* s);
+
+#else
+
+#define print(text) \
+  do {              \
+  } while (0)
+
+#define printbytes(text, b, l) \
+  do {                         \
+  } while (0)
+
+#define printword(text, w) \
+  do {                     \
+  } while (0)
+
+#define printstate(text, s) \
+  do {                      \
+  } while (0)
+
+#endif
+
+#endif /* PRINTSTATE_H_ */
+
+
+// round.h
+#ifndef ROUND_H_
+#define ROUND_H_
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "printstate.h"
+
+static inline uint64_t ROR(uint64_t x, int n) {
+  return x >> n | x << (-n & 63);
+}
+
+static inline void ROUND(ascon_state_t* s, uint8_t C) {
+  ascon_state_t t;
+  /* addition of round constant */
+  s->x[2] ^= C;
+  /* printstate(" round constant", s); */
+  /* substitution layer */
+  s->x[0] ^= s->x[4];
+  s->x[4] ^= s->x[3];
+  s->x[2] ^= s->x[1];
+  /* start of keccak s-box */
+  t.x[0] = s->x[0] ^ (~s->x[1] & s->x[2]);
+  t.x[1] = s->x[1] ^ (~s->x[2] & s->x[3]);
+  t.x[2] = s->x[2] ^ (~s->x[3] & s->x[4]);
+  t.x[3] = s->x[3] ^ (~s->x[4] & s->x[0]);
+  t.x[4] = s->x[4] ^ (~s->x[0] & s->x[1]);
+  /* end of keccak s-box */
+  t.x[1] ^= t.x[0];
+  t.x[0] ^= t.x[4];
+  t.x[3] ^= t.x[2];
+  t.x[2] = ~t.x[2];
+  /* printstate(" substitution layer", &t); */
+  /* linear diffusion layer */
+  s->x[0] = t.x[0] ^ ROR(t.x[0], 19) ^ ROR(t.x[0], 28);
+  s->x[1] = t.x[1] ^ ROR(t.x[1], 61) ^ ROR(t.x[1], 39);
+  s->x[2] = t.x[2] ^ ROR(t.x[2], 1) ^ ROR(t.x[2], 6);
+  s->x[3] = t.x[3] ^ ROR(t.x[3], 10) ^ ROR(t.x[3], 17);
+  s->x[4] = t.x[4] ^ ROR(t.x[4], 7) ^ ROR(t.x[4], 41);
+  printstate(" round output", s);
+}
+
+#endif /* ROUND_H_ */
+
+
+// permutations.h
+#ifndef PERMUTATIONS_H_
+#define PERMUTATIONS_H_
+
+#include <stdint.h>
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "printstate.h"
+//#include "round.h"
+
+static inline void P12(ascon_state_t* s) {
+  ROUND(s, 0xf0);
+  ROUND(s, 0xe1);
+  ROUND(s, 0xd2);
+  ROUND(s, 0xc3);
+  ROUND(s, 0xb4);
+  ROUND(s, 0xa5);
+  ROUND(s, 0x96);
+  ROUND(s, 0x87);
+  ROUND(s, 0x78);
+  ROUND(s, 0x69);
+  ROUND(s, 0x5a);
+  ROUND(s, 0x4b);
+}
+
+static inline void P8(ascon_state_t* s) {
+  ROUND(s, 0xb4);
+  ROUND(s, 0xa5);
+  ROUND(s, 0x96);
+  ROUND(s, 0x87);
+  ROUND(s, 0x78);
+  ROUND(s, 0x69);
+  ROUND(s, 0x5a);
+  ROUND(s, 0x4b);
+}
+
+static inline void P6(ascon_state_t* s) {
+  ROUND(s, 0x96);
+  ROUND(s, 0x87);
+  ROUND(s, 0x78);
+  ROUND(s, 0x69);
+  ROUND(s, 0x5a);
+  ROUND(s, 0x4b);
+}
+
+#endif /* PERMUTATIONS_H_ */
+
+
+// aead.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "crypto_aead.h"
+//#include "permutations.h"
+//#include "printstate.h"
+//#include "word.h"
+
+#ifdef OP_encrypt
+int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
+                        const unsigned char* m, unsigned long long mlen,
+                        const unsigned char* ad, unsigned long long adlen,
+                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+
+  /* set ciphertext size */
+  *clen = mlen + CRYPTO_ABYTES;
+
+  /* print input bytes */
+  print("encrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("m", m, mlen);
+
+  /* load key and nonce */
+  const uint64_t K0 = LOADBYTES(k, 8);
+  const uint64_t K1 = LOADBYTES(k + 8, 8);
+  const uint64_t N0 = LOADBYTES(npub, 8);
+  const uint64_t N1 = LOADBYTES(npub + 8, 8);
+
+  /* initialize */
+  ascon_state_t s;
+  s.x[0] = ASCON_128A_IV;
+  s.x[1] = K0;
+  s.x[2] = K1;
+  s.x[3] = N0;
+  s.x[4] = N1;
+  printstate("init 1st key xor", &s);
+  P12(&s);
+  s.x[3] ^= K0;
+  s.x[4] ^= K1;
+  printstate("init 2nd key xor", &s);
+
+  if (adlen) {
+    /* full associated data blocks */
+    while (adlen >= ASCON_128A_RATE) {
+      s.x[0] ^= LOADBYTES(ad, 8);
+      s.x[1] ^= LOADBYTES(ad + 8, 8);
+      printstate("absorb adata", &s);
+      P8(&s);
+      ad += ASCON_128A_RATE;
+      adlen -= ASCON_128A_RATE;
+    }
+    /* final associated data block */
+    if (adlen >= 8) {
+      s.x[0] ^= LOADBYTES(ad, 8);
+      s.x[1] ^= LOADBYTES(ad + 8, adlen - 8);
+      s.x[1] ^= PAD(adlen - 8);
+    } else {
+      s.x[0] ^= LOADBYTES(ad, adlen);
+      s.x[0] ^= PAD(adlen);
+    }
+    printstate("pad adata", &s);
+    P8(&s);
+  }
+  /* domain separation */
+  s.x[4] ^= DSEP();
+  printstate("domain separation", &s);
+
+  /* full plaintext blocks */
+  while (mlen >= ASCON_128A_RATE) {
+    s.x[0] ^= LOADBYTES(m, 8);
+    s.x[1] ^= LOADBYTES(m + 8, 8);
+    STOREBYTES(c, s.x[0], 8);
+    STOREBYTES(c + 8, s.x[1], 8);
+    printstate("absorb plaintext", &s);
+    P8(&s);
+    m += ASCON_128A_RATE;
+    c += ASCON_128A_RATE;
+    mlen -= ASCON_128A_RATE;
+  }
+  /* final plaintext block */
+  if (mlen >= 8) {
+    s.x[0] ^= LOADBYTES(m, 8);
+    s.x[1] ^= LOADBYTES(m + 8, mlen - 8);
+    STOREBYTES(c, s.x[0], 8);
+    STOREBYTES(c + 8, s.x[1], mlen - 8);
+    s.x[1] ^= PAD(mlen - 8);
+  } else {
+    s.x[0] ^= LOADBYTES(m, mlen);
+    STOREBYTES(c, s.x[0], mlen);
+    s.x[0] ^= PAD(mlen);
+  }
+  m += mlen;
+  c += mlen;
+  printstate("pad plaintext", &s);
+
+  /* finalize */
+  s.x[2] ^= K0;
+  s.x[3] ^= K1;
+  printstate("final 1st key xor", &s);
+  P12(&s);
+  s.x[3] ^= K0;
+  s.x[4] ^= K1;
+  printstate("final 2nd key xor", &s);
+
+  /* get tag */
+  STOREBYTES(c, s.x[3], 8);
+  STOREBYTES(c + 8, s.x[4], 8);
+
+  /* print output bytes */
+  printbytes("c", c - *clen + CRYPTO_ABYTES, *clen - CRYPTO_ABYTES);
+  printbytes("t", c, CRYPTO_ABYTES);
+  print("\n");
+
+  return 0;
+}
+#endif
+
+#ifdef OP_decrypt
+int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+                        unsigned char* nsec, const unsigned char* c,
+                        unsigned long long clen, const unsigned char* ad,
+                        unsigned long long adlen, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+
+  if (clen < CRYPTO_ABYTES) return -1;
+
+  /* set plaintext size */
+  *mlen = clen - CRYPTO_ABYTES;
+
+  /* print input bytes */
+  print("decrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("c", c, *mlen);
+  printbytes("t", c + *mlen, CRYPTO_ABYTES);
+
+  /* load key and nonce */
+  const uint64_t K0 = LOADBYTES(k, 8);
+  const uint64_t K1 = LOADBYTES(k + 8, 8);
+  const uint64_t N0 = LOADBYTES(npub, 8);
+  const uint64_t N1 = LOADBYTES(npub + 8, 8);
+
+  /* initialize */
+  ascon_state_t s;
+  s.x[0] = ASCON_128A_IV;
+  s.x[1] = K0;
+  s.x[2] = K1;
+  s.x[3] = N0;
+  s.x[4] = N1;
+  printstate("init 1st key xor", &s);
+  P12(&s);
+  s.x[3] ^= K0;
+  s.x[4] ^= K1;
+  printstate("init 2nd key xor", &s);
+
+  if (adlen) {
+    /* full associated data blocks */
+    while (adlen >= ASCON_128A_RATE) {
+      s.x[0] ^= LOADBYTES(ad, 8);
+      s.x[1] ^= LOADBYTES(ad + 8, 8);
+      printstate("absorb adata", &s);
+      P8(&s);
+      ad += ASCON_128A_RATE;
+      adlen -= ASCON_128A_RATE;
+    }
+    /* final associated data block */
+    if (adlen >= 8) {
+      s.x[0] ^= LOADBYTES(ad, 8);
+      s.x[1] ^= LOADBYTES(ad + 8, adlen - 8);
+      s.x[1] ^= PAD(adlen - 8);
+    } else {
+      s.x[0] ^= LOADBYTES(ad, adlen);
+      s.x[0] ^= PAD(adlen);
+    }
+    printstate("pad adata", &s);
+    P8(&s);
+  }
+  /* domain separation */
+  s.x[4] ^= DSEP();
+  printstate("domain separation", &s);
+
+  /* full ciphertext blocks */
+  clen -= CRYPTO_ABYTES;
+  while (clen >= ASCON_128A_RATE) {
+    uint64_t c0 = LOADBYTES(c, 8);
+    uint64_t c1 = LOADBYTES(c + 8, 8);
+    STOREBYTES(m, s.x[0] ^ c0, 8);
+    STOREBYTES(m + 8, s.x[1] ^ c1, 8);
+    s.x[0] = c0;
+    s.x[1] = c1;
+    printstate("insert ciphertext", &s);
+    P8(&s);
+    m += ASCON_128A_RATE;
+    c += ASCON_128A_RATE;
+    clen -= ASCON_128A_RATE;
+  }
+  /* final ciphertext block */
+  if (clen >= 8) {
+    uint64_t c0 = LOADBYTES(c, 8);
+    uint64_t c1 = LOADBYTES(c + 8, clen - 8);
+    STOREBYTES(m, s.x[0] ^ c0, 8);
+    STOREBYTES(m + 8, s.x[1] ^ c1, clen - 8);
+    s.x[0] = c0;
+    s.x[1] = CLEARBYTES(s.x[1], clen - 8);
+    s.x[1] |= c1;
+    s.x[1] ^= PAD(clen - 8);
+  } else {
+    uint64_t c0 = LOADBYTES(c, clen);
+    STOREBYTES(m, s.x[0] ^ c0, clen);
+    s.x[0] = CLEARBYTES(s.x[0], clen);
+    s.x[0] |= c0;
+    s.x[0] ^= PAD(clen);
+  }
+  m += clen;
+  c += clen;
+  printstate("pad ciphertext", &s);
+
+  /* finalize */
+  s.x[2] ^= K0;
+  s.x[3] ^= K1;
+  printstate("final 1st key xor", &s);
+  P12(&s);
+  s.x[3] ^= K0;
+  s.x[4] ^= K1;
+  printstate("final 2nd key xor", &s);
+
+  /* get tag */
+  uint8_t t[16];
+  STOREBYTES(t, s.x[3], 8);
+  STOREBYTES(t + 8, s.x[4], 8);
+
+  /* verify should be constant time, check compiler output */
+  int i;
+  int result = 0;
+  for (i = 0; i < CRYPTO_ABYTES; ++i) result |= c[i] ^ t[i];
+  result = (((result - 1) >> 8) & 1) - 1;
+
+  /* print output bytes */
+  printbytes("m", m - *mlen, *mlen);
+  print("\n");
+
+  return result;
+}
+#endif
+
+#endif
+
+
+#ifdef IMPL_opt8
+
+//config.h
+#ifndef CONFIG_H_
+#define CONFIG_H_
+
+/* inline the ascon mode */
+#ifndef ASCON_INLINE_MODE
+#define ASCON_INLINE_MODE 0
+#endif
+
+/* inline all permutations */
+#ifndef ASCON_INLINE_PERM
+#define ASCON_INLINE_PERM 0
+#endif
+
+/* unroll permutation loops */
+#ifndef ASCON_UNROLL_LOOPS
+#define ASCON_UNROLL_LOOPS 0
+#endif
+
+#endif /* CONFIG_H_ */
+
+
+// ascon.h
+#ifndef ASCON_H_
+#define ASCON_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+//#include "config.h"
+
+typedef union {
+  uint64_t x[5];
+  uint32_t w[5][2];
+  uint8_t b[5][8];
+} ascon_state_t;
+
+#ifdef ASCON_AEAD_RATE
+
+#define ASCON_KEYWORDS (CRYPTO_KEYBYTES + 7) / 8
+
+typedef union {
+  uint64_t x[ASCON_KEYWORDS];
+  uint32_t w[ASCON_KEYWORDS][2];
+  uint8_t b[ASCON_KEYWORDS][8];
+} ascon_key_t;
+
+#if !ASCON_INLINE_MODE
+
+void ascon_loadkey(ascon_key_t* key, const uint8_t* k);
+void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                    const uint8_t* npub);
+void ascon_adata(ascon_state_t* s, const uint8_t* ad, uint64_t adlen);
+void ascon_encrypt(ascon_state_t* s, uint8_t* c, const uint8_t* m,
+                   uint64_t mlen);
+void ascon_decrypt(ascon_state_t* s, uint8_t* m, const uint8_t* c,
+                   uint64_t clen);
+void ascon_final(ascon_state_t* s, const ascon_key_t* k);
+
+#endif
+
+int ascon_aead_encrypt(uint8_t* t, uint8_t* c, const uint8_t* m, uint64_t mlen,
+                       const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+                       const uint8_t* k);
+int ascon_aead_decrypt(uint8_t* m, const uint8_t* t, const uint8_t* c,
+                       uint64_t clen, const uint8_t* ad, uint64_t adlen,
+                       const uint8_t* npub, const uint8_t* k);
+
+#endif
+
+#ifdef ASCON_HASH_BYTES
+
+#if !ASCON_INLINE_MODE
+
+void ascon_inithash(ascon_state_t* s);
+void ascon_absorb(ascon_state_t* s, const uint8_t* in, uint64_t inlen);
+void ascon_squeeze(ascon_state_t* s, uint8_t* out, uint64_t outlen);
+
+#endif
+
+int ascon_xof(uint8_t* out, uint64_t outlen, const uint8_t* in, uint64_t inlen);
+
+#endif
+
+#endif /* ASCON_H_ */
+
+
+// constants.h
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+
+#include <stdint.h>
+
+#define ASCON_80PQ_VARIANT 0
+#define ASCON_AEAD_VARIANT 1
+#define ASCON_HASH_VARIANT 2
+#define ASCON_XOF_VARIANT 3
+#define ASCON_CXOF_VARIANT 4
+#define ASCON_MAC_VARIANT 5
+#define ASCON_PRF_VARIANT 6
+#define ASCON_PRFS_VARIANT 7
+
+#define ASCON_TAG_SIZE 16
+#define ASCON_HASH_SIZE 32
+
+#define ASCON_128_RATE 8
+#define ASCON_128A_RATE 16
+#define ASCON_HASH_RATE 8
+#define ASCON_PRF_IN_RATE 32
+#define ASCON_PRFA_IN_RATE 40
+#define ASCON_PRF_OUT_RATE 16
+
+#define ASCON_PA_ROUNDS 12
+#define ASCON_128_PB_ROUNDS 6
+#define ASCON_128A_PB_ROUNDS 8
+#define ASCON_HASH_PB_ROUNDS 12
+#define ASCON_HASHA_PB_ROUNDS 8
+#define ASCON_PRF_PB_ROUNDS 12
+#define ASCON_PRFA_PB_ROUNDS 8
+
+#define ASCON_128_IV 0x00000800806c0001ull
+#define ASCON_128A_IV 0x00001000808c0001ull
+#define ASCON_80PQ_IV 0x00000000806c0800ull
+
+#define ASCON_HASH_IV 0x0000080100cc0002ull
+#define ASCON_HASHA_IV 0x00000801008c0002ull
+#define ASCON_XOF_IV 0x0000080000cc0003ull
+#define ASCON_XOFA_IV 0x00000800008c0003ull
+#define ASCON_CXOF_IV 0x0000080000cc0004ull
+#define ASCON_CXOFA_IV 0x00000800008c0004ull
+
+#define ASCON_MAC_IV 0x0010200080cc0005ull
+#define ASCON_MACA_IV 0x00102800808c0005ull
+#define ASCON_PRF_IV 0x0010200000cc0006ull
+#define ASCON_PRFA_IV 0x00102800008c0006ull
+#define ASCON_PRFS_IV 0x00000000800c0007ull
+
+#define ASCON_HASH_IV0 0x9b1e5494e934d681ull
+#define ASCON_HASH_IV1 0x4bc3a01e333751d2ull
+#define ASCON_HASH_IV2 0xae65396c6b34b81aull
+#define ASCON_HASH_IV3 0x3c7fd4a4d56a4db3ull
+#define ASCON_HASH_IV4 0x1a5c464906c5976dull
+
+#define ASCON_HASHA_IV0 0xe2ffb4d17ffcadc5ull
+#define ASCON_HASHA_IV1 0xdd364b655fa88cebull
+#define ASCON_HASHA_IV2 0xdcaabe85a70319d2ull
+#define ASCON_HASHA_IV3 0xd98f049404be3214ull
+#define ASCON_HASHA_IV4 0xca8c9d516e8a2221ull
+
+#define ASCON_XOF_IV0 0xda82ce768d9447ebull
+#define ASCON_XOF_IV1 0xcc7ce6c75f1ef969ull
+#define ASCON_XOF_IV2 0xe7508fd780085631ull
+#define ASCON_XOF_IV3 0x0ee0ea53416b58ccull
+#define ASCON_XOF_IV4 0xe0547524db6f0bdeull
+
+#define ASCON_XOFA_IV0 0xf3040e5017d92943ull
+#define ASCON_XOFA_IV1 0xc474f6e3ae01892eull
+#define ASCON_XOFA_IV2 0xbf5cb3ca954805e0ull
+#define ASCON_XOFA_IV3 0xd9c28702ccf962efull
+#define ASCON_XOFA_IV4 0x5923fa01f4b0e72full
+
+#define RC0 0xf0
+#define RC1 0xe1
+#define RC2 0xd2
+#define RC3 0xc3
+#define RC4 0xb4
+#define RC5 0xa5
+#define RC6 0x96
+#define RC7 0x87
+#define RC8 0x78
+#define RC9 0x69
+#define RCa 0x5a
+#define RCb 0x4b
+
+#define RC(i) (i)
+
+#define START(n) ((3 + (n)) << 4 | (12 - (n)))
+#define INC -0x0f
+#define END 0x3c
+
+#endif /* CONSTANTS_H_ */
+
+
+// printstate.h
+#ifndef PRINTSTATE_H_
+#define PRINTSTATE_H_
+
+#ifdef ASCON_PRINT_STATE
+
+#include "ascon.h"
+
+void print(const char* text);
+void printbytes(const char* text, const uint8_t* b, uint64_t len);
+void printword(const char* text, const uint64_t x);
+void printstate(const char* text, const ascon_state_t* s);
+
+#else
+
+#define print(text) \
+  do {              \
+  } while (0)
+
+#define printbytes(text, b, l) \
+  do {                         \
+  } while (0)
+
+#define printword(text, w) \
+  do {                     \
+  } while (0)
+
+#define printstate(text, s) \
+  do {                      \
+  } while (0)
+
+#endif
+
+#endif /* PRINTSTATE_H_ */
+
+
+// forceinline.h
+#ifndef FORCEINLINE_H_
+#define FORCEINLINE_H_
+
+/* define forceinline macro */
+#ifdef _MSC_VER
+#define forceinline __forceinline
+#elif defined(__GNUC__)
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline static inline
+#endif
+#elif defined(__CLANG__)
+#if __has_attribute(__always_inline__)
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline inline
+#endif
+#else
+#define forceinline inline
+#endif
+
+#endif /* FORCEINLINE_H_ */
+
+
+// lendian.h
+#ifndef ENDIAN_H_
+#define ENDIAN_H_
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
+    defined(_MSC_VER)
+
+/* macros for little endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for little endian machines")
+#endif
+#define U64LE(x) (x)
+#define U32LE(x) (x)
+#define U16LE(x) (x)
+
+#elif (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+
+/* macros for big endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for big endian machines")
+#endif
+#define U64LE(x)                           \
+  (((0x00000000000000FFULL & (x)) << 56) | \
+   ((0x000000000000FF00ULL & (x)) << 40) | \
+   ((0x0000000000FF0000ULL & (x)) << 24) | \
+   ((0x00000000FF000000ULL & (x)) << 8) |  \
+   ((0x000000FF00000000ULL & (x)) >> 8) |  \
+   ((0x0000FF0000000000ULL & (x)) >> 24) | \
+   ((0x00FF000000000000ULL & (x)) >> 40) | \
+   ((0xFF00000000000000ULL & (x)) >> 56))
+#define U32LE(x)                                            \
+  (((0x000000FF & (x)) << 24) | ((0x0000FF00 & (x)) << 8) | \
+   ((0x00FF0000 & (x)) >> 8) | ((0xFF000000 & (x)) >> 24))
+#define U16LE(x) (((0x00FF & (x)) << 8) | ((0xFF00 & (x)) >> 8))
+
+#else
+#error "Ascon byte order macros not defined in lendian.h"
+#endif
+
+#endif /* ENDIAN_H_ */
+
+
+// word.h
+#ifndef WORD_H_
+#define WORD_H_
+
+#include <stdint.h>
+#include <string.h>
+
+//#include "forceinline.h"
+//#include "lendian.h"
+
+typedef union {
+  uint64_t x;
+  uint32_t w[2];
+  uint8_t b[8];
+} word_t;
+
+#define U64TOWORD(x) U64LE(x)
+#define WORDTOU64(x) U64LE(x)
+#define LOAD(b, n) LOADBYTES(b, n)
+#define STORE(b, w, n) STOREBYTES(b, w, n)
+
+#define XMUL(i, x)                               \
+  do {                                           \
+    tmp = (uint16_t)a.b[i] * (1 << (x));         \
+    b.b[(byte_rol + (i)) & 0x7] ^= (uint8_t)tmp; \
+    b.b[(byte_rol + (i) + 1) & 0x7] ^= tmp >> 8; \
+  } while (0)
+
+forceinline uint64_t ROR(uint64_t x, int n) {
+  word_t a = {.x = x}, b = {.x = 0ull};
+  int bit_rol = (64 - n) & 0x7;
+  int byte_rol = (64 - n) >> 3;
+  uint16_t tmp;
+  XMUL(0, bit_rol);
+  XMUL(1, bit_rol);
+  XMUL(2, bit_rol);
+  XMUL(3, bit_rol);
+  XMUL(4, bit_rol);
+  XMUL(5, bit_rol);
+  XMUL(6, bit_rol);
+  XMUL(7, bit_rol);
+  return b.x;
+}
+
+forceinline uint8_t NOT8(uint8_t a) { return ~a; }
+
+forceinline uint8_t XOR8(uint8_t a, uint8_t b) { return a ^ b; }
+
+forceinline uint8_t AND8(uint8_t a, uint8_t b) { return a & b; }
+
+forceinline uint8_t OR8(uint8_t a, uint8_t b) { return a | b; }
+
+forceinline uint64_t KEYROT(uint64_t hi2lo, uint64_t lo2hi) {
+  return lo2hi << 32 | hi2lo >> 32;
+}
+
+forceinline int NOTZERO(uint64_t a, uint64_t b) {
+  uint64_t result = a | b;
+  result |= result >> 32;
+  result |= result >> 16;
+  result |= result >> 8;
+  return ((((int)(result & 0xff) - 1) >> 8) & 1) - 1;
+}
+
+forceinline uint64_t PAD() { return 0x01; }
+
+forceinline uint64_t DSEP() { return 0x80; }
+
+forceinline uint64_t PRFS_MLEN(uint64_t len) { return len << 51; }
+
+forceinline uint64_t CLEAR(uint64_t w, int n) {
+  /* undefined for n == 0 */
+  uint64_t mask = ~0ull << (8 * n);
+  return w & mask;
+}
+
+forceinline uint64_t MASK(int n) {
+  /* undefined for n == 0 */
+  return ~0ull << (64 - 8 * n);
+}
+
+forceinline uint64_t LOADBYTES(const uint8_t* bytes, int n) {
+  uint64_t x = 0;
+  memcpy(&x, bytes, n);
+  return U64TOWORD(x);
+}
+
+forceinline void STOREBYTES(uint8_t* bytes, uint64_t w, int n) {
+  uint64_t x = WORDTOU64(w);
+  memcpy(bytes, &x, n);
+}
+
+forceinline void memxor(uint8_t* dst, const uint8_t* src, int n) {
+  while (n > 0) {
+    *dst++ ^= *src++;
+    --n;
+  }
+}
+
+forceinline void INSERT(uint8_t* s, const uint8_t* d, int n) {
+  while (n > 0) {
+    *s++ = *d++;
+    --n;
+  }
+}
+
+forceinline void SQUEEZE(uint8_t* d, const uint8_t* s, int n) {
+  while (n > 0) {
+    *d++ = *s++;
+    --n;
+  }
+}
+
+forceinline void ABSORB(uint8_t* s, const uint8_t* d, int n) {
+  while (n > 0) {
+    *s++ ^= *d++;
+    --n;
+  }
+}
+
+forceinline void ENCRYPT(uint8_t* s, uint8_t* c, const uint8_t* m, int n) {
+  while (n > 0) {
+    *c++ = (*s++ ^= *m++);
+    --n;
+  }
+}
+
+forceinline void DECRYPT(uint8_t* s, uint8_t* m, const uint8_t* c, int n) {
+  while (n > 0) {
+    uint8_t t = *c++;
+    *m++ = *s ^ t;
+    *s++ = t;
+    --n;
+  }
+}
+
+forceinline uint8_t VERIFY(const uint8_t* s, const uint8_t* d, int n) {
+  uint8_t r = 0;
+  while (n > 0) {
+    r |= *s++ ^ *d++;
+    --n;
+  }
+  return r;
+}
+
+#endif /* WORD_H_ */
+
+
+// round.h
+#ifndef ROUND_H_
+#define ROUND_H_
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "forceinline.h"
+//#include "printstate.h"
+//#include "word.h"
+
+forceinline void LINEAR_LAYER(ascon_state_t* s, uint64_t xtemp) {
+  uint64_t temp;
+  temp = s->x[2] ^ ROR(s->x[2], 28 - 19);
+  s->x[0] = s->x[2] ^ ROR(temp, 19);
+  temp = s->x[4] ^ ROR(s->x[4], 6 - 1);
+  s->x[2] = s->x[4] ^ ROR(temp, 1);
+  temp = s->x[1] ^ ROR(s->x[1], 41 - 7);
+  s->x[4] = s->x[1] ^ ROR(temp, 7);
+  temp = s->x[3] ^ ROR(s->x[3], 61 - 39);
+  s->x[1] = s->x[3] ^ ROR(temp, 39);
+  temp = xtemp ^ ROR(xtemp, 17 - 10);
+  s->x[3] = xtemp ^ ROR(temp, 10);
+}
+
+forceinline void NONLINEAR_LAYER(ascon_state_t* s, word_t* xtemp, uint8_t pos) {
+  uint8_t t0;
+  uint8_t t1;
+  uint8_t t2;
+  // Based on the round description of Ascon given in the Bachelor's thesis:
+  //"Optimizing Ascon on RISC-V" of Lars Jellema
+  // see https://github.com/Lucus16/ascon-riscv/
+  t0 = XOR8(s->b[1][pos], s->b[2][pos]);
+  t1 = XOR8(s->b[0][pos], s->b[4][pos]);
+  t2 = XOR8(s->b[3][pos], s->b[4][pos]);
+  s->b[4][pos] = OR8(s->b[3][pos], NOT8(s->b[4][pos]));
+  s->b[4][pos] = XOR8(s->b[4][pos], t0);
+  s->b[3][pos] = XOR8(s->b[3][pos], s->b[1][pos]);
+  s->b[3][pos] = OR8(s->b[3][pos], t0);
+  s->b[3][pos] = XOR8(s->b[3][pos], t1);
+  s->b[2][pos] = XOR8(s->b[2][pos], t1);
+  s->b[2][pos] = OR8(s->b[2][pos], s->b[1][pos]);
+  s->b[2][pos] = XOR8(s->b[2][pos], t2);
+  s->b[1][pos] = AND8(s->b[1][pos], NOT8(t1));
+  s->b[1][pos] = XOR8(s->b[1][pos], t2);
+  s->b[0][pos] = OR8(s->b[0][pos], t2);
+  (*xtemp).b[pos] = XOR8(s->b[0][pos], t0);
+}
+
+forceinline void ROUND(ascon_state_t* s, uint8_t C) {
+  int i;
+  word_t xtemp;
+  /* round constant */
+  s->b[2][0] = XOR8(s->b[2][0], C);
+  /* s-box layer */
+  for (i = 0; i < 8; i++) NONLINEAR_LAYER(s, &xtemp, i);
+  /* linear layer */
+  LINEAR_LAYER(s, xtemp.x);
+  printstate(" round output", s);
+}
+
+forceinline void PROUNDS(ascon_state_t* s, int nr) {
+  int i = START(nr);
+  do {
+    ROUND(s, RC(i));
+    i += INC;
+  } while (i != END);
+}
+
+#endif /* ROUND_H_ */
+
+
+// permutations.h
+#ifndef PERMUTATIONS_H_
+#define PERMUTATIONS_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+//#include "ascon.h"
+//#include "config.h"
+//#include "constants.h"
+//#include "printstate.h"
+//#include "round.h"
+
+forceinline void P12ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC0);
+  ROUND(s, RC1);
+  ROUND(s, RC2);
+  ROUND(s, RC3);
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P8ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P6ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+#if ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12ROUNDS(s);
+  if (nr == 8) P8ROUNDS(s);
+  if (nr == 6) P6ROUNDS(s);
+}
+
+#elif !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s);
+void P8(ascon_state_t* s);
+void P6(ascon_state_t* s);
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12(s);
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8))
+  if (nr == 8) P8(s);
+#endif
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8)
+  if (nr == 6) P6(s);
+#endif
+}
+
+#elif ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#else /* !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS */
+
+void P(ascon_state_t* s, int nr);
+
+#endif
+
+#endif /* PERMUTATIONS_H_ */
+
+
+// aead.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "crypto_aead.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if !ASCON_INLINE_MODE
+#undef forceinline
+#define forceinline
+#endif
+
+#ifdef ASCON_AEAD_RATE
+
+forceinline void ascon_loadkey(ascon_key_t* key, const uint8_t* k) {
+#if CRYPTO_KEYBYTES == 16
+  INSERT(key->b[0], k, 8);
+  INSERT(key->b[1], k + 8, 8);
+#else /* CRYPTO_KEYBYTES == 20 */
+  key->x[0] = KEYROT(0, LOADBYTES(k, 4));
+  key->x[1] = LOADBYTES(k + 4, 8);
+  key->x[2] = LOADBYTES(k + 12, 8);
+#endif
+}
+
+forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                                const uint8_t* npub) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) s->x[0] = ASCON_128_IV;
+  if (ASCON_AEAD_RATE == 16) s->x[0] = ASCON_128A_IV;
+  memcpy(s->b[1], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[0] = key->x[0] | ASCON_80PQ_IV;
+  memcpy(s->b[1], key->b[1], 16);
+#endif
+  INSERT(s->b[3], npub, 8);
+  INSERT(s->b[4], npub + 8, 8);
+  printstate("init 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[3], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  memxor(s->b[2], key->b[0], 24);
+#endif
+  printstate("init 2nd key xor", s);
+}
+
+forceinline void ascon_adata(ascon_state_t* s, const uint8_t* ad,
+                             uint64_t adlen) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  if (adlen) {
+    /* full associated data blocks */
+    while (adlen >= ASCON_AEAD_RATE) {
+      ABSORB(s->b[0], ad, 8);
+      if (ASCON_AEAD_RATE == 16) ABSORB(s->b[1], ad + 8, 8);
+      printstate("absorb adata", s);
+      P(s, nr);
+      ad += ASCON_AEAD_RATE;
+      adlen -= ASCON_AEAD_RATE;
+    }
+    /* final associated data block */
+    int i = 0;
+    if (ASCON_AEAD_RATE == 16 && adlen >= 8) {
+      ABSORB(s->b[0], ad, 8);
+      i = 1;
+      ad += 8;
+      adlen -= 8;
+    }
+    ABSORB(s->b[i], ad, adlen);
+    s->b[i][adlen] ^= PAD();
+    printstate("pad adata", s);
+    P(s, nr);
+  }
+  /* domain separation */
+  s->b[4][7] ^= DSEP();
+  printstate("domain separation", s);
+}
+
+forceinline void ascon_encrypt(ascon_state_t* s, uint8_t* c, const uint8_t* m,
+                               uint64_t mlen) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  /* full plaintext blocks */
+  while (mlen >= ASCON_AEAD_RATE) {
+    ENCRYPT(s->b[0], c, m, 8);
+    if (ASCON_AEAD_RATE == 16) ENCRYPT(s->b[1], c + 8, m + 8, 8);
+    printstate("absorb plaintext", s);
+    P(s, nr);
+    m += ASCON_AEAD_RATE;
+    c += ASCON_AEAD_RATE;
+    mlen -= ASCON_AEAD_RATE;
+  }
+  /* final plaintext block */
+  int i = 0;
+  if (ASCON_AEAD_RATE == 16 && mlen >= 8) {
+    ENCRYPT(s->b[0], c, m, 8);
+    i = 1;
+    m += 8;
+    c += 8;
+    mlen -= 8;
+  }
+  ENCRYPT(s->b[i], c, m, mlen);
+  s->b[i][mlen] ^= PAD();
+  printstate("pad plaintext", s);
+}
+
+forceinline void ascon_decrypt(ascon_state_t* s, uint8_t* m, const uint8_t* c,
+                               uint64_t clen) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  /* full ciphertext blocks */
+  while (clen >= ASCON_AEAD_RATE) {
+    DECRYPT(s->b[0], m, c, 8);
+    if (ASCON_AEAD_RATE == 16) DECRYPT(s->b[1], m + 8, c + 8, 8);
+    printstate("insert ciphertext", s);
+    P(s, nr);
+    m += ASCON_AEAD_RATE;
+    c += ASCON_AEAD_RATE;
+    clen -= ASCON_AEAD_RATE;
+  }
+  /* final ciphertext block */
+  int i = 0;
+  if (ASCON_AEAD_RATE == 16 && clen >= 8) {
+    DECRYPT(s->b[0], m, c, 8);
+    i = 1;
+    m += 8;
+    c += 8;
+    clen -= 8;
+  }
+  DECRYPT(s->b[i], m, c, clen);
+  s->b[i][clen] ^= PAD();
+  printstate("pad ciphertext", s);
+}
+
+forceinline void ascon_final(ascon_state_t* s, const ascon_key_t* key) {
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[ASCON_AEAD_RATE / 8], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[1] ^= KEYROT(key->x[0], key->x[1]);
+  s->x[2] ^= KEYROT(key->x[1], key->x[2]);
+  s->x[3] ^= KEYROT(key->x[2], 0);
+#endif
+  printstate("final 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[3], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  memxor(s->b[3], key->b[1], 16);
+#endif
+  printstate("final 2nd key xor", s);
+}
+
+forceinline void ascon_gettag(ascon_state_t* s, uint8_t* t) {
+  SQUEEZE(t, s->b[3], 8);
+  SQUEEZE(t + 8, s->b[4], 8);
+}
+
+forceinline int ascon_verify(ascon_state_t* s, const uint8_t* t) {
+  /* verify should be constant time, check compiler output */
+  uint8_t r = 0;
+  r |= VERIFY(s->b[3], t, 8);
+  r |= VERIFY(s->b[4], t + 8, 8);
+  return ((((int)r - 1) >> 8) & 1) - 1;
+}
+
+int ascon_aead_encrypt(uint8_t* t, uint8_t* c, const uint8_t* m, uint64_t mlen,
+                       const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+                       const uint8_t* k) {
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  ascon_adata(&s, ad, adlen);
+  ascon_encrypt(&s, c, m, mlen);
+  ascon_final(&s, &key);
+  ascon_gettag(&s, t);
+  return 0;
+}
+
+int ascon_aead_decrypt(uint8_t* m, const uint8_t* t, const uint8_t* c,
+                       uint64_t clen, const uint8_t* ad, uint64_t adlen,
+                       const uint8_t* npub, const uint8_t* k) {
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  ascon_adata(&s, ad, adlen);
+  ascon_decrypt(&s, m, c, clen);
+  ascon_final(&s, &key);
+  return ascon_verify(&s, t);
+}
+
+#ifdef OP_encrypt
+int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
+                        const unsigned char* m, unsigned long long mlen,
+                        const unsigned char* ad, unsigned long long adlen,
+                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  /* set ciphertext size */
+  *clen = mlen + CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + mlen;
+  print("encrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("m", m, mlen);
+  /* ascon encryption */
+  int result = ascon_aead_encrypt(t, c, m, mlen, ad, adlen, npub, k);
+  printbytes("c", c, mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  print("\n");
+  return result;
+}
+#endif
+
+#ifdef OP_decrypt
+int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+                        unsigned char* nsec, const unsigned char* c,
+                        unsigned long long clen, const unsigned char* ad,
+                        unsigned long long adlen, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  if (clen < CRYPTO_ABYTES) return -1;
+  /* set plaintext size */
+  *mlen = clen - CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + *mlen;
+  print("decrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("c", c, *mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  /* ascon decryption */
+  int result = ascon_aead_decrypt(m, t, c, *mlen, ad, adlen, npub, k);
+  printbytes("m", m, *mlen);
+  print("\n");
+  return result;
+}
+#endif
+
+#endif
+
+
+// permutations.c
+//#include "permutations.h"
+
+#if !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s) { P12ROUNDS(s); }
+
+#endif
+
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8)) &&  \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P8(ascon_state_t* s) { P8ROUNDS(s); }
+
+#endif
+
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8) && \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P6(ascon_state_t* s) { P6ROUNDS(s); }
+
+#endif
+
+#if !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#endif
+
+#endif
+
+
+#ifdef IMPL_bi8
+
+// config.h
+#ifndef CONFIG_H_
+#define CONFIG_H_
+
+/* inline the ascon mode */
+#ifndef ASCON_INLINE_MODE
+#define ASCON_INLINE_MODE 1
+#endif
+
+/* inline all permutations */
+#ifndef ASCON_INLINE_PERM
+#define ASCON_INLINE_PERM 0
+#endif
+
+/* unroll permutation loops */
+#ifndef ASCON_UNROLL_LOOPS
+#define ASCON_UNROLL_LOOPS 0
+#endif
+
+/* inline bitinterleaving */
+#ifndef ASCON_INLINE_BI
+#define ASCON_INLINE_BI 0
+#endif
+
+/* extern bitinterleaving */
+#ifndef ASCON_EXTERN_BI
+#define ASCON_EXTERN_BI 0
+#endif
+
+#endif /* CONFIG_H_ */
+
+
+// ascon.h
+#ifndef ASCON_H_
+#define ASCON_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+//#include "config.h"
+
+typedef union {
+  uint64_t x[5];
+  uint32_t w[5][2];
+  uint8_t b[5][8];
+} ascon_state_t;
+
+#ifdef ASCON_AEAD_RATE
+
+#define ASCON_KEYWORDS (CRYPTO_KEYBYTES + 7) / 8
+
+typedef union {
+  uint64_t x[ASCON_KEYWORDS];
+  uint32_t w[ASCON_KEYWORDS][2];
+  uint8_t b[ASCON_KEYWORDS][8];
+} ascon_key_t;
+
+#if !ASCON_INLINE_MODE
+
+void ascon_loadkey(ascon_key_t* key, const uint8_t* k);
+void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                    const uint8_t* npub);
+void ascon_adata(ascon_state_t* s, const uint8_t* ad, uint64_t adlen);
+void ascon_encrypt(ascon_state_t* s, uint8_t* c, const uint8_t* m,
+                   uint64_t mlen);
+void ascon_decrypt(ascon_state_t* s, uint8_t* m, const uint8_t* c,
+                   uint64_t clen);
+void ascon_final(ascon_state_t* s, const ascon_key_t* k);
+
+#endif
+
+int ascon_aead_encrypt(uint8_t* t, uint8_t* c, const uint8_t* m, uint64_t mlen,
+                       const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+                       const uint8_t* k);
+int ascon_aead_decrypt(uint8_t* m, const uint8_t* t, const uint8_t* c,
+                       uint64_t clen, const uint8_t* ad, uint64_t adlen,
+                       const uint8_t* npub, const uint8_t* k);
+
+#endif
+
+#ifdef ASCON_HASH_BYTES
+
+#if !ASCON_INLINE_MODE
+
+void ascon_inithash(ascon_state_t* s);
+void ascon_absorb(ascon_state_t* s, const uint8_t* in, uint64_t inlen);
+void ascon_squeeze(ascon_state_t* s, uint8_t* out, uint64_t outlen);
+
+#endif
+
+int ascon_xof(uint8_t* out, uint64_t outlen, const uint8_t* in, uint64_t inlen);
+
+#endif
+
+#endif /* ASCON_H_ */
+
+
+// constants.h
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+
+#include <stdint.h>
+
+#define ASCON_80PQ_VARIANT 0
+#define ASCON_AEAD_VARIANT 1
+#define ASCON_HASH_VARIANT 2
+#define ASCON_XOF_VARIANT 3
+#define ASCON_CXOF_VARIANT 4
+#define ASCON_MAC_VARIANT 5
+#define ASCON_PRF_VARIANT 6
+#define ASCON_PRFS_VARIANT 7
+
+#define ASCON_TAG_SIZE 16
+#define ASCON_HASH_SIZE 32
+
+#define ASCON_128_RATE 8
+#define ASCON_128A_RATE 16
+#define ASCON_HASH_RATE 8
+#define ASCON_PRF_IN_RATE 32
+#define ASCON_PRFA_IN_RATE 40
+#define ASCON_PRF_OUT_RATE 16
+
+#define ASCON_PA_ROUNDS 12
+#define ASCON_128_PB_ROUNDS 6
+#define ASCON_128A_PB_ROUNDS 8
+#define ASCON_HASH_PB_ROUNDS 12
+#define ASCON_HASHA_PB_ROUNDS 8
+#define ASCON_PRF_PB_ROUNDS 12
+#define ASCON_PRFA_PB_ROUNDS 8
+
+#define ASCON_128_IV 0x0804040024040001ull
+#define ASCON_128A_IV 0x0c00002004040001ull
+#define ASCON_80PQ_IV 0x0804040006040000ull
+
+#define ASCON_HASH_IV 0x0404000024040110ull
+#define ASCON_HASHA_IV 0x0400000024040110ull
+#define ASCON_XOF_IV 0x0404000024040101ull
+#define ASCON_XOFA_IV 0x0400000024040101ull
+#define ASCON_CXOF_IV 0x0404000024050000ull
+#define ASCON_CXOFA_IV 0x0400000024050000ull
+
+#define ASCON_MAC_IV 0x0c04204004050001ull
+#define ASCON_MACA_IV 0x0c00204024050001ull
+#define ASCON_PRF_IV 0x0404204004050100ull
+#define ASCON_PRFA_IV 0x0400204024050100ull
+#define ASCON_PRFS_IV 0x0800000004050101ull
+
+#define ASCON_HASH_IV0 0x9b2a0cf6c876c289ull
+#define ASCON_HASH_IV1 0x61c32c1f9014ddceull
+#define ASCON_HASH_IV2 0x8258fe27bbd48968ull
+#define ASCON_HASH_IV3 0x396ed5e9c6fa454bull
+#define ASCON_HASH_IV4 0x067501c2d16faa17ull
+
+#define ASCON_HASHA_IV0 0xf7ddee7c4e6fc85bull
+#define ASCON_HASHA_IV1 0x87b955c8afda69b9ull
+#define ASCON_HASHA_IV2 0xf98168a3e2b86d1eull
+#define ASCON_HASHA_IV3 0xd4800697c47d46c0ull
+#define ASCON_HASHA_IV4 0xe4980b30ec688e31ull
+
+#define ASCON_XOF_IV0 0xedb31194a93ef30bull
+#define ASCON_XOF_IV1 0xb2fb634ecffc3c1bull
+#define ASCON_XOF_IV2 0xb8d2815324b2b2b1ull
+#define ASCON_XOF_IV3 0x617f6412a781b41cull
+#define ASCON_XOF_IV4 0x89edb4690f750f2eull
+
+#define ASCON_XOFA_IV0 0x8495829c2668a98full
+#define ASCON_XOFA_IV1 0xbaf079600be93916ull
+#define ASCON_XOFA_IV2 0xb955a1e8d4cab0aaull
+#define ASCON_XOFA_IV3 0xedcf07848d2973a5ull
+#define ASCON_XOFA_IV4 0x2eaa6faca10b63d3ull
+
+#define RC0 0x0101010100000000ull
+#define RC1 0x0101010000000001ull
+#define RC2 0x0101000100000100ull
+#define RC3 0x0101000000000101ull
+#define RC4 0x0100010100010000ull
+#define RC5 0x0100010000010001ull
+#define RC6 0x0100000100010100ull
+#define RC7 0x0100000000010101ull
+#define RC8 0x0001010101000000ull
+#define RC9 0x0001010001000001ull
+#define RCa 0x0001000101000100ull
+#define RCb 0x0001000001000101ull
+
+#define RC(i) (constants[i])
+#define START(n) (12 - (n))
+#define INC 1
+#define END 12
+
+extern const uint64_t constants[];
+
+#endif /* CONSTANTS_H_ */
+
+
+// printstate.h
+#ifndef PRINTSTATE_H_
+#define PRINTSTATE_H_
+
+#ifdef ASCON_PRINT_STATE
+
+//#include "ascon.h"
+
+void print(const char* text);
+void printbytes(const char* text, const uint8_t* b, uint64_t len);
+void printword(const char* text, const uint64_t x);
+void printstate(const char* text, const ascon_state_t* s);
+
+#else
+
+#define print(text) \
+  do {              \
+  } while (0)
+
+#define printbytes(text, b, l) \
+  do {                         \
+  } while (0)
+
+#define printword(text, w) \
+  do {                     \
+  } while (0)
+
+#define printstate(text, s) \
+  do {                      \
+  } while (0)
+
+#endif
+
+#endif /* PRINTSTATE_H_ */
+
+
+// forceinline.h
+#ifndef FORCEINLINE_H_
+#define FORCEINLINE_H_
+
+/* define forceinline macro */
+#ifdef _MSC_VER
+#define forceinline __forceinline
+#elif defined(__GNUC__)
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline static inline
+#endif
+#elif defined(__CLANG__)
+#if __has_attribute(__always_inline__)
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline inline
+#endif
+#else
+#define forceinline inline
+#endif
+
+#endif /* FORCEINLINE_H_ */
+
+
+// interleave.h
+#ifndef INTERLEAVE_H_
+#define INTERLEAVE_H_
+
+#include <stdint.h>
+
+//#include "config.h"
+//#include "forceinline.h"
+
+#if ASCON_EXTERN_BI
+
+#define TOBI
+#define FROMBI
+
+#elif ASCON_INLINE_BI
+
+#define TOBI interleave8
+#define FROMBI interleave8
+
+#else
+
+uint64_t TOBI(uint64_t in);
+uint64_t FROMBI(uint64_t in);
+
+#endif
+
+/* credit to Henry S. Warren, Hacker's Delight, Addison-Wesley, 2002 */
+forceinline uint64_t interleave8(uint64_t x) {
+  x = (x & 0xaa55aa55aa55aa55ull) | ((x & 0x00aa00aa00aa00aaull) << 7) |
+      ((x >> 7) & 0x00aa00aa00aa00aaull);
+  x = (x & 0xcccc3333cccc3333ull) | ((x & 0x0000cccc0000ccccull) << 14) |
+      ((x >> 14) & 0x0000cccc0000ccccull);
+  x = (x & 0xf0f0f0f00f0f0f0full) | ((x & 0x00000000f0f0f0f0ull) << 28) |
+      ((x >> 28) & 0x00000000f0f0f0f0ull);
+  return x;
+}
+
+#endif /* INTERLEAVE_H_ */
+
+
+// lendian.h
+#ifndef ENDIAN_H_
+#define ENDIAN_H_
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
+    defined(_MSC_VER)
+
+/* macros for little endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for little endian machines")
+#endif
+#define U64LE(x) (x)
+#define U32LE(x) (x)
+#define U16LE(x) (x)
+
+#elif (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+
+/* macros for big endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for big endian machines")
+#endif
+#define U64LE(x)                           \
+  (((0x00000000000000FFULL & (x)) << 56) | \
+   ((0x000000000000FF00ULL & (x)) << 40) | \
+   ((0x0000000000FF0000ULL & (x)) << 24) | \
+   ((0x00000000FF000000ULL & (x)) << 8) |  \
+   ((0x000000FF00000000ULL & (x)) >> 8) |  \
+   ((0x0000FF0000000000ULL & (x)) >> 24) | \
+   ((0x00FF000000000000ULL & (x)) >> 40) | \
+   ((0xFF00000000000000ULL & (x)) >> 56))
+#define U32LE(x)                                            \
+  (((0x000000FF & (x)) << 24) | ((0x0000FF00 & (x)) << 8) | \
+   ((0x00FF0000 & (x)) >> 8) | ((0xFF000000 & (x)) >> 24))
+#define U16LE(x) (((0x00FF & (x)) << 8) | ((0xFF00 & (x)) >> 8))
+
+#else
+#error "Ascon byte order macros not defined in lendian.h"
+#endif
+
+#endif /* ENDIAN_H_ */
+
+
+// word.h
+#ifndef WORD_H_
+#define WORD_H_
+
+#include <stdint.h>
+#include <string.h>
+
+//#include "forceinline.h"
+//#include "interleave.h"
+//#include "lendian.h"
+
+typedef union {
+  uint64_t x;
+  uint32_t w[2];
+  uint8_t b[8];
+} word_t;
+
+#define U64TOWORD(x) interleave8(U64LE(x))
+#define WORDTOU64(x) U64LE(interleave8(x))
+#define LOAD(b, n) LOADBYTES(b, n)
+#define STORE(b, w, n) STOREBYTES(b, w, n)
+
+forceinline uint8_t ROR8(uint8_t a, int n) { return a >> n | a << (8 - n); }
+
+forceinline uint64_t ROR(uint64_t x, int n) {
+  word_t b, a = {.x = x};
+  b.b[0] = ROR8(a.b[(n + 0) & 0x7], (n + 0) >> 3);
+  b.b[1] = ROR8(a.b[(n + 1) & 0x7], (n + 1) >> 3);
+  b.b[2] = ROR8(a.b[(n + 2) & 0x7], (n + 2) >> 3);
+  b.b[3] = ROR8(a.b[(n + 3) & 0x7], (n + 3) >> 3);
+  b.b[4] = ROR8(a.b[(n + 4) & 0x7], (n + 4) >> 3);
+  b.b[5] = ROR8(a.b[(n + 5) & 0x7], (n + 5) >> 3);
+  b.b[6] = ROR8(a.b[(n + 6) & 0x7], (n + 6) >> 3);
+  b.b[7] = ROR8(a.b[(n + 7) & 0x7], (n + 7) >> 3);
+  return b.x;
+}
+
+forceinline uint64_t KEYROT(uint64_t hi2lo, uint64_t lo2hi) {
+  word_t w, a = {.x = lo2hi}, b = {.x = hi2lo};
+  w.b[0] = a.b[0] << 4 | b.b[0] >> 4;
+  w.b[1] = a.b[1] << 4 | b.b[1] >> 4;
+  w.b[2] = a.b[2] << 4 | b.b[2] >> 4;
+  w.b[3] = a.b[3] << 4 | b.b[3] >> 4;
+  w.b[4] = a.b[4] << 4 | b.b[4] >> 4;
+  w.b[5] = a.b[5] << 4 | b.b[5] >> 4;
+  w.b[6] = a.b[6] << 4 | b.b[6] >> 4;
+  w.b[7] = a.b[7] << 4 | b.b[7] >> 4;
+  return w.x;
+}
+
+forceinline int NOTZERO(uint64_t a, uint64_t b) {
+  uint64_t result = a | b;
+  result |= result >> 32;
+  result |= result >> 16;
+  result |= result >> 8;
+  return ((((int)(result & 0xff) - 1) >> 8) & 1) - 1;
+}
+
+forceinline uint64_t PAD(int i) { return (uint8_t)0x01 << i; }
+
+forceinline uint64_t DSEP() { return 0x80ull << 56; }
+
+forceinline uint64_t PRFS_MLEN(uint64_t len) {
+  return ((len & 0x01) << 30) | /* 0000x */
+         ((len & 0x02) << 37) | /* 000x0 */
+         ((len & 0x04) << 44) | /* 00x00 */
+         ((len & 0x08) << 51) | /* 0x000 */
+         ((len & 0x10) << 58);  /* x0000 */
+}
+
+forceinline uint64_t CLEAR(uint64_t w, int n) {
+  /* undefined for n == 0 */
+  uint8_t m = 0xff << n;
+  word_t mask = {
+      .b[0] = m,
+      .b[1] = m,
+      .b[2] = m,
+      .b[3] = m,
+      .b[4] = m,
+      .b[5] = m,
+      .b[6] = m,
+      .b[7] = m,
+  };
+  return w & mask.x;
+}
+
+forceinline uint64_t MASK(int n) {
+  /* undefined for n == 0 */
+  return ~0ull << (64 - 8 * n);
+}
+
+forceinline uint64_t LOADBYTES(const uint8_t* bytes, int n) {
+  uint64_t x = 0;
+  memcpy(&x, bytes, n);
+  return U64TOWORD(x);
+}
+
+forceinline void STOREBYTES(uint8_t* bytes, uint64_t w, int n) {
+  uint64_t x = WORDTOU64(w);
+  memcpy(bytes, &x, n);
+}
+
+#endif /* WORD_H_ */
+
+
+// round.h
+#ifndef ROUND_H_
+#define ROUND_H_
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "forceinline.h"
+//#include "printstate.h"
+//#include "word.h"
+
+forceinline void ROUND(ascon_state_t* s, uint64_t C) {
+  uint64_t xtemp;
+  /* round constant */
+  s->x[2] ^= C;
+  /* s-box layer */
+  s->x[0] ^= s->x[4];
+  s->x[4] ^= s->x[3];
+  s->x[2] ^= s->x[1];
+  xtemp = s->x[0] & ~s->x[4];
+  s->x[0] ^= s->x[2] & ~s->x[1];
+  s->x[2] ^= s->x[4] & ~s->x[3];
+  s->x[4] ^= s->x[1] & ~s->x[0];
+  s->x[1] ^= s->x[3] & ~s->x[2];
+  s->x[3] ^= xtemp;
+  s->x[1] ^= s->x[0];
+  s->x[3] ^= s->x[2];
+  s->x[0] ^= s->x[4];
+  /* linear layer */
+  xtemp = s->x[0] ^ ROR(s->x[0], 28 - 19);
+  s->x[0] ^= ROR(xtemp, 19);
+  xtemp = s->x[1] ^ ROR(s->x[1], 61 - 39);
+  s->x[1] ^= ROR(xtemp, 39);
+  xtemp = s->x[2] ^ ROR(s->x[2], 6 - 1);
+  s->x[2] ^= ROR(xtemp, 1);
+  xtemp = s->x[3] ^ ROR(s->x[3], 17 - 10);
+  s->x[3] ^= ROR(xtemp, 10);
+  xtemp = s->x[4] ^ ROR(s->x[4], 41 - 7);
+  s->x[4] ^= ROR(xtemp, 7);
+  s->x[2] = ~s->x[2];
+  printstate(" round output", s);
+}
+
+forceinline void PROUNDS(ascon_state_t* s, int nr) {
+  int i = START(nr);
+  do {
+    ROUND(s, RC(i));
+    i += INC;
+  } while (i != END);
+}
+
+#endif /* ROUND_H_ */
+
+
+// permutations.h
+#ifndef PERMUTATIONS_H_
+#define PERMUTATIONS_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+//#include "ascon.h"
+//#include "config.h"
+//#include "constants.h"
+//#include "printstate.h"
+//#include "round.h"
+
+forceinline void P12ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC0);
+  ROUND(s, RC1);
+  ROUND(s, RC2);
+  ROUND(s, RC3);
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P8ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P6ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+#if ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12ROUNDS(s);
+  if (nr == 8) P8ROUNDS(s);
+  if (nr == 6) P6ROUNDS(s);
+}
+
+#elif !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s);
+void P8(ascon_state_t* s);
+void P6(ascon_state_t* s);
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12(s);
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8))
+  if (nr == 8) P8(s);
+#endif
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8)
+  if (nr == 6) P6(s);
+#endif
+}
+
+#elif ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#else /* !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS */
+
+void P(ascon_state_t* s, int nr);
+
+#endif
+
+#endif /* PERMUTATIONS_H_ */
+
+
+// aead.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "crypto_aead.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if !ASCON_INLINE_MODE
+#undef forceinline
+#define forceinline
+#endif
+
+#ifdef ASCON_AEAD_RATE
+
+forceinline void ascon_loadkey(ascon_key_t* key, const uint8_t* k) {
+#if CRYPTO_KEYBYTES == 16
+  key->x[0] = LOAD(k, 8);
+  key->x[1] = LOAD(k + 8, 8);
+#else /* CRYPTO_KEYBYTES == 20 */
+  key->x[0] = KEYROT(0, LOADBYTES(k, 4));
+  key->x[1] = LOADBYTES(k + 4, 8);
+  key->x[2] = LOADBYTES(k + 12, 8);
+#endif
+}
+
+forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                                const uint8_t* npub) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) s->x[0] = ASCON_128_IV;
+  if (ASCON_AEAD_RATE == 16) s->x[0] = ASCON_128A_IV;
+  s->x[1] = key->x[0];
+  s->x[2] = key->x[1];
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[0] = key->x[0] | ASCON_80PQ_IV;
+  s->x[1] = key->x[1];
+  s->x[2] = key->x[2];
+#endif
+  s->x[3] = LOAD(npub, 8);
+  s->x[4] = LOAD(npub + 8, 8);
+  printstate("init 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  s->x[3] ^= key->x[0];
+  s->x[4] ^= key->x[1];
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[2] ^= key->x[0];
+  s->x[3] ^= key->x[1];
+  s->x[4] ^= key->x[2];
+#endif
+  printstate("init 2nd key xor", s);
+}
+
+forceinline void ascon_adata(ascon_state_t* s, const uint8_t* ad,
+                             uint64_t adlen) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  if (adlen) {
+    /* full associated data blocks */
+    while (adlen >= ASCON_AEAD_RATE) {
+      s->x[0] ^= LOAD(ad, 8);
+      if (ASCON_AEAD_RATE == 16) s->x[1] ^= LOAD(ad + 8, 8);
+      printstate("absorb adata", s);
+      P(s, nr);
+      ad += ASCON_AEAD_RATE;
+      adlen -= ASCON_AEAD_RATE;
+    }
+    /* final associated data block */
+    uint64_t* px = &s->x[0];
+    if (ASCON_AEAD_RATE == 16 && adlen >= 8) {
+      s->x[0] ^= LOAD(ad, 8);
+      px = &s->x[1];
+      ad += 8;
+      adlen -= 8;
+    }
+    *px ^= PAD(adlen);
+    if (adlen) *px ^= LOADBYTES(ad, adlen);
+    printstate("pad adata", s);
+    P(s, nr);
+  }
+  /* domain separation */
+  s->x[4] ^= DSEP();
+  printstate("domain separation", s);
+}
+
+forceinline void ascon_encrypt(ascon_state_t* s, uint8_t* c, const uint8_t* m,
+                               uint64_t mlen) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  /* full plaintext blocks */
+  while (mlen >= ASCON_AEAD_RATE) {
+    s->x[0] ^= LOAD(m, 8);
+    STORE(c, s->x[0], 8);
+    if (ASCON_AEAD_RATE == 16) {
+      s->x[1] ^= LOAD(m + 8, 8);
+      STORE(c + 8, s->x[1], 8);
+    }
+    printstate("absorb plaintext", s);
+    P(s, nr);
+    m += ASCON_AEAD_RATE;
+    c += ASCON_AEAD_RATE;
+    mlen -= ASCON_AEAD_RATE;
+  }
+  /* final plaintext block */
+  uint64_t* px = &s->x[0];
+  if (ASCON_AEAD_RATE == 16 && mlen >= 8) {
+    s->x[0] ^= LOAD(m, 8);
+    STORE(c, s->x[0], 8);
+    px = &s->x[1];
+    m += 8;
+    c += 8;
+    mlen -= 8;
+  }
+  *px ^= PAD(mlen);
+  if (mlen) {
+    *px ^= LOADBYTES(m, mlen);
+    STOREBYTES(c, *px, mlen);
+  }
+  printstate("pad plaintext", s);
+}
+
+forceinline void ascon_decrypt(ascon_state_t* s, uint8_t* m, const uint8_t* c,
+                               uint64_t clen) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  /* full ciphertext blocks */
+  while (clen >= ASCON_AEAD_RATE) {
+    uint64_t cx = LOAD(c, 8);
+    s->x[0] ^= cx;
+    STORE(m, s->x[0], 8);
+    s->x[0] = cx;
+    if (ASCON_AEAD_RATE == 16) {
+      cx = LOAD(c + 8, 8);
+      s->x[1] ^= cx;
+      STORE(m + 8, s->x[1], 8);
+      s->x[1] = cx;
+    }
+    printstate("insert ciphertext", s);
+    P(s, nr);
+    m += ASCON_AEAD_RATE;
+    c += ASCON_AEAD_RATE;
+    clen -= ASCON_AEAD_RATE;
+  }
+  /* final ciphertext block */
+  uint64_t* px = &s->x[0];
+  if (ASCON_AEAD_RATE == 16 && clen >= 8) {
+    uint64_t cx = LOAD(c, 8);
+    s->x[0] ^= cx;
+    STORE(m, s->x[0], 8);
+    s->x[0] = cx;
+    px = &s->x[1];
+    m += 8;
+    c += 8;
+    clen -= 8;
+  }
+  *px ^= PAD(clen);
+  if (clen) {
+    uint64_t cx = LOADBYTES(c, clen);
+    *px ^= cx;
+    STOREBYTES(m, *px, clen);
+    *px = CLEAR(*px, clen);
+    *px ^= cx;
+  }
+  printstate("pad ciphertext", s);
+}
+
+forceinline void ascon_final(ascon_state_t* s, const ascon_key_t* key) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) {
+    s->x[1] ^= key->x[0];
+    s->x[2] ^= key->x[1];
+  } else {
+    s->x[2] ^= key->x[0];
+    s->x[3] ^= key->x[1];
+  }
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[1] ^= KEYROT(key->x[0], key->x[1]);
+  s->x[2] ^= KEYROT(key->x[1], key->x[2]);
+  s->x[3] ^= KEYROT(key->x[2], 0);
+#endif
+  printstate("final 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  s->x[3] ^= key->x[0];
+  s->x[4] ^= key->x[1];
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[3] ^= key->x[1];
+  s->x[4] ^= key->x[2];
+#endif
+  printstate("final 2nd key xor", s);
+}
+
+forceinline void ascon_gettag(ascon_state_t* s, uint8_t* t) {
+  STOREBYTES(t, s->x[3], 8);
+  STOREBYTES(t + 8, s->x[4], 8);
+}
+
+forceinline int ascon_verify(ascon_state_t* s, const uint8_t* t) {
+  /* verify should be constant time, check compiler output */
+  s->x[3] ^= LOADBYTES(t, 8);
+  s->x[4] ^= LOADBYTES(t + 8, 8);
+  return NOTZERO(s->x[3], s->x[4]);
+}
+
+#ifdef OP_encrypt
+int ascon_aead_encrypt(uint8_t* t, uint8_t* c, const uint8_t* m, uint64_t mlen,
+                       const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+                       const uint8_t* k) {
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  ascon_adata(&s, ad, adlen);
+  ascon_encrypt(&s, c, m, mlen);
+  ascon_final(&s, &key);
+  ascon_gettag(&s, t);
+  return 0;
+}
+#endif
+
+#ifdef OP_decrypt
+int ascon_aead_decrypt(uint8_t* m, const uint8_t* t, const uint8_t* c,
+                       uint64_t clen, const uint8_t* ad, uint64_t adlen,
+                       const uint8_t* npub, const uint8_t* k) {
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  ascon_adata(&s, ad, adlen);
+  ascon_decrypt(&s, m, c, clen);
+  ascon_final(&s, &key);
+  return ascon_verify(&s, t);
+}
+#endif
+
+#ifdef OP_encrypt
+int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
+                        const unsigned char* m, unsigned long long mlen,
+                        const unsigned char* ad, unsigned long long adlen,
+                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  /* set ciphertext size */
+  *clen = mlen + CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + mlen;
+  print("encrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("m", m, mlen);
+  /* ascon encryption */
+  int result = ascon_aead_encrypt(t, c, m, mlen, ad, adlen, npub, k);
+  printbytes("c", c, mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  print("\n");
+  return result;
+}
+#endif
+
+#ifdef OP_decrypt
+int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+                        unsigned char* nsec, const unsigned char* c,
+                        unsigned long long clen, const unsigned char* ad,
+                        unsigned long long adlen, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  if (clen < CRYPTO_ABYTES) return -1;
+  /* set plaintext size */
+  *mlen = clen - CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + *mlen;
+  print("decrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("c", c, *mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  /* ascon decryption */
+  int result = ascon_aead_decrypt(m, t, c, *mlen, ad, adlen, npub, k);
+  printbytes("m", m, *mlen);
+  print("\n");
+  return result;
+}
+#endif
+
+#endif
+
+
+// constants.c
+//#include "constants.h"
+
+#if !ASCON_UNROLL_LOOPS
+
+const uint64_t constants[] = {RC0, RC1, RC2, RC3, RC4, RC5,
+                              RC6, RC7, RC8, RC9, RCa, RCb};
+
+#endif
+
+
+// permutations.c
+//#include "permutations.h"
+
+#if !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s) { P12ROUNDS(s); }
+
+#endif
+
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8)) &&  \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P8(ascon_state_t* s) { P8ROUNDS(s); }
+
+#endif
+
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8) && \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P6(ascon_state_t* s) { P6ROUNDS(s); }
+
+#endif
+
+#if !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#endif
+
+#endif
+
+
+#ifdef IMPL_opt32_lowsize
+
+// ascon.h
+#ifndef ASCON_H_
+#define ASCON_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+
+typedef union {
+  uint64_t x[5];
+  uint32_t w[5][2];
+  uint8_t b[5][8];
+} ascon_state_t;
+
+#ifdef ASCON_AEAD_RATE
+
+#define ASCON_KEYWORDS (CRYPTO_KEYBYTES + 7) / 8
+
+typedef union {
+  uint64_t x[ASCON_KEYWORDS];
+  uint32_t w[ASCON_KEYWORDS][2];
+  uint8_t b[ASCON_KEYWORDS][8];
+} ascon_key_t;
+
+#endif
+
+#define ASCON_ABSORB 0x1
+#define ASCON_SQUEEZE 0x2
+#define ASCON_INSERT 0x4
+#define ASCON_HASH 0x8
+#define ASCON_ENCRYPT (ASCON_ABSORB | ASCON_SQUEEZE)
+#define ASCON_DECRYPT (ASCON_ABSORB | ASCON_SQUEEZE | ASCON_INSERT)
+
+void ascon_update(ascon_state_t* s, uint8_t* out, const uint8_t* in,
+                  uint64_t len, uint8_t mode);
+
+int ascon_aead(uint8_t* tag, uint8_t* out, const uint8_t* in, uint64_t inlen,
+               const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+               const uint8_t* k, uint8_t mode);
+
+#endif /* ASCON_H_ */
+
+
+// config.h
+#ifndef CONFIG_H_
+#define CONFIG_H_
+
+/* inline the ascon mode */
+#ifndef ASCON_INLINE_MODE
+#define ASCON_INLINE_MODE 1
+#endif
+
+/* inline all permutations */
+#ifndef ASCON_INLINE_PERM
+#define ASCON_INLINE_PERM 0
+#endif
+
+/* unroll permutation loops */
+#ifndef ASCON_UNROLL_LOOPS
+#define ASCON_UNROLL_LOOPS 0
+#endif
+
+#endif /* CONFIG_H_ */
+
+
+// constants.h
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+
+#include <stdint.h>
+
+#define ASCON_80PQ_VARIANT 0
+#define ASCON_AEAD_VARIANT 1
+#define ASCON_HASH_VARIANT 2
+#define ASCON_XOF_VARIANT 3
+#define ASCON_CXOF_VARIANT 4
+#define ASCON_MAC_VARIANT 5
+#define ASCON_PRF_VARIANT 6
+#define ASCON_PRFS_VARIANT 7
+
+#define ASCON_TAG_SIZE 16
+#define ASCON_HASH_SIZE 32
+
+#define ASCON_128_RATE 8
+#define ASCON_128A_RATE 16
+#define ASCON_HASH_RATE 8
+#define ASCON_PRF_IN_RATE 32
+#define ASCON_PRFA_IN_RATE 40
+#define ASCON_PRF_OUT_RATE 16
+
+#define ASCON_PA_ROUNDS 12
+#define ASCON_128_PB_ROUNDS 6
+#define ASCON_128A_PB_ROUNDS 8
+#define ASCON_HASH_PB_ROUNDS 12
+#define ASCON_HASHA_PB_ROUNDS 8
+#define ASCON_PRF_PB_ROUNDS 12
+#define ASCON_PRFA_PB_ROUNDS 8
+
+#define ASCON_128_IV 0x00000800806c0001ull
+#define ASCON_128A_IV 0x00001000808c0001ull
+#define ASCON_80PQ_IV 0x00000000806c0800ull
+
+#define ASCON_HASH_IV 0x0000080100cc0002ull
+#define ASCON_HASHA_IV 0x00000801008c0002ull
+#define ASCON_XOF_IV 0x0000080000cc0003ull
+#define ASCON_XOFA_IV 0x00000800008c0003ull
+#define ASCON_CXOF_IV 0x0000080000cc0004ull
+#define ASCON_CXOFA_IV 0x00000800008c0004ull
+
+#define ASCON_MAC_IV 0x0010200080cc0005ull
+#define ASCON_MACA_IV 0x00102800808c0005ull
+#define ASCON_PRF_IV 0x0010200000cc0006ull
+#define ASCON_PRFA_IV 0x00102800008c0006ull
+#define ASCON_PRFS_IV 0x00000000800c0007ull
+
+#define ASCON_HASH_IV0 0x9b1e5494e934d681ull
+#define ASCON_HASH_IV1 0x4bc3a01e333751d2ull
+#define ASCON_HASH_IV2 0xae65396c6b34b81aull
+#define ASCON_HASH_IV3 0x3c7fd4a4d56a4db3ull
+#define ASCON_HASH_IV4 0x1a5c464906c5976dull
+
+#define ASCON_HASHA_IV0 0xe2ffb4d17ffcadc5ull
+#define ASCON_HASHA_IV1 0xdd364b655fa88cebull
+#define ASCON_HASHA_IV2 0xdcaabe85a70319d2ull
+#define ASCON_HASHA_IV3 0xd98f049404be3214ull
+#define ASCON_HASHA_IV4 0xca8c9d516e8a2221ull
+
+#define ASCON_XOF_IV0 0xda82ce768d9447ebull
+#define ASCON_XOF_IV1 0xcc7ce6c75f1ef969ull
+#define ASCON_XOF_IV2 0xe7508fd780085631ull
+#define ASCON_XOF_IV3 0x0ee0ea53416b58ccull
+#define ASCON_XOF_IV4 0xe0547524db6f0bdeull
+
+#define ASCON_XOFA_IV0 0xf3040e5017d92943ull
+#define ASCON_XOFA_IV1 0xc474f6e3ae01892eull
+#define ASCON_XOFA_IV2 0xbf5cb3ca954805e0ull
+#define ASCON_XOFA_IV3 0xd9c28702ccf962efull
+#define ASCON_XOFA_IV4 0x5923fa01f4b0e72full
+
+#define RC0 0xf0
+#define RC1 0xe1
+#define RC2 0xd2
+#define RC3 0xc3
+#define RC4 0xb4
+#define RC5 0xa5
+#define RC6 0x96
+#define RC7 0x87
+#define RC8 0x78
+#define RC9 0x69
+#define RCa 0x5a
+#define RCb 0x4b
+
+#define RC(i) (i)
+
+#define START(n) ((3 + (n)) << 4 | (12 - (n)))
+#define INC -0x0f
+#define END 0x3c
+
+#endif /* CONSTANTS_H_ */
+
+
+// printstate.h
+#ifndef PRINTSTATE_H_
+#define PRINTSTATE_H_
+
+#ifdef ASCON_PRINT_STATE
+
+#include "ascon.h"
+
+void print(const char* text);
+void printbytes(const char* text, const uint8_t* b, uint64_t len);
+void printword(const char* text, const uint64_t x);
+void printstate(const char* text, const ascon_state_t* s);
+
+#else
+
+#define print(text) \
+  do {              \
+  } while (0)
+
+#define printbytes(text, b, l) \
+  do {                         \
+  } while (0)
+
+#define printword(text, w) \
+  do {                     \
+  } while (0)
+
+#define printstate(text, s) \
+  do {                      \
+  } while (0)
+
+#endif
+
+#endif /* PRINTSTATE_H_ */
+
+
+// forceinline.h
+#ifndef FORCEINLINE_H_
+#define FORCEINLINE_H_
+
+/* define forceinline macro */
+#ifdef _MSC_VER
+#define forceinline __forceinline
+#elif defined(__GNUC__)
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline static inline
+#endif
+#elif defined(__CLANG__)
+#if __has_attribute(__always_inline__)
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline inline
+#endif
+#else
+#define forceinline inline
+#endif
+
+#endif /* FORCEINLINE_H_ */
+
+
+// lendian.h
+#ifndef ENDIAN_H_
+#define ENDIAN_H_
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
+    defined(_MSC_VER)
+
+/* macros for little endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for little endian machines")
+#endif
+#define U64LE(x) (x)
+#define U32LE(x) (x)
+#define U16LE(x) (x)
+
+#elif (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+
+/* macros for big endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for big endian machines")
+#endif
+#define U64LE(x)                           \
+  (((0x00000000000000FFULL & (x)) << 56) | \
+   ((0x000000000000FF00ULL & (x)) << 40) | \
+   ((0x0000000000FF0000ULL & (x)) << 24) | \
+   ((0x00000000FF000000ULL & (x)) << 8) |  \
+   ((0x000000FF00000000ULL & (x)) >> 8) |  \
+   ((0x0000FF0000000000ULL & (x)) >> 24) | \
+   ((0x00FF000000000000ULL & (x)) >> 40) | \
+   ((0xFF00000000000000ULL & (x)) >> 56))
+#define U32LE(x)                                            \
+  (((0x000000FF & (x)) << 24) | ((0x0000FF00 & (x)) << 8) | \
+   ((0x00FF0000 & (x)) >> 8) | ((0xFF000000 & (x)) >> 24))
+#define U16LE(x) (((0x00FF & (x)) << 8) | ((0xFF00 & (x)) >> 8))
+
+#else
+#error "Ascon byte order macros not defined in lendian.h"
+#endif
+
+#endif /* ENDIAN_H_ */
+
+
+// word.h
+#ifndef WORD_H_
+#define WORD_H_
+
+#include <stdint.h>
+#include <string.h>
+
+//#include "forceinline.h"
+//#include "lendian.h"
+
+typedef union {
+  uint64_t x;
+  uint32_t w[2];
+  uint8_t b[8];
+} word_t;
+
+#define U64TOWORD(x) U64LE(x)
+#define WORDTOU64(x) U64LE(x)
+#define LOAD(b, n) LOADBYTES(b, n)
+#define STORE(b, w, n) STOREBYTES(b, w, n)
+
+forceinline uint64_t ROR(uint64_t x, int n) { return x >> n | x << (-n & 63); }
+
+forceinline uint64_t KEYROT(uint64_t hi2lo, uint64_t lo2hi) {
+  return lo2hi << 32 | hi2lo >> 32;
+}
+
+forceinline int NOTZERO(uint64_t a, uint64_t b) {
+  uint64_t result = a | b;
+  result |= result >> 32;
+  result |= result >> 16;
+  result |= result >> 8;
+  return ((((int)(result & 0xff) - 1) >> 8) & 1) - 1;
+}
+
+forceinline uint64_t PAD(int i) { return 0x01ull << (8 * i); }
+
+forceinline uint64_t DSEP() { return 0x80ull << 56; }
+
+forceinline uint64_t PRFS_MLEN(uint64_t len) { return len << 51; }
+
+forceinline uint64_t CLEAR(uint64_t w, int n) {
+  /* undefined for n == 0 */
+  uint64_t mask = ~0ull << (8 * n);
+  return w & mask;
+}
+
+forceinline uint64_t MASK(int n) {
+  /* undefined for n == 0 */
+  return ~0ull << (64 - 8 * n);
+}
+
+forceinline uint64_t LOADBYTES(const uint8_t* bytes, int n) {
+  uint64_t x = 0;
+  memcpy(&x, bytes, n);
+  return U64TOWORD(x);
+}
+
+forceinline void STOREBYTES(uint8_t* bytes, uint64_t w, int n) {
+  uint64_t x = WORDTOU64(w);
+  memcpy(bytes, &x, n);
+}
+
+#endif /* WORD_H_ */
+
+
+// round.h
+#ifndef ROUND_H_
+#define ROUND_H_
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "forceinline.h"
+//#include "printstate.h"
+//#include "word.h"
+
+forceinline void ROUND(ascon_state_t* s, uint8_t C) {
+  uint64_t xtemp;
+  /* round constant */
+  s->x[2] ^= C;
+  /* s-box layer */
+  s->x[0] ^= s->x[4];
+  s->x[4] ^= s->x[3];
+  s->x[2] ^= s->x[1];
+  xtemp = s->x[0] & ~s->x[4];
+  s->x[0] ^= s->x[2] & ~s->x[1];
+  s->x[2] ^= s->x[4] & ~s->x[3];
+  s->x[4] ^= s->x[1] & ~s->x[0];
+  s->x[1] ^= s->x[3] & ~s->x[2];
+  s->x[3] ^= xtemp;
+  s->x[1] ^= s->x[0];
+  s->x[3] ^= s->x[2];
+  s->x[0] ^= s->x[4];
+  s->x[2] = ~s->x[2];
+  /* linear layer */
+  s->x[0] ^=
+      (s->x[0] >> 19) ^ (s->x[0] << 45) ^ (s->x[0] >> 28) ^ (s->x[0] << 36);
+  s->x[1] ^=
+      (s->x[1] >> 61) ^ (s->x[1] << 3) ^ (s->x[1] >> 39) ^ (s->x[1] << 25);
+  s->x[2] ^=
+      (s->x[2] >> 1) ^ (s->x[2] << 63) ^ (s->x[2] >> 6) ^ (s->x[2] << 58);
+  s->x[3] ^=
+      (s->x[3] >> 10) ^ (s->x[3] << 54) ^ (s->x[3] >> 17) ^ (s->x[3] << 47);
+  s->x[4] ^=
+      (s->x[4] >> 7) ^ (s->x[4] << 57) ^ (s->x[4] >> 41) ^ (s->x[4] << 23);
+  printstate(" round output", s);
+}
+
+forceinline void PROUNDS(ascon_state_t* s, int nr) {
+  int i = START(nr);
+  do {
+    ROUND(s, RC(i));
+    i += INC;
+  } while (i != END);
+}
+
+#endif /* ROUND_H_ */
+
+
+// permutations.h
+#ifndef PERMUTATIONS_H_
+#define PERMUTATIONS_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+//#include "ascon.h"
+//#include "config.h"
+//#include "constants.h"
+//#include "printstate.h"
+//#include "round.h"
+
+forceinline void P12ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC0);
+  ROUND(s, RC1);
+  ROUND(s, RC2);
+  ROUND(s, RC3);
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P8ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P6ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+#if ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12ROUNDS(s);
+  if (nr == 8) P8ROUNDS(s);
+  if (nr == 6) P6ROUNDS(s);
+}
+
+#elif !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s);
+void P8(ascon_state_t* s);
+void P6(ascon_state_t* s);
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12(s);
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8))
+  if (nr == 8) P8(s);
+#endif
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8)
+  if (nr == 6) P6(s);
+#endif
+}
+
+#elif ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#else /* !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS */
+
+void P(ascon_state_t* s, int nr);
+
+#endif
+
+#endif /* PERMUTATIONS_H_ */
+
+
+// aead.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if !ASCON_INLINE_MODE
+#undef forceinline
+#define forceinline
+#endif
+
+#ifdef ASCON_AEAD_RATE
+
+forceinline void ascon_loadkey(ascon_key_t* key, const uint8_t* k) {
+#if CRYPTO_KEYBYTES == 16
+  key->x[0] = LOAD(k, 8);
+  key->x[1] = LOAD(k + 8, 8);
+#else /* CRYPTO_KEYBYTES == 20 */
+  key->x[0] = KEYROT(0, LOADBYTES(k, 4));
+  key->x[1] = LOADBYTES(k + 4, 8);
+  key->x[2] = LOADBYTES(k + 12, 8);
+#endif
+}
+
+forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                                const uint8_t* npub) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) s->x[0] = ASCON_128_IV;
+  if (ASCON_AEAD_RATE == 16) s->x[0] = ASCON_128A_IV;
+  s->x[1] = key->x[0];
+  s->x[2] = key->x[1];
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[0] = key->x[0] | ASCON_80PQ_IV;
+  s->x[1] = key->x[1];
+  s->x[2] = key->x[2];
+#endif
+  s->x[3] = LOAD(npub, 8);
+  s->x[4] = LOAD(npub + 8, 8);
+  printstate("init 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  s->x[3] ^= key->x[0];
+  s->x[4] ^= key->x[1];
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[2] ^= key->x[0];
+  s->x[3] ^= key->x[1];
+  s->x[4] ^= key->x[2];
+#endif
+  printstate("init 2nd key xor", s);
+}
+
+forceinline void ascon_final(ascon_state_t* s, const ascon_key_t* key) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) {
+    s->x[1] ^= key->x[0];
+    s->x[2] ^= key->x[1];
+  } else {
+    s->x[2] ^= key->x[0];
+    s->x[3] ^= key->x[1];
+  }
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[1] ^= KEYROT(key->x[0], key->x[1]);
+  s->x[2] ^= KEYROT(key->x[1], key->x[2]);
+  s->x[3] ^= KEYROT(key->x[2], 0);
+#endif
+  printstate("final 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  s->x[3] ^= key->x[0];
+  s->x[4] ^= key->x[1];
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[3] ^= key->x[1];
+  s->x[4] ^= key->x[2];
+#endif
+  printstate("final 2nd key xor", s);
+}
+
+int ascon_aead(uint8_t* tag, uint8_t* out, const uint8_t* in, uint64_t inlen,
+               const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+               const uint8_t* k, uint8_t mode) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  /* initialize */
+  ascon_state_t s;
+  ascon_initaead(&s, &key, npub);
+  /* process associated data */
+  if (adlen) {
+    ascon_update(&s, (void*)0, ad, adlen, ASCON_ABSORB);
+    printstate("pad adata", &s);
+    P(&s, nr);
+  }
+  /* domain separation */
+  s.x[4] ^= DSEP();
+  printstate("domain separation", &s);
+  /* process plaintext/ciphertext */
+  ascon_update(&s, out, in, inlen, mode);
+  if (mode == ASCON_ENCRYPT) printstate("pad plaintext", &s);
+  if (mode == ASCON_DECRYPT) printstate("pad ciphertext", &s);
+  /* finalize */
+  ascon_final(&s, &key);
+  uint8_t t[16];
+  ((uint64_t*)t)[0] = WORDTOU64(s.x[3]);
+  ((uint64_t*)t)[1] = WORDTOU64(s.x[4]);
+  if (mode == ASCON_ENCRYPT) {
+    /* get tag */
+    for (int i = 0; i < CRYPTO_ABYTES; ++i) tag[i] = t[i];
+    return 0;
+  }
+  /* verify should be constant time, check compiler output */
+  int result = 0;
+  for (int i = 0; i < CRYPTO_ABYTES; ++i) result |= tag[i] ^ t[i];
+  return (((result - 1) >> 8) & 1) - 1;
+}
+
+
+// cypto_aead.c:
+//#include "crypto_aead.h"
+
+#include <string.h>
+
+//#include "api.h"
+//#include "ascon.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#ifdef ASCON_AEAD_RATE
+
+#ifdef OP_encrypt
+int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
+                        const unsigned char* m, unsigned long long mlen,
+                        const unsigned char* ad, unsigned long long adlen,
+                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  /* set ciphertext size */
+  *clen = mlen + CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + mlen;
+  print("encrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("m", m, mlen);
+  /* ascon encryption */
+  int result = ascon_aead(t, c, m, mlen, ad, adlen, npub, k, ASCON_ENCRYPT);
+  printbytes("c", c, mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  print("\n");
+  return result;
+}
+#endif
+
+#ifdef OP_decrypt
+int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+                        unsigned char* nsec, const unsigned char* c,
+                        unsigned long long clen, const unsigned char* ad,
+                        unsigned long long adlen, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  if (clen < CRYPTO_ABYTES) return -1;
+  /* set plaintext size */
+  *mlen = clen - CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + *mlen;
+  print("decrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("c", c, *mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  /* ascon decryption */
+  int result = ascon_aead(t, m, c, *mlen, ad, adlen, npub, k, ASCON_DECRYPT);
+  printbytes("m", m, *mlen);
+  print("\n");
+  return result;
+}
+#endif
+
+#endif
+
+
+// permutations.c
+//#include "permutations.h"
+
+#if !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s) { P12ROUNDS(s); }
+
+#endif
+
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8)) &&  \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P8(ascon_state_t* s) { P8ROUNDS(s); }
+
+#endif
+
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8) && \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P6(ascon_state_t* s) { P6ROUNDS(s); }
+
+#endif
+
+#if !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#endif
+
+
+// update.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#ifdef ASCON_AEAD_RATE
+
+#if ASCON_AEAD_RATE == ASCON_128_RATE
+#define ASCON_AEAD_ROUNDS ASCON_128_PB_ROUNDS
+#else
+#define ASCON_AEAD_ROUNDS ASCON_128A_PB_ROUNDS
+#endif
+
+void ascon_update(ascon_state_t* s, uint8_t* out, const uint8_t* in,
+                  uint64_t len, uint8_t mode) {
+#if defined(ASCON_HASH_BYTES)
+  const int nr = (mode & ASCON_HASH) ? ASCON_HASH_ROUNDS : ASCON_AEAD_ROUNDS;
+  const int rate = (mode & ASCON_HASH) ? ASCON_HASH_RATE : ASCON_AEAD_RATE;
+#else
+  const int nr = ASCON_AEAD_ROUNDS;
+  const int rate = ASCON_AEAD_RATE;
+#endif
+#if ASCON_AEAD_RATE == 8
+  const int i = 0;
+  (void)rate;
+#else
+  int i = 0;
+#endif
+  uint64_t tmp = 0;
+  while (len >= 8) {
+    /* absorb data */
+#ifdef ASCON_HASH_BYTES
+    if (mode & ASCON_ABSORB)
+#endif
+    {
+      tmp = LOAD(in, 8);
+      s->x[i] ^= tmp;
+      if (mode == ASCON_ABSORB) printstate("absorb adata", s);
+      if (mode == ASCON_ENCRYPT) printstate("absorb plaintext", s);
+    }
+    /* extract data */
+    if (mode & ASCON_SQUEEZE) {
+      STORE(out, s->x[i], 8);
+      if (mode & ASCON_HASH) printstate("squeeze output", s);
+    }
+    /* insert data */
+    if (mode & ASCON_INSERT) {
+      s->x[i] = tmp;
+      printstate("insert ciphertext", s);
+    }
+    /* compute permutation for full blocks */
+#if ASCON_AEAD_RATE == 16
+    if (++i == rate / 8) i = 0;
+#endif
+    if (i == 0) P(s, nr);
+    in += 8;
+    out += 8;
+    len -= 8;
+  }
+  /* absorb data */
+#ifdef ASCON_HASH_BYTES
+  if (mode & ASCON_ABSORB)
+#endif
+  {
+    tmp = LOADBYTES(in, len);
+    s->x[i] ^= tmp;
+  }
+  /* extract data */
+  if (mode & ASCON_SQUEEZE) STOREBYTES(out, s->x[i], len);
+  /* insert data */
+  if (mode & ASCON_INSERT) {
+    s->x[i] = CLEAR(s->x[i], len);
+    s->x[i] ^= tmp;
+  }
+  s->x[i] ^= PAD(len);
+}
+
+#endif
+
+#endif
+
+#endif
+
+
+#ifdef IMPL_opt8_lowsize
+
+// ascon.h
+#ifndef ASCON_H_
+#define ASCON_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+
+typedef union {
+  uint64_t x[5];
+  uint32_t w[5][2];
+  uint8_t b[5][8];
+} ascon_state_t;
+
+#ifdef ASCON_AEAD_RATE
+
+#define ASCON_KEYWORDS (CRYPTO_KEYBYTES + 7) / 8
+
+typedef union {
+  uint64_t x[ASCON_KEYWORDS];
+  uint32_t w[ASCON_KEYWORDS][2];
+  uint8_t b[ASCON_KEYWORDS][8];
+} ascon_key_t;
+
+#endif
+
+#define ASCON_ABSORB 0x1
+#define ASCON_SQUEEZE 0x2
+#define ASCON_INSERT 0x4
+#define ASCON_HASH 0x8
+#define ASCON_ENCRYPT (ASCON_ABSORB | ASCON_SQUEEZE)
+#define ASCON_DECRYPT (ASCON_ABSORB | ASCON_SQUEEZE | ASCON_INSERT)
+
+void ascon_update(ascon_state_t* s, uint8_t* out, const uint8_t* in,
+                  uint64_t len, uint8_t mode);
+
+int ascon_aead(uint8_t* tag, uint8_t* out, const uint8_t* in, uint64_t inlen,
+               const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+               const uint8_t* k, uint8_t mode);
+
+#endif /* ASCON_H_ */
+
+
+// config.h
+#ifndef CONFIG_H_
+#define CONFIG_H_
+
+/* inline the ascon mode */
+#ifndef ASCON_INLINE_MODE
+#define ASCON_INLINE_MODE 0
+#endif
+
+/* inline all permutations */
+#ifndef ASCON_INLINE_PERM
+#define ASCON_INLINE_PERM 0
+#endif
+
+/* unroll permutation loops */
+#ifndef ASCON_UNROLL_LOOPS
+#define ASCON_UNROLL_LOOPS 0
+#endif
+
+#endif /* CONFIG_H_ */
+
+
+// constants.h
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+
+#include <stdint.h>
+
+#define ASCON_80PQ_VARIANT 0
+#define ASCON_AEAD_VARIANT 1
+#define ASCON_HASH_VARIANT 2
+#define ASCON_XOF_VARIANT 3
+#define ASCON_CXOF_VARIANT 4
+#define ASCON_MAC_VARIANT 5
+#define ASCON_PRF_VARIANT 6
+#define ASCON_PRFS_VARIANT 7
+
+#define ASCON_TAG_SIZE 16
+#define ASCON_HASH_SIZE 32
+
+#define ASCON_128_RATE 8
+#define ASCON_128A_RATE 16
+#define ASCON_HASH_RATE 8
+#define ASCON_PRF_IN_RATE 32
+#define ASCON_PRFA_IN_RATE 40
+#define ASCON_PRF_OUT_RATE 16
+
+#define ASCON_PA_ROUNDS 12
+#define ASCON_128_PB_ROUNDS 6
+#define ASCON_128A_PB_ROUNDS 8
+#define ASCON_HASH_PB_ROUNDS 12
+#define ASCON_HASHA_PB_ROUNDS 8
+#define ASCON_PRF_PB_ROUNDS 12
+#define ASCON_PRFA_PB_ROUNDS 8
+
+#define ASCON_128_IV 0x00000800806c0001ull
+#define ASCON_128A_IV 0x00001000808c0001ull
+#define ASCON_80PQ_IV 0x00000000806c0800ull
+
+#define ASCON_HASH_IV 0x0000080100cc0002ull
+#define ASCON_HASHA_IV 0x00000801008c0002ull
+#define ASCON_XOF_IV 0x0000080000cc0003ull
+#define ASCON_XOFA_IV 0x00000800008c0003ull
+#define ASCON_CXOF_IV 0x0000080000cc0004ull
+#define ASCON_CXOFA_IV 0x00000800008c0004ull
+
+#define ASCON_MAC_IV 0x0010200080cc0005ull
+#define ASCON_MACA_IV 0x00102800808c0005ull
+#define ASCON_PRF_IV 0x0010200000cc0006ull
+#define ASCON_PRFA_IV 0x00102800008c0006ull
+#define ASCON_PRFS_IV 0x00000000800c0007ull
+
+#define ASCON_HASH_IV0 0x9b1e5494e934d681ull
+#define ASCON_HASH_IV1 0x4bc3a01e333751d2ull
+#define ASCON_HASH_IV2 0xae65396c6b34b81aull
+#define ASCON_HASH_IV3 0x3c7fd4a4d56a4db3ull
+#define ASCON_HASH_IV4 0x1a5c464906c5976dull
+
+#define ASCON_HASHA_IV0 0xe2ffb4d17ffcadc5ull
+#define ASCON_HASHA_IV1 0xdd364b655fa88cebull
+#define ASCON_HASHA_IV2 0xdcaabe85a70319d2ull
+#define ASCON_HASHA_IV3 0xd98f049404be3214ull
+#define ASCON_HASHA_IV4 0xca8c9d516e8a2221ull
+
+#define ASCON_XOF_IV0 0xda82ce768d9447ebull
+#define ASCON_XOF_IV1 0xcc7ce6c75f1ef969ull
+#define ASCON_XOF_IV2 0xe7508fd780085631ull
+#define ASCON_XOF_IV3 0x0ee0ea53416b58ccull
+#define ASCON_XOF_IV4 0xe0547524db6f0bdeull
+
+#define ASCON_XOFA_IV0 0xf3040e5017d92943ull
+#define ASCON_XOFA_IV1 0xc474f6e3ae01892eull
+#define ASCON_XOFA_IV2 0xbf5cb3ca954805e0ull
+#define ASCON_XOFA_IV3 0xd9c28702ccf962efull
+#define ASCON_XOFA_IV4 0x5923fa01f4b0e72full
+
+#define RC0 0xf0
+#define RC1 0xe1
+#define RC2 0xd2
+#define RC3 0xc3
+#define RC4 0xb4
+#define RC5 0xa5
+#define RC6 0x96
+#define RC7 0x87
+#define RC8 0x78
+#define RC9 0x69
+#define RCa 0x5a
+#define RCb 0x4b
+
+#define RC(i) (i)
+
+#define START(n) ((3 + (n)) << 4 | (12 - (n)))
+#define INC -0x0f
+#define END 0x3c
+
+#endif /* CONSTANTS_H_ */
+
+
+// printstate.h
+#ifndef PRINTSTATE_H_
+#define PRINTSTATE_H_
+
+#ifdef ASCON_PRINT_STATE
+
+//#include "ascon.h"
+
+void print(const char* text);
+void printbytes(const char* text, const uint8_t* b, uint64_t len);
+void printword(const char* text, const uint64_t x);
+void printstate(const char* text, const ascon_state_t* s);
+
+#else
+
+#define print(text) \
+  do {              \
+  } while (0)
+
+#define printbytes(text, b, l) \
+  do {                         \
+  } while (0)
+
+#define printword(text, w) \
+  do {                     \
+  } while (0)
+
+#define printstate(text, s) \
+  do {                      \
+  } while (0)
+
+#endif
+
+#endif /* PRINTSTATE_H_ */
+
+
+// forceinline.h
+#ifndef FORCEINLINE_H_
+#define FORCEINLINE_H_
+
+/* define forceinline macro */
+#ifdef _MSC_VER
+#define forceinline __forceinline
+#elif defined(__GNUC__)
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline static inline
+#endif
+#elif defined(__CLANG__)
+#if __has_attribute(__always_inline__)
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline inline
+#endif
+#else
+#define forceinline inline
+#endif
+
+#endif /* FORCEINLINE_H_ */
+
+
+// lendian.h
+#ifndef ENDIAN_H_
+#define ENDIAN_H_
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
+    defined(_MSC_VER)
+
+/* macros for little endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for little endian machines")
+#endif
+#define U64LE(x) (x)
+#define U32LE(x) (x)
+#define U16LE(x) (x)
+
+#elif (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+
+/* macros for big endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for big endian machines")
+#endif
+#define U64LE(x)                           \
+  (((0x00000000000000FFULL & (x)) << 56) | \
+   ((0x000000000000FF00ULL & (x)) << 40) | \
+   ((0x0000000000FF0000ULL & (x)) << 24) | \
+   ((0x00000000FF000000ULL & (x)) << 8) |  \
+   ((0x000000FF00000000ULL & (x)) >> 8) |  \
+   ((0x0000FF0000000000ULL & (x)) >> 24) | \
+   ((0x00FF000000000000ULL & (x)) >> 40) | \
+   ((0xFF00000000000000ULL & (x)) >> 56))
+#define U32LE(x)                                            \
+  (((0x000000FF & (x)) << 24) | ((0x0000FF00 & (x)) << 8) | \
+   ((0x00FF0000 & (x)) >> 8) | ((0xFF000000 & (x)) >> 24))
+#define U16LE(x) (((0x00FF & (x)) << 8) | ((0xFF00 & (x)) >> 8))
+
+#else
+#error "Ascon byte order macros not defined in lendian.h"
+#endif
+
+#endif /* ENDIAN_H_ */
+
+
+// word.h
+#ifndef WORD_H_
+#define WORD_H_
+
+#include <stdint.h>
+#include <string.h>
+
+//#include "forceinline.h"
+//#include "lendian.h"
+
+typedef union {
+  uint64_t x;
+  uint32_t w[2];
+  uint8_t b[8];
+} word_t;
+
+#define U64TOWORD(x) U64LE(x)
+#define WORDTOU64(x) U64LE(x)
+#define LOAD(b, n) LOADBYTES(b, n)
+#define STORE(b, w, n) STOREBYTES(b, w, n)
+
+#define XMUL(i, x)                               \
+  do {                                           \
+    tmp = (uint16_t)a.b[i] * (1 << (x));         \
+    b.b[(byte_rol + (i)) & 0x7] ^= (uint8_t)tmp; \
+    b.b[(byte_rol + (i) + 1) & 0x7] ^= tmp >> 8; \
+  } while (0)
+
+forceinline uint64_t ROR(uint64_t x, int n) {
+  word_t a = {.x = x}, b = {.x = 0ull};
+  int bit_rol = (64 - n) & 0x7;
+  int byte_rol = (64 - n) >> 3;
+  uint16_t tmp;
+  XMUL(0, bit_rol);
+  XMUL(1, bit_rol);
+  XMUL(2, bit_rol);
+  XMUL(3, bit_rol);
+  XMUL(4, bit_rol);
+  XMUL(5, bit_rol);
+  XMUL(6, bit_rol);
+  XMUL(7, bit_rol);
+  return b.x;
+}
+
+forceinline uint8_t NOT8(uint8_t a) { return ~a; }
+
+forceinline uint8_t XOR8(uint8_t a, uint8_t b) { return a ^ b; }
+
+forceinline uint8_t AND8(uint8_t a, uint8_t b) { return a & b; }
+
+forceinline uint8_t OR8(uint8_t a, uint8_t b) { return a | b; }
+
+forceinline uint64_t KEYROT(uint64_t hi2lo, uint64_t lo2hi) {
+  return lo2hi << 32 | hi2lo >> 32;
+}
+
+forceinline int NOTZERO(uint64_t a, uint64_t b) {
+  uint64_t result = a | b;
+  result |= result >> 32;
+  result |= result >> 16;
+  result |= result >> 8;
+  return ((((int)(result & 0xff) - 1) >> 8) & 1) - 1;
+}
+
+forceinline uint64_t PAD() { return 0x01; }
+
+forceinline uint64_t DSEP() { return 0x80; }
+
+forceinline uint64_t PRFS_MLEN(uint64_t len) { return len << 51; }
+
+forceinline uint64_t CLEAR(uint64_t w, int n) {
+  /* undefined for n == 0 */
+  uint64_t mask = ~0ull << (8 * n);
+  return w & mask;
+}
+
+forceinline uint64_t MASK(int n) {
+  /* undefined for n == 0 */
+  return ~0ull << (64 - 8 * n);
+}
+
+forceinline uint64_t LOADBYTES(const uint8_t* bytes, int n) {
+  uint64_t x = 0;
+  memcpy(&x, bytes, n);
+  return U64TOWORD(x);
+}
+
+forceinline void STOREBYTES(uint8_t* bytes, uint64_t w, int n) {
+  uint64_t x = WORDTOU64(w);
+  memcpy(bytes, &x, n);
+}
+
+forceinline void memxor(uint8_t* dst, const uint8_t* src, int n) {
+  while (n > 0) {
+    *dst++ ^= *src++;
+    --n;
+  }
+}
+
+forceinline void INSERT(uint8_t* s, const uint8_t* d, int n) {
+  while (n > 0) {
+    *s++ = *d++;
+    --n;
+  }
+}
+
+forceinline void SQUEEZE(uint8_t* d, const uint8_t* s, int n) {
+  while (n > 0) {
+    *d++ = *s++;
+    --n;
+  }
+}
+
+forceinline void ABSORB(uint8_t* s, const uint8_t* d, int n) {
+  while (n > 0) {
+    *s++ ^= *d++;
+    --n;
+  }
+}
+
+forceinline void ENCRYPT(uint8_t* s, uint8_t* c, const uint8_t* m, int n) {
+  while (n > 0) {
+    *c++ = (*s++ ^= *m++);
+    --n;
+  }
+}
+
+forceinline void DECRYPT(uint8_t* s, uint8_t* m, const uint8_t* c, int n) {
+  while (n > 0) {
+    uint8_t t = *c++;
+    *m++ = *s ^ t;
+    *s++ = t;
+    --n;
+  }
+}
+
+forceinline uint8_t VERIFY(const uint8_t* s, const uint8_t* d, int n) {
+  uint8_t r = 0;
+  while (n > 0) {
+    r |= *s++ ^ *d++;
+    --n;
+  }
+  return r;
+}
+
+#endif /* WORD_H_ */
+
+
+// round.h
+#ifndef ROUND_H_
+#define ROUND_H_
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "forceinline.h"
+//#include "printstate.h"
+//#include "word.h"
+
+forceinline void LINEAR_LAYER(ascon_state_t* s, uint64_t xtemp) {
+  uint64_t temp;
+  temp = s->x[2] ^ ROR(s->x[2], 28 - 19);
+  s->x[0] = s->x[2] ^ ROR(temp, 19);
+  temp = s->x[4] ^ ROR(s->x[4], 6 - 1);
+  s->x[2] = s->x[4] ^ ROR(temp, 1);
+  temp = s->x[1] ^ ROR(s->x[1], 41 - 7);
+  s->x[4] = s->x[1] ^ ROR(temp, 7);
+  temp = s->x[3] ^ ROR(s->x[3], 61 - 39);
+  s->x[1] = s->x[3] ^ ROR(temp, 39);
+  temp = xtemp ^ ROR(xtemp, 17 - 10);
+  s->x[3] = xtemp ^ ROR(temp, 10);
+}
+
+forceinline void NONLINEAR_LAYER(ascon_state_t* s, word_t* xtemp, uint8_t pos) {
+  uint8_t t0;
+  uint8_t t1;
+  uint8_t t2;
+  // Based on the round description of Ascon given in the Bachelor's thesis:
+  //"Optimizing Ascon on RISC-V" of Lars Jellema
+  // see https://github.com/Lucus16/ascon-riscv/
+  t0 = XOR8(s->b[1][pos], s->b[2][pos]);
+  t1 = XOR8(s->b[0][pos], s->b[4][pos]);
+  t2 = XOR8(s->b[3][pos], s->b[4][pos]);
+  s->b[4][pos] = OR8(s->b[3][pos], NOT8(s->b[4][pos]));
+  s->b[4][pos] = XOR8(s->b[4][pos], t0);
+  s->b[3][pos] = XOR8(s->b[3][pos], s->b[1][pos]);
+  s->b[3][pos] = OR8(s->b[3][pos], t0);
+  s->b[3][pos] = XOR8(s->b[3][pos], t1);
+  s->b[2][pos] = XOR8(s->b[2][pos], t1);
+  s->b[2][pos] = OR8(s->b[2][pos], s->b[1][pos]);
+  s->b[2][pos] = XOR8(s->b[2][pos], t2);
+  s->b[1][pos] = AND8(s->b[1][pos], NOT8(t1));
+  s->b[1][pos] = XOR8(s->b[1][pos], t2);
+  s->b[0][pos] = OR8(s->b[0][pos], t2);
+  (*xtemp).b[pos] = XOR8(s->b[0][pos], t0);
+}
+
+forceinline void ROUND(ascon_state_t* s, uint8_t C) {
+  int i;
+  word_t xtemp;
+  /* round constant */
+  s->b[2][0] = XOR8(s->b[2][0], C);
+  /* s-box layer */
+  for (i = 0; i < 8; i++) NONLINEAR_LAYER(s, &xtemp, i);
+  /* linear layer */
+  LINEAR_LAYER(s, xtemp.x);
+  printstate(" round output", s);
+}
+
+forceinline void PROUNDS(ascon_state_t* s, int nr) {
+  int i = START(nr);
+  do {
+    ROUND(s, RC(i));
+    i += INC;
+  } while (i != END);
+}
+
+#endif /* ROUND_H_ */
+
+
+// permutations.h
+#ifndef PERMUTATIONS_H_
+#define PERMUTATIONS_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+//#include "ascon.h"
+//#include "config.h"
+//#include "constants.h"
+//#include "printstate.h"
+//#include "round.h"
+
+forceinline void P12ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC0);
+  ROUND(s, RC1);
+  ROUND(s, RC2);
+  ROUND(s, RC3);
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P8ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC4);
+  ROUND(s, RC5);
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+forceinline void P6ROUNDS(ascon_state_t* s) {
+  ROUND(s, RC6);
+  ROUND(s, RC7);
+  ROUND(s, RC8);
+  ROUND(s, RC9);
+  ROUND(s, RCa);
+  ROUND(s, RCb);
+}
+
+#if ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12ROUNDS(s);
+  if (nr == 8) P8ROUNDS(s);
+  if (nr == 6) P6ROUNDS(s);
+}
+
+#elif !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s);
+void P8(ascon_state_t* s);
+void P6(ascon_state_t* s);
+
+forceinline void P(ascon_state_t* s, int nr) {
+  if (nr == 12) P12(s);
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8))
+  if (nr == 8) P8(s);
+#endif
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8)
+  if (nr == 6) P6(s);
+#endif
+}
+
+#elif ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+forceinline void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#else /* !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS */
+
+void P(ascon_state_t* s, int nr);
+
+#endif
+
+#endif /* PERMUTATIONS_H_ */
+
+
+// aead.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "crypto_aead.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if !ASCON_INLINE_MODE
+#undef forceinline
+#define forceinline
+#endif
+
+#ifdef ASCON_AEAD_RATE
+
+forceinline void ascon_loadkey(ascon_key_t* key, const uint8_t* k) {
+#if CRYPTO_KEYBYTES == 16
+  INSERT(key->b[0], k, 8);
+  INSERT(key->b[1], k + 8, 8);
+#else /* CRYPTO_KEYBYTES == 20 */
+  key->x[0] = KEYROT(0, LOADBYTES(k, 4));
+  key->x[1] = LOADBYTES(k + 4, 8);
+  key->x[2] = LOADBYTES(k + 12, 8);
+#endif
+}
+
+forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                                const uint8_t* npub) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) s->x[0] = ASCON_128_IV;
+  if (ASCON_AEAD_RATE == 16) s->x[0] = ASCON_128A_IV;
+  memcpy(s->b[1], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[0] = key->x[0] | ASCON_80PQ_IV;
+  memcpy(s->b[1], key->b[1], 16);
+#endif
+  INSERT(s->b[3], npub, 8);
+  INSERT(s->b[4], npub + 8, 8);
+  printstate("init 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[3], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  memxor(s->b[2], key->b[0], 24);
+#endif
+  printstate("init 2nd key xor", s);
+}
+
+forceinline void ascon_final(ascon_state_t* s, const ascon_key_t* key) {
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[ASCON_AEAD_RATE / 8], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[1] ^= KEYROT(key->x[0], key->x[1]);
+  s->x[2] ^= KEYROT(key->x[1], key->x[2]);
+  s->x[3] ^= KEYROT(key->x[2], 0);
+#endif
+  printstate("final 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[3], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  memxor(s->b[3], key->b[1], 16);
+#endif
+  printstate("final 2nd key xor", s);
+}
+
+forceinline void ascon_gettag(ascon_state_t* s, uint8_t* t) {
+  SQUEEZE(t, s->b[3], 8);
+  SQUEEZE(t + 8, s->b[4], 8);
+}
+
+forceinline int ascon_verify(ascon_state_t* s, const uint8_t* t) {
+  /* verify should be constant time, check compiler output */
+  uint8_t r = 0;
+  r |= VERIFY(s->b[3], t, 8);
+  r |= VERIFY(s->b[4], t + 8, 8);
+  return ((((int)r - 1) >> 8) & 1) - 1;
+}
+
+int ascon_aead_encrypt(uint8_t* t, uint8_t* c, const uint8_t* m, uint64_t mlen,
+                       const uint8_t* ad, uint64_t adlen, const uint8_t* npub,
+                       const uint8_t* k) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  if (adlen) {
+    ascon_update(&s, (void*)0, ad, adlen, ASCON_ABSORB);
+    P(&s, nr);
+  }
+  s.b[4][7] ^= DSEP();
+  printstate("domain separation", &s);
+  ascon_update(&s, c, m, mlen, ASCON_ENCRYPT);
+  ascon_final(&s, &key);
+  ascon_gettag(&s, t);
+  return 0;
+}
+
+int ascon_aead_decrypt(uint8_t* m, const uint8_t* t, const uint8_t* c,
+                       uint64_t clen, const uint8_t* ad, uint64_t adlen,
+                       const uint8_t* npub, const uint8_t* k) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  if (adlen) {
+    ascon_update(&s, (void*)0, ad, adlen, ASCON_ABSORB);
+    P(&s, nr);
+  }
+  s.b[4][7] ^= DSEP();
+  printstate("domain separation", &s);
+  ascon_update(&s, m, c, clen, ASCON_DECRYPT);
+  ascon_final(&s, &key);
+  return ascon_verify(&s, t);
+}
+
+int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
+                        const unsigned char* m, unsigned long long mlen,
+                        const unsigned char* ad, unsigned long long adlen,
+                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  /* set ciphertext size */
+  *clen = mlen + CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + mlen;
+  print("encrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("m", m, mlen);
+  /* ascon encryption */
+  int result = ascon_aead_encrypt(t, c, m, mlen, ad, adlen, npub, k);
+  printbytes("c", c, mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  print("\n");
+  return result;
+}
+
+int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+                        unsigned char* nsec, const unsigned char* c,
+                        unsigned long long clen, const unsigned char* ad,
+                        unsigned long long adlen, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  if (clen < CRYPTO_ABYTES) return -1;
+  /* set plaintext size */
+  *mlen = clen - CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + *mlen;
+  print("decrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("c", c, *mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  /* ascon decryption */
+  int result = ascon_aead_decrypt(m, t, c, *mlen, ad, adlen, npub, k);
+  printbytes("m", m, *mlen);
+  print("\n");
+  return result;
+}
+
+#endif
+
+
+// permutations.c
+//#include "permutations.h"
+
+#if !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s) { P12ROUNDS(s); }
+
+#endif
+
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8)) &&  \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P8(ascon_state_t* s) { P8ROUNDS(s); }
+
+#endif
+
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8) && \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P6(ascon_state_t* s) { P6ROUNDS(s); }
+
+#endif
+
+#if !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#endif
+
+
+// update.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if defined(ASCON_AEAD_RATE)
+#if ASCON_AEAD_RATE == ASCON_128_RATE
+#define ASCON_AEAD_ROUNDS ASCON_128_PB_ROUNDS
+#else
+#define ASCON_AEAD_ROUNDS ASCON_128A_PB_ROUNDS
+#endif
+#endif
+
+void ascon_update(ascon_state_t* s, uint8_t* c, const uint8_t* m, uint64_t mlen,
+                  uint8_t mode) {
+#if defined(ASCON_AEAD_RATE) && !defined(ASCON_HASH_ROUNDS)
+  const uint8_t nr = ASCON_AEAD_ROUNDS;
+  const uint8_t rate = ASCON_AEAD_RATE;
+#elif !defined(ASCON_AEAD_RATE) && defined(ASCON_HASH_ROUNDS)
+  const uint8_t nr = ASCON_HASH_ROUNDS;
+  const uint8_t rate = ASCON_HASH_RATE;
+#else
+  const uint8_t nr =
+      (mode & ASCON_HASH) ? ASCON_HASH_ROUNDS : ASCON_AEAD_ROUNDS;
+  const uint8_t rate = (mode & ASCON_HASH) ? ASCON_HASH_RATE : ASCON_AEAD_RATE;
+#endif
+  /* full plaintext blocks */
+  while (mlen >= rate) {
+    if (mode == 1 || mode == 9) ABSORB(s->b[0], m, 8);
+#if defined(ASCON_HASH_ROUNDS)
+    if (mode == 2 || mode == 10) SQUEEZE(c, s->b[0], 8);
+#endif
+#if defined(ASCON_AEAD_RATE)
+    if (mode == 3) ENCRYPT(s->b[0], c, m, 8);
+    if (mode == 7) DECRYPT(s->b[0], c, m, 8);
+    if (mode == 1 && ASCON_AEAD_RATE == 16) ABSORB(s->b[1], m + 8, 8);
+    if (mode == 3 && ASCON_AEAD_RATE == 16) ENCRYPT(s->b[1], c + 8, m + 8, 8);
+    if (mode == 7 && ASCON_AEAD_RATE == 16) DECRYPT(s->b[1], c + 8, m + 8, 8);
+#endif
+    if (mode == 1) printstate("absorb adata", s);
+    if (mode == 3 || mode == 9) printstate("absorb plaintext", s);
+    if (mode == 7) printstate("insert ciphertext", s);
+    if (mode == 2 || mode == 10) printstate("squeeze output", s);
+#if defined(ASCON_HASH_ROUNDS)
+    if (!(mode == 10 && mlen == rate)) P(s, nr);
+#else
+    P(s, nr);
+#endif
+    m += rate;
+    c += rate;
+    mlen -= rate;
+  }
+  /* final plaintext block */
+  int i = 0;
+#if defined(ASCON_AEAD_RATE)
+  if (ASCON_AEAD_RATE == 16 && mlen >= 8) {
+    if (mode == 1) ABSORB(s->b[0], m, 8);
+    if (mode == 3) ENCRYPT(s->b[0], c, m, 8);
+    if (mode == 7) DECRYPT(s->b[0], c, m, 8);
+    i = 1;
+    m += 8;
+    c += 8;
+    mlen -= 8;
+  }
+  if (mode == 3) ENCRYPT(s->b[i], c, m, mlen);
+  if (mode == 7) DECRYPT(s->b[i], c, m, mlen);
+#endif
+  if (mode == 1 || mode == 9) ABSORB(s->b[i], m, mlen);
+#if defined(ASCON_HASH_ROUNDS)
+  if (mode == 2 || mode == 10) SQUEEZE(c, s->b[0], mlen);
+#endif
+  s->b[i][mlen] ^= PAD();
+  if (mode == 1) printstate("pad adata", s);
+  if (mode == 3) printstate("pad plaintext", s);
+  if (mode == 7) printstate("pad ciphertext", s);
+}
+
+#endif
+
+
+#ifdef IMPL_opt8_mylowsize
+
+#include <stddef.h>
+#if defined (__SDCC) || __STDC_VERSION__ >= 202311L
+#include <stdbit.h>
+#endif
+
+#if __STDC_VERSION__ <= 202311L && !defined(__SDCC)
+#define stdc_rotate_right(x, n) (((x) >> (n)) | ((x) << (64-(n))))
+#endif
+
+
+// ascon.h
+#ifndef ASCON_H_
+#define ASCON_H_
+
+#include <stdint.h>
+
+//#include "api.h"
+
+typedef union {
+  uint64_t x[5];
+  uint32_t w[5][2];
+  uint8_t b[5][8];
+} ascon_state_t;
+
+#ifdef ASCON_AEAD_RATE
+
+#define ASCON_KEYWORDS (CRYPTO_KEYBYTES + 7) / 8
+
+typedef union {
+  uint64_t x[ASCON_KEYWORDS];
+  uint32_t w[ASCON_KEYWORDS][2];
+  uint8_t b[ASCON_KEYWORDS][8];
+} ascon_key_t;
+
+#endif
+
+#define ASCON_ABSORB 0x1
+#define ASCON_SQUEEZE 0x2
+#define ASCON_INSERT 0x4
+#define ASCON_HASH 0x8
+#define ASCON_ENCRYPT (ASCON_ABSORB | ASCON_SQUEEZE)
+#define ASCON_DECRYPT (ASCON_ABSORB | ASCON_SQUEEZE | ASCON_INSERT)
+
+void ascon_update(ascon_state_t* s, uint8_t* out, const uint8_t* in,
+                  size_t len, uint8_t mode);
+
+int ascon_aead(uint8_t* tag, uint8_t* out, const uint8_t* in, size_t inlen,
+               const uint8_t* ad, size_t adlen, const uint8_t* npub,
+               const uint8_t* k, uint8_t mode);
+
+#endif /* ASCON_H_ */
+
+
+// config.h
+#ifndef CONFIG_H_
+#define CONFIG_H_
+
+/* inline the ascon mode */
+#ifndef ASCON_INLINE_MODE
+#define ASCON_INLINE_MODE 0
+#endif
+
+/* inline all permutations */
+#ifndef ASCON_INLINE_PERM
+#define ASCON_INLINE_PERM 0
+#endif
+
+/* unroll permutation loops */
+#ifndef ASCON_UNROLL_LOOPS
+#define ASCON_UNROLL_LOOPS 0
+#endif
+
+#endif /* CONFIG_H_ */
+
+
+// constants.h
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+
+#include <stdint.h>
+
+#define ASCON_80PQ_VARIANT 0
+#define ASCON_AEAD_VARIANT 1
+#define ASCON_HASH_VARIANT 2
+#define ASCON_XOF_VARIANT 3
+#define ASCON_CXOF_VARIANT 4
+#define ASCON_MAC_VARIANT 5
+#define ASCON_PRF_VARIANT 6
+#define ASCON_PRFS_VARIANT 7
+
+#define ASCON_TAG_SIZE 16
+#define ASCON_HASH_SIZE 32
+
+#define ASCON_128_RATE 8
+#define ASCON_128A_RATE 16
+#define ASCON_HASH_RATE 8
+#define ASCON_PRF_IN_RATE 32
+#define ASCON_PRFA_IN_RATE 40
+#define ASCON_PRF_OUT_RATE 16
+
+#define ASCON_PA_ROUNDS 12
+#define ASCON_128_PB_ROUNDS 6
+#define ASCON_128A_PB_ROUNDS 8
+#define ASCON_HASH_PB_ROUNDS 12
+#define ASCON_HASHA_PB_ROUNDS 8
+#define ASCON_PRF_PB_ROUNDS 12
+#define ASCON_PRFA_PB_ROUNDS 8
+
+#define ASCON_128_IV 0x00000800806c0001ull
+#define ASCON_128A_IV 0x00001000808c0001ull
+#define ASCON_80PQ_IV 0x00000000806c0800ull
+
+#define ASCON_HASH_IV 0x0000080100cc0002ull
+#define ASCON_HASHA_IV 0x00000801008c0002ull
+#define ASCON_XOF_IV 0x0000080000cc0003ull
+#define ASCON_XOFA_IV 0x00000800008c0003ull
+#define ASCON_CXOF_IV 0x0000080000cc0004ull
+#define ASCON_CXOFA_IV 0x00000800008c0004ull
+
+#define ASCON_MAC_IV 0x0010200080cc0005ull
+#define ASCON_MACA_IV 0x00102800808c0005ull
+#define ASCON_PRF_IV 0x0010200000cc0006ull
+#define ASCON_PRFA_IV 0x00102800008c0006ull
+#define ASCON_PRFS_IV 0x00000000800c0007ull
+
+#define ASCON_HASH_IV0 0x9b1e5494e934d681ull
+#define ASCON_HASH_IV1 0x4bc3a01e333751d2ull
+#define ASCON_HASH_IV2 0xae65396c6b34b81aull
+#define ASCON_HASH_IV3 0x3c7fd4a4d56a4db3ull
+#define ASCON_HASH_IV4 0x1a5c464906c5976dull
+
+#define ASCON_HASHA_IV0 0xe2ffb4d17ffcadc5ull
+#define ASCON_HASHA_IV1 0xdd364b655fa88cebull
+#define ASCON_HASHA_IV2 0xdcaabe85a70319d2ull
+#define ASCON_HASHA_IV3 0xd98f049404be3214ull
+#define ASCON_HASHA_IV4 0xca8c9d516e8a2221ull
+
+#define ASCON_XOF_IV0 0xda82ce768d9447ebull
+#define ASCON_XOF_IV1 0xcc7ce6c75f1ef969ull
+#define ASCON_XOF_IV2 0xe7508fd780085631ull
+#define ASCON_XOF_IV3 0x0ee0ea53416b58ccull
+#define ASCON_XOF_IV4 0xe0547524db6f0bdeull
+
+#define ASCON_XOFA_IV0 0xf3040e5017d92943ull
+#define ASCON_XOFA_IV1 0xc474f6e3ae01892eull
+#define ASCON_XOFA_IV2 0xbf5cb3ca954805e0ull
+#define ASCON_XOFA_IV3 0xd9c28702ccf962efull
+#define ASCON_XOFA_IV4 0x5923fa01f4b0e72full
+
+#define RC0 0xf0
+#define RC1 0xe1
+#define RC2 0xd2
+#define RC3 0xc3
+#define RC4 0xb4
+#define RC5 0xa5
+#define RC6 0x96
+#define RC7 0x87
+#define RC8 0x78
+#define RC9 0x69
+#define RCa 0x5a
+#define RCb 0x4b
+
+#define RC(i) (i)
+
+#define START(n) ((3 + (n)) << 4 | (12 - (n)))
+#define INC -0x0f
+#define END 0x3c
+
+#endif /* CONSTANTS_H_ */
+
+
+// printstate.h
+#ifndef PRINTSTATE_H_
+#define PRINTSTATE_H_
+
+#ifdef ASCON_PRINT_STATE
+
+//#include "ascon.h"
+
+void print(const char* text);
+void printbytes(const char* text, const uint8_t* b, uint64_t len);
+void printword(const char* text, const uint64_t x);
+void printstate(const char* text, const ascon_state_t* s);
+
+#else
+
+#define print(text) \
+  do {              \
+  } while (0)
+
+#define printbytes(text, b, l) \
+  do {                         \
+  } while (0)
+
+#define printword(text, w) \
+  do {                     \
+  } while (0)
+
+#define printstate(text, s) \
+  do {                      \
+  } while (0)
+
+#endif
+
+#endif /* PRINTSTATE_H_ */
+
+
+// forceinline.h
+#ifndef FORCEINLINE_H_
+#define FORCEINLINE_H_
+
+/* define forceinline macro */
+#ifdef _MSC_VER
+#define forceinline __forceinline
+#elif defined(__GNUC__)
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline static inline
+#endif
+#elif defined(__CLANG__)
+#if __has_attribute(__always_inline__)
+#define forceinline inline __attribute__((__always_inline__))
+#else
+#define forceinline inline
+#endif
+#else
+#define forceinline inline
+#endif
+
+#endif /* FORCEINLINE_H_ */
+
+
+// lendian.h
+#ifndef ENDIAN_H_
+#define ENDIAN_H_
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) || \
+    defined(_MSC_VER)
+
+/* macros for little endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for little endian machines")
+#endif
+#define U64LE(x) (x)
+#define U32LE(x) (x)
+#define U16LE(x) (x)
+
+#elif (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+
+/* macros for big endian machines */
+#ifdef PRAGMA_ENDIAN
+#pragma message("Use macros for big endian machines")
+#endif
+#define U64LE(x)                           \
+  (((0x00000000000000FFULL & (x)) << 56) | \
+   ((0x000000000000FF00ULL & (x)) << 40) | \
+   ((0x0000000000FF0000ULL & (x)) << 24) | \
+   ((0x00000000FF000000ULL & (x)) << 8) |  \
+   ((0x000000FF00000000ULL & (x)) >> 8) |  \
+   ((0x0000FF0000000000ULL & (x)) >> 24) | \
+   ((0x00FF000000000000ULL & (x)) >> 40) | \
+   ((0xFF00000000000000ULL & (x)) >> 56))
+#define U32LE(x)                                            \
+  (((0x000000FF & (x)) << 24) | ((0x0000FF00 & (x)) << 8) | \
+   ((0x00FF0000 & (x)) >> 8) | ((0xFF000000 & (x)) >> 24))
+#define U16LE(x) (((0x00FF & (x)) << 8) | ((0xFF00 & (x)) >> 8))
+
+#else
+#error "Ascon byte order macros not defined in lendian.h"
+#endif
+
+#endif /* ENDIAN_H_ */
+
+
+// word.h
+#ifndef WORD_H_
+#define WORD_H_
+
+#include <stdint.h>
+#include <string.h>
+
+//#include "forceinline.h"
+//#include "lendian.h"
+
+typedef union {
+  uint64_t x;
+  uint32_t w[2];
+  uint8_t b[8];
+} word_t;
+
+#define U64TOWORD(x) U64LE(x)
+#define WORDTOU64(x) U64LE(x)
+#define LOAD(b, n) LOADBYTES(b, n)
+#define STORE(b, w, n) STOREBYTES(b, w, n)
+
+forceinline uint8_t NOT8(uint8_t a) { return ~a; }
+
+forceinline uint8_t XOR8(uint8_t a, uint8_t b) { return a ^ b; }
+
+forceinline uint8_t AND8(uint8_t a, uint8_t b) { return a & b; }
+
+forceinline uint8_t OR8(uint8_t a, uint8_t b) { return a | b; }
+
+forceinline uint64_t KEYROT(uint64_t hi2lo, uint64_t lo2hi) {
+  return lo2hi << 32 | hi2lo >> 32;
+}
+
+forceinline int NOTZERO(uint64_t a, uint64_t b) {
+  uint64_t result = a | b;
+  result |= result >> 32;
+  result |= result >> 16;
+  result |= result >> 8;
+  return ((((int)(result & 0xff) - 1) >> 8) & 1) - 1;
+}
+
+forceinline uint64_t PAD() { return 0x01; }
+
+forceinline uint64_t DSEP() { return 0x80; }
+
+forceinline uint64_t PRFS_MLEN(uint64_t len) { return len << 51; }
+
+forceinline uint64_t CLEAR(uint64_t w, uint_fast8_t n) {
+  /* undefined for n == 0 */
+  uint64_t mask = ~0ull << (8 * n);
+  return w & mask;
+}
+
+forceinline uint64_t MASK(uint_fast8_t n) {
+  /* undefined for n == 0 */
+  return ~0ull << (64 - 8 * n);
+}
+
+forceinline uint64_t LOADBYTES(const uint8_t* bytes, uint_fast8_t n) {
+  uint64_t x = 0;
+  memcpy(&x, bytes, n);
+  return U64TOWORD(x);
+}
+
+forceinline void STOREBYTES(uint8_t* bytes, uint64_t w, uint_fast8_t n) {
+  uint64_t x = WORDTOU64(w);
+  memcpy(bytes, &x, n);
+}
+
+forceinline void memxor(uint8_t* dst, const uint8_t* src, uint_fast8_t n) {
+  while (n > 0) {
+    *dst++ ^= *src++;
+    --n;
+  }
+}
+
+forceinline void INSERT(uint8_t* s, const uint8_t* d, uint_fast8_t n) {
+  /*while (n > 0) {
+    *s++ = *d++;
+    --n;
+  }*/
+  memcpy (s, d, n);
+}
+
+forceinline void SQUEEZE(uint8_t* d, const uint8_t* s, uint_fast8_t n) {
+  /*while (n > 0) {
+    *d++ = *s++;
+    --n;
+  }*/
+  memcpy (d, s, n);
+}
+
+/*forceinline*/ void ABSORB(uint8_t* s, const uint8_t* d, uint_fast8_t n) {
+  while (n > 0) {
+    *s++ ^= *d++;
+    --n;
+  }
+}
+
+/*forceinline*/ void ENCRYPT(uint8_t* s, uint8_t* c, const uint8_t* m, uint_fast8_t n) {
+  while (n > 0) {
+    *c++ = (*s++ ^= *m++);
+    --n;
+  }
+}
+
+/*forceinline*/ void DECRYPT(uint8_t* s, uint8_t* m, const uint8_t* c, uint_fast8_t n) {
+  while (n > 0) {
+    uint8_t t = *c++;
+    *m++ = *s ^ t;
+    *s++ = t;
+    --n;
+  }
+}
+
+/*forceinline*/ uint8_t VERIFY(const uint8_t* s, const uint8_t* d, uint_fast8_t n) {
+  uint8_t r = 0;
+  while (n > 0) {
+    r |= *s++ ^ *d++;
+    --n;
+  }
+  return r;
+}
+
+#endif /* WORD_H_ */
+
+
+// round.h
+#ifndef ROUND_H_
+#define ROUND_H_
+
+//#include "ascon.h"
+//#include "constants.h"
+//#include "forceinline.h"
+//#include "printstate.h"
+//#include "word.h"
+
+forceinline void LINEAR_LAYER(ascon_state_t* s, uint64_t xtemp) {
+  uint64_t temp;
+  temp = s->x[2] ^ stdc_rotate_right(s->x[2], 28 - 19);
+  s->x[0] = s->x[2] ^ stdc_rotate_right(temp, 19);
+  temp = s->x[4] ^ stdc_rotate_right(s->x[4], 6 - 1);
+  s->x[2] = s->x[4] ^ stdc_rotate_right(temp, 1);
+  temp = s->x[1] ^ stdc_rotate_right(s->x[1], 41 - 7);
+  s->x[4] = s->x[1] ^ stdc_rotate_right(temp, 7);
+  temp = s->x[3] ^ stdc_rotate_right(s->x[3], 61 - 39);
+  s->x[1] = s->x[3] ^ stdc_rotate_right(temp, 39);
+  temp = xtemp ^ stdc_rotate_right(xtemp, 17 - 10);
+  s->x[3] = xtemp ^ stdc_rotate_right(temp, 10);
+}
+
+/*forceinline*/ void NONLINEAR_LAYER(ascon_state_t* s, word_t* xtemp, uint8_t pos) {
+  uint8_t t0;
+  uint8_t t1;
+  uint8_t t2;
+  // Based on the round description of Ascon given in the Bachelor's thesis:
+  //"Optimizing Ascon on RISC-V" of Lars Jellema
+  // see https://github.com/Lucus16/ascon-riscv/
+  t0 = XOR8(s->b[1][pos], s->b[2][pos]);
+  t1 = XOR8(s->b[0][pos], s->b[4][pos]);
+  t2 = XOR8(s->b[3][pos], s->b[4][pos]);
+  s->b[4][pos] = OR8(s->b[3][pos], NOT8(s->b[4][pos]));
+  s->b[4][pos] = XOR8(s->b[4][pos], t0);
+  s->b[3][pos] = XOR8(s->b[3][pos], s->b[1][pos]);
+  s->b[3][pos] = OR8(s->b[3][pos], t0);
+  s->b[3][pos] = XOR8(s->b[3][pos], t1);
+  s->b[2][pos] = XOR8(s->b[2][pos], t1);
+  s->b[2][pos] = OR8(s->b[2][pos], s->b[1][pos]);
+  s->b[2][pos] = XOR8(s->b[2][pos], t2);
+  s->b[1][pos] = AND8(s->b[1][pos], NOT8(t1));
+  s->b[1][pos] = XOR8(s->b[1][pos], t2);
+  s->b[0][pos] = OR8(s->b[0][pos], t2);
+  (*xtemp).b[pos] = XOR8(s->b[0][pos], t0);
+}
+
+/*forceinline*/ void ROUND(ascon_state_t* s, uint8_t C) {
+  word_t xtemp;
+  /* round constant */
+  s->b[2][0] = XOR8(s->b[2][0], C);
+  /* s-box layer */
+  for (uint_fast8_t i = 0; i < 8; i++) NONLINEAR_LAYER(s, &xtemp, i);
+  /* linear layer */
+  LINEAR_LAYER(s, xtemp.x);
+  printstate(" round output", s);
+}
+
+forceinline void PROUNDS(ascon_state_t* s, uint_fast8_t nr) {
+  int i = START(nr);
+  do {
+    ROUND(s, RC(i));
+    i += INC;
+  } while (i != END);
+}
+
+#endif /* ROUND_H_ */
+
+
+// permutations.h
+void P(ascon_state_t* s, int nr);
+
+
+// aead.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "crypto_aead.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if !ASCON_INLINE_MODE
+#undef forceinline
+#define forceinline
+#endif
+
+#ifdef ASCON_AEAD_RATE
+
+forceinline void ascon_loadkey(ascon_key_t* key, const uint8_t* k) {
+#if CRYPTO_KEYBYTES == 16
+  INSERT(key->b[0], k, 8);
+  INSERT(key->b[1], k + 8, 8);
+#else /* CRYPTO_KEYBYTES == 20 */
+  key->x[0] = KEYROT(0, LOADBYTES(k, 4));
+  key->x[1] = LOADBYTES(k + 4, 8);
+  key->x[2] = LOADBYTES(k + 12, 8);
+#endif
+}
+
+forceinline void ascon_initaead(ascon_state_t* s, const ascon_key_t* key,
+                                const uint8_t* npub) {
+#if CRYPTO_KEYBYTES == 16
+  if (ASCON_AEAD_RATE == 8) s->x[0] = ASCON_128_IV;
+  if (ASCON_AEAD_RATE == 16) s->x[0] = ASCON_128A_IV;
+  memcpy(s->b[1], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[0] = key->x[0] | ASCON_80PQ_IV;
+  memcpy(s->b[1], key->b[1], 16);
+#endif
+  INSERT(s->b[3], npub, 8);
+  INSERT(s->b[4], npub + 8, 8);
+  printstate("init 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[3], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  memxor(s->b[2], key->b[0], 24);
+#endif
+  printstate("init 2nd key xor", s);
+}
+
+forceinline void ascon_final(ascon_state_t* s, const ascon_key_t* key) {
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[ASCON_AEAD_RATE / 8], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  s->x[1] ^= KEYROT(key->x[0], key->x[1]);
+  s->x[2] ^= KEYROT(key->x[1], key->x[2]);
+  s->x[3] ^= KEYROT(key->x[2], 0);
+#endif
+  printstate("final 1st key xor", s);
+  P(s, 12);
+#if CRYPTO_KEYBYTES == 16
+  memxor(s->b[3], key->b[0], 16);
+#else /* CRYPTO_KEYBYTES == 20 */
+  memxor(s->b[3], key->b[1], 16);
+#endif
+  printstate("final 2nd key xor", s);
+}
+
+forceinline void ascon_gettag(ascon_state_t* s, uint8_t* t) {
+  SQUEEZE(t, s->b[3], 8);
+  SQUEEZE(t + 8, s->b[4], 8);
+}
+
+forceinline int ascon_verify(ascon_state_t* s, const uint8_t* t) {
+  /* verify should be constant time, check compiler output */
+  uint8_t r = 0;
+  r |= VERIFY(s->b[3], t, 8);
+  r |= VERIFY(s->b[4], t + 8, 8);
+  return ((((int)r - 1) >> 8) & 1) - 1;
+}
+
+#ifdef OP_encrypt
+int ascon_aead_encrypt(uint8_t* t, uint8_t* c, const uint8_t* m, size_t mlen,
+                       const uint8_t* ad, size_t adlen, const uint8_t* npub,
+                       const uint8_t* k) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  if (adlen) {
+    ascon_update(&s, (void*)0, ad, adlen, ASCON_ABSORB);
+    P(&s, nr);
+  }
+  s.b[4][7] ^= DSEP();
+  printstate("domain separation", &s);
+  ascon_update(&s, c, m, mlen, ASCON_ENCRYPT);
+  ascon_final(&s, &key);
+  ascon_gettag(&s, t);
+  return 0;
+}
+#endif
+
+#ifdef OP_decrypt
+int ascon_aead_decrypt(uint8_t* m, const uint8_t* t, const uint8_t* c,
+                       uint64_t clen, const uint8_t* ad, size_t adlen,
+                       const uint8_t* npub, const uint8_t* k) {
+  const int nr = (ASCON_AEAD_RATE == 8) ? 6 : 8;
+  ascon_state_t s;
+  ascon_key_t key;
+  ascon_loadkey(&key, k);
+  ascon_initaead(&s, &key, npub);
+  if (adlen) {
+    ascon_update(&s, (void*)0, ad, adlen, ASCON_ABSORB);
+    P(&s, nr);
+  }
+  s.b[4][7] ^= DSEP();
+  printstate("domain separation", &s);
+  ascon_update(&s, m, c, clen, ASCON_DECRYPT);
+  ascon_final(&s, &key);
+  return ascon_verify(&s, t);
+}
+#endif
+
+#ifdef OP_encrypt
+int crypto_aead_encrypt(unsigned char* c, unsigned long long* clen,
+                        const unsigned char* m, unsigned long long mlen,
+                        const unsigned char* ad, unsigned long long adlen,
+                        const unsigned char* nsec, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  /* set ciphertext size */
+  *clen = mlen + CRYPTO_ABYTES;
+  uint8_t* t = (uint8_t*)c + mlen;
+  print("encrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("m", m, mlen);
+  /* ascon encryption */
+  int result = ascon_aead_encrypt(t, c, m, mlen, ad, adlen, npub, k);
+  printbytes("c", c, mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  print("\n");
+  return result;
+}
+#endif
+
+#ifdef OP_decrypt
+int crypto_aead_decrypt(unsigned char* m, unsigned long long* mlen,
+                        unsigned char* nsec, const unsigned char* c,
+                        unsigned long long clen, const unsigned char* ad,
+                        unsigned long long adlen, const unsigned char* npub,
+                        const unsigned char* k) {
+  (void)nsec;
+  if (clen < CRYPTO_ABYTES) return -1;
+  /* set plaintext size */
+  *mlen = clen - CRYPTO_ABYTES;
+  const uint8_t* t = (const uint8_t*)c + *mlen;
+  print("decrypt\n");
+  printbytes("k", k, CRYPTO_KEYBYTES);
+  printbytes("n", npub, CRYPTO_NPUBBYTES);
+  printbytes("a", ad, adlen);
+  printbytes("c", c, *mlen);
+  printbytes("t", t, CRYPTO_ABYTES);
+  /* ascon decryption */
+  int result = ascon_aead_decrypt(m, t, c, *mlen, ad, adlen, npub, k);
+  printbytes("m", m, *mlen);
+  print("\n");
+  return result;
+}
+#endif
+
+#endif
+
+
+// permutations.c
+//#include "permutations.h"
+
+#if !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P12(ascon_state_t* s) { P12ROUNDS(s); }
+
+#endif
+
+#if ((defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 16) ||    \
+     (defined(ASCON_HASH_ROUNDS) && ASCON_HASH_ROUNDS == 8) || \
+     (defined(ASCON_PRF_ROUNDS) && ASCON_PRF_ROUNDS == 8)) &&  \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P8(ascon_state_t* s) { P8ROUNDS(s); }
+
+#endif
+
+#if (defined(ASCON_AEAD_RATE) && ASCON_AEAD_RATE == 8) && \
+    !ASCON_INLINE_PERM && ASCON_UNROLL_LOOPS
+
+void P6(ascon_state_t* s) { P6ROUNDS(s); }
+
+#endif
+
+#if !ASCON_INLINE_PERM && !ASCON_UNROLL_LOOPS
+
+void P(ascon_state_t* s, int nr) { PROUNDS(s, nr); }
+
+#endif
+
+
+// update.c
+//#include "api.h"
+//#include "ascon.h"
+//#include "permutations.h"
+//#include "printstate.h"
+
+#if defined(ASCON_AEAD_RATE)
+#if ASCON_AEAD_RATE == ASCON_128_RATE
+#define ASCON_AEAD_ROUNDS ASCON_128_PB_ROUNDS
+#else
+#define ASCON_AEAD_ROUNDS ASCON_128A_PB_ROUNDS
+#endif
+#endif
+
+void ascon_update(ascon_state_t* s, uint8_t* c, const uint8_t* m, size_t mlen,
+                  uint8_t mode) {
+#if defined(ASCON_AEAD_RATE) && !defined(ASCON_HASH_ROUNDS)
+  const uint8_t nr = ASCON_AEAD_ROUNDS;
+  const uint8_t rate = ASCON_AEAD_RATE;
+#elif !defined(ASCON_AEAD_RATE) && defined(ASCON_HASH_ROUNDS)
+  const uint8_t nr = ASCON_HASH_ROUNDS;
+  const uint8_t rate = ASCON_HASH_RATE;
+#else
+  const uint8_t nr =
+      (mode & ASCON_HASH) ? ASCON_HASH_ROUNDS : ASCON_AEAD_ROUNDS;
+  const uint8_t rate = (mode & ASCON_HASH) ? ASCON_HASH_RATE : ASCON_AEAD_RATE;
+#endif
+  /* full plaintext blocks */
+  while (mlen >= rate) {
+    if (mode == 1 || mode == 9) ABSORB(s->b[0], m, 8);
+#if defined(ASCON_HASH_ROUNDS)
+    if (mode == 2 || mode == 10) SQUEEZE(c, s->b[0], 8);
+#endif
+#if defined(ASCON_AEAD_RATE)
+    if (mode == 3) ENCRYPT(s->b[0], c, m, 8);
+    if (mode == 7) DECRYPT(s->b[0], c, m, 8);
+    if (mode == 1 && ASCON_AEAD_RATE == 16) ABSORB(s->b[1], m + 8, 8);
+    if (mode == 3 && ASCON_AEAD_RATE == 16) ENCRYPT(s->b[1], c + 8, m + 8, 8);
+    if (mode == 7 && ASCON_AEAD_RATE == 16) DECRYPT(s->b[1], c + 8, m + 8, 8);
+#endif
+    if (mode == 1) printstate("absorb adata", s);
+    if (mode == 3 || mode == 9) printstate("absorb plaintext", s);
+    if (mode == 7) printstate("insert ciphertext", s);
+    if (mode == 2 || mode == 10) printstate("squeeze output", s);
+#if defined(ASCON_HASH_ROUNDS)
+    if (!(mode == 10 && mlen == rate)) P(s, nr);
+#else
+    P(s, nr);
+#endif
+    m += rate;
+    c += rate;
+    mlen -= rate;
+  }
+  /* final plaintext block */
+  uint_fast8_t i = 0;
+#if defined(ASCON_AEAD_RATE)
+  if (ASCON_AEAD_RATE == 16 && mlen >= 8) {
+    if (mode == 1) ABSORB(s->b[0], m, 8);
+    if (mode == 3) ENCRYPT(s->b[0], c, m, 8);
+    if (mode == 7) DECRYPT(s->b[0], c, m, 8);
+    i = 1;
+    m += 8;
+    c += 8;
+    mlen -= 8;
+  }
+  if (mode == 3) ENCRYPT(s->b[i], c, m, mlen);
+  if (mode == 7) DECRYPT(s->b[i], c, m, mlen);
+#endif
+  if (mode == 1 || mode == 9) ABSORB(s->b[i], m, mlen);
+#if defined(ASCON_HASH_ROUNDS)
+  if (mode == 2 || mode == 10) SQUEEZE(c, s->b[0], mlen);
+#endif
+  s->b[i][mlen] ^= PAD();
+  if (mode == 1) printstate("pad adata", s);
+  if (mode == 3) printstate("pad plaintext", s);
+  if (mode == 7) printstate("pad ciphertext", s);
+}
+
+#endif
+
+
+#include <string.h>
+
+// Test vector 333 from reference implementation.
+const unsigned char key[CRYPTO_KEYBYTES] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
+const unsigned char nonce[CRYPTO_NPUBBYTES] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F};
+const unsigned char pt[] = {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29};
+const unsigned long long ptlen = 10;
+const unsigned char ad[] = {0x30, 0x31};
+const unsigned long long adlen = 2;
+const unsigned char ct[] = {0x30, 0xFC, 0xEF, 0xAD, 0x28, 0x27, 0x5D, 0xF1, 0xA3, 0x1E, 0x58, 0xD5, 0xD7, 0x16, 0xAE, 0x8F, 0xFF, 0x42, 0xF8, 0xF1, 0x76, 0x1C, 0x91, 0xCB, 0xE3, 0xD8};
+const unsigned long long ctlen = 26;
+unsigned char buf[32];
+unsigned long long blen;
+
+void testAscon(void)
+{
+#ifdef OP_encrypt
+  ASSERT(!crypto_aead_encrypt(buf, &blen, pt, ptlen, ad, adlen, NULL, nonce, key));
+  ASSERT(blen == ctlen);
+  ASSERT(!memcmp(buf, ct, blen));
+#endif
+#ifdef OP_decrypt
+  ASSERT(!crypto_aead_decrypt(buf, &blen, NULL, ct, ctlen, ad, adlen, nonce, key));
+  ASSERT(blen == ptlen);
+  ASSERT(!memcmp(buf, pt, blen));
+#endif
+}
+

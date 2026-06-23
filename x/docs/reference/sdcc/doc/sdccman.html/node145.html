@@ -1,0 +1,69 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.6.1 Calling convention</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="previous" HREF="node144.html">
+<LINK REL="next" HREF="node146.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node146.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node144.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node144.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1835"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1837"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node146.html">4.7 The MOS6502 and WDC65C02</A>
+<B> Up:</B> <A
+ HREF="node144.html">4.6 The f8 port</A>
+<B> Previous:</B> <A
+ HREF="node144.html">4.6 The f8 port</A>
+ &nbsp; <B>  <A ID="tex2html1836"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1838"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00561000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">1</SPAN> Calling convention</A>
+</H2>
+
+<P>
+If the the function does not have variable arguments, and the first
+argument is not a struct or union and has 8 or 16 bits, it is passed
+in xl (8 bits) or y (16 bits). All other arguments are passed on the
+stack right-to-left. Return values are in xl (8 bit), x (16 bit),
+xxl (24 bit), yx (32 bit) or use a hidden extra pointer parameter
+pointing to the location (anything wider than 32 bit, and all struct
+/ union). The stack is not adjusted for the parameters by the callee
+(thus the caller has to do this instead).
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

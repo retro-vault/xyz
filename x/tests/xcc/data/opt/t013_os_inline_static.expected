@@ -1,0 +1,23 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_use_double
+_use_double:
+	; sdcccall(1) prologue: use_double (locals=0, temp_frame=0, stack_params=0)
+	; frameless function: no IX frame needed
+	push	hl
+	pop	de
+	add	hl, de
+	ld	a, #1
+	ld	e, a
+	ld	a, l
+	add	a, e
+	ld	l, a
+	ld	a, h
+	adc	a, #0
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ex	de, hl
+__use_double_end:
+	; epilogue: use_double
+	ret

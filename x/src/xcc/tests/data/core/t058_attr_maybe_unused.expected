@@ -1,0 +1,30 @@
+	.module xcc_output
+
+	.area _DATA
+_debug_counter:
+	.ds 2
+
+
+	.area _CODE
+
+	.globl _main
+_main:
+	; sdcccall(1) prologue: main (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #0
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ex	de, hl
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

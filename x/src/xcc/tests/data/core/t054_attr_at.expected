@@ -1,0 +1,28 @@
+	.module xcc_output
+
+	.globl _mapped_var
+_mapped_var = 16384
+
+	.area _CODE
+
+	.globl _get
+_get:
+	; sdcccall(1) prologue: get (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, (_mapped_var)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ex	de, hl
+	jp	__get_end
+__get_end:
+	; epilogue: get
+	ld	sp, ix
+	pop	ix
+	ret

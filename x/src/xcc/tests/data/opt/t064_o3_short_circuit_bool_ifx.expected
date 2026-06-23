@@ -1,0 +1,64 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_classify
+_classify:
+	; sdcccall(1) prologue: classify (locals=0, temp_frame=2, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	-2(ix), a
+	ld	a, l
+	ld	-1(ix), a
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	; receive (sdcccall1) register param handled by prologue
+	; receive (sdcccall1) register param handled by prologue
+	ld	a, -2(ix)
+	cp	#32
+	jr	z, __xcc_L0
+__xcc_L3:
+	cp	#44
+	jr	z, __xcc_L0
+	jr	__xcc_L2
+__xcc_L0:
+	ld	a, #1
+	jr	__classify_end
+__xcc_L2:
+	ld	a, -1(ix)
+	cp	#2
+	jr	z, __xcc_L4
+__xcc_L8:
+	cp	#4
+	jr	z, __xcc_L4
+__xcc_L7:
+	ld	a, -1(ix)
+	cp	#6
+	jr	z, __xcc_L4
+	jr	__xcc_L6
+__xcc_L4:
+	ld	a, #2
+	jr	__classify_end
+__xcc_L6:
+	ld	a, -2(ix)
+	cp	#97
+	jr	c, __xcc_L12
+__xcc_L13:
+	cp	#122
+	jr	z, __xcc_L9
+	jr	c, __xcc_L9
+__xcc_L12:
+	ld	a, -2(ix)
+	cp	#95
+	jr	z, __xcc_L9
+	jr	__xcc_L11
+__xcc_L9:
+	ld	a, #3
+	jr	__classify_end
+__xcc_L11:
+	xor	a
+__classify_end:
+	; epilogue: classify
+	ld	sp, ix
+	pop	ix
+	ret

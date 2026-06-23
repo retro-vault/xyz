@@ -1,0 +1,368 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>1.5 Compatibility with previous
+versions</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node8.html">
+<LINK REL="previous" HREF="node6.html">
+<LINK REL="next" HREF="node8.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node8.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node2.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node6.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html765"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html767"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node8.html">1.6 System Requirements</A>
+<B> Up:</B> <A
+ HREF="node2.html">1. Introduction</A>
+<B> Previous:</B> <A
+ HREF="node6.html">1.4 Typographic conventions</A>
+ &nbsp; <B>  <A ID="tex2html766"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html768"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00250000000000000000"></A><A ID="sec:Compatibility-with-previous"></A><A ID="149"></A>
+<BR>
+<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> Compatibility with previous
+versions
+</H1>
+
+<P>
+Newer versions have usually numerous bug fixes compared with the previous
+version. But we also sometimes introduce some incompatibilities with
+older versions. Not just for the fun of it, but to make the compiler
+more stable, efficient and standard compliant<A ID="150"></A>
+(see section <A HREF="node38.html#subsec:Standard-Compliance">3.1</A> for Standard-Compliance).
+This is a list of such changes .
+
+<UL>
+<LI>short is now equivalent to int (16 bits), it used to be equivalent
+to char (8 bits) which is not ANSI compliant. To maintain compatibility,
+old programs could be compiled using the &mdash;short-is-8bits command
+line option (option removed after the 3.6.0 release).
+</LI>
+<LI>the default directory for gcc-builds where include, library and documentation
+files are stored is now in /usr/local/share.
+</LI>
+<LI>char type parameters to vararg<A ID="153"></A>
+functions are casted to int unless explicitly casted and neither of
+the <SPAN  CLASS="textbf">&mdash;std-c90<A ID="154"></A>,</SPAN> <SPAN  CLASS="textbf">&mdash;std-c99<A ID="155"></A>,
+&mdash;std-c11<A ID="156"></A></SPAN> or <SPAN  CLASS="textbf">&mdash;std-c23<A ID="157"></A></SPAN>
+command line options is used, e.g.: 
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;char a=3;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;printf (%d %c\n,
+a, (char)a);</SPAN>
+<BR>
+will push a as an int and as a char resp if none of the above command
+line options are not defined,
+<BR>
+will push a as two ints if none of the above command line option
+is defined.
+</LI>
+<LI>pointer type parameters to vararg<A ID="160"></A>
+functions are casted to generic pointers on Harvard architectures
+(e.g. mcs51, ds390) unless explicitly casted and neither of the <SPAN  CLASS="textbf">&mdash;std-c90<A ID="161"></A>,</SPAN>
+<SPAN  CLASS="textbf">&mdash;std-c99<A ID="162"></A>, &mdash;std-c11<A ID="163"></A></SPAN>
+or <SPAN  CLASS="textbf">&mdash;std-c23<A ID="164"></A></SPAN> command line
+options is used.
+</LI>
+<LI>option &mdash;regextend has been removed.
+</LI>
+<LI>option &mdash;noregparms has been removed.
+</LI>
+<LI>option &mdash;stack-after-data has been removed.
+</LI>
+<LI>__bit<A ID="165"></A> and __sbit<A ID="166"></A> types
+now consistently behave like the C99 _Bool type with respect to type
+conversion<A ID="167"></A><A ID="168"></A>. The most
+common incompatibility resulting from this change is related to bit
+toggling<A ID="169"></A> idioms, e.g.:
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;__bit b;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;b = ~<A ID="5563"></A>b;
+/* equivalent to b=1 instead of toggling b */</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;b = !b; /* toggles b */</SPAN>&nbsp;
+<BR>
+In previous versions, both forms would have toggled the bit.
+</LI>
+<LI>in older versions, the preprocessor was always called with <SPAN  CLASS="textbf">&mdash;std-c99<A ID="176"></A></SPAN>
+regardless of the <SPAN  CLASS="textbf">&mdash;std-xxx</SPAN> setting. This is no longer
+true, and can cause compilation failures on code built with <SPAN  CLASS="textbf">&mdash;std-c90<A ID="178"></A></SPAN>
+but using c99 preprocessor features, such as one-line (//) comments
+</LI>
+<LI>in versions older than 2.8.4 the pic16 *printf() and printf_tiny()
+library functions supported undocumented and not standard compliant
+'b' binary format specifier (%b, %hb
+and %lb). The 'b' specifier is now
+disabled by default. It can be enabled by defining BINARY_SPECIFIER
+macro in files device/lib/pic16/libc/stdio/vfprintf.c and device/lib/pic16/libc/stdio/printf_tiny.c
+and recompiling the library.
+</LI>
+<LI>in versions older then 2.8.5 the unnamed bit-field structure members
+participated in initialization, which is not conforming with ISO/IEC
+9899:1999 standard (see section Section 6.7.8 Initialization, clause
+9)
+<BR>
+<BR>
+Old behaviour, before version 2.8.5:<SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;struct {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;int a : 2;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;char&nbsp; : 2;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;int b : 2;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;} s = {1, 2, 3};</SPAN>
+<BR><SPAN  CLASS="texttt">/* s.a = 1, s.b = 3 */</SPAN>
+<BR>
+<BR>
+New behaviour:<SPAN  CLASS="texttt"></SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;struct {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;int a : 2;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;char&nbsp; : 2;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;int b : 2;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;} s = {1, 2};</SPAN>
+<BR><SPAN  CLASS="texttt">/* s.a = 1, s.b = 2 */</SPAN>
+</LI>
+<LI>In 2.9.0 libraries included in SDCC packages, are in ar format. See
+section <A HREF="node52.html#subsec:Using-sdar-to">3.2.5</A>.
+</LI>
+<LI>In 3.0.0 targets for xa51 and avr are disabled by default.
+</LI>
+<LI>In 3.0.0 sdldgb and sdldz80 don't support generation of Game Boy binary
+image format. The makebin utility can be used to convert Intel Hex
+format to Game Boy binary image format.
+</LI>
+<LI>In 3.0.0 sdldgb and sdldz80 don't support generation of rrgb (Game
+Boy simulator) map file and no$gmb symbol file formats. The as2gbmap
+utility can be used to convert sdld map format to rrgb and no$gmb
+file formats.
+</LI>
+<LI>In 3.1.0 asranlib utility was renamed to sdranlib.
+</LI>
+<LI>In 3.1.0 pic14 target, structured access to SFR via <SPAN  CLASS="texttt">&lt;sfrname&gt;_bits.&lt;bitname&gt;</SPAN>
+is deprecated and replaced by <SPAN  CLASS="texttt">&lt;sfrname&gt;bits.&lt;bitname&gt;</SPAN>. It
+will be obsoleted (removed) in one of next SDCC releases. See section
+<A HREF="node159.html#subsec:Naming-of-special">4.8.8.3</A>.
+</LI>
+<LI>sdar archive managing utility and sdnm utilities were introduced in
+version 3.2.0. sdar, sdranlib and sdnm are derived from GNU Binutils
+package.
+</LI>
+<LI>In 3.2.0 the sdcclib utility is deprecated. Sdar utility should be
+used to create SDCC object file archives. Sdcclib utility will become
+obsolete in one of next SDCC releases and will be removed from SDCC
+packages.
+</LI>
+<LI>In 3.2.0 special SDCC keywords which are not preceded by a double
+underscore are obsoleted (removed). See section <A HREF="node38.html#subsec:Standard-Compliance">3.1</A>
+Standard-Compliance.
+</LI>
+<LI>In 3.2.0 compiler macro definitions not starting with double underscore
+characters are deprecated if <SPAN  CLASS="texttt">--std-cXX</SPAN> command line option
+is defined. They have been obsoleted (removed) after the 3.4.0 release
+(except for the macro SDCC, which has been removed after the 3.6.0
+release (and brought back for mcs51 for the 3.7.0 release)).
+</LI>
+<LI>In 3.2.0 new compiler macros for processor definition were introduced
+for pic14 and pic16 targets: -D__SDCC_PIC16XXXX and -D__SDCC_PIC18FXXX
+respectively. The pic16 macro definition -D__18fXXX is deprecated.
+It was obsoleted (removed) after the 3.4.0 release.
+</LI>
+<LI>In 3.2.0 pragma config for pic16 target was introduced. See section
+<A HREF="node167.html#subsec:PIC16_Pragmas">4.9.6</A>
+</LI>
+<LI>In 3.2.0 new inline assembler format <SPAN  CLASS="texttt">__asm__ (&rdquo;inline_assembler_code&rdquo;);</SPAN>
+as an addition to <SPAN  CLASS="texttt">__asm ... __endasem;</SPAN> format introduced.
+See section <A HREF="node102.html#sec:Inline-Assembler-Code">3.11</A>
+</LI>
+<LI>sdobjcopy utility was introduced in version 3.3.0. It is derived from
+GNU Binutils package.
+</LI>
+<LI>Before 3.4.0 release, intrinsic named address spaces were called &rdquo;storage
+classes&rdquo; in this manual.
+</LI>
+<LI>In 3.6.0, the default for char changed from signed to unsigned.
+</LI>
+<LI>In 3.7.0, the prototype for putchar() changed from void putchar(char)
+to int putchar(int).
+</LI>
+<LI>In 3.7.0 mcs51 and ds390 got a full _Bool/bool type, separate from
+__bit.
+</LI>
+<LI>In 3.7.0, the option <SPAN  CLASS="textbf">&mdash;nojtbound</SPAN> and the corresponding
+pragma have been deprecated.
+</LI>
+<LI>In 3.7.0, the prototype for getchar() changed from char getchar(void)
+to int getchar(void).
+</LI>
+<LI>In 3.8.6, the deprecated sdcclib was removed.
+</LI>
+<LI>In 4.0.3, _itoa, _uitoa, _ltoa, _ultoa were renamed to __itoa,
+__uitoa, __ltoa, __ultoa.
+</LI>
+<LI>In 4.1.1, typeof.h has been removed.
+</LI>
+<LI>In 4.1.3, support for <SPAN  CLASS="textbf">&mdash;oldralloc</SPAN> has been removed for
+the z80-related backends.
+</LI>
+<LI>In 4.1.10, the default calling convention switched from __sdccall(0)
+to __sdccall(1) for stm8 and gbz80.
+</LI>
+<LI>In 4.1.10, support for<SPAN  CLASS="textbf"> &mdash;profile</SPAN> has been removed for
+gbz80.
+</LI>
+<LI>In 4.1.11, the minimum Z80N Core version for the z80n port has been
+raised from 1.0 to 2.0.
+</LI>
+<LI>In 4.1.12, the default calling convention switched from __sdccall(0)
+to __sdccall(1) for z80, z180 and z80n.
+</LI>
+<LI>In 4.1.12, support for <SPAN  CLASS="textbf">&mdash;profile</SPAN> has been removed for
+z80, z180, z80n.
+</LI>
+<LI>In 4.1.13, support for <SPAN  CLASS="textbf">&mdash;profile</SPAN> has been removed.
+</LI>
+<LI>In 4.1.14, the gbz80 port was renamed to sm83.
+</LI>
+<LI>In 4.2.3, support for non-parenthesized arguments to __using and
+__interrupt was dropped.
+</LI>
+<LI>In 4.2.3, support for non-parenthesized arguments to __at that are
+not constants was dropped.
+</LI>
+<LI>In 4.2.4, the placement of __at in declarations was restricted.
+</LI>
+<LI>In 4.2.6, bool is chosen as the underlying integer type for enumerations
+with just two values.
+</LI>
+<LI>In 4.2.9, support for<SPAN  CLASS="textbf">&mdash;pedantic-parse-number</SPAN> and #pragma
+pedantic_parse_numer was dropped.
+</LI>
+<LI>In 4.2.9, support for #pragma sdcc_hash was dropped, necessitating
+a wrapper macro for literal &rdquo;#&rdquo; characters in macro bodies.
+</LI>
+<LI>In 4.2.9, support for arguments to -MMD was dropped. The output file
+can be specified via -MF instead.
+</LI>
+<LI>In 4.2.10, _sdcc_external_startup was renamed to __sdcc_external_startup
+and support for it was added to further ports.
+</LI>
+<LI>In 4.2.13, for the sm83 port, __sfr addresses need to be specified
+using the full 16-bit address.
+</LI>
+<LI>In 4.2.14, byte order in output from the %p specifier of printf()-family
+functions was corrected for big-endian platforms (stm8, hc08, s08,
+mos6502) to match uintptr_t.
+</LI>
+<LI>In 4.3.1, __builtin_rlc, __builtin_rrc and __builtin_swap
+were replaced by __builtin_rot.
+</LI>
+<LI>In 4.3.6, support for <SPAN  CLASS="textbf">&mdash;parms-in-bank1</SPAN> was removed from
+the mcs51 port.
+</LI>
+<LI>In 4.4.1, the address width in .rel files was increased from 24 bits
+to 32 bits for the z80 (and related) ports.
+</LI>
+<LI>In 4.5.2, the C23 standard library bit and byte utilities (stdbit.h)
+more closely follow the final ISO C23 standard instead of the 2022
+C2X draft.
+</LI>
+<LI>In 4.5.3, signed, short, long on __bit or __sbit gives an error
+instead of being ignored silently.
+</LI>
+<LI>In 4.5.6, bool is no longer used as an underlying type for enums without
+a fixed underlying type.
+</LI>
+<LI>In 4.5.9, support for __builtin_rot was removed. The C2Y features
+from stdbit.h can be used instead.
+</LI>
+<LI>In 4.5.10, the semantics of realloc(ptr, 0) changed from C90 to C99.
+</LI>
+<LI>In 4.5.11, the ez80_z80 port has been replaced by the ez80 port,
+and the crt0 now needs to set up both sps and spl stack pointers,
+and interrupt handlers now need to save all 24 bits of registers BC,
+DE, HL, IY if they use them (SDCC will do this automatically for __interrupt,
+but hand-written interrupt handlers might need to be adapted).
+</LI>
+<LI>In 4.5.11, for the r2k, r2ka, r3ka ports the internal interrupt table
+is generated by the compiler (instead of being part of the crt0).
+</LI>
+<LI>In 4.5.11, for the tlcs90 port requires interrupt handlers need to
+save register BY if they use it (SDCC will do this automatically for
+__interrupt, but hand-written interrupt handlers might need to be
+adapted). 
+</LI>
+<LI>In 4.5.12, void parameters may no longer be named or qualified.
+</LI>
+<LI>In 4.5.12, struct/union members other than anoymous struct/union or
+bit-fields must be named.
+</LI>
+<LI>In 4.5.13, stray non-ASCII characters in source files are an error
+instead of being silently ignored.
+</LI>
+<LI>In 4.5.15 the omission of integer promotions on explicitly cast variable
+arguments only happens for the mcs51, ds390, mos6502, mos65c02, pic14
+and pic16 ports.
+</LI>
+</UL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node8.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node2.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node6.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html765"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html767"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node8.html">1.6 System Requirements</A>
+<B> Up:</B> <A
+ HREF="node2.html">1. Introduction</A>
+<B> Previous:</B> <A
+ HREF="node6.html">1.4 Typographic conventions</A>
+ &nbsp; <B>  <A ID="tex2html766"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html768"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

@@ -1,0 +1,144 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.2.1 Single Source File Projects</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node49.html">
+<LINK REL="previous" HREF="node47.html">
+<LINK REL="next" HREF="node49.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node49.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node47.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node47.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1169"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1171"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node49.html">3.2.2 Postprocessing the Intel Hex</A>
+<B> Up:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+<B> Previous:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+ &nbsp; <B>  <A ID="tex2html1170"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1172"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00421000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Single Source File Projects</A>
+</H2>
+
+<P>
+For single source file 8051 projects the process is very simple. Compile
+your programs with the following command <SPAN  CLASS="textsf"><SPAN  CLASS="textbf">sdcc
+sourcefile.c.</SPAN></SPAN> This will compile, assemble and link
+your source file. Output files are as follows:
+
+<UL>
+<LI>sourcefile.asm<A ID="807"></A> - Assembler source<A ID="808"></A>
+file created by the compiler
+</LI>
+<LI>sourcefile.lst<A ID="809"></A> - Assembler listing<A ID="810"></A>
+file created by the Assembler
+</LI>
+<LI>sourcefile.rst<A ID="811"></A> - Assembler listing<A ID="812"></A>
+file updated with linkedit information, created by linkage editor
+</LI>
+<LI>sourcefile.sym<A ID="813"></A> - symbol listing<A ID="814"></A>
+for the sourcefile, created by the assembler
+</LI>
+<LI>sourcefile.rel<A ID="815"></A> - Object file<A ID="816"></A>
+created by the assembler, input to Linkage editor
+</LI>
+<LI>sourcefile.map<A ID="817"></A> - The memory map<A ID="818"></A>
+for the load module, created by the Linker
+</LI>
+<LI>sourcefile.mem<A ID="819"></A> - A file with a summary of the memory
+usage
+</LI>
+<LI>sourcefile.ihx<A ID="820"></A> - The load module in Intel hex format<A ID="821"></A>
+(you can select the Motorola S19 format<A ID="822"></A>
+with &mdash;out-fmt-s19<A ID="823"></A>. If you
+need another format you might want to use <SPAN  CLASS="textsf"><SPAN  CLASS="textit">objdump</SPAN></SPAN><A ID="825"></A>
+or <SPAN  CLASS="textsf"><SPAN  CLASS="textit">srecord</SPAN></SPAN><A ID="827"></A>
+- see also section subsec:Postprocessing-the-Intel). Both
+formats are documented in the documentation of srecord<A ID="829"></A>
+</LI>
+<LI>sourcefile.adb<A ID="830"></A> - An intermediate file containing
+debug information needed to create the .cdb file (with &mdash;debug<A ID="831"></A>) 
+</LI>
+<LI>sourcefile.cdb<A ID="832"></A> - An optional file (with &mdash;debug)
+containing debug information. The format is documented in cdbfileformat.pdf
+</LI>
+<LI>sourcefile.omf<A ID="833"></A> - An optional AOMF or AOMF51<A ID="834"></A>
+<A ID="OMF_file"></A>file containing debug information (generated with
+option &mdash;debug). The (Intel) <SPAN  CLASS="textit">a</SPAN>bsolute <SPAN  CLASS="textit">o</SPAN>bject <SPAN  CLASS="textit">m</SPAN>odule
+<SPAN  CLASS="textit">f</SPAN>ormat is a subformat of the OMF51 format and is commonly used
+by third party tools (debuggers<A ID="840"></A>, simulators, emulators).
+</LI>
+<LI>sourcefile.dump*<A ID="5633"></A> - Dump file to debug the
+compiler it self (generated with option &mdash;dumpall) (see section
+<A HREF="node66.html#subsec:Intermediate-Dump-Options">3.3.13</A>&nbsp; and section <A HREF="node233.html#subsec:The-anatomy-of">9.1</A>&nbsp;&rdquo;Anatomy
+of the compiler&rdquo;).
+</LI>
+</UL>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node49.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node47.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node47.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1169"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1171"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node49.html">3.2.2 Postprocessing the Intel Hex</A>
+<B> Up:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+<B> Previous:</B> <A
+ HREF="node47.html">3.2 Compiling</A>
+ &nbsp; <B>  <A ID="tex2html1170"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1172"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

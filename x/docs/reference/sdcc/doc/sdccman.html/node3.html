@@ -1,0 +1,267 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>1.1 About SDCC</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node4.html">
+<LINK REL="previous" HREF="node2.html">
+<LINK REL="next" HREF="node4.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node4.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node2.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node2.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html749"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html751"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node4.html">1.2 SDCC Suite Licenses</A>
+<B> Up:</B> <A
+ HREF="node2.html">1. Introduction</A>
+<B> Previous:</B> <A
+ HREF="node2.html">1. Introduction</A>
+ &nbsp; <B>  <A ID="tex2html750"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html752"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00210000000000000000">
+<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> About SDCC</A>
+</H1>
+
+<P>
+<SPAN  CLASS="textbf">SDCC</SPAN> (<SPAN  CLASS="textit">S</SPAN>mall <SPAN  CLASS="textit">D</SPAN>evice <SPAN  CLASS="textit">C</SPAN> <SPAN  CLASS="textit">C</SPAN>ompiler)
+is free open source, retargettable, optimizing standard (ANSI C89
+/ ISO C90, ISO C99, ISO C11 / ISO C17) C compiler suite originally
+written by <SPAN  CLASS="textbf">Sandeep Dutta</SPAN> designed for 8 bit Microprocessors.
+The current version targets Intel MCS-51 based Microprocessors (8031,
+8032, 8051, 8052<A ID="92"></A>, etc.),
+Dallas DS80C390 variants, NXP (formerly Freescale/Motorola) HC08 based
+(HC08, S08), Zilog Z80 based MCUs (Z80, Z80N, Z180, SM83, Rabbit 2000/3000/3000A,
+Toshiba TLCS-90, Zilog eZ80, ASCII R800<A ID="93"></A>),
+STMicroelectronics STM8 <A ID="94"></A>, Padauk PDK14 and PDK15. It
+can be retargeted for other microprocessors; support for Padauk PDK13,
+Rabbit 4000/5000/6000, and MOS6502 is under development, whereas Microchip
+PIC is currently unmaintained. The entire source code for the compiler
+is distributed under GPL. SDCC uses a modified version of ASXXXX<A ID="95"></A>
+&amp; ASLINK<A ID="96"></A>, free open source retargetable assembler &amp;
+linker. SDCC has extensive language extensions suitable for utilizing
+various microcontrollers and underlying hardware effectively. 
+<BR>
+You might also want to have a look at the wiki <kbd><A ID="tex2html1"
+  HREF="https://sourceforge.net/p/sdcc/wiki/">https://sourceforge.net/p/sdcc/wiki/</A></kbd>.
+<BR>
+<BR>
+In addition to the MCU specific optimizations SDCC also does a host
+of standard optimizations like:
+
+<UL>
+<LI>global sub expression elimination, 
+</LI>
+<LI>loop optimizations (loop invariant, strength reduction of induction
+variables and loop reversing), 
+</LI>
+<LI>constant folding &amp; propagation, 
+</LI>
+<LI>copy propagation, 
+</LI>
+<LI>dead code elimination 
+</LI>
+<LI>jump tables for <SPAN  CLASS="textit">switch</SPAN> statements.
+</LI>
+</UL>
+For the back-end SDCC uses a global register allocation scheme which
+should be well suited for other 8 bit MCUs.
+<BR>
+<BR>
+The peep hole optimizer uses a rule based substitution mechanism which
+is MCU independent.
+<BR>
+<BR>
+Supported data-types are:
+<BR>
+<P>
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="CENTER">type</TD>
+<TD CLASS="CENTER">width</TD>
+<TD CLASS="CENTER">default</TD>
+<TD CLASS="CENTER">signed range</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+unsigned range
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">_Bool / bool</TD>
+<TD CLASS="CENTER">8 bits, 1 byte</TD>
+<TD CLASS="CENTER">unsigned</TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+0, 1
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">char</TD>
+<TD CLASS="CENTER">8 bits, 1 byte</TD>
+<TD CLASS="CENTER">unsigned</TD>
+<TD CLASS="CENTER">-128, +127</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+0, +255
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">short</TD>
+<TD CLASS="CENTER">16 bits, 2 bytes</TD>
+<TD CLASS="CENTER">signed</TD>
+<TD CLASS="CENTER">-32.768, +32.767</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+0, +65.535
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">int</TD>
+<TD CLASS="CENTER">16 bits, 2 bytes</TD>
+<TD CLASS="CENTER">signed</TD>
+<TD CLASS="CENTER">-32.768, +32.767</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+0, +65.535
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">long</TD>
+<TD CLASS="CENTER">32 bits, 4 bytes</TD>
+<TD CLASS="CENTER">signed</TD>
+<TD CLASS="CENTER">-2.147.483.648, +2.147.483.647</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+0, +4.294.967.295
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">long long<A ID="tex2html2"
+  HREF="footnode.html#foot104"><SUP><SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN></SUP></A></TD>
+<TD CLASS="CENTER">64 bits, 8 bytes</TD>
+<TD CLASS="CENTER">signed</TD>
+<TD CLASS="CENTER">&nbsp;</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">_BitInt<A ID="tex2html3"
+  HREF="footnode.html#foot105"><SUP><SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN></SUP></A></TD>
+<TD CLASS="CENTER">8 to 64 bits, 1 to 8 bytes</TD>
+<TD CLASS="CENTER">&nbsp;</TD>
+<TD CLASS="CENTER">&nbsp;</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">float</TD>
+<TD CLASS="CENTER">4 bytes similar to IEEE 754</TD>
+<TD CLASS="CENTER">signed</TD>
+<TD CLASS="CENTER">&nbsp;</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+1.175494351E-38, 3.402823466E+38
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">pointer</TD>
+<TD CLASS="CENTER">1, 2, 3 or 4 bytes</TD>
+<TD CLASS="CENTER">generic</TD>
+<TD CLASS="CENTER">&nbsp;</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+
+</DIV></TD>
+</TR>
+<TR><TD CLASS="CENTER">__bit<A ID="tex2html4"
+  HREF="footnode.html#foot106"><SUP><SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN></SUP></A></TD>
+<TD CLASS="CENTER">1 bit</TD>
+<TD CLASS="CENTER">unsigned</TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=100>
+<DIV class="CENTER">
+0, 1
+</DIV></TD>
+</TR>
+</TABLE>
+<BR>
+The compiler also allows <SPAN  CLASS="textit">inline assembler code</SPAN> to be embedded
+anywhere in a function. In addition, routines developed in assembly
+can also be called.
+<BR>
+<BR>
+SDCC also provides an option (&mdash;cyclomatic) to report the relative
+complexity of a function. These functions can then be further optimized,
+or hand coded in assembly if needed.
+<BR>
+<BR>
+SDCC also comes with a companion source level debugger SDCDB. The
+debugger currently uses ucSim, a free open source simulator for 8051
+and other micro-controllers.
+<BR>
+<BR>
+The latest SDCC version can be downloaded from <kbd><A ID="tex2html5"
+  HREF="http://sdcc.sourceforge.net/snap.php">http://sdcc.sourceforge.net/snap.php</A></kbd>.
+<SPAN  CLASS="textit">Please note: the compiler will probably always be some steps
+ahead of this documentation</SPAN><SPAN  CLASS="textbf"><A ID="111"></A></SPAN><B><A ID="tex2html6"
+  HREF="footnode.html#foot112"><SUP><SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN></SUP></A></B><SPAN  CLASS="textbf">.</SPAN>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node4.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node2.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node2.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html749"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html751"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node4.html">1.2 SDCC Suite Licenses</A>
+<B> Up:</B> <A
+ HREF="node2.html">1. Introduction</A>
+<B> Previous:</B> <A
+ HREF="node2.html">1. Introduction</A>
+ &nbsp; <B>  <A ID="tex2html750"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html752"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

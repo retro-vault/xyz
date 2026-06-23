@@ -1,0 +1,132 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>4.1.1 pdata access by SFR</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node124.html">
+<LINK REL="previous" HREF="node122.html">
+<LINK REL="next" HREF="node124.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node124.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1702"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1704"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node124.html">4.1.2 Other Features available by</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+ &nbsp; <B>  <A ID="tex2html1703"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1705"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00511000000000000000">
+<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> pdata access by SFR</A>
+</H2>
+
+<P>
+With the upcome of devices with internal xdata and flash memory devices
+using port P2<A ID="2645"></A> as dedicated I/O port is becoming
+more popular. Switching the high byte for __pdata<A ID="2646"></A>
+access which was formerly done by port P2 is then achieved by a Special
+Function Register<A ID="2647"></A>. In well-established MCS51 tradition
+the address of this <SPAN  CLASS="textit">sfr</SPAN> is where the chip designers decided
+to put it. Needless to say that they didn't agree on a common name
+either. So that the startup code can correctly initialize xdata variables,
+you should define an sfr with the name _XPAGE<SPAN  CLASS="texttt"><A ID="2649"></A></SPAN>
+at the appropriate location if the default, port P2, is not used for
+this. Some examples are:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">__sfr __at (0x85) _XPAGE; /* Ramtron VRS51 family a.k.a. MPAGE
+*/</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">__sfr __at (0x92) _XPAGE; /* Cypress EZ-USB family,
+Texas Instruments (Chipcon) a.k.a. MPAGE */</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">__sfr __at (0x91) _XPAGE; /* Infineon (Siemens) C500
+family a.k.a. XPAGE */</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">__sfr __at (0xaf) _XPAGE; /* some Silicon Labs (Cygnal)
+chips a.k.a. EMI0CN */</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">__sfr __at (0xaa) _XPAGE; /* some Silicon Labs (Cygnal)
+chips a.k.a. EMI0CN */</SPAN>
+
+</BLOCKQUOTE>
+There are also devices without anything resembling _XPAGE, but luckily
+they usually have dual data-pointers. For these devices a different
+method can be used to correctly initialize xdata variables. A default
+implementation is already in crtxinit.asm but it needs to be assembled
+manually with DUAL_DPTR set to 1.
+
+<P>
+For more exotic implementations further customizations may be needed.
+See section <A HREF="node126.html#subsec:MCS51-Startup-Code">4.1.4</A> for other possibilities.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node124.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node122.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1702"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1704"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node124.html">4.1.2 Other Features available by</A>
+<B> Up:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+<B> Previous:</B> <A
+ HREF="node122.html">4.1 MCS51 variants</A>
+ &nbsp; <B>  <A ID="tex2html1703"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1705"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

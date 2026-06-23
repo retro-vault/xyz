@@ -1,0 +1,513 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.14.2 Stdclib functions (puts, printf, strcat etc.)</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node112.html">
+<LINK REL="previous" HREF="node110.html">
+<LINK REL="next" HREF="node112.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node112.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node109.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node110.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1531"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1533"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node112.html">3.14.3 Math functions (sinf, powf,</A>
+<B> Up:</B> <A
+ HREF="node109.html">3.14 Library Routines</A>
+<B> Previous:</B> <A
+ HREF="node110.html">3.14.1 Compiler support routines (_gptrget,</A>
+ &nbsp; <B>  <A ID="tex2html1532"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1534"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1535"
+  HREF="node111.html#SECTION004142100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> &lt;stdio.h&gt;</A>
+<UL>
+<LI><A ID="tex2html1536"
+  HREF="node111.html#SECTION004142110000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> getchar(), putchar()</A>
+<LI><A ID="tex2html1537"
+  HREF="node111.html#SECTION004142120000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> printf()</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1538"
+  HREF="node111.html#SECTION004142200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> &lt;malloc.h&gt;</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION004142000000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN> Stdclib functions (puts, printf, strcat etc.)</A>
+</H2>
+
+<P>
+
+<H3><A ID="SECTION004142100000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> &lt;stdio.h&gt;</A>
+</H3>
+
+<P>
+
+<H4><A ID="SECTION004142110000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> getchar(), putchar()</A>
+</H4>
+
+<P>
+<A ID="2261"></A>As usual on embedded systems you have to provide
+your own <SPAN  CLASS="texttt">getchar()<A ID="2262"></A></SPAN> and <SPAN  CLASS="texttt">putchar()<A ID="2263"></A><A ID="2264"></A></SPAN>
+routines. SDCC does not know whether the system connects to a serial
+line with or without handshake, LCD, keyboard or other device. And
+whether a <SPAN  CLASS="texttt">lf</SPAN> to <SPAN  CLASS="texttt">crlf</SPAN> conversion within <SPAN  CLASS="texttt">putchar()</SPAN>
+is intended. You'll find examples for serial routines f.e. in sdcc/device/lib.
+For the mcs51 this minimalistic polling <SPAN  CLASS="texttt">putchar()</SPAN> routine
+might be a start:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">int putchar (int c) {</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;while (!TI)&nbsp;&nbsp;&nbsp; /* assumes UART is initialized
+*/</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;TI = 0;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;SBUF = c;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">&nbsp;&nbsp;&nbsp;&nbsp;return c;</SPAN>
+</BLOCKQUOTE>
+<P>
+<BLOCKQUOTE><SPAN  CLASS="texttt">}</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+
+<H4><A ID="SECTION004142120000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> printf()</A>
+</H4>
+
+<P>
+The default <SPAN  CLASS="texttt">printf()<A ID="2280"></A></SPAN> implementation in <SPAN  CLASS="texttt">printf_large.c</SPAN>
+does not support float<A ID="2282"></A> (except on ds390),
+only &lt;NO FLOAT&gt;<A ID="2283"></A><A ID="2284"></A>
+will be printed instead of the value. To enable floating point output,
+recompile it with the option <SPAN  CLASS="textit">-DUSE_FLOATS=1<A ID="2285"></A></SPAN>
+on the command line. Use <SPAN  CLASS="textit">&mdash;model-large<A ID="2286"></A></SPAN>
+for the mcs51 port, since this uses a lot of memory. To enable float
+support for the pic16 targets, see <A HREF="node170.html#subsec:pic16Libraries">4.9.9</A>.
+
+<P>
+If you're short on code memory you might want to use <SPAN  CLASS="texttt">printf_small()<A ID="2288"></A></SPAN>
+<SPAN  CLASS="textit">instead</SPAN> of <SPAN  CLASS="texttt">printf().</SPAN> For the mcs51 there additionally
+are assembly versions <SPAN  CLASS="texttt">printf_tiny()<A ID="2291"></A></SPAN>
+(subset of printf using less than 270 bytes) and <SPAN  CLASS="texttt">printf_fast()<A ID="2292"></A></SPAN>
+and <SPAN  CLASS="texttt">printf_fast_f()<A ID="2293"></A></SPAN>
+(floating-point aware version of printf_fast) which should fit the
+requirements of many embedded systems (printf_fast() can be customized
+by unsetting #defines to <SPAN  CLASS="textit">not</SPAN> support long variables and field
+widths). Be sure to use only one of these printf options within a
+project.
+<BR>
+<P>
+Feature matrix of different <SPAN  CLASS="textit">printf</SPAN> options on mcs51.
+
+<P>
+<TABLE class="PAD  BORDER" style="">
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+</DIV>
+<DIV class="LEFT"><SPAN CLASS="LARGE"><SPAN  CLASS="textbf">mcs51</SPAN></SPAN> 
+</DIV></TD>
+<TD CLASS="CENTER">printf<A ID="2306"></A></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+printf </DIV>
+<DIV class="CENTER"><SPAN CLASS="SCRIPTSIZE">USE_FLOATS=1</SPAN> 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+printf_small 
+</DIV></TD>
+<TD CLASS="CENTER">printf_fast</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+printf_fast_f 
+</DIV></TD>
+<TD CLASS="CENTER">printf_tiny</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+filename 
+</DIV></TD>
+<TD CLASS="CENTER"><SPAN CLASS="SCRIPTSIZE">printf_large.c</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+</DIV>
+<DIV class="CENTER"><SPAN CLASS="SCRIPTSIZE">printf_large.c</SPAN> 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+</DIV>
+<DIV class="CENTER"><SPAN CLASS="SCRIPTSIZE">printfl.c</SPAN> 
+</DIV></TD>
+<TD CLASS="CENTER"><SPAN CLASS="SCRIPTSIZE">printf_fast.c</SPAN></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+</DIV>
+<DIV class="CENTER"><SPAN CLASS="SCRIPTSIZE">printf_fast_f.c</SPAN> 
+</DIV></TD>
+<TD CLASS="CENTER"><SPAN CLASS="SCRIPTSIZE">printf_tiny.c</SPAN></TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+&rdquo;Hello World&rdquo; size
+
+<P>
+small / large 
+</DIV></TD>
+<TD CLASS="CENTER">1.7k / 2.4k</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+4.3k / 5.6k 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+1.2k / 1.8k 
+</DIV></TD>
+<TD CLASS="CENTER">1.3k / 1.3k</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+1.9k / 1.9k 
+</DIV></TD>
+<TD CLASS="CENTER">0.44k / 0.44k</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+code size
+
+<P>
+small / large 
+</DIV></TD>
+<TD CLASS="CENTER">1.4k / 2.0k</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+2.8k / 3.7k 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+0.45k / 0.47k (+ _ltoa) 
+</DIV></TD>
+<TD CLASS="CENTER">1.2k / 1.2k</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+1.6k / 1.6k 
+</DIV></TD>
+<TD CLASS="CENTER">0.26k / 0.26k</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+formats 
+</DIV></TD>
+<TD CLASS="CENTER">cdi<SPAN  CLASS="textit">o</SPAN>psux</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+cdfi<SPAN  CLASS="textit">o</SPAN>psux 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+cd<SPAN  CLASS="textit">o</SPAN>sx 
+</DIV></TD>
+<TD CLASS="CENTER">cdsux</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+cdfsux 
+</DIV></TD>
+<TD CLASS="CENTER">cdsux</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+long (32 bit) support 
+</DIV></TD>
+<TD CLASS="CENTER">x</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+x 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+x 
+</DIV></TD>
+<TD CLASS="CENTER">x</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+x 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+byte arguments on stack 
+</DIV></TD>
+<TD CLASS="CENTER">b</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+b 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+float format<A ID="2317"></A> 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+%f 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+%f<A ID="tex2html55"
+  HREF="footnode.html#foot2318"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN></SUP></A> 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+float formats %e %g 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+field width 
+</DIV></TD>
+<TD CLASS="CENTER">x</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+x 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">x</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+x 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+string speed<A ID="tex2html56"
+  HREF="footnode.html#foot2319"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN></SUP></A>,
+
+<P>
+small / large 
+</DIV></TD>
+<TD CLASS="CENTER">1.52 / 2.59 ms</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+1.53 / 2.62 ms 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+0.92 / 0.93 ms 
+</DIV></TD>
+<TD CLASS="CENTER">0.45 / 0.45 ms</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+0.46 / 0.46 ms 
+</DIV></TD>
+<TD CLASS="CENTER">0.45 / 0.45 ms</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+int speed<A ID="tex2html57"
+  HREF="footnode.html#foot2320"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">10</SPAN></SUP></A>,
+
+<P>
+small / large 
+</DIV></TD>
+<TD CLASS="CENTER">3.01 / 3.61 ms</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+3.01 / 3.61 ms 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+3.51 / 18.13 ms 
+</DIV></TD>
+<TD CLASS="CENTER">0.22 / 0.22 ms</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+0.23 / 0.23 ms 
+</DIV></TD>
+<TD CLASS="CENTER">0.25 / 0.25 ms<A ID="tex2html58"
+  HREF="footnode.html#foot2321"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN></SUP></A></TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+long speed<A ID="tex2html59"
+  HREF="footnode.html#foot2322"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">12</SPAN></SUP></A>,
+
+<P>
+small / large 
+</DIV></TD>
+<TD CLASS="CENTER">5.37 / 6.31 ms</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+5.37 / 6.31 ms 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+8.71 / 40.65 ms 
+</DIV></TD>
+<TD CLASS="CENTER">0.40 / 0.40 ms</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+0.40 / 0.40 ms 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+<TR><TD CLASS="LEFT MIDDLE"  WIDTH=0>
+<DIV class="LEFT">
+float speed<A ID="tex2html60"
+  HREF="footnode.html#foot2323"><SUP><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">13</SPAN></SUP></A>,
+
+<P>
+small / large 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+7.49 / 22.47 ms 
+</DIV></TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+- 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+<TD CLASS="LEFT TOP"  WIDTH=0>
+<DIV class="CENTER">
+1.04 / 1.04 ms 
+</DIV></TD>
+<TD CLASS="CENTER">-</TD>
+</TR>
+</TABLE>
+
+<P>
+
+<H3><A ID="SECTION004142200000000000000"></A><A ID="2325"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> &lt;malloc.h&gt;
+</H3>
+
+<P>
+As of SDCC 2.6.2 you no longer need to call an initialization routine
+before using dynamic memory allocation<A ID="2326"></A>
+and a default heap<A ID="2327"></A> space of 1024 bytes is provided
+for malloc to allocate memory from. If you need a different heap size
+you need to recompile _heap.c with the required size defined in HEAP_SIZE.
+It is recommended to make a copy of this file into your project directory
+and compile it there with:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">sdcc -c _heap.c -D HEAP_SIZE=2048</SPAN>
+
+</BLOCKQUOTE>
+And then link it with:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">sdcc main.rel _heap.rel</SPAN>
+
+</BLOCKQUOTE>
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node112.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node109.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node110.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1531"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1533"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node112.html">3.14.3 Math functions (sinf, powf,</A>
+<B> Up:</B> <A
+ HREF="node109.html">3.14 Library Routines</A>
+<B> Previous:</B> <A
+ HREF="node110.html">3.14.1 Compiler support routines (_gptrget,</A>
+ &nbsp; <B>  <A ID="tex2html1532"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1534"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

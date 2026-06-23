@@ -1,0 +1,92 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>8.1.1 Sub-expression Elimination</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node215.html">
+<LINK REL="previous" HREF="node213.html">
+<LINK REL="next" HREF="node215.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node215.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node213.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html2301"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html2303"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node215.html">8.1.2 Dead-Code Elimination</A>
+<B> Up:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+<B> Previous:</B> <A
+ HREF="node213.html">8.1 Optimizations</A>
+ &nbsp; <B>  <A ID="tex2html2302"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html2304"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H2><A ID="SECTION00911000000000000000"></A><A ID="4207"></A>
+<BR>
+<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Sub-expression Elimination
+</H2>
+
+<P>
+The compiler does local and <SPAN  CLASS="textit">g</SPAN>lobal <SPAN  CLASS="textit">c</SPAN>ommon <SPAN  CLASS="textit">s</SPAN>ubexpression
+<SPAN  CLASS="textit">e</SPAN>limination, e.g.: 
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">i = x + y + 1;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">j = x + y;</SPAN>
+
+</BLOCKQUOTE>
+will be translated to
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">iTemp = x + y;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">i = iTemp + 1;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">j = iTemp;</SPAN>
+
+</BLOCKQUOTE>
+Some subexpressions are not as obvious as the above example, e.g.:
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">a-&gt;b[i].c = 10;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">a-&gt;b[i].d = 11;</SPAN>
+
+</BLOCKQUOTE>
+In this case the address arithmetic a-&gt;b[i] will be computed only
+once; the equivalent code in C would be.
+<BLOCKQUOTE>
+<SPAN  CLASS="texttt">iTemp = a-&gt;b[i];</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">iTemp.c = 10;</SPAN>&nbsp;
+<BR><SPAN  CLASS="texttt">iTemp.d = 11;</SPAN>
+
+</BLOCKQUOTE>
+The compiler will try to keep these temporary variables in registers.
+
+<P>
+<BR><HR>
+
+</BODY>
+</HTML>

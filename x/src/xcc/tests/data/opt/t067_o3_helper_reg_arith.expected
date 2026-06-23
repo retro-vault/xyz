@@ -1,0 +1,37 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_f
+_f:
+	; O3 sdcc-style leaf fast path: two-arg word mix helper
+	ld	c, l
+	ld	b, h
+	ld	hl, #40503
+	add	hl, de
+	ld	a, c
+	xor	l
+	ld	l, a
+	ld	a, b
+	xor	h
+	ld	b, a
+	ld	h, a
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	add	hl, hl
+	ld	a, b
+	rrca
+	rrca
+	rrca
+	and	#31
+	or	l
+	ld	l, a
+	ld	a, e
+	xor	#74
+	ld	c, a
+	ld	a, d
+	xor	#127
+	ld	b, a
+	add	hl, bc
+	ex	de, hl
+	ret

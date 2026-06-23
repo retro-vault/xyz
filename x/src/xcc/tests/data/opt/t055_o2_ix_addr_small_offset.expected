@@ -1,0 +1,28 @@
+	.module	xcc_output
+	.area	_CODE
+	.globl	_f
+_f:
+	; sdcccall(1) prologue: f (locals=2, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	; keep incoming register arg a live in register for first use
+	ex	de, hl
+	ld	hl, #-2
+	add	hl, sp
+	ld	sp, hl
+	ex	de, hl
+	; receive (sdcccall1) param a at -2(ix)
+	push	ix
+	pop	hl
+	dec	hl
+	dec	hl
+	ld	b, h
+	ld	c, l
+	.globl	_sink_int_ptr
+	call	_sink_int_ptr
+__f_end:
+	; epilogue: f
+	ld	sp, ix
+	pop	ix
+	ret

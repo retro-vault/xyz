@@ -1,0 +1,52 @@
+	.module xcc_output
+
+
+	.area _CODE
+
+	.globl _main
+_main:
+	; sdcccall(1) prologue: main (locals=2, temp_frame=6, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	ld	a, #1
+	ld	-1(ix), a
+	ld	a, #0
+	ld	-2(ix), a
+	ld	a, -1(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	a, -2(ix)
+	ld	l, a
+	ld	h, #0
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	e, -6(ix)
+	ld	d, -5(ix)
+	add	hl, de
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ex	de, hl
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

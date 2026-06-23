@@ -1,0 +1,165 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3.15.1 MCS51 Memory Models</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node116.html">
+<LINK REL="previous" HREF="node114.html">
+<LINK REL="next" HREF="node116.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node116.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1558"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1560"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node116.html">3.15.2 DS390 Memory Model</A>
+<B> Up:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+<B> Previous:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html1559"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1561"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html1562"
+  HREF="node115.html#SECTION004151100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Small, Medium, Large and Huge</A>
+<LI><A ID="tex2html1563"
+  HREF="node115.html#SECTION004151200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> External Stack</A>
+</UL>
+<!--End of Table of Child-Links-->
+<HR>
+
+<H2><A ID="SECTION004151000000000000000"></A><A ID="2343"></A><A ID="2344"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN> MCS51 Memory Models
+</H2>
+
+<P>
+
+<H3><A ID="SECTION004151100000000000000">
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Small, Medium, Large and Huge</A>
+</H3>
+
+<P>
+SDCC allows four memory models for MCS51 code, <SPAN  CLASS="textsl">small, medium,
+large</SPAN> and <SPAN  CLASS="textsl">huge</SPAN>. Modules compiled with different memory models
+should <SPAN  CLASS="textit">never</SPAN> be combined together or the results would be unpredictable.
+The library routines supplied with the compiler are compiled for all
+models (however, the libraries for –stack-auto are compiled for the
+small and large models only). The compiled library modules are contained
+in separate directories as small, medium, large and huge so that you
+can link to the appropriate set.
+
+<P>
+When the medium, large or huge model is used all variables declared
+without specifying an intrinsic named address space will be allocated
+into the external ram, this includes all parameters and local variables
+(for non-reentrant<A ID="2349"></A> functions). Medium model uses
+pdata and large and huge models use xdata. When the small model is
+used variables without an explicitly specified intrinsic named address
+space are allocated in the internal ram.
+
+<P>
+The huge model compiles all functions as <SPAN  CLASS="textit">banked<A HREF="node125.html#subsec:Bankswitching">4.1.3</A></SPAN>
+and is otherwise equal to large for now. All other models compile
+the functions without bankswitching by default.
+
+<P>
+Judicious usage of the processor specific intrinsic named address
+spaces<A ID="2351"></A> and the 'reentrant' function
+type will yield much more efficient code, than using the large model.
+Several optimizations are disabled when the program is compiled using
+the large model, it is therefore recommended that the small model
+be used unless absolutely required.
+
+<P>
+
+<H3><A ID="SECTION004151200000000000000"></A><A ID="subsec:External-Stack"></A><A ID="2353"></A><A ID="2354"></A>
+<BR>
+<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> External Stack
+</H3>
+
+<P>
+The external stack (&mdash;xstack option<A ID="2355"></A>)
+is located in pdata<A ID="2356"></A>
+memory (usually at the start of the external ram segment) and uses
+all unused space in pdata (max. 256 bytes). When &mdash;xstack option
+is used to compile the program, the parameters and local variables<A ID="2357"></A>
+of all reentrant functions are allocated in this area. This option
+is provided for programs with large stack space requirements. When
+used with the &mdash;stack-auto<A ID="2358"></A>
+option, all parameters and local variables are allocated on the external
+stack (note: support libraries will need to be recompiled with the
+same options. There is a predefined target in the library makefile).
+
+<P>
+The compiler outputs the higher order address byte of the external
+ram segment into port P2<A ID="2359"></A> (see also section
+<A HREF="node122.html#subsec:MCS51-variants">4.1</A>), therefore when using the External Stack
+option, this port <SPAN  CLASS="textit">may not</SPAN> be used by the application program.
+
+<P>
+
+<DIV CLASS="navigation"><HR>
+<!--Navigation Panel-->
+<A
+ HREF="node116.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node114.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html1558"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html1560"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node116.html">3.15.2 DS390 Memory Model</A>
+<B> Up:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+<B> Previous:</B> <A
+ HREF="node114.html">3.15 Memory Models</A>
+ &nbsp; <B>  <A ID="tex2html1559"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html1561"
+  HREF="node237.html">Index</A></B> </DIV>
+<!--End of Navigation Panel-->
+
+</BODY>
+</HTML>

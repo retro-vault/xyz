@@ -1,0 +1,430 @@
+<!DOCTYPE HTML>
+
+<!--Converted with LaTeX2HTML 2023 (Released January 1, 2023) -->
+<HTML lang="en">
+<HEAD>
+<TITLE>3. Using SDCC</TITLE>
+
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<META NAME="viewport" CONTENT="width=device-width, initial-scale=1.0">
+<META NAME="Generator" CONTENT="LaTeX2HTML v2023">
+
+<LINK REL="STYLESHEET" HREF="sdccman.css">
+
+<LINK REL="next" HREF="node121.html">
+<LINK REL="previous" HREF="node10.html">
+<LINK REL="next" HREF="node38.html">
+</HEAD>
+
+<BODY >
+
+<DIV CLASS="navigation"><!--Navigation Panel-->
+<A
+ HREF="node38.html">
+<IMG WIDTH="37" HEIGHT="24" ALT="next" SRC="next.png"></A> 
+<A
+ HREF="sdccman.html">
+<IMG WIDTH="26" HEIGHT="24" ALT="up" SRC="up.png"></A> 
+<A
+ HREF="node36.html">
+<IMG WIDTH="63" HEIGHT="24" ALT="previous" SRC="prev.png"></A> 
+<A ID="tex2html928"
+  HREF="node1.html">
+<IMG WIDTH="65" HEIGHT="24" ALT="contents" SRC="contents.png"></A> 
+<A ID="tex2html930"
+  HREF="node237.html">
+<IMG WIDTH="43" HEIGHT="24" ALT="index" SRC="index.png"></A> 
+<BR>
+<B> Next:</B> <A
+ HREF="node38.html">3.1 Standard-Compliance</A>
+<B> Up:</B> <A
+ HREF="sdccman.html">SDCC Compiler User Guide</A>
+<B> Previous:</B> <A
+ HREF="node36.html">2.9.5 sdcdb - Source Level</A>
+ &nbsp; <B>  <A ID="tex2html929"
+  HREF="node1.html">Contents</A></B> 
+ &nbsp; <B>  <A ID="tex2html931"
+  HREF="node237.html">Index</A></B> 
+<BR>
+<BR></DIV>
+<!--End of Navigation Panel-->
+
+<H1><A ID="SECTION00400000000000000000">
+<SPAN CLASS="arabic">3</SPAN>. Using SDCC</A>
+</H1>
+
+<P>
+<BR><HR>
+<!--Table of Child-Links-->
+<A ID="CHILD_LINKS"><STRONG>Subsections</STRONG></A>
+
+<UL CLASS="ChildLinks">
+<LI><A ID="tex2html932"
+  HREF="node38.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Standard-Compliance</A>
+<UL>
+<LI><A ID="tex2html933"
+  HREF="node39.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> ISO C90 and ANSI C89</A>
+<UL>
+<LI><A ID="tex2html934"
+  HREF="node39.html#SECTION00411100000000000000">Deviations from standard compliance</A>
+<LI><A ID="tex2html935"
+  HREF="node39.html#SECTION00411200000000000000">Features missing in some ports</A>
+</UL>
+<LI><A ID="tex2html936"
+  HREF="node40.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> ISO C94 (aka ISO C95)</A>
+<UL>
+<LI><A ID="tex2html937"
+  HREF="node40.html#SECTION00412100000000000000">Implementation status</A>
+</UL>
+<LI><A ID="tex2html938"
+  HREF="node41.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> ISO C99</A>
+<UL>
+<LI><A ID="tex2html939"
+  HREF="node41.html#SECTION00413100000000000000">Deviations from standard compliance</A>
+<LI><A ID="tex2html940"
+  HREF="node41.html#SECTION00413200000000000000">Features missing in some ports</A>
+</UL>
+<LI><A ID="tex2html941"
+  HREF="node42.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> ISO C11 and ISO C17</A>
+<UL>
+<LI><A ID="tex2html942"
+  HREF="node42.html#SECTION00414100000000000000">Implementation status</A>
+</UL>
+<LI><A ID="tex2html943"
+  HREF="node43.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> ISO C23</A>
+<UL>
+<LI><A ID="tex2html944"
+  HREF="node43.html#SECTION00415100000000000000">Deviations from standard compliance</A>
+<LI><A ID="tex2html945"
+  HREF="node43.html#SECTION00415200000000000000">Features missing in some ports</A>
+</UL>
+<LI><A ID="tex2html946"
+  HREF="node44.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">6</SPAN> ISO C2y preview</A>
+<UL>
+<LI><A ID="tex2html947"
+  HREF="node44.html#SECTION00416100000000000000">Implementation status</A>
+</UL>
+<LI><A ID="tex2html948"
+  HREF="node45.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">7</SPAN> Embedded C</A>
+<LI><A ID="tex2html949"
+  HREF="node46.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN> Implementation-defined behavior</A>
+<UL>
+<LI><A ID="tex2html950"
+  HREF="node46.html#SECTION00418100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> Translation</A>
+<LI><A ID="tex2html951"
+  HREF="node46.html#SECTION00418200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> Environment</A>
+<LI><A ID="tex2html952"
+  HREF="node46.html#SECTION00418300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> Identifiers</A>
+<LI><A ID="tex2html953"
+  HREF="node46.html#SECTION00418400000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Characters</A>
+<LI><A ID="tex2html954"
+  HREF="node46.html#SECTION00418500000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Integers</A>
+<LI><A ID="tex2html955"
+  HREF="node46.html#SECTION00418600000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> Floating point</A>
+<LI><A ID="tex2html956"
+  HREF="node46.html#SECTION00418700000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> Arrays and Pointers</A>
+<LI><A ID="tex2html957"
+  HREF="node46.html#SECTION00418800000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">8</SPAN> Hints</A>
+<LI><A ID="tex2html958"
+  HREF="node46.html#SECTION00418900000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">9</SPAN> Structures, unions, enumerations and bit-fields</A>
+<LI><A ID="tex2html959"
+  HREF="node46.html#SECTION004181000000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">10</SPAN> Qualifiers</A>
+<LI><A ID="tex2html960"
+  HREF="node46.html#SECTION004181100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">11</SPAN> Preprocessing directives</A>
+<LI><A ID="tex2html961"
+  HREF="node46.html#SECTION004181200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">12</SPAN> Library functions</A>
+<LI><A ID="tex2html962"
+  HREF="node46.html#SECTION004181300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">13</SPAN> Architecture</A>
+</UL>
+</UL>
+<BR>
+<LI><A ID="tex2html963"
+  HREF="node47.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Compiling</A>
+<UL>
+<LI><A ID="tex2html964"
+  HREF="node48.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> Single Source File Projects</A>
+<LI><A ID="tex2html965"
+  HREF="node49.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> Postprocessing the Intel Hex file</A>
+<LI><A ID="tex2html966"
+  HREF="node50.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> Projects with Multiple Source Files</A>
+<LI><A ID="tex2html967"
+  HREF="node51.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN> Projects with Additional Libraries</A>
+<LI><A ID="tex2html968"
+  HREF="node52.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">5</SPAN> Using sdar to Create and Manage Libraries</A>
+</UL>
+<BR>
+<LI><A ID="tex2html969"
+  HREF="node53.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN> Command Line Options</A>
+<UL>
+<LI><A ID="tex2html970"
+  HREF="node54.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> Processor Selection Options</A>
+<LI><A ID="tex2html971"
+  HREF="node55.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">2</SPAN> Preprocessor Options</A>
+<LI><A ID="tex2html972"
+  HREF="node56.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN> Optimization Options</A>
+<LI><A ID="tex2html973"
+  HREF="node57.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN> Other Options</A>
+<LI><A ID="tex2html974"
+  HREF="node58.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN> Linker Options</A>
+<LI><A ID="tex2html975"
+  HREF="node59.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">6</SPAN> MCS51 Options</A>
+<LI><A ID="tex2html976"
+  HREF="node60.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">7</SPAN> DS390 / DS400 Options</A>
+<LI><A ID="tex2html977"
+  HREF="node61.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN> Options common to all z80-related ports (z80, z80n, z180, r2k, r3ka,
+r4k, r5k, r6k, sm83, tlcs90, ez80, r800)</A>
+<LI><A ID="tex2html978"
+  HREF="node62.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN> Z80 Options (apply to z80, z80n,
+z180, r2k, r3ka, tlcs90, ez80)</A>
+<LI><A ID="tex2html979"
+  HREF="node63.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">10</SPAN> SM83 Options</A>
+<LI><A ID="tex2html980"
+  HREF="node64.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN> STM8 Options</A>
+<LI><A ID="tex2html981"
+  HREF="node65.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">12</SPAN> MOS6502 Options (apply
+to mos6502, mos65c02)</A>
+<LI><A ID="tex2html982"
+  HREF="node66.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">13</SPAN> Intermediate Dump Options</A>
+<LI><A ID="tex2html983"
+  HREF="node67.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN> Redirecting output on Windows Shells</A>
+</UL>
+<BR>
+<LI><A ID="tex2html984"
+  HREF="node68.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">4</SPAN> Environment variables</A>
+<LI><A ID="tex2html985"
+  HREF="node69.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN> SDCC Language Extensions</A>
+<UL>
+<LI><A ID="tex2html986"
+  HREF="node70.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN> MCS51/DS390 intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html987"
+  HREF="node70.html#SECTION00451100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> __data
+/ __near</A>
+<LI><A ID="tex2html988"
+  HREF="node70.html#SECTION00451200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata
+/ __far</A>
+<LI><A ID="tex2html989"
+  HREF="node70.html#SECTION00451300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> __idata</A>
+<LI><A ID="tex2html990"
+  HREF="node70.html#SECTION00451400000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> __pdata</A>
+<LI><A ID="tex2html991"
+  HREF="node70.html#SECTION00451500000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">5</SPAN> __code</A>
+<LI><A ID="tex2html992"
+  HREF="node70.html#SECTION00451600000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">6</SPAN> __bit</A>
+<LI><A ID="tex2html993"
+  HREF="node70.html#SECTION00451700000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">7</SPAN> __sfr / __sfr16 /
+__sfr32 / __sbit</A>
+<LI><A ID="tex2html994"
+  HREF="node70.html#SECTION00451800000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">8</SPAN> Pointers to MCS51/DS390 intrinsic named address spaces</A>
+<LI><A ID="tex2html995"
+  HREF="node70.html#SECTION00451900000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">9</SPAN> Notes on MCS51 memory layout</A>
+</UL>
+<LI><A ID="tex2html996"
+  HREF="node71.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN> Z80/Z180/eZ80 intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html997"
+  HREF="node71.html#SECTION00452100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> __sfr (in/out to 8-bit addresses)</A>
+<LI><A ID="tex2html998"
+  HREF="node71.html#SECTION00452200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> __banked __sfr (in/out to 16-bit addresses)</A>
+<LI><A ID="tex2html999"
+  HREF="node71.html#SECTION00452300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">3</SPAN> __sfr (in0/out0 to 8 bit addresses on Z180/HD64180)</A>
+<LI><A ID="tex2html1000"
+  HREF="node71.html#SECTION00452400000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">4</SPAN> __far (eZ80 only)</A>
+</UL>
+<LI><A ID="tex2html1001"
+  HREF="node72.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">3</SPAN> SM83 intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html1002"
+  HREF="node72.html#SECTION00453100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> __sfr</A>
+</UL>
+<LI><A ID="tex2html1003"
+  HREF="node73.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">4</SPAN> Rabbit intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html1004"
+  HREF="node73.html#SECTION00454100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">1</SPAN> __sfr</A>
+<LI><A ID="tex2html1005"
+  HREF="node73.html#SECTION00454200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">4</SPAN>.<SPAN CLASS="arabic">2</SPAN> __far </A>
+</UL>
+<LI><A ID="tex2html1006"
+  HREF="node74.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">5</SPAN> TLCS-90 intrinsic named address spaces</A>
+<LI><A ID="tex2html1007"
+  HREF="node75.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">6</SPAN> HC08/S08 intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html1008"
+  HREF="node75.html#SECTION00456100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">1</SPAN> __data </A>
+<LI><A ID="tex2html1009"
+  HREF="node75.html#SECTION00456200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">6</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata </A>
+</UL>
+<LI><A ID="tex2html1010"
+  HREF="node76.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">7</SPAN> PDK14/PDK15 intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html1011"
+  HREF="node76.html#SECTION00457100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">7</SPAN>.<SPAN CLASS="arabic">1</SPAN> __sfr</A>
+<LI><A ID="tex2html1012"
+  HREF="node76.html#SECTION00457200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">7</SPAN>.<SPAN CLASS="arabic">2</SPAN> __sfr16</A>
+</UL>
+<LI><A ID="tex2html1013"
+  HREF="node77.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN> MOS6502 intrinsic named address spaces</A>
+<UL>
+<LI><A ID="tex2html1014"
+  HREF="node77.html#SECTION00458100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> __zp/__data
+/__near</A>
+<LI><A ID="tex2html1015"
+  HREF="node77.html#SECTION00458200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> __xdata
+/__far</A>
+</UL>
+<LI><A ID="tex2html1016"
+  HREF="node78.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">9</SPAN> Non-intrinsic named address spaces</A>
+<LI><A ID="tex2html1017"
+  HREF="node79.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">10</SPAN> Absolute Addressing</A>
+<LI><A ID="tex2html1018"
+  HREF="node80.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">11</SPAN> __sdcc_external_startup</A>
+<LI><A ID="tex2html1019"
+  HREF="node81.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">12</SPAN> Preserved register specification</A>
+<LI><A ID="tex2html1020"
+  HREF="node82.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">13</SPAN> Binary constants</A>
+<LI><A ID="tex2html1021"
+  HREF="node83.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">14</SPAN> Returning void</A>
+<LI><A ID="tex2html1022"
+  HREF="node84.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">15</SPAN> Omitting promotion on arguments of vararg function (mcs51, ds390,
+mos6502, mos65c02, pic14 and pic16 only)</A>
+<LI><A ID="tex2html1023"
+  HREF="node85.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">16</SPAN> Parameter forward declarations</A>
+<LI><A ID="tex2html1024"
+  HREF="node86.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">5</SPAN>.<SPAN CLASS="arabic">17</SPAN> _Optional</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1025"
+  HREF="node87.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">6</SPAN> Parameters and Local
+Variables</A>
+<LI><A ID="tex2html1026"
+  HREF="node88.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">7</SPAN> Overlaying</A>
+<LI><A ID="tex2html1027"
+  HREF="node89.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN> Interrupt Service Routines</A>
+<UL>
+<LI><A ID="tex2html1028"
+  HREF="node90.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN> General Information</A>
+<UL>
+<LI><A ID="tex2html1029"
+  HREF="node90.html#SECTION00481100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Common interrupt
+pitfall: variable not declared <SPAN  CLASS="textit">volatile</SPAN></A>
+<LI><A ID="tex2html1030"
+  HREF="node90.html#SECTION00481200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> Common interrupt
+pitfall: <SPAN  CLASS="textit">non-atomic access</SPAN></A>
+<LI><A ID="tex2html1031"
+  HREF="node90.html#SECTION00481300000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">3</SPAN> Common interrupt
+pitfall: <SPAN  CLASS="textit">stack overflow</SPAN></A>
+<LI><A ID="tex2html1032"
+  HREF="node90.html#SECTION00481400000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">4</SPAN> Common interrupt
+pitfall: <SPAN  CLASS="textit">use of non-reentrant functions</SPAN></A>
+</UL>
+<LI><A ID="tex2html1033"
+  HREF="node91.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">2</SPAN> MCS51/DS390 Interrupt Service Routines</A>
+<LI><A ID="tex2html1034"
+  HREF="node92.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">3</SPAN> HC08 Interrupt Service Routines</A>
+<LI><A ID="tex2html1035"
+  HREF="node93.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">4</SPAN> Z80, Z180 and eZ80 Interrupt Service Routines</A>
+<LI><A ID="tex2html1036"
+  HREF="node94.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">5</SPAN> Rabbit 2000, 3000, 3000A, 4000, 5000, and 6000 Interrupt Service
+Routines</A>
+<LI><A ID="tex2html1037"
+  HREF="node95.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">6</SPAN> SM83 and TLCS-90 Interrupt Service Routines</A>
+<LI><A ID="tex2html1038"
+  HREF="node96.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">8</SPAN>.<SPAN CLASS="arabic">7</SPAN> STM8 Interrupt Service Routines</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1039"
+  HREF="node97.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN> Enabling and Disabling Interrupts</A>
+<UL>
+<LI><A ID="tex2html1040"
+  HREF="node98.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">1</SPAN> Critical Functions and Critical Statements</A>
+<LI><A ID="tex2html1041"
+  HREF="node99.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">2</SPAN> Enabling and Disabling Interrupts directly</A>
+<LI><A ID="tex2html1042"
+  HREF="node100.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">9</SPAN>.<SPAN CLASS="arabic">3</SPAN> Semaphore locking (mcs51/ds390)</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1043"
+  HREF="node101.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">10</SPAN> Functions using private register banks(mcs51/ds390)</A>
+<LI><A ID="tex2html1044"
+  HREF="node102.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN> Inline Assembler Code</A>
+<UL>
+<LI><A ID="tex2html1045"
+  HREF="node103.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN> Inline Assembler Code Formats</A>
+<UL>
+<LI><A ID="tex2html1046"
+  HREF="node103.html#SECTION004111100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Old __asm ... __endasm; Format</A>
+<LI><A ID="tex2html1047"
+  HREF="node103.html#SECTION004111200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> New __asm__ (''inline_assembler_code'')
+Format</A>
+</UL>
+<LI><A ID="tex2html1048"
+  HREF="node104.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">2</SPAN> A Step by Step Introduction</A>
+<LI><A ID="tex2html1049"
+  HREF="node105.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">3</SPAN> Naked Functions</A>
+<LI><A ID="tex2html1050"
+  HREF="node106.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">11</SPAN>.<SPAN CLASS="arabic">4</SPAN> Use of Labels within Inline Assembler</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1051"
+  HREF="node107.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">12</SPAN> Support routines for integer multiplicative operators</A>
+<LI><A ID="tex2html1052"
+  HREF="node108.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">13</SPAN> Floating Point Support</A>
+<LI><A ID="tex2html1053"
+  HREF="node109.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN> Library Routines</A>
+<UL>
+<LI><A ID="tex2html1054"
+  HREF="node110.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">1</SPAN> Compiler support routines (_gptrget, _mulint etc.)</A>
+<LI><A ID="tex2html1055"
+  HREF="node111.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN> Stdclib functions (puts, printf, strcat etc.)</A>
+<UL>
+<LI><A ID="tex2html1056"
+  HREF="node111.html#SECTION004142100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN> &lt;stdio.h&gt;</A>
+<UL>
+<LI><A ID="tex2html1057"
+  HREF="node111.html#SECTION004142110000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> getchar(), putchar()</A>
+<LI><A ID="tex2html1058"
+  HREF="node111.html#SECTION004142120000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> printf()</A>
+</UL>
+<LI><A ID="tex2html1059"
+  HREF="node111.html#SECTION004142200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">2</SPAN>.<SPAN CLASS="arabic">2</SPAN> &lt;malloc.h&gt;</A>
+</UL>
+<LI><A ID="tex2html1060"
+  HREF="node112.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">3</SPAN> Math functions (sinf, powf, sqrtf etc.)</A>
+<UL>
+<LI><A ID="tex2html1061"
+  HREF="node112.html#SECTION004143100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">1</SPAN> &lt;math.h&gt;</A>
+</UL>
+<LI><A ID="tex2html1062"
+  HREF="node113.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">14</SPAN>.<SPAN CLASS="arabic">4</SPAN> Other libraries</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1063"
+  HREF="node114.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN> Memory Models</A>
+<UL>
+<LI><A ID="tex2html1064"
+  HREF="node115.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN> MCS51 Memory Models</A>
+<UL>
+<LI><A ID="tex2html1065"
+  HREF="node115.html#SECTION004151100000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">1</SPAN> Small, Medium, Large and Huge</A>
+<LI><A ID="tex2html1066"
+  HREF="node115.html#SECTION004151200000000000000"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">1</SPAN>.<SPAN CLASS="arabic">2</SPAN> External Stack</A>
+</UL>
+<LI><A ID="tex2html1067"
+  HREF="node116.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">2</SPAN> DS390 Memory Model</A>
+<LI><A ID="tex2html1068"
+  HREF="node117.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">3</SPAN> STM8 Memory Models</A>
+<LI><A ID="tex2html1069"
+  HREF="node118.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">15</SPAN>.<SPAN CLASS="arabic">4</SPAN> MOS6502 Memory Models</A>
+</UL>
+<BR>
+<LI><A ID="tex2html1070"
+  HREF="node119.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">16</SPAN> Pragmas</A>
+<LI><A ID="tex2html1071"
+  HREF="node120.html"><SPAN CLASS="arabic">3</SPAN>.<SPAN CLASS="arabic">17</SPAN> Defines Created by the Compiler</A>
+</UL>
+<!--End of Table of Child-Links-->
+<BR><HR>
+
+</BODY>
+</HTML>
