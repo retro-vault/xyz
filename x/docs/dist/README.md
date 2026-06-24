@@ -38,7 +38,7 @@ xcc main.c --oformat=binary -Ttext=0x8000 -o app.bin
 
 # Debug a program
 xcc -g main.c -o app.xl
-xgdb-z80 --listen 127.0.0.1:9000 &
+xemu --listen 127.0.0.1:9000 &
 xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 ```
 
@@ -52,14 +52,15 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 | `xopt` | Standalone Z80 assembly optimizer | `share/doc/XOPT.md` |
 | `xar` | Static library archiver | `share/doc/XAR.md` |
 | `xobjcopy` | Object/archive format conversion | `share/doc/XOBJCOPY.md` |
-| `xgdb`, `xgdb-z80` | Source-level debugger and Z80 gdbserver | `share/doc/XGDB.md` |
+| `xgdb` | Source-level debugger | `share/doc/XGDB.md` |
+| `xemu` | Standalone Z80 emulator and remote debug target | `share/doc/XEMU.md` |
 
 ## Prefix layout
 
 ```text
 bin/          the tools
-lib/          host SDK libraries (libxbfd, libxopt, librsp, libxgdb)
-include/      host SDK headers (xbfd/, xopt/, rsp/, xgdb/)
+lib/          host SDK libraries (libxbfd, libxopt, librsp, libxgdb, libxemu, libxz80)
+include/      host SDK headers (xbfd/, xopt/, rsp/, xgdb/, xemu/, xz80/)
 z80/include/  C library headers for the target
 z80/lib/      crt0, linker scripts, libc, runtime, platform libraries
 share/doc/    tool manuals

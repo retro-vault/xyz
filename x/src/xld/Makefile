@@ -17,7 +17,8 @@ HEADERS         = $(wildcard include/xld/*.h)
 TARGET          = xld
 INCLUDE         = -Iinclude -I$(XBFD_INC) -I$(XGDB_INC)
 
-TEST_MAIN       = tests/test_main.cpp
+TEST_DIR        = $(ROOT)/tests/tests/xld
+TEST_MAIN       = $(TEST_DIR)/test_main.cpp
 TEST_FILTER     = $(filter-out src/main.cpp,$(SOURCES))
 TEST_TARGET     = xld_tests
 
@@ -43,7 +44,7 @@ $(BIN_OUTPUT):
 
 test: xbfd-lib $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
 	$(CXX) -o $(OUTPUT_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
-		$(CXXFLAGS) $(INCLUDE) -Itests $(XBFD_LIB)
+		$(CXXFLAGS) $(INCLUDE) -I$(TEST_DIR) $(XBFD_LIB)
 	$(OUTPUT_DIR)/$(TEST_TARGET)
 
 clean:

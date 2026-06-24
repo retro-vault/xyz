@@ -4,7 +4,7 @@ BUILD_DIR ?= $(REPO_ROOT)/build
 DIST_DIR ?= $(REPO_ROOT)/bin/x
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 
-SUBDIRS := xbfd xopt xz80 rsp xgdb
+SUBDIRS := xbfd xopt xz80 rsp xgdb xemu
 
 .PHONY: all clean $(SUBDIRS)
 

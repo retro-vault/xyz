@@ -1,1 +1,0 @@
--Wno-deprecated-declarations

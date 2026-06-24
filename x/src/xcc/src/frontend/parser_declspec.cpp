@@ -9,8 +9,99 @@
 //
 #include "frontend/parser.h"
 #include "frontend/const_eval.h"
+#include <unordered_map>
 
 namespace xcc {
+
+namespace {
+
+type_ptr make_incomplete_owner_ref(const type_ptr &owner) {
+    if (!owner)
+        return owner;
+    if (owner->kind == type_kind::STRUCT)
+        return type::make_struct(owner->tag);
+    if (owner->kind == type_kind::UNION)
+        return type::make_union(owner->tag);
+    return owner;
+}
+
+type_ptr decycle_field_type_impl(
+    const type_ptr &ty,
+    const type_ptr &owner,
+    std::unordered_map<const type *, type_ptr> &memo) {
+    if (!ty || !owner)
+        return ty;
+
+    if (ty == owner)
+        return make_incomplete_owner_ref(owner);
+
+    auto it = memo.find(ty.get());
+    if (it != memo.end())
+        return it->second;
+
+    bool changed = false;
+    auto copy = std::make_shared<type>(*ty);
+    memo.emplace(ty.get(), copy);
+
+    if (ty->base) {
+        auto new_base = decycle_field_type_impl(ty->base, owner, memo);
+        if (new_base != ty->base) {
+            copy->base = new_base;
+            changed = true;
+        }
+    }
+
+    if (ty->ret) {
+        auto new_ret = decycle_field_type_impl(ty->ret, owner, memo);
+        if (new_ret != ty->ret) {
+            copy->ret = new_ret;
+            changed = true;
+        }
+    }
+
+    if (!ty->params.empty()) {
+        std::vector<type_ptr> new_params = ty->params;
+        bool params_changed = false;
+        for (size_t i = 0; i < ty->params.size(); ++i) {
+            new_params[i] = decycle_field_type_impl(ty->params[i], owner, memo);
+            if (new_params[i] != ty->params[i])
+                params_changed = true;
+        }
+        if (params_changed) {
+            copy->params = std::move(new_params);
+            changed = true;
+        }
+    }
+
+    if (!ty->fields.empty()) {
+        std::vector<struct_field> new_fields = ty->fields;
+        bool fields_changed = false;
+        for (size_t i = 0; i < ty->fields.size(); ++i) {
+            new_fields[i].type =
+                decycle_field_type_impl(ty->fields[i].type, owner, memo);
+            if (new_fields[i].type != ty->fields[i].type)
+                fields_changed = true;
+        }
+        if (fields_changed) {
+            copy->fields = std::move(new_fields);
+            changed = true;
+        }
+    }
+
+    if (!changed) {
+        memo[ty.get()] = ty;
+        return ty;
+    }
+
+    return copy;
+}
+
+type_ptr decycle_field_type(const type_ptr &ty, const type_ptr &owner) {
+    std::unordered_map<const type *, type_ptr> memo;
+    return decycle_field_type_impl(ty, owner, memo);
+}
+
+} // namespace
 
 // ----- parse_declaration_specifiers ----------------------------------
 // Parses a sequence of: storage-class-specifier | type-specifier | type-qualifier
@@ -39,6 +130,7 @@ decl_spec parser::parse_declaration_specifiers() {
     bool is_const    = false;
     bool is_volatile = false;
     bool is_restrict = false;
+    bool is_atomic   = false;
 
     type_ptr explicit_type; // for struct/union/enum
 
@@ -92,11 +184,14 @@ decl_spec parser::parse_declaration_specifiers() {
         if (k == tk::KW_RESTRICT) { is_restrict = true; consume(); continue; }
         if (k == tk::KW__ATOMIC) {
             consume();
+            is_atomic = true;
             // _Atomic(type-name) form — parse and strip the qualifier (Z80 uses DI/EI stubs)
             if (check(tk::LPAREN) && !explicit_type) {
                 expect(tk::LPAREN);
                 if (is_type_start()) {
                     decl_spec ads = parse_declaration_specifiers();
+                    if (ads.is_deduced)
+                        error("_Atomic cannot be applied to type 'auto' in C23");
                     explicit_type = ads.base_type ? ads.base_type->unqual() : nullptr;
                     parse_abstract_declarator(explicit_type ? explicit_type : type::make_int());
                 }
@@ -213,8 +308,15 @@ decl_spec parser::parse_declaration_specifiers() {
                 explicit_type = t ? t : ds.base_type;
             } else {
                 auto e = parse_expression();
-                if (e && e->type) explicit_type = e->type;
-                else              explicit_type = type::make_int();
+                if (auto *str = dynamic_cast<string_literal_expr *>(e.get())) {
+                    explicit_type = type::make_array(
+                        type::make_char(),
+                        static_cast<int>(str->value.size()) + 1);
+                } else if (e && e->type) {
+                    explicit_type = e->type;
+                } else {
+                    explicit_type = type::make_int();
+                }
             }
             if (strip_quals && explicit_type) explicit_type = explicit_type->unqual();
             expect(tk::RPAREN);
@@ -279,8 +381,12 @@ decl_spec parser::parse_declaration_specifiers() {
                        !has_int && !has_float && !has_double && !has_complex &&
                        !has_short && !has_long && !has_llong && !has_unsigned &&
                        sc == storage_class::AUTO);
+    if (is_atomic && is_deduced)
+        error("_Atomic cannot be applied to type 'auto' in C23");
     // If deducing, reset storage class to NONE (auto deduction ≠ auto storage).
     if (is_deduced) sc = storage_class::NONE;
+    if (is_atomic && base && base->kind == type_kind::ARRAY)
+        error("_Atomic cannot be applied to array type");
 
     if (!is_deduced) {
         bool preserves_tag_identity =
@@ -333,6 +439,13 @@ void parser::parse_struct_body(type_ptr stype, bool is_union) {
 
         decl_spec fds   = parse_declaration_specifiers();
         type_ptr  fbase = fds.base_type;
+        if (!fbase) {
+            if (fds.is_deduced)
+                error("'auto' not allowed in struct member");
+            else
+                error("a type specifier is required for struct member declaration");
+            fbase = type::make_int();
+        }
 
         // Anonymous struct/union with no declarator: promote fields directly.
         if (check(tk::SEMICOLON) &&
@@ -357,7 +470,7 @@ void parser::parse_struct_body(type_ptr stype, bool is_union) {
 
             struct_field field;
             field.name = fname;
-            field.type = ftype;
+            field.type = decycle_field_type(ftype, stype);
 
             if (check(tk::COLON)) {
                 consume();

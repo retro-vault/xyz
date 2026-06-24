@@ -1,0 +1,2 @@
+host_golden = gcc
+host_arg = -lm

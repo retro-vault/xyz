@@ -7,6 +7,7 @@
 #include "frontend/const_eval.h"
 #include "frontend/ast.h"
 #include <cmath>
+#include <limits>
 
 namespace xcc {
 
@@ -59,6 +60,127 @@ static std::optional<double> evaluate_fp(const expr *e) {
     return std::nullopt;
 }
 
+static const struct_field *find_named_field(const type *agg,
+                                            const std::string &member) {
+    if (!agg)
+        return nullptr;
+    for (const auto &field : agg->fields) {
+        if (field.name == member)
+            return &field;
+    }
+    return nullptr;
+}
+
+static int slot_index_for_offset(const type *agg, int offset) {
+    if (!agg)
+        return -1;
+    int slot = -1;
+    int last_offset = std::numeric_limits<int>::min();
+    for (const auto &field : agg->fields) {
+        if (field.name.empty())
+            continue;
+        if (slot < 0 || field.offset != last_offset) {
+            ++slot;
+            last_offset = field.offset;
+        }
+        if (field.offset == offset)
+            return slot;
+    }
+    return -1;
+}
+
+static std::optional<int64_t> evaluate_aggregate_member(type_ptr agg_type,
+                                                        const expr *init,
+                                                        const std::string &member);
+
+static std::optional<int64_t> evaluate_member_value(const struct_field *field,
+                                                    const expr *value) {
+    if (!field || !value)
+        return std::nullopt;
+    auto v = const_expr_evaluator::evaluate(value);
+    if (!v)
+        return std::nullopt;
+    if (field->type && field->type->is_integer())
+        return apply_integer_cast(*v, field->type.get());
+    return v;
+}
+
+static std::optional<int64_t> search_designated_member(const init_list_expr *il,
+                                                       const struct_field *target) {
+    if (!il || !target)
+        return std::nullopt;
+    for (const auto &elem : il->elements) {
+        if (elem.field_name && *elem.field_name == target->name) {
+            if (auto v = evaluate_member_value(target, elem.value.get()))
+                return v;
+        }
+        if (auto *nested = dynamic_cast<const init_list_expr *>(elem.value.get())) {
+            if (auto v = search_designated_member(nested, target))
+                return v;
+        }
+    }
+    return std::nullopt;
+}
+
+static std::optional<int64_t> evaluate_aggregate_member(type_ptr agg_type,
+                                                        const expr *init,
+                                                        const std::string &member) {
+    if (!agg_type || !init)
+        return std::nullopt;
+
+    if (auto *cl = dynamic_cast<const compound_literal_expr *>(init)) {
+        return evaluate_aggregate_member(cl->type ? cl->type : agg_type,
+                                         cl->init.get(), member);
+    }
+
+    const auto *agg = agg_type.get();
+    if (!agg || (agg->kind != type_kind::STRUCT && agg->kind != type_kind::UNION))
+        return std::nullopt;
+
+    const struct_field *target = find_named_field(agg, member);
+    if (!target)
+        return std::nullopt;
+
+    auto *il = dynamic_cast<const init_list_expr *>(init);
+    if (!il)
+        return std::nullopt;
+
+    if (auto v = search_designated_member(il, target))
+        return v;
+
+    const int target_slot = slot_index_for_offset(agg, target->offset);
+    if (target_slot < 0)
+        return std::nullopt;
+
+    int current_slot = 0;
+    for (const auto &elem : il->elements) {
+        if (elem.field_name) {
+            const struct_field *designated = find_named_field(agg, *elem.field_name);
+            if (!designated)
+                continue;
+            int designated_slot = slot_index_for_offset(agg, designated->offset);
+            current_slot = (agg->kind == type_kind::UNION || designated_slot < 0)
+                             ? 0
+                             : designated_slot + 1;
+            continue;
+        }
+
+        if (current_slot == target_slot) {
+            if (auto v = evaluate_member_value(target, elem.value.get()))
+                return v;
+            if (auto *nested = dynamic_cast<const init_list_expr *>(elem.value.get())) {
+                if (auto v = search_designated_member(nested, target))
+                    return v;
+            }
+        }
+
+        if (agg->kind != type_kind::UNION)
+            ++current_slot;
+    }
+
+    return std::nullopt;
+}
+
 std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
     if (!e) return std::nullopt;
 
@@ -66,6 +188,18 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
     if (auto *ch  = dynamic_cast<const char_literal_expr *>(e)) return ch->value;
 
     if (auto *sz = dynamic_cast<const sizeof_expr *>(e)) {
+        if (sz->is_countof) {
+            if (sz->sizeof_type &&
+                sz->sizeof_type->kind == type_kind::ARRAY &&
+                sz->sizeof_type->array_size >= 0) {
+                return sz->sizeof_type->array_size;
+            }
+            if (sz->sizeof_expr_op && sz->sizeof_expr_op->type &&
+                sz->sizeof_expr_op->type->kind == type_kind::ARRAY) {
+                return sz->sizeof_expr_op->type->array_size;
+            }
+            return std::nullopt;
+        }
         if (sz->sizeof_type)
             return sz->is_alignof ? sz->sizeof_type->align() : sz->sizeof_type->size();
         if (sz->sizeof_expr_op && sz->sizeof_expr_op->type)
@@ -146,6 +280,58 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
         case unary_op::BNOT: return ~*v;
         case unary_op::NOT:  return !*v ? 1 : 0;
         default: return std::nullopt;
+        }
+    }
+
+    if (auto *idx = dynamic_cast<const index_expr *>(e)) {
+        auto i = evaluate(idx->index.get());
+        auto *s = dynamic_cast<const string_literal_expr *>(idx->base.get());
+        if (!i || !s || *i < 0)
+            return std::nullopt;
+        size_t pos = static_cast<size_t>(*i);
+        if (pos >= s->value.size())
+            return std::nullopt;
+
+        int64_t value = static_cast<unsigned char>(s->value[pos]);
+        if (idx->type && !idx->type->is_unsigned() && value >= 0x80)
+            value = static_cast<int64_t>(static_cast<int8_t>(value));
+        return value;
+    }
+
+    if (auto *cl = dynamic_cast<const compound_literal_expr *>(e)) {
+        if (!cl->init)
+            return std::nullopt;
+        auto v = evaluate(cl->init.get());
+        if (!v)
+            return std::nullopt;
+        if (cl->type && cl->type->is_integer())
+            return apply_integer_cast(*v, cl->type.get());
+        return v;
+    }
+
+    if (auto *mem = dynamic_cast<const member_expr *>(e)) {
+        if (auto *id = dynamic_cast<const ident_expr *>(mem->object.get())) {
+            if (id->sym && id->sym->init_expr &&
+                id->sym->type &&
+                (id->sym->type->kind == type_kind::STRUCT ||
+                 id->sym->type->kind == type_kind::UNION)) {
+                if (auto v = evaluate_aggregate_member(id->sym->type,
+                                                       id->sym->init_expr,
+                                                       mem->member)) {
+                    if (mem->type && mem->type->is_integer())
+                        return apply_integer_cast(*v, mem->type.get());
+                    return v;
+                }
+            }
+        }
+
+        if (auto *cl = dynamic_cast<const compound_literal_expr *>(mem->object.get())) {
+            if (auto v = evaluate_aggregate_member(cl->type, cl->init.get(),
+                                                   mem->member)) {
+                if (mem->type && mem->type->is_integer())
+                    return apply_integer_cast(*v, mem->type.get());
+                return v;
+            }
         }
     }
 

@@ -29,6 +29,7 @@ To run one phase only:
 ./tests/e2e_test.sh --no-build --phase xas
 ./tests/e2e_test.sh --no-build --phase xar
 ./tests/e2e_test.sh --no-build --phase xgdb
+./tests/e2e_test.sh --no-build --phase xemu
 ./tests/e2e_test.sh --no-build --phase mdr
 ./tests/e2e_test.sh --no-build --phase chain
 ```
@@ -43,6 +44,7 @@ Current phase names are:
 - `xas`
 - `xar`
 - `xgdb`
+- `xemu`
 - `mdr`
 - `chain`
 
@@ -52,12 +54,13 @@ Current phase names are:
 |-------|----------------|-------|
 | `build` | Host-tool rebuild for the core toolchain pieces used by the suite | Only runs unless `--no-build` is passed |
 | `xz80` | `lib/xz80` unit tests | CPU/disassembler library validation |
-| `xcc` | `src/xc/xcc/tests/run_tests.sh` | Compiler codegen, semantic, and optimizer regressions |
-| `xcc-exec` | `src/xc/xcc/tests/run_exec_tests.sh` | Execution-oriented compiler regressions |
+| `xcc` | `x/tests/run_tests.sh --filter xcc` | Unified manifest-driven compiler compile/run regressions |
+| `xcc-exec` | `x/tests/run_tests.sh --filter xcc_exec_` | Execution-oriented compiler regressions with xemu and optional host gcc goldens |
 | `xld` | `src/xc/xld` tests | Linker parsing, placement, relocation, and emission |
-| `xas` | `src/xc/xas/tests/asm_compare_test.sh` plus `make -C src/xc/xas test` | Parity against `sdasz80` plus format-conversion coverage |
+| `xas` | `x/tests/tests/xas/asm_compare_test.sh` plus `make -C x/src/xas test` | Parity against `sdasz80` plus format-conversion coverage |
 | `xar` | Archive smoke tests inside the wrapper | Create, list, and link-against archive flow |
 | `xgdb` | `lib/xgdb` tests | Debugger library-level coverage |
+| `xemu` | `lib/xemu` plus `src/xemu` smoke tests | Emulator library coverage plus direct stdio execution |
 | `mdr` | `tests/mdr-emu` | Microdrive end-to-end validation |
 | `chain` | Full `xcc -> xas -> xld` integration | Verifies valid XL binary output on representative programs |
 
@@ -73,9 +76,11 @@ make -C src/xc/xas test
 make -C src/xc/xas test-libs
 make -C src/xc/xld test
 make -C lib/xgdb test
+make -C lib/xemu test
+make -C src/xemu test
 make -C y/tests/mdr-emu test
-bash src/xc/xcc/tests/run_tests.sh ./bin/x/bin/xcc
-bash src/xc/xcc/tests/run_exec_tests.sh ./bin/x/bin/xcc
+bash x/tests/run_tests.sh ./bin/x/bin/xcc --filter xcc
+bash x/tests/run_tests.sh ./bin/x/bin/xcc --filter xcc_exec_
 make -C src/xc/xcc bench
 ```
 
@@ -85,7 +90,7 @@ For a repeatable compiler-size benchmark against SDCC that measures only
 generated translation-unit code, use:
 
 ```sh
-bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc
+bash archive/x/tests/tests/xcc-legacy/run_codegen_bench.sh ./bin/x/bin/xcc
 ```
 
 By default this benchmarks the `exec/int` suite with `sdcccall(1)` and
@@ -109,7 +114,7 @@ The benchmark writes:
 To cover all exec suites instead of only integer tests:
 
 ```sh
-bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc --suite all
+bash archive/x/tests/tests/xcc-legacy/run_codegen_bench.sh ./bin/x/bin/xcc --suite all
 ```
 
 ## Practical Refactoring Checklist

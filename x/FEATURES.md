@@ -29,7 +29,7 @@ examples.
 | [§4. One Toolchain, Two Object Worlds](#4-one-toolchain-two-object-worlds) | SDCC `.rel` / `.lib` and GNU ELF / `.a` modes in one suite. |
 | [§5. Assembly Dialect Translation](#5-assembly-dialect-translation) | Convert SDCC-style assembly to GNU style, and back again. |
 | [§6. Dual Debug Model](#6-dual-debug-model) | CDB for SDCC-style builds and DWARF2 for ELF builds. |
-| [§7. Integrated Z80 Debugger](#7-integrated-z80-debugger) | `xgdb`, `xgdb-z80`, source stepping, breakpoints, and emulator attach. |
+| [§7. Integrated Z80 Debugger](#7-integrated-z80-debugger) | `xgdb`, `xemu`, source stepping, breakpoints, and emulator attach. |
 | [§8. Relocatable XL Output](#8-relocatable-xl-output) | Native XL images with relocation tables for loaders and OSes. |
 | [§9. Reserved Address Ranges In The Linker](#9-reserved-address-ranges-in-the-linker) | Keep memory holes, MMIO, ROM, stacks, and firmware areas out of allocations. |
 | [§10. Multiple Final Image Formats](#10-multiple-final-image-formats) | Emit XL, raw binary, ELF, Intel HEX, and other deployment formats. |
@@ -450,20 +450,20 @@ address looks wrong.
 
 ### 7. Integrated Z80 Debugger
 
-**What:** `xgdb` (GDB-style front end) + `xgdb-z80` (built-in Z80 emulator
+**What:** `xgdb` (GDB-style front end) + `xemu` (standalone Z80 emulator
 speaking GDB remote protocol over TCP).
 
 **When:** Debug on your workstation without hardware, or attach `xgdb` to any
 remote target that speaks the same protocol.
 
-**How it works:** Build with `-g`. Start `xgdb-z80` as the "machine" — it loads
+**How it works:** Build with `-g`. Start `xemu` as the "machine" — it loads
 your binary at `--origin` and sets PC/SP. Start `xgdb`, point it at the same
 image plus the CDB file, and connect with `--remote`. Then use normal commands:
 `break main`, `run`, `next`, `step`, `print x`, `continue`.
 
 ```
 # Terminal 1 — emulator target
-xgdb-z80 --listen 127.0.0.1:9000 \
+xemu --listen 127.0.0.1:9000 \
          --load-bin app.bin --origin 0x0100 --pc 0x0100
 
 # Terminal 2 — debugger
@@ -473,7 +473,7 @@ xgdb --exec app.bin --cdb app.cdb --map app.map --remote 127.0.0.1:9000
 ```
 # XL workflow (CDB name follows the -o basename)
 xcc -g main.c -o app.xl
-xgdb-z80 --listen 127.0.0.1:9000 &
+xemu --listen 127.0.0.1:9000 &
 xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 ```
 
@@ -481,8 +481,8 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 
 | Tool | Flag | Meaning |
 |---|---|---|
-| `xgdb-z80` | `--origin ADDR` | Where raw binary is loaded in RAM |
-| `xgdb-z80` | `--pc ADDR` | Initial program counter (often = origin) |
+| `xemu` | `--origin ADDR` | Where raw binary is loaded in RAM |
+| `xemu` | `--pc ADDR` | Initial program counter (often = origin) |
 | `xgdb` | `--cdb FILE` | SDCC debug database from `xld -g` |
 | `xgdb` | `-d DIR` | Extra source search path |
 
@@ -1084,7 +1084,7 @@ xas main.opt.s -o main.rel
 xld main.rel -g -o main.xl
 
 # 5. Debug
-xgdb-z80 --listen 127.0.0.1:9000 &
+xemu --listen 127.0.0.1:9000 &
 xgdb --exec main.xl --cdb main.cdb --remote 127.0.0.1:9000
 ```
 

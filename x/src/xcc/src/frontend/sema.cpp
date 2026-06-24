@@ -23,6 +23,40 @@ namespace xcc {
 
 // ----- attribute application -----------------------------------------
 
+static type_ptr apply_array_qualifiers_to_element(const type_ptr &elem,
+                                                  const type_ptr &array_ty) {
+    if (!elem || !array_ty)
+        return elem;
+    if (!array_ty->is_const && !array_ty->is_volatile &&
+        !array_ty->is_restrict)
+        return elem;
+
+    auto qualified = std::make_shared<type>(*elem);
+    qualified->is_const    = qualified->is_const || array_ty->is_const;
+    qualified->is_volatile = qualified->is_volatile || array_ty->is_volatile;
+    qualified->is_restrict = qualified->is_restrict || array_ty->is_restrict;
+    return qualified;
+}
+
+static type_ptr subscript_element_type(const type_ptr &ty) {
+    if (!ty)
+        return nullptr;
+
+    type_ptr unqualified = ty->unqual();
+    if (!unqualified)
+        return nullptr;
+
+    if ((unqualified->kind == type_kind::POINTER ||
+         unqualified->kind == type_kind::ARRAY) &&
+        unqualified->base) {
+        if (unqualified->kind == type_kind::ARRAY)
+            return apply_array_qualifiers_to_element(unqualified->base, ty);
+        return unqualified->base;
+    }
+
+    return nullptr;
+}
+
 static bool attrs_specify_call_abi(const attr_list &attrs) {
     for (const auto &a : attrs) {
         if (a.ns == "sdcc" &&
@@ -314,17 +348,9 @@ void sema::visit(index_expr &e) {
     if (e.index) e.index->accept(*this);
 
     auto set_from_subscriptable = [&](const type_ptr &t) -> bool {
-        if (!t)
-            return false;
-        type_ptr u = t->unqual();
-        if (!u)
-            return false;
-        if ((u->kind == type_kind::ARRAY || u->kind == type_kind::POINTER) && u->base) {
-            e.type = u->base;
-            e.is_lvalue = true;
-            return true;
-        }
-        return false;
+        e.type = subscript_element_type(t);
+        e.is_lvalue = (e.type != nullptr);
+        return e.type != nullptr;
     };
 
     if (set_from_subscriptable(e.base ? e.base->type : nullptr))

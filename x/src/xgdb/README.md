@@ -1,43 +1,33 @@
 # xgdb
 
-This directory contains the current debugger front-end and the current
-reference remote target.
+`xgdb` is the debugger frontend for programs built with `xcc -g`.
 
-Built binaries:
+Built binary:
 
 - `bin/x/bin/xgdb`
-- `bin/x/bin/xgdb-z80`
 
-## Components
+Related sibling tool:
 
-`xgdb`
+- `bin/x/bin/xemu` — standalone Z80 emulator and remote debug target
 
-- a reasonably minimal GDB-like command-line debugger
-- loads SDCC `.cdb` debug information and `.map` linker output for source-level debugging
+## What xgdb does
+
+- provides a GDB-like command-line debugger
+- loads SDCC `.cdb` debug information and optional `.map` linker output
 - talks to remote targets through `librsp`
 - falls back cleanly to symbol/disassembly-only debugging when a linked
   function has no source file
 
-`xgdb-z80`
-
-- a small reference Z80 remote target
-- uses the vendored `z80ex` CPU core
-- loads a raw binary into 64K memory and exposes it through the stub
-  protocol
-
-`xgdb-z80` is not meant to replace your full emulator. Its real job is
-to give the debugger stack a known-good target for bring-up and tests.
-
 ## Build
 
 ```sh
-make -C src/xc/xgdb all
+make -C x/src/xgdb all
 ```
 
 Run the MI smoke test:
 
 ```sh
-make -C src/xc/xgdb test
+make -C x/src/xgdb test
 ```
 
 ## xgdb Usage
@@ -58,8 +48,8 @@ Supported startup switches:
 - `-q`, `--quiet`
 - `-h`, `--help`
 
-If `--cdb` is not given and `--exec foo.bin` is set, `xgdb` also
-tries `foo.bin.cdb` and `foo.bin.map` as sidecars.
+If `--cdb` is not given and `--exec foo.bin` is set, `xgdb` also tries
+`foo.bin.cdb` and `foo.bin.map` as sidecars.
 
 For machine-interface (IDE) integration use:
 
@@ -81,10 +71,6 @@ For DDD integration use `xgdb` directly:
 ```sh
 ddd --debugger bin/x/bin/xgdb
 ```
-
-DDD classifies debuggers partly by executable name. Now that the real
-binary is named `xgdb`, DDD selects its GDB frontend and passes the
-expected `-q -fullname` startup flags.
 
 The long-term goal for the interactive command language is GNU GDB
 compatibility, not emulating the SDCC debugger command set.
@@ -138,7 +124,7 @@ Address expressions currently supported by `break`, `disassemble`, and
 Start the reference target:
 
 ```sh
-bin/x/bin/xgdb-z80 --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
+bin/x/bin/xemu --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
 ```
 
 Connect with the debugger:
@@ -184,51 +170,29 @@ still knows its address range and can debug it through:
 - `disassemble`
 - `x/Ni ADDR`
 
-The debugger will no longer pretend that such functions belong to a
-previous source file just to keep source stepping alive.
+## Pairing With xemu
 
-## xgdb-z80 Usage
+`xemu` is the default companion target for local debugger bring-up.
 
-Basic form:
-
-```sh
-bin/x/bin/xgdb-z80 --listen 127.0.0.1:9000 --load-bin test.bin --origin 0x0000 --pc 0x0000 --sp 0xFFFF
-```
-
-Supported switches:
+Common options:
 
 - `--listen HOST:PORT`
 - `--load-bin FILE`
 - `--origin ADDR`
 - `--pc ADDR`
 - `--sp ADDR`
-- `-q`, `--quiet`
-- `-h`, `--help`
+- `--run`
+- `--stdin-port ADDR`
+- `--stdout-port ADDR`
 
-Behavior today:
-
-- 64K flat RAM
-- raw binary load at `origin`
-- Z80 register access through `z80ex`
-- software-side breakpoint list checked before instruction execution
-- `continue`, `step_instruction`, `pause`, `read/write memory`, `read/write registers`
-
-When embedding the same transport in a real emulator, the intended
-shutdown pattern is:
-
-- run `serve()` inside a loop like `while (server.is_listening())`
-- call `server.close()` from another thread when the emulator is
-  shutting down
-
-That now wakes a blocking `serve()` call even if it is waiting in
-`accept()` or on an already connected client.
+See [x/src/xemu/README.md](/home/tstih/data/retro-vault/xyz/x/src/xemu/README.md)
+for the standalone emulator details and `libxemu` API.
 
 ## What This Is And Is Not
 
 What it is:
 
 - enough debugger surface to inspect memory, symbols, lines, and locals
-- enough remote target surface to test the debugger end to end
 - a GDB-style CLI and MI interface for IDE integration
 - a GDB Remote Serial Protocol transport path through `librsp`
 
@@ -237,7 +201,6 @@ What it is not yet:
 - a DAP mode exposed by the main `xgdb` executable
 - a source-level expression evaluator
 - a call stack unwinder
-- a full emulator integration for Iskra Delta Partner devices
 
 Those are natural next steps, but this layer is already enough to start
 debugger-driven bring-up against a remote Z80 target.

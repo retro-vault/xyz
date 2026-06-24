@@ -11,7 +11,7 @@ Release status:
   `x/tests/c23/setups/xcc-z80/bin/run_xcc_z80.sh`.
 - Kept the dedicated `x` release pipeline that builds and publishes `x.tar.gz`.
 - Preserved the `xcc`, `xas`, `xar`, `xld`, `xobjcopy`, `xopt`, `xgdb`, and
-  `xgdb-z80` tool set introduced in earlier alpha tags.
+  `xemu` tool set introduced in earlier alpha tags.
 
 ## v1.7.0 - Alpha - 2026-06-20
 
@@ -60,7 +60,7 @@ Release status:
 
 - Marked the transition from the earlier `xlink`/`xdbg`-centric stack to a
   staged `xc` toolchain built around `xcc`, `xas`, `xar`, `xld`, `xgdb`, and
-  `xgdb-z80`.
+  `xemu`.
 - Added a large assembler-based libc surface under `x/libc`, including new
   headers and implementations for `assert`, `complex`, `ctype`, `errno`,
   `fenv`, `inttypes`, `locale`, `math`, `setjmp`, `signal`, `stdlib`,

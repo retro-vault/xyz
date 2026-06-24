@@ -6,9 +6,11 @@ and the target toolchain.
 ## Current Libraries
 
 - `rsp/`
-  GDB Remote Serial Protocol transport used by `xgdb` and `xgdb-z80`
+  GDB Remote Serial Protocol transport used by `xgdb` and `xemu`
 - `xgdb/`
   debugger-side document model and disassembly library
+- `xemu/`
+  reusable Z80 emulator library plus RSP target/session helpers
 - `xbfd/`
   object, binary, and debug-info reader/writer support
 - `xz80/`
@@ -34,6 +36,7 @@ Useful focused commands:
 
 ```sh
 make -C x/lib/xgdb test
+make -C x/lib/xemu test
 make -C x/lib/xz80 test
 make -C x/libc
 ```
@@ -42,3 +45,4 @@ make -C x/libc
 
 - [librsp](rsp/README.md)
 - [libxgdb](xgdb/README.md)
+- [libxemu](xemu/README.md)

@@ -118,7 +118,9 @@ stage-includes:
 	cp -R $(X_ROOT)/lib/xbfd/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/lib/xopt/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/lib/rsp/include/. $(PUBLIC_INCLUDE_DIR)/
+	cp -R $(X_ROOT)/lib/xz80/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/lib/xgdb/include/. $(PUBLIC_INCLUDE_DIR)/
+	cp -R $(X_ROOT)/lib/xemu/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/libc/include/. $(TARGET_INCLUDE_DIR)/
 	cp $(Y_ROOT)/include/yos.h $(TARGET_INCLUDE_DIR)/yos.h
 
@@ -150,7 +152,11 @@ stage-xcc-support:
 	    base="$$(basename "$${src%.s}")"; \
 	    skip=0; \
 	    case "$$base" in \
-	        fs*|*2fs|fs2*|fp*|fitosf|fstoi|cabsf|cargf|cimag|conjf|creal|complex_i) \
+	        cabsf|cargf|cimag|conjf|creal|complex_i) \
+	            skip=1 ;; \
+	    esac; \
+	    case "$$base" in \
+	        fs*|*2fs|fs2*|fp*|fitosf|fstoi) \
 	            if [ "$(LIBC_FLOAT)" = "0" ]; then skip=1; fi ;; \
 	    esac; \
 	    case "$$base" in \

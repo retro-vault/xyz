@@ -45,7 +45,7 @@ public:
 
     // Execute exactly one instruction.  Returns the number of T-states
     // consumed (4–23 for documented opcodes).
-    int  step()     noexcept;
+    int  step();
 
     // Raise a non-maskable interrupt.
     void nmi()      noexcept;

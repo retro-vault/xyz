@@ -6,12 +6,12 @@ This document describes the current state of the repository and the target struc
 
 The project is a single monorepo containing several related but conceptually distinct products:
 
-- **Toolchain ("X Tools")**: xcc (C compiler), xas (assembler), xld (linker), xopt (standalone Z80 assembly optimizer), xar, xobjcopy, xgdb, plus supporting bits (some runtime code, bfd, etc.). Located primarily under `src/xc/`.
+- **Toolchain ("X Tools")**: xcc (C compiler), xas (assembler), xld (linker), xopt (standalone Z80 assembly optimizer), xar, xobjcopy, xgdb, xemu, plus supporting bits (some runtime code, bfd, etc.). Located primarily under `src/xc/`.
 - **C Library**: Hand-written Z80 assembler implementation of (mostly) C23 libc. Located in `lib/libc/`. Must be usable both by the toolchain (for testing) and by the OS.
-- **Low-level Runtime**: SDCC-compatible helpers for 64-bit integers, double, float, etc. (`src/xc/xcc/lib/runtime/` + `tests/runtime/`).
+- **Low-level Runtime**: SDCC-compatible helpers for 64-bit integers, double, float, etc. (`src/xc/xcc/lib/runtime/` + `tests/tests/runtime/`).
 - **Operating System**: YOS kernel, drivers, basic applications (`src/yos/` and related directories).
 - **Supporting libraries & tools**: xz80 emulator, xbfd, debug infrastructure, host tools (appmake, microdrive tools, etc.).
-- **Tests**: Currently mixed in a top-level `tests/` directory (libc tests, runtime tests, benchmarks, e2e, debug harnesses, and the recently integrated C23 compatibility suite under `tests/c23/`).
+- **Tests**: Canonical non-benchmark suites now live under `tests/tests/`, while benchmarks remain in the top-level `tests/` benchmark directories.
 - **Packaging & Distribution**: `pkg/`, staging into `bin/`, some VSIX packaging for the debugger.
 
 ### Problems with the Current Layout
@@ -45,6 +45,7 @@ xyz/
 │   ├── xar/
 │   ├── xobjcopy/
 │   ├── xgdb/
+│   ├── xemu/
 │   ├── common/               # shared code needed by the tools
 │   ├── tests/                # local toolchain tests (compiler features, C23 language, etc.)
 │   └── Makefile
@@ -105,14 +106,14 @@ xyz/
 - If a test genuinely requires the compiler + libc + OS + emulator together → put it under root `tests/` (e2e or integration).
 
 Current examples and current locations:
-- `tests/libc/` currently holds the big dual direct + C-driven test base, including the in-tree C23 dispatch.
-- `tests/runtime/` currently holds the runtime helper matrices for ll/double and related coverage.
-- `tests/c23/` holds the external C23 compatibility suite — used for both compiler acceptance and libc surface verification.
-- True cross-product `tests/e2e/` and `tests/integration/` buckets are still planned rather than fully established.
+- `tests/tests/libc/` currently holds the big dual direct + C-driven test base, including the in-tree C23 dispatch.
+- `tests/tests/runtime/` currently holds the runtime helper matrices for ll/double and related coverage.
+- `tests/tests/c23/` holds the external C23 compatibility suite — used for both compiler acceptance and libc surface verification.
+- Benchmarks remain outside that canonical tree for now.
 
 When adding tests for new C23 features (or anything else):
-- Add the semantic/functional verification inside the component (for now, extend `tests/libc/c23_cases.c` or the dispatch).
-- Use the copied suite under `tests/c23/tests/cases/` as the source of truth for the full matrix of language + library features.
+- Add the semantic/functional verification inside the component (for now, extend `tests/tests/libc/c23_cases.c` or the dispatch).
+- Use the copied suite under `tests/tests/c23/tests/cases/` as the source of truth for the full matrix of language + library features.
 
 ## Build & Distribution
 
@@ -133,7 +134,7 @@ When adding tests for new C23 features (or anything else):
   - `bin/x/` is the standalone xtools install prefix.
   - `bin/x/bin/` contains the installed executables.
   - `bin/x/include/` and `bin/x/lib/` hold host SDK headers and libraries
-    (`xbfd`, `rsp`, `xgdb`).
+    (`xbfd`, `rsp`, `xgdb`, `xemu`, `xz80`).
   - `bin/x/z80/include/` stages the target libc headers and `yos.h`.
   - `bin/x/z80/lib/` stages `crt0`, linker scripts, `libruntime.a`, `libc.a`,
     the default `libnone.a`, and named platform payloads such as `libcpm3.a`.

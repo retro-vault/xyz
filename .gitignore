@@ -54,5 +54,9 @@ project
 .agents
 .codex
 
+# Legacy root release archives
+/x.zip
+/xext.zip
+
 # Packaged editor extensions
 bin/pkg/vsix/*.vsix

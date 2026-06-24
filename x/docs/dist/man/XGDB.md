@@ -1,13 +1,10 @@
 # xgdb — debugger
 
-Source-level debugger for programs built with `xcc -g`. Comes in two
-parts:
+Source-level debugger for programs built with `xcc -g`.
 
-- **xgdb** — the debugger front end. Speaks the familiar GDB command
-  language (CLI) or GDB/MI for IDE integration.
-- **xgdb-z80** — a Z80 gdbserver with a built-in emulator. Speaks the
-  GDB Remote Serial Protocol over TCP, so any GDB-compatible client can
-  connect to it too.
+`xgdb` is the debugger front end. It speaks a familiar GDB-style CLI and
+GDB/MI for IDE integration. Pair it with `xemu` or any other compatible
+RSP target.
 
 ## Quick start
 
@@ -16,14 +13,14 @@ parts:
 xcc -g main.c -o app.xl
 
 # 2. Start the target (Z80 emulator + gdbserver)
-xgdb-z80 --listen 127.0.0.1:9000 &
+xemu --listen 127.0.0.1:9000 &
 
 # 3. Connect the debugger
 xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 ```
 
-Then use the usual GDB commands: `break main`, `run`, `next`, `step`,
-`print x`, `backtrace`, `continue`, `quit`.
+Then use the usual debugger commands: `break main`, `run`, `stepi`,
+`info registers`, `continue`, `quit`.
 
 ## xgdb options
 
@@ -38,13 +35,4 @@ Then use the usual GDB commands: `break main`, `run`, `next`, `step`,
 | `-ex <command>` | Execute a debugger command on startup |
 | `--log <file>` | Log all protocol I/O |
 
-## xgdb-z80 options
-
-| Option | Meaning |
-|---|---|
-| `--listen HOST:PORT` | Listen address (default `127.0.0.1:9000`) |
-| `--load-bin FILE` | Load a raw binary into memory |
-| `--origin ADDR` | Binary load address (default `0x0000`) |
-| `--pc ADDR` | Initial program counter (default: origin) |
-| `--sp ADDR` | Initial stack pointer (default `0xFFFF`) |
-| `-q`, `--quiet` | Quiet startup |
+For target-side emulator options, see `XEMU.md`.

@@ -14,6 +14,7 @@ INCLUDE   := -Iinclude -I$(XBFD_INC)
 TARGET    := $(HOST_BIN_DIR)/xobjcopy
 OBJDIR    := $(BUILD_DIR)/xc/xobjcopy/obj
 TEST_BIN  := $(BUILD_DIR)/xc/xobjcopy/xobjcopy_tests
+TEST_DIR  := $(ROOT)/tests/tests/xobjcopy
 
 SRCS := \
     src/main.cpp \
@@ -21,7 +22,7 @@ SRCS := \
     src/operations.cpp
 
 TEST_SRCS := \
-    tests/test_main.cpp \
+    $(TEST_DIR)/test_main.cpp \
     src/cli.cpp \
     src/operations.cpp
 
@@ -49,7 +50,7 @@ $(HOST_BIN_DIR):
 	@mkdir -p $@
 
 test: $(XBFD_LIB) dirs $(TEST_SRCS)
-	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -o $(TEST_BIN) $(TEST_SRCS) $(XBFD_LIB)
+	$(CXX) $(CXXFLAGS) $(INCLUDE) -I$(TEST_DIR) -o $(TEST_BIN) $(TEST_SRCS) $(XBFD_LIB)
 	$(TEST_BIN)
 
 -include $(DEPS)

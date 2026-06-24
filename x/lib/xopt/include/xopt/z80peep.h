@@ -75,7 +75,8 @@ public:
     //
     static std::string optimize(const std::string &asm_text,
                                 bool speed_bias = false,
-                                bool enable_spaghetti = false);
+                                bool enable_spaghetti = false,
+                                int normal_passes = 10);
 
 private:
     std::vector<asm_line> lines_;

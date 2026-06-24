@@ -18,6 +18,47 @@ namespace xcc {
 
 static bool types_compatible(type_ptr a, type_ptr b); // forward decl
 
+static std::string trailing_alpha_suffix(const std::string &text) {
+    size_t start = text.size();
+    while (start > 0 &&
+           std::isalpha(static_cast<unsigned char>(text[start - 1]))) {
+        --start;
+    }
+    return text.substr(start);
+}
+
+static type_ptr apply_array_qualifiers_to_element(const type_ptr &elem,
+                                                  const type_ptr &array_ty) {
+    if (!elem || !array_ty)
+        return elem;
+    if (!array_ty->is_const && !array_ty->is_volatile &&
+        !array_ty->is_restrict)
+        return elem;
+
+    auto qualified = std::make_shared<type>(*elem);
+    qualified->is_const    = qualified->is_const || array_ty->is_const;
+    qualified->is_volatile = qualified->is_volatile || array_ty->is_volatile;
+    qualified->is_restrict = qualified->is_restrict || array_ty->is_restrict;
+    return qualified;
+}
+
+static type_ptr subscript_element_type(const type_ptr &ty) {
+    if (!ty)
+        return nullptr;
+
+    type_ptr unqualified = ty->unqual();
+    if (!unqualified)
+        return nullptr;
+
+    if (unqualified->kind == type_kind::POINTER && unqualified->base)
+        return unqualified->base;
+
+    if (unqualified->kind == type_kind::ARRAY && unqualified->base)
+        return apply_array_qualifiers_to_element(unqualified->base, ty);
+
+    return nullptr;
+}
+
 // ----- Expressions ---------------------------------------------------
 
 expr_ptr parser::parse_expression() {
@@ -299,7 +340,7 @@ expr_ptr parser::parse_unary_expression() {
         e->operand = parse_cast_expression();
         // &expr has type pointer-to-operand-type
         if (e->operand && e->operand->type)
-            e->type = type::make_pointer(e->operand->type->unqual());
+            e->type = type::make_pointer(e->operand->type);
         return e;
     }
     if (check(tk::PLUS_PLUS)) {
@@ -344,6 +385,28 @@ expr_ptr parser::parse_unary_expression() {
         e->type = type::make_uint();
         return e;
     }
+    if (check(tk::IDENT) && peek().text == "_Countof") {
+        consume();
+        auto e = std::make_unique<sizeof_expr>();
+        e->loc        = loc;
+        e->is_countof = true;
+        e->type       = type::make_uint();
+        auto saved_vla_size = std::move(last_vla_size_);
+        if (check(tk::LPAREN)) {
+            consume();
+            if (is_type_start()) {
+                e->sizeof_type = parse_type_name();
+                expect(tk::RPAREN);
+            } else {
+                e->sizeof_expr_op = parse_expression();
+                expect(tk::RPAREN);
+            }
+        } else {
+            e->sizeof_expr_op = parse_unary_expression();
+        }
+        last_vla_size_ = std::move(saved_vla_size);
+        return e;
+    }
     if (check(tk::KW_SIZEOF)) {
         consume();
         auto e = std::make_unique<sizeof_expr>();
@@ -380,6 +443,13 @@ expr_ptr parser::parse_postfix_expression() {
             idx->base  = std::move(e);
             idx->index = parse_expression();
             expect(tk::RBRACKET);
+            idx->type = subscript_element_type(idx->base ? idx->base->type
+                                                         : nullptr);
+            if (!idx->type)
+                idx->type = subscript_element_type(idx->index
+                                                   ? idx->index->type
+                                                   : nullptr);
+            idx->is_lvalue = (idx->type != nullptr);
             e = std::move(idx);
         } else if (check(tk::LPAREN)) {
             consume();
@@ -533,12 +603,20 @@ expr_ptr parser::parse_primary_expression() {
         auto e = std::make_unique<float_literal_expr>();
         e->loc   = t.loc;
         e->value = t.fval;
-        if (!t.text.empty()) {
-            char suffix = t.text.back();
-            if (suffix == 'f' || suffix == 'F')
-                e->type = type::make_float();
-            else
-                e->type = type::make_double();
+        std::string suffix = trailing_alpha_suffix(t.text);
+        for (char &ch : suffix)
+            ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
+        bool is_complex_literal =
+            suffix.find('i') != std::string::npos ||
+            suffix.find('j') != std::string::npos;
+        bool is_float_literal =
+            suffix.find('f') != std::string::npos;
+
+        if (is_complex_literal) {
+            e->type = type::make_complex();
+        } else if (is_float_literal) {
+            e->type = type::make_float();
         } else {
             e->type = type::make_double();
         }
@@ -563,7 +641,9 @@ expr_ptr parser::parse_primary_expression() {
         while (check(tk::STR_LIT)) {
             e->value += lex_.next().sval;
         }
-        e->type = type::make_pointer(type::make_char());
+        type_ptr elem_type = (e->char_width == 8) ? type::make_char8t()
+                                                  : type::make_char();
+        e->type = type::make_pointer(elem_type);
         e->type->is_const = true;
         return e;
     }
@@ -609,6 +689,34 @@ expr_ptr parser::parse_primary_expression() {
             parse_assignment_expression(); // discard hint
             expect(tk::RPAREN);
             return e;
+        }
+        if (t.text == "__builtin_constant_p") {
+            auto callee = std::make_unique<ident_expr>();
+            callee->loc  = t.loc;
+            callee->name = t.text;
+
+            auto sym = syms_.lookup(t.text);
+            if (!sym) {
+                sym = std::make_shared<symbol>();
+                sym->name      = t.text;
+                sym->kind      = sym_kind::FUNC;
+                sym->type      = type::make_function(type::make_int(), {}, true);
+                sym->is_global = true;
+                syms_.insert(sym);
+            }
+            callee->sym  = sym;
+            callee->type = sym->type;
+
+            auto call = std::make_unique<call_expr>();
+            call->loc    = t.loc;
+            call->callee = std::move(callee);
+            call->type   = type::make_int();
+
+            expect(tk::LPAREN);
+            if (!check(tk::RPAREN))
+                call->args.push_back(parse_assignment_expression());
+            expect(tk::RPAREN);
+            return call;
         }
         if (t.text == "__builtin_inf" || t.text == "__builtin_inff" ||
             t.text == "__builtin_infl") {
@@ -903,6 +1011,9 @@ static bool types_compatible_impl(type_ptr a, type_ptr b, bool decay) {
     a = generic_match_type(a, decay);
     b = generic_match_type(b, decay);
     if (!a || !b) return false;
+    if ((a->kind == type_kind::CHAR8T && b->kind == type_kind::UCHAR) ||
+        (a->kind == type_kind::UCHAR && b->kind == type_kind::CHAR8T))
+        return true;
     if (a->kind != b->kind) return false;
     if (a->kind == type_kind::POINTER)
         return types_compatible_impl(a->base, b->base, false);
@@ -933,8 +1044,14 @@ expr_ptr parser::parse_generic_selection() {
     consume(); // _Generic
     expect(tk::LPAREN);
 
-    auto ctrl   = parse_assignment_expression();
-    type_ptr ct = generic_match_type(ctrl ? ctrl->type : nullptr, true);
+    expr_ptr ctrl;
+    type_ptr ct;
+    if (is_type_start()) {
+        ct = generic_match_type(parse_type_name(), true);
+    } else {
+        ctrl = parse_assignment_expression();
+        ct = generic_match_type(ctrl ? ctrl->type : nullptr, true);
+    }
 
     expect(tk::COMMA);
 

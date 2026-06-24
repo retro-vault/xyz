@@ -2,6 +2,7 @@ ROOT ?= ../..
 BUILD_DIR ?= $(ROOT)/build
 DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
+PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
 CXXFLAGS ?= -std=c++2a -Wall -Wextra -Wpedantic -g
 
@@ -10,7 +11,7 @@ XBFD_INC  := $(XBFD_DIR)/include
 XBFD_LIB  := $(BUILD_DIR)/lib/libxbfd.a
 XZ80_DIR  := $(ROOT)/lib/xz80
 XZ80_INC  := $(XZ80_DIR)/include
-XZ80_LIB  := $(BUILD_DIR)/lib/libxz80.a
+XZ80_LIB  := $(PUBLIC_LIB_DIR)/libxz80.a
 
 INCLUDE   := -Iinclude -I$(XBFD_INC) -I$(XZ80_INC)
 
@@ -36,13 +37,15 @@ DEPS := $(OBJS:.o=.d)
 
 .PHONY: all test test-libs clean
 
+TEST_DIR := $(ROOT)/tests/tests/xas
+
 all: $(XBFD_LIB) $(XZ80_LIB) $(TARGET)
 
 $(XBFD_LIB):
-	$(MAKE) -C $(XBFD_DIR)
+	$(MAKE) -C $(XBFD_DIR) ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
 
 $(XZ80_LIB):
-	$(MAKE) -C $(XZ80_DIR)
+	$(MAKE) -C $(XZ80_DIR) ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
 
 $(TARGET): $(OBJS) $(XBFD_LIB) $(XZ80_LIB) | $(HOST_BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(XBFD_LIB) $(XZ80_LIB)
@@ -59,12 +62,12 @@ $(HOST_BIN_DIR):
 -include $(DEPS)
 
 test: all
-	bash ./tests/format_test.sh
-	bash ./tests/macro_test.sh
-	bash ./tests/macro_convert_test.sh
+	bash $(TEST_DIR)/format_test.sh
+	bash $(TEST_DIR)/macro_test.sh
+	bash $(TEST_DIR)/macro_convert_test.sh
 
 test-libs: all
-	bash ./tests/library_format_roundtrip_test.sh
+	bash $(TEST_DIR)/library_format_roundtrip_test.sh
 
 clean:
 	rm -rf $(OBJDIR)

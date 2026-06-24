@@ -5,7 +5,7 @@ This file contains conventions, build instructions, and context for AI coding ag
 ## Project Overview
 
 This is a Z80 retro-computing monorepo containing:
-- **X Tools** — the cross-development toolchain (xcc C compiler, xas assembler, xld linker, xar archiver, xobjcopy, xgdb, etc.).
+- **X Tools** — the cross-development toolchain (xcc C compiler, xas assembler, xld linker, xar archiver, xobjcopy, xgdb, xemu, etc.).
 - **libc** — hand-written Z80 assembler C library (C23 surface, thread-safe, no static data where possible).
 - **Runtime** — low-level SDCC-compatible helpers (int64, double, float, etc.).
 - **YOS** — the operating system (kernel, drivers, apps).
@@ -40,8 +40,7 @@ make -C x               # build the migrated X product tree
 make -C y               # build the migrated Y product tree
 make -C x/libc          # build only the C library
 make -C y/src           # build only the OS
-make -C x/tests/libc test
-make -C x/tests/runtime test
+bash x/tests/run_tests.sh --filter xcc
 ```
 
 See `x/docs/ARCHITECTURE.md` for the planned future layout and wrapper targets.
@@ -53,24 +52,22 @@ make stage-includes stage-xcc-support
 
 ## Testing Strategy (Local vs E2E)
 
-- **Tool-local tests** already live with some components:
-  - `x/src/*/tests` — compiler, assembler, linker, and tool-specific tests
-  - `x/lib/xz80/tests`
-  - `x/lib/xgdb/tests`
-
-- **Current migrated test suites** now live under the product roots:
-  - `x/tests/libc/` — the main libc direct + C-driven suite
-  - `x/tests/runtime/` — runtime helper tests
-  - `x/tests/c23/` — the external C23 compatibility suite
-  - `x/tests/benchmarks/`, `x/tests/debug/`, and other toolchain-side harnesses
+- **Canonical active non-benchmark X suite** now lives under `x/tests/tests/`:
+  - `x/tests/tests/cases/` — the active manifest-driven run set
+  - `x/tests/tests/c23_0001_*`, `x/tests/tests/c23_0002_*`, ... — hand-authored probe cases
+  - `x/tests/tests/xcc/data/` — source payloads reused by generated compiler cases
+  - `archive/x/tests/tests/` — legacy suite manifests and harness entrypoints kept out of the default unified run
+- **Benchmarks remain separate for now**:
+  - `x/tests/benchmarks/`, `x/tests/grouped_benchmarks/`, `x/tests/numeric_benchmarks/`
   - `y/tests/` — YOS-side apps, media, and emulator harnesses
 
 - The long-term direction is still component-owned tests plus a smaller E2E
   bucket, but the repository has not fully moved there yet.
 
 When adding a new test:
-- Put it in the component's own `tests/` directory if it only exercises that component.
-- Prefer placing it under `x/tests/` or `y/tests/` according to ownership; keep cross-stack cases small and explicit.
+- Prefer placing it under `x/tests/tests/` or `y/tests/` according to ownership.
+- Give it a `test.cfg` with a stable `id`, `component`, and any needed `legacy_path` aliases.
+- Keep cross-stack cases small and explicit.
 
 ## Working on the X Tools Independently
 
@@ -104,25 +101,25 @@ make -C x/src/xcc test
 **Work on libc + run its tests**
 ```bash
 make -C x/libc
-make -C x/tests/libc test
+bash x/tests/run_tests.sh --filter xcc
 ```
 
 **Run the runtime test suite**
 ```bash
 make xtools
-make -C x/tests/runtime test
+bash x/tests/run_tests.sh --filter xcc_exec_
 ```
 
 **Run the full C23 compiler + libc surface test**
 ```bash
-make -C x/tests/libc core-test
-# or via the copied suite
-cd x/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
+bash x/tests/run_tests.sh --filter xcc
+# copied external matrix payload still lives under x/tests/tests/c23/
+cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
 ```
 
 **Add a new C23 feature test**
-- Prefer adding to the current in-tree `x/tests/libc/` dispatch (see `c23_cases.c`) for semantic verification.
-- The external-style suite under `x/tests/c23/tests/cases/` is the source of truth for the full matrix.
+- Prefer adding to the current in-tree `x/tests/tests/libc/` dispatch (see `c23_cases.c`) for semantic verification.
+- The external-style suite under `x/tests/tests/c23/tests/cases/` is the source of truth for the full matrix.
 
 **Distribute the x tools**
 - Build with `make xtools`
@@ -139,7 +136,7 @@ cd x/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
 
 - Heavy focus on completing a full C23 libc surface in pure assembler (strfrom*, fromfp* family, fmaximum*/fminimum* variants, roundeven*, totalorder*, get/setpayload, free_sized/aligned, stdckdint, char8_t support, %b in printf, stdio float, etc.).
 - Large dual-style test base (direct emulator calls + xcc-compiled C cases) for both libc and runtime.
-- Integration of an external C23 compatibility suite (`x/tests/c23/`) for compiler testing.
+- Integration of an external C23 compatibility suite (`x/tests/tests/c23/`) for compiler testing.
 - Discussion and planning of repo restructuring for independent toolchain distribution (see `x/docs/ARCHITECTURE.md`).
 
 Update this file and the architecture documents when major structural or philosophical changes are made.

@@ -1252,6 +1252,38 @@ static bool is_tail_mergeable_icode(const icode &ic) {
     }
 }
 
+static bool icode_defines_result_temp(const icode &ic) {
+    if (!ic.result.is_temp())
+        return false;
+
+    switch (ic.op) {
+    case icode_op::LABEL:
+    case icode_op::GOTO:
+    case icode_op::IFX:
+    case icode_op::RETURN:
+    case icode_op::SEND:
+    case icode_op::SET_VALUE_AT:
+    case icode_op::FUNCTION:
+    case icode_op::ENDFUNCTION:
+    case icode_op::INLINE_ASM:
+        return false;
+    default:
+        return true;
+    }
+}
+
+static type_ptr temp_type_in_function(const ir_function &fn, int temp_id) {
+    for (const auto &ic : fn.icodes) {
+        if (ic.result.is_temp() && ic.result.temp_id == temp_id && ic.result.type)
+            return ic.result.type;
+        if (ic.left.is_temp() && ic.left.temp_id == temp_id && ic.left.type)
+            return ic.left.type;
+        if (ic.right.is_temp() && ic.right.temp_id == temp_id && ic.right.type)
+            return ic.right.type;
+    }
+    return type::make_int();
+}
+
 static std::string make_unique_label(const ir_function &fn,
                                      const std::string &prefix) {
     for (int id = 0;; ++id) {
@@ -3117,6 +3149,8 @@ public:
                 fn.icodes[first_i].op == icode_op::FUNCTION) {
                 continue;
             }
+            if (fn.icodes[end_i - 1].op != icode_op::RETURN)
+                continue;
 
             for (size_t bj = bi + 1; bj < cfg.blocks().size(); ++bj) {
                 const auto &block_j = cfg.block(bj);
@@ -3127,6 +3161,8 @@ public:
                     fn.icodes[first_j].op == icode_op::FUNCTION) {
                     continue;
                 }
+                if (fn.icodes[end_j - 1].op != icode_op::RETURN)
+                    continue;
 
                 size_t suffix_len = 0;
                 std::unordered_map<int, int> lhs_to_rhs_temps;
@@ -3168,39 +3204,88 @@ public:
             fn.icodes.begin() + static_cast<std::ptrdiff_t>(best->canon_split),
             fn.icodes.begin() + static_cast<std::ptrdiff_t>(best->canon_end));
 
-        auto rename_temp = [&](operand &op) {
-            if (!op.is_temp())
-                return;
-            auto it = best->other_to_canon_temps.find(op.temp_id);
-            if (it != best->other_to_canon_temps.end())
-                op.temp_id = it->second;
-        };
-
-        for (size_t i = best->other_begin; i < best->other_split; ++i) {
-            rename_temp(fn.icodes[i].result);
-            rename_temp(fn.icodes[i].left);
-            rename_temp(fn.icodes[i].right);
+        std::unordered_set<int> shared_defs;
+        std::vector<int> shared_live_in_order;
+        std::unordered_set<int> shared_live_in_seen;
+        for (const auto &ic : shared_tail) {
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (!op.is_temp() || shared_defs.count(op.temp_id))
+                    return;
+                if (shared_live_in_seen.insert(op.temp_id).second)
+                    shared_live_in_order.push_back(op.temp_id);
+            });
+            if (icode_defines_result_temp(ic))
+                shared_defs.insert(ic.result.temp_id);
         }
 
-        auto replace_with_goto = [&](size_t start, size_t end) {
+        int next_temp = next_temp_id(fn);
+        std::vector<icode> bridge_prefix;
+        std::vector<icode> bridge_copies;
+        for (int canon_temp : shared_live_in_order) {
+            int other_temp = -1;
+            for (const auto &[mapped_other, mapped_canon] :
+                 best->other_to_canon_temps) {
+                if (mapped_canon == canon_temp) {
+                    other_temp = mapped_other;
+                    break;
+                }
+            }
+            if (other_temp < 0 || other_temp == canon_temp)
+                continue;
+
+            type_ptr bridge_type = temp_type_in_function(fn, canon_temp);
+            if (!bridge_type)
+                bridge_type = temp_type_in_function(fn, other_temp);
+            operand saved = make_fresh_temp(next_temp, bridge_type);
+
+            icode save_ic;
+            save_ic.op = icode_op::ASSIGN;
+            save_ic.result = saved;
+            save_ic.left = operand::make_temp(other_temp, bridge_type);
+
+            icode copy_ic;
+            copy_ic.op = icode_op::ASSIGN;
+            copy_ic.result = operand::make_temp(canon_temp, bridge_type);
+            copy_ic.left = saved;
+
+            bridge_prefix.push_back(std::move(save_ic));
+            bridge_copies.push_back(std::move(copy_ic));
+        }
+
+        auto replacement_sequence = [&](size_t start,
+                                       const std::vector<icode> *prefix)
+            -> std::vector<icode> {
+            std::vector<icode> seq;
+            if (prefix) {
+                seq.insert(seq.end(), prefix->begin(), prefix->end());
+                seq.insert(seq.end(), bridge_copies.begin(), bridge_copies.end());
+            }
+
             icode goto_ic;
             goto_ic.op = icode_op::GOTO;
             goto_ic.label_name = tail_label;
             if (start < fn.icodes.size())
                 goto_ic.line = fn.icodes[start].line;
+            seq.push_back(std::move(goto_ic));
+            return seq;
+        };
 
+        auto replace_with_sequence = [&](size_t start,
+                                         size_t end,
+                                         const std::vector<icode> *prefix) {
             auto erase_begin =
                 fn.icodes.begin() + static_cast<std::ptrdiff_t>(start);
             auto erase_end =
                 fn.icodes.begin() + static_cast<std::ptrdiff_t>(end);
             fn.icodes.erase(erase_begin, erase_end);
+            auto seq = replacement_sequence(start, prefix);
             fn.icodes.insert(
                 fn.icodes.begin() + static_cast<std::ptrdiff_t>(start),
-                std::move(goto_ic));
+                seq.begin(), seq.end());
         };
 
-        replace_with_goto(best->other_split, best->other_end);
-        replace_with_goto(best->canon_split, best->canon_end);
+        replace_with_sequence(best->other_split, best->other_end, &bridge_prefix);
+        replace_with_sequence(best->canon_split, best->canon_end, nullptr);
 
         icode label_ic;
         label_ic.op = icode_op::LABEL;

@@ -664,33 +664,31 @@ class Z80
     static inline void OP_IX(Z80* ctx)
     {
         unsigned char operandNumber = ctx->fetch(4 + ctx->wtc.fetchM);
-#ifndef Z80_NO_EXCEPTION
-        if (!ctx->opSetIX[operandNumber]) {
-            char buf[80];
-            snprintf(buf, sizeof(buf), "detect an unknown operand (DD,%02X)", operandNumber);
-            throw std::runtime_error(buf);
+        void (*handler)(Z80* ctx) = ctx->opSetIX[operandNumber];
+        if (!handler) handler = ctx->opSet1[operandNumber];
+        if (!handler) {
+            NOP(ctx);
+            return;
         }
-#endif
 #ifndef Z80_DISABLE_BREAKPOINT
         ctx->checkBreakOperandIX(operandNumber);
 #endif
-        ctx->opSetIX[operandNumber](ctx);
+        handler(ctx);
     }
 
     static inline void OP_IY(Z80* ctx)
     {
         unsigned char operandNumber = ctx->fetch(4 + ctx->wtc.fetchM);
-#ifndef Z80_NO_EXCEPTION
-        if (!ctx->opSetIY[operandNumber]) {
-            char buf[80];
-            snprintf(buf, sizeof(buf), "detect an unknown operand (FD,%02X)", operandNumber);
-            throw std::runtime_error(buf);
+        void (*handler)(Z80* ctx) = ctx->opSetIY[operandNumber];
+        if (!handler) handler = ctx->opSet1[operandNumber];
+        if (!handler) {
+            NOP(ctx);
+            return;
         }
-#endif
 #ifndef Z80_DISABLE_BREAKPOINT
         ctx->checkBreakOperandIY(operandNumber);
 #endif
-        ctx->opSetIY[operandNumber](ctx);
+        handler(ctx);
     }
 
     static inline void OP_IX4(Z80* ctx)

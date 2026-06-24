@@ -60,7 +60,8 @@ compiler-suite install tree:
 - `bin/x/` is the xtools install prefix:
   - `bin/x/bin/` for host executables
   - `bin/x/include/` and `bin/x/lib/` for host SDK headers and libraries,
-    including the shared `libxopt` assembly optimizer
+    including the shared `libxopt` assembly optimizer plus debugger/emulator
+    support libraries such as `libxgdb`, `libxemu`, `librsp`, and `libxz80`
   - `bin/x/z80/include/` for staged target libc headers
   - `bin/x/z80/lib/` for `crt0`, linker scripts, `libruntime.a`, `libc.a`,
     the default platform archive (`libnone.a`), and named payloads such as
@@ -71,6 +72,9 @@ compiler-suite install tree:
   `.mdr` media.
 - `xcc` now probes its install prefix for default headers, and `xld` probes
   its install prefix for default runtime/startup archives.
+- The debugger target split now treats `xemu` as its own xtools product:
+  a standalone emulator executable plus reusable `libxemu` for host-side
+  execution testing.
 - Z80 assembly peepholes now live in shared `lib/xopt`; `xcc` links
   `libxopt.a`, and the standalone `xopt` tool can optimize `.s` files
   directly.

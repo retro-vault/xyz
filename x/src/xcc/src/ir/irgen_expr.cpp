@@ -648,6 +648,43 @@ void ir_gen::visit(call_expr &e) {
 }
 
 void ir_gen::visit(sizeof_expr &e) {
+    if (e.is_countof) {
+        if (e.sizeof_expr_op) {
+            if (auto *id = dynamic_cast<ident_expr*>(e.sizeof_expr_op.get())) {
+                if (id->sym && id->sym->vla_size_sym) {
+                    operand bytes = sym_to_operand(*id->sym->vla_size_sym, type::make_uint());
+                    int elem_sz = (id->sym->type && id->sym->type->is_ptr() && id->sym->type->base)
+                        ? id->sym->type->base->size()
+                        : 0;
+                    if (elem_sz > 1) {
+                        operand result = new_temp(type::make_uint());
+                        icode ic;
+                        ic.op     = icode_op::DIV;
+                        ic.result = result;
+                        ic.left   = bytes;
+                        ic.right  = operand::make_int(elem_sz, type::make_uint());
+                        emit(ic);
+                        expr_result_ = result;
+                    } else {
+                        expr_result_ = bytes;
+                    }
+                    return;
+                }
+            }
+            if (e.sizeof_expr_op->type && e.sizeof_expr_op->type->kind == type_kind::ARRAY) {
+                expr_result_ = operand::make_int(
+                    e.sizeof_expr_op->type->array_size,
+                    type::make_int());
+                return;
+            }
+        }
+        if (e.sizeof_type && e.sizeof_type->kind == type_kind::ARRAY) {
+            expr_result_ = operand::make_int(e.sizeof_type->array_size, type::make_int());
+            return;
+        }
+        expr_result_ = operand::make_int(0, type::make_int());
+        return;
+    }
     if (!e.is_alignof && e.sizeof_expr_op) {
         if (auto *id = dynamic_cast<ident_expr*>(e.sizeof_expr_op.get())) {
             if (id->sym && id->sym->vla_size_sym) {

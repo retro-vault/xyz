@@ -148,6 +148,12 @@ stmt_ptr parser::parse_compound_statement() {
                     vd->sym      = vsym;
                     vd->type     = ptr_type;
                     vd->vla_size = std::move(last_vla_size_);
+                    if (match(tk::EQ)) {
+                        vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
+                                                     : parse_assignment_expression();
+                    }
+                    if (vsym)
+                        vsym->init_expr = vd->init.get();
                 } else if (dspec.sc == storage_class::STATIC) {
                     expr_ptr pending_init;
                     if (match(tk::EQ)) {
@@ -164,6 +170,8 @@ stmt_ptr parser::parse_compound_statement() {
                     if (vsym) vsym->requested_align = dspec.align_req;
                     if (pending_init) {
                         vd->init = std::move(pending_init);
+                        if (vsym)
+                            vsym->init_expr = vd->init.get();
                         if (vsym && vsym->type && vsym->type->is_const &&
                             vsym->type->is_integer() && vd->init) {
                             if (auto cv = const_expr_evaluator::evaluate(vd->init.get()))
@@ -218,6 +226,8 @@ stmt_ptr parser::parse_compound_statement() {
                         } else if (dspec.is_deduced) {
                             error("'auto' variable requires an initializer with a known type");
                         }
+                        if (vd->sym)
+                            vd->sym->init_expr = vd->init.get();
                         if (vd->sym && vd->sym->type && vd->sym->type->is_const &&
                             vd->sym->type->is_integer() && vd->init) {
                             if (auto cv = const_expr_evaluator::evaluate(vd->init.get()))
@@ -312,6 +322,7 @@ stmt_ptr parser::parse_for_statement() {
             if (match(tk::EQ))
                 vd->init = check(tk::LBRACE) ? parse_initializer(vtype)
                                               : parse_assignment_expression();
+            vsym->init_expr = vd->init.get();
             ds->decls.push_back(std::move(vd));
         } while (match(tk::COMMA));
         expect(tk::SEMICOLON);

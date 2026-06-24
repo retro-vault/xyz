@@ -2482,11 +2482,13 @@ bool z80_peep::apply_spaghetti_tail_once() {
 
 std::string z80_peep::optimize(const std::string &asm_text,
 	                               bool speed_bias,
-	                               bool enable_spaghetti) {
+	                               bool enable_spaghetti,
+                                   int normal_passes) {
     z80_peep p;
     p.speed_bias_ = speed_bias;
     p.load(asm_text);
-    p.apply_passes(10);
+    if (normal_passes > 0)
+        p.apply_passes(normal_passes);
     if (enable_spaghetti) {
         p.apply_spaghetti_passes(4);
         p.apply_spaghetti_tail_passes(3);

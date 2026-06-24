@@ -124,10 +124,12 @@ struct optimization_settings {
             break;
 
         case opt_level::O3:
-            s = for_level(opt_level::O2);
+            s = for_level(opt_level::Of);
             s.level = level;
-            s.inline_static_functions = true;
+            s.address_deref_fold = true;
             s.duplicate_block_merge = true;
+            s.merge_tails = true;
+            s.prealloc_temp_frame = true;
             break;
 
         case opt_level::Os:

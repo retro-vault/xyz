@@ -82,7 +82,10 @@ SRCS := \
 OBJS := $(patsubst $(SRCDIR)/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean test check dist lint dirs bench
+.PHONY: all clean test test-exec test-external test-c23 test-all check dist lint dirs bench test-unified
+
+TEST_RUNNER := $(ROOT)/tests/run_tests.sh
+LEGACY_TEST_DIR := $(ROOT)/../archive/x/tests/tests/xcc-legacy
 
 all: $(TARGET)
 
@@ -108,12 +111,27 @@ $(HOST_BIN_DIR):
 
 # Run the test suite against the current build.
 test: $(TARGET)
-	@bash tests/run_tests.sh $(TARGET)
+	@bash $(TEST_RUNNER) $(TARGET) --filter xcc
+
+test-exec: $(TARGET)
+	@bash $(TEST_RUNNER) $(TARGET) --filter xcc_exec_
+
+test-external: $(TARGET)
+	@bash $(TEST_RUNNER) $(TARGET) --filter xcc_external_
+
+test-c23: $(TARGET)
+	@bash $(TEST_RUNNER) $(TARGET) --filter xcc_external_c23_
+
+test-all: test test-exec test-external test-c23 test-unified
+
+# Run the new unified xemu-backed suite.
+test-unified: $(TARGET)
+	@bash $(TEST_RUNNER) $(TARGET) --filter xcc
 
 # Run the repeatable codegen-only benchmark against SDCC.
 # Outputs land under $(BUILD_DIR)/xc/xcc/bench/codegen/.
 bench: $(TARGET)
-	@bash tests/run_codegen_bench.sh $(TARGET)
+	@bash $(LEGACY_TEST_DIR)/run_codegen_bench.sh $(TARGET)
 
 # Like 'make test' but forces a debug build (sanitizers active).
 # Use this before committing to catch memory and UB issues.

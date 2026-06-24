@@ -1903,7 +1903,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
             bool backend_safe = true;
             for (int k = iv.first_def + 1; k <= iv.last_use - 1; ++k) {
-                if (bc_clob[k]) {
+                if (bc_clob[k] || bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
                     backend_safe = false;
                     break;
                 }
@@ -1955,6 +1955,15 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
 
             bool backend_safe = true;
+            for (int k = iv.first_def + 1; k <= iv.last_use - 1; ++k) {
+                if (bc_clob[k] || bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                    backend_safe = false;
+                    break;
+                }
+            }
+            if (!backend_safe)
+                continue;
+
             int compare_uses = 0;
             int mask_uses = 0;
             for (int k = iv.first_def; k <= iv.last_use; ++k) {
@@ -2003,6 +2012,15 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
 
             bool backend_safe = true;
+            for (int k = iv.first_idx; k <= iv.last_idx; ++k) {
+                if (bc_clob[k] || bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                    backend_safe = false;
+                    break;
+                }
+            }
+            if (!backend_safe)
+                continue;
+
             int compare_uses = 0;
             int mask_uses = 0;
             for (int k = iv.first_idx; k <= iv.last_idx; ++k) {

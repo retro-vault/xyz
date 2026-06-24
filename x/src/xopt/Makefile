@@ -19,6 +19,8 @@ DEPS := $(OBJS:.o=.d)
 
 .PHONY: all test clean xopt-lib
 
+TEST_DIR := $(ROOT)/tests/tests/xopt
+
 all: xopt-lib $(TARGET)
 
 xopt-lib:
@@ -40,7 +42,7 @@ $(HOST_BIN_DIR):
 -include $(DEPS)
 
 test: all
-	bash tests/xopt_smoke_test.sh $(TARGET)
+	bash $(TEST_DIR)/xopt_smoke_test.sh $(TARGET)
 
 clean:
 	rm -rf $(OBJDIR)

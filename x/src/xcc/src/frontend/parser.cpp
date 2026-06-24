@@ -357,7 +357,17 @@ decl_ptr parser::parse_external_declaration() {
 
     auto di = parse_declarator(ds.base_type);
     const std::string &name      = di.name;
-    type_ptr           decl_type = di.type;
+    type_ptr           decl_type = di.type ? di.type : type::make_int();
+    if (ds.sc == storage_class::TYPEDEF && ds.is_deduced) {
+        error("'auto' not allowed in typedef");
+        ds.is_deduced = false;
+    }
+    if (ds.is_deduced && decl_type->is_func()) {
+        error("'auto' not allowed in function return type");
+        if (!decl_type->ret)
+            decl_type->ret = type::make_int();
+        ds.is_deduced = false;
+    }
     apply_call_abi_attrs_to_type(decl_type, ds.attrs);
 
     // Typedef at file scope: register as TYPE symbol, no variable emitted.
@@ -508,6 +518,7 @@ decl_ptr parser::parse_external_declaration() {
     sym->requested_align = ds.align_req;
     syms_.insert(sym);
     vd->sym = sym;
+    sym->init_expr = vd->init.get();
     if (sym->type && sym->type->is_const && sym->type->is_integer() && vd->init) {
         if (auto cv = const_expr_evaluator::evaluate(vd->init.get())) sym->const_val = cv;
     }
@@ -536,6 +547,7 @@ decl_ptr parser::parse_external_declaration() {
         esym->requested_align = ds.align_req;
         syms_.insert(esym);
         evd->sym = esym;
+        esym->init_expr = evd->init.get();
         pending_decls_.push_back(std::move(evd));
     }
 

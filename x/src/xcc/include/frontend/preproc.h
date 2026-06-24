@@ -61,7 +61,9 @@ private:
     // Set by process_text() before each expand() call so that __LINE__ and
     // __FILE__ inside macro bodies resolve to the call-site location.
     mutable int         expand_lineno_ = 0;
+    mutable int         expand_line_end_ = 0;
     mutable std::string expand_file_;
+    mutable std::vector<size_t> expand_splice_offsets_;
     mutable int         counter_       = 0; // __COUNTER__ value
 
     // Recursive worker: processes source, appending to out.
@@ -93,6 +95,7 @@ private:
     static bool        is_id_start(char c);
     static bool        is_id_cont(char c);
     static std::string read_ident(const std::string &s, size_t pos);
+    int                line_for_offset(size_t offset) const;
 };
 
 } // namespace xcc

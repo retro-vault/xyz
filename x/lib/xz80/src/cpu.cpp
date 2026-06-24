@@ -69,7 +69,7 @@ void cpu::reset() noexcept
     impl_->z80.reg = {};
 }
 
-int cpu::step() noexcept
+int cpu::step()
 {
     // Passing 1 causes execute() to run exactly one instruction:
     // after one opcode (minimum 4 T-states) the clock goes negative

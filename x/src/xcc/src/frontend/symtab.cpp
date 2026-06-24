@@ -10,13 +10,59 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "frontend/symtab.h"
+#include <unordered_set>
 
 namespace xcc {
+
+namespace {
+
+void break_type_cycles(const type_ptr &ty, std::unordered_set<const type *> &seen) {
+    if (!ty || !seen.insert(ty.get()).second)
+        return;
+
+    break_type_cycles(ty->base, seen);
+    break_type_cycles(ty->ret, seen);
+    for (const auto &param : ty->params)
+        break_type_cycles(param, seen);
+    for (const auto &field : ty->fields)
+        break_type_cycles(field.type, seen);
+
+    ty->base.reset();
+    ty->ret.reset();
+    ty->params.clear();
+    ty->fields.clear();
+}
+
+} // namespace
 
 symbol_table::symbol_table() {
     // Global scope is always present.
     scopes_.emplace_back(0);
     tag_scopes_.emplace_back();
+}
+
+symbol_table::~symbol_table() {
+    std::unordered_set<const type *> seen;
+
+    for (const auto &scope : scopes_) {
+        for (const auto &entry : scope.entries()) {
+            const auto &sym = entry.second;
+            if (!sym)
+                continue;
+            break_type_cycles(sym->type, seen);
+            if (sym->vla_size_sym)
+                sym->vla_size_sym.reset();
+        }
+    }
+
+    for (const auto &tags : tag_scopes_) {
+        for (const auto &entry : tags)
+            break_type_cycles(entry.second, seen);
+    }
+
+    for (auto &scope : scopes_)
+        scope.clear();
+    tag_scopes_.clear();
 }
 
 void symbol_table::push_scope() {

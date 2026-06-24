@@ -260,7 +260,9 @@ static int int_rank(type_kind k) {
 type_ptr integer_promote(type_ptr t) {
     // If rank < int: promote to int (or uint if int can't hold all values)
     if (t->is_integer() && int_rank(t->kind) < int_rank(type_kind::INT)) {
-        if (t->size() <= type::make_int()->size())
+        const int int_size = type::make_int()->size();
+        if ((!t->is_unsigned() && t->size() <= int_size) ||
+            (t->is_unsigned() && t->size() < int_size))
             return type::make_int();
         return type::make_uint();
     }

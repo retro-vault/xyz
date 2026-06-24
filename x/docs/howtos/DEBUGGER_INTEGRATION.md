@@ -10,8 +10,8 @@ The live split is:
   the debugger frontend
 - `librsp`
   the transport layer between the debugger and a target
-- `xgdb-z80`
-  the reference Z80 remote target built on that transport
+- `xemu`
+  the reference Z80 emulator and remote target built on that transport
 
 In other words, an emulator should not implement a debugger frontend
 protocol directly first. The normal integration point is the remote target
@@ -182,7 +182,8 @@ The simplest approach is software-side breakpoint checking:
 
 The reference target follows that pattern in:
 
-- `src/xc/xgdb/src/xgdb_z80.cpp`
+- `x/lib/xemu/src/xemu.cpp`
+- `x/src/xemu/src/main.cpp`
 
 ## Running Against `xgdb`
 
@@ -223,5 +224,6 @@ Read these first:
 
 - `lib/rsp/include/rsp/rsp.h`
 - `lib/xgdb/include/xgdb/target.h`
-- `src/xc/xgdb/README.md`
-- `src/xc/xgdb/src/xgdb_z80.cpp`
+- `x/lib/xemu/include/xemu/xemu.h`
+- `x/src/xgdb/README.md`
+- `x/src/xemu/README.md`

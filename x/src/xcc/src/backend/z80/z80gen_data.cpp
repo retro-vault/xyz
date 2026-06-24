@@ -49,6 +49,9 @@ void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template
             else if (e.size == 4) {
                 asm_.dw((int)(e.value & 0xFFFF));
                 asm_.dw((int)((e.value >> 16) & 0xFFFF));
+            } else if (e.size == 8) {
+                for (int w = 0; w < 4; ++w)
+                    asm_.dw((int)((e.value >> (w * 16)) & 0xFFFF));
             } else asm_.ds(e.size);
         }
     } else {

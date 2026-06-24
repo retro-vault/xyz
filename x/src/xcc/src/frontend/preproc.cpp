@@ -60,6 +60,15 @@ std::string preprocessor::read_ident(const std::string &s, size_t pos) {
     return s.substr(start, pos - start);
 }
 
+int preprocessor::line_for_offset(size_t offset) const {
+    int line = expand_lineno_;
+    for (size_t splice : expand_splice_offsets_) {
+        if (splice <= offset)
+            ++line;
+    }
+    return line;
+}
+
 std::string preprocessor::read_file(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
     if (!f) return "";
@@ -295,6 +304,7 @@ std::string preprocessor::expand(const std::string &text,
         if (!is_id_start(text[i])) { result += text[i++]; continue; }
 
         // Read identifier
+        size_t id_pos = i;
         std::string id = read_ident(text, i);
         i += id.size();
 
@@ -326,7 +336,7 @@ std::string preprocessor::expand(const std::string &text,
 
         // Built-in dynamic macros — resolved using the call-site context set
         // in expand_lineno_ / expand_file_ before expand() is called.
-        if (id == "__LINE__") { result += std::to_string(expand_lineno_); continue; }
+        if (id == "__LINE__") { result += std::to_string(line_for_offset(id_pos)); continue; }
         if (id == "__FILE__") { result += '"'; result += expand_file_; result += '"'; continue; }
         if (id == "__DATE__") { result += s_date; continue; }
         if (id == "__TIME__") { result += s_time; continue; }
@@ -344,7 +354,16 @@ std::string preprocessor::expand(const std::string &text,
 
         if (!m.is_function_like) {
             guard.push_back(id);
+            const int saved_lineno = expand_lineno_;
+            const int saved_line_end = expand_line_end_;
+            const auto saved_splices = expand_splice_offsets_;
+            expand_lineno_ = line_for_offset(id_pos);
+            expand_line_end_ = expand_lineno_;
+            expand_splice_offsets_.clear();
             result += expand(m.body, guard);
+            expand_lineno_ = saved_lineno;
+            expand_line_end_ = saved_line_end;
+            expand_splice_offsets_ = saved_splices;
             guard.pop_back();
             continue;
         }
@@ -517,7 +536,15 @@ std::string preprocessor::expand(const std::string &text,
         }
 
         guard.push_back(id);
+        const int saved_lineno = expand_lineno_;
+        const int saved_line_end = expand_line_end_;
+        const auto saved_splices = expand_splice_offsets_;
+        expand_lineno_ = expand_line_end_;
+        expand_splice_offsets_.clear();
         result += expand(body, guard);
+        expand_lineno_ = saved_lineno;
+        expand_line_end_ = saved_line_end;
+        expand_splice_offsets_ = saved_splices;
         guard.pop_back();
     }
     return result;
@@ -945,10 +972,12 @@ void preprocessor::process_text(const std::string &source,
     while (std::getline(ss, line)) {
         ++lineno;
         int logical_lineno = lineno; // __LINE__ uses start of logical line
+        std::vector<size_t> splice_offsets;
 
         // Handle line splicing (backslash-newline)
         while (!line.empty() && line.back() == '\\') {
             line.pop_back();
+            splice_offsets.push_back(line.size());
             std::string cont;
             if (!std::getline(ss, cont)) break;
             ++lineno;
@@ -1225,7 +1254,9 @@ void preprocessor::process_text(const std::string &source,
         // Set call-site context so expand() can resolve __LINE__ / __FILE__
         // inside macro bodies at expansion time (C standard requirement).
         expand_lineno_ = logical_lineno;
+        expand_line_end_ = lineno;
         expand_file_   = filename;
+        expand_splice_offsets_ = splice_offsets;
 
         std::vector<std::string> guard;
         out += expand(line, guard);

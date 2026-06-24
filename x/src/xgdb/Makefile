@@ -7,7 +7,7 @@ CXX ?= g++
 CXXFLAGS ?= -std=c++23 -g
 XZ80_DIR ?= $(ROOT)/lib/xz80
 XZ80_INCLUDE = -I$(XZ80_DIR)/include
-XZ80_LIB = $(BUILD_DIR)/lib/libxz80.a
+XZ80_LIB = $(PUBLIC_LIB_DIR)/libxz80.a
 XGDB_DIR ?= $(ROOT)/lib/xgdb
 XGDB_INCLUDE = -I$(XGDB_DIR)/include
 RSP_DIR ?= $(ROOT)/lib/rsp
@@ -18,16 +18,14 @@ OUTPUT_DIR = $(BUILD_DIR)/xc/xgdb
 BIN_OUTPUT = $(HOST_BIN_DIR)
 LIB_OUTPUT = $(PUBLIC_LIB_DIR)
 XGDB_TARGET = $(BIN_OUTPUT)/xgdb
-XGDB_Z80_TARGET = $(BIN_OUTPUT)/xgdb-z80
-XGDB_SOURCES = $(filter-out src/xgdb_z80.cpp src/frontends.cpp src/mi_frontend.cpp,$(wildcard src/*.cpp))
-XGDB_Z80_SOURCES = src/xgdb_z80.cpp
+XGDB_SOURCES = $(filter-out src/frontends.cpp src/mi_frontend.cpp,$(wildcard src/*.cpp))
 CLI_PROTOCOL_SOURCE = src/frontends.cpp
 MI_PROTOCOL_SOURCE = src/mi_frontend.cpp
 CLI_PROTOCOL_OBJECT = $(OUTPUT_DIR)/frontends.o
 MI_PROTOCOL_OBJECT = $(OUTPUT_DIR)/mi_frontend.o
 CLI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxgdb_cli.a
 MI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxgdb_mi.a
-TEST_DIR = tests
+TEST_DIR = $(ROOT)/tests/tests/xgdb
 MI_SMOKE_TEST = $(TEST_DIR)/mi_smoke_test.sh
 
 .PHONY: all test clean
@@ -37,10 +35,10 @@ XBFD_INCLUDE = -I$(XBFD_DIR)/include
 XBFD_LIB     = $(PUBLIC_LIB_DIR)/libxbfd.a
 
 all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(LIB_OUTPUT)
-	$(MAKE) -C $(XZ80_DIR) all
-	$(MAKE) -C $(ROOT)/lib/xbfd all
-	$(MAKE) -C $(ROOT)/lib/xgdb all
-	$(MAKE) -C $(ROOT)/lib/rsp all
+	$(MAKE) -C $(XZ80_DIR) all ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
+	$(MAKE) -C $(ROOT)/lib/xbfd all ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
+	$(MAKE) -C $(ROOT)/lib/xgdb all ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
+	$(MAKE) -C $(ROOT)/lib/rsp all ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
 	$(MAKE) $(CLI_PROTOCOL_LIB) $(MI_PROTOCOL_LIB)
 	$(CXX) $(CXXFLAGS) -pthread $(XGDB_INCLUDE) $(RSP_INCLUDE) $(XBFD_INCLUDE) $(XZ80_INCLUDE) $(XGDB_SOURCES) \
 		$(CLI_PROTOCOL_LIB) \
@@ -50,10 +48,6 @@ all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(LIB_OUTPUT)
 		$(XBFD_LIB) \
 		$(XZ80_LIB) \
 		-o $(XGDB_TARGET)
-	$(CXX) $(CXXFLAGS) -pthread $(RSP_INCLUDE) $(XZ80_INCLUDE) $(XGDB_Z80_SOURCES) \
-		$(PUBLIC_LIB_DIR)/librsp.a \
-		$(XZ80_LIB) \
-		-o $(XGDB_Z80_TARGET)
 
 $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
@@ -81,5 +75,5 @@ test: all
 
 clean:
 	rm -rf $(OUTPUT_DIR)
-	rm -rf $(LIB_OUTPUT)
-	rm -f $(XGDB_TARGET) $(XGDB_Z80_TARGET)
+	rm -f $(CLI_PROTOCOL_LIB) $(MI_PROTOCOL_LIB)
+	rm -f $(XGDB_TARGET)

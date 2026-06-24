@@ -130,7 +130,7 @@ struct char_literal_expr : expr {
 //
 struct string_literal_expr : expr {
     std::string value;
-    int char_width = 1; // 1=char, 2=char16_t, 4=char32_t
+    int char_width = 1; // 1=char, 2=char16_t, 4=char32_t, 8=char8_t
     void accept(expr_visitor &v) override;
 };
 
@@ -200,6 +200,7 @@ struct sizeof_expr : expr {
     type_ptr sizeof_type;
     expr_ptr sizeof_expr_op;
     bool     is_alignof = false;
+    bool     is_countof = false;
     int      align_override = 0; // symbol-level alignas override for alignof(expr)
     void accept(expr_visitor &v) override;
 };

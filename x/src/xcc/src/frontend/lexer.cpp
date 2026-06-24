@@ -411,8 +411,9 @@ token lexer::lex_char_literal(int char_width) {
     }
     if (cur() != '\'') return error_tok(loc, "unterminated character literal");
     advance();
-    // C: plain char is signed on this target; sign-extend values in 0x80..0xFF.
-    if (val >= 0x80 && val <= 0xFF)
+    // Plain character constants use the target's signed-char semantics.
+    // UTF-8 character literals (u8'X') keep their unsigned code unit value.
+    if (char_width == 1 && val >= 0x80 && val <= 0xFF)
         val = (int64_t)(int8_t)(uint8_t)val;
     token t = make(tk::CHAR_LIT, "", loc);
     t.ival = val;
@@ -569,7 +570,7 @@ token lexer::lex_one() {
 
     // Unicode/wide string/char literal prefixes: u8"", L"", u"", U"", L'', u'', U''
     if (c == 'u' && peek_char() == '8' && peek_char(2) == '"') {
-        advance(); advance(); return lex_string_literal(1);
+        advance(); advance(); return lex_string_literal(8);
     }
     if ((c == 'L') && peek_char() == '"') { advance(); return lex_string_literal(2); }
     if ((c == 'u') && peek_char() == '"') { advance(); return lex_string_literal(2); }

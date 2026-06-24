@@ -178,8 +178,10 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
         return false;
 
     size_t first_body_idx = receive_idx + 1;
+    bool saw_leading_label = false;
     while (first_body_idx < fn.icodes.size() &&
            is_passive_leading_op(fn.icodes[first_body_idx])) {
+        saw_leading_label = true;
         ++first_body_idx;
     }
 
@@ -187,12 +189,12 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
         const auto &scan = fn.icodes[i];
         if (ic.result.is_temp()) {
             if (icode_uses_temp(scan, ic.result.temp_id))
-                return i == first_body_idx;
+                return i == first_body_idx && !saw_leading_label;
             if (uses_temp(scan.result, ic.result.temp_id))
                 return false;
         } else {
             if (icode_uses_symbol(scan, ic.result))
-                return i == first_body_idx;
+                return i == first_body_idx && !saw_leading_label;
             if (same_local_symbol(scan.result, ic.result))
                 return false;
         }

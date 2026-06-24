@@ -118,10 +118,10 @@ typedef unsigned long long uintmax_t;
 #define WINT_MAX          UINT16_MAX
 
 /* Integer constant construction macros. */
-#define INT8_C(v)         ((int8_t)(v))
-#define UINT8_C(v)        ((uint8_t)(v ## U))
-#define INT16_C(v)        ((int16_t)(v))
-#define UINT16_C(v)       ((uint16_t)(v ## U))
+#define INT8_C(v)         (v)
+#define UINT8_C(v)        (v)
+#define INT16_C(v)        (v)
+#define UINT16_C(v)       (v ## U)
 #define INT32_C(v)        (v ## L)
 #define UINT32_C(v)       (v ## UL)
 #define INT64_C(v)        (v ## LL)

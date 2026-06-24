@@ -49,7 +49,7 @@ DIST_PREFIX_FILES := \
 HOST_TOOLS := \
 	$(DIST_DIR)/bin/xld \
 	$(DIST_DIR)/bin/xgdb \
-	$(DIST_DIR)/bin/xgdb-z80 \
+	$(DIST_DIR)/bin/xemu \
 	$(DIST_DIR)/bin/xas \
 	$(DIST_DIR)/bin/xar \
 	$(DIST_DIR)/bin/xobjcopy \
@@ -59,6 +59,9 @@ DEBUG_LIBS := \
 	$(DIST_DIR)/lib/libxgdb_cli.a \
 	$(DIST_DIR)/lib/libxgdb_mi.a \
 	$(DIST_DIR)/lib/librsp.a
+EMU_LIBS := \
+	$(DIST_DIR)/lib/libxemu.a \
+	$(DIST_DIR)/lib/libxz80.a
 
 .PHONY: all clean
 
@@ -83,8 +86,11 @@ $(DIST_DIR)/bin/xobjcopy:
 $(DIST_DIR)/bin/xopt $(XOPT_LIB):
 	$(MAKE) -C $(X_ROOT)/src/xopt ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(DIST_DIR)/bin PUBLIC_LIB_DIR=$(DIST_DIR)/lib
 
-$(DIST_DIR)/bin/xgdb $(DIST_DIR)/bin/xgdb-z80 $(DEBUG_LIBS):
+$(DIST_DIR)/bin/xgdb $(DEBUG_LIBS):
 	$(MAKE) -C $(X_ROOT)/src/xgdb ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(DIST_DIR)/bin PUBLIC_LIB_DIR=$(DIST_DIR)/lib
+
+$(DIST_DIR)/bin/xemu $(EMU_LIBS):
+	$(MAKE) -C $(X_ROOT)/src/xemu ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(DIST_DIR)/bin PUBLIC_LIB_DIR=$(DIST_DIR)/lib
 
 $(XBFD_LIB):
 	$(MAKE) -C $(X_ROOT)/lib/xbfd ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR)
@@ -110,7 +116,7 @@ $(XCC_RUNTIME_COMPAT_ARCHIVE): $(XCC_RUNTIME_ARCHIVE)
 $(DIST_PREFIX_FILES):
 	$(MAKE) -C $(X_ROOT) x REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) OUT_DIR=$(ROOT)/bin Z_DIST_DIR=$(ROOT)/bin/z PLATFORM=$(DEFAULT_PLATFORM) DEFAULT_PLATFORM=$(DEFAULT_PLATFORM)
 
-$(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(XOPT_LIB) $(XCC_PACKAGE_BIN) $(DIST_PREFIX_FILES) $(CONTROL_TEMPLATE)
+$(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(EMU_LIBS) $(XBFD_LIB) $(XOPT_LIB) $(XCC_PACKAGE_BIN) $(DIST_PREFIX_FILES) $(CONTROL_TEMPLATE)
 	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb not found. Please install dpkg-dev or dpkg."; exit 1; }
 	rm -rf $(PKG_STAGING_DIR)
 	mkdir -p $(PKG_STAGING_DIR)/DEBIAN
@@ -129,8 +135,7 @@ $(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(XBFD_LIB) $(XOPT_
 	      $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/z80/lib/libemu.a \
 	      $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/z80/lib/libemu.lib \
 	      $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/z80/lib/linker-emu.ld \
-	      $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/z80/lib/linker-emu.lk \
-	      $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/lib/libxz80.a
+	      $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/z80/lib/linker-emu.lk
 	cp $(XCC_PACKAGE_BIN) $(PKG_STAGING_DIR)$(INSTALL_PREFIX)/bin/xcc
 	printf '%s\n' \
 		'# x compiler suite for z80' \

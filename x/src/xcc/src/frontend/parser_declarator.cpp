@@ -222,6 +222,13 @@ parser::parse_param_list(bool &variadic) {
         }
 
         decl_spec ds = parse_declaration_specifiers();
+        if (!ds.base_type) {
+            if (ds.is_deduced)
+                error("'auto' not allowed in function prototype");
+            else
+                error("a type specifier is required for parameter declaration");
+            ds.base_type = type::make_int();
+        }
 
         // If we see just 'void' followed by ')', that means (void)
         if (ds.base_type->kind == type_kind::VOID && check(tk::RPAREN)) break;

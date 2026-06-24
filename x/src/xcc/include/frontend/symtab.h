@@ -28,6 +28,8 @@
 
 namespace xcc {
 
+struct expr;
+
 // ----- storage_class -------------------------------------------------
 
 enum class storage_class {
@@ -71,6 +73,10 @@ struct symbol {
     // Compile-time constant value for const-qualified variables with
     // integer initializers (used by const_eval for constant folding).
     std::optional<int64_t> const_val;
+
+    // Non-owning pointer to the parsed initializer expression. This lets
+    // constant evaluation inspect constexpr aggregate/object initializers.
+    const expr *init_expr = nullptr;
 
     // For static locals: the mangled assembly-level name (e.g. _func__var_0).
     // Empty for all other symbols; when non-empty, used by irgen/z80gen instead of name.
@@ -131,6 +137,14 @@ public:
     //
     int depth() const { return depth_; }
 
+    const std::unordered_map<std::string, sym_ptr> &entries() const {
+        return table_;
+    }
+
+    void clear() {
+        table_.clear();
+    }
+
 private:
     std::unordered_map<std::string, sym_ptr> table_;
     int depth_;
@@ -144,6 +158,7 @@ public:
     // Construct a symbol table with an empty global scope (depth 0).
     //
     symbol_table();
+    ~symbol_table();
 
     //
     // Push a new inner scope.  Called at the opening { of a compound
