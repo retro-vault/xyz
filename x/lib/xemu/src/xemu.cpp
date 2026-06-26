@@ -4,9 +4,12 @@
 // copyright (C) 2026 tomaz stih
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <istream>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <stdexcept>
@@ -124,11 +127,47 @@ std::vector<uint8_t> pack_registers(const register_image& regs) {
     return data;
 }
 
+constexpr uint16_t kEmuReqFd = 0xff11;
+constexpr uint16_t kEmuReqPtr = 0xff13;
+constexpr uint16_t kEmuReqLen = 0xff15;
+constexpr uint16_t kEmuReqFlags = 0xff17;
+constexpr uint16_t kEmuReqMode = 0xff19;
+constexpr uint16_t kEmuReqWhence = 0xff1b;
+constexpr uint16_t kEmuReqOffset = 0xff1d;
+constexpr uint16_t kEmuReqPath = 0xff21;
+constexpr uint16_t kEmuReqPath2 = 0xff23;
+constexpr uint16_t kEmuReqResult = 0xff25;
+
+constexpr uint8_t kEmuCmdExit = 1;
+constexpr uint8_t kEmuCmdOpen = 4;
+constexpr uint8_t kEmuCmdClose = 5;
+constexpr uint8_t kEmuCmdRead = 6;
+constexpr uint8_t kEmuCmdWrite = 7;
+constexpr uint8_t kEmuCmdLseek = 8;
+constexpr uint8_t kEmuCmdUnlink = 9;
+constexpr uint8_t kEmuCmdRename = 10;
+
+constexpr uint16_t kOpenAccessMask = 0x0003;
+constexpr uint16_t kOpenWriteOnly = 0x0001;
+constexpr uint16_t kOpenReadWrite = 0x0002;
+constexpr uint16_t kOpenCreate = 0x0100;
+constexpr uint16_t kOpenTruncate = 0x0200;
+constexpr uint16_t kOpenAppend = 0x0400;
+
 } // namespace
 
 struct machine::impl {
+    struct file_handle {
+        std::fstream stream;
+        uint16_t flags = 0;
+    };
+
     class port_mux final : public xz80::IPorts {
     public:
+        explicit port_mux(impl& owner) noexcept
+            : owner_(&owner)
+        {}
+
         uint8_t in(uint16_t port) noexcept override {
             if (stdin_stream_ != nullptr && stdin_status_port_.has_value() &&
                 port == stdin_status_port_.value()) {
@@ -157,6 +196,9 @@ struct machine::impl {
                 port == stdout_port_.value()) {
                 stdout_stream_->put(static_cast<char>(value));
                 stdout_stream_->flush();
+            }
+            if (port == machine::emu_cmd_port && owner_ != nullptr) {
+                owner_->handle_command(value);
             }
         }
 
@@ -192,7 +234,16 @@ struct machine::impl {
             stdout_stream_ = nullptr;
         }
 
+        std::istream* stdin_stream() const noexcept {
+            return stdin_stream_;
+        }
+
+        std::ostream* stdout_stream() const noexcept {
+            return stdout_stream_;
+        }
+
     private:
+        impl* owner_ = nullptr;
         std::optional<uint16_t> stdin_status_port_;
         std::optional<uint16_t> stdin_data_port_;
         std::optional<uint16_t> stdout_port_;
@@ -201,7 +252,8 @@ struct machine::impl {
     };
 
     explicit impl(uint8_t fill)
-        : mem(fill)
+        : ports(*this)
+        , mem(fill)
         , cpu(mem, ports)
     {
         cpu.reset();
@@ -212,10 +264,424 @@ struct machine::impl {
             breakpoints.end();
     }
 
+    uint8_t read8(uint16_t address) const noexcept {
+        return mem.read(address);
+    }
+
+    uint16_t read16(uint16_t address) const noexcept {
+        return static_cast<uint16_t>(read8(address))
+            | static_cast<uint16_t>(
+                static_cast<uint16_t>(read8(static_cast<uint16_t>(address + 1u))) << 8);
+    }
+
+    uint32_t read32(uint16_t address) const noexcept {
+        return static_cast<uint32_t>(read16(address))
+            | (static_cast<uint32_t>(
+                   read16(static_cast<uint16_t>(address + 2u)))
+               << 16);
+    }
+
+    void write8(uint16_t address, uint8_t value) noexcept {
+        mem.write(address, value);
+    }
+
+    void write16(uint16_t address, int value) noexcept {
+        const auto uvalue = static_cast<uint16_t>(value);
+        write8(address, static_cast<uint8_t>(uvalue & 0xff));
+        write8(
+            static_cast<uint16_t>(address + 1u),
+            static_cast<uint8_t>((uvalue >> 8) & 0xff));
+    }
+
+    void write32(uint16_t address, std::int32_t value) noexcept {
+        const auto uvalue = static_cast<std::uint32_t>(value);
+        write16(address, static_cast<int>(uvalue & 0xffffu));
+        write16(
+            static_cast<uint16_t>(address + 2u),
+            static_cast<int>((uvalue >> 16) & 0xffffu));
+    }
+
+    void write_result16(int value) noexcept {
+        write16(kEmuReqResult, value);
+        write16(kEmuReqResult + 2u, value < 0 ? -1 : 0);
+    }
+
+    void write_result32(std::int32_t value) noexcept {
+        write32(kEmuReqResult, value);
+    }
+
+    std::string read_c_string(uint16_t address) const {
+        std::string text;
+        text.reserve(64);
+        for (int i = 0; i < 1024; ++i) {
+            const auto ch = read8(static_cast<uint16_t>(address + i));
+            if (ch == 0) {
+                return text;
+            }
+            text.push_back(static_cast<char>(ch));
+        }
+        return {};
+    }
+
+    std::filesystem::path resolve_guest_path(const std::string& guest_path) const {
+        if (!host_fs_root_.has_value()) {
+            return {};
+        }
+        if (guest_path.empty()) {
+            return {};
+        }
+
+        const std::filesystem::path guest(guest_path);
+        if (guest.is_absolute()) {
+            return {};
+        }
+
+        const auto normalized = guest.lexically_normal();
+        for (const auto& part : normalized) {
+            if (part == "..") {
+                return {};
+            }
+        }
+
+        return *host_fs_root_ / normalized;
+    }
+
+    int alloc_fd(std::unique_ptr<file_handle> file) {
+        for (std::size_t i = 0; i < files.size(); ++i) {
+            if (!files[i]) {
+                files[i] = std::move(file);
+                return static_cast<int>(i) + 3;
+            }
+        }
+
+        files.push_back(std::move(file));
+        return static_cast<int>(files.size()) + 2;
+    }
+
+    file_handle* get_file(uint16_t fd) noexcept {
+        if (fd < 3) {
+            return nullptr;
+        }
+
+        const auto index = static_cast<std::size_t>(fd - 3);
+        if (index >= files.size() || !files[index]) {
+            return nullptr;
+        }
+        return files[index].get();
+    }
+
+    static std::streamoff end_position(file_handle& file) {
+        const auto access = file.flags & kOpenAccessMask;
+        const bool can_read = (access == 0) || (access == kOpenReadWrite);
+        const bool can_write = (access == kOpenWriteOnly) || (access == kOpenReadWrite);
+
+        file.stream.clear();
+        if (can_read) {
+            file.stream.seekg(0, std::ios::end);
+            const auto pos = file.stream.tellg();
+            if (pos >= 0) {
+                return static_cast<std::streamoff>(pos);
+            }
+        }
+        if (can_write) {
+            file.stream.seekp(0, std::ios::end);
+            const auto pos = file.stream.tellp();
+            if (pos >= 0) {
+                return static_cast<std::streamoff>(pos);
+            }
+        }
+        return static_cast<std::streamoff>(-1);
+    }
+
+    static std::streamoff current_position(file_handle& file) {
+        const auto access = file.flags & kOpenAccessMask;
+        const bool can_read = (access == 0) || (access == kOpenReadWrite);
+        const bool can_write = (access == kOpenWriteOnly) || (access == kOpenReadWrite);
+
+        file.stream.clear();
+        if (can_read) {
+            const auto pos = file.stream.tellg();
+            if (pos >= 0) {
+                return static_cast<std::streamoff>(pos);
+            }
+        }
+        if (can_write) {
+            const auto pos = file.stream.tellp();
+            if (pos >= 0) {
+                return static_cast<std::streamoff>(pos);
+            }
+        }
+        return static_cast<std::streamoff>(-1);
+    }
+
+    void handle_open() {
+        const auto path = resolve_guest_path(read_c_string(read16(kEmuReqPath)));
+        const auto flags = read16(kEmuReqFlags);
+        if (path.empty()) {
+            write_result16(-1);
+            return;
+        }
+
+        std::ios::openmode mode = std::ios::binary;
+        const auto access = static_cast<uint16_t>(flags & kOpenAccessMask);
+        if (access == kOpenWriteOnly) {
+            mode |= std::ios::out;
+        } else if (access == kOpenReadWrite) {
+            mode |= std::ios::in | std::ios::out;
+        } else {
+            mode |= std::ios::in;
+        }
+        if (flags & kOpenTruncate) {
+            mode |= std::ios::trunc;
+        }
+        if (flags & kOpenAppend) {
+            mode |= std::ios::app;
+        }
+
+        if (flags & kOpenCreate) {
+            if (!path.parent_path().empty()) {
+                std::filesystem::create_directories(path.parent_path());
+            }
+            std::ofstream create(path, std::ios::binary | std::ios::app);
+        }
+
+        auto file = std::make_unique<file_handle>();
+        file->flags = flags;
+        file->stream.open(path, mode);
+        if (!file->stream && (flags & kOpenCreate) && access == kOpenReadWrite) {
+            std::ofstream create(path, std::ios::binary);
+            create.close();
+            file->stream.clear();
+            file->stream.open(path, mode);
+        }
+        if (!file->stream) {
+            write_result16(-1);
+            return;
+        }
+
+        if (flags & kOpenAppend) {
+            file->stream.seekg(0, std::ios::end);
+            file->stream.seekp(0, std::ios::end);
+        }
+
+        write_result16(alloc_fd(std::move(file)));
+    }
+
+    void handle_close() noexcept {
+        const auto fd = read16(kEmuReqFd);
+        if (fd < 3) {
+            write_result16(0);
+            return;
+        }
+
+        const auto index = static_cast<std::size_t>(fd - 3);
+        if (index >= files.size() || !files[index]) {
+            write_result16(-1);
+            return;
+        }
+
+        files[index]->stream.close();
+        files[index].reset();
+        write_result16(0);
+    }
+
+    void handle_read() noexcept {
+        const auto fd = read16(kEmuReqFd);
+        const auto ptr = read16(kEmuReqPtr);
+        const auto len = read16(kEmuReqLen);
+
+        if (fd == 0) {
+            auto* input = ports.stdin_stream();
+            if (input == nullptr) {
+                write_result16(0);
+                return;
+            }
+
+            uint16_t count = 0;
+            while (count < len) {
+                const int ch = input->get();
+                if (ch == std::char_traits<char>::eof()) {
+                    input->clear();
+                    break;
+                }
+                write8(static_cast<uint16_t>(ptr + count), static_cast<uint8_t>(ch));
+                ++count;
+            }
+
+            write_result16(count);
+            return;
+        }
+
+        auto* file = get_file(fd);
+        if (file == nullptr) {
+            write_result16(-1);
+            return;
+        }
+
+        std::vector<char> buffer(len);
+        file->stream.read(buffer.data(), static_cast<std::streamsize>(len));
+        const auto count = static_cast<uint16_t>(file->stream.gcount());
+        for (uint16_t i = 0; i < count; ++i) {
+            write8(static_cast<uint16_t>(ptr + i), static_cast<uint8_t>(buffer[i]));
+        }
+        if (file->stream.eof()) {
+            file->stream.clear();
+        }
+        write_result16(count);
+    }
+
+    void handle_write() noexcept {
+        const auto fd = read16(kEmuReqFd);
+        const auto ptr = read16(kEmuReqPtr);
+        const auto len = read16(kEmuReqLen);
+
+        if (fd == 1 || fd == 2) {
+            if (auto* output = ports.stdout_stream(); output != nullptr) {
+                for (uint16_t i = 0; i < len; ++i) {
+                    output->put(static_cast<char>(read8(static_cast<uint16_t>(ptr + i))));
+                }
+                output->flush();
+            }
+            write_result16(len);
+            return;
+        }
+
+        auto* file = get_file(fd);
+        if (file == nullptr) {
+            write_result16(-1);
+            return;
+        }
+
+        for (uint16_t i = 0; i < len; ++i) {
+            file->stream.put(static_cast<char>(read8(static_cast<uint16_t>(ptr + i))));
+        }
+        file->stream.flush();
+        write_result16(file->stream ? len : -1);
+    }
+
+    void handle_lseek() noexcept {
+        const auto fd = read16(kEmuReqFd);
+        auto* file = get_file(fd);
+        if (file == nullptr) {
+            write_result32(-1);
+            return;
+        }
+
+        const auto offset = static_cast<std::int32_t>(read32(kEmuReqOffset));
+        const auto whence = read16(kEmuReqWhence);
+        const auto access = static_cast<uint16_t>(file->flags & kOpenAccessMask);
+        const bool can_read = (access == 0) || (access == kOpenReadWrite);
+        const bool can_write = (access == kOpenWriteOnly) || (access == kOpenReadWrite);
+
+        file->stream.clear();
+
+        std::streamoff base = 0;
+        if (whence == 0) {
+            base = 0;
+        } else if (whence == 1) {
+            base = current_position(*file);
+        } else if (whence == 2) {
+            base = end_position(*file);
+        } else {
+            write_result32(-1);
+            return;
+        }
+
+        if (base < 0) {
+            write_result32(-1);
+            return;
+        }
+
+        const auto target = base + static_cast<std::streamoff>(offset);
+        if (target < 0) {
+            write_result32(-1);
+            return;
+        }
+
+        if (can_read) {
+            file->stream.seekg(target, std::ios::beg);
+        }
+        if (can_write) {
+            file->stream.seekp(target, std::ios::beg);
+        }
+
+        const auto pos = current_position(*file);
+        if (pos < 0) {
+            write_result32(-1);
+            return;
+        }
+
+        write_result32(static_cast<std::int32_t>(pos));
+    }
+
+    void handle_unlink() {
+        const auto path = resolve_guest_path(read_c_string(read16(kEmuReqPath)));
+        if (path.empty()) {
+            write_result16(-1);
+            return;
+        }
+
+        write_result16(std::remove(path.c_str()) == 0 ? 0 : -1);
+    }
+
+    void handle_rename() {
+        const auto from = resolve_guest_path(read_c_string(read16(kEmuReqPath)));
+        const auto to = resolve_guest_path(read_c_string(read16(kEmuReqPath2)));
+        if (from.empty() || to.empty()) {
+            write_result16(-1);
+            return;
+        }
+
+        if (!to.parent_path().empty()) {
+            std::filesystem::create_directories(to.parent_path());
+        }
+        write_result16(std::rename(from.c_str(), to.c_str()) == 0 ? 0 : -1);
+    }
+
+    void handle_command(uint8_t value) noexcept {
+        try {
+            switch (value) {
+            case kEmuCmdExit:
+                break;
+            case kEmuCmdOpen:
+                handle_open();
+                break;
+            case kEmuCmdClose:
+                handle_close();
+                break;
+            case kEmuCmdRead:
+                handle_read();
+                break;
+            case kEmuCmdWrite:
+                handle_write();
+                break;
+            case kEmuCmdLseek:
+                handle_lseek();
+                break;
+            case kEmuCmdUnlink:
+                handle_unlink();
+                break;
+            case kEmuCmdRename:
+                handle_rename();
+                break;
+            default:
+                break;
+            }
+        } catch (...) {
+            if (value == kEmuCmdLseek) {
+                write_result32(-1);
+            } else if (value != kEmuCmdExit) {
+                write_result16(-1);
+            }
+        }
+    }
+
     port_mux ports;
     xz80::flat_memory mem;
     xz80::cpu cpu;
     std::vector<uint16_t> breakpoints;
+    std::optional<std::filesystem::path> host_fs_root_;
+    std::vector<std::unique_ptr<file_handle>> files;
 };
 
 machine::machine(uint8_t fill)
@@ -305,12 +771,28 @@ void machine::bind_stdout(uint16_t port, std::ostream& output) noexcept {
     impl_->ports.bind_stdout(port, output);
 }
 
+void machine::bind_emu_stdio(std::istream& input, std::ostream& output) noexcept {
+    bind_stdin_status_data(emu_stdin_status_port, emu_stdin_data_port, input);
+    bind_stdout(emu_stdout_port, output);
+}
+
+void machine::bind_host_filesystem(const std::filesystem::path& root) {
+    impl_->host_fs_root_ = std::filesystem::absolute(root);
+    std::filesystem::create_directories(*impl_->host_fs_root_);
+    impl_->files.clear();
+}
+
 void machine::clear_stdin() noexcept {
     impl_->ports.clear_stdin();
 }
 
 void machine::clear_stdout() noexcept {
     impl_->ports.clear_stdout();
+}
+
+void machine::clear_host_filesystem() noexcept {
+    impl_->host_fs_root_.reset();
+    impl_->files.clear();
 }
 
 void machine::clear_io() noexcept {

@@ -311,7 +311,8 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
             sz = op.type->size();
         if (sz < 1)
             sz = 1;
-        iv.size = std::max(iv.size, sz);
+        const int extent = sz + std::max(op.byte_offset, 0);
+        iv.size = std::max(iv.size, extent);
     };
 
     auto temp_slot_reuse_safe = [&](const ir_function &fn) {
@@ -450,11 +451,30 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
             return dedicated_bytes + shared_region_pool;
         }
 
-        int total = 0;
-        for (const auto &[tid, iv] : intervals)
-            total += iv.size;
-        next_temp_slot_ = 0;
-        return total;
+        std::vector<temp_interval> ordered;
+        ordered.reserve(intervals.size());
+        for (const auto &[tid, iv] : intervals) {
+            if (iv.first_idx >= 0)
+                ordered.push_back(iv);
+        }
+
+        std::sort(ordered.begin(), ordered.end(),
+                  [](const temp_interval &a, const temp_interval &b) {
+                      if (a.first_idx != b.first_idx)
+                          return a.first_idx < b.first_idx;
+                      if (a.last_idx != b.last_idx)
+                          return a.last_idx < b.last_idx;
+                      return a.temp_id < b.temp_id;
+                  });
+
+        int dedicated_bytes = 0;
+        for (const auto &iv : ordered) {
+            temp_slots_[iv.temp_id] =
+                -(local_bytes_ + dedicated_bytes + iv.size);
+            dedicated_bytes += iv.size;
+        }
+        next_temp_slot_ = -dedicated_bytes;
+        return dedicated_bytes;
     }
 
     std::vector<temp_interval> ordered;
@@ -479,6 +499,10 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
 }
 
 void z80_gen::regalloc_prepass(const ir_function &fn) {
+    temp_regs_.clear();
+    symbol_regs_.clear();
+    incoming_symbol_homes_.clear();
+
     struct interval {
         int  first_def   = -1;
         int  last_use    = -1;
@@ -1372,6 +1396,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                         break;
                     }
                 }
+
                 if (end_label_idx < 0)
                     continue;
 

@@ -11,6 +11,25 @@ namespace xcc {
 
 namespace {
 
+uint16_t int_const_word(const operand &op, int word_index) {
+    if (word_index < 0)
+        return 0;
+
+    const int type_size = op.type ? op.type->size() : 8;
+    const int clamped_size =
+        type_size < 0 ? 0 : (type_size > 8 ? 8 : type_size);
+    const bool sign_fill =
+        op.type && !op.type->is_unsigned() && op.ival < 0;
+    const int shift = word_index * 16;
+    const int bit_width = clamped_size * 8;
+
+    if (shift >= 64 || shift >= bit_width)
+        return sign_fill ? 0xffffu : 0x0000u;
+
+    const uint64_t bits = static_cast<uint64_t>(op.ival);
+    return static_cast<uint16_t>((bits >> shift) & 0xffffu);
+}
+
 uint16_t fp_const_word(const operand &op, int word_index) {
     const int size = op.type ? op.type->size() : 8;
     if (size == 8) {
@@ -162,6 +181,19 @@ bool z80_gen::op_is_16bit(const operand &op) const {
     return op_size(op) >= 2;
 }
 
+namespace {
+
+int temp_storage_bytes(const operand &op) {
+    int sz = 2;
+    if (op.type && op.type->size() > 0)
+        sz = op.type->size();
+    if (sz < 1)
+        sz = 1;
+    return sz + std::max(op.byte_offset, 0);
+}
+
+} // namespace
+
 int z80_gen::alloc_temp(int temp_id, int sz) {
     auto it = temp_slots_.find(temp_id);
     if (it != temp_slots_.end()) return it->second;
@@ -216,8 +248,7 @@ std::string z80_gen::addr_of(const operand &op) {
 int z80_gen::ix_offset_of(const operand &op) const {
     int base;
     if (op.kind == operand_kind::TEMP) {
-        int sz = (op.type && op.type->size() > 0) ? op.type->size() : 2;
-        if (sz < 1) sz = 1;
+        int sz = temp_storage_bytes(op);
         base = const_cast<z80_gen*>(this)->alloc_temp(op.temp_id, sz);
     } else {
         base = op.is_param ? param_ix_offset(op) : op.stack_offset;
@@ -326,10 +357,28 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                     emit_line("ld\t%c, c", r.lo);
                     extend_loaded_byte(r.lo, r.hi);
                     return;
+                case temp_home::main_bc:
+                    emit_line("ld\t%c, %c", r.lo,
+                              op.byte_offset == 0 ? 'c' : 'b');
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
                 case temp_home::alt_a:
                     emit_line("ex\taf, af'");
                     emit_line("ld\t%c, a", r.lo);
                     emit_line("ex\taf, af'");
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::remat_hl:
+                    if (emit_rematerialize_hl(op)) {
+                        emit_line("ld\t%c, %c", r.lo,
+                                  op.byte_offset == 0 ? 'l' : 'h');
+                        extend_loaded_byte(r.lo, r.hi);
+                        return;
+                    }
+                    [[fallthrough]];
+                case temp_home::main_hl:
+                    emit_line("ld\t%c, %c", r.lo,
+                              op.byte_offset == 0 ? 'l' : 'h');
                     extend_loaded_byte(r.lo, r.hi);
                     return;
                 case temp_home::arg_a:
@@ -339,6 +388,18 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                     return;
                 case temp_home::arg_l:
                     emit_line("ld\t%c, l", r.lo);
+                    maybe_materialize_incoming_arg_temp(op);
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::arg_hl:
+                    emit_line("ld\t%c, %c", r.lo,
+                              op.byte_offset == 0 ? 'l' : 'h');
+                    maybe_materialize_incoming_arg_temp(op);
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::arg_de:
+                    emit_line("ld\t%c, %c", r.lo,
+                              op.byte_offset == 0 ? 'e' : 'd');
                     maybe_materialize_incoming_arg_temp(op);
                     extend_loaded_byte(r.lo, r.hi);
                     return;
@@ -706,8 +767,23 @@ void z80_gen::load_a(const operand &op) {
                 emit_line("ld\ta, c");
                 set_a_cache(cache_key);
                 return;
+            case temp_home::main_bc:
+                emit_line("ld\ta, %c", op.byte_offset == 0 ? 'c' : 'b');
+                set_a_cache(cache_key);
+                return;
             case temp_home::alt_a:
                 emit_line("ex\taf, af'");
+                set_a_cache(cache_key);
+                return;
+            case temp_home::remat_hl:
+                if (emit_rematerialize_hl(op)) {
+                    emit_line("ld\ta, %c", op.byte_offset == 0 ? 'l' : 'h');
+                    set_a_cache(cache_key);
+                    return;
+                }
+                [[fallthrough]];
+            case temp_home::main_hl:
+                emit_line("ld\ta, %c", op.byte_offset == 0 ? 'l' : 'h');
                 set_a_cache(cache_key);
                 return;
             case temp_home::arg_a:
@@ -716,6 +792,16 @@ void z80_gen::load_a(const operand &op) {
                 return;
             case temp_home::arg_l:
                 emit_line("ld\ta, l");
+                maybe_materialize_incoming_arg_temp(op);
+                set_a_cache(cache_key);
+                return;
+            case temp_home::arg_hl:
+                emit_line("ld\ta, %c", op.byte_offset == 0 ? 'l' : 'h');
+                maybe_materialize_incoming_arg_temp(op);
+                set_a_cache(cache_key);
+                return;
+            case temp_home::arg_de:
+                emit_line("ld\ta, %c", op.byte_offset == 0 ? 'e' : 'd');
                 maybe_materialize_incoming_arg_temp(op);
                 set_a_cache(cache_key);
                 return;
@@ -840,7 +926,7 @@ void z80_gen::load_hl_word(const operand &op, int word_index) {
         }
     }
     if (op.kind == operand_kind::INT_CONST)
-        emit_line("ld\thl, %s", asm_.imm((op.ival >> (word_index * 16)) & 0xFFFF).c_str());
+        emit_line("ld\thl, %s", asm_.imm(int_const_word(op, word_index)).c_str());
     else if (op.kind == operand_kind::FLOAT_CONST)
         emit_line("ld\thl, %s", asm_.imm(fp_const_word(op, word_index)).c_str());
     else if (op.kind == operand_kind::SYMBOL && op.is_global) {
@@ -890,7 +976,7 @@ void z80_gen::load_de_word(const operand &op, int word_index) {
         }
     }
     if (op.kind == operand_kind::INT_CONST) {
-        emit_line("ld\tde, %s", asm_.imm((op.ival >> (word_index * 16)) & 0xFFFF).c_str());
+        emit_line("ld\tde, %s", asm_.imm(int_const_word(op, word_index)).c_str());
     } else if (op.kind == operand_kind::FLOAT_CONST) {
         emit_line("ld\tde, %s", asm_.imm(fp_const_word(op, word_index)).c_str());
     } else if (op.kind == operand_kind::SYMBOL && op.is_global) {

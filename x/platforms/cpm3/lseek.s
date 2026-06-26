@@ -44,8 +44,8 @@ _lseek::
         call    __cpm3_set_user_a
         call    __cpm3_sync_iy
         jp      nz,__cpm3_lseek_restore_fail
-        ld      a,8(ix)
-        or      9(ix)
+        ld      a,9(ix)
+        or      a
         jp      nz,__cpm3_lseek_restore_fail
         ld      a,8(ix)
         cp      #SEEK_SET_V
@@ -190,4 +190,3 @@ __cpm3_lseek_fail:
         ld      hl,#0xffff
         pop     ix
         ret
-

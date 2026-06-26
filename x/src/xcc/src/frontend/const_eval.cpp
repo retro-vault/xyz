@@ -11,6 +11,27 @@
 
 namespace xcc {
 
+static int64_t wrap_add(int64_t lhs, int64_t rhs) {
+    return static_cast<int64_t>(static_cast<uint64_t>(lhs) +
+                                static_cast<uint64_t>(rhs));
+}
+
+static int64_t wrap_sub(int64_t lhs, int64_t rhs) {
+    return static_cast<int64_t>(static_cast<uint64_t>(lhs) -
+                                static_cast<uint64_t>(rhs));
+}
+
+static int64_t wrap_mul(int64_t lhs, int64_t rhs) {
+    return static_cast<int64_t>(static_cast<uint64_t>(lhs) *
+                                static_cast<uint64_t>(rhs));
+}
+
+static int64_t wrap_shl(int64_t lhs, int64_t rhs) {
+    const unsigned sh =
+        static_cast<unsigned>(static_cast<uint64_t>(rhs) & 63ULL);
+    return static_cast<int64_t>(static_cast<uint64_t>(lhs) << sh);
+}
+
 static std::optional<int64_t> apply_integer_cast(int64_t v, const type *t) {
     if (!t || !t->is_integer()) return std::nullopt;
     int bits = t->size() * 8;
@@ -214,15 +235,23 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
         auto r = evaluate(bin->right.get());
         if (l && r) {
             switch (bin->op) {
-            case bin_op::ADD:  return *l + *r;
-            case bin_op::SUB:  return *l - *r;
-            case bin_op::MUL:  return *l * *r;
-            case bin_op::DIV:  return *r ? std::optional<int64_t>(*l / *r) : std::nullopt;
-            case bin_op::MOD:  return *r ? std::optional<int64_t>(*l % *r) : std::nullopt;
+            case bin_op::ADD:  return wrap_add(*l, *r);
+            case bin_op::SUB:  return wrap_sub(*l, *r);
+            case bin_op::MUL:  return wrap_mul(*l, *r);
+            case bin_op::DIV:
+                if (*r == 0) return std::nullopt;
+                if (*l == std::numeric_limits<int64_t>::min() && *r == -1)
+                    return std::optional<int64_t>(std::numeric_limits<int64_t>::min());
+                return std::optional<int64_t>(*l / *r);
+            case bin_op::MOD:
+                if (*r == 0) return std::nullopt;
+                if (*l == std::numeric_limits<int64_t>::min() && *r == -1)
+                    return std::optional<int64_t>(0);
+                return std::optional<int64_t>(*l % *r);
             case bin_op::AND:  return *l & *r;
             case bin_op::OR:   return *l | *r;
             case bin_op::XOR:  return *l ^ *r;
-            case bin_op::SHL:  return *l << *r;
+            case bin_op::SHL:  return wrap_shl(*l, *r);
             case bin_op::SHR:  return *l >> *r;
             case bin_op::EQ:   return (*l == *r) ? 1 : 0;
             case bin_op::NE:   return (*l != *r) ? 1 : 0;

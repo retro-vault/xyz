@@ -115,6 +115,28 @@ TEST(machine_reads_split_stdin_status_and_data_ports) {
     ASSERT_EQ(static_cast<unsigned char>(bytes[2]), 0x00);
 }
 
+TEST(machine_binds_platform_emu_stdio_defaults) {
+    xemu::machine emu;
+    std::istringstream input("Q");
+    std::ostringstream output;
+    const std::vector<uint8_t> program = {
+        0xDB, 0xE2, // in a, (0xe2) status
+        0xB7,       // or a
+        0x28, 0xFB, // jr z, back to start
+        0xDB, 0xE3, // in a, (0xe3) data
+        0xD3, 0xE1, // out (0xe1), a
+        0x76        // halt
+    };
+
+    emu.load_bytes(0x0000, program);
+    emu.bind_emu_stdio(input, output);
+    emu.set_pc(0x0000);
+
+    const auto stop = emu.continue_execution();
+    ASSERT_EQ(stop.reason, xemu::stop_reason::halted);
+    ASSERT_EQ(output.str(), std::string("Q"));
+}
+
 TEST(machine_breakpoint_stops_before_instruction) {
     xemu::machine emu;
     const std::vector<uint8_t> program = {

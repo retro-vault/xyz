@@ -9,27 +9,20 @@
         .globl  __atomic_exchange_2
 
         ; __atomic_exchange_2
-        ; inputs: 4(ix)..5(ix) = pointer, 6(ix)..7(ix) = new value.
-        ; outputs: HL = previous 16-bit value.
-        ; clobbers: AF, DE, IX.
+        ; inputs: HL = pointer, DE = new value.
+        ; outputs: DE = previous 16-bit value.
+        ; clobbers: A, BC, HL.
 
 __atomic_exchange_2:
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         di
-        ld      l, 4(ix)
-        ld      h, 5(ix)
-        ld      e, (hl)
+        ld      a, (hl)
+        ld      c, a
+        ld      (hl), e
         inc     hl
-        ld      d, (hl)
-        dec     hl
-        ld      a, 6(ix)
-        ld      (hl), a
-        inc     hl
-        ld      a, 7(ix)
-        ld      (hl), a
-        ex      de, hl
+        ld      a, (hl)
+        ld      b, a
+        ld      (hl), d
+        ld      e, c
+        ld      d, b
         ei
-        pop     ix
         ret

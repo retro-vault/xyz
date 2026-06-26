@@ -17,6 +17,8 @@ __stdio_io_alloc_stream::
         ld      b,#FILE_POOL_COUNT
 __stdio_io_alloc_stream_loop:
         ld      a,(hl)
+        or      a
+        ret     z
         cp      #FILE_FREE_FD
         ret     z
         ld      de,#4

@@ -31,6 +31,8 @@ struct alias_info {
     std::unordered_set<std::string> address_taken_bases;
 };
 
+static int64_t cast_int_value(int64_t v, const type_ptr &type);
+
 struct ssa_value {
     enum class kind : uint8_t {
         UNKNOWN,
@@ -170,7 +172,8 @@ static bool is_licm_safe(icode_op op) {
     }
 }
 
-static int64_t fold_binary(icode_op op, int64_t l, int64_t r) {
+static int64_t fold_binary(icode_op op, int64_t l, int64_t r,
+                           const type_ptr &type) {
     auto rotl = [](uint64_t v, unsigned sh, unsigned bits) -> uint64_t {
         const uint64_t mask = bits >= 64 ? ~0ULL : ((1ULL << bits) - 1ULL);
         sh &= (bits - 1U);
@@ -183,26 +186,74 @@ static int64_t fold_binary(icode_op op, int64_t l, int64_t r) {
         v &= mask;
         return ((v >> sh) | (v << ((bits - sh) & (bits - 1U)))) & mask;
     };
+    const bool use_unsigned = type && (type->is_unsigned() || type->is_ptr());
+    const unsigned bits =
+        (!type || type->size() <= 0 || type->size() >= 8)
+            ? 64U
+            : static_cast<unsigned>(type->size() * 8);
+    const uint64_t mask =
+        bits >= 64 ? ~0ULL : ((1ULL << bits) - 1ULL);
+    const uint64_t ul = static_cast<uint64_t>(l) & mask;
+    const uint64_t ur = static_cast<uint64_t>(r) & mask;
+    const unsigned sh = static_cast<unsigned>(ur) & (bits - 1U);
+
+    auto normalize = [&](int64_t value) -> int64_t {
+        return cast_int_value(value, type);
+    };
+
     switch (op) {
-    case icode_op::ADD:  return l + r;
-    case icode_op::SUB:  return l - r;
-    case icode_op::MUL:  return l * r;
-    case icode_op::DIV:  return r ? l / r : 0;
-    case icode_op::MOD:  return r ? l % r : 0;
-    case icode_op::BAND: return l & r;
-    case icode_op::BOR:  return l | r;
-    case icode_op::BXOR: return l ^ r;
-    case icode_op::SHL:  return l << (r & 63);
-    case icode_op::SHR:  return l >> (r & 63);
-    case icode_op::ROL:  return static_cast<int64_t>(rotl(static_cast<uint64_t>(l), static_cast<unsigned>(r), 16));
-    case icode_op::ROR:  return static_cast<int64_t>(rotr(static_cast<uint64_t>(l), static_cast<unsigned>(r), 16));
-    case icode_op::PACK_BYTES: return (l & 0xff) | ((r & 0xff) << 8);
-    case icode_op::EQ:   return l == r ? 1 : 0;
-    case icode_op::NE:   return l != r ? 1 : 0;
-    case icode_op::LT:   return l <  r ? 1 : 0;
-    case icode_op::LE:   return l <= r ? 1 : 0;
-    case icode_op::GT:   return l >  r ? 1 : 0;
-    case icode_op::GE:   return l >= r ? 1 : 0;
+    case icode_op::ADD:
+        return normalize(static_cast<int64_t>(ul + ur));
+    case icode_op::SUB:
+        return normalize(static_cast<int64_t>(ul - ur));
+    case icode_op::MUL:
+        return normalize(static_cast<int64_t>(ul * ur));
+    case icode_op::DIV:
+        if (r == 0)
+            return 0;
+        if (use_unsigned)
+            return normalize(static_cast<int64_t>(ul / ur));
+        if (l == std::numeric_limits<int64_t>::min() && r == -1)
+            return normalize(l);
+        return normalize(l / r);
+    case icode_op::MOD:
+        if (r == 0)
+            return 0;
+        if (use_unsigned)
+            return normalize(static_cast<int64_t>(ul % ur));
+        if (l == std::numeric_limits<int64_t>::min() && r == -1)
+            return 0;
+        return normalize(l % r);
+    case icode_op::BAND:
+        return normalize(static_cast<int64_t>(ul & ur));
+    case icode_op::BOR:
+        return normalize(static_cast<int64_t>(ul | ur));
+    case icode_op::BXOR:
+        return normalize(static_cast<int64_t>(ul ^ ur));
+    case icode_op::SHL:
+        return normalize(static_cast<int64_t>(ul << sh));
+    case icode_op::SHR:
+        if (use_unsigned)
+            return normalize(static_cast<int64_t>(ul >> sh));
+        return normalize(l >> sh);
+    case icode_op::ROL:
+        return normalize(static_cast<int64_t>(rotl(ul, static_cast<unsigned>(ur), bits)));
+    case icode_op::ROR:
+        return normalize(static_cast<int64_t>(rotr(ul, static_cast<unsigned>(ur), bits)));
+    case icode_op::PACK_BYTES:
+        return normalize(static_cast<int64_t>((ul & 0xffULL) | ((ur & 0xffULL) << 8)));
+    case icode_op::EQ:
+        return use_unsigned ? (ul == ur ? 1 : 0) : (l == r ? 1 : 0);
+    case icode_op::NE:
+        return use_unsigned ? (ul != ur ? 1 : 0) : (l != r ? 1 : 0);
+    case icode_op::LT:
+        return use_unsigned ? (ul < ur ? 1 : 0) : (l < r ? 1 : 0);
+    case icode_op::LE:
+        return use_unsigned ? (ul <= ur ? 1 : 0) : (l <= r ? 1 : 0);
+    case icode_op::GT:
+        return use_unsigned ? (ul > ur ? 1 : 0) : (l > r ? 1 : 0);
+    case icode_op::GE:
+        return use_unsigned ? (ul >= ur ? 1 : 0) : (l >= r ? 1 : 0);
     default:             return 0;
     }
 }
@@ -223,6 +274,8 @@ static int64_t cast_int_value(int64_t v, const type_ptr &type) {
         return is_unsigned
                    ? static_cast<int64_t>(static_cast<uint32_t>(v & 0xFFFFFFFFLL))
                    : static_cast<int64_t>(static_cast<int32_t>(v & 0xFFFFFFFFLL));
+    case 8:
+        return static_cast<int64_t>(static_cast<uint64_t>(v));
     default: return v;
     }
 }
@@ -274,6 +327,14 @@ static bool same_type_shape(const type_ptr &lhs, const type_ptr &rhs) {
     if (!lhs || !rhs)
         return false;
     return lhs->to_string() == rhs->to_string();
+}
+
+static bool cast_can_fold_to_int_const(const type_ptr &target) {
+    if (!target)
+        return true;
+    return target->is_integer() ||
+           target->kind == type_kind::POINTER ||
+           target->kind == type_kind::ENUM;
 }
 
 static bool is_local_cse_barrier(const icode &ic);
@@ -385,6 +446,12 @@ static bool is_trackable_symbol(const operand &op, const alias_info &alias) {
     if (!op.is_symbol()) return false;
     if (op.is_global || op.is_tls || op.is_sfr) return false;
     if (op.byte_offset != 0) return false;
+    // SSA-style value propagation is only sound for scalar locals here.
+    // Aggregate objects (especially unions / overlapping subobjects) may be
+    // partially read or written through derived addresses, so treating the
+    // whole base symbol as an interchangeable "value" lets later DCE drop
+    // required stores.
+    if (!op.type || !op.type->is_scalar()) return false;
     return !base_symbol_address_taken(alias, op);
 }
 
@@ -522,7 +589,9 @@ static ssa_value simplify_binary_value(const icode &ic,
     if (lhs.tag == ssa_value::kind::INT_CONST &&
         rhs.tag == ssa_value::kind::INT_CONST &&
         is_binary_foldable(ic.op)) {
-        return ssa_value::int_const(fold_binary(ic.op, lhs.ival, rhs.ival));
+        const type_ptr fold_type =
+            ic.left.type ? ic.left.type : (ic.right.type ? ic.right.type : ic.result.type);
+        return ssa_value::int_const(fold_binary(ic.op, lhs.ival, rhs.ival, fold_type));
     }
 
     const bool left_const  = lhs.tag == ssa_value::kind::INT_CONST;
@@ -618,7 +687,8 @@ static ssa_value evaluate_defined_value(const icode &ic, size_t index,
         return ssa_value::value_ref(value_id);
 
     case icode_op::CAST:
-        if (lhs.tag == ssa_value::kind::INT_CONST)
+        if (lhs.tag == ssa_value::kind::INT_CONST &&
+            cast_can_fold_to_int_const(ic.result.type))
             return ssa_value::int_const(cast_int_value(lhs.ival, ic.result.type));
         return ssa_value::value_ref(value_id);
 
@@ -3634,24 +3704,32 @@ public:
             if (is_binary_foldable(ic.op) &&
                 ic.left.kind == operand_kind::INT_CONST &&
                 ic.right.kind == operand_kind::INT_CONST) {
-                const int64_t folded = fold_binary(ic.op, ic.left.ival, ic.right.ival);
+                const type_ptr fold_type =
+                    ic.left.type ? ic.left.type : (ic.right.type ? ic.right.type : ic.result.type);
+                const int64_t folded = fold_binary(ic.op, ic.left.ival, ic.right.ival,
+                                                   fold_type);
                 ic.op    = icode_op::ASSIGN;
                 ic.left  = operand::make_int(folded, ic.result.type);
                 ic.right = operand::make_none();
                 changed  = true;
             } else if (ic.op == icode_op::NEG &&
                        ic.left.kind == operand_kind::INT_CONST) {
+                const uint64_t raw = 0ULL - static_cast<uint64_t>(ic.left.ival);
                 ic.op   = icode_op::ASSIGN;
-                ic.left = operand::make_int(-ic.left.ival, ic.result.type);
+                ic.left = operand::make_int(cast_int_value(static_cast<int64_t>(raw),
+                                                           ic.result.type),
+                                            ic.result.type);
                 changed = true;
             } else if (ic.op == icode_op::BNOT &&
                        ic.left.kind == operand_kind::INT_CONST) {
                 ic.op   = icode_op::ASSIGN;
-                ic.left = operand::make_int(~ic.left.ival, ic.result.type);
+                ic.left = operand::make_int(cast_int_value(~ic.left.ival, ic.result.type),
+                                            ic.result.type);
                 changed = true;
             } else if (ic.op == icode_op::CAST &&
                        ic.left.kind == operand_kind::INT_CONST &&
-                       ic.result.type) {
+                       ic.result.type &&
+                       cast_can_fold_to_int_const(ic.result.type)) {
                 ic.op   = icode_op::ASSIGN;
                 ic.left = operand::make_int(cast_int_value(ic.left.ival, ic.result.type),
                                             ic.result.type);

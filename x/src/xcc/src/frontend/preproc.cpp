@@ -48,9 +48,9 @@ static std::string normalize_digraph_hashes(const std::string &s) {
 }
 
 std::string preprocessor::pp_trim(const std::string &s) {
-    size_t a = s.find_first_not_of(" \t\r");
+    size_t a = s.find_first_not_of(" \t\r\n\f\v");
     if (a == std::string::npos) return "";
-    size_t b = s.find_last_not_of(" \t\r");
+    size_t b = s.find_last_not_of(" \t\r\n\f\v");
     return s.substr(a, b - a + 1);
 }
 
@@ -95,6 +95,46 @@ static std::string canonical_include_key(const std::string &path) {
         return absolute.lexically_normal().string();
 
     return std::filesystem::path(path).lexically_normal().string();
+}
+
+static bool is_pp_space(char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n' ||
+           c == '\f' || c == '\v';
+}
+
+static bool has_unclosed_paren(const std::string &text) {
+    int depth = 0;
+    char quote = '\0';
+
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+
+        if (quote != '\0') {
+            if (c == '\\' && i + 1 < text.size()) {
+                ++i;
+            } else if (c == quote) {
+                quote = '\0';
+            }
+            continue;
+        }
+
+        if (i + 1 < text.size() && text[i] == '/' && text[i + 1] == '/') {
+            break;
+        }
+
+        if (c == '"' || c == '\'') {
+            quote = c;
+            continue;
+        }
+
+        if (c == '(') {
+            ++depth;
+        } else if (c == ')' && depth > 0) {
+            --depth;
+        }
+    }
+
+    return depth > 0;
 }
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -313,7 +353,7 @@ std::string preprocessor::expand(const std::string &text,
         if (id == "defined") {
             result += id;
             size_t j = i;
-            while (j < text.size() && (text[j] == ' ' || text[j] == '\t')) ++j;
+            while (j < text.size() && is_pp_space(text[j])) ++j;
             if (j < text.size() && text[j] == '(') {
                 // defined(X): copy through closing ')'
                 while (i <= j) result += text[i++]; // up to and including '('
@@ -370,7 +410,7 @@ std::string preprocessor::expand(const std::string &text,
 
         // Function-like: look for '('
         size_t j = i;
-        while (j < text.size() && (text[j] == ' ' || text[j] == '\t')) ++j;
+        while (j < text.size() && is_pp_space(text[j])) ++j;
         if (j >= text.size() || text[j] != '(') {
             // No argument list — leave unexpanded
             result += id;
@@ -989,6 +1029,18 @@ void preprocessor::process_text(const std::string &source,
         expand_file_   = filename;
 
         std::string trimmed = pp_trim(line);
+
+        if (trimmed.empty() || trimmed[0] != '#') {
+            while (has_unclosed_paren(line)) {
+                splice_offsets.push_back(line.size());
+                std::string cont;
+                if (!std::getline(ss, cont)) break;
+                ++lineno;
+                line += '\n';
+                line += cont;
+            }
+            trimmed = pp_trim(line);
+        }
 
         // Substitute __LINE__ / __FILE__ in any string (used for directives).
         auto subst_line_file = [&](const std::string &s) -> std::string {

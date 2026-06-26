@@ -136,6 +136,20 @@ static std::string fixed_float_call_name(const std::string &name) {
     return name;
 }
 
+static type_ptr default_arg_promote_type(type_ptr t) {
+    if (!t)
+        return type::make_int();
+
+    t = t->unqual();
+    if (!t)
+        return type::make_int();
+
+    if (t->kind == type_kind::FLOAT)
+        return type::make_double();
+
+    return integer_promote(t);
+}
+
 // ----- Literal visitors ----------------------------------------------
 
 void ir_gen::visit(int_literal_expr &e) {
@@ -297,6 +311,10 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
         if (!op.type) {
             op.type = target;
             return op;
+        }
+        if (target->kind == type_kind::COMPLEX &&
+            op.type->kind != type_kind::COMPLEX) {
+            return emit_unop(icode_op::CAST, op, target);
         }
         bool same_type =
             op.type->kind == target->kind &&
@@ -593,8 +611,13 @@ void ir_gen::visit(call_expr &e) {
     arg_types.reserve(arg_ops.size());
     for (size_t i = 0; i < arg_ops.size(); ++i) {
         type_ptr abi_type = arg_ops[i].type ? arg_ops[i].type : type::make_int();
-        if (fn_type && i < fn_type->params.size() && fn_type->params[i])
+        const bool is_variadic_tail =
+            fn_type && fn_type->variadic && i >= fn_type->params.size();
+        if (is_variadic_tail) {
+            abi_type = default_arg_promote_type(abi_type);
+        } else if (fn_type && i < fn_type->params.size() && fn_type->params[i]) {
             abi_type = fn_type->params[i];
+        }
         arg_types.push_back(abi_type);
         if (arg_ops[i].type != abi_type) {
             bool needs_materialized_cast =

@@ -49,6 +49,11 @@ struct stop_result {
 
 class machine {
 public:
+    static constexpr uint16_t emu_cmd_port = 0x00e0;
+    static constexpr uint16_t emu_stdout_port = 0x00e1;
+    static constexpr uint16_t emu_stdin_status_port = 0x00e2;
+    static constexpr uint16_t emu_stdin_data_port = 0x00e3;
+
     explicit machine(uint8_t fill = 0x00);
     ~machine();
 
@@ -82,8 +87,11 @@ public:
         uint16_t data_port,
         std::istream& input) noexcept;
     void bind_stdout(uint16_t port, std::ostream& output) noexcept;
+    void bind_emu_stdio(std::istream& input, std::ostream& output) noexcept;
+    void bind_host_filesystem(const std::filesystem::path& root);
     void clear_stdin() noexcept;
     void clear_stdout() noexcept;
+    void clear_host_filesystem() noexcept;
     void clear_io() noexcept;
 
     void insert_breakpoint(uint16_t address);

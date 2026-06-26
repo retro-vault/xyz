@@ -1,0 +1,32 @@
+=== Z80 C23 FLOAT + MATH.H TEST ===
+
+sizeof(float) = 4, sizeof(double) = 8
+FLT_EPSILON ≈ 1.192093e-07, DBL_EPSILON ≈ 1.192093e-07
+
+  [PASS] float literal
+  [PASS] double literal
+  [PASS] float +
+  [PASS] double *
+  [PASS] float -
+  [PASS] double /
+  [PASS] float >
+  [PASS] double <
+  [PASS] double to int
+  [PASS] int to float
+  [PASS] sinf(0)
+  [PASS] cos(M_PI)
+  [PASS] sqrt(2)
+  [PASS] pow(2,3)
+  [PASS] exp(1)
+  [PASS] log(e)
+  [PASS] fabsf
+  [PASS] floor
+  [PASS] ceil
+  [PASS] fmod
+  [PASS] INFINITY
+  [PASS] NAN
+  [PASS] float array/pointer
+
+=== SUMMARY ===
+Tests passed: 23 / 23
+FLOAT + MATH TEST PASSED SUCCESSFULLY!

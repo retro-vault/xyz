@@ -6,7 +6,7 @@
         ;; Copyright (C) 2026 tomaz stih
 
         .module fscanf
-        .optsdcc -mz80 sdcccall(1)
+        .optsdcc -mz80 sdcccall(0)
 
         .globl  _fscanf
         .globl  __stdio_scan_init_stream

@@ -8,6 +8,7 @@ C8C ?= $(HOST_BIN_DIR)/xcc
 AS8 ?= $(HOST_BIN_DIR)/xas
 AR8 ?= $(HOST_BIN_DIR)/xar
 C8FLAGS ?= -I$(ROOT)/libc/include -I$(ROOT)/platforms/include
+LIBC_COPTFLAGS ?= -Os
 AS8FLAGS ?= --mode=sdcc
 AR8FLAGS ?= rcs
 LIBC_PROFILE ?= full
@@ -133,7 +134,7 @@ $(BUILD_TARGET): $(OBJS) | $(PROJECT_BUILD_DIR)
 
 $(OBJDIR)/%.s: %.c | $(OBJDIR)
 	@mkdir -p $(dir $@)
-	$(C8C) -S $(C8FLAGS) -o $@ $<
+	$(C8C) -S $(LIBC_COPTFLAGS) $(C8FLAGS) -o $@ $<
 
 $(OBJDIR)/%.rel: %.s | $(OBJDIR)
 	@mkdir -p $(dir $@)
@@ -151,7 +152,7 @@ $(OBJDIR)/sys/%.rel: $(SYS_DIR)/%.s | $(OBJDIR)
 
 $(OBJDIR)/sys/%.s: $(SYS_DIR)/%.c | $(OBJDIR)
 	@mkdir -p $(dir $@)
-	$(C8C) -S $(C8FLAGS) -o $@ $<
+	$(C8C) -S $(LIBC_COPTFLAGS) $(C8FLAGS) -o $@ $<
 
 $(OBJDIR)/sys/%.rel: $(OBJDIR)/sys/%.s | $(OBJDIR)
 	@mkdir -p $(dir $@)

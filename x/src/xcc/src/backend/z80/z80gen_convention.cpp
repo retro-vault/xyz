@@ -19,7 +19,8 @@ int arg_size(type_ptr type) {
 }
 
 bool sdcccall1_caller_cleans(type_ptr ret_type) {
-    return ret_type && ret_type->size() >= 4;
+    (void)ret_type;
+    return true;
 }
 
 bool has_fixed_frame_hazards(const ir_function &fn) {
@@ -599,15 +600,10 @@ void abi_convention::materialize_modern_receive(z80_gen &g, const icode &ic)
         g.store_hl(ic.result);
         break;
     case abi_arg_loc::REG_DE:
-        g.emit_line("push\tde");
-        g.emit_line("pop\thl");
-        g.store_hl(ic.result);
+        g.store_de(ic.result);
         break;
     case abi_arg_loc::REG_DEHL:
-        g.emit_line("push\thl");
-        g.emit_line("ex\tde, hl");
-        g.store_hl_lo32(ic.result);
-        g.emit_line("pop\thl");
+        g.store_de(ic.result);
         g.store_hl_hi32(ic.result);
         break;
     case abi_arg_loc::STACK:

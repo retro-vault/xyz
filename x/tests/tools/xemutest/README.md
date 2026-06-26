@@ -27,6 +27,7 @@ Supported keys:
 - `runner = xemu` or `runner = command`
 - `component = xcc`
 - `summary = short human-readable description`
+- `tag = double-regression`
 - `alias = xcc`
 - `legacy_path = x/src/xcc/tests`
 - `kind = compile` or `kind = run`
@@ -45,6 +46,8 @@ Supported keys:
 - `expect_exit = 0`
 - `stderr_contains = some text`
 - `stderr_not_contains = some text`
+- `asm_contains = some text`
+- `asm_not_contains = some text`
 - `assert_reg = hl=0x1234`
 - `assert_mem = 0xff02: 0xa5`
 - `assert_var = sum:int=42`
@@ -56,6 +59,7 @@ For run tests, the default console wiring matches the current `emu` platform:
 - stdout port: `0xe1`
 
 Use one `compiler_arg = ...` line per compiler/linker argument.
+`--filter` matches ids, aliases, tags, legacy paths, and components.
 `xemutest --list` shows the fully expanded runnable variants.
 
 ## Build

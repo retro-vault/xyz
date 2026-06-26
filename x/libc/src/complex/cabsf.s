@@ -53,12 +53,12 @@ _cabsf::
         pop     af
 
         ;; real*real + imag*imag
+        push    hl
+        push    de
+        ld      e,-4(ix)
+        ld      d,-3(ix)
         ld      l,-2(ix)
         ld      h,-1(ix)
-        push    hl
-        ld      l,-4(ix)
-        ld      h,-3(ix)
-        push    hl
         call    ___fsadd
         pop     bc
         pop     bc

@@ -26,6 +26,7 @@
         .globl  __cpm3_entry_fcb_ptr_iy
         .globl  __cpm3_find_open
         .globl  __cpm3_get_current_user
+        .globl  __cpm3_get_current_drive
         .globl  __cpm3_set_user_a
         .globl  __cpm3_cmp_fpos_size_iy
         .globl  __cpm3_inc_fpos_iy
@@ -48,11 +49,11 @@
         .equ    BDOS_SUCCESS,0
         .equ    DMA_SIZE,128
         .equ    DRV_GET,25
-        .equ    FCB_OFF_F6ATTR,6
         .equ    FCB_OFF_RREC0,33
         .equ    FCB_OFF_RREC1,34
         .equ    FCB_OFF_RREC2,35
         .equ    FCB_OFF_SEQREQ,32
+        .equ    FCB_OFF_F6,6
         .equ    FCB_SIZE,36
         .equ    FD_FILE_BASE,3
         .equ    FD_OFF_BUFREC0,13
@@ -65,11 +66,10 @@
         .equ    FD_OFF_FSIZE0,9
         .equ    FD_OFF_USER,2
         .equ    FD_SIZE,181
-        .equ    F_ATTRIB,30
         .equ    F_CLOSE,16
+        .equ    F_ATTRIB,30
         .equ    F_DMAOFF,26
         .equ    F_READRAND,33
-        .equ    F_TRUNCATE,99
         .equ    F_USERNUM,32
         .equ    F_WRITERAND,34
         .equ    OPEN_COUNT,16
@@ -121,7 +121,7 @@ __cpm3_zero_bytes_loop:
 
         ;; HL = ptr, B = byte count. Fill with spaces.
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_fd_table:
         .ds     OPEN_COUNT * FD_SIZE
 
@@ -130,42 +130,43 @@ __cpm3_fd_slot_ptr::
         ld      hl,#__cpm3_fd_table
         or      a
         ret     z
-        ld      b,a
+        ld      c,a
 __cpm3_fd_slot_ptr_loop:
         ld      de,#FD_SIZE
         add     hl,de
-        djnz    __cpm3_fd_slot_ptr_loop
+        dec     c
+        jr      nz,__cpm3_fd_slot_ptr_loop
         ret
 
         ;; HL = fd. Return HL = entry or 0 on failure.
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_fcb::
         .ds     FCB_SIZE
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_len::
-        .dw     0
+        .ds     2
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_ptr::
-        .dw     0
+        .ds     2
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_rec::
-        .db     0, 0, 0, 0
+        .ds     4
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_rec2::
-        .db     0, 0, 0, 0
+        .ds     4
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_saved_user::
-        .db     0
+        .ds     1
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_user::
-        .db     0
+        .ds     1
 
         .area   _CODE
 __cpm3_clear_entry_iy::
@@ -489,76 +490,14 @@ __cpm3_sync_iy::
 __cpm3_sync_iy_impl:
         call    __cpm3_flush_iy
         ret     nz
-        ld      a,FD_OFF_FLAGS(iy)
-        and     #ACC_MASK
-        ret     z
-        push    iy
-        pop     hl
-        ld      de,#FD_OFF_FSIZE0
-        add     hl,de
-        call    __cpm3_shift7_from_ptr
-        ld      b,a                     ; B = last-record byte count
-        or      a
-        jr      z,__cpm3_sync_no_ceil
-        call    __cpm3_inc_tmprec
-__cpm3_sync_no_ceil:
-        ld      a,(__cpm3_tmp_rec)
-        ld      FD_OFF_FCB + FCB_OFF_RREC0(iy),a
-        ld      a,(__cpm3_tmp_rec + 1)
-        ld      FD_OFF_FCB + FCB_OFF_RREC1(iy),a
-        ld      a,(__cpm3_tmp_rec + 2)
-        ld      FD_OFF_FCB + FCB_OFF_RREC2(iy),a
-        call    __cpm3_entry_fcb_ptr_iy
-        ex      de,hl
-        push    ix
-        push    iy
-        push    bc                      ; keep remainder across BDOS
-        ld      c,#F_TRUNCATE
-        call    BDOS
-        pop     bc
-        pop     iy
-        pop     ix
-        cp      #BDOS_SUCCESS
-        jr      nz,__cpm3_sync_truncate_unsupported
-        ld      a,b
-        or      a
-        ret     z
-        ld      a,b
-        ld      FD_OFF_FCB + FCB_OFF_SEQREQ(iy),a
-        ld      a,FD_OFF_FCB + FCB_OFF_F6ATTR(iy)
-        or      #0x80
-        ld      FD_OFF_FCB + FCB_OFF_F6ATTR(iy),a
-        call    __cpm3_entry_fcb_ptr_iy
-        ex      de,hl
-        push    ix
-        push    iy
-        ld      c,#F_ATTRIB
-        call    BDOS
-        pop     iy
-        pop     ix
-        push    af                      ; keep BDOS status across restore
-        ld      a,FD_OFF_FCB + FCB_OFF_F6ATTR(iy)
-        and     #0x7f
-        ld      FD_OFF_FCB + FCB_OFF_F6ATTR(iy),a
-        pop     af
-        cp      #BDOS_SUCCESS
-        jr      nz,__cpm3_sync_fail
         xor     a
-        ret
-__cpm3_sync_truncate_unsupported:
-        ;; Hosts without BDOS 99 (e.g. CP/M 2.2-style emulators) keep the
-        ;; record-rounded length; that is not a close failure.
-        xor     a
-        ret
-__cpm3_sync_fail:
-        ld      a,#1
         ret
 
         ;; A -> BCD in A.
 
-        .area   _DATA
+        .area   _BSS
 __cpm3_tmp_ptr2:
-        .dw     0
+        .ds     2
         .area   _CODE
 __cpm3_fill_spaces:
         ld      a,#' '
@@ -606,7 +545,8 @@ __cpm3_name_char_ok:
 __cpm3_name_char_ret:
         ret
 
-__cpm3_get_current_drive:
+        .area   _CODE
+__cpm3_get_current_drive::
         push    ix
         push    iy
         ld      c,#DRV_GET
@@ -620,6 +560,7 @@ __cpm3_get_current_drive:
         ;; HL = path, DE = destination FCB. Writes default drive/user plus
         ;; upper-cased 8.3 name. On success A = 0 and __cpm3_tmp_user holds
         ;; the selected user area.
+        .area   _CODE
 __cpm3_parse_path::
         ld      a,h
         or      l
@@ -786,18 +727,22 @@ __cpm3_parse_fail:
 
         .area   _CODE
 __cpm3_close_file::
+        push    iy
         call    __cpm3_find_open
         ld      a,h
         or      l
         jr      z,__cpm3_cf_fail
         push    hl
         pop     iy
+__cpm3_cf_prepare:
         call    __cpm3_get_current_user
         ld      (__cpm3_tmp_saved_user),a
         ld      a,FD_OFF_USER(iy)
         call    __cpm3_set_user_a
+__cpm3_cf_sync:
         call    __cpm3_sync_iy
         jr      nz,__cpm3_cf_restore_fail
+__cpm3_cf_close:
         call    __cpm3_entry_fcb_ptr_iy
         ex      de,hl
         push    ix
@@ -806,24 +751,45 @@ __cpm3_close_file::
         call    BDOS
         pop     iy
         pop     ix
-        push    af
+        cp      #0xff
+        jr      z,__cpm3_cf_restore_fail
+        ld      a,FD_OFF_FLAGS(iy)
+        and     #ACC_MASK
+        jr      z,__cpm3_cf_done
+        ld      a,FD_OFF_FCB + FCB_OFF_F6(iy)
+        or      #0x80
+        ld      FD_OFF_FCB + FCB_OFF_F6(iy),a
+        ld      a,FD_OFF_FSIZE0(iy)
+        and     #0x7f
+        ld      FD_OFF_FCB + FCB_OFF_SEQREQ(iy),a
+        call    __cpm3_entry_fcb_ptr_iy
+        ex      de,hl
+        push    ix
+        push    iy
+        ld      c,#F_ATTRIB
+        call    BDOS
+        pop     iy
+        pop     ix
+        cp      #0xff
+        jr      z,__cpm3_cf_restore_fail
+__cpm3_cf_done:
+        call    __cpm3_clear_entry_iy
         ld      a,(__cpm3_tmp_saved_user)
         call    __cpm3_set_user_a
-        pop     af
-        cp      #BDOS_SUCCESS
-        jr      nz,__cpm3_cf_fail
-        call    __cpm3_clear_entry_iy
         ld      de,#0x0000
+        pop     iy
         ret
 __cpm3_cf_restore_fail:
         ld      a,(__cpm3_tmp_saved_user)
         call    __cpm3_set_user_a
 __cpm3_cf_fail:
         ld      de,#0xffff
+        pop     iy
         ret
 
         .area   _CODE
 __cpm3_read_file::
+        push    iy
         ld      (__cpm3_tmp_ptr),de     ; capture buf before BDOS clobbers DE
         call    __cpm3_find_open
         ld      a,h
@@ -835,12 +801,8 @@ __cpm3_read_file::
         and     #ACC_MASK
         cp      #ACC_WRONLY
         jp      z,__cpm3_rf_fail
-        call    __cpm3_get_current_user
-        ld      (__cpm3_tmp_saved_user),a
-        ld      a,FD_OFF_USER(iy)
-        call    __cpm3_set_user_a
         call    __cpm3_sync_iy
-        jp      nz,__cpm3_rf_restore_fail
+        jp      nz,__cpm3_rf_fail
         ld      c,4(ix)
         ld      b,5(ix)
         ld      (__cpm3_tmp_len),bc
@@ -854,7 +816,7 @@ __cpm3_read_file_loop:
         or      a
         jr      nz,__cpm3_read_have_buf
         call    __cpm3_loadbuf_read_iy
-        jp      nz,__cpm3_rf_restore_fail
+        jp      nz,__cpm3_rf_fail
 __cpm3_read_have_buf:
         ld      a,FD_OFF_FPOS0(iy)
         and     #0x7f
@@ -876,19 +838,16 @@ __cpm3_read_have_buf:
         ld      FD_OFF_BUFVALID(iy),a
         jr      __cpm3_read_file_loop
 __cpm3_read_file_done:
-        ld      a,(__cpm3_tmp_saved_user)
-        call    __cpm3_set_user_a
         ld      hl,(__cpm3_tmp_len)
         or      a
         sbc     hl,bc
         ex      de,hl
+        pop     iy
         pop     ix
         ret
-__cpm3_rf_restore_fail:
-        ld      a,(__cpm3_tmp_saved_user)
-        call    __cpm3_set_user_a
 __cpm3_rf_fail:
         ld      de,#0xffff
+        pop     iy
         pop     ix
         ret
 
@@ -939,6 +898,7 @@ __cpm3_loadbuf_write_existing:
         jp      __cpm3_loadbuf_read_iy
 
 __cpm3_write_file::
+        push    iy
         ld      (__cpm3_tmp_ptr),de     ; capture buf before BDOS clobbers DE
         call    __cpm3_find_open
         ld      a,h
@@ -949,10 +909,6 @@ __cpm3_write_file::
         ld      a,FD_OFF_FLAGS(iy)
         and     #ACC_MASK
         jp      z,__cpm3_wf_fail
-        call    __cpm3_get_current_user
-        ld      (__cpm3_tmp_saved_user),a
-        ld      a,FD_OFF_USER(iy)
-        call    __cpm3_set_user_a
         ld      a,FD_OFF_FLAGS(iy)
         and     #APPEND_FLAG
         call    nz,__cpm3_copy_size_to_fpos_iy
@@ -967,7 +923,7 @@ __cpm3_write_file_loop:
         or      a
         jr      nz,__cpm3_write_have_buf
         call    __cpm3_loadbuf_write_iy
-        jp      nz,__cpm3_wf_restore_fail
+        jp      nz,__cpm3_wf_fail
 __cpm3_write_have_buf:
         ld      hl,(__cpm3_tmp_ptr)
         ld      a,(hl)
@@ -991,23 +947,20 @@ __cpm3_write_have_buf:
         and     #0x7f
         jr      nz,__cpm3_write_file_loop
         call    __cpm3_flush_iy
-        jp      nz,__cpm3_wf_restore_fail
+        jp      nz,__cpm3_wf_fail
         xor     a
         ld      FD_OFF_BUFVALID(iy),a
         jr      __cpm3_write_file_loop
 __cpm3_write_file_done:
-        ld      a,(__cpm3_tmp_saved_user)
-        call    __cpm3_set_user_a
         ld      hl,(__cpm3_tmp_len)
         or      a
         sbc     hl,bc
         ex      de,hl
+        pop     iy
         pop     ix
         ret
-__cpm3_wf_restore_fail:
-        ld      a,(__cpm3_tmp_saved_user)
-        call    __cpm3_set_user_a
 __cpm3_wf_fail:
         ld      de,#0xffff
+        pop     iy
         pop     ix
         ret

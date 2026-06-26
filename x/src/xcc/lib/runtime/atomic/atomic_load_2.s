@@ -9,23 +9,14 @@
         .globl  __atomic_load_2
 
         ; __atomic_load_2
-        ; inputs: 4(ix)..5(ix) = pointer.
-        ; outputs: HL = loaded 16-bit value.
-        ; clobbers: DE, IX.
+        ; inputs: HL = pointer.
+        ; outputs: DE = loaded 16-bit value.
+        ; clobbers: A, HL.
 
 __atomic_load_2:
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         di
-        ; pointer low byte
-        ld      l, 4(ix)
-        ; pointer high byte
-        ld      h, 5(ix)
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
-        ex      de, hl
         ei
-        pop     ix
         ret

@@ -9,18 +9,12 @@
         .globl  __atomic_flag_clear
 
         ; __atomic_flag_clear
-        ; inputs: 4(ix)..5(ix) = flag pointer.
+        ; inputs: HL = flag pointer.
         ; outputs: none.
-        ; clobbers: HL, IX.
+        ; clobbers: HL.
 
 __atomic_flag_clear:
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         di
-        ld      l, 4(ix)
-        ld      h, 5(ix)
         ld      (hl), #0
         ei
-        pop     ix
         ret

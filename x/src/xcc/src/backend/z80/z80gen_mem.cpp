@@ -55,7 +55,9 @@ static bool load_byte_preserves_hl(const operand &op,
 }
 
 void z80_gen::gen_assign(const icode &ic) {
-    int sz = op_size(ic.left);
+    int sz = op_size(ic.result);
+    if (sz <= 0)
+        sz = op_size(ic.left);
     if (sz == 1) {
         load_a(ic.left);
         store_a(ic.result);

@@ -6,7 +6,7 @@
         ;; Copyright (C) 2026 tomaz stih
 
         .module sscanf
-        .optsdcc -mz80 sdcccall(1)
+        .optsdcc -mz80 sdcccall(0)
 
         .globl  _sscanf
         .globl  __stdio_scan_init_string

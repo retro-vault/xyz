@@ -202,9 +202,13 @@ _fixed16_16_fminimum_mag::
         ret
 
 _fixed16_16_getpayload::
-_fixed16_16_nan::
         ld      de,#0
         ld      hl,#0
+        ret
+
+_fixed16_16_nan::
+        ld      de,#0xfffe
+        ld      hl,#0x7fff
         ret
 
 _fixed16_16_setpayloadsig::

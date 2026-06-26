@@ -131,6 +131,31 @@ operand ir_gen::emit_binop(icode_op op, operand left, operand right, type_ptr t)
 }
 
 operand ir_gen::emit_unop(icode_op op, operand left, type_ptr t) {
+    if (op == icode_op::CAST && t && t->kind == type_kind::COMPLEX &&
+        (!left.type || left.type->kind != type_kind::COMPLEX)) {
+        type_ptr float_t = type::make_float();
+        operand real = left;
+
+        if (real.kind == operand_kind::INT_CONST ||
+            real.kind == operand_kind::FLOAT_CONST) {
+            real = coerce_const_operand(real, float_t);
+        } else if (!real.type || real.type->kind != type_kind::FLOAT) {
+            real = emit_unop(icode_op::CAST, real, float_t);
+        } else {
+            real.type = float_t;
+        }
+
+        operand imag = operand::make_float(0.0, float_t);
+        operand res = new_temp(t);
+        icode ic;
+        ic.op = icode_op::MAKE_COMPLEX;
+        ic.result = res;
+        ic.left = real;
+        ic.right = imag;
+        emit(ic);
+        return res;
+    }
+
     if (t && left.kind == operand_kind::FLOAT_CONST)
         left.type = t;
     operand res = new_temp(t);

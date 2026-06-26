@@ -9,31 +9,22 @@
         .globl  __atomic_fetch_add_2
 
         ; __atomic_fetch_add_2
-        ; inputs: 4(ix)..5(ix) = pointer, 6(ix)..7(ix) = value.
-        ; outputs: HL = previous 16-bit value.
-        ; clobbers: AF, BC, DE, IX.
+        ; inputs: HL = pointer, DE = value.
+        ; outputs: DE = previous 16-bit value.
+        ; clobbers: A, BC, HL.
 
 __atomic_fetch_add_2:
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         di
-        ld      l, 4(ix)
-        ld      h, 5(ix)
-        ld      e, (hl)
+        ld      a, (hl)
+        ld      c, a
+        add     a, e
+        ld      (hl), a
         inc     hl
-        ld      d, (hl)
-        dec     hl
-        ld      c, 6(ix)
-        ld      b, 7(ix)
-        push    de
-        ex      de, hl
-        add     hl, bc
-        ex      de, hl
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
-        pop     hl
+        ld      a, (hl)
+        ld      b, a
+        adc     a, d
+        ld      (hl), a
+        ld      e, c
+        ld      d, b
         ei
-        pop     ix
         ret

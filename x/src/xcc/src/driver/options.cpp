@@ -10,6 +10,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "driver/options.h"
+#include <cctype>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -200,6 +201,18 @@ static void add_float_format_defines(options &opts) {
                            std::to_string(float_format_size(opts.float_fmt)));
     opts.defines.push_back(std::string("__XCC_FLOAT_FRACTION_BITS__=") +
                            std::to_string(float_format_fraction_bits(opts.float_fmt)));
+}
+
+static std::string platform_define_name(const std::string &platform_name) {
+    std::string name = "__XCC_PLATFORM_";
+    for (unsigned char ch : platform_name) {
+        if (std::isalnum(ch) != 0) {
+            name.push_back(static_cast<char>(std::toupper(ch)));
+        } else {
+            name.push_back('_');
+        }
+    }
+    return name + "=1";
 }
 
 static void driver_warning(const options &opts, warning_group group,
@@ -573,6 +586,9 @@ options options::parse(int argc, char **argv) {
 
     add_default_include_paths(opts, argv[0]);
     add_float_format_defines(opts);
+    if (!opts.platform_name.empty()) {
+        opts.defines.push_back(platform_define_name(opts.platform_name));
+    }
     opts.driver_dir = resolve_process_executable(argv[0]).parent_path().string();
 
     return opts;

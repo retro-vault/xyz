@@ -11,6 +11,18 @@
 
 namespace xcc {
 
+namespace {
+
+uint64_t bitfield_mask_bits(int width) {
+    if (width <= 0)
+        return 0;
+    if (width >= 64)
+        return ~uint64_t{0};
+    return (uint64_t{1} << width) - 1;
+}
+
+} // namespace
+
 static const struct_field *find_member(const member_expr &e) {
     type_ptr st = e.object->type;
     if (e.is_arrow && st && st->is_ptr()) st = st->base;
@@ -64,7 +76,8 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
         operand ptr = gen_member_ptr(*mem);
         if (fld && fld->bit_width >= 0) {
             type_ptr unit_type = fld->type ? fld->type : type::make_int();
-            int64_t  mask      = (1LL << fld->bit_width) - 1;
+            int64_t  mask      =
+                static_cast<int64_t>(bitfield_mask_bits(fld->bit_width));
             operand m_src = emit_binop(icode_op::BAND, src,
                                        operand::make_int(mask, type::make_int()), unit_type);
             operand s_src = m_src;
@@ -217,6 +230,13 @@ void ir_gen::visit(member_expr &e) {
     const struct_field *fld = find_member(e);
     operand ptr      = gen_member_ptr(e);
     type_ptr fld_type = e.type ? e.type : type::make_int();
+
+    if (fld_type && fld_type->is_array() && fld_type->base) {
+        ptr.type = type::make_pointer(fld_type->base);
+        expr_result_ = ptr;
+        return;
+    }
+
     operand loaded   = emit_unop(icode_op::GET_VALUE_AT, ptr, fld_type);
 
     if (fld && fld->bit_width >= 0) {
@@ -224,9 +244,20 @@ void ir_gen::visit(member_expr &e) {
             operand off_op = operand::make_int(fld->bit_offset, type::make_int());
             loaded = emit_binop(icode_op::SHR, loaded, off_op, fld_type);
         }
-        int64_t mask    = (1LL << fld->bit_width) - 1;
+        int64_t mask =
+            static_cast<int64_t>(bitfield_mask_bits(fld->bit_width));
         operand mask_op = operand::make_int(mask, type::make_int());
         loaded = emit_binop(icode_op::BAND, loaded, mask_op, fld_type);
+        if (fld_type && fld_type->is_integer() &&
+            !fld_type->is_unsigned() &&
+            fld->bit_width > 0 &&
+            fld->bit_width < fld_type->size() * 8) {
+            const int64_t sign_bit =
+                static_cast<int64_t>(uint64_t{1} << (fld->bit_width - 1));
+            operand sign_op = operand::make_int(sign_bit, fld_type);
+            loaded = emit_binop(icode_op::BXOR, loaded, sign_op, fld_type);
+            loaded = emit_binop(icode_op::SUB, loaded, sign_op, fld_type);
+        }
     }
     expr_result_ = loaded;
 }

@@ -650,6 +650,7 @@ namespace xas {
                 }
             }
             ++cur_offset_;
+            note_section_offset();
         }
 
         // Emit a 16-bit word that may need a relocation.
@@ -673,6 +674,7 @@ namespace xas {
                 }
             }
             cur_offset_ += 2;
+            note_section_offset();
         }
 
         // Emit an 8-bit PC-relative offset (for JR / DJNZ).
@@ -715,6 +717,7 @@ namespace xas {
                 }
             }
             ++cur_offset_;
+            note_section_offset();
         }
 
         // -----------------------------------------------------------------------
@@ -1671,6 +1674,7 @@ namespace xas {
                     auto v = eval_expr(*s.args[0], syms_, cur_offset_);
                     if (v) cur_offset_ = static_cast<uint32_t>(*v);
                 }
+                note_section_offset();
                 return;
             }
 

@@ -359,10 +359,49 @@ struct machine {
         const bool can_read = (acc == 0 || acc == O_RDWR);
         const bool can_write = (acc == O_WRONLY || acc == O_RDWR);
         fh->stream.clear();
+        std::streamoff base = 0;
+        if (dir == std::ios::beg) {
+            base = 0;
+        } else if (dir == std::ios::cur) {
+            std::streampos pos = can_read ? fh->stream.tellg()
+                                          : std::streampos(-1);
+            if (pos < 0 && can_write)
+                pos = fh->stream.tellp();
+            if (pos < 0) {
+                write_result32(-1);
+                return;
+            }
+            base = static_cast<std::streamoff>(pos);
+        } else {
+            if (can_read) {
+                fh->stream.seekg(0, std::ios::end);
+                const std::streampos pos = fh->stream.tellg();
+                if (pos >= 0)
+                    base = static_cast<std::streamoff>(pos);
+                else if (can_write)
+                    base = static_cast<std::streamoff>(fh->stream.tellp());
+                else
+                    base = static_cast<std::streamoff>(-1);
+            } else if (can_write) {
+                fh->stream.seekp(0, std::ios::end);
+                base = static_cast<std::streamoff>(fh->stream.tellp());
+            } else {
+                base = static_cast<std::streamoff>(-1);
+            }
+            if (base < 0) {
+                write_result32(-1);
+                return;
+            }
+        }
+        const std::streamoff target = base + static_cast<std::streamoff>(offset);
+        if (target < 0) {
+            write_result32(-1);
+            return;
+        }
         if (can_read)
-            fh->stream.seekg(offset, dir);
+            fh->stream.seekg(target, std::ios::beg);
         if (can_write)
-            fh->stream.seekp(offset, dir);
+            fh->stream.seekp(target, std::ios::beg);
         std::streampos pos = can_read ? fh->stream.tellg()
                                       : std::streampos(-1);
         if (pos < 0 && can_write)

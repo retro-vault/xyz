@@ -3,7 +3,7 @@
         ;; one public routine per module (prevents overlinking).
 
         .module sprintf
-        .optsdcc -mz80 sdcccall(1)
+        .optsdcc -mz80 sdcccall(0)
 
         .globl  _sprintf
         .globl  __stdio_alloc_ctx
@@ -37,4 +37,3 @@ _sprintf::
         ld      sp,ix
         pop     ix
         ret
-

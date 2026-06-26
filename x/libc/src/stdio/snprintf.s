@@ -3,7 +3,7 @@
         ;; one public routine per module (prevents overlinking).
 
         .module snprintf
-        .optsdcc -mz80 sdcccall(1)
+        .optsdcc -mz80 sdcccall(0)
 
         .globl  _snprintf
         .globl  __stdio_alloc_ctx

@@ -9,39 +9,34 @@
         .globl  __atomic_compare_exchange_2
 
         ; __atomic_compare_exchange_2
-        ; inputs: ptr at 4(ix)..5(ix), expected at 6(ix)..7(ix), desired
-        ; at 8(ix)..9(ix).
-        ; outputs: HL = 1 on swap, HL = 0 on mismatch.
-        ; clobbers: AF, DE, IX.
+        ; inputs: HL = pointer, DE = expected, desired at 4(ix)..5(ix).
+        ; outputs: DE = 1 on swap, DE = 0 on mismatch.
+        ; clobbers: AF, BC, HL, IX.
 
 __atomic_compare_exchange_2:
         push    ix
         ld      ix, #0
         add     ix, sp
         di
-        ld      l, 4(ix)
-        ld      h, 5(ix)
-        ld      e, (hl)
+        ld      a, (hl)
+        cp      e
+        jr      nz, .acas2_fail
         inc     hl
-        ld      d, (hl)
+        ld      a, (hl)
+        cp      d
+        jr      nz, .acas2_fail
+        ld      b, 5(ix)
+        ld      a, 4(ix)
         dec     hl
-        ld      a, 6(ix)
-        cp      a, e
-        jr      nz, .acas2_fail
-        ld      a, 7(ix)
-        cp      a, d
-        jr      nz, .acas2_fail
-        ld      a, 8(ix)
         ld      (hl), a
         inc     hl
-        ld      a, 9(ix)
-        ld      (hl), a
-        ld      hl, #1
+        ld      (hl), b
+        ld      de, #1
         ei
         pop     ix
         ret
 .acas2_fail:
-        ld      hl, #0
+        ld      de, #0
         ei
         pop     ix
         ret

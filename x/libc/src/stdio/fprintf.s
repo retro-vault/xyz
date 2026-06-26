@@ -3,7 +3,7 @@
         ;; one public routine per module (prevents overlinking).
 
         .module fprintf
-        .optsdcc -mz80 sdcccall(1)
+        .optsdcc -mz80 sdcccall(0)
 
         .globl  _fprintf
         .globl  __stdio_alloc_ctx
@@ -50,4 +50,3 @@ __stdio_fprintf_ok:
         ld      sp,ix
         pop     ix
         ret
-

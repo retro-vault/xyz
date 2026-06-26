@@ -45,7 +45,12 @@ bool uses_speed_biased_rules(optimization_level level) {
 }
 
 bool uses_spaghetti_rules(optimization_level level) {
-    return level == optimization_level::o3;
+    // The current spaghetti helper outlining/rewrite lane is still too
+    // fragile for full-program correctness.  Keep O3's other experimental
+    // frontend/backend passes enabled, but leave this late assembly
+    // transform off until the dedicated SHA/runtime regressions are stable.
+    (void)level;
+    return false;
 }
 
 std::string optimize_z80_assembly(const std::string &asm_text,

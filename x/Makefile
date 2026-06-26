@@ -122,6 +122,7 @@ stage-includes:
 	cp -R $(X_ROOT)/lib/xgdb/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/lib/xemu/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/libc/include/. $(TARGET_INCLUDE_DIR)/
+	cp -R $(X_ROOT)/platforms/include/. $(TARGET_INCLUDE_DIR)/
 	cp $(Y_ROOT)/include/yos.h $(TARGET_INCLUDE_DIR)/yos.h
 
 stage-target-assets:

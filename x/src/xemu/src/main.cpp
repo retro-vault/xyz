@@ -16,8 +16,12 @@ struct options {
     uint16_t origin = 0x0000;
     std::optional<uint16_t> pc;
     uint16_t sp = 0xFFFF;
+    bool emu_stdio = false;
     std::optional<uint16_t> stdin_port;
+    std::optional<uint16_t> stdin_status_port;
+    std::optional<uint16_t> stdin_data_port;
     std::optional<uint16_t> stdout_port;
+    std::optional<std::filesystem::path> fs_root;
     std::size_t max_steps = 1'000'000;
     bool quiet = false;
     bool run_mode = false;
@@ -39,7 +43,13 @@ void print_help() {
         << "  --origin ADDR        binary load address (default 0x0000)\n"
         << "  --pc ADDR            initial program counter (default: origin)\n"
         << "  --sp ADDR            initial stack pointer (default 0xFFFF)\n"
-        << "  --stdin-port ADDR    map Z80 port ADDR to host stdin\n"
+        << "  --emu-stdio          map platform=emu stdio ports to host stdin/stdout\n"
+        << "  --fs-root DIR        map platform=emu file syscalls to host DIR\n"
+        << "  --stdin-port ADDR    map single Z80 input port ADDR to host stdin\n"
+        << "  --stdin-status-port ADDR\n"
+        << "                       map Z80 status port ADDR to host stdin readiness\n"
+        << "  --stdin-data-port ADDR\n"
+        << "                       map Z80 data port ADDR to host stdin bytes\n"
         << "  --stdout-port ADDR   map Z80 port ADDR to host stdout\n"
         << "  -q, --quiet          quiet startup\n"
         << "  -h, --help           show this help\n";
@@ -94,12 +104,23 @@ options parse_options(int argc, char* argv[]) {
         } else if (arg == "--sp") {
             if (++i >= argc) throw std::runtime_error("--sp requires a value");
             opts.sp = static_cast<uint16_t>(parse_u32(argv[i]));
+        } else if (arg == "--emu-stdio") {
+            opts.emu_stdio = true;
         } else if (arg == "--stdin-port") {
             if (++i >= argc) throw std::runtime_error("--stdin-port requires a value");
             opts.stdin_port = static_cast<uint16_t>(parse_u32(argv[i]));
+        } else if (arg == "--stdin-status-port") {
+            if (++i >= argc) throw std::runtime_error("--stdin-status-port requires a value");
+            opts.stdin_status_port = static_cast<uint16_t>(parse_u32(argv[i]));
+        } else if (arg == "--stdin-data-port") {
+            if (++i >= argc) throw std::runtime_error("--stdin-data-port requires a value");
+            opts.stdin_data_port = static_cast<uint16_t>(parse_u32(argv[i]));
         } else if (arg == "--stdout-port") {
             if (++i >= argc) throw std::runtime_error("--stdout-port requires a value");
             opts.stdout_port = static_cast<uint16_t>(parse_u32(argv[i]));
+        } else if (arg == "--fs-root") {
+            if (++i >= argc) throw std::runtime_error("--fs-root requires a path");
+            opts.fs_root = argv[i];
         } else {
             throw std::runtime_error("unknown option: " + arg);
         }
@@ -108,12 +129,49 @@ options parse_options(int argc, char* argv[]) {
 }
 
 void configure_machine(xemu::machine& emu, const options& opts) {
+    const bool has_simple_stdin = opts.stdin_port.has_value();
+    const bool has_split_stdin =
+        opts.stdin_status_port.has_value() || opts.stdin_data_port.has_value();
+
     if (opts.binary_path.has_value())
         emu.load_binary(opts.binary_path.value(), opts.origin);
-    if (opts.stdin_port.has_value())
+    if (opts.fs_root.has_value())
+        emu.bind_host_filesystem(*opts.fs_root);
+
+    if (has_simple_stdin && has_split_stdin) {
+        throw std::runtime_error(
+            "cannot combine --stdin-port with --stdin-status-port/--stdin-data-port");
+    }
+    if (has_split_stdin &&
+        (!opts.stdin_status_port.has_value() || !opts.stdin_data_port.has_value())) {
+        throw std::runtime_error(
+            "--stdin-status-port and --stdin-data-port must be provided together");
+    }
+
+    if (opts.emu_stdio) {
+        if (has_simple_stdin) {
+            throw std::runtime_error(
+                "cannot combine --emu-stdio with --stdin-port");
+        }
+        emu.bind_stdin_status_data(
+            opts.stdin_status_port.value_or(xemu::machine::emu_stdin_status_port),
+            opts.stdin_data_port.value_or(xemu::machine::emu_stdin_data_port),
+            std::cin);
+        emu.bind_stdout(
+            opts.stdout_port.value_or(xemu::machine::emu_stdout_port),
+            std::cout);
+    } else if (opts.stdin_status_port.has_value()) {
+        emu.bind_stdin_status_data(
+            opts.stdin_status_port.value(),
+            opts.stdin_data_port.value(),
+            std::cin);
+    } else if (opts.stdin_port.has_value()) {
         emu.bind_stdin(opts.stdin_port.value(), std::cin);
-    if (opts.stdout_port.has_value())
+    }
+
+    if (!opts.emu_stdio && opts.stdout_port.has_value()) {
         emu.bind_stdout(opts.stdout_port.value(), std::cout);
+    }
 
     emu.set_pc(opts.pc.has_value() ? opts.pc.value() : opts.origin);
     emu.set_sp(opts.sp);
@@ -159,12 +217,29 @@ int serve_debugger(xemu::machine& emu, const options& opts) {
         if (opts.binary_path.has_value())
             std::cout << "loaded " << opts.binary_path.value()
                       << " at 0x" << std::hex << opts.origin << std::dec << "\n";
-        if (opts.stdin_port.has_value())
+        if (opts.emu_stdio) {
+            std::cout << "platform=emu stdin status mapped to port 0x" << std::hex
+                      << opts.stdin_status_port.value_or(xemu::machine::emu_stdin_status_port)
+                      << ", data to 0x"
+                      << opts.stdin_data_port.value_or(xemu::machine::emu_stdin_data_port)
+                      << ", stdout to 0x"
+                      << opts.stdout_port.value_or(xemu::machine::emu_stdout_port)
+                      << std::dec << "\n";
+        } else if (opts.stdin_port.has_value()) {
             std::cout << "stdin mapped to port 0x" << std::hex
                       << opts.stdin_port.value() << std::dec << "\n";
-        if (opts.stdout_port.has_value())
+        } else if (opts.stdin_status_port.has_value()) {
+            std::cout << "stdin status mapped to port 0x" << std::hex
+                      << opts.stdin_status_port.value()
+                      << ", data to 0x" << opts.stdin_data_port.value()
+                      << std::dec << "\n";
+        }
+        if (!opts.emu_stdio && opts.stdout_port.has_value())
             std::cout << "stdout mapped to port 0x" << std::hex
                       << opts.stdout_port.value() << std::dec << "\n";
+        if (opts.fs_root.has_value())
+            std::cout << "platform=emu filesystem rooted at "
+                      << std::filesystem::absolute(*opts.fs_root) << "\n";
         std::cout << "connect with: target remote "
                   << opts.listen_host << ":" << opts.listen_port << "\n";
     }

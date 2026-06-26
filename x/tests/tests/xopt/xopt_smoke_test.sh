@@ -324,11 +324,11 @@ _demo:
 ASM
 
 "$XOPT" -O3 "$TMPDIR/ix_word_inc_direct.s" -o "$TMPDIR/ix_word_inc_direct.out.s"
-grep -q 'inc	-4(ix)' "$TMPDIR/ix_word_inc_direct.out.s"
-grep -q 'jr	nz, __xopt_inc16_' "$TMPDIR/ix_word_inc_direct.out.s"
-grep -q 'inc	-3(ix)' "$TMPDIR/ix_word_inc_direct.out.s"
-if grep -q 'inc	hl' "$TMPDIR/ix_word_inc_direct.out.s"; then
-    echo "xopt smoke: direct IX word increment did not fire" >&2
+grep -q 'inc	hl' "$TMPDIR/ix_word_inc_direct.out.s"
+grep -q 'ld	-4(ix),l' "$TMPDIR/ix_word_inc_direct.out.s"
+grep -q 'ld	-3(ix),h' "$TMPDIR/ix_word_inc_direct.out.s"
+if grep -q 'inc	-4(ix)' "$TMPDIR/ix_word_inc_direct.out.s"; then
+    echo "xopt smoke: disabled IX word increment rewrite still fired" >&2
     exit 1
 fi
 
@@ -348,6 +348,27 @@ ASM
 grep -q 'inc	hl' "$TMPDIR/ix_word_inc_flags_live.out.s"
 if grep -q 'inc	-4(ix)' "$TMPDIR/ix_word_inc_flags_live.out.s"; then
     echo "xopt smoke: direct IX word increment clobbered live flags" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/ix_word_inc_hl_live.s" <<'ASM'
+_demo:
+	ld	l,-4(ix)
+	ld	h,-3(ix)
+	inc	hl
+	ld	-4(ix),l
+	ld	-3(ix),h
+	ld	de,#3
+	or	a
+	sbc	hl,de
+	ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/ix_word_inc_hl_live.s" -o "$TMPDIR/ix_word_inc_hl_live.out.s"
+grep -q 'inc	hl' "$TMPDIR/ix_word_inc_hl_live.out.s"
+grep -q 'sbc	hl, de' "$TMPDIR/ix_word_inc_hl_live.out.s"
+if grep -q 'inc	-4(ix)' "$TMPDIR/ix_word_inc_hl_live.out.s"; then
+    echo "xopt smoke: direct IX word increment clobbered live HL" >&2
     exit 1
 fi
 

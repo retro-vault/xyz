@@ -7,19 +7,9 @@
 
         .globl  _exp
         .globl  _expl
-        .globl  ___fs2db
-        .globl  __lgd_load_arg0_fs
-        .globl  _expf
+        .globl  _expd_core
 
         .area   _CODE
 _exp::
 _expl::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
-        call    __lgd_load_arg0_fs
-        call    _expf
-        call    ___fs2db
-        pop     ix
-        ret
-
+        jp      _expd_core

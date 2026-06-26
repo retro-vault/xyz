@@ -32,18 +32,22 @@ HEAP_LIMIT_HI   .equ 5
 
         .area   _CODE
         ;; void _heap_init_arena(heap, base, limit)
-        ;;   HL = heap descriptor, DE = base, BC = limit
+        ;;   HL = heap descriptor, DE = base, limit on stack at 4(ix),5(ix)
 _heap_init_arena::
         push    ix
-        push    hl                      ; save heap descriptor
+        ld      ix,#0
+        add     ix,sp
+        push    iy
         push    hl
-        pop     ix                      ; IX = heap descriptor
-        ld      HEAP_HEAD_LO(ix),e      ; head  = base
-        ld      HEAP_HEAD_HI(ix),d
-        ld      HEAP_BASE_LO(ix),e      ; base  = base
-        ld      HEAP_BASE_HI(ix),d
-        ld      HEAP_LIMIT_LO(ix),c     ; limit = limit
-        ld      HEAP_LIMIT_HI(ix),b
+        pop     iy                      ; IY = heap descriptor
+        ld      c,4(ix)
+        ld      b,5(ix)                 ; BC = limit
+        ld      HEAP_HEAD_LO(iy),e      ; head  = base
+        ld      HEAP_HEAD_HI(iy),d
+        ld      HEAP_BASE_LO(iy),e      ; base  = base
+        ld      HEAP_BASE_HI(iy),d
+        ld      HEAP_LIMIT_LO(iy),c     ; limit = limit
+        ld      HEAP_LIMIT_HI(iy),b
 
         ;; payload = (limit - base) - BLOCK_HDR_SIZE
         ld      h,b
@@ -62,8 +66,10 @@ _heap_init_arena::
         ld      BLOCK_FREE_HI(ix),#0
         ld      BLOCK_NEXT_LO(ix),#0
         ld      BLOCK_NEXT_HI(ix),#0
+        push    iy
         pop     hl                      ; HL = heap descriptor
         ld      BLOCK_HEAP_LO(ix),l
         ld      BLOCK_HEAP_HI(ix),h
+        pop     iy
         pop     ix
         ret

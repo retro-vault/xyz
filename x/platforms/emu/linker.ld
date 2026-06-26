@@ -6,7 +6,9 @@
  *   0xff00..0xff02  process result/done flag
  *   0xff10..0xff3f  syscall request block
  *
- * The emu crt0 keeps the Z80 stack at 0xf000 so this mailbox remains stable.
+ * The emulator crt0 currently starts the Z80 stack at 0xfa00. The default
+ * heap is not preallocated in the image; it begins at the end of the linked
+ * program and may grow upward until the fixed emu heap ceiling at 0xf000.
  */
 
 ENTRY(_entry)

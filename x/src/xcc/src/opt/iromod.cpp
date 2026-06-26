@@ -116,6 +116,14 @@ static std::string base_symbol_key(const operand &op) {
     return symbol_key(base);
 }
 
+static bool cast_can_fold_to_int_const(const type_ptr &target) {
+    if (!target)
+        return true;
+    return target->is_integer() ||
+           target->kind == type_kind::POINTER ||
+           target->kind == type_kind::ENUM;
+}
+
 static void note_function_operand(const operand &op, module_use_info &info) {
     if (!op.is_symbol() || !op.is_func) return;
     info.referenced_funcs.insert(op.name);
@@ -929,17 +937,22 @@ static bool evaluate_const_binary(const icode &ic, int64_t lhs, int64_t rhs,
 
     switch (ic.op) {
     case icode_op::ADD:
-        out = normalize_integer_value(lhs + rhs, value_type);
+        out = normalize_integer_value(static_cast<int64_t>(ul + ur), value_type);
         return true;
     case icode_op::SUB:
-        out = normalize_integer_value(lhs - rhs, value_type);
+        out = normalize_integer_value(static_cast<int64_t>(ul - ur), value_type);
         return true;
     case icode_op::MUL:
-        out = normalize_integer_value(lhs * rhs, value_type);
+        out = normalize_integer_value(static_cast<int64_t>(ul * ur), value_type);
         return true;
     case icode_op::DIV:
         if (rhs == 0) {
             out = 0;
+            return true;
+        }
+        if (!use_unsigned &&
+            lhs == std::numeric_limits<int64_t>::min() && rhs == -1) {
+            out = normalize_integer_value(lhs, value_type);
             return true;
         }
         out = use_unsigned
@@ -948,6 +961,11 @@ static bool evaluate_const_binary(const icode &ic, int64_t lhs, int64_t rhs,
         return true;
     case icode_op::MOD:
         if (rhs == 0) {
+            out = 0;
+            return true;
+        }
+        if (!use_unsigned &&
+            lhs == std::numeric_limits<int64_t>::min() && rhs == -1) {
             out = 0;
             return true;
         }
@@ -1500,16 +1518,14 @@ static bool evaluate_const_runtime_helper_call(const icode &call_ic,
     const uint64_t ur = unsigned_value_for_type(rhs, value_type);
 
     if (call_ic.func_name == "__mul16" || call_ic.func_name == "__mul32") {
-        if (use_unsigned) {
-            ret_value = static_cast<int64_t>((ul * ur) & integer_mask_for_type(value_type));
-        } else {
-            ret_value = normalize_integer_value(lhs * rhs, value_type);
-        }
+        ret_value = normalize_integer_value(static_cast<int64_t>(ul * ur), value_type);
     } else if (call_ic.func_name == "__div16" || call_ic.func_name == "__div32") {
         if (rhs == 0) {
             ret_value = 0;
         } else if (use_unsigned) {
             ret_value = normalize_integer_value(static_cast<int64_t>(ul / ur), value_type);
+        } else if (lhs == std::numeric_limits<int64_t>::min() && rhs == -1) {
+            ret_value = normalize_integer_value(lhs, value_type);
         } else {
             ret_value = normalize_integer_value(lhs / rhs, value_type);
         }
@@ -1518,6 +1534,8 @@ static bool evaluate_const_runtime_helper_call(const icode &call_ic,
             ret_value = 0;
         } else if (use_unsigned) {
             ret_value = normalize_integer_value(static_cast<int64_t>(ul % ur), value_type);
+        } else if (lhs == std::numeric_limits<int64_t>::min() && rhs == -1) {
+            ret_value = 0;
         } else {
             ret_value = normalize_integer_value(lhs % rhs, value_type);
         }
@@ -2608,6 +2626,10 @@ static void update_straight_const_env(const icode &ic, straight_const_env &env) 
     case icode_op::CAST: {
         operand value;
         if (!resolve_straight_const(ic.left, env, value)) {
+            erase_straight_const(ic.result, env);
+            return;
+        }
+        if (!cast_can_fold_to_int_const(ic.result.type)) {
             erase_straight_const(ic.result, env);
             return;
         }

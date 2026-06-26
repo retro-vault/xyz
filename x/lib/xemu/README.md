@@ -10,6 +10,8 @@ It provides:
 - breakpoint-aware run and single-step control
 - optional stdin/stdout port binding for console-style programs
 - split stdin status/data port binding for the `platform=emu` console ABI
+- a convenience `bind_emu_stdio()` helper for the default `platform=emu`
+  console ports (`0xe2`/`0xe3` in, `0xe1` out)
 - an `rsp::target` adapter so the same machine can be exposed to `xgdb`
 - a small remote-session wrapper for talking to a running `xemu`
 

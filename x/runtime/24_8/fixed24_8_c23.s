@@ -202,9 +202,13 @@ _fixed24_8_fminimum_mag::
         ret
 
 _fixed24_8_getpayload::
-_fixed24_8_nan::
         ld      de,#0
         ld      hl,#0
+        ret
+
+_fixed24_8_nan::
+        ld      de,#0xfffe
+        ld      hl,#0x7fff
         ret
 
 _fixed24_8_setpayloadsig::

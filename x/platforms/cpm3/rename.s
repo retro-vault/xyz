@@ -76,8 +76,8 @@ _rename::
         call    __cpm3_set_user_a
         pop     af
         pop     hl
-        cp      #BDOS_SUCCESS
-        jr      nz,__cpm3_rename_fail
+        cp      #0xff
+        jr      z,__cpm3_rename_fail
         ld      de,#0x0000
         ret
 __cpm3_rename_fail_pop:
@@ -85,4 +85,3 @@ __cpm3_rename_fail_pop:
 __cpm3_rename_fail:
         ld      de,#0xffff
         ret
-

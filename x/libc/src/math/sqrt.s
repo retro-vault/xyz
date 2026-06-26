@@ -7,19 +7,9 @@
 
         .globl  _sqrt
         .globl  _sqrtl
-        .globl  ___fs2db
-        .globl  __lgd_load_arg0_fs
-        .globl  _sqrtf
+        .globl  _sqrtd_core
 
         .area   _CODE
 _sqrt::
 _sqrtl::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
-        call    __lgd_load_arg0_fs
-        call    _sqrtf
-        call    ___fs2db
-        pop     ix
-        ret
-
+        jp      _sqrtd_core

@@ -9,20 +9,13 @@
         .globl  __atomic_flag_test_set
 
         ; __atomic_flag_test_set
-        ; inputs: 4(ix)..5(ix) = flag pointer.
-        ; outputs: L = previous flag value.
-        ; clobbers: AF, H, IX.
+        ; inputs: HL = flag pointer.
+        ; outputs: A = previous flag value.
+        ; clobbers: HL.
 
 __atomic_flag_test_set:
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         di
-        ld      l, 4(ix)
-        ld      h, 5(ix)
         ld      a, (hl)
         ld      (hl), #1
-        ld      l, a
         ei
-        pop     ix
         ret

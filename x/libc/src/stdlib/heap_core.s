@@ -127,7 +127,9 @@ __libc_heap_setup:
         ld      c,e                     ; BC = limit
         ex      de,hl                   ; DE = base
         ld      hl,#__libc_default_heap
+        push    bc
         call    _heap_init_arena       ; HL = heap, DE = base, BC = limit
+        pop     bc
         ld      a,#1
         ld      (__libc_heap_ready),a
         ret

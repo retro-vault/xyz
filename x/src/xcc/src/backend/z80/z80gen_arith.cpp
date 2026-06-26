@@ -1958,6 +1958,87 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         return;
     }
 
+    if (op_size(ic.left) == 4 && op_size(ic.right) == 4) {
+        const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+        const std::string less_lbl = "__lcmp_lt_" + std::to_string(rand() % 100000);
+        const std::string greater_lbl = "__lcmp_gt_" + std::to_string(rand() % 100000);
+        const std::string equal_lbl = "__lcmp_eq_" + std::to_string(rand() % 100000);
+        const std::string end_lbl = "__lcmp_end_" + std::to_string(rand() % 100000);
+
+        for (int w = 1; w >= 0; --w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ex\tde, hl");
+            if (w == 1 && !is_unsigned) {
+                emit_line("ld\ta, h");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\th, a");
+                emit_line("ld\ta, d");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\td, a");
+            }
+            emit_line("or\ta, a");
+            emit_line("sbc\thl, de");
+            emit_line("jp\tc, %s", less_lbl.c_str());
+            emit_line("jp\tnz, %s", greater_lbl.c_str());
+        }
+        emit_line("jp\t%s", equal_lbl.c_str());
+
+        asm_.label(equal_lbl, false);
+        switch (cmp) {
+        case icode_op::EQ:
+        case icode_op::LE:
+        case icode_op::GE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        else
+            emit_line("jp\t%s", end_lbl.c_str());
+
+        asm_.label(less_lbl, false);
+        switch (cmp) {
+        case icode_op::LT:
+        case icode_op::LE:
+        case icode_op::NE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        else
+            emit_line("jp\t%s", end_lbl.c_str());
+
+        asm_.label(greater_lbl, false);
+        switch (cmp) {
+        case icode_op::GT:
+        case icode_op::GE:
+        case icode_op::NE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        else
+            emit_line("jp\t%s", end_lbl.c_str());
+
+        if (false_lbl.empty())
+            asm_.label(end_lbl, false);
+        return;
+    }
+
     if (is_llong_op(ic.left)) {
         const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
         const std::string less_lbl = "__llcmp_lt_" + std::to_string(rand() % 100000);
@@ -2570,6 +2651,77 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         return;
     }
 
+    if (op_size(ic.left) == 4 && op_size(ic.right) == 4) {
+        const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+        const std::string less_lbl = "__lcmp_lt_" + std::to_string(rand() % 100000);
+        const std::string greater_lbl = "__lcmp_gt_" + std::to_string(rand() % 100000);
+        const std::string equal_lbl = "__lcmp_eq_" + std::to_string(rand() % 100000);
+        const std::string done_lbl = "__lcmp_done_" + std::to_string(rand() % 100000);
+
+        for (int w = 1; w >= 0; --w) {
+            load_hl_word(ic.left, w);
+            emit_line("push\thl");
+            load_hl_word(ic.right, w);
+            emit_line("pop\tde");
+            emit_line("ex\tde, hl");
+            if (w == 1 && !is_unsigned) {
+                emit_line("ld\ta, h");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\th, a");
+                emit_line("ld\ta, d");
+                emit_line("xor\t%s", asm_.imm(0x80).c_str());
+                emit_line("ld\td, a");
+            }
+            emit_line("or\ta, a");
+            emit_line("sbc\thl, de");
+            emit_line("jp\tc, %s", less_lbl.c_str());
+            emit_line("jp\tnz, %s", greater_lbl.c_str());
+        }
+        emit_line("jp\t%s", equal_lbl.c_str());
+
+        asm_.label(less_lbl, false);
+        switch (cmp) {
+        case icode_op::LT:
+        case icode_op::LE:
+        case icode_op::NE:
+            emit_line("ld\thl, %s", asm_.imm(1).c_str());
+            break;
+        default:
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            break;
+        }
+        emit_line("jp\t%s", done_lbl.c_str());
+
+        asm_.label(greater_lbl, false);
+        switch (cmp) {
+        case icode_op::GT:
+        case icode_op::GE:
+        case icode_op::NE:
+            emit_line("ld\thl, %s", asm_.imm(1).c_str());
+            break;
+        default:
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            break;
+        }
+        emit_line("jp\t%s", done_lbl.c_str());
+
+        asm_.label(equal_lbl, false);
+        switch (cmp) {
+        case icode_op::EQ:
+        case icode_op::LE:
+        case icode_op::GE:
+            emit_line("ld\thl, %s", asm_.imm(1).c_str());
+            break;
+        default:
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
+            break;
+        }
+
+        asm_.label(done_lbl, false);
+        store_hl(ic.result);
+        return;
+    }
+
     if (is_llong_op(ic.left)) {
         const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
         const std::string less_lbl = "__llcmp_lt_" + std::to_string(rand() % 100000);
@@ -2598,15 +2750,15 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
         emit_line("jp\t%s", equal_lbl.c_str());
 
-        emit_line("ld\thl, %s", asm_.imm(0).c_str());
         asm_.label(less_lbl, false);
         switch (cmp) {
         case icode_op::LT:
         case icode_op::LE:
         case icode_op::NE:
-            emit_line("inc\tl");
+            emit_line("ld\thl, %s", asm_.imm(1).c_str());
             break;
         default:
+            emit_line("ld\thl, %s", asm_.imm(0).c_str());
             break;
         }
         emit_line("jp\t%s", done_lbl.c_str());
@@ -3319,7 +3471,9 @@ void z80_gen::gen_cast(const icode &ic) {
     } else if (dst_sz > src_sz) {
         if (src_sz == 1) {
             load_a(ic.left);
-            if (ic.left.type && ic.left.type->is_unsigned()) {
+            const bool src_unsigned =
+                ic.left.type && ic.left.type->is_unsigned();
+            if (src_unsigned) {
                 emit_line("ld\tl, a");
                 emit_line("ld\th, %s", asm_.imm(0).c_str());
             } else {
@@ -3329,7 +3483,19 @@ void z80_gen::gen_cast(const icode &ic) {
                 emit_line("sbc\ta, a");  // A = 0x00 or 0xFF
                 emit_line("ld\th, a");
             }
-            store_hl(ic.result);
+            if (dst_sz == 2) {
+                store_hl(ic.result);
+            } else if (dst_sz == 4) {
+                store_hl_lo32(ic.result);
+                if (src_unsigned) {
+                    emit_line("ld\thl, %s", asm_.imm(0).c_str());
+                } else {
+                    emit_line("ld\tl, h");
+                }
+                store_hl_hi32(ic.result);
+            } else {
+                store_hl(ic.result);
+            }
         } else if (dst_sz == 4 && src_sz == 2) {
             load_hl(ic.left);
             store_hl_lo32(ic.result);

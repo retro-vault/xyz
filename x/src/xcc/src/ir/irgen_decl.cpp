@@ -27,6 +27,19 @@ static bool is_char_pointer_type(type_ptr ty)
            elem == type_kind::CHAR8T;
 }
 
+static const string_literal_expr *unwrap_string_literal(expr *init)
+{
+    while (init) {
+        if (auto *str = dynamic_cast<string_literal_expr*>(init))
+            return str;
+        auto *cast = dynamic_cast<cast_expr*>(init);
+        if (!cast || !cast->operand)
+            break;
+        init = cast->operand.get();
+    }
+    return nullptr;
+}
+
 static std::string add_global_string_literal(ir_module &mod, int &next_lbl,
                                              const string_literal_expr &str)
 {
@@ -125,7 +138,7 @@ static void collect_global_init(expr *init, type_ptr target,
         return;
     }
 
-    if (auto *str = dynamic_cast<string_literal_expr*>(init);
+    if (const auto *str = unwrap_string_literal(init);
         str && is_char_array_type(target)) {
         append_string_bytes(*str, target, out);
         return;
@@ -133,7 +146,8 @@ static void collect_global_init(expr *init, type_ptr target,
 
     if (auto *il = dynamic_cast<init_list_expr*>(init)) {
         if (is_char_array_type(target) && il->elements.size() == 1) {
-            if (auto *str = dynamic_cast<string_literal_expr*>(il->elements[0].value.get())) {
+            if (const auto *str =
+                    unwrap_string_literal(il->elements[0].value.get())) {
                 append_string_bytes(*str, target, out);
                 return;
             }
@@ -251,7 +265,7 @@ static void collect_global_init(expr *init, type_ptr target,
         return;
     }
 
-    if (auto *str = dynamic_cast<string_literal_expr*>(init);
+    if (const auto *str = unwrap_string_literal(init);
         str && is_char_pointer_type(target)) {
         out.push_back(make_init_elem(0, target->size(),
                                      add_global_string_literal(mod, next_lbl, *str)));

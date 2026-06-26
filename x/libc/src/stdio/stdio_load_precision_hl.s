@@ -18,7 +18,7 @@
         .globl  __modulong
         .endif
         .if     __XCC_LIBC_FLOAT
-        .globl  __strfromd_core
+        .globl  _stdio_format_double
         .endif
         .globl  __stdio_emit_a
         .globl  __stdio_emit_padding
@@ -1356,20 +1356,91 @@ __stdio_vformat_binary:
 
         .if     __XCC_LIBC_FLOAT
 __stdio_vformat_float:
-        ; Hardened C23 float formatting: use stack buffer + call __strfromd_core (reuses the new strfrom assembler, thread safe).
-        ; For demo fp in regs (real would fetch double from va using existing fetch logic in this file).
-        ; Alloc buf on stack, call, emit the resulting string, restore.
-        ld      hl,#-40
+        ; Render the variadic double into a temporary buffer, then emit it
+        ; through the regular string-field path so width/alignment still work.
+        ld      CTX_BASE(iy),a
+        ld      hl,#-48
         add     hl,sp
         ld      sp,hl
-        push    hl   ; buf s
-        ld      de,#40
-        ; fp demo in regs (DE HL DE' HL' for double)
-        ; (in full printf float path, load the double arg here using the va state).
-        call    __strfromd_core
-        pop     hl   ; buf
+        ld      hl,#0
+        add     hl,sp
+        call    __stdio_store_digits_ptr_hl
+        call    __stdio_load_ap_hl
+        ld      a,(hl)
+        ld      CTX_UVAL0(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL1(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL2(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL3(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL4(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL5(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL6(iy),a
+        inc     hl
+        ld      a,(hl)
+        ld      CTX_UVAL7(iy),a
+        inc     hl
+        call    __stdio_store_ap_hl
+
+        ld      a,CTX_HAVE_PREC(iy)
+        or      a
+        jr      nz,__stdio_vformat_float_have_precision
+        ld      hl,#6
+        jr      __stdio_vformat_float_store_precision
+__stdio_vformat_float_have_precision:
+        call    __stdio_load_precision_hl
+__stdio_vformat_float_store_precision:
+        call    __stdio_store_digits_len_hl
+        ld      a,CTX_UVAL6(iy)
+        ld      l,a
+        ld      a,CTX_UVAL7(iy)
+        ld      h,a
+        push    hl
+        ld      a,CTX_UVAL4(iy)
+        ld      l,a
+        ld      a,CTX_UVAL5(iy)
+        ld      h,a
+        push    hl
+        ld      a,CTX_UVAL2(iy)
+        ld      l,a
+        ld      a,CTX_UVAL3(iy)
+        ld      h,a
+        push    hl
+        ld      a,CTX_UVAL0(iy)
+        ld      l,a
+        ld      a,CTX_UVAL1(iy)
+        ld      h,a
+        push    hl
+        ld      a,CTX_BASE(iy)
+        ld      l,a
+        ld      h,#0
+        push    hl
+        call    __stdio_load_digits_len_hl
+        push    hl
+        ld      hl,#48
+        push    hl
+        call    __stdio_load_digits_ptr_hl
+        push    hl
+        call    _stdio_format_double
+        ld      hl,#16
+        add     hl,sp
+        ld      sp,hl
+        xor     a
+        ld      CTX_HAVE_PREC(iy),a
+        ld      hl,#0
+        add     hl,sp
         call    __stdio_emit_string_field
-        ld      hl,#40
+        ld      hl,#48
         add     hl,sp
         ld      sp,hl
         jp      __stdio_vformat_loop

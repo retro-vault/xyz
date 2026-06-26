@@ -9,22 +9,14 @@
         .globl  __atomic_store_2
 
         ; __atomic_store_2
-        ; inputs: 4(ix)..5(ix) = pointer, 6(ix)..7(ix) = value.
+        ; inputs: HL = pointer, DE = value.
         ; outputs: none.
-        ; clobbers: AF, HL, IX.
+        ; clobbers: A, HL.
 
 __atomic_store_2:
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         di
-        ld      l, 4(ix)
-        ld      h, 5(ix)
-        ld      a, 6(ix)
-        ld      (hl), a
+        ld      (hl), e
         inc     hl
-        ld      a, 7(ix)
-        ld      (hl), a
+        ld      (hl), d
         ei
-        pop     ix
         ret

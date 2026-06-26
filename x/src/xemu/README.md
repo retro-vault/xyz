@@ -37,3 +37,30 @@ port `1` to host stdout:
 ```sh
 bin/x/bin/xemu --run --load-bin test.bin --stdin-port 0 --stdout-port 1
 ```
+
+Run a `--platform=emu` binary with the libc console ABI wired to host
+stdin/stdout:
+
+```sh
+bin/x/bin/xemu --run --load-bin test.bin --pc 0x0000 --emu-stdio
+```
+
+Run a `--platform=emu` binary with both console I/O and host-backed file I/O:
+
+```sh
+bin/x/bin/xemu --run --load-bin test.bin --pc 0x0000 --emu-stdio --fs-root ./emu-fs
+```
+
+The default `platform=emu` console ports are:
+
+- stdin status: `0xe2`
+- stdin data: `0xe3`
+- stdout: `0xe1`
+
+The default `platform=emu` file ABI uses command port `0xe0` and request
+mailboxes in high RAM. `--fs-root` binds those syscalls to a host directory so
+`fopen`, `fread`, `fwrite`, `remove`, `rename`, and `lseek` can be exercised
+from tests or direct emulator runs without touching the real project tree.
+
+They can be overridden with `--stdin-status-port`, `--stdin-data-port`, and
+`--stdout-port`.

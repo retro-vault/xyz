@@ -116,8 +116,11 @@ _fixed8_8_fminimum_mag::
         ret
 
 _fixed8_8_getpayload::
-_fixed8_8_nan::
         ld      de,#0
+        ret
+
+_fixed8_8_nan::
+        ld      de,#0x7ffe
         ret
 
 _fixed8_8_setpayloadsig::

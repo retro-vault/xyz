@@ -24,7 +24,7 @@
 
 
         .module printf
-        .optsdcc -mz80 sdcccall(1)
+        .optsdcc -mz80 sdcccall(0)
 
         .globl  _printf
         .globl  __stdio_alloc_ctx
@@ -56,4 +56,3 @@ _printf::
         ld      sp,ix
         pop     ix
         ret
-

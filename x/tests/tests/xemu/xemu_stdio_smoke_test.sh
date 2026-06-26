@@ -37,4 +37,19 @@ output="$(
 
 [[ "$output" == "Q" ]] || fail "expected stdout 'Q', got '$output'"
 
+emu_program="$tmpdir/emu_stdio.bin"
+printf '\xDB\xE2\xB7\x28\xFB\xDB\xE3\xD3\xE1\x76' > "$emu_program"
+
+emu_output="$(
+    printf 'R' | "$XEMU" \
+        --run \
+        --quiet \
+        --load-bin "$emu_program" \
+        --origin 0x0000 \
+        --pc 0x0000 \
+        --emu-stdio
+)"
+
+[[ "$emu_output" == "R" ]] || fail "expected platform=emu stdout 'R', got '$emu_output'"
+
 echo "${GREEN}PASS${RESET}: xemu stdio smoke"

@@ -110,6 +110,8 @@ struct test_case {
     std::vector<std::string> host_args;
     std::vector<std::string> stderr_contains;
     std::vector<std::string> stderr_not_contains;
+    std::vector<std::string> asm_contains;
+    std::vector<std::string> asm_not_contains;
     std::vector<std::string> matrix_opts;
     std::vector<std::string> matrix_floats;
     std::optional<fs::path> stdin_path;
@@ -732,6 +734,10 @@ test_case load_test_case(const fs::path& manifest_path) {
             test.stderr_contains.push_back(value);
         } else if (key == "stderrnotcontains") {
             test.stderr_not_contains.push_back(value);
+        } else if (key == "asmcontains") {
+            test.asm_contains.push_back(value);
+        } else if (key == "asmnotcontains") {
+            test.asm_not_contains.push_back(value);
         } else if (key == "stdin") {
             test.stdin_path = test.directory / value;
         } else if (key == "stdout") {
@@ -935,6 +941,11 @@ bool test_matches_filter(const expanded_test_case& test, const std::string& filt
     }
     for (const auto& alias : test.base.aliases) {
         if (alias.find(filter) != std::string::npos) {
+            return true;
+        }
+    }
+    for (const auto& tag : test.base.tags) {
+        if (tag.find(filter) != std::string::npos) {
             return true;
         }
     }
@@ -1160,6 +1171,7 @@ std::optional<golden_result> prepare_host_golden(
     const fs::path host_build_stderr = test_work / "host-build.stderr.log";
     const fs::path host_run_stdout = test_work / "host-run.stdout.log";
     const fs::path host_run_stderr = test_work / "host-run.stderr.log";
+    const fs::path host_run_dir = test_work / "host-fs";
 
     const auto build_args = build_host_compile_command(test, cli, host_bin);
     const auto build_result = run_command(
@@ -1177,9 +1189,11 @@ std::optional<golden_result> prepare_host_golden(
         fail("host golden compilation failed:\n" + first_lines(build_result.stderr_text));
     }
 
+    fs::remove_all(host_run_dir);
+    fs::create_directories(host_run_dir);
     const auto run_result = run_command(
-        {host_bin.string()},
-        fs::current_path(),
+        {fs::absolute(host_bin).string()},
+        host_run_dir,
         host_run_stdout,
         host_run_stderr,
         test.base.stdin_path,
@@ -1416,6 +1430,18 @@ test_result run_compile_test(
                        + "\n" + first_lines(result.stderr_text)};
     }
 
+    if (compiled) {
+        const std::string asm_text = read_file_text(asm_output);
+
+        if (!text_contains_all(asm_text, test.base.asm_contains, &missing_pattern)) {
+            return {false, "expected assembly to contain: " + missing_pattern};
+        }
+
+        if (text_contains_any(asm_text, test.base.asm_not_contains, &found_pattern)) {
+            return {false, "assembly unexpectedly contained: " + found_pattern};
+        }
+    }
+
     return {true, {}};
 }
 
@@ -1471,11 +1497,14 @@ test_result run_emulated_test(
 
     std::istringstream input_stream(stdin_bytes);
     std::ostringstream output_stream;
+    const fs::path emu_fs_root = test_work / "emu-fs";
 
     xemu::machine emu;
     emu.load_binary(bin_output, test.base.origin);
     emu.set_pc(test.base.pc.value_or(test.base.origin));
     emu.set_sp(test.base.sp);
+    fs::remove_all(emu_fs_root);
+    emu.bind_host_filesystem(emu_fs_root);
 
     if (test.base.stdin_path.has_value()) {
         if (test.base.stdin_status_port.has_value()) {
@@ -1629,7 +1658,7 @@ void print_help() {
         << "  --gcc PATH        path to host gcc (default: gcc)\n"
         << "  --suite DIR       root directory containing test.cfg manifests\n"
         << "  --work DIR        work/output directory (default build/tests/tools/xemutest/work)\n"
-        << "  --filter TEXT     only run tests whose id, alias, path, or component contains TEXT\n"
+        << "  --filter TEXT     only run tests whose id, alias, tag, path, or component contains TEXT\n"
         << "  --list            list discovered tests and exit\n"
         << "  --verbose         print compile/link commands\n"
         << "  -h, --help        show this help\n";

@@ -3739,6 +3739,13 @@ bool z80_peep::rule_superopt_separated_pair_immediate_load(size_t i) {
 }
 
 bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
+    // Disabled for now. The direct-memory rewrite can drop the live HL value
+    // produced by `inc hl`, which breaks later compares in O3 loops such as
+    // `for (;;){ counter++; if (counter > 3) break; }`. Re-enable only with a
+    // stronger pair-liveness proof for HL.
+    (void)i;
+    return false;
+
     if (i + 4 >= lines_.size())
         return false;
     for (size_t k = 0; k < 5; ++k) {

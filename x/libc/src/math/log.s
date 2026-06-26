@@ -7,19 +7,9 @@
 
         .globl  _log
         .globl  _logl
-        .globl  ___fs2db
-        .globl  __lgd_load_arg0_fs
-        .globl  _logf
+        .globl  _logd_core
 
         .area   _CODE
 _log::
 _logl::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
-        call    __lgd_load_arg0_fs
-        call    _logf
-        call    ___fs2db
-        pop     ix
-        ret
-
+        jp      _logd_core

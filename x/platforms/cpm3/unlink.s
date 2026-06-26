@@ -40,11 +40,10 @@ _unlink::
         ld      a,(__cpm3_tmp_saved_user)
         call    __cpm3_set_user_a
         pop     af
-        cp      #BDOS_SUCCESS
-        jr      nz,__cpm3_unlink_fail
+        cp      #0xff
+        jr      z,__cpm3_unlink_fail
         ld      de,#0x0000
         ret
 __cpm3_unlink_fail:
         ld      de,#0xffff
         ret
-

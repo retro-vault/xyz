@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <sstream>
 
@@ -27,6 +28,47 @@ int64_t mask_to_bytes(int64_t value, int bytes) {
         return value;
     const uint64_t mask = (uint64_t{1} << (bytes * 8)) - 1;
     return static_cast<int64_t>(static_cast<uint64_t>(value) & mask);
+}
+
+int64_t fixed_positive_infinity_raw(int bytes) {
+    switch (bytes) {
+    case 2:
+        return 0x7fff;
+    case 4:
+        return 0x7fffffff;
+    default:
+        throw std::logic_error("unsupported fixed-float byte width");
+    }
+}
+
+int64_t fixed_nan_raw(int bytes) {
+    switch (bytes) {
+    case 2:
+        return 0x7ffe;
+    case 4:
+        return 0x7ffffffe;
+    default:
+        throw std::logic_error("unsupported fixed-float byte width");
+    }
+}
+
+int64_t fixed_negative_infinity_raw(int bytes) {
+    switch (bytes) {
+    case 2:
+        return -0x8000;
+    case 4:
+        return -0x80000000ll;
+    default:
+        throw std::logic_error("unsupported fixed-float byte width");
+    }
+}
+
+int64_t fixed_max_finite_raw(int bytes) {
+    return fixed_nan_raw(bytes) - 1;
+}
+
+int64_t fixed_min_finite_raw(int bytes) {
+    return fixed_negative_infinity_raw(bytes) + 1;
 }
 
 } // namespace
@@ -90,8 +132,25 @@ int64_t encode_float_constant(double value, type_ptr target_type) {
 
     const int frac_bits = float_format_fraction_bits(format);
     const int bytes = float_format_size(format);
+    if (std::isnan(value))
+        return mask_to_bytes(fixed_nan_raw(bytes), bytes);
+    if (std::isinf(value)) {
+        const int64_t raw = value < 0.0 ? fixed_negative_infinity_raw(bytes)
+                                        : fixed_positive_infinity_raw(bytes);
+        return mask_to_bytes(raw, bytes);
+    }
+
     const double scaled = std::ldexp(value, frac_bits);
+    if (scaled >= static_cast<double>(std::numeric_limits<int64_t>::max()))
+        return mask_to_bytes(fixed_max_finite_raw(bytes), bytes);
+    if (scaled <= static_cast<double>(std::numeric_limits<int64_t>::min()))
+        return mask_to_bytes(fixed_min_finite_raw(bytes), bytes);
+
     const int64_t raw = static_cast<int64_t>(std::llround(scaled));
+    if (raw > fixed_max_finite_raw(bytes))
+        return mask_to_bytes(fixed_max_finite_raw(bytes), bytes);
+    if (raw < fixed_min_finite_raw(bytes))
+        return mask_to_bytes(fixed_min_finite_raw(bytes), bytes);
     return mask_to_bytes(raw, bytes);
 }
 

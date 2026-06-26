@@ -33,6 +33,27 @@ bool is_char_array_type(type_ptr ty) {
            elem == type_kind::CHAR8T;
 }
 
+bool is_char_pointer_type(type_ptr ty) {
+    if (!ty || ty->kind != type_kind::POINTER || !ty->base)
+        return false;
+    type_kind elem = ty->base->unqual()->kind;
+    return elem == type_kind::CHAR ||
+           elem == type_kind::UCHAR ||
+           elem == type_kind::CHAR8T;
+}
+
+const string_literal_expr *unwrap_string_literal(expr *init) {
+    while (init) {
+        if (auto *str = dynamic_cast<string_literal_expr*>(init))
+            return str;
+        auto *cast = dynamic_cast<cast_expr*>(init);
+        if (!cast || !cast->operand)
+            break;
+        init = cast->operand.get();
+    }
+    return nullptr;
+}
+
 void append_string_bytes(const string_literal_expr &str, type_ptr array_type,
                          std::vector<ir_module::global_var::init_elem> &out) {
     int n = array_type ? array_type->size() : 0;
@@ -61,13 +82,21 @@ int64_t narrow_static_int(int64_t value, type_ptr ty) {
     return static_cast<int64_t>(static_cast<uint64_t>(value) & mask);
 }
 
+uint64_t bitfield_mask_bits(int width) {
+    if (width <= 0)
+        return 0;
+    if (width >= 64)
+        return ~uint64_t{0};
+    return (uint64_t{1} << width) - 1;
+}
+
 void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                          int &next_lbl,
                          std::vector<ir_module::global_var::init_elem> &out) {
     if (!init || !target)
         return;
 
-    if (auto *str = dynamic_cast<string_literal_expr*>(init);
+    if (const auto *str = unwrap_string_literal(init);
         str && is_char_array_type(target)) {
         append_string_bytes(*str, target, out);
         return;
@@ -75,8 +104,8 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
 
     if (auto *il = dynamic_cast<init_list_expr*>(init)) {
         if (is_char_array_type(target) && il->elements.size() == 1) {
-            if (auto *str = dynamic_cast<string_literal_expr*>(
-                    il->elements[0].value.get())) {
+            if (const auto *str =
+                    unwrap_string_literal(il->elements[0].value.get())) {
                 append_string_bytes(*str, target, out);
                 return;
             }
@@ -148,8 +177,8 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
     } else if (auto *flit = dynamic_cast<float_literal_expr*>(init)) {
         out.push_back(init_elem(encode_float_constant(flit->value, target),
                                 target->size()));
-    } else if (auto *str = dynamic_cast<string_literal_expr*>(init);
-               str && target->kind == type_kind::POINTER) {
+    } else if (const auto *str = unwrap_string_literal(init);
+               str && is_char_pointer_type(target)) {
         std::string lbl = "__str_" + std::to_string(next_lbl++);
         ir_module::global_var gv;
         gv.name       = lbl;
@@ -240,6 +269,57 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il)
         return out;
     };
 
+    auto zero_object = [&](const operand &dst_ptr, const type_ptr &dst_type) {
+        if (!dst_type)
+            return;
+        const int size = dst_type->size();
+        for (int i = 0; i < size; ++i) {
+            operand byte_ptr = ptr_at(dst_ptr, i, type::make_uchar());
+            icode ic;
+            ic.op = icode_op::SET_VALUE_AT;
+            ic.result = byte_ptr;
+            ic.left = operand::make_int(0, type::make_uchar());
+            emit(ic);
+        }
+    };
+
+    auto emit_bitfield_store =
+        [&](const operand &dst_ptr, const struct_field &field, operand value) {
+            type_ptr unit_type = field.type ? field.type : type::make_int();
+            operand field_ptr = ptr_at(dst_ptr, field.offset, unit_type);
+            const int64_t mask =
+                static_cast<int64_t>(bitfield_mask_bits(field.bit_width));
+
+            value = coerce_init_store(value, field.type);
+            operand masked = emit_binop(
+                icode_op::BAND,
+                value,
+                operand::make_int(mask, type::make_int()),
+                unit_type);
+            if (field.bit_offset > 0) {
+                masked = emit_binop(
+                    icode_op::SHL,
+                    masked,
+                    operand::make_int(field.bit_offset, type::make_int()),
+                    unit_type);
+            }
+
+            operand current = emit_unop(icode_op::GET_VALUE_AT, field_ptr, unit_type);
+            const int64_t clear_mask = ~(mask << field.bit_offset);
+            operand cleared = emit_binop(
+                icode_op::BAND,
+                current,
+                operand::make_int(clear_mask, type::make_int()),
+                unit_type);
+            operand combined = emit_binop(icode_op::BOR, cleared, masked, unit_type);
+
+            icode ic;
+            ic.op = icode_op::SET_VALUE_AT;
+            ic.result = field_ptr;
+            ic.left = combined;
+            emit(ic);
+        };
+
     std::function<void(const operand&, const type_ptr&, init_list_expr&)> emit_init_at;
     emit_init_at = [&](const operand &dst_ptr, const type_ptr &dst_type,
                        init_list_expr &list) {
@@ -307,16 +387,21 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il)
                 if (!fld)
                     continue;
 
-                operand fld_ptr = ptr_at(dst_ptr, fld->offset, fld->type);
                 if (auto *sub = dynamic_cast<init_list_expr*>(e.value.get());
                     sub && (fld->type->kind == type_kind::ARRAY ||
                             fld->type->kind == type_kind::STRUCT ||
                             fld->type->kind == type_kind::UNION)) {
+                    operand fld_ptr = ptr_at(dst_ptr, fld->offset, fld->type);
                     emit_init_at(fld_ptr, fld->type, *sub);
+                } else if (fld->bit_width >= 0) {
+                    emit_bitfield_store(dst_ptr, *fld, gen_expr(*e.value));
                 } else {
+                    operand fld_ptr = ptr_at(dst_ptr, fld->offset, fld->type);
                     operand val = coerce_init_store(gen_expr(*e.value), fld->type);
                     icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = fld_ptr; ic.left = val; emit(ic);
                 }
+                if (dst_type->kind == type_kind::UNION)
+                    break;
             }
         } else if (!list.elements.empty()) {
             operand src = coerce_init_store(gen_expr(*list.elements[0].value), dst_type);
@@ -324,6 +409,9 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il)
         }
     };
 
+    // Aggregate list-initialization zero-fills any members/elements not
+    // explicitly mentioned before overlaying the provided initializers.
+    zero_object(base_ptr, type);
     emit_init_at(base_ptr, type, il);
 }
 
