@@ -18,6 +18,11 @@
 #define XLD_DEFAULT_PLATFORM "none"
 #endif
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 namespace xld {
 
     static std::filesystem::path normalize_path(const std::filesystem::path& path)
@@ -32,10 +37,24 @@ namespace xld {
     static std::optional<std::filesystem::path> resolve_process_executable()
     {
         std::error_code ec;
+#ifdef _WIN32
+        std::vector<char> path_buf(MAX_PATH);
+        for (;;) {
+            const DWORD len = ::GetModuleFileNameA(
+                nullptr, path_buf.data(), static_cast<DWORD>(path_buf.size()));
+            if (len == 0)
+                return std::nullopt;
+            if (len < path_buf.size())
+                return normalize_path(
+                    std::filesystem::path(std::string(path_buf.data(), len)));
+            path_buf.resize(path_buf.size() * 2);
+        }
+#else
         auto proc_self = std::filesystem::read_symlink("/proc/self/exe", ec);
         if (!ec && !proc_self.empty())
             return normalize_path(proc_self);
         return std::nullopt;
+#endif
     }
 
     static bool has_extension_ci(const std::filesystem::path& path,

@@ -6,8 +6,10 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
 #include <termios.h>
 #include <unistd.h>
+#endif
 
 #include "debugger_session.h"
 #include "frontends.h"
@@ -31,6 +33,20 @@ namespace {
         std::optional<std::filesystem::path> log_file;
         bool show_help = false;
     };
+
+    void configure_terminal_input() {
+#ifndef _WIN32
+        // When stdin is a terminal (e.g. a PTY under DDD), disable echo so the
+        // front-end's own output is not echoed back to us as commands.
+        if (isatty(STDIN_FILENO)) {
+            struct termios t;
+            if (tcgetattr(STDIN_FILENO, &t) == 0) {
+                t.c_lflag &= ~static_cast<tcflag_t>(ECHO | ECHOE | ECHOK | ECHONL);
+                tcsetattr(STDIN_FILENO, TCSANOW, &t);
+            }
+        }
+#endif
+    }
 
     void print_help() {
         std::cout
@@ -135,15 +151,7 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    // When stdin is a terminal (e.g. a PTY under DDD), disable echo so the
-    // front-end's own output is not echoed back to us as commands.
-    if (isatty(STDIN_FILENO)) {
-        struct termios t;
-        if (tcgetattr(STDIN_FILENO, &t) == 0) {
-            t.c_lflag &= ~static_cast<tcflag_t>(ECHO | ECHOE | ECHOK | ECHONL);
-            tcsetattr(STDIN_FILENO, TCSANOW, &t);
-        }
-    }
+    configure_terminal_input();
 
     try {
         auto opts = parse_options(argc, argv);

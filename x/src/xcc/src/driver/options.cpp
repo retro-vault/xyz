@@ -17,6 +17,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <system_error>
+#include <vector>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 #ifndef XCC_VERSION
 #define XCC_VERSION "0.1.0"
@@ -89,9 +95,22 @@ static std::filesystem::path normalize_path(const std::filesystem::path &path) {
 
 static std::filesystem::path resolve_process_executable(const char *argv0) {
     std::error_code ec;
+#ifdef _WIN32
+    std::vector<char> path_buf(MAX_PATH);
+    for (;;) {
+        const DWORD len = ::GetModuleFileNameA(
+            nullptr, path_buf.data(), static_cast<DWORD>(path_buf.size()));
+        if (len == 0)
+            break;
+        if (len < path_buf.size())
+            return normalize_path(std::filesystem::path(std::string(path_buf.data(), len)));
+        path_buf.resize(path_buf.size() * 2);
+    }
+#else
     auto proc_self = std::filesystem::read_symlink("/proc/self/exe", ec);
     if (!ec && !proc_self.empty())
         return normalize_path(proc_self);
+#endif
 
     std::filesystem::path executable = (argv0 && *argv0) ? argv0 : "xcc";
     if (executable.is_relative()) {

@@ -32,6 +32,7 @@
 
 #include <cstdlib>
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -41,8 +42,12 @@
 #include <system_error>
 #include <unordered_map>
 
+#ifdef _WIN32
+#include <process.h>
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 namespace xcc {
 
@@ -387,19 +392,27 @@ static int run_tool(const std::vector<std::string> &args, bool verbose) {
         fprintf(stderr, "xcc: %s\n", line.c_str());
     }
 
-    std::vector<char *> argv;
+    std::vector<const char *> argv;
     argv.reserve(args.size() + 1);
     for (const auto &a : args)
-        argv.push_back(const_cast<char *>(a.c_str()));
+        argv.push_back(a.c_str());
     argv.push_back(nullptr);
 
+#ifdef _WIN32
+    const int status = _spawnvp(_P_WAIT, argv[0], argv.data());
+    if (status == -1) {
+        fprintf(stderr, "xcc: error: cannot execute '%s'\n", args[0].c_str());
+        return 1;
+    }
+    return status;
+#else
     pid_t pid = fork();
     if (pid < 0) {
         fprintf(stderr, "xcc: error: fork failed\n");
         return 1;
     }
     if (pid == 0) {
-        execvp(argv[0], argv.data());
+        execvp(argv[0], const_cast<char * const *>(argv.data()));
         fprintf(stderr, "xcc: error: cannot execute '%s'\n", args[0].c_str());
         _exit(127);
     }
@@ -412,6 +425,7 @@ static int run_tool(const std::vector<std::string> &args, bool verbose) {
         return WEXITSTATUS(status);
     fprintf(stderr, "xcc: error: '%s' terminated abnormally\n", args[0].c_str());
     return 1;
+#endif
 }
 
 // xas/xld live next to the xcc executable in an installed prefix;
@@ -423,6 +437,13 @@ static std::string find_tool(const options &opts, const char *name) {
         std::error_code ec;
         if (std::filesystem::exists(candidate, ec))
             return candidate.string();
+#ifdef _WIN32
+        auto exe_candidate = candidate;
+        exe_candidate += ".exe";
+        ec.clear();
+        if (std::filesystem::exists(exe_candidate, ec))
+            return exe_candidate.string();
+#endif
     }
     return name;
 }
@@ -477,18 +498,36 @@ struct temp_dir {
     bool create() {
         std::error_code ec;
         auto base = std::filesystem::temp_directory_path(ec);
-        if (ec)
-            base = "/tmp";
-        std::string tmpl = (base / "xcc-XXXXXX").string();
-        std::vector<char> buf(tmpl.begin(), tmpl.end());
-        buf.push_back('\0');
-        if (mkdtemp(buf.data()) == nullptr) {
-            fprintf(stderr, "xcc: error: cannot create temporary directory\n");
+        if (ec) {
+            ec.clear();
+            base = std::filesystem::current_path(ec);
+        }
+        if (ec) {
+            fprintf(stderr, "xcc: error: cannot determine temporary directory\n");
             return false;
         }
-        path = buf.data();
-        valid = true;
-        return true;
+
+        const auto stamp =
+            static_cast<unsigned long long>(
+                std::chrono::steady_clock::now().time_since_epoch().count());
+        for (unsigned attempt = 0; attempt != 256; ++attempt) {
+            auto candidate = base / ("xcc-" + std::to_string(stamp) + "-"
+                                     + std::to_string(attempt));
+            ec.clear();
+            if (std::filesystem::create_directory(candidate, ec)) {
+                path = std::move(candidate);
+                valid = true;
+                return true;
+            }
+        }
+
+        if (ec) {
+            fprintf(stderr, "xcc: error: cannot create temporary directory: %s\n",
+                    ec.message().c_str());
+        } else {
+            fprintf(stderr, "xcc: error: cannot create temporary directory\n");
+        }
+        return false;
     }
 
     std::string make_name(int index, const std::string &input,
