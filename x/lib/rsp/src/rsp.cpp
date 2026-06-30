@@ -5,17 +5,23 @@
  * Copyright (C) 2026 tomaz stih
  */
 
-#include <arpa/inet.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -27,71 +33,154 @@ namespace rsp {
 
 namespace {
 
+#ifdef _WIN32
+using native_socket = SOCKET;
+using socket_len = int;
+constexpr native_socket k_invalid_native_socket = INVALID_SOCKET;
+constexpr int k_shutdown_both = SD_BOTH;
+#else
+using native_socket = int;
+using socket_len = socklen_t;
+constexpr native_socket k_invalid_native_socket = -1;
+constexpr int k_shutdown_both = SHUT_RDWR;
+#endif
+
+native_socket to_native_socket(socket_handle fd) {
+    return fd == invalid_socket_handle
+        ? k_invalid_native_socket
+        : static_cast<native_socket>(fd);
+}
+
+socket_handle from_native_socket(native_socket fd) {
+    return fd == k_invalid_native_socket
+        ? invalid_socket_handle
+        : static_cast<socket_handle>(fd);
+}
+
+void raw_socket_close(native_socket fd) {
+#ifdef _WIN32
+    ::closesocket(fd);
+#else
+    ::close(fd);
+#endif
+}
+
 // ---------------------------------------------------------------------------
 // Low-level socket helpers
 // ---------------------------------------------------------------------------
 
 void throw_errno(const char* prefix) {
+#ifdef _WIN32
+    const int code = ::WSAGetLastError();
+    throw error(std::string(prefix) + ": WSA error " + std::to_string(code));
+#else
     throw error(std::string(prefix) + ": " + std::strerror(errno));
+#endif
 }
 
-void fd_close(int& fd) {
-    if (fd >= 0) { ::close(fd); fd = -1; }
+void ensure_socket_layer() {
+#ifdef _WIN32
+    static const int once = []() {
+        WSADATA data{};
+        const int rc = ::WSAStartup(MAKEWORD(2, 2), &data);
+        if (rc != 0) {
+            throw error("WSAStartup failed: " + std::to_string(rc));
+        }
+        return 0;
+    }();
+    (void)once;
+#endif
 }
 
-void fd_shutdown_close(int fd) {
-    if (fd >= 0) { ::shutdown(fd, SHUT_RDWR); ::close(fd); }
+void fd_close(socket_handle& fd) {
+    if (fd != invalid_socket_handle) {
+        raw_socket_close(to_native_socket(fd));
+        fd = invalid_socket_handle;
+    }
 }
 
-void atomic_close(std::atomic<int>& afd) {
-    fd_shutdown_close(afd.exchange(-1));
+void fd_shutdown_close(socket_handle fd) {
+    if (fd != invalid_socket_handle) {
+        const native_socket s = to_native_socket(fd);
+        ::shutdown(s, k_shutdown_both);
+        raw_socket_close(s);
+    }
 }
 
-void send_all(int fd, const void* buf, std::size_t len) {
+void atomic_close(std::atomic<socket_handle>& afd) {
+    fd_shutdown_close(afd.exchange(invalid_socket_handle));
+}
+
+void send_all(socket_handle fd, const void* buf, std::size_t len) {
     const auto* p = static_cast<const char*>(buf);
+    const native_socket s = to_native_socket(fd);
     while (len > 0) {
-        ssize_t n = ::send(fd, p, len, 0);
+        const int chunk = static_cast<int>(std::min<std::size_t>(
+            len, static_cast<std::size_t>(std::numeric_limits<int>::max())));
+        const int n = ::send(s, p, chunk, 0);
         if (n < 0) throw_errno("send");
         if (n == 0) throw error("connection closed during send");
         p += n; len -= static_cast<std::size_t>(n);
     }
 }
 
-void send_str(int fd, const std::string& s) {
+void send_str(socket_handle fd, const std::string& s) {
     send_all(fd, s.data(), s.size());
 }
 
-int recv_byte(int fd) {
+int recv_byte(socket_handle fd) {
     uint8_t ch;
-    ssize_t n = ::recv(fd, &ch, 1, 0);
+    const int n = ::recv(to_native_socket(fd), reinterpret_cast<char*>(&ch), 1, 0);
     if (n < 0) throw_errno("recv");
     if (n == 0) return -1;   // EOF
     return static_cast<int>(ch);
 }
 
-int connect_socket(const std::string& host, uint16_t port) {
+void throw_gai_error(const char* prefix, int code, const std::string& detail = {}) {
+#ifdef _WIN32
+    const char* message = ::gai_strerrorA(code);
+#else
+    const char* message = ::gai_strerror(code);
+#endif
+    std::string text = std::string(prefix) + ": " + (message ? message : "unknown");
+    if (!detail.empty()) {
+        text += " (" + detail + ")";
+    }
+    throw error(text);
+}
+
+socket_handle connect_socket(const std::string& host, uint16_t port) {
+    ensure_socket_layer();
+
     addrinfo hints{};
     hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
     addrinfo* info = nullptr;
     const std::string ps = std::to_string(port);
-    if (::getaddrinfo(host.c_str(), ps.c_str(), &hints, &info) != 0)
-        throw error("getaddrinfo failed for " + host);
+    const int rc = ::getaddrinfo(host.c_str(), ps.c_str(), &hints, &info);
+    if (rc != 0) {
+        throw_gai_error("getaddrinfo failed", rc, host + ":" + ps);
+    }
 
-    int fd = -1;
+    native_socket fd = k_invalid_native_socket;
     for (auto* c = info; c; c = c->ai_next) {
         fd = ::socket(c->ai_family, c->ai_socktype, c->ai_protocol);
-        if (fd < 0) continue;
+        if (fd == k_invalid_native_socket) continue;
         if (::connect(fd, c->ai_addr, c->ai_addrlen) == 0) break;
-        ::close(fd); fd = -1;
+        raw_socket_close(fd);
+        fd = k_invalid_native_socket;
     }
     ::freeaddrinfo(info);
-    if (fd < 0) throw error("cannot connect to " + host + ":" + ps);
-    return fd;
+    if (fd == k_invalid_native_socket) {
+        throw error("cannot connect to " + host + ":" + ps);
+    }
+    return from_native_socket(fd);
 }
 
-int listen_socket(const std::string& host, uint16_t port) {
+socket_handle listen_socket(const std::string& host, uint16_t port) {
+    ensure_socket_layer();
+
     addrinfo hints{};
     hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -100,22 +189,30 @@ int listen_socket(const std::string& host, uint16_t port) {
     addrinfo* info = nullptr;
     const std::string ps = std::to_string(port);
     const char* hp = host.empty() ? nullptr : host.c_str();
-    if (::getaddrinfo(hp, ps.c_str(), &hints, &info) != 0)
-        throw error("getaddrinfo failed");
+    const int rc = ::getaddrinfo(hp, ps.c_str(), &hints, &info);
+    if (rc != 0) {
+        throw_gai_error("getaddrinfo failed", rc, ps);
+    }
 
-    int fd = -1;
+    native_socket fd = k_invalid_native_socket;
     for (auto* c = info; c; c = c->ai_next) {
         fd = ::socket(c->ai_family, c->ai_socktype, c->ai_protocol);
-        if (fd < 0) continue;
+        if (fd == k_invalid_native_socket) continue;
         int one = 1;
+#ifdef _WIN32
+        ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                     reinterpret_cast<const char*>(&one), sizeof(one));
+#else
         ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+#endif
         if (::bind(fd, c->ai_addr, c->ai_addrlen) == 0 &&
             ::listen(fd, 1) == 0) break;
-        ::close(fd); fd = -1;
+        raw_socket_close(fd);
+        fd = k_invalid_native_socket;
     }
     ::freeaddrinfo(info);
-    if (fd < 0) throw error("cannot bind to port " + ps);
-    return fd;
+    if (fd == k_invalid_native_socket) throw error("cannot bind to port " + ps);
+    return from_native_socket(fd);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +243,7 @@ std::string encode_packet(const std::string& data) {
 
 // Receive one complete $data#XX packet from fd.
 // Handles leading '+'/'-' and interrupt bytes, skips garbage.
-std::string recv_rsp_packet(int fd) {
+std::string recv_rsp_packet(socket_handle fd) {
     while (true) {
         int ch = recv_byte(fd);
         if (ch < 0) throw error("connection closed");
@@ -254,7 +351,7 @@ stop_reply parse_stop(const std::string& r) {
 // Server packet dispatcher
 // ---------------------------------------------------------------------------
 
-void serve_client(int client_fd, target& tgt, const std::atomic<bool>& stop_req) {
+void serve_client(socket_handle client_fd, target& tgt, const std::atomic<bool>& stop_req) {
     while (!stop_req.load()) {
         // Peek at the next byte to handle interrupt vs packet.
         int first;
@@ -391,16 +488,16 @@ void serve_client(int client_fd, target& tgt, const std::atomic<bool>& stop_req)
 server::~server() { close(); }
 
 server::server(server&& o) noexcept
-    : listen_fd_(o.listen_fd_.exchange(-1))
-    , client_fd_(o.client_fd_.exchange(-1))
+    : listen_fd_(o.listen_fd_.exchange(invalid_socket_handle))
+    , client_fd_(o.client_fd_.exchange(invalid_socket_handle))
     , stop_requested_(o.stop_requested_.load())
 { o.stop_requested_ = false; }
 
 server& server::operator=(server&& o) noexcept {
     if (this != &o) {
         close();
-        listen_fd_      = o.listen_fd_.exchange(-1);
-        client_fd_      = o.client_fd_.exchange(-1);
+        listen_fd_      = o.listen_fd_.exchange(invalid_socket_handle);
+        client_fd_      = o.client_fd_.exchange(invalid_socket_handle);
         stop_requested_ = o.stop_requested_.load();
         o.stop_requested_ = false;
     }
@@ -419,16 +516,18 @@ void server::close() {
     atomic_close(listen_fd_);
 }
 
-bool server::is_listening() const { return listen_fd_.load() >= 0; }
+bool server::is_listening() const { return listen_fd_.load() != invalid_socket_handle; }
 
 void server::serve(target& tgt) {
-    const int lfd = listen_fd_.load();
-    if (lfd < 0) throw error("server is not listening");
+    const socket_handle lfd = listen_fd_.load();
+    if (lfd == invalid_socket_handle) throw error("server is not listening");
 
     sockaddr_storage addr{};
-    socklen_t len = sizeof(addr);
-    int cfd = ::accept(lfd, reinterpret_cast<sockaddr*>(&addr), &len);
-    if (cfd < 0) {
+    socket_len len = static_cast<socket_len>(sizeof(addr));
+    const native_socket accepted =
+        ::accept(to_native_socket(lfd), reinterpret_cast<sockaddr*>(&addr), &len);
+    const socket_handle cfd = from_native_socket(accepted);
+    if (cfd == invalid_socket_handle) {
         if (stop_requested_.load()) return;
         throw_errno("accept");
     }
@@ -437,15 +536,15 @@ void server::serve(target& tgt) {
     try {
         serve_client(cfd, tgt, stop_requested_);
     } catch (...) {
-        int expected = cfd;
-        if (client_fd_.compare_exchange_strong(expected, -1))
+        socket_handle expected = cfd;
+        if (client_fd_.compare_exchange_strong(expected, invalid_socket_handle))
             fd_shutdown_close(cfd);
         if (!stop_requested_.load()) throw;
         return;
     }
 
-    int expected = cfd;
-    if (client_fd_.compare_exchange_strong(expected, -1))
+    socket_handle expected = cfd;
+    if (client_fd_.compare_exchange_strong(expected, invalid_socket_handle))
         fd_shutdown_close(cfd);
 }
 
@@ -455,10 +554,10 @@ void server::serve(target& tgt) {
 
 client::~client() { close(); }
 
-client::client(client&& o) noexcept : fd_(o.fd_) { o.fd_ = -1; }
+client::client(client&& o) noexcept : fd_(o.fd_) { o.fd_ = invalid_socket_handle; }
 
 client& client::operator=(client&& o) noexcept {
-    if (this != &o) { close(); fd_ = o.fd_; o.fd_ = -1; }
+    if (this != &o) { close(); fd_ = o.fd_; o.fd_ = invalid_socket_handle; }
     return *this;
 }
 
@@ -469,7 +568,7 @@ void client::connect(const std::string& host, uint16_t port) {
 
 void client::close() { fd_close(fd_); }
 
-bool client::is_connected() const { return fd_ >= 0; }
+bool client::is_connected() const { return fd_ != invalid_socket_handle; }
 
 std::string client::recv_packet() {
     return recv_rsp_packet(fd_);

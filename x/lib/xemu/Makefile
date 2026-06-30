@@ -4,6 +4,11 @@ DIST_DIR ?= $(ROOT)/bin/x
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
 CXXFLAGS ?= -std=c++20 -g
+UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
+SOCKET_LIBS :=
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+SOCKET_LIBS += -lws2_32
+endif
 XZ80_DIR ?= $(ROOT)/lib/xz80
 XZ80_INCLUDE = -I$(XZ80_DIR)/include
 XZ80_LIB = $(PUBLIC_LIB_DIR)/libxz80.a
@@ -44,7 +49,7 @@ $(RSP_LIB):
 
 test: $(OUTPUT_DIR) $(LIB_TARGET) $(XZ80_LIB) $(RSP_LIB) $(TEST_DIR)/test_main.cpp
 	$(CXX) $(CXXFLAGS) -Iinclude $(RSP_INCLUDE) $(XZ80_INCLUDE) \
-		$(TEST_DIR)/test_main.cpp $(LIB_TARGET) $(RSP_LIB) $(XZ80_LIB) -pthread -o $(TEST_TARGET)
+		$(TEST_DIR)/test_main.cpp $(LIB_TARGET) $(RSP_LIB) $(XZ80_LIB) $(SOCKET_LIBS) -pthread -o $(TEST_TARGET)
 	$(TEST_TARGET)
 
 clean:

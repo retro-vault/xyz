@@ -5,6 +5,11 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
 CXXFLAGS ?= -std=c++20 -g
+UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
+SOCKET_LIBS :=
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+SOCKET_LIBS += -lws2_32
+endif
 XZ80_DIR ?= $(ROOT)/lib/xz80
 XZ80_INCLUDE = -I$(XZ80_DIR)/include
 XZ80_LIB = $(PUBLIC_LIB_DIR)/libxz80.a
@@ -47,6 +52,7 @@ all: $(BIN_OUTPUT) $(OUTPUT_DIR) $(LIB_OUTPUT)
 		$(PUBLIC_LIB_DIR)/librsp.a \
 		$(XBFD_LIB) \
 		$(XZ80_LIB) \
+		$(SOCKET_LIBS) \
 		-o $(XGDB_TARGET)
 
 $(OUTPUT_DIR):

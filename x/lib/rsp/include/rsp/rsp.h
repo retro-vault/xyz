@@ -29,6 +29,9 @@
 
 namespace rsp {
 
+    using socket_handle = std::intptr_t;
+    inline constexpr socket_handle invalid_socket_handle = -1;
+
     // -----------------------------------------------------------------------
     // Error type
     // -----------------------------------------------------------------------
@@ -120,8 +123,8 @@ namespace rsp {
         void serve(target& tgt);
 
     private:
-        std::atomic<int>  listen_fd_      {-1};
-        std::atomic<int>  client_fd_      {-1};
+        std::atomic<socket_handle> listen_fd_      {invalid_socket_handle};
+        std::atomic<socket_handle> client_fd_      {invalid_socket_handle};
         std::atomic<bool> stop_requested_ {false};
     };
 
@@ -190,7 +193,7 @@ namespace rsp {
         // Parse a stop reply string like "S05", "W00", "X0b".
         static stop_reply parse_stop_reply(const std::string& reply);
 
-        int fd_ = -1;
+        socket_handle fd_ = invalid_socket_handle;
     };
 
 } // namespace rsp

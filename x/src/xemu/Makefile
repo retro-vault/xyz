@@ -5,6 +5,11 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
 CXXFLAGS ?= -std=c++20 -g
+UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
+SOCKET_LIBS :=
+ifneq (,$(findstring MINGW,$(UNAME_S)))
+SOCKET_LIBS += -lws2_32
+endif
 XEMU_DIR ?= $(ROOT)/lib/xemu
 XEMU_INCLUDE = -I$(XEMU_DIR)/include
 XEMU_LIB = $(PUBLIC_LIB_DIR)/libxemu.a
@@ -40,6 +45,7 @@ $(XEMU_TARGET): $(XEMU_SOURCES) $(HEADERS)
 		$(XEMU_LIB) \
 		$(RSP_LIB) \
 		$(XZ80_LIB) \
+		$(SOCKET_LIBS) \
 		-o $(XEMU_TARGET)
 
 $(OUTPUT_DIR):
