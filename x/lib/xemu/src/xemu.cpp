@@ -4,6 +4,7 @@
 // copyright (C) 2026 tomaz stih
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -14,6 +15,7 @@
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -67,6 +69,95 @@ std::vector<uint8_t> read_file_bytes(const std::filesystem::path& path) {
     return std::vector<uint8_t>(
         std::istreambuf_iterator<char>(file),
         std::istreambuf_iterator<char>());
+}
+
+struct ihx_chunk {
+    uint16_t address = 0;
+    std::vector<uint8_t> bytes;
+};
+
+int hex_nibble(char ch) {
+    if (ch >= '0' && ch <= '9')
+        return ch - '0';
+    if (ch >= 'a' && ch <= 'f')
+        return 10 + (ch - 'a');
+    if (ch >= 'A' && ch <= 'F')
+        return 10 + (ch - 'A');
+    throw std::runtime_error("bad Intel HEX digit");
+}
+
+uint8_t parse_hex_byte(const std::string& line, std::size_t offset) {
+    return static_cast<uint8_t>((hex_nibble(line.at(offset)) << 4)
+                                | hex_nibble(line.at(offset + 1)));
+}
+
+std::vector<ihx_chunk> read_ihx_chunks(const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input.is_open())
+        throw std::runtime_error("cannot open Intel HEX: " + path.string());
+
+    std::vector<ihx_chunk> chunks;
+    std::string line;
+    uint32_t ext_base = 0;
+
+    while (std::getline(input, line)) {
+        if (line.empty())
+            continue;
+        if (line[0] != ':')
+            throw std::runtime_error("invalid Intel HEX record in " + path.string());
+        if (line.size() < 11)
+            throw std::runtime_error("truncated Intel HEX record in " + path.string());
+
+        const uint8_t len = parse_hex_byte(line, 1);
+        const std::size_t expected_size = 11u + static_cast<std::size_t>(len) * 2u;
+        if (line.size() < expected_size)
+            throw std::runtime_error("short Intel HEX record in " + path.string());
+
+        const uint16_t addr = static_cast<uint16_t>(
+            (parse_hex_byte(line, 3) << 8) | parse_hex_byte(line, 5));
+        const uint8_t type = parse_hex_byte(line, 7);
+        uint8_t checksum = static_cast<uint8_t>(
+            len + static_cast<uint8_t>((addr >> 8) & 0xff)
+            + static_cast<uint8_t>(addr & 0xff) + type);
+
+        std::vector<uint8_t> bytes;
+        bytes.reserve(len);
+        for (uint8_t i = 0; i < len; ++i) {
+            const uint8_t byte = parse_hex_byte(line, 9 + i * 2);
+            checksum = static_cast<uint8_t>(checksum + byte);
+            bytes.push_back(byte);
+        }
+        checksum = static_cast<uint8_t>(checksum + parse_hex_byte(line, 9 + len * 2));
+        if (checksum != 0)
+            throw std::runtime_error("bad Intel HEX checksum in " + path.string());
+
+        if (type == 0x00) {
+            const uint32_t full = ext_base + addr;
+            if (full + bytes.size() > 0x10000u)
+                throw std::runtime_error("Intel HEX image exceeds 64K: " + path.string());
+
+            if (!chunks.empty()
+                && static_cast<uint32_t>(chunks.back().address + chunks.back().bytes.size())
+                       == full) {
+                chunks.back().bytes.insert(
+                    chunks.back().bytes.end(),
+                    bytes.begin(),
+                    bytes.end());
+            } else {
+                chunks.push_back({static_cast<uint16_t>(full), std::move(bytes)});
+            }
+        } else if (type == 0x01) {
+            break;
+        } else if (type == 0x04) {
+            if (bytes.size() != 2)
+                throw std::runtime_error("bad Intel HEX extended address in " + path.string());
+            ext_base = static_cast<uint32_t>(
+                (static_cast<uint32_t>(bytes[0]) << 24)
+                | (static_cast<uint32_t>(bytes[1]) << 16));
+        }
+    }
+
+    return chunks;
 }
 
 std::string to_rsp_stop(const stop_result& stop) {
@@ -126,6 +217,410 @@ std::vector<uint8_t> pack_registers(const register_image& regs) {
     data[17] = regs.r;
     return data;
 }
+
+class mapped_memory final : public xz80::IMemory {
+public:
+    static constexpr std::size_t compat_page_count = banked_memory_config::page_count;
+    static constexpr uint32_t compat_page_size = banked_memory_config::page_size;
+
+    explicit mapped_memory(uint8_t fill = 0x00)
+        : fill_(fill)
+    {
+        configure(default_flat_config());
+    }
+
+    uint8_t read(uint16_t addr) const noexcept override {
+        const int window_index = addr_to_window_[addr];
+        if (window_index < 0) {
+            return fill_;
+        }
+
+        const auto& window = windows_[static_cast<std::size_t>(window_index)];
+        const auto& store = stores_[window.store_index];
+        const auto bank = resolve_bank(window, store);
+        const auto offset = static_cast<uint32_t>(addr - window.start);
+        return store.data[data_index(store, bank, window.bank_offset + offset)];
+    }
+
+    void write(uint16_t addr, uint8_t value) noexcept override {
+        store_byte(addr, value, true);
+    }
+
+    void clear(uint8_t fill) noexcept {
+        fill_ = fill;
+        for (auto& store : stores_) {
+            std::fill(store.data.begin(), store.data.end(), fill);
+        }
+        reset_selectors();
+    }
+
+    void reset_selectors() noexcept {
+        for (auto& selector : selectors_) {
+            selector.value = selector.initial_value;
+        }
+    }
+
+    void load(uint16_t origin, std::span<const uint8_t> src) noexcept {
+        for (std::size_t i = 0; i < src.size(); ++i) {
+            const auto addr = static_cast<uint32_t>(origin) + static_cast<uint32_t>(i);
+            if (addr >= 0x10000u) {
+                break;
+            }
+            store_byte(static_cast<uint16_t>(addr), src[i], false);
+        }
+    }
+
+    void configure(const memory_map_config& config) {
+        if (config.stores.empty()) {
+            throw std::runtime_error("memory map must define at least one store");
+        }
+        if (config.windows.empty()) {
+            throw std::runtime_error("memory map must define at least one window");
+        }
+
+        std::unordered_map<std::string, std::size_t> store_lookup;
+        std::unordered_map<std::string, std::size_t> selector_lookup;
+        std::vector<store_runtime> new_stores;
+        std::vector<selector_runtime> new_selectors;
+        std::vector<window_runtime> new_windows;
+        std::vector<port_rule_runtime> new_port_rules;
+        std::array<int, 0x10000> new_addr_to_window{};
+        new_addr_to_window.fill(-1);
+
+        for (const auto& store_cfg : config.stores) {
+            if (store_cfg.name.empty()) {
+                throw std::runtime_error("memory store name cannot be empty");
+            }
+            if (store_lookup.count(store_cfg.name) != 0) {
+                throw std::runtime_error("duplicate memory store: " + store_cfg.name);
+            }
+            if (store_cfg.bank_count == 0) {
+                throw std::runtime_error("store bank_count must be at least 1: " + store_cfg.name);
+            }
+            if (store_cfg.bank_size == 0) {
+                throw std::runtime_error("store bank_size must be at least 1: " + store_cfg.name);
+            }
+
+            const auto index = new_stores.size();
+            store_lookup[store_cfg.name] = index;
+            auto& store = new_stores.emplace_back();
+            store.name = store_cfg.name;
+            store.bank_count = store_cfg.bank_count;
+            store.bank_size = store_cfg.bank_size;
+            store.writable = store_cfg.writable;
+            store.data.assign(
+                static_cast<std::size_t>(store_cfg.bank_count)
+                    * static_cast<std::size_t>(store_cfg.bank_size),
+                fill_);
+        }
+
+        for (const auto& selector_cfg : config.selectors) {
+            if (selector_cfg.name.empty()) {
+                throw std::runtime_error("memory selector name cannot be empty");
+            }
+            if (selector_lookup.count(selector_cfg.name) != 0) {
+                throw std::runtime_error("duplicate selector: " + selector_cfg.name);
+            }
+
+            const auto index = new_selectors.size();
+            selector_lookup[selector_cfg.name] = index;
+            auto& selector = new_selectors.emplace_back();
+            selector.name = selector_cfg.name;
+            selector.initial_value = selector_cfg.initial_value;
+            selector.value = selector_cfg.initial_value;
+        }
+
+        for (const auto& window_cfg : config.windows) {
+            if (window_cfg.store.empty()) {
+                throw std::runtime_error("memory window store cannot be empty");
+            }
+            const auto store_it = store_lookup.find(window_cfg.store);
+            if (store_it == store_lookup.end()) {
+                throw std::runtime_error("unknown window store: " + window_cfg.store);
+            }
+            if (window_cfg.end < window_cfg.start) {
+                throw std::runtime_error("window end before start for store " + window_cfg.store);
+            }
+            if (window_cfg.fixed_bank.has_value() && window_cfg.selector.has_value()) {
+                throw std::runtime_error(
+                    "window cannot specify both fixed_bank and selector for store "
+                    + window_cfg.store);
+            }
+
+            const auto range_size = static_cast<uint32_t>(
+                static_cast<uint32_t>(window_cfg.end) - static_cast<uint32_t>(window_cfg.start)
+                + 1u);
+            const auto& store = new_stores[store_it->second];
+            if (window_cfg.bank_offset + range_size > store.bank_size) {
+                throw std::runtime_error(
+                    "window range exceeds bank size for store " + window_cfg.store);
+            }
+            if (window_cfg.fixed_bank.has_value()
+                && window_cfg.fixed_bank.value() >= store.bank_count) {
+                throw std::runtime_error(
+                    "fixed bank out of range for store " + window_cfg.store);
+            }
+
+            int selector_index = -1;
+            if (window_cfg.selector.has_value()) {
+                const auto selector_it = selector_lookup.find(window_cfg.selector.value());
+                if (selector_it == selector_lookup.end()) {
+                    throw std::runtime_error(
+                        "unknown selector " + window_cfg.selector.value()
+                        + " for store " + window_cfg.store);
+                }
+                selector_index = static_cast<int>(selector_it->second);
+            }
+
+            const auto window_index = static_cast<int>(new_windows.size());
+            auto& window = new_windows.emplace_back();
+            window.start = window_cfg.start;
+            window.end = window_cfg.end;
+            window.store_index = store_it->second;
+            window.fixed_bank = window_cfg.fixed_bank.value_or(0);
+            window.selector_index = selector_index;
+            window.bank_offset = window_cfg.bank_offset;
+
+            for (uint32_t addr = window.start; addr <= window.end; ++addr) {
+                auto& slot = new_addr_to_window[static_cast<std::size_t>(addr)];
+                if (slot >= 0) {
+                    throw std::runtime_error("memory windows overlap at address 0x"
+                                             + hex_word(static_cast<uint16_t>(addr)));
+                }
+                slot = window_index;
+            }
+        }
+
+        for (const auto& rule_cfg : config.port_rules) {
+            const auto selector_it = selector_lookup.find(rule_cfg.selector);
+            if (selector_it == selector_lookup.end()) {
+                throw std::runtime_error("unknown selector in port rule: " + rule_cfg.selector);
+            }
+            if (rule_cfg.shift > 15) {
+                throw std::runtime_error("port rule shift must be in the range 0..15");
+            }
+
+            auto& rule = new_port_rules.emplace_back();
+            rule.port = rule_cfg.port;
+            rule.port_mask = rule_cfg.port_mask;
+            rule.selector_index = selector_it->second;
+            rule.mask = rule_cfg.mask;
+            rule.shift = rule_cfg.shift;
+        }
+
+        stores_ = std::move(new_stores);
+        selectors_ = std::move(new_selectors);
+        windows_ = std::move(new_windows);
+        port_rules_ = std::move(new_port_rules);
+        addr_to_window_ = new_addr_to_window;
+        compat_selector_index_.reset();
+    }
+
+    void configure_compat(const banked_memory_config& config) {
+        validate_compat_config(config);
+
+        memory_map_config map;
+        const bool have_banked_pages = !config.banked_pages.empty();
+        constexpr const char* compat_selector_name = "__compat_bank";
+
+        if (have_banked_pages) {
+            map.selectors.push_back({compat_selector_name, 0});
+        }
+
+        std::array<bool, compat_page_count> banked_mask{};
+        for (const auto page : config.banked_pages) {
+            banked_mask[page] = true;
+        }
+
+        for (uint8_t page = 0; page < compat_page_count; ++page) {
+            memory_store_config store;
+            store.name = "compat_page_" + std::to_string(page);
+            store.bank_count = banked_mask[page] ? config.bank_count : 1;
+            store.bank_size = compat_page_size;
+            store.writable = true;
+            map.stores.push_back(store);
+
+            memory_window_config window;
+            window.start = static_cast<uint16_t>(page * compat_page_size);
+            window.end = static_cast<uint16_t>(window.start + compat_page_size - 1u);
+            window.store = store.name;
+            if (banked_mask[page]) {
+                window.selector = compat_selector_name;
+            } else {
+                window.fixed_bank = 0;
+            }
+            map.windows.push_back(window);
+        }
+
+        configure(map);
+        compat_selector_index_ = find_selector_index(compat_selector_name);
+    }
+
+    void apply_port_write(uint16_t port, uint8_t value) noexcept {
+        for (const auto& rule : port_rules_) {
+            if ((port & rule.port_mask) != (rule.port & rule.port_mask)) {
+                continue;
+            }
+            selectors_[rule.selector_index].value = static_cast<uint16_t>(
+                (static_cast<uint16_t>(value) & rule.mask) >> rule.shift);
+        }
+    }
+
+    void set_compat_active_bank(uint16_t bank) noexcept {
+        if (compat_selector_index_.has_value()) {
+            selectors_[compat_selector_index_.value()].value = bank;
+        }
+    }
+
+    uint16_t compat_active_bank() const noexcept {
+        if (compat_selector_index_.has_value()) {
+            return selectors_[compat_selector_index_.value()].value;
+        }
+        return 0;
+    }
+
+private:
+    void store_byte(uint16_t addr, uint8_t value, bool honor_writable) noexcept {
+        const int window_index = addr_to_window_[addr];
+        if (window_index < 0) {
+            return;
+        }
+
+        const auto& window = windows_[static_cast<std::size_t>(window_index)];
+        auto& store = stores_[window.store_index];
+        if (honor_writable && !store.writable) {
+            return;
+        }
+
+        const auto bank = resolve_bank(window, store);
+        const auto offset = static_cast<uint32_t>(addr - window.start);
+        store.data[data_index(store, bank, window.bank_offset + offset)] = value;
+    }
+
+    struct store_runtime {
+        std::string name;
+        uint16_t bank_count = 1;
+        uint32_t bank_size = 0x10000;
+        bool writable = true;
+        std::vector<uint8_t> data;
+    };
+
+    struct selector_runtime {
+        std::string name;
+        uint16_t initial_value = 0;
+        uint16_t value = 0;
+    };
+
+    struct window_runtime {
+        uint16_t start = 0;
+        uint16_t end = 0xFFFF;
+        std::size_t store_index = 0;
+        uint16_t fixed_bank = 0;
+        int selector_index = -1;
+        uint32_t bank_offset = 0;
+    };
+
+    struct port_rule_runtime {
+        uint16_t port = 0;
+        uint16_t port_mask = 0xFFFF;
+        std::size_t selector_index = 0;
+        uint16_t mask = 0x00FF;
+        uint8_t shift = 0;
+    };
+
+    static memory_map_config default_flat_config() {
+        memory_map_config config;
+        config.stores.push_back({"main", 1, 0x10000u, true});
+        config.windows.push_back({0x0000, 0xFFFF, "main", 0, std::nullopt, 0});
+        return config;
+    }
+
+    static std::string hex_word(uint16_t value) {
+        static constexpr char digits[] = "0123456789ABCDEF";
+        std::string text(4, '0');
+        text[0] = digits[(value >> 12) & 0x0F];
+        text[1] = digits[(value >> 8) & 0x0F];
+        text[2] = digits[(value >> 4) & 0x0F];
+        text[3] = digits[value & 0x0F];
+        return text;
+    }
+
+    static void validate_compat_config(const banked_memory_config& config) {
+        std::array<bool, compat_page_count> seen{};
+        auto mark_pages = [&](const std::vector<uint8_t>& pages, const char* label) {
+            for (const auto page_value : pages) {
+                if (page_value >= compat_page_count) {
+                    throw std::runtime_error(
+                        std::string(label) + " contains invalid page index "
+                        + std::to_string(page_value));
+                }
+                if (seen[page_value]) {
+                    throw std::runtime_error(
+                        std::string("duplicate page index ")
+                        + std::to_string(page_value) + " in banked memory configuration");
+                }
+                seen[page_value] = true;
+            }
+        };
+
+        mark_pages(config.shared_pages, "shared_pages");
+        mark_pages(config.banked_pages, "banked_pages");
+
+        if (config.shared_pages.size() + config.banked_pages.size() != compat_page_count) {
+            throw std::runtime_error(
+                "banked memory configuration must classify all 4 CPU pages");
+        }
+
+        if (config.banked_pages.empty()) {
+            if (config.bank_count != 0) {
+                throw std::runtime_error(
+                    "bank_count must be 0 when no banked pages are configured");
+            }
+            return;
+        }
+
+        if (config.bank_count == 0 || config.bank_count > 256) {
+            throw std::runtime_error("bank_count must be in the range 1..256");
+        }
+    }
+
+    uint16_t resolve_bank(const window_runtime& window, const store_runtime& store) const noexcept {
+        uint16_t bank = window.fixed_bank;
+        if (window.selector_index >= 0) {
+            bank = selectors_[static_cast<std::size_t>(window.selector_index)].value;
+        }
+        if (store.bank_count == 0) {
+            return 0;
+        }
+        return static_cast<uint16_t>(bank % store.bank_count);
+    }
+
+    std::size_t data_index(
+        const store_runtime& store,
+        uint16_t bank,
+        uint32_t offset) const noexcept
+    {
+        return static_cast<std::size_t>(bank) * static_cast<std::size_t>(store.bank_size)
+            + static_cast<std::size_t>(offset);
+    }
+
+    std::optional<int> find_selector_index(const std::string& name) const noexcept {
+        for (std::size_t i = 0; i < selectors_.size(); ++i) {
+            if (selectors_[i].name == name) {
+                return static_cast<int>(i);
+            }
+        }
+        return std::nullopt;
+    }
+
+    uint8_t fill_ = 0x00;
+    std::vector<store_runtime> stores_;
+    std::vector<selector_runtime> selectors_;
+    std::vector<window_runtime> windows_;
+    std::vector<port_rule_runtime> port_rules_;
+    std::array<int, 0x10000> addr_to_window_{};
+    std::optional<int> compat_selector_index_;
+};
 
 constexpr uint16_t kEmuReqFd = 0xff11;
 constexpr uint16_t kEmuReqPtr = 0xff13;
@@ -197,6 +692,12 @@ struct machine::impl {
                 stdout_stream_->put(static_cast<char>(value));
                 stdout_stream_->flush();
             }
+            if (owner_ != nullptr) {
+                owner_->mem.apply_port_write(port, value);
+            }
+            if (bank_port_.has_value() && port == bank_port_.value() && owner_ != nullptr) {
+                owner_->mem.set_compat_active_bank(value);
+            }
             if (port == machine::emu_cmd_port && owner_ != nullptr) {
                 owner_->handle_command(value);
             }
@@ -223,6 +724,10 @@ struct machine::impl {
             stdout_stream_ = &output;
         }
 
+        void bind_bank_port(uint16_t port) noexcept {
+            bank_port_ = port;
+        }
+
         void clear_stdin() noexcept {
             stdin_status_port_.reset();
             stdin_data_port_.reset();
@@ -232,6 +737,10 @@ struct machine::impl {
         void clear_stdout() noexcept {
             stdout_port_.reset();
             stdout_stream_ = nullptr;
+        }
+
+        void clear_bank_port() noexcept {
+            bank_port_.reset();
         }
 
         std::istream* stdin_stream() const noexcept {
@@ -247,6 +756,7 @@ struct machine::impl {
         std::optional<uint16_t> stdin_status_port_;
         std::optional<uint16_t> stdin_data_port_;
         std::optional<uint16_t> stdout_port_;
+        std::optional<uint16_t> bank_port_;
         std::istream* stdin_stream_ = nullptr;
         std::ostream* stdout_stream_ = nullptr;
     };
@@ -677,7 +1187,7 @@ struct machine::impl {
     }
 
     port_mux ports;
-    xz80::flat_memory mem;
+    mapped_memory mem;
     xz80::cpu cpu;
     std::vector<uint16_t> breakpoints;
     std::optional<std::filesystem::path> host_fs_root_;
@@ -693,12 +1203,12 @@ machine::machine(machine&&) noexcept = default;
 machine& machine::operator=(machine&&) noexcept = default;
 
 void machine::reset() noexcept {
+    impl_->mem.reset_selectors();
     impl_->cpu.reset();
 }
 
 void machine::clear_memory(uint8_t fill) noexcept {
-    for (uint32_t address = 0; address < 0x10000u; ++address)
-        impl_->mem.write(static_cast<uint16_t>(address), fill);
+    impl_->mem.clear(fill);
 }
 
 void machine::load_binary(const std::filesystem::path& path, uint16_t origin) {
@@ -706,8 +1216,42 @@ void machine::load_binary(const std::filesystem::path& path, uint16_t origin) {
     load_bytes(origin, std::span<const uint8_t>(bytes.data(), bytes.size()));
 }
 
+void machine::load_ihx(const std::filesystem::path& path) {
+    for (const auto& chunk : read_ihx_chunks(path))
+        load_bytes(chunk.address,
+                   std::span<const uint8_t>(chunk.bytes.data(), chunk.bytes.size()));
+}
+
 void machine::load_bytes(uint16_t origin, std::span<const uint8_t> bytes) noexcept {
     impl_->mem.load(origin, bytes);
+}
+
+void machine::configure_memory_map(const memory_map_config& config) {
+    impl_->mem.configure(config);
+    impl_->ports.clear_bank_port();
+}
+
+void machine::configure_banked_memory(const banked_memory_config& config) {
+    impl_->mem.configure_compat(config);
+    if (config.banked_pages.empty()) {
+        impl_->ports.clear_bank_port();
+    }
+}
+
+void machine::bind_bank_port(uint16_t port) noexcept {
+    impl_->ports.bind_bank_port(port);
+}
+
+void machine::clear_bank_port() noexcept {
+    impl_->ports.clear_bank_port();
+}
+
+void machine::set_active_bank(uint16_t bank) noexcept {
+    impl_->mem.set_compat_active_bank(bank);
+}
+
+uint16_t machine::active_bank() const noexcept {
+    return impl_->mem.compat_active_bank();
 }
 
 std::vector<uint8_t> machine::read_memory(uint32_t address, std::size_t length) const {
@@ -991,6 +1535,12 @@ void remote_session::write_memory(uint32_t address, std::span<const uint8_t> dat
 void remote_session::load_binary(const std::filesystem::path& path, uint16_t origin) {
     const auto bytes = read_file_bytes(path);
     write_memory(origin, std::span<const uint8_t>(bytes.data(), bytes.size()));
+}
+
+void remote_session::load_ihx(const std::filesystem::path& path) {
+    for (const auto& chunk : read_ihx_chunks(path))
+        write_memory(chunk.address,
+                     std::span<const uint8_t>(chunk.bytes.data(), chunk.bytes.size()));
 }
 
 rsp::stop_reply remote_session::continue_execution() {

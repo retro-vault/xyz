@@ -58,6 +58,14 @@ bool z80_gen::fits_ix_disp(int off) {
 }
 
 void z80_gen::load_ix_addr_hl(int off) {
+    if (!fits_ix_disp(off) && has_known_sp_ix_delta()) {
+        emit_line("ld\thl, %s", asm_.imm(off - current_sp_ix_delta()).c_str());
+        emit_line("add\thl, sp");
+        set_pair_cache(reg_pair{"hl", 'l', 'h', false},
+                       pair_ix_addr_cache_key(off));
+        return;
+    }
+
     emit_line("push\tix");
     emit_line("pop\thl");
     if (off == 0)
@@ -154,6 +162,10 @@ void z80_gen::store_frame_word(const reg_pair &r, int off) {
         emit_line("push\tde");
         emit_line("ld\td, h");
         emit_line("ld\te, l");
+    } else {
+        // Deep frame stores use HL as an address scratch, so preserve the
+        // caller's high-word source when we're spilling a DE-backed word.
+        emit_line("push\thl");
     }
     load_ix_addr_hl(off);
     if (r.lo == 'l') {
@@ -168,6 +180,7 @@ void z80_gen::store_frame_word(const reg_pair &r, int off) {
     emit_line("ld\t(hl), %c", r.lo);
     emit_line("inc\thl");
     emit_line("ld\t(hl), %c", r.hi);
+    emit_line("pop\thl");
     emit_line("pop\tbc");
     emit_line("pop\taf");
 }
@@ -288,7 +301,12 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 extend_loaded_byte(r.lo, r.hi);
                 return;
             } else if (op.is_global) {
-                emit_line("ld\t%c, (%s)", r.lo, mangle(op.name).c_str());
+                if (r.lo == 'a') {
+                    emit_line("ld\ta, (%s)", mangle(op.name).c_str());
+                } else {
+                    emit_line("ld\ta, (%s)", mangle(op.name).c_str());
+                    emit_line("ld\t%c, a", r.lo);
+                }
                 extend_loaded_byte(r.lo, r.hi);
                 return;
             }
@@ -700,7 +718,13 @@ void z80_gen::load_a(const operand &op) {
         return;
     }
     if (op.kind == operand_kind::SYMBOL && op.is_global) {
-        emit_line("ld\ta, (%s)", mangle(op.name).c_str());
+        // Honour a non-zero byte offset (e.g. the bank byte of a far
+        // pointer at sym+2, or the tail byte of any odd-sized global).
+        if (op.byte_offset != 0)
+            emit_line("ld\ta, %s",
+                      asm_.indir_global(mangle(op.name), op.byte_offset).c_str());
+        else
+            emit_line("ld\ta, (%s)", mangle(op.name).c_str());
         invalidate_a_cache();
         return;
     }
@@ -842,7 +866,11 @@ void z80_gen::store_a(const operand &op) {
         return;
     }
     if (op.kind == operand_kind::SYMBOL && op.is_global) {
-        emit_line("ld\t(%s), a", mangle(op.name).c_str());
+        if (op.byte_offset != 0)
+            emit_line("ld\t%s, a",
+                      asm_.indir_global(mangle(op.name), op.byte_offset).c_str());
+        else
+            emit_line("ld\t(%s), a", mangle(op.name).c_str());
         invalidate_a_cache();
         return;
     }
@@ -1039,6 +1067,40 @@ void z80_gen::store_hl_word(const operand &op, int word_index) {
                        pair_word_cache_key(op, word_index));
     else
         invalidate_hl_cache();
+}
+
+void z80_gen::store_de_word(const operand &op, int word_index) {
+    int word_byte = word_index * 2;
+    bool preserves_de = true;
+    if (op.kind == operand_kind::TEMP) {
+        auto ri = temp_regs_.find(op.temp_id);
+        if (ri != temp_regs_.end() && word_index == 0 && ri->second == temp_home::main_bc) {
+            emit_line("ld\tb, d");
+            emit_line("ld\tc, e");
+            set_pair_cache(reg_pair{"de", 'e', 'd', true},
+                           pair_word_cache_key(op, word_index));
+            return;
+        }
+    }
+    if (op.kind == operand_kind::SYMBOL && op.is_global) {
+        int total = op.byte_offset + word_byte;
+        emit_line("ld\t%s, de", asm_.indir_global(mangle(op.name), total).c_str());
+    } else if (op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op) &&
+               op.byte_offset + word_byte == 0) {
+        emit_line("ld\tb, d");
+        emit_line("ld\tc, e");
+    } else {
+        int off = ix_offset_of(op) + word_byte;
+        preserves_de = fits_ix_disp(off) && fits_ix_disp(off + 1);
+        store_frame_word(reg_pair{"de", 'e', 'd', true},
+                         ix_offset_of(op) + word_byte);
+    }
+
+    if (preserves_de)
+        set_pair_cache(reg_pair{"de", 'e', 'd', true},
+                       pair_word_cache_key(op, word_index));
+    else
+        invalidate_de_cache();
 }
 
 void z80_gen::load_hl_lo32 (const operand &op) { load_hl_word(op, 0); }

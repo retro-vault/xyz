@@ -33,8 +33,16 @@ void gnuas_emitter::section_code() {
     out_ << "\n\t.text\n\n";
 }
 
+void gnuas_emitter::section_code_named(const std::string &name) {
+    out_ << "\n\t.section\t" << name << ",\"ax\"\n\n";
+}
+
 void gnuas_emitter::section_data() {
     out_ << "\t.data\n";
+}
+
+void gnuas_emitter::section_data_named(const std::string &name) {
+    out_ << "\t.section\t" << name << ",\"aw\"\n";
 }
 
 void gnuas_emitter::section_rodata() {

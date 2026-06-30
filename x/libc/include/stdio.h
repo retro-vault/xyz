@@ -37,6 +37,10 @@ typedef long fpos_t;
 #  define L_tmpnam 12
 #endif
 
+#ifndef FILENAME_MAX
+#  define FILENAME_MAX 255
+#endif
+
 #ifndef _IOFBF
 #  define _IOFBF 0
 #  define _IOLBF 1

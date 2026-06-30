@@ -64,6 +64,7 @@ struct options {
     std::string              invocation_target;
     std::string              platform_name;
     float_format             float_fmt = float_format::IEEE32;
+    call_abi                 default_call_abi = call_abi::SDCCCALL1;
 
     // Include paths and defines forwarded to the external preprocessor
     std::vector<std::string> include_paths;

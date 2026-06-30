@@ -3,5 +3,6 @@
 ; sdldz80 and xld. Use the command line to choose output format and
 ; explicit entry symbol if needed.
 
+FORMAT binary
 -b _CODE = 0x0000
 ENTRY _entry

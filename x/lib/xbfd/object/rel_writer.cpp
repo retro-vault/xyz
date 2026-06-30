@@ -59,6 +59,9 @@ private:
         case xbfd::calling_convention::xcc_sdcccall1:
             out << "O -mz80 sdcccall(1)\n";
             break;
+        case xbfd::calling_convention::xcc_z88dk_smallc:
+            out << "O -mz80 z88dk::smallc\n";
+            break;
         case xbfd::calling_convention::xcc_z88dk_fastcall:
             out << "O -mz80 z88dk::fastcall\n";
             break;

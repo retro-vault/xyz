@@ -11,12 +11,14 @@
         .globl  __strtox_core
         .globl  __sx_negate
         .globl  _fgetc
+        .if     __XCC_LIBC_STDIO_FLOAT
         .if     __XCC_LIBC_DOUBLE
         .globl  _strtod
         .globl  _strtold
         .endif
         .if     __XCC_LIBC_FLOAT
         .globl  _strtof
+        .endif
         .endif
         .globl  _ungetc
 
@@ -783,7 +785,7 @@ __stdio_scan_inc_assigned:
         ld      SC_ASSIGNED_HI(ix),h
         ret
 
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
 __stdio_scan_capture_float:
         ld      a,e
         ld      SC_FVAL(ix),a
@@ -929,7 +931,7 @@ __stdio_scan_match_fail_count:
         ;; Output:
         ;;   carry set on success, clear on matching failure
         ;;   __stdio_scan_token contains a NUL-terminated token
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
 __stdio_scan_collect_float:
         ld      SC_WIDTH_LO(ix),c
         ld      SC_WIDTH_HI(ix),b
@@ -1240,7 +1242,7 @@ __stdio_scan_conv_have_spec:
         jp      z,__stdio_scan_conv_unsigned
         cp      #'p'
         jp      z,__stdio_scan_conv_pointer
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
         cp      #'f'
         jp      z,__stdio_scan_conv_float
         cp      #'F'
@@ -1427,7 +1429,7 @@ __stdio_scan_conv_pointer:
         call    __stdio_scan_store_pointer
         jp      __stdio_scan_loop
 
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
 __stdio_scan_conv_float:
         call    __stdio_scan_skip_input_ws
         ld      c,SC_WIDTH_LO(ix)

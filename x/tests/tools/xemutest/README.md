@@ -5,7 +5,7 @@
 It is the canonical manifest runner for:
 
 - compile-only tests that just need to pass or fail compilation
-- executable tests that build a flat `--platform=emu` binary
+- executable tests that build a flat `--platform=emu` binary image
 - emulator-backed checks on stdout, exit status, registers, memory, and debug-visible variables
 - host-gcc golden generation for expected stdout / exit results
 - optimization and float-format matrix expansion from one manifest
@@ -28,13 +28,16 @@ Supported keys:
 - `component = xcc`
 - `summary = short human-readable description`
 - `tag = double-regression`
+- `tag = model-s`
+- `tag = model-m`
+- `tag = model-l`
 - `alias = xcc`
 - `legacy_path = x/src/xcc/tests`
 - `kind = compile` or `kind = run`
 - `source = main.c`
 - `compiler_arg = -O2`
 - `matrix_opt = O1`
-- `matrix_float = ieee32`
+- `matrix_float = ieee32|ieee16|fixed8_8|fixed16_16|fixed24_8`
 - `host_golden = gcc`
 - `host_arg = -std=c2x`
 - `timeout_seconds = 30`
@@ -61,6 +64,20 @@ For run tests, the default console wiring matches the current `emu` platform:
 Use one `compiler_arg = ...` line per compiler/linker argument.
 `--filter` matches ids, aliases, tags, legacy paths, and components.
 `xemutest --list` shows the fully expanded runnable variants.
+
+Model tags are used for release-profile validation:
+
+- `model-s` — compatible with the `X_MODEL=S` staged toolchain
+- `model-m` — compatible with the `X_MODEL=M` staged toolchain
+- `model-l` — compatible with the `X_MODEL=L` staged toolchain
+
+Examples:
+
+```sh
+bash x/tests/run_tests.sh bin/x-s/bin/xcc --filter model-s
+bash x/tests/run_tests.sh bin/x-m/bin/xcc --filter model-m
+bash x/tests/run_tests.sh bin/x-l/bin/xcc --filter model-l
+```
 
 ## Build
 

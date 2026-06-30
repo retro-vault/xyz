@@ -31,7 +31,7 @@ run_case_opt() {
     local opt_flags=()
     read -r -a opt_flags <<< "$opt"
     local fs="$BUILD/fs/$name"
-    local bin="$BUILD/bin/$name.bin"
+    local image="$BUILD/bin/$name.bin"
     local map="$BUILD/bin/$name.map"
     local out="$BUILD/bin/$name.out"
     rm -rf "$fs"
@@ -48,7 +48,7 @@ run_case_opt() {
     echo "==> $name: compile ($opt)"
     set +e
     timeout "$COMPILE_TIMEOUT" env ASAN_OPTIONS=detect_leaks=0 \
-        "$XCC" --platform=emu --oformat=binary "${opt_flags[@]}" -Wl,-Map,"$map" "$@" -o "$bin" \
+        "$XCC" --platform=emu --oformat=binary "${opt_flags[@]}" -Wl,-Map,"$map" "$@" -o "$image" \
         >"$BUILD/bin/$name.compile.log" 2>&1
     local compile_rc=$?
     set -e
@@ -74,7 +74,7 @@ run_case_opt() {
 
     echo "==> $name: run"
     local summary
-    if ! summary="$("$RUNNER" --bin --cycles "$CYCLES" --fs-root "$fs" --stdout "$out" "$bin")"; then
+    if ! summary="$("$RUNNER" --bin --cycles "$CYCLES" --fs-root "$fs" --stdout "$out" "$image")"; then
         echo "FAIL $name [emulator]"
         echo "$summary"
         fail=$((fail + 1))

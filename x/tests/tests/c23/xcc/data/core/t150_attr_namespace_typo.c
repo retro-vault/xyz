@@ -1,0 +1,1 @@
+char * [[xcc:::far]] p;

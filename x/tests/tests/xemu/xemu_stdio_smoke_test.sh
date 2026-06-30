@@ -7,7 +7,7 @@
 #
 set -euo pipefail
 
-XEMU="${1:?usage: xemu_stdio_smoke_test.sh /path/to/xemu}"
+XEMU="$(realpath "${1:?usage: xemu_stdio_smoke_test.sh /path/to/xemu}")"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -51,5 +51,41 @@ emu_output="$(
 )"
 
 [[ "$emu_output" == "R" ]] || fail "expected platform=emu stdout 'R', got '$emu_output'"
+
+bank_program="$tmpdir/banked.bin"
+printf '\x3E\x41\x32\x00\x80\x3E\x01\xD3\x10\x3E\x42\x32\x00\x80\xAF\xD3\x10\x3A\x00\x80\xD3\x01\x3E\x01\xD3\x10\x3A\x00\x80\xD3\x01\x76' > "$bank_program"
+
+cat > "$tmpdir/xemu.conf" <<'EOF'
+stdout_port = 1
+store.low.size = 0x8000
+store.banked.banks = 2
+store.banked.size = 0x4000
+store.high.size = 0x4000
+
+selector.bank = 0
+
+window.low.range = 0x0000-0x7fff
+window.low.store = low
+window.bank.range = 0x8000-0xbfff
+window.bank.store = banked
+window.bank.selector = bank
+window.high.range = 0xc000-0xffff
+window.high.store = high
+
+port_rule.bank.port = 0x10
+port_rule.bank.selector = bank
+EOF
+
+bank_output="$(
+    cd "$tmpdir"
+    "$XEMU" \
+        --run \
+        --quiet \
+        --load-bin "$(basename "$bank_program")" \
+        --origin 0x0000 \
+        --pc 0x0000
+)"
+
+[[ "$bank_output" == "AB" ]] || fail "expected banked stdout 'AB', got '$bank_output'"
 
 echo "${GREEN}PASS${RESET}: xemu stdio smoke"

@@ -167,6 +167,11 @@ static bool apply_float_format_option(options &opts, const char *format) {
         opts.float_fmt = float_format::IEEE32;
         return true;
     }
+    if (strcmp(format, "ieee16") == 0 || strcmp(format, "half") == 0 ||
+        strcmp(format, "binary16") == 0) {
+        opts.float_fmt = float_format::IEEE16;
+        return true;
+    }
     if (strcmp(format, "fixed8_8") == 0 || strcmp(format, "8_8") == 0 ||
         strcmp(format, "fixed8.8") == 0 || strcmp(format, "8.8") == 0) {
         opts.float_fmt = float_format::FIXED8_8;
@@ -185,13 +190,30 @@ static bool apply_float_format_option(options &opts, const char *format) {
     return false;
 }
 
+static bool parse_default_call_mode(const char *text, call_abi &abi) {
+    if (text == nullptr)
+        return false;
+
+    if (strcmp(text, "0") == 0) {
+        abi = call_abi::SDCCCALL0;
+        return true;
+    }
+    if (strcmp(text, "1") == 0) {
+        abi = call_abi::SDCCCALL1;
+        return true;
+    }
+    return false;
+}
+
 static void add_float_format_defines(options &opts) {
     const int format_id =
         opts.float_fmt == float_format::IEEE32 ? 0 :
         opts.float_fmt == float_format::FIXED8_8 ? 1 :
-        opts.float_fmt == float_format::FIXED16_16 ? 2 : 3;
+        opts.float_fmt == float_format::FIXED16_16 ? 2 :
+        opts.float_fmt == float_format::FIXED24_8 ? 3 : 4;
     opts.defines.push_back(std::string("__XCC_FLOAT_FORMAT_") +
                            (opts.float_fmt == float_format::IEEE32 ? "IEEE32" :
+                            opts.float_fmt == float_format::IEEE16 ? "IEEE16" :
                             opts.float_fmt == float_format::FIXED8_8 ? "FIXED8_8" :
                             opts.float_fmt == float_format::FIXED16_16 ? "FIXED16_16" :
                             "FIXED24_8") + "=1");
@@ -201,6 +223,11 @@ static void add_float_format_defines(options &opts) {
                            std::to_string(float_format_size(opts.float_fmt)));
     opts.defines.push_back(std::string("__XCC_FLOAT_FRACTION_BITS__=") +
                            std::to_string(float_format_fraction_bits(opts.float_fmt)));
+}
+
+static void add_default_call_mode_defines(options &opts) {
+    const int abi_id = opts.default_call_abi == call_abi::SDCCCALL0 ? 0 : 1;
+    opts.defines.push_back(std::string("__SDCCCALL=") + std::to_string(abi_id));
 }
 
 static std::string platform_define_name(const std::string &platform_name) {
@@ -400,7 +427,8 @@ void options::usage(const char *argv0) {
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  --platform=<name> Select target platform include defaults\n"
         "  --float-format=<fmt>\n"
-        "                    Float ABI: ieee32, fixed8_8, fixed16_16, fixed24_8\n"
+        "                    Float ABI: ieee32, ieee16, fixed8_8, fixed16_16, fixed24_8\n"
+        "  --sdcccall <0|1>  SDCC-compatible default ABI selector\n"
         "  -g                Emit debug info\n"
         "  --dump-ir         Dump lowered IR to stderr\n"
         "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
@@ -495,7 +523,9 @@ options options::parse(int argc, char **argv) {
             opts.opt_settings = optimization_settings::for_level(opts.opt);
         } else if (strcmp(a, "-O2") == 0) {
             opts.opt = opt_level::O2;
-            opts.opt_settings = optimization_settings::for_level(opts.opt);
+            // Route -O2 through the mature high-optimization profile so
+            // large real-world translation units do not balloon past 64K.
+            opts.opt_settings = optimization_settings::for_level(opt_level::Of);
         } else if (strcmp(a, "-Of") == 0) {
             opts.opt = opt_level::Of;
             opts.opt_settings = optimization_settings::for_level(opts.opt);
@@ -543,6 +573,27 @@ options options::parse(int argc, char **argv) {
                 fprintf(stderr, "xcc: error: unknown float format '%s'\n", format);
                 exit(1);
             }
+        } else if (strcmp(a, "--sdcccall") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "xcc: error: --sdcccall requires a value\n");
+                exit(1);
+            }
+            call_abi abi = call_abi::DEFAULT;
+            const char *mode = argv[++i];
+            if (!parse_default_call_mode(mode, abi)) {
+                fprintf(stderr, "xcc: error: --sdcccall value must be 0 or 1\n");
+                exit(1);
+            }
+            opts.default_call_abi = abi;
+        } else if (strncmp(a, "--sdcccall=", 11) == 0) {
+            fprintf(stderr, "xcc: error: use '--sdcccall 0' or '--sdcccall 1'\n");
+            exit(1);
+        } else if (strcmp(a, "--call-mode") == 0
+                   || strncmp(a, "--call-mode=", 12) == 0) {
+            fprintf(stderr,
+                    "xcc: error: unsupported option '--call-mode'; "
+                    "use '--sdcccall 0' or '--sdcccall 1'\n");
+            exit(1);
         } else if (strncmp(a, "-std=", 5) == 0) {
             // We only support c11; silently accept c99/c11/gnu11 etc.
         } else if (strncmp(a, "-masm=", 6) == 0) {
@@ -586,6 +637,7 @@ options options::parse(int argc, char **argv) {
 
     add_default_include_paths(opts, argv[0]);
     add_float_format_defines(opts);
+    add_default_call_mode_defines(opts);
     if (!opts.platform_name.empty()) {
         opts.defines.push_back(platform_define_name(opts.platform_name));
     }

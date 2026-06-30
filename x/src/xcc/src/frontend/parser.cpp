@@ -99,11 +99,32 @@ attr_list parser::parse_attr_list() {
                 break;
             }
             a.name = consume().text;
-            // Namespace separator ::
+            // Namespace separator :: (require the full token pair).
             if (check(tk::COLON)) {
-                consume(); // first :
-                if (check(tk::COLON)) { consume(); } // second :
+                token first_colon = consume();
+                if (!match(tk::COLON)) {
+                    diag_.error(first_colon.loc,
+                                "expected '::' in attribute namespace");
+                    while (!check(tk::COMMA) && !check(tk::RATTR) &&
+                           !check(tk::END_OF_FILE)) {
+                        consume();
+                    }
+                    if (match(tk::COMMA))
+                        continue;
+                    break;
+                }
                 a.ns   = a.name;
+                if (!check(tk::IDENT) && !peek().is_keyword()) {
+                    diag_.error(peek().loc,
+                                "expected attribute name after '::'");
+                    while (!check(tk::COMMA) && !check(tk::RATTR) &&
+                           !check(tk::END_OF_FILE)) {
+                        consume();
+                    }
+                    if (match(tk::COMMA))
+                        continue;
+                    break;
+                }
                 a.name = consume().text;
             }
 
@@ -177,6 +198,14 @@ static bool attr_to_call_abi(const attr &a, call_abi &abi) {
             }
         }
     } else if (a.ns == "z88dk") {
+        if (a.name == "stdc") {
+            abi = call_abi::SDCCCALL0;
+            return true;
+        }
+        if (a.name == "smallc") {
+            abi = call_abi::Z88DK_SMALLC;
+            return true;
+        }
         if (a.name == "fastcall") {
             abi = call_abi::Z88DK_FASTCALL;
             return true;
@@ -187,6 +216,42 @@ static bool attr_to_call_abi(const attr &a, call_abi &abi) {
         }
     }
     return false;
+}
+
+static const char *legacy_callconv_keyword_replacement(const token &tok) {
+    if (tok.kind != tk::IDENT)
+        return nullptr;
+
+    if (tok.text == "__z88dk_fastcall" || tok.text == "__FASTCALL__") {
+        return "[[z88dk::fastcall]]";
+    }
+
+    if (tok.text == "__smallc") {
+        return "[[z88dk::smallc]]";
+    }
+
+    if (tok.text == "__stdc" || tok.text == "__z88dk_sdccdecl") {
+        return "[[z88dk::stdc]]";
+    }
+
+    if (tok.text == "__z88dk_callee") {
+        return "[[z88dk::callee]]";
+    }
+
+    return nullptr;
+}
+
+bool parser::reject_legacy_callconv_keyword() {
+    const token tok = peek();
+    const char *replacement = legacy_callconv_keyword_replacement(tok);
+    if (!replacement)
+        return false;
+
+    consume();
+    diag_.error(tok.loc,
+                "legacy z88dk/SDCC calling-convention keyword '%s' is not supported; use %s",
+                tok.text.c_str(), replacement);
+    return true;
 }
 
 static bool apply_call_abi_to_nested_function(type_ptr t, call_abi abi) {
@@ -411,7 +476,7 @@ decl_ptr parser::parse_external_declaration() {
         if (check(tk::LBRACE)) {
             return parse_function_definition(decl_type->ret, name, ds.sc,
                                               std::move(params),
-                                              variadic, loc, ds.attrs,
+                                              variadic, ds.is_inline, loc, ds.attrs,
                                               decl_type->func_abi);
         }
         // Prototype — also pick up [[attrs]] that follow the declarator
@@ -425,6 +490,7 @@ decl_ptr parser::parse_external_declaration() {
         fd->type       = decl_type;
         fd->storage    = ds.sc;
         fd->is_variadic = decl_type->variadic;
+        fd->is_inline  = ds.is_inline;
         fd->params     = std::move(params);
         fd->body       = nullptr;
         fd->attrs      = ds.attrs;
@@ -449,6 +515,7 @@ decl_ptr parser::parse_external_declaration() {
                 auto efd = std::make_unique<func_decl>();
                 efd->loc = loc; efd->name = edi.name; efd->type = edi.type;
                 efd->storage = ds.sc; efd->is_variadic = edi.variadic;
+                efd->is_inline = ds.is_inline;
                 efd->params = std::move(edi.params); efd->body = nullptr;
                 auto esym = syms_.lookup_current(edi.name);
                 if (!esym || esym->kind != sym_kind::FUNC) {
@@ -560,13 +627,14 @@ decl_ptr parser::parse_external_declaration() {
 decl_ptr parser::parse_function_definition(
     type_ptr ret, std::string name, storage_class sc,
     std::vector<std::unique_ptr<param_decl>> params,
-    bool variadic, source_loc loc, attr_list attrs, call_abi abi)
+    bool variadic, bool is_inline, source_loc loc, attr_list attrs, call_abi abi)
 {
     auto fd = std::make_unique<func_decl>();
     fd->loc        = loc;
     fd->name       = name;
     fd->storage    = sc;
     fd->is_variadic = variadic;
+    fd->is_inline  = is_inline;
     fd->attrs      = std::move(attrs);
 
     // Build function type

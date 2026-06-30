@@ -43,6 +43,7 @@ using type_ptr = std::shared_ptr<type>;
 // scalar float.
 enum class float_format : uint8_t {
     IEEE32,
+    IEEE16,
     FIXED8_8,
     FIXED16_16,
     FIXED24_8,
@@ -59,18 +60,22 @@ int64_t encode_float_constant(double value, type_ptr target_type);
 //
 // Calling convention for a function type or symbol, set by vendor attributes
 // such as [[sdcc::sdccall(N)]] or [[z88dk::fastcall]] / [[z88dk::callee]].
-// DEFAULT maps to SDCCCALL1, matching modern SDCC's z80 default ABI.
+// DEFAULT resolves to the driver-selected default call mode.
 
 enum class call_abi : uint8_t {
-    DEFAULT,     // same as SDCCCALL1 — register-based ABI, current xcc default
-    SDCCCALL0,   // [[sdcc::sdccall(0)]] — explicit stack-based ABI
+    DEFAULT,     // driver-selected default call mode
+    SDCCCALL0,   // [[sdcc::sdccall(0)]] / [[z88dk::stdc]] — explicit stack-based ABI
     SDCCCALL1,   // [[sdcc::sdccall(1)]] — SDCC 4.3+ register-based ABI
-    Z88DK_FASTCALL, // [[z88dk::fastcall]] — one arg in L/HL/DEHL, std return regs
+    Z88DK_SMALLC,   // [[z88dk::smallc]] — Small-C stack ABI, left-to-right args
+    Z88DK_FASTCALL, // [[z88dk::fastcall]] — first eligible arg in L/HL/DEHL, rest on stack
     Z88DK_CALLEE,   // [[z88dk::callee]]   — stack args, callee repairs stack
     NAKED,       // [[sdcc::naked]]      — no prologue/epilogue emitted
     INTERRUPT,   // [[sdcc::interrupt]]  — ISR: save all regs, reti
     CRITICAL,    // [[sdcc::critical]]   — wrap body with di/ei
 };
+
+void set_default_call_abi(call_abi abi);
+call_abi get_default_call_abi();
 
 // ----- type_kind -----------------------------------------------------
 
@@ -119,6 +124,10 @@ struct type {
     bool is_volatile = false;
     bool is_restrict = false;
     bool is_vla      = false; // true for VLA array types (int a[n])
+    bool is_far      = false; // POINTER: 24-bit banked pointer ([[xcc::far]])
+                              // low 16 bits = address, high 8 bits = bank.
+                              // 3 bytes wide; dereference goes through the
+                              // far-access runtime trampoline.
 
     // POINTER and ARRAY: pointee / element type
     type_ptr base;
@@ -223,6 +232,17 @@ struct type {
     }
 
     //
+    // Return a far (24-bit banked) pointer type whose pointee is base.
+    // size() is 3: low 16 bits address, high 8 bits bank selector.
+    //
+    static type_ptr make_far_pointer(type_ptr base) {
+        auto t = std::make_shared<type>(type_kind::POINTER);
+        t->base   = std::move(base);
+        t->is_far = true;
+        return t;
+    }
+
+    //
     // Return an array type with element type elem and element count sz.
     // Pass sz=0 for an incomplete (unsized) array.
     //
@@ -321,6 +341,7 @@ struct type {
     bool is_scalar()   const;
 
     bool is_ptr()     const { return kind == type_kind::POINTER;  }
+    bool is_far_ptr() const { return kind == type_kind::POINTER && is_far; }
     bool is_array()   const { return kind == type_kind::ARRAY;    }
     bool is_func()    const { return kind == type_kind::FUNCTION; }
     bool is_complex() const { return kind == type_kind::COMPLEX;  }

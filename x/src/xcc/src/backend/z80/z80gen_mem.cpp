@@ -94,7 +94,114 @@ void z80_gen::gen_address_of(const icode &ic) {
     store_hl(ic.result);
 }
 
+// ----- far (24-bit banked) pointer support ---------------------------
+//
+// Representation: 3 bytes — bytes 0..1 = 16-bit address, byte 2 = bank.
+// Dereference goes through the per-target trampoline:
+//   __far_getb : in  HL = address, C = bank        -> out A = byte
+//   __far_putb : in  HL = address, C = bank, A = byte
+// Both trampolines MUST preserve BC, DE and HL (only A/flags change),
+// so the codegen below can keep the pointer live across calls.  The
+// default (none/cpm3) implementations ignore the bank and do a plain
+// (hl) access — see lib/runtime/far/.
+
+void z80_gen::load_far_bank(const operand &ptr) {
+    // Bank byte lives at offset 2; load_a/store_a now honour byte_offset
+    // for globals (sym+2) as well as frame/param slots.
+    operand bank = ptr;
+    bank.byte_offset += 2;
+    bank.type = type::make_uchar();
+    load_a(bank);
+}
+
+void z80_gen::store_far_bank(const operand &dst) {
+    operand bank = dst;
+    bank.byte_offset += 2;
+    bank.type = type::make_uchar();
+    store_a(bank);
+}
+
+void z80_gen::emit_load_far_ptr(const operand &ptr) {
+    // HL = address (low 16 bits).  Load first, then protect across the
+    // bank load (load_a may clobber HL/BC for deep frame or TLS sources).
+    load_hl_word(ptr, 0);
+    emit_line("push\thl");
+    load_far_bank(ptr);
+    emit_line("ld\tc, a");   // C = bank
+    emit_line("pop\thl");    // HL = address
+}
+
+bool z80_gen::gen_far_get_value_at(const icode &ic) {
+    if (!ic.left.type || !ic.left.type->is_far_ptr())
+        return false;
+
+    invalidate_a_cache();
+    invalidate_pair_cache();
+
+    int n = op_size(ic.result);
+    emit_load_far_ptr(ic.left);   // HL = addr, C = bank
+    asm_.global_decl("__far_getb");
+
+    if (n == 1) {
+        emit_line("call\t__far_getb");
+        store_a(ic.result);
+    } else if (n == 2) {
+        emit_line("call\t__far_getb");  // low byte
+        emit_line("ld\te, a");
+        emit_line("inc\thl");
+        emit_line("call\t__far_getb");  // high byte
+        emit_line("ld\td, a");
+        store_de(ic.result);
+    } else {
+        // Wider pointee (long / struct / far-pointer-to-far-pointer): the
+        // result is a multi-byte temp with a frame slot.  Store byte by byte.
+        int base = ix_offset_of(ic.result);
+        for (int i = 0; i < n; ++i) {
+            emit_line("call\t__far_getb");
+            store_frame_byte(base + i, 'a');
+            if (i < n - 1)
+                emit_line("inc\thl");
+        }
+    }
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    return true;
+}
+
+bool z80_gen::gen_far_set_value_at(const icode &ic) {
+    if (!ic.result.type || !ic.result.type->is_far_ptr())
+        return false;
+
+    invalidate_a_cache();
+    invalidate_pair_cache();
+
+    int n = op_size(ic.left);
+    emit_load_far_ptr(ic.result);  // HL = addr, C = bank
+    asm_.global_decl("__far_putb");
+
+    for (int i = 0; i < n; ++i) {
+        // Preserve pointer (HL) and bank (BC) across the value-byte load,
+        // which may clobber both.
+        emit_line("push\tbc");
+        emit_line("push\thl");
+        operand vbyte = ic.left;
+        vbyte.byte_offset += i;
+        vbyte.type = type::make_uchar();
+        load_a(vbyte);
+        emit_line("pop\thl");
+        emit_line("pop\tbc");
+        emit_line("call\t__far_putb");
+        if (i < n - 1)
+            emit_line("inc\thl");
+    }
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    return true;
+}
+
 void z80_gen::gen_get_value_at(const icode &ic) {
+    if (gen_far_get_value_at(ic))
+        return;
     auto is_bc_pointer_home = [&](const operand &op) {
         if (op.kind == operand_kind::TEMP) {
             auto it = temp_regs_.find(op.temp_id);
@@ -229,6 +336,8 @@ void z80_gen::gen_get_value_at(const icode &ic) {
 }
 
 void z80_gen::gen_set_value_at(const icode &ic) {
+    if (gen_far_set_value_at(ic))
+        return;
     auto is_bc_pointer_home = [&](const operand &op) {
         if (op.kind == operand_kind::TEMP) {
             auto it = temp_regs_.find(op.temp_id);

@@ -525,6 +525,7 @@ struct var_decl : decl {
 struct func_decl : decl {
     std::vector<std::unique_ptr<param_decl>> params;
     bool      is_variadic = false;
+    bool      is_inline = false;
     stmt_ptr  body;
     sym_ptr   sym;
     int       local_bytes = 0;

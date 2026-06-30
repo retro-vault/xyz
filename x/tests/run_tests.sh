@@ -7,7 +7,12 @@ REPO_ROOT="$(cd "$X_ROOT/.." && pwd)"
 RUNNER_DIR="$X_ROOT/tests/tools/xemutest"
 RUNNER_BIN="$REPO_ROOT/build/tests/tools/xemutest/xemutest"
 SUITE_ROOT="$X_ROOT/tests/tests/c23"
-XCC_BIN="${XCC:-$REPO_ROOT/bin/x/bin/xcc}"
+if [[ -x "$REPO_ROOT/bin/x/bin/xcc" ]]; then
+    DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
+else
+    DEFAULT_XCC="$REPO_ROOT/x/bin/x/bin/xcc"
+fi
+XCC_BIN="${XCC:-$DEFAULT_XCC}"
 
 if [[ $# -gt 0 && "${1:-}" != --* ]]; then
     XCC_BIN="$1"

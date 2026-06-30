@@ -14,8 +14,17 @@
 
 namespace xcc {
 
+namespace {
+
+std::string banked_data_section_name(int bank) {
+    return "_DATA_BANK_" + std::to_string(bank);
+}
+
+} // namespace
+
 void z80_gen::emit_module(const ir_module &mod) {
     asm_.module_header();
+    asm_.default_calling_convention(get_default_call_abi());
 
     if (debug_) debug_->begin_module();
 
@@ -33,7 +42,6 @@ void z80_gen::emit_module(const ir_module &mod) {
     emit_strings(mod);
     emit_external_data_refs(mod);
 
-    asm_.section_code();
     for (auto &fn : mod.functions)
         emit_function(fn);
 
@@ -95,20 +103,26 @@ void z80_gen::emit_globals(const ir_module &mod) {
         asm_.symbol_assign(lbl, (long long)g.sfr_port);
     }
 
-    bool any_data = false;
-    for (auto &g : mod.globals)
-        if (!g.is_tls && g.at_address < 0 && g.sfr_port < 0) { any_data = true; break; }
-    if (any_data) {
-        asm_.section_data();
-        for (auto &g : mod.globals) {
-            if (g.is_tls) continue;
-            if (g.at_address >= 0 || g.sfr_port >= 0) continue; // handled above
-            std::string lbl = mangle(g.name);
-            if (!g.is_static) asm_.global_decl(lbl);
-            if (debug_) debug_->emit_global(g.name, g.type.get(), g.is_static);
-            asm_.label(lbl, false);
-            emit_global_body(g, false);
+    int current_data_bank = -2;
+    bool emitted_data = false;
+    for (auto &g : mod.globals) {
+        if (g.is_tls) continue;
+        if (g.at_address >= 0 || g.sfr_port >= 0) continue; // handled above
+
+        if (g.bank != current_data_bank) {
+            if (g.bank < 0) asm_.section_data();
+            else asm_.section_data_named(banked_data_section_name(g.bank));
+            current_data_bank = g.bank;
         }
+
+        std::string lbl = mangle(g.name);
+        if (!g.is_static) asm_.global_decl(lbl);
+        if (debug_) debug_->emit_global(g.name, g.type.get(), g.is_static);
+        asm_.label(lbl, false);
+        emit_global_body(g, false);
+        emitted_data = true;
+    }
+    if (emitted_data) {
         asm_.raw("\n");
     }
 

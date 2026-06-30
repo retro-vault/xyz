@@ -17,7 +17,7 @@
         .globl  __divulong
         .globl  __modulong
         .endif
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
         .globl  _stdio_format_double
         .endif
         .globl  __stdio_emit_a
@@ -1116,7 +1116,7 @@ __stdio_vformat_length:
         jp      z,__stdio_vformat_binary
         cp      #'B'
         jp      z,__stdio_vformat_binary
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
         cp      #'f'
         jp      z,__stdio_vformat_float
         cp      #'e'
@@ -1354,7 +1354,7 @@ __stdio_vformat_binary:
         call    __stdio_emit_number
         jp      __stdio_vformat_loop
 
-        .if     __XCC_LIBC_FLOAT
+        .if     __XCC_LIBC_STDIO_FLOAT
 __stdio_vformat_float:
         ; Render the variadic double into a temporary buffer, then emit it
         ; through the regular string-field path so width/alignment still work.

@@ -3051,7 +3051,7 @@ public:
         mod.functions.erase(
             std::remove_if(mod.functions.begin(), mod.functions.end(),
                 [&](const ir_function &fn) {
-                    return !fn.is_global &&
+                    return (!fn.is_global || fn.discard_if_unused) &&
                            info.referenced_funcs.find(fn.name) ==
                                info.referenced_funcs.end();
                 }),

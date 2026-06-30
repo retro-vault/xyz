@@ -22,12 +22,73 @@ namespace xcc {
 namespace {
 
 float_format g_float_format = float_format::IEEE32;
+call_abi g_default_call_abi = call_abi::SDCCCALL1;
 
 int64_t mask_to_bytes(int64_t value, int bytes) {
     if (bytes <= 0 || bytes >= 8)
         return value;
     const uint64_t mask = (uint64_t{1} << (bytes * 8)) - 1;
     return static_cast<int64_t>(static_cast<uint64_t>(value) & mask);
+}
+
+uint16_t round_to_even_u16(double value) {
+    if (value <= 0.0)
+        return 0;
+
+    const double floored = std::floor(value);
+    const double frac = value - floored;
+    uint32_t rounded = static_cast<uint32_t>(floored);
+    if (frac > 0.5) {
+        ++rounded;
+    } else if (frac == 0.5 && (rounded & 1u) != 0u) {
+        ++rounded;
+    }
+    return static_cast<uint16_t>(rounded);
+}
+
+uint16_t encode_ieee16_raw(double value) {
+    const bool sign = std::signbit(value);
+    const uint16_t sign_bit = sign ? 0x8000u : 0x0000u;
+
+    if (std::isnan(value))
+        return static_cast<uint16_t>(sign_bit | 0x7e00u);
+    if (std::isinf(value))
+        return static_cast<uint16_t>(sign_bit | 0x7c00u);
+    if (value == 0.0)
+        return sign_bit;
+
+    const double abs_value = std::fabs(value);
+    int exponent = 0;
+    const double fraction = std::frexp(abs_value, &exponent);
+    int half_exponent = exponent - 1 + 15;
+
+    if (half_exponent >= 31)
+        return static_cast<uint16_t>(sign_bit | 0x7c00u);
+
+    if (half_exponent <= 0) {
+        if (half_exponent < -10)
+            return sign_bit;
+
+        uint16_t mantissa = round_to_even_u16(std::ldexp(abs_value, 24));
+        if (mantissa == 0)
+            return sign_bit;
+        if (mantissa >= 1024u)
+            return static_cast<uint16_t>(sign_bit | 0x0400u);
+        return static_cast<uint16_t>(sign_bit | mantissa);
+    }
+
+    const double significand = std::ldexp(fraction, 1);
+    uint16_t mantissa = round_to_even_u16((significand - 1.0) * 1024.0);
+    if (mantissa >= 1024u) {
+        mantissa = 0;
+        ++half_exponent;
+        if (half_exponent >= 31)
+            return static_cast<uint16_t>(sign_bit | 0x7c00u);
+    }
+
+    return static_cast<uint16_t>(sign_bit |
+                                 (static_cast<uint16_t>(half_exponent) << 10) |
+                                 mantissa);
 }
 
 int64_t fixed_positive_infinity_raw(int bytes) {
@@ -81,9 +142,29 @@ float_format get_float_format() {
     return g_float_format;
 }
 
+void set_default_call_abi(call_abi abi) {
+    switch (abi) {
+    case call_abi::SDCCCALL0:
+    case call_abi::SDCCCALL1:
+    case call_abi::Z88DK_SMALLC:
+    case call_abi::Z88DK_FASTCALL:
+    case call_abi::Z88DK_CALLEE:
+        g_default_call_abi = abi;
+        break;
+    default:
+        g_default_call_abi = call_abi::SDCCCALL1;
+        break;
+    }
+}
+
+call_abi get_default_call_abi() {
+    return g_default_call_abi;
+}
+
 const char *float_format_name(float_format format) {
     switch (format) {
     case float_format::IEEE32:     return "ieee32";
+    case float_format::IEEE16:     return "ieee16";
     case float_format::FIXED8_8:   return "fixed8_8";
     case float_format::FIXED16_16: return "fixed16_16";
     case float_format::FIXED24_8:  return "fixed24_8";
@@ -94,6 +175,7 @@ const char *float_format_name(float_format format) {
 int float_format_size(float_format format) {
     switch (format) {
     case float_format::IEEE32:     return 4;
+    case float_format::IEEE16:     return 2;
     case float_format::FIXED8_8:   return 2;
     case float_format::FIXED16_16: return 4;
     case float_format::FIXED24_8:  return 4;
@@ -106,6 +188,7 @@ int float_format_fraction_bits(float_format format) {
     case float_format::FIXED8_8:   return 8;
     case float_format::FIXED16_16: return 16;
     case float_format::FIXED24_8:  return 8;
+    case float_format::IEEE16:
     case float_format::IEEE32:
         return 0;
     }
@@ -129,6 +212,8 @@ int64_t encode_float_constant(double value, type_ptr target_type) {
         std::memcpy(&bits, &narrowed, sizeof(bits));
         return bits;
     }
+    if (format == float_format::IEEE16)
+        return encode_ieee16_raw(value);
 
     const int frac_bits = float_format_fraction_bits(format);
     const int bytes = float_format_size(format);
@@ -212,7 +297,7 @@ int type::size() const {
     case type_kind::FLOAT:   return float_format_size(get_float_format());
     case type_kind::DOUBLE:  return 8;
     case type_kind::COMPLEX: return 8; // re+im, each a 4-byte soft-float
-    case type_kind::POINTER: return 2;
+    case type_kind::POINTER: return is_far ? 3 : 2;
     case type_kind::ENUM:    return 2; // enum -> int -> 2 bytes
     case type_kind::ARRAY: {
         if (!base) return 0;
@@ -279,7 +364,7 @@ std::string type::to_string() const {
     case type_kind::COMPLEX: os << "float _Complex"; break;
     case type_kind::CHAR8T:  os << "char8_t"; break;
     case type_kind::BITINT:  os << (bitint_unsigned ? "unsigned " : "") << "_BitInt(" << bitint_width << ")"; break;
-    case type_kind::POINTER: os << base->to_string() << "*"; break;
+    case type_kind::POINTER: os << base->to_string() << (is_far ? "* far" : "*"); break;
     case type_kind::ARRAY:   os << base->to_string() << "[" << array_size << "]"; break;
     case type_kind::FUNCTION:
         os << ret->to_string() << "(";

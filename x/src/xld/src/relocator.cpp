@@ -17,6 +17,7 @@ namespace xld {
     void relocator::relocate(link_context& ctx) {
         // Allocate code buffer.
         ctx.code_buffer.resize(ctx.code_size, 0x00);
+        ctx.code_occupancy.resize(ctx.code_size, 0x00);
 
         for (auto& mod : ctx.modules) {
             for (auto& tr : mod->texts()) {
@@ -39,11 +40,15 @@ namespace xld {
                 if (dest + tr.data.size() > ctx.code_buffer.size()) {
                     // Grow buffer if needed.
                     ctx.code_buffer.resize(dest + tr.data.size(), 0x00);
+                    ctx.code_occupancy.resize(dest + tr.data.size(), 0x00);
                     ctx.code_size = static_cast<uint32_t>(
                         ctx.code_buffer.size());
                 }
                 std::memcpy(&ctx.code_buffer[dest],
                             tr.data.data(), tr.data.size());
+                std::fill(ctx.code_occupancy.begin() + dest,
+                          ctx.code_occupancy.begin() + dest + tr.data.size(),
+                          0x01);
 
                 // Process relocations.
                 for (auto& re : tr.relocs) {

@@ -56,6 +56,7 @@ static call_abi from_xbfd_calling_convention(xbfd::calling_convention cc) {
     case xbfd::calling_convention::normal:             return call_abi::DEFAULT;
     case xbfd::calling_convention::xcc_sdcccall0:      return call_abi::SDCCCALL0;
     case xbfd::calling_convention::xcc_sdcccall1:      return call_abi::SDCCCALL1;
+    case xbfd::calling_convention::xcc_z88dk_smallc:   return call_abi::Z88DK_SMALLC;
     case xbfd::calling_convention::xcc_z88dk_fastcall: return call_abi::Z88DK_FASTCALL;
     case xbfd::calling_convention::xcc_z88dk_callee:   return call_abi::Z88DK_CALLEE;
     case xbfd::calling_convention::xcc_naked:          return call_abi::NAKED;
@@ -222,6 +223,7 @@ static int compile_file_to_text(const std::string &input_path,
         fprintf(stderr, "xcc: compiling %s\n", input_path.c_str());
 
     set_float_format(opts.float_fmt);
+    set_default_call_abi(opts.default_call_abi);
 
     std::string raw = read_file(input_path);
 
@@ -245,7 +247,7 @@ static int compile_file_to_text(const std::string &input_path,
     }
 
     // ----- 2.5 Semantic analysis (const enforcement etc.) ------------
-    sema sema_pass(diag, imported_abis);
+    sema sema_pass(diag, imported_abis, opts.default_call_abi);
     sema_pass.check(*tu);
     if (diag.has_errors()) {
         fprintf(stderr, "xcc: %d error(s) in '%s'\n",
@@ -300,7 +302,15 @@ static int compile_file_to_text(const std::string &input_path,
     asm_text = asm_buf.str();
 
     // ----- 5. Peephole optimization ----------------------------------
-    if (opts.opt_settings.peephole) {
+    // Skip the assembly peephole optimizer for pathologically large output:
+    // some layout-dependent rules (e.g. jp->jr) recompute the whole code
+    // layout per application, which is O(n^2) and dominates compile time on
+    // machine-generated stress inputs (e.g. the C23 translation-limit tests).
+    // Generated code is slightly larger but correct.
+    const size_t asm_line_count =
+        static_cast<size_t>(std::count(asm_text.begin(), asm_text.end(), '\n'));
+    constexpr size_t kMaxPeepholeLines = 8000;
+    if (opts.opt_settings.peephole && asm_line_count <= kMaxPeepholeLines) {
         xopt::optimizer_options xopt_opts;
         switch (opts.opt_settings.level) {
         case opt_level::O0:

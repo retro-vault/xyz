@@ -10,11 +10,14 @@
 // Copyright (C) 2026 tomaz stih
 //
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <iosfwd>
 
 namespace xcc {
+
+enum class call_abi : uint8_t;
 
 class asm_emitter {
 public:
@@ -37,8 +40,11 @@ public:
     // -- Module / section directives --------------------------------------
 
     virtual void module_header() = 0;
+    virtual void default_calling_convention(call_abi) {}
     virtual void section_code() = 0;
+    virtual void section_code_named(const std::string &name) = 0;
     virtual void section_data() = 0;
+    virtual void section_data_named(const std::string &name) = 0;
     virtual void section_rodata() = 0;
     virtual void section_tls() = 0;
 

@@ -49,6 +49,9 @@ namespace xld {
 
         // Output data.
         std::vector<uint8_t> code_buffer;
+        // Bytes explicitly populated by linked T records. Sparse IHX output
+        // uses this to avoid padding the whole declared address window.
+        std::vector<uint8_t> code_occupancy;
         std::vector<output_reloc> reloc_table;
         uint16_t entry_point = 0;
         uint32_t code_size = 0;

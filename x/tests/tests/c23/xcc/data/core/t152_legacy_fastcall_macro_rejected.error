@@ -1,0 +1,1 @@
+legacy z88dk/SDCC calling-convention keyword '__FASTCALL__' is not supported; use [[z88dk::fastcall]]

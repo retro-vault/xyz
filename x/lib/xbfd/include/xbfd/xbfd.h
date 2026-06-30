@@ -61,6 +61,7 @@ enum class calling_convention : uint8_t {
     xcc_naked       = 0x44,
     xcc_interrupt   = 0x45,
     xcc_critical    = 0x46,
+    xcc_z88dk_smallc = 0x47,
 };
 
 inline std::string_view to_string(calling_convention cc) {
@@ -68,6 +69,7 @@ inline std::string_view to_string(calling_convention cc) {
     case calling_convention::normal:             return "normal";
     case calling_convention::xcc_sdcccall0:      return "sdcccall(0)";
     case calling_convention::xcc_sdcccall1:      return "sdcccall(1)";
+    case calling_convention::xcc_z88dk_smallc:   return "z88dk::smallc";
     case calling_convention::xcc_z88dk_fastcall: return "z88dk::fastcall";
     case calling_convention::xcc_z88dk_callee:   return "z88dk::callee";
     case calling_convention::xcc_naked:          return "sdcc::naked";
@@ -81,6 +83,7 @@ inline std::optional<calling_convention> parse_calling_convention(std::string_vi
     if (text == "normal")            return calling_convention::normal;
     if (text == "sdcccall(0)")       return calling_convention::xcc_sdcccall0;
     if (text == "sdcccall(1)")       return calling_convention::xcc_sdcccall1;
+    if (text == "z88dk::smallc")     return calling_convention::xcc_z88dk_smallc;
     if (text == "z88dk::fastcall")   return calling_convention::xcc_z88dk_fastcall;
     if (text == "z88dk::callee")     return calling_convention::xcc_z88dk_callee;
     if (text == "sdcc::naked")       return calling_convention::xcc_naked;

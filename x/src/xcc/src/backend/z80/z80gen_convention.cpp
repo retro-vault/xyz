@@ -219,6 +219,7 @@ bool z80_gen::needs_frame_without_temps(const ir_function &fn) const {
     switch (effective_call_abi(fn.abi)) {
     case call_abi::SDCCCALL0:
     case call_abi::SDCCCALL1:
+    case call_abi::Z88DK_SMALLC:
     case call_abi::Z88DK_FASTCALL:
     case call_abi::Z88DK_CALLEE:
         return false;
@@ -228,7 +229,7 @@ bool z80_gen::needs_frame_without_temps(const ir_function &fn) const {
 }
 
 call_abi effective_call_abi(call_abi abi) {
-    return abi == call_abi::DEFAULT ? call_abi::SDCCCALL1 : abi;
+    return abi == call_abi::DEFAULT ? get_default_call_abi() : abi;
 }
 
 // ─── abi_convention: shared protected helpers ────────────────────────────────
@@ -269,6 +270,23 @@ void abi_convention::emit_bc_indirect_call(z80_gen &g, const operand &target,
     g.emit_line("call\t__sdcc_call_bc");
 }
 
+void abi_convention::emit_far_ptr_to_regs(z80_gen &g, const operand &value)
+{
+    // HL = address (bytes 0..1), E = bank (byte 2), D = 0.
+    g.load_hl(value);
+    g.load_far_bank(value);
+    g.emit_line("ld\te, a");
+    g.emit_line("ld\td, %s", g.asm_.imm(0).c_str());
+}
+
+void abi_convention::emit_far_ptr_from_regs(z80_gen &g, const operand &result)
+{
+    // Store HL -> address (bytes 0..1), E -> bank (byte 2).
+    g.store_hl(result);
+    g.emit_line("ld\ta, e");
+    g.store_far_bank(result);
+}
+
 void abi_convention::emit_legacy_return_value(z80_gen &g, const operand &value)
 {
     if (value.is_none()) return;
@@ -280,10 +298,11 @@ void abi_convention::emit_legacy_return_value(z80_gen &g, const operand &value)
     } else if (sz == 8) {
         g.load_reg64(value);
     } else if (sz == 4) {
-        g.load_hl_hi32(value);
-        g.emit_line("push\thl");
         g.load_hl_lo32(value);
-        g.emit_line("pop\tde");
+        g.load_de_word(value, 1);
+    } else if (sz == 3 && value.type && value.type->is_far_ptr()) {
+        // Far (24-bit) pointer return: HL = address, E = bank.
+        emit_far_ptr_to_regs(g, value);
     } else {
         g.load_hl(value);
     }
@@ -301,9 +320,10 @@ void abi_convention::emit_store_legacy_result(z80_gen &g, const icode &ic)
         g.store_reg64(ic.result);
     } else if (sz == 4) {
         g.store_hl_lo32(ic.result);
-        g.emit_line("push\tde");
-        g.emit_line("pop\thl");
-        g.store_hl_hi32(ic.result);
+        g.store_de_word(ic.result, 1);
+    } else if (sz == 3 && ic.result.type && ic.result.type->is_far_ptr()) {
+        // Far (24-bit) pointer result: HL = address, E = bank.
+        emit_far_ptr_from_regs(g, ic.result);
     } else {
         g.store_hl(ic.result);
     }
@@ -345,10 +365,11 @@ void abi_convention::emit_modern_return_value(z80_gen &g, const operand &value)
     } else if (sz == 8) {
         g.load_reg64(value);
     } else if (sz == 4) {
-        g.load_hl_lo32(value);
-        g.emit_line("push\thl");
+        g.load_de_word(value, 0);
         g.load_hl_hi32(value);
-        g.emit_line("pop\tde");
+    } else if (sz == 3 && value.type && value.type->is_far_ptr()) {
+        // Far (24-bit) pointer return: HL = address, E = bank.
+        emit_far_ptr_to_regs(g, value);
     } else {
         g.load_hl(value);
         g.emit_line("ex\tde, hl");
@@ -385,14 +406,11 @@ void abi_convention::emit_store_modern_result(z80_gen &g, const icode &ic)
     } else if (sz == 8) {
         g.store_reg64(ic.result);
     } else if (sz == 4) {
-        g.emit_line("ld\tb, h");
-        g.emit_line("ld\tc, l");
-        g.emit_line("push\tde");
-        g.emit_line("pop\thl");
-        g.store_hl_lo32(ic.result);
-        g.emit_line("ld\th, b");
-        g.emit_line("ld\tl, c");
+        g.store_de_word(ic.result, 0);
         g.store_hl_hi32(ic.result);
+    } else if (sz == 3 && ic.result.type && ic.result.type->is_far_ptr()) {
+        // Far (24-bit) pointer result: HL = address, E = bank.
+        emit_far_ptr_from_regs(g, ic.result);
     } else {
         g.emit_line("push\tde");
         g.emit_line("pop\thl");
@@ -627,16 +645,19 @@ void abi_convention::std_prologue_frame(z80_gen &g, const ir_function &fn)
 {
     if (g.can_omit_frame_pointer(fn)) {
         g.emit_comment("frameless function: no IX frame needed");
+        g.clear_known_sp_ix_delta();
         return;
     }
 
     g.emit_line("push\tix");
     g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
     g.emit_line("add\tix, sp");
+    g.set_known_sp_ix_delta(0);
     if (g.total_frame_bytes() > 0) {
         g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
         g.emit_line("add\thl, sp");
         g.emit_line("ld\tsp, hl");
+        g.set_known_sp_ix_delta(-g.total_frame_bytes());
     }
 }
 
@@ -649,7 +670,9 @@ void abi_convention::std_epilogue_frame(z80_gen &g, const ir_function &fn)
         g.emit_comment("epilogue: %s", fn.name.c_str());
         if (!g.can_omit_frame_pointer(fn)) {
             g.emit_line("ld\tsp, ix");
+            g.set_known_sp_ix_delta(0);
             g.emit_line("pop\tix");
+            g.clear_known_sp_ix_delta();
         }
     }
 }
@@ -766,6 +789,31 @@ struct cc_z88dk_callee final : stack_linkage_convention {
     bool callee_repairs_stack() const override { return true; }
 };
 
+struct cc_z88dk_smallc final : stack_linkage_convention {
+    call_abi abi_tag() const override { return call_abi::Z88DK_SMALLC; }
+    const char *name() const override { return "z88dk smallc"; }
+    bool caller_sends_right_to_left() const override { return false; }
+
+    void emit_send(z80_gen &g, const icode &ic) override {
+        if (g.op_size(ic.left) == 1) {
+            g.load_a(ic.left);
+            g.emit_line("ld\tl, a");
+            g.emit_line("ld\th, %s", g.asm_.imm(0).c_str());
+            g.emit_line("push\thl");
+            return;
+        }
+        std_send_push(g, ic);
+    }
+
+    void emit_return_value(z80_gen &g, const operand &value) const override {
+        emit_modern_return_value(g, value);
+    }
+
+    void emit_store_call_result(z80_gen &g, const icode &ic) const override {
+        emit_store_modern_result(g, ic);
+    }
+};
+
 // ─── z88dk fastcall ──────────────────────────────────────────────────────────
 
 struct cc_z88dk_fastcall final : abi_convention {
@@ -774,7 +822,7 @@ struct cc_z88dk_fastcall final : abi_convention {
     std::vector<abi_arg_loc>
     classify_args(const std::vector<type_ptr> &types) const override {
         std::vector<abi_arg_loc> locs(types.size(), abi_arg_loc::STACK);
-        if (types.size() != 1) return locs;
+        if (types.empty()) return locs;
 
         switch (arg_size(types[0])) {
         case 1: locs[0] = abi_arg_loc::REG_L;    break;
@@ -800,15 +848,18 @@ struct cc_z88dk_fastcall final : abi_convention {
                        fn.stack_param_bytes);
         if (g.can_omit_frame_pointer(fn)) {
             g.emit_comment("frameless function: no IX frame needed");
+            g.clear_known_sp_ix_delta();
         } else {
             g.emit_line("push\tix");
             g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
             g.emit_line("add\tix, sp");
+            g.set_known_sp_ix_delta(0);
             spill_leading_receives(g, fn, spill_fastcall_receive);
             if (g.total_frame_bytes() > 0) {
                 g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
                 g.emit_line("add\thl, sp");
                 g.emit_line("ld\tsp, hl");
+                g.set_known_sp_ix_delta(-g.total_frame_bytes());
             }
         }
     }
@@ -835,10 +886,8 @@ struct cc_z88dk_fastcall final : abi_convention {
             g.load_hl(ic.left);
             break;
         case abi_arg_loc::REG_DEHL:
-            g.load_hl_hi32(ic.left);
-            g.emit_line("push\thl");
             g.load_hl_lo32(ic.left);
-            g.emit_line("pop\tde");
+            g.load_de_word(ic.left, 1);
             break;
         default:
             std_send_push(g, ic);
@@ -851,9 +900,7 @@ struct cc_z88dk_fastcall final : abi_convention {
     }
 
     void emit_indirect_call(z80_gen &g, const icode &ic) const override {
-        g.asm_.global_decl("__call_hl");
-        g.load_hl(ic.left);
-        g.emit_line("call\t__call_hl");
+        emit_bc_indirect_call(g, ic.left, false, true, true);
     }
 
     void emit_return_value(z80_gen &g, const operand &value) const override {
@@ -908,10 +955,12 @@ struct cc_sdcccall1 final : abi_convention {
         bool frameless = g.can_omit_frame_pointer(fn);
         if (frameless) {
             g.emit_comment("frameless function: no IX frame needed");
+            g.clear_known_sp_ix_delta();
         } else {
             g.emit_line("push\tix");
             g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
             g.emit_line("add\tix, sp");
+            g.set_known_sp_ix_delta(0);
             bool retain_incoming_regs =
                 g.opt_settings_.level == opt_level::O2 ||
                 g.o3_baseline_enabled();
@@ -978,11 +1027,13 @@ struct cc_sdcccall1 final : abi_convention {
                     g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
                     g.emit_line("add\thl, sp");
                     g.emit_line("ld\tsp, hl");
+                    g.set_known_sp_ix_delta(-g.total_frame_bytes());
                     g.emit_line("ex\tde, hl");
                 } else {
                     g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
                     g.emit_line("add\thl, sp");
                     g.emit_line("ld\tsp, hl");
+                    g.set_known_sp_ix_delta(-g.total_frame_bytes());
                 }
             }
         }
@@ -1038,10 +1089,8 @@ struct cc_sdcccall1 final : abi_convention {
             g.load_de(ic.left);
             break;
         case abi_arg_loc::REG_DEHL:
-            g.load_hl_lo32(ic.left);
-            g.emit_line("push\thl");
+            g.load_de_word(ic.left, 0);
             g.load_hl_hi32(ic.left);
-            g.emit_line("pop\tde");
             break;
         case abi_arg_loc::STACK:
             if (g.op_size(ic.left) == 1) {
@@ -1261,6 +1310,7 @@ abi_convention &get_abi_convention(call_abi abi)
 {
     static cc_sdcccall0      sdcccall0;
     static cc_sdcccall1      sdcccall1;
+    static cc_z88dk_smallc   z88dk_smallc;
     static cc_z88dk_fastcall z88dk_fastcall;
     static cc_z88dk_callee   z88dk_callee;
     static cc_naked          naked;
@@ -1270,6 +1320,7 @@ abi_convention &get_abi_convention(call_abi abi)
     switch (effective_call_abi(abi)) {
     case call_abi::SDCCCALL0:      return sdcccall0;
     case call_abi::SDCCCALL1:      return sdcccall1;
+    case call_abi::Z88DK_SMALLC:   return z88dk_smallc;
     case call_abi::Z88DK_FASTCALL: return z88dk_fastcall;
     case call_abi::Z88DK_CALLEE:   return z88dk_callee;
     case call_abi::NAKED:          return naked;

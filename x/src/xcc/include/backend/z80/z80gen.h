@@ -68,6 +68,7 @@ enum class temp_home {
 struct stack_linkage_convention;
 struct cc_sdcccall0;
 struct cc_sdcccall1;
+struct cc_z88dk_smallc;
 struct cc_z88dk_fastcall;
 struct cc_z88dk_callee;
 struct cc_naked;
@@ -79,6 +80,7 @@ class z80_gen {
     friend struct stack_linkage_convention;
     friend struct cc_sdcccall0;
     friend struct cc_sdcccall1;
+    friend struct cc_z88dk_smallc;
     friend struct cc_z88dk_fastcall;
     friend struct cc_z88dk_callee;
     friend struct cc_naked;
@@ -147,6 +149,8 @@ private:
     pair_cache_state hl_cache_;
     pair_cache_state de_cache_;
     byte_cache_state a_cache_;
+    bool sp_ix_delta_known_ = false;
+    int sp_ix_delta_ = 0;
 
     // TLS: maps mangled global name → byte offset within the TLS block.
     // Built during emit_module() before globals are emitted.
@@ -190,6 +194,16 @@ private:
     std::string pair_ix_addr_cache_key(int off) const;
     std::string a_load_cache_key(const operand &op) const;
     void track_emitted_instruction(const std::string &line);
+    void set_known_sp_ix_delta(int delta) {
+        sp_ix_delta_known_ = true;
+        sp_ix_delta_ = delta;
+    }
+    void clear_known_sp_ix_delta() {
+        sp_ix_delta_known_ = false;
+        sp_ix_delta_ = 0;
+    }
+    bool has_known_sp_ix_delta() const { return sp_ix_delta_known_; }
+    int current_sp_ix_delta() const { return sp_ix_delta_; }
 
     bool regalloc_enabled() const { return opt_settings_.regalloc; }
     bool compare_ifx_fusion_enabled() const { return opt_settings_.compare_ifx_fusion; }
@@ -389,6 +403,33 @@ private:
     void load_frame_word(const reg_pair &r, int off);
     void store_frame_word(const reg_pair &r, int off);
 
+    // ----- far (24-bit banked) pointer support -----------------------
+    //
+    // Load / store the bank byte (byte 2) of a far pointer operand into A.
+    // Unlike load_a/store_a these honour the byte offset for global
+    // symbols, where the bank lives at (sym+2).
+    //
+    void load_far_bank (const operand &ptr);
+    void store_far_bank(const operand &dst);
+
+    //
+    // Load a far pointer operand into HL (16-bit address) and C (bank).
+    // Robust against helper clobbers via push/pop sequencing.
+    //
+    void emit_load_far_ptr(const operand &ptr);
+
+    // Lower *farptr (load) and *farptr = v (store) via the far-access
+    // runtime trampoline (__far_getb / __far_putb).  Return true when the
+    // operand is a far pointer and the far path was emitted.
+    //
+    bool gen_far_get_value_at(const icode &ic);
+    bool gen_far_set_value_at(const icode &ic);
+
+    // 24-bit far pointer ± integer arithmetic.  Returns true when the
+    // result is a far pointer and the far path was emitted.  is_add
+    // selects addition (carry into bank) vs subtraction (borrow).
+    bool gen_far_ptr_arith(const icode &ic, bool is_add);
+
     //
     // Load op (16-bit) into HL.
     //
@@ -441,6 +482,11 @@ private:
     // Store HL into the 16-bit word at byte-offset word_index*2 in op.
     //
     void store_hl_word(const operand &op, int word_index);
+
+    //
+    // Store DE into the 16-bit word at byte-offset word_index*2 in op.
+    //
+    void store_de_word(const operand &op, int word_index);
 
     //
     // Load the low 16 bits of a 32-bit operand into HL.

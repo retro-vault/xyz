@@ -16,6 +16,28 @@
 
 namespace xld {
 
+    static std::optional<std::pair<uint16_t, uint16_t>>
+    occupied_window(const link_context& ctx)
+    {
+        if (ctx.code_occupancy.empty())
+            return std::nullopt;
+
+        uint32_t first = 0;
+        while (first < ctx.code_occupancy.size() && ctx.code_occupancy[first] == 0x00)
+            ++first;
+        if (first >= ctx.code_occupancy.size())
+            return std::nullopt;
+
+        uint32_t last = ctx.code_occupancy.size();
+        while (last > first && ctx.code_occupancy[last - 1] == 0x00)
+            --last;
+
+        return std::pair<uint16_t, uint16_t>{
+            static_cast<uint16_t>(first),
+            static_cast<uint16_t>(last - 1)
+        };
+    }
+
     static std::pair<uint16_t, uint16_t> emit_window(const link_context& ctx) {
         if (ctx.output_range.has_value()) {
             const uint16_t start = ctx.output_range->start;
@@ -24,6 +46,9 @@ namespace xld {
                 throw xld_error("invalid binary output range");
             return {start, end};
         }
+
+        if (auto occupied = occupied_window(ctx))
+            return *occupied;
 
         if (ctx.code_buffer.empty())
             return {0x0000, 0x0000};
@@ -35,6 +60,44 @@ namespace xld {
             ? static_cast<uint16_t>(ctx.image_base)
             : 0x0000;
         return {start, end};
+    }
+
+    template <typename Callback>
+    static void for_each_hole_guard(
+        const link_context& ctx,
+        uint16_t start,
+        uint16_t end,
+        Callback&& callback)
+    {
+        for (const auto& hole : ctx.holes) {
+            uint16_t hs = std::max<uint16_t>(hole.start, start);
+            uint16_t he = std::min<uint16_t>(hole.end, end);
+            if (hs > he)
+                continue;
+
+            uint32_t hole_size = static_cast<uint32_t>(he) - hs + 1u;
+            if (static_cast<uint32_t>(hs) >= static_cast<uint32_t>(start) + 2u
+                && hole_size <= 0x7Fu
+                && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
+                callback(
+                    static_cast<uint16_t>(hs - 2u),
+                    std::vector<uint8_t>{
+                        0x18,
+                        static_cast<uint8_t>(hole_size)
+                    });
+            } else if (static_cast<uint32_t>(hs)
+                           >= static_cast<uint32_t>(start) + 3u
+                       && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
+                const uint16_t target = static_cast<uint16_t>(he + 1u);
+                callback(
+                    static_cast<uint16_t>(hs - 3u),
+                    std::vector<uint8_t>{
+                        0xC3,
+                        static_cast<uint8_t>(target & 0xFF),
+                        static_cast<uint8_t>((target >> 8) & 0xFF)
+                    });
+            }
+        }
     }
 
     // Helper: write uint16_t in little-endian.
@@ -64,45 +127,72 @@ namespace xld {
             uint16_t he = std::min<uint16_t>(hole.end, end);
             if (hs > he)
                 continue;
-            uint32_t hole_size = static_cast<uint32_t>(he) - hs + 1u;
 
             // Reserved bytes remain untouched in the final image.
             for (uint32_t addr = hs; addr <= he; ++addr)
                 image[addr - start] = 0x00;
-
-            // If there are enough bytes before the hole inside the
-            // emitted range, place a JR for short skips or a JP for
-            // longer ones.
-            if (static_cast<uint32_t>(hs) >= static_cast<uint32_t>(start) + 2u
-                && hole_size <= 0x7Fu
-                && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
-                uint16_t guard = static_cast<uint16_t>(hs - 2u);
-                const uint32_t idx = static_cast<uint32_t>(guard - start);
-                image[idx + 0] = 0x18;  // jr +disp
-                image[idx + 1] = static_cast<uint8_t>(hole_size);
-            } else if (static_cast<uint32_t>(hs)
-                           >= static_cast<uint32_t>(start) + 3u
-                       && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
-                uint16_t guard = static_cast<uint16_t>(hs - 3u);
-                uint16_t target = static_cast<uint16_t>(he + 1u);
-                const uint32_t idx = static_cast<uint32_t>(guard - start);
-                image[idx + 0] = 0xC3;  // jp nn
-                image[idx + 1] = static_cast<uint8_t>(target & 0xFF);
-                image[idx + 2] = static_cast<uint8_t>((target >> 8) & 0xFF);
-            }
         }
+
+        // If there are enough bytes before the hole inside the emitted range,
+        // place a JR for short skips or a JP for longer ones.
+        for_each_hole_guard(ctx, start, end,
+            [&](uint16_t guard, const std::vector<uint8_t>& bytes) {
+                const uint32_t idx = static_cast<uint32_t>(guard - start);
+                for (size_t i = 0; i < bytes.size(); ++i)
+                    image[idx + i] = bytes[i];
+            });
 
         return image;
     }
 
-    static void emit_ihx(std::ofstream& out, const link_context& ctx) {
-        const auto [start, _end] = emit_window(ctx);
-        const auto image = build_linear_image(ctx);
+    static std::vector<uint8_t> build_linear_occupancy(
+        const link_context& ctx,
+        uint16_t start,
+        uint16_t end)
+    {
+        const uint32_t out_size = static_cast<uint32_t>(end - start + 1);
+        std::vector<uint8_t> occupancy(out_size, 0x00);
+        const bool has_sparse_data = !ctx.code_occupancy.empty();
 
-        for (size_t offset = 0; offset < image.size(); offset += 16) {
-            const uint8_t count = static_cast<uint8_t>(
-                std::min<size_t>(16, image.size() - offset));
-            const uint16_t addr = static_cast<uint16_t>(start + offset);
+        for (uint32_t addr = start; addr <= end; ++addr) {
+            if (has_sparse_data) {
+                if (addr < ctx.code_occupancy.size() && ctx.code_occupancy[addr] != 0)
+                    occupancy[addr - start] = 0x01;
+            } else if (addr < ctx.code_buffer.size()) {
+                occupancy[addr - start] = 0x01;
+            }
+        }
+
+        for_each_hole_guard(ctx, start, end,
+            [&](uint16_t guard, const std::vector<uint8_t>& bytes) {
+                const uint32_t idx = static_cast<uint32_t>(guard - start);
+                for (size_t i = 0; i < bytes.size(); ++i)
+                    occupancy[idx + i] = 0x01;
+            });
+
+        return occupancy;
+    }
+
+    static void emit_ihx(std::ofstream& out, const link_context& ctx) {
+        const auto [start, end] = emit_window(ctx);
+        const auto image = build_linear_image(ctx);
+        const auto occupancy = build_linear_occupancy(ctx, start, end);
+
+        for (size_t offset = 0; offset < image.size();) {
+            while (offset < image.size() && occupancy[offset] == 0x00)
+                ++offset;
+            if (offset >= image.size())
+                break;
+
+            const size_t chunk_start = offset;
+            while (offset < image.size()
+                   && occupancy[offset] != 0x00
+                   && (offset - chunk_start) < 16u) {
+                ++offset;
+            }
+
+            const uint8_t count = static_cast<uint8_t>(offset - chunk_start);
+            const uint16_t addr = static_cast<uint16_t>(start + chunk_start);
             uint8_t checksum = count
                              + static_cast<uint8_t>((addr >> 8) & 0xFF)
                              + static_cast<uint8_t>(addr & 0xFF);
@@ -114,7 +204,7 @@ namespace xld {
                 << "00";
 
             for (uint8_t i = 0; i < count; ++i) {
-                const uint8_t byte = image[offset + i];
+                const uint8_t byte = image[chunk_start + i];
                 checksum = static_cast<uint8_t>(checksum + byte);
                 out << std::setw(2) << static_cast<unsigned>(byte);
             }

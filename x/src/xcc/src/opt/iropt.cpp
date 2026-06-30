@@ -866,8 +866,18 @@ public:
         return dom;
     }
 
+    // Above this basic-block count the iterative dominator computation
+    // (super-linear in the number of blocks) dominates compile time on
+    // pathological machine-generated functions — e.g. the C23 translation
+    // limit tests with 127 nested blocks.  Loop optimizations are optional,
+    // so for such oversized functions we skip them (report no loops) and
+    // fall back to the cheaper, correctness-preserving passes.
+    static constexpr size_t kMaxLoopOptBlocks = 400;
+
     std::vector<natural_loop> natural_loops() const {
         std::map<size_t, natural_loop> by_header;
+        if (blocks_.size() > kMaxLoopOptBlocks)
+            return {};
         auto reachable = reachable_blocks();
         auto dom = dominators();
 
@@ -5568,7 +5578,26 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
 
 void ir_optimizer::optimize(ir_function &fn,
                             const optimization_settings &settings) {
-    auto passes = build_pipeline(settings);
+    // Pathologically large, machine-generated functions (e.g. the C23
+    // translation-limit stress tests with a 4095-token expression and 127
+    // nested blocks) make the analysis-heavy passes super-linear: value
+    // propagation compares whole dataflow environments, and the loop passes
+    // run an iterative dominator computation.  For such oversized functions,
+    // drop those passes and keep only the cheaper, local optimizations.
+    // Correctness is unaffected — these are all optional.
+    constexpr size_t kLargeFunctionInsns = 2000;
+    optimization_settings eff = settings;
+    if (fn.icodes.size() > kLargeFunctionInsns) {
+        eff.value_propagation   = false;
+        eff.local_cse           = false;
+        eff.loop_licm           = false;
+        eff.loop_induction      = false;
+        eff.strength_reduction  = false;
+        eff.jump_threading      = false;
+        eff.merge_identical_functions = false;
+    }
+
+    auto passes = build_pipeline(eff);
     for (int iter = 0; iter < 16; ++iter) {
         bool changed = false;
         for (auto &pass : passes)

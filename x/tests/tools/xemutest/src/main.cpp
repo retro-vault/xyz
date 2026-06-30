@@ -358,6 +358,9 @@ std::string normalize_float_format(const std::string& value) {
     if (kind == "ieee" || kind == "ieee32") {
         return "ieee32";
     }
+    if (kind == "ieee16" || kind == "half" || kind == "binary16") {
+        return "ieee16";
+    }
     if (kind == "88" || kind == "fixed88" || kind == "fixed8_8") {
         return "fixed8_8";
     }
@@ -871,6 +874,7 @@ std::vector<expanded_test_case> expand_test_cases(const std::vector<test_case>& 
         } else if (test.float_present) {
             floats = {
                 std::optional<std::string>("ieee32"),
+                std::optional<std::string>("ieee16"),
                 std::optional<std::string>("fixed8_8"),
                 std::optional<std::string>("fixed16_16"),
                 std::optional<std::string>("fixed16_8")
@@ -1037,6 +1041,22 @@ std::vector<std::string> build_target_compile_command(
     const cli_options& cli,
     const fs::path& output_path)
 {
+    auto shortest_cwd_path = [](const fs::path& path) -> std::string {
+        const fs::path absolute = fs::absolute(path).lexically_normal();
+        std::string best = absolute.string();
+
+        std::error_code ec;
+        fs::path relative = fs::relative(absolute, fs::current_path(), ec);
+        if (!ec) {
+            relative = relative.lexically_normal();
+            const std::string rel_text = relative.string();
+            if (!rel_text.empty() && rel_text.size() < best.size()) {
+                best = rel_text;
+            }
+        }
+        return best;
+    };
+
     std::vector<std::string> args;
     args.push_back(cli.xcc.string());
     if (test.base.kind == test_kind::compile) {
@@ -1052,7 +1072,7 @@ std::vector<std::string> build_target_compile_command(
     const auto compiler_args = build_compiler_args(test, cli);
     args.insert(args.end(), compiler_args.begin(), compiler_args.end());
     for (const auto& source : test.base.sources) {
-        args.push_back(fs::absolute(source).string());
+        args.push_back(shortest_cwd_path(source));
     }
     args.push_back("-o");
     args.push_back(output_path.string());
@@ -1450,11 +1470,11 @@ test_result run_emulated_test(
     const cli_options& cli)
 {
     const fs::path test_work = test_work_dir(cli, test);
-    const fs::path bin_output = test_work / "program.bin";
+    const fs::path image_output = test_work / "program.bin";
     const fs::path stdout_log = test_work / "link.stdout.log";
     const fs::path stderr_log = test_work / "link.stderr.log";
 
-    const auto args = build_target_compile_command(test, cli, bin_output);
+    const auto args = build_target_compile_command(test, cli, image_output);
     const auto compile_result = run_command(
         args,
         fs::current_path(),
@@ -1500,7 +1520,7 @@ test_result run_emulated_test(
     const fs::path emu_fs_root = test_work / "emu-fs";
 
     xemu::machine emu;
-    emu.load_binary(bin_output, test.base.origin);
+    emu.load_binary(image_output, test.base.origin);
     emu.set_pc(test.base.pc.value_or(test.base.origin));
     emu.set_sp(test.base.sp);
     fs::remove_all(emu_fs_root);
@@ -1519,7 +1539,11 @@ test_result run_emulated_test(
     emu.bind_stdout(test.base.stdout_port, output_stream);
 
     const auto stop = emu.continue_execution(test.base.max_steps);
-    if (stop.reason != xemu::stop_reason::halted) {
+    const std::string actual_stdout = output_stream.str();
+    bool done_seen = false;
+    const int actual_exit = decode_emu_exit_code(emu, &done_seen);
+
+    if (stop.reason != xemu::stop_reason::halted && !done_seen) {
         std::ostringstream detail;
         detail << "execution did not halt cleanly (reason="
                << stop_reason_name(stop.reason)
@@ -1529,10 +1553,12 @@ test_result run_emulated_test(
             detail << ", message=" << stop.message;
         }
         detail << ")";
+        if (!actual_stdout.empty()) {
+            detail << "\nstdout: " << describe_bytes(actual_stdout);
+        }
         return {false, detail.str()};
     }
 
-    const std::string actual_stdout = output_stream.str();
     if (test.base.stdout_path.has_value() || golden.has_value()) {
         if (actual_stdout != expected_stdout) {
             return {false, "stdout mismatch\nexpected: "
@@ -1542,8 +1568,6 @@ test_result run_emulated_test(
     }
 
     if (expected_exit.has_value()) {
-        bool done_seen = false;
-        const int actual_exit = decode_emu_exit_code(emu, &done_seen);
         if (!done_seen) {
             return {false, "emu exit mailbox was not completed"};
         }
@@ -1593,8 +1617,8 @@ test_result run_emulated_test(
     }
 
     if (!test.base.variable_assertions.empty()) {
-        const fs::path cdb_path = bin_output.parent_path()
-            / (bin_output.stem().string() + ".cdb");
+        const fs::path cdb_path = image_output.parent_path()
+            / (image_output.stem().string() + ".cdb");
         if (!fs::exists(cdb_path)) {
             return {false, "expected debug sidecar not found: " + cdb_path.string()};
         }

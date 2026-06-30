@@ -23,8 +23,11 @@ public:
     void raw(const std::string &text) override;
 
     void module_header() override;
+    void default_calling_convention(call_abi abi) override;
     void section_code() override;
+    void section_code_named(const std::string &name) override;
     void section_data() override;
+    void section_data_named(const std::string &name) override;
     void section_rodata() override;
     void section_tls() override;
 

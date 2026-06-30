@@ -31,6 +31,10 @@ namespace xcc {
 
 namespace {
 
+std::string banked_code_section_name(int bank) {
+    return "_CODE_BANK_" + std::to_string(bank);
+}
+
 bool is_compare_op(icode_op op) {
     switch (op) {
     case icode_op::EQ:
@@ -349,9 +353,6 @@ std::string z80_gen::a_load_cache_key(const operand &op) const {
 }
 
 void z80_gen::track_emitted_instruction(const std::string &line) {
-    if (!pair_cache_enabled())
-        return;
-
     using sv = std::string_view;
 
     auto starts = [&](sv prefix) {
@@ -390,6 +391,28 @@ void z80_gen::track_emitted_instruction(const std::string &line) {
         }
         return false;
     };
+
+    auto adjust_known_sp_ix_delta = [&](int delta) {
+        if (sp_ix_delta_known_)
+            sp_ix_delta_ += delta;
+    };
+
+    if (starts("push\t")) {
+        adjust_known_sp_ix_delta(-2);
+    } else if (starts("pop\t")) {
+        adjust_known_sp_ix_delta(2);
+    } else if (starts("inc\tsp")) {
+        adjust_known_sp_ix_delta(1);
+    } else if (starts("dec\tsp")) {
+        adjust_known_sp_ix_delta(-1);
+    } else if (starts("ld\tsp, ix") || starts("ld\tsp,ix")) {
+        set_known_sp_ix_delta(0);
+    } else if (starts("ld\tsp, hl") || starts("ld\tsp,hl")) {
+        clear_known_sp_ix_delta();
+    }
+
+    if (!pair_cache_enabled())
+        return;
 
     if (starts("call\t")) {
         invalidate_pair_cache();
@@ -502,8 +525,11 @@ void z80_gen::emit_function(const ir_function &fn) {
     temp_frame_bytes_ = 0;
     cur_convention_ = &get_abi_convention(fn.abi);
     cur_ic_index_ = 0;
+    clear_known_sp_ix_delta();
     invalidate_pair_cache();
     invalidate_a_cache();
+    if (fn.bank < 0) asm_.section_code();
+    else asm_.section_code_named(banked_code_section_name(fn.bank));
 
     if (o3_baseline_enabled() &&
         (try_emit_window_minmax_benchmark(fn) ||
@@ -536,7 +562,15 @@ void z80_gen::emit_function(const ir_function &fn) {
         (auto_temp_frame && temp_stack_bytes_ > 0 && !can_omit_frame_pointer(fn)))
         temp_frame_bytes_ = temp_stack_bytes_;
 
+    // The structured loop/pattern matchers below each scan ahead in the
+    // instruction stream (some via temp_value_used_after), so running them at
+    // every index is O(n^2).  For pathologically large machine-generated
+    // functions (e.g. the C23 translation-limit stress test) none of these
+    // small-loop patterns can match, so skip them and emit straight-line code.
+    const bool structured_match = fn.icodes.size() <= 1200;
+
     for (size_t i = 0; i < fn.icodes.size(); ++i) {
+      if (structured_match) {
         if (try_emit_seeded_recurrence_loop(fn, i))
             continue;
         if (try_emit_masked_step_fill_loop(fn, i))
@@ -581,6 +615,7 @@ void z80_gen::emit_function(const ir_function &fn) {
             continue;
         if (try_emit_compare_ifx(fn, i))
             continue;
+      }
         gen_icode(fn.icodes[i]);
     }
 

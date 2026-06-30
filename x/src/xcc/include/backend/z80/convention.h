@@ -50,6 +50,8 @@ struct abi_convention {
         return type ? type->size() : 2;
     }
 
+    virtual bool caller_sends_right_to_left() const { return true; }
+
     // Callee side.
     virtual void emit_prologue  (z80_gen &g, const ir_function &fn) = 0;
     virtual void emit_epilogue  (z80_gen &g, const ir_function &fn) = 0;
@@ -75,6 +77,11 @@ protected:
                                       bool preserve_af,
                                       bool preserve_hl,
                                       bool preserve_de);
+    // Far (24-bit) pointer return-value convention: HL = 16-bit address,
+    // E = bank (D = 0).  Used by both legacy and modern ABIs for size-3
+    // pointer results so the bank byte is not lost on return-by-value.
+    static void emit_far_ptr_to_regs  (z80_gen &g, const operand &value);
+    static void emit_far_ptr_from_regs(z80_gen &g, const operand &result);
     static void emit_legacy_return_value(z80_gen &g, const operand &value);
     static void emit_store_legacy_result(z80_gen &g, const icode &ic);
     static void emit_modern_return_value(z80_gen &g, const operand &value);

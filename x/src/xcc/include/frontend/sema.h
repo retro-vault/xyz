@@ -31,8 +31,11 @@ class sema
 {
 public:
     explicit sema(diag_engine &diag,
-                  const std::unordered_map<std::string, call_abi> *imported_abis = nullptr)
-        : diag_(diag), imported_abis_(imported_abis) {}
+                  const std::unordered_map<std::string, call_abi> *imported_abis = nullptr,
+                  call_abi default_call_abi = call_abi::SDCCCALL1)
+        : diag_(diag),
+          imported_abis_(imported_abis),
+          default_call_abi_(default_call_abi) {}
 
     //
     // Walk the entire translation unit and report semantic errors to
@@ -48,6 +51,7 @@ public:
 private:
     diag_engine &diag_;
     const std::unordered_map<std::string, call_abi> *imported_abis_ = nullptr;
+    call_abi default_call_abi_ = call_abi::SDCCCALL1;
 
     bool is_const_lval(const expr &e) const;
 
@@ -86,8 +90,10 @@ private:
     void visit(case_stmt      &s) override;
 
     // ----- decl_visitor overrides ------------------------------------
-    void visit(var_decl  &d) override;
-    void visit(func_decl &d) override;
+    void visit(var_decl     &d) override;
+    void visit(func_decl    &d) override;
+    void visit(param_decl   &d) override;
+    void visit(typedef_decl &d) override;
 };
 
 } // namespace xcc

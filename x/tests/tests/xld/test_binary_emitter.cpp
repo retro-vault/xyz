@@ -138,11 +138,12 @@ TEST(binary_emitter_bin_pre_hole_jp_for_large_hole) {
     std::filesystem::remove(out_path);
 }
 
-TEST(binary_emitter_ihx_emits_linear_hex_image) {
+TEST(binary_emitter_ihx_emits_sparse_hex_image) {
     xld::link_context ctx;
     ctx.format = xld::output_format::ihx;
     ctx.output_range = xld::address_range{0x0000, 0x0005};
-    ctx.code_buffer = {0x11, 0x22, 0x33};
+    ctx.code_buffer = {0x11, 0x22, 0x33, 0x00, 0x00, 0x00};
+    ctx.code_occupancy = {0x01, 0x01, 0x01, 0x00, 0x00, 0x00};
 
     char tmp_template[] = "/tmp/xld-ihx-test-XXXXXX";
     int fd = mkstemp(tmp_template);
@@ -157,8 +158,73 @@ TEST(binary_emitter_ihx_emits_linear_hex_image) {
     std::string text((std::istreambuf_iterator<char>(in)),
                      std::istreambuf_iterator<char>());
 
-    ASSERT(text.find(":0600000011223300000094\n") != std::string::npos);
+    ASSERT(text.find(":0300000011223397\n") != std::string::npos);
+    ASSERT(text.find(":0600000011223300000094\n") == std::string::npos);
     ASSERT(text.find(":00000001FF\n") != std::string::npos);
+
+    std::filesystem::remove(out_path);
+}
+
+TEST(binary_emitter_ihx_keeps_pre_hole_guard_bytes) {
+    xld::link_context ctx;
+    ctx.format = xld::output_format::ihx;
+    ctx.output_range = xld::address_range{0x00F8, 0x0113};
+    ctx.holes.push_back({0x0100, 0x010F});
+    ctx.code_buffer.resize(0x0114, 0x00);
+    ctx.code_occupancy.resize(0x0114, 0x00);
+
+    char tmp_template[] = "/tmp/xld-ihx-hole-test-XXXXXX";
+    int fd = mkstemp(tmp_template);
+    ASSERT(fd >= 0);
+    close(fd);
+    std::filesystem::path out_path = tmp_template;
+
+    xld::binary_emitter::emit(out_path, ctx);
+
+    std::ifstream in(out_path);
+    ASSERT(in.is_open());
+    std::string text((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+
+    ASSERT(text.find(":0200FE001810D8\n") != std::string::npos);
+    ASSERT(text.find(":00000001FF\n") != std::string::npos);
+
+    std::filesystem::remove(out_path);
+}
+
+TEST(binary_emitter_bin_implicit_window_uses_occupied_bytes_only) {
+    xld::link_context ctx;
+    ctx.format = xld::output_format::bin;
+    ctx.code_buffer.resize(0x0020, 0x00);
+    ctx.code_buffer[0x0010] = 0x11;
+    ctx.code_buffer[0x0011] = 0x22;
+    ctx.code_buffer[0x001A] = 0x33;
+    ctx.code_buffer[0x001B] = 0x44;
+    ctx.code_occupancy.resize(0x0020, 0x00);
+    ctx.code_occupancy[0x0010] = 0x01;
+    ctx.code_occupancy[0x0011] = 0x01;
+    ctx.code_occupancy[0x001A] = 0x01;
+    ctx.code_occupancy[0x001B] = 0x01;
+
+    char tmp_template[] = "/tmp/xld-bin-implicit-window-test-XXXXXX";
+    int fd = mkstemp(tmp_template);
+    ASSERT(fd >= 0);
+    close(fd);
+    std::filesystem::path out_path = tmp_template;
+
+    xld::binary_emitter::emit(out_path, ctx);
+
+    std::ifstream in(out_path, std::ios::binary);
+    ASSERT(in.is_open());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 12u);
+    ASSERT_EQ(bytes[0], 0x11);
+    ASSERT_EQ(bytes[1], 0x22);
+    for (size_t i = 2; i < 10; ++i)
+        ASSERT_EQ(bytes[i], 0x00);
+    ASSERT_EQ(bytes[10], 0x33);
+    ASSERT_EQ(bytes[11], 0x44);
 
     std::filesystem::remove(out_path);
 }

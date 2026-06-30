@@ -3,7 +3,7 @@ BUILD_DIR ?= $(ROOT)/build
 DIST_DIR ?= $(ROOT)/bin/x
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
-CXXFLAGS ?= -std=c++23 -Wall -Wextra -Wpedantic -g
+CXXFLAGS ?= -std=c++20 -Wall -Wextra -Wpedantic -g
 
 INCLUDE  := -Iinclude -I.
 OBJDIR   := $(BUILD_DIR)/lib/xbfd

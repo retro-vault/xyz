@@ -1,0 +1,12 @@
+	.module	xcc_output
+	.optsdcc	-mz80 sdcccall(1)
+	.area	_CODE
+	.globl	_main
+_main:
+	; sdcccall(1) prologue: main (locals=0, temp_frame=0, stack_params=0)
+	; frameless function: no IX frame needed
+	ld	hl, #0
+	ex	de, hl
+__main_end:
+	; epilogue: main
+	ret

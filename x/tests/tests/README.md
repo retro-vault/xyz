@@ -32,9 +32,10 @@ Every active `xemutest` case uses `test.cfg` metadata with:
 Common optional execution fields now include:
 
 - `matrix_opt = O1|O2|O3`
-- `matrix_float = ieee32|fixed8_8|fixed16_16|fixed24_8`
+- `matrix_float = ieee32|ieee16|fixed8_8|fixed16_16|fixed24_8`
 - `host_golden = gcc` for host-generated expected exit/stdout
 - `timeout_seconds = N`
 - `assert_var = name:type=value` for debug-symbol-backed variable checks
+- `tag = model-s|model-m|model-l` for staged release-model compatibility
 
 `xemutest --list` expands these matrices into the concrete runnable variants.

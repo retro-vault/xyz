@@ -47,7 +47,7 @@ xcc -g main.c -o app.xl
 | `-D<macro>[=val]` | Define preprocessor macro |
 | `-g` | Emit debug info (for `xgdb`) |
 | `--platform=<name>` | Select target platform (default `none`) |
-| `--float-format=<fmt>` | Select the ABI used for C `float`: `ieee32`, `fixed8_8`, `fixed16_16`, or `fixed24_8` |
+| `--float-format=<fmt>` | Select the ABI used for C `float`: `ieee32`, `ieee16`, `fixed8_8`, `fixed16_16`, or `fixed24_8` |
 | `-masm=<dialect>` | Assembler dialect: `sdasz80` (default) or `gnuas` |
 | `-L<dir>`, `-l<name>` | Forwarded to the linker |
 | `-nostdlib`, `-nostartfiles` | Forwarded to the linker |
@@ -71,6 +71,7 @@ arguments, and return values.
 
 ```bash
 xcc --float-format=ieee32 main.c -o app-ieee.xl
+xcc --float-format=ieee16 main.c -o app-half.xl
 xcc --float-format=fixed8_8 main.c -o app-8_8.xl
 xcc --float-format=fixed16_16 main.c -o app-16_16.xl
 xcc --float-format=fixed24_8 main.c -o app-24_8.xl

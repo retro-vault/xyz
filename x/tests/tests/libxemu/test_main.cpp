@@ -1,4 +1,7 @@
 #include <cstdint>
+#include <array>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -135,6 +138,146 @@ TEST(machine_binds_platform_emu_stdio_defaults) {
     const auto stop = emu.continue_execution();
     ASSERT_EQ(stop.reason, xemu::stop_reason::halted);
     ASSERT_EQ(output.str(), std::string("Q"));
+}
+
+TEST(machine_loads_sparse_ihx_image) {
+    const auto path = std::filesystem::temp_directory_path() / "xemu-load-ihx-test.ihx";
+    {
+        std::ofstream out(path);
+        ASSERT(out.is_open());
+        out << ":030100003E427606\n";
+        out << ":01FF0000768A\n";
+        out << ":00000001FF\n";
+    }
+
+    xemu::machine emu;
+    emu.load_ihx(path);
+
+    ASSERT_EQ(emu.read_byte(0x0100), static_cast<uint8_t>(0x3E));
+    ASSERT_EQ(emu.read_byte(0x0101), static_cast<uint8_t>(0x42));
+    ASSERT_EQ(emu.read_byte(0x0102), static_cast<uint8_t>(0x76));
+    ASSERT_EQ(emu.read_byte(0x00FF), static_cast<uint8_t>(0x00));
+    ASSERT_EQ(emu.read_byte(0xFF00), static_cast<uint8_t>(0x76));
+
+    std::filesystem::remove(path);
+}
+
+TEST(machine_loads_readonly_store_image) {
+    xemu::machine emu;
+    xemu::memory_map_config map;
+    map.stores.push_back({"rom", 1, 0x4000u, false});
+    map.stores.push_back({"ram", 1, 0xC000u, true});
+    map.windows.push_back({0x0000, 0x3FFF, "rom", 0, std::nullopt, 0});
+    map.windows.push_back({0x4000, 0xFFFF, "ram", 0, std::nullopt, 0});
+
+    emu.configure_memory_map(map);
+    const std::array<uint8_t, 3> image = {0x3E, 0x42, 0x76};
+    emu.load_bytes(0x0000, image);
+
+    ASSERT_EQ(emu.read_byte(0x0000), static_cast<uint8_t>(0x3E));
+    ASSERT_EQ(emu.read_byte(0x0001), static_cast<uint8_t>(0x42));
+    ASSERT_EQ(emu.read_byte(0x0002), static_cast<uint8_t>(0x76));
+
+    emu.write_byte(0x0001, 0x99);
+    ASSERT_EQ(emu.read_byte(0x0001), static_cast<uint8_t>(0x42));
+}
+
+TEST(machine_switches_selector_driven_window_via_port) {
+    xemu::machine emu;
+    std::ostringstream output;
+    const std::vector<uint8_t> program = {
+        0x3E, 0x41,       // ld a, 'A'
+        0x32, 0x00, 0x80, // ld (0x8000), a   bank 0
+        0x3E, 0x01,       // ld a, 1
+        0xD3, 0x10,       // out (0x10), a    switch to bank 1
+        0x3E, 0x42,       // ld a, 'B'
+        0x32, 0x00, 0x80, // ld (0x8000), a   bank 1
+        0xAF,             // xor a
+        0xD3, 0x10,       // out (0x10), a    switch to bank 0
+        0x3A, 0x00, 0x80, // ld a, (0x8000)
+        0xD3, 0x01,       // out (1), a
+        0x3E, 0x01,       // ld a, 1
+        0xD3, 0x10,       // out (0x10), a    switch to bank 1
+        0x3A, 0x00, 0x80, // ld a, (0x8000)
+        0xD3, 0x01,       // out (1), a
+        0x76              // halt
+    };
+
+    xemu::memory_map_config map;
+    map.stores.push_back({"low", 1, 0x8000u, true});
+    map.stores.push_back({"banked", 2, 0x4000u, true});
+    map.stores.push_back({"high", 1, 0x4000u, true});
+    map.selectors.push_back({"bank", 0});
+    map.windows.push_back({0x0000, 0x7FFF, "low", 0, std::nullopt, 0});
+    map.windows.push_back({0x8000, 0xBFFF, "banked", std::nullopt, std::string("bank"), 0});
+    map.windows.push_back({0xC000, 0xFFFF, "high", 0, std::nullopt, 0});
+    map.port_rules.push_back({0x0010, 0xFFFF, "bank", 0x00FF, 0});
+
+    emu.configure_memory_map(map);
+    emu.load_bytes(0x0000, program);
+    emu.bind_stdout(0x0001, output);
+    emu.set_pc(0x0000);
+
+    const auto stop = emu.continue_execution();
+    ASSERT_EQ(stop.reason, xemu::stop_reason::halted);
+    ASSERT_EQ(output.str(), std::string("AB"));
+    ASSERT_EQ(emu.read_byte(0x0000), static_cast<uint8_t>(0x3E));
+}
+
+TEST(machine_updates_multiple_selectors_from_one_port) {
+    xemu::machine emu;
+    std::ostringstream output;
+    const std::vector<uint8_t> program = {
+        0x01, 0xFD, 0x7F, // ld bc, 0x7ffd
+        0xAF,             // xor a
+        0xED, 0x79,       // out (c), a      low=0 top=0
+        0x3E, 0x4C,       // ld a, 'L'
+        0x32, 0x00, 0x00, // ld (0x0000), a  low bank 0
+        0x3E, 0x30,       // ld a, '0'
+        0x32, 0x00, 0xC0, // ld (0xc000), a  top bank 0
+        0x3E, 0x11,       // ld a, 0x11
+        0xED, 0x79,       // out (c), a      low=1 top=1
+        0x3E, 0x6C,       // ld a, 'l'
+        0x32, 0x00, 0x00, // ld (0x0000), a  low bank 1
+        0x3E, 0x31,       // ld a, '1'
+        0x32, 0x00, 0xC0, // ld (0xc000), a  top bank 1
+        0xAF,             // xor a
+        0xED, 0x79,       // out (c), a      low=0 top=0
+        0x3A, 0x00, 0x00, // ld a, (0x0000)
+        0xD3, 0x01,       // out (1), a
+        0x3A, 0x00, 0xC0, // ld a, (0xc000)
+        0xD3, 0x01,       // out (1), a
+        0x3E, 0x11,       // ld a, 0x11
+        0xED, 0x79,       // out (c), a      low=1 top=1
+        0x3A, 0x00, 0x00, // ld a, (0x0000)
+        0xD3, 0x01,       // out (1), a
+        0x3A, 0x00, 0xC0, // ld a, (0xc000)
+        0xD3, 0x01,       // out (1), a
+        0x76              // halt
+    };
+
+    xemu::memory_map_config map;
+    map.stores.push_back({"low", 2, 0x4000u, true});
+    map.stores.push_back({"mid", 1, 0x8000u, true});
+    map.stores.push_back({"top", 8, 0x4000u, true});
+    map.selectors.push_back({"low_bank", 0});
+    map.selectors.push_back({"top_bank", 0});
+    map.windows.push_back({0x0000, 0x3FFF, "low", std::nullopt, std::string("low_bank"), 0});
+    map.windows.push_back({0x4000, 0xBFFF, "mid", 0, std::nullopt, 0});
+    map.windows.push_back({0xC000, 0xFFFF, "top", std::nullopt, std::string("top_bank"), 0});
+    map.port_rules.push_back({0x00FD, 0x00FF, "low_bank", 0x0010, 4});
+    map.port_rules.push_back({0x00FD, 0x00FF, "top_bank", 0x0007, 0});
+
+    emu.configure_memory_map(map);
+    emu.load_bytes(0x4000, program);
+    emu.bind_stdout(0x0001, output);
+    emu.set_pc(0x4000);
+
+    const auto stop = emu.continue_execution();
+    ASSERT_EQ(stop.reason, xemu::stop_reason::halted);
+    ASSERT_EQ(output.str(), std::string("L0l1"));
+    ASSERT_EQ(emu.read_byte(0x0000), static_cast<uint8_t>('l'));
+    ASSERT_EQ(emu.read_byte(0xC000), static_cast<uint8_t>('1'));
 }
 
 TEST(machine_breakpoint_stops_before_instruction) {

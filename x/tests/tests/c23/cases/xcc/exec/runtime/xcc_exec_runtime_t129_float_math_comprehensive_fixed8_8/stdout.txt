@@ -1,7 +1,7 @@
 === Z80 C23 FLOAT + MATH.H TEST ===
 
 sizeof(float) = 2, sizeof(double) = 8
-FLT_EPSILON ≈ 1.192093e-07, DBL_EPSILON ≈ 1.192093e-07
+FLT_EPSILON ≈ 3.906250e-03, DBL_EPSILON ≈ 2.220446e-16
 
   [PASS] float literal
   [PASS] double literal

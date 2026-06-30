@@ -417,7 +417,7 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
     }
 
     if (!temp_slot_reuse_safe(fn)) {
-        if (o3_baseline_enabled()) {
+        if (opt_settings_.local_frame_compaction) {
             int dedicated_bytes = 0;
             std::unordered_map<int, std::vector<temp_interval>> region_locals;
 

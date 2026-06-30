@@ -5,6 +5,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/sdasz80_emitter.h"
+#include "frontend/types.h"
 
 namespace xcc {
 
@@ -29,12 +30,33 @@ void sdasz80_emitter::module_header() {
     out_ << "\t.module xcc_output\n\n";
 }
 
+void sdasz80_emitter::default_calling_convention(call_abi abi) {
+    switch (abi) {
+    case call_abi::SDCCCALL0:
+        out_ << "\t.optsdcc -mz80 sdcccall(0)\n\n";
+        break;
+    case call_abi::SDCCCALL1:
+        out_ << "\t.optsdcc -mz80 sdcccall(1)\n\n";
+        break;
+    default:
+        break;
+    }
+}
+
 void sdasz80_emitter::section_code() {
     out_ << "\n\t.area _CODE\n\n";
 }
 
+void sdasz80_emitter::section_code_named(const std::string &name) {
+    out_ << "\n\t.area " << name << "\n\n";
+}
+
 void sdasz80_emitter::section_data() {
     out_ << "\t.area _DATA\n";
+}
+
+void sdasz80_emitter::section_data_named(const std::string &name) {
+    out_ << "\t.area " << name << "\n";
 }
 
 void sdasz80_emitter::section_rodata() {

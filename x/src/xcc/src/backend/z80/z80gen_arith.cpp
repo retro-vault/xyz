@@ -33,14 +33,33 @@ static bool is_float32_op(const operand &op) {
            op.type->size() == 4;
 }
 
+static bool is_float16_op(const operand &op) {
+    return op.type && op.type->kind == type_kind::FLOAT &&
+           get_float_format() == float_format::IEEE16 &&
+           op.type->size() == 2;
+}
+
+static bool is_fixed_format(float_format format) {
+    switch (format) {
+    case float_format::FIXED8_8:
+    case float_format::FIXED16_16:
+    case float_format::FIXED24_8:
+        return true;
+    case float_format::IEEE16:
+    case float_format::IEEE32:
+        return false;
+    }
+    return false;
+}
+
 static bool is_fixed_float_op(const operand &op) {
     return op.type && op.type->kind == type_kind::FLOAT &&
-           get_float_format() != float_format::IEEE32;
+           is_fixed_format(get_float_format());
 }
 
 static bool is_fixed_float_type(type_ptr type) {
     return type && type->kind == type_kind::FLOAT &&
-           get_float_format() != float_format::IEEE32;
+           is_fixed_format(get_float_format());
 }
 
 static bool is_double64_op(const operand &op) {
@@ -48,7 +67,7 @@ static bool is_double64_op(const operand &op) {
 }
 
 static bool is_real_float_op(const operand &op) {
-    return is_float32_op(op) || is_double64_op(op);
+    return is_float16_op(op) || is_float32_op(op) || is_double64_op(op);
 }
 
 static const char *fixed_helper_prefix() {
@@ -56,6 +75,7 @@ static const char *fixed_helper_prefix() {
     case float_format::FIXED8_8:   return "_fixed8_8";
     case float_format::FIXED16_16: return "_fixed16_16";
     case float_format::FIXED24_8:  return "_fixed24_8";
+    case float_format::IEEE16:
     case float_format::IEEE32:
         return "";
     }
@@ -224,7 +244,64 @@ static bool is_straight_line_helper_codegen_fn(const ir_function *fn) {
     return true;
 }
 
+// ----- far (24-bit banked) pointer arithmetic ------------------------
+//
+// result(far,3) = farptr(3) +/- index(int,16).  The index is treated as
+// a signed 16-bit value sign-extended to 24 bits, so the bank byte gets
+// the carry/borrow and crossing a 64K boundary works like a flat 24-bit
+// pointer.  (The target's trampoline decides how a bank maps to memory.)
+bool z80_gen::gen_far_ptr_arith(const icode &ic, bool is_add) {
+    if (!ic.result.type || !ic.result.type->is_far_ptr())
+        return false;
+
+    // Identify the far-pointer operand (always present; the other is the
+    // integer index already scaled by the element size in the IR).
+    const operand *ptr = nullptr;
+    const operand *idx = nullptr;
+    if (ic.left.type && ic.left.type->is_far_ptr()) { ptr = &ic.left;  idx = &ic.right; }
+    else if (ic.right.type && ic.right.type->is_far_ptr()) { ptr = &ic.right; idx = &ic.left; }
+    else return false;
+
+    invalidate_a_cache();
+    invalidate_pair_cache();
+
+    // DE = index, HL = address, A = bank (push/pop to survive helper clobbers).
+    load_de(*idx);
+    load_hl_word(*ptr, 0);
+    emit_line("push\thl");
+    emit_line("push\tde");
+    load_far_bank(*ptr);
+    emit_line("pop\tde");
+    emit_line("pop\thl");
+
+    std::string nofix = fresh_local_label("__far_nofix");
+    if (is_add) {
+        emit_line("add\thl, de");     // HL = addr + index ; CF = carry
+        emit_line("adc\ta, %s", asm_.imm(0).c_str());
+        emit_line("bit\t7, d");       // index negative? -> subtract 1 (sign-extend)
+        emit_line("jr\tz, %s", nofix.c_str());
+        emit_line("dec\ta");
+    } else {
+        emit_line("or\ta, a");        // clear carry
+        emit_line("sbc\thl, de");     // HL = addr - index ; CF = borrow
+        emit_line("sbc\ta, %s", asm_.imm(0).c_str());
+        emit_line("bit\t7, d");       // index negative? subtracting it adds 1
+        emit_line("jr\tz, %s", nofix.c_str());
+        emit_line("inc\ta");
+    }
+    emit_label(nofix, false);
+
+    // Store bank (A) then address (HL) into the 3-byte far result.
+    store_far_bank(ic.result);
+    store_hl_word(ic.result, 0);
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    return true;
+}
+
 void z80_gen::gen_add(const icode &ic) {
+    if (gen_far_ptr_arith(ic, /*is_add=*/true))
+        return;
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -546,6 +623,8 @@ void z80_gen::gen_add(const icode &ic) {
 }
 
 void z80_gen::gen_sub(const icode &ic) {
+    if (gen_far_ptr_arith(ic, /*is_add=*/false))
+        return;
     auto can_load_word_into_de_without_clobber_hl =
         [this](const operand &op, int word_index) {
             if (op.kind == operand_kind::INT_CONST)
@@ -1471,17 +1550,16 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
 
     if (op_size(ic.result) == 4 && op_size(ic.left) == 4) {
         auto load_32_to_dehl = [&]() {
+            // Load the high word into DE *first*: in the deep-frame path
+            // load_de_word uses HL as an address scratch, which would clobber
+            // the low word if HL were loaded first.  load_hl_lo32 uses BC as
+            // its scratch and preserves DE, so doing it last is safe.
+            load_de_word(ic.left, 1);
             load_hl_lo32(ic.left);
-            emit_line("push\thl");
-            load_hl_hi32(ic.left);
-            emit_line("ex\tde, hl");
-            emit_line("pop\thl");
         };
         auto store_dehl_32 = [&]() {
-            emit_line("push\tde");
             store_hl_lo32(ic.result);
-            emit_line("pop\thl");
-            store_hl_hi32(ic.result);
+            store_de_word(ic.result, 1);
         };
         auto emit_zero_32 = [&]() {
             emit_line("ld\thl, %s", asm_.imm(0).c_str());
@@ -1539,11 +1617,9 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
 
         load_hl_lo32(ic.left);
         emit_line("push\thl");
-        load_hl_hi32(ic.left);
-        emit_line("push\thl");
+        load_de_word(ic.left, 1);
         load_hl(ic.right);
         emit_line("ld\tb, l");
-        emit_line("pop\tde");
         emit_line("pop\thl");
 
         std::string done_lbl = fresh_local_label("__sh32_done");
@@ -1792,6 +1868,8 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                                   const std::string &true_lbl,
                                   const std::string &false_lbl) {
     if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
+        const bool half_compare =
+            is_float16_op(ic.left) || is_float16_op(ic.right);
         auto load_operand_as_double64 = [&](const operand &op) {
             if (op.kind == operand_kind::FLOAT_CONST) {
                 if (op.type && op.type->kind == type_kind::FLOAT &&
@@ -1933,7 +2011,17 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 emit_line("jp\t%s", false_lbl.c_str());
         };
 
-        if (is_double64_op(ic.left) || is_double64_op(ic.right)) {
+        if (half_compare) {
+            asm_.global_decl("___fh2fs");
+            asm_.global_decl("___fscmp");
+            load_hl(ic.right);
+            emit_line("call\t___fh2fs");
+            emit_line("push\thl");
+            emit_line("push\tde");
+            load_hl(ic.left);
+            emit_line("call\t___fh2fs");
+            emit_line("call\t___fscmp");
+        } else if (is_double64_op(ic.left) || is_double64_op(ic.right)) {
             asm_.global_decl("___dbcmp");
             push_double_stack_arg(ic.right);
             load_operand_as_double64(ic.left);
@@ -2500,6 +2588,8 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
     };
 
     if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
+        const bool half_compare =
+            is_float16_op(ic.left) || is_float16_op(ic.right);
         auto load_operand_as_double64 = [&](const operand &op) {
             if (op.kind == operand_kind::FLOAT_CONST) {
                 if (op.type && op.type->kind == type_kind::FLOAT &&
@@ -2626,7 +2716,17 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             store_hl(ic.result);
         };
 
-        if (is_double64_op(ic.left) || is_double64_op(ic.right)) {
+        if (half_compare) {
+            asm_.global_decl("___fh2fs");
+            asm_.global_decl("___fscmp");
+            load_hl(ic.right);
+            emit_line("call\t___fh2fs");
+            emit_line("push\thl");
+            emit_line("push\tde");
+            load_hl(ic.left);
+            emit_line("call\t___fh2fs");
+            emit_line("call\t___fscmp");
+        } else if (is_double64_op(ic.left) || is_double64_op(ic.right)) {
             asm_.global_decl("___dbcmp");
             push_double_stack_arg(ic.right);
             load_operand_as_double64(ic.left);
@@ -3139,11 +3239,51 @@ void z80_gen::gen_cast(const icode &ic) {
         return;
     }
 
+    // ----- far (24-bit banked) pointer conversions -------------------
+    // A far pointer is 3 bytes (addr16 + bank).  Convert by adjusting
+    // only the bank byte; the 16-bit address is preserved.
+    {
+        const bool dst_far = ic.result.type->is_far_ptr();
+        const bool src_far = ic.left.type && ic.left.type->is_far_ptr();
+        if (dst_far && !src_far) {
+            // Widen near pointer / integer -> far: low 16 bits = source,
+            // bank = 0 (current bank is the target's concern at deref time).
+            invalidate_pair_cache();
+            load_hl(ic.left);
+            store_hl_word(ic.result, 0);
+            emit_line("xor\ta");
+            store_far_bank(ic.result);
+            return;
+        }
+        if (src_far && !dst_far) {
+            // Narrow far -> near pointer / integer: keep low 16 bits.
+            invalidate_pair_cache();
+            load_hl_word(ic.left, 0);
+            if (op_size(ic.result) == 1) {
+                emit_line("ld\ta, l");
+                store_a(ic.result);
+            } else {
+                store_hl(ic.result);
+            }
+            return;
+        }
+        if (src_far && dst_far) {
+            // far -> far: identical representation, copy all 3 bytes.
+            gen_assign(ic);
+            return;
+        }
+    }
+
+    const bool src_is_float16 = is_float16_op(ic.left);
     const bool src_is_float32 = is_float32_op(ic.left);
     const bool src_is_fixed_float = is_fixed_float_op(ic.left);
     const bool src_is_double64 = is_double64_op(ic.left);
-    const bool src_is_real_float = src_is_float32 || src_is_double64;
+    const bool src_is_real_float = src_is_float16 || src_is_float32 || src_is_double64;
     const bool src_is_llong = is_llong_op(ic.left);
+    const bool dst_is_float16 =
+        ic.result.type->kind == type_kind::FLOAT &&
+        get_float_format() == float_format::IEEE16 &&
+        ic.result.type->size() == 2;
     const bool dst_is_float32 =
         ic.result.type->kind == type_kind::FLOAT &&
         get_float_format() == float_format::IEEE32 &&
@@ -3151,7 +3291,7 @@ void z80_gen::gen_cast(const icode &ic) {
     const bool dst_is_fixed_float = is_fixed_float_type(ic.result.type);
     const bool dst_is_double64 =
         ic.result.type->kind == type_kind::DOUBLE && ic.result.type->size() == 8;
-    const bool dst_is_real_float = dst_is_float32 || dst_is_double64;
+    const bool dst_is_real_float = dst_is_float16 || dst_is_float32 || dst_is_double64;
     const bool dst_is_llong =
         ic.result.type->kind == type_kind::LLONG ||
         ic.result.type->kind == type_kind::ULLONG;
@@ -3171,30 +3311,154 @@ void z80_gen::gen_cast(const icode &ic) {
     };
 
     auto store_dehl32 = [&]() {
-        emit_line("ld\tb, h");
-        emit_line("ld\tc, l");
-        emit_line("push\tde");
-        emit_line("pop\thl");
         if (dst_sz == 1) {
-            emit_line("ld\ta, l");
+            emit_line("ld\ta, e");
             store_a(ic.result);
         } else if (dst_sz == 2) {
-            store_hl(ic.result);
+            store_de(ic.result);
         } else {
-            store_hl_lo32(ic.result);
-            emit_line("ld\th, b");
-            emit_line("ld\tl, c");
+            store_de_word(ic.result, 0);
             store_hl_hi32(ic.result);
         }
     };
 
     auto load_fixed32_dehl = [&](const operand &op) {
+        load_de_word(op, 0);
         load_hl_hi32(op);
-        emit_line("push\thl");
-        load_hl_lo32(op);
-        emit_line("ex\tde, hl");
-        emit_line("pop\thl");
     };
+
+    auto store_half_from_de = [&]() {
+        emit_line("push\tde");
+        emit_line("pop\thl");
+        store_hl(ic.result);
+    };
+
+    auto load_half_as_float32 = [&](const operand &op) {
+        asm_.global_decl("___fh2fs");
+        load_hl(op);
+        emit_line("call\t___fh2fs");
+    };
+
+    auto emit_integer_to_float32 = [&](const operand &op) {
+        if (is_llong_op(op)) {
+            asm_.global_decl(op.type && op.type->is_unsigned()
+                                 ? "___ull2db"
+                                 : "___sll2db");
+            load_reg64(op);
+            emit_line("call\t%s",
+                      op.type && op.type->is_unsigned()
+                          ? "___ull2db"
+                          : "___sll2db");
+            asm_.global_decl("___db2fs");
+            emit_line("call\t___db2fs");
+            return;
+        }
+
+        if (op_size(op) <= 2) {
+            const char *helper =
+                op.type && op.type->is_unsigned()
+                    ? "___uint2fs"
+                    : "___sint2fs";
+            asm_.global_decl(helper);
+            load_hl(op);
+            emit_line("call\t%s", helper);
+            return;
+        }
+
+        const char *helper =
+            op.type && op.type->is_unsigned()
+                ? "___ulong2fs"
+                : "___slong2fs";
+        asm_.global_decl(helper);
+        load_hl_lo32(op);
+        emit_line("push\thl");
+        load_hl_hi32(op);
+        emit_line("pop\tde");
+        emit_line("call\t%s", helper);
+    };
+
+    if (dst_is_float16 && !src_is_float16) {
+        if (ic.left.kind == operand_kind::FLOAT_CONST ||
+            ic.left.kind == operand_kind::INT_CONST) {
+            operand packed = ic.left.kind == operand_kind::FLOAT_CONST
+                ? operand::make_float(ic.left.fval, ic.result.type)
+                : operand::make_float(static_cast<double>(ic.left.ival), ic.result.type);
+            load_hl(packed);
+            store_hl(ic.result);
+            return;
+        }
+
+        if (src_is_double64) {
+            asm_.global_decl("___db2fs");
+            asm_.global_decl("___fs2fh");
+            load_reg64(ic.left);
+            emit_line("call\t___db2fs");
+            emit_line("call\t___fs2fh");
+            store_half_from_de();
+            return;
+        }
+
+        if (src_is_float32) {
+            asm_.global_decl("___fs2fh");
+            load_de_word(ic.left, 0);
+            load_hl_hi32(ic.left);
+            emit_line("call\t___fs2fh");
+            store_half_from_de();
+            return;
+        }
+
+        emit_integer_to_float32(ic.left);
+        asm_.global_decl("___fs2fh");
+        emit_line("call\t___fs2fh");
+        store_half_from_de();
+        return;
+    }
+
+    if (src_is_float16 && !dst_is_float16) {
+        if (dst_is_double64) {
+            asm_.global_decl("___fs2db");
+            load_half_as_float32(ic.left);
+            emit_line("call\t___fs2db");
+            store_reg64(ic.result);
+            return;
+        }
+
+        if (dst_is_float32) {
+            load_half_as_float32(ic.left);
+            store_dehl32();
+            return;
+        }
+
+        if (dst_is_llong) {
+            asm_.global_decl("___fs2db");
+            asm_.global_decl(ic.result.type->is_unsigned()
+                                 ? "___db2ull"
+                                 : "___db2sll");
+            load_half_as_float32(ic.left);
+            emit_line("call\t___fs2db");
+            emit_line("call\t%s",
+                      ic.result.type->is_unsigned()
+                          ? "___db2ull"
+                          : "___db2sll");
+            store_reg64(ic.result);
+            return;
+        }
+
+        {
+            const char *helper =
+                dst_sz <= 2
+                    ? (ic.result.type->is_unsigned() ? "___fs2uint" : "___fs2sint")
+                    : (ic.result.type->is_unsigned() ? "___fs2ulong" : "___fs2slong");
+            asm_.global_decl(helper);
+            load_half_as_float32(ic.left);
+            emit_line("call\t%s", helper);
+            if (dst_sz <= 2)
+                store_de_as_int(dst_sz);
+            else
+                store_dehl32();
+            return;
+        }
+    }
 
     if (dst_is_fixed_float && !src_is_fixed_float) {
         if (ic.left.kind == operand_kind::FLOAT_CONST ||
@@ -3247,10 +3511,8 @@ void z80_gen::gen_cast(const icode &ic) {
     if (dst_is_real_float) {
         if (src_is_float32 && dst_is_double64) {
             asm_.global_decl("___fs2db");
-            load_hl_lo32(ic.left);
-            emit_line("push\thl");
+            load_de_word(ic.left, 0);
             load_hl_hi32(ic.left);
-            emit_line("pop\tde");
             emit_line("call\t___fs2db");
             store_reg64(ic.result);
             return;
@@ -3486,11 +3748,15 @@ void z80_gen::gen_cast(const icode &ic) {
             if (dst_sz == 2) {
                 store_hl(ic.result);
             } else if (dst_sz == 4) {
+                // A holds the sign byte (0x00/0xFF) for the signed case; it
+                // survives store_hl_lo32 (which preserves AF), whereas H does
+                // not in the deep-frame path (HL is used as an address scratch).
                 store_hl_lo32(ic.result);
                 if (src_unsigned) {
                     emit_line("ld\thl, %s", asm_.imm(0).c_str());
                 } else {
-                    emit_line("ld\tl, h");
+                    emit_line("ld\th, a");
+                    emit_line("ld\tl, a");
                 }
                 store_hl_hi32(ic.result);
             } else {
@@ -3498,17 +3764,24 @@ void z80_gen::gen_cast(const icode &ic) {
             }
         } else if (dst_sz == 4 && src_sz == 2) {
             load_hl(ic.left);
-            store_hl_lo32(ic.result);
             if (ic.left.type && ic.left.type->is_unsigned()) {
+                store_hl_lo32(ic.result);
                 emit_line("ld\thl, %s", asm_.imm(0).c_str());
+                store_hl_hi32(ic.result);
             } else {
+                // Compute the sign byte from H *before* storing the low word.
+                // A large (deep) frame stores through HL as an address scratch,
+                // clobbering it; reading H afterwards would pick up a stack
+                // address byte and sign-extend to 0xFFFF.  store_hl_lo32
+                // preserves AF, so the sign byte in A survives it.
                 emit_line("ld\ta, h");
                 emit_line("rlca");
-                emit_line("sbc\ta, a");
+                emit_line("sbc\ta, a");          // A = 0x00 / 0xFF
+                store_hl_lo32(ic.result);
                 emit_line("ld\th, a");
                 emit_line("ld\tl, a");
+                store_hl_hi32(ic.result);
             }
-            store_hl_hi32(ic.result);
         } else {
             load_hl(ic.left);
             store_hl(ic.result);
@@ -3622,6 +3895,148 @@ void z80_gen::gen_float_arith(const icode &ic) {
                 load_fixed32_dehl(ic.left);
             emit_line("call\t%s", helper.c_str());
             store_de16();
+            return;
+        }
+        default:
+            break;
+        }
+    }
+
+    if (is_float16_op(ic.result) ||
+        is_float16_op(ic.left) ||
+        is_float16_op(ic.right)) {
+        auto push_half_as_float32 = [&](const operand &op) {
+            asm_.global_decl("___fh2fs");
+            load_hl(op);
+            emit_line("call\t___fh2fs");
+            emit_line("push\thl");
+            emit_line("push\tde");
+        };
+        auto load_half_as_float32 = [&](const operand &op) {
+            asm_.global_decl("___fh2fs");
+            load_hl(op);
+            emit_line("call\t___fh2fs");
+        };
+        auto store_half_result = [&]() {
+            asm_.global_decl("___fs2fh");
+            emit_line("call\t___fs2fh");
+            emit_line("push\tde");
+            emit_line("pop\thl");
+            store_hl(ic.result);
+        };
+        auto store_de_as_int = [&](int size) {
+            emit_line("push\tde");
+            emit_line("pop\thl");
+            if (size == 1) {
+                emit_line("ld\ta, l");
+                store_a(ic.result);
+            } else {
+                store_hl(ic.result);
+            }
+        };
+        auto store_dehl32 = [&]() {
+            if (op_size(ic.result) == 1) {
+                emit_line("ld\ta, e");
+                store_a(ic.result);
+            } else if (op_size(ic.result) == 2) {
+                store_de(ic.result);
+            } else {
+                store_de_word(ic.result, 0);
+                store_hl_hi32(ic.result);
+            }
+        };
+        auto emit_integer_to_float32 = [&](const operand &op) {
+            if (is_llong_op(op)) {
+                asm_.global_decl(op.type && op.type->is_unsigned()
+                                     ? "___ull2db"
+                                     : "___sll2db");
+                load_reg64(op);
+                emit_line("call\t%s",
+                          op.type && op.type->is_unsigned()
+                              ? "___ull2db"
+                              : "___sll2db");
+                asm_.global_decl("___db2fs");
+                emit_line("call\t___db2fs");
+                return;
+            }
+            if (op_size(op) <= 2) {
+                const char *helper =
+                    op.type && op.type->is_unsigned()
+                        ? "___uint2fs"
+                        : "___sint2fs";
+                asm_.global_decl(helper);
+                load_hl(op);
+                emit_line("call\t%s", helper);
+                return;
+            }
+            const char *helper =
+                op.type && op.type->is_unsigned()
+                    ? "___ulong2fs"
+                    : "___slong2fs";
+            asm_.global_decl(helper);
+            load_hl_lo32(op);
+            emit_line("push\thl");
+            load_hl_hi32(op);
+            emit_line("pop\tde");
+            emit_line("call\t%s", helper);
+        };
+
+        switch (ic.op) {
+        case icode_op::FADD:
+        case icode_op::FSUB:
+        case icode_op::FMUL:
+        case icode_op::FDIV: {
+            const char *helper = "__fsadd";
+            switch (ic.op) {
+            case icode_op::FADD: helper = "__fsadd"; break;
+            case icode_op::FSUB: helper = "__fssub"; break;
+            case icode_op::FMUL: helper = "__fsmul"; break;
+            case icode_op::FDIV: helper = "__fsdiv"; break;
+            default: break;
+            }
+            asm_.global_decl(helper);
+            push_half_as_float32(ic.right);
+            load_half_as_float32(ic.left);
+            emit_line("call\t%s", helper);
+            emit_line("pop\tbc");
+            emit_line("pop\tbc");
+            store_half_result();
+            return;
+        }
+        case icode_op::FITOSF:
+            emit_integer_to_float32(ic.left);
+            store_half_result();
+            return;
+        case icode_op::FSTOI: {
+            load_half_as_float32(ic.left);
+            if (is_llong_op(ic.result)) {
+                asm_.global_decl("___fs2db");
+                asm_.global_decl(ic.result.type && ic.result.type->is_unsigned()
+                                     ? "___db2ull"
+                                     : "___db2sll");
+                emit_line("call\t___fs2db");
+                emit_line("call\t%s",
+                          ic.result.type && ic.result.type->is_unsigned()
+                              ? "___db2ull"
+                              : "___db2sll");
+                store_reg64(ic.result);
+                return;
+            }
+
+            const char *helper =
+                op_size(ic.result) <= 2
+                    ? ((ic.result.type && ic.result.type->is_unsigned())
+                           ? "___fs2uint"
+                           : "___fs2sint")
+                    : ((ic.result.type && ic.result.type->is_unsigned())
+                           ? "___fs2ulong"
+                           : "___fs2slong");
+            asm_.global_decl(helper);
+            emit_line("call\t%s", helper);
+            if (op_size(ic.result) <= 2)
+                store_de_as_int(op_size(ic.result));
+            else
+                store_dehl32();
             return;
         }
         default:

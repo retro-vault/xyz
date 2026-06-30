@@ -4,7 +4,7 @@ DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
-CXXFLAGS ?= -std=c++23 -g
+CXXFLAGS ?= -std=c++20 -g
 XZ80_DIR ?= $(ROOT)/lib/xz80
 XZ80_INCLUDE = -I$(XZ80_DIR)/include
 XZ80_LIB = $(PUBLIC_LIB_DIR)/libxz80.a

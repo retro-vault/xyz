@@ -15,11 +15,15 @@ NUMERIC_ROOT="$BENCH_ROOT/numeric"
 BARE_INCLUDE_DIR="$BARE_ROOT/include"
 NUMERIC_INCLUDE_DIR="$NUMERIC_ROOT/include"
 EXPECTED_CSV="$BARE_ROOT/expected.csv"
-CRT0_S="$TEST_ROOT/tests/xcc/tools/z80emu/crt0_sdasz80.s"
+CRT0_S="$TEST_ROOT/tests/c23/xcc/tools/z80emu/crt0_sdasz80.s"
 NUMERIC_CRT0="$NUMERIC_ROOT/crt0.s"
 IHX2BIN="$TEST_ROOT/tests/runtime/tools/ihx2bin.py"
 RUNNER_BIN="$REPO_ROOT/build/bin/z80_exec"
-DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
+if [[ -x "$REPO_ROOT/bin/x/bin/xcc" ]]; then
+    DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
+else
+    DEFAULT_XCC="$REPO_ROOT/x/bin/x/bin/xcc"
+fi
 
 XCC="$DEFAULT_XCC"
 OUTDIR="$REPO_ROOT/build/x/benchmarks"
@@ -87,7 +91,7 @@ run_xcc() {
 
 ensure_runner() {
     local runner_dir
-    local runner_src="$TEST_ROOT/tests/xcc/tools/z80emu/z80_exec.cpp"
+    local runner_src="$TEST_ROOT/tests/c23/xcc/tools/z80emu/z80_exec.cpp"
 
     if [[ -x "$RUNNER_BIN" && "$RUNNER_BIN" -nt "$runner_src" ]]; then
         return

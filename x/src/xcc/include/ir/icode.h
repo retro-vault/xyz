@@ -273,10 +273,12 @@ struct icode {
 struct ir_function {
     std::string         name;
     bool                is_global  = true;
+    bool                discard_if_unused = false;
     std::vector<icode>  icodes;
     type_ptr            ret_type;
     int                 local_bytes = 0;
     int                 num_params  = 0;
+    int                 bank        = -1; // [[xcc::bank(N)]] section placement (-1 = default code)
 
     // Calling-convention variant from [[sdcc::...]] attributes
     call_abi            abi              = call_abi::DEFAULT;
@@ -307,6 +309,7 @@ struct ir_module {
         bool    is_static  = false; // static linkage: do not emit .globl
         int64_t at_address = -1;   // [[sdcc::at(N)]]: emit as absolute symbol (not in _DATA)
         int     sfr_port   = -1;   // [[sdcc::sfr(N)]]: no data emitted, reads/writes use IN/OUT
+        int     bank       = -1;   // [[xcc::bank(N)]]: place object in banked data section
 
         // Each entry is (value, byte_size), or label if non-empty for pointer
         // initializers such as static char *v[] = {"x"}.

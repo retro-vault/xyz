@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <string>
 #include <span>
 #include <vector>
@@ -17,6 +18,51 @@
 #include <xz80/cpu_state.h>
 
 namespace xemu {
+
+struct memory_store_config {
+    std::string name;
+    uint16_t bank_count = 1;
+    uint32_t bank_size = 0x10000;
+    bool writable = true;
+};
+
+struct memory_selector_config {
+    std::string name;
+    uint16_t initial_value = 0;
+};
+
+struct memory_window_config {
+    uint16_t start = 0x0000;
+    uint16_t end = 0xFFFF;
+    std::string store;
+    std::optional<uint16_t> fixed_bank;
+    std::optional<std::string> selector;
+    uint32_t bank_offset = 0;
+};
+
+struct memory_port_rule_config {
+    uint16_t port = 0;
+    uint16_t port_mask = 0xFFFF;
+    std::string selector;
+    uint16_t mask = 0x00FF;
+    uint8_t shift = 0;
+};
+
+struct memory_map_config {
+    std::vector<memory_store_config> stores;
+    std::vector<memory_selector_config> selectors;
+    std::vector<memory_window_config> windows;
+    std::vector<memory_port_rule_config> port_rules;
+};
+
+struct banked_memory_config {
+    static constexpr uint8_t page_count = 4;
+    static constexpr uint16_t page_size = 0x4000;
+
+    std::vector<uint8_t> shared_pages;
+    std::vector<uint8_t> banked_pages;
+    uint16_t bank_count = 0;
+};
 
 struct register_image {
     uint16_t af = 0;
@@ -66,7 +112,15 @@ public:
     void clear_memory(uint8_t fill = 0x00) noexcept;
 
     void load_binary(const std::filesystem::path& path, uint16_t origin);
+    void load_ihx(const std::filesystem::path& path);
     void load_bytes(uint16_t origin, std::span<const uint8_t> bytes) noexcept;
+
+    void configure_memory_map(const memory_map_config& config);
+    void configure_banked_memory(const banked_memory_config& config);
+    void bind_bank_port(uint16_t port) noexcept;
+    void clear_bank_port() noexcept;
+    void set_active_bank(uint16_t bank) noexcept;
+    uint16_t active_bank() const noexcept;
 
     std::vector<uint8_t> read_memory(uint32_t address, std::size_t length) const;
     uint8_t read_byte(uint16_t address) const noexcept;
@@ -144,6 +198,7 @@ public:
     std::vector<uint8_t> read_memory(uint32_t address, std::size_t length);
     void write_memory(uint32_t address, std::span<const uint8_t> data);
     void load_binary(const std::filesystem::path& path, uint16_t origin);
+    void load_ihx(const std::filesystem::path& path);
 
     rsp::stop_reply continue_execution();
     rsp::stop_reply step_instruction();

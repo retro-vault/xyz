@@ -12,19 +12,28 @@ ships a matching standard library in hand-tuned Z80 assembly.
 
 This document is a programmer's guide. Each section is meant to stand on its
 own — read the one that matches what you are trying to do. **§1–§24** cover
-toolchain mechanics; **§25 onward** cover C23 language and library features.
-**§34** is the complete `[[attribute]]` catalogue with generated-assembly
-examples.
+toolchain mechanics; **§25–§42** cover C23 language and library features;
+**§43 onward** cover advanced emulator, SDK, optimization, and integration
+features. **§34–§42** are the `[[attribute]]` catalogue split into smaller
+daily-sized feature entries with generated-assembly examples.
 
-## Table Of Contents
+---
 
-| Start here | Best entry point |
+<div class="article-toc">
+
+<p class="article-toc__title">Contents</p>
+
+<p class="article-toc__part">Compiler Fundamentals</p>
+
+| Section | What it covers |
 |---|---|
 | [§1. Standard C23](#1-standard-c23) | Build normal C23 programs with the full `xcc` → `xas` → `xld` pipeline. |
 | [§2. Predefined Compiler Symbols](#2-predefined-compiler-symbols) | See the `__XCC__`, `__STDC_VERSION__`, integer model, and float-format macros. |
 | [§3. Compiler Pragmas](#3-compiler-pragmas) | Use `#pragma once` and GNU-style diagnostic control. |
 
-| Toolchain Mechanics | What it covers |
+<p class="article-toc__part">Objects, Linking And Debug</p>
+
+| Section | What it covers |
 |---|---|
 | [§4. One Toolchain, Two Object Worlds](#4-one-toolchain-two-object-worlds) | SDCC `.rel` / `.lib` and GNU ELF / `.a` modes in one suite. |
 | [§5. Assembly Dialect Translation](#5-assembly-dialect-translation) | Convert SDCC-style assembly to GNU style, and back again. |
@@ -34,16 +43,20 @@ examples.
 | [§9. Reserved Address Ranges In The Linker](#9-reserved-address-ranges-in-the-linker) | Keep memory holes, MMIO, ROM, stacks, and firmware areas out of allocations. |
 | [§10. Multiple Final Image Formats](#10-multiple-final-image-formats) | Emit XL, raw binary, ELF, Intel HEX, and other deployment formats. |
 
-| Optimization, Runtime, And Platforms | What it covers |
+<p class="article-toc__part">Optimization, Runtime, And Platforms</p>
+
+| Section | What it covers |
 |---|---|
 | [§11. Standalone Z80 Optimizer](#11-standalone-z80-optimizer) | Run `xopt` independently on one or many assembly files. |
 | [§12. Experimental Whole-Module Optimization](#12-experimental-whole-module-optimization) | `-O3` dragon country: cross-function and aggressive Z80 rewrites. |
 | [§13. Selectable Float Representation](#13-selectable-float-representation) | Choose IEEE `float` or fixed 8.8, 16.16, and 24.8 formats. |
-| [§14. 64-Bit Integer And Double Runtime Support](#14-64-bit-integer-and-double-runtime-support) | `long long`, software `double`, and tiny libc feature switches. |
+| [§14. 64-Bit Integer And Double Runtime Support](#14-64-bit-integer-and-double-runtime-support) | `long long`, software `double`, and S/M/L libc feature switches. |
 | [§15. Retargetable Platform Model](#15-retargetable-platform-model) | Add new boards, ROMs, CP/M-like targets, or bare-metal platforms. |
 | [§16. Self-Contained Relocatable Installation](#16-self-contained-relocatable-installation) | Install once; tools find headers, libraries, and support files by prefix. |
 
-| Build, Link, And Distribution | What it covers |
+<p class="article-toc__part">Build, Link, And Distribution</p>
+
+| Section | What it covers |
 |---|---|
 | [§17. GNU-Style Driver Behavior](#17-gnu-style-driver-behavior) | Familiar GCC-style switches for build systems and muscle memory. |
 | [§18. Classic CMake And Make Integration](#18-classic-cmake-and-make-integration) | Use the X Compiler Suite from ordinary Makefiles and CMake projects. |
@@ -54,7 +67,9 @@ examples.
 | [§23. Useful Bare-Metal Defaults](#23-useful-bare-metal-defaults) | Sensible defaults for tiny systems and freestanding builds. |
 | [§24. One Suite For The Whole Pipeline](#24-one-suite-for-the-whole-pipeline) | Compile, optimize, assemble, link, and debug with one coherent toolset. |
 
-| C23 Language And Library | What it covers |
+<p class="article-toc__part">C23 Language And Library</p>
+
+| Section | What it covers |
 |---|---|
 | [§25. C23 Language Support In The Compiler](#25-c23-language-support-in-the-compiler) | Modern C syntax, attributes, `_BitInt`, `nullptr`, `typeof`, and more. |
 | [§26. C23 Standard Library In Hand-Written Assembler](#26-c23-standard-library-in-hand-written-assembler) | Small Z80-native libc surface with C23 headers. |
@@ -65,9 +80,30 @@ examples.
 | [§31. Register Calling Conventions](#31-register-calling-conventions) | SDCC-compatible register ABI and stack ABI interop. |
 | [§32. `_Complex` Numbers And Inline Assembly](#32-_complex-numbers-and-inline-assembly) | Complex arithmetic plus inline Z80 assembly. |
 | [§33. Aggressive Compile-Time Evaluation](#33-aggressive-compile-time-evaluation--o2-and-up) | Constant folding and function evaluation at `-O2` and above. |
-| [§34. `[[attributes]]` Full Reference](#34-attributes--full-reference-with-generated-code) | Standard C23, `sdcc::`, and `z88dk::` attributes with generated assembly. |
+| [§34. `[[attributes]]` Overview And Standard C23 Attributes](#34-attributes-overview-and-standard-c23-attributes) | Syntax, unknown-attribute behavior, and standard C23 attributes such as `[[noreturn]]`. |
+| [§35. `[[sdcc::sdcccall(n)]]` ABI Selection](#35-sdccsdcccalln-abi-selection) | Pick stack or register ABI explicitly for one function. |
+| [§36. `[[sdcc::naked]]`, `[[sdcc::interrupt]]`, And `[[sdcc::critical]]`](#36-sdccnaked-sdccinterrupt-and-sdcccritical) | Raw entry stubs, full ISRs, and interrupt-masked functions. |
+| [§37. `[[sdcc::at(addr)]]` Absolute Variables](#37-sdccataddr-absolute-variables) | Bind a C object name to a fixed memory address. |
+| [§38. `[[sdcc::sfr(port)]]` Port-Mapped Variables](#38-sdccsfrport-port-mapped-variables) | Map C reads and writes onto Z80 `in` / `out`. |
+| [§39. `[[xcc::far]]` 24-Bit Pointers](#39-xccfar-24-bit-pointers) | Banked pointers with 16-bit address plus 8-bit bank byte. |
+| [§40. `[[xcc::bank(n)]]` Banked Code And Data Placement](#40-xccbankn-banked-code-and-data-placement) | Put functions and static-storage objects into `_CODE_BANK_n` / `_DATA_BANK_n`. |
+| [§41. `[[z88dk::…]]` Alternate Call Conventions](#41-z88dk-alternate-call-conventions) | z88dk-compatible fastcall and callee-cleanup interop. |
+| [§42. Attribute Rules And Interactions](#42-attribute-rules-and-interactions) | Variadics, imported ABIs, atomics, and other cross-attribute rules. |
 
----
+<p class="article-toc__part">Advanced Tooling And Integration</p>
+
+| Section | What it covers |
+|---|---|
+| [§43. Bank-Switched Memory Emulation](#43-bank-switched-memory-emulation) | `xemu` stores/selectors/windows/port-rules for paged memory and far pointers. |
+| [§44. Headless Emulator And Console Port Binding](#44-headless-emulator-and-console-port-binding) | Run binaries directly, wire Z80 ports to host I/O, or expose `xemu` as an RSP target. |
+| [§45. Embeddable Host SDK Libraries](#45-embeddable-host-sdk-libraries) | Reuse `libxemu`, `libxgdb`, `libxopt`, `libxz80`, `librsp`, and `libxbfd` in your own tools. |
+| [§46. Fine-Grained Optimization Switches](#46-fine-grained-optimization-switches) | Override individual optimizer passes with `-f...` and `-fno-...`. |
+| [§47. GNU Compatibility Extras](#47-gnu-compatibility-extras) | Statement expressions, `typeof_unqual`, GNU builtins, and compatibility parsing. |
+| [§48. GCC-Style Warning Surface](#48-gcc-style-warning-surface) | Command-line warning control that matches the pragma groups in `xcc`. |
+
+</div>
+
+# Compiler Fundamentals
 
 ## 1. Standard C23
 
@@ -151,6 +187,7 @@ Floating-point format macros:
 | `fixed8_8` | `__XCC_FLOAT_FORMAT_FIXED8_8=1`, `__XCC_FLOAT_FORMAT__=1`, `__XCC_FLOAT_SIZE__=2`, `__XCC_FLOAT_FRACTION_BITS__=8` |
 | `fixed16_16` | `__XCC_FLOAT_FORMAT_FIXED16_16=1`, `__XCC_FLOAT_FORMAT__=2`, `__XCC_FLOAT_SIZE__=4`, `__XCC_FLOAT_FRACTION_BITS__=16` |
 | `fixed24_8` | `__XCC_FLOAT_FORMAT_FIXED24_8=1`, `__XCC_FLOAT_FORMAT__=3`, `__XCC_FLOAT_SIZE__=4`, `__XCC_FLOAT_FRACTION_BITS__=8` |
+| `ieee16` | `__XCC_FLOAT_FORMAT_IEEE16=1`, `__XCC_FLOAT_FORMAT__=4`, `__XCC_FLOAT_SIZE__=2`, `__XCC_FLOAT_FRACTION_BITS__=0` |
 
 ```
 #include <math.h>
@@ -280,7 +317,9 @@ yet execute the pragma payload.
 
 ---
 
-### 4. One Toolchain, Two Object Worlds
+# Objects, Linking And Debug
+
+## 4. One Toolchain, Two Object Worlds
 
 **What:** One install speaks both SDCC/ASxxxx and GNU object formats.
 
@@ -312,7 +351,7 @@ to cross over.
 
 ---
 
-### 5. Assembly Dialect Translation
+## 5. Assembly Dialect Translation
 
 **What:** `xas --format=` converts assembly *source* between SDCC and GNU syntax
 without assembling. Parsed once into a common form, then printed in the other
@@ -414,7 +453,7 @@ to produce an object file.
 
 ---
 
-### 6. Dual Debug Model
+## 6. Dual Debug Model
 
 **What:** Source-level debug info in either SDCC style (CDB) or GNU style
 (DWARF inside ELF).
@@ -448,7 +487,7 @@ address looks wrong.
 
 ---
 
-### 7. Integrated Z80 Debugger
+## 7. Integrated Z80 Debugger
 
 **What:** `xgdb` (GDB-style front end) + `xemu` (standalone Z80 emulator
 speaking GDB remote protocol over TCP).
@@ -488,7 +527,7 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 
 ---
 
-### 8. Relocatable XL Output
+## 8. Relocatable XL Output
 
 **What:** XL is the default executable format — a loadable Z80 program with a
 header and relocation table.
@@ -516,7 +555,7 @@ xld -Ttext=0x4000 main.rel -o app.xl   # remains relocatable
 
 ---
 
-### 9. Reserved Address Ranges In The Linker
+## 9. Reserved Address Ranges In The Linker
 
 **What:** Mark address holes the linker must not place sections into.
 
@@ -546,7 +585,7 @@ guardrails for automatic layout.
 
 ---
 
-### 10. Multiple Final Image Formats
+## 10. Multiple Final Image Formats
 
 **What:** One linker, four common output containers.
 
@@ -572,7 +611,9 @@ script). XL does not.
 
 ---
 
-### 11. Standalone Z80 Optimizer
+# Optimization, Runtime, And Platforms
+
+## 11. Standalone Z80 Optimizer
 
 **What:** `xopt` — the same optimizer `xcc` uses internally, runnable on `.s`
 files directly.
@@ -602,7 +643,7 @@ xas main.opt.s -o main.rel
 
 ---
 
-### 12. Experimental Whole-Module Optimization
+## 12. Experimental Whole-Module Optimization
 
 **What:** `-O3` in `xcc` and `xopt` — aggressive, cross-function optimization.
 
@@ -628,7 +669,7 @@ xas combined.s -o app.rel
 
 ---
 
-### 13. Selectable Float Representation
+## 13. Selectable Float Representation
 
 **What:** Choose how the C `float` type is implemented at compile time — IEEE
 software float or fixed-point — without changing your source style.
@@ -675,7 +716,7 @@ must agree on the `float` ABI.
 
 ---
 
-### 14. 64-Bit Integer And Double Runtime Support
+## 14. 64-Bit Integer And Double Runtime Support
 
 **What:** `long long` and `double` on a 16-bit-target toolchain.
 
@@ -699,37 +740,44 @@ double seconds_since_boot(void) {
 xcc time.c -o time.xl
 ```
 
-#### Tiny libc profiles and feature switches
+#### S model and libc feature switches
 
 **What:** Build a smaller libc by omitting memory-hungry formatting and
 conversion paths for `float`, `double`, `long`, and `long long`.
 
-**When:** You are targeting tiny ROM/RAM machines and know your program does
+**When:** You are targeting small ROM/RAM machines and know your program does
 not need wide numeric support in libc. This is especially useful for making
 `printf`, `scanf`, `strto*`, and related helper surfaces much smaller.
 
 **How it works:** These are **toolchain/library build switches**, not source
-language switches. Rebuild or stage libc with a profile, then normal `xcc`
+language switches. Rebuild or stage libc with an `X_MODEL`, then normal `xcc`
 links against the smaller staged `libc.a`. The root makefile exports matching
 feature macros (`__XCC_LIBC_NO_FLOAT`, `__XCC_LIBC_NO_DOUBLE`,
-`__XCC_LIBC_NO_LONG`, `__XCC_LIBC_NO_LONGLONG`) so C and assembly sources can
-compile out the heavy code paths.
+`__XCC_LIBC_NO_LONG`, `__XCC_LIBC_NO_LONGLONG`, and
+`__XCC_LIBC_NO_STDIO_FLOAT`) so C and assembly sources can compile out the
+heavy code paths.
 
 | Build switch | Effect |
 |---|---|
-| `LIBC_PROFILE=full` | Default: keep all libc numeric features |
-| `LIBC_PROFILE=tiny` | Disable all four heavy families |
+| `X_MODEL=S` | No `float`, `double`, `long`, `long long`, or stdio float conversions |
+| `X_MODEL=M` | Keep `float` and `long`, drop `double`, `long long`, and stdio float conversions |
+| `X_MODEL=L` | Full model: keep `float`, `double`, `long`, `long long`, and stdio float conversions |
 | `LIBC_FLOAT=0` | Omit libc `float` formatting/conversion paths |
 | `LIBC_DOUBLE=0` | Omit libc `double` formatting/conversion paths |
 | `LIBC_LONG=0` | Omit libc `long` formatting/conversion paths |
 | `LIBC_LONGLONG=0` | Omit libc `long long` formatting/conversion paths |
+| `LIBC_STDIO_FLOAT=0` | Keep `printf`/`scanf` integer-only even when `float` stays enabled elsewhere |
 
 ```
-# Smallest libc: no float, double, long, or long long support in libc helpers
+# Smallest libc: the S model
 make clean
-LIBC_PROFILE=tiny make libc stage-xcc-support
+X_MODEL=S make libc stage-xcc-support
 
-# Selective profile: keep long, drop float/double/long long
+# Middle libc: keep float and long, but keep stdio integer-only
+make clean
+X_MODEL=M make libc stage-xcc-support
+
+# Selective custom build: keep long, drop float/double/long long
 make clean
 LIBC_FLOAT=0 LIBC_DOUBLE=0 LIBC_LONG=1 LIBC_LONGLONG=0 \
     make libc stage-xcc-support
@@ -739,7 +787,7 @@ Program source stays normal; unsupported heavy format/conversion cases are
 compiled out of the library you staged:
 
 ```
-/* Tiny-profile friendly: no float/double/long-long formatting needed. */
+/* S-model friendly: no float/double/long-long formatting needed. */
 #include <stdio.h>
 
 int main(void) {
@@ -752,12 +800,12 @@ int main(void) {
 xcc --platform=cpm3 -Os hello.c -o hello.com
 ```
 
-**Rule:** `LIBC_PROFILE=tiny` is shorthand for setting all four individual
-switches to `0`. Use individual switches when you want a custom middle ground.
+**Rule:** `X_MODEL=S` is now the canonical small-library switch. Use the
+individual `LIBC_*` toggles when you want a custom middle ground.
 
 ---
 
-### 15. Retargetable Platform Model
+## 15. Retargetable Platform Model
 
 **What:** `--platform=<name>` selects startup code, linker script, and the
 platform library that implements libc's machine hooks. Platform definitions are
@@ -837,7 +885,7 @@ xcc main.c --platform=myboard -o app.xl
 
 ---
 
-### 16. Self-Contained Relocatable Installation
+## 16. Self-Contained Relocatable Installation
 
 **What:** Copy the install prefix anywhere; tools still find headers and
 libraries.
@@ -866,7 +914,9 @@ share/doc/     tool manuals
 
 ---
 
-### 17. GNU-Style Driver Behavior
+# Build, Link, And Distribution
+
+## 17. GNU-Style Driver Behavior
 
 **What:** `xcc` and `xld` accept GCC/GNU ld switches you already know.
 
@@ -899,7 +949,7 @@ xcc -Iinclude -DNDEBUG main.c util.s \
 
 ---
 
-### 18. Classic CMake And Make Integration
+## 18. Classic CMake And Make Integration
 
 **What:** Point `CC` at `xcc`; no bespoke compiler wrapper.
 
@@ -924,7 +974,7 @@ app.xl: main.c util.c
 
 ---
 
-### 19. Object And Archive Conversion
+## 19. Object And Archive Conversion
 
 **What:** `xobjcopy` translates objects and libraries between SDCC and GNU
 formats.
@@ -944,7 +994,7 @@ preserved, but the two modes still need matching calling conventions.
 
 ---
 
-### 20. Archive Compatibility
+## 20. Archive Compatibility
 
 **What:** `xar` builds static libraries in either SDCC `.lib` or GNU `.a` form.
 
@@ -962,7 +1012,7 @@ GNU `.a` with GNU link.
 
 ---
 
-### 21. Linker-Script Compatibility
+## 21. Linker-Script Compatibility
 
 **What:** Describe memory layout in a script instead of many CLI flags.
 
@@ -1008,7 +1058,7 @@ defaults when both are present.
 
 ---
 
-### 22. Automatic Runtime And Library Discovery
+## 22. Automatic Runtime And Library Discovery
 
 **What:** `xcc` / `xld` link a complete program from one `.c` file with no
 manual `-l` list.
@@ -1037,7 +1087,7 @@ xld --no-default-runtime main.rel -o main.xl   # skip prefix probe only
 
 ---
 
-### 23. Useful Bare-Metal Defaults
+## 23. Useful Bare-Metal Defaults
 
 **What:** Omitting `--platform` is the same as `--platform=none`.
 
@@ -1061,7 +1111,7 @@ xcc main.c --platform=none -o app.xl
 
 ---
 
-### 24. One Suite For The Whole Pipeline
+## 24. One Suite For The Whole Pipeline
 
 **What:** Compile → assemble → optimize → link → debug without format mismatches.
 
@@ -1099,14 +1149,14 @@ formats, and platform layout — that is the point of the suite.
 
 ---
 
-## C23 Language and Library
+# C23 Language And Library
 
 The sections below cover C23 language support, a full libc surface in
 assembler, atomics, register calling conventions, and related library features.
 
 ---
 
-### 25. C23 Language Support In The Compiler
+## 25. C23 Language Support In The Compiler
 
 **What:** `xcc` implements a broad slice of ISO C23 across the frontend,
 preprocessor, and codegen.
@@ -1128,7 +1178,7 @@ dedicated cases for each feature below. A separate conformance matrix lives in
 | Preprocessor | `#elifdef` / `#elifndef`, `#warning`, `__VA_OPT__`, `__has_include`, `__has_c_attribute` |
 | Initialization | Empty `{}` init, designated initializers, compound literals with storage class |
 | Enums | Typed enums (`enum e : unsigned char`) |
-| Attributes | Standard C23 `[[noreturn]]`, `[[deprecated]]`, … plus Z80-specific `[[sdcc::…]]` and `[[z88dk::…]]` — full list in §34 |
+| Attributes | Standard C23 `[[noreturn]]`, `[[deprecated]]`, … plus Z80-specific `[[sdcc::…]]` and `[[z88dk::…]]` — full list in §34–§42 |
 | Other | `_Generic`, `_Static_assert`, `_Complex` arithmetic (lowered by compiler), `__asm__` inline asm, `unreachable()` |
 
 ```
@@ -1162,7 +1212,7 @@ until implemented.
 
 ---
 
-### 26. C23 Standard Library In Hand-Written Assembler
+## 26. C23 Standard Library In Hand-Written Assembler
 
 **What:** `x/libc/` is a C23 standard library implemented in Z80 assembly.
 
@@ -1222,7 +1272,7 @@ roots, rounding, min/max, `fromfp*`, and fixed-point paths are the mature parts.
 
 ---
 
-### 27. Atomics On Z80 (`<stdatomic.h>`)
+## 27. Atomics On Z80 (`<stdatomic.h>`)
 
 **What:** C23 `_Atomic` types and `atomic_*` operations with runtime helpers.
 
@@ -1260,11 +1310,11 @@ void main_loop(void) {
 ```
 
 **Rule:** Atomics serialize against interrupts, not against a second CPU. For
-IRQ masking around a plain C function body, see `[[sdcc::critical]]` in §34.
+IRQ masking around a plain C function body, see `[[sdcc::critical]]` in §36.
 
 ---
 
-### 28. `stdbit.h` And `stdckdint.h`
+## 28. `stdbit.h` And `stdckdint.h`
 
 **What:** C23 bit-counting/scanning macros and checked integer arithmetic.
 
@@ -1296,7 +1346,7 @@ helpers.
 
 ---
 
-### 29. UTF-8 `char8_t` And The Unicode Layer
+## 29. UTF-8 `char8_t` And The Unicode Layer
 
 **What:** C23 `char8_t` plus the full `uchar.h` / `wchar.h` conversion APIs.
 
@@ -1322,7 +1372,7 @@ void put_utf8_char(char8_t c8) {
 
 ---
 
-### 30. C23 Math And IEC 60559 Extras
+## 30. C23 Math And IEC 60559 Extras
 
 **What:** Modern `<math.h>` beyond `sin`/`cos` — IEC 60559 manipulation functions,
 payload/ordering helpers, and float formatting round-trip support.
@@ -1362,11 +1412,11 @@ void report(float x) {
 
 ---
 
-### 31. Register Calling Conventions
+## 31. Register Calling Conventions
 
 **What:** Multiple Z80 calling conventions in one compiler, selectable per
-function via `[[sdcc::sdcccall(N)]]` or `[[z88dk::…]]` (see §34 for prologue/
-epilogue codegen).
+function via `[[sdcc::sdcccall(N)]]` or `[[z88dk::…]]` (see §35–§41 for
+prologue and epilogue codegen).
 
 **When:** You want register-based argument passing for speed, or you are
 linking objects that use a specific calling convention.
@@ -1404,7 +1454,7 @@ import tests (`t080`–`t084` in the compiler suite) verify REL, ELF, `.lib`, an
 
 ---
 
-### 32. `_Complex` Numbers And Inline Assembly
+## 32. `_Complex` Numbers And Inline Assembly
 
 **What:** C complex types with compiler-lowered arithmetic plus libc accessors.
 
@@ -1437,7 +1487,7 @@ void delay(void) {
 
 ---
 
-### 33. Aggressive Compile-Time Evaluation (`-O2` And Up)
+## 33. Aggressive Compile-Time Evaluation (`-O2` And Up)
 
 **What:** The compiler evaluates pure constant expressions and constant call
 chains at compile time, not only for simple literals.
@@ -1472,14 +1522,14 @@ evaluation without the experimental lane.
 
 ---
 
-### 34. `[[attributes]]` — Full Reference With Generated Code
+## 34. `[[attributes]]` Overview And Standard C23 Attributes
 
 **What:** C23 `[[attribute]]` syntax plus Z80-specific `[[sdcc::…]]` and
 `[[z88dk::…]]` namespaces. Attributes change codegen, memory placement, or
 diagnostics — they are not just hints.
 
-**When:** ISRs, port-mapped I/O, absolute RAM mirrors, fast register calls, or
-standard C23 deprecation / nodiscard warnings.
+**When:** ISRs, port-mapped I/O, absolute RAM mirrors, banked sections, fast
+register calls, or standard C23 deprecation / nodiscard warnings.
 
 **Syntax:** `[[ns::name]]`, `[[ns::name(arg)]]`, or several in sequence:
 `[[noreturn]] [[sdcc::naked]]`. Unknown standard attributes warn and are
@@ -1492,7 +1542,7 @@ Inspect what the compiler actually emits:
 xcc -S app.c -o app.s    # read the assembly comments and instructions
 ```
 
-#### Standard C23 attributes (no namespace)
+Standard C23 attributes (no namespace):
 
 | Attribute | Applies to | Effect |
 |---|---|---|
@@ -1523,14 +1573,50 @@ __halt_forever_end:
     ; epilogue omitted: halt_forever is [[noreturn]]
 ```
 
-#### `[[sdcc::…]]` — functions (calling convention and CPU mode)
+---
 
-These set the function ABI. Only one ABI attribute per function.
+## 35. `[[sdcc::sdcccall(n)]]` ABI Selection
+
+**What:** These attributes choose the function ABI explicitly. Use them when
+one declaration must opt into stack ABI or the fast SDCC-style register ABI.
+
+**Rules:** Only one ABI attribute per function. Variadic functions must use
+`[[sdcc::sdccall(0)]]`.
+
+| Attribute | Argument passing | Return / epilogue | Use for |
+|---|---|---|---|
+| `[[sdcc::sdccall(0)]]` | Stack ABI with normal IX frame | `ret` | Variadic functions (`printf`), explicit stack interop |
+| `[[sdcc::sdcccall(1)]]` | First args in **L / BC / DE**, then stack | `ret`; 16-bit result in **DE** | Fast libc / platform hooks |
+
+Example:
+
+```
+[[sdcc::sdccall(0)]] int stack_add(int a, int b);
+[[sdcc::sdcccall(1)]] int fast_add(int a, int b);
+```
+
+Generated assembly shows the chosen calling convention in the prologue comments:
+
+```
+_stack_add:
+    ; sdcccall(0) prologue: stack_add
+    ; receive (sdcccall(0)) param a at 4(ix)
+
+_fast_add:
+    ; sdcccall(1) prologue: fast_add
+```
+
+See §31 for the bigger calling-convention overview; this section is the
+per-function override switch.
+
+---
+
+## 36. `[[sdcc::naked]]`, `[[sdcc::interrupt]]`, And `[[sdcc::critical]]`
+
+These set CPU-entry / exit behavior rather than ordinary parameter passing.
 
 | Attribute | Prologue | Body / epilogue | Use for |
 |---|---|---|---|
-| `[[sdcc::sdcccall(0)]]` | Normal IX frame | `ret` | Variadic functions (`printf`), explicit stack ABI |
-| `[[sdcc::sdcccall(1)]]` | IX frame; args in **L/BC/DE** | `ret`; 16-bit result in **DE** | Default for fast libc/platform hooks |
 | `[[sdcc::naked]]` | **Label only** — no `push ix`, no frame | **Nothing** — you supply all insns | Raw ISR stub, context switch, `halt` |
 | `[[sdcc::interrupt]]` | `push af/bc/de/hl/iy` + IX frame | `reti` after full restore | Maskable interrupt service routines |
 | `[[sdcc::critical]]` | **`di`** then IX frame | **`ei`** then `ret` | Short critical sections (not the same as `stdatomic`) |
@@ -1619,15 +1705,12 @@ Combine with `[[noreturn]]` on naked shutdown paths:
 }
 ```
 
-#### `[[sdcc::…]]` — variables (memory and I/O ports)
+---
 
-| Attribute | Storage | Read in C | Write in C |
-|---|---|---|---|
-| `[[sdcc::at(ADDR)]]` | **No `.data` entry** — symbol = fixed address | `ld hl, (_sym)` / load via `(sym)` | `ld (sym), …` |
-| `[[sdcc::sfr(PORT)]]` | **No RAM** — symbol = port number | Compile-time selected `in` | Compile-time selected `out` |
+## 37. `[[sdcc::at(addr)]]` Absolute Variables
 
-`[[sdcc::at(0x4000)]]` — variable pinned to a machine address (shared RAM,
-firmware mailbox, video buffer):
+**What:** Bind a C object name to a fixed machine address without allocating
+space in `_DATA`.
 
 ```
 [[sdcc::at(0x4000)]] int mapped_var;
@@ -1648,9 +1731,16 @@ _get:
 The linker does not reserve bytes in `_DATA`; the symbol is an absolute
 address alias. You are responsible for that memory being valid RAM or MMIO.
 
-`[[sdcc::sfr(0x3F)]]` — C variable names a **Z80 I/O port** (not a memory cell).
-The port number is known at compile time, so `xcc` chooses the cheapest correct
-Z80 instruction form:
+Use this for shared RAM windows, firmware mailboxes, memory-mapped device
+registers, or fixed screen buffers.
+
+---
+
+## 38. `[[sdcc::sfr(port)]]` Port-Mapped Variables
+
+**What:** Map a C variable name onto a Z80 I/O port instead of a RAM cell.
+
+`[[sdcc::sfr(0x3F)]]` — port number fits in the immediate `in` / `out` form:
 
 ```
 [[sdcc::sfr(0x3F)]] unsigned char PORT_A;
@@ -1713,7 +1803,103 @@ _get_wide:
 - Taking the address of an SFR variable gives you the port constant, not a
   memory pointer.
 
-#### `[[z88dk::…]]` — alternate fastcall conventions
+---
+
+## 39. `[[xcc::far]]` 24-Bit Pointers
+
+A `[[xcc::far]]` attribute placed **after the `*`** makes a pointer 24 bits
+wide instead of 16: the low 16 bits are the address, the high 8 bits are a
+**bank** selector. This is the standards-conforming attribute slot (C23
+§6.7.6.1 puts an `attribute-specifier-sequence` right after the `*`, where it
+appertains to the pointer — exactly like `const` in `char * const p`).
+
+```
+char * [[xcc::far]] p;                       // far pointer to char (3 bytes)
+char * [[xcc::far]] * [[xcc::far]] pp;       // far pointer to far pointer
+```
+
+Only the C23 attribute spelling `[[xcc::far]]` is accepted for far pointers.
+
+Placing the attribute *before* the `*` (`char [[xcc::far]] *p`) is diagnosed:
+there it would appertain to the pointee type, not the pointer, so it does **not**
+make a far pointer.
+
+| Aspect | Behavior |
+|---|---|
+| `sizeof` | **3 bytes** (`addr16` + `bank`) vs 2 for a near pointer |
+| Dereference | Routed through the per-target trampoline `__far_getb` / `__far_putb` (in `C` = bank, `HL` = address) |
+| Arithmetic | Full **24-bit** add/sub: carrying/borrowing into the bank byte, so `p+n`, `p[i]`, `p++`, `p-n` behave like a flat pointer |
+| `near → far` cast | Zero-extends: bank byte = 0 |
+| `far → near` cast | Truncates to the low 16 bits |
+| Return-by-value / args | Returned in `HL` (address) + `E` (bank); passed as 3 stack bytes |
+
+A far pointer is a **distinct type** from a near pointer: assigning one to the
+other requires a cast, and it has its own runtime, its own arithmetic, and its
+own ABI footprint.
+
+**Runtime trampoline.** Every far access calls a target hook:
+
+```
+__far_getb : in  C = bank, HL = address          -> out A = byte
+__far_putb : in  C = bank, HL = address, A = byte -> stores the byte
+```
+
+Both **must preserve `BC`, `DE`, `HL`** (only `A`/flags change) so the compiler
+can keep the pointer live across consecutive byte accesses. The default
+implementations shipped for the `none` and `cpm3` targets ignore the bank and do
+a plain `(hl)` access — so on an unbanked target a far pointer behaves exactly
+like a near one. A banked target overrides `__far_getb` / `__far_putb` (linking
+its own module ahead of the runtime library) to program the paging hardware from
+the bank byte.
+
+**Current limitations:** far−far pointer difference and far/far relational
+comparisons compare only the low 16 bits (bank ignored); a full 24-bit
+`memcpy`/`strcpy` family (`_fmemcpy`, …) and `intptr_t` widening to hold a far
+pointer are not yet provided.
+
+---
+
+## 40. `[[xcc::bank(n)]]` Banked Code And Data Placement
+
+A `[[xcc::bank(n)]]` attribute placed **before a function or variable declaration**
+selects a numbered code/data bank `0..255`:
+
+```
+[[xcc::bank(3)]] int draw_sprite(void);
+[[xcc::bank(7)]] unsigned char tile_cache[256];
+
+void owner(void) {
+    [[xcc::bank(5)]] static unsigned char scratch[32];
+}
+```
+
+Only the C23 attribute spelling `[[xcc::bank(n)]]` is accepted for banked
+placement.
+
+`xcc` lowers this as a **placement attribute**:
+
+- functions go to `_CODE_BANK_n`
+- variables with static storage duration go to `_DATA_BANK_n`
+- unannotated declarations continue to use the default `_CODE` / `_DATA`
+
+This means the linker can order/place banked areas explicitly, and targets with
+custom bank loaders can keep bank membership visible in object files.
+
+**Rules:**
+
+- `n` must be an integer in the range **`0..255`**
+- applies to **functions** and **objects with static storage duration**
+  (globals and `static` locals)
+- rejected for automatic locals, `_Thread_local`, `[[sdcc::at(...)]]`, and
+  `[[sdcc::sfr(...)]]`
+
+**Current limitation:** this does **not yet** make calls automatically
+cross-bank. `xcc` still emits ordinary near calls; `[[xcc::bank(n)]]` currently
+controls section placement, not `__sdcc_banked_call` lowering.
+
+---
+
+## 41. `[[z88dk::…]]` Alternate Call Conventions
 
 | Attribute | Argument passing | Callee cleanup |
 |---|---|---|
@@ -1729,7 +1915,9 @@ Use when linking external objects that expect these register layouts:
 
 Caller of `z88_fast_inc` places the first `int` in **DE** before `call`.
 
-#### Rules and interactions
+---
+
+## 42. Attribute Rules And Interactions
 
 | Rule | Detail |
 |---|---|
@@ -1740,6 +1928,278 @@ Caller of `z88_fast_inc` places the first `int` in **DE** before `call`.
 | `[[sdcc::naked]]` + locals | Frame is not set up — locals still work only if you add your own SP/IX setup |
 | Memory-order atomics | Use `<stdatomic.h>` (§27) for `_Atomic` variables; `[[sdcc::critical]]` only masks IRQs for the function body |
 
-Port-mapped I/O, absolute addresses, interrupt handlers, and critical sections
-use standard C23 `[[sdcc::…]]` spelling. The codegen is visible in `xcc -S`
-output with labelled prologue/epilogue comments.
+Port-mapped I/O, absolute addresses, interrupt handlers, critical sections,
+banked placement, and far pointers all use C23 `[[...]]` attribute syntax
+instead of GNU-style `__attribute__((...))`.
+The codegen is visible in `xcc -S` output with labelled prologue and epilogue
+comments.
+
+---
+
+# Advanced Tooling And Integration
+
+## 43. Bank-Switched Memory Emulation
+
+**What:** `libxemu` can model flat RAM/ROM and selector/window-based banked
+memory for paged machines, including port-driven bank selection. This is the
+same emulator core used by the standalone `xemu` tool and by emulator-driven
+tests.
+
+**When:** Use it when a target swaps 16K/8K windows, overlays ROM and RAM,
+routes far-pointer access through bank selectors, or needs paging behavior that
+is difficult to validate on real hardware every time.
+
+**How it works:** Build a `memory_map_config` from named **stores**,
+**selectors**, **windows**, and **port rules**, then install it with
+`machine::configure_memory_map()`. For the older fixed four-page model there
+are still compatibility helpers: `configure_banked_memory()` and
+`bind_bank_port()`.
+
+| Building block | Meaning |
+|---|---|
+| `memory_store_config` | Backing storage object, bank count, bank size, and writability |
+| `memory_selector_config` | Active bank register or latch |
+| `memory_window_config` | CPU-visible address range mapped into one store |
+| `memory_port_rule_config` | `out` side effect that updates a selector, with optional port masking |
+
+```cpp
+#include <xemu/xemu.h>
+
+xemu::machine m;
+xemu::memory_map_config map;
+
+map.stores.push_back({"rom",   1, 0x10000, false});
+map.stores.push_back({"banks", 8, 0x4000,  true});
+map.selectors.push_back({"page", 0});
+
+map.windows.push_back({0x0000, 0x3fff, "rom",   0, std::nullopt, 0});
+map.windows.push_back({0x4000, 0x7fff, "banks", std::nullopt, std::string("page"), 0});
+map.port_rules.push_back({0x7ffd, 0xffff, "page", 0x07, 0});
+
+m.configure_memory_map(map);
+```
+
+This lets host-side tests exercise the same sort of paging that a real machine
+would trigger via port writes, while still keeping breakpoints, run control,
+and memory inspection available.
+
+**Rule:** Use `configure_memory_map()` for arbitrary hardware. Keep
+`configure_banked_memory()` and `bind_bank_port()` for quick compatibility with
+the classic fixed 4x16K page-switching model.
+
+---
+
+## 44. Headless Emulator And Console Port Binding
+
+**What:** `xemu` is not only a remote debugger target. It can also execute a
+binary directly in headless mode and bind Z80 ports to host stdin/stdout.
+
+**When:** Use this for CI smoke tests, golden-output execution tests, quick
+bring-up of console-style programs, or any workflow where launching a debugger
+would be unnecessary overhead.
+
+**How it works:** `--listen` starts `xemu` as an RSP server for `xgdb`;
+`--run` executes immediately. The CLI can bind one input port and one output
+port, while the library also supports split status/data console input and a
+`bind_emu_stdio()` helper for the default `platform=emu` console ABI.
+
+| Mode | Typical use |
+|---|---|
+| `xemu --listen HOST:PORT` | Source-level debugging with `xgdb` or another RSP client |
+| `xemu --run` | Headless execution for tests and quick manual checks |
+| `--stdin-port` / `--stdout-port` | Simple console ABI on one input port and one output port |
+| `bind_emu_stdio()` | Default split-console ABI: stdin status `0x00e2`, stdin data `0x00e3`, stdout `0x00e1` |
+
+```bash
+# Headless execution with simple port I/O
+xemu --run --load-bin app.bin --origin 0x0100 --pc 0x0100 \
+     --stdin-port 0 --stdout-port 1
+
+# Debugger-target mode
+xemu --listen 127.0.0.1:9000 --load-bin app.bin --origin 0x0100 --pc 0x0100
+```
+
+```cpp
+xemu::machine m;
+m.load_binary("app.bin", 0x0100);
+m.set_pc(0x0100);
+m.bind_emu_stdio(std::cin, std::cout);
+auto stop = m.continue_execution(200000);
+```
+
+`--max-steps` is useful when a program should either finish or prove that it is
+stuck within a predictable instruction budget.
+
+**Rule:** For `platform=emu`, prefer the split-console ABI via
+`bind_emu_stdio()` or ports `0x00e2` / `0x00e3` in and `0x00e1` out. Use plain
+`--stdin-port` / `--stdout-port` only for simpler custom harnesses.
+
+---
+
+## 45. Embeddable Host SDK Libraries
+
+**What:** The suite is also a host-side SDK. Its major internal engines are
+shipped as reusable libraries with staged public headers, not just hidden
+implementation details inside command-line tools.
+
+**When:** Use these libraries when building your own debugger front end, ROM
+inspector, object-file converter, emulator-driven test harness, or Z80 assembly
+analysis tool on top of the X toolchain.
+
+**How it works:** Host libraries stage into `<prefix>/include` and
+`<prefix>/lib`, while the target C SDK stages separately into
+`<prefix>/z80/include` and `<prefix>/z80/lib`.
+
+| Library | Purpose |
+|---|---|
+| `libxemu` | In-process emulator, banked-memory helpers, breakpoint/run control, and RSP target adapter |
+| `libxgdb` | Debugger-side symbol/source/disassembly model |
+| `librsp` | GDB Remote Serial Protocol transport |
+| `libxopt` | Shared Z80 optimization and analysis engine |
+| `libxz80` | CPU core and disassembly support |
+| `libxbfd` | Object, archive, binary, and debug-info reader/writer support |
+
+Typical host-side integration:
+
+```bash
+c++ host_tool.cpp -I"$PREFIX/include" -L"$PREFIX/lib" \
+   -lxemu -lxz80 -lrsp -o host_tool
+```
+
+Target-side C code still uses the separate cross SDK:
+
+```bash
+xcc app.c -o app.xl
+# target headers from <prefix>/z80/include, target libs from <prefix>/z80/lib
+```
+
+**Rule:** Host SDK headers live in `include/`. Target program headers live in
+`z80/include`. Treat them as two layers of the install tree, not one merged API
+surface.
+
+---
+
+## 46. Fine-Grained Optimization Switches
+
+**What:** `xcc` exposes named `-f...` and `-fno-...` toggles for individual
+optimizer families, on top of the usual `-O0` / `-O1` / `-O2` / `-O3` /
+`-Of` / `-Os` presets.
+
+**When:** Use them to bisect regressions, pin one proven pass in CI, compare
+generated code under controlled conditions, or build a project-specific tuning
+profile without treating `-O3` as a black box.
+
+**How it works:** An `-O` preset seeds the optimizer settings, then each
+`-f...` or `-fno-...` override flips one named pass on or off.
+
+| Area | Example switches |
+|---|---|
+| Late assembly | `peephole` |
+| Module-level IR | `const-arg-prop`, `const-call-eval`, `function-const-eval`, `merge-identical-functions`, `inline-static-functions` |
+| Function IR | `scalar-local-promotion`, `reg-param-promotion`, `narrow-counted-byte-loops`, `loop-pointer-walk`, `duplicate-block-merge`, `merge-tails`, `local-frame-compaction` |
+| Backend | `regalloc`, `compare-ifx-fusion`, `frame-omit`, `prealloc-temp-frame`, `switch-jump-tables` |
+
+```bash
+# Keep -O2, but turn off two backend choices
+xcc -O2 -fno-regalloc -fno-frame-omit main.c -o main.xl
+
+# Size profile with one explicit enable and one explicit disable
+xcc -Os -fconst-call-eval -fno-inline-static-functions app.c -o app.xl
+
+# Probe O3-only shape-changing passes individually
+xcc -O3 -fno-duplicate-block-merge -fno-merge-tails hot.c -o hot.xl
+```
+
+This is especially useful when a benchmark win is clear but you want to prove
+which pass earned it, or when one transformation is good for a hot loop but
+undesirable in the rest of a firmware image.
+
+**Rule:** Start from `-O2` or `-Os` and override a few named passes. Building a
+production profile from dozens of hand-picked flags at `-O0` is best treated as
+an experiment, not a stable default.
+
+---
+
+## 47. GNU Compatibility Extras
+
+**What:** Beyond core ISO C23, the frontend accepts several GNU-compatibility
+constructs that make imported headers and macro-heavy codebases much easier to
+port.
+
+**When:** Use these when bringing over GCC-oriented utility headers, local
+macro frameworks, or compatibility shims that assume GNU C spelling.
+
+**How it works:** The parser supports GNU statement expressions `({ ... })`,
+`typeof` / `typeof_unqual`, `__builtin_types_compatible_p`, and
+`__builtin_bit_cast`. It also accepts `__extension__` as a no-op suppressor and
+parses declarator `__attribute__((...))` for compatibility even when the real
+effect should be spelled with C23 `[[...]]`.
+
+| Feature | Use |
+|---|---|
+| `({ ... })` | Statement expressions for macro helpers that return a value |
+| `typeof` / `typeof_unqual` | Derive types from expressions or strip qualifiers in portability code |
+| `__builtin_types_compatible_p(T1, T2)` | Compile-time type dispatch and assertions |
+| `__builtin_bit_cast(T, expr)` | Explicit same-size bit reinterpretation spellings |
+| `__extension__` | Accepted as a compatibility prefix, ignored semantically |
+| `__attribute__((...))` | Parsed on declarators for compatibility; use `[[...]]` for xcc-specific behavior |
+
+```c
+#define MAX_T(a, b) \
+    ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a : _b; })
+
+_Static_assert(
+    __builtin_types_compatible_p(typeof_unqual((const int)0), int),
+    "expected unqualified int");
+```
+
+These features are particularly handy when importing code that was written to
+straddle GCC, Clang, and SDCC-style environments without maintaining a special
+`#ifdef XCC` fork.
+
+**Rule:** Use GNU extras mainly in portability shims and macro infrastructure.
+For ordinary application code, clean ISO C23 remains the best default surface.
+
+---
+
+## 48. GCC-Style Warning Surface
+
+**What:** The command-line warning model follows familiar GCC spelling and
+matches the warning-group names used by the pragma interface.
+
+**When:** Use it when tightening CI, temporarily downgrading one noisy imported
+warning, or promoting a specific correctness class such as ABI mismatches to an
+error.
+
+**How it works:** `xcc` supports whole-profile controls (`-Wall`, `-Wextra`,
+`-Wpedantic`, `-Werror`, `-w`, `-W0`..`-W3`) plus per-group overrides
+(`-Wname`, `-Wno-name`, `-Werror=name`, `-Wno-error=name`).
+
+| Switch | Meaning |
+|---|---|
+| `-Wall` | Re-enable the full default warning surface |
+| `-Wextra` | Add extra project checks such as `old-style-definition`, `abi`, `constexpr-not-constant`, and `bitint-width` |
+| `-Wpedantic` | Enable pedantic language-surface checks such as `c23-extensions` |
+| `-Werror` / `-Wno-error` | Promote or un-promote all warnings globally |
+| `-Werror=name` | Promote one warning group only |
+| `-Wno-name` | Disable one warning group without muting the rest |
+| `-w` | Disable all warnings |
+
+```bash
+# Make ABI mismatches fatal, keep the rest as warnings
+xcc -Wextra -Werror=abi main.c -o main.xl
+
+# Silence just deprecation warnings while importing old APIs
+xcc -Wno-deprecated-declarations compat.c -o compat.xl
+
+# Strict CI lane
+xcc -Wpedantic -Werror -c lib.c
+```
+
+The group names match the pragma controls from §3, so a warning you disable in
+one file with `#pragma GCC diagnostic ignored "-Wattributes"` is the same group
+you can enable globally with `-Wattributes`.
+
+**Rule:** Prefer disabling one named group over `-w`, and prefer
+`-Werror=<group>` over blanket `-Werror` when imported third-party code is still
+being cleaned up.

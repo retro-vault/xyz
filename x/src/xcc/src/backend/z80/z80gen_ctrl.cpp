@@ -34,6 +34,27 @@ void z80_gen::gen_label(const icode &ic) {
 }
 
 void z80_gen::gen_goto(const icode &ic) {
+    bool local_target = ic.label_name == fn_end_lbl_;
+    if (!local_target && cur_fn_) {
+        for (const auto &fn_ic : cur_fn_->icodes) {
+            if (fn_ic.op == icode_op::LABEL && fn_ic.label_name == ic.label_name) {
+                local_target = true;
+                break;
+            }
+        }
+    }
+
+    const bool tail_jumps_to_external_symbol =
+        cur_fn_ &&
+        !local_target &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size() &&
+        cur_fn_->icodes[cur_ic_index_ + 1].op == icode_op::ENDFUNCTION;
+
+    if (tail_jumps_to_external_symbol) {
+        asm_.global_decl(ic.label_name);
+        emit_line("call\t%s", ic.label_name.c_str());
+        return;
+    }
     emit_line("jp\t%s", ic.label_name.c_str());
 }
 

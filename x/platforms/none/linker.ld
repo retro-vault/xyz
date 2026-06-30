@@ -9,7 +9,6 @@
 
 ENTRY(_entry)
 OUTPUT_FORMAT(binary)
-BINARY_RANGE(0x0000-0xFFFF)
 
 SECTIONS {
   .text 0x0000 : { *(.text) }

@@ -194,7 +194,7 @@ private:
     decl_ptr parse_function_definition(
         type_ptr ret, std::string name, storage_class sc,
         std::vector<std::unique_ptr<param_decl>> params,
-        bool variadic, source_loc loc, attr_list attrs = {},
+        bool variadic, bool is_inline, source_loc loc, attr_list attrs = {},
         call_abi abi = call_abi::DEFAULT);
     std::vector<decl_ptr> parse_declaration(
         bool allow_function_def = false);
@@ -259,6 +259,13 @@ private:
     // without consuming anything.
     //
     attr_list parse_attr_list();
+
+    //
+    // Reject one legacy z88dk/SDCC calling-convention keyword spelling
+    // such as __z88dk_callee or __z88dk_fastcall with a fix-it style
+    // diagnostic that points to the C23 [[...]] attribute form.
+    //
+    bool reject_legacy_callconv_keyword();
 
     //
     // Apply ABI-bearing attributes such as [[sdcc::sdccall(N)]] to the

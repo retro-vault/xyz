@@ -370,6 +370,7 @@ void ir_gen::visit(var_decl &vd) {
         gv.is_static  = (vd.sym->storage == storage_class::STATIC);
         gv.at_address = vd.sym->at_address;
         gv.sfr_port   = vd.sym->sfr_port;
+        gv.bank       = vd.sym->bank;
         if (vd.init) {
             if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
                 str && is_char_array_type(vd.type)) {
@@ -440,10 +441,14 @@ void ir_gen::gen_func(func_decl &fd) {
     ir_function fn;
     fn.name             = fd.name;
     fn.is_global        = (fd.storage != storage_class::STATIC);
+    fn.discard_if_unused =
+        fd.is_inline && fd.storage != storage_class::STATIC &&
+        fd.storage != storage_class::EXTERN;
     fn.ret_type         = fd.type ? fd.type->ret : type::make_void();
     fn.local_bytes      = fd.local_bytes;
     fn.orig_local_bytes = fd.local_bytes;
     fn.num_params       = static_cast<int>(fd.params.size());
+    fn.bank             = fd.sym ? fd.sym->bank : -1;
     fn.abi              = fd.sym ? fd.sym->abi : call_abi::DEFAULT;
     fn.is_noreturn      = fd.sym ? fd.sym->attr_noreturn : false;
 
@@ -462,14 +467,35 @@ void ir_gen::gen_func(func_decl &fd) {
         if (!p || !p->sym) continue;
 
         abi_arg_loc loc = param_locs[i];
-        if (loc == abi_arg_loc::STACK) {
-            p->sym->stack_offset = stack_bytes;
-            p->sym->is_param     = true;
-            stack_bytes += conv.stack_arg_bytes(p->type, loc);
-        } else {
+        if (loc != abi_arg_loc::STACK) {
             spill_bytes += conv.spill_bytes(p->type, loc);
             p->sym->stack_offset = -(fd.local_bytes + spill_bytes);
             p->sym->is_param     = false;
+        }
+    }
+
+    std::vector<int> stack_param_indices;
+    stack_param_indices.reserve(fd.params.size());
+    for (int i = 0; i < static_cast<int>(fd.params.size()); ++i) {
+        if (param_locs[i] == abi_arg_loc::STACK)
+            stack_param_indices.push_back(i);
+    }
+
+    if (conv.caller_sends_right_to_left()) {
+        for (int idx : stack_param_indices) {
+            auto &p = fd.params[idx];
+            if (!p || !p->sym) continue;
+            p->sym->stack_offset = stack_bytes;
+            p->sym->is_param     = true;
+            stack_bytes += conv.stack_arg_bytes(p->type, param_locs[idx]);
+        }
+    } else {
+        for (auto it = stack_param_indices.rbegin(); it != stack_param_indices.rend(); ++it) {
+            auto &p = fd.params[*it];
+            if (!p || !p->sym) continue;
+            p->sym->stack_offset = stack_bytes;
+            p->sym->is_param     = true;
+            stack_bytes += conv.stack_arg_bytes(p->type, param_locs[*it]);
         }
     }
 

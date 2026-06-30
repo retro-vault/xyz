@@ -65,7 +65,8 @@ static bool attrs_specify_call_abi(const attr_list &attrs) {
             return true;
         }
         if (a.ns == "z88dk" &&
-            (a.name == "fastcall" || a.name == "callee")) {
+            (a.name == "stdc" || a.name == "smallc" ||
+             a.name == "fastcall" || a.name == "callee")) {
             return true;
         }
     }
@@ -77,6 +78,7 @@ static const char *call_abi_name(call_abi abi) {
     case call_abi::DEFAULT:         return "default";
     case call_abi::SDCCCALL0:       return "sdcccall(0)";
     case call_abi::SDCCCALL1:       return "sdcccall(1)";
+    case call_abi::Z88DK_SMALLC:    return "z88dk::smallc";
     case call_abi::Z88DK_FASTCALL:  return "z88dk::fastcall";
     case call_abi::Z88DK_CALLEE:    return "z88dk::callee";
     case call_abi::NAKED:           return "sdcc::naked";
@@ -91,6 +93,34 @@ static bool variadic_abi_must_be_stack(call_abi abi) {
 }
 
 void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
+    bool saw_bank_attr = false;
+    source_loc bank_loc = loc;
+    std::string bank_name = "bank";
+
+    auto apply_bank_attr = [&](const attr &a) {
+        saw_bank_attr = true;
+        bank_loc = a.loc;
+        bank_name = a.ns.empty() ? "bank" : (a.ns + "::bank");
+        if (a.args.size() != 1) {
+            diag_.error(a.loc, "[[%s]] requires a single integer argument",
+                        bank_name.c_str());
+        } else {
+            try {
+                unsigned long long bank = std::stoull(a.args[0], nullptr, 0);
+                if (bank > 255ull) {
+                    diag_.error(a.loc,
+                                "[[%s(%s)]]: bank number must be in range 0..255",
+                                bank_name.c_str(), a.args[0].c_str());
+                } else {
+                    sym.bank = (int)bank;
+                }
+            } catch (...) {
+                diag_.error(a.loc, "[[%s]]: invalid bank '%s'",
+                            bank_name.c_str(), a.args[0].c_str());
+            }
+        }
+    };
+
     for (auto &a : attrs) {
         // ----- standard C23 attributes (no namespace) ----------------
         if (a.ns.empty()) {
@@ -110,6 +140,11 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
                 sym.attr_unsequenced = true;
             } else if (a.name == "reproducible") {
                 sym.attr_reproducible = true;
+            } else if (a.name == "bank") {
+                diag_.error(a.loc,
+                            "[[bank]] is not supported; use [[xcc::bank(n)]]");
+            } else if (a.name == "far") {
+                // Far appertainment and spelling are diagnosed while parsing.
             } else {
                 diag_.warning(warning_group::ATTRIBUTES, a.loc,
                               "unknown standard attribute '[[%s]]' ignored",
@@ -161,15 +196,33 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
                                     a.args[0].c_str());
                     }
                 }
+            } else if (a.name == "far") {
+                // Far appertainment and spelling are diagnosed while parsing.
             } else {
                 diag_.warning(warning_group::ATTRIBUTES, a.loc,
                               "unknown sdcc attribute '[[sdcc::%s]]' ignored",
                               a.name.c_str());
             }
         }
+        // ----- xcc vendor attributes (namespace xcc) -----------------
+        else if (a.ns == "xcc") {
+            if (a.name == "bank") {
+                apply_bank_attr(a);
+            } else if (a.name == "far") {
+                // Pointer appertainment is handled while parsing declarators.
+            } else {
+                diag_.warning(warning_group::ATTRIBUTES, a.loc,
+                              "unknown xcc attribute '[[xcc::%s]]' ignored",
+                              a.name.c_str());
+            }
+        }
         // ----- z88dk vendor attributes (namespace z88dk) ------------
         else if (a.ns == "z88dk") {
-            if (a.name == "fastcall") {
+            if (a.name == "stdc") {
+                sym.abi = call_abi::SDCCCALL0;
+            } else if (a.name == "smallc") {
+                sym.abi = call_abi::Z88DK_SMALLC;
+            } else if (a.name == "fastcall") {
                 sym.abi = call_abi::Z88DK_FASTCALL;
             } else if (a.name == "callee") {
                 sym.abi = call_abi::Z88DK_CALLEE;
@@ -184,6 +237,31 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
             // Unknown namespace — silently ignore per C23 rules.
             (void)loc;
         }
+    }
+
+    if (!saw_bank_attr)
+        return;
+
+    if (sym.kind != sym_kind::FUNC &&
+        !(sym.kind == sym_kind::VAR && sym.is_global)) {
+        diag_.error(bank_loc,
+                    "[[%s]] applies only to functions and objects with static storage duration",
+                    bank_name.c_str());
+    }
+
+    if (sym.is_tls) {
+        diag_.error(bank_loc, "[[%s]] cannot be combined with _Thread_local",
+                    bank_name.c_str());
+    }
+
+    if (sym.at_address >= 0) {
+        diag_.error(bank_loc, "[[%s]] cannot be combined with [[sdcc::at]]",
+                    bank_name.c_str());
+    }
+
+    if (sym.sfr_port >= 0) {
+        diag_.error(bank_loc, "[[%s]] cannot be combined with [[sdcc::sfr]]",
+                    bank_name.c_str());
     }
 }
 
@@ -237,6 +315,35 @@ static void sync_nested_function_type_abi(type_ptr t, call_abi abi) {
     }
     if ((t->kind == type_kind::POINTER || t->kind == type_kind::ARRAY) && t->base)
         sync_nested_function_type_abi(t->base, abi);
+}
+
+static call_abi resolve_default_function_abi(const type_ptr &fn_type,
+                                             call_abi default_call_abi) {
+    if (fn_type && fn_type->is_func() && fn_type->variadic)
+        return call_abi::SDCCCALL0;
+    return default_call_abi;
+}
+
+static void resolve_default_call_abi_in_type(type_ptr t,
+                                             call_abi default_call_abi) {
+    if (!t)
+        return;
+
+    switch (t->kind) {
+    case type_kind::FUNCTION:
+        if (t->func_abi == call_abi::DEFAULT)
+            t->func_abi = resolve_default_function_abi(t, default_call_abi);
+        resolve_default_call_abi_in_type(t->ret, default_call_abi);
+        for (auto &param : t->params)
+            resolve_default_call_abi_in_type(param, default_call_abi);
+        return;
+    case type_kind::POINTER:
+    case type_kind::ARRAY:
+        resolve_default_call_abi_in_type(t->base, default_call_abi);
+        return;
+    default:
+        return;
+    }
 }
 
 static void sync_function_symbol_abi_from_type(func_decl &d) {
@@ -504,6 +611,9 @@ void sema::visit(case_stmt &s) {
 void sema::visit(var_decl &d) {
     if (d.sym && !d.attrs.empty())
         apply_attrs(*d.sym, d.attrs, d.loc);
+    resolve_default_call_abi_in_type(d.type, default_call_abi_);
+    if (d.sym)
+        resolve_default_call_abi_in_type(d.sym->type, default_call_abi_);
     if (d.init) d.init->accept(*this);
     // constexpr requires a constant initializer.
     if (d.sym && d.sym->type && d.sym->type->is_const && d.init) {
@@ -523,20 +633,24 @@ void sema::visit(func_decl &d) {
     if (d.sym) {
         sync_nested_function_type_abi(d.type, d.sym->abi);
         sync_nested_function_type_abi(d.sym->type, d.sym->abi);
-    }
-    if (d.sym && d.sym->abi == call_abi::Z88DK_FASTCALL) {
-        if (d.params.size() != 1) {
-            diag_.error(d.loc, "[[z88dk::fastcall]] requires exactly one parameter");
-        } else {
-            type_ptr param_type = d.params.front() ? d.params.front()->type : nullptr;
-            int sz = param_type ? param_type->size() : 0;
-            if (!(sz == 1 || sz == 2 || sz == 4)) {
-                diag_.error(d.loc,
-                            "[[z88dk::fastcall]] requires an 8-, 16-, or 32-bit parameter");
-            }
-        }
+        resolve_default_call_abi_in_type(d.type, default_call_abi_);
+        resolve_default_call_abi_in_type(d.sym->type, default_call_abi_);
+        if (d.sym->abi == call_abi::DEFAULT && d.type && d.type->is_func())
+            d.sym->abi = d.type->func_abi;
+        sync_nested_function_type_abi(d.type, d.sym->abi);
+        sync_nested_function_type_abi(d.sym->type, d.sym->abi);
     }
     if (d.body) d.body->accept(*this);
+}
+
+void sema::visit(param_decl &d) {
+    resolve_default_call_abi_in_type(d.type, default_call_abi_);
+    if (d.sym)
+        resolve_default_call_abi_in_type(d.sym->type, default_call_abi_);
+}
+
+void sema::visit(typedef_decl &d) {
+    resolve_default_call_abi_in_type(d.type, default_call_abi_);
 }
 
 // ----- entry point ---------------------------------------------------

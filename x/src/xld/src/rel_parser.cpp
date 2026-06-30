@@ -34,7 +34,9 @@ namespace xld {
                 || name == "_GSINIT"
                 || name == "_GSFINAL"
                 || name == "_DABS"
-                || name == "_CABS";
+                || name == "_CABS"
+                || name.rfind("_DATA_BANK_", 0) == 0
+                || name.rfind(".data.bank.", 0) == 0;
         }
 
         static bool is_code_like_symbol_name(

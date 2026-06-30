@@ -155,6 +155,11 @@ decl_spec parser::parse_declaration_specifiers() {
             continue;
         }
 
+        // Legacy z88dk/SDCC calling-convention keywords are rejected in
+        // favor of the C23 [[...]] attribute spellings.
+        if (reject_legacy_callconv_keyword())
+            continue;
+
         // C23 constexpr — compile-time constant; implies const + static/auto storage
         if (k == tk::KW_CONSTEXPR) { is_constexpr = true; is_const = true; consume(); continue; }
 
@@ -411,6 +416,25 @@ decl_spec parser::parse_declaration_specifiers() {
     ds.is_constexpr= is_constexpr;
     ds.is_deduced  = is_deduced;
     ds.align_req   = requested_align;
+    // A far attribute in the declaration-specifier slot (e.g. `char [[xcc::far]] *p`)
+    // appertains to the specifier type, not the pointer — it does NOT make a far
+    // pointer.  Warn so the user moves it after the '*': `char * [[xcc::far]] p`.
+    for (const auto &a : local_attrs) {
+        if (a.name != "far")
+            continue;
+        if (a.ns == "xcc") {
+            diag_.warning(warning_group::ATTRIBUTES, a.loc,
+                "[[xcc::far]] here applies to the type, not the pointer; "
+                "place it after the '*' to declare a far pointer "
+                "(e.g. 'char * [[xcc::far]] p')");
+        } else if (a.ns == "sdcc") {
+            diag_.error(a.loc,
+                "[[sdcc::far]] is not supported; use [[xcc::far]] after the '*'");
+        } else if (a.ns.empty()) {
+            diag_.error(a.loc,
+                "[[far]] is not supported; use [[xcc::far]] after the '*'");
+        }
+    }
     ds.attrs       = std::move(local_attrs);
     return ds;
 }

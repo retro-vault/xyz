@@ -60,15 +60,19 @@ xbfd::type_ref xdi_adapter::to_xdi(const type* t) {
 }
 
 xbfd::calling_convention xdi_adapter::to_xdi(call_abi abi) {
+    if (abi == call_abi::DEFAULT)
+        abi = get_default_call_abi();
+
     switch (abi) {
-    case call_abi::DEFAULT:         return xbfd::calling_convention::normal;
     case call_abi::SDCCCALL0:       return xbfd::calling_convention::xcc_sdcccall0;
     case call_abi::SDCCCALL1:       return xbfd::calling_convention::xcc_sdcccall1;
+    case call_abi::Z88DK_SMALLC:    return xbfd::calling_convention::xcc_z88dk_smallc;
     case call_abi::Z88DK_FASTCALL:  return xbfd::calling_convention::xcc_z88dk_fastcall;
     case call_abi::Z88DK_CALLEE:    return xbfd::calling_convention::xcc_z88dk_callee;
     case call_abi::NAKED:           return xbfd::calling_convention::xcc_naked;
     case call_abi::INTERRUPT:       return xbfd::calling_convention::xcc_interrupt;
     case call_abi::CRITICAL:        return xbfd::calling_convention::xcc_critical;
+    case call_abi::DEFAULT:         return xbfd::calling_convention::normal;
     default:                        return xbfd::calling_convention::unknown;
     }
 }

@@ -13,18 +13,54 @@
 namespace xcc {
 
 // ----- parse_pointer -------------------------------------------------
-// Handles: * [qualifiers] [more pointers]
+// Handles: * [attribute-specifier-seq] [qualifiers] [more pointers]
+//
+// C23 §6.7.6.1 places an optional attribute-specifier-sequence right
+// after the '*' (before the qualifier list); such attributes appertain
+// to the pointer itself.  This is where [[xcc::far]] belongs:
+//
+//   char * [[xcc::far]] p;            // far pointer to char
+//   char * [[xcc::far]] * [[xcc::far]] pp;  // far pointer to far pointer
 
 type_ptr parser::parse_pointer(type_ptr base) {
+    auto apply_pointer_attrs = [&](type_ptr &ptr, const attr_list &attrs) {
+        for (const auto &a : attrs) {
+            if (a.name != "far")
+                continue;
+            if (a.ns == "xcc") {
+                ptr->is_far = true;
+            } else if (a.ns == "sdcc") {
+                diag_.error(a.loc,
+                            "[[sdcc::far]] is not supported; use [[xcc::far]]");
+            } else if (a.ns.empty()) {
+                diag_.error(a.loc,
+                            "[[far]] is not supported; use [[xcc::far]]");
+            }
+        }
+        apply_call_abi_attrs_to_type(ptr, attrs);
+    };
+
     while (check(tk::STAR)) {
         consume();
         auto ptr = type::make_pointer(base);
+        // C23: attribute-specifier-sequence immediately after '*' applies
+        // to the pointer.  [[xcc::far]] turns it into a 24-bit far pointer.
+        if (check(tk::LATTR)) {
+            attr_list pattrs = parse_attr_list();
+            apply_pointer_attrs(ptr, pattrs);
+        }
         // qualifiers on the pointer itself
         while (peek().is_type_qualifier()) {
             if (peek().kind == tk::KW_CONST)    { ptr->is_const    = true; consume(); }
             else if (peek().kind == tk::KW_VOLATILE)  { ptr->is_volatile = true; consume(); }
             else if (peek().kind == tk::KW_RESTRICT)  { ptr->is_restrict = true; consume(); }
             else consume();
+        }
+        // A second attribute slot may follow the qualifiers (some toolchains
+        // emit it after const/volatile); accept far there too.
+        if (check(tk::LATTR)) {
+            attr_list pattrs = parse_attr_list();
+            apply_pointer_attrs(ptr, pattrs);
         }
         base = ptr;
     }
@@ -85,6 +121,9 @@ type_ptr parser::parse_direct_declarator_suffix(type_ptr base, std::string &/*na
             attr_list attrs = parse_attr_list();
             apply_call_abi_attrs_to_type(base, attrs);
         } else {
+            if (reject_legacy_callconv_keyword()) {
+                continue;
+            }
             break;
         }
     }

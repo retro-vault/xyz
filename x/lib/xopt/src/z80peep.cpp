@@ -2527,25 +2527,11 @@ bool z80_peep::rule_push_pop_hl(size_t i) {
 
 // call target; ret  →  jp target
 bool z80_peep::rule_call_ret_to_jp(size_t i) {
-    if (i + 1 >= lines_.size()) return false;
-
-    auto &call = lines_[i];
-    if (call.mnemonic != "call") return false;
-    if (call.operands.find(',') != std::string::npos) return false;
-
-    auto is_noncode = [](const asm_line &l) {
-        return l.mnemonic.empty();
-    };
-    size_t j = i + 1;
-    while (j < lines_.size() && is_noncode(lines_[j]))
-        ++j;
-    if (j < lines_.size() && lines_[j].mnemonic == "ret" &&
-        trim(lines_[j].operands).empty() && lines_[j].label.empty()) {
-        call.mnemonic = "jp";
-        lines_.erase(lines_.begin() + j);
-        return true;
-    }
-
+    // Disabled: the assembly stream does not encode enough calling-convention
+    // metadata to prove that replacing `call target; ret` with `jp target` is
+    // safe. In particular, callee-clean conventions such as z88dk::callee rely
+    // on a real return address remaining on the stack.
+    (void)i;
     return false;
 }
 

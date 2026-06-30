@@ -21,6 +21,25 @@ uint64_t bitfield_mask_bits(int width) {
     return (uint64_t{1} << width) - 1;
 }
 
+// Build a pointer-to-elem type that inherits far-ness from the base
+// pointer/array, so far pointer arithmetic (p+i, p[i], p->f) keeps the
+// result far and routes its dereference through the far trampoline.
+static type_ptr elem_ptr_like(const type_ptr &base, type_ptr elem) {
+    if (base && base->is_far_ptr())
+        return type::make_far_pointer(std::move(elem));
+    return type::make_pointer(std::move(elem));
+}
+
+static bool is_subscriptable_type(const type_ptr &ty) {
+    type_ptr t = ty ? ty->unqual() : nullptr;
+    return t && (t->is_ptr() || t->is_array());
+}
+
+static void normalize_subscript_operands(operand &base, operand &index) {
+    if (!is_subscriptable_type(base.type) && is_subscriptable_type(index.type))
+        std::swap(base, index);
+}
+
 } // namespace
 
 static const struct_field *find_member(const member_expr &e) {
@@ -98,12 +117,17 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
     }
     if (auto *idx = dynamic_cast<index_expr*>(&lhs)) {
         operand base  = gen_expr(*idx->base);
+        operand index = gen_expr(*idx->index);
         if (base.type && base.type->is_array() && base.type->base) {
             // Array expressions decay to element pointers before index arithmetic.
             base = emit_unop(icode_op::ADDRESS_OF, base,
                              type::make_pointer(base.type->base));
         }
-        operand index = gen_expr(*idx->index);
+        if (index.type && index.type->is_array() && index.type->base) {
+            index = emit_unop(icode_op::ADDRESS_OF, index,
+                              type::make_pointer(index.type->base));
+        }
+        normalize_subscript_operands(base, index);
         if (index.type && index.type->is_integer() &&
             index.type->size() < type::make_int()->size()) {
             index = emit_unop(icode_op::CAST, index, type::make_int());
@@ -114,7 +138,7 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
             operand scale = operand::make_int(elem_sz, type::make_int());
             index = emit_binop(icode_op::MUL, index, scale, index.type);
         }
-        operand addr = emit_binop(icode_op::ADD, base, index, type::make_pointer(elem_type));
+        operand addr = emit_binop(icode_op::ADD, base, index, elem_ptr_like(base.type, elem_type));
         src = coerce_for_store(src, elem_type);
         icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = addr; ic.left = src; emit(ic);
         return src;
@@ -124,12 +148,17 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
 
 void ir_gen::visit(index_expr &e) {
     operand base  = gen_expr(*e.base);
+    operand index = gen_expr(*e.index);
     if (base.type && base.type->is_array() && base.type->base) {
         // Array expressions decay to element pointers before index arithmetic.
         base = emit_unop(icode_op::ADDRESS_OF, base,
                          type::make_pointer(base.type->base));
     }
-    operand index = gen_expr(*e.index);
+    if (index.type && index.type->is_array() && index.type->base) {
+        index = emit_unop(icode_op::ADDRESS_OF, index,
+                          type::make_pointer(index.type->base));
+    }
+    normalize_subscript_operands(base, index);
     if (index.type && index.type->is_integer() &&
         index.type->size() < type::make_int()->size()) {
         index = emit_unop(icode_op::CAST, index, type::make_int());
@@ -142,7 +171,7 @@ void ir_gen::visit(index_expr &e) {
         index = emit_binop(icode_op::MUL, index, scale, index.type);
     }
 
-    operand ptr = emit_binop(icode_op::ADD, base, index, type::make_pointer(elem_type));
+    operand ptr = emit_binop(icode_op::ADD, base, index, elem_ptr_like(base.type, elem_type));
     expr_result_ = emit_unop(icode_op::GET_VALUE_AT, ptr, elem_type);
 }
 
@@ -165,13 +194,16 @@ operand ir_gen::gen_member_ptr(member_expr &e) {
 
     type_ptr struct_ptr_type =
         type::make_pointer(struct_type ? struct_type : field_type);
-    type_ptr field_ptr_type = type::make_pointer(field_type);
     operand ptr;
     if (e.is_arrow) {
         ptr = gen_expr(*e.object);
     } else {
         ptr = gen_lvalue_addr(*e.object, struct_ptr_type);
     }
+
+    // A far struct pointer yields far field pointers, so the member access
+    // dereferences through the far trampoline.
+    type_ptr field_ptr_type = elem_ptr_like(ptr.type, field_type);
 
     if (field_offset != 0) {
         operand off = operand::make_int(field_offset, type::make_int());
@@ -197,12 +229,16 @@ operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
 
     if (auto *idx = dynamic_cast<index_expr*>(&e)) {
         operand base = gen_expr(*idx->base);
+        operand index = gen_expr(*idx->index);
         if (base.type && base.type->is_array() && base.type->base) {
             base = emit_unop(icode_op::ADDRESS_OF, base,
                              type::make_pointer(base.type->base));
         }
-
-        operand index = gen_expr(*idx->index);
+        if (index.type && index.type->is_array() && index.type->base) {
+            index = emit_unop(icode_op::ADDRESS_OF, index,
+                              type::make_pointer(index.type->base));
+        }
+        normalize_subscript_operands(base, index);
         if (index.type && index.type->is_integer() &&
             index.type->size() < type::make_int()->size()) {
             index = emit_unop(icode_op::CAST, index, type::make_int());
@@ -215,8 +251,10 @@ operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
             index = emit_binop(icode_op::MUL, index, scale, index.type);
         }
 
-        return emit_binop(icode_op::ADD, base, index,
-                          ptr_t ? ptr_t : type::make_pointer(elem_type));
+        type_ptr res_t = (base.type && base.type->is_far_ptr())
+                             ? type::make_far_pointer(elem_type)
+                             : (ptr_t ? ptr_t : type::make_pointer(elem_type));
+        return emit_binop(icode_op::ADD, base, index, res_t);
     }
 
     if (auto *mem = dynamic_cast<member_expr*>(&e))

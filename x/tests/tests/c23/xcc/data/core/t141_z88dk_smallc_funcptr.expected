@@ -1,0 +1,87 @@
+	.module xcc_output
+
+	.optsdcc -mz80 sdcccall(1)
+
+
+	.area _CODE
+
+	.globl _z88_smallc_add2
+_z88_smallc_add2:
+	; z88dk smallc prologue: z88_smallc_add2 (locals=0, temp_frame=4, stack_params=4)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	; receive (z88dk smallc) param a at 6(ix)
+	; receive (z88dk smallc) param b at 4(ix)
+	ld	l, 6(ix)
+	ld	h, 7(ix)
+	ld	e, 4(ix)
+	ld	d, 5(ix)
+	add	hl, de
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ex	de, hl
+	jp	__z88_smallc_add2_end
+__z88_smallc_add2_end:
+	; epilogue: z88_smallc_add2
+	ld	sp, ix
+	pop	ix
+	ret
+	.globl _main
+_main:
+	; sdcccall(1) prologue: main (locals=2, temp_frame=6, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	ld	hl, #_z88_smallc_add2
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #5
+	push	hl
+	ld	hl, #6
+	push	hl
+	.globl __sdcc_call_bc
+	push	de
+	push	hl
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	b, h
+	ld	c, l
+	pop	hl
+	pop	de
+	call	__sdcc_call_bc
+	pop	bc
+	pop	bc
+	push	de
+	pop	hl
+	ld	-6(ix), l
+	ld	-5(ix), h
+	ld	l, -6(ix)
+	ld	h, -5(ix)
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	ex	de, hl
+	jp	__main_end
+__main_end:
+	; epilogue: main
+	ld	sp, ix
+	pop	ix
+	ret

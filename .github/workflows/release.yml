@@ -10,7 +10,254 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-linux:
+    name: Build ${{ matrix.package_name }} for Linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: S
+            package_name: x-s
+          - model: M
+            package_name: x-m
+          - model: L
+            package_name: x-l
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build and package x model
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo_root="$PWD"
+          build_dir="$repo_root/build/${{ matrix.package_name }}-linux"
+          dist_dir="$repo_root/build/dist/${{ matrix.package_name }}-linux"
+          out_dir="$repo_root/build/out/${{ matrix.package_name }}-linux"
+          z_dist_dir="$repo_root/build/z/${{ matrix.package_name }}-linux"
+          archive_base="${{ matrix.package_name }}-linux"
+
+          make -C x x \
+            REPO_ROOT="$repo_root" \
+            Y_ROOT="$repo_root/y" \
+            BUILD_DIR="$build_dir" \
+            DIST_DIR="$dist_dir" \
+            OUT_DIR="$out_dir" \
+            Z_DIST_DIR="$z_dist_dir" \
+            X_MODEL="${{ matrix.model }}" \
+            PACKAGE_NAME="${{ matrix.package_name }}"
+
+          python - "$dist_dir" "$archive_base" <<'PY'
+          import shutil
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          dist_dir = Path(sys.argv[1])
+          archive_base = sys.argv[2]
+          stage_dir = Path("build/release-stage") / archive_base
+          archive_path = Path("build/release-artifacts") / f"{archive_base}.zip"
+
+          if stage_dir.exists():
+              shutil.rmtree(stage_dir)
+          shutil.copytree(dist_dir, stage_dir)
+
+          pkg_dir = stage_dir / "pkg"
+          if pkg_dir.exists():
+              shutil.rmtree(pkg_dir)
+
+          archive_path.parent.mkdir(parents=True, exist_ok=True)
+          if archive_path.exists():
+              archive_path.unlink()
+
+          with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(stage_dir.rglob("*")):
+                  zf.write(path, Path(archive_base) / path.relative_to(stage_dir))
+          PY
+
+      - name: Upload x model zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.package_name }}-linux
+          path: build/release-artifacts/${{ matrix.package_name }}-linux.zip
+
+  build-macos:
+    name: Build ${{ matrix.package_name }} for macOS
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: S
+            package_name: x-s
+          - model: M
+            package_name: x-m
+          - model: L
+            package_name: x-l
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build and package x model
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo_root="$PWD"
+          build_dir="$repo_root/build/${{ matrix.package_name }}-macos"
+          dist_dir="$repo_root/build/dist/${{ matrix.package_name }}-macos"
+          out_dir="$repo_root/build/out/${{ matrix.package_name }}-macos"
+          z_dist_dir="$repo_root/build/z/${{ matrix.package_name }}-macos"
+          archive_base="${{ matrix.package_name }}-macos"
+
+          make -C x x \
+            REPO_ROOT="$repo_root" \
+            Y_ROOT="$repo_root/y" \
+            BUILD_DIR="$build_dir" \
+            DIST_DIR="$dist_dir" \
+            OUT_DIR="$out_dir" \
+            Z_DIST_DIR="$z_dist_dir" \
+            X_MODEL="${{ matrix.model }}" \
+            PACKAGE_NAME="${{ matrix.package_name }}"
+
+          python - "$dist_dir" "$archive_base" <<'PY'
+          import shutil
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          dist_dir = Path(sys.argv[1])
+          archive_base = sys.argv[2]
+          stage_dir = Path("build/release-stage") / archive_base
+          archive_path = Path("build/release-artifacts") / f"{archive_base}.zip"
+
+          if stage_dir.exists():
+              shutil.rmtree(stage_dir)
+          shutil.copytree(dist_dir, stage_dir)
+
+          pkg_dir = stage_dir / "pkg"
+          if pkg_dir.exists():
+              shutil.rmtree(pkg_dir)
+
+          archive_path.parent.mkdir(parents=True, exist_ok=True)
+          if archive_path.exists():
+              archive_path.unlink()
+
+          with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(stage_dir.rglob("*")):
+                  zf.write(path, Path(archive_base) / path.relative_to(stage_dir))
+          PY
+
+      - name: Upload x model zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.package_name }}-macos
+          path: build/release-artifacts/${{ matrix.package_name }}-macos.zip
+
+  build-windows:
+    name: Build ${{ matrix.package_name }} for Windows
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: S
+            package_name: x-s
+          - model: M
+            package_name: x-m
+          - model: L
+            package_name: x-l
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - name: Build and package x model
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          repo_root="$PWD"
+          build_dir="$repo_root/build/${{ matrix.package_name }}-windows"
+          dist_dir="$repo_root/build/dist/${{ matrix.package_name }}-windows"
+          out_dir="$repo_root/build/out/${{ matrix.package_name }}-windows"
+          z_dist_dir="$repo_root/build/z/${{ matrix.package_name }}-windows"
+          archive_base="${{ matrix.package_name }}-windows"
+
+          make -C x x \
+            REPO_ROOT="$repo_root" \
+            Y_ROOT="$repo_root/y" \
+            BUILD_DIR="$build_dir" \
+            DIST_DIR="$dist_dir" \
+            OUT_DIR="$out_dir" \
+            Z_DIST_DIR="$z_dist_dir" \
+            X_MODEL="${{ matrix.model }}" \
+            PACKAGE_NAME="${{ matrix.package_name }}"
+
+          python - "$dist_dir" "$archive_base" <<'PY'
+          import shutil
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          dist_dir = Path(sys.argv[1])
+          archive_base = sys.argv[2]
+          stage_dir = Path("build/release-stage") / archive_base
+          archive_path = Path("build/release-artifacts") / f"{archive_base}.zip"
+
+          if stage_dir.exists():
+              shutil.rmtree(stage_dir)
+          shutil.copytree(dist_dir, stage_dir)
+
+          pkg_dir = stage_dir / "pkg"
+          if pkg_dir.exists():
+              shutil.rmtree(pkg_dir)
+
+          archive_path.parent.mkdir(parents=True, exist_ok=True)
+          if archive_path.exists():
+              archive_path.unlink()
+
+          with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(stage_dir.rglob("*")):
+                  zf.write(path, Path(archive_base) / path.relative_to(stage_dir))
+          PY
+
+      - name: Upload x model zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.package_name }}-windows
+          path: build/release-artifacts/${{ matrix.package_name }}-windows.zip
+
+  build-xext:
+    name: Build x extension
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,7 +267,7 @@ jobs:
 
       - name: Derive package version from tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "PACKAGE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: echo "VSIX_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -33,43 +280,48 @@ jobs:
         run: npm ci
         working-directory: x/pkg/xgdb-vsix
 
-      - name: Build all
-        run: make all
+      - name: Build x extension
+        run: |
+          set -euo pipefail
+          make -C x/pkg/xgdb-vsix \
+            ROOT="$PWD" \
+            BUILD_DIR="$PWD/build/xext" \
+            DIST_DIR="$PWD/build/xext-dist" \
+            VSIX_STAGE_DIR="$PWD/build/xext-stage" \
+            VSIX_VERSION="${VSIX_VERSION:-0.1.0}"
 
-      - name: Prepare release artifacts
+      - name: Prepare x extension artifact
         run: |
           set -euo pipefail
           command -v zip >/dev/null 2>&1 || { echo "zip not found"; exit 1; }
-          mkdir -p build/release-stage/x build/release-stage/xext build/release-artifacts
-          cp -a bin/x/. build/release-stage/x/
-          rm -rf build/release-stage/x/pkg
-          cp bin/x/pkg/vsix/*.vsix build/release-stage/xext/
-          (cd build/release-stage && zip -qr ../release-artifacts/x.zip x)
+          mkdir -p build/release-stage/xext build/release-artifacts
+          cp build/xext-stage/*.vsix build/release-stage/xext/
           (cd build/release-stage && zip -qr ../release-artifacts/xext.zip xext)
-
-      - name: Upload x zip artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: x.zip
-          path: build/release-artifacts/x.zip
-
-      - name: Upload x deb artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: x-deb
-          path: bin/x/pkg/deb/x_*.deb
 
       - name: Upload x extension artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xext.zip
+          name: release-xext
           path: build/release-artifacts/xext.zip
 
+  publish-release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - build-linux
+      - build-macos
+      - build-windows
+      - build-xext
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: build/release-artifacts
+          merge-multiple: true
+
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            build/release-artifacts/x.zip
-            build/release-artifacts/xext.zip
-            bin/x/pkg/deb/x_*.deb
+          files: build/release-artifacts/*.zip

@@ -56,8 +56,9 @@ static int pointer_step(type_ptr ty) {
     return step > 0 ? step : 1;
 }
 
-static const char *fixed_float_prefix() {
+static const char *alternate_float_prefix() {
     switch (get_float_format()) {
+    case float_format::IEEE16:     return "ieee16";
     case float_format::FIXED8_8:   return "fixed8_8";
     case float_format::FIXED16_16: return "fixed16_16";
     case float_format::FIXED24_8:  return "fixed24_8";
@@ -67,11 +68,11 @@ static const char *fixed_float_prefix() {
     return "";
 }
 
-static std::string fixed_float_call_name(const std::string &name) {
+static std::string alternate_float_call_name(const std::string &name) {
     if (get_float_format() == float_format::IEEE32)
         return name;
 
-    const char *prefix = fixed_float_prefix();
+    const char *prefix = alternate_float_prefix();
     auto prefixed = [&](const char *suffix) {
         return std::string(prefix) + suffix;
     };
@@ -82,17 +83,53 @@ static std::string fixed_float_call_name(const std::string &name) {
     if (name == "__libc_isinff")      return prefixed("_isinf");
     if (name == "__libc_isnanf")      return prefixed("_isnan");
     if (name == "fabsf")              return prefixed("_abs");
+    if (get_float_format() == float_format::IEEE16) {
+        if (name == "sinf")               return prefixed("_sin");
+        if (name == "cosf")               return prefixed("_cos");
+        if (name == "tanf")               return prefixed("_tan");
+        if (name == "asinf")              return prefixed("_asin");
+        if (name == "acosf")              return prefixed("_acos");
+        if (name == "atanf")              return prefixed("_atan");
+        if (name == "atan2f")             return prefixed("_atan2");
+        if (name == "sinhf")              return prefixed("_sinh");
+        if (name == "coshf")              return prefixed("_cosh");
+        if (name == "tanhf")              return prefixed("_tanh");
+        if (name == "asinhf")             return prefixed("_asinh");
+        if (name == "acoshf")             return prefixed("_acosh");
+        if (name == "atanhf")             return prefixed("_atanh");
+        if (name == "expf")               return prefixed("_exp");
+        if (name == "exp2f")              return prefixed("_exp2");
+        if (name == "expm1f")             return prefixed("_expm1");
+        if (name == "logf")               return prefixed("_log");
+        if (name == "log2f")              return prefixed("_log2");
+        if (name == "log10f")             return prefixed("_log10");
+        if (name == "log1pf")             return prefixed("_log1p");
+        if (name == "powf")               return prefixed("_pow");
+        if (name == "cbrtf")              return prefixed("_cbrt");
+        if (name == "erff")               return prefixed("_erf");
+        if (name == "erfcf")              return prefixed("_erfc");
+        if (name == "tgammaf")            return prefixed("_tgamma");
+        if (name == "lgammaf")            return prefixed("_lgamma");
+    }
     if (name == "sqrtf")              return prefixed("_sqrt");
     if (name == "hypotf")             return prefixed("_hypot");
     if (name == "ceilf")              return prefixed("_ceil");
     if (name == "floorf")             return prefixed("_floor");
     if (name == "truncf")             return prefixed("_trunc");
-    if (name == "roundf" ||
-        name == "roundevenf" ||
-        name == "nearbyintf" ||
-        name == "rintf")              return prefixed("_round");
-    if (name == "lroundf" ||
-        name == "lrintf")             return prefixed("_lround");
+    if (name == "roundf")             return prefixed("_round");
+    if (name == "roundevenf")
+        return get_float_format() == float_format::IEEE16 ?
+               prefixed("_roundeven") : prefixed("_round");
+    if (name == "nearbyintf")
+        return get_float_format() == float_format::IEEE16 ?
+               prefixed("_nearbyint") : prefixed("_round");
+    if (name == "rintf")
+        return get_float_format() == float_format::IEEE16 ?
+               prefixed("_rint") : prefixed("_round");
+    if (name == "lroundf")            return prefixed("_lround");
+    if (name == "lrintf")
+        return get_float_format() == float_format::IEEE16 ?
+               prefixed("_lrint") : prefixed("_lround");
     if (name == "llroundf")           return prefixed("_llround");
     if (name == "llrintf")            return prefixed("_llrint");
     if (name == "fmaxf")              return prefixed("_fmax");
@@ -524,33 +561,60 @@ void ir_gen::visit(unary_expr &e) {
                                        e.type ? e.type
                                               : type::make_pointer(type::make_void()));
         break;
-    case unary_op::DEREF:
-        expr_result_ = emit_unop(icode_op::GET_VALUE_AT, gen_expr(*e.operand),
+    case unary_op::DEREF: {
+        operand ptr = gen_expr(*e.operand);
+        if (e.type && e.type->is_array() && e.type->base) {
+            // Dereferencing a pointer-to-array yields an array lvalue, which
+            // immediately decays to an element pointer in value context.
+            ptr.type = (ptr.type && ptr.type->is_far_ptr())
+                           ? type::make_far_pointer(e.type->base)
+                           : type::make_pointer(e.type->base);
+            expr_result_ = ptr;
+            break;
+        }
+        expr_result_ = emit_unop(icode_op::GET_VALUE_AT, ptr,
                                  e.type ? e.type : type::make_int());
         break;
+    }
     case unary_op::PRE_INC: case unary_op::PRE_DEC: {
         bool inc = (e.op == unary_op::PRE_INC);
         operand op = gen_expr(*e.operand);
+        type_ptr op_type = op.type ? op.type : type::make_int();
+        bool is_float = op_type &&
+                        (op_type->kind == type_kind::FLOAT ||
+                         op_type->kind == type_kind::DOUBLE);
         int step_value = 1;
         if (op.type && op.type->is_ptr() && op.type->base)
             step_value = op.type->base->size();
-        operand step = operand::make_int(step_value, type::make_int());
-        operand tmp = emit_binop(inc ? icode_op::ADD : icode_op::SUB,
-                                 op, step, op.type ? op.type : type::make_int());
+        operand step = is_float
+                           ? operand::make_float(static_cast<double>(step_value), op_type)
+                           : operand::make_int(step_value, type::make_int());
+        operand tmp = emit_binop(is_float
+                                     ? (inc ? icode_op::FADD : icode_op::FSUB)
+                                     : (inc ? icode_op::ADD : icode_op::SUB),
+                                 op, step, op_type);
         expr_result_ = gen_lvalue_write(*e.operand, tmp);
         break;
     }
     case unary_op::POST_INC: case unary_op::POST_DEC: {
         bool inc = (e.op == unary_op::POST_INC);
         operand op = gen_expr(*e.operand);
-        operand old = new_temp(op.type ? op.type : type::make_int());
+        type_ptr op_type = op.type ? op.type : type::make_int();
+        bool is_float = op_type &&
+                        (op_type->kind == type_kind::FLOAT ||
+                         op_type->kind == type_kind::DOUBLE);
+        operand old = new_temp(op_type);
         emit_assign(old, op);
         int step_value = 1;
         if (op.type && op.type->is_ptr() && op.type->base)
             step_value = op.type->base->size();
-        operand step = operand::make_int(step_value, type::make_int());
-        operand tmp = emit_binop(inc ? icode_op::ADD : icode_op::SUB,
-                                 op, step, op.type ? op.type : type::make_int());
+        operand step = is_float
+                           ? operand::make_float(static_cast<double>(step_value), op_type)
+                           : operand::make_int(step_value, type::make_int());
+        operand tmp = emit_binop(is_float
+                                     ? (inc ? icode_op::FADD : icode_op::FSUB)
+                                     : (inc ? icode_op::ADD : icode_op::SUB),
+                                 op, step, op_type);
         gen_lvalue_write(*e.operand, tmp);
         expr_result_ = old;
         break;
@@ -567,7 +631,7 @@ void ir_gen::visit(call_expr &e) {
     operand indirect_callee;
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
         if (id->sym && id->sym->kind == sym_kind::FUNC)
-            direct_func_name = fixed_float_call_name(id->name);
+            direct_func_name = alternate_float_call_name(id->name);
     }
     if (direct_func_name.empty() && e.callee) {
         // Evaluate an indirect callee before SENDs.  On register ABIs the SEND
@@ -618,6 +682,7 @@ void ir_gen::visit(call_expr &e) {
         } else if (fn_type && i < fn_type->params.size() && fn_type->params[i]) {
             abi_type = fn_type->params[i];
         }
+        arg_ops[i] = coerce_const_operand(arg_ops[i], abi_type);
         arg_types.push_back(abi_type);
         if (arg_ops[i].type != abi_type) {
             bool needs_materialized_cast =
@@ -635,17 +700,31 @@ void ir_gen::visit(call_expr &e) {
     const auto &conv = get_abi_convention(c_abi);
     auto arg_locs = conv.classify_args(arg_types);
 
-    // Emit SEND icodes right-to-left (standard C push order).
+    // Emit SEND icodes in ABI order so the caller stack matches the callee's
+    // expected parameter layout.
     int total_arg_bytes = 0;
-    for (int i = static_cast<int>(arg_ops.size()) - 1; i >= 0; --i) {
-        total_arg_bytes += conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
-        icode ic;
-        ic.op         = icode_op::SEND;
-        ic.left       = arg_ops[i];
-        ic.argreg     = i;
-        ic.arg_loc    = arg_locs[i];
-        ic.callee_abi = c_abi;
-        emit(ic);
+    if (conv.caller_sends_right_to_left()) {
+        for (int i = static_cast<int>(arg_ops.size()) - 1; i >= 0; --i) {
+            total_arg_bytes += conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
+            icode ic;
+            ic.op         = icode_op::SEND;
+            ic.left       = arg_ops[i];
+            ic.argreg     = i;
+            ic.arg_loc    = arg_locs[i];
+            ic.callee_abi = c_abi;
+            emit(ic);
+        }
+    } else {
+        for (int i = 0; i < static_cast<int>(arg_ops.size()); ++i) {
+            total_arg_bytes += conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
+            icode ic;
+            ic.op         = icode_op::SEND;
+            ic.left       = arg_ops[i];
+            ic.argreg     = i;
+            ic.arg_loc    = arg_locs[i];
+            ic.callee_abi = c_abi;
+            emit(ic);
+        }
     }
 
     type_ptr ret_type = e.type ? e.type : type::make_int();

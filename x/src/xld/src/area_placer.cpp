@@ -11,12 +11,22 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <xld/area_placer.h>
 #include <xld/errors.h>
 
 namespace xld {
+
+    namespace {
+
+        static bool starts_with(std::string_view value, std::string_view prefix)
+        {
+            return value.substr(0, prefix.size()) == prefix;
+        }
+
+    } // namespace
 
     static std::optional<int> default_area_priority(const std::string& name)
     {
@@ -44,9 +54,17 @@ namespace xld {
         };
 
         auto it = priorities.find(name);
-        if (it == priorities.end())
-            return std::nullopt;
-        return it->second;
+        if (it != priorities.end())
+            return it->second;
+
+        if (starts_with(name, "_CODE_BANK_") || starts_with(name, ".text.bank."))
+            return 20;
+        if (starts_with(name, "_CONST_BANK_") || starts_with(name, ".rodata.bank."))
+            return 30;
+        if (starts_with(name, "_DATA_BANK_") || starts_with(name, ".data.bank."))
+            return 70;
+
+        return std::nullopt;
     }
 
     static bool ranges_overlap(uint16_t start_a, uint16_t end_a,
@@ -298,6 +316,7 @@ namespace xld {
 
         ctx.code_size = max_end;
         ctx.image_base = (min_start == UINT32_MAX) ? 0 : min_start;
+        ctx.code_occupancy.clear();
 
         // Print memory map if requested.
         if (ctx.print_map) {

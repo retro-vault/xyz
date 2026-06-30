@@ -1,0 +1,536 @@
+{
+  "z88dk_test_feature_feature": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/feature",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": "cannot find include file 'features.h'",
+    "reason": "z88dk platform-feature environment dependency",
+    "sources": [
+      "upstream/test/feature/feature.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_ctype_test_isbdigit": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/ctype",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-DMAX_TESTS=300"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk non-standard ctype extension",
+    "sources": [
+      "upstream/test/suites/ctype/test_isbdigit.c",
+      "generated/wrappers/z88dk_test_suites_ctype_test_isbdigit_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 90
+  },
+  "z88dk_test_suites_ctype_test_isodigit": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/ctype",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-DMAX_TESTS=300"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk non-standard ctype extension",
+    "sources": [
+      "upstream/test/suites/ctype/test_isodigit.c",
+      "generated/wrappers/z88dk_test_suites_ctype_test_isodigit_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 90
+  },
+  "z88dk_test_suites_far_sprintf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/far",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-D__TESTTARGET__",
+      "-D__Z80"
+    ],
+    "expect_build_failure": true,
+    "marker": null,
+    "reason": "z88dk far-string library dependency",
+    "sources": [
+      "upstream/test/suites/far/sprintf.c",
+      "generated/wrappers/z88dk_test_suites_far_sprintf_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_far_strcasecmpf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/far",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-D__TESTTARGET__",
+      "-D__Z80"
+    ],
+    "expect_build_failure": true,
+    "marker": null,
+    "reason": "z88dk far-string library dependency",
+    "sources": [
+      "upstream/test/suites/far/strcasecmpf.c",
+      "generated/wrappers/z88dk_test_suites_far_strcasecmpf_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_far_strchrf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/far",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-D__TESTTARGET__",
+      "-D__Z80"
+    ],
+    "expect_build_failure": true,
+    "marker": null,
+    "reason": "z88dk far-string library dependency",
+    "sources": [
+      "upstream/test/suites/far/strchrf.c",
+      "generated/wrappers/z88dk_test_suites_far_strchrf_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_far_strcmpf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/far",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-D__TESTTARGET__",
+      "-D__Z80"
+    ],
+    "expect_build_failure": true,
+    "marker": null,
+    "reason": "z88dk far-string library dependency",
+    "sources": [
+      "upstream/test/suites/far/strcmpf.c",
+      "generated/wrappers/z88dk_test_suites_far_strcmpf_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_far_strncatf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/far",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-D__TESTTARGET__",
+      "-D__Z80"
+    ],
+    "expect_build_failure": true,
+    "marker": null,
+    "reason": "z88dk far-string library dependency",
+    "sources": [
+      "upstream/test/suites/far/strncatf.c",
+      "generated/wrappers/z88dk_test_suites_far_strncatf_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_math_fixmath": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/math",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": "cannot find include file 'math/math_fix16.h'",
+    "reason": "z88dk fixed-point math header dependency",
+    "sources": [
+      "upstream/test/suites/math/fixmath.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_math_math_fmod": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/math",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "double fmod precision downgrade",
+    "sources": [
+      "generated/sources/z88dk_test_suites_math_math_fmod_suites_math_math_math_split.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_md5_md5sum": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/md5",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "non-standard POSIX I/O dependency",
+    "sources": [
+      "upstream/test/suites/md5/md5sum.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 90
+  },
+  "z88dk_test_suites_regex_regex": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/regex",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": "cannot find include file 'regexp.h'",
+    "reason": "z88dk regex header dependency",
+    "sources": [
+      "upstream/test/suites/regex/regex.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_sccz80_autoinit": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk permissive aggregate-init and floating ABI dependency",
+    "sources": [
+      "generated/sources/z88dk_test_suites_sccz80_autoinit_suites_sccz80_autoinit.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_sccz80_compare0": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk inline-assembly extension",
+    "sources": [
+      "upstream/test/suites/sccz80/compare0.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_sccz80_division": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk signed remainder semantics expectation",
+    "sources": [
+      "generated/sources/z88dk_test_suites_sccz80_division_suites_sccz80_division.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_sccz80_mult": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk signed-overflow multiplication expectation",
+    "sources": [
+      "upstream/test/suites/sccz80/mult.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_sccz80_offsetof": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk builtin offsetof extension",
+    "sources": [
+      "upstream/test/suites/sccz80/offsetof.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_sccz80_sizeof": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk ABI and far-pointer extension dependency",
+    "sources": [
+      "upstream/test/suites/sccz80/sizeof.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_stdio_scanf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/stdio",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk stdio pragma and binary-scan format extension",
+    "sources": [
+      "upstream/test/suites/stdio/scanf.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_stdio_sprintf": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/stdio",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk stdio pragma and binary-format extension",
+    "sources": [
+      "upstream/test/suites/stdio/sprintf.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_stdlib_bsearch": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/stdlib",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-DMAX_TESTS=300"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk low-level stdlib helper dependency",
+    "sources": [
+      "upstream/test/suites/stdlib/bsearch.c",
+      "generated/wrappers/z88dk_test_suites_stdlib_bsearch_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_stdlib_isqrt": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/stdlib",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-DMAX_TESTS=300"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk non-standard stdlib extension",
+    "sources": [
+      "upstream/test/suites/stdlib/isqrt.c",
+      "generated/wrappers/z88dk_test_suites_stdlib_isqrt_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 180
+  },
+  "z88dk_test_suites_stdlib_qsort_newlib": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/stdlib",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-DMAX_TESTS=300"
+    ],
+    "expect_build_failure": false,
+    "marker": "unknown preprocessor directive '#asm'",
+    "reason": "z88dk inline-assembly extension",
+    "sources": [
+      "upstream/test/suites/stdlib/qsort_newlib.c",
+      "generated/wrappers/z88dk_test_suites_stdlib_qsort_newlib_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_stdlib_unbcd": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/stdlib",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-DMAX_TESTS=300"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk non-standard stdlib extension",
+    "sources": [
+      "upstream/test/suites/stdlib/unbcd.c",
+      "generated/wrappers/z88dk_test_suites_stdlib_unbcd_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_string_stricmp": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/string",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/string"
+    ],
+    "expect_build_failure": true,
+    "marker": "implicit declaration of function 'stricmp'",
+    "reason": "z88dk non-standard string extension",
+    "sources": [
+      "generated/sources/z88dk_test_suites_string_stricmp_suites_string_stricmp_split.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_string_strnchr": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/string",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/string"
+    ],
+    "expect_build_failure": true,
+    "marker": "implicit declaration of function 'strnchr'",
+    "reason": "z88dk non-standard string extension",
+    "sources": [
+      "generated/sources/z88dk_test_suites_string_strnchr_suites_string_strchr_split.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_string_strrev": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/string",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk non-standard string extension",
+    "sources": [
+      "upstream/test/suites/string/strrev.c",
+      "generated/wrappers/z88dk_test_suites_string_strrev_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  },
+  "z88dk_test_suites_string_strrstr": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/string",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk non-standard string extension",
+    "sources": [
+      "upstream/test/suites/string/strrstr.c",
+      "generated/wrappers/z88dk_test_suites_string_strrstr_main.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 45
+  }
+}

@@ -95,6 +95,8 @@ private:
             obj_.default_calling_convention = xbfd::calling_convention::xcc_sdcccall0;
         } else if (text.find("sdcccall(1)") != std::string::npos) {
             obj_.default_calling_convention = xbfd::calling_convention::xcc_sdcccall1;
+        } else if (text.find("z88dk::smallc") != std::string::npos) {
+            obj_.default_calling_convention = xbfd::calling_convention::xcc_z88dk_smallc;
         } else if (text.find("z88dk::fastcall") != std::string::npos) {
             obj_.default_calling_convention = xbfd::calling_convention::xcc_z88dk_fastcall;
         } else if (text.find("z88dk::callee") != std::string::npos) {
