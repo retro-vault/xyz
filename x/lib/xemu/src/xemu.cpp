@@ -15,6 +15,7 @@
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -1131,7 +1132,9 @@ struct machine::impl {
             return;
         }
 
-        write_result16(std::remove(path.c_str()) == 0 ? 0 : -1);
+        std::error_code ec;
+        const bool removed = std::filesystem::remove(path, ec);
+        write_result16(!ec && removed ? 0 : -1);
     }
 
     void handle_rename() {
@@ -1145,7 +1148,9 @@ struct machine::impl {
         if (!to.parent_path().empty()) {
             std::filesystem::create_directories(to.parent_path());
         }
-        write_result16(std::rename(from.c_str(), to.c_str()) == 0 ? 0 : -1);
+        std::error_code ec;
+        std::filesystem::rename(from, to, ec);
+        write_result16(!ec ? 0 : -1);
     }
 
     void handle_command(uint8_t value) noexcept {
