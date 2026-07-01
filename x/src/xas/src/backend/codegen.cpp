@@ -1280,8 +1280,14 @@ namespace xas {
 
             if (s.mnemonic == "RET") {
                 if (s.operands.empty()) { emit_byte_val(0xC9); return; }
-                if (s.operands[0].kind == operand_kind::cond) {
-                    int cc = cond_code(s.operands[0].cond_name);
+                std::string cc_name;
+                if (s.operands[0].kind == operand_kind::cond)
+                    cc_name = s.operands[0].cond_name;
+                else if (s.operands[0].kind == operand_kind::reg
+                         && s.operands[0].reg_name == "C")
+                    cc_name = "C";
+                if (!cc_name.empty()) {
+                    int cc = cond_code(cc_name);
                     if (cc >= 0) {
                         emit_byte_val(static_cast<uint8_t>(0xC0 | (cc << 3)));
                         return;
@@ -1820,6 +1826,8 @@ namespace xas {
             }
 
             if (s.kind == stmt_kind::equ) {
+                if (s.equ_global)
+                    syms_[s.equ_name].global = true;
                 auto v = eval_expr(*s.equ_value, syms_, cur_offset_);
                 if (v) {
                     syms_[s.equ_name].value   = static_cast<uint32_t>(*v);
@@ -1905,9 +1913,13 @@ namespace xas {
                     syms_[s.label_name].value        = cur_offset_;
                     syms_[s.label_name].section_name = cur_section_;
                     syms_[s.label_name].defined      = true;
+                    if (s.label_global)
+                        syms_[s.label_name].global = true;
                     continue;
                 }
                 if (s.kind == stmt_kind::equ) {
+                    if (s.equ_global)
+                        syms_[s.equ_name].global = true;
                     auto v = eval_expr(*s.equ_value, syms_, cur_offset_);
                     if (v) {
                         syms_[s.equ_name].value   = static_cast<uint32_t>(*v);

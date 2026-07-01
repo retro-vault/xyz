@@ -478,7 +478,9 @@ namespace xld {
             auto& area = mod->areas()[area_idx];
             if (area.placed_addr().has_value())
                 addr = static_cast<uint16_t>(addr + area.placed_addr().value());
-        } else if (!mod->areas().empty() && mod->areas()[0].placed_addr().has_value()) {
+        } else if (!sym.is_absolute()
+                   && !mod->areas().empty()
+                   && mod->areas()[0].placed_addr().has_value()) {
             addr = static_cast<uint16_t>(addr + mod->areas()[0].placed_addr().value());
         }
         return addr;

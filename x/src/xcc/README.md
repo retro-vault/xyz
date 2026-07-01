@@ -234,7 +234,7 @@ The feature tables below use the following labels:
 | Return value ≤ 4 bytes      | **DE:HL** (DE = high word)      |
 | Parameter passing           | right-to-left push on stack     |
 | Callee-saved registers      | IX only                         |
-| Stack cleanup               | caller (`add hl, sp; ld sp, hl`)|
+| Stack cleanup               | caller-clean: stacked arguments are dropped by the caller after return |
 
 See [docs/HOWTO.md](docs/HOWTO.md) for calling xcc functions from assembly and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the compiler internals.

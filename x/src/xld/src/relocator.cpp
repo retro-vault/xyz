@@ -95,7 +95,8 @@ namespace xld {
                                     if (!def_area.placed_addr().has_value())
                                         throw reloc_error("def area not placed");
                                     target += def_area.placed_addr().value();
-                                } else if (!def_mod->areas().empty()) {
+                                } else if (!def_sym.is_absolute()
+                                           && !def_mod->areas().empty()) {
                                     auto& def_area = def_mod->areas()[0];
                                     if (def_area.placed_addr().has_value())
                                         target += def_area.placed_addr().value();
@@ -112,7 +113,8 @@ namespace xld {
                                 if (!def_area.placed_addr().has_value())
                                     throw reloc_error("def area not placed");
                                 target += def_area.placed_addr().value();
-                            } else if (!mod->areas().empty()
+                            } else if (!sym.is_absolute()
+                                && !mod->areas().empty()
                                 && mod->areas()[0].placed_addr().has_value()) {
                                 target += mod->areas()[0].placed_addr().value();
                             }

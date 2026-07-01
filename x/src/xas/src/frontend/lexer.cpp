@@ -338,7 +338,25 @@ namespace xas {
             return read_ident_or_directive();
         }
 
-        if (c == '.' || c == '_' || (c == '\\' && (peek(1) == 'u' || peek(1) == 'U')))
+        if (c == '.') {
+            const char next = peek(1);
+            const bool starts_directive =
+                std::isalnum(static_cast<unsigned char>(next)) || next == '_'
+                || next == '.' || next == '$' || next == '\''
+                || next == '!' || (next == '\\'
+                                   && (peek(2) == 'u' || peek(2) == 'U'));
+            if (starts_directive)
+                return read_ident_or_directive();
+            token t;
+            t.kind = token_kind::dot;
+            t.text = ".";
+            t.file = file_;
+            t.line = line_;
+            ++pos_;
+            return t;
+        }
+
+        if (c == '_' || (c == '\\' && (peek(1) == 'u' || peek(1) == 'U')))
             return read_ident_or_directive();
         if (c == '$' || c == '@') {
             token t; t.kind = (c == '$') ? token_kind::dollar : token_kind::at;

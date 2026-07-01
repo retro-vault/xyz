@@ -674,7 +674,7 @@ namespace xas {
                 s.label_name = sym;
                 s.source_line= t.line;
                 advance(); // consume ':'
-                eat(token_kind::colon); // consume optional second ':' (SDCC '::')
+                s.label_global = eat(token_kind::colon); // SDCC '::' exports the label
                 if (peek().kind == token_kind::comment
                     || peek().kind == token_kind::newline
                     || peek().kind == token_kind::eof) {
@@ -694,6 +694,20 @@ namespace xas {
             if (peek().kind == token_kind::directive
                 && (peek().text == "equ" || peek().text == "set")) {
                 return parse_equ(sym);
+            }
+
+            // SDCC absolute global assignment: "name == expr"
+            if (peek().kind == token_kind::eq && peek(1).kind == token_kind::eq) {
+                advance();
+                advance();
+                stmt s;
+                s.kind = stmt_kind::equ;
+                s.equ_name = sym;
+                s.equ_global = true;
+                s.source_line = t.line;
+                s.equ_value = parse_expr();
+                finish_stmt(s);
+                return s;
             }
 
             // Absolute symbol assignment: "name = expr" (SDCC / GNU syntax)

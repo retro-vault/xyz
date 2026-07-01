@@ -166,6 +166,7 @@ namespace xld {
                 xld::symbol xs(sym.name, stype,
                                   static_cast<uint16_t>(sym.value),
                                   idx, area_idx);
+                xs.set_absolute(sym.is_absolute());
                 xs.set_owner(mod.get());
                 mod->symbols().push_back(xs);
             }

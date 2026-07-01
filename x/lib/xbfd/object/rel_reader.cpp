@@ -125,6 +125,8 @@ private:
         sym.value = hex16(toks[1].substr(3));
         sym.flags = is_def ? xbfd::symbol_flags::global
                            : (xbfd::symbol_flags::global | xbfd::symbol_flags::undefined);
+        if (is_def && area_names_.empty())
+            sym.flags = sym.flags | xbfd::symbol_flags::absolute;
         if (is_def && !area_names_.empty()) sym.section_name = area_names_.back();
         obj_.symbols.push_back(std::move(sym));
     }

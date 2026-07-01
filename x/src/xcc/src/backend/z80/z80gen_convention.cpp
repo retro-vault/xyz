@@ -18,11 +18,6 @@ int arg_size(type_ptr type) {
     return type ? type->size() : 2;
 }
 
-bool sdcccall1_caller_cleans(type_ptr ret_type) {
-    (void)ret_type;
-    return true;
-}
-
 bool has_fixed_frame_hazards(const ir_function &fn) {
     for (const auto &ic : fn.icodes) {
         if (ic.op == icode_op::ALLOCA || ic.op == icode_op::INLINE_ASM)
@@ -1041,12 +1036,8 @@ struct cc_sdcccall1 final : abi_convention {
 
     void emit_epilogue(z80_gen &g, const ir_function &fn) override {
         std_epilogue_frame(g, fn);
-        if (!fn.is_noreturn) {
-            if (fn.stack_param_bytes > 0 && !sdcccall1_caller_cleans(fn.ret_type))
-                callee_stack_return(g, fn.stack_param_bytes);
-            else
-                g.emit_line("ret");
-        }
+        if (!fn.is_noreturn)
+            g.emit_line("ret");
         if (g.debug_) g.debug_->end_function(fn);
     }
 
@@ -1105,8 +1096,7 @@ struct cc_sdcccall1 final : abi_convention {
     }
 
     void emit_call_cleanup(z80_gen &g, const icode &ic) override {
-        if (ic.arg_bytes > 0 && sdcccall1_caller_cleans(ic.result.type))
-            exact_stack_drop(g, ic.arg_bytes);
+        exact_stack_drop(g, ic.arg_bytes);
     }
 
     void emit_indirect_call(z80_gen &g, const icode &ic) const override {

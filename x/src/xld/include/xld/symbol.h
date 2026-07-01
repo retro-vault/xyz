@@ -23,9 +23,10 @@ namespace xld {
         symbol() = default;
 
         symbol(const std::string& name, symbol_type type,
-               uint16_t value, int index, int area_index = -1)
+               uint16_t value, int index, int area_index = -1,
+               bool absolute = false)
             : name_(name), type_(type), value_(value), index_(index),
-              area_index_(area_index) {}
+              area_index_(area_index), absolute_(absolute) {}
 
         const std::string& name() const { return name_; }
         symbol_type type() const { return type_; }
@@ -33,6 +34,8 @@ namespace xld {
         void set_value(uint16_t value) { value_ = value; }
         int index() const { return index_; }
         int area_index() const { return area_index_; }
+        bool is_absolute() const { return absolute_; }
+        void set_absolute(bool absolute) { absolute_ = absolute; }
 
         module* owner() const { return owner_; }
         void set_owner(module* m) { owner_ = m; }
@@ -46,6 +49,7 @@ namespace xld {
         uint16_t value_ = 0;
         int index_ = 0;
         int area_index_ = -1;
+        bool absolute_ = false;
         module* owner_ = nullptr;
     };
 

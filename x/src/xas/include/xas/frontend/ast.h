@@ -153,6 +153,7 @@ namespace xas {
         // equ_stmt
         std::string equ_name;
         expr_ptr    equ_value;
+        bool        equ_global = false;
 
         // comment_stmt
         std::string comment_text;

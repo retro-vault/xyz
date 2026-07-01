@@ -253,9 +253,10 @@ stack-passed in a stable layout for `va_list` handling.
 - Second 16-bit argument after an 8-bit or 16-bit first argument: `DE`
 - Remaining arguments are pushed **right-to-left** by the caller.
 - Stack-passed `char` and `_Bool` arguments occupy one pushed byte.
-- Stack cleanup follows the callee ABI rules already encoded in the IR:
-  register-passed arguments need no cleanup, and stack-passed arguments
-  are dropped according to the selected convention.
+- Stack cleanup is ABI-sensitive: register-passed arguments need no
+  cleanup, stack-passed `sdcccall(0)` / `z88dk` arguments follow their
+  declared convention, and `sdcccall(1)` keeps stack-spilled arguments
+  caller-clean.
 
 ### Return values
 

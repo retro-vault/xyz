@@ -1,4 +1,4 @@
-// Tests [[sdcc::sdccall(1)]] caller: args loaded into HL/DE/BC, no stack cleanup.
+// Tests [[sdcc::sdccall(1)]] caller: a/b in HL/DE, c on stack, caller pops it.
 [[sdcc::sdccall(1)]] int add3(int a, int b, int c);
 
 int main(void) {

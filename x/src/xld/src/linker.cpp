@@ -306,7 +306,8 @@ namespace xld {
             auto& area = mod->area_by_index(entry_area_idx);
             if (area.placed_addr().has_value())
                 ctx.entry_point += area.placed_addr().value();
-        } else if (!mod->areas().empty()
+        } else if (!sym.is_absolute()
+            && !mod->areas().empty()
             && mod->areas()[0].placed_addr().has_value()) {
             // Fallback for objects without symbol->area metadata.
             ctx.entry_point += mod->areas()[0].placed_addr().value();

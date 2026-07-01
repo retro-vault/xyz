@@ -45,8 +45,4 @@ __add3_end:
 	; epilogue: add3
 	ld	sp, ix
 	pop	ix
-	pop	bc
-	inc	sp
-	inc	sp
-	push	bc
 	ret

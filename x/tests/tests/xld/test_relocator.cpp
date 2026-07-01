@@ -199,3 +199,41 @@ TEST(relocator_pc_relative_byte_rejects_out_of_range_target) {
 
     ASSERT_THROWS(xld::relocator::relocate(ctx), xld::reloc_error);
 }
+
+TEST(relocator_symbol_relocation_to_absolute_def_skips_area_bias) {
+    xld::link_context ctx;
+
+    auto caller = std::make_shared<xld::module>("caller", "caller.rel");
+    caller->areas().emplace_back("_CODE", 4, xld::area_flags::none, 0);
+    caller->areas()[0].set_placed_addr(0xC000);
+    caller->symbols().emplace_back("kfunc", xld::symbol_type::ref, 0, 0);
+
+    xld::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0xCD, 0x00, 0x00, 0xC9};
+
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::word | xld::reloc_mode::sym;
+    re.offset_in_t = 1;
+    re.ref_index = 0;
+    tr.relocs.push_back(re);
+    caller->texts().push_back(tr);
+
+    auto provider = std::make_shared<xld::module>("provider", "provider.rel");
+    provider->areas().emplace_back("_CODE", 0, xld::area_flags::none, 0);
+    provider->areas()[0].set_placed_addr(0x4000);
+    provider->symbols().emplace_back("kfunc", xld::symbol_type::def,
+                                     0x1234, 0, -1, true);
+
+    ctx.modules.push_back(caller);
+    ctx.modules.push_back(provider);
+    ctx.global_symbols["kfunc"] = {provider.get(), 0};
+    ctx.code_size = 0xC004;
+
+    xld::relocator::relocate(ctx);
+
+    const uint16_t value = ctx.code_buffer[0xC001]
+                         | (ctx.code_buffer[0xC002] << 8);
+    ASSERT_EQ(value, 0x1234);
+}

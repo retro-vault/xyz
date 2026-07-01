@@ -18,6 +18,7 @@ _main:
 	ld	hl, #1
 	.globl _add3
 	call	_add3
+	pop	bc
 	push	de
 	pop	hl
 	ld	-2(ix), l

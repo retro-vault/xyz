@@ -99,5 +99,4 @@ protected:
 
 call_abi effective_call_abi(call_abi abi);
 abi_convention &get_abi_convention(call_abi abi);
-
 } // namespace xcc

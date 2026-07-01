@@ -409,7 +409,7 @@ static std::optional<uint32_t> resolve_growth_target(
             return target + def_area.placed_addr().value();
         }
 
-        if (!def_mod->areas().empty()) {
+        if (!def_sym->is_absolute() && !def_mod->areas().empty()) {
             const auto &fallback_area = def_mod->areas()[0];
             if (!fallback_area.placed_addr().has_value())
                 return std::nullopt;

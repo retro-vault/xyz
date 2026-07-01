@@ -1739,8 +1739,10 @@ public:
                 type->kind == type_kind::STRUCT ||
                 type->kind == type_kind::UNION)
                 return false;
-            int sz = type->size();
-            return sz == 1 || sz == 2;
+            // This pass is intentionally limited to simple 16-bit locals.
+            // Promoting 8-bit locals interacts badly with later loop passes
+            // and has produced missed state updates in optimized code.
+            return type->size() == 2;
         };
 
         auto block_if_needed = [&](const operand &op) {
