@@ -139,8 +139,8 @@ $(BUILD_TARGET): $(OBJS) $(ARCHIVE_MANIFEST) | $(PROJECT_BUILD_DIR)
 	$(AR8) $(AR8FLAGS) $@ @$(ARCHIVE_MANIFEST)
 
 $(ARCHIVE_MANIFEST): $(OBJS) | $(PROJECT_BUILD_DIR)
-	@$(file >$@,)
-	@$(foreach obj,$(OBJS),$(file >>$@,$(obj)))
+	find "$(OBJDIR)" -type f -name '*.rel' | LC_ALL=C sort > $@
+	test -s $@
 
 $(OBJDIR)/%.s: %.c | $(OBJDIR)
 	@mkdir -p $(dir $@)

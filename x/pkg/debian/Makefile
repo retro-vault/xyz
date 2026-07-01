@@ -123,8 +123,8 @@ $(XCC_RUNTIME_ARCHIVE): $(XCC_RUNTIME_RELS) $(XCC_RUNTIME_MANIFEST) $(DIST_DIR)/
 	$(DIST_DIR)/bin/xar rcs $@ @$(XCC_RUNTIME_MANIFEST)
 
 $(XCC_RUNTIME_MANIFEST): $(XCC_RUNTIME_RELS) | $(XCC_RUNTIME_BUILD_DIR)
-	@$(file >$@,)
-	@$(foreach rel,$(XCC_RUNTIME_RELS),$(file >>$@,$(rel)))
+	find "$(XCC_RUNTIME_BUILD_DIR)" -type f -name '*.rel' | LC_ALL=C sort > $@
+	test -s $@
 
 $(XCC_RUNTIME_COMPAT_ARCHIVE): $(XCC_RUNTIME_ARCHIVE)
 	cp $< $@

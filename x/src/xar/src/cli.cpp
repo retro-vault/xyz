@@ -7,6 +7,7 @@
 // MIT License (see: LICENSE)
 // copyright (C) 2026 tomaz stih
 //
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -19,11 +20,30 @@ namespace xar {
 
     namespace {
 
+        std::string normalize_cli_path(std::string path)
+        {
+#ifdef _WIN32
+            // Response files bypass the MSYS argv path rewrite, so convert
+            // /c/... style paths into native C:/... form before opening them.
+            if (path.size() >= 3
+                && path[0] == '/'
+                && std::isalpha(static_cast<unsigned char>(path[1]))
+                && path[2] == '/') {
+                path = std::string(
+                    1,
+                    static_cast<char>(
+                        std::toupper(static_cast<unsigned char>(path[1]))))
+                    + ":" + path.substr(2);
+            }
+#endif
+            return path;
+        }
+
         void append_members_from_response_file(
             const std::string& path,
             std::vector<std::string>& members)
         {
-            std::ifstream file(path);
+            std::ifstream file(normalize_cli_path(path));
             if (!file.is_open())
                 throw std::runtime_error("cannot open response file: " + path);
 
@@ -32,7 +52,7 @@ namespace xar {
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
                 if (!line.empty())
-                    members.push_back(line);
+                    members.push_back(normalize_cli_path(std::move(line)));
             }
         }
 
@@ -126,12 +146,12 @@ namespace xar {
         if (i >= argc)
             throw std::runtime_error("no archive name specified");
 
-        opts.archive = argv[i++];
+        opts.archive = normalize_cli_path(argv[i++]);
 
         while (i < argc) {
             std::string arg = argv[i++];
             if (arg.rfind("@@", 0) == 0) {
-                opts.members.push_back(arg.substr(1));
+                opts.members.push_back(normalize_cli_path(arg.substr(1)));
                 continue;
             }
             if (!arg.empty() && arg[0] == '@') {
@@ -140,7 +160,7 @@ namespace xar {
                 append_members_from_response_file(arg.substr(1), opts.members);
                 continue;
             }
-            opts.members.push_back(std::move(arg));
+            opts.members.push_back(normalize_cli_path(std::move(arg)));
         }
 
         return opts;
