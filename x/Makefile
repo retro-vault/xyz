@@ -187,7 +187,10 @@ stage-xcc-support:
 	    if [ "$$skip" = "1" ]; then continue; fi; \
 	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$src" -o "$$rel"; \
 	done
-	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(RUNTIME_ARCHIVE_NAME) $(TOOLCHAIN_RUNTIME_BUILD_DIR)/*.rel
+	@runtime_manifest="$(TOOLCHAIN_RUNTIME_BUILD_DIR)/$(RUNTIME_ARCHIVE_NAME).members"; \
+	find "$(TOOLCHAIN_RUNTIME_BUILD_DIR)" -maxdepth 1 -name '*.rel' | sort > "$$runtime_manifest"; \
+	test -s "$$runtime_manifest" || { echo "no runtime objects for $(RUNTIME_ARCHIVE_NAME)"; exit 1; }; \
+	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(RUNTIME_ARCHIVE_NAME) "@$$runtime_manifest"
 	@for src in $$(find \
 	        $(X_ROOT)/runtime/8_8 \
 	        $(X_ROOT)/runtime/16_16 \
@@ -199,7 +202,10 @@ stage-xcc-support:
 	    $(HOST_BIN_DIR)/xopt -O3 "$$src" -o "$$opt"; \
 	    $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$opt" -o "$$rel"; \
 	done
-	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(FIXED_ARCHIVE_NAME) $(TOOLCHAIN_FIXED_BUILD_DIR)/*.rel
+	@fixed_manifest="$(TOOLCHAIN_FIXED_BUILD_DIR)/$(FIXED_ARCHIVE_NAME).members"; \
+	find "$(TOOLCHAIN_FIXED_BUILD_DIR)" -maxdepth 1 -name '*.rel' | sort > "$$fixed_manifest"; \
+	test -s "$$fixed_manifest" || { echo "no runtime objects for $(FIXED_ARCHIVE_NAME)"; exit 1; }; \
+	$(HOST_BIN_DIR)/xar --mode=gnu rcs $(TARGET_LIB_DIR)/$(FIXED_ARCHIVE_NAME) "@$$fixed_manifest"
 	@for platform in $(STAGED_PLATFORMS); do \
 	    sysdir="$(X_ROOT)/platforms/$$platform"; \
 	    builddir="$(BUILD_DIR)/toolchain-platform/$$platform"; \
@@ -218,7 +224,10 @@ stage-xcc-support:
 	            *.s) $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$src" -o "$$rel" ;; \
 	        esac; \
 	    done; \
-	    $(HOST_BIN_DIR)/xar --mode=gnu rcs "$(TARGET_LIB_DIR)/lib$$platform.a" "$$builddir"/*.rel; \
+	    manifest="$$builddir/lib$$platform.members"; \
+	    find "$$builddir" -maxdepth 1 -name '*.rel' | sort > "$$manifest"; \
+	    test -s "$$manifest" || { echo "no platform objects for $$platform"; exit 1; }; \
+	    $(HOST_BIN_DIR)/xar --mode=gnu rcs "$(TARGET_LIB_DIR)/lib$$platform.a" "@$$manifest"; \
 	done
 	$(MAKE) -C $(X_ROOT)/libc \
 	    ROOT=$(X_ROOT) \

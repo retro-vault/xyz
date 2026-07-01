@@ -47,6 +47,7 @@ XCC_RUNTIME_SOURCES := $(shell find $(XCC_RUNTIME_SRC_DIR) -type f -name '*.s' |
 XCC_RUNTIME_RELS := $(patsubst $(XCC_RUNTIME_SRC_DIR)/%.s,$(XCC_RUNTIME_BUILD_DIR)/%.rel,$(XCC_RUNTIME_SOURCES))
 XCC_RUNTIME_ARCHIVE := $(XCC_RUNTIME_BUILD_DIR)/z80.lib
 XCC_RUNTIME_COMPAT_ARCHIVE := $(XCC_RUNTIME_BUILD_DIR)/runtime.lib
+XCC_RUNTIME_MANIFEST := $(XCC_RUNTIME_BUILD_DIR)/z80-lib.members
 DIST_PREFIX_FILES := \
 	$(DIST_DIR)/bin/xcc \
 	$(DIST_DIR)/z80/include/stdio.h \
@@ -117,9 +118,13 @@ $(XCC_RUNTIME_BUILD_DIR)/%.rel: $(XCC_RUNTIME_SRC_DIR)/%.s $(DIST_DIR)/bin/xas |
 	mkdir -p $(dir $@)
 	$(DIST_DIR)/bin/xas --mode=sdcc $< -o $@
 
-$(XCC_RUNTIME_ARCHIVE): $(XCC_RUNTIME_RELS) $(DIST_DIR)/bin/xar | $(XCC_RUNTIME_BUILD_DIR)
+$(XCC_RUNTIME_ARCHIVE): $(XCC_RUNTIME_RELS) $(XCC_RUNTIME_MANIFEST) $(DIST_DIR)/bin/xar | $(XCC_RUNTIME_BUILD_DIR)
 	rm -f $@
-	$(DIST_DIR)/bin/xar rcs $@ $(XCC_RUNTIME_RELS)
+	$(DIST_DIR)/bin/xar rcs $@ @$(XCC_RUNTIME_MANIFEST)
+
+$(XCC_RUNTIME_MANIFEST): $(XCC_RUNTIME_RELS) | $(XCC_RUNTIME_BUILD_DIR)
+	@$(file >$@,)
+	@$(foreach rel,$(XCC_RUNTIME_RELS),$(file >>$@,$(rel)))
 
 $(XCC_RUNTIME_COMPAT_ARCHIVE): $(XCC_RUNTIME_ARCHIVE)
 	cp $< $@

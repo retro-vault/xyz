@@ -220,6 +220,16 @@ EOF
     echo "$listing" | grep -q 'b' || { echo "  list: 'b' not found in listing"; return 1; }
     echo "  ${GREEN}list${RESET}: ok"
 
+    # Create archive via response file as a long-argv-safe path.
+    printf '%s\n%s\n' "$tmpdir/a.rel" "$tmpdir/b.rel" > "$tmpdir/members.rsp"
+    "$XAR" rcs "$tmpdir/test-rsp.lib" "@$tmpdir/members.rsp" 2>/dev/null \
+        || { echo "  xar response file create failed"; return 1; }
+    [[ -f "$tmpdir/test-rsp.lib" ]] || { echo "  response-file archive not created"; return 1; }
+    listing=$("$XAR" t "$tmpdir/test-rsp.lib" 2>/dev/null)
+    echo "$listing" | grep -q 'a' || { echo "  response list: 'a' not found in listing"; return 1; }
+    echo "$listing" | grep -q 'b' || { echo "  response list: 'b' not found in listing"; return 1; }
+    echo "  ${GREEN}response-file${RESET}: ok"
+
     # Link using the archive (pull in _foo only).
     cat > "$tmpdir/main.s" <<'EOF'
     .module main
@@ -289,7 +299,8 @@ phase_chain() {
         base=$(basename "${s%.s}")
         "$XAS" --mode=sdcc "$s" -o "$rtdir/${base}.rel" 2>/dev/null || true
     done < <(find "$runtime_dir" -type f -name '*.s' | sort)
-    "$XAR" rcs "$rtdir/runtime.lib" "$rtdir"/*.rel 2>/dev/null \
+    find "$rtdir" -maxdepth 1 -name '*.rel' | sort > "$rtdir/runtime.members"
+    "$XAR" rcs "$rtdir/runtime.lib" "@$rtdir/runtime.members" 2>/dev/null \
         || { echo "${RED}FAILED${RESET}"; rt_ok=false; }
     $rt_ok && echo "${GREEN}ok${RESET}"
     $rt_ok || return 1

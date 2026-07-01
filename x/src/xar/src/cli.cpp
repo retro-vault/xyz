@@ -8,6 +8,7 @@
 // copyright (C) 2026 tomaz stih
 //
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -15,6 +16,27 @@
 #include <xar/cli.h>
 
 namespace xar {
+
+    namespace {
+
+        void append_members_from_response_file(
+            const std::string& path,
+            std::vector<std::string>& members)
+        {
+            std::ifstream file(path);
+            if (!file.is_open())
+                throw std::runtime_error("cannot open response file: " + path);
+
+            std::string line;
+            while (std::getline(file, line)) {
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
+                if (!line.empty())
+                    members.push_back(line);
+            }
+        }
+
+    } // anonymous namespace
 
     [[noreturn]] void print_usage_and_exit(const char* prog, int code)
     {
@@ -37,12 +59,14 @@ namespace xar {
             << "options:\n"
             << "  --mode=sdcc   Text-index .lib format (default)\n"
             << "  --mode=gnu    GNU ar binary format\n"
+            << "  @file         Read member paths from a response file\n"
             << "  --help        Show this help\n"
             << "  --version     Show version\n"
             << "\n"
             << "examples:\n"
             << "  xar rcs mylib.lib foo.rel bar.rel\n"
             << "  xar --mode=gnu rc mylib.a foo.o bar.o\n"
+            << "  xar rcs mylib.lib @members.rsp\n"
             << "  xar t mylib.lib\n"
             << "  xar x mylib.lib foo.rel\n"
             << "  xar d mylib.lib old.rel\n";
@@ -104,8 +128,20 @@ namespace xar {
 
         opts.archive = argv[i++];
 
-        while (i < argc)
-            opts.members.push_back(argv[i++]);
+        while (i < argc) {
+            std::string arg = argv[i++];
+            if (arg.rfind("@@", 0) == 0) {
+                opts.members.push_back(arg.substr(1));
+                continue;
+            }
+            if (!arg.empty() && arg[0] == '@') {
+                if (arg.size() == 1)
+                    throw std::runtime_error("empty response file argument");
+                append_members_from_response_file(arg.substr(1), opts.members);
+                continue;
+            }
+            opts.members.push_back(std::move(arg));
+        }
 
         return opts;
     }

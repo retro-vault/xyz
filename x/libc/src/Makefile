@@ -50,6 +50,7 @@ LIBC_BUILD_FLAVOR := $(LIBC_PROFILE)-$(X_MODEL_NAME)-f$(LIBC_FLOAT)-d$(LIBC_DOUB
 PROJECT_BUILD_DIR := $(BUILD_DIR)/lib/libc/$(LIBC_BUILD_FLAVOR)
 OBJDIR := $(PROJECT_BUILD_DIR)/obj
 BUILD_TARGET := $(PROJECT_BUILD_DIR)/libc.a
+ARCHIVE_MANIFEST := $(PROJECT_BUILD_DIR)/libc.members
 
 C_SRCS := $(sort $(wildcard *.c */*.c))
 S_SRCS := $(sort $(wildcard *.s */*.s))
@@ -133,9 +134,13 @@ endif
 
 all: $(BUILD_TARGET)
 
-$(BUILD_TARGET): $(OBJS) | $(PROJECT_BUILD_DIR)
+$(BUILD_TARGET): $(OBJS) $(ARCHIVE_MANIFEST) | $(PROJECT_BUILD_DIR)
 	rm -f $@
-	$(AR8) $(AR8FLAGS) $@ $^
+	$(AR8) $(AR8FLAGS) $@ @$(ARCHIVE_MANIFEST)
+
+$(ARCHIVE_MANIFEST): $(OBJS) | $(PROJECT_BUILD_DIR)
+	@$(file >$@,)
+	@$(foreach obj,$(OBJS),$(file >>$@,$(obj)))
 
 $(OBJDIR)/%.s: %.c | $(OBJDIR)
 	@mkdir -p $(dir $@)

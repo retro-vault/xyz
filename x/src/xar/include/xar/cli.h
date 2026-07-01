@@ -19,6 +19,7 @@
 // Global options:
 //   --mode=sdcc   Text-index .lib format (default)
 //   --mode=gnu    GNU ar binary format
+//   @file         Read member paths from a response file
 //   --help        Print help and exit
 //   --version     Print version and exit
 //
