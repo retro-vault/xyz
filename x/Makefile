@@ -77,12 +77,17 @@ FIXED_ARCHIVE_NAME := libfixed.a
 STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3 emu)
 TOOLCHAIN_RUNTIME_BUILD_DIR := $(BUILD_DIR)/toolchain-runtime
 TOOLCHAIN_FIXED_BUILD_DIR := $(BUILD_DIR)/toolchain-fixed
+WINDOWS_MINGW_DOCKER_SCRIPT := $(X_ROOT)/tests/tools/windows_host_preflight_docker.sh
 
 .PHONY: all x clean
 .PHONY: stage-includes stage-target-assets stage-xcc-support
 .PHONY: stage-layout-cleanup stage-dist-docs
+.PHONY: windows-host-preflight
 
 all: x
+
+windows-host-preflight:
+	bash $(WINDOWS_MINGW_DOCKER_SCRIPT)
 
 x:
 	@$(MAKE) -C lib \

@@ -6,8 +6,16 @@ PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
 CXXFLAGS ?= -std=c++20 -g
 UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
+HOST_TRIPLE ?= $(shell $(CXX) -dumpmachine 2>/dev/null || echo unknown)
+NEEDS_WINSOCK := 0
+ifneq ($(filter Windows_NT MINGW% MSYS% CYGWIN%,$(OS) $(UNAME_S)),)
+NEEDS_WINSOCK := 1
+endif
+ifneq ($(findstring mingw,$(HOST_TRIPLE)),)
+NEEDS_WINSOCK := 1
+endif
 SOCKET_LIBS :=
-ifneq (,$(findstring MINGW,$(UNAME_S)))
+ifeq ($(NEEDS_WINSOCK),1)
 SOCKET_LIBS += -lws2_32
 endif
 XZ80_DIR ?= $(ROOT)/lib/xz80

@@ -19,3 +19,4 @@ First-pass product copy for the X tools.
 - `tests/tests/` is now the canonical home for non-benchmark test suites.
 - Benchmarks now live under the unified `tests/benchmarks/` root.
 - `tests/tests/corpus/upstream/` holds the upstream corpora that previously lived under the repo-level `orig/`.
+- For a Docker-based MinGW host-tools preflight, run `make -C x windows-host-preflight`.
