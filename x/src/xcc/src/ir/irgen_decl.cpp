@@ -353,6 +353,11 @@ void ir_gen::visit(var_decl &vd) {
                 call_ic.func_name = "__vla_zero";
                 call_ic.num_params = 2;
                 call_ic.arg_bytes  = 4; // 2 bytes ptr + 2 bytes count
+                call_ic.callee_cleans_stack =
+                    abi_callee_cleans_stack(call_abi::DEFAULT,
+                                            type::make_void(),
+                                            {ptr_res.type, bytes.type},
+                                            false);
                 emit(call_ic);
             }
         }
@@ -450,6 +455,7 @@ void ir_gen::gen_func(func_decl &fd) {
     fn.num_params       = static_cast<int>(fd.params.size());
     fn.bank             = fd.sym ? fd.sym->bank : -1;
     fn.abi              = fd.sym ? fd.sym->abi : call_abi::DEFAULT;
+    fn.is_variadic      = fd.type ? fd.type->variadic : false;
     fn.is_noreturn      = fd.sym ? fd.sym->attr_noreturn : false;
 
     std::vector<type_ptr> param_types;
@@ -501,6 +507,9 @@ void ir_gen::gen_func(func_decl &fd) {
 
     fn.local_bytes += spill_bytes;
     fn.stack_param_bytes = stack_bytes;
+    fn.callee_cleans_stack =
+        abi_callee_cleans_stack(fn.abi, fn.ret_type, param_types,
+                                fn.is_variadic);
 
     mod_->functions.push_back(std::move(fn));
     cur_fn_ = &mod_->functions.back();

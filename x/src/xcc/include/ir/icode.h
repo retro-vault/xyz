@@ -261,6 +261,7 @@ struct icode {
     int      line        = 0;
     int      arg_bytes   = 0;               // CALL: total bytes pushed by SEND (for SP cleanup)
     call_abi callee_abi  = call_abi::DEFAULT; // SEND/CALL: ABI of the callee function
+    bool     callee_cleans_stack = false;   // CALL: callee drops stack-passed args before returning
 
     //
     // Print a human-readable dump of this instruction to stdout.
@@ -284,6 +285,8 @@ struct ir_function {
     call_abi            abi              = call_abi::DEFAULT;
     int                 orig_local_bytes = 0; // sdccall(1): local_bytes before register spill area
     int                 stack_param_bytes = 0; // sdccall(1): bytes physically passed on stack
+    bool                is_variadic      = false;
+    bool                callee_cleans_stack = false; // epilogue drops stack params before returning
     bool                is_noreturn      = false; // [[noreturn]]: epilogue unreachable
 
     //

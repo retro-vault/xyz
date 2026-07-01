@@ -98,5 +98,9 @@ protected:
 // ---------------------------------------------------------------------------
 
 call_abi effective_call_abi(call_abi abi);
+bool abi_callee_cleans_stack(call_abi abi,
+                             type_ptr ret_type,
+                             const std::vector<type_ptr> &arg_types,
+                             bool variadic);
 abi_convention &get_abi_convention(call_abi abi);
 } // namespace xcc

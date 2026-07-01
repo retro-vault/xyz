@@ -13,6 +13,7 @@
 
         .globl  _memcmp
         .globl  __string_compare_result
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -40,7 +41,7 @@ memcmp_loop:
         jr      z,memcmp_same
         call    __string_compare_result
         pop     ix
-        ret
+        jp      __string_ret_clean2
 memcmp_same:
         inc     de
         inc     hl
@@ -49,4 +50,4 @@ memcmp_same:
 memcmp_equal:
         ld      de,#0x0000
         pop     ix
-        ret
+        jp      __string_ret_clean2

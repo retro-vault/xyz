@@ -122,6 +122,14 @@ void z80_gen::gen_call(const icode &ic) {
         conv.emit_indirect_call(*this, ic);
     }
 
+    // When the callee pops stack-passed arguments, the machine SP has already
+    // advanced on return even though we emit no caller-side cleanup sequence.
+    // Keep the cached SP-vs-IX delta in sync so deep frame accesses continue to
+    // use the right sp-relative offset after optimized calls.
+    if (ic.callee_cleans_stack && ic.arg_bytes > 0 && has_known_sp_ix_delta()) {
+        set_known_sp_ix_delta(current_sp_ix_delta() + ic.arg_bytes);
+    }
+
     bool direct_return = false;
     if (cur_fn_ && !ic.result.is_none() &&
         cur_ic_index_ + 1 < cur_fn_->icodes.size()) {

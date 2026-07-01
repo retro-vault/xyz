@@ -198,6 +198,27 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
     return false;
 }
 
+bool is_float_type(const type_ptr &type) {
+    return type && type->kind == type_kind::FLOAT;
+}
+
+bool sdcccall1_callee_cleans_stack(type_ptr ret_type,
+                                   const std::vector<type_ptr> &arg_types,
+                                   bool variadic) {
+    if (variadic)
+        return false;
+
+    type_ptr effective_ret = ret_type ? ret_type : type::make_int();
+    if (effective_ret->kind == type_kind::VOID)
+        return true;
+    if (effective_ret->size() <= 2)
+        return true;
+
+    return is_float_type(effective_ret) &&
+           !arg_types.empty() &&
+           is_float_type(arg_types.front());
+}
+
 } // namespace
 
 bool z80_gen::can_omit_frame_pointer(const ir_function &fn) const {
@@ -225,6 +246,20 @@ bool z80_gen::needs_frame_without_temps(const ir_function &fn) const {
 
 call_abi effective_call_abi(call_abi abi) {
     return abi == call_abi::DEFAULT ? get_default_call_abi() : abi;
+}
+
+bool abi_callee_cleans_stack(call_abi abi,
+                             type_ptr ret_type,
+                             const std::vector<type_ptr> &arg_types,
+                             bool variadic) {
+    switch (effective_call_abi(abi)) {
+    case call_abi::SDCCCALL1:
+        return sdcccall1_callee_cleans_stack(ret_type, arg_types, variadic);
+    case call_abi::Z88DK_CALLEE:
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ─── abi_convention: shared protected helpers ────────────────────────────────
@@ -1036,8 +1071,12 @@ struct cc_sdcccall1 final : abi_convention {
 
     void emit_epilogue(z80_gen &g, const ir_function &fn) override {
         std_epilogue_frame(g, fn);
-        if (!fn.is_noreturn)
-            g.emit_line("ret");
+        if (!fn.is_noreturn) {
+            if (fn.callee_cleans_stack && fn.stack_param_bytes > 0)
+                callee_stack_return(g, fn.stack_param_bytes);
+            else
+                g.emit_line("ret");
+        }
         if (g.debug_) g.debug_->end_function(fn);
     }
 
@@ -1096,7 +1135,8 @@ struct cc_sdcccall1 final : abi_convention {
     }
 
     void emit_call_cleanup(z80_gen &g, const icode &ic) override {
-        exact_stack_drop(g, ic.arg_bytes);
+        if (!ic.callee_cleans_stack)
+            exact_stack_drop(g, ic.arg_bytes);
     }
 
     void emit_indirect_call(z80_gen &g, const icode &ic) const override {

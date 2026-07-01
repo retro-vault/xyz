@@ -12,6 +12,7 @@
 
         .globl  _strncat
         .globl  __string_scan_nul
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -51,4 +52,4 @@ strncat_term:
         ld      (de),a                  ; append the required trailing NUL
         pop     de
         pop     ix
-        ret
+        jp      __string_ret_clean2

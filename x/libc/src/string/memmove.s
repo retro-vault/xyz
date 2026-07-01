@@ -12,6 +12,7 @@
 
 
         .globl  _memmove
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -54,4 +55,4 @@ memmove_forward:
 memmove_done:
         pop     de
         pop     ix
-        ret
+        jp      __string_ret_clean2

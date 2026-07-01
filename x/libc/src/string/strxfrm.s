@@ -14,6 +14,7 @@
 
         .globl  _strxfrm
         .globl  __string_scan_nul
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -60,4 +61,4 @@ strxfrm_copy:
 strxfrm_return_len:
         pop     de
         pop     ix
-        ret
+        jp      __string_ret_clean2

@@ -1433,6 +1433,11 @@ static bool rewrite_fixed_unary_specialized_call(ir_function &caller,
     new_call.func_name = target;
     new_call.num_params = 1;
     new_call.arg_bytes = total_arg_bytes;
+    new_call.callee_cleans_stack =
+        abi_callee_cleans_stack(new_call.callee_abi,
+                                new_call.result.type,
+                                arg_types,
+                                false);
     replacement.push_back(std::move(new_call));
 
     auto erase_begin =
@@ -1923,6 +1928,12 @@ static bool rewrite_dead_params_in_function(
     fn.num_params = candidate.new_num_params;
     fn.local_bytes = candidate.new_local_bytes;
     fn.stack_param_bytes = candidate.new_stack_param_bytes;
+    std::vector<type_ptr> kept_types;
+    kept_types.reserve(candidate.kept.size());
+    for (const auto &kept : candidate.kept)
+        kept_types.push_back(kept.new_op.type ? kept.new_op.type : type::make_int());
+    fn.callee_cleans_stack =
+        abi_callee_cleans_stack(fn.abi, fn.ret_type, kept_types, fn.is_variadic);
     return true;
 }
 
@@ -1974,6 +1985,9 @@ static bool rewrite_dead_params_in_calls(
             icode new_call = ic;
             new_call.num_params = static_cast<int>(kept_args.size());
             new_call.arg_bytes = total_arg_bytes;
+            new_call.callee_cleans_stack =
+                abi_callee_cleans_stack(callee.abi, callee.ret_type, kept_types,
+                                        callee.is_variadic);
             replacement.push_back(std::move(new_call));
 
             auto erase_begin =

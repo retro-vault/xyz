@@ -12,6 +12,7 @@
 
 
         .globl  _memcpy
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -38,4 +39,4 @@ _memcpy::
 memcpy_done:
         pop     de
         pop     ix
-        ret
+        jp      __string_ret_clean2

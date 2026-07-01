@@ -668,7 +668,9 @@ void ir_gen::visit(call_expr &e) {
         }
     }
 
-    if (fn_type && fn_type->variadic && c_abi == call_abi::DEFAULT)
+    const bool callee_variadic = fn_type && fn_type->variadic;
+
+    if (callee_variadic && c_abi == call_abi::DEFAULT)
         c_abi = call_abi::SDCCCALL0;
 
     std::vector<type_ptr> arg_types;
@@ -676,7 +678,7 @@ void ir_gen::visit(call_expr &e) {
     for (size_t i = 0; i < arg_ops.size(); ++i) {
         type_ptr abi_type = arg_ops[i].type ? arg_ops[i].type : type::make_int();
         const bool is_variadic_tail =
-            fn_type && fn_type->variadic && i >= fn_type->params.size();
+            callee_variadic && i >= fn_type->params.size();
         if (is_variadic_tail) {
             abi_type = default_arg_promote_type(abi_type);
         } else if (fn_type && i < fn_type->params.size() && fn_type->params[i]) {
@@ -739,6 +741,8 @@ void ir_gen::visit(call_expr &e) {
     ic.arg_bytes  = total_arg_bytes;
     ic.result     = result;
     ic.callee_abi = c_abi;
+    ic.callee_cleans_stack =
+        abi_callee_cleans_stack(c_abi, ret_type, arg_types, callee_variadic);
 
     if (!direct_func_name.empty())
         ic.func_name = direct_func_name;

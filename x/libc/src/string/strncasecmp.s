@@ -12,6 +12,7 @@
 
         .globl  _strncasecmp
         .globl  __string_fold_lower
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -48,12 +49,12 @@ strncasecmp_loop:
 strncasecmp_lt:
         pop     ix
         ld      de,#0xffff
-        ret
+        jp      __string_ret_clean2
 strncasecmp_gt:
         pop     ix
         ld      de,#0x0001
-        ret
+        jp      __string_ret_clean2
 strncasecmp_eq:
         pop     ix
         ld      de,#0x0000
-        ret
+        jp      __string_ret_clean2

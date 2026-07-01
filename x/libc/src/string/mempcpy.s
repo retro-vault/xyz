@@ -12,6 +12,7 @@
 
 
         .globl  _mempcpy
+        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -32,4 +33,4 @@ _mempcpy::
         ldir                            ; copy BC bytes; DE ends at dest+count
 mempcpy_done:
         pop     ix
-        ret                             ; DE already = destination + count
+        jp      __string_ret_clean2     ; DE already = destination + count

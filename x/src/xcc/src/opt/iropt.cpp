@@ -1224,7 +1224,8 @@ static std::string icode_signature(
            std::to_string(ic.argreg) + "|" +
            std::to_string(static_cast<int>(ic.arg_loc)) + "|" +
            std::to_string(ic.arg_bytes) + "|" +
-           std::to_string(static_cast<int>(ic.callee_abi));
+           std::to_string(static_cast<int>(ic.callee_abi)) + "|" +
+           std::to_string(ic.callee_cleans_stack ? 1 : 0);
 }
 
 static std::string block_body_signature(const ir_function &fn,
@@ -1308,7 +1309,8 @@ static bool icodes_equivalent_for_tail_merge(
         lhs.argreg != rhs.argreg ||
         lhs.arg_loc != rhs.arg_loc ||
         lhs.arg_bytes != rhs.arg_bytes ||
-        lhs.callee_abi != rhs.callee_abi) {
+        lhs.callee_abi != rhs.callee_abi ||
+        lhs.callee_cleans_stack != rhs.callee_cleans_stack) {
         return false;
     }
 
