@@ -30,6 +30,7 @@
 #include <xopt/xopt.h>
 #include <xbfd/xbfd.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cctype>
 #include <chrono>
