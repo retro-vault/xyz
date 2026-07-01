@@ -16,19 +16,37 @@ XOPT_DIR := $(ROOT)/lib/xopt
 XOPT_INC := $(XOPT_DIR)/include
 XOPT_LIB := $(BUILD_DIR)/lib/libxopt.a
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src  -I$(ROOT)/platforms/include -I$(ROOT)/lib/xbfd/include -I$(XOPT_INC)
-DBGFLAGS ?= -g3 -O0 -DDEBUG -fsanitize=address,undefined
+DBGFLAGS ?= -g3 -O0 -DDEBUG
+SANITIZE_FLAGS ?= -fsanitize=address,undefined
 RELFLAGS ?= -O2 -DNDEBUG
 LDFLAGS ?=
+HOST_OS ?= $(shell uname -s 2>/dev/null || echo unknown)
+HOST_TRIPLE ?= $(shell $(CXX) -dumpmachine 2>/dev/null || echo unknown)
+ENABLE_SANITIZERS ?= auto
 GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
 XCC_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
 CXXFLAGS += -DXCC_VERSION=\"$(XCC_VERSION)\"
+
+ifeq ($(ENABLE_SANITIZERS),auto)
+  ENABLE_SANITIZERS := 1
+  # MinGW/MSYS CI environments commonly lack the sanitizer runtime libs.
+  ifneq ($(filter Windows_NT MINGW% MSYS% CYGWIN%,$(OS) $(HOST_OS)),)
+    ENABLE_SANITIZERS := 0
+  endif
+  ifneq ($(findstring mingw,$(HOST_TRIPLE)),)
+    ENABLE_SANITIZERS := 0
+  endif
+endif
 
 BUILD    ?= debug
 ifeq ($(BUILD),release)
   CXXFLAGS += $(RELFLAGS)
 else
   CXXFLAGS += $(DBGFLAGS)
-  LDFLAGS  += -fsanitize=address,undefined
+  ifeq ($(ENABLE_SANITIZERS),1)
+    CXXFLAGS += $(SANITIZE_FLAGS)
+    LDFLAGS  += $(SANITIZE_FLAGS)
+  endif
 endif
 
 SRCDIR   := src
@@ -133,7 +151,7 @@ test-unified: $(TARGET)
 bench: $(TARGET)
 	@bash $(LEGACY_TEST_DIR)/run_codegen_bench.sh $(TARGET)
 
-# Like 'make test' but forces a debug build (sanitizers active).
+# Like 'make test' but forces a debug build (sanitizers active when supported).
 # Use this before committing to catch memory and UB issues.
 check:
 	@$(MAKE) BUILD=debug test
