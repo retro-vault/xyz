@@ -55,7 +55,17 @@ jobs:
             X_MODEL="${{ matrix.model }}" \
             PACKAGE_NAME="${{ matrix.package_name }}"
 
-          python - "$dist_dir" "$archive_base" <<'PY'
+          python_cmd=()
+          if command -v python3 >/dev/null 2>&1; then
+            python_cmd=("$(command -v python3)")
+          elif command -v python >/dev/null 2>&1; then
+            python_cmd=("$(command -v python)")
+          else
+            echo "python interpreter not found" >&2
+            exit 1
+          fi
+
+          "${python_cmd[@]}" - "$dist_dir" "$archive_base" <<'PY'
           import shutil
           import sys
           import zipfile
@@ -134,7 +144,17 @@ jobs:
             X_MODEL="${{ matrix.model }}" \
             PACKAGE_NAME="${{ matrix.package_name }}"
 
-          python - "$dist_dir" "$archive_base" <<'PY'
+          python_cmd=()
+          if command -v python3 >/dev/null 2>&1; then
+            python_cmd=("$(command -v python3)")
+          elif command -v python >/dev/null 2>&1; then
+            python_cmd=("$(command -v python)")
+          else
+            echo "python interpreter not found" >&2
+            exit 1
+          fi
+
+          "${python_cmd[@]}" - "$dist_dir" "$archive_base" <<'PY'
           import shutil
           import sys
           import zipfile
@@ -222,7 +242,28 @@ jobs:
             X_MODEL="${{ matrix.model }}" \
             PACKAGE_NAME="${{ matrix.package_name }}"
 
-          python - "$dist_dir" "$archive_base" <<'PY'
+          python_cmd=()
+          if [ -n "${pythonLocation:-}" ]; then
+            python_candidate="$(cygpath -u "$pythonLocation")/python.exe"
+            if [ -x "$python_candidate" ]; then
+              python_cmd=("$python_candidate")
+            fi
+          fi
+          if [ ${#python_cmd[@]} -eq 0 ] && command -v python3 >/dev/null 2>&1; then
+            python_cmd=("$(command -v python3)")
+          fi
+          if [ ${#python_cmd[@]} -eq 0 ] && command -v python >/dev/null 2>&1; then
+            python_cmd=("$(command -v python)")
+          fi
+          if [ ${#python_cmd[@]} -eq 0 ] && command -v py >/dev/null 2>&1; then
+            python_cmd=("$(command -v py)" -3)
+          fi
+          if [ ${#python_cmd[@]} -eq 0 ]; then
+            echo "python interpreter not found" >&2
+            exit 1
+          fi
+
+          "${python_cmd[@]}" - "$dist_dir" "$archive_base" <<'PY'
           import shutil
           import sys
           import zipfile
