@@ -116,14 +116,11 @@ namespace xar {
 
             bfd::archive_member m;
             m.name = name;
+            m.path = p.string();
 
             if (opts.mode == archive_mode::gnu) {
                 // ar binary: embed raw bytes.
                 m.data = read_file(p);
-                m.path = p;
-            } else {
-                // text-index: store path reference.
-                m.path = p;
             }
 
             auto it = idx_map.find(name);
