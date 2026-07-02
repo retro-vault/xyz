@@ -22,12 +22,10 @@
 namespace bfd {
 namespace {
 
-static constexpr uint32_t SHT_NULL     = 0;
 static constexpr uint32_t SHT_PROGBITS = 1;
 static constexpr uint32_t SHT_SYMTAB   = 2;
 static constexpr uint32_t SHT_STRTAB   = 3;
 static constexpr uint32_t SHT_RELA     = 4;
-static constexpr uint32_t SHT_REL      = 9;
 static constexpr uint32_t SHT_NOBITS   = 8;
 static constexpr uint32_t SHF_WRITE    = 0x01;
 static constexpr uint32_t SHF_ALLOC    = 0x02;
@@ -52,14 +50,7 @@ static constexpr uint8_t  DW_FORM_string      = 0x08;
 static constexpr uint8_t  DW_FORM_data1       = 0x0b;
 static constexpr uint8_t  DW_FORM_flag        = 0x0c;
 static constexpr uint8_t  DW_LNS_copy         = 1;
-static constexpr uint8_t  DW_LNS_advance_pc   = 2;
 static constexpr uint8_t  DW_LNS_advance_line = 3;
-static constexpr uint8_t  DW_LNS_set_file     = 4;
-static constexpr uint8_t  DW_LNS_set_column   = 5;
-static constexpr uint8_t  DW_LNS_negate_stmt  = 6;
-static constexpr uint8_t  DW_LNS_set_basic_block = 7;
-static constexpr uint8_t  DW_LNS_const_add_pc = 8;
-static constexpr uint8_t  DW_LNS_fixed_advance_pc = 9;
 static constexpr uint8_t  DW_LNE_end_sequence = 1;
 static constexpr uint8_t  DW_LNE_set_address  = 2;
 

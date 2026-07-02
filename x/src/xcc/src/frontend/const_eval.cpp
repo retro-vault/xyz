@@ -48,27 +48,27 @@ static std::optional<int64_t> apply_integer_cast(int64_t v, const type *t) {
 
 // Evaluate a floating-point constant expression.  Returns nullopt if not
 // reducible at compile time.
-static std::optional<double> evaluate_fp(const expr *e) {
+std::optional<double> const_expr_evaluator::evaluate_float(const expr *e) {
     if (!e) return std::nullopt;
     if (auto *fl = dynamic_cast<const float_literal_expr *>(e)) return fl->value;
     if (auto *il = dynamic_cast<const int_literal_expr   *>(e)) return (double)il->value;
     if (auto *ch = dynamic_cast<const char_literal_expr  *>(e)) return (double)ch->value;
     if (auto *c = dynamic_cast<const cast_expr *>(e)) {
-        auto v = evaluate_fp(c->operand.get());
+        auto v = evaluate_float(c->operand.get());
         if (v) return *v;
         auto iv = const_expr_evaluator::evaluate(c->operand.get());
         if (iv) return (double)*iv;
         return std::nullopt;
     }
     if (auto *u = dynamic_cast<const unary_expr *>(e)) {
-        auto v = evaluate_fp(u->operand.get());
+        auto v = evaluate_float(u->operand.get());
         if (!v) return std::nullopt;
         if (u->op == unary_op::NEG) return -*v;
         return std::nullopt;
     }
     if (auto *bin = dynamic_cast<const binary_expr *>(e)) {
-        auto l = evaluate_fp(bin->left.get());
-        auto r = evaluate_fp(bin->right.get());
+        auto l = evaluate_float(bin->left.get());
+        auto r = evaluate_float(bin->right.get());
         if (!l || !r) return std::nullopt;
         switch (bin->op) {
         case bin_op::ADD: return *l + *r;
@@ -265,8 +265,8 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
             }
         }
         // Fall back to floating-point evaluation for comparison/arithmetic ops.
-        auto fl = evaluate_fp(bin->left.get());
-        auto fr = evaluate_fp(bin->right.get());
+        auto fl = evaluate_float(bin->left.get());
+        auto fr = evaluate_float(bin->right.get());
         if (fl && fr) {
             switch (bin->op) {
             case bin_op::ADD:  { double v = *fl + *fr; return (int64_t)v; }
@@ -295,7 +295,7 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
             return v;
         }
         // Try float operand → integer result (e.g. (int)(1.5f))
-        auto fv = evaluate_fp(c->operand.get());
+        auto fv = evaluate_float(c->operand.get());
         if (fv && c->target_type && c->target_type->is_integer())
             return apply_integer_cast((int64_t)*fv, c->target_type.get());
         return std::nullopt;
@@ -424,7 +424,7 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
             }
             // __builtin_fpclassify(nan, inf, norm, subnorm, zero, x)
             if (nm == "__builtin_fpclassify" && call->args.size() == 6) {
-                auto xv = evaluate_fp(call->args[5].get());
+                auto xv = evaluate_float(call->args[5].get());
                 if (xv) {
                     int idx;
                     if (std::isnan(*xv))         idx = 0; // FP_NAN
@@ -437,19 +437,19 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
             }
             // __builtin_isinf_sign, __builtin_isfinite, __builtin_isnormal, __builtin_isnan
             if (nm == "__builtin_isinf_sign" && call->args.size() == 1) {
-                auto xv = evaluate_fp(call->args[0].get());
+                auto xv = evaluate_float(call->args[0].get());
                 if (xv) return (int64_t)(std::isinf(*xv) ? (*xv > 0 ? 1 : -1) : 0);
             }
             if (nm == "__builtin_isfinite" && call->args.size() == 1) {
-                auto xv = evaluate_fp(call->args[0].get());
+                auto xv = evaluate_float(call->args[0].get());
                 if (xv) return (int64_t)(std::isfinite(*xv) ? 1 : 0);
             }
             if (nm == "__builtin_isnormal" && call->args.size() == 1) {
-                auto xv = evaluate_fp(call->args[0].get());
+                auto xv = evaluate_float(call->args[0].get());
                 if (xv) return (int64_t)(std::isnormal(*xv) ? 1 : 0);
             }
             if (nm == "__builtin_isnan" && call->args.size() == 1) {
-                auto xv = evaluate_fp(call->args[0].get());
+                auto xv = evaluate_float(call->args[0].get());
                 if (xv) return (int64_t)(std::isnan(*xv) ? 1 : 0);
             }
         }

@@ -1,0 +1,17 @@
+/src/build-mingw/toolchain-platform/cpm3/_exit.rel
+/src/build-mingw/toolchain-platform/cpm3/bdos.rel
+/src/build-mingw/toolchain-platform/cpm3/close.rel
+/src/build-mingw/toolchain-platform/cpm3/exit_status.rel
+/src/build-mingw/toolchain-platform/cpm3/file_vectors.rel
+/src/build-mingw/toolchain-platform/cpm3/fileio.rel
+/src/build-mingw/toolchain-platform/cpm3/getchar.rel
+/src/build-mingw/toolchain-platform/cpm3/gettimeofday.rel
+/src/build-mingw/toolchain-platform/cpm3/heap_region.rel
+/src/build-mingw/toolchain-platform/cpm3/lseek.rel
+/src/build-mingw/toolchain-platform/cpm3/open.rel
+/src/build-mingw/toolchain-platform/cpm3/putchar.rel
+/src/build-mingw/toolchain-platform/cpm3/read.rel
+/src/build-mingw/toolchain-platform/cpm3/rename.rel
+/src/build-mingw/toolchain-platform/cpm3/settimeofday.rel
+/src/build-mingw/toolchain-platform/cpm3/unlink.rel
+/src/build-mingw/toolchain-platform/cpm3/write.rel

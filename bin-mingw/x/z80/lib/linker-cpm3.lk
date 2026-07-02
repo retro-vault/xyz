@@ -1,0 +1,7 @@
+; CP/M 3 COM-style memory map.
+; Written in SDCC command-file style so it can be consumed by both
+; sdldz80 and xld.
+
+-f binary
+-b _CODE = 0x0100
+ENTRY _entry

@@ -1,0 +1,178 @@
+!<arch>
+//              0           0     0     644     36        `
+gettimeofday.rel/
+settimeofday.rel/
+_exit.rel/      0           0     0     644     272       `
+XL4
+H 1 areas 2 global symbols
+M _exit
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S __exit Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 F3
+R 00 00 00 00
+T 01 00 00 00
+R 00 00 00 00
+T 01 00 00 00 76 18 FD
+R 00 00 00 00
+close.rel/      0           0     0     644     212       `
+XL4
+H 1 areas 2 global symbols
+M close
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _close Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 00 00 C9
+R 00 00 00 00
+getchar.rel/    0           0     0     644     216       `
+XL4
+H 1 areas 2 global symbols
+M getchar
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _getchar Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 FF FF C9
+R 00 00 00 00
+/0              0           0     0     644     307       `
+XL4
+H 1 areas 2 global symbols
+M gettimeofday
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size B flags 0 addr 0
+S _gettimeofday Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 06 08 AF
+R 00 00 00 00
+T 03 00 00 00
+R 00 00 00 00
+T 03 00 00 00 77 23 10 FC 11 00 00 C9
+R 00 00 00 00
+
+heap_region.rel/0           0     0     644     381       `
+XL4
+H 2 areas 2 global symbols
+M heap_region
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 7 flags 0 addr 0
+S _heap_region Def00000000
+A _HEAP size 2000 flags 0 addr 0
+T 00 00 00 00
+R 00 00 01 00
+T 00 00 00 00
+R 00 00 01 00
+T 00 20 00 00
+R 00 00 01 00
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 21 00 00 11 00 20 C9
+R 00 00 00 00 00 05 01 00 00 08 01 00
+
+lseek.rel/      0           0     0     644     221       `
+XL4
+H 1 areas 2 global symbols
+M lseek
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 7 flags 0 addr 0
+S _lseek Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 21 FF FF 11 FF FF C9
+R 00 00 00 00
+
+open.rel/       0           0     0     644     210       `
+XL4
+H 1 areas 2 global symbols
+M open
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _open Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 FF FF C9
+R 00 00 00 00
+putchar.rel/    0           0     0     644     216       `
+XL4
+H 1 areas 2 global symbols
+M putchar
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _putchar Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 5D 16 00 C9
+R 00 00 00 00
+read.rel/       0           0     0     644     210       `
+XL4
+H 1 areas 2 global symbols
+M read
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _read Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 00 00 C9
+R 00 00 00 00
+rename.rel/     0           0     0     644     214       `
+XL4
+H 1 areas 2 global symbols
+M rename
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _rename Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 FF FF C9
+R 00 00 00 00
+/18             0           0     0     644     226       `
+XL4
+H 1 areas 2 global symbols
+M settimeofday
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _settimeofday Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 FF FF C9
+R 00 00 00 00
+unlink.rel/     0           0     0     644     214       `
+XL4
+H 1 areas 2 global symbols
+M unlink
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _unlink Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 FF FF C9
+R 00 00 00 00
+write.rel/      0           0     0     644     212       `
+XL4
+H 1 areas 2 global symbols
+M write
+O -mz80 sdcccall(1)
+S .__.ABS. Def00000000
+A _CODE size 4 flags 0 addr 0
+S _write Def00000000
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 11 FF FF C9
+R 00 00 00 00

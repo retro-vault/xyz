@@ -37,6 +37,10 @@ public:
           imported_abis_(imported_abis),
           default_call_abi_(default_call_abi) {}
 
+    using default_expr_visitor::visit;
+    using default_stmt_visitor::visit;
+    using default_decl_visitor::visit;
+
     //
     // Walk the entire translation unit and report semantic errors to
     // the diagnostic engine.  Returns the number of errors found.

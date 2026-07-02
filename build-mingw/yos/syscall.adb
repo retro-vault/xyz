@@ -1,0 +1,14 @@
+M:syscall
+F:G$yos_version$0_0$0({2}DF,SI:S),C,0,0,0,0,0,ABI=sdcccall(1)
+F:G$yos_malloc$0_0$0({2}DF,DP,SV:S),C,0,0,0,0,0,ABI=sdcccall(1)
+F:G$yos_free$0_0$0({2}DF,SV:S),C,0,0,0,0,0,ABI=sdcccall(1)
+S:Lsyscall.yos_free$p$1_0$9({2}DP,SV:S),B,0,-2
+S:Lsyscall.yos_free$p$1_0$9({2}DP,SV:S),B,0,2
+F:G$yos_clock$0_0$0({2}DF,SI:U),C,0,0,0,0,0,ABI=sdcccall(1)
+F:G$_yos_init$0_0$0({2}DF,DP,SV:S),C,0,0,0,0,0,ABI=sdcccall(1)
+S:G$_yos$0_0$0({52}STyos_s:S),E,0,0
+S:G$yos_version$0_0$0({2}DF,SI:S),C,0,0
+S:G$yos_malloc$0_0$0({2}DF,DP,SV:S),C,0,0
+S:G$yos_free$0_0$0({2}DF,SV:S),C,0,0
+S:G$yos_clock$0_0$0({2}DF,SI:U),C,0,0
+S:G$_yos_init$0_0$0({2}DF,DP,SV:S),C,0,0

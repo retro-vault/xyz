@@ -8,17 +8,9 @@ PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 PUBLIC_INCLUDE_DIR ?= $(DIST_DIR)/include
 ZX_ROMS_DIR ?= $(DIST_DIR)/z80/spectrum/bin
 
-.PHONY: all clean
+.PHONY: all packages clean
 
 all:
-	@$(MAKE) -C pkg \
-		REPO_ROOT=$(REPO_ROOT) \
-		Y_ROOT=$(Y_ROOT) \
-		BUILD_DIR=$(BUILD_DIR) \
-		DIST_DIR=$(DIST_DIR) \
-		HOST_BIN_DIR=$(HOST_BIN_DIR) \
-		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
-		PUBLIC_INCLUDE_DIR=$(PUBLIC_INCLUDE_DIR)
 	@$(MAKE) -C src \
 		ROOT=$(REPO_ROOT) \
 		REPO_ROOT=$(REPO_ROOT) \
@@ -27,6 +19,16 @@ all:
 		BUILD_DIR=$(BUILD_DIR)/yos \
 		DIST_DIR=$(DIST_DIR) \
 		ZX_ROMS_DIR=$(ZX_ROMS_DIR)
+
+packages:
+	@$(MAKE) -C pkg \
+		REPO_ROOT=$(REPO_ROOT) \
+		Y_ROOT=$(Y_ROOT) \
+		BUILD_DIR=$(BUILD_DIR) \
+		DIST_DIR=$(DIST_DIR) \
+		HOST_BIN_DIR=$(HOST_BIN_DIR) \
+		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
+		PUBLIC_INCLUDE_DIR=$(PUBLIC_INCLUDE_DIR)
 
 clean:
 	@$(MAKE) -C src clean \

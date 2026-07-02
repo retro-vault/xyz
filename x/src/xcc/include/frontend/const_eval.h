@@ -30,6 +30,12 @@ public:
     // Returns the value on success, std::nullopt if e is not a constant.
     //
     static std::optional<int64_t> evaluate(const expr *e);
+
+    //
+    // Try to fold e to a compile-time floating-point constant.
+    // Returns the value on success, std::nullopt if e is not a constant.
+    //
+    static std::optional<double> evaluate_float(const expr *e);
 };
 
 } // namespace xcc

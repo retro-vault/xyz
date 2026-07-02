@@ -1,0 +1,15 @@
+M:timer
+F:G$tmr_install$0_0$0({2}DF,DP,SV:S),C,0,0,0,0,0,ABI=sdcccall(1)
+S:Ltimer.tmr_install$hook$1_0$7({2}DP,SV:S),B,0,-4
+S:Ltimer.tmr_install$t$1_0$7({2}DP,SV:S),B,0,-2
+S:Ltimer.tmr_install$hook$1_0$7({2}DP,SV:S),B,0,0
+S:Ltimer.tmr_install$owner$1_0$7({2}DP,SV:S),B,0,4
+F:G$tmr_uninstall$0_0$0({2}DF,DP,SV:S),C,0,0,0,0,0,ABI=sdcccall(1)
+S:Ltimer.tmr_uninstall$t$1_0$8({2}DP,SV:S),B,0,-2
+S:Ltimer.tmr_uninstall$t$1_0$8({2}DP,SV:S),B,0,2
+F:G$_tmr_chain$0_0$0({2}DF,SV:S),C,0,0,0,0,0,ABI=sdcccall(1)
+S:Ltimer._tmr_chain$t$1_0$9({2}DP,SV:S),B,0,-2
+S:G$_tmr_first$0_0$0({2}DP,SV:S),E,0,0
+S:G$tmr_install$0_0$0({2}DF,DP,SV:S),C,0,0
+S:G$tmr_uninstall$0_0$0({2}DF,DP,SV:S),C,0,0
+S:G$_tmr_chain$0_0$0({2}DF,SV:S),C,0,0

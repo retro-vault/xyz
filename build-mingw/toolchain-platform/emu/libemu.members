@@ -1,0 +1,13 @@
+/src/build-mingw/toolchain-platform/emu/_exit.rel
+/src/build-mingw/toolchain-platform/emu/close.rel
+/src/build-mingw/toolchain-platform/emu/getchar.rel
+/src/build-mingw/toolchain-platform/emu/gettimeofday.rel
+/src/build-mingw/toolchain-platform/emu/heap_region.rel
+/src/build-mingw/toolchain-platform/emu/lseek.rel
+/src/build-mingw/toolchain-platform/emu/open.rel
+/src/build-mingw/toolchain-platform/emu/putchar.rel
+/src/build-mingw/toolchain-platform/emu/read.rel
+/src/build-mingw/toolchain-platform/emu/rename.rel
+/src/build-mingw/toolchain-platform/emu/settimeofday.rel
+/src/build-mingw/toolchain-platform/emu/unlink.rel
+/src/build-mingw/toolchain-platform/emu/write.rel

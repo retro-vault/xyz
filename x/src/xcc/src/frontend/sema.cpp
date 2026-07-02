@@ -23,6 +23,18 @@ namespace xcc {
 
 // ----- attribute application -----------------------------------------
 
+static bool has_constant_initializer(const expr *init, const type *init_type) {
+    if (!init)
+        return false;
+    if (const_expr_evaluator::evaluate(init).has_value())
+        return true;
+    if (!init_type)
+        return false;
+    return (init_type->kind == type_kind::FLOAT ||
+            init_type->kind == type_kind::DOUBLE) &&
+           const_expr_evaluator::evaluate_float(init).has_value();
+}
+
 static type_ptr apply_array_qualifiers_to_element(const type_ptr &elem,
                                                   const type_ptr &array_ty) {
     if (!elem || !array_ty)
@@ -617,7 +629,7 @@ void sema::visit(var_decl &d) {
     if (d.init) d.init->accept(*this);
     // constexpr requires a constant initializer.
     if (d.sym && d.sym->type && d.sym->type->is_const && d.init) {
-        if (!const_expr_evaluator::evaluate(d.init.get()))
+        if (!has_constant_initializer(d.init.get(), d.sym->type.get()))
             diag_.warning(warning_group::CONSTEXPR_NOT_CONSTANT, d.loc,
                           "constexpr / const initializer is not a constant expression");
     }
