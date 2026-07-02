@@ -52,6 +52,8 @@ jobs:
             DIST_DIR="$dist_dir" \
             OUT_DIR="$out_dir" \
             Z_DIST_DIR="$z_dist_dir" \
+            BUILD=release \
+            ENABLE_SANITIZERS=0 \
             X_MODEL="${{ matrix.model }}" \
             PACKAGE_NAME="${{ matrix.package_name }}"
 
@@ -141,6 +143,8 @@ jobs:
             DIST_DIR="$dist_dir" \
             OUT_DIR="$out_dir" \
             Z_DIST_DIR="$z_dist_dir" \
+            BUILD=release \
+            ENABLE_SANITIZERS=0 \
             X_MODEL="${{ matrix.model }}" \
             PACKAGE_NAME="${{ matrix.package_name }}"
 
@@ -239,6 +243,8 @@ jobs:
             DIST_DIR="$dist_dir" \
             OUT_DIR="$out_dir" \
             Z_DIST_DIR="$z_dist_dir" \
+            BUILD=release \
+            ENABLE_SANITIZERS=0 \
             X_MODEL="${{ matrix.model }}" \
             PACKAGE_NAME="${{ matrix.package_name }}"
 

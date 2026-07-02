@@ -103,14 +103,18 @@ xcc [options] <input.c> [-o output]
 
   -o <file>          Output filename
   -S                 Emit assembly (default)
-  -o <file>          Output filename
-  -S                 Emit assembly (default)
+  --c1mode           Read preprocessed C from stdin, emit assembly
+  -c1-mode           Alias for --c1mode
   -O0                No optimization (default)
   -O1                Enable peephole optimizer
   -O2                Enable general optimization
   -Os                Enable size optimization
+  --opt-code-size    Alias for -Os
+  --opt-code-speed   Alias for -Of
+  -mz80              Accepted for SDCC/z88dk compatibility
   -I<dir>            Add include directory
   -D<macro>[=val]    Define macro
+  --nostdinc         Do not add default target include path
   -std=c11           Language standard (only c11 supported)
   -g                 Emit DWARF 2 debug info
   -v                 Verbose
@@ -184,7 +188,8 @@ Requirements: `g++` ≥ 7 with C++17 support.
 
 ## Limitations (initial version)
 
-- No integrated preprocessor (use `cpp` externally)
+- Built-in preprocessor in normal mode; use `--c1mode` for externally
+  preprocessed stdin
 - Struct/union member access code-gen is minimal
 - 32-bit arithmetic uses runtime helpers (not inline)
 - No register allocation (all temporaries spill to stack)

@@ -29,6 +29,9 @@ xcc -S hello.c
 # Inspect the assembly on stdout
 xcc -S hello.c -o -
 
+# Compile preprocessed stdin directly to assembly (SDCC c1-mode compatibility)
+cpp -Iinclude -DVALUE=1 hello.c | xcc --c1mode -mz80 --opt-code-size -o hello.s
+
 # Forward flags to the linker
 xcc hello.c --oformat=binary -Ttext=0x8000 -o hello.bin
 xcc hello.c -nostdlib -Wl,-Map=hello.map -o bare.xl

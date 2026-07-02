@@ -24,6 +24,9 @@ xcc -c hello.c
 # Compile only, emit hello.s (use "-o -" for stdout)
 xcc -S hello.c
 
+# Compile preprocessed stdin directly to assembly (SDCC c1-mode)
+cpp -Iinclude -DVALUE=1 hello.c | xcc --c1mode -mz80 --opt-code-size -o hello.s
+
 # Optimized release build
 xcc -Os main.c util.c -o app.xl
 
@@ -41,11 +44,15 @@ xcc -g main.c -o app.xl
 | `-o <file>` | Output file |
 | `-c` | Compile and assemble only, emit `.rel` |
 | `-S` | Compile only, emit assembly |
+| `--c1mode`, `-c1-mode` | Read preprocessed C from stdin, skip preprocessing, and emit assembly (`stdout` by default) |
 | `-O0/-O1/-O2/-O3/-Os/-Of` | Optimization level (default `-O0`) |
+| `--opt-code-size`, `--opt-code-speed` | SDCC-compatible aliases for `-Os` and `-Of` |
 | `-f<name>`, `-fno-<name>` | Enable/disable a single optimization family |
 | `-w`, `-W0..-W3`, `-Wall`, `-Wextra`, `-Wpedantic`, `-Werror[=<name>]`, `-Wno-error[=<name>]` | Driver warning controls |
+| `-mz80` | Accepted as a no-op for SDCC/z88dk compatibility |
 | `-I<dir>` | Add include directory |
 | `-D<macro>[=val]` | Define preprocessor macro |
+| `--nostdinc` | Do not add xcc's default target include directory |
 | `-g` | Emit debug info (for `xgdb`) |
 | `--platform <name>`, `--platform=<name>` | Select target platform (default `none`) |
 | `--float-format <fmt>`, `--float-format=<fmt>` | Select the ABI used for C `float`: `ieee32`, `ieee16`, `fixed8_8`, `fixed16_16`, or `fixed24_8` |
@@ -89,3 +96,16 @@ as `fabsf`, `sqrtf`, `ceilf`, `floorf`, `truncf`, `roundf`, `fminf`,
 `fmaxf`, `fdimf`, `copysignf`, `fpclassify`, `signbit`, `isfinite`,
 `isinf`, and `isnan` are redirected to fixed-point helpers for the
 selected format.
+
+## C1 Mode
+
+`--c1mode` is compatible with SDCC's "c1 mode": `xcc` reads already
+preprocessed C from `stdin`, skips its own preprocessor, and emits
+assembly. This is useful when a build system wants full control over
+preprocessing while still using `xcc` for parsing, optimization, and Z80
+code generation.
+
+```bash
+cpp -Iinclude -DVALUE=1 hello.c | xcc --c1mode -o hello.s
+cpp -Iinclude -DVALUE=1 hello.c | xcc --c1mode > hello.s
+```

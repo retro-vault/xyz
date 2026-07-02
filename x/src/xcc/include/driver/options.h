@@ -69,9 +69,11 @@ struct options {
     // Include paths and defines forwarded to the external preprocessor
     std::vector<std::string> include_paths;
     std::vector<std::string> defines;
+    bool                     use_default_include_paths = true;
 
     bool                     debug = false; // -g: emit debug info (DWARF 2 for gnuas, SDCC ;! for sdasz80)
     bool                     dump_ir = false; // --dump-ir: print lowered IR to stderr
+    bool                     c1_mode = false; // SDCC-compatible compile-from-stdin mode
 
     // Use IX as the frame pointer (always true for now)
     bool                     use_ix_fp = true;

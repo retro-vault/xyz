@@ -36,6 +36,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -206,6 +207,12 @@ static std::string read_file(const std::string &path) {
     return ss.str();
 }
 
+static std::string read_stdin() {
+    std::ostringstream ss;
+    ss << std::cin.rdbuf();
+    return ss.str();
+}
+
 // ----- Derive output filename ----------------------------------------
 static std::string strip_extension(const std::string &path) {
     std::string base = path;
@@ -220,24 +227,30 @@ static std::string derive_output(const std::string &input, output_mode mode) {
 }
 
 // ----- Compile one file ----------------------------------------------
-static int compile_file_to_text(const std::string &input_path,
-                                const options &opts,
-                                const std::string &out_path,
-                                std::string &asm_text,
-                                const std::unordered_map<std::string, call_abi> *imported_abis = nullptr) {
+static int compile_source_to_text(const std::string &input_path,
+                                  const std::string &raw,
+                                  bool run_preprocessor,
+                                  const options &opts,
+                                  const std::string &out_path,
+                                  std::string &asm_text,
+                                  const std::unordered_map<std::string, call_abi> *imported_abis = nullptr) {
     if (opts.verbose)
-        fprintf(stderr, "xcc: compiling %s\n", input_path.c_str());
+        fprintf(stderr, "xcc: compiling %s%s\n",
+                input_path.c_str(),
+                run_preprocessor ? "" : " from preprocessed stdin (--c1mode)");
 
     set_float_format(opts.float_fmt);
     set_default_call_abi(opts.default_call_abi);
 
-    std::string raw = read_file(input_path);
-
-    // ----- 0. Preprocess ---------------------------------------------
     diag_engine diag;
     diag.set_options(opts.diagnostics);
-    preprocessor pp(diag, opts.include_paths, opts.defines);
-    std::string src = pp.process(raw, input_path);
+    std::string src = raw;
+
+    // ----- 0. Preprocess ---------------------------------------------
+    if (run_preprocessor) {
+        preprocessor pp(diag, opts.include_paths, opts.defines);
+        src = pp.process(raw, input_path);
+    }
 
     // ----- 1. Lex ----------------------------------------------------
     lexer lex(diag, src, input_path.c_str());
@@ -284,6 +297,9 @@ static int compile_file_to_text(const std::string &input_path,
             emitter = std::make_unique<gnuas_emitter>(asm_buf);
         else
             emitter = std::make_unique<sdasz80_emitter>(asm_buf);
+
+        if (!run_preprocessor)
+            emitter->comment("Compiled in c1-mode from preprocessed input");
 
         z80_gen codegen(*emitter);
         codegen.set_opt_settings(opts.opt_settings);
@@ -344,6 +360,24 @@ static int compile_file_to_text(const std::string &input_path,
     return 0;
 }
 
+static int compile_file_to_text(const std::string &input_path,
+                                const options &opts,
+                                const std::string &out_path,
+                                std::string &asm_text,
+                                const std::unordered_map<std::string, call_abi> *imported_abis = nullptr) {
+    return compile_source_to_text(input_path, read_file(input_path), true,
+                                  opts, out_path, asm_text, imported_abis);
+}
+
+static int compile_stdin_to_text(const std::string &logical_input_path,
+                                 const options &opts,
+                                 const std::string &out_path,
+                                 std::string &asm_text,
+                                 const std::unordered_map<std::string, call_abi> *imported_abis = nullptr) {
+    return compile_source_to_text(logical_input_path, read_stdin(), false,
+                                  opts, out_path, asm_text, imported_abis);
+}
+
 // ----- Write compiled assembly to a file or stdout --------------------
 static int write_asm_output(const std::string &asm_text,
                             const std::string &out_path,
@@ -374,6 +408,22 @@ static int compile_file_checked(const std::string &input_path,
     try {
         return compile_file_to_text(input_path, opts, adb_base_path,
                                     asm_text, imported_abis);
+    } catch (const fatal_error &) {
+        // fatal diagnostic already printed by diag_engine::fatal()
+    } catch (const std::exception &e) {
+        fprintf(stderr, "xcc: error: %s\n", e.what());
+    }
+    return 1;
+}
+
+static int compile_stdin_checked(const std::string &logical_input_path,
+                                 const options &opts,
+                                 const std::string &adb_base_path,
+                                 std::string &asm_text,
+                                 const std::unordered_map<std::string, call_abi> *imported_abis) {
+    try {
+        return compile_stdin_to_text(logical_input_path, opts, adb_base_path,
+                                     asm_text, imported_abis);
     } catch (const fatal_error &) {
         // fatal diagnostic already printed by diag_engine::fatal()
     } catch (const std::exception &e) {
@@ -552,6 +602,35 @@ int main(int argc, char **argv) {
     using namespace xcc;
 
     options opts = options::parse(argc, argv);
+
+    if (opts.c1_mode) {
+        std::string logical_input = "<stdin>";
+        bool saw_logical_source = false;
+        for (const auto &input : opts.input_files) {
+            if (classify_input(input) != input_kind::C_SOURCE) {
+                fprintf(stderr,
+                        "xcc: error: input '%s' is incompatible with --c1mode; "
+                        "read preprocessed C from stdin instead\n",
+                        input.c_str());
+                return 1;
+            }
+            if (!saw_logical_source) {
+                logical_input = input;
+                saw_logical_source = true;
+            } else if (opts.verbose) {
+                fprintf(stderr,
+                        "xcc: ignoring extra c1-mode source hint '%s'\n",
+                        input.c_str());
+            }
+        }
+
+        std::string out = opts.output_file.empty() ? "-" : opts.output_file;
+        std::string asm_text;
+        int r = compile_stdin_checked(logical_input, opts, out, asm_text, nullptr);
+        if (r == 0)
+            r = write_asm_output(asm_text, out, opts);
+        return r;
+    }
 
     struct input_item {
         input_kind kind;

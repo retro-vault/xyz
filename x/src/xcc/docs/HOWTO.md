@@ -128,6 +128,12 @@ xcc -S hello.c -o hello.s
 xcc -S hello.c -o -
 ```
 
+### Compile preprocessed stdin with c1-mode
+
+```bash
+cpp -Iinclude -DVALUE=1 hello.c | xcc --c1mode -mz80 --opt-code-size -o hello.s
+```
+
 
 ### Full build pipeline (compile → assemble → link)
 

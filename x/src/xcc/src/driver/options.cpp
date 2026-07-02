@@ -424,12 +424,16 @@ void options::usage(const char *argv0) {
         "  -o <file>         Output file\n"
         "  -c                Compile and assemble only, emit .rel\n"
         "  -S                Compile only, emit assembly\n"
+        "  --c1mode          Read preprocessed C from stdin and emit assembly\n"
+        "  -c1-mode          Alias for --c1mode\n"
         "  -O0               No optimization (default)\n"
         "  -O1               Enable peephole optimizer\n"
         "  -O2               Enable general optimization\n"
         "  -Of               Enable speed optimization\n"
         "  -O3               Enable experimental optimization (Here be dragons)\n"
         "  -Os               Enable size optimization\n"
+        "  --opt-code-size   Alias for -Os (SDCC compatibility)\n"
+        "  --opt-code-speed  Alias for -Of (SDCC compatibility)\n"
         "  -f<name>          Enable one optimization family\n"
         "  -fno-<name>       Disable one optimization family\n"
         "  -w                Disable all warnings\n"
@@ -441,8 +445,10 @@ void options::usage(const char *argv0) {
         "  -Werror[=<name>]  Promote warnings to errors\n"
         "  -Wno-error[=<name>]\n"
         "                    Stop promoting warnings to errors\n"
+        "  -mz80             Accepted for SDCC compatibility\n"
         "  -I<dir>           Add include directory\n"
         "  -D<macro>[=val]   Define preprocessor macro\n"
+        "  --nostdinc        Do not add the default target include directory\n"
         "  -std=c11          Language standard (only c11 supported)\n"
         "  -masm <dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
@@ -502,6 +508,16 @@ options options::parse(int argc, char **argv) {
             opts.mode = output_mode::ASSEMBLY;
         } else if (strcmp(a, "-c") == 0) {
             opts.mode = output_mode::OBJECT;
+        } else if (strcmp(a, "--c1mode") == 0
+                   || strcmp(a, "--c1-mode") == 0
+                   || strcmp(a, "-c1-mode") == 0) {
+            opts.c1_mode = true;
+        } else if (strcmp(a, "--opt-code-size") == 0) {
+            opts.opt = opt_level::Os;
+            opts.opt_settings = optimization_settings::for_level(opts.opt);
+        } else if (strcmp(a, "--opt-code-speed") == 0) {
+            opts.opt = opt_level::Of;
+            opts.opt_settings = optimization_settings::for_level(opts.opt);
         } else if (strncmp(a, "-Wl,", 4) == 0) {
             // Comma-separated arguments forwarded verbatim to the linker.
             const char *p = a + 4;
@@ -577,10 +593,14 @@ options options::parse(int argc, char **argv) {
             if (!apply_opt_flag(opts, name, true))
                 driver_warning(opts, warning_group::UNKNOWN_WARNING_OPTION,
                                "unknown optimization flag '%s'", a);
+        } else if (strcmp(a, "-mz80") == 0) {
+            // Accepted for SDCC/z88dk driver compatibility; xcc only targets Z80.
         } else if (strncmp(a, "-I", 2) == 0) {
             opts.include_paths.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
         } else if (strncmp(a, "-D", 2) == 0) {
             opts.defines.push_back(a[2] != '\0' ? a + 2 : (i + 1 < argc ? argv[++i] : ""));
+        } else if (strcmp(a, "--nostdinc") == 0) {
+            opts.use_default_include_paths = false;
         } else if (strcmp(a, "--platform") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "xcc: error: --platform requires a value\n");
@@ -626,6 +646,16 @@ options options::parse(int argc, char **argv) {
                     "xcc: error: unsupported option '--call-mode'; "
                     "use '--sdcccall 0' or '--sdcccall 1'\n");
             exit(1);
+        } else if (strcmp(a, "--std-c89") == 0
+                   || strcmp(a, "--std-sdcc89") == 0
+                   || strcmp(a, "--std-c95") == 0
+                   || strcmp(a, "--std-c99") == 0
+                   || strcmp(a, "--std-sdcc99") == 0
+                   || strcmp(a, "--std-c11") == 0
+                   || strcmp(a, "--std-sdcc11") == 0
+                   || strcmp(a, "--std-c2x") == 0
+                   || strcmp(a, "--std-sdcc2x") == 0) {
+            // Accepted for SDCC compatibility; xcc always parses as hosted C11/C23-ish xcc mode.
         } else if (strncmp(a, "-std=", 5) == 0) {
             // We only support c11; silently accept c99/c11/gnu11 etc.
         } else if (strncmp(a, "-masm=", 6) == 0) {
@@ -662,12 +692,13 @@ options options::parse(int argc, char **argv) {
         }
     }
 
-    if (opts.input_files.empty()) {
+    if (opts.input_files.empty() && !opts.c1_mode) {
         fprintf(stderr, "xcc: error: no input files\n");
         exit(1);
     }
 
-    add_default_include_paths(opts, argv[0]);
+    if (opts.use_default_include_paths)
+        add_default_include_paths(opts, argv[0]);
     add_float_format_defines(opts);
     add_default_call_mode_defines(opts);
     if (!opts.platform_name.empty()) {

@@ -111,13 +111,18 @@ xcc [options] <input>... [-o output]
   -o <file>                     Output filename
   -c                            Compile and assemble only, emit .rel
   -S                            Compile only, emit assembly
+  --c1mode, -c1-mode           Read preprocessed C from stdin, emit assembly
   -O0/-O1/-O2/-Of/-O3/-Os       Optimization level
+  --opt-code-size              Alias for -Os
+  --opt-code-speed             Alias for -Of
   -f<name>, -fno-<name>         Fine-grained optimization family control
   -w, -W0..-W3, -Wall, -Wextra,
   -Wpedantic, -Werror[=name],
   -Wno-error[=name]             Driver warning controls
+  -mz80                         Accepted for SDCC/z88dk compatibility
   -I<dir>                       Add include directory
   -D<macro>[=val]               Define macro
+  --nostdinc                    Do not add default target include path
   -std=c11                      Language standard (other -std= forms are tolerated)
   -masm <dialect>, -masm=<dialect>
                                 Assembler dialect: sdasz80 or gnuas
@@ -208,7 +213,8 @@ Requirements: `g++` ≥ 7 with C++17 support.
 
 ## Limitations (initial version)
 
-- No integrated preprocessor (use `cpp` externally)
+- Built-in preprocessor in normal mode; use `--c1mode` for externally
+  preprocessed stdin
 - Struct/union member access code-gen is minimal
 - 32-bit arithmetic uses runtime helpers (not inline)
 - No register allocation (all temporaries spill to stack)

@@ -38,7 +38,9 @@ ifeq ($(ENABLE_SANITIZERS),auto)
   endif
 endif
 
-BUILD    ?= debug
+# Normal builds should produce a redistributable compiler binary.
+# Use BUILD=debug or `make check` when you want sanitizer instrumentation.
+BUILD    ?= release
 ifeq ($(BUILD),release)
   CXXFLAGS += $(RELFLAGS)
 else
