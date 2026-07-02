@@ -15,9 +15,6 @@
         .globl	_mouse_calibrate
         .globl	__mouse_scan
 
-        .globl	.kmp_scan_raw
-        .globl	.kmp_calib_raw
-
         .equ	KMP_BTN_PORT, 0xfadf
         .equ	KMP_X_PORT, 0xfbdf
         .equ	KMP_Y_PORT, 0xffdf
@@ -35,7 +32,7 @@ _mouse_calibrate::
         ; calibrate
         ; input:  b=start y, c=start x (hint:center)
         ; affects: a, flags, hl, bc
-.kmp_calib_raw::
+.kmp_calib_raw:
         ld	hl,#.kmp_mcurxy
         ld	a,c                     ; x to a
         ld	(hl),a                  ; to low cursor pos
@@ -77,7 +74,7 @@ __mouse_scan::
         ;;         D = button change flags (1=change, 0=no change)
         ;; affects: FLAGS, A, BC, HL, DE
         ;; notes:   reads hardware and computes delta since last scan
-.kmp_scan_raw::
+.kmp_scan_raw:
         ;; first scan buttons for changes
         ld	bc,#KMP_BTN_PORT
         in	a,(c)                   ; buttons to a

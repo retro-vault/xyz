@@ -181,3 +181,31 @@ bank_count = 4
 bank_port = 0x50
 stdout_port = 0x01
 ```
+
+## Command-line options
+
+Common switches:
+
+- `--config FILE`
+- `--listen HOST:PORT`
+- `--run`
+- `--max-steps N`
+- `--load-bin FILE`
+- `--load-ihx FILE`
+- `--origin ADDR`
+- `--pc ADDR`
+- `--sp ADDR`
+- `--emu-stdio`, `--no-emu-stdio`
+- `--fs-root DIR`
+- `--stdin-port ADDR`
+- `--stdin-status-port ADDR`
+- `--stdin-data-port ADDR`
+- `--stdout-port ADDR`
+- `--shared-pages LIST`
+- `--banked-pages LIST`
+- `--bank-count N`
+- `--bank-port ADDR`
+- `-q`, `--quiet`
+- `--no-quiet`
+- `--version`
+- `-h`, `--help`

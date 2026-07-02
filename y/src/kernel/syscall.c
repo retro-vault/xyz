@@ -20,13 +20,13 @@
 #include <tty/tty.h>
 #include <tty/tty_print.h>
 #include <drivers/mdr.h>
+#include <drivers/time.h>
 
 #include <yos.h>
 
 yos_t _yos;
 
 int yos_version(void) { return YOS_VERSION; }
-extern unsigned int _clock(void);
 
 static void *yos_malloc(unsigned int size) {
     return mem_allocate((void *)&_heap, (uint16_t)size, NONE);
@@ -37,7 +37,7 @@ static void yos_free(void *p) {
 }
 
 static unsigned int yos_clock(void) {
-    return (unsigned int)_clock();
+    return (unsigned int)__clock();
 }
 
 /* populate function list */

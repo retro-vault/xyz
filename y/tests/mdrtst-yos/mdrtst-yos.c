@@ -12,7 +12,7 @@
 #include <stdint.h>
 
 #include <yos.h>
-#include "../../../x/tests/hello/crt0.h"
+#include "../../../x/tests/tests/hello/crt0.h"
 
 #define TEST_DRIVE      1
 #define MAX_FILES       32

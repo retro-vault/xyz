@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #include <yos.h>
-#include "../../../x/tests/hello/crt0.h"
+#include "../../../x/tests/tests/hello/crt0.h"
 
 #ifndef TEST_NAME
 #define TEST_NAME "t123"

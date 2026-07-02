@@ -32,10 +32,12 @@ xas --mode=sdcc -g main.s -o main.rel
 | `--format=gnu` | Pretty-print / emit GNU-style assembly text |
 | `-o <file>` | Output file |
 | `-g` | Emit debug information |
-| `-I <dir>` | Add include directory |
-| `-D <sym[=v]>` | Define preprocessor symbol |
+| `-I <dir>`, `-I<dir>` | Add include directory |
+| `-D <sym[=v]>`, `-D<sym[=v]>` | Define preprocessor symbol |
+| `--version` | Print version and exit |
+| `-h`, `--help` | Show usage and exit |
 
 You rarely need to call xas directly: `xcc` invokes it automatically.
 Use it directly when assembling hand-written `.s` files outside a C
 build, or when converting between the two assembly dialects with
-`--format=`.
+`--format=`. Source-to-source `--format=` conversion requires `-o <file>`.

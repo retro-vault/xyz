@@ -59,7 +59,7 @@ extern void thread_exit(thread_t *t);
 extern thread_t* _thread_select_next(void);
 
 /* context switch */
-extern void _thread_robin(void) __naked;
+[[sdcc::naked]] extern void _thread_robin(void);
 
 /* create new thread */
 extern thread_t * thread_create(

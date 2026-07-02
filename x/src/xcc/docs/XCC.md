@@ -3,6 +3,13 @@
 xcc is a clean-room C11 compiler targeting the Z80 processor, built from scratch
 in modern C++17, with a hand-written recursive descent parser, a typed three-address IR, and GCC-compatible command-line flags.
 
+CLI note:
+
+- The authoritative end-user switch summary is `x/docs/dist/man/XCC.md`
+  together with `xcc --help`.
+- This document remains useful for architecture and ABI context, but the
+  packaged manpage is the current CLI contract.
+
 ---
 
 ## Architecture
@@ -99,23 +106,40 @@ Source (.c)
 ## Command line (GCC-compatible)
 
 ```
-xcc [options] <input.c> [-o output]
+xcc [options] <input>... [-o output]
 
-  -o <file>          Output filename
-  -S                 Emit assembly (default)
-  -o <file>          Output filename
-  -S                 Emit assembly (default)
-  -O0                No optimization (default)
-  -O1                Enable peephole optimizer
-  -O2                Enable general optimization
-  -Os                Enable size optimization
-  -I<dir>            Add include directory
-  -D<macro>[=val]    Define macro
-  -std=c11           Language standard (only c11 supported)
-  -g                 Emit DWARF 2 debug info
-  -v                 Verbose
-  --version          Version
-  --help             Help
+  -o <file>                     Output filename
+  -c                            Compile and assemble only, emit .rel
+  -S                            Compile only, emit assembly
+  -O0/-O1/-O2/-Of/-O3/-Os       Optimization level
+  -f<name>, -fno-<name>         Fine-grained optimization family control
+  -w, -W0..-W3, -Wall, -Wextra,
+  -Wpedantic, -Werror[=name],
+  -Wno-error[=name]             Driver warning controls
+  -I<dir>                       Add include directory
+  -D<macro>[=val]               Define macro
+  -std=c11                      Language standard (other -std= forms are tolerated)
+  -masm <dialect>, -masm=<dialect>
+                                Assembler dialect: sdasz80 or gnuas
+  --mode=sdcc, --mode=gnu       Assembler-output dialect aliases
+  --platform <name>, --platform=<name>
+                                Select target platform include defaults
+  --float-format <fmt>, --float-format=<fmt>
+                                Select the C float ABI
+  --sdcccall <0|1>              Select the default calling convention
+  --dump-ir                     Dump lowered IR to stderr
+  -L<dir>, -l<name>, -B <prefix>,
+  -nostdlib, -nostartfiles,
+  --no-default-runtime,
+  --oformat=<fmt>, -T*, --script=<file>,
+  --section-start=<name>=<addr>,
+  --binary-range=<lo>-<hi>, --reserve=<lo>-<hi>,
+  -e <sym>, -Map=<file>, -M,
+  -Wl,<args>                    Forwarded to xld
+  -g                            Emit debug info
+  -v                            Verbose
+  --version                     Print version
+  -h, --help                    Help
 ```
 
 ---

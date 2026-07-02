@@ -49,11 +49,13 @@ typedef struct block_s
 /*
  * System-owned allocator heap.
  */
-extern void *_sys_heap;
+extern void *__sys_heap;
+#define _sys_heap __sys_heap
 /*
  * Default process allocator heap.
  */
-extern void *_heap;
+extern void *__heap;
+#define _heap __heap
 
 /*
  * Initialize one heap region.

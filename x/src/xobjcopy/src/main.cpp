@@ -13,7 +13,9 @@
 #include <xobjcopy/errors.h>
 #include <xobjcopy/operations.h>
 
-#define XOBJCOPY_VERSION "1.0.0"
+#ifndef XOBJCOPY_VERSION
+#define XOBJCOPY_VERSION "0.1.0"
+#endif
 
 int main(int argc, char* argv[])
 {
@@ -27,7 +29,7 @@ int main(int argc, char* argv[])
 
         if (opts.show_version) {
             std::cout << "xobjcopy " << XOBJCOPY_VERSION
-                      << " (X Object Copy for Z80)\n";
+                      << " (X Tools Object Copy for Z80)\n";
             return 0;
         }
 

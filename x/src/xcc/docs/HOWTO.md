@@ -22,7 +22,7 @@
 |------------------|-------------|
 | `-o FILE`        | Write output to FILE. Use `-o -` to write to stdout. |
 | `-S`             | Stop after compiling; produce assembly (`.s`) output. This is xcc's primary output mode. |
-| `-c`             | Accepted for compatibility; xcc produces assembly, not object files directly. Assemble with `sdasz80`. |
+| `-c`             | Compile and assemble only; emit a `.rel` object by driving `xas` for you. |
 
 ### Optimisation
 
@@ -74,14 +74,43 @@ xcc has a built-in preprocessor that handles `#include`, `#define`, `#if`/`#ifde
 |-------------|-------------|
 | `-g`        | Emit DWARF 2 debug info (`.debug_info`, `.debug_aranges`, `.debug_abbrev`). |
 | `-v`        | Verbose: print each pipeline stage to stderr. |
+| `-w`, `-W0..-W3`, `-Wall`, `-Wextra`, `-Wpedantic` | Control driver diagnostics and warning groups. |
+| `-Werror[=name]`, `-Wno-error[=name]` | Promote all or selected warnings to errors, or disable promotion. |
 | `--version` | Print version string and exit. |
-| `--help`    | Print switch summary and exit. |
+| `-h`, `--help` | Print switch summary and exit. |
+
+### Target and ABI control
+
+| Switch | Description |
+|--------|-------------|
+| `--platform <name>`, `--platform=<name>` | Select target-platform include defaults and predefined platform macros. |
+| `--float-format <fmt>`, `--float-format=<fmt>` | Select the C `float` ABI: `ieee32`, `ieee16`, `fixed8_8`, `fixed16_16`, or `fixed24_8`. |
+| `--sdcccall <0\|1>` | Select the default SDCC-compatible calling convention. |
+| `--dump-ir` | Dump lowered IR to stderr for debugging the compiler pipeline. |
+| `--mode=sdcc`, `--mode=gnu` | Force the assembly output dialect alias. Equivalent to the corresponding `-masm=` choice. |
+
+### Linker forwarding
+
+`xcc` is a compiler driver, so some switches are passed through to `xld`
+instead of being interpreted by the frontend itself.
+
+Common forwarded switches:
+
+- `-L<dir>`, `-l<name>`
+- `-B <prefix>`
+- `-nostdlib`, `-nostartfiles`, `--no-default-runtime`
+- `--oformat=<fmt>`
+- `-T*`, `--script=<file>`, `--section-start=<name>=<addr>`
+- `--binary-range=<lo>-<hi>`, `--reserve=<lo>-<hi>`
+- `-e <sym>`, `-Map=<file>`, `-M`
+- `-Wl,<args>`
 
 ### Standard
 
 | Switch      | Description |
 |-------------|-------------|
 | `-std=c11`  | Accepted (xcc always compiles C11; this switch is a no-op included for script compatibility). |
+| other `-std=` values | Tolerated for GCC-compatibility, but they do not currently change the compiler mode. |
 
 ---
 
@@ -106,15 +135,14 @@ xcc -S hello.c -o -
 # 1. Compile C to assembly (preprocessor is built-in)
 xcc -O1 hello.c -o hello.s
 
-# 2. Assemble with the Z80 assembler
-sdasz80 -o hello.rel hello.s
+# 2. Assemble with xas
+xas --mode=sdcc hello.s -o hello.rel
 
-# 3. Link: runtime modules are staged by make dist
-sdldz80 -i hello.ihx /usr/local/lib/xcc/crt0.rel hello.rel \
-        /usr/local/lib/xcc/runtime/*.rel
+# 3. Link with xld
+xld hello.rel -o hello.xl
 
-# 4. Convert to binary if needed
-hex2bin hello.ihx
+# 4. Or emit a flat binary directly
+xld --oformat=binary -Ttext=0x0100 hello.rel -o hello.bin
 ```
 
 ### Multi-file project
@@ -122,10 +150,9 @@ hex2bin hello.ihx
 ```bash
 xcc -O1 module_a.c -o module_a.s
 xcc -O1 module_b.c -o module_b.s
-sdasz80 -o module_a.rel module_a.s
-sdasz80 -o module_b.rel module_b.s
-sdldz80 -i program.ihx /usr/local/lib/xcc/crt0.rel module_a.rel module_b.rel \
-        /usr/local/lib/xcc/runtime/*.rel
+xas --mode=sdcc module_a.s -o module_a.rel
+xas --mode=sdcc module_b.s -o module_b.rel
+xld module_a.rel module_b.rel -o program.xl
 ```
 
 ---

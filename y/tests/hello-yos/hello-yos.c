@@ -9,7 +9,7 @@
  */
 
 #include <yos.h>
-#include "../../../x/tests/hello/crt0.h"
+#include "../../../x/tests/tests/hello/crt0.h"
 
 int main(void) {
     yos_t *y = (yos_t*)query_service("yos");

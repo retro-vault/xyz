@@ -15,25 +15,29 @@
 
 namespace xas {
 
+#ifndef XTOOLS_VERSION
+#define XTOOLS_VERSION "0.1.0"
+#endif
+
     [[noreturn]] void print_usage_and_exit(const char* prog, int code)
     {
         std::cerr
             << "Usage: " << prog << " [options] <input.s>\n"
             << "\n"
-            << "X Assembler (xas) — Z80 assembler\n"
+            << "X Tools Assembler (xas) — Z80 assembler\n"
             << "\n"
             << "options:\n"
-            << "  --mode=sdcc   SDCC sdasz80 directives, .rel output (default)\n"
-            << "  --mode=gnu    GNU gas directives, ELF32 output\n"
-            << "  --format=sdcc Pretty-print / emit SDCC-style assembly text\n"
-            << "  --format=gnu  Pretty-print / emit GNU-style assembly text\n"
-            << "                Supported source subset excludes assembler macros\n"
-            << "  -o <file>     Output file\n"
-            << "  -g            Emit debug information\n"
-            << "  -I <dir>      Add include directory\n"
-            << "  -D <sym[=v]>  Define preprocessor symbol\n"
-            << "  --help        Show this help\n"
-            << "  --version     Show version\n";
+            << "  --mode=sdcc               SDCC sdasz80 directives, .rel output (default)\n"
+            << "  --mode=gnu                GNU gas directives, ELF32 output\n"
+            << "  --format=sdcc             Pretty-print / emit SDCC-style assembly text\n"
+            << "  --format=gnu              Pretty-print / emit GNU-style assembly text\n"
+            << "                            Supported source subset excludes assembler macros\n"
+            << "  -o <file>                 Output file\n"
+            << "  -g                        Emit debug information\n"
+            << "  -I <dir>, -I<dir>         Add include directory\n"
+            << "  -D <sym[=v]>, -D<sym[=v]> Define preprocessor symbol\n"
+            << "  --version                 Print version\n"
+            << "  -h, --help                Show this help\n";
         std::exit(code);
     }
 
@@ -48,11 +52,12 @@ namespace xas {
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
 
-            if (arg == "--help") {
+            if (arg == "-h" || arg == "--help") {
                 print_usage_and_exit(prog, 0);
             }
             if (arg == "--version") {
-                std::cout << "xas 0.1.0\n";
+                std::cout << "xas " << XTOOLS_VERSION
+                          << " (X Tools Assembler for Z80)\n";
                 std::exit(0);
             }
             if (arg == "--mode=sdcc") {

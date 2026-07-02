@@ -43,17 +43,23 @@ xcc -g main.c -o app.xl
 | `-S` | Compile only, emit assembly |
 | `-O0/-O1/-O2/-O3/-Os/-Of` | Optimization level (default `-O0`) |
 | `-f<name>`, `-fno-<name>` | Enable/disable a single optimization family |
+| `-w`, `-W0..-W3`, `-Wall`, `-Wextra`, `-Wpedantic`, `-Werror[=<name>]`, `-Wno-error[=<name>]` | Driver warning controls |
 | `-I<dir>` | Add include directory |
 | `-D<macro>[=val]` | Define preprocessor macro |
 | `-g` | Emit debug info (for `xgdb`) |
-| `--platform=<name>` | Select target platform (default `none`) |
-| `--float-format=<fmt>` | Select the ABI used for C `float`: `ieee32`, `ieee16`, `fixed8_8`, `fixed16_16`, or `fixed24_8` |
-| `-masm=<dialect>` | Assembler dialect: `sdasz80` (default) or `gnuas` |
-| `-L<dir>`, `-l<name>` | Forwarded to the linker |
-| `-nostdlib`, `-nostartfiles` | Forwarded to the linker |
-| `--oformat=<fmt>`, `-T*`, `-e <sym>` | Forwarded to the linker |
+| `--platform <name>`, `--platform=<name>` | Select target platform (default `none`) |
+| `--float-format <fmt>`, `--float-format=<fmt>` | Select the ABI used for C `float`: `ieee32`, `ieee16`, `fixed8_8`, `fixed16_16`, or `fixed24_8` |
+| `-masm <dialect>`, `-masm=<dialect>` | Assembler dialect: `sdasz80` (default) or `gnuas` |
+| `--sdcccall <0\|1>` | Select the default SDCC-compatible calling convention |
+| `--dump-ir` | Dump lowered IR to stderr |
+| `--mode=sdcc`, `--mode=gnu` | Select the assembler output dialect |
+| `-L<dir>`, `-l<name>`, `-B <prefix>` | Forwarded to the linker |
+| `-nostdlib`, `-nostartfiles`, `--no-default-runtime` | Forwarded to the linker |
+| `--oformat=<fmt>`, `-T*`, `--script=<file>`, `--section-start=<name>=<addr>`, `--binary-range=<lo>-<hi>`, `--reserve=<lo>-<hi>`, `-e <sym>`, `-Map=<file>`, `-M` | Forwarded to the linker (`xl`, `binary`, and `ihx` are active; primary `elf` output is still reserved) |
 | `-Wl,<args>` | Forward comma-separated arguments to the linker |
 | `-v` | Verbose: print the xas/xld commands being run |
+| `--version` | Print version and exit |
+| `-h`, `--help` | Show usage and exit |
 
 ## Defaults
 

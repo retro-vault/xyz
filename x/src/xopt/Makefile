@@ -4,6 +4,9 @@ DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -g
+GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+XTOOLS_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
+CXXFLAGS += -DXTOOLS_VERSION=\"$(XTOOLS_VERSION)\"
 
 XOPT_DIR := $(ROOT)/lib/xopt
 XOPT_INC := $(XOPT_DIR)/include

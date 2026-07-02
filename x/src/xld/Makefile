@@ -5,6 +5,9 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 DEFAULT_PLATFORM ?= none
 CXXFLAGS ?= -std=c++2a -g -DXLD_DEFAULT_PLATFORM=\"$(DEFAULT_PLATFORM)\"
+GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+XLD_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
+CXXFLAGS += -DXLD_VERSION=\"$(XLD_VERSION)\"
 
 XBFD_DIR  := $(ROOT)/lib/xbfd
 XBFD_INC  := $(XBFD_DIR)/include

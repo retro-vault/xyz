@@ -10,16 +10,17 @@ X_ROOT    ?= $(REPO_ROOT)/x
 BUILD_DIR := $(REPO_ROOT)/build/mdrtst-yos
 DIST_DIR  ?= $(REPO_ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
+X_DIST_DIR ?= $(REPO_ROOT)/bin/x
+X_HOST_BIN_DIR ?= $(X_DIST_DIR)/bin
 Y_DIST_DIR ?= $(REPO_ROOT)/bin/y
 Y_HOST_BIN_DIR ?= $(Y_DIST_DIR)/bin
 ZX_APPS_DIR ?= $(REPO_ROOT)/bin/z/z80/spectrum/bin/apps
 ZX_MDR_DIR ?= $(REPO_ROOT)/bin/z/z80/spectrum/bin/mdr
 BIN_DIR   := $(ZX_APPS_DIR)/mdrtst-yos
-XLD     := $(HOST_BIN_DIR)/xld
+XAS     := $(X_HOST_BIN_DIR)/xas
+XLD     := $(X_HOST_BIN_DIR)/xld
 MDR_TOOL  := $(Y_HOST_BIN_DIR)/microdrive
 IMAGE     := $(ZX_MDR_DIR)/mdrtst.mdr
-
-DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
 .DEFAULT_GOAL := all
 
@@ -28,17 +29,23 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 	rm -f $(IMAGE)
 
-ifndef IN_DOCKER
 .PHONY: all
-all:
-	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
-	docker run --rm \
-	    -u $(shell id -u):$(shell id -g) \
-	    -v $(REPO_ROOT):$(REPO_ROOT) \
-	    -w $(THIS_DIR) \
-	    $(DOCKER_IMAGE) \
-	    make IN_DOCKER=1 ROOT=$(ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(X_ROOT)
-	$(XLD) -v -m -nostdlib -e _entry \
+all: $(BIN_DIR)/mdrtst.app
+
+XASFLAGS := --mode=sdcc -g
+XLDFLAGS := --mode=sdcc -v -m -nostdlib --no-default-runtime -e _entry
+
+$(XAS) $(XLD):
+	$(MAKE) -C $(REPO_ROOT) x
+
+$(BUILD_DIR):
+	mkdir -p $@
+
+$(BIN_DIR):
+	mkdir -p $@
+
+$(BIN_DIR)/mdrtst.app: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/mdrtst.rel $(XLD) | $(BIN_DIR)
+	$(XLD) $(XLDFLAGS) \
 	    -o $(BIN_DIR)/mdrtst.app \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/mdrtst.rel
@@ -50,18 +57,8 @@ image: all
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/mdrtst.app
 	$(MDR_TOOL) dir $(IMAGE)
 
-else
+$(BUILD_DIR)/crt0.rel: $(X_ROOT)/tests/tests/hello/crt0.s $(XAS) | $(BUILD_DIR)
+	$(XAS) $(XASFLAGS) $< -o $@
 
-AS      := sdasz80
-ASFLAGS := -xlos -g
-
-.PHONY: all
-all: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/mdrtst.rel
-
-$(BUILD_DIR)/crt0.rel: $(X_ROOT)/tests/hello/crt0.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-$(BUILD_DIR)/mdrtst.rel: mdrtst.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-endif
+$(BUILD_DIR)/mdrtst.rel: mdrtst.s $(XAS) | $(BUILD_DIR)
+	$(XAS) $(XASFLAGS) $< -o $@

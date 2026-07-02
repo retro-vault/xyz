@@ -58,9 +58,8 @@ void *_svc_query(const char *name) {
  *   input : HL = service name pointer
  *   output: DE = service table pointer (or 0)
  */
-void svc_query_rst10(void) __naked {
-    __asm
-        call    __svc_query
-        ret
-    __endasm;
+[[sdcc::naked]] void svc_query_rst10(void) {
+    __asm__(
+        "call _svc_query\n"
+        "ret\n");
 }

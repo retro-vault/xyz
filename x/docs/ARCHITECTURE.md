@@ -118,6 +118,9 @@ When adding tests for new C23 features (or anything else):
 ## Build & Distribution
 
 - Root `Makefile` remains a thin delegator + staging layer.
+- The default root `make` path now builds the staged X toolchain first and
+  then builds YOS against that staged toolchain; packaging is split into a
+  separate `make packages` step instead of being part of the default build.
 - Add clear phony targets at the root:
   - `make xtools`
   - `make libc`
@@ -130,6 +133,9 @@ When adding tests for new C23 features (or anything else):
   - Build the toolchain product.
   - Stage the necessary headers and runtime libraries.
   - Package via `pkg/` (separate xtools packaging recipe is desirable).
+- YOS should consume the staged X toolchain directly (`xcc`, `xas`, `xld`,
+  staged libc/runtime, platform scripts) rather than relying on a separate
+  Docker-only SDCC path.
 - The current staged xtools layout is now prefix-rooted and relocatable:
   - `bin/x/` is the standalone xtools install prefix.
   - `bin/x/bin/` contains the installed executables.

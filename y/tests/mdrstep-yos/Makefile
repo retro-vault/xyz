@@ -6,16 +6,17 @@ X_ROOT    ?= $(REPO_ROOT)/x
 BUILD_DIR := $(REPO_ROOT)/build/mdrstep-yos
 DIST_DIR  ?= $(REPO_ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
+X_DIST_DIR ?= $(REPO_ROOT)/bin/x
+X_HOST_BIN_DIR ?= $(X_DIST_DIR)/bin
 Y_DIST_DIR ?= $(REPO_ROOT)/bin/y
 Y_HOST_BIN_DIR ?= $(Y_DIST_DIR)/bin
 ZX_APPS_DIR ?= $(REPO_ROOT)/bin/z/z80/spectrum/bin/apps
 ZX_MDR_DIR ?= $(REPO_ROOT)/bin/z/z80/spectrum/bin/mdr
 BIN_DIR   := $(ZX_APPS_DIR)/mdrstep-yos
-XLD     := $(HOST_BIN_DIR)/xld
+XAS     := $(X_HOST_BIN_DIR)/xas
+XLD     := $(X_HOST_BIN_DIR)/xld
 MDR_TOOL  := $(Y_HOST_BIN_DIR)/microdrive
 IMAGE     := $(ZX_MDR_DIR)/mdrstep.mdr
-
-DOCKER_IMAGE := wischner/sdcc-z80-zx-spectrum:latest
 
 .DEFAULT_GOAL := all
 
@@ -26,19 +27,23 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 	rm -f $(IMAGE)
 
-ifndef IN_DOCKER
 .PHONY: all
 all: $(addprefix $(BIN_DIR)/,$(addsuffix .app,$(APPS)))
 
-$(BIN_DIR)/%.app:
-	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
-	docker run --rm \
-	    -u $(shell id -u):$(shell id -g) \
-	    -v $(REPO_ROOT):$(REPO_ROOT) \
-	    -w $(THIS_DIR) \
-	    $(DOCKER_IMAGE) \
-	    make IN_DOCKER=1 ROOT=$(ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(X_ROOT) APP=$*
-	$(XLD) -v -m -nostdlib -e _entry \
+XASFLAGS := --mode=sdcc -g
+XLDFLAGS := --mode=sdcc -v -m -nostdlib --no-default-runtime -e _entry
+
+$(XAS) $(XLD):
+	$(MAKE) -C $(REPO_ROOT) x
+
+$(BUILD_DIR):
+	mkdir -p $@
+
+$(BIN_DIR):
+	mkdir -p $@
+
+$(BIN_DIR)/%.app: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/%.rel $(XLD) | $(BIN_DIR)
+	$(XLD) $(XLDFLAGS) \
 	    -o $@ \
 	    $(BUILD_DIR)/crt0.rel \
 	    $(BUILD_DIR)/$*.rel
@@ -55,17 +60,8 @@ image: all
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/l777.app
 	$(MDR_TOOL) dir $(IMAGE)
 
-else
-
-AS      := sdasz80
-ASFLAGS := -xlos -g
-
-.PHONY: all
-all: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/$(APP).rel
-
-$(BUILD_DIR)/crt0.rel: crt0tiny.s
-	@mkdir -p $(BUILD_DIR)
-	$(AS) $(ASFLAGS) -o $@ $<
+$(BUILD_DIR)/crt0.rel: crt0tiny.s $(XAS) | $(BUILD_DIR)
+	$(XAS) $(XASFLAGS) $< -o $@
 
 $(BUILD_DIR)/s123.s: save.s.in
 	@mkdir -p $(BUILD_DIR)
@@ -91,22 +87,5 @@ $(BUILD_DIR)/l777.s: load.s.in
 	@mkdir -p $(BUILD_DIR)
 	sed -e 's/@MODULE@/l777/g' -e 's/@NAME@/t777/g' -e 's/@LEN@/777/g' $< > $@
 
-$(BUILD_DIR)/s123.rel: $(BUILD_DIR)/s123.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-$(BUILD_DIR)/s512.rel: $(BUILD_DIR)/s512.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-$(BUILD_DIR)/s777.rel: $(BUILD_DIR)/s777.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-$(BUILD_DIR)/l123.rel: $(BUILD_DIR)/l123.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-$(BUILD_DIR)/l512.rel: $(BUILD_DIR)/l512.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-$(BUILD_DIR)/l777.rel: $(BUILD_DIR)/l777.s
-	$(AS) $(ASFLAGS) -o $@ $<
-
-endif
+$(BUILD_DIR)/%.rel: $(BUILD_DIR)/%.s $(XAS) | $(BUILD_DIR)
+	$(XAS) $(XASFLAGS) $< -o $@

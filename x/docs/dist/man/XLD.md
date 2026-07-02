@@ -41,18 +41,24 @@ xld -T layout.ld main.rel -o app.xl
 | `-e <symbol>` | Entry symbol (default `_main` in sdcc mode, `_start` in gnu mode) |
 | `--mode=sdcc` / `--mode=gnu` | Input flavor (default `sdcc`) |
 | `-L<dir>`, `-l<name>` | Library search directory / library |
-| `--platform=<name>` | Select target platform library (default `none`) |
+| `-B <prefix>`, `--sdcc-runtime <dir>` | Add the startup/runtime/toolchain search prefix |
+| `--platform <name>`, `--platform=<name>` | Select target platform library (default `none`) |
 | `-nostartfiles` | No implicit startup file |
 | `-nostdlib` | No implicit startup file or default libraries |
 | `--no-default-runtime` | Do not auto-probe the install prefix for runtime assets |
-| `--oformat=xl\|binary\|elf\|ihx` | Output format (default `xl`) |
-| `-T <file>`, `--script=<file>` | Linker script |
-| `-Ttext/-Tdata/-Tbss=<addr>` | Section base addresses |
-| `--section-start=<name>=<addr>` | Base address for a named section |
-| `--binary-range=<lo>-<hi>` | Limit emitted range for binary output |
-| `--reserve=<lo>-<hi>` | Reserve an address range (repeatable) |
+| `-f <fmt>`, `--oformat=xl\|binary\|ihx` | Output format (default `xl`) |
+| `--oformat=elf` | Reserved; not yet implemented as a primary output format |
+| `-T <file>`, `--script <file>`, `--script=<file>` | Linker script |
+| `-b <name>=<addr>`, `--section-start=<name>=<addr>` | Base address for a named section |
+| `-Ttext/-Tdata/-Tbss=<addr>` | Section base aliases |
+| `-x <lo>-<hi>`, `--binary-range=<lo>-<hi>` | Limit emitted range for binary output |
+| `-r <lo>-<hi>`, `--reserve=<lo>-<hi>` | Reserve an address range (repeatable) |
 | `-g` | Emit debug outputs (CDB) for use with xgdb |
-| `-M`, `-Map=<file>` | Print/write memory map |
+| `-m`, `-M`, `--print-map` | Print memory map |
+| `-Map <file>`, `-Map=<file>` | Write memory map |
+| `-v`, `--verbose` | Verbose output |
+| `--version` | Print version and exit |
+| `-h`, `--help` | Show usage and exit |
 
 ## Output formats
 
@@ -60,4 +66,5 @@ xld -T layout.ld main.rel -o app.xl
   table, loadable at any address.
 - **binary** — flat memory image.
 - **ihx** — Intel HEX.
-- **elf** — ELF image with DWARF debug sections (gnu mode).
+- **gnu debug sidecar** — in `--mode=gnu`, `-g` derives an ELF + DWARF
+  debug sidecar next to the primary output.

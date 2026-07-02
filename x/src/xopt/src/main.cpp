@@ -20,6 +20,10 @@
 
 namespace {
 
+#ifndef XTOOLS_VERSION
+#define XTOOLS_VERSION "0.1.0"
+#endif
+
 struct cli_options {
     xopt::optimizer_options optimizer;
     std::vector<std::string> inputs;
@@ -35,7 +39,7 @@ struct cli_options {
     std::cerr <<
         "Usage: " << prog << " [options] <input.s>...\n"
         "\n"
-        "X Optimizer (xopt) — Z80 assembly optimizer\n"
+        "X Tools Optimizer (xopt) — Z80 assembly optimizer\n"
         "\n"
         "options:\n"
         "  -O0|-O2|-Os|-Of|-O3      Select optimization level (default: -O2)\n"
@@ -91,7 +95,8 @@ cli_options parse_args(int argc, char **argv) {
         if (arg == "-h" || arg == "--help")
             print_usage_and_exit(prog, 0);
         if (arg == "--version") {
-            std::cout << "xopt 0.1.0\n";
+            std::cout << "xopt " << XTOOLS_VERSION
+                      << " (X Tools Optimizer for Z80)\n";
             std::exit(0);
         }
         if (arg == "-o") {

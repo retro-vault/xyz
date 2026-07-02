@@ -31,6 +31,21 @@ Convert a text archive into a GNU `ar` archive:
 xobjcopy -I lib -O a libstuff.lib libstuff.a
 ```
 
+Use an explicit `-o` output path or a positional output argument:
+
+```sh
+xobjcopy -I rel -O elf foo.rel -o foo.o
+xobjcopy -I rel -O elf foo.rel foo.o
+```
+
+## Command-line notes
+
+- `-I <target>`, `--input-target=<target>` select the input format.
+- `-O <target>`, `--output-target=<target>` select the output format.
+- `-g`, `--strip-debug` removes inline debug metadata.
+- `--version` prints the version and exits.
+- `-h`, `--help` prints usage and exits.
+
 ## Current limitations
 
 - `--strip-debug` currently supports object inputs only.

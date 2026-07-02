@@ -15,6 +15,10 @@
 
 namespace {
 
+#ifndef XTOOLS_VERSION
+#define XTOOLS_VERSION "0.1.0"
+#endif
+
 enum class image_format {
     bin,
     ihx
@@ -80,12 +84,13 @@ struct options {
     bool quiet = false;
     bool run_mode = false;
     bool show_help = false;
+    bool show_version = false;
 };
 
 void print_help() {
     std::cout
-        << "xemu - Z80 emulator\n"
-        << "usage: xemu [options]\n\n"
+        << "Usage: xemu [options]\n\n"
+        << "X Tools Emulator (xemu) — Z80 emulator and RSP target\n\n"
         << "modes:\n"
         << "  default              start an RSP server for xgdb-compatible clients\n"
         << "  --run                execute immediately until HALT or the step limit\n\n"
@@ -118,6 +123,7 @@ void print_help() {
         << "  --bank-port ADDR     compatibility shortcut: OUT port selects active bank\n"
         << "  -q, --quiet          quiet startup\n"
         << "  --no-quiet           disable quiet mode even if enabled in config\n"
+        << "  --version            print version\n"
         << "  -h, --help           show this help\n";
 }
 
@@ -519,6 +525,9 @@ options parse_options(int argc, char* argv[]) {
         if (arg == "-h" || arg == "--help") {
             opts.show_help = true;
             return opts;
+        } else if (arg == "--version") {
+            opts.show_version = true;
+            return opts;
         } else if (arg == "-q" || arg == "--quiet") {
             opts.quiet = true;
         } else if (arg == "--no-quiet") {
@@ -835,6 +844,11 @@ int main(int argc, char* argv[]) {
         const auto opts = parse_options(argc, argv);
         if (opts.show_help) {
             print_help();
+            return 0;
+        }
+        if (opts.show_version) {
+            std::cout << "xemu " << XTOOLS_VERSION
+                      << " (X Tools Emulator for Z80)\n";
             return 0;
         }
 

@@ -7,15 +7,6 @@
 #   make clean  — remove all build artifacts
 # ---------------------------------------------------------------------------
 
-# Linux only.
-ifneq ($(shell uname), Linux)
-$(error OS must be Linux!)
-endif
-
-# Prerequisite checks.
-$(if $(shell which docker),,$(error "docker not found. Please install Docker."))
-$(if $(shell which gcc),,$(error "gcc not found. Please install gcc."))
-
 # Use the latest reachable vX.Y.Z tag as the default package version.
 GIT_VERSION_TAG := $(shell git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
 
@@ -112,7 +103,7 @@ export DOCS_DIR           := $(SHARE_DIR)/doc
 export PKG_DIR            := $(DIST_DIR)/pkg
 export VSIX_STAGE_DIR     := $(PKG_DIR)/vsix
 
-.PHONY: all x x-s x-m x-l x-models clean help
+.PHONY: all packages x x-s x-m x-l x-models clean help
 .PHONY: test-x-s test-x-m test-x-l test-x-models
 .PHONY: stage-includes stage-target-assets stage-xcc-support
 .PHONY: stage-layout-cleanup stage-toolchain-targets
@@ -146,6 +137,8 @@ all:
 		HOST_BIN_DIR=$(Y_DIST_DIR)/bin \
 		PUBLIC_LIB_DIR=$(Y_DIST_DIR)/lib \
 		PUBLIC_INCLUDE_DIR=$(Y_DIST_DIR)/include
+
+packages:
 	@echo "==> packages"
 	@$(MAKE) -C $(X_ROOT)/pkg all REPO_ROOT=$(ROOT) X_ROOT=$(X_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) VSIX_STAGE_DIR=$(VSIX_STAGE_DIR) DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) PACKAGE_NAME=$(PACKAGE_NAME) PACKAGE_VERSION=$(PACKAGE_VERSION) PACKAGE_RELEASE=$(PACKAGE_RELEASE) LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG) LIBC_STDIO_FLOAT=$(LIBC_STDIO_FLOAT) X_MODEL=$(X_MODEL)
 
@@ -297,7 +290,8 @@ help:
 		'Usage: make [target] [VARIABLE=value ...]' \
 		'' \
 		'Targets:' \
-		'  all                  Build x tools, y tools, and packages (default).' \
+		'  all                  Build x tools and y outputs (default).' \
+		'  packages             Build the optional x packaging artifacts.' \
 		'  x                    Build only the x compiler suite distribution.' \
 		'  x-models             Build the S, M, and L x distributions.' \
 		'  x-s                  Build the S model into bin/x-s.' \

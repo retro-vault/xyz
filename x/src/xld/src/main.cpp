@@ -21,7 +21,9 @@
 #include <xld/map_emitter.h>
 #include <xld/runtime.h>
 
-#define XLD_VERSION "1.0.0"
+#ifndef XLD_VERSION
+#define XLD_VERSION "0.1.0"
+#endif
 
 static std::filesystem::path replace_extension(const std::filesystem::path& path,
                                                const std::string& ext)
@@ -41,7 +43,7 @@ int main(int argc, char* argv[]) {
         }
         if (opts.show_version) {
             std::cout << "xld " << XLD_VERSION
-                      << " (X Linker for Z80)\n";
+                      << " (X Tools Linker for Z80)\n";
             return 0;
         }
 

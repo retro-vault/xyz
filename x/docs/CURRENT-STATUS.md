@@ -2,7 +2,7 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: during the C23 completion, repo structure discussion, and xtools prefix-layout work.
+Last updated: during the C23 completion, repo structure discussion, xtools prefix-layout work, and native YOS build migration.
 
 ## Major Recent Work
 
@@ -81,6 +81,24 @@ compiler-suite install tree:
 - The copied runtime `.rel` staging tree was removed from the public install
   layout; runtime helpers are now shipped as `libruntime.a`.
 
+### 6. Native Root Build for YOS
+The default top-level build flow now leans fully on the staged X toolchain:
+
+- The root `Makefile` no longer hard-blocks non-Linux hosts and no longer
+  folds packaging into the default `make` path.
+- `make` at the repo root now builds X first, then builds Y natively using the
+  staged `bin/x/bin/xcc`, `xas`, and `xld`.
+- The active YOS ROM build in `y/src/Makefile` now compiles C sources with
+  `xcc --mode=sdcc -S -Os`, assembles with `xas`, and links with `xld`
+  against staged `libc.a` and `libruntime.a`.
+- The Y-side sample app builds under `y/tests/hello-yos/`,
+  `y/tests/mdrsave-yos/`, `y/tests/mdrtst-yos/`, and `y/tests/mdrstep-yos/`
+  were migrated off the Docker/SDCC path to the same staged X toolchain flow.
+- A small YOS compatibility pass was needed so the older SDCC-oriented kernel
+  and driver sources also build cleanly under `xcc`/`xas`:
+  `[[sdcc::naked]]` attributes, a few inline-asm bridges, and symbol-name
+  alignment between C and assembler entry points.
+
 ## Current High-Level Layout (Pre-Restructuring)
 
 - `src/xc/` — the x tools (xcc, xas, xld, xopt, ...)
@@ -98,6 +116,9 @@ compiler-suite install tree:
 - Create dedicated packaging for the standalone xtools product.
 - Flesh out the `toolchain/tests/`, `libc/tests/`, etc. ownership once directories move.
 - Decide on sysroot / target layout for the distributable xtools.
+- Keep reducing assumptions that require a specifically Linux-hosted developer
+  environment; the current build is native across GNU Make + POSIX-like shells,
+  but Windows still expects something like MSYS2 rather than pure cmd.exe.
 - Keep evolving the dual-style test base as new C23 or OS features are added.
 - The copied `x/tests/c23/` suite should remain the authoritative source for the broad C23 matrix; the in-tree dispatch is for fast local verification + libc surface testing.
 

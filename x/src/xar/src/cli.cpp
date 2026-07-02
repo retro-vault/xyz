@@ -18,6 +18,10 @@
 
 namespace xar {
 
+#ifndef XTOOLS_VERSION
+#define XTOOLS_VERSION "0.1.0"
+#endif
+
     namespace {
 
         std::string normalize_cli_path(std::string path)
@@ -63,7 +67,7 @@ namespace xar {
         std::cerr
             << "Usage: " << prog << " [--mode=sdcc|gnu] <operation> archive [members...]\n"
             << "\n"
-            << "X Archiver (xar) — Z80 archive tool\n"
+            << "X Tools Archiver (xar) — Z80 archive manager\n"
             << "\n"
             << "operations:\n"
             << "  r   Add or replace members\n"
@@ -80,8 +84,9 @@ namespace xar {
             << "  --mode=sdcc   Text-index .lib format (default)\n"
             << "  --mode=gnu    GNU ar binary format\n"
             << "  @file         Read member paths from a response file\n"
-            << "  --help        Show this help\n"
-            << "  --version     Show version\n"
+            << "  @@file        Treat a leading '@' as part of a literal member path\n"
+            << "  --version     Print version\n"
+            << "  -h, --help    Show this help\n"
             << "\n"
             << "examples:\n"
             << "  xar rcs mylib.lib foo.rel bar.rel\n"
@@ -105,9 +110,10 @@ namespace xar {
         // Process --options first.
         for (; i < argc; ++i) {
             std::string arg = argv[i];
-            if (arg == "--help") print_usage_and_exit(prog, 0);
+            if (arg == "-h" || arg == "--help") print_usage_and_exit(prog, 0);
             if (arg == "--version") {
-                std::cout << "xar 0.1.0\n";
+                std::cout << "xar " << XTOOLS_VERSION
+                          << " (X Tools Archiver for Z80)\n";
                 std::exit(0);
             }
             if (arg == "--mode=sdcc") { opts.mode = archive_mode::sdcc; continue; }

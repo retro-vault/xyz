@@ -44,8 +44,10 @@ Supported startup switches:
 - `--cdb <file>`   SDCC CDB debug information
 - `--map <file>`   SDCC MAP linker output (optional, supplements CDB)
 - `--remote <host:port>`
+- `-d <dir>`, `--directory <dir>`
+- `--log <file>`
 - `-ex <command>`
-- `-q`, `--quiet`
+- `--version`
 - `-h`, `--help`
 
 If `--cdb` is not given and `--exec foo.bin` is set, `xgdb` also tries
@@ -65,6 +67,14 @@ bin/x/bin/xgdb --interpreter=mi --exec yos.rom --cdb yos.cdb --map yos.map --rem
 The protocol abstraction layer also has a DAP-shaped direction in the code,
 but the current `xgdb` entry point does not yet expose
 `--interpreter=dap`.
+
+Compatibility flags accepted and currently ignored:
+
+- `-q`, `--quiet`
+- `--nx`, `-nx`
+- `--fullname`, `-fullname`
+- `--tty <path>`
+- `--tty=<path>`
 
 For DDD integration use `xgdb` directly:
 

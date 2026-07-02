@@ -23,16 +23,27 @@ Canonical release notes now live with each product root:
 
 - The root `Makefile` is a thin orchestrator. It now delegates primarily to
   the migrated product roots `x/` and `y/`.
+- The default root `make` path builds the staged X toolchain first and then
+  builds YOS natively with that staged toolchain. Packaging is no longer part
+  of the default root build; use `make packages` when you explicitly want
+  package artifacts.
 - Prefer building **subsets** when possible (see targets below).
 - Output goes to `bin/` (dist) and `build/`.
 - Most components use recursive Make. Some sub-areas may use CMake (check `archive/` and vendored dirs).
 - The current staged xtools sysroot lives under `bin/x/z80/`, with related YOS
   outputs under `bin/y/` and staged target assets under `bin/z/`.
+- The YOS ROM and the active `y/tests/*-yos` app builds now use the staged
+  `bin/x/bin/{xcc,xas,xld}` toolchain directly with `-Os`; the old Docker /
+  SDCC-only path is no longer the default build route.
+- "Cross-platform" in this repo means GNU Make plus a POSIX-like shell/tool
+  environment (for example Linux, macOS, or MSYS2 on Windows), because the
+  Makefiles still use commands such as `rm`, `cp`, `mkdir`, and `sed`.
 
 ### Useful Current Commands
 
 ```bash
 make                    # full build (current root flow)
+make packages           # optional packaging pass
 make xtools             # build the standalone xtools prefix
 make clean
 

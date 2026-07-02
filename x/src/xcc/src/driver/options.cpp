@@ -418,7 +418,7 @@ void options::usage(const char *argv0) {
     fprintf(stderr,
         "Usage: %s [options] <input>... [-o <output>]\n"
         "\n"
-        "X C Compiler (xcc) — C11 compiler driver for Z80\n"
+        "X Tools C Compiler (xcc) — C11 compiler driver for Z80\n"
         "\n"
         "options:\n"
         "  -o <file>         Output file\n"
@@ -435,6 +435,7 @@ void options::usage(const char *argv0) {
         "  -w                Disable all warnings\n"
         "  -W0..-W3          Warning levels (none, default, Wall, Wall+extra)\n"
         "  -Wall, -Wextra    Enable grouped warnings\n"
+        "  -Wpedantic        Enable pedantic warnings\n"
         "  -W<name>          Enable one warning group\n"
         "  -Wno-<name>       Disable one warning group\n"
         "  -Werror[=<name>]  Promote warnings to errors\n"
@@ -443,8 +444,12 @@ void options::usage(const char *argv0) {
         "  -I<dir>           Add include directory\n"
         "  -D<macro>[=val]   Define preprocessor macro\n"
         "  -std=c11          Language standard (only c11 supported)\n"
+        "  -masm <dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
+        "  --platform <name> Select target platform include defaults\n"
         "  --platform=<name> Select target platform include defaults\n"
+        "  --float-format <fmt>\n"
+        "                    Float ABI: ieee32, ieee16, fixed8_8, fixed16_16, fixed24_8\n"
         "  --float-format=<fmt>\n"
         "                    Float ABI: ieee32, ieee16, fixed8_8, fixed16_16, fixed24_8\n"
         "  --sdcccall <0|1>  SDCC-compatible default ABI selector\n"
@@ -453,14 +458,22 @@ void options::usage(const char *argv0) {
         "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
         "  --mode=gnu        Output for GNU binutils assembler\n"
         "  -L<dir>, -l<name> Forwarded to the linker\n"
+        "  -B <prefix>       Forwarded to the linker runtime/toolchain search path\n"
         "  -nostdlib         Forwarded to the linker\n"
         "  -nostartfiles     Forwarded to the linker\n"
-        "  --oformat=<fmt>   Forwarded to the linker (xl, binary, elf, ihx)\n"
-        "  -T*, -e <sym>     Forwarded to the linker\n"
+        "  --no-default-runtime\n"
+        "                    Forwarded to the linker\n"
+        "  --oformat=<fmt>   Forwarded to the linker (xl, binary, ihx; elf reserved)\n"
+        "  -T*, --script=<file>, --section-start=<name>=<addr>\n"
+        "                    Forwarded to the linker\n"
+        "  --binary-range=<lo>-<hi>, --reserve=<lo>-<hi>\n"
+        "                    Forwarded to the linker\n"
+        "  -e <sym>, -Map=<file>, -M\n"
+        "                    Forwarded to the linker\n"
         "  -Wl,<args>        Forward comma-separated args to the linker\n"
         "  -v                Verbose output\n"
         "  --version         Print version\n"
-        "  --help            Print this help\n",
+        "  -h, --help        Print this help\n",
         argv0);
 }
 
@@ -482,7 +495,7 @@ options options::parse(int argc, char **argv) {
             exit(0);
         }
         if (strcmp(a, "--version") == 0) {
-            fprintf(stdout, "xcc %s (X C Compiler for Z80)\n", XCC_VERSION);
+            fprintf(stdout, "xcc %s (X Tools C Compiler for Z80)\n", XCC_VERSION);
             exit(0);
         }
         if (strcmp(a, "-S") == 0) {

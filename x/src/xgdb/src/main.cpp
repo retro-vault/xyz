@@ -17,6 +17,10 @@
 
 namespace {
 
+#ifndef XTOOLS_VERSION
+#define XTOOLS_VERSION "0.1.0"
+#endif
+
     enum class frontend_mode {
         cli,
         mi
@@ -32,6 +36,7 @@ namespace {
         std::vector<std::filesystem::path> source_dirs;
         std::optional<std::filesystem::path> log_file;
         bool show_help = false;
+        bool show_version = false;
     };
 
     void configure_terminal_input() {
@@ -50,19 +55,29 @@ namespace {
 
     void print_help() {
         std::cout
-            << "xgdb - remote debugger for xgdb/xld targets\n"
-            << "usage: xgdb [options] [program]\n\n"
-            << "options:\n"
+            << "Usage: xgdb [options] [program]\n\n"
+            << "X Tools Debugger (xgdb) — remote Z80 debugger\n\n"
+            << "startup:\n"
             << "  --exec <file>           target binary image\n"
-            << "  -d <dir>                add source search directory\n"
-            << "  --log <file>            log all protocol I/O to file\n"
             << "  --cdb <file>            SDCC CDB debug information file\n"
             << "  --map <file>            SDCC MAP linker output file (optional)\n"
             << "  --remote <host:port>    connect to remote target\n"
+            << "  -d <dir>                add source search directory\n"
+            << "  --directory <dir>       add source search directory\n"
+            << "  --log <file>            log all protocol I/O to file\n"
             << "  --interpreter <mode>    frontend mode: cli, mi, or mi2\n"
             << "  --interpreter=<mode>    frontend mode: cli, mi, or mi2\n"
             << "  --mi                    shorthand for --interpreter=mi\n"
             << "  -ex <command>           execute debugger command\n"
+            << "\n"
+            << "compatibility:\n"
+            << "  -q, --quiet             accepted for GDB frontend compatibility (ignored)\n"
+            << "  --nx, -nx               accepted for GDB frontend compatibility (ignored)\n"
+            << "  --fullname, -fullname   accepted for DDD compatibility (ignored)\n"
+            << "  --tty <path>            accepted for DDD compatibility (ignored)\n"
+            << "  --tty=<path>            accepted for DDD compatibility (ignored)\n"
+            << "\n"
+            << "  --version               print version\n"
             << "  -h, --help              show this help\n";
     }
 
@@ -72,6 +87,9 @@ namespace {
             const std::string arg = argv[i];
             if (arg == "-h" || arg == "--help") {
                 opts.show_help = true;
+                return opts;
+            } else if (arg == "--version") {
+                opts.show_version = true;
                 return opts;
             } else if (arg == "--mi") {
                 opts.mode = frontend_mode::mi;
@@ -132,8 +150,13 @@ namespace {
                 opts.execute_commands.push_back(argv[i]);
             } else if (arg == "--nx" || arg == "-nx"
                        || arg == "--fullname" || arg == "-fullname"
-                       || arg == "-q") {
+                       || arg == "-q" || arg == "--quiet") {
                 // Flags GDB front-ends (DDD etc.) may append; accept silently.
+                continue;
+            } else if (arg == "--tty") {
+                if (++i >= argc) {
+                    throw std::runtime_error("--tty requires a path");
+                }
                 continue;
             } else if (arg.rfind("--tty=", 0) == 0) {
                 continue;
@@ -157,6 +180,11 @@ int main(int argc, char* argv[]) {
         auto opts = parse_options(argc, argv);
         if (opts.show_help) {
             print_help();
+            return 0;
+        }
+        if (opts.show_version) {
+            std::cout << "xgdb " << XTOOLS_VERSION
+                      << " (X Tools Debugger for Z80)\n";
             return 0;
         }
 

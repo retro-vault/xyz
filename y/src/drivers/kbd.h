@@ -28,7 +28,8 @@ typedef struct kbd_buff_s {
 /*
  * Global keyboard event buffer filled by the scanner.
  */
-extern kbd_buff_t* _kbd_buff;
+extern kbd_buff_t* __kbd_buff;
+#define _kbd_buff __kbd_buff
 
 /*
  * Poll the keyboard matrix and queue state transitions.
@@ -36,7 +37,8 @@ extern kbd_buff_t* _kbd_buff;
  * Notes:
  *      Intended to run from a 50 Hz timer hook.
  */
-extern void _kbd_scan(void);
+extern void __kbd_scan(void);
+#define _kbd_scan __kbd_scan
 
 /* checks kbd. buffer, 0 for no key available 
    otherwise internal key code 

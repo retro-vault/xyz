@@ -43,6 +43,10 @@ xar d libfoo.a bar.rel
 |---|---|
 | `--mode=sdcc` | Text-index `.lib` format (default) |
 | `--mode=gnu` | GNU `ar` binary format |
+| `@file` | Read member paths from a response file |
+| `@@file` | Treat a leading `@` as part of a literal member path |
+| `--version` | Print version and exit |
+| `-h`, `--help` | Show usage and exit |
 
 Libraries built with xar can be passed to `xld` (or to `xcc` on the
 command line) like any object file; only the members needed to resolve

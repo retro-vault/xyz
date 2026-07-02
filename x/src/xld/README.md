@@ -30,6 +30,16 @@ Current limits that are worth knowing up front:
 - `OVR` does not produce separate overlay payload files
 - if two overlaid modules write bytes to the same addresses, later copied bytes overwrite earlier ones in the final image
 
+Current CLI note:
+
+- The authoritative end-user switch summary is `x/docs/dist/man/XLD.md`
+  together with `xld --help`.
+- This README still contains deeper implementation notes and some historical
+  discussion, but the packaged manpage is the current CLI contract.
+- Historical sections below that mention removed outputs such as NoICE
+  `.noi` files or older `.xgdb` sidecars should be read as background,
+  not as the current CLI surface.
+
 ---
 
 ## What Files xld Reads
@@ -40,13 +50,13 @@ Current limits that are worth knowing up front:
 | `.o`, `.obj` | GNU ELF relocatable object. Uses section names such as `.text`, `.data`, and `.bss`. | Optional |
 | `.lib` | Library input. Can be xld text-index format or a native `ar` archive. xld loads only members that satisfy unresolved symbols. | Optional |
 | `.a` | GNU/SysV `ar` archive, typically containing ELF `.o` members. | Optional |
-| `.adb` | SDCC C debug sidecar. Used by `.xgdb`, and as a fallback source for compiler records when emitting `.cdb`. | Optional |
+| `.adb` | SDCC C debug sidecar. Used as a fallback source for compiler records when emitting `.cdb` or GNU-mode debug sidecars. | Optional |
 | `.cdb` | SDCC compiler debug sidecar. Preferred compiler-record source when emitting a linked `.cdb`. | Optional |
 | `.lst` | Assembler listing. Used when emitting GNU/SDCC debug sidecars for assembly modules. | Optional |
 
 ### Notes
 
-- `--mode=sdcc` defaults the entry symbol to `_main`, keeps `-Ttext/-Tdata/-Tbss` mapped to `_CODE/_DATA/_BSS`, and enables `--sdcc-runtime`.
+- `--mode=sdcc` defaults the entry symbol to `_main`, keeps `-Ttext/-Tdata/-Tbss` mapped to `_CODE/_DATA/_BSS`, and uses the SDCC-style runtime auto-probe rules.
 - `--mode=gnu` defaults the entry symbol to `_start` and maps `-Ttext/-Tdata/-Tbss` to `.text/.data/.bss`.
 - Both `.rel` and ELF `.o` eventually become the same internal module model inside `xld`.
 - `.adb`, `.cdb`, and `.lst` are not linked themselves; they are sidecars used only to enrich debug outputs.
@@ -128,10 +138,10 @@ including harmless linker-driver commands such as `-p`, `-m`, `-z`, `-k`,
 
 | File | How You Ask For It | What It Is |
 |------|---------------------|------------|
-| primary output, default `a.out` | always, via `-o <file>` | Either relocatable `XL` or flat `BIN`, depending on `-f` |
+| primary output, default `a.out` | always, via `-o <file>` | Relocatable `XL`, flat `BIN`, or Intel HEX `IHX`, depending on `-f` / `--oformat` |
 | `.xl` | default `-f xl` | Relocatable XYZ loader image with header and relocation table |
 | `.bin` | `-f bin` | Flat absolute binary image |
-| `.noi` | `-n <file>` | NoICE command file with `DEF`, `FILE`, `LINE`, and scope records |
+| `.ihx` | `-f ihx` | Intel HEX image |
 | `.cdb` | derived by `-g` in `--mode=sdcc` | Linked SDCC CDB debug file |
 | `.elf` | derived by `-g` in `--mode=gnu` | Derived ELF debug sidecar with DWARF2 sections |
 
@@ -139,6 +149,7 @@ including harmless linker-driver commands such as `-p`, `-m`, `-z`, `-k`,
 
 - Use `XL` when a loader will relocate the program at load time.
 - Use `BIN` when you want a fixed-address ROM or raw memory image.
+- Use `IHX` when you want Intel HEX records for PROM programmers or loaders.
 - Use `-g` when you want source-level debugging metadata.
 - In `--mode=sdcc`, `-g` derives a linked `.cdb`.
 - In `--mode=gnu`, `-g` derives an ELF sidecar with DWARF2 sections.
@@ -169,31 +180,16 @@ xld -f bin -e _entry \
 This links `_CODE` at `0x0100` and emits only the inclusive range
 `0x0100..0x02FF` into `hello.bin`.
 
-### 3. Produce a binary plus a NoICE file
+### 3. Produce an Intel HEX image
 
 ```bash
-xld -f bin -e _entry \
+xld -f ihx -e _entry \
       -b _CODE=0100 \
-      -x 0100-02FF \
-      -n build/hello.noi \
-      -o hello.bin \
+      -o hello.ihx \
       build/crt0.rel build/hello.rel
 ```
 
-The `.noi` file now contains NoICE commands. The exact contents depend on
-which sidecars exist, but the linked symbol section still looks familiar:
-
-```text
-LASTFILELOADED
-CLEARLINEINFO Y
-DEF _entry 0x0100
-DEF _main 0x0134
-DEF s__CODE 0x0100
-DEF l__CODE 0x01A4
-```
-
-If C and assembly sidecars are present, xld also adds `FILE`, `LINE`,
-`FUNCTION`, and `DEFSCOPE` commands.
+This emits Intel HEX records instead of a flat binary image.
 
 ### 4. Produce a binary plus a linked SDCC CDB file
 
@@ -275,24 +271,26 @@ If you want the same placement rules but relocatable `XL` output, omit
 ## Command-Line Usage
 
 ```text
-xld [options] <file.rel|file.lib> ...
+xld [options] <input>...
 ```
 
-There are thirteen switches in total today.
+Current commonly used switches:
 
 | Option | Short meaning |
 |--------|---------------|
-| `-g` | Write mode-specific debug output: `.cdb` in SDCC mode, `.elf` in GNU mode |
+| `--mode=sdcc`, `--mode=gnu` | Select the input/object flavor |
+| `-g` | Write mode-specific debug output: `.cdb` in SDCC mode, `.elf` sidecar in GNU mode |
 | `--sdcc-runtime <dir>` | Auto-inject runtime `crt0` and default library from a directory |
 | `-o <file>` | Set primary output filename |
-| `-n <file>` | Write NoICE `.noi` output |
 | `-e <symbol>` | Set entry symbol |
-| `-r <start>-<end>` | Reserve an address range |
-| `-b <area>=<addr>` | Force base address for an area group |
-| `-f <xl\|bin>` | Choose output format |
-| `-x <start>-<end>` | Restrict emitted BIN range |
-| `-m` | Print memory map |
+| `-r <start>-<end>`, `--reserve=<start>-<end>` | Reserve an address range |
+| `-b <area>=<addr>`, `--section-start=<area>=<addr>` | Force a base address for a section/area |
+| `-f <xl\|bin\|ihx>`, `--oformat=...` | Choose the primary output format |
+| `-x <start>-<end>`, `--binary-range=<start>-<end>` | Restrict emitted BIN range |
+| `-m`, `-M`, `--print-map` | Print the memory map |
+| `-Map <file>`, `-Map=<file>` | Write the memory map to a file |
 | `-v` | Verbose output |
+| `--version` | Print the version |
 | `-h`, `--help` | Show usage |
 
 Input files are processed in command-line order. That matters for:
@@ -326,8 +324,9 @@ In `--mode=gnu`, xld derives an `.elf` sidecar with:
 - `.adb` for SDCC C debug information
 - `.lst` for assembly source line mappings
 
-If the sidecars are missing, xld still writes `.xgdb`, but it can only
-include what it knows from the linked objects themselves.
+If the sidecars are missing, xld still writes the selected mode-specific
+debug sidecar, but it can only include what it knows from the linked
+objects themselves.
 
 Important detail for library modules:
 

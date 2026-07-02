@@ -4,6 +4,9 @@ DIST_DIR ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 CXX ?= g++
 CXXFLAGS ?= -std=c++2a -Wall -Wextra -Wpedantic -g
+GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+XOBJCOPY_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
+CXXFLAGS += -DXOBJCOPY_VERSION=\"$(XOBJCOPY_VERSION)\"
 
 XBFD_DIR  := $(ROOT)/lib/xbfd
 XBFD_INC  := $(XBFD_DIR)/include

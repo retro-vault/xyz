@@ -5,6 +5,9 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
 CXXFLAGS ?= -std=c++20 -g
+GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+XTOOLS_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
+CXXFLAGS += -DXTOOLS_VERSION=\"$(XTOOLS_VERSION)\"
 UNAME_S := $(shell uname -s 2>/dev/null || echo unknown)
 HOST_TRIPLE ?= $(shell $(CXX) -dumpmachine 2>/dev/null || echo unknown)
 NEEDS_WINSOCK := 0

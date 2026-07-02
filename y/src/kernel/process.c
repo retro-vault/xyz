@@ -34,7 +34,7 @@ static void _process_make_pname(const char *src, char out[MAX_PNAME_LEN]) {
     out[i] = '\0';
 }
 
-extern uint8_t __process_relocate(uint8_t *img);
+extern uint8_t ___process_relocate(uint8_t *img);
 
 process_t *process_first = NULL;
 uint8_t process_last_error = PROCESS_LOAD_OK;
@@ -141,7 +141,7 @@ process_t *process_load(
         return NULL;
     }
 
-    if (__process_relocate(img) != 0) {
+    if (___process_relocate(img) != 0) {
         process_last_error = PROCESS_LOAD_ERR_XL_INVALID;
         mem_free((void *)&_heap, img);
         return NULL;

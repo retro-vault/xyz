@@ -20,8 +20,8 @@ thread_t *thread_first_running = NULL;
 thread_t *thread_first_waiting = NULL;
 thread_t *thread_first_terminated = NULL;
 
-extern uint8_t lob(uint16_t w) __naked;
-extern uint8_t hib(uint16_t w) __naked;
+[[sdcc::naked]] extern uint8_t lob(uint16_t w);
+[[sdcc::naked]] extern uint8_t hib(uint16_t w);
 
 static void _thread_cleanup_terminated(void)
 {
@@ -218,23 +218,17 @@ thread_t* _thread_select_next(void) {
 }
 
 /* low byte service function */
-uint8_t lob(uint16_t w) __naked {
+[[sdcc::naked]] uint8_t lob(uint16_t w) {
     w;
-    __asm
-        ;; w is in HL (SDCC 4.5 calling convention)
-        ;; uint8_t return value must be in A
-        ld      a,l
-        ret
-    __endasm;
+    __asm__(
+        "ld a,l\n"
+        "ret\n");
 }
 
 /* high byte service function */
-uint8_t hib(uint16_t w) __naked {
+[[sdcc::naked]] uint8_t hib(uint16_t w) {
     w;
-    __asm
-        ;; w is in HL (SDCC 4.5 calling convention)
-        ;; uint8_t return value must be in A
-        ld      a,h
-        ret
-    __endasm;
+    __asm__(
+        "ld a,h\n"
+        "ret\n");
 }

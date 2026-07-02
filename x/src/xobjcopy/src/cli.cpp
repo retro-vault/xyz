@@ -161,23 +161,25 @@ namespace xobjcopy {
         std::cerr
             << "Usage: " << argv0 << " [options] <input> [output]\n"
             << "\n"
-            << "X Object Copy (xobjcopy) - object/archive format conversion for Z80\n"
+            << "X Tools Object Copy (xobjcopy) — Z80 object/archive converter\n"
             << "\n"
             << "options:\n"
             << "  -I <bfdname>              Input target format\n"
             << "  --input-target=<bfdname>  Input target format\n"
             << "  -O <bfdname>              Output target format\n"
             << "  --output-target=<bfdname> Output target format\n"
-            << "  -o <file>                 Output file\n"
+            << "  -o <file>                 Output file (or use positional [output])\n"
             << "  -g, --strip-debug         Remove inline debug sections/metadata\n"
-            << "  --help                    Show this help\n"
             << "  --version                 Show version\n"
+            << "  -h, --help                Show this help\n"
             << "\n"
             << "supported targets:\n"
             << "  rel, sdcc-rel             SDCC .rel object\n"
-            << "  elf, elf32-z80            GNU ELF32 Z80 object\n"
+            << "  elf, elf32-z80, elf32-littlez80\n"
+            << "                            GNU ELF32 Z80 object\n"
             << "  lib, text-archive         xobjcopy text-index archive\n"
-            << "  a, ar, gnu-ar             GNU ar archive\n";
+            << "  a, ar, gnu-ar, binary-archive\n"
+            << "                            GNU ar archive\n";
     }
 
 } // namespace xobjcopy

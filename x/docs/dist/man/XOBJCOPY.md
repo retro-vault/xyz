@@ -31,16 +31,18 @@ xobjcopy --strip-debug main.rel main-stripped.rel
 |---|---|
 | `-I <target>`, `--input-target=` | Input format |
 | `-O <target>`, `--output-target=` | Output format |
-| `-o <file>` | Output file |
+| `-o <file>` | Output file. A positional `[output]` path is also accepted. |
 | `-g`, `--strip-debug` | Remove inline debug sections/metadata |
+| `--version` | Print version and exit |
+| `-h`, `--help` | Show usage and exit |
 
 ## Supported targets
 
 | Name | Format |
 |---|---|
 | `rel`, `sdcc-rel` | SDCC `.rel` object |
-| `elf`, `elf32-z80` | GNU ELF32 Z80 object |
+| `elf`, `elf32-z80`, `elf32-littlez80` | GNU ELF32 Z80 object |
 | `lib`, `text-archive` | Text-index archive |
-| `a`, `ar`, `gnu-ar` | GNU ar archive |
+| `a`, `ar`, `gnu-ar`, `binary-archive` | GNU ar archive |
 
 Formats are detected automatically when `-I`/`-O` are omitted.
