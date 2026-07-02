@@ -102,6 +102,7 @@ export SHARE_DIR          := $(DIST_DIR)/share
 export DOCS_DIR           := $(SHARE_DIR)/doc
 export PKG_DIR            := $(DIST_DIR)/pkg
 export VSIX_STAGE_DIR     := $(PKG_DIR)/vsix
+DOCKER_CLEAN_IMAGE ?= wischner/gcc-x86_64-windows-mingw-w64
 
 .PHONY: all packages x x-s x-m x-l x-models clean help
 .PHONY: test-x-s test-x-m test-x-l test-x-models
@@ -305,7 +306,7 @@ help:
 		'  stage-target-assets  Stage target output directories and assets.' \
 		'  stage-xcc-support    Build and stage runtime, libc, crt0, and linker files.' \
 		'  stage-dist-docs      Stage x distribution documentation.' \
-		'  clean                Remove bin/ and build/ outputs.' \
+		'  clean                Remove generated output roots (bin/, build/, bin-*/, build-*).' \
 		'  help                 Show this help.' \
 		'' \
 		'Common variables:' \
@@ -323,5 +324,27 @@ help:
 		'  PACKAGE_RELEASE=n               Package release number (default: 1).'
 
 clean:
-	rm -rf $(OUT_DIR) $(BUILD_DIR)
+	@set -e; \
+	rm -rf $(OUT_DIR) \
+	       $(BUILD_DIR) \
+	       $(ROOT)/bin-* \
+	       $(ROOT)/build-* \
+	       $(ROOT)/root-build.log 2>/dev/null || true; \
+	remaining=0; \
+	for path in "$(ROOT)/bin" "$(ROOT)/build" $(ROOT)/bin-* $(ROOT)/build-* "$(ROOT)/root-build.log"; do \
+		if [ -e "$$path" ]; then \
+			remaining=1; \
+			break; \
+		fi; \
+	done; \
+	if [ "$$remaining" -eq 1 ]; then \
+		if command -v docker >/dev/null 2>&1; then \
+			echo "clean: retrying generated-output cleanup via Docker ($(DOCKER_CLEAN_IMAGE))"; \
+			docker run --rm -v "$(ROOT)":/work $(DOCKER_CLEAN_IMAGE) \
+				bash -lc 'rm -rf /work/bin /work/build /work/bin-* /work/build-* /work/root-build.log'; \
+		else \
+			echo "clean: generated outputs remain and need Docker-assisted cleanup"; \
+			exit 1; \
+		fi; \
+	fi
 	@$(MAKE) -C $(X_ROOT)/pkg clean REPO_ROOT=$(ROOT) X_ROOT=$(X_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) VSIX_STAGE_DIR=$(VSIX_STAGE_DIR)

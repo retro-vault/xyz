@@ -1,6 +1,0 @@
-; Flat emulator memory map.
-; See linker.ld for the mailbox contract.
-
-FORMAT binary
--b _CODE = 0x0000
-ENTRY _entry

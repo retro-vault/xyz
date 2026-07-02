@@ -1,8 +1,0 @@
-; Flat bare-metal memory map for the `none` backend.
-; Written in SDCC command-file style so it can be consumed by both
-; sdldz80 and xld. Use the command line to choose output format and
-; explicit entry symbol if needed.
-
-FORMAT binary
--b _CODE = 0x0000
-ENTRY _entry

@@ -38,6 +38,9 @@
 .vscode
 bin
 build
+/bin-*/
+/build-*/
+/root-build.log
 orig
 
 # Keep the C23 suite's checked-in setup drivers trackable even though their
