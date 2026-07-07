@@ -49,10 +49,12 @@ struct inline_candidate {
     std::unordered_set<int> mutable_param_temp_ids;
     std::unordered_map<int, operand> param_temps;
     std::unordered_map<std::string, operand> local_symbols;
+    std::unordered_set<std::string> stack_local_keys;
     std::vector<icode> body;
     int op_count = 0;
     int approx_inline_cost = 0;
     int helper_definition_bonus = 0;
+    int local_frame_bytes = 0;
     bool pure_leaf_arith = true;
     bool contains_call = false;
 };
@@ -124,6 +126,10 @@ static bool cast_can_fold_to_int_const(const type_ptr &target) {
            target->kind == type_kind::ENUM;
 }
 
+static bool has_implicit_void_fallthrough_return(const ir_function &fn) {
+    return fn.ret_type && fn.ret_type->kind == type_kind::VOID;
+}
+
 static void note_function_operand(const operand &op, module_use_info &info) {
     if (!op.is_symbol() || !op.is_func) return;
     info.referenced_funcs.insert(op.name);
@@ -179,6 +185,12 @@ static bool is_inlineable_op(icode_op op) {
     }
 }
 
+static bool is_inline_candidate_op(icode_op op) {
+    return is_inlineable_op(op) ||
+           op == icode_op::SEND ||
+           op == icode_op::CALL;
+}
+
 static bool is_inline_control_op(icode_op op) {
     switch (op) {
     case icode_op::LABEL:
@@ -210,26 +222,31 @@ static bool is_inline_local_symbol(const operand &op) {
            !op.is_param &&
            !op.is_func &&
            !op.is_tls &&
-           !op.is_sfr &&
-           op.byte_offset == 0;
+           !op.is_sfr;
 }
 
 static bool operand_allowed_in_candidate(
     const operand &op, bool is_write_pos,
     const std::unordered_set<std::string> &param_keys,
-    std::unordered_map<std::string, operand> *local_symbols)
+    std::unordered_map<std::string, operand> *local_symbols,
+    std::unordered_set<std::string> *stack_local_keys)
 {
     if (op.is_none() || op.is_temp() || op.is_const() || op.is_label())
         return true;
     if (!op.is_symbol())
         return false;
-    if (param_keys.find(symbol_key(op)) != param_keys.end()) {
+    const std::string param_key = base_symbol_key(op);
+    if (param_keys.find(param_key) != param_keys.end()) {
         return is_write_pos ? op.byte_offset == 0 : true;
     }
     if (is_inline_local_symbol(op)) {
         if (local_symbols) {
-            local_symbols->try_emplace(symbol_key(op), op);
+            operand base = op;
+            base.byte_offset = 0;
+            local_symbols->try_emplace(base_symbol_key(base), base);
         }
+        if (stack_local_keys && op.byte_offset != 0)
+            stack_local_keys->insert(base_symbol_key(op));
         return true;
     }
     return is_write_pos ? is_allowed_symbol_write(op, param_keys)
@@ -241,7 +258,7 @@ static bool analyze_inline_candidate(const ir_function &fn,
                                      int max_ops) {
     if (fn.is_global || fn.is_noreturn)
         return false;
-    if (fn.num_params > 3)
+    if (fn.num_params > 6)
         return false;
     if (fn.icodes.size() < 3)
         return false;
@@ -258,13 +275,14 @@ static bool analyze_inline_candidate(const ir_function &fn,
     };
     std::vector<pending_branch> branches;
     out = {};
+    out.local_frame_bytes = fn.local_bytes;
 
     for (size_t i = 1; i + 1 < fn.icodes.size(); ++i) {
         const auto &ic = fn.icodes[i];
 
         if (ic.op == icode_op::RECEIVE) {
             if (ic.result.is_symbol()) {
-                const std::string key = symbol_key(ic.result);
+                const std::string key = base_symbol_key(ic.result);
                 out.param_argregs[key] = ic.argreg;
                 out.param_keys.insert(key);
                 out.param_symbols.emplace(key, ic.result);
@@ -300,7 +318,8 @@ static bool analyze_inline_candidate(const ir_function &fn,
         if (ic.op == icode_op::IFX) {
             out.pure_leaf_arith = false;
             if (!operand_allowed_in_candidate(ic.left, false, out.param_keys,
-                                              &out.local_symbols))
+                                              &out.local_symbols,
+                                              &out.stack_local_keys))
                 return false;
             if (!ic.true_lbl.empty())
                 branches.push_back({i, ic.true_lbl});
@@ -315,31 +334,35 @@ static bool analyze_inline_candidate(const ir_function &fn,
         if (ic.op == icode_op::RETURN) {
             saw_return = true;
             if (!operand_allowed_in_candidate(ic.left, false, out.param_keys,
-                                              &out.local_symbols))
+                                              &out.local_symbols,
+                                              &out.stack_local_keys))
                 return false;
             out.body.push_back(ic);
             ++out.approx_inline_cost;
             continue;
         }
 
-        if (!is_inlineable_op(ic.op) && !is_inline_control_op(ic.op))
+        if (!is_inline_candidate_op(ic.op) && !is_inline_control_op(ic.op))
             return false;
         if (!operand_allowed_in_candidate(ic.result, true, out.param_keys,
-                                          &out.local_symbols))
+                                          &out.local_symbols,
+                                          &out.stack_local_keys))
             return false;
         if (!operand_allowed_in_candidate(ic.left, false, out.param_keys,
-                                          &out.local_symbols))
+                                          &out.local_symbols,
+                                          &out.stack_local_keys))
             return false;
         if (!operand_allowed_in_candidate(ic.right, false, out.param_keys,
-                                          &out.local_symbols))
+                                          &out.local_symbols,
+                                          &out.stack_local_keys))
             return false;
 
         // Parameter locals are pass-by-value and must not be assigned to.
         if (ic.result.is_symbol() &&
-            out.param_keys.find(symbol_key(ic.result)) != out.param_keys.end()) {
+            out.param_keys.find(base_symbol_key(ic.result)) != out.param_keys.end()) {
             if (ic.result.byte_offset != 0)
                 return false;
-            out.mutable_param_keys.insert(symbol_key(ic.result));
+            out.mutable_param_keys.insert(base_symbol_key(ic.result));
         }
         if (ic.result.is_temp() &&
             out.temp_param_argregs.find(ic.result.temp_id) !=
@@ -349,10 +372,14 @@ static bool analyze_inline_candidate(const ir_function &fn,
 
         // Taking the address of a parameter would expose a callee-local object.
         if (ic.op == icode_op::ADDRESS_OF &&
-            ic.left.is_symbol() &&
-            (out.param_keys.find(symbol_key(ic.left)) != out.param_keys.end() ||
-             is_inline_local_symbol(ic.left))) {
-            return false;
+            ic.left.is_symbol()) {
+            const std::string key = base_symbol_key(ic.left);
+            if (out.param_keys.find(key) != out.param_keys.end()) {
+                return false;
+            }
+            if (is_inline_local_symbol(ic.left)) {
+                out.stack_local_keys.insert(key);
+            }
         }
 
         if (out.pure_leaf_arith) {
@@ -377,7 +404,8 @@ static bool analyze_inline_candidate(const ir_function &fn,
             auto pure_ok_operand = [&](const operand &op) {
                 return op.is_none() || op.is_temp() || op.is_const() ||
                        (op.is_symbol() &&
-                        out.param_keys.find(symbol_key(op)) != out.param_keys.end());
+                        out.param_keys.find(base_symbol_key(op)) !=
+                            out.param_keys.end());
             };
             if (!pure_ok_operand(ic.result) ||
                 !pure_ok_operand(ic.left) ||
@@ -395,7 +423,7 @@ static bool analyze_inline_candidate(const ir_function &fn,
         ++out.approx_inline_cost;
     }
 
-    if (!saw_return)
+    if (!saw_return && !has_implicit_void_fallthrough_return(fn))
         return false;
     for (const auto &branch : branches) {
         if (label_index.find(branch.target) == label_index.end())
@@ -578,7 +606,7 @@ static bool analyze_merge_candidate(const ir_function &fn, merge_candidate &out)
         ++op_count;
     }
 
-    if (!saw_return)
+    if (!saw_return && !has_implicit_void_fallthrough_return(fn))
         return false;
     for (const auto &branch : branches) {
         auto it = label_index.find(branch.target);
@@ -2841,7 +2869,7 @@ static operand remap_operand(
     }
 
     if (op.is_symbol()) {
-        auto it = param_map.find(symbol_key(op));
+        auto it = param_map.find(base_symbol_key(op));
         if (it != param_map.end()) {
             operand remapped = it->second;
             remapped.type = op.type ? op.type : remapped.type;
@@ -2849,7 +2877,7 @@ static operand remap_operand(
             return remapped;
         }
 
-        auto local_it = local_map.find(symbol_key(op));
+        auto local_it = local_map.find(base_symbol_key(op));
         if (local_it != local_map.end()) {
             operand remapped = local_it->second;
             remapped.type = op.type ? op.type : remapped.type;
@@ -2888,8 +2916,24 @@ static bool inline_call_site(ir_function &caller, size_t call_idx,
     std::unordered_map<int, int> temp_map;
     int next_temp = next_temp_id(caller);
     std::unordered_map<std::string, operand> local_map;
-    for (auto &[key, op] : candidate.local_symbols)
+    const int caller_local_bytes = caller.local_bytes;
+    const bool needs_stack_locals = !candidate.stack_local_keys.empty();
+    if (needs_stack_locals) {
+        caller.local_bytes += candidate.local_frame_bytes;
+        caller.orig_local_bytes += candidate.local_frame_bytes;
+        if (!caller.icodes.empty() && caller.icodes.front().op == icode_op::FUNCTION)
+            caller.icodes.front().local_bytes = caller.local_bytes;
+    }
+    for (auto &[key, op] : candidate.local_symbols) {
+        if (candidate.stack_local_keys.find(key) != candidate.stack_local_keys.end()) {
+            operand storage = op;
+            storage.byte_offset = 0;
+            storage.stack_offset = op.stack_offset - caller_local_bytes;
+            local_map.emplace(key, std::move(storage));
+            continue;
+        }
         local_map.emplace(key, operand::make_temp(next_temp++, op.type));
+    }
     std::unordered_map<std::string, operand> param_map;
     std::unordered_map<int, operand> param_temp_map;
     std::vector<icode> init_assigns;
@@ -3378,6 +3422,76 @@ static bool collect_inline_sites(const ir_module &mod,
     return true;
 }
 
+static bool candidate_has_internal_control_flow(const inline_candidate &candidate) {
+    for (const auto &ic : candidate.body) {
+        if (ic.op == icode_op::LABEL ||
+            ic.op == icode_op::GOTO ||
+            ic.op == icode_op::IFX) {
+            return true;
+        }
+    }
+    return false;
+}
+
+class trivial_internal_leaf_inline_pass final : public ir_module_pass {
+public:
+    explicit trivial_internal_leaf_inline_pass(optimization_settings analysis_settings)
+        : analysis_settings_(std::move(analysis_settings)) {}
+
+    const char *name() const override { return "trivial_internal_leaf_inline"; }
+
+    bool run(ir_module &mod) override {
+        const auto info = build_module_use_info(mod);
+
+        for (size_t callee_idx = 0; callee_idx < mod.functions.size(); ++callee_idx) {
+            const auto &callee = mod.functions[callee_idx];
+            if (callee.is_global || callee.num_params != 0 ||
+                callee.local_bytes != 0 || callee.stack_param_bytes != 0) {
+                continue;
+            }
+            if (info.address_taken_funcs.find(callee.name) !=
+                info.address_taken_funcs.end()) {
+                continue;
+            }
+            auto count_it = info.direct_call_counts.find(callee.name);
+            if (count_it == info.direct_call_counts.end() || count_it->second == 0)
+                continue;
+
+            ir_function analysis_fn = callee;
+            if (analysis_settings_.has_function_ir_passes())
+                ir_optimizer::optimize(analysis_fn, analysis_settings_);
+
+            inline_candidate candidate;
+            if (!analyze_inline_candidate(analysis_fn, candidate, 1))
+                continue;
+            if (candidate.op_count > 1 || candidate.contains_call ||
+                candidate.local_frame_bytes != 0 ||
+                candidate_has_internal_control_flow(candidate)) {
+                continue;
+            }
+
+            std::vector<std::pair<size_t, size_t>> sites;
+            int total_overhead = 0;
+            if (!collect_inline_sites(mod, callee.name, sites, total_overhead))
+                continue;
+
+            for (const auto &[caller_idx, call_idx] : sites) {
+                if (caller_idx == callee_idx)
+                    continue;
+                if (mod.functions[caller_idx].is_global)
+                    continue;
+                if (inline_call_site(mod.functions[caller_idx], call_idx, candidate))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+private:
+    optimization_settings analysis_settings_;
+};
+
 class size_profitable_static_inline_pass final : public ir_module_pass {
 public:
     size_profitable_static_inline_pass(int max_inline_ops,
@@ -3443,6 +3557,18 @@ public:
             }
 
             const int use_count = static_cast<int>(sites.size());
+            const bool caller_already_has_locals =
+                use_count == 1 &&
+                mod.functions[sites.front().first].local_bytes >= 8;
+            const bool stack_local_cfg_candidate =
+                use_count == 1 &&
+                candidate.local_frame_bytes > 0 &&
+                caller_already_has_locals &&
+                candidate_has_internal_control_flow(candidate);
+            if (stack_local_cfg_candidate) {
+                continue;
+            }
+
             if (use_count > 1) {
                 // Repeatedly inlining larger pure arithmetic helpers often
                 // looks profitable in raw IR, but it can bloat final Z80
@@ -3558,6 +3684,9 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<function_const_eval_pass>());
     if (settings.dead_params)
         passes.push_back(std::make_unique<dead_param_elimination_pass>());
+    if (settings.inline_trivial_internal_functions)
+        passes.push_back(std::make_unique<trivial_internal_leaf_inline_pass>(
+            settings));
     if (settings.inline_static_functions)
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
             (settings.level == opt_level::O3 ||
@@ -3569,7 +3698,8 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
             (settings.level == opt_level::O3 ||
              settings.level == opt_level::Of ||
              settings.level == opt_level::Os) ? 64 : 16,
-            settings.level == opt_level::O3,
+            settings.level == opt_level::O3 ||
+            settings.level == opt_level::Of,
             settings));
     if (settings.merge_identical_functions)
         passes.push_back(std::make_unique<merge_identical_helpers_pass>());

@@ -22,7 +22,12 @@ xbfd::type_ref xdi_adapter::to_xdi(const type* t) {
     switch (t->kind) {
     case type_kind::VOID:    r.base = xbfd::type_ref::kind::void_;    break;
     case type_kind::BOOL:    r.base = xbfd::type_ref::kind::uchar;    break;
-    case type_kind::CHAR:    r.base = xbfd::type_ref::kind::char_;    break;
+    case type_kind::CHAR:
+        r.base = plain_char_is_unsigned()
+            ? xbfd::type_ref::kind::uchar
+            : xbfd::type_ref::kind::char_;
+        break;
+    case type_kind::SCHAR:   r.base = xbfd::type_ref::kind::char_;    break;
     case type_kind::UCHAR:
     case type_kind::CHAR8T:  r.base = xbfd::type_ref::kind::uchar;    break;
     case type_kind::SHORT:   r.base = xbfd::type_ref::kind::short_;   break;

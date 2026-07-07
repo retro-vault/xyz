@@ -20,8 +20,9 @@ thread_t *thread_first_running = NULL;
 thread_t *thread_first_waiting = NULL;
 thread_t *thread_first_terminated = NULL;
 
-[[sdcc::naked]] extern uint8_t lob(uint16_t w);
-[[sdcc::naked]] extern uint8_t hib(uint16_t w);
+extern void thread_prepare_startup(
+    thread_t *t,
+    void (*entry_point)(void));
 
 static void _thread_cleanup_terminated(void)
 {
@@ -75,27 +76,8 @@ thread_t *thread_create(
             t->process = process; /* parent */
             /* prepare stack */
             t->sp = (uint16_t)stack + stack_size - CONTEXT_SIZE;
-            /* emit startup code: */
-            /*  call entry_point */
-            (t->startup)[0] = 0xcd;     /* call opcode */
-            (t->startup)[1] = lob((uint16_t)entry_point);
-            (t->startup)[2] = hib((uint16_t)entry_point);
-            /*  ld hl,t */
-            (t->startup)[3] = 0x21;     /* ld hl, opcode */
-            (t->startup)[4] = lob((uint16_t)t);
-            (t->startup)[5] = hib((uint16_t)t);
-            /*  jp thread_exit(t) */
-            /*  thread_exit expects t in HL under sdcccall(1) */
-            (t->startup)[6] = 0xc3;     /* jp opcode */
-            (t->startup)[7] = lob((uint16_t)&thread_exit);
-            (t->startup)[8] = hib((uint16_t)&thread_exit);
-            /* guard byte (padding) */
-            (t->startup)[9] = 0x00;     /* nop */
-
-            /* top two bytes are the return address,
-               make them point to startup code */
-            uint16_t *ret_addr = (uint16_t *)(t->sp + CONTEXT_SIZE - 2);
-            (*ret_addr) = (uint16_t)(&(t->startup));
+            /* emit startup code and seed the initial return address */
+            thread_prepare_startup(t, entry_point);
 
             /* and that's it. when scheduler yields 
                a slice to this thread it will execute ret
@@ -215,20 +197,4 @@ thread_t* _thread_select_next(void) {
         /* no change */
         return thread_current;
 
-}
-
-/* low byte service function */
-[[sdcc::naked]] uint8_t lob(uint16_t w) {
-    w;
-    __asm__(
-        "ld a,l\n"
-        "ret\n");
-}
-
-/* high byte service function */
-[[sdcc::naked]] uint8_t hib(uint16_t w) {
-    w;
-    __asm__(
-        "ld a,h\n"
-        "ret\n");
 }

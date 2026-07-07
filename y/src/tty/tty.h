@@ -72,8 +72,8 @@ extern void tty_gets(const char *s);
 /*
  * Timer-driven internal cursor blink hook.
  */
-extern void __tty_cur_tick(void);
-#define _tty_cur_tick __tty_cur_tick
+extern void _tty_cur_tick(void);
+#define __tty_cur_tick _tty_cur_tick
 
 /*
  * Enable or disable the visible text cursor.

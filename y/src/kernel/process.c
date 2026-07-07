@@ -34,47 +34,27 @@ static void _process_make_pname(const char *src, char out[MAX_PNAME_LEN]) {
     out[i] = '\0';
 }
 
-extern uint8_t ___process_relocate(uint8_t *img);
+extern uint8_t _process_relocate(uint8_t *img);
 
 process_t *process_first = NULL;
 uint8_t process_last_error = PROCESS_LOAD_OK;
 
-static uint8_t _process_match_owner(list_item_t *p, uint16_t owner)
+static sysobj_t *find_owned(sysobj_t *first, void *owner)
 {
-    sysobj_t *o = (sysobj_t *)p;
-    return o->owner == (void *)owner;
+    uint8_t guard = 0;
+
+    while (first) {
+        if (first->owner == owner) {
+            return first;
+        }
+        first = (sysobj_t *)first->next;
+        if (++guard == 0) break;
+    }
+
+    return NULL;
 }
 
-static uint8_t _process_has_threads(process_t *p)
-{
-    thread_t *t;
-
-    t = thread_first_running;
-    while (t) {
-        if (t->process == (void *)p) return 1;
-        t = t->hdr.next;
-    }
-
-    t = thread_first_suspended;
-    while (t) {
-        if (t->process == (void *)p) return 1;
-        t = t->hdr.next;
-    }
-
-    t = thread_first_waiting;
-    while (t) {
-        if (t->process == (void *)p) return 1;
-        t = t->hdr.next;
-    }
-
-    t = thread_first_terminated;
-    while (t) {
-        if (t->process == (void *)p) return 1;
-        t = t->hdr.next;
-    }
-
-    return 0;
-}
+extern uint8_t process_has_threads(process_t *p);
 
 process_t *process_start(
     char *pname,
@@ -141,7 +121,7 @@ process_t *process_load(
         return NULL;
     }
 
-    if (___process_relocate(img) != 0) {
+    if (_process_relocate(img) != 0) {
         process_last_error = PROCESS_LOAD_ERR_XL_INVALID;
         mem_free((void *)&_heap, img);
         return NULL;
@@ -170,7 +150,6 @@ process_t *process_load(
 }
 
 void process_reap(process_t *p) {
-    list_item_t *prev;
     event_t *e;
     timer_t *t;
     service_t *s;
@@ -178,33 +157,21 @@ void process_reap(process_t *p) {
     if (!p) return;
 
     enter_critical_section();
-    if (_process_has_threads(p)) {
+    if (process_has_threads(p)) {
         leave_critical_section();
         return;
     }
 
     p->main_thread = NULL;
-    while ((e = (event_t *)list_find(
-        (list_item_t *)_evt_first,
-        &prev,
-        _process_match_owner,
-        (uint16_t)p))) {
+    while ((e = (event_t *)find_owned((sysobj_t *)_evt_first, (void *)p))) {
         evt_destroy(e);
     }
 
-    while ((t = (timer_t *)list_find(
-        (list_item_t *)_tmr_first,
-        &prev,
-        _process_match_owner,
-        (uint16_t)p))) {
+    while ((t = (timer_t *)find_owned((sysobj_t *)_tmr_first, (void *)p))) {
         tmr_uninstall(t);
     }
 
-    while ((s = (service_t *)list_find(
-        (list_item_t *)_svc_first,
-        &prev,
-        _process_match_owner,
-        (uint16_t)p))) {
+    while ((s = (service_t *)find_owned((sysobj_t *)_svc_first, (void *)p))) {
         svc_unregister(s);
     }
 

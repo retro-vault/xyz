@@ -192,37 +192,6 @@ static void stdio_round_digits(unsigned char *digits,
     ++(*carry_exponent);
 }
 
-static void stdio_trim_fraction(char *buffer) {
-    char *exp_ptr = buffer;
-    char *dot_ptr = 0;
-    char *tail;
-
-    while (*exp_ptr != '\0' && *exp_ptr != 'e' && *exp_ptr != 'E') {
-        if (*exp_ptr == '.') {
-            dot_ptr = exp_ptr;
-        }
-        ++exp_ptr;
-    }
-    if (dot_ptr == 0) {
-        return;
-    }
-
-    tail = exp_ptr - 1;
-    while (tail > dot_ptr && *tail == '0') {
-        --tail;
-    }
-    if (tail == dot_ptr) {
-        ++tail;
-    } else {
-        ++tail;
-    }
-
-    while (*exp_ptr != '\0') {
-        *tail++ = *exp_ptr++;
-    }
-    *tail = '\0';
-}
-
 static int stdio_format_special(stdio_writer *writer,
                                 unsigned conv,
                                 int negative,
@@ -360,8 +329,6 @@ int stdio_format_double(char *s,
     int negative = 0;
     int cls;
     unsigned work_precision = precision;
-    char local_buffer[48];
-    unsigned normalized_conv;
 
     if (work_precision > STDIO_FMT_MAX_PREC) {
         work_precision = STDIO_FMT_MAX_PREC;
@@ -375,65 +342,17 @@ int stdio_format_double(char *s,
         return writer.count;
     }
 
-    normalized_conv = conv;
-    if (normalized_conv == 'F') {
-        normalized_conv = 'f';
-    } else if (normalized_conv == 'G') {
-        normalized_conv = 'g';
-    } else if (normalized_conv == 'A') {
-        normalized_conv = 'a';
-    }
-
-    if (normalized_conv == 'e' || normalized_conv == 'E') {
+    /* Keep the non-fixed formats on the lean scientific path so printf users
+       that never print floats do not pay for extra trimming machinery. */
+    if (conv == 'e' || conv == 'E' || conv == 'g' || conv == 'G' ||
+        conv == 'a' || conv == 'A') {
         stdio_format_scientific(&writer, work_precision, conv, value, negative);
         stdio_writer_finish(&writer);
         return writer.count;
     }
 
-    if (normalized_conv == 'f') {
+    if (conv == 'f' || conv == 'F') {
         stdio_format_fixed(&writer, work_precision, value, negative);
-        stdio_writer_finish(&writer);
-        return writer.count;
-    }
-
-    if (normalized_conv == 'g') {
-        double abs_value = negative ? -value : value;
-        int exponent10;
-        unsigned sig_precision = work_precision == 0u ? 1u : work_precision;
-        unsigned fixed_precision;
-
-        if (abs_value == 0.0) {
-            stdio_writer_putc(&writer, negative ? '-' : '0');
-            if (negative) {
-                stdio_writer_putc(&writer, '0');
-            }
-            stdio_writer_finish(&writer);
-            return writer.count;
-        }
-
-        exponent10 = stdio_normalize_decimal(&abs_value);
-        if (exponent10 < -4 || exponent10 >= (int)sig_precision) {
-            stdio_writer_init(&writer, local_buffer, sizeof(local_buffer));
-            stdio_format_scientific(&writer, sig_precision - 1u, conv, value, negative);
-            stdio_writer_finish(&writer);
-            stdio_trim_fraction(local_buffer);
-            stdio_writer_init(&writer, s, n);
-            stdio_writer_puts(&writer, local_buffer);
-            stdio_writer_finish(&writer);
-            return writer.count;
-        }
-
-        if (sig_precision > (unsigned)(exponent10 + 1)) {
-            fixed_precision = sig_precision - (unsigned)(exponent10 + 1);
-        } else {
-            fixed_precision = 0u;
-        }
-        stdio_writer_init(&writer, local_buffer, sizeof(local_buffer));
-        stdio_format_fixed(&writer, fixed_precision, value, negative);
-        stdio_writer_finish(&writer);
-        stdio_trim_fraction(local_buffer);
-        stdio_writer_init(&writer, s, n);
-        stdio_writer_puts(&writer, local_buffer);
         stdio_writer_finish(&writer);
         return writer.count;
     }

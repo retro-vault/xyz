@@ -58,6 +58,16 @@ void z80_gen::gen_assign(const icode &ic) {
     int sz = op_size(ic.result);
     if (sz <= 0)
         sz = op_size(ic.left);
+    if (direct_word_value_pending_ &&
+        ic.left.is_temp() &&
+        direct_word_value_.is_temp() &&
+        ic.left.temp_id == direct_word_value_.temp_id &&
+        sz == 2) {
+        store_de(ic.result);
+        direct_word_value_pending_ = false;
+        direct_word_value_ = operand{};
+        return;
+    }
     if (sz == 1) {
         load_a(ic.left);
         store_a(ic.result);
@@ -83,6 +93,11 @@ void z80_gen::gen_assign(const icode &ic) {
 }
 
 void z80_gen::gen_address_of(const icode &ic) {
+    if (ic.result.is_temp()) {
+        auto ri = temp_regs_.find(ic.result.temp_id);
+        if (ri != temp_regs_.end() && ri->second == temp_home::remat_hl)
+            return;
+    }
     if (ic.left.is_global) {
         emit_line("ld\thl, %s", asm_.imm_sym(mangle(ic.left.name)).c_str());
     } else {
@@ -202,6 +217,228 @@ bool z80_gen::gen_far_set_value_at(const icode &ic) {
 void z80_gen::gen_get_value_at(const icode &ic) {
     if (gen_far_get_value_at(ic))
         return;
+    auto clear_direct_postinc_load = [&]() {
+        direct_postinc_load_pending_ = false;
+        direct_postinc_load_cursor_ = operand{};
+        direct_postinc_load_old_ptr_ = operand{};
+        direct_postinc_load_step_ = 0;
+        direct_postinc_load_get_index_ = 0;
+    };
+    const bool use_pending_word_ptr =
+        direct_word_value_pending_ &&
+        ic.left.is_temp() &&
+        direct_word_value_.is_temp() &&
+        ic.left.temp_id == direct_word_value_.temp_id;
+    operand direct_word_load_ifx_value;
+    int direct_word_result_size = op_size(ic.result);
+    if (direct_word_result_size <= 0 &&
+        ic.left.type &&
+        ic.left.type->base) {
+        direct_word_result_size = ic.left.type->base->size();
+    }
+    if (direct_word_result_size <= 0)
+        direct_word_result_size = 2;
+    const bool direct_word_forward =
+        cur_fn_ &&
+        ic.result.is_temp() &&
+        direct_word_result_size == 2 &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size() &&
+        [&, this]() {
+            const auto &next = cur_fn_->icodes[cur_ic_index_ + 1];
+            const bool uses_left_temp =
+                next.left.is_temp() &&
+                next.left.temp_id == ic.result.temp_id;
+
+            switch (next.op) {
+            case icode_op::ASSIGN:
+            case icode_op::SEND:
+            case icode_op::GET_VALUE_AT:
+                if (!uses_left_temp)
+                    return false;
+                break;
+            default:
+                return false;
+            }
+
+            return !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                          ic.result.temp_id);
+        }();
+    const bool direct_word_load_ifx =
+        cur_fn_ &&
+        ic.result.is_temp() &&
+        direct_word_result_size == 2 &&
+        find_direct_word_truth_ifx(ic.result, cur_ic_index_,
+                                   direct_word_load_ifx_value);
+    if (direct_postinc_load_pending_ &&
+        cur_ic_index_ == direct_postinc_load_get_index_) {
+        if (ic.left.is_temp() &&
+            direct_postinc_load_old_ptr_.is_temp() &&
+            ic.left.temp_id == direct_postinc_load_old_ptr_.temp_id &&
+            ic.right.is_none()) {
+            operand load_target = ic.result;
+            operand byte_target;
+            bool narrow_to_byte = false;
+            auto same_local_symbol = [](const operand &a, const operand &b) {
+                return a.kind == operand_kind::SYMBOL &&
+                       b.kind == operand_kind::SYMBOL &&
+                       !a.is_global &&
+                       !b.is_global &&
+                       a.stack_offset == b.stack_offset &&
+                       a.byte_offset == b.byte_offset &&
+                       a.name == b.name;
+            };
+            int load_size = op_size(ic.result);
+            if (load_size <= 0 &&
+                ic.left.type &&
+                ic.left.type->base) {
+                load_size = ic.left.type->base->size();
+            }
+            if (load_size <= 0)
+                load_size = 2;
+
+            if (cur_fn_ && cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+                const auto &next = cur_fn_->icodes[cur_ic_index_ + 1];
+                if (next.op == icode_op::ASSIGN &&
+                    next.left.is_temp() &&
+                    ic.result.is_temp() &&
+                    next.left.temp_id == ic.result.temp_id &&
+                    !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                           ic.result.temp_id)) {
+                    load_target = next.result;
+                    skipped_icodes_.insert(cur_ic_index_ + 1);
+                } else if (next.op == icode_op::CAST &&
+                           next.left.is_temp() &&
+                           ic.result.is_temp() &&
+                           next.left.temp_id == ic.result.temp_id &&
+                           next.result.type &&
+                           next.result.type->size() == 1 &&
+                           next.result.type->is_integer() &&
+                           next.result.type->kind != type_kind::BOOL &&
+                           !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                                  ic.result.temp_id)) {
+                    narrow_to_byte = true;
+                    byte_target = next.result;
+                    skipped_icodes_.insert(cur_ic_index_ + 1);
+
+                    if (cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+                        const auto &assign_ic = cur_fn_->icodes[cur_ic_index_ + 2];
+                        if (assign_ic.op == icode_op::ASSIGN &&
+                            assign_ic.left.is_temp() &&
+                            next.result.is_temp() &&
+                            assign_ic.left.temp_id == next.result.temp_id &&
+                            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 3,
+                                                   next.result.temp_id)) {
+                            byte_target = assign_ic.result;
+                            skipped_icodes_.insert(cur_ic_index_ + 2);
+                        }
+                    }
+                }
+            }
+
+            if (narrow_to_byte && cur_fn_) {
+                size_t next_idx = cur_ic_index_ + 1;
+                while (next_idx < cur_fn_->icodes.size() &&
+                       skipped_icodes_.count(next_idx))
+                    ++next_idx;
+                if (next_idx < cur_fn_->icodes.size()) {
+                    const auto &next = cur_fn_->icodes[next_idx];
+                    const bool matches_target =
+                        (byte_target.is_temp() &&
+                         next.left.is_temp() &&
+                         next.left.temp_id == byte_target.temp_id) ||
+                        same_local_symbol(next.left, byte_target);
+                    const bool target_dead_after =
+                        byte_target.is_temp()
+                            ? !temp_value_used_after(*cur_fn_, next_idx + 1,
+                                                     byte_target.temp_id)
+                            : !symbol_value_used_after(*cur_fn_, next_idx + 1,
+                                                       byte_target);
+                    if (next.op == icode_op::ASSIGN &&
+                        matches_target &&
+                        op_size(next.result) == 1 &&
+                        target_dead_after) {
+                        byte_target = next.result;
+                        skipped_icodes_.insert(next_idx);
+                    }
+                }
+            }
+
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            load_hl(direct_postinc_load_cursor_);
+
+            if (narrow_to_byte) {
+                emit_line("ld\ta, (hl)");
+                for (int i = 0; i < direct_postinc_load_step_; ++i)
+                    emit_line("inc\thl");
+                store_hl(direct_postinc_load_cursor_);
+                store_a(byte_target);
+            } else if (op_size(load_target) == 1) {
+                emit_line("ld\ta, (hl)");
+                for (int i = 0; i < direct_postinc_load_step_; ++i)
+                    emit_line("inc\thl");
+                store_hl(direct_postinc_load_cursor_);
+                store_a(load_target);
+            } else if (op_size(load_target) == 2 || load_size == 2) {
+                emit_line("ld\te, (hl)");
+                emit_line("inc\thl");
+                emit_line("ld\td, (hl)");
+                for (int i = 1; i < direct_postinc_load_step_; ++i)
+                    emit_line("inc\thl");
+                store_hl(direct_postinc_load_cursor_);
+                if (direct_word_load_ifx) {
+                    emit_line("ld\ta, d");
+                    emit_line("or\ta, e");
+                    direct_word_load_ifx_pending_ = true;
+                    direct_word_load_ifx_value_ = direct_word_load_ifx_value;
+                    direct_word_value_pending_ = true;
+                    direct_word_value_ = ic.result;
+                } else {
+                    store_de(load_target);
+                }
+            } else {
+                clear_direct_postinc_load();
+                return;
+            }
+
+            clear_direct_postinc_load();
+            return;
+        }
+        clear_direct_postinc_load();
+    }
+    operand direct_byte_load_ifx_value;
+    const bool direct_byte_load_ifx =
+        cur_fn_ &&
+        ic.result.is_temp() &&
+        op_size(ic.result) == 1 &&
+        find_direct_byte_truth_ifx(ic.result, cur_ic_index_,
+                                   direct_byte_load_ifx_value);
+
+    if (direct_byte_load_ifx) {
+        direct_byte_load_ifx_pending_ = true;
+        direct_byte_load_ifx_value_ = direct_byte_load_ifx_value;
+    }
+
+    const bool direct_mem_copy_shape =
+        cur_fn_ &&
+        ic.result.is_temp() &&
+        (op_size(ic.result) == 1 || op_size(ic.result) == 2) &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size() &&
+        cur_fn_->icodes[cur_ic_index_ + 1].op == icode_op::SET_VALUE_AT &&
+        cur_fn_->icodes[cur_ic_index_ + 1].left.is_temp() &&
+        cur_fn_->icodes[cur_ic_index_ + 1].left.temp_id == ic.result.temp_id;
+    const bool direct_mem_copy =
+        direct_mem_copy_shape &&
+        !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2, ic.result.temp_id);
+
+    if (direct_mem_copy) {
+        direct_mem_copy_pending_ = true;
+        direct_mem_copy_value_ = ic.result;
+        direct_mem_copy_src_ptr_ = ic.left;
+        direct_mem_copy_src_index_ = ic.right;
+        return;
+    }
+
     auto is_bc_pointer_home = [&](const operand &op) {
         if (op.kind == operand_kind::TEMP) {
             auto it = temp_regs_.find(op.temp_id);
@@ -219,20 +456,26 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         const std::string label_sym = asm_label_ref_name(ic.left.name);
         operand byte_src;
         if (get_zero_extended_u8_source(ic.right, byte_src)) {
-            load_a(byte_src);
-            emit_line("ld\te, a");
-            emit_line("ld\td, %s", asm_.imm(0).c_str());
+            load_de_zero_extended_u8(byte_src);
             emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
             emit_line("add\thl, de");
             emit_line("ld\ta, (hl)");
-            store_a(ic.result);
+            if (direct_byte_load_ifx) {
+                emit_line("or\ta, a");
+            } else {
+                store_a(ic.result);
+            }
             return;
         }
         load_de(ic.right);
         emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
         emit_line("add\thl, de");
         emit_line("ld\ta, (hl)");
-        store_a(ic.result);
+        if (direct_byte_load_ifx) {
+            emit_line("or\ta, a");
+        } else {
+            store_a(ic.result);
+        }
         return;
     }
 
@@ -260,19 +503,21 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         if (!get_zero_extended_u8_source(*index, byte_src))
             return false;
 
-        load_a(byte_src);
-        emit_line("ld\te, a");
-        emit_line("ld\td, %s", asm_.imm(0).c_str());
+        load_de_zero_extended_u8(byte_src);
         emit_line("ld\thl, %s", asm_.imm_sym(mangle(base->name)).c_str());
         emit_line("add\thl, de");
         return true;
     };
 
-    if (is_direct_abs_ptr(ic.left)) {
+    if (!use_pending_word_ptr && is_direct_abs_ptr(ic.left)) {
         const std::string abs = "(" + asm_.imm(ic.left.ival) + ")";
         if (op_size(ic.result) == 1) {
             emit_line("ld\ta, %s", abs.c_str());
-            store_a(ic.result);
+            if (direct_byte_load_ifx) {
+                emit_line("or\ta, a");
+            } else {
+                store_a(ic.result);
+            }
         } else if (op_size(ic.result) > 2) {
             int sz = op_size(ic.result);
             for (int w = 0; w < sz / 2; ++w) {
@@ -297,17 +542,34 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         return;
     }
 
-    if (op_size(ic.result) == 1 && is_bc_pointer_home(ic.left)) {
+    if (!use_pending_word_ptr &&
+        op_size(ic.result) == 1 &&
+        is_bc_pointer_home(ic.left)) {
         emit_line("ld\ta, (bc)");
-        store_a(ic.result);
+        if (direct_byte_load_ifx) {
+            emit_line("or\ta, a");
+        } else {
+            store_a(ic.result);
+        }
         return;
     }
 
-    if (!emit_global_plus_u8_index_hl(ic.left))
+    if (use_pending_word_ptr) {
+        invalidate_pair_cache();
+        invalidate_a_cache();
+        emit_line("ex\tde, hl");
+        direct_word_value_pending_ = false;
+        direct_word_value_ = operand{};
+    } else if (!emit_global_plus_u8_index_hl(ic.left)) {
         load_hl(ic.left);
+    }
     if (op_size(ic.result) == 1) {
         emit_line("ld\ta, (hl)");
-        store_a(ic.result);
+        if (direct_byte_load_ifx) {
+            emit_line("or\ta, a");
+        } else {
+            store_a(ic.result);
+        }
     } else if (op_size(ic.result) > 2) {
         int sz = op_size(ic.result);
         for (int w = 0; w < sz / 2; ++w) {
@@ -331,7 +593,19 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         emit_line("ld\te, (hl)");
         emit_line("inc\thl");
         emit_line("ld\td, (hl)");
-        store_de(ic.result);
+        if (direct_word_load_ifx) {
+            emit_line("ld\ta, d");
+            emit_line("or\ta, e");
+            direct_word_load_ifx_pending_ = true;
+            direct_word_load_ifx_value_ = direct_word_load_ifx_value;
+            direct_word_value_pending_ = true;
+            direct_word_value_ = ic.result;
+        } else if (direct_word_forward) {
+            direct_word_value_pending_ = true;
+            direct_word_value_ = ic.result;
+        } else {
+            store_de(ic.result);
+        }
     }
 }
 
@@ -423,9 +697,7 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         const std::string label_sym = asm_label_ref_name(ic.result.name);
         operand byte_src;
         if (get_zero_extended_u8_source(ic.right, byte_src)) {
-            load_a(byte_src);
-            emit_line("ld\te, a");
-            emit_line("ld\td, %s", asm_.imm(0).c_str());
+            load_de_zero_extended_u8(byte_src);
             emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
             emit_line("add\thl, de");
             if (!byte_load_preserves_hl_here(ic.left))
@@ -472,13 +744,64 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         if (!get_zero_extended_u8_source(*index, byte_src))
             return false;
 
-        load_a(byte_src);
-        emit_line("ld\te, a");
-        emit_line("ld\td, %s", asm_.imm(0).c_str());
+        load_de_zero_extended_u8(byte_src);
         emit_line("ld\thl, %s", asm_.imm_sym(mangle(base->name)).c_str());
         emit_line("add\thl, de");
         return true;
     };
+
+    const bool direct_mem_copy =
+        direct_mem_copy_pending_ &&
+        ic.left.is_temp() &&
+        direct_mem_copy_value_.is_temp() &&
+        ic.left.temp_id == direct_mem_copy_value_.temp_id;
+    operand direct_mem_copy_src = direct_mem_copy_src_ptr_;
+    operand direct_mem_copy_idx = direct_mem_copy_src_index_;
+    direct_mem_copy_pending_ = false;
+    direct_mem_copy_value_ = operand{};
+    direct_mem_copy_src_ptr_ = operand{};
+    direct_mem_copy_src_index_ = operand{};
+
+    if (direct_mem_copy) {
+        auto emit_direct_copy_src_hl = [&]() {
+            if (!direct_mem_copy_idx.is_none()) {
+                if (!emit_global_plus_u8_index_hl(direct_mem_copy_src))
+                    load_hl(direct_mem_copy_src);
+                emit_line("push\thl");
+                operand byte_src;
+                if (get_zero_extended_u8_source(direct_mem_copy_idx, byte_src))
+                    load_de_zero_extended_u8(byte_src);
+                else
+                    load_de(direct_mem_copy_idx);
+                emit_line("pop\thl");
+                emit_line("add\thl, de");
+                return;
+            }
+            if (!emit_global_plus_u8_index_hl(direct_mem_copy_src))
+                load_hl(direct_mem_copy_src);
+        };
+
+        if (op_size(ic.left) == 1) {
+            emit_direct_copy_src_hl();
+            emit_line("ld\ta, (hl)");
+            if (!emit_global_plus_u8_index_hl(ic.result))
+                load_hl(ic.result);
+            emit_line("ld\t(hl), a");
+            return;
+        }
+        if (op_size(ic.left) == 2) {
+            emit_direct_copy_src_hl();
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            if (!emit_global_plus_u8_index_hl(ic.result))
+                load_hl(ic.result);
+            emit_line("ld\t(hl), e");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), d");
+            return;
+        }
+    }
 
     if (is_direct_abs_ptr(ic.result)) {
         const std::string abs = "(" + asm_.imm(ic.result.ival) + ")";

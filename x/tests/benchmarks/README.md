@@ -6,6 +6,7 @@ Layout:
 
 - `bare/` — standalone bare-metal kernels compared across `xcc` and `sdcc`
 - `numeric/` — numeric-format matrix benchmarks (`fixed8_8`, `fixed16_16`, `fixed24_8`, `float`, `double`)
+- `z88dk/` — libc-free adaptations of the z88dk compiler-comparison kernels
 - `grouped/` — grouped or future multi-file benchmark material
 
 The active benchmark entrypoint is:
@@ -16,6 +17,7 @@ Useful options:
 
 - `--suite bare`
 - `--suite numeric`
+- `--suite z88dk`
 - `--filter <regex>`
 - `--bare-filter <regex>`
 - `--numeric-filter <regex>`

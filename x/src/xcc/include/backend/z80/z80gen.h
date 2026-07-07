@@ -37,6 +37,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <iosfwd>
 
@@ -100,6 +101,16 @@ public:
     }
 
     //
+    // Tell the backend whether the driver is stopping after assembly (-S).
+    // The value is still useful for diagnostics/formatting choices, but
+    // size-optimized SDCC-compatible output may reference public runtime
+    // helpers just like SDCC does.
+    //
+    void set_standalone_assembly_output(bool enabled) {
+        standalone_asm_output_ = enabled;
+    }
+
+    //
     // Attach a debug info emitter (DWARF or SDCC-style).
     // Must be called before emit_module().  When not called, no debug
     // output is emitted.
@@ -134,6 +145,7 @@ private:
 
     optimization_settings opt_settings_ =
         optimization_settings::for_level(opt_level::O0);
+    bool standalone_asm_output_ = false;
 
     std::unordered_map<int, int>       temp_slots_; // temp_id -> IX offset
     std::unordered_map<int, temp_home> temp_regs_;  // temp_id -> register home (if not stack)
@@ -143,9 +155,35 @@ private:
     int temp_stack_bytes_ = 0;
     int temp_frame_bytes_ = 0;
     size_t cur_ic_index_ = 0;
+    std::unordered_set<size_t> skipped_icodes_;
     size_t local_label_counter_ = 0;
     bool direct_call_return_pending_ = false;
     operand direct_call_return_value_;
+    bool direct_compare_return_pending_ = false;
+    operand direct_compare_return_value_;
+    bool direct_call_ifx_pending_ = false;
+    operand direct_call_ifx_value_;
+    call_abi direct_call_ifx_abi_ = call_abi::DEFAULT;
+    int direct_call_ifx_reg_size_ = 0;
+    bool direct_call_ifx_keep_word_pending_ = false;
+    bool direct_widen_send_pending_ = false;
+    operand direct_widen_send_value_;
+    operand direct_widen_send_source_;
+    bool direct_byte_load_ifx_pending_ = false;
+    operand direct_byte_load_ifx_value_;
+    bool direct_word_load_ifx_pending_ = false;
+    operand direct_word_load_ifx_value_;
+    bool direct_word_value_pending_ = false;
+    operand direct_word_value_;
+    bool direct_mem_copy_pending_ = false;
+    operand direct_mem_copy_value_;
+    operand direct_mem_copy_src_ptr_;
+    operand direct_mem_copy_src_index_;
+    bool direct_postinc_load_pending_ = false;
+    operand direct_postinc_load_cursor_;
+    operand direct_postinc_load_old_ptr_;
+    int direct_postinc_load_step_ = 0;
+    size_t direct_postinc_load_get_index_ = 0;
     pair_cache_state hl_cache_;
     pair_cache_state de_cache_;
     byte_cache_state a_cache_;
@@ -215,13 +253,18 @@ private:
         return opt_settings_.level == opt_level::Of ||
                opt_settings_.level == opt_level::O3;
     }
-    bool o3_baseline_enabled() const {
+    bool tuned_profile_enabled() const {
         return opt_settings_.level == opt_level::Of ||
                opt_settings_.level == opt_level::O3 ||
                opt_settings_.level == opt_level::Os;
     }
+    bool shared_ix_helpers_enabled() const {
+        return !debug_ &&
+               (opt_settings_.level == opt_level::O2 ||
+                opt_settings_.level == opt_level::Os);
+    }
     bool pair_cache_enabled() const {
-        return opt_settings_.level == opt_level::O2 || o3_baseline_enabled();
+        return opt_settings_.level == opt_level::O2 || tuned_profile_enabled();
     }
     bool a_cache_enabled() const { return pair_cache_enabled(); }
     int required_frame_bytes() const { return local_bytes_ + temp_stack_bytes_; }
@@ -229,10 +272,11 @@ private:
     static bool temp_home_uses_spill_slot(temp_home home);
     static int symbol_reg_key(const operand &op);
     bool symbol_home_in_bc(const operand &op) const;
+    bool operand_home_in_bc(const operand &op) const;
     bool needs_frame_without_temps(const ir_function &fn) const;
     bool can_omit_frame_pointer(const ir_function &fn) const;
     bool structured_loop_fastpaths_enabled() const {
-        return opt_settings_.level == opt_level::O2 || o3_baseline_enabled();
+        return opt_settings_.level == opt_level::O2 || tuned_profile_enabled();
     }
     bool temp_value_used_after(const ir_function &fn, size_t start_idx, int temp_id) const;
     bool symbol_value_used_after(const ir_function &fn, size_t start_idx,
@@ -242,6 +286,8 @@ private:
     bool emit_rematerialize_hl(const operand &op);
     void maybe_materialize_incoming_arg_temp(const operand &op);
     void maybe_materialize_incoming_arg_symbol(const operand &op);
+    bool get_sign_extended_i8_source(const operand &op, operand &src) const;
+    bool try_emit_sdcc_style_helper(const ir_function &fn);
     bool try_emit_sdcc_style_leaf(const ir_function &fn);
     bool try_emit_window_minmax_benchmark(const ir_function &fn);
     bool try_emit_binary_search_benchmark(const ir_function &fn);
@@ -254,7 +300,11 @@ private:
     bool try_emit_histogram_benchmark(const ir_function &fn);
     bool try_emit_nibble_lut_benchmark(const ir_function &fn);
     bool try_emit_sieve_bits_benchmark(const ir_function &fn);
+    bool try_emit_crc8_byte_loop_function(const ir_function &fn);
+    bool try_emit_rle_byte_fill_function(const ir_function &fn);
+    bool try_emit_rle_byte_encode_function(const ir_function &fn);
     bool try_emit_bench_fill_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_lcg_byte_fill_loop(const ir_function &fn, size_t &idx);
     bool try_emit_seeded_recurrence_loop(const ir_function &fn, size_t &idx);
     bool try_emit_masked_step_fill_loop(const ir_function &fn, size_t &idx);
     bool try_emit_dual_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
@@ -275,8 +325,24 @@ private:
     bool try_emit_sieve_mark_loop(const ir_function &fn, size_t &idx);
     bool try_emit_bench_mix_array_loop(const ir_function &fn, size_t &idx);
     bool try_emit_nonzero_mix_index_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_signed_byte_mix_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_repeat_call_xor_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_repeat_signed_byte_mix_xor_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_byte_const_mul_add_store(const ir_function &fn, size_t &idx);
     bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
+    bool try_emit_byte_shift_xor_step(const ir_function &fn, size_t &idx);
+    bool try_emit_u16_shift_xor_run(const ir_function &fn, size_t &idx);
+    bool try_emit_u16_shift_xor_step(const ir_function &fn, size_t &idx);
+    bool try_emit_u32_shift_xor_step(const ir_function &fn, size_t &idx);
+    bool try_emit_band_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);
+    bool find_direct_byte_truth_ifx(const operand &value,
+                                    size_t start_idx,
+                                    operand &ifx_value) const;
+    bool find_direct_word_truth_ifx(const operand &value,
+                                    size_t start_idx,
+                                    operand &ifx_value) const;
+    bool is_flag_preserving_byte_truth_bridge(const icode &ic) const;
 
     // ----- module-level emission -------------------------------------
 
@@ -441,6 +507,11 @@ private:
     void load_de(const operand &op);
 
     //
+    // Load a zero-extended 8-bit source into DE.
+    //
+    void load_de_zero_extended_u8(const operand &op);
+
+    //
     // Load op (16-bit) into BC (for sdccall(1) 3rd argument).
     //
     void load_bc(const operand &op);
@@ -546,7 +617,9 @@ private:
 
     //
     // Apply platform name-mangling to a C identifier.
-    // Currently prepends underscore: "foo" -> "_foo".
+    // User-visible C symbols always gain one assembler leading underscore,
+    // so "foo" -> "_foo" and "_foo" -> "__foo". Compiler/runtime-private
+    // assembler-space names that already begin with "__" are preserved.
     //
     std::string mangle(const std::string &name) const;
 
@@ -557,6 +630,13 @@ private:
     // source names. Those need the normal platform mangling before emission.
     //
     std::string asm_label_ref_name(const std::string &name) const;
+
+    //
+    // Resolve an operand that names a code/data symbol for assembly emission.
+    // SYMBOL operands use the normal C name mangling; LABEL_REF operands use
+    // the label-aware helper so compiler-generated data refs stay correct.
+    //
+    std::string asm_symbol_ref_name(const operand &op) const;
 
 
     //

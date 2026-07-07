@@ -1401,6 +1401,7 @@ __stdio_vformat_float_have_precision:
         call    __stdio_load_precision_hl
 __stdio_vformat_float_store_precision:
         call    __stdio_store_digits_len_hl
+        push    iy
         ld      a,CTX_UVAL6(iy)
         ld      l,a
         ld      a,CTX_UVAL7(iy)
@@ -1435,6 +1436,7 @@ __stdio_vformat_float_store_precision:
         ld      hl,#16
         add     hl,sp
         ld      sp,hl
+        pop     iy
         xor     a
         ld      CTX_HAVE_PREC(iy),a
         ld      hl,#0

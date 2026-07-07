@@ -11,62 +11,65 @@
  */
 #include <stdbool.h>
 
-#include <kernel/list.h>
+#include <ctype.h>
+#include <string.h>
+
 #include <kernel/mem.h>
-#include <kernel/service.h>
-#include <kernel/thread.h>
 #include <kernel/process.h>
+#include <kernel/thread.h>
+
+#include <tty/tty.h>
+#include <tty/tty_print.h>
 
 #include <yos.h>
 
-/* syscalls */
-yos_t *y;
 char cmd[128];
 uint8_t current_drive = 0; /* 0 = RAM (-:), 1..8 = A:..H: */
 #define DIR_MAX_FILES 32
 mdr_file_t dir_files[DIR_MAX_FILES];
-static char default_cart_name[] = "xyz os";
 
 /* change to lowercase */
-void lcase(char *s) {
-    for (int i=0;i<y->strlen(s);i++) s[i]=y->tolower(s[i]);
-}
-
-bool starts_with(const char *s, const char *prefix) {
-    while (*prefix) {
-        if (*s != *prefix) return FALSE;
+static void lcase(char *s) {
+    while (*s) {
+        *s = (char)tolower(*s);
         s++;
-        prefix++;
     }
-    return TRUE;
 }
 
-char *skip_spaces(char *s) {
-    while (*s && y->isspace(*s)) s++;
-    return s;
+static void help(void) {
+    tty_putc('\n');
+    tty_puts("AVAILABLE COMMANDS");
+    tty_putc('\n');
+    tty_puts("    help   ... display help");
+    tty_puts("    mem    ... memory usage");
+    tty_puts("    clear  ... clear screen");
+    tty_puts("    ver    ... yos version");
+    tty_puts("    ps     ... list processes and threads");
+    tty_puts("    dir    ... list current directory");
+    tty_puts("    format ... format cartridge");
+    tty_puts("    a:..h: ... switch current drive");
 }
 
-void help(void) {
-    y->printf("\nAVAILABLE COMMANDS\n\n");
-    y->printf("    help   ... display help\n");
-    y->printf("    mem    ... memory usage\n");
-    y->printf("    clear  ... clear screen\n");
-    y->printf("    ver    ... yos version\n");
-    y->printf("    ps     ... list processes and threads\n");
-    y->printf("    dir    ... list current directory\n");
-    y->printf("    format ... format cartridge\n");
-    y->printf("    a:..h: ... switch current drive\n");
+static bool process_alive(process_t *target) {
+    process_t *p = process_first;
+    while (p) {
+        if (p == target) {
+            return TRUE;
+        }
+        p = (process_t *)p->hdr.next;
+    }
+    return FALSE;
 }
 
-bool run_app(char *name) {
+static bool run_app(char *name) {
     char app[12];
     uint8_t i = 0;
+    uint8_t len = (uint8_t)strlen(name);
     process_t *p;
-    list_item_t *prev;
 
-    if (y->strlen(name) == 0 || y->strlen(name) > 6) return FALSE;
+    if (len == 0 || len > 6) return FALSE;
     if (current_drive == 0) {
-        y->printf("RAM DISK NOT IMPLEMENTED\n");
+        tty_puts("RAM DISK NOT IMPLEMENTED");
         return TRUE;
     }
 
@@ -85,168 +88,150 @@ bool run_app(char *name) {
         if (process_last_error == PROCESS_LOAD_ERR_NOT_FOUND) {
             return FALSE;
         }
-        y->printf("LOAD FAILED\n");
+        tty_puts("LOAD FAILED");
         return TRUE;
     }
 
-wait_loop:
-    while (list_find(
-        (list_item_t *)process_first,
-        &prev,
-        list_match_eq,
-        (uint16_t)p) != NULL) {
+    while (process_alive(p)) {
         __asm__("halt");
     }
 
-    y->printf("\n");
+    tty_putc('\n');
     return TRUE;
 }
 
-
-void print_header(char *c) {
-    while(*c) {
-        if (*c==' ') y->setattr(AT_NONE); else y->setattr(AT_UNDERLINE);
-        y->printf("%c",*c);
+static void print_header(const char *c) {
+    while (*c) {
+        tty_attr(*c == ' ' ? AT_NONE : AT_UNDERLINE);
+        tty_putc(*c);
         c++;
     }
-    y->setattr(AT_NONE);
-    y->printf("\n");
+    tty_attr(AT_NONE);
+    tty_putc('\n');
 }
 
-void mem_block(list_item_t *p, uint16_t arg) {
-    arg;
-    block_t *b=(block_t *)p;
-    y->printf("%s %04X %04X %04X %5u\n", 
-        b->stat==NEW?"F":"A",
+static void mem_block(block_t *b) {
+    tty_printf("%s %04X %04X %04X %5u\n",
+        b->stat == NEW ? "F" : "A",
         b,
         b->hdr.next,
         b->data,
         b->size);
 }
 
-static uint16_t mem_free_accum = 0;
+static uint16_t mem_free_total(void *first) {
+    block_t *b = (block_t *)first;
+    uint16_t total = 0;
 
-void mem_count_free_block(list_item_t *p, uint16_t arg) {
-    arg;
-    block_t *b = (block_t *)p;
-    if (b->stat == NEW) mem_free_accum += b->size;
+    while (b) {
+        if (b->stat == NEW) {
+            total += b->size;
+        }
+        b = (block_t *)b->hdr.next;
+    }
+
+    return total;
 }
 
-uint16_t mem_free_total(void *first) {
-    mem_free_accum = 0;
-    list_iterate(
-        (list_item_t *)first,
-        mem_count_free_block,
-        0);
-    return mem_free_accum;
-}
+static void mem_dump(const char *title, void *first) {
+    block_t *b = (block_t *)first;
 
-void mem_dump(char *title, void *first) {
-    y->printf("%s\n\n", title);
+    tty_printf("%s\n\n", title);
     print_header("S ADDR NEXT DATA  SIZE");
-    list_iterate(
-        (list_item_t *)first,
-        mem_block,
-        0);
+    while (b) {
+        mem_block(b);
+        b = (block_t *)b->hdr.next;
+    }
 }
 
-uint16_t mem(void) {
+static uint16_t mem(void) {
     uint16_t free_sys;
     uint16_t free_user;
     uint16_t free_total;
 
-    y->printf("\nTOTAL %u bytes\n\n", (uint16_t)(0xffff - (uint16_t)&_heap));
+    tty_printf("\nTOTAL %u bytes\n\n", (uint16_t)(0xffff - (uint16_t)&_heap));
     mem_dump("SYSTEM HEAP", &_sys_heap);
-    y->printf("\n");
+    tty_putc('\n');
     mem_dump("USER HEAP", &_heap);
-    y->printf("\n");
+    tty_putc('\n');
 
     free_sys = mem_free_total(&_sys_heap);
     free_user = mem_free_total(&_heap);
     free_total = (uint16_t)(free_sys + free_user);
-    y->printf("FREE %u bytes (SYS %u, USER %u)\n", free_total, free_sys, free_user);
+    tty_printf("FREE %u bytes (SYS %u, USER %u)\n", free_total, free_sys, free_user);
     return 0;
 }
 
-void ver(void) {
-    int v=y->ver();
-    int minor=v&0x0f,major=(v&0xf0)>>4;
-    y->printf("\nYOS VERSION %d.%d\n",major,minor);
+static void ver(void) {
+    int minor = YOS_VERSION & 0x0f;
+    int major = (YOS_VERSION & 0xf0) >> 4;
+    tty_printf("\nYOS VERSION %d.%d\n", major, minor);
 }
 
-static uint8_t pstat_thread_count = 0;
+static uint8_t print_thread_list(thread_t *first, process_t *proc, thread_t *main_thread) {
+    uint8_t count = 0;
 
-void print_thread(list_item_t *li, uint16_t arg) {
-    process_t *proc=(process_t *)arg;
-    thread_t *t=(thread_t *)li;
-    thread_t *main=proc->main_thread;
+    while (first) {
+        if (first->process == (void *)proc) {
+            tty_printf("  %c      %04X %04X\n",
+                first == main_thread ? 'M' : '-',
+                first,
+                first->hdr.next);
+            count++;
+        }
+        first = (thread_t *)first->hdr.next;
+    }
 
-    if (t->process == (void *)proc) {
-        y->printf("  %c      %04X %04X\n",
-            t==main?'M':'-',
-            t,
-            t->hdr.next);
-        pstat_thread_count++;
+    return count;
+}
+
+static void print_process(process_t *p) {
+    uint8_t thread_count = 0;
+    thread_t *main_thread = p->main_thread;
+
+    tty_printf("%-8s %04X %04X\n", p->pname, p, p->hdr.next);
+    thread_count += print_thread_list(thread_first_running, p, main_thread);
+    thread_count += print_thread_list(thread_first_suspended, p, main_thread);
+    thread_count += print_thread_list(thread_first_terminated, p, main_thread);
+    thread_count += print_thread_list(thread_first_waiting, p, main_thread);
+    if (thread_count == 0) {
+        tty_puts("  (no threads)");
     }
 }
 
-void print_process(list_item_t *li, uint16_t arg) {
-    arg;
-    process_t *p=(process_t *)li;
-    y->printf("%-8s %04X %04X\n",
-        p->pname,
-        p,
-        p->hdr.next);
+static void pstat(void) {
+    process_t *p = process_first;
 
-    pstat_thread_count = 0;
-    list_iterate(
-        (list_item_t*)thread_first_running,
-        print_thread,
-        (uint16_t)p);
-    list_iterate(
-        (list_item_t*)thread_first_suspended,
-        print_thread,
-        (uint16_t)p);
-    list_iterate(
-        (list_item_t*)thread_first_terminated,
-        print_thread,
-        (uint16_t)p);
-    list_iterate(
-        (list_item_t*)thread_first_waiting,
-        print_thread,
-        (uint16_t)p);
-    if (pstat_thread_count == 0) {
-        y->printf("  (no threads)\n");
-    }
-}
-
-void pstat(void) {
-    y->printf("\nPROCESSES AND THREADS\n\n");
+    tty_putc('\n');
+    tty_puts("PROCESSES AND THREADS");
+    tty_putc('\n');
     print_header("NAME     ADDR NEXT");
-    list_iterate(
-        (list_item_t*)process_first,
-        print_process,
-        0);
+    while (p) {
+        print_process(p);
+        p = (process_t *)p->hdr.next;
+    }
 }
 
-void dir(void) {
+static void dir(void) {
     uint8_t drive = current_drive;
+    uint8_t count;
+
     if (drive == 0) {
-        y->printf("\nRAM DISK NOT IMPLEMENTED\n");
+        tty_puts("RAM DISK NOT IMPLEMENTED");
         return;
     }
 
-    uint8_t count = y->mdr_dir(drive, dir_files, DIR_MAX_FILES);
+    count = mdr_dir(drive, dir_files, DIR_MAX_FILES);
     if (count > DIR_MAX_FILES) count = DIR_MAX_FILES; /* defensive clamp */
-    y->printf("\nDRIVE %u DIRECTORY\n\n", drive);
+    tty_printf("\nDRIVE %u DIRECTORY\n\n", drive);
     if (count == 0) {
-        y->printf("EMPTY\n");
+        tty_puts("EMPTY");
         return;
     }
 
     print_header("NAME       SECTORS SIZE");
     for (uint8_t i = 0; i < count; i++) {
-        y->printf("%-10s %7u %4u\n",
+        tty_printf("%-10s %7u %4u\n",
             dir_files[i].name,
             dir_files[i].sectors,
             dir_files[i].size);
@@ -259,60 +244,93 @@ void format_drive(char *args) {
 }
 #endif
 
-void exec(char *text) {
+static void exec(char *text) {
+    uint8_t len;
+
     lcase(text);
-    if (y->strlen(text) == 2 && text[0] == '-' && text[1] == ':') {
-        current_drive = 0;
+    len = (uint8_t)strlen(text);
+
+    if (len == 0) {
+        tty_putc('\n');
+        return;
     }
-    else
-    if (y->strlen(text) == 2 && text[1] == ':' &&
-        text[0] >= 'a' && text[0] <= 'h') {
+
+    if (len == 2 && text[0] == '-' && text[1] == ':') {
+        current_drive = 0;
+        return;
+    }
+
+    if (len == 2 && text[1] == ':' && text[0] >= 'a' && text[0] <= 'h') {
         uint8_t target = (uint8_t)(text[0] - 'a' + 1);
-        uint8_t drives = y->mdr_detect_drives();
+        uint8_t drives = mdr_detect_drives();
         if (drives == 0) {
-            y->printf("NO MICRODRIVE DETECTED\n");
+            tty_puts("NO MICRODRIVE DETECTED");
             return;
         }
         if (target > drives) {
-            y->printf("DRIVE %u NOT PRESENT\n", target);
+            tty_printf("DRIVE %u NOT PRESENT\n", target);
             return;
         }
         current_drive = target;
+        return;
     }
-    else
-    if (y->strcmp(text,"clear")==0)
-        y->clrscr();
-    else if (y->strcmp(text,"help")==0)
-        help();
-    else if (y->strcmp(text,"dir")==0)
-        dir();
-    else if (y->strcmp(text,"mem")==0)
-        mem();
-    else if (y->strcmp(text,"ver")==0)
-        ver();
-    else if (y->strcmp(text,"ps")==0)
-        pstat();
-    else if (y->strlen(text)==0) /* tolerate empty string */
-        y->printf("\n");
-    else if (run_app(text))
-        ;
-    else
-        y->printf("UNKNOWN COMMAND: %s\n", text);
+
+    switch (text[0]) {
+        case 'c':
+            if (strcmp(text, "clear") == 0) {
+                tty_cls();
+                return;
+            }
+            break;
+        case 'd':
+            if (strcmp(text, "dir") == 0) {
+                dir();
+                return;
+            }
+            break;
+        case 'h':
+            if (strcmp(text, "help") == 0) {
+                help();
+                return;
+            }
+            break;
+        case 'm':
+            if (strcmp(text, "mem") == 0) {
+                mem();
+                return;
+            }
+            break;
+        case 'p':
+            if (strcmp(text, "ps") == 0) {
+                pstat();
+                return;
+            }
+            break;
+        case 'v':
+            if (strcmp(text, "ver") == 0) {
+                ver();
+                return;
+            }
+            break;
+    }
+
+    if (!run_app(text)) {
+        tty_printf("UNKNOWN COMMAND: %s\n", text);
+    }
 }
 
 void ysh(void) {
-
-    /* get syscall table */
-    y=_svc_query("yos");
-
-    /* mini shell */
-    while(TRUE) {
-        if (current_drive == 0)
-            y->printf("\n-:\\");
-        else
-            y->printf("\n%c:\\", (char)('A' + current_drive - 1));
-        y->gets(cmd);
-        y->printf("\n"); 
+    while (TRUE) {
+        tty_putc('\n');
+        if (current_drive == 0) {
+            tty_putc('-');
+        } else {
+            tty_putc((char)('A' + current_drive - 1));
+        }
+        tty_putc(':');
+        tty_putc('\\');
+        tty_gets(cmd);
+        tty_putc('\n');
         exec(cmd);
     }
 }

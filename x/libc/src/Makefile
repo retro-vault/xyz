@@ -139,8 +139,16 @@ $(BUILD_TARGET): $(OBJS) $(ARCHIVE_MANIFEST) | $(PROJECT_BUILD_DIR)
 	$(AR8) $(AR8FLAGS) $@ @$(ARCHIVE_MANIFEST)
 
 $(ARCHIVE_MANIFEST): $(OBJS) | $(PROJECT_BUILD_DIR)
-	find "$(OBJDIR)" -type f -name '*.rel' | LC_ALL=C sort > $@
+	printf '%s\n' $(OBJS) | LC_ALL=C sort > $@
 	test -s $@
+
+# Temporary per-file workaround: the minimal float formatter still miscompiles
+# under `-Os` in the `%e` path. A trimmed `-O2` build keeps the active float
+# regression tests green without forcing the rest of libc off the normal
+# profile.
+$(OBJDIR)/stdio/stdio_format_double.s: stdio/stdio_format_double.c | $(OBJDIR)
+	@mkdir -p $(dir $@)
+	$(C8C) -S -O2 $(C8FLAGS) -o $@ $<
 
 $(OBJDIR)/%.s: %.c | $(OBJDIR)
 	@mkdir -p $(dir $@)

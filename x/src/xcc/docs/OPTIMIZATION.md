@@ -231,7 +231,7 @@ Implementation approach:
 Current status:
 
 - implemented as `-fprealloc-temp-frame`
-- now also enabled automatically at `-O2` / `-O3` / `-Os` when the function
+- now also enabled automatically at `-O2` / `-Of` / `-O3` / `-Os` when the function
   already needs an IX frame for locals, stack parameters, or fixed-frame
   hazards
 - compute `max_temp_bytes`

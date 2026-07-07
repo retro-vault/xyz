@@ -50,7 +50,23 @@ bool icode_uses_symbol(const icode &ic, const operand &sym) {
 }
 
 bool is_passive_leading_op(const icode &ic) {
-    return ic.op == icode_op::LABEL;
+    return ic.op == icode_op::RECEIVE;
+}
+
+bool is_safe_receive_prefix_init(const icode &ic) {
+    if (ic.op != icode_op::ASSIGN ||
+        !ic.right.is_none() ||
+        ic.left.kind != operand_kind::INT_CONST) {
+        return false;
+    }
+
+    if (!ic.result.is_symbol() || ic.result.is_global || !ic.result.type)
+        return false;
+
+    // Byte local/param constant stores lower to an A + IX store sequence and
+    // do not need to consume an incoming word argument register pair first.
+    return ic.result.type->size() == 1 &&
+           ic.left.ival >= 0 && ic.left.ival <= 0xff;
 }
 
 [[maybe_unused]] bool is_straight_line_helper_fn(const ir_function &fn) {
@@ -173,27 +189,30 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
     if (incoming_arg_home(ic.arg_loc) == temp_home::stack)
         return false;
 
-    size_t first_body_idx = receive_idx + 1;
-    bool saw_leading_label = false;
-    while (first_body_idx < fn.icodes.size() &&
-           is_passive_leading_op(fn.icodes[first_body_idx])) {
-        saw_leading_label = true;
-        ++first_body_idx;
-    }
-
     for (size_t i = receive_idx + 1; i < fn.icodes.size(); ++i) {
         const auto &scan = fn.icodes[i];
+        if (is_passive_leading_op(scan))
+            continue;
+        // A label before the first real use means the "prefix" is not
+        // single-entry straight-line code anymore: a backedge can re-enter
+        // the later-emitted loads after the incoming register has already
+        // been clobbered inside the loop body.
+        if (scan.op == icode_op::LABEL)
+            return false;
         if (ic.result.is_temp()) {
             if (icode_uses_temp(scan, ic.result.temp_id))
-                return i == first_body_idx && !saw_leading_label;
+                return true;
             if (uses_temp(scan.result, ic.result.temp_id))
                 return false;
         } else {
             if (icode_uses_symbol(scan, ic.result))
-                return i == first_body_idx && !saw_leading_label;
+                return true;
             if (same_local_symbol(scan.result, ic.result))
                 return false;
         }
+        if (is_safe_receive_prefix_init(scan))
+            continue;
+        return false;
     }
     return false;
 }
@@ -223,6 +242,7 @@ bool sdcccall1_callee_cleans_stack(type_ptr ret_type,
 
 bool z80_gen::can_omit_frame_pointer(const ir_function &fn) const {
     if (!frame_omit_enabled()) return false;
+    if (temp_stack_bytes_ != 0) return false;
     if (required_frame_bytes() != 0) return false;
     return !needs_frame_without_temps(fn);
 }
@@ -272,10 +292,12 @@ void abi_convention::exact_stack_drop(z80_gen &g, int bytes)
 
 void abi_convention::callee_stack_return(z80_gen &g, int bytes)
 {
-    g.emit_line("pop\tbc");
-    exact_stack_drop(g, bytes);
-    g.emit_line("push\tbc");
-    g.emit_line("ret");
+    g.emit_line("pop\thl");
+    for (int n = 0; n < bytes / 2; ++n)
+        g.emit_line("pop\taf");
+    if (bytes & 1)
+        exact_stack_drop(g, 1);
+    g.emit_line("jp\t(hl)");
 }
 
 void abi_convention::emit_bc_indirect_call(z80_gen &g, const operand &target,
@@ -284,6 +306,10 @@ void abi_convention::emit_bc_indirect_call(z80_gen &g, const operand &target,
                                            bool preserve_de)
 {
     g.asm_.global_decl("__sdcc_call_bc");
+    if (g.operand_home_in_bc(target)) {
+        g.emit_line("call\t__sdcc_call_bc");
+        return;
+    }
     if (preserve_de)
         g.emit_line("push\tde");
     if (preserve_hl)
@@ -364,6 +390,52 @@ void abi_convention::emit_modern_return_value(z80_gen &g, const operand &value)
     if (value.is_none()) return;
 
     int sz = g.op_size(value);
+    auto prefer_direct_de_return = [&]() -> bool {
+        if (sz != 2)
+            return false;
+
+        if (g.direct_word_value_pending_ &&
+            g.direct_word_value_.is_temp() &&
+            value.is_temp() &&
+            value.temp_id == g.direct_word_value_.temp_id) {
+            return true;
+        }
+
+        switch (value.kind) {
+        case operand_kind::INT_CONST:
+        case operand_kind::FLOAT_CONST:
+        case operand_kind::LABEL_REF:
+            return true;
+        case operand_kind::SYMBOL:
+            if (value.is_global)
+                return value.is_tls;
+            if (g.symbol_home_in_bc(value) && value.byte_offset == 0)
+                return true;
+            if (value.byte_offset == 0) {
+                auto it = g.incoming_symbol_homes_.find(value.stack_offset);
+                if (it != g.incoming_symbol_homes_.end()) {
+                    return it->second == temp_home::arg_de;
+                }
+            }
+            return true;
+        case operand_kind::TEMP: {
+            auto it = g.temp_regs_.find(value.temp_id);
+            if (it == g.temp_regs_.end())
+                return true;
+            switch (it->second) {
+            case temp_home::main_hl:
+            case temp_home::remat_hl:
+            case temp_home::arg_hl:
+                return false;
+            default:
+                return true;
+            }
+        }
+        default:
+            return false;
+        }
+    };
+
     if (sz > 8) {
         if (g.cur_fn_ && g.cur_fn_->stack_param_bytes > 0) {
             for (int w = 0; w < sz / 2; ++w) {
@@ -384,8 +456,12 @@ void abi_convention::emit_modern_return_value(z80_gen &g, const operand &value)
             g.emit_line("add\thl, de");
             g.emit_line("ex\tde, hl");
         } else {
-            g.load_hl(value);
-            g.emit_line("ex\tde, hl");
+            if (prefer_direct_de_return()) {
+                g.load_de(value);
+            } else {
+                g.load_hl(value);
+                g.emit_line("ex\tde, hl");
+            }
         }
         return;
     }
@@ -401,8 +477,12 @@ void abi_convention::emit_modern_return_value(z80_gen &g, const operand &value)
         // Far (24-bit) pointer return: HL = address, E = bank.
         emit_far_ptr_to_regs(g, value);
     } else {
-        g.load_hl(value);
-        g.emit_line("ex\tde, hl");
+        if (prefer_direct_de_return()) {
+            g.load_de(value);
+        } else {
+            g.load_hl(value);
+            g.emit_line("ex\tde, hl");
+        }
     }
 }
 
@@ -679,9 +759,15 @@ void abi_convention::std_prologue_frame(z80_gen &g, const ir_function &fn)
         return;
     }
 
-    g.emit_line("push\tix");
-    g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
-    g.emit_line("add\tix, sp");
+    bool use_shared_enter = g.shared_ix_helpers_enabled();
+    if (use_shared_enter) {
+        g.asm_.global_decl("__sdcc_enter_ix");
+        g.emit_line("call\t__sdcc_enter_ix");
+    } else {
+        g.emit_line("push\tix");
+        g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
+        g.emit_line("add\tix, sp");
+    }
     g.set_known_sp_ix_delta(0);
     if (g.total_frame_bytes() > 0) {
         g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
@@ -771,11 +857,24 @@ struct stack_linkage_convention : abi_convention {
     }
 
     void emit_epilogue(z80_gen &g, const ir_function &fn) override {
-        std_epilogue_frame(g, fn);
+        bool use_shared_leave =
+            !fn.is_noreturn &&
+            !g.can_omit_frame_pointer(fn) &&
+            g.shared_ix_helpers_enabled() &&
+            !(callee_repairs_stack() && fn.stack_param_bytes > 0);
+        if (use_shared_leave) {
+            g.emit_label(g.fn_end_lbl_, false);
+            g.emit_comment("epilogue: %s", fn.name.c_str());
+            g.asm_.global_decl("__sdcc_leave_ix");
+            g.emit_line("jp\t__sdcc_leave_ix");
+            g.clear_known_sp_ix_delta();
+        } else {
+            std_epilogue_frame(g, fn);
+        }
         if (!fn.is_noreturn) {
             if (callee_repairs_stack() && fn.stack_param_bytes > 0)
                 callee_stack_return(g, fn.stack_param_bytes);
-            else
+            else if (!use_shared_leave)
                 g.emit_line("ret");
         }
         if (g.debug_) g.debug_->end_function(fn);
@@ -880,9 +979,15 @@ struct cc_z88dk_fastcall final : abi_convention {
             g.emit_comment("frameless function: no IX frame needed");
             g.clear_known_sp_ix_delta();
         } else {
-            g.emit_line("push\tix");
-            g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
-            g.emit_line("add\tix, sp");
+            bool use_shared_enter = g.shared_ix_helpers_enabled();
+            if (use_shared_enter) {
+                g.asm_.global_decl("__sdcc_enter_ix");
+                g.emit_line("call\t__sdcc_enter_ix");
+            } else {
+                g.emit_line("push\tix");
+                g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
+                g.emit_line("add\tix, sp");
+            }
             g.set_known_sp_ix_delta(0);
             spill_leading_receives(g, fn, spill_fastcall_receive);
             if (g.total_frame_bytes() > 0) {
@@ -895,8 +1000,19 @@ struct cc_z88dk_fastcall final : abi_convention {
     }
 
     void emit_epilogue(z80_gen &g, const ir_function &fn) override {
-        std_epilogue_frame(g, fn);
-        if (!fn.is_noreturn)
+        if (!fn.is_noreturn &&
+            !g.can_omit_frame_pointer(fn) &&
+            g.shared_ix_helpers_enabled()) {
+            g.emit_label(g.fn_end_lbl_, false);
+            g.emit_comment("epilogue: %s", fn.name.c_str());
+            g.asm_.global_decl("__sdcc_leave_ix");
+            g.emit_line("jp\t__sdcc_leave_ix");
+            g.clear_known_sp_ix_delta();
+        } else {
+            std_epilogue_frame(g, fn);
+        }
+        if (!fn.is_noreturn &&
+            (g.can_omit_frame_pointer(fn) || !g.shared_ix_helpers_enabled()))
             g.emit_line("ret");
         if (g.debug_) g.debug_->end_function(fn);
     }
@@ -987,13 +1103,19 @@ struct cc_sdcccall1 final : abi_convention {
             g.emit_comment("frameless function: no IX frame needed");
             g.clear_known_sp_ix_delta();
         } else {
-            g.emit_line("push\tix");
-            g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
-            g.emit_line("add\tix, sp");
+            bool use_shared_enter = g.shared_ix_helpers_enabled();
+            if (use_shared_enter) {
+                g.asm_.global_decl("__sdcc_enter_ix");
+                g.emit_line("call\t__sdcc_enter_ix");
+            } else {
+                g.emit_line("push\tix");
+                g.emit_line("ld\tix, %s", g.asm_.imm(0).c_str());
+                g.emit_line("add\tix, sp");
+            }
             g.set_known_sp_ix_delta(0);
             bool retain_incoming_regs =
                 g.opt_settings_.level == opt_level::O2 ||
-                g.o3_baseline_enabled();
+                g.tuned_profile_enabled();
             std::unordered_map<size_t, temp_home> retained;
             bool retain_hl_like = false;
             bool retain_de = false;
@@ -1002,23 +1124,25 @@ struct cc_sdcccall1 final : abi_convention {
                     const auto &ic = fn.icodes[i];
                     if (ic.op != icode_op::RECEIVE)
                         break;
+                    temp_home preferred_home = incoming_arg_home(ic.arg_loc);
                     if (ic.result.is_temp()) {
                         auto ti = g.temp_regs_.find(ic.result.temp_id);
                         if (ti != g.temp_regs_.end() &&
-                            ti->second == temp_home::main_bc)
-                            continue;
+                            ti->second == temp_home::main_bc) {
+                            preferred_home = temp_home::main_bc;
+                        }
                     } else if (ic.result.is_symbol() &&
                                g.symbol_home_in_bc(ic.result) &&
                                ic.result.byte_offset == 0) {
-                        continue;
+                        preferred_home = temp_home::main_bc;
                     }
                     if (!should_keep_modern_receive_in_register(fn, i, ic))
                         continue;
-                    temp_home home = incoming_arg_home(ic.arg_loc);
-                    retained[i] = home;
+                    retained[i] = preferred_home;
                     retain_hl_like = retain_hl_like ||
-                        home == temp_home::arg_hl || home == temp_home::arg_l;
-                    retain_de = retain_de || home == temp_home::arg_de;
+                        preferred_home == temp_home::arg_hl ||
+                        preferred_home == temp_home::arg_l;
+                    retain_de = retain_de || preferred_home == temp_home::arg_de;
                 }
                 if (retain_hl_like && retain_de) {
                     for (auto it = retained.begin(); it != retained.end();) {
@@ -1039,13 +1163,50 @@ struct cc_sdcccall1 final : abi_convention {
                 auto keep_it = retained.find(i);
                 if (keep_it != retained.end()) {
                     if (ic.result.is_temp()) {
-                        g.emit_comment("keep incoming register arg t%d live in register for first use",
-                                       ic.result.temp_id);
-                        g.temp_regs_[ic.result.temp_id] = keep_it->second;
+                        if (keep_it->second == temp_home::main_bc) {
+                            g.emit_comment("keep incoming register arg t%d live in BC for first use",
+                                           ic.result.temp_id);
+                            switch (ic.arg_loc) {
+                            case abi_arg_loc::REG_HL:
+                                g.emit_line("ld\tb, h");
+                                g.emit_line("ld\tc, l");
+                                break;
+                            case abi_arg_loc::REG_DE:
+                                g.emit_line("ld\tb, d");
+                                g.emit_line("ld\tc, e");
+                                break;
+                            default:
+                                materialize_modern_receive(g, ic);
+                                continue;
+                            }
+                            g.temp_regs_[ic.result.temp_id] = temp_home::main_bc;
+                        } else {
+                            g.emit_comment("keep incoming register arg t%d live in register for first use",
+                                           ic.result.temp_id);
+                            g.temp_regs_[ic.result.temp_id] = keep_it->second;
+                        }
                     } else {
-                        g.emit_comment("keep incoming register arg %s live in register for first use",
-                                       ic.result.name.c_str());
-                        g.incoming_symbol_homes_[ic.result.stack_offset] = keep_it->second;
+                        if (keep_it->second == temp_home::main_bc) {
+                            g.emit_comment("keep incoming register arg %s live in BC for first use",
+                                           ic.result.name.c_str());
+                            switch (ic.arg_loc) {
+                            case abi_arg_loc::REG_HL:
+                                g.emit_line("ld\tb, h");
+                                g.emit_line("ld\tc, l");
+                                break;
+                            case abi_arg_loc::REG_DE:
+                                g.emit_line("ld\tb, d");
+                                g.emit_line("ld\tc, e");
+                                break;
+                            default:
+                                materialize_modern_receive(g, ic);
+                                continue;
+                            }
+                        } else {
+                            g.emit_comment("keep incoming register arg %s live in register for first use",
+                                           ic.result.name.c_str());
+                            g.incoming_symbol_homes_[ic.result.stack_offset] = keep_it->second;
+                        }
                     }
                     continue;
                 }
@@ -1070,11 +1231,24 @@ struct cc_sdcccall1 final : abi_convention {
     }
 
     void emit_epilogue(z80_gen &g, const ir_function &fn) override {
-        std_epilogue_frame(g, fn);
+        bool use_shared_leave =
+            !fn.is_noreturn &&
+            !g.can_omit_frame_pointer(fn) &&
+            g.shared_ix_helpers_enabled() &&
+            !(fn.callee_cleans_stack && fn.stack_param_bytes > 0);
+        if (use_shared_leave) {
+            g.emit_label(g.fn_end_lbl_, false);
+            g.emit_comment("epilogue: %s", fn.name.c_str());
+            g.asm_.global_decl("__sdcc_leave_ix");
+            g.emit_line("jp\t__sdcc_leave_ix");
+            g.clear_known_sp_ix_delta();
+        } else {
+            std_epilogue_frame(g, fn);
+        }
         if (!fn.is_noreturn) {
             if (fn.callee_cleans_stack && fn.stack_param_bytes > 0)
                 callee_stack_return(g, fn.stack_param_bytes);
-            else
+            else if (!use_shared_leave)
                 g.emit_line("ret");
         }
         if (g.debug_) g.debug_->end_function(fn);
@@ -1085,6 +1259,55 @@ struct cc_sdcccall1 final : abi_convention {
             if (g.cur_fn_ && !g.can_omit_frame_pointer(*g.cur_fn_)) {
                 g.emit_comment("receive (sdcccall1) register param handled by prologue");
                 return;
+            }
+            bool safe_frameless_single_use = false;
+            if (g.cur_fn_) {
+                size_t first_use =
+                    first_temp_use_after(*g.cur_fn_, g.cur_ic_index_,
+                                         ic.result.temp_id);
+                if (first_use < g.cur_fn_->icodes.size() &&
+                    !g.temp_value_used_after(*g.cur_fn_, first_use + 1,
+                                             ic.result.temp_id)) {
+                    safe_frameless_single_use = true;
+                    for (size_t i = g.cur_ic_index_ + 1; i < first_use; ++i) {
+                        if (g.cur_fn_->icodes[i].op == icode_op::LABEL) {
+                            safe_frameless_single_use = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (safe_frameless_single_use) {
+                temp_home preferred_home = incoming_arg_home(ic.arg_loc);
+                auto ti = g.temp_regs_.find(ic.result.temp_id);
+                if (ti != g.temp_regs_.end() &&
+                    ti->second == temp_home::main_bc) {
+                    preferred_home = temp_home::main_bc;
+                }
+
+                if (preferred_home == temp_home::main_bc) {
+                    g.emit_comment("keep incoming register arg t%d live in BC for first use",
+                                   ic.result.temp_id);
+                    switch (ic.arg_loc) {
+                    case abi_arg_loc::REG_HL:
+                        g.emit_line("ld\tb, h");
+                        g.emit_line("ld\tc, l");
+                        g.temp_regs_[ic.result.temp_id] = temp_home::main_bc;
+                        return;
+                    case abi_arg_loc::REG_DE:
+                        g.emit_line("ld\tb, d");
+                        g.emit_line("ld\tc, e");
+                        g.temp_regs_[ic.result.temp_id] = temp_home::main_bc;
+                        return;
+                    default:
+                        break;
+                    }
+                } else if (preferred_home != temp_home::stack) {
+                    g.emit_comment("keep incoming register arg t%d live in register for first use",
+                                   ic.result.temp_id);
+                    g.temp_regs_[ic.result.temp_id] = preferred_home;
+                    return;
+                }
             }
             materialize_modern_receive(g, ic);
             return;

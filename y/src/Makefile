@@ -39,15 +39,17 @@ clean:
 docs:
 	pandoc -t gfm --template docs/00_template.gfm --toc -s --toc-depth=3 docs/*.md > README.md
 
-XCCFLAGS := --mode=sdcc -S -Os -g -std=c11 \
+YOS_OPT ?= -Os
+
+XCCFLAGS := --mode=sdcc -S $(YOS_OPT) -std=c11 \
             -I$(THIS_DIR)/include \
             -I$(THIS_DIR) \
             -I$(Y_ROOT)/include
 
-XASFLAGS := --mode=sdcc -g
+XASFLAGS := --mode=sdcc
 
 # Protect the ZX Spectrum Interface 1 ROM paging trigger at 0x1708.
-XLDFLAGS := --mode=sdcc -v -m -f bin -g \
+XLDFLAGS := --mode=sdcc -v -m -f bin \
               -nostdlib \
               --no-default-runtime \
               -x 0000-3FFF \

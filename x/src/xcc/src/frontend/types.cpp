@@ -23,6 +23,7 @@ namespace {
 
 float_format g_float_format = float_format::IEEE32;
 call_abi g_default_call_abi = call_abi::SDCCCALL1;
+bool g_plain_char_unsigned = true;
 
 int64_t mask_to_bytes(int64_t value, int bytes) {
     if (bytes <= 0 || bytes >= 8)
@@ -161,6 +162,14 @@ call_abi get_default_call_abi() {
     return g_default_call_abi;
 }
 
+void set_plain_char_unsigned(bool is_unsigned) {
+    g_plain_char_unsigned = is_unsigned;
+}
+
+bool plain_char_is_unsigned() {
+    return g_plain_char_unsigned;
+}
+
 const char *float_format_name(float_format format) {
     switch (format) {
     case float_format::IEEE32:     return "ieee32";
@@ -241,7 +250,8 @@ int64_t encode_float_constant(double value, type_ptr target_type) {
 
 bool type::is_integer() const {
     switch (kind) {
-    case type_kind::BOOL:   case type_kind::CHAR:   case type_kind::UCHAR:
+    case type_kind::BOOL:   case type_kind::CHAR:
+    case type_kind::SCHAR:  case type_kind::UCHAR:
     case type_kind::SHORT:  case type_kind::USHORT:
     case type_kind::INT:    case type_kind::UINT:
     case type_kind::LONG:   case type_kind::ULONG:
@@ -259,6 +269,8 @@ bool type::is_unsigned() const {
     case type_kind::BOOL:  case type_kind::UCHAR:  case type_kind::USHORT:
     case type_kind::UINT:  case type_kind::ULONG:  case type_kind::ULLONG:
         return true;
+    case type_kind::CHAR:
+        return plain_char_is_unsigned();
     case type_kind::BITINT:
         return bitint_unsigned;
     case type_kind::CHAR8T:
@@ -285,6 +297,7 @@ int type::size() const {
     case type_kind::VOID:    return 0;
     case type_kind::BOOL:    return 1;
     case type_kind::CHAR:    return 1;
+    case type_kind::SCHAR:   return 1;
     case type_kind::UCHAR:   return 1;
     case type_kind::SHORT:   return 2;
     case type_kind::USHORT:  return 2;
@@ -350,6 +363,7 @@ std::string type::to_string() const {
     case type_kind::VOID:    os << "void"; break;
     case type_kind::BOOL:    os << "_Bool"; break;
     case type_kind::CHAR:    os << "char"; break;
+    case type_kind::SCHAR:   os << "signed char"; break;
     case type_kind::UCHAR:   os << "unsigned char"; break;
     case type_kind::SHORT:   os << "short"; break;
     case type_kind::USHORT:  os << "unsigned short"; break;
@@ -387,6 +401,7 @@ static int int_rank(type_kind k) {
     switch (k) {
     case type_kind::BOOL:    return 1;
     case type_kind::CHAR:
+    case type_kind::SCHAR:
     case type_kind::UCHAR:   return 2;
     case type_kind::SHORT:
     case type_kind::USHORT:  return 3;

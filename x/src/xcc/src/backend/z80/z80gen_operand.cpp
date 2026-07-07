@@ -58,12 +58,17 @@ bool z80_gen::fits_ix_disp(int off) {
 }
 
 void z80_gen::load_ix_addr_hl(int off) {
-    if (!fits_ix_disp(off) && has_known_sp_ix_delta()) {
-        emit_line("ld\thl, %s", asm_.imm(off - current_sp_ix_delta()).c_str());
-        emit_line("add\thl, sp");
-        set_pair_cache(reg_pair{"hl", 'l', 'h', false},
-                       pair_ix_addr_cache_key(off));
-        return;
+    if (has_known_sp_ix_delta()) {
+        // When the SP<->IX delta is known, materializing an address via SP is
+        // usually smaller than cloning IX into HL and then walking/adding the
+        // displacement. Keep the tiny +/-1 and exact-zero cases on the IX path.
+        if (!fits_ix_disp(off) || off < -1 || off > 1) {
+            emit_line("ld\thl, %s", asm_.imm(off - current_sp_ix_delta()).c_str());
+            emit_line("add\thl, sp");
+            set_pair_cache(reg_pair{"hl", 'l', 'h', false},
+                           pair_ix_addr_cache_key(off));
+            return;
+        }
     }
 
     emit_line("push\tix");
@@ -186,6 +191,40 @@ void z80_gen::store_frame_word(const reg_pair &r, int off) {
 }
 
 int z80_gen::op_size(const operand &op) const {
+    if (op.kind == operand_kind::SYMBOL &&
+        !op.is_global &&
+        cur_fn_ &&
+        op.type && op.type->size() > 1) {
+        auto same_symbol_slot = [&](const operand &cand) {
+            return cand.kind == operand_kind::SYMBOL &&
+                   cand.is_global == op.is_global &&
+                   cand.is_param == op.is_param &&
+                   cand.is_tls == op.is_tls &&
+                   cand.is_sfr == op.is_sfr &&
+                   cand.is_func == op.is_func &&
+                   cand.stack_offset == op.stack_offset &&
+                   cand.byte_offset == op.byte_offset &&
+                   cand.name == op.name;
+        };
+
+        int stored_size = 0;
+        auto consider_def = [&](const operand &cand) {
+            if (!same_symbol_slot(cand) || !cand.type)
+                return;
+            int sz = cand.type->size();
+            if (sz <= 0)
+                return;
+            if (stored_size == 0 || sz < stored_size)
+                stored_size = sz;
+        };
+
+        for (const auto &ic : cur_fn_->icodes)
+            consider_def(ic.result);
+
+        if (stored_size > 0 && stored_size < op.type->size())
+            return stored_size;
+    }
+
     if (!op.type) return 2;
     return op.type->size();
 }
@@ -221,14 +260,22 @@ int z80_gen::alloc_temp(int temp_id, int sz) {
     int offset = next_temp_slot_ - local_bytes_;
     temp_slots_[temp_id] = offset;
 
-    if (temp_frame_bytes_ == 0) {
-        if (sz == 1)      emit_line("dec\tsp");
-        else if (sz == 2) { emit_line("dec\tsp"); emit_line("dec\tsp"); }
-        else if (sz == 4) {
-            for (int i = 0; i < 4; ++i) emit_line("dec\tsp");
-        } else if (sz == 8) {
-            for (int i = 0; i < 8; ++i) emit_line("dec\tsp");
-        }
+    // Some temps are intentionally left in incoming argument registers for an
+    // initial use and only spill later if another use appears. Those late
+    // materializations need real stack space even when the precomputed temp
+    // frame did not reserve a slot for them, so grow SP whenever we mint a
+    // brand-new spill slot.
+    if (sz == 1) {
+        emit_line("dec\tsp");
+    } else if (sz == 2) {
+        emit_line("dec\tsp");
+        emit_line("dec\tsp");
+    } else if (sz == 4) {
+        for (int i = 0; i < 4; ++i) emit_line("dec\tsp");
+    } else if (sz == 8) {
+        for (int i = 0; i < 8; ++i) emit_line("dec\tsp");
+    } else {
+        for (int i = 0; i < sz; ++i) emit_line("dec\tsp");
     }
 
     return offset;
@@ -274,8 +321,41 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
     if (pair_cache_matches(r, cache_key))
         return;
 
+    auto effective_byte_type = [&](const operand &byte_op) -> type_ptr {
+        if (byte_op.kind == operand_kind::SYMBOL &&
+            !byte_op.is_global &&
+            cur_fn_ &&
+            byte_op.type && byte_op.type->size() >= 1) {
+            auto same_symbol_slot = [&](const operand &cand) {
+                return cand.kind == operand_kind::SYMBOL &&
+                       cand.is_global == byte_op.is_global &&
+                       cand.is_param == byte_op.is_param &&
+                       cand.is_tls == byte_op.is_tls &&
+                       cand.is_sfr == byte_op.is_sfr &&
+                       cand.is_func == byte_op.is_func &&
+                       cand.stack_offset == byte_op.stack_offset &&
+                       cand.byte_offset == byte_op.byte_offset &&
+                       cand.name == byte_op.name;
+            };
+
+            type_ptr stored_type;
+            for (const auto &ic : cur_fn_->icodes) {
+                if (!same_symbol_slot(ic.result) || !ic.result.type)
+                    continue;
+                if (ic.result.type->size() != 1)
+                    continue;
+                stored_type = ic.result.type;
+                break;
+            }
+            if (stored_type)
+                return stored_type;
+        }
+        return byte_op.type;
+    };
+
     auto extend_loaded_byte = [&](char lo, char hi) {
-        if (op.type && !op.type->is_unsigned()) {
+        type_ptr byte_type = effective_byte_type(op);
+        if (byte_type && !byte_type->is_unsigned()) {
             emit_line("ld\ta, %c", lo);
             emit_line("rlca");
             emit_line("sbc\ta, a");
@@ -283,6 +363,30 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
         } else {
             emit_line("ld\t%c, %s", hi, asm_.imm(0).c_str());
         }
+    };
+
+    auto load_promoted_byte_pair = [&](const operand &byte_src, bool sign_extend) {
+        if (byte_src.kind == operand_kind::INT_CONST) {
+            const uint8_t raw = static_cast<uint8_t>(byte_src.ival & 0xff);
+            const uint16_t widened =
+                sign_extend
+                    ? static_cast<uint16_t>(static_cast<int16_t>(
+                          static_cast<int8_t>(raw)))
+                    : static_cast<uint16_t>(raw);
+            emit_line("ld\t%s, %s", r.name, asm_.imm(widened).c_str());
+            set_pair_cache(r, cache_key);
+            return;
+        }
+        load_a(byte_src);
+        emit_line("ld\t%c, a", r.lo);
+        if (sign_extend) {
+            emit_line("rlca");
+            emit_line("sbc\ta, a");
+            emit_line("ld\t%c, a", r.hi);
+        } else {
+            emit_line("ld\t%c, %s", r.hi, asm_.imm(0).c_str());
+        }
+        set_pair_cache(r, cache_key);
     };
 
     if (op_size(op) == 1) {
@@ -434,6 +538,16 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
         }
     }
 
+    operand byte_src;
+    if (get_zero_extended_u8_source(op, byte_src)) {
+        load_promoted_byte_pair(byte_src, false);
+        return;
+    }
+    if (get_sign_extended_i8_source(op, byte_src)) {
+        load_promoted_byte_pair(byte_src, true);
+        return;
+    }
+
     switch (op.kind) {
     case operand_kind::INT_CONST:
         emit_line("ld\t%s, %s", r.name, asm_.imm(op.ival).c_str());
@@ -467,11 +581,13 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 emit_line("ld\t%s, %s", r.name, asm_.imm_sym(mangle(op.name)).c_str());
             }
         } else if (op.is_global) {
+            const std::string global_addr =
+                asm_.indir_global(mangle(op.name), op.byte_offset);
             if (r.via_hl) {
-                emit_line("ld\thl, (%s)", mangle(op.name).c_str());
+                emit_line("ld\thl, %s", global_addr.c_str());
                 emit_line("ex\tde, hl");
             } else {
-                emit_line("ld\t%s, (%s)", r.name, mangle(op.name).c_str());
+                emit_line("ld\t%s, %s", r.name, global_addr.c_str());
             }
         } else {
             if (symbol_home_in_bc(op) && op.byte_offset == 0) {
@@ -595,7 +711,9 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
             }
             preserves_pair = false;
         } else if (op.is_global) {
-            emit_line("ld\t(%s), %s", mangle(op.name).c_str(), r.name);
+            emit_line("ld\t%s, %s",
+                      asm_.indir_global(mangle(op.name), op.byte_offset).c_str(),
+                      r.name);
         } else {
             if (symbol_home_in_bc(op) && op.byte_offset == 0) {
                 incoming_symbol_homes_.erase(op.stack_offset);
@@ -666,10 +784,49 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
         invalidate_de_cache();
 }
 
-void z80_gen::load_hl (const operand &op) { constexpr reg_pair HL{"hl",'l','h',false}; emit_load_rr (HL, op); }
-void z80_gen::load_de (const operand &op) { constexpr reg_pair DE{"de",'e','d',true};  emit_load_rr (DE, op); }
+void z80_gen::load_hl (const operand &op) {
+    if (direct_word_value_pending_ &&
+        direct_word_value_.is_temp() &&
+        op.is_temp() &&
+        op.temp_id == direct_word_value_.temp_id &&
+        op_is_16bit(op)) {
+        invalidate_pair_cache();
+        invalidate_a_cache();
+        emit_line("ex\tde, hl");
+        direct_word_value_pending_ = false;
+        direct_word_value_ = operand{};
+        return;
+    }
+    constexpr reg_pair HL{"hl",'l','h',false};
+    emit_load_rr(HL, op);
+}
+void z80_gen::load_de (const operand &op) {
+    if (direct_word_value_pending_ &&
+        direct_word_value_.is_temp() &&
+        op.is_temp() &&
+        op.temp_id == direct_word_value_.temp_id &&
+        op_is_16bit(op)) {
+        direct_word_value_pending_ = false;
+        direct_word_value_ = operand{};
+        return;
+    }
+    constexpr reg_pair DE{"de",'e','d',true};
+    emit_load_rr(DE, op);
+}
 void z80_gen::store_hl(const operand &op) { constexpr reg_pair HL{"hl",'l','h',false}; emit_store_rr(HL, op); }
 void z80_gen::store_de(const operand &op) { constexpr reg_pair DE{"de",'e','d',true};  emit_store_rr(DE, op); }
+
+void z80_gen::load_de_zero_extended_u8(const operand &op) {
+    if (op.kind == operand_kind::INT_CONST) {
+        load_de(operand::make_int(op.ival & 0xff, type::make_uint()));
+        return;
+    }
+
+    invalidate_de_cache();
+    load_a(op);
+    emit_line("ld\te, a");
+    emit_line("ld\td, %s", asm_.imm(0).c_str());
+}
 
 void z80_gen::load_bc(const operand &op) {
     if (symbol_home_in_bc(op))

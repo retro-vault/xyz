@@ -74,29 +74,45 @@ type_ptr parser::parse_pointer(type_ptr base) {
 type_ptr parser::parse_direct_declarator_suffix(type_ptr base, std::string &/*name*/) {
     while (true) {
         if (check(tk::LBRACKET)) {
-            consume();
-            // C11 §6.7.6.3: optional 'static' and type-qualifiers before array size
-            if (check(tk::KW_STATIC)) consume();
-            while (peek().is_type_qualifier()) consume();
-            if (check(tk::KW_STATIC)) consume(); // static may follow qualifiers
-            int sz = 0;
-            bool has_vla = base && base->is_vla;
-            if (check(tk::STAR)) {
-                // C11 §6.7.6.2: [*] or [qualifiers *] VLA unspecified size in prototype
-                consume(); // consume the '*'; expect ']' next
-            } else if (!check(tk::RBRACKET)) {
-                auto e = parse_assignment_expression();
-                if (auto cv = const_expr_evaluator::evaluate(e.get())) {
-                    sz = static_cast<int>(*cv);
-                } else if (cur_func_) {
-                    // VLA: runtime-sized array (only valid inside a function)
-                    last_vla_size_ = std::move(e);
-                    has_vla = true;
+            struct array_suffix {
+                int  size = 0;
+                bool is_vla = false;
+            };
+            std::vector<array_suffix> arrays;
+
+            while (check(tk::LBRACKET)) {
+                consume();
+                // C11 §6.7.6.3: optional 'static' and type-qualifiers before array size.
+                if (check(tk::KW_STATIC)) consume();
+                while (peek().is_type_qualifier()) consume();
+                if (check(tk::KW_STATIC)) consume(); // static may follow qualifiers
+                array_suffix suffix;
+                if (check(tk::STAR)) {
+                    // C11 §6.7.6.2: [*] or [qualifiers *] VLA unspecified size in prototype.
+                    consume(); // consume the '*'; expect ']' next
+                    suffix.is_vla = true;
+                } else if (!check(tk::RBRACKET)) {
+                    auto e = parse_assignment_expression();
+                    if (auto cv = const_expr_evaluator::evaluate(e.get())) {
+                        suffix.size = static_cast<int>(*cv);
+                    } else if (cur_func_) {
+                        // VLA: runtime-sized array (only valid inside a function).
+                        last_vla_size_ = std::move(e);
+                        suffix.is_vla = true;
+                    }
                 }
+                expect(tk::RBRACKET);
+                arrays.push_back(suffix);
             }
-            expect(tk::RBRACKET);
-            base = type::make_array(base, sz);
-            base->is_vla = has_vla;
+
+            // In C, the first bracket after the identifier is the outermost
+            // array.  Build the type inside-out so int a[4][3] is
+            // array[4] of array[3] of int, not the reverse.
+            for (auto it = arrays.rbegin(); it != arrays.rend(); ++it) {
+                bool has_vla = it->is_vla || (base && base->is_vla);
+                base = type::make_array(base, it->size);
+                base->is_vla = has_vla;
+            }
         } else if (check(tk::LPAREN)) {
             // Function params: parse for both named and unnamed declarators.
             // Unnamed abstract declarators like int(*)(void) need this too.

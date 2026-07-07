@@ -55,6 +55,8 @@ const char *float_format_name(float_format format);
 int float_format_size(float_format format);
 int float_format_fraction_bits(float_format format);
 int64_t encode_float_constant(double value, type_ptr target_type);
+void set_plain_char_unsigned(bool is_unsigned);
+bool plain_char_is_unsigned();
 
 // ----- call_abi ------------------------------------------------------
 //
@@ -82,7 +84,8 @@ call_abi get_default_call_abi();
 enum class type_kind : uint8_t {
     VOID,
     BOOL,           // _Bool
-    CHAR,           // signed char
+    CHAR,           // plain char (target-default signedness)
+    SCHAR,          // signed char
     UCHAR,          // unsigned char
     SHORT,
     USHORT,
@@ -163,9 +166,14 @@ struct type {
     static type_ptr make_bool()   { return std::make_shared<type>(type_kind::BOOL);   }
 
     //
-    // Return a new signed char type.
+    // Return a new plain char type.
     //
     static type_ptr make_char()   { return std::make_shared<type>(type_kind::CHAR);   }
+
+    //
+    // Return a new signed char type.
+    //
+    static type_ptr make_schar()  { return std::make_shared<type>(type_kind::SCHAR);  }
 
     //
     // Return a new unsigned char type.

@@ -17,8 +17,75 @@
 #include "backend/z80/convention.h"
 #include <cassert>
 #include <cmath>
+#include <unordered_map>
 
 namespace xcc {
+
+namespace {
+
+std::string string_literal_pool_key(const ir_module::global_var &gv) {
+    std::string key;
+    key.reserve(gv.str_init.size() + 2);
+    key.push_back(static_cast<char>(gv.char_width & 0xff));
+    key.push_back('\0');
+    key += gv.str_init;
+    return key;
+}
+
+void remap_string_literal_operand(
+    operand &op,
+    const std::unordered_map<std::string, std::string> &aliases) {
+    if (!op.is_symbol())
+        return;
+    auto found = aliases.find(op.name);
+    if (found == aliases.end())
+        return;
+    op.name = found->second;
+}
+
+void merge_duplicate_string_literals(ir_module &mod) {
+    if (mod.string_literals.empty())
+        return;
+
+    std::unordered_map<std::string, std::string> canonical_by_key;
+    std::unordered_map<std::string, std::string> aliases;
+    std::vector<ir_module::global_var> pooled;
+    pooled.reserve(mod.string_literals.size());
+
+    for (const auto &gv : mod.string_literals) {
+        const std::string key = string_literal_pool_key(gv);
+        auto found = canonical_by_key.find(key);
+        if (found == canonical_by_key.end()) {
+            canonical_by_key.emplace(key, gv.name);
+            pooled.push_back(gv);
+        } else {
+            aliases.emplace(gv.name, found->second);
+        }
+    }
+
+    if (aliases.empty())
+        return;
+
+    for (auto &gv : mod.globals) {
+        for (auto &elem : gv.init_vals) {
+            auto found = aliases.find(elem.label);
+            if (found != aliases.end())
+                elem.label = found->second;
+        }
+    }
+
+    for (auto &fn : mod.functions) {
+        for (auto &ic : fn.icodes) {
+            remap_string_literal_operand(ic.result, aliases);
+            remap_string_literal_operand(ic.left, aliases);
+            remap_string_literal_operand(ic.right, aliases);
+        }
+    }
+
+    mod.string_literals = std::move(pooled);
+}
+
+} // namespace
 
 // ----- Helpers -------------------------------------------------------
 
@@ -170,6 +237,7 @@ std::unique_ptr<ir_module> ir_gen::lower(translation_unit &tu) {
     mod_ = std::make_unique<ir_module>();
     for (auto &d : tu.decls)
         if (d) gen_decl(*d);
+    merge_duplicate_string_literals(*mod_);
     return std::move(mod_);
 }
 

@@ -17,10 +17,12 @@
 #include <stdint.h>
 #include <kernel/sysobj.h>
 
-typedef enum event_state_e {
+typedef uint8_t event_state_t;
+
+enum {
 	nonsignaled,
 	signaled
-} event_state_t;
+};
 
 typedef struct event_s {
 	/* event is a system object */

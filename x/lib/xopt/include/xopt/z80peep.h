@@ -113,6 +113,9 @@ private:
     // Remove the second or a,a when two consecutive or a,a appear.
     bool rule_or_a_or_a(size_t i);
 
+    // Fold inclusive byte-threshold branches after cp #N.
+    bool rule_cp_threshold_branch_fold(size_t i);
+
     // Elide dec sp;dec sp;ld N(ix),l;ld N+1(ix),h;ld l,N(ix);ld h,N+1(ix)
     // when the temp slot is not referenced anywhere after the reload.
     bool rule_temp_store_reload(size_t i);
@@ -132,12 +135,145 @@ private:
     // ld hl,#imm; ld hl,X  →  ld hl,X  (dead first immediate load)
     bool rule_dead_hl_load(size_t i);
 
+    // ld l,X; ld h,Y  → removed when HL is overwritten before any read.
+    bool rule_dead_hl_pair_load(size_t i);
+
+    // ld l,X; ld h,#0; ld l,Y; ld h,Z  →  ld l,Y; ld h,Z
+    // when the second pair load does not read the old HL value.
+    bool rule_dead_hl_zero_extend_before_pair_load(size_t i);
+
+    // ld l,lo; ld h,hi; ld de,#0; or a,a; sbc hl,de; jp p/m,L
+    //   → bit 7,hi; jp z/nz,L when HL/DE/flags die on both paths.
+    bool rule_signed_zero_branch_from_high_bit(size_t i);
+
     // ld a,#0  →  xor a  (when not immediately followed by a conditional branch)
     bool rule_ld_a_zero(size_t i);
+
+    // ld a,#N; ld (hl),a  →  ld (hl),#N
+    // when A is dead after the store.
+    bool rule_hl_immediate_store_direct(size_t i);
+
+    // ld a,N(ix/iy); ld R,a  →  ld R,N(ix/iy)
+    // when A is overwritten before any later read.
+    bool rule_dead_a_indexed_load_shuttle(size_t i);
+
+    // ld a,#N; ld N(ix/iy),a  →  ld N(ix/iy),#N
+    // when A is overwritten before any later read.
+    bool rule_dead_a_indexed_immediate_store(size_t i);
+
+    // ld T(ix),a; cp/or...; jr/jp cc,L; [unreferenced labels]; ld a,T(ix)
+    //   → keep A live across the preserving compare/branch path.
+    bool rule_a_temp_reload_after_preserving_branch(size_t i);
+
+    // ld a,(hl); ld T(ix),a; or a,a; jr z,L; ld l,T(ix); ld h,#0
+    //   → keep the loaded byte in A and zero-extend it directly.
+    bool rule_byte_temp_zero_extend_after_test(size_t i);
+
+    // ld T(ix),e; ld T+1(ix),d; ld l,T(ix); ld h,T+1(ix); ex de,hl
+    //   → keep the existing DE value when HL is dead afterwards.
+    bool rule_dead_de_spill_reload_exchange(size_t i);
+
+    // ld d,h; ld e,l; <full HL reload>  →  ex de,hl; <full HL reload>
+    // when the exchange's old-DE value in HL is overwritten before any read.
+    bool rule_hl_to_de_before_hl_reload_exchange(size_t i);
+
+    // ld h,B; ld l,C; inc/dec hl...  →  ld hl,#offset; add hl,bc
+    // (also DE) when flags are dead after the materialized address.
+    bool rule_pair_copy_offset_materialize(size_t i);
+
+    // ld rr,#A; ld dd_hi,rr_hi; ld dd_lo,rr_lo; ld rr,#B
+    //   → ld dd,#A; ld rr,#B
+    // Also handles the common compiler form that routes the copy through BC
+    // when BC is dead after the copied value reaches the destination pair.
+    bool rule_pair_immediate_copy_reload_elide(size_t i);
+
+    // ld hl,#BASE; spill BASE; ld hl,#LIMIT; ld de,#BASE; sbc; DE=HL; reload BASE
+    //   → ld hl,#LIMIT; ld de,#BASE; sbc; ex de,hl
+    // when the spill is in the compiler temp frame and dies after the reload.
+    bool rule_temp_base_subtract_result_exchange(size_t i);
+
+    // ld bc,#A; <no BC/DD touch>; ld dd_hi,b; ld dd_lo,c
+    //   → ld dd,#A; <span>
+    // when BC dies after the copy.
+    bool rule_bc_immediate_copy_to_pair_direct(size_t i);
+
+    // ld rr,#K; ld M(ix),rr_lo; ld M+1(ix),rr_hi
+    //   → ld M(ix),#<K; ld M+1(ix),#>K
+    // when rr dies after the store.
+    bool rule_pair_immediate_store_direct(size_t i);
+
+    // ld bc,#A; add hl,bc; ld de,#B; add hl,de
+    //   → ld bc,#(A+B); add hl,bc
+    // when BC, DE, and flags are dead after the folded address calculation.
+    bool rule_const_add_bc_de_fold(size_t i);
 
     // ld N(ix),l; ld N+1(ix),h; ld l,N(ix); ld h,N+1(ix)  →  first 2 only
     // (store HL to IX slot then immediately reload it — HL is unchanged)
     bool rule_ix_store_reload(size_t i);
+
+    // push ix; pop hl; ld bc,#N; add hl,bc; [inc hl...]; ld/xor a; ld (hl),a
+    //   → ld/xor a; ld N+k(ix),a
+    // when the computed address in HL is dead afterwards.
+    bool rule_ix_local_byte_store_direct(size_t i);
+
+    // ld a,I(ix); ld T(ix),a; inc I(ix); ld a,T(ix); widen; stack-local base;
+    // add index; ld (hl),#N
+    //   → keep the old index in A/DE and skip the temporary round-trip.
+    bool rule_ix_postinc_local_immediate_store(size_t i);
+
+    // Repeated stack-local immediate stores through the same byte index:
+    //   ld a,I(ix); inc I(ix); ... base+I ...; ld (hl),#N
+    //   ld a,I(ix); inc I(ix); ... base+I ...; ld (hl),#M
+    //   ld a,I(ix);             ... base+I ...; ld (hl),#0
+    //     -> compute base+I once and emit sequential stores with inc hl.
+    bool rule_ix_indexed_stack_immediate_store_run(size_t i);
+
+    // ld hl,#-N; add hl,sp; ld sp,hl
+    //   → push af... [dec sp]
+    // for small stack-frame allocations where the add flags are dead.
+    bool rule_small_stack_alloc_push_af(size_t i);
+
+    // push ix; pop hl; ld bc,#N; add hl,bc; [inc/dec hl]*
+    //   → ld hl,#(N-current_sp_ix_delta); add hl,sp
+    // when the fixed frame allocation and current stack delta are visible.
+    bool rule_ix_addr_materialize_sp_relative(size_t i);
+
+    // ld a,X; push af; inc sp; ld a,Y; push af; inc sp
+    //   → ld b,X; ld c,Y; push bc
+    // when A/BC are dead while constructing the call frame.
+    bool rule_adjacent_byte_arg_push_pair(size_t i);
+
+    // ld l,T(ix); ld h,T+1(ix); ld (hl),#N
+    //   → ld K(ix),#N
+    // when T is a temp-frame slot holding a known IX-relative address.
+    bool rule_ix_temp_ptr_immediate_store_direct(size_t i);
+
+    // ld hl,#K; add hl,sp; [inc/dec hl...] with dead HL
+    //   → removed.
+    bool rule_dead_hl_sp_frameaddr_calc(size_t i);
+
+    // ld a,S(ix); add a,a*3; ld T(ix),a; ld e,S(ix); ld d,T(ix);
+    // ld a,e; xor d; ld S(ix),a
+    //   → keep S in E and shifted byte in D when T is dead afterwards.
+    bool rule_ix_byte_left_shift_xor_temp_elide(size_t i);
+
+    // ld S(ix),a; srl a*5; ld T(ix),a; ld e,S(ix); ld d,T(ix);
+    // ld a,e; xor d; ld S(ix),a
+    //   → keep S in E and shifted byte in D when T is dead afterwards.
+    bool rule_ix_byte_right_shift_xor_temp_elide(size_t i);
+
+    // ld l,I(ix); ld h,#0; add hl,hl; ld T(ix),l; ld T+1(ix),h;
+    // ld l,B(ix); ld h,B+1(ix); ld e,T(ix); ld d,T+1(ix); add hl,de
+    //   → keep doubled offset in DE directly when T/T+1 are dead afterwards.
+    bool rule_ix_scaled_offset_temp_elide(size_t i);
+
+    // ld hl,S(ix); spill to T(ix); loop: reload T; ld a,(hl); ...; inc T; jr loop
+    //   → keep the loop scan pointer in HL when T dies at the forward exit.
+    bool rule_ix_pointer_scan_temp_to_hl_loop(size_t i);
+
+    // Collapse the temp-spilled 2*i + 4*i + 8*i expansion into register
+    // shift-adds for byte-indexed arrays with 14-byte elements.
+    bool rule_ix_index14_scaled_base_temp_elide(size_t i);
 
     // push hl; ld hl,#0; pop de; or a,a; sbc hl,de; jp z/nz,L
     //   →  ld a,h; or a,l; jp z/nz,L   (zero-compare shortcut)
@@ -150,6 +286,22 @@ private:
     // tested value is already in HL.
     bool rule_hl_nonzero_materialize(size_t i);
 
+    // ld l,N(ix); ld h,N+1(ix); ld a,h; or a,l; jr/jp z/nz,L
+    //   → ld a,N+1(ix); or N(ix); jr/jp z/nz,L
+    // when HL is dead on both branch paths.
+    bool rule_ix_word_zero_test_direct(size_t i);
+
+    // ld T(ix),lo; ld T+1(ix),hi; ld a,T+1(ix); or T(ix); jr/jp z/nz,L
+    //   → ld T(ix),lo; ld T+1(ix),hi; ld a,hi; or lo; jr/jp z/nz,L
+    // for matching BC/DE/HL source pairs.
+    bool rule_ix_word_store_zero_test_from_pair(size_t i);
+
+    // ld T(ix),l; ld T+1(ix),h; ...; ld l,T(ix); ld h,T+1(ix);
+    // ld a,h; or a,l; jr/jp z/nz,L
+    //   → ld T(ix),l; ld T+1(ix),h; ...; ld a,h; or a,l; jr/jp z/nz,L
+    // when the short intervening span preserves HL.
+    bool rule_ix_hl_store_zero_test_reload_elide(size_t i);
+
     // jp [cc,] L  →  jr [cc,] L  when the estimated final displacement is
     // within JR range. Only unconditional and z/nz/c/nc branches can be
     // shortened this way.
@@ -158,10 +310,42 @@ private:
     // push hl; pop bc  →  ld b,h; ld c,l  (same size, faster)
     bool rule_push_hl_pop_bc(size_t i);
 
+    // push de; pop hl  →  ex de,hl
+    // when the old DE value is overwritten before any later read.
+    bool rule_push_de_pop_hl_to_ex(size_t i);
+
+    // pop bc repeated 6+ times  →  ld hl,#bytes; add hl,sp; ld sp,hl
+    // when HL and flags are dead after the stack adjustment.
+    bool rule_pop_bc_run_sp_adjust(size_t i);
+
+    // push de; pop hl; ld b,h; ld c,l[; ld a,l]
+    //   →  ld b,d; ld c,e[; ld a,e]
+    // when HL is dead on every following path.
+    bool rule_dead_hl_de_stack_copy_to_bc(size_t i);
+
+    // ld c,a; ld b,#0  → removed when BC is overwritten/clobbered before read.
+    bool rule_dead_bc_zero_extend_from_a(size_t i);
+
+    // ld b,h; ld c,l; ld d,b; ld e,c  →  ld d,h; ld e,l
+    // when BC is dead on every following path.
+    bool rule_dead_bc_hl_to_de_copy(size_t i);
+
     // push de/bc; pop hl/de/bc  →  register-register copy
     // Same size as the stack shuttle, but much faster. Only enabled for
     // speed-biased presets so -Os output remains byte-for-byte conservative.
     bool rule_push_pair_copy_adjacent_speed(size_t i);
+
+    // push de; pop hl; <HL/DE-preserving stores>; ex de,hl; ld hl,#X; ex de,hl
+    //   → ld de,#X because the copy made HL == DE.
+    bool rule_de_hl_equal_load_exchange(size_t i);
+
+    // push de; pop hl; <stores/tests that only read H/L>
+    //   → rewrite those reads to D/E and remove the stack copy when HL is dead.
+    bool rule_de_result_hl_forward(size_t i);
+
+    // ld l,A(ix); ld h,A+1(ix); ex de,hl; ld l,B(ix); ld h,B+1(ix); or a,a; sbc hl,de
+    //   → ld e,A(ix); ld d,A+1(ix); ld l,B(ix); ld h,B+1(ix); or a,a; sbc hl,de
+    bool rule_ix_pair_compare_load_de_direct(size_t i);
 
     // Experimental superoptimizer-inspired length-2 accumulator rewrites.
     // These are exact Z80 flag/value equivalents, but live only in the
@@ -203,21 +387,133 @@ private:
     // and equivalent C/B, D/E, E/D, H/L, and L/H forms.
     bool rule_superopt_separated_pair_immediate_load(size_t i);
 
+    // Experimental temp-frame constant word forwarding:
+    //   ld hl,#K; ld T(ix),l; ld T+1(ix),h; ...; ld rr_low,T(ix); ld rr_high,T+1(ix)
+    //     -> ld rr,#K
+    // for compiler temp-frame slots whose last direct definition is a
+    // constant word store.
+    bool rule_superopt_temp_const_word_load_direct(size_t i);
+
+    // Experimental direct call-result store:
+    //   call f; ex de,hl; [ld b,h; ld c,l;] ld M,l; ld N,h
+    //     -> call f; [ld b,d; ld c,e;] ld M,e; ld N,d
+    // when HL and DE are dead after the store, and BC is dead if its copy is
+    // removed entirely.
+    bool rule_superopt_call_result_store_de_direct(size_t i);
+
+    // Experimental dead-BC store-copy cleanup:
+    //   ld b,h; ld c,l; ld M,l; ld N,h  ->  ld M,l; ld N,h
+    // when BC is overwritten before any later read.
+    bool rule_superopt_dead_bc_store_copy(size_t i);
+
+    // Experimental low-byte zero extension to DE:
+    //   ld a,h; and #0; ld h,a; ld b,h; ld c,l; ld d,b; ld e,c
+    //     -> and #0; ld d,a; ld e,l
+    // when HL and BC are dead after the sequence.
+    bool rule_superopt_lowbyte_zero_extend_to_de(size_t i);
+
     // Experimental direct IX word increment:
     //   ld l,N(ix); ld h,N+1(ix); inc hl; ld N(ix),l; ld N+1(ix),h
     //     -> inc N(ix); jr nz,L; inc N+1(ix); L:
-    // when the following path overwrites flags before any observer.
+    // when the following path overwrites HL and flags before any observer.
     bool rule_superopt_ix_word_inc_direct(size_t i);
+
+    // Experimental direct IX word add-one:
+    //   ld l,N(ix); ld h,N+1(ix); ld de,#1; add hl,de; store back
+    //     -> inc N(ix); jr nz,L; inc N+1(ix); L:
+    // when the following path overwrites HL, DE, and flags before any observer.
+    bool rule_superopt_ix_word_add1_direct(size_t i);
+
+    // ld rr,#small; add hl,rr  ->  inc/dec hl repeated
+    // when the following path overwrites rr and flags before any observer.
+    bool rule_add_hl_de_one_to_inc(size_t i);
 
     // Experimental direct IX byte increment:
     //   ld a,N(ix); add a,#1; ld N(ix),a  ->  inc N(ix)
     // when both A and flags are proven dead along the following path.
     bool rule_superopt_ix_byte_inc_direct(size_t i);
 
+    // Direct IX byte increment with immediate zero test:
+    //   ld a,N(ix); add a,#1; ld N(ix),a; or a,a; jr/jp z/nz,L
+    //     -> inc N(ix); ld a,N(ix); or a,a; jr/jp z/nz,L
+    bool rule_ix_byte_inc_test_direct(size_t i);
+
+    // Direct register byte increment/decrement:
+    //   ld a,r; add/sub a,#1; ld r,a  ->  inc/dec r
+    // when A and flags are dead afterwards.
+    bool rule_reg_byte_inc_dec_direct(size_t i);
+
+    // __divuint remainder preservation cleanup:
+    //   call __divuint; ld b,h; ld c,l; store DE; ld h,b; ld l,c; ld a,l; ld r,a
+    //     -> call __divuint; [preserve needed B/C side effects]; store DE; ld a,l; ld r,a
+    bool rule_divuint_remainder_bc_restore_elide(size_t i);
+
+    // Direct IX byte decrement:
+    //   ld a,N(ix); sub #1; ld N(ix),a  ->  dec N(ix)
+    // when both A and flags are proven dead along the following path.
+    bool rule_ix_byte_dec_direct(size_t i);
+
+    // Fold A/E/D byte add shuttle:
+    //   ld a,r; ld e,a; ld d,X; ld a,e; add a,d; ld r,a
+    //     -> ld a,r; add a,X; ld r,a
+    // when DE is dead afterwards.
+    bool rule_reg_byte_add_shuttle_elide(size_t i);
+
+    // Fold E/D byte add/sub shuttle back into a byte destination:
+    //   ld e,X; ld d,Y; ld a,e; add/sub a,d; ld X,a
+    //     -> ld a,X; add/sub a,Y; ld X,a
+    // when DE is dead afterwards.
+    bool rule_byte_addsub_shuttle_elide(size_t i);
+
+    // Fold A-mediated E/D byte add/sub shuttle:
+    //   ld e,X; ld a,Y; ld d,a; ld a,e; add/sub a,d; ld X,a
+    //     -> ld a,X; add/sub a,Y; ld X,a
+    // when DE is dead afterwards.
+    bool rule_byte_addsub_a_to_d_shuttle_elide(size_t i);
+
+    // Remove dead D copy in byte x*10 expansion:
+    //   ld e,a; add a,a; add a,a; ld d,a; add a,e
+    //     -> ld e,a; add a,a; add a,a; add a,e
+    bool rule_dead_d_in_byte_mul10(size_t i);
+
+    // Direct IX byte bit set:
+    //   ld a,N(ix); or #bitmask; ld N(ix),a  ->  set bit,N(ix)
+    // when the bitmask has one bit and both A and flags are dead afterwards.
+    bool rule_ix_byte_or_mask_set_direct(size_t i);
+
+    // Fold spilled 8-bit x*10:
+    //   x2=temp(x+x); x8=temp(x<<3); x=x2+x8
+    // into straight-line A/E/D arithmetic while preserving final A/D/E/flags.
+    bool rule_ix_byte_mul10_spill_elide(size_t i);
+
+    // Fold spilled 8-bit addition:
+    //   ld a,X(ix); ld e,a; ld a,Y(ix); ld d,a; ld a,e; add a,d; ld Z(ix),a
+    //     -> ld a,X(ix); add a,Y(ix); ld Z(ix),a
+    // when DE is dead afterwards.
+    bool rule_ix_byte_add_spill_elide(size_t i);
+
+    // Fold spilled 8-bit addition feeding a zero/nonzero branch while keeping
+    // the explicit or a,a flag normalization.
+    bool rule_ix_byte_add_spill_branch_elide(size_t i);
+
+    // cp #K; jr z,L; jr c,L; jr out  ->  cp #(K+1); jr c,L; jr out
+    // when flags are dead at both branch targets.
+    bool rule_unsigned_le_branch_fold(size_t i);
+
     // Experimental IX byte load forwarding:
     //   ld a,N(ix); ld r,a  ->  ld r,N(ix)
     // when the accumulator value is proven dead along the following path.
     bool rule_superopt_ix_byte_load_forward(size_t i);
+
+    // Experimental direct IX byte ALU forwarding:
+    //   ld e,X(ix); ld d,Y(ix); ld a,e; op a,d  ->  ld a,X(ix); op a,Y(ix)
+    // when DE is overwritten before any later read.
+    bool rule_superopt_ix_byte_alu_forward(size_t i);
+
+    // Experimental zero-clear cleanup:
+    //   ld a,r; and #0; ld r,a  ->  ld r,#0
+    // when A and flags are overwritten before any observer.
+    bool rule_superopt_dead_a_zero_reg(size_t i);
 
     // Experimental HL byte load forwarding:
     //   ld a,(hl); ld r,a  ->  ld r,(hl)
@@ -314,6 +610,30 @@ private:
     //     -> ex de,hl; <epilogue>
     // `BC` is caller-saved and not part of the modern return value.
     bool rule_superopt_dead_bc_return_copy(size_t i);
+
+    // Experimental return cleanup:
+    //   ld b,h; ld c,l; ld d,b; ld e,c; <epilogue>
+    //     -> ld d,h; ld e,l; <epilogue>
+    // `BC` is caller-saved and not part of the modern return value.
+    bool rule_superopt_hl_via_bc_return_de_copy(size_t i);
+
+    // Experimental modern-ABI direct return load:
+    //   ld hl,#imm-or-(abs); ld d,h; ld e,l; <epilogue>
+    //     -> ld de,#imm-or-(abs); <epilogue>
+    // because the modern ABI returns 16-bit values in DE.
+    bool rule_superopt_hl_load_return_de_direct(size_t i);
+
+    // Experimental modern-ABI direct IX return load:
+    //   ld l,N(ix); ld h,M(ix); ld d,h; ld e,l; <epilogue>
+    //     -> ld e,N(ix); ld d,M(ix); <epilogue>
+    // because the modern ABI returns 16-bit values in DE.
+    bool rule_superopt_ix_word_return_de_direct(size_t i);
+
+    // Low-byte return synthesis:
+    //   ld b,#0; ld hl,#K; add hl,bc; add hl,de; ld a,l; ret
+    //     -> ld a,e; add a,c; add a,#K; ret
+    // when only the byte return value in A escapes.
+    bool rule_superopt_lowbyte_sum_return_direct(size_t i);
 
     // Experimental pair-copy forwarding:
     //   ld d,b; ld e,c; [or a,a;] sbc hl,de
@@ -416,6 +736,14 @@ private:
     // ld N(ix),a; ld a,N(ix)  →  ld N(ix),a
     // (byte store to IX slot then immediate reload — A is unchanged)
     bool rule_ix_byte_store_reload(size_t i);
+
+    // ld N(ix),a; ld r,N(ix)  →  ld N(ix),a; ld r,a
+    // (immediate byte store forwarding for one-shot temporaries)
+    bool rule_ix_byte_store_forward(size_t i);
+
+    // ld T(ix),r where T is in the compiler temp frame and T is never
+    // referenced again in the function  -> removed.
+    bool rule_dead_temp_ix_store(size_t i);
 
     // jr/jp cc1,L; ld hl,#A; jr/jp L_end; L: ld hl,#B; L_end: ld a,h; or a,l; jr/jp cc2,tgt
     // →  jr/jp combined_cc, tgt

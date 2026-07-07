@@ -21,12 +21,6 @@
 
 service_t *_svc_first=NULL;
 
-uint8_t _svc_match_eq(list_item_t *p, uint16_t arg) {
-    char *name=(char *)arg;
-    service_t *s=(service_t *)p;
-    return ( strcmp (name,s->name)==0 );
-}
-
 service_t* svc_register(const char *name, void *service) {
     service_t *s;
 	if ( s = (service_t *)so_create(
@@ -39,19 +33,27 @@ service_t* svc_register(const char *name, void *service) {
 	return s;
 }
 
-void svc_unregister(service_t *s) {
-    so_destroy((void **)&_svc_first, (void *)s);
+[[sdcc::naked]] void svc_unregister(service_t *s) {
+    s;
+    __asm__(
+        "ex de, hl\n"
+        "ld hl, #__svc_first\n"
+        "jp _so_destroy\n");
 }
 
 void *_svc_query(const char *name) {
-    list_item_t *prev;
-    service_t *s = (service_t *)list_find(
-        (list_item_t *)_svc_first,
-        &prev,
-        _svc_match_eq,
-        (uint16_t) name);
-    if (s!=NULL) return s->fntable;
-    else return NULL;
+    service_t *s = _svc_first;
+    uint8_t guard = 0;
+
+    while (s) {
+        if (strcmp(name, s->name) == 0) {
+            return s->fntable;
+        }
+        s = (service_t *)s->hdr.next;
+        if (++guard == 0) break;
+    }
+
+    return NULL;
 }
 
 /* RST10 bridge:
@@ -60,6 +62,6 @@ void *_svc_query(const char *name) {
  */
 [[sdcc::naked]] void svc_query_rst10(void) {
     __asm__(
-        "call _svc_query\n"
+        "call __svc_query\n"
         "ret\n");
 }

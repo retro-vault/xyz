@@ -60,7 +60,8 @@ std::string sdcc_debug_emitter::cdb_base_type(const type *t) {
     switch (t->kind) {
     case type_kind::VOID:    return "SV:S";
     case type_kind::BOOL:    return "SC:U";
-    case type_kind::CHAR:    return "SC:S";
+    case type_kind::CHAR:    return plain_char_is_unsigned() ? "SC:U" : "SC:S";
+    case type_kind::SCHAR:   return "SC:S";
     case type_kind::UCHAR:   return "SC:U";
     case type_kind::CHAR8T:  return "SC:U";
     case type_kind::SHORT:   return "SI:S";

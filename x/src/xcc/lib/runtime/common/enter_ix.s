@@ -27,10 +27,15 @@ ___sdcc_enter_ix:
         ; __sdcc_enter_ix
         ; inputs:  stack = return address (caller's code)
         ; outputs: ix = frame pointer (sp after push ix)
-        ; clobbers: hl
+        ; clobbers: alternate bc
 __sdcc_enter_ix:
-        pop     hl                      ; hl = return address
+        exx
+        pop     bc                      ; bc' = return address
+        exx
         push    ix                      ; save caller's frame pointer
         ld      ix, #0
         add     ix, sp
-        jp      (hl)                    ; resume in the calling function
+        exx
+        push    bc                      ; restore continuation for RET
+        exx
+        ret                             ; resume in the calling function

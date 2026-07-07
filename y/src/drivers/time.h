@@ -19,11 +19,11 @@ typedef unsigned int clock_t;
 /*
  * Return the current system tick counter.
  */
-extern clock_t __clock(void);
-extern void __clock_tick(void);
+extern clock_t _clock(void);
+extern void _clock_tick(void);
 
-#define clock __clock
-#define _clock __clock
-#define _clock_tick __clock_tick
+#define clock _clock
+#define __clock _clock
+#define __clock_tick _clock_tick
 
 #endif /* __TIME_H__ */

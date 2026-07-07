@@ -18,12 +18,12 @@
 #include <tty/tty_print.h>
 
 /* prints the string of width with flags */
-void _prints(const char *string, int width, int flags)
+static void _prints(const char *string, unsigned char width, unsigned char flags)
 {
-	int padchar = ' ';
+	char padchar = ' ';
 
 	if (width > 0) {
-		int len = 0;
+		unsigned char len = 0;
 		const char *ptr;
 		for (ptr = string; *ptr; ++ptr) ++len;
 		if (len >= width) width = 0;
@@ -45,11 +45,17 @@ void _prints(const char *string, int width, int flags)
 }
 
 /* print the integer */
-void _printi(int i, int base, int sign, int width, int flags, int letbase)
+static void _printi(
+    int i,
+    unsigned char base,
+    unsigned char sign,
+    unsigned char width,
+    unsigned char flags,
+    unsigned char letbase)
 {
 	char print_buf[PRINT_BUF_LEN];
 	char *s;
-	int t, neg = 0, pc = 0;
+	unsigned char t, neg = 0;
 	unsigned int u = i;
 	if (i == 0) {
 		print_buf[0] = '0';
@@ -73,7 +79,6 @@ void _printi(int i, int base, int sign, int width, int flags, int letbase)
 	if (neg) {
 		if( width && (flags & PAD_ZERO) ) {
 			tty_putc ('-');
-			++pc;
 			--width;
 		}
 		else {
@@ -89,15 +94,12 @@ void tty_printf(const char *format, ...)
     va_list ap;
     va_start(ap, format);
 
-	int width, flags;
+	unsigned char width, flags;
 	char scr[2];
-	union {
-		char c;
-		char *s;
-		int i;
-		unsigned int u;
-		void *p;
-	} u;
+    unsigned int value;
+    char *str;
+    unsigned char base, sign, letbase;
+    char ch;
 
     /* for each char in format */
 	for (; *format != 0; ++format) {
@@ -129,36 +131,46 @@ void tty_printf(const char *format, ...)
             /* "main" format specifier */
 			switch (*format) {
 				case('d'):              /* decimal! */
-					u.i = va_arg(ap, int);
-					_printi(u.i, 10, 1, width, flags, 'a');
-					break;
+					value = (unsigned int)va_arg(ap, int);
+                    base = 10;
+                    sign = 1;
+                    letbase = 'a';
+                    goto print_number;
 
 				case('u'):              /* unsigned */
-					u.u = va_arg(ap, unsigned int);
-					_printi(u.u, 10, 0, width, flags, 'a');
-					break;
+					value = va_arg(ap, unsigned int);
+                    base = 10;
+                    sign = 0;
+                    letbase = 'a';
+                    goto print_number;
 
 				case('x'):              /* hex */
-					u.u = va_arg(ap, unsigned int);
-					_printi(u.u, 16, 0, width, flags, 'a');
-					break;
+					value = va_arg(ap, unsigned int);
+                    base = 16;
+                    sign = 0;
+                    letbase = 'a';
+                    goto print_number;
 
 				case('X'):              /* hex, capital */
-					u.u = va_arg(ap, unsigned int);
-					_printi(u.u, 16, 0, width, flags, 'A');
+					value = va_arg(ap, unsigned int);
+                    base = 16;
+                    sign = 0;
+                    letbase = 'A';
+print_number:
+					_printi((int)value, base, sign, width, flags, letbase);
 					break;
 
 				case('c'):              /* char */
-					u.c = va_arg(ap, int);
-					scr[0] = u.c;
+					ch = (char)va_arg(ap, int);
+					scr[0] = ch;
 					scr[1] = '\0';
 					_prints(scr, width, flags);
 					break;
 
 				case('s'):              /* string */
-					u.s = va_arg(ap, char *);
+					str = va_arg(ap, char *);
                     #pragma disable_warning 196
-					_prints(u.s ? u.s : "(null)", width, flags);
+					_prints(str ? str : "(null)", width, flags);
 					break;
 
 				default:

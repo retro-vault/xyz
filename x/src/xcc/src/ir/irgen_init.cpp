@@ -29,6 +29,7 @@ bool is_char_array_type(type_ptr ty) {
         return false;
     type_kind elem = ty->base->unqual()->kind;
     return elem == type_kind::CHAR ||
+           elem == type_kind::SCHAR ||
            elem == type_kind::UCHAR ||
            elem == type_kind::CHAR8T;
 }
@@ -38,6 +39,7 @@ bool is_char_pointer_type(type_ptr ty) {
         return false;
     type_kind elem = ty->base->unqual()->kind;
     return elem == type_kind::CHAR ||
+           elem == type_kind::SCHAR ||
            elem == type_kind::UCHAR ||
            elem == type_kind::CHAR8T;
 }

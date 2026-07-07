@@ -241,6 +241,7 @@ static int compile_source_to_text(const std::string &input_path,
 
     set_float_format(opts.float_fmt);
     set_default_call_abi(opts.default_call_abi);
+    set_plain_char_unsigned(opts.plain_char_unsigned);
 
     diag_engine diag;
     diag.set_options(opts.diagnostics);
@@ -303,6 +304,7 @@ static int compile_source_to_text(const std::string &input_path,
 
         z80_gen codegen(*emitter);
         codegen.set_opt_settings(opts.opt_settings);
+        codegen.set_standalone_assembly_output(opts.mode == output_mode::ASSEMBLY);
         if (opts.debug) {
             std::string base = out_path;
             auto dot = base.rfind('.');
@@ -351,7 +353,7 @@ static int compile_source_to_text(const std::string &input_path,
             xopt_opts.level = xopt::optimization_level::of;
             break;
         case opt_level::O3:
-            xopt_opts.level = xopt::optimization_level::o3;
+            xopt_opts.level = xopt::optimization_level::of;
             break;
         }
         asm_text = xopt::optimize_assembly(asm_text, xopt_opts);

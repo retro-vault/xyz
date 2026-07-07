@@ -45,6 +45,7 @@ static constexpr opt_flag_binding k_opt_flag_bindings[] = {
     {"function-const-eval", &optimization_settings::function_const_eval},
     {"dead-params", &optimization_settings::dead_params},
     {"merge-identical-functions", &optimization_settings::merge_identical_functions},
+    {"inline-trivial-internal-functions", &optimization_settings::inline_trivial_internal_functions},
     {"inline-static-functions", &optimization_settings::inline_static_functions},
     {"cfg-cleanup", &optimization_settings::cfg_cleanup},
     {"jump-threading", &optimization_settings::jump_threading},
@@ -249,6 +250,13 @@ static void add_default_call_mode_defines(options &opts) {
     opts.defines.push_back(std::string("__SDCCCALL=") + std::to_string(abi_id));
 }
 
+static void add_plain_char_defines(options &opts) {
+    if (!opts.plain_char_unsigned)
+        return;
+    opts.defines.push_back("__CHAR_UNSIGNED__=1");
+    opts.defines.push_back("__SDCC_CHAR_UNSIGNED=1");
+}
+
 static std::string platform_define_name(const std::string &platform_name) {
     std::string name = "__XCC_PLATFORM_";
     for (unsigned char ch : platform_name) {
@@ -427,11 +435,11 @@ void options::usage(const char *argv0) {
         "  --c1mode          Read preprocessed C from stdin and emit assembly\n"
         "  -c1-mode          Alias for --c1mode\n"
         "  -O0               No optimization (default)\n"
-        "  -O1               Enable peephole optimizer\n"
-        "  -O2               Enable general optimization\n"
-        "  -Of               Enable speed optimization\n"
-        "  -O3               Enable experimental optimization (Here be dragons)\n"
-        "  -Os               Enable size optimization\n"
+        "  -O1               Late target cleanup only (peephole + tiny backend fusions)\n"
+        "  -O2               Smart optimizer baseline (IR + backend + O1 cleanup)\n"
+        "  -Of               Speed-biased smart optimization\n"
+        "  -O3               Reserved experimental slot (currently same as -Of)\n"
+        "  -Os               Size-biased smart optimization\n"
         "  --opt-code-size   Alias for -Os (SDCC compatibility)\n"
         "  --opt-code-speed  Alias for -Of (SDCC compatibility)\n"
         "  -f<name>          Enable one optimization family\n"
@@ -459,6 +467,8 @@ void options::usage(const char *argv0) {
         "  --float-format=<fmt>\n"
         "                    Float ABI: ieee32, ieee16, fixed8_8, fixed16_16, fixed24_8\n"
         "  --sdcccall <0|1>  SDCC-compatible default ABI selector\n"
+        "  -fsigned-char     Make plain 'char' signed\n"
+        "  -funsigned-char   Make plain 'char' unsigned (default)\n"
         "  -g                Emit debug info\n"
         "  --dump-ir         Dump lowered IR to stderr\n"
         "  --mode=sdcc       Output for SDCC sdasz80 assembler (default)\n"
@@ -571,9 +581,7 @@ options options::parse(int argc, char **argv) {
             opts.opt_settings = optimization_settings::for_level(opts.opt);
         } else if (strcmp(a, "-O2") == 0) {
             opts.opt = opt_level::O2;
-            // Route -O2 through the mature high-optimization profile so
-            // large real-world translation units do not balloon past 64K.
-            opts.opt_settings = optimization_settings::for_level(opt_level::Of);
+            opts.opt_settings = optimization_settings::for_level(opts.opt);
         } else if (strcmp(a, "-Of") == 0) {
             opts.opt = opt_level::Of;
             opts.opt_settings = optimization_settings::for_level(opts.opt);
@@ -583,6 +591,10 @@ options options::parse(int argc, char **argv) {
         } else if (strcmp(a, "-Os") == 0) {
             opts.opt = opt_level::Os;
             opts.opt_settings = optimization_settings::for_level(opts.opt);
+        } else if (strcmp(a, "-fsigned-char") == 0) {
+            opts.plain_char_unsigned = false;
+        } else if (strcmp(a, "-funsigned-char") == 0) {
+            opts.plain_char_unsigned = true;
         } else if (strncmp(a, "-fno-", 5) == 0) {
             const char *name = a + 5;
             if (!apply_opt_flag(opts, name, false))
@@ -701,6 +713,7 @@ options options::parse(int argc, char **argv) {
         add_default_include_paths(opts, argv[0]);
     add_float_format_defines(opts);
     add_default_call_mode_defines(opts);
+    add_plain_char_defines(opts);
     if (!opts.platform_name.empty()) {
         opts.defines.push_back(platform_define_name(opts.platform_name));
     }

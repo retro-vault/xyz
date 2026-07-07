@@ -16,16 +16,29 @@
 event_t *_evt_first=NULL;
 
 /* creates new event, adds to the list of events */
-event_t *evt_create(void *owner) {
-	event_t *e;
-	if ( e = (event_t *)so_create((void **)&_evt_first, sizeof(event_t), owner) )
-		e->state=nonsignaled;
-	return e;
+[[sdcc::naked]] event_t *evt_create(void *owner) {
+    owner;
+    __asm__(
+        "push hl\n"
+        "ld de, #5\n"
+        "ld hl, #__evt_first\n"
+        "call _so_create\n"
+        "ld a, e\n"
+        "or d\n"
+        "ret z\n"
+        "ld hl, #4\n"
+        "add hl, de\n"
+        "ld (hl), #0\n"
+        "ret\n");
 }
 
 /* destroys existing event, removes from the list of events */
-event_t *evt_destroy(event_t *e) {
-	return (event_t *)so_destroy((void **)&_evt_first, (void *)e);	
+[[sdcc::naked]] event_t *evt_destroy(event_t *e) {
+    e;
+    __asm__(
+        "ex de, hl\n"
+        "ld hl, #__evt_first\n"
+        "jp _so_destroy\n");
 }
 
 /* set event state */

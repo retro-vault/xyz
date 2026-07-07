@@ -13,9 +13,9 @@
 #include <tty/tty.h>
 
 /*
- * Scratch buffer length used by the formatter implementation.
+ * Scratch buffer length for signed 16-bit decimal output plus NUL.
  */
-#define PRINT_BUF_LEN 128
+#define PRINT_BUF_LEN 7
 
 /*
  * Internal formatting flags used by the tty printf implementation.

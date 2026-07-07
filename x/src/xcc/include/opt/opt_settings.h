@@ -16,17 +16,18 @@ namespace xcc {
 
 enum class opt_level {
     O0 = 0, // no optimization
-    O1 = 1, // peephole rules
-    O2 = 2, // general optimization
-    O3 = 3, // single-translation-unit experimental optimization
-    Of = 4, // speed optimization
-    Os = 5, // size optimization
+    O1 = 1, // late target cleanup only (peephole + tiny backend fusions)
+    O2 = 2, // smart optimizer baseline (IR + backend + O1 cleanup)
+    O3 = 3, // reserved experimental slot (currently aliases the stable -Of profile)
+    Of = 4, // speed-biased smart optimization
+    Os = 5, // size-biased smart optimization
 };
 
 struct optimization_settings {
     opt_level level = opt_level::O0;
 
-    // Late assembly passes.
+    // Late assembly passes. These always run after IR optimization and
+    // target code generation; they never replace the IR pipeline.
     bool peephole = false;
 
     // Module-level IR passes.
@@ -36,6 +37,7 @@ struct optimization_settings {
     bool function_const_eval = false;
     bool dead_params = false;
     bool merge_identical_functions = false;
+    bool inline_trivial_internal_functions = false;
     bool inline_static_functions = false;
 
     // Per-function IR passes.
@@ -79,6 +81,7 @@ struct optimization_settings {
 
         case opt_level::O1:
             s.peephole = true;
+            s.compare_ifx_fusion = true;
             break;
 
         case opt_level::O2:
@@ -89,10 +92,10 @@ struct optimization_settings {
             s.function_const_eval = true;
             s.dead_params = true;
             s.merge_identical_functions = true;
+            s.inline_trivial_internal_functions = true;
             s.inline_static_functions = false;
             s.cfg_cleanup = true;
             s.jump_threading = true;
-            s.address_deref_fold = false;
             s.value_propagation = true;
             s.constant_folding = true;
             s.algebraic_simplify = true;
@@ -109,27 +112,24 @@ struct optimization_settings {
             s.promoted_byte_compare = true;
             s.promoted_byte_ops = true;
             s.rotate_combine = true;
-            s.duplicate_block_merge = false;
+            s.duplicate_block_merge = true;
             s.merge_tails = false;
             s.local_frame_compaction = true;
             s.regalloc = true;
             s.compare_ifx_fusion = true;
             s.frame_omit = true;
+            s.prealloc_temp_frame = true;
             s.switch_jump_tables = true;
             break;
 
         case opt_level::Of:
-            s = for_level(opt_level::Os);
+            s = for_level(opt_level::O2);
             s.level = level;
             break;
 
         case opt_level::O3:
             s = for_level(opt_level::Of);
             s.level = level;
-            s.address_deref_fold = true;
-            s.duplicate_block_merge = true;
-            s.merge_tails = true;
-            s.prealloc_temp_frame = true;
             break;
 
         case opt_level::Os:
@@ -150,6 +150,7 @@ struct optimization_settings {
                function_const_eval ||
                dead_params ||
                merge_identical_functions ||
+               inline_trivial_internal_functions ||
                inline_static_functions;
     }
 

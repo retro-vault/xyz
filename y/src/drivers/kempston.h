@@ -16,7 +16,7 @@ extern void mouse_calibrate(uint8_t x, uint8_t y);
 /*
  * Poll the Kempston mouse and store the latest state.
  */
-extern void __mouse_scan(void *mouse_info);
-#define _mouse_scan __mouse_scan
+extern void _mouse_scan(void *mouse_info);
+#define __mouse_scan _mouse_scan
 
 #endif /* __KEMPSTON_H__ */

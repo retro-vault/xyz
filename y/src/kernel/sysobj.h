@@ -13,8 +13,8 @@
 /*
  * System-owned allocator heap supplied by the kernel.
  */
-extern void *__sys_heap;
-#define _sys_heap __sys_heap
+extern void *_sys_heap;
+#define __sys_heap _sys_heap
 
 /*
  * Base header shared by all tracked YOS system objects.

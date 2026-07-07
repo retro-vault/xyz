@@ -11,26 +11,14 @@
  */
 #include <kernel/mem.h>
 
-uint8_t match_free_block(list_item_t *p, uint16_t size)
-{
-    block_t *b = (block_t *)p;
-    return !(b->stat & ALLOCATED) && b->size >= size;
-}
-
-static uint8_t match_owner_block(list_item_t *p, uint16_t owner)
-{
-    block_t *b = (block_t *)p;
-    return (b->stat & ALLOCATED) && b->hdr.owner == (void *)owner;
-}
-
-void merge_with_next(block_t *b)
+static void merge_with_next(block_t *b)
 {
     block_t *bnext = b->hdr.next;
     b->size += (BLK_SIZE + bnext->size);
     b->hdr.next = bnext->hdr.next;
 }
 
-void split(block_t *b, uint16_t size)
+static void split(block_t *b, uint16_t size)
 {
     block_t *nw;
     nw = (block_t *)((uint16_t)(b->data) + size);
@@ -65,22 +53,25 @@ void mem_init(void *heap, uint16_t size)
  */
 void *mem_allocate(void *heap, uint16_t size, void *owner)
 {
-
-    block_t *prev;
     block_t *b;
+    uint8_t guard = 0;
 
-    b = (block_t *)list_find((list_item_t *)heap, (list_item_t **)&prev, match_free_block, size);
-
-    if (b)
+    b = (block_t *)heap;
+    while (b)
     {
-        if (b->size - size > BLK_SIZE + MIN_CHUNK_SIZE)
-            split(b, size);
-        b->hdr.owner = owner;
-        b->stat = ALLOCATED;
-        return b->data;
+        if (!(b->stat & ALLOCATED) && b->size >= size)
+        {
+            if (b->size - size > BLK_SIZE + MIN_CHUNK_SIZE)
+                split(b, size);
+            b->hdr.owner = owner;
+            b->stat = ALLOCATED;
+            return b->data;
+        }
+        b = (block_t *)b->hdr.next;
+        if (++guard == 0) break;
     }
-    else
-        return NULL;
+
+    return NULL;
 }
 
 /*
@@ -88,33 +79,41 @@ void *mem_allocate(void *heap, uint16_t size, void *owner)
  */
 void *mem_free(void *heap, void *p)
 {
-
     block_t *prev;
     block_t *b;
+    uint8_t guard = 0;
 
     /* calculate block address from pointer */
     b = (block_t *)((uint16_t)p - BLK_SIZE);
 
     /* make sure it is a valid memory block by finding it */
-    if (list_find((list_item_t *)heap, (list_item_t **)&prev, list_match_eq, (uint16_t)b))
+    prev = NULL;
     {
-        b->hdr.owner = NONE; /* reclaim for the heap */
-        b->stat = NEW;
-        /*
-                 * merge 3 blocks if possible
-                 */
-        if (prev && !(prev->stat & ALLOCATED))
-        { /* try previous */
-            merge_with_next(prev);
-            b = prev;
+        block_t *current = (block_t *)heap;
+        while (current && current != b)
+        {
+            prev = current;
+            current = (block_t *)current->hdr.next;
+            if (++guard == 0) return NULL;
         }
-        if (b->hdr.next && !(((block_t *)(b->hdr.next))->stat & ALLOCATED)) /* try next */
-            merge_with_next(b);
-
-        return b->data;
+        if (!current)
+            return NULL;
     }
-    else
-        return NULL;
+
+    b->hdr.owner = NONE; /* reclaim for the heap */
+    b->stat = NEW;
+    /*
+             * merge 3 blocks if possible
+             */
+    if (prev && !(prev->stat & ALLOCATED))
+    { /* try previous */
+        merge_with_next(prev);
+        b = prev;
+    }
+    if (b->hdr.next && !(((block_t *)(b->hdr.next))->stat & ALLOCATED)) /* try next */
+        merge_with_next(b);
+
+    return b->data;
 }
 
 /*
@@ -122,20 +121,24 @@ void *mem_free(void *heap, void *p)
  */
 uint8_t mem_free_owner(void *heap, void *owner)
 {
-    block_t *prev;
     block_t *b;
     uint8_t count = 0;
+    uint8_t guard = 0;
 
-    while (1)
+    b = (block_t *)heap;
+    while (b)
     {
-        b = (block_t *)list_find(
-            (list_item_t *)heap,
-            (list_item_t **)&prev,
-            match_owner_block,
-            (uint16_t)owner);
-        if (!b) break;
-        mem_free(heap, b->data);
-        count++;
+        if ((b->stat & ALLOCATED) && b->hdr.owner == owner)
+        {
+            mem_free(heap, b->data);
+            count++;
+            b = (block_t *)heap;
+            guard = 0;
+            continue;
+        }
+
+        b = (block_t *)b->hdr.next;
+        if (++guard == 0) break;
     }
 
     return count;

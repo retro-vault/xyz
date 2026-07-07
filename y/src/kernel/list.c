@@ -11,7 +11,7 @@
  */
 #include <kernel/list.h>
 
-#define LIST_GUARD_MAX 1024
+#define LIST_GUARD_MAX 255
 
 /*
  * check if arg and pointer are equal
@@ -33,13 +33,12 @@ void list_iterate(
 {
     list_item_t *slow = first;
     list_item_t *fast = first;
-    uint16_t guard = 0;
+    uint8_t guard = 0;
     while (first)
     {
         fn(first, the_arg);
         first = first->next;
-        guard++;
-        if (guard >= LIST_GUARD_MAX) break; /* probable corruption */
+        if (++guard == 0) break; /* probable corruption */
         if (slow) slow = (list_item_t *)slow->next;
         if (fast && fast->next)
             fast = (list_item_t *)((list_item_t *)fast->next)->next;
@@ -59,15 +58,14 @@ list_item_t *list_find(
     uint8_t((*match)(list_item_t *p, uint16_t arg)),
     uint16_t the_arg)
 {
-    uint16_t guard = 0;
+    uint8_t guard = 0;
     /* assume no previous */
     *prev = NULL;
     while (first && !match(first, the_arg))
     {
         *prev = first;
         first = first->next;
-        guard++;
-        if (guard >= LIST_GUARD_MAX) return NULL; /* probable cycle/corruption */
+        if (++guard == 0) return NULL; /* probable cycle/corruption */
     }
     /* result is in first */
     return first;
@@ -90,7 +88,7 @@ list_item_t *list_append(list_item_t **first, list_item_t *el)
 {
 
     list_item_t *current;
-    uint16_t guard = 0;
+    uint8_t guard = 0;
 
     el->next = NULL; /* it's always the last element */
 
@@ -102,8 +100,7 @@ list_item_t *list_append(list_item_t **first, list_item_t *el)
         while (current->next)
         {
             current = current->next;
-            guard++;
-            if (guard >= LIST_GUARD_MAX) return NULL; /* probable cycle/corruption */
+            if (++guard == 0) return NULL; /* probable cycle/corruption */
         }
         current->next = el;
     }

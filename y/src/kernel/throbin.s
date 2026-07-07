@@ -9,7 +9,7 @@
 
         .module	throbin
 
-        .globl	_thread_robin
+        .globl	__thread_robin
 
         .area	_CODE
 
@@ -17,7 +17,7 @@
         ;; return:       (none)
         ;; affects:      (all registers are saved/restored as part of context switch)
         ;; notes:        round-robin scheduler, saves current thread context and restores next
-_thread_robin::
+__thread_robin::
         ;; no interrupts
         di
         ;; we will need af and hl
@@ -62,9 +62,9 @@ _thread_robin::
         pop	af
 .trbn_exec:
         ;; chain pending timers
-        call	_tmr_chain
+        call	__tmr_chain
         ;; select next thread pointer (SDCC returns pointers in DE)
-        call	_thread_select_next
+        call	__thread_select_next
         ld	a,d
         or	e
         jr	nz, .trbn_have_next

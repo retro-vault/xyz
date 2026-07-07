@@ -4,7 +4,7 @@
  * Standard C23 integer limits for the xcc Z80 target.
  *
  * Target data model:
- *   char      1 byte (signed)
+ *   char      1 byte (target-default signedness)
  *   short     2 bytes
  *   int       2 bytes
  *   long      4 bytes
@@ -26,9 +26,14 @@
 #define SCHAR_MAX       127
 #define UCHAR_MAX       255U
 
-/* Plain char is signed on this target. */
+/* Plain char follows the compiler target default. */
+#ifdef __CHAR_UNSIGNED__
+#define CHAR_MIN        0
+#define CHAR_MAX        UCHAR_MAX
+#else
 #define CHAR_MIN        SCHAR_MIN
 #define CHAR_MAX        SCHAR_MAX
+#endif
 
 /* short and unsigned short limits. */
 #define SHRT_MIN        (-32768)

@@ -116,6 +116,7 @@ decl_spec parser::parse_declaration_specifiers() {
     attr_list     local_attrs;
 
     bool has_unsigned = false;
+    bool has_signed   = false;
     bool has_short    = false;
     bool has_long     = false;
     bool has_llong    = false;
@@ -218,7 +219,7 @@ decl_spec parser::parse_declaration_specifiers() {
         if (k == tk::KW_DOUBLE)    { has_double  = true; consume(); continue; }
         if (k == tk::KW__COMPLEX)  { has_complex = true; consume(); continue; }
         if (k == tk::KW__IMAGINARY){ has_complex = true; consume(); continue; }
-        if (k == tk::KW_SIGNED)   { consume(); continue; }
+        if (k == tk::KW_SIGNED)   { has_signed = true; consume(); continue; }
         if (k == tk::KW_UNSIGNED) { has_unsigned = true; consume(); continue; }
         if (k == tk::KW_SHORT)    { has_short  = true; consume(); continue; }
         if (k == tk::KW_LONG) {
@@ -362,7 +363,12 @@ decl_spec parser::parse_declaration_specifiers() {
     } else if (has_bool) {
         base = type::make_bool();
     } else if (has_char) {
-        base = has_unsigned ? type::make_uchar() : type::make_char();
+        if (has_unsigned)
+            base = type::make_uchar();
+        else if (has_signed)
+            base = type::make_schar();
+        else
+            base = type::make_char();
     } else if (has_complex) {
         base = type::make_complex(); // float _Complex or double _Complex → same 8-byte type
     } else if (has_float) {

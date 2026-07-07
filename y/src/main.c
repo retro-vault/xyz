@@ -27,7 +27,7 @@
 
 #include <yos.h>
 
-extern yos_t* _yos_init(void);
+extern yos_t _yos;
 extern void _clock_tick(void);
 extern void ysh(void); /* yos shell */
 
@@ -48,17 +48,17 @@ void main(void) {
 
     /* goto 0,0 */
     tty_xy(0,31);
-    tty_printf("XYZ OS (c) 2022-2026 TOMAZ STIH\n\n");
+    tty_puts("XYZ OS (c) 2022-2026 TOMAZ STIH");
+    tty_putc('\n');
 
     /* register syscalls (api) service */
-    yos_t* y=_yos_init();
-    svc_register("yos",y);
+    svc_register("yos", (void *)&_yos);
     sys_vec_set(svc_query_rst10, RST10);
 
     /* create shell process */
     process_t *p=process_start("ysh", ysh, 1024);
     if (!p) {
-        tty_printf("ERR: PROCESS START FAILED\n");
+        tty_puts("ERR: PROCESS START FAILED");
         return;
     }
 

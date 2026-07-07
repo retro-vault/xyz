@@ -33,8 +33,12 @@ timer_t *tmr_install(void (*hook)(void), uint16_t ticks, void *owner) {
 /*
  * remove timer hook
  */
-timer_t *tmr_uninstall(timer_t *t) {
-	return (timer_t *)so_destroy((void **)&_tmr_first, (void *)t);
+[[sdcc::naked]] timer_t *tmr_uninstall(timer_t *t) {
+    t;
+    __asm__(
+        "ex de, hl\n"
+        "ld hl, #__tmr_first\n"
+        "jp _so_destroy\n");
 }
 
 /*

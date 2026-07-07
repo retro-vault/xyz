@@ -285,7 +285,8 @@ void parser::complete_unsized_char_array_from_string(type_ptr t,
     if (!t || t->kind != type_kind::ARRAY || t->array_size != 0 || !t->base || !init)
         return;
     type_kind elem = t->base->unqual()->kind;
-    if (elem != type_kind::CHAR && elem != type_kind::UCHAR && elem != type_kind::CHAR8T)
+    if (elem != type_kind::CHAR && elem != type_kind::SCHAR &&
+        elem != type_kind::UCHAR && elem != type_kind::CHAR8T)
         return;
     auto *str = dynamic_cast<string_literal_expr*>(init.get());
     if (!str) {

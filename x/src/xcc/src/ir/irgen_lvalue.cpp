@@ -172,6 +172,14 @@ void ir_gen::visit(index_expr &e) {
     }
 
     operand ptr = emit_binop(icode_op::ADD, base, index, elem_ptr_like(base.type, elem_type));
+    if (elem_type && elem_type->is_array() && elem_type->base) {
+        // A subscript of a pointer-to-array yields an array lvalue.  In value
+        // context that lvalue decays to a pointer to the first element at the
+        // same address; do not load a temporary row object.
+        ptr.type = elem_ptr_like(base.type, elem_type->base);
+        expr_result_ = ptr;
+        return;
+    }
     expr_result_ = emit_unop(icode_op::GET_VALUE_AT, ptr, elem_type);
 }
 

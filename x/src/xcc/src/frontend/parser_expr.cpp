@@ -304,6 +304,7 @@ expr_ptr parser::parse_unary_expression() {
             switch (t->kind) {
             case type_kind::BOOL:
             case type_kind::CHAR:
+            case type_kind::SCHAR:
             case type_kind::UCHAR:
             case type_kind::SHORT:
                 promoted = type::make_int();  break;

@@ -403,6 +403,11 @@ static std::string base_symbol_key(const operand &op) {
     return symbol_key(base);
 }
 
+static bool same_symbol_slot(const operand &a, const operand &b) {
+    return !base_symbol_key(a).empty() &&
+           base_symbol_key(a) == base_symbol_key(b);
+}
+
 static alias_info build_alias_info(const ir_function &fn) {
     alias_info info;
     for (auto &ic : fn.icodes) {
@@ -722,6 +727,7 @@ static void for_each_use_operand(icode &ic, Fn fn) {
     case icode_op::SET_VALUE_AT:
         if (!ic.result.is_none()) fn(ic.result);
         if (!ic.left.is_none())   fn(ic.left);
+        if (!ic.right.is_none())  fn(ic.right);
         break;
     case icode_op::INLINE_ASM:
         break;
@@ -755,6 +761,7 @@ static void for_each_use_operand(const icode &ic, Fn fn) {
     case icode_op::SET_VALUE_AT:
         if (!ic.result.is_none()) fn(ic.result);
         if (!ic.left.is_none())   fn(ic.left);
+        if (!ic.right.is_none())  fn(ic.right);
         break;
     case icode_op::INLINE_ASM:
         break;
@@ -1386,6 +1393,34 @@ static bool rewrite_operand(operand &op, const ssa_env &env,
                             const alias_info &alias,
                             const std::unordered_map<std::string, operand> &operand_bank,
                             const std::vector<std::string> &ordered_keys) {
+    auto types_compatible_for_value_rewrite = [](const operand &use,
+                                                 const operand &repl) {
+        if (!use.type || !repl.type)
+            return true;
+
+        if (use.type->size() != repl.type->size())
+            return false;
+
+        const bool use_ptr = use.type->is_ptr();
+        const bool repl_ptr = repl.type->is_ptr();
+        const bool use_far_ptr = use.type->is_far_ptr();
+        const bool repl_far_ptr = repl.type->is_far_ptr();
+        const bool use_int = use.type->is_integer();
+        const bool repl_int = repl.type->is_integer();
+
+        if (use_ptr != repl_ptr || use_far_ptr != repl_far_ptr ||
+            use_int != repl_int) {
+            return false;
+        }
+
+        if (use_int && repl_int &&
+            use.type->is_unsigned() != repl.type->is_unsigned()) {
+            return false;
+        }
+
+        return true;
+    };
+
     std::string key = trackable_key(op, alias);
     if (key.empty()) return false;
     auto it = env.find(key);
@@ -1414,6 +1449,8 @@ static bool rewrite_operand(operand &op, const ssa_env &env,
         // substitute. Keep pointer identities explicit unless we are merely
         // rewriting to another temp.
         if (op.type && op.type->is_ptr() && !repl.is_temp())
+            continue;
+        if (!types_compatible_for_value_rewrite(op, repl))
             continue;
         if (op.type) repl.type = op.type;
         op = repl;
@@ -1737,7 +1774,6 @@ public:
             if (!type)
                 return false;
             if (type->is_array() || type->is_func() ||
-                type->is_ptr() ||
                 type->kind == type_kind::STRUCT ||
                 type->kind == type_kind::UNION)
                 return false;
@@ -1763,6 +1799,7 @@ public:
             if (ic.op == icode_op::RECEIVE && ic.result.is_symbol()) {
                 blocked.insert(base_symbol_key(ic.result));
             }
+
             block_if_needed(ic.result);
             block_if_needed(ic.left);
             block_if_needed(ic.right);
@@ -1856,8 +1893,6 @@ public:
                 continue;
             if (ic.result.byte_offset != 0 || !ic.result.type)
                 continue;
-            if (ic.result.type->is_ptr())
-                continue;
             if (base_symbol_address_taken(alias, ic.result))
                 continue;
             promoted.try_emplace(base_symbol_key(ic.result),
@@ -1924,6 +1959,30 @@ public:
         auto one_const = [](const operand &op) {
             return op.kind == operand_kind::INT_CONST && op.ival == 1;
         };
+        auto truthy_type = [](const type_ptr &type) {
+            return type &&
+                   !type->is_far_ptr() &&
+                   (type->is_integer() || type->is_ptr());
+        };
+        auto truthy_operand = [&](const operand &op) {
+            return truthy_type(op.type);
+        };
+        auto truth_preserving_cast = [&](const icode &ic) {
+            return ic.op == icode_op::CAST &&
+                   truthy_type(ic.left.type) &&
+                   truthy_type(ic.result.type) &&
+                   ic.left.type->size() > 0 &&
+                   ic.result.type->size() >= ic.left.type->size();
+        };
+        auto swapped_compare = [](icode_op op) {
+            switch (op) {
+            case icode_op::LT: return icode_op::GT;
+            case icode_op::LE: return icode_op::GE;
+            case icode_op::GT: return icode_op::LT;
+            case icode_op::GE: return icode_op::LE;
+            default: return op;
+            }
+        };
 
         std::function<std::optional<operand>(const operand &,
                                              std::unordered_set<int> &)>
@@ -1942,16 +2001,33 @@ public:
                 return std::nullopt;
             const icode &def = *def_it->second;
 
-            if (is_compare_op(def.op)) {
-                operand repl = op;
-                repl.type = def.result.type ? def.result.type : repl.type;
-                return repl;
-            }
+                if (is_compare_op(def.op)) {
+                    operand repl = op;
+                    repl.type = def.result.type ? def.result.type : repl.type;
+                    return repl;
+                }
 
-            if (def.op == icode_op::ASSIGN && def.left.is_temp()) {
-                auto nested = resolve_truth_preserving_source(def.left, visiting);
-                if (nested) {
-                    operand repl = *nested;
+                if (truth_preserving_cast(def)) {
+                    if (def.left.is_temp()) {
+                        auto nested =
+                            resolve_truth_preserving_source(def.left, visiting);
+                        if (nested) {
+                            operand repl = *nested;
+                            repl.type = def.result.type ? def.result.type : repl.type;
+                            return repl;
+                        }
+                    }
+                    if (truthy_operand(def.left)) {
+                        operand repl = def.left;
+                        repl.type = def.result.type ? def.result.type : repl.type;
+                        return repl;
+                    }
+                }
+
+                if (def.op == icode_op::ASSIGN && def.left.is_temp()) {
+                    auto nested = resolve_truth_preserving_source(def.left, visiting);
+                    if (nested) {
+                        operand repl = *nested;
                     repl.type = def.result.type ? def.result.type : repl.type;
                     return repl;
                 }
@@ -1981,27 +2057,43 @@ public:
                             repl.type = def.result.type ? def.result.type : repl.type;
                             return repl;
                         }
+                        }
                     }
                 }
-            }
 
-            return std::nullopt;
-        };
+                if (truthy_operand(op)) {
+                    operand repl = op;
+                    repl.type = def.result.type ? def.result.type : repl.type;
+                    return repl;
+                }
+
+                return std::nullopt;
+            };
 
         auto identity_source = [&](const icode &ic) -> std::optional<operand> {
             const operand *source = nullptr;
-            bool identity = false;
-            if (ic.left.is_temp() &&
-                ((ic.op == icode_op::NE && zero_const(ic.right)) ||
-                 (ic.op == icode_op::EQ && one_const(ic.right)))) {
+            icode_op effective_op = ic.op;
+            const operand *constant = nullptr;
+            if (ic.left.is_temp() && ic.right.kind == operand_kind::INT_CONST) {
                 source = &ic.left;
-                identity = true;
-            }
-            if (!identity && ic.right.is_temp() &&
-                ((ic.op == icode_op::NE && zero_const(ic.left)) ||
-                 (ic.op == icode_op::EQ && one_const(ic.left)))) {
+                constant = &ic.right;
+            } else if (ic.right.is_temp() && ic.left.kind == operand_kind::INT_CONST) {
                 source = &ic.right;
-                identity = true;
+                constant = &ic.left;
+                effective_op = swapped_compare(ic.op);
+            }
+            bool identity = false;
+            if (source && constant) {
+                identity =
+                    (effective_op == icode_op::NE && zero_const(*constant)) ||
+                    (effective_op == icode_op::EQ && one_const(*constant));
+                if (!identity &&
+                    truthy_operand(*source) &&
+                    (source->type->is_unsigned() || source->type->is_ptr())) {
+                    identity =
+                        (effective_op == icode_op::GT && zero_const(*constant)) ||
+                        (effective_op == icode_op::GE && one_const(*constant));
+                }
             }
             if (!identity || !source)
                 return std::nullopt;
@@ -2163,6 +2255,7 @@ public:
                 continue;
 
             bool found_init = false;
+            size_t init_idx = fn.icodes.size();
             for (size_t i = preheader.begin; i < preheader.end; ++i) {
                 auto &ic = fn.icodes[i];
                 if (ic.op == icode_op::ASSIGN &&
@@ -2170,9 +2263,8 @@ public:
                     ic.result.temp_id == iv_temp &&
                     ic.left.kind == operand_kind::INT_CONST &&
                     ic.left.ival == 0) {
-                    ic.result.type = byte_type;
-                    ic.left.type = byte_type;
                     found_init = true;
+                    init_idx = i;
                 }
             }
             if (!found_init)
@@ -2223,6 +2315,35 @@ public:
             if (!found_update || next_temp < 0)
                 continue;
 
+            std::vector<bool> in_loop(fn.icodes.size(), false);
+            for (size_t block_id : loop.blocks) {
+                const auto &block = cfg.block(block_id);
+                for (size_t i = block.begin; i < block.end; ++i)
+                    in_loop[i] = true;
+            }
+
+            auto mentions_temp_id = [](const icode &ic, int temp_id) {
+                auto mentions = [&](const operand &op) {
+                    return op.is_temp() && op.temp_id == temp_id;
+                };
+                return mentions(ic.result) || mentions(ic.left) || mentions(ic.right);
+            };
+
+            bool confined_to_loop = true;
+            for (size_t i = 0; i < fn.icodes.size(); ++i) {
+                const bool allowed = in_loop[i] || i == init_idx;
+                if (!allowed &&
+                    (mentions_temp_id(fn.icodes[i], iv_temp) ||
+                     mentions_temp_id(fn.icodes[i], next_temp))) {
+                    confined_to_loop = false;
+                    break;
+                }
+            }
+            if (!confined_to_loop)
+                continue;
+
+            fn.icodes[init_idx].result.type = byte_type;
+            fn.icodes[init_idx].left.type = byte_type;
             retag_temp(iv_temp);
             retag_temp(next_temp);
 
@@ -2253,9 +2374,14 @@ public:
             return false;
 
         std::unordered_map<int, const icode *> temp_defs;
+        std::unordered_map<int, size_t> temp_def_index;
         for (const auto &ic : fn.icodes) {
             if (ic.result.is_temp())
                 temp_defs[ic.result.temp_id] = &ic;
+        }
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            if (fn.icodes[i].result.is_temp())
+                temp_def_index[fn.icodes[i].result.temp_id] = i;
         }
 
         auto unwrap_loop_index = [&](const operand &op, int iv_temp) -> bool {
@@ -2305,6 +2431,34 @@ public:
                     return base.type;
             }
             return type::make_pointer(type::make_char());
+        };
+
+        auto is_byte_pointer_base = [](const operand &op) {
+            if (op.kind == operand_kind::LABEL_REF)
+                return true;
+            if (op.kind != operand_kind::SYMBOL &&
+                op.kind != operand_kind::TEMP)
+                return false;
+            if (op.kind == operand_kind::SYMBOL &&
+                (op.is_tls || op.is_sfr || op.is_func))
+                return false;
+            if (op.byte_offset != 0 || !op.type)
+                return false;
+            if (op.type->is_array())
+                return op.type->base && op.type->base->size() == 1;
+            if (op.type->is_ptr())
+                return !op.type->is_far_ptr() &&
+                       op.type->base &&
+                       op.type->base->size() == 1;
+            return false;
+        };
+
+        auto base_key = [](const operand &op) {
+            if (op.kind == operand_kind::LABEL_REF)
+                return std::string("label|") + op.name;
+            if (op.kind == operand_kind::TEMP)
+                return std::string("temp|") + std::to_string(op.temp_id);
+            return symbol_key(op);
         };
 
         int next_temp = next_temp_id(fn);
@@ -2439,6 +2593,42 @@ public:
                 return saw_use;
             };
 
+            auto base_stable_in_loop = [&](const operand &base) {
+                if (base.kind == operand_kind::LABEL_REF)
+                    return true;
+
+                if (base.kind == operand_kind::TEMP) {
+                    auto it = temp_def_index.find(base.temp_id);
+                    if (it == temp_def_index.end())
+                        return false;
+                    if (in_loop_inst[it->second])
+                        return false;
+                    for (size_t block_id : loop.blocks) {
+                        const auto &block = cfg.block(block_id);
+                        for (size_t i = block.begin; i < block.end; ++i) {
+                            if (fn.icodes[i].result.is_temp() &&
+                                fn.icodes[i].result.temp_id == base.temp_id) {
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                }
+
+                if (base.kind == operand_kind::SYMBOL) {
+                    for (size_t block_id : loop.blocks) {
+                        const auto &block = cfg.block(block_id);
+                        for (size_t i = block.begin; i < block.end; ++i) {
+                            if (same_symbol_slot(fn.icodes[i].result, base))
+                                return false;
+                        }
+                    }
+                    return true;
+                }
+
+                return false;
+            };
+
             for (size_t block_id : loop.blocks) {
                 const auto &block = cfg.block(block_id);
                 for (size_t i = block.begin; i < block.end; ++i) {
@@ -2447,24 +2637,10 @@ public:
                         continue;
 
                     operand base;
-                    auto is_byte_base = [](const operand &op) {
-                        if (op.kind == operand_kind::LABEL_REF)
-                            return true;
-                        return op.is_symbol() &&
-                               op.is_global &&
-                               !op.is_tls &&
-                               !op.is_sfr &&
-                               !op.is_func &&
-                               op.type &&
-                               op.type->is_array() &&
-                               op.type->base &&
-                               op.type->base->size() == 1;
-                    };
-
-                    if (is_byte_base(ic.left) &&
+                    if (is_byte_pointer_base(ic.left) &&
                         unwrap_loop_index(ic.right, iv_temp)) {
                         base = ic.left;
-                    } else if (is_byte_base(ic.right) &&
+                    } else if (is_byte_pointer_base(ic.right) &&
                                unwrap_loop_index(ic.left, iv_temp)) {
                         base = ic.right;
                     } else {
@@ -2473,10 +2649,10 @@ public:
 
                     if (!loop_only_byte_mem_temp(ic.result.temp_id))
                         continue;
+                    if (!base_stable_in_loop(base))
+                        continue;
 
-                    std::string key = base.kind == operand_kind::LABEL_REF
-                                          ? "label|" + base.name
-                                          : symbol_key(base);
+                    std::string key = base_key(base);
                     auto &group = groups[key];
                     if (group.base.is_none()) {
                         group.base = base;
@@ -2494,9 +2670,11 @@ public:
             for (auto &[_, group] : groups) {
                 operand ptr = make_fresh_temp(next_temp, group.ptr_type);
                 icode init;
-                init.op = group.base.kind == operand_kind::LABEL_REF
-                              ? icode_op::ASSIGN
-                              : icode_op::ADDRESS_OF;
+                init.op =
+                    (group.base.kind == operand_kind::LABEL_REF ||
+                     (group.base.type && group.base.type->is_ptr()))
+                        ? icode_op::ASSIGN
+                        : icode_op::ADDRESS_OF;
                 init.result = ptr;
                 init.left = group.base;
                 insert_before[pre_insert].push_back(init);
@@ -3401,8 +3579,25 @@ public:
         for (auto &ic : fn.icodes) {
             auto remember = [&](const operand &op) {
                 std::string key = trackable_key(op, alias);
-                if (!key.empty() && !operand_bank.count(key))
+                if (key.empty())
+                    return;
+                auto it = operand_bank.find(key);
+                if (it == operand_bank.end()) {
                     operand_bank.emplace(key, op);
+                    return;
+                }
+                if (op.kind != operand_kind::SYMBOL)
+                    return;
+                const int cur_size =
+                    it->second.type && it->second.type->size() > 0
+                        ? it->second.type->size()
+                        : std::numeric_limits<int>::max();
+                const int new_size =
+                    op.type && op.type->size() > 0
+                        ? op.type->size()
+                        : std::numeric_limits<int>::max();
+                if (new_size < cur_size)
+                    it->second = op;
             };
             remember(ic.result);
             remember(ic.left);
@@ -3799,6 +3994,242 @@ public:
     }
 };
 
+class add_const_chain_pass final : public ir_pass {
+public:
+    const char *name() const override { return "add_const_chain"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        control_flow_graph cfg(fn);
+        std::unordered_map<int, int> temp_def_count;
+        std::unordered_map<int, std::vector<size_t>> temp_use_indices;
+
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            const auto &ic = fn.icodes[i];
+            if (ic.result.is_temp())
+                ++temp_def_count[ic.result.temp_id];
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (op.is_temp())
+                    temp_use_indices[op.temp_id].push_back(i);
+            });
+        }
+
+        auto barrier_between = [&](size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i) {
+                if (is_local_cse_barrier(fn.icodes[i]))
+                    return true;
+            }
+            return false;
+        };
+
+        auto extract_const_chain = [&](const icode &ic, operand &base,
+                                       int64_t &delta) {
+            if (ic.op == icode_op::ADD) {
+                if (ic.right.kind == operand_kind::INT_CONST &&
+                    ic.left.kind != operand_kind::INT_CONST) {
+                    base = ic.left;
+                    delta = ic.right.ival;
+                    return true;
+                }
+                if (ic.left.kind == operand_kind::INT_CONST &&
+                    ic.right.kind != operand_kind::INT_CONST) {
+                    base = ic.right;
+                    delta = ic.left.ival;
+                    return true;
+                }
+                return false;
+            }
+
+            if (ic.op == icode_op::SUB &&
+                ic.right.kind == operand_kind::INT_CONST &&
+                ic.left.kind != operand_kind::INT_CONST) {
+                base = ic.left;
+                delta = -ic.right.ival;
+                return true;
+            }
+
+            return false;
+        };
+
+        bool changed = false;
+
+        for (const auto &block : cfg.blocks()) {
+            for (size_t i = block.begin; i < block.end; ++i) {
+                auto &producer = fn.icodes[i];
+                if (!producer.result.is_temp())
+                    continue;
+
+                operand producer_base;
+                int64_t producer_delta = 0;
+                if (!extract_const_chain(producer, producer_base, producer_delta))
+                    continue;
+
+                const int produced_temp = producer.result.temp_id;
+                if (temp_def_count[produced_temp] != 1)
+                    continue;
+
+                auto use_it = temp_use_indices.find(produced_temp);
+                if (use_it == temp_use_indices.end() || use_it->second.size() != 1)
+                    continue;
+
+                const size_t consumer_idx = use_it->second.front();
+                if (consumer_idx <= i || consumer_idx >= block.end)
+                    continue;
+                if (barrier_between(i + 1, consumer_idx))
+                    continue;
+
+                auto &consumer = fn.icodes[consumer_idx];
+                operand consumer_base;
+                int64_t consumer_delta = 0;
+                bool uses_temp = false;
+
+                if (consumer.op == icode_op::ADD) {
+                    if (consumer.left.is_temp() &&
+                        consumer.left.temp_id == produced_temp &&
+                        consumer.right.kind == operand_kind::INT_CONST) {
+                        consumer_base = producer_base;
+                        consumer_delta = consumer.right.ival;
+                        uses_temp = true;
+                    } else if (consumer.right.is_temp() &&
+                               consumer.right.temp_id == produced_temp &&
+                               consumer.left.kind == operand_kind::INT_CONST) {
+                        consumer_base = producer_base;
+                        consumer_delta = consumer.left.ival;
+                        uses_temp = true;
+                    }
+                } else if (consumer.op == icode_op::SUB &&
+                           consumer.left.is_temp() &&
+                           consumer.left.temp_id == produced_temp &&
+                           consumer.right.kind == operand_kind::INT_CONST) {
+                    consumer_base = producer_base;
+                    consumer_delta = -consumer.right.ival;
+                    uses_temp = true;
+                }
+
+                if (!uses_temp)
+                    continue;
+
+                int64_t combined = producer_delta + consumer_delta;
+                consumer.left = producer_base;
+                if (combined == 0) {
+                    consumer.op = icode_op::ASSIGN;
+                    consumer.right = operand::make_none();
+                } else if (combined > 0) {
+                    consumer.op = icode_op::ADD;
+                    consumer.right = operand::make_int(
+                        combined,
+                        consumer.result.type ? consumer.result.type : producer.result.type);
+                } else {
+                    consumer.op = icode_op::SUB;
+                    consumer.right = operand::make_int(
+                        -combined,
+                        consumer.result.type ? consumer.result.type : producer.result.type);
+                }
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+};
+
+class post_update_recover_pass final : public ir_pass {
+public:
+    const char *name() const override { return "post_update_recover"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.size() < 3)
+            return false;
+
+        control_flow_graph cfg(fn);
+        bool changed = false;
+
+        auto same_loc = [&](const operand &a, const operand &b) {
+            return a.kind == b.kind &&
+                   a.byte_offset == b.byte_offset &&
+                   a.is_global == b.is_global &&
+                   a.is_param == b.is_param &&
+                   a.stack_offset == b.stack_offset &&
+                   a.temp_id == b.temp_id &&
+                   a.name == b.name;
+        };
+
+        auto is_copy_sink = [&](const icode &ic, const operand &target,
+                                int temp_id) {
+            if (!(ic.left.is_temp() && ic.left.temp_id == temp_id))
+                return false;
+            if (!same_loc(ic.result, target))
+                return false;
+            return ic.op == icode_op::ASSIGN ||
+                   (ic.op == icode_op::CAST && is_noop_scalar_cast(ic));
+        };
+
+        auto extract_step = [&](const icode &ic, operand &base, int64_t &step) {
+            if (ic.op == icode_op::ADD &&
+                ic.right.kind == operand_kind::INT_CONST &&
+                ic.left.kind != operand_kind::INT_CONST) {
+                base = ic.left;
+                step = ic.right.ival;
+                return true;
+            }
+            if (ic.op == icode_op::SUB &&
+                ic.right.kind == operand_kind::INT_CONST &&
+                ic.left.kind != operand_kind::INT_CONST) {
+                base = ic.left;
+                step = -ic.right.ival;
+                return true;
+            }
+            return false;
+        };
+
+        for (const auto &block : cfg.blocks()) {
+            for (size_t i = block.begin; i + 2 < block.end; ++i) {
+                auto &update_ic = fn.icodes[i];
+                if (!update_ic.result.is_temp())
+                    continue;
+
+                operand base;
+                int64_t step = 0;
+                if (!extract_step(update_ic, base, step) || step == 0)
+                    continue;
+                if (base.type && base.type->is_ptr())
+                    continue;
+
+                auto &copy_ic = fn.icodes[i + 1];
+                if (!is_copy_sink(copy_ic, base, update_ic.result.temp_id))
+                    continue;
+
+                auto &recover_ic = fn.icodes[i + 2];
+                operand recover_base;
+                int64_t recover_step = 0;
+                if (!extract_step(recover_ic, recover_base, recover_step))
+                    continue;
+                if (!same_loc(recover_base, base) || recover_step != -step)
+                    continue;
+
+                if (recover_ic.result.is_temp() &&
+                    recover_ic.result.temp_id == update_ic.result.temp_id)
+                    continue;
+
+                icode moved = recover_ic;
+                moved.op = icode_op::ASSIGN;
+                moved.left = base;
+                moved.right = operand::make_none();
+
+                fn.icodes[i] = moved;
+                fn.icodes[i + 1] = update_ic;
+                fn.icodes[i + 2] = copy_ic;
+                changed = true;
+                ++i;
+            }
+        }
+
+        return changed;
+    }
+};
+
 static bool is_local_cse_barrier(const icode &ic) {
     switch (ic.op) {
     case icode_op::FUNCTION:
@@ -3975,10 +4406,401 @@ public:
     }
 };
 
+struct linear_expr {
+    std::map<std::string, int64_t> terms;
+    int64_t constant = 0;
+    std::vector<std::string> deps;
+};
+
+static bool value_preserving_cse_cast(const icode &ic) {
+    if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type)
+        return false;
+
+    type_ptr src = ic.left.type->unqual();
+    type_ptr dst = ic.result.type->unqual();
+    if (!src || !dst)
+        return false;
+    if (src->is_far_ptr() || dst->is_far_ptr())
+        return false;
+
+    if (src->is_ptr() && dst->is_ptr())
+        return src->size() == dst->size();
+
+    if (!src->is_integer() || !dst->is_integer())
+        return false;
+
+    if (src->size() == dst->size())
+        return src->is_unsigned() == dst->is_unsigned();
+
+    if (src->size() > dst->size())
+        return false;
+
+    // Widening preserves the mathematical value for unsigned sources and for
+    // signed-to-signed sources.  Avoid signed-to-unsigned here because negative
+    // inputs would change value even though the bit pattern is well-defined.
+    return src->is_unsigned() || !dst->is_unsigned();
+}
+
+static std::string canonical_linear_leaf_key(
+    const operand &op,
+    const std::unordered_map<int, const icode *> &temp_defs,
+    int depth = 0) {
+    if (depth > 8)
+        return {};
+
+    if (op.is_temp()) {
+        auto it = temp_defs.find(op.temp_id);
+        if (it != temp_defs.end() && it->second) {
+            const icode &def = *it->second;
+            if (def.op == icode_op::ASSIGN ||
+                value_preserving_cse_cast(def)) {
+                std::string nested =
+                    canonical_linear_leaf_key(def.left, temp_defs, depth + 1);
+                if (!nested.empty())
+                    return nested;
+            }
+        }
+    }
+
+    return local_cse_operand_key(op);
+}
+
+static bool linear_expr_add_term(linear_expr &expr,
+                                 const std::string &key,
+                                 int64_t coeff) {
+    if (key.empty() || coeff == 0)
+        return true;
+
+    int64_t &slot = expr.terms[key];
+    if ((coeff > 0 && slot > std::numeric_limits<int64_t>::max() - coeff) ||
+        (coeff < 0 && slot < std::numeric_limits<int64_t>::min() - coeff)) {
+        return false;
+    }
+
+    slot += coeff;
+    if (slot == 0)
+        expr.terms.erase(key);
+    return true;
+}
+
+static bool linear_expr_accumulate(linear_expr &dst,
+                                   const linear_expr &src,
+                                   int sign) {
+    if (sign != 1 && sign != -1)
+        return false;
+    if ((sign > 0 &&
+         dst.constant > std::numeric_limits<int64_t>::max() - src.constant) ||
+        (sign < 0 &&
+         dst.constant < std::numeric_limits<int64_t>::min() + src.constant)) {
+        return false;
+    }
+    dst.constant += sign * src.constant;
+
+    for (const auto &term : src.terms) {
+        if (!linear_expr_add_term(dst, term.first, sign * term.second))
+            return false;
+    }
+    dst.deps.insert(dst.deps.end(), src.deps.begin(), src.deps.end());
+    return true;
+}
+
+static bool linear_expr_scale(linear_expr &expr, int64_t scale) {
+    if (scale == 0) {
+        expr.terms.clear();
+        expr.constant = 0;
+        return true;
+    }
+
+    if (expr.constant != 0 &&
+        (expr.constant > std::numeric_limits<int64_t>::max() / scale ||
+         expr.constant < std::numeric_limits<int64_t>::min() / scale)) {
+        return false;
+    }
+    expr.constant *= scale;
+
+    for (auto &term : expr.terms) {
+        if (term.second != 0 &&
+            (term.second > std::numeric_limits<int64_t>::max() / scale ||
+             term.second < std::numeric_limits<int64_t>::min() / scale)) {
+            return false;
+        }
+        term.second *= scale;
+    }
+    return true;
+}
+
+static std::optional<linear_expr> resolve_linear_expr(
+    const operand &op,
+    const std::unordered_map<int, const icode *> &temp_defs,
+    int depth,
+    std::unordered_set<int> &visiting);
+
+static std::optional<linear_expr> resolve_linear_expr_from_def(
+    const icode &def,
+    const std::unordered_map<int, const icode *> &temp_defs,
+    int depth,
+    std::unordered_set<int> &visiting) {
+    if (depth > 8)
+        return std::nullopt;
+
+    switch (def.op) {
+    case icode_op::ASSIGN:
+    case icode_op::ADDRESS_OF:
+        return resolve_linear_expr(def.left, temp_defs, depth + 1, visiting);
+    case icode_op::CAST:
+        if (!value_preserving_cse_cast(def))
+            return std::nullopt;
+        return resolve_linear_expr(def.left, temp_defs, depth + 1, visiting);
+    case icode_op::ADD:
+    case icode_op::SUB: {
+        auto left = resolve_linear_expr(def.left, temp_defs, depth + 1,
+                                        visiting);
+        auto right = resolve_linear_expr(def.right, temp_defs, depth + 1,
+                                         visiting);
+        if (!left || !right)
+            return std::nullopt;
+        linear_expr out;
+        if (!linear_expr_accumulate(out, *left, 1))
+            return std::nullopt;
+        if (!linear_expr_accumulate(out, *right,
+                                    def.op == icode_op::ADD ? 1 : -1))
+            return std::nullopt;
+        return out;
+    }
+    case icode_op::SHL: {
+        if (def.right.kind != operand_kind::INT_CONST ||
+            def.right.ival < 0 || def.right.ival > 15)
+            return std::nullopt;
+        auto out = resolve_linear_expr(def.left, temp_defs, depth + 1,
+                                       visiting);
+        if (!out)
+            return std::nullopt;
+        if (!linear_expr_scale(*out, int64_t{1} << def.right.ival))
+            return std::nullopt;
+        return out;
+    }
+    default:
+        return std::nullopt;
+    }
+}
+
+static std::optional<linear_expr> resolve_linear_expr(
+    const operand &op,
+    const std::unordered_map<int, const icode *> &temp_defs,
+    int depth,
+    std::unordered_set<int> &visiting) {
+    if (depth > 8)
+        return std::nullopt;
+
+    if (op.kind == operand_kind::INT_CONST) {
+        linear_expr out;
+        out.constant = op.ival;
+        return out;
+    }
+
+    if (op.is_temp()) {
+        if (!visiting.insert(op.temp_id).second)
+            return std::nullopt;
+        auto cleanup = [&]() { visiting.erase(op.temp_id); };
+        auto it = temp_defs.find(op.temp_id);
+        if (it != temp_defs.end() && it->second) {
+            auto out = resolve_linear_expr_from_def(*it->second, temp_defs,
+                                                    depth + 1, visiting);
+            cleanup();
+            if (out)
+                return out;
+        } else {
+            cleanup();
+        }
+    }
+
+    std::string key = canonical_linear_leaf_key(op, temp_defs);
+    if (key.empty())
+        return std::nullopt;
+
+    linear_expr out;
+    out.terms.emplace(key, 1);
+    out.deps.push_back(key);
+    return out;
+}
+
+static std::string linear_expr_key(const linear_expr &expr,
+                                   const type_ptr &result_type) {
+    if (expr.terms.empty())
+        return {};
+
+    std::string key = "LIN:";
+    key += result_type ? std::to_string(result_type->size()) : "0";
+    key += ":";
+    key += result_type && result_type->is_unsigned() ? "u" : "s";
+    key += "|C:";
+    key += std::to_string(expr.constant);
+    for (const auto &term : expr.terms) {
+        key += "|";
+        key += term.first;
+        key += "*";
+        key += std::to_string(term.second);
+    }
+    return key;
+}
+
+static bool linear_expr_address_cse_candidate(const icode &ic,
+                                              const linear_expr &expr) {
+    if (ic.op != icode_op::ADD && ic.op != icode_op::SUB)
+        return false;
+
+    auto pointerish = [](const type_ptr &t) {
+        return t && !t->is_far_ptr() && (t->is_ptr() || t->is_array());
+    };
+    if (!pointerish(ic.result.type) &&
+        !pointerish(ic.left.type) &&
+        !pointerish(ic.right.type)) {
+        return false;
+    }
+
+    bool has_direct_base = false;
+    bool has_scaled_index = false;
+    for (const auto &term : expr.terms) {
+        if (term.second == 1 &&
+            (term.first.rfind("S:", 0) == 0 ||
+             term.first.rfind("L:", 0) == 0)) {
+            has_direct_base = true;
+        }
+        if (term.second != 0 && term.second != 1 && term.second != -1)
+            has_scaled_index = true;
+    }
+
+    return has_direct_base && has_scaled_index;
+}
+
+class linear_expr_cse_pass final : public ir_pass {
+public:
+    const char *name() const override { return "linear_expr_cse"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        struct entry {
+            operand value;
+            std::vector<std::string> deps;
+        };
+
+        std::unordered_map<int, const icode *> temp_defs;
+        std::unordered_map<std::string, entry> available;
+        bool changed = false;
+
+        auto clear_for_barrier = [&](const icode &ic) {
+            switch (ic.op) {
+            case icode_op::FUNCTION:
+            case icode_op::ENDFUNCTION:
+            case icode_op::LABEL:
+            case icode_op::GOTO:
+            case icode_op::IFX:
+            case icode_op::CALL:
+            case icode_op::RETURN:
+            case icode_op::INLINE_ASM:
+            case icode_op::RECEIVE:
+            case icode_op::ALLOCA:
+                return true;
+            default:
+                return false;
+            }
+        };
+
+        auto invalidate_dep = [&](const operand &op) {
+            if (available.empty())
+                return;
+            std::unordered_set<std::string> deps;
+            std::string direct = local_cse_operand_key(op);
+            if (!direct.empty())
+                deps.insert(direct);
+            std::string canonical = canonical_linear_leaf_key(op, temp_defs);
+            if (!canonical.empty())
+                deps.insert(canonical);
+            if (deps.empty())
+                return;
+            for (auto it = available.begin(); it != available.end();) {
+                bool erase = false;
+                for (const auto &entry_dep : it->second.deps) {
+                    if (deps.count(entry_dep)) {
+                        erase = true;
+                        break;
+                    }
+                }
+                if (erase)
+                    it = available.erase(it);
+                else
+                    ++it;
+            }
+        };
+        auto note_temp_def = [&](const icode &ic) {
+            if (defines_result(ic) && ic.result.is_temp())
+                temp_defs[ic.result.temp_id] = &ic;
+        };
+
+        for (auto &ic : fn.icodes) {
+            if (clear_for_barrier(ic)) {
+                available.clear();
+                temp_defs.clear();
+                continue;
+            }
+
+            if (defines_result(ic))
+                invalidate_dep(ic.result);
+
+            if (!is_local_cse_candidate(ic)) {
+                note_temp_def(ic);
+                continue;
+            }
+
+            std::unordered_set<int> visiting;
+            auto expr = resolve_linear_expr_from_def(ic, temp_defs, 0,
+                                                     visiting);
+            if (!expr) {
+                note_temp_def(ic);
+                continue;
+            }
+            if (!linear_expr_address_cse_candidate(ic, *expr)) {
+                note_temp_def(ic);
+                continue;
+            }
+
+            std::string key = linear_expr_key(*expr, ic.result.type);
+            if (key.empty()) {
+                note_temp_def(ic);
+                continue;
+            }
+
+            auto found = available.find(key);
+            if (found != available.end()) {
+                ic.op = icode_op::ASSIGN;
+                ic.left = found->second.value;
+                ic.right = operand::make_none();
+                note_temp_def(ic);
+                changed = true;
+                continue;
+            }
+
+            available.emplace(key, entry{ic.result, expr->deps});
+            note_temp_def(ic);
+        }
+
+        return changed;
+    }
+};
+
 struct available_byte_load_entry {
     operand value;
     std::vector<std::string> deps;
 };
+
+struct available_byte_index_key {
+    std::string key;
+    std::vector<std::string> deps;
+};
+
+using temp_def_map = std::unordered_map<int, const icode *>;
 
 static bool is_available_byte_load_barrier(const icode &ic) {
     switch (ic.op) {
@@ -3989,7 +4811,6 @@ static bool is_available_byte_load_barrier(const icode &ic) {
     case icode_op::RECEIVE:
     case icode_op::SEND:
     case icode_op::ALLOCA:
-    case icode_op::SET_VALUE_AT:
         return true;
     case icode_op::ASSIGN:
         return ic.result.is_symbol() &&
@@ -4013,15 +4834,87 @@ static bool is_available_byte_load_candidate(const icode &ic) {
            !local_cse_operand_key(ic.left).empty();
 }
 
-static std::string available_byte_load_key(const icode &ic) {
+static available_byte_index_key available_byte_index_operand_key(
+    const operand &op,
+    const temp_def_map &temp_defs,
+    int depth = 0) {
+    if (depth > 4)
+        return {};
+
+    auto direct_key = [&]() -> available_byte_index_key {
+        std::string key = local_cse_operand_key(op);
+        if (key.empty())
+            return {};
+        available_byte_index_key out;
+        out.key = key;
+        if (op.kind == operand_kind::TEMP || op.kind == operand_kind::SYMBOL)
+            out.deps.push_back(key);
+        return out;
+    };
+
+    if (!op.is_temp())
+        return direct_key();
+
+    auto it = temp_defs.find(op.temp_id);
+    if (it == temp_defs.end() || !it->second)
+        return direct_key();
+
+    const icode &def = *it->second;
+    auto type_key = [&]() {
+        return std::to_string(def.result.type ? def.result.type->size() : 0) +
+               ":" +
+               std::to_string(def.result.type && def.result.type->is_unsigned());
+    };
+
+    if ((def.op == icode_op::ASSIGN || def.op == icode_op::CAST) &&
+        !def.left.is_none()) {
+        auto nested = available_byte_index_operand_key(def.left, temp_defs,
+                                                       depth + 1);
+        if (!nested.key.empty()) {
+            nested.key = "IDXCAST|" + type_key() + "|" + nested.key;
+            return nested;
+        }
+    }
+
+    const operand *base = nullptr;
+    int64_t delta = 0;
+    if (def.op == icode_op::ADD) {
+        if (def.right.kind == operand_kind::INT_CONST) {
+            base = &def.left;
+            delta = def.right.ival;
+        } else if (def.left.kind == operand_kind::INT_CONST) {
+            base = &def.right;
+            delta = def.left.ival;
+        }
+    } else if (def.op == icode_op::SUB &&
+               def.right.kind == operand_kind::INT_CONST) {
+        base = &def.left;
+        delta = -def.right.ival;
+    }
+
+    if (base) {
+        auto nested = available_byte_index_operand_key(*base, temp_defs,
+                                                       depth + 1);
+        if (!nested.key.empty()) {
+            nested.key = "IDXADD|" + type_key() + "|" + nested.key + "|" +
+                         std::to_string(delta);
+            return nested;
+        }
+    }
+
+    return direct_key();
+}
+
+static std::string available_byte_load_key(const icode &ic,
+                                           const temp_def_map &temp_defs) {
     if (!is_available_byte_load_candidate(ic))
         return {};
 
     if (ic.left.kind == operand_kind::LABEL_REF) {
-        std::string idx = local_cse_operand_key(ic.right);
-        if (idx.empty())
+        auto idx = available_byte_index_operand_key(ic.right, temp_defs);
+        if (idx.key.empty())
             return {};
-        return "LOAD8|" + ic.left.name + "|" + idx;
+        return "LOAD8|" + ic.left.name + "|" + idx.key;
     }
 
     std::string ptr = local_cse_operand_key(ic.left);
@@ -4030,15 +4923,88 @@ static std::string available_byte_load_key(const icode &ic) {
     return "LOAD8PTR|" + ptr;
 }
 
-static std::vector<std::string> available_byte_load_deps(const icode &ic) {
+static std::vector<std::string> available_byte_load_deps(
+    const icode &ic,
+    const temp_def_map &temp_defs) {
     std::vector<std::string> deps;
     std::string ptr = local_cse_operand_key(ic.left);
     if (!ptr.empty())
         deps.push_back(ptr);
-    std::string idx = local_cse_operand_key(ic.right);
-    if (!idx.empty())
-        deps.push_back(idx);
+    auto idx = available_byte_index_operand_key(ic.right, temp_defs);
+    deps.insert(deps.end(), idx.deps.begin(), idx.deps.end());
     return deps;
+}
+
+static bool available_byte_direct_data_base(const operand &op) {
+    return op.kind == operand_kind::SYMBOL &&
+           op.is_global &&
+           !op.is_tls &&
+           !op.is_sfr &&
+           !op.is_func &&
+           !op.is_param;
+}
+
+static bool available_byte_extract_data_base(
+    const operand &op,
+    const temp_def_map &temp_defs,
+    std::string &base,
+    bool allow_bare_symbol,
+    int depth = 0) {
+    if (depth > 8)
+        return false;
+
+    if (op.kind == operand_kind::LABEL_REF) {
+        base = op.name;
+        return true;
+    }
+
+    if (allow_bare_symbol && available_byte_direct_data_base(op)) {
+        base = op.name;
+        return true;
+    }
+
+    if (!op.is_temp())
+        return false;
+
+    auto it = temp_defs.find(op.temp_id);
+    if (it == temp_defs.end() || !it->second)
+        return false;
+
+    const icode &def = *it->second;
+    if ((def.op == icode_op::ASSIGN || def.op == icode_op::CAST) &&
+        !def.left.is_none()) {
+        return available_byte_extract_data_base(def.left, temp_defs, base,
+                                                allow_bare_symbol, depth + 1);
+    }
+
+    if (def.op == icode_op::ADDRESS_OF &&
+        available_byte_direct_data_base(def.left)) {
+        base = def.left.name;
+        return true;
+    }
+
+    if (def.op == icode_op::ADD) {
+        if (available_byte_extract_data_base(def.left, temp_defs, base, true,
+                                             depth + 1))
+            return true;
+        if (available_byte_extract_data_base(def.right, temp_defs, base, true,
+                                             depth + 1))
+            return true;
+    }
+
+    return false;
+}
+
+static std::string available_byte_direct_store_base(
+    const icode &ic,
+    const temp_def_map &temp_defs) {
+    if (ic.op != icode_op::SET_VALUE_AT)
+        return {};
+
+    std::string base;
+    if (available_byte_extract_data_base(ic.result, temp_defs, base, false))
+        return base;
+    return {};
 }
 
 static void available_byte_load_invalidate_operand(
@@ -4057,6 +5023,29 @@ static void available_byte_load_invalidate_operand(
             }
         }
         if (erase)
+            it = avail.erase(it);
+        else
+            ++it;
+    }
+}
+
+static void available_byte_load_invalidate_store(
+    std::unordered_map<std::string, available_byte_load_entry> &avail,
+    const icode &ic,
+    const temp_def_map &temp_defs) {
+    std::string base = available_byte_direct_store_base(ic, temp_defs);
+    if (base.empty()) {
+        avail.clear();
+        return;
+    }
+
+    const std::string direct_prefix = "LOAD8|" + base + "|";
+    for (auto it = avail.begin(); it != avail.end();) {
+        const bool same_direct_object =
+            it->first.rfind(direct_prefix, 0) == 0;
+        const bool pointer_may_alias =
+            it->first.rfind("LOAD8PTR|", 0) == 0;
+        if (same_direct_object || pointer_may_alias)
             it = avail.erase(it);
         else
             ++it;
@@ -4088,7 +5077,7 @@ public:
 
         std::unordered_map<int, const icode *> temp_defs;
         for (const auto &ic : fn.icodes) {
-            if (ic.result.is_temp())
+            if (defines_result(ic) && ic.result.is_temp())
                 temp_defs[ic.result.temp_id] = &ic;
         }
 
@@ -4110,16 +5099,23 @@ public:
                     continue;
                 }
 
+                if (ic.op == icode_op::SET_VALUE_AT) {
+                    available_byte_load_invalidate_store(current, ic,
+                                                         temp_defs);
+                    continue;
+                }
+
                 if (defines_result(ic))
                     available_byte_load_invalidate_operand(current, ic.result);
 
-                std::string key = available_byte_load_key(ic);
+                std::string key = available_byte_load_key(ic, temp_defs);
                 if (!key.empty()) {
                     auto it = current.find(key);
                     if (it == current.end()) {
                         current.emplace(key, available_byte_load_entry{
                                                 ic.result,
-                                                available_byte_load_deps(ic)});
+                                                available_byte_load_deps(ic,
+                                                                        temp_defs)});
                     }
                 }
             }
@@ -4188,10 +5184,16 @@ public:
                     continue;
                 }
 
+                if (ic.op == icode_op::SET_VALUE_AT) {
+                    available_byte_load_invalidate_store(current, ic,
+                                                         temp_defs);
+                    continue;
+                }
+
                 if (defines_result(ic))
                     available_byte_load_invalidate_operand(current, ic.result);
 
-                std::string key = available_byte_load_key(ic);
+                std::string key = available_byte_load_key(ic, temp_defs);
                 if (key.empty())
                     continue;
 
@@ -4205,12 +5207,505 @@ public:
 
                 current[key] = available_byte_load_entry{
                     ic.result,
-                    available_byte_load_deps(ic)
+                    available_byte_load_deps(ic, temp_defs)
                 };
             }
         }
 
         return rewritten;
+    }
+};
+
+struct available_word_load_entry {
+    operand value;
+    std::vector<std::string> deps;
+};
+
+struct available_word_mem_ref {
+    std::string base_key;
+    int offset = 0;
+    std::vector<std::string> deps;
+};
+
+static bool is_available_word_load_barrier(const icode &ic) {
+    switch (ic.op) {
+    case icode_op::FUNCTION:
+    case icode_op::ENDFUNCTION:
+    case icode_op::CALL:
+    case icode_op::INLINE_ASM:
+    case icode_op::RECEIVE:
+    case icode_op::SEND:
+    case icode_op::ALLOCA:
+        return true;
+    case icode_op::ASSIGN:
+        return ic.result.is_symbol() &&
+               (ic.result.is_global || ic.result.is_tls || ic.result.is_sfr);
+    default:
+        return false;
+    }
+}
+
+static bool is_available_word_load_candidate(const icode &ic) {
+    int load_size = 0;
+    if (ic.result.type)
+        load_size = ic.result.type->size();
+    if (load_size <= 0 &&
+        ic.left.type &&
+        ic.left.type->is_ptr() &&
+        ic.left.type->base) {
+        load_size = ic.left.type->base->size();
+    }
+    return ic.op == icode_op::GET_VALUE_AT &&
+           ic.result.kind != operand_kind::NONE &&
+           load_size == 2 &&
+           ic.right.is_none() &&
+           !local_cse_operand_key(ic.left).empty();
+}
+
+static bool is_available_word_store_candidate(const icode &ic) {
+    int store_size = 0;
+    if (ic.left.type)
+        store_size = ic.left.type->size();
+    if (store_size <= 0 &&
+        ic.result.type &&
+        ic.result.type->is_ptr() &&
+        ic.result.type->base) {
+        store_size = ic.result.type->base->size();
+    }
+    return ic.op == icode_op::SET_VALUE_AT &&
+           ic.right.is_none() &&
+           ic.left.kind != operand_kind::NONE &&
+           store_size == 2;
+}
+
+static std::optional<available_word_mem_ref> resolve_available_word_mem_ref(
+    const operand &ptr,
+    const std::unordered_map<int, const icode *> &temp_defs,
+    int depth,
+    std::unordered_set<int> &visiting) {
+    if (depth > 6)
+        return std::nullopt;
+
+    auto make_leaf_ref = [&](const operand &leaf, int extra_offset) {
+        std::string key = local_cse_operand_key(leaf);
+        if (key.empty())
+            return std::optional<available_word_mem_ref>{};
+        available_word_mem_ref ref;
+        ref.base_key = key;
+        ref.offset = extra_offset;
+        ref.deps.push_back(key);
+        return std::optional<available_word_mem_ref>{ref};
+    };
+
+    if (ptr.is_temp()) {
+        if (!visiting.insert(ptr.temp_id).second)
+            return std::nullopt;
+
+        auto erase_visiting = [&]() {
+            visiting.erase(ptr.temp_id);
+        };
+
+        auto def_it = temp_defs.find(ptr.temp_id);
+        if (def_it != temp_defs.end() && def_it->second) {
+            const icode &def = *def_it->second;
+            if (def.result.is_temp() && def.result.temp_id == ptr.temp_id) {
+                switch (def.op) {
+                case icode_op::ASSIGN:
+                case icode_op::CAST: {
+                    auto ref = resolve_available_word_mem_ref(
+                        def.left, temp_defs, depth + 1, visiting);
+                    erase_visiting();
+                    return ref;
+                }
+                case icode_op::ADDRESS_OF:
+                    if (def.left.kind == operand_kind::SYMBOL) {
+                        operand base = def.left;
+                        int offset = def.left.byte_offset;
+                        base.byte_offset = 0;
+                        auto ref = make_leaf_ref(base, offset);
+                        erase_visiting();
+                        return ref;
+                    }
+                    break;
+                case icode_op::ADD:
+                case icode_op::SUB: {
+                    auto resolve_with_delta = [&](const operand &base,
+                                                  const operand &delta,
+                                                  int sign) {
+                        if (delta.kind != operand_kind::INT_CONST)
+                            return std::optional<available_word_mem_ref>{};
+                        auto ref = resolve_available_word_mem_ref(
+                            base, temp_defs, depth + 1, visiting);
+                        if (!ref)
+                            return ref;
+                        int64_t off64 = static_cast<int64_t>(ref->offset) +
+                                        sign * delta.ival;
+                        if (off64 < std::numeric_limits<int>::min() ||
+                            off64 > std::numeric_limits<int>::max()) {
+                            return std::optional<available_word_mem_ref>{};
+                        }
+                        ref->offset = static_cast<int>(off64);
+                        return ref;
+                    };
+
+                    auto ref = resolve_with_delta(def.left, def.right, +1);
+                    if (!ref && def.op == icode_op::ADD)
+                        ref = resolve_with_delta(def.right, def.left, +1);
+                    if (!ref && def.op == icode_op::SUB)
+                        ref = resolve_with_delta(def.left, def.right, -1);
+                    erase_visiting();
+                    return ref;
+                }
+                default:
+                    break;
+                }
+            }
+        }
+
+        erase_visiting();
+    }
+
+    return make_leaf_ref(ptr, 0);
+}
+
+static std::string available_word_load_key(
+    const icode &ic,
+    const std::unordered_map<int, const icode *> &temp_defs) {
+    if (!is_available_word_load_candidate(ic))
+        return {};
+    std::unordered_set<int> visiting;
+    auto ref = resolve_available_word_mem_ref(ic.left, temp_defs, 0, visiting);
+    if (!ref)
+        return {};
+    return "LOAD16PTR|" + ref->base_key + "|" + std::to_string(ref->offset);
+}
+
+static std::string available_word_store_key(
+    const icode &ic,
+    const std::unordered_map<int, const icode *> &temp_defs) {
+    if (!is_available_word_store_candidate(ic))
+        return {};
+    std::unordered_set<int> visiting;
+    auto ref = resolve_available_word_mem_ref(ic.result, temp_defs, 0, visiting);
+    if (!ref)
+        return {};
+    return "LOAD16PTR|" + ref->base_key + "|" + std::to_string(ref->offset);
+}
+
+static std::vector<std::string> available_word_load_deps(
+    const icode &ic,
+    const std::unordered_map<int, const icode *> &temp_defs) {
+    std::unordered_set<int> visiting;
+    auto ref = resolve_available_word_mem_ref(ic.left, temp_defs, 0, visiting);
+    return ref ? ref->deps : std::vector<std::string>{};
+}
+
+static std::vector<std::string> available_word_store_deps(
+    const icode &ic,
+    const std::unordered_map<int, const icode *> &temp_defs) {
+    std::unordered_set<int> visiting;
+    auto ref = resolve_available_word_mem_ref(ic.result, temp_defs, 0, visiting);
+    return ref ? ref->deps : std::vector<std::string>{};
+}
+
+static void available_word_load_invalidate_operand(
+    std::unordered_map<std::string, available_word_load_entry> &avail,
+    const operand &op) {
+    std::string dep = local_cse_operand_key(op);
+    if (dep.empty() || avail.empty())
+        return;
+
+    for (auto it = avail.begin(); it != avail.end();) {
+        bool erase = false;
+        for (const auto &entry_dep : it->second.deps) {
+            if (entry_dep == dep) {
+                erase = true;
+                break;
+            }
+        }
+        if (erase)
+            it = avail.erase(it);
+        else
+            ++it;
+    }
+}
+
+static bool available_word_load_maps_equal(
+    const std::unordered_map<std::string, available_word_load_entry> &lhs,
+    const std::unordered_map<std::string, available_word_load_entry> &rhs) {
+    if (lhs.size() != rhs.size())
+        return false;
+    for (const auto &it : lhs) {
+        auto found = rhs.find(it.first);
+        if (found == rhs.end())
+            return false;
+        if (!same_value_operand(it.second.value, found->second.value))
+            return false;
+    }
+    return true;
+}
+
+class available_word_load_pass final : public ir_pass {
+public:
+    const char *name() const override { return "available_word_load"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        auto has_fp_or_complex = [](const operand &op) {
+            return op.type &&
+                   (op.type->kind == type_kind::FLOAT ||
+                    op.type->is_complex());
+        };
+        for (const auto &ic : fn.icodes) {
+            switch (ic.op) {
+            case icode_op::FADD:
+            case icode_op::FSUB:
+            case icode_op::FMUL:
+            case icode_op::FDIV:
+            case icode_op::FITOSF:
+            case icode_op::FSTOI:
+            case icode_op::MAKE_COMPLEX:
+                return false;
+            default:
+                break;
+            }
+            if (has_fp_or_complex(ic.result) ||
+                has_fp_or_complex(ic.left) ||
+                has_fp_or_complex(ic.right)) {
+                return false;
+            }
+        }
+
+        std::unordered_map<int, const icode *> temp_defs;
+        for (const auto &ic : fn.icodes) {
+            if (defines_result(ic) && ic.result.is_temp())
+                temp_defs[ic.result.temp_id] = &ic;
+        }
+
+        control_flow_graph cfg(fn);
+        auto reachable = cfg.reachable_blocks();
+        auto order = cfg.reverse_postorder();
+        const size_t nblocks = cfg.blocks().size();
+
+        using avail_map = std::unordered_map<std::string, available_word_load_entry>;
+        std::vector<avail_map> in(nblocks), out(nblocks);
+
+        auto transfer = [&](const basic_block &block, const avail_map &start) {
+            avail_map current = start;
+            for (size_t i = block.begin; i < block.end; ++i) {
+                const icode &ic = fn.icodes[i];
+
+                if (is_available_word_load_barrier(ic)) {
+                    current.clear();
+                    continue;
+                }
+
+                if (ic.op == icode_op::SET_VALUE_AT) {
+                    current.clear();
+                    std::string key = available_word_store_key(ic, temp_defs);
+                    if (!key.empty()) {
+                        current[key] = available_word_load_entry{
+                            ic.left,
+                            available_word_store_deps(ic, temp_defs)
+                        };
+                    }
+                    continue;
+                }
+
+                if (defines_result(ic))
+                    available_word_load_invalidate_operand(current, ic.result);
+
+                std::string key = available_word_load_key(ic, temp_defs);
+                if (!key.empty()) {
+                    auto it = current.find(key);
+                    if (it == current.end()) {
+                        current.emplace(key, available_word_load_entry{
+                                                 ic.result,
+                                                 available_word_load_deps(ic, temp_defs)});
+                    }
+                }
+            }
+            return current;
+        };
+
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            for (size_t block_id : order) {
+                if (!reachable.count(block_id))
+                    continue;
+
+                avail_map merged;
+                bool have_pred = false;
+                const auto &block = cfg.block(block_id);
+                for (size_t pred_id : block.preds) {
+                    if (!reachable.count(pred_id))
+                        continue;
+                    if (!have_pred) {
+                        merged = out[pred_id];
+                        have_pred = true;
+                        continue;
+                    }
+
+                    for (auto it = merged.begin(); it != merged.end();) {
+                        auto found = out[pred_id].find(it->first);
+                        if (found == out[pred_id].end() ||
+                            !same_value_operand(it->second.value,
+                                                found->second.value)) {
+                            it = merged.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+
+                if (!have_pred)
+                    merged.clear();
+
+                if (!available_word_load_maps_equal(in[block_id], merged)) {
+                    in[block_id] = merged;
+                    changed = true;
+                }
+
+                avail_map new_out = transfer(block, in[block_id]);
+                if (!available_word_load_maps_equal(out[block_id], new_out)) {
+                    out[block_id] = std::move(new_out);
+                    changed = true;
+                }
+            }
+        }
+
+        bool rewritten = false;
+        for (size_t block_id : order) {
+            if (!reachable.count(block_id))
+                continue;
+
+            avail_map current = in[block_id];
+            const auto &block = cfg.block(block_id);
+            for (size_t i = block.begin; i < block.end; ++i) {
+                icode &ic = fn.icodes[i];
+
+                if (is_available_word_load_barrier(ic)) {
+                    current.clear();
+                    continue;
+                }
+
+                if (ic.op == icode_op::SET_VALUE_AT) {
+                    current.clear();
+                    std::string key = available_word_store_key(ic, temp_defs);
+                    if (!key.empty()) {
+                        current[key] = available_word_load_entry{
+                            ic.left,
+                            available_word_store_deps(ic, temp_defs)
+                        };
+                    }
+                    continue;
+                }
+
+                if (defines_result(ic))
+                    available_word_load_invalidate_operand(current, ic.result);
+
+                std::string key = available_word_load_key(ic, temp_defs);
+                if (key.empty())
+                    continue;
+
+                auto it = current.find(key);
+                if (it != current.end()) {
+                    ic.op = icode_op::ASSIGN;
+                    ic.left = it->second.value;
+                    ic.right = operand::make_none();
+                    rewritten = true;
+                }
+
+                current[key] = available_word_load_entry{
+                    ic.result,
+                    available_word_load_deps(ic, temp_defs)
+                };
+            }
+        }
+
+        return rewritten;
+    }
+};
+
+class local_word_store_forward_pass final : public ir_pass {
+public:
+    const char *name() const override { return "local_word_store_forward"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        std::unordered_map<int, const icode *> temp_defs;
+        for (const auto &ic : fn.icodes) {
+            if (defines_result(ic) && ic.result.is_temp())
+                temp_defs[ic.result.temp_id] = &ic;
+        }
+
+        auto clear_window = [&](const icode &ic) {
+            switch (ic.op) {
+            case icode_op::FUNCTION:
+            case icode_op::ENDFUNCTION:
+            case icode_op::LABEL:
+            case icode_op::GOTO:
+            case icode_op::IFX:
+            case icode_op::RETURN:
+            case icode_op::CALL:
+            case icode_op::INLINE_ASM:
+            case icode_op::RECEIVE:
+            case icode_op::SEND:
+            case icode_op::ALLOCA:
+                return true;
+            case icode_op::ASSIGN:
+                return ic.result.is_symbol() &&
+                       (ic.result.is_global || ic.result.is_tls ||
+                        ic.result.is_sfr);
+            default:
+                return false;
+            }
+        };
+
+        using avail_map =
+            std::unordered_map<std::string, available_word_load_entry>;
+        avail_map current;
+        bool changed = false;
+
+        for (auto &ic : fn.icodes) {
+            if (clear_window(ic)) {
+                current.clear();
+                continue;
+            }
+
+            if (ic.op == icode_op::SET_VALUE_AT) {
+                current.clear();
+                std::string key = available_word_store_key(ic, temp_defs);
+                if (!key.empty()) {
+                    current[key] = available_word_load_entry{
+                        ic.left,
+                        available_word_store_deps(ic, temp_defs)};
+                }
+                continue;
+            }
+
+            if (defines_result(ic))
+                available_word_load_invalidate_operand(current, ic.result);
+
+            std::string key = available_word_load_key(ic, temp_defs);
+            if (key.empty())
+                continue;
+
+            auto found = current.find(key);
+            if (found != current.end()) {
+                ic.op = icode_op::ASSIGN;
+                ic.left = found->second.value;
+                ic.right = operand::make_none();
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 };
 
@@ -5223,6 +6718,106 @@ public:
     }
 };
 
+class adjacent_pack_word_load_pass final : public ir_pass {
+public:
+    const char *name() const override { return "adjacent_pack_word_load"; }
+
+    bool run(ir_function &fn) override {
+        std::unordered_map<int, const icode *> temp_defs;
+        std::unordered_map<int, size_t> temp_def_index;
+        std::unordered_map<int, int> temp_use_count;
+
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            const auto &ic = fn.icodes[i];
+            if (ic.result.is_temp()) {
+                temp_defs[ic.result.temp_id] = &ic;
+                temp_def_index[ic.result.temp_id] = i;
+            }
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (op.is_temp())
+                    ++temp_use_count[op.temp_id];
+            });
+        }
+
+        auto is_byte_load_def = [&](const operand &op) -> const icode * {
+            if (!op.is_temp())
+                return nullptr;
+            auto it = temp_defs.find(op.temp_id);
+            if (it == temp_defs.end() || !it->second)
+                return nullptr;
+            const icode *def = it->second;
+            if (def->op != icode_op::GET_VALUE_AT || !def->result.type ||
+                def->result.type->size() != 1 || !def->right.is_none()) {
+                return nullptr;
+            }
+            return def;
+        };
+
+        auto has_barrier_between = [&](size_t begin, size_t end, size_t skip0,
+                                       size_t skip1) {
+            for (size_t i = begin; i < end; ++i) {
+                if (i == skip0 || i == skip1)
+                    continue;
+                const icode &scan = fn.icodes[i];
+                if (scan.op == icode_op::SET_VALUE_AT ||
+                    is_available_word_load_barrier(scan)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        bool changed = false;
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            auto &ic = fn.icodes[i];
+            if (ic.op != icode_op::PACK_BYTES || !ic.result.type ||
+                ic.result.type->size() != 2) {
+                continue;
+            }
+
+            const icode *low_def = is_byte_load_def(ic.left);
+            const icode *high_def = is_byte_load_def(ic.right);
+            if (!low_def || !high_def)
+                continue;
+
+            if (temp_use_count[ic.left.temp_id] != 1 ||
+                temp_use_count[ic.right.temp_id] != 1) {
+                continue;
+            }
+
+            const size_t low_idx = temp_def_index[ic.left.temp_id];
+            const size_t high_idx = temp_def_index[ic.right.temp_id];
+            if (!(low_idx < high_idx && high_idx < i))
+                continue;
+
+            if (has_barrier_between(low_idx + 1, i, low_idx, high_idx))
+                continue;
+
+            std::unordered_set<int> visiting_lo;
+            std::unordered_set<int> visiting_hi;
+            auto low_ref =
+                resolve_available_word_mem_ref(low_def->left, temp_defs, 0,
+                                               visiting_lo);
+            auto high_ref =
+                resolve_available_word_mem_ref(high_def->left, temp_defs, 0,
+                                               visiting_hi);
+            if (!low_ref || !high_ref)
+                continue;
+            if (low_ref->base_key != high_ref->base_key ||
+                high_ref->offset != low_ref->offset + 1) {
+                continue;
+            }
+
+            ic.op = icode_op::GET_VALUE_AT;
+            ic.left = low_def->left;
+            ic.right = operand::make_none();
+            changed = true;
+        }
+
+        return changed;
+    }
+};
+
 class label_indexed_byte_access_pass final : public ir_pass {
 public:
     const char *name() const override { return "label_indexed_byte_access"; }
@@ -5250,6 +6845,55 @@ public:
             return std::nullopt;
         };
 
+        auto direct_data_base = [](const operand &op) {
+            return op.kind == operand_kind::SYMBOL &&
+                   op.is_global &&
+                   !op.is_tls &&
+                   !op.is_sfr &&
+                   !op.is_func &&
+                   !op.is_param;
+        };
+
+        std::function<bool(const operand &, operand &)> extract_data_base;
+        extract_data_base = [&](const operand &cand, operand &out) {
+            if (cand.kind == operand_kind::LABEL_REF) {
+                out = cand;
+                return true;
+            }
+            if (direct_data_base(cand)) {
+                out = operand::make_label(cand.name);
+                return true;
+            }
+            if (!cand.is_temp())
+                return false;
+            auto src_it = temp_defs.find(cand.temp_id);
+            if (src_it == temp_defs.end() || !src_it->second)
+                return false;
+            const icode *src_def = src_it->second;
+            if ((src_def->op == icode_op::ASSIGN ||
+                 src_def->op == icode_op::CAST) &&
+                src_def->left.is_temp()) {
+                return extract_data_base(src_def->left, out);
+            }
+            if (src_def->op == icode_op::ADDRESS_OF &&
+                direct_data_base(src_def->left)) {
+                out = operand::make_label(src_def->left.name);
+                return true;
+            }
+            return false;
+        };
+
+        std::unordered_set<std::string> mutable_bases;
+        for (const auto &ic : fn.icodes) {
+            if (ic.op != icode_op::SET_VALUE_AT)
+                continue;
+            operand base;
+            if (extract_data_base(ic.result, base) &&
+                base.kind == operand_kind::LABEL_REF) {
+                mutable_bases.insert(base.name);
+            }
+        }
+
         std::function<bool(const operand &, operand &, operand &)> match_ptr;
         match_ptr = [&](const operand &ptr,
                         operand &base,
@@ -5267,32 +6911,17 @@ public:
             if (def->op != icode_op::ADD)
                 return false;
 
-            auto direct_data_base = [](const operand &op) {
-                return op.kind == operand_kind::SYMBOL &&
-                       op.is_global &&
-                       !op.is_tls &&
-                       !op.is_sfr &&
-                       !op.is_func &&
-                       !op.is_param;
-            };
-
-            if (def->left.kind == operand_kind::LABEL_REF || direct_data_base(def->left)) {
+            if (extract_data_base(def->left, base)) {
                 auto idx = unwrap_index(def->right);
                 if (!idx)
                     return false;
-                base = def->left.kind == operand_kind::LABEL_REF
-                           ? def->left
-                           : operand::make_label(def->left.name);
                 index = *idx;
                 return true;
             }
-            if (def->right.kind == operand_kind::LABEL_REF || direct_data_base(def->right)) {
+            if (extract_data_base(def->right, base)) {
                 auto idx = unwrap_index(def->left);
                 if (!idx)
                     return false;
-                base = def->right.kind == operand_kind::LABEL_REF
-                           ? def->right
-                           : operand::make_label(def->right.name);
                 index = *idx;
                 return true;
             }
@@ -5305,18 +6934,20 @@ public:
             operand index;
             const int result_size =
                 (ic.result.type && ic.result.type->size() > 0) ? ic.result.type->size() : 2;
-            const int left_size =
-                (ic.left.type && ic.left.type->size() > 0) ? ic.left.type->size() : 2;
             if (ic.op == icode_op::GET_VALUE_AT &&
                 result_size == 1 &&
-                match_ptr(ic.left, base, index)) {
+                match_ptr(ic.left, base, index) &&
+                !(base.kind == operand_kind::LABEL_REF &&
+                  mutable_bases.count(base.name))) {
                 ic.left = base;
                 ic.right = index;
                 changed = true;
                 continue;
             }
+            const int store_size =
+                (ic.left.type && ic.left.type->size() > 0) ? ic.left.type->size() : 2;
             if (ic.op == icode_op::SET_VALUE_AT &&
-                left_size == 1 &&
+                store_size == 1 &&
                 match_ptr(ic.result, base, index)) {
                 ic.result = base;
                 ic.right = index;
@@ -5324,6 +6955,36 @@ public:
                 continue;
             }
         }
+        return changed;
+    }
+};
+
+class dead_call_result_elide_pass final : public ir_pass {
+public:
+    const char *name() const override { return "dead_call_result_elide"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        std::unordered_set<int> used_temps;
+        for (const auto &ic : fn.icodes) {
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (op.is_temp())
+                    used_temps.insert(op.temp_id);
+            });
+        }
+
+        bool changed = false;
+        for (auto &ic : fn.icodes) {
+            if (ic.op != icode_op::CALL || !ic.result.is_temp())
+                continue;
+            if (used_temps.count(ic.result.temp_id) != 0)
+                continue;
+            ic.result = operand::make_none();
+            changed = true;
+        }
+
         return changed;
     }
 };
@@ -5519,7 +7180,7 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<jump_threading_pass>());
     if (settings.address_deref_fold)
         passes.push_back(std::make_unique<address_deref_fold_pass>());
-    if (settings.cfg_cleanup)
+    if (settings.value_propagation)
         passes.push_back(std::make_unique<global_address_const_pass>());
     if (settings.scalar_local_promotion)
         passes.push_back(std::make_unique<scalar_local_promotion_pass>());
@@ -5546,9 +7207,15 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
     if (settings.promoted_byte_ops)
         passes.push_back(std::make_unique<pack_bytes_pass>());
     if (settings.promoted_byte_ops)
+        passes.push_back(std::make_unique<adjacent_pack_word_load_pass>());
+    if (settings.promoted_byte_ops)
         passes.push_back(std::make_unique<label_indexed_byte_access_pass>());
     if (settings.promoted_byte_ops)
         passes.push_back(std::make_unique<available_byte_load_pass>());
+    if (settings.value_propagation)
+        passes.push_back(std::make_unique<local_word_store_forward_pass>());
+    if (settings.value_propagation)
+        passes.push_back(std::make_unique<available_word_load_pass>());
     if (settings.rotate_combine)
         passes.push_back(std::make_unique<rotate_combine_pass>());
     if (settings.value_propagation)
@@ -5561,6 +7228,10 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<constant_fold_pass>());
     if (settings.algebraic_simplify)
         passes.push_back(std::make_unique<algebraic_simplify_pass>());
+    if (settings.algebraic_simplify)
+        passes.push_back(std::make_unique<add_const_chain_pass>());
+    if (settings.algebraic_simplify)
+        passes.push_back(std::make_unique<post_update_recover_pass>());
     if (settings.local_cse)
         passes.push_back(std::make_unique<local_cse_pass>());
     if (settings.loop_licm)
@@ -5569,6 +7240,10 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<loop_induction_pass>());
     if (settings.strength_reduction)
         passes.push_back(std::make_unique<strength_reduction_pass>());
+    if (settings.local_cse)
+        passes.push_back(std::make_unique<linear_expr_cse_pass>());
+    if (settings.dead_code_elim)
+        passes.push_back(std::make_unique<dead_call_result_elide_pass>());
     if (settings.dead_code_elim)
         passes.push_back(std::make_unique<dead_code_elim_pass>());
     if (settings.duplicate_block_merge)

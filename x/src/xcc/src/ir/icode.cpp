@@ -50,16 +50,26 @@ const char *icode_op_name(icode_op op) {
 }
 
 std::string operand::to_string() const {
+    auto append_byte_offset = [&](std::string text) {
+        if (byte_offset == 0)
+            return text;
+        if (byte_offset > 0)
+            return text + "+" + std::to_string(byte_offset);
+        return text + std::to_string(byte_offset);
+    };
+
     switch (kind) {
     case operand_kind::NONE:       return "_";
-    case operand_kind::TEMP:       return "t" + std::to_string(temp_id);
+    case operand_kind::TEMP:
+        return append_byte_offset("t" + std::to_string(temp_id));
     case operand_kind::SYMBOL:
-        if (is_global) return name;
-        if (is_param)  return name + "(ix+" + std::to_string(stack_offset + 4) + ")";
-        return name + "(ix" + std::to_string(stack_offset) + ")";
+        if (is_global) return append_byte_offset(name);
+        if (is_param)
+            return append_byte_offset(name + "(ix+" + std::to_string(stack_offset + 4) + ")");
+        return append_byte_offset(name + "(ix" + std::to_string(stack_offset) + ")");
     case operand_kind::INT_CONST:  return "#" + std::to_string(ival);
     case operand_kind::FLOAT_CONST:return "#" + std::to_string(fval);
-    case operand_kind::LABEL_REF:  return name;
+    case operand_kind::LABEL_REF:  return append_byte_offset(name);
     }
     return "?";
 }

@@ -179,7 +179,10 @@ void z80_gen::emit_external_data_refs(const ir_module &mod) {
 
 void z80_gen::emit_strings(const ir_module &mod) {
     if (mod.string_literals.empty()) return;
-    asm_.section_rodata();
+    if (size_opt_enabled() && !debug_)
+        asm_.section_code();
+    else
+        asm_.section_rodata();
     for (auto &s : mod.string_literals) {
         asm_.label(mangle(s.name), false);
         if (s.char_width <= 1) {

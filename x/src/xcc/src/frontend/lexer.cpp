@@ -12,6 +12,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "frontend/lexer.h"
+#include "frontend/types.h"
 #include <cassert>
 #include <cctype>
 #include <cstring>
@@ -411,9 +412,10 @@ token lexer::lex_char_literal(int char_width) {
     }
     if (cur() != '\'') return error_tok(loc, "unterminated character literal");
     advance();
-    // Plain character constants use the target's signed-char semantics.
+    // Plain character constants follow the target's plain-char default.
     // UTF-8 character literals (u8'X') keep their unsigned code unit value.
-    if (char_width == 1 && val >= 0x80 && val <= 0xFF)
+    if (char_width == 1 && !plain_char_is_unsigned() &&
+        val >= 0x80 && val <= 0xFF)
         val = (int64_t)(int8_t)(uint8_t)val;
     token t = make(tk::CHAR_LIT, "", loc);
     t.ival = val;

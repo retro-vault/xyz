@@ -12,6 +12,7 @@
 //
 #include "backend/z80/z80gen.h"
 #include <algorithm>
+#include <unordered_set>
 
 namespace xcc {
 namespace {
@@ -21,6 +22,20 @@ bool mentions_temp(const icode &ic, int temp_id) {
         return op.is_temp() && op.temp_id == temp_id;
     };
     return uses_temp(ic.result) || uses_temp(ic.left) || uses_temp(ic.right);
+}
+
+bool same_local_symbol_base(const operand &a, const operand &b) {
+    return a.kind == operand_kind::SYMBOL &&
+           b.kind == operand_kind::SYMBOL &&
+           !a.is_global &&
+           !b.is_global &&
+           !a.is_tls &&
+           !b.is_tls &&
+           !a.is_func &&
+           !b.is_func &&
+           a.is_param == b.is_param &&
+           a.stack_offset == b.stack_offset &&
+           a.name == b.name;
 }
 
 bool is_cfg_barrier(const icode &ic) {
@@ -101,6 +116,7 @@ bool immediate_use_safe_in_a(const icode &ic, int temp_id) {
     case icode_op::ROL:
     case icode_op::ROR:
     case icode_op::RETURN:
+    case icode_op::SET_VALUE_AT:
         return true;
     default:
         return false;
@@ -224,6 +240,7 @@ bool bc_backend_hazard(const icode &ic, bool small_ix_frame) {
 bool z80_gen::clobbers_bc(const icode &ic) {
     switch (ic.op) {
     case icode_op::CALL:
+        return true;
     case icode_op::MUL:  case icode_op::DIV:  case icode_op::MOD:
     case icode_op::FADD: case icode_op::FSUB:
     case icode_op::FMUL: case icode_op::FDIV:
@@ -265,6 +282,124 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
 
     std::unordered_map<int, temp_interval> intervals;
     std::vector<int> regions(fn.icodes.size(), 0);
+    std::unordered_set<int> no_spill_temps;
+    std::unordered_map<int, abi_arg_loc> incoming_arg_locs;
+
+    auto same_call_result_operand = [](const operand &a, const operand &b) {
+        if (a.kind != b.kind)
+            return false;
+        switch (a.kind) {
+        case operand_kind::TEMP:
+            return a.temp_id == b.temp_id;
+        case operand_kind::SYMBOL:
+            return a.name == b.name &&
+                   a.stack_offset == b.stack_offset &&
+                   a.byte_offset == b.byte_offset &&
+                   a.is_global == b.is_global;
+        default:
+            return false;
+        }
+    };
+
+    auto supports_direct_call_ifx = [](call_abi abi, int size) {
+        return effective_call_abi(abi) == call_abi::SDCCCALL1 &&
+               (size == 1 || size == 2);
+    };
+
+    auto supports_direct_compare_return = [&](const operand &op) {
+        if (!op.type)
+            return false;
+        const int sz = op_size(op);
+        if (sz != 1 && sz != 2)
+            return false;
+        switch (effective_call_abi(fn.abi)) {
+        case call_abi::SDCCCALL1:
+        case call_abi::SDCCCALL0:
+        case call_abi::Z88DK_SMALLC:
+        case call_abi::Z88DK_FASTCALL:
+        case call_abi::Z88DK_CALLEE:
+        case call_abi::NAKED:
+        case call_abi::INTERRUPT:
+        case call_abi::CRITICAL:
+            return true;
+        default:
+            return false;
+        }
+    };
+
+    auto is_truth_test_preserving_integer_cast = [](const icode &ic) {
+        if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type)
+            return false;
+        if (ic.left.type->is_far_ptr() || ic.result.type->is_far_ptr())
+            return false;
+        const bool src_ok = ic.left.type->is_integer() || ic.left.type->is_ptr();
+        const bool dst_ok = ic.result.type->is_integer() || ic.result.type->is_ptr();
+        return src_ok && dst_ok;
+    };
+
+    auto temp_used_after = [&](size_t start_idx, int temp_id) {
+        for (size_t i = start_idx; i < fn.icodes.size(); ++i) {
+            const auto &ic = fn.icodes[i];
+            auto uses = [&](const operand &op) {
+                return op.is_temp() && op.temp_id == temp_id;
+            };
+            if (uses(ic.left) || uses(ic.right))
+                return true;
+            if (uses(ic.result)) {
+                if (ic.op == icode_op::SET_VALUE_AT)
+                    return true;
+                return false;
+            }
+        }
+        return false;
+    };
+
+    auto has_direct_call_ifx_fallthrough_send =
+        [&](size_t ifx_idx, const operand &value) {
+            if (!value.is_temp() || ifx_idx + 2 >= fn.icodes.size())
+                return false;
+
+            const auto &ifx = fn.icodes[ifx_idx];
+            if (ifx.op != icode_op::IFX ||
+                !same_call_result_operand(ifx.left, value) ||
+                ifx.true_lbl.empty()) {
+                return false;
+            }
+
+            const auto &true_label = fn.icodes[ifx_idx + 1];
+            if (true_label.op != icode_op::LABEL ||
+                true_label.label_name != ifx.true_lbl) {
+                return false;
+            }
+
+            size_t send_idx = ifx_idx + 2;
+            while (send_idx < fn.icodes.size() &&
+                   fn.icodes[send_idx].op == icode_op::LABEL) {
+                ++send_idx;
+            }
+            if (send_idx >= fn.icodes.size())
+                return false;
+
+            const auto &send = fn.icodes[send_idx];
+            if (send.op != icode_op::SEND ||
+                !same_call_result_operand(send.left, value) ||
+                (send.arg_loc != abi_arg_loc::REG_HL &&
+                 send.arg_loc != abi_arg_loc::REG_DE)) {
+                return false;
+            }
+
+            return !temp_used_after(send_idx + 1, value.temp_id);
+        };
+
+    auto maybe_mark_dead_incoming_arg_temp = [&](const operand &op,
+                                                 size_t after_idx) {
+        if (!op.is_temp())
+            return;
+        if (incoming_arg_locs.find(op.temp_id) == incoming_arg_locs.end())
+            return;
+        if (!temp_used_after(after_idx, op.temp_id))
+            no_spill_temps.insert(op.temp_id);
+    };
 
     auto is_region_barrier = [](icode_op op) {
         switch (op) {
@@ -287,8 +422,160 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
             ++region_id;
     }
 
+    for (size_t idx = 1; idx < fn.icodes.size(); ++idx) {
+        const auto &ic = fn.icodes[idx];
+        if (ic.op != icode_op::RECEIVE)
+            break;
+        if (ic.result.is_temp() && ic.arg_loc != abi_arg_loc::STACK)
+            incoming_arg_locs[ic.result.temp_id] = ic.arg_loc;
+    }
+
+    for (size_t idx = 0; idx < fn.icodes.size(); ++idx) {
+        const auto &ic = fn.icodes[idx];
+        if (ic.op == icode_op::CALL &&
+            ic.result.is_temp() &&
+            !temp_used_after(idx + 1, ic.result.temp_id)) {
+            no_spill_temps.insert(ic.result.temp_id);
+            continue;
+        }
+
+        if (ic.op == icode_op::CALL && ic.result.is_temp() &&
+            idx + 1 < fn.icodes.size()) {
+            const auto &next = fn.icodes[idx + 1];
+
+            if (next.op == icode_op::RETURN &&
+                same_call_result_operand(next.left, ic.result) &&
+                !temp_used_after(idx + 2, ic.result.temp_id)) {
+                no_spill_temps.insert(ic.result.temp_id);
+                continue;
+            }
+
+            const int result_size =
+                (ic.result.type && ic.result.type->size() > 0)
+                    ? ic.result.type->size()
+                    : 2;
+            if (!supports_direct_call_ifx(ic.callee_abi, result_size))
+                continue;
+
+            if (next.op == icode_op::IFX &&
+                same_call_result_operand(next.left, ic.result) &&
+                (!temp_used_after(idx + 2, ic.result.temp_id) ||
+                 (result_size == 2 &&
+                  has_direct_call_ifx_fallthrough_send(idx + 1,
+                                                       ic.result)))) {
+                no_spill_temps.insert(ic.result.temp_id);
+                continue;
+            }
+
+            if (next.op != icode_op::CAST ||
+                !same_call_result_operand(next.left, ic.result) ||
+                !next.result.is_temp() ||
+                !is_truth_test_preserving_integer_cast(next) ||
+                idx + 2 >= fn.icodes.size()) {
+                continue;
+            }
+
+            const auto &ifx = fn.icodes[idx + 2];
+            if (ifx.op != icode_op::IFX ||
+                !same_call_result_operand(ifx.left, next.result) ||
+                temp_used_after(idx + 2, ic.result.temp_id) ||
+                temp_used_after(idx + 3, next.result.temp_id)) {
+                continue;
+            }
+
+            no_spill_temps.insert(ic.result.temp_id);
+            no_spill_temps.insert(next.result.temp_id);
+            continue;
+        }
+
+        if (!is_compare_op(ic.op) || !ic.result.is_temp() ||
+            idx + 1 >= fn.icodes.size()) {
+            continue;
+        }
+
+        const auto &next = fn.icodes[idx + 1];
+        if (next.op == icode_op::IFX &&
+            same_call_result_operand(next.left, ic.result) &&
+            !temp_used_after(idx + 2, ic.result.temp_id)) {
+            no_spill_temps.insert(ic.result.temp_id);
+            maybe_mark_dead_incoming_arg_temp(ic.left, idx + 2);
+            maybe_mark_dead_incoming_arg_temp(ic.right, idx + 2);
+            continue;
+        }
+
+        if (next.op == icode_op::RETURN &&
+            same_call_result_operand(next.left, ic.result) &&
+            !temp_used_after(idx + 2, ic.result.temp_id) &&
+            supports_direct_compare_return(next.left)) {
+            no_spill_temps.insert(ic.result.temp_id);
+            maybe_mark_dead_incoming_arg_temp(ic.left, idx + 2);
+            maybe_mark_dead_incoming_arg_temp(ic.right, idx + 2);
+            continue;
+        }
+
+        if (next.op == icode_op::CAST &&
+            same_call_result_operand(next.left, ic.result) &&
+            next.result.is_temp() &&
+            is_truth_test_preserving_integer_cast(next) &&
+            idx + 2 < fn.icodes.size()) {
+            const auto &ret_ic = fn.icodes[idx + 2];
+            if (ret_ic.op == icode_op::RETURN &&
+                same_call_result_operand(ret_ic.left, next.result) &&
+                !temp_used_after(idx + 2, ic.result.temp_id) &&
+                !temp_used_after(idx + 3, next.result.temp_id) &&
+                supports_direct_compare_return(ret_ic.left)) {
+                no_spill_temps.insert(ic.result.temp_id);
+                no_spill_temps.insert(next.result.temp_id);
+                maybe_mark_dead_incoming_arg_temp(ic.left, idx + 3);
+                maybe_mark_dead_incoming_arg_temp(ic.right, idx + 3);
+                continue;
+            }
+        }
+
+        if ((next.op != icode_op::EQ && next.op != icode_op::NE) ||
+            idx + 2 >= fn.icodes.size()) {
+            continue;
+        }
+
+        const auto &final_ifx = fn.icodes[idx + 2];
+        if (final_ifx.op != icode_op::IFX ||
+            final_ifx.true_lbl.empty() ||
+            !next.result.is_temp() ||
+            !final_ifx.left.is_temp() ||
+            next.result.temp_id != final_ifx.left.temp_id ||
+            temp_used_after(idx + 2, next.result.temp_id)) {
+            continue;
+        }
+
+        const bool cmp_on_left =
+            next.left.is_temp() && next.left.temp_id == ic.result.temp_id;
+        const bool cmp_on_right =
+            next.right.is_temp() && next.right.temp_id == ic.result.temp_id;
+        if (!cmp_on_left && !cmp_on_right)
+            continue;
+        const operand &other = cmp_on_left ? next.right : next.left;
+        if (other.kind != operand_kind::INT_CONST ||
+            temp_used_after(idx + 1, ic.result.temp_id)) {
+            continue;
+        }
+
+        if (!((next.op == icode_op::NE && other.ival == 0) ||
+              (next.op == icode_op::EQ && other.ival == 1) ||
+              (next.op == icode_op::EQ && other.ival == 0) ||
+              (next.op == icode_op::NE && other.ival == 1))) {
+            continue;
+        }
+
+        no_spill_temps.insert(ic.result.temp_id);
+        no_spill_temps.insert(next.result.temp_id);
+        maybe_mark_dead_incoming_arg_temp(ic.left, idx + 3);
+        maybe_mark_dead_incoming_arg_temp(ic.right, idx + 3);
+    }
+
     auto note_temp = [&](const operand &op, int idx) {
         if (!op.is_temp())
+            return;
+        if (no_spill_temps.count(op.temp_id))
             return;
 
         auto home_it = temp_regs_.find(op.temp_id);
@@ -416,49 +703,14 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
         note_temp(ic.right, idx);
     }
 
-    if (!temp_slot_reuse_safe(fn)) {
-        if (opt_settings_.local_frame_compaction) {
-            int dedicated_bytes = 0;
-            std::unordered_map<int, std::vector<temp_interval>> region_locals;
+    std::vector<temp_interval> ordered;
+    ordered.reserve(intervals.size());
+    for (const auto &[tid, iv] : intervals) {
+        if (iv.first_idx >= 0)
+            ordered.push_back(iv);
+    }
 
-            for (const auto &[tid, iv] : intervals) {
-                if (iv.first_idx < 0)
-                    continue;
-                if (iv.first_region != -1 && iv.first_region == iv.last_region) {
-                    region_locals[iv.first_region].push_back(iv);
-                    continue;
-                }
-                temp_slots_[tid] = -(local_bytes_ + dedicated_bytes + iv.size);
-                dedicated_bytes += iv.size;
-            }
-
-            int shared_region_pool = 0;
-            for (auto &[rid, local_intervals] : region_locals) {
-                std::sort(local_intervals.begin(), local_intervals.end(),
-                          [](const temp_interval &a, const temp_interval &b) {
-                              if (a.first_idx != b.first_idx)
-                                  return a.first_idx < b.first_idx;
-                              if (a.last_idx != b.last_idx)
-                                  return a.last_idx < b.last_idx;
-                              return a.temp_id < b.temp_id;
-                          });
-                shared_region_pool = std::max(
-                    shared_region_pool,
-                    assign_linear_scan_slots(local_intervals, dedicated_bytes));
-            }
-
-            next_temp_slot_ = -(dedicated_bytes + shared_region_pool);
-            return dedicated_bytes + shared_region_pool;
-        }
-
-        std::vector<temp_interval> ordered;
-        ordered.reserve(intervals.size());
-        for (const auto &[tid, iv] : intervals) {
-            if (iv.first_idx >= 0)
-                ordered.push_back(iv);
-        }
-
-        std::sort(ordered.begin(), ordered.end(),
+    std::sort(ordered.begin(), ordered.end(),
                   [](const temp_interval &a, const temp_interval &b) {
                       if (a.first_idx != b.first_idx)
                           return a.first_idx < b.first_idx;
@@ -467,6 +719,7 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
                       return a.temp_id < b.temp_id;
                   });
 
+    if (!temp_slot_reuse_safe(fn)) {
         int dedicated_bytes = 0;
         for (const auto &iv : ordered) {
             temp_slots_[iv.temp_id] =
@@ -476,22 +729,6 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
         next_temp_slot_ = -dedicated_bytes;
         return dedicated_bytes;
     }
-
-    std::vector<temp_interval> ordered;
-    ordered.reserve(intervals.size());
-    for (const auto &[tid, iv] : intervals) {
-        if (iv.first_idx >= 0)
-            ordered.push_back(iv);
-    }
-
-    std::sort(ordered.begin(), ordered.end(),
-              [](const temp_interval &a, const temp_interval &b) {
-                  if (a.first_idx != b.first_idx)
-                      return a.first_idx < b.first_idx;
-                  if (a.last_idx != b.last_idx)
-                      return a.last_idx < b.last_idx;
-                  return a.temp_id < b.temp_id;
-              });
 
     int high_water = assign_linear_scan_slots(ordered, 0);
     next_temp_slot_ = -high_water;
@@ -598,6 +835,24 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     for (int idx = 0; idx < n; ++idx)
         bc_clob[idx] = clobbers_bc(fn.icodes[idx]);
 
+    // A TEMP whose value has no later IR use must still allow the defining
+    // instruction to execute, but it does not need an IX-frame spill slot.
+    // Give those dead results a register home that makes store_a/store_hl a
+    // no-op (or at worst a register move for DE-origin word results).
+    for (auto &[tid, iv] : ivs) {
+        if (iv.first_def < 0 || iv.has_addr_of)
+            continue;
+        if (iv.last_use > iv.first_def)
+            continue;
+        if (temp_regs_.find(tid) != temp_regs_.end())
+            continue;
+        if (iv.size == 1) {
+            temp_regs_[tid] = temp_home::main_a;
+        } else if (iv.size == 2) {
+            temp_regs_[tid] = temp_home::main_hl;
+        }
+    }
+
     // Step 3: sort by first_def.
     std::vector<std::pair<int,int>> order; // {first_def, temp_id}
     for (auto &[tid, iv] : ivs)
@@ -650,67 +905,80 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         const icode &def_ic = fn.icodes[iv.first_def];
         if (!def_ic.result.is_temp() || def_ic.result.temp_id != temp_id)
             return false;
-
-        auto base_ok = [](const operand &cand) {
-            return (cand.kind == operand_kind::SYMBOL &&
-                    cand.is_global && !cand.is_tls &&
-                    !cand.is_func && !cand.is_param) ||
-                   cand.kind == operand_kind::LABEL_REF;
-        };
-        auto addr_temp_ok = [&](const operand &cand) {
-            if (!cand.is_temp())
-                return false;
-            auto src_it = ivs.find(cand.temp_id);
-            if (src_it == ivs.end() || src_it->second.first_def < 0)
-                return false;
-            const icode &src_def = fn.icodes[src_it->second.first_def];
-            return src_def.op == icode_op::ADDRESS_OF;
-        };
-        auto remat_base_ok = [&](const operand &cand, int next_depth) {
-            return base_ok(cand) ||
-                   addr_temp_ok(cand) ||
-                   (cand.is_temp() && remat_pointer_temp_ok(cand.temp_id, next_depth));
-        };
-        auto small_pointer_delta_ok = [&](const operand &cand, int next_depth) {
-            if (cand.kind == operand_kind::INT_CONST)
-                return cand.ival >= -32768 && cand.ival <= 32767;
-            return is_zero_u8ish(cand, next_depth);
-        };
-
-        switch (def_ic.op) {
-        case icode_op::ADDRESS_OF:
-            break;
-        case icode_op::ASSIGN:
-        case icode_op::CAST:
-            if (!(def_ic.left.is_temp() &&
-                  remat_pointer_temp_ok(def_ic.left.temp_id, depth + 1)))
-                return false;
-            break;
-        case icode_op::ADD:
-        case icode_op::SUB:
-            if (remat_base_ok(def_ic.left, depth + 1)) {
-                if (!small_pointer_delta_ok(def_ic.right, depth + 1))
-                    return false;
-            } else if (def_ic.op == icode_op::ADD &&
-                       remat_base_ok(def_ic.right, depth + 1)) {
-                if (!small_pointer_delta_ok(def_ic.left, depth + 1))
-                    return false;
-            } else {
-                return false;
-            }
-            break;
-        default:
+        if (!def_ic.result.type || !def_ic.result.type->is_ptr() ||
+            def_ic.result.type->is_far_ptr())
             return false;
-        }
+
+        // Only invariant address materialization is safe enough for the
+        // generic allocator. Rebuilding derived pointer values here can cross
+        // aggregate-update boundaries and has caused O3 miscompiles in
+        // pointer-heavy stress tests. Direct stack-local addresses are stable
+        // relative to IX, just like globals are stable absolute addresses.
+        if (def_ic.op != icode_op::ADDRESS_OF)
+            return false;
+        const bool direct_global_address =
+            def_ic.left.is_global &&
+            !def_ic.left.is_tls &&
+            !def_ic.left.is_func &&
+            !def_ic.left.is_param;
+        const bool direct_stack_local_address =
+            def_ic.left.kind == operand_kind::SYMBOL &&
+            !def_ic.left.is_global &&
+            !def_ic.left.is_tls &&
+            !def_ic.left.is_func &&
+            !def_ic.left.is_param;
+        if (!direct_global_address && !direct_stack_local_address)
+            return false;
 
         for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
             const icode &use_ic = fn.icodes[k];
+            const bool used_as_left =
+                use_ic.left.is_temp() && use_ic.left.temp_id == temp_id;
+            const bool used_as_right =
+                use_ic.right.is_temp() && use_ic.right.temp_id == temp_id;
+            const bool used_as_result =
+                use_ic.result.is_temp() && use_ic.result.temp_id == temp_id;
+            if (!used_as_left && !used_as_right && !used_as_result)
+                continue;
+
             if (use_ic.op == icode_op::GET_VALUE_AT &&
-                use_ic.left.is_temp() && use_ic.left.temp_id == temp_id)
+                used_as_left)
                 continue;
             if (use_ic.op == icode_op::SET_VALUE_AT &&
-                use_ic.result.is_temp() && use_ic.result.temp_id == temp_id)
+                used_as_result)
                 continue;
+
+            if (!used_as_result && (used_as_left || used_as_right)) {
+                switch (use_ic.op) {
+                case icode_op::ASSIGN:
+                case icode_op::CAST:
+                case icode_op::SEND:
+                case icode_op::RETURN:
+                case icode_op::IFX:
+                case icode_op::ADD:
+                case icode_op::SUB:
+                case icode_op::MUL:
+                case icode_op::DIV:
+                case icode_op::MOD:
+                case icode_op::BAND:
+                case icode_op::BOR:
+                case icode_op::BXOR:
+                case icode_op::EQ:
+                case icode_op::NE:
+                case icode_op::LT:
+                case icode_op::LE:
+                case icode_op::GT:
+                case icode_op::GE:
+                case icode_op::SHL:
+                case icode_op::SHR:
+                case icode_op::ROL:
+                case icode_op::ROR:
+                case icode_op::CALL:
+                    continue;
+                default:
+                    break;
+                }
+            }
             return false;
         }
         return true;
@@ -797,6 +1065,18 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return false;
         if (!(def_ic.op == icode_op::ASSIGN || def_ic.op == icode_op::CAST))
             return false;
+        if (def_ic.op == icode_op::CAST) {
+            if (!def_ic.left.type || !def_ic.result.type)
+                return false;
+            if (def_ic.left.type->is_far_ptr() || def_ic.result.type->is_far_ptr())
+                return false;
+            const bool src_ok =
+                def_ic.left.type->is_integer() || def_ic.left.type->is_ptr();
+            const bool dst_ok =
+                def_ic.result.type->is_integer() || def_ic.result.type->is_ptr();
+            if (!src_ok || !dst_ok)
+                return false;
+        }
         if (!is_zero_u8ish(def_ic.left, depth + 1))
             return false;
 
@@ -845,7 +1125,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return false;
         if (iv.first_def < 0 || iv.last_use <= iv.first_def)
             return false;
-        if (iv.mentions < 3)
+        if (iv.mentions < 2)
             return false;
 
         const icode &def_ic = fn.icodes[iv.first_def];
@@ -866,19 +1146,31 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                     (op.type->is_ptr() && op.type->base &&
                      op.type->base->size() == 1));
         };
+        auto is_byte_pointer_value = [](const operand &op) {
+            return op.type &&
+                   op.type->is_ptr() &&
+                   !op.type->is_far_ptr() &&
+                   op.type->base &&
+                   op.type->base->size() == 1;
+        };
 
         bool init_ok = false;
         switch (def_ic.op) {
         case icode_op::ASSIGN:
         case icode_op::CAST:
         case icode_op::ADDRESS_OF:
-            init_ok = is_byte_data_base(def_ic.left);
+            init_ok = is_byte_data_base(def_ic.left) ||
+                      is_byte_pointer_value(def_ic.left);
             break;
         default:
             break;
         }
         if (!init_ok)
             return false;
+        if (uses_tls_global(def_ic.left) ||
+            symbol_word_access_may_need_bc_scratch(def_ic.left)) {
+            return false;
+        }
 
         auto pointer_bc_hazard = [&](const icode &ic) {
             if (clobbers_bc(ic))
@@ -992,14 +1284,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         score_out = 160 + iv.mentions * 8 - (iv.last_use - iv.first_def);
         return true;
     };
-
     auto loop_pointer_hl_candidate = [&](int temp_id, const interval &iv,
                                          int &score_out) -> bool {
         if (iv.size != 2 || iv.has_addr_of)
             return false;
         if (iv.first_def < 0 || iv.last_use <= iv.first_def)
             return false;
-        if (iv.mentions < 3)
+        if (iv.mentions < 2)
             return false;
 
         const icode &def_ic = fn.icodes[iv.first_def];
@@ -1142,7 +1433,75 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         score_out = 240 + iv.mentions * 10 - (iv.last_use - iv.first_def);
         return true;
     };
+    auto symbol_bc_backend_hazard = [&](const icode &ic,
+                                        const operand &sym_base) {
+        if (is_cfg_barrier(ic))
+            return true;
+
+        if (uses_tls_global(ic.result) || uses_tls_global(ic.left) ||
+            uses_tls_global(ic.right)) {
+            return true;
+        }
+
+        if (ic.op == icode_op::ADDRESS_OF && address_of_may_need_bc_scratch(ic.left))
+            return true;
+
+        auto needs_bc_scratch = [&](const operand &op) {
+            if (same_local_symbol_base(op, sym_base) &&
+                op.byte_offset >= 0 && op.byte_offset <= 1) {
+                return false;
+            }
+            return symbol_word_access_may_need_bc_scratch(op);
+        };
+
+        return needs_bc_scratch(ic.result) ||
+               needs_bc_scratch(ic.left) ||
+               needs_bc_scratch(ic.right);
+    };
     const bool helper_like_fn = straight_line_helper_like();
+    auto simple_send_operand_for_bc_live_range = [&](const operand &op) {
+        switch (op.kind) {
+        case operand_kind::INT_CONST:
+        case operand_kind::FLOAT_CONST:
+        case operand_kind::LABEL_REF:
+            return true;
+        case operand_kind::SYMBOL:
+            return op.is_global &&
+                   !op.is_tls &&
+                   !op.is_sfr &&
+                   !op.is_func;
+        default:
+            return false;
+        }
+    };
+    auto indirect_callee_bc_candidate = [&](int temp_id, const interval &iv,
+                                            int &score_out) -> bool {
+        if (iv.size != 2 || iv.has_addr_of)
+            return false;
+        if (iv.first_def < 0 || iv.last_use <= iv.first_def)
+            return false;
+
+        const icode &call_ic = fn.icodes[iv.last_use];
+        if (call_ic.op != icode_op::CALL || !call_ic.func_name.empty())
+            return false;
+        if (!(call_ic.left.is_temp() && call_ic.left.temp_id == temp_id))
+            return false;
+
+        for (int k = iv.first_def + 1; k < iv.last_use; ++k) {
+            const icode &mid = fn.icodes[k];
+            if (mentions_temp(mid, temp_id))
+                return false;
+            if (mid.op == icode_op::LABEL)
+                continue;
+            if (mid.op != icode_op::SEND)
+                return false;
+            if (!simple_send_operand_for_bc_live_range(mid.left))
+                return false;
+        }
+
+        score_out = 600 - (iv.last_use - iv.first_def);
+        return true;
+    };
 
     auto main_byte_window_use_safe = [&](const icode &ic, int temp_id) {
         const bool use_left =
@@ -1290,6 +1649,64 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return false;
         }
     };
+    auto byte_symbol_reg_hazard = [&](const icode &ic,
+                                      const operand &sym) {
+        switch (ic.op) {
+        case icode_op::LABEL:
+        case icode_op::GOTO:
+        case icode_op::IFX:
+        case icode_op::RETURN:
+            return false;
+        default:
+            break;
+        }
+
+        if (clobbers_bc(ic))
+            return true;
+        if (uses_tls_global(ic.result) || uses_tls_global(ic.left) ||
+            uses_tls_global(ic.right)) {
+            return true;
+        }
+        if (ic.op == icode_op::ADDRESS_OF &&
+            address_of_may_need_bc_scratch(ic.left)) {
+            return true;
+        }
+
+        auto needs_bc_scratch = [&](const operand &op) {
+            if (same_local_symbol(op, sym))
+                return false;
+            return symbol_word_access_may_need_bc_scratch(op);
+        };
+        return needs_bc_scratch(ic.result) ||
+               needs_bc_scratch(ic.left) ||
+               needs_bc_scratch(ic.right);
+    };
+    auto byte_symbol_first_occurrence_is_definition =
+        [&](const sym_interval &iv) {
+        if (iv.first_idx < 0 || iv.first_idx >= n)
+            return false;
+        const icode &first = fn.icodes[iv.first_idx];
+        if (!same_local_symbol(first.result, iv.base))
+            return false;
+        switch (first.op) {
+        case icode_op::ASSIGN:
+        case icode_op::CAST:
+        case icode_op::ADD:
+        case icode_op::SUB:
+        case icode_op::BAND:
+        case icode_op::BOR:
+        case icode_op::BXOR:
+        case icode_op::NEG:
+        case icode_op::BNOT:
+        case icode_op::SHL:
+        case icode_op::SHR:
+        case icode_op::ROL:
+        case icode_op::ROR:
+            return true;
+        default:
+            return false;
+        }
+    };
 
     struct c_candidate {
         int tid = -1;
@@ -1314,7 +1731,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     std::vector<std::pair<int, int>> c_windows;
     std::vector<std::pair<int, int>> hl_windows;
 
-    if (o3_baseline_enabled()) {
+    // Keep the old O3-only lane pinning disabled by default until its loop
+    // matcher is hardened outside the synthetic benchmark shapes it targets.
+    if (false && tuned_profile_enabled()) {
         auto force_bench_fill_lanes = [&]() {
             auto find_temp_zero_init_before = [&](int tid, int before_idx) {
                 auto it = ivs.find(tid);
@@ -1565,6 +1984,14 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     std::vector<bc_candidate> bc_candidates;
     for (auto &[fd, tid] : order) {
         const interval &iv = ivs[tid];
+        int score = 0;
+        if (!indirect_callee_bc_candidate(tid, iv, score))
+            continue;
+        bc_candidates.push_back(
+            {iv.first_def, iv.last_use, score, false, tid});
+    }
+    for (auto &[fd, tid] : order) {
+        const interval &iv = ivs[tid];
         if (iv.size != 2)                         continue;
         if (iv.has_addr_of)                       continue;
         if (iv.last_use - iv.first_def > 6)       continue;
@@ -1680,7 +2107,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         bool backend_safe = true;
         for (int k = iv.first_idx + 1; k <= iv.last_idx - 1; ++k) {
-            if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+            if (symbol_bc_backend_hazard(fn.icodes[k], iv.base)) {
                 backend_safe = false;
                 break;
             }
@@ -1705,7 +2132,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         bool backend_safe = true;
         for (int k = iv.first_idx + 1; k <= iv.last_idx - 1; ++k) {
-            if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+            if (symbol_bc_backend_hazard(fn.icodes[k], iv.base)) {
                 backend_safe = false;
                 break;
             }
@@ -1736,7 +2163,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         bool backend_safe = true;
         for (int k = iv.first_idx + 1; k <= iv.last_idx - 1; ++k) {
-            if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+            if (symbol_bc_backend_hazard(fn.icodes[k], iv.base)) {
                 backend_safe = false;
                 break;
             }
@@ -1762,7 +2189,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             bool backend_safe = true;
             for (int k = iv.first_idx + 1; k <= iv.last_idx - 1; ++k) {
-                if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                if (symbol_bc_backend_hazard(fn.icodes[k], iv.base)) {
                     backend_safe = false;
                     break;
                 }
@@ -1799,7 +2226,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (o3_baseline_enabled()) {
+    if (false && tuned_profile_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
             int score = 0;
@@ -1808,6 +2235,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             pointer_bc_candidates.push_back(
                 {iv.first_def, iv.last_use, score, false, tid});
         }
+    }
+
+    if (size_opt_enabled() || tuned_profile_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
             int score = 0;
@@ -1870,7 +2300,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             bool backend_safe = true;
             for (int k = iv.first_idx + 1; k <= iv.last_idx - 1; ++k) {
-                if (bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                if (symbol_bc_backend_hazard(fn.icodes[k], iv.base)) {
                     backend_safe = false;
                     break;
                 }
@@ -1882,7 +2312,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (o3_baseline_enabled()) {
+    // No-call byte pointer loops are safe to keep in HL: the recognizer rejects
+    // calls, address-taking, deep frame accesses, and non-byte memory traffic.
+    if (size_opt_enabled() || tuned_profile_enabled()) {
         for (const auto &cand : hl_candidates) {
             if (temp_regs_.find(cand.id) != temp_regs_.end())
                 continue;
@@ -1891,7 +2323,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             temp_regs_[cand.id] = temp_home::main_hl;
             hl_windows.push_back({cand.start, cand.end});
         }
+    }
 
+    // The extra O3-only BC pointer pinning below is still available in the
+    // source, but keep it disabled by default until the remaining pointer /
+    // wchar regressions are hardened.
+    if (false && tuned_profile_enabled()) {
         for (const auto &cand : pointer_bc_candidates) {
             if (temp_regs_.find(cand.id) != temp_regs_.end())
                 continue;
@@ -1902,7 +2339,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (o3_baseline_enabled()) {
+    // Conservative byte B/C pinning: keep short byte temps/symbols in B or C
+    // when the whole live window is free of calls, address-taking, memory
+    // indirection, and overlapping pair-register allocations.
+    if (size_opt_enabled() || tuned_profile_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
             if (iv.size != 1)                         continue;
@@ -1956,11 +2396,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (!backend_safe)
                 continue;
 
-            c_candidates.push_back(
-                {tid, iv.first_def, iv.last_use,
-                 220 + iv.mentions * 10 + compare_uses * 12 +
-                     mask_uses * 8 -
-                     (iv.last_use - iv.first_def)});
+            if (compare_uses == 0) {
+                c_candidates.push_back(
+                    {tid, iv.first_def, iv.last_use,
+                     220 + iv.mentions * 10 + mask_uses * 8 -
+                         (iv.last_use - iv.first_def)});
+            }
 
             b_candidates.push_back(
                 {tid, iv.first_def, iv.last_use,
@@ -2016,10 +2457,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (!backend_safe)
                 continue;
 
-            c_candidates.push_back(
-                {tid, iv.first_def, iv.last_use,
-                 170 + iv.mentions * 10 + compare_uses * 10 +
-                     mask_uses * 6 - (iv.last_use - iv.first_def)});
+            if (compare_uses == 0) {
+                c_candidates.push_back(
+                    {tid, iv.first_def, iv.last_use,
+                     170 + iv.mentions * 10 + mask_uses * 6 -
+                         (iv.last_use - iv.first_def)});
+            }
             b_candidates.push_back(
                 {tid, iv.first_def, iv.last_use,
                  150 + iv.mentions * 8 + compare_uses * 8 +
@@ -2029,16 +2472,20 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         for (auto &[key, iv] : syms) {
             if (!iv.base.type || iv.base.type->size() != 1)
                 continue;
+            if (iv.base.is_param)
+                continue;
             if (iv.has_addr_of || iv.unsupported)
                 continue;
             if (iv.first_idx < 0 || iv.last_idx <= iv.first_idx)
                 continue;
             if (iv.mentions < 4)
                 continue;
+            if (!byte_symbol_first_occurrence_is_definition(iv))
+                continue;
 
             bool backend_safe = true;
             for (int k = iv.first_idx; k <= iv.last_idx; ++k) {
-                if (bc_clob[k] || bc_backend_hazard(fn.icodes[k], small_ix_frame)) {
+                if (byte_symbol_reg_hazard(fn.icodes[k], iv.base)) {
                     backend_safe = false;
                     break;
                 }
@@ -2073,10 +2520,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (!backend_safe)
                 continue;
 
-            sym_c_candidates.push_back(
-                {key, iv.first_idx, iv.last_idx,
-                 200 + iv.mentions * 10 + compare_uses * 12 +
-                     mask_uses * 8 - (iv.last_idx - iv.first_idx)});
+            if (compare_uses == 0) {
+                sym_c_candidates.push_back(
+                    {key, iv.first_idx, iv.last_idx,
+                     200 + iv.mentions * 10 + mask_uses * 8 -
+                         (iv.last_idx - iv.first_idx)});
+            }
             sym_b_candidates.push_back(
                 {key, iv.first_idx, iv.last_idx,
                  160 + iv.mentions * 8 + compare_uses * 10 +
@@ -2124,6 +2573,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         for (const auto &cand : c_candidates) {
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
+                overlaps_windows(b_windows, cand.start, cand.end) ||
                 overlaps_windows(c_windows, cand.start, cand.end))
                 continue;
             temp_regs_[cand.tid] = temp_home::main_c;
@@ -2133,6 +2583,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (symbol_regs_.find(cand.key) != symbol_regs_.end())
                 continue;
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
+                overlaps_windows(b_windows, cand.start, cand.end) ||
                 overlaps_windows(c_windows, cand.start, cand.end))
                 continue;
             symbol_regs_[cand.key] = temp_home::main_c;
@@ -2140,6 +2591,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         for (const auto &cand : b_candidates) {
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
+                overlaps_windows(c_windows, cand.start, cand.end) ||
                 overlaps_windows(b_windows, cand.start, cand.end))
                 continue;
             temp_regs_[cand.tid] = temp_home::main_b;
@@ -2149,6 +2601,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (symbol_regs_.find(cand.key) != symbol_regs_.end())
                 continue;
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
+                overlaps_windows(c_windows, cand.start, cand.end) ||
                 overlaps_windows(b_windows, cand.start, cand.end))
                 continue;
             symbol_regs_[cand.key] = temp_home::main_b;
@@ -2188,12 +2641,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     };
 
     for (auto &[tid, iv] : ivs) {
-        if (iv.has_addr_of)                    continue;
         if (iv.first_def < 0)                  continue;
         if (iv.last_use != iv.first_def + 1)   continue;
         if (!contiguous_live_window(iv, tid))  continue;
         const icode &def_ic = fn.icodes[iv.first_def];
         const icode &use_ic = fn.icodes[iv.last_use];
+        if (iv.has_addr_of)                    continue;
         if (alt_a_use_hazard(use_ic))          continue;
 
         if (iv.size == 1 && alt_a_def_safe(def_ic) &&
@@ -2208,15 +2661,18 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    // Step 4c: rematerialize cheap pointer temporaries instead of giving
-    // them IX spill slots. This follows the same general direction as SDCC:
-    // addresses built from &obj or base+u8-index are often cheaper to rebuild
-    // on demand than to spill and reload around every dereference.
-    for (auto &[fd, tid] : order) {
-        const interval &iv = ivs[tid];
-        if (iv.has_addr_of)                     continue;
-        if (!remat_pointer_temp_ok(tid, 0))    continue;
-        temp_regs_[tid] = temp_home::remat_hl;
+    const bool general_pointer_remat_enabled = size_opt_enabled();
+
+    if (general_pointer_remat_enabled) {
+        for (auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            const bool ok = remat_pointer_temp_ok(tid, 0);
+            if (iv.has_addr_of)                    continue;
+            if (temp_regs_.find(tid) != temp_regs_.end())
+                continue;
+            if (!ok)                              continue;
+            temp_regs_[tid] = temp_home::remat_hl;
+        }
     }
 
     for (auto &[fd, tid] : order) {

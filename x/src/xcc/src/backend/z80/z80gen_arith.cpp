@@ -39,6 +39,76 @@ static bool is_float16_op(const operand &op) {
            op.type->size() == 2;
 }
 
+static bool same_call_result_operand(const operand &a, const operand &b) {
+    if (a.kind != b.kind)
+        return false;
+    switch (a.kind) {
+    case operand_kind::TEMP:
+        return a.temp_id == b.temp_id;
+    case operand_kind::SYMBOL:
+        return a.name == b.name &&
+               a.stack_offset == b.stack_offset &&
+               a.byte_offset == b.byte_offset &&
+               a.is_global == b.is_global;
+    default:
+        return false;
+    }
+}
+
+static bool equivalent_operands(const operand &a, const operand &b) {
+    if (a.kind != b.kind ||
+        a.byte_offset != b.byte_offset ||
+        a.is_global != b.is_global ||
+        a.is_param != b.is_param ||
+        a.is_func != b.is_func ||
+        a.is_tls != b.is_tls ||
+        a.is_sfr != b.is_sfr ||
+        a.sfr_port != b.sfr_port ||
+        a.stack_offset != b.stack_offset ||
+        a.temp_id != b.temp_id ||
+        a.name != b.name) {
+        return false;
+    }
+
+    switch (a.kind) {
+    case operand_kind::NONE:
+    case operand_kind::TEMP:
+    case operand_kind::SYMBOL:
+    case operand_kind::LABEL_REF:
+        return true;
+    case operand_kind::INT_CONST:
+        return a.ival == b.ival;
+    case operand_kind::FLOAT_CONST:
+        return a.fval == b.fval;
+    }
+    return false;
+}
+
+static bool is_divmod_fusion_barrier(const icode &ic) {
+    switch (ic.op) {
+    case icode_op::LABEL:
+    case icode_op::GOTO:
+    case icode_op::IFX:
+    case icode_op::CALL:
+    case icode_op::RETURN:
+    case icode_op::FUNCTION:
+    case icode_op::ENDFUNCTION:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_truth_test_preserving_integer_cast(const icode &ic) {
+    if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type)
+        return false;
+    if (ic.left.type->is_far_ptr() || ic.result.type->is_far_ptr())
+        return false;
+    const bool src_ok = ic.left.type->is_integer() || ic.left.type->is_ptr();
+    const bool dst_ok = ic.result.type->is_integer() || ic.result.type->is_ptr();
+    return src_ok && dst_ok;
+}
+
 static bool is_fixed_format(float_format format) {
     switch (format) {
     case float_format::FIXED8_8:
@@ -302,6 +372,67 @@ bool z80_gen::gen_far_ptr_arith(const icode &ic, bool is_add) {
 void z80_gen::gen_add(const icode &ic) {
     if (gen_far_ptr_arith(ic, /*is_add=*/true))
         return;
+    if (!debug_ &&
+        cur_fn_ &&
+        ic.result.is_temp() &&
+        cur_ic_index_ + 3 < cur_fn_->icodes.size()) {
+        const auto &store_ic = cur_fn_->icodes[cur_ic_index_ + 1];
+        const auto &sub_ic = cur_fn_->icodes[cur_ic_index_ + 2];
+        const auto &get_ic = cur_fn_->icodes[cur_ic_index_ + 3];
+
+        const operand *cursor = nullptr;
+        int step = 0;
+        if ((store_ic.op == icode_op::ASSIGN ||
+             store_ic.op == icode_op::CAST) &&
+            store_ic.left.is_temp() &&
+            store_ic.left.temp_id == ic.result.temp_id &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id)) {
+            if (ic.right.kind == operand_kind::INT_CONST &&
+                equivalent_operands(ic.left, store_ic.result)) {
+                cursor = &store_ic.result;
+                step = static_cast<int>(ic.right.ival);
+            } else if (ic.left.kind == operand_kind::INT_CONST &&
+                       equivalent_operands(ic.right, store_ic.result)) {
+                cursor = &store_ic.result;
+                step = static_cast<int>(ic.left.ival);
+            }
+        }
+
+        if (cursor &&
+            step >= 1 && step <= 4 &&
+            sub_ic.op == icode_op::SUB &&
+            sub_ic.result.is_temp() &&
+            equivalent_operands(sub_ic.left, *cursor) &&
+            sub_ic.right.kind == operand_kind::INT_CONST &&
+            static_cast<int>(sub_ic.right.ival) == step &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 4,
+                                   sub_ic.result.temp_id) &&
+            get_ic.op == icode_op::GET_VALUE_AT &&
+            get_ic.left.is_temp() &&
+            get_ic.left.temp_id == sub_ic.result.temp_id &&
+            get_ic.right.is_none()) {
+            int load_size = op_size(get_ic.result);
+            if (load_size <= 0 &&
+                get_ic.left.type &&
+                get_ic.left.type->base) {
+                load_size = get_ic.left.type->base->size();
+            }
+            if (load_size <= 0)
+                load_size = 2;
+            if ((load_size == 1 && step >= 1) ||
+                (load_size == 2 && step >= 2)) {
+                direct_postinc_load_pending_ = true;
+                direct_postinc_load_cursor_ = *cursor;
+                direct_postinc_load_old_ptr_ = sub_ic.result;
+                direct_postinc_load_step_ = step;
+                direct_postinc_load_get_index_ = cur_ic_index_ + 3;
+                skipped_icodes_.insert(cur_ic_index_ + 1);
+                skipped_icodes_.insert(cur_ic_index_ + 2);
+                return;
+            }
+        }
+    }
     auto rhs_available_in_bc =
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
@@ -533,7 +664,9 @@ void z80_gen::gen_add(const icode &ic) {
         } else {
             word_lhs = nullptr;
         }
-        if (word_lhs && is_straight_line_helper_codegen_fn(cur_fn_)) {
+        if (word_lhs &&
+            is_straight_line_helper_codegen_fn(cur_fn_) &&
+            byte_src.kind != operand_kind::INT_CONST) {
             load_a(byte_src);
             emit_line("ld\te, a");
             load_hl(*word_lhs);
@@ -549,12 +682,23 @@ void z80_gen::gen_add(const icode &ic) {
             return;
         }
 
-        // inc/dec for ±1 saves 1 byte and 4 cycles vs add hl,de.
+        const bool size_biased_small_const_add =
+            opt_settings_.level == opt_level::O2 ||
+            opt_settings_.level == opt_level::Os;
+
+        // Small signed constant adds are often smaller as repeated INC/DEC
+        // than materializing a full 16-bit addend register pair.
         if (ic.right.kind == operand_kind::INT_CONST) {
             int64_t v = ic.right.ival;
-            if (v == 1 || v == -1) {
+            if (v == 0) {
                 load_hl(ic.left);
-                emit_line(v == 1 ? "inc\thl" : "dec\thl");
+                store_hl(ic.result);
+                return;
+            }
+            if (size_biased_small_const_add && v >= -3 && v <= 3) {
+                load_hl(ic.left);
+                for (int64_t i = 0; i < (v > 0 ? v : -v); ++i)
+                    emit_line(v > 0 ? "inc\thl" : "dec\thl");
                 store_hl(ic.result);
                 return;
             }
@@ -794,6 +938,59 @@ void z80_gen::gen_mul(const icode &ic) {
         return;
     }
 
+    if (op_size(ic.result) == 2 &&
+        op_size(ic.left) == 2 &&
+        op_size(ic.right) == 2) {
+        const operand *value = nullptr;
+        const operand *constant = nullptr;
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            ic.right.kind != operand_kind::INT_CONST) {
+            value = &ic.right;
+            constant = &ic.left;
+        } else if (ic.right.kind == operand_kind::INT_CONST &&
+                   ic.left.kind != operand_kind::INT_CONST) {
+            value = &ic.left;
+            constant = &ic.right;
+        }
+
+        if (value && constant) {
+            const uint16_t k = static_cast<uint16_t>(constant->ival);
+            int msb = -1;
+            for (int bit = 15; bit >= 0; --bit) {
+                if ((k >> bit) & 1u) {
+                    msb = bit;
+                    break;
+                }
+            }
+            int op_count = 0;
+            if (msb >= 0) {
+                op_count = msb;
+                for (int bit = msb - 1; bit >= 0; --bit)
+                    if ((k >> bit) & 1u)
+                        ++op_count;
+            }
+
+            const int max_inline_ops = size_opt_enabled() ? 20 : 30;
+            if (msb < 0) {
+                emit_line("ld\thl, %s", asm_.imm(0).c_str());
+                store_hl(ic.result);
+                return;
+            }
+            if (op_count <= max_inline_ops) {
+                load_de(*value);
+                emit_line("ld\th, d");
+                emit_line("ld\tl, e");
+                for (int bit = msb - 1; bit >= 0; --bit) {
+                    emit_line("add\thl, hl");
+                    if ((k >> bit) & 1u)
+                        emit_line("add\thl, de");
+                }
+                store_hl(ic.result);
+                return;
+            }
+        }
+    }
+
     if (is_llong_op(ic.left)) {
         asm_.global_decl("__mulll");
         for (int w = 3; w >= 0; --w) {
@@ -858,6 +1055,191 @@ void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
         return;
     }
 
+    size_t fused_div_idx = 0;
+    size_t fused_assign_idx = 0;
+    operand fused_quotient_target;
+    const bool try_divmod_writeback_fusion =
+        want_mod &&
+        cur_fn_ &&
+        cur_ic_index_ + 2 < cur_fn_->icodes.size() &&
+        (op_size(ic.left) == 1 || op_size(ic.left) == 2);
+
+    if (try_divmod_writeback_fusion) {
+        auto find_temp_def = [&](const operand &op) -> const icode * {
+            if (!op.is_temp())
+                return nullptr;
+            for (size_t p = cur_ic_index_; p > 0; --p) {
+                const auto &def_ic = cur_fn_->icodes[p - 1];
+                if (def_ic.result.is_temp() && def_ic.result.temp_id == op.temp_id)
+                    return &def_ic;
+            }
+            return nullptr;
+        };
+
+        auto same_unsigned_divisor_value = [&](const operand &a,
+                                               const operand &b) {
+            if (equivalent_operands(a, b))
+                return true;
+
+            auto is_unsigned_widen_of = [&](const operand &widened,
+                                            const operand &src) {
+                const icode *def_ic = find_temp_def(widened);
+                if (!def_ic || def_ic->op != icode_op::CAST ||
+                    !def_ic->left.type || !def_ic->result.type)
+                    return false;
+                if (!equivalent_operands(def_ic->left, src))
+                    return false;
+                return def_ic->result.type->size() > def_ic->left.type->size();
+            };
+
+            return is_unsigned_widen_of(a, b) || is_unsigned_widen_of(b, a);
+        };
+
+        auto value_uses_operand = [&](const icode &use_ic,
+                                      const operand &op) {
+            if (equivalent_operands(use_ic.left, op) ||
+                equivalent_operands(use_ic.right, op))
+                return true;
+            // SET_VALUE_AT stores through result, so the result operand is a
+            // value use (the destination address), not a definition.
+            return use_ic.op == icode_op::SET_VALUE_AT &&
+                   equivalent_operands(use_ic.result, op);
+        };
+
+        auto defines_operand = [&](const icode &def_ic,
+                                   const operand &op) {
+            if (def_ic.op == icode_op::SET_VALUE_AT)
+                return false;
+            return equivalent_operands(def_ic.result, op);
+        };
+
+        std::vector<std::pair<std::string, size_t>> branch_targets;
+        auto remember_branch_target = [&](const std::string &label) {
+            if (!label.empty())
+                branch_targets.emplace_back(label, cur_ic_index_);
+        };
+
+        auto has_target = [&](const icode &branch_ic,
+                              const std::string &label) {
+            if (label.empty())
+                return false;
+            switch (branch_ic.op) {
+            case icode_op::GOTO:
+                return branch_ic.label_name == label;
+            case icode_op::IFX:
+                return branch_ic.true_lbl == label ||
+                       branch_ic.false_lbl == label;
+            default:
+                return false;
+            }
+        };
+
+        auto branch_window_is_closed = [&](size_t div_idx) {
+            std::unordered_set<std::string> expected;
+            for (const auto &target : branch_targets) {
+                expected.insert(target.first);
+            }
+
+            std::unordered_set<std::string> labels_in_window;
+            for (size_t i = cur_ic_index_ + 1; i < div_idx; ++i) {
+                const auto &scan_ic = cur_fn_->icodes[i];
+                if (scan_ic.op != icode_op::LABEL)
+                    continue;
+                if (expected.find(scan_ic.label_name) == expected.end())
+                    return false;
+                labels_in_window.insert(scan_ic.label_name);
+            }
+
+            for (const auto &target : expected) {
+                if (labels_in_window.find(target) == labels_in_window.end())
+                    return false;
+            }
+
+            for (size_t i = 0; i < cur_fn_->icodes.size(); ++i) {
+                if (i >= cur_ic_index_ + 1 && i < div_idx)
+                    continue;
+                const auto &scan_ic = cur_fn_->icodes[i];
+                for (const auto &label : labels_in_window) {
+                    if (has_target(scan_ic, label))
+                        return false;
+                }
+            }
+            return true;
+        };
+
+        for (size_t scan = cur_ic_index_ + 1; scan < cur_fn_->icodes.size(); ++scan) {
+            const auto &mid = cur_fn_->icodes[scan];
+            if (mid.op == icode_op::LABEL) {
+                continue;
+            }
+            if (mid.op == icode_op::IFX) {
+                if (value_uses_operand(mid, ic.left) ||
+                    value_uses_operand(mid, ic.right))
+                    break;
+                remember_branch_target(mid.true_lbl);
+                remember_branch_target(mid.false_lbl);
+                continue;
+            }
+            if (is_divmod_fusion_barrier(mid))
+                break;
+
+            if (defines_operand(mid, ic.left) ||
+                defines_operand(mid, ic.right))
+                break;
+
+            if (mid.op == icode_op::DIV &&
+                equivalent_operands(mid.left, ic.left) &&
+                same_unsigned_divisor_value(mid.right, ic.right)) {
+                if (scan + 1 >= cur_fn_->icodes.size())
+                    break;
+
+                const auto &assign_ic = cur_fn_->icodes[scan + 1];
+                if (assign_ic.op != icode_op::ASSIGN ||
+                    !equivalent_operands(assign_ic.left, mid.result) ||
+                    !equivalent_operands(assign_ic.result, ic.left) ||
+                    equivalent_operands(assign_ic.result, ic.result))
+                    break;
+
+                if (!branch_window_is_closed(scan))
+                    break;
+
+                if (mid.result.is_temp() &&
+                    temp_value_used_after(*cur_fn_, scan + 2, mid.result.temp_id))
+                    break;
+
+                fused_div_idx = scan;
+                fused_assign_idx = scan + 1;
+                fused_quotient_target = assign_ic.result;
+                break;
+            }
+
+            if (value_uses_operand(mid, ic.left))
+                break;
+        }
+    }
+
+    auto demote_target_to_stack = [&](const operand &target) {
+        if (target.is_temp()) {
+            temp_regs_.erase(target.temp_id);
+            return;
+        }
+        if (target.is_symbol() && !target.is_global)
+            symbol_regs_.erase(symbol_reg_key(target));
+    };
+
+    auto record_fused_div_writeback = [&](const operand &target, size_t div_idx,
+                                          size_t assign_idx, bool byte_result) {
+        demote_target_to_stack(target);
+        if (byte_result) {
+            emit_line("ld\ta, e");
+            store_a(target);
+        } else {
+            store_de_word(target, 0);
+        }
+        skipped_icodes_.insert(div_idx);
+        skipped_icodes_.insert(assign_idx);
+    };
+
     if (op_size(ic.left) == 1 && op_size(ic.right) == 1) {
         const bool left_unsigned =
             ic.left.type && ic.left.type->is_unsigned();
@@ -904,6 +1286,10 @@ void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
         if (!want_mod || !left_unsigned || !right_unsigned)
             emit_line("ex\tde, hl");
         store_result();
+        if (want_mod && left_unsigned && right_unsigned &&
+            fused_div_idx > cur_ic_index_)
+            record_fused_div_writeback(fused_quotient_target, fused_div_idx,
+                                       fused_assign_idx, true);
         return;
     }
 
@@ -953,6 +1339,12 @@ void z80_gen::gen_div_mod(const icode &ic, bool want_mod) {
             emit_line("call\t__divuint");        // HL = remainder, DE = quotient
             if (want_mod) {
                 store_hl(ic.result);
+                if (fused_div_idx > cur_ic_index_) {
+                    record_fused_div_writeback(fused_quotient_target,
+                                               fused_div_idx,
+                                               fused_assign_idx,
+                                               false);
+                }
             } else {
                 emit_line("ex\tde, hl");
                 store_hl(ic.result);
@@ -1040,6 +1432,14 @@ void z80_gen::gen_neg(const icode &ic) {
 }
 
 void z80_gen::gen_band(const icode &ic) {
+    operand direct_byte_band_ifx_value;
+    const bool direct_byte_band_ifx =
+        cur_fn_ &&
+        ic.result.is_temp() &&
+        op_size(ic.result) == 1 &&
+        find_direct_byte_truth_ifx(ic.result, cur_ic_index_,
+                                   direct_byte_band_ifx_value);
+
     if (is_llong_op(ic.left)) {
         for (int w = 0; w < 4; ++w) {
             load_hl_word(ic.left, w);
@@ -1124,6 +1524,11 @@ void z80_gen::gen_band(const icode &ic) {
         if (op_size(ic.result) == 1) {
             load_a(*lhs);
             emit_line("and\t%s", asm_.imm(imm & 0xFF).c_str());
+            if (direct_byte_band_ifx) {
+                direct_byte_load_ifx_pending_ = true;
+                direct_byte_load_ifx_value_ = direct_byte_band_ifx_value;
+                return;
+            }
             store_a(ic.result);
             return;
         }
@@ -1149,6 +1554,11 @@ void z80_gen::gen_band(const icode &ic) {
             emit_line("ld\td, a");
             emit_line("ld\ta, e");
             emit_line("and\ta, d");
+        }
+        if (direct_byte_band_ifx) {
+            direct_byte_load_ifx_pending_ = true;
+            direct_byte_load_ifx_value_ = direct_byte_band_ifx_value;
+            return;
         }
         store_a(ic.result);
         return;
@@ -1272,6 +1682,41 @@ void z80_gen::gen_bor(const icode &ic) {
     if (rhs->kind == operand_kind::INT_CONST) {
         const uint16_t imm = static_cast<uint16_t>(rhs->ival);
         if (op_size(ic.result) == 1) {
+            const uint8_t mask = static_cast<uint8_t>(imm & 0xffu);
+            if (mask != 0 &&
+                (mask & static_cast<uint8_t>(mask - 1)) == 0 &&
+                same_call_result_operand(ic.result, *lhs)) {
+                int bit = 0;
+                uint8_t probe = mask;
+                while ((probe & 1u) == 0u) {
+                    probe >>= 1;
+                    ++bit;
+                }
+
+                auto emit_inplace_set = [&](const operand &dst) -> bool {
+                    if (dst.kind == operand_kind::SYMBOL && dst.is_global && !dst.is_tls) {
+                        std::string sym = asm_.imm_sym(mangle(dst.name));
+                        if (dst.byte_offset != 0)
+                            sym += " + " + std::to_string(dst.byte_offset);
+                        emit_line("ld\thl, %s", sym.c_str());
+                        emit_line("set\t%d, (hl)", bit);
+                        return true;
+                    }
+                    if ((dst.kind == operand_kind::SYMBOL && !dst.is_global) ||
+                        dst.kind == operand_kind::TEMP) {
+                        int off = ix_offset_of(dst);
+                        if (fits_ix_disp(off)) {
+                            emit_line("set\t%d, %s", bit, asm_.ix_rel(off).c_str());
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
+                if (emit_inplace_set(ic.result))
+                    return;
+            }
+
             load_a(*lhs);
             emit_line("or\t%s", asm_.imm(imm & 0xFF).c_str());
             store_a(ic.result);
@@ -2367,6 +2812,58 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
     }
 
     if (can_use_unsigned_byte_compare(ic)) {
+        const operand *value = &ic.left;
+        const operand *constant = &ic.right;
+        icode_op effective_cmp = cmp;
+        if (value->kind == operand_kind::INT_CONST) {
+            std::swap(value, constant);
+            effective_cmp = swapped_compare(cmp);
+        }
+
+        if (constant->kind == operand_kind::INT_CONST &&
+            static_cast<uint8_t>(constant->ival & 0xff) == 0) {
+            auto emit_const_compare_result = [&](bool truth) {
+                if (truth) {
+                    if (!true_lbl.empty())
+                        emit_line("jp\t%s", true_lbl.c_str());
+                } else if (!false_lbl.empty()) {
+                    emit_line("jp\t%s", false_lbl.c_str());
+                }
+            };
+
+            switch (effective_cmp) {
+            case icode_op::LT:
+                emit_const_compare_result(false);
+                return;
+            case icode_op::GE:
+                emit_const_compare_result(true);
+                return;
+            default:
+                break;
+            }
+
+            load_a(*value);
+            emit_line("or\ta, a");
+            switch (effective_cmp) {
+            case icode_op::EQ:
+            case icode_op::LE:
+                if (!true_lbl.empty())
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                break;
+            case icode_op::NE:
+            case icode_op::GT:
+                if (!true_lbl.empty())
+                    emit_line("jp\tnz, %s", true_lbl.c_str());
+                break;
+            default:
+                break;
+            }
+
+            if (!false_lbl.empty())
+                emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        }
+
         auto emit_cp_rhs = [&]() {
             if (ic.right.kind == operand_kind::INT_CONST) {
                 emit_line("cp\t%s",
@@ -2587,6 +3084,86 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
     };
 
+    bool direct_return = false;
+    operand direct_return_value;
+
+    auto return_target_supported = [&](const operand &op) {
+        if (!op.type)
+            return false;
+        const int sz = op_size(op);
+        if (sz != 1 && sz != 2)
+            return false;
+        switch (effective_call_abi(cur_fn_ ? cur_fn_->abi : call_abi::DEFAULT)) {
+        case call_abi::SDCCCALL1:
+        case call_abi::SDCCCALL0:
+        case call_abi::Z88DK_SMALLC:
+        case call_abi::Z88DK_FASTCALL:
+        case call_abi::Z88DK_CALLEE:
+        case call_abi::NAKED:
+        case call_abi::INTERRUPT:
+        case call_abi::CRITICAL:
+            return true;
+        default:
+            return false;
+        }
+    };
+
+    if (cur_fn_ && ic.result.is_temp() &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+        const auto &next = cur_fn_->icodes[cur_ic_index_ + 1];
+        if (next.op == icode_op::RETURN &&
+            same_call_result_operand(next.left, ic.result) &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id) &&
+            return_target_supported(next.left)) {
+            direct_return = true;
+            direct_return_value = next.left;
+        } else if (cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+            const auto &cast_ic = next;
+            const auto &ret_ic = cur_fn_->icodes[cur_ic_index_ + 2];
+            if (cast_ic.op == icode_op::CAST &&
+                same_call_result_operand(cast_ic.left, ic.result) &&
+                cast_ic.result.is_temp() &&
+                is_truth_test_preserving_integer_cast(cast_ic) &&
+                ret_ic.op == icode_op::RETURN &&
+                same_call_result_operand(ret_ic.left, cast_ic.result) &&
+                !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                       ic.result.temp_id) &&
+                !temp_value_used_after(*cur_fn_, cur_ic_index_ + 3,
+                                       cast_ic.result.temp_id) &&
+                return_target_supported(ret_ic.left)) {
+                direct_return = true;
+                direct_return_value = cast_ic.result;
+            }
+        }
+    }
+
+    auto prepare_direct_compare_return = [&](const operand &target) {
+        const int sz = op_size(target);
+        switch (effective_call_abi(cur_fn_ ? cur_fn_->abi : call_abi::DEFAULT)) {
+        case call_abi::SDCCCALL1:
+        case call_abi::Z88DK_SMALLC:
+        case call_abi::Z88DK_FASTCALL:
+            if (sz == 1)
+                emit_line("ld\ta, l");
+            else
+                emit_line("ex\tde, hl");
+            break;
+        default:
+            break;
+        }
+        direct_compare_return_pending_ = true;
+        direct_compare_return_value_ = target;
+    };
+
+    auto finish_compare_result = [&]() {
+        if (direct_return) {
+            prepare_direct_compare_return(direct_return_value);
+            return;
+        }
+        store_hl(ic.result);
+    };
+
     if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
         const bool half_compare =
             is_float16_op(ic.left) || is_float16_op(ic.right);
@@ -2713,7 +3290,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             asm_.label(true_lbl, false);
             emit_line("inc\tl");
             asm_.label(end_lbl, false);
-            store_hl(ic.result);
+            finish_compare_result();
         };
 
         if (half_compare) {
@@ -2818,7 +3395,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
 
         asm_.label(done_lbl, false);
-        store_hl(ic.result);
+        finish_compare_result();
         return;
     }
 
@@ -2889,7 +3466,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
 
         asm_.label(done_lbl, false);
-        store_hl(ic.result);
+        finish_compare_result();
         return;
     }
 
@@ -2986,7 +3563,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
                   end_lbl.c_str());
         emit_line("dec\thl");
         asm_.label(end_lbl, false);
-        store_hl(ic.result);
+        finish_compare_result();
         return;
     }
 
@@ -3027,7 +3604,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             asm_.label(false_lbl, false);
             emit_line("dec\thl");
             asm_.label(end_lbl, false);
-            store_hl(ic.result);
+            finish_compare_result();
             return;
         }
         case icode_op::GE:
@@ -3038,7 +3615,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
         emit_line("dec\thl");
         asm_.label(end_lbl, false);
-        store_hl(ic.result);
+        finish_compare_result();
         return;
     }
 
@@ -3163,7 +3740,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         }
 
         asm_.label(end_lbl, false);
-        store_hl(ic.result);
+        finish_compare_result();
         return;
     }
 
@@ -3229,10 +3806,106 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
     }
 
     asm_.label(end_lbl, false);
-    store_hl(ic.result);
+    finish_compare_result();
 }
 
 void z80_gen::gen_cast(const icode &ic) {
+    auto source_safe_for_delayed_byte_remat = [&](const operand &src) {
+        if (src.kind == operand_kind::SYMBOL && !src.is_global) {
+            return incoming_symbol_homes_.find(src.stack_offset) ==
+                   incoming_symbol_homes_.end();
+        }
+        if (!src.is_temp())
+            return true;
+        auto it = temp_regs_.find(src.temp_id);
+        if (it == temp_regs_.end())
+            return true;
+        switch (it->second) {
+        case temp_home::arg_a:
+        case temp_home::arg_l:
+        case temp_home::arg_hl:
+        case temp_home::arg_de:
+            return false;
+        default:
+            return true;
+        }
+    };
+
+    auto first_use_index = [&](int temp_id) -> size_t {
+        if (!cur_fn_)
+            return cur_fn_ ? cur_fn_->icodes.size() : 0;
+        auto uses_temp = [&](const operand &op) {
+            return op.is_temp() && op.temp_id == temp_id;
+        };
+        for (size_t i = cur_ic_index_ + 1; i < cur_fn_->icodes.size(); ++i) {
+            const auto &next = cur_fn_->icodes[i];
+            if (uses_temp(next.left) || uses_temp(next.right))
+                return i;
+            if (uses_temp(next.result))
+                break;
+        }
+        return cur_fn_->icodes.size();
+    };
+
+    if (direct_compare_return_pending_ &&
+        same_call_result_operand(ic.result, direct_compare_return_value_) &&
+        is_truth_test_preserving_integer_cast(ic)) {
+        return;
+    }
+
+    if (direct_call_ifx_pending_ &&
+        same_call_result_operand(ic.left, direct_call_ifx_value_) &&
+        ic.result.is_temp() &&
+        is_truth_test_preserving_integer_cast(ic)) {
+        direct_call_ifx_value_ = ic.result;
+        return;
+    }
+
+    if (cur_fn_ && ic.result.is_temp()) {
+        const size_t first_use = first_use_index(ic.result.temp_id);
+        const bool delayed_remat_safe =
+            first_use == cur_ic_index_ + 1 ||
+            source_safe_for_delayed_byte_remat(ic.left);
+
+        if (ic.left.type &&
+            ic.left.type->size() == 1 &&
+            is_truth_test_preserving_integer_cast(ic) &&
+            first_use < cur_fn_->icodes.size()) {
+            const auto &use_ic = cur_fn_->icodes[first_use];
+            if (use_ic.op == icode_op::IFX &&
+                use_ic.left.is_temp() &&
+                use_ic.left.temp_id == ic.result.temp_id &&
+                delayed_remat_safe &&
+                !temp_value_used_after(*cur_fn_, first_use + 1,
+                                       ic.result.temp_id)) {
+                return;
+            }
+        }
+
+        if (op_size(ic.left) == 1 &&
+            op_size(ic.result) == 2 &&
+            first_use < cur_fn_->icodes.size()) {
+            const auto &use_ic = cur_fn_->icodes[first_use];
+            if (use_ic.op == icode_op::SEND &&
+                use_ic.left.is_temp() &&
+                use_ic.left.temp_id == ic.result.temp_id &&
+                (use_ic.arg_loc == abi_arg_loc::REG_HL ||
+                 use_ic.arg_loc == abi_arg_loc::REG_DE) &&
+                !temp_value_used_after(*cur_fn_, first_use + 1,
+                                       ic.result.temp_id)) {
+                if (delayed_remat_safe) {
+                    return;
+                }
+                if (first_use == cur_ic_index_ + 1) {
+                    direct_widen_send_pending_ = true;
+                    direct_widen_send_value_ = ic.result;
+                    direct_widen_send_source_ = ic.left;
+                    return;
+                }
+            }
+        }
+    }
+
     if (!ic.result.type) {
         load_hl(ic.left);
         store_hl(ic.result);

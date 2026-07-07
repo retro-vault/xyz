@@ -66,7 +66,7 @@ semantic check
   ->
 IR generator
   ->
-IR optimizer (-O2, -Of / -Os promoted baseline, and experimental -O3)
+IR optimizer (-O2 baseline, tuned -Of / -Os profiles, and a reserved -O3 slot)
   ->
 Z80 code generator
   ->
@@ -126,11 +126,11 @@ stage in order.
 Important options today:
 
 - `-O0`: no optimization
-- `-O1`: peephole optimizer after assembly generation; the simplest fixed-window peepholes are now table-driven while the more contextual ones still use custom matchers
-- `-O2`: general optimization, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, direct control-condition lowering, counted-byte-loop narrowing, loop pointer-walk canonicalization, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; the core local algebraic identities are now shared through one small declarative rule table instead of duplicated `switch` logic
-- `-Of`: speed optimization; it shares the current proven aggressive baseline and may spend a little size for fewer cycles, including O3-proven speed-biased peepholes
-- `-O3`: experimental optimization; it keeps the proven `-Os` baseline, then adds speed, size, shape-changing, and superoptimizer-inspired peephole experiments. Here be dragons
-- `-Os`: size optimization; it is the protected record-setting aggressive size baseline
+- `-O1`: late target cleanup only; it runs after IR optimization and code generation, and today mainly enables the assembly peephole pass plus tiny backend fusions
+- `-O2`: the smart optimization baseline, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, direct control-condition lowering, counted-byte-loop narrowing, loop pointer-walk canonicalization, address/deref folding, duplicate-block cleanup, automatic TEMP preallocation, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; it also keeps the `-O1` late cleanup stage at the end
+- `-Of`: speed-biased smart optimization; it builds on the stable `-O2` baseline and may spend a little size for fewer cycles
+- `-O3`: reserved experimental slot; today it is intentionally identical to `-Of` so the stable presets are `-O2`, `-Of`, and `-Os`
+- `-Os`: size-biased smart optimization; it builds on the stable `-O2` baseline with size-oriented helper inlining and codegen choices
 - `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info
 - `-masm=sdasz80` or `-masm=gnuas`: choose assembly dialect
