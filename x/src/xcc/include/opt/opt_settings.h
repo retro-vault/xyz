@@ -18,8 +18,8 @@ enum class opt_level {
     O0 = 0, // no optimization
     O1 = 1, // late target cleanup only (peephole + tiny backend fusions)
     O2 = 2, // smart optimizer baseline (IR + backend + O1 cleanup)
-    O3 = 3, // reserved experimental slot (currently aliases the stable -Of profile)
-    Of = 4, // speed-biased smart optimization
+    O3 = 3, // reserved experimental layer; currently aliases Of
+    Of = 4, // Os-based speed profile; currently no extra speed hooks
     Os = 5, // size-biased smart optimization
 };
 
@@ -123,13 +123,11 @@ struct optimization_settings {
             break;
 
         case opt_level::Of:
-            s = for_level(opt_level::O2);
-            s.level = level;
+            s = for_level(opt_level::Os);
             break;
 
         case opt_level::O3:
             s = for_level(opt_level::Of);
-            s.level = level;
             break;
 
         case opt_level::Os:

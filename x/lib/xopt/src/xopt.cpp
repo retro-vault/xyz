@@ -20,7 +20,9 @@ int choose_pass_budget(const std::string &asm_text,
         if (level == optimization_level::o1)
             return 0;
         if (level == optimization_level::o2 ||
-            level == optimization_level::os)
+            level == optimization_level::os ||
+            level == optimization_level::of ||
+            level == optimization_level::o3)
             return 2;
         return 3;
     }
@@ -29,7 +31,9 @@ int choose_pass_budget(const std::string &asm_text,
         if (level == optimization_level::o1)
             return 2;
         if (level == optimization_level::o2 ||
-            level == optimization_level::os)
+            level == optimization_level::os ||
+            level == optimization_level::of ||
+            level == optimization_level::o3)
             return 4;
         return 6;
     }
@@ -40,28 +44,20 @@ int choose_pass_budget(const std::string &asm_text,
 } // namespace
 
 bool uses_speed_biased_rules(optimization_level level) {
+    // Direct xopt keeps this laboratory bundle for smoke coverage and future
+    // experiments. The xcc driver maps stable -Of/-O3 presets to xopt -Os
+    // until individual speed rules prove profitable for compiler output.
     return level == optimization_level::of ||
            level == optimization_level::o3;
-}
-
-bool uses_spaghetti_rules(optimization_level level) {
-    // The current spaghetti helper outlining/rewrite lane is still too
-    // fragile for full-program correctness.  Keep O3's other experimental
-    // frontend/backend passes enabled, but leave this late assembly
-    // transform off until the dedicated SHA/runtime regressions are stable.
-    (void)level;
-    return false;
 }
 
 std::string optimize_z80_assembly(const std::string &asm_text,
                                   optimization_level level) {
     if (level == optimization_level::none)
         return asm_text;
-    const bool enable_spaghetti = uses_spaghetti_rules(level);
     const int pass_budget = choose_pass_budget(asm_text, level);
     return z80_peep::optimize(asm_text,
                               uses_speed_biased_rules(level),
-                              enable_spaghetti,
                               pass_budget);
 }
 

@@ -408,7 +408,6 @@ Each line is parsed into an `asm_line` struct (`label`, `mnemonic`, `operands`, 
 |------|---------|-------------|
 | `rule_redundant_ld` | `ld r, r` | removed (self-load no-op) |
 | `rule_push_pop_hl` | `push hl; pop hl` | removed |
-| `rule_push_hl_pop_de` | `push hl; pop de` | `ex de,hl` |
 | `rule_push_hl_load_pop_de` | `push hl; ld hl,X; pop de` | `ex de,hl; ld hl,X` |
 | `rule_push_hl_ix_pop_de` | `push hl; ld l,N(ix); ld h,N+1(ix); pop de` | `ex de,hl; ld l,N(ix); ld h,N+1(ix)` |
 | `rule_push_hl_de_load` | `push hl; ld de,#imm; pop hl` | `ld de,#imm` |

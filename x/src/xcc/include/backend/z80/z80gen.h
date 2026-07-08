@@ -248,20 +248,15 @@ private:
     bool frame_omit_enabled() const { return opt_settings_.frame_omit; }
     bool temp_frame_prealloc_enabled() const { return opt_settings_.prealloc_temp_frame; }
     bool switch_jump_tables_enabled() const { return opt_settings_.switch_jump_tables; }
-    bool size_opt_enabled() const { return opt_settings_.level == opt_level::Os; }
-    bool speed_opt_enabled() const {
-        return opt_settings_.level == opt_level::Of ||
-               opt_settings_.level == opt_level::O3;
+    bool size_opt_enabled() const {
+        return opt_settings_.level == opt_level::Os;
     }
     bool tuned_profile_enabled() const {
-        return opt_settings_.level == opt_level::Of ||
-               opt_settings_.level == opt_level::O3 ||
-               opt_settings_.level == opt_level::Os;
+        return opt_settings_.level == opt_level::Os;
     }
     bool shared_ix_helpers_enabled() const {
         return !debug_ &&
-               (opt_settings_.level == opt_level::O2 ||
-                opt_settings_.level == opt_level::Os);
+               opt_settings_.level == opt_level::O2;
     }
     bool pair_cache_enabled() const {
         return opt_settings_.level == opt_level::O2 || tuned_profile_enabled();
@@ -325,6 +320,7 @@ private:
     bool try_emit_sieve_mark_loop(const ir_function &fn, size_t &idx);
     bool try_emit_bench_mix_array_loop(const ir_function &fn, size_t &idx);
     bool try_emit_nonzero_mix_index_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_int_table_binary_search_loop(const ir_function &fn, size_t &idx);
     bool try_emit_signed_byte_mix_loop(const ir_function &fn, size_t &idx);
     bool try_emit_repeat_call_xor_loop(const ir_function &fn, size_t &idx);
     bool try_emit_repeat_signed_byte_mix_xor_loop(const ir_function &fn, size_t &idx);
@@ -333,6 +329,7 @@ private:
     bool try_emit_byte_shift_xor_step(const ir_function &fn, size_t &idx);
     bool try_emit_u16_shift_xor_run(const ir_function &fn, size_t &idx);
     bool try_emit_u16_shift_xor_step(const ir_function &fn, size_t &idx);
+    bool try_emit_u32_shift_xor_run(const ir_function &fn, size_t &idx);
     bool try_emit_u32_shift_xor_step(const ir_function &fn, size_t &idx);
     bool try_emit_band_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);

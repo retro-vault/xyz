@@ -1,0 +1,52 @@
+/* auto-generated z88dk string split */
+
+
+
+
+
+#include "string_tests.h"
+
+static int (*func)(const char *x,const  char *y) [[z88dk::smallc]];
+
+void stricmp_equal_lower()
+{
+    Assert(func("equal","equal") == 0, "Should be == 0");
+}
+
+
+void stricmp_equal_upper()
+{
+    Assert(func("EQUAL","EQUAL") == 0, "Should be == 0");
+}
+
+
+void stricmp_equal_mixed()
+{
+    Assert(func("EqUaL","eQuAl") == 0, "Should be == 0");
+}
+
+
+void stricmp_less()
+{
+    Assert(func("EQUAL","equam") < 0, "Should be < 0");
+}
+
+
+void stricmp_greater()
+{
+    Assert(func("equam","EQUAL") > 0, "Should be > 0");
+}
+
+
+
+int main(void)
+{
+    suite_setup("Stricmp Tests");
+    func = stricmp;
+    suite_add_test(stricmp_equal_lower);
+    suite_add_test(stricmp_equal_upper);
+    suite_add_test(stricmp_equal_mixed);
+    suite_add_test(stricmp_less);
+    suite_add_test(stricmp_greater);
+    return suite_run();
+}

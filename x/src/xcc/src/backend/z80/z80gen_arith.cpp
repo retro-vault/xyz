@@ -2188,8 +2188,7 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         }
 
         // Small constant shifts are smaller and faster fully unrolled.
-        // -Of/-O3 may spend a couple of bytes to avoid the DJNZ loop overhead.
-        const int unroll_limit = speed_opt_enabled() ? 7 : 5;
+        const int unroll_limit = 5;
         if (count <= unroll_limit) {
             for (int k = 0; k < count; ++k) {
                 if (!right)

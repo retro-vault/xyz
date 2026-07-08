@@ -24,6 +24,8 @@ IHX2BIN="$TEST_ROOT/tests/runtime/tools/ihx2bin.py"
 RUNNER_BIN="$REPO_ROOT/build/bin/z80_exec"
 XLD_DEFAULT="$REPO_ROOT/bin/x/bin/xld"
 RUNTIME_LIB="$REPO_ROOT/bin/x/z80/lib/libruntime.a"
+ORIG_Z88DK_ROOT="${ORIG_Z88DK_ROOT:-$REPO_ROOT/orig/z88dk}"
+ORIG_Z88DK_ZCC="$ORIG_Z88DK_ROOT/bin/zcc"
 if [[ -x "$REPO_ROOT/bin/x/bin/xcc" ]]; then
     DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
 else
@@ -45,6 +47,7 @@ NUMERIC_OPT="-Of"
 XCC_ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 CURRENT_INCLUDE_DIR="$BARE_INCLUDE_DIR"
 CURRENT_CYCLES="$BARE_CYCLES"
+CURRENT_SIZE_METRIC="flat"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -235,6 +238,27 @@ payload_bytes_from_ihx() {
     fi
 }
 
+linked_non_bss_payload_bytes_from_map() {
+    local map_file="$1"
+    local crt0_size="$2"
+    local sum=0
+    local value
+    local line
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]+(_CODE|_HOME|_GSINIT|_GSFINAL|_INITIALIZER|_INITIALIZED|_RODATA)[[:space:]]+[0-9A-Fa-f]+[[:space:]]+([0-9A-Fa-f]+)[[:space:]] ]]; then
+            value="${BASH_REMATCH[2]}"
+            sum=$((sum + 16#$value))
+        fi
+    done < "$map_file"
+
+    if (( sum > crt0_size )); then
+        printf '%s\n' "$((sum - crt0_size))"
+    else
+        printf '0\n'
+    fi
+}
+
 format_delta() {
     local lhs="$1"
     local rhs="$2"
@@ -307,9 +331,15 @@ link_benchmark() {
     local crt0_rel="$1"
     local main_rel="$2"
     local out_ihx="$3"
+    local out_map="${4:-}"
+    local map_args=()
+
+    if [[ -n "$out_map" ]]; then
+        map_args=("-Map=$out_map")
+    fi
 
     "$XLD" --mode=sdcc --oformat=ihx -nostdlib -e __xc_test_start \
-        -Ttext=0x0000 -o "$out_ihx" \
+        -Ttext=0x0000 "${map_args[@]}" -o "$out_ihx" \
         "$crt0_rel" "$main_rel" "$RUNTIME_LIB" >/dev/null
 }
 
@@ -322,6 +352,7 @@ run_xcc_mode() {
     local tag="xcc_${mode}"
     local main_rel="$bench_dir/main.$tag.rel"
     local ihx="$bench_dir/$tag.ihx"
+    local map="$bench_dir/$tag.map"
     local bin="$bench_dir/$tag.bin"
     local status
     local ret
@@ -332,11 +363,16 @@ run_xcc_mode() {
         printf 'build_error,0,0,0\n'
         return
     fi
-    if ! link_benchmark "$crt0_rel" "$main_rel" "$ihx" >/dev/null 2>&1; then
+    if ! link_benchmark "$crt0_rel" "$main_rel" "$ihx" "$map" >/dev/null 2>&1; then
         printf 'link_error,0,0,0\n'
         return
     fi
-    bytes="$(payload_bytes_from_ihx "$ihx" "$bin" "$crt0_size")"
+    if [[ "$CURRENT_SIZE_METRIC" == "non_bss" ]]; then
+        bytes="$(linked_non_bss_payload_bytes_from_map "$map" "$crt0_size")"
+        python3 "$IHX2BIN" "$ihx" "$bin" >/dev/null
+    else
+        bytes="$(payload_bytes_from_ihx "$ihx" "$bin" "$crt0_size")"
+    fi
     IFS=, read -r status ret cycles <<< "$(run_image "$CURRENT_CYCLES" "$ihx")"
     printf '%s,%s,%s,%s\n' "$status" "$ret" "$bytes" "$cycles"
 }
@@ -350,6 +386,7 @@ run_sdcc_mode() {
     local tag="sdcc_${mode}"
     local main_rel="$bench_dir/main.$tag.rel"
     local ihx="$bench_dir/$tag.ihx"
+    local map="$bench_dir/$tag.map"
     local bin="$bench_dir/$tag.bin"
     local status
     local ret
@@ -362,12 +399,118 @@ run_sdcc_mode() {
         printf 'build_error,0,0,0\n'
         return
     fi
-    if ! link_benchmark "$crt0_rel" "$main_rel" "$ihx" >/dev/null 2>&1; then
+    if ! link_benchmark "$crt0_rel" "$main_rel" "$ihx" "$map" >/dev/null 2>&1; then
         printf 'link_error,0,0,0\n'
         return
     fi
-    bytes="$(payload_bytes_from_ihx "$ihx" "$bin" "$crt0_size")"
+    if [[ "$CURRENT_SIZE_METRIC" == "non_bss" ]]; then
+        bytes="$(linked_non_bss_payload_bytes_from_map "$map" "$crt0_size")"
+        python3 "$IHX2BIN" "$ihx" "$bin" >/dev/null
+    else
+        bytes="$(payload_bytes_from_ihx "$ihx" "$bin" "$crt0_size")"
+    fi
     IFS=, read -r status ret cycles <<< "$(run_image "$CURRENT_CYCLES" "$ihx")"
+    printf '%s,%s,%s,%s\n' "$status" "$ret" "$bytes" "$cycles"
+}
+
+z88dk_env() {
+    env Z88DK_ROOT="$ORIG_Z88DK_ROOT" \
+        ZCCCFG="$ORIG_Z88DK_ROOT/lib/config" \
+        PATH="$ORIG_Z88DK_ROOT/bin:$PATH" \
+        "$@"
+}
+
+z88dk_non_bss_bytes_from_map() {
+    local map_file="$1"
+    local sum=0
+    local value
+    local line
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^__(code|data|rodata)_[[:alnum:]_]+_size[[:space:]]+=[[:space:]]+\$([0-9A-Fa-f]+) ]]; then
+            value="${BASH_REMATCH[2]}"
+            sum=$((sum + 16#$value))
+        fi
+    done < "$map_file"
+    printf '%s\n' "$sum"
+}
+
+build_z88dk_baseline() {
+    local compiler="$1"
+    local bench_dir="$2"
+    local src="$bench_dir/empty_$compiler.c"
+    local out="$bench_dir/empty_$compiler"
+    local map="$out.map"
+
+    printf 'int main(void) { return 0; }\n' > "$src"
+    if ! z88dk_env "$ORIG_Z88DK_ZCC" +test -vn "-compiler=$compiler" \
+        -m -s "$src" -o "$out" >"$bench_dir/empty_$compiler.log" 2>&1; then
+        printf '0\n'
+        return
+    fi
+    z88dk_non_bss_bytes_from_map "$map"
+}
+
+run_z88dk_image() {
+    local cycle_limit="$1"
+    local bin="$2"
+    local output
+    local rc
+    local done=0
+    local ret=0
+    local cycles=0
+
+    set +e
+    output="$("$RUNNER_BIN" --bin --z88dk-trap --cycles "$cycle_limit" "$bin" 2>&1)"
+    rc=$?
+    set -e
+
+    if [[ "$output" =~ done=([0-9]+) ]]; then
+        done="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$output" =~ return=([0-9]+) ]]; then
+        ret="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$output" =~ cycles=([0-9]+) ]]; then
+        cycles="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ "$done" == "1" ]]; then
+        printf 'ok,%s,%s\n' "$ret" "$cycles"
+    elif [[ "$rc" -ne 0 ]]; then
+        printf 'timeout,%s,%s\n' "$ret" "$cycles"
+    else
+        printf 'run_error,%s,%s\n' "$ret" "$cycles"
+    fi
+}
+
+run_z88dk_mode() {
+    local c_file="$1"
+    local compiler="$2"
+    local bench_dir="$3"
+    local baseline_bytes="$4"
+    local tag="z88dk_$compiler"
+    local out="$bench_dir/$tag"
+    local map="$out.map"
+    local status
+    local ret
+    local cycles
+    local bytes
+    local total_bytes
+
+    if ! z88dk_env "$ORIG_Z88DK_ZCC" +test -vn "-compiler=$compiler" \
+        -m -s "$c_file" -o "$out" >"$bench_dir/$tag.log" 2>&1; then
+        printf 'build_error,0,0,0\n'
+        return
+    fi
+
+    total_bytes="$(z88dk_non_bss_bytes_from_map "$map")"
+    if (( total_bytes > baseline_bytes )); then
+        bytes="$((total_bytes - baseline_bytes))"
+    else
+        bytes=0
+    fi
+    IFS=, read -r status ret cycles <<< "$(run_z88dk_image "$CURRENT_CYCLES" "$out")"
     printf '%s,%s,%s,%s\n' "$status" "$ret" "$bytes" "$cycles"
 }
 
@@ -419,6 +562,7 @@ run_bare_suite() {
 
     CURRENT_INCLUDE_DIR="$BARE_INCLUDE_DIR"
     CURRENT_CYCLES="$BARE_CYCLES"
+    CURRENT_SIZE_METRIC="flat"
 
     need_cmd sdasz80
     need_cmd "$XLD"
@@ -464,6 +608,7 @@ run_bare_suite() {
     } > "$results_csv"
 
     {
+        echo "xcc_path: $XCC"
         echo "xcc: $("$XCC" --version 2>/dev/null | head -1 || basename "$XCC")"
         echo "sdcc: $(sdcc --version 2>/dev/null | head -1)"
         echo "runner: $RUNNER_BIN"
@@ -750,19 +895,30 @@ run_z88dk_suite() {
     local xcc_os_status xcc_os_ret xcc_os_bytes xcc_os_cycles
     local sdcc_size_status sdcc_size_ret sdcc_size_bytes sdcc_size_cycles
     local sdcc_speed_status sdcc_speed_ret sdcc_speed_bytes sdcc_speed_cycles
+    local z88dk_80cc_status z88dk_80cc_ret z88dk_80cc_bytes z88dk_80cc_cycles
+    local z88dk_sccz80_status z88dk_sccz80_ret z88dk_sccz80_bytes z88dk_sccz80_cycles
     local xcc_o2_match xcc_of_match xcc_o3_match xcc_os_match
     local sdcc_size_match sdcc_speed_match
+    local z88dk_80cc_match z88dk_sccz80_match
+    local z88dk_80cc_baseline=0 z88dk_sccz80_baseline=0
 
     CURRENT_INCLUDE_DIR="$Z88DK_INCLUDE_DIR"
     CURRENT_CYCLES="$Z88DK_CYCLES"
+    CURRENT_SIZE_METRIC="non_bss"
 
     need_cmd sdasz80
     need_cmd "$XLD"
     need_cmd sdcc
+    [[ -x "$ORIG_Z88DK_ZCC" ]] || die "missing local z88dk zcc: $ORIG_Z88DK_ZCC"
+    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib" ]] || die "missing z88dk test library: $ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib"
+    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib" ]] || die "missing z88dk crt library: $ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib"
     [[ -f "$RUNTIME_LIB" ]] || die "missing runtime library: $RUNTIME_LIB"
 
     rm -rf "$suite_outdir"
     mkdir -p "$workdir"
+
+    z88dk_80cc_baseline="$(build_z88dk_baseline "80cc" "$workdir")"
+    z88dk_sccz80_baseline="$(build_z88dk_baseline "sccz80" "$workdir")"
 
     crt0_rel="$workdir/crt0.rel"
     sdasz80 -o "$crt0_rel" "$CRT0_S" >/dev/null
@@ -796,15 +952,22 @@ run_z88dk_suite() {
         printf 'xcc_O3_status,xcc_O3_return,xcc_O3_match,xcc_O3_bytes,xcc_O3_cycles,'
         printf 'xcc_Os_status,xcc_Os_return,xcc_Os_match,xcc_Os_bytes,xcc_Os_cycles,'
         printf 'sdcc_size_status,sdcc_size_return,sdcc_size_match,sdcc_size_bytes,sdcc_size_cycles,'
-        printf 'sdcc_speed_status,sdcc_speed_return,sdcc_speed_match,sdcc_speed_bytes,sdcc_speed_cycles\n'
+        printf 'sdcc_speed_status,sdcc_speed_return,sdcc_speed_match,sdcc_speed_bytes,sdcc_speed_cycles,'
+        printf 'z88dk_80cc_status,z88dk_80cc_return,z88dk_80cc_match,z88dk_80cc_bytes,z88dk_80cc_cycles,'
+        printf 'z88dk_sccz80_status,z88dk_sccz80_return,z88dk_sccz80_match,z88dk_sccz80_bytes,z88dk_sccz80_cycles\n'
     } > "$results_csv"
 
     {
+        echo "xcc_path: $XCC"
         echo "xcc: $("$XCC" --version 2>/dev/null | head -1 || basename "$XCC")"
         echo "sdcc: $(sdcc --version 2>/dev/null | head -1)"
+        echo "z88dk: $("$ORIG_Z88DK_ZCC" -h 2>&1 | sed -n '/^zcc /p' | head -1 || basename "$ORIG_Z88DK_ZCC")"
+        echo "z88dk_root: $ORIG_Z88DK_ROOT"
         echo "xld: $("$XLD" --version 2>/dev/null | head -1 || basename "$XLD")"
         echo "runtime: $RUNTIME_LIB"
         echo "crt0_code_bytes: $crt0_size"
+        echo "z88dk_80cc_non_bss_baseline_bytes: $z88dk_80cc_baseline"
+        echo "z88dk_sccz80_non_bss_baseline_bytes: $z88dk_sccz80_baseline"
         echo "cycle_limit: $Z88DK_CYCLES"
         echo "benchmarks: ${#benchmarks[@]}"
     } > "$versions_txt"
@@ -822,6 +985,8 @@ run_z88dk_suite() {
         IFS=, read -r xcc_os_status xcc_os_ret xcc_os_bytes xcc_os_cycles <<< "$(run_xcc_mode "$c_file" "Os" "$bench_dir" "$crt0_rel" "$crt0_size")"
         IFS=, read -r sdcc_size_status sdcc_size_ret sdcc_size_bytes sdcc_size_cycles <<< "$(run_sdcc_mode "$c_file" "size" "$bench_dir" "$crt0_rel" "$crt0_size")"
         IFS=, read -r sdcc_speed_status sdcc_speed_ret sdcc_speed_bytes sdcc_speed_cycles <<< "$(run_sdcc_mode "$c_file" "speed" "$bench_dir" "$crt0_rel" "$crt0_size")"
+        IFS=, read -r z88dk_80cc_status z88dk_80cc_ret z88dk_80cc_bytes z88dk_80cc_cycles <<< "$(run_z88dk_mode "$c_file" "80cc" "$bench_dir" "$z88dk_80cc_baseline")"
+        IFS=, read -r z88dk_sccz80_status z88dk_sccz80_ret z88dk_sccz80_bytes z88dk_sccz80_cycles <<< "$(run_z88dk_mode "$c_file" "sccz80" "$bench_dir" "$z88dk_sccz80_baseline")"
 
         xcc_o2_match="$(match_expected "$xcc_o2_status" "$xcc_o2_ret" "$expected_ret")"
         xcc_of_match="$(match_expected "$xcc_of_status" "$xcc_of_ret" "$expected_ret")"
@@ -829,8 +994,10 @@ run_z88dk_suite() {
         xcc_os_match="$(match_expected "$xcc_os_status" "$xcc_os_ret" "$expected_ret")"
         sdcc_size_match="$(match_expected "$sdcc_size_status" "$sdcc_size_ret" "$expected_ret")"
         sdcc_speed_match="$(match_expected "$sdcc_speed_status" "$sdcc_speed_ret" "$expected_ret")"
+        z88dk_80cc_match="$(match_expected "$z88dk_80cc_status" "$z88dk_80cc_ret" "$expected_ret")"
+        z88dk_sccz80_match="$(match_expected "$z88dk_sccz80_status" "$z88dk_sccz80_ret" "$expected_ret")"
 
-        echo "$bench_name,$expected_ret,$xcc_o2_status,$xcc_o2_ret,$xcc_o2_match,$xcc_o2_bytes,$xcc_o2_cycles,$xcc_of_status,$xcc_of_ret,$xcc_of_match,$xcc_of_bytes,$xcc_of_cycles,$xcc_o3_status,$xcc_o3_ret,$xcc_o3_match,$xcc_o3_bytes,$xcc_o3_cycles,$xcc_os_status,$xcc_os_ret,$xcc_os_match,$xcc_os_bytes,$xcc_os_cycles,$sdcc_size_status,$sdcc_size_ret,$sdcc_size_match,$sdcc_size_bytes,$sdcc_size_cycles,$sdcc_speed_status,$sdcc_speed_ret,$sdcc_speed_match,$sdcc_speed_bytes,$sdcc_speed_cycles" \
+        echo "$bench_name,$expected_ret,$xcc_o2_status,$xcc_o2_ret,$xcc_o2_match,$xcc_o2_bytes,$xcc_o2_cycles,$xcc_of_status,$xcc_of_ret,$xcc_of_match,$xcc_of_bytes,$xcc_of_cycles,$xcc_o3_status,$xcc_o3_ret,$xcc_o3_match,$xcc_o3_bytes,$xcc_o3_cycles,$xcc_os_status,$xcc_os_ret,$xcc_os_match,$xcc_os_bytes,$xcc_os_cycles,$sdcc_size_status,$sdcc_size_ret,$sdcc_size_match,$sdcc_size_bytes,$sdcc_size_cycles,$sdcc_speed_status,$sdcc_speed_ret,$sdcc_speed_match,$sdcc_speed_bytes,$sdcc_speed_cycles,$z88dk_80cc_status,$z88dk_80cc_ret,$z88dk_80cc_match,$z88dk_80cc_bytes,$z88dk_80cc_cycles,$z88dk_sccz80_status,$z88dk_sccz80_ret,$z88dk_sccz80_match,$z88dk_sccz80_bytes,$z88dk_sccz80_cycles" \
             >> "$results_csv"
     done
 
@@ -857,6 +1024,8 @@ run_z88dk_suite() {
             add("xcc -Os", $18, $20, $21, $22)
             add("sdcc size", $23, $25, $26, $27)
             add("sdcc speed", $28, $30, $31, $32)
+            add("z88dk 80cc", $33, $35, $36, $37)
+            add("z88dk sccz80", $38, $40, $41, $42)
 
             if ($18 == "ok" && $20 == "ok" && $23 == "ok" && $25 == "ok") {
                 os_common++
@@ -875,6 +1044,8 @@ run_z88dk_suite() {
             print ""
             print "These are libc-free adaptations of the z88dk compiler-comparison kernels."
             print "The runner links startup plus `libruntime.a`, but not `libc.a`."
+            print "`xcc`/SDCC payload bytes are linked non-BSS code/initializer bytes from xld maps, minus crt0."
+            print "z88dk modes use local `orig/z88dk` with the `+test` target; their payload bytes are non-BSS code/data/rodata minus an empty-main baseline."
             print ""
             print "## Totals"
             print ""
@@ -886,7 +1057,9 @@ run_z88dk_suite() {
             order[4] = "xcc -Os"
             order[5] = "sdcc size"
             order[6] = "sdcc speed"
-            for (i = 1; i <= 6; ++i) {
+            order[7] = "z88dk 80cc"
+            order[8] = "z88dk sccz80"
+            for (i = 1; i <= 8; ++i) {
                 mode = order[i]
                 printf "| `%s` | %d/%d | %d | %d |\n", \
                     mode, correct[mode], seen[mode], total_bytes[mode], total_cycles[mode]
@@ -909,8 +1082,8 @@ run_z88dk_suite() {
         echo ""
         echo "## Per Benchmark"
         echo ""
-        echo "| benchmark | xcc -O2 | xcc -Of | xcc -O3 | xcc -Os | sdcc size | sdcc speed |"
-        echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
+        echo "| benchmark | xcc -O2 | xcc -Of | xcc -O3 | xcc -Os | sdcc size | sdcc speed | z88dk 80cc | z88dk sccz80 |"
+        echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
         awk -F, '
             NR == 1 { next }
 
@@ -925,14 +1098,16 @@ run_z88dk_suite() {
             }
 
             {
-                printf "| `%s` | %s | %s | %s | %s | %s | %s |\n", \
+                printf "| `%s` | %s | %s | %s | %s | %s | %s | %s | %s |\n", \
                     $1, \
                     cell($3,  $5,  $6,  $7), \
                     cell($8,  $10, $11, $12), \
                     cell($13, $15, $16, $17), \
                     cell($18, $20, $21, $22), \
                     cell($23, $25, $26, $27), \
-                    cell($28, $30, $31, $32)
+                    cell($28, $30, $31, $32), \
+                    cell($33, $35, $36, $37), \
+                    cell($38, $40, $41, $42)
             }
         ' "$results_csv"
         echo ""
@@ -1160,7 +1335,7 @@ write_top_summary() {
             printf '| `%s` | %s | `%s` | `%s` | `%s` |\n' \
                 "z88dk" \
                 "$Z88DK_BENCHMARKS_RUN" \
-                "xcc O2/Of/O3/Os + sdcc size/speed" \
+                "xcc O2/Of/O3/Os + sdcc size/speed + z88dk 80cc/sccz80" \
                 "$OUTDIR/z88dk/summary.md" \
                 "$OUTDIR/z88dk/results.csv"
         fi

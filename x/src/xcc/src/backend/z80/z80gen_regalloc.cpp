@@ -494,15 +494,6 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
         }
 
         const auto &next = fn.icodes[idx + 1];
-        if (next.op == icode_op::IFX &&
-            same_call_result_operand(next.left, ic.result) &&
-            !temp_used_after(idx + 2, ic.result.temp_id)) {
-            no_spill_temps.insert(ic.result.temp_id);
-            maybe_mark_dead_incoming_arg_temp(ic.left, idx + 2);
-            maybe_mark_dead_incoming_arg_temp(ic.right, idx + 2);
-            continue;
-        }
-
         if (next.op == icode_op::RETURN &&
             same_call_result_operand(next.left, ic.result) &&
             !temp_used_after(idx + 2, ic.result.temp_id) &&
@@ -531,45 +522,6 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
                 continue;
             }
         }
-
-        if ((next.op != icode_op::EQ && next.op != icode_op::NE) ||
-            idx + 2 >= fn.icodes.size()) {
-            continue;
-        }
-
-        const auto &final_ifx = fn.icodes[idx + 2];
-        if (final_ifx.op != icode_op::IFX ||
-            final_ifx.true_lbl.empty() ||
-            !next.result.is_temp() ||
-            !final_ifx.left.is_temp() ||
-            next.result.temp_id != final_ifx.left.temp_id ||
-            temp_used_after(idx + 2, next.result.temp_id)) {
-            continue;
-        }
-
-        const bool cmp_on_left =
-            next.left.is_temp() && next.left.temp_id == ic.result.temp_id;
-        const bool cmp_on_right =
-            next.right.is_temp() && next.right.temp_id == ic.result.temp_id;
-        if (!cmp_on_left && !cmp_on_right)
-            continue;
-        const operand &other = cmp_on_left ? next.right : next.left;
-        if (other.kind != operand_kind::INT_CONST ||
-            temp_used_after(idx + 1, ic.result.temp_id)) {
-            continue;
-        }
-
-        if (!((next.op == icode_op::NE && other.ival == 0) ||
-              (next.op == icode_op::EQ && other.ival == 1) ||
-              (next.op == icode_op::EQ && other.ival == 0) ||
-              (next.op == icode_op::NE && other.ival == 1))) {
-            continue;
-        }
-
-        no_spill_temps.insert(ic.result.temp_id);
-        no_spill_temps.insert(next.result.temp_id);
-        maybe_mark_dead_incoming_arg_temp(ic.left, idx + 3);
-        maybe_mark_dead_incoming_arg_temp(ic.right, idx + 3);
     }
 
     auto note_temp = [&](const operand &op, int idx) {
@@ -909,11 +861,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             def_ic.result.type->is_far_ptr())
             return false;
 
-        // Only invariant address materialization is safe enough for the
-        // generic allocator. Rebuilding derived pointer values here can cross
-        // aggregate-update boundaries and has caused O3 miscompiles in
-        // pointer-heavy stress tests. Direct stack-local addresses are stable
-        // relative to IX, just like globals are stable absolute addresses.
+        // Only invariant global address materialization is safe enough for the
+        // generic allocator. Stack-local addresses are IX-relative and stable,
+        // but rematerializing them across aggregate stores can interact badly
+        // with pair-cache reuse and produce triangular local-array offsets.
         if (def_ic.op != icode_op::ADDRESS_OF)
             return false;
         const bool direct_global_address =
@@ -921,13 +872,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             !def_ic.left.is_tls &&
             !def_ic.left.is_func &&
             !def_ic.left.is_param;
-        const bool direct_stack_local_address =
-            def_ic.left.kind == operand_kind::SYMBOL &&
-            !def_ic.left.is_global &&
-            !def_ic.left.is_tls &&
-            !def_ic.left.is_func &&
-            !def_ic.left.is_param;
-        if (!direct_global_address && !direct_stack_local_address)
+        if (!direct_global_address)
             return false;
 
         for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
@@ -1117,171 +1062,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 return false;
             }
         }
-        return true;
-    };
-    auto loop_pointer_bc_candidate = [&](int temp_id, const interval &iv,
-                                         int &score_out) -> bool {
-        if (iv.size != 2 || iv.has_addr_of)
-            return false;
-        if (iv.first_def < 0 || iv.last_use <= iv.first_def)
-            return false;
-        if (iv.mentions < 2)
-            return false;
-
-        const icode &def_ic = fn.icodes[iv.first_def];
-        if (!def_ic.result.is_temp() || def_ic.result.temp_id != temp_id)
-            return false;
-
-        auto is_byte_data_base = [](const operand &op) {
-            if (op.kind == operand_kind::LABEL_REF)
-                return true;
-            return op.kind == operand_kind::SYMBOL &&
-                   op.is_global &&
-                   !op.is_tls &&
-                   !op.is_sfr &&
-                   !op.is_func &&
-                   op.type &&
-                   ((op.type->is_array() && op.type->base &&
-                     op.type->base->size() == 1) ||
-                    (op.type->is_ptr() && op.type->base &&
-                     op.type->base->size() == 1));
-        };
-        auto is_byte_pointer_value = [](const operand &op) {
-            return op.type &&
-                   op.type->is_ptr() &&
-                   !op.type->is_far_ptr() &&
-                   op.type->base &&
-                   op.type->base->size() == 1;
-        };
-
-        bool init_ok = false;
-        switch (def_ic.op) {
-        case icode_op::ASSIGN:
-        case icode_op::CAST:
-        case icode_op::ADDRESS_OF:
-            init_ok = is_byte_data_base(def_ic.left) ||
-                      is_byte_pointer_value(def_ic.left);
-            break;
-        default:
-            break;
-        }
-        if (!init_ok)
-            return false;
-        if (uses_tls_global(def_ic.left) ||
-            symbol_word_access_may_need_bc_scratch(def_ic.left)) {
-            return false;
-        }
-
-        auto pointer_bc_hazard = [&](const icode &ic) {
-            if (clobbers_bc(ic))
-                return true;
-            if (uses_tls_global(ic.result) || uses_tls_global(ic.left) ||
-                uses_tls_global(ic.right)) {
-                return true;
-            }
-            if (ic.op == icode_op::ADDRESS_OF &&
-                address_of_may_need_bc_scratch(ic.left)) {
-                return true;
-            }
-            if (symbol_word_access_may_need_bc_scratch(ic.result) ||
-                symbol_word_access_may_need_bc_scratch(ic.left) ||
-                symbol_word_access_may_need_bc_scratch(ic.right)) {
-                return true;
-            }
-            return false;
-        };
-
-        bool saw_mem_use = false;
-        bool saw_update = false;
-        int inc_temp = -1;
-
-        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
-            const icode &ic = fn.icodes[k];
-            if (pointer_bc_hazard(ic))
-                return false;
-
-            if (ic.op == icode_op::LABEL ||
-                ic.op == icode_op::GOTO ||
-                ic.op == icode_op::IFX) {
-                continue;
-            }
-            if (ic.op == icode_op::GET_VALUE_AT &&
-                ic.left.is_temp() &&
-                ic.left.temp_id == temp_id &&
-                ic.result.type &&
-                ic.result.type->size() == 1) {
-                saw_mem_use = true;
-                continue;
-            }
-            if (ic.op == icode_op::SET_VALUE_AT &&
-                ic.result.is_temp() &&
-                ic.result.temp_id == temp_id &&
-                ic.left.type &&
-                ic.left.type->size() == 1) {
-                saw_mem_use = true;
-                continue;
-            }
-            if (ic.op == icode_op::ADD &&
-                ic.left.is_temp() &&
-                ic.left.temp_id == temp_id &&
-                ic.right.kind == operand_kind::INT_CONST &&
-                ic.right.ival == 1 &&
-                ic.result.is_temp()) {
-                inc_temp = ic.result.temp_id;
-                saw_update = true;
-                continue;
-            }
-            if (ic.op == icode_op::ASSIGN &&
-                ic.result.is_temp() &&
-                ic.result.temp_id == temp_id &&
-                ic.left.is_temp() &&
-                ic.left.temp_id == inc_temp) {
-                continue;
-            }
-            if (is_compare_op(ic.op))
-                continue;
-            auto byteish_operand = [&](const operand &op) {
-                if (op.is_none())
-                    return true;
-                if (op.kind == operand_kind::INT_CONST ||
-                    op.kind == operand_kind::FLOAT_CONST)
-                    return true;
-                if (op.kind == operand_kind::LABEL_REF)
-                    return true;
-                if (op.is_temp() && op.temp_id == temp_id)
-                    return true;
-                return op.type && op.type->size() <= 1;
-            };
-            auto safe_byteish_ic = [&](const icode &cur) {
-                switch (cur.op) {
-                case icode_op::ASSIGN:
-                case icode_op::CAST:
-                case icode_op::ADD:
-                case icode_op::SUB:
-                case icode_op::BAND:
-                case icode_op::BOR:
-                case icode_op::BXOR:
-                case icode_op::NEG:
-                case icode_op::BNOT:
-                case icode_op::SHL:
-                case icode_op::SHR:
-                case icode_op::ROL:
-                case icode_op::ROR:
-                    return byteish_operand(cur.left) && byteish_operand(cur.right);
-                default:
-                    return false;
-                }
-            };
-            if (!safe_byteish_ic(ic))
-                return false;
-            if (mentions_temp(ic, temp_id))
-                return false;
-        }
-
-        if (!saw_mem_use || !saw_update)
-            return false;
-
-        score_out = 160 + iv.mentions * 8 - (iv.last_use - iv.first_def);
         return true;
     };
     auto loop_pointer_hl_candidate = [&](int temp_id, const interval &iv,
@@ -1725,256 +1505,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     std::vector<sym_byte_candidate> sym_c_candidates;
     std::vector<sym_byte_candidate> sym_b_candidates;
     std::vector<bc_candidate> hl_candidates;
-    std::vector<bc_candidate> pointer_bc_candidates;
     std::vector<std::pair<int, int>> pair_windows;
     std::vector<std::pair<int, int>> b_windows;
     std::vector<std::pair<int, int>> c_windows;
     std::vector<std::pair<int, int>> hl_windows;
-
-    // Keep the old O3-only lane pinning disabled by default until its loop
-    // matcher is hardened outside the synthetic benchmark shapes it targets.
-    if (false && tuned_profile_enabled()) {
-        auto force_bench_fill_lanes = [&]() {
-            auto find_temp_zero_init_before = [&](int tid, int before_idx) {
-                auto it = ivs.find(tid);
-                if (it == ivs.end() || it->second.first_def < 0 ||
-                    it->second.first_def >= before_idx) {
-                    return false;
-                }
-                const icode &def = fn.icodes[it->second.first_def];
-                if (!(def.result.is_temp() && def.result.temp_id == tid))
-                    return false;
-                if ((def.op == icode_op::ASSIGN || def.op == icode_op::CAST) &&
-                    def.left.kind == operand_kind::INT_CONST &&
-                    def.left.ival == 0) {
-                    return true;
-                }
-                return false;
-            };
-            auto find_temp_global_ptr_init_before = [&](int tid, int before_idx) {
-                auto it = ivs.find(tid);
-                if (it == ivs.end() || it->second.first_def < 0 ||
-                    it->second.first_def >= before_idx) {
-                    return false;
-                }
-                const icode &def = fn.icodes[it->second.first_def];
-                if (!(def.result.is_temp() && def.result.temp_id == tid))
-                    return false;
-                if (def.op != icode_op::ASSIGN &&
-                    def.op != icode_op::CAST &&
-                    def.op != icode_op::ADDRESS_OF) {
-                    return false;
-                }
-                const operand &src = def.left;
-                if (src.kind == operand_kind::LABEL_REF)
-                    return true;
-                return src.kind == operand_kind::SYMBOL &&
-                       src.is_global &&
-                       !src.is_tls &&
-                       !src.is_sfr &&
-                       !src.is_func &&
-                       src.type &&
-                       ((src.type->is_array() && src.type->base &&
-                         src.type->base->size() == 1) ||
-                        (src.type->is_ptr() && src.type->base &&
-                         src.type->base->size() == 1));
-            };
-
-            for (int cond_idx = 0; cond_idx + 3 < n; ++cond_idx) {
-                if (cond_idx == 0 || fn.icodes[cond_idx - 1].op != icode_op::LABEL)
-                    continue;
-                const std::string &cond_label = fn.icodes[cond_idx - 1].label_name;
-                const icode &cmp_ic = fn.icodes[cond_idx];
-                const icode &ifx_ic = fn.icodes[cond_idx + 1];
-                const icode &body_lbl = fn.icodes[cond_idx + 2];
-
-                if (cmp_ic.op != icode_op::LT ||
-                    !cmp_ic.result.is_temp() ||
-                    !cmp_ic.left.is_temp() ||
-                    cmp_ic.right.kind != operand_kind::INT_CONST ||
-                    cmp_ic.right.ival <= 0 || cmp_ic.right.ival > 255) {
-                    continue;
-                }
-                if (ifx_ic.op != icode_op::IFX ||
-                    !(ifx_ic.left.is_temp() &&
-                      ifx_ic.left.temp_id == cmp_ic.result.temp_id) ||
-                    body_lbl.op != icode_op::LABEL ||
-                    body_lbl.label_name != ifx_ic.true_lbl) {
-                    continue;
-                }
-
-                const int idx_tid = cmp_ic.left.temp_id;
-                if (!find_temp_zero_init_before(idx_tid, cond_idx))
-                    continue;
-
-                int end_label_idx = -1;
-                for (int i = cond_idx + 3; i < n; ++i) {
-                    if (fn.icodes[i].op == icode_op::LABEL &&
-                        fn.icodes[i].label_name == ifx_ic.false_lbl) {
-                        end_label_idx = i;
-                        break;
-                    }
-                }
-
-                if (end_label_idx < 0)
-                    continue;
-
-                int goto_back_idx = -1;
-                int idx_add1_idx = -1, idx_assign_idx = -1;
-                int ptr_add1_idx = -1, ptr_assign_idx = -1;
-                int ptr_tid = -1;
-                int store_idx = -1;
-                int store_val_tid = -1;
-                int value_tid = -1;
-
-                for (int i = end_label_idx - 1; i >= cond_idx + 3; --i) {
-                    const icode &ic = fn.icodes[i];
-                    if (goto_back_idx < 0 &&
-                        ic.op == icode_op::GOTO &&
-                        ic.label_name == cond_label) {
-                        goto_back_idx = i;
-                        continue;
-                    }
-                    if (goto_back_idx < 0)
-                        continue;
-
-                    if (ptr_assign_idx < 0 &&
-                        ic.op == icode_op::ASSIGN &&
-                        ic.result.is_temp() &&
-                        ic.left.is_temp()) {
-                        int maybe_ptr_tid = ic.result.temp_id;
-                        int maybe_inc_tid = ic.left.temp_id;
-                        for (int j = i - 1; j >= cond_idx + 3; --j) {
-                            const icode &prev = fn.icodes[j];
-                            if (prev.op == icode_op::ADD &&
-                                prev.result.is_temp() &&
-                                prev.result.temp_id == maybe_inc_tid &&
-                                prev.left.is_temp() &&
-                                prev.left.temp_id == maybe_ptr_tid &&
-                                prev.right.kind == operand_kind::INT_CONST &&
-                                prev.right.ival == 1) {
-                                ptr_tid = maybe_ptr_tid;
-                                ptr_add1_idx = j;
-                                ptr_assign_idx = i;
-                                break;
-                            }
-                        }
-                        if (ptr_tid >= 0)
-                            continue;
-                    }
-
-                    if (idx_assign_idx < 0 &&
-                        ic.op == icode_op::ASSIGN &&
-                        ic.result.is_temp() &&
-                        ic.result.temp_id == idx_tid &&
-                        ic.left.is_temp()) {
-                        int maybe_inc_tid = ic.left.temp_id;
-                        for (int j = i - 1; j >= cond_idx + 3; --j) {
-                            const icode &prev = fn.icodes[j];
-                            if (prev.op == icode_op::ADD &&
-                                prev.result.is_temp() &&
-                                prev.result.temp_id == maybe_inc_tid &&
-                                prev.left.is_temp() &&
-                                prev.left.temp_id == idx_tid &&
-                                prev.right.kind == operand_kind::INT_CONST &&
-                                prev.right.ival == 1) {
-                                idx_add1_idx = j;
-                                idx_assign_idx = i;
-                                break;
-                            }
-                        }
-                        if (idx_assign_idx >= 0)
-                            continue;
-                    }
-
-                    if (store_idx < 0 &&
-                        ic.op == icode_op::SET_VALUE_AT &&
-                        ic.result.is_temp() &&
-                        ic.left.is_temp() &&
-                        ic.left.type && ic.left.type->size() == 1) {
-                        store_idx = i;
-                        store_val_tid = ic.left.temp_id;
-                    }
-                }
-
-                if (goto_back_idx < 0 || idx_add1_idx < 0 || idx_assign_idx < 0 ||
-                    ptr_add1_idx < 0 || ptr_assign_idx < 0 || ptr_tid < 0 ||
-                    store_idx < 0) {
-                    continue;
-                }
-                if (!find_temp_global_ptr_init_before(ptr_tid, cond_idx))
-                    continue;
-
-                for (int i = store_idx - 1; i >= cond_idx + 3; --i) {
-                    const icode &ic = fn.icodes[i];
-                    if (!(ic.result.is_temp() && ic.result.temp_id == store_val_tid))
-                        continue;
-                    if (ic.op != icode_op::BXOR)
-                        break;
-                    if (ic.left.is_temp() && ic.left.temp_id == idx_tid &&
-                        ic.right.is_temp()) {
-                        value_tid = ic.right.temp_id;
-                    } else if (ic.right.is_temp() && ic.right.temp_id == idx_tid &&
-                               ic.left.is_temp()) {
-                        value_tid = ic.left.temp_id;
-                    }
-                    break;
-                }
-                if (value_tid < 0 || value_tid == idx_tid || value_tid == ptr_tid)
-                    continue;
-                auto viv = ivs.find(value_tid);
-                if (viv == ivs.end() || viv->second.size != 1 ||
-                    viv->second.first_def < 0 ||
-                    viv->second.first_def >= cond_idx) {
-                    continue;
-                }
-
-                // Require the evolving byte state to be used mostly inside the loop
-                // and to participate in a self-derived update each iteration.
-                bool saw_value_self_update = false;
-                for (int i = cond_idx + 3; i < goto_back_idx; ++i) {
-                    const icode &ic = fn.icodes[i];
-                    if (ic.result.is_temp() &&
-                        ic.result.temp_id == value_tid &&
-                        ((ic.left.is_temp() && ic.left.temp_id == value_tid) ||
-                         (ic.right.is_temp() && ic.right.temp_id == value_tid))) {
-                        saw_value_self_update = true;
-                        break;
-                    }
-                    if (ic.op == icode_op::ASSIGN &&
-                        ic.result.is_temp() &&
-                        ic.result.temp_id == value_tid &&
-                        ic.left.is_temp()) {
-                        int tmp_tid = ic.left.temp_id;
-                        auto tmp_it = ivs.find(tmp_tid);
-                        if (tmp_it == ivs.end() || tmp_it->second.first_def < 0)
-                            continue;
-                        const icode &tmp_def = fn.icodes[tmp_it->second.first_def];
-                        if (tmp_def.result.is_temp() &&
-                            tmp_def.result.temp_id == tmp_tid &&
-                            ((tmp_def.left.is_temp() &&
-                              tmp_def.left.temp_id == value_tid) ||
-                             (tmp_def.right.is_temp() &&
-                              tmp_def.right.temp_id == value_tid))) {
-                            saw_value_self_update = true;
-                            break;
-                        }
-                    }
-                }
-                if (!saw_value_self_update)
-                    continue;
-
-                temp_regs_[ptr_tid] = temp_home::main_hl;
-                temp_regs_[value_tid] = temp_home::main_c;
-                temp_regs_[idx_tid] = temp_home::main_b;
-                hl_windows.push_back({cond_idx + 2, goto_back_idx});
-                c_windows.push_back({cond_idx + 2, goto_back_idx});
-                b_windows.push_back({cond_idx + 2, goto_back_idx});
-            }
-        };
-
-        force_bench_fill_lanes();
-    }
 
     // Step 4a: gather BC candidates from both word temps and simple
     // 16-bit local / parameter symbols. The symbol path is intentionally
@@ -2226,17 +1760,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    if (false && tuned_profile_enabled()) {
-        for (auto &[fd, tid] : order) {
-            const interval &iv = ivs[tid];
-            int score = 0;
-            if (!loop_pointer_bc_candidate(tid, iv, score))
-                continue;
-            pointer_bc_candidates.push_back(
-                {iv.first_def, iv.last_use, score, false, tid});
-        }
-    }
-
     if (size_opt_enabled() || tuned_profile_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
@@ -2249,15 +1772,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     }
 
     std::sort(bc_candidates.begin(), bc_candidates.end(),
-              [](const bc_candidate &a, const bc_candidate &b) {
-                  if (a.score != b.score) return a.score > b.score;
-                  int aspan = a.end - a.start;
-                  int bspan = b.end - b.start;
-                  if (aspan != bspan) return aspan < bspan;
-                  if (a.start != b.start) return a.start < b.start;
-                  return a.is_symbol && !b.is_symbol;
-              });
-    std::sort(pointer_bc_candidates.begin(), pointer_bc_candidates.end(),
               [](const bc_candidate &a, const bc_candidate &b) {
                   if (a.score != b.score) return a.score > b.score;
                   int aspan = a.end - a.start;
@@ -2322,20 +1836,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             temp_regs_[cand.id] = temp_home::main_hl;
             hl_windows.push_back({cand.start, cand.end});
-        }
-    }
-
-    // The extra O3-only BC pointer pinning below is still available in the
-    // source, but keep it disabled by default until the remaining pointer /
-    // wchar regressions are hardened.
-    if (false && tuned_profile_enabled()) {
-        for (const auto &cand : pointer_bc_candidates) {
-            if (temp_regs_.find(cand.id) != temp_regs_.end())
-                continue;
-            if (overlaps_windows(pair_windows, cand.start, cand.end))
-                continue;
-            temp_regs_[cand.id] = temp_home::main_bc;
-            pair_windows.push_back({cand.start, cand.end});
         }
     }
 

@@ -66,7 +66,7 @@ semantic check
   ->
 IR generator
   ->
-IR optimizer (-O2 baseline, tuned -Of / -Os profiles, and a reserved -O3 slot)
+IR optimizer (-O2 baseline, Os-based -Of / -Os profiles, and a reserved -O3 layer)
   ->
 Z80 code generator
   ->
@@ -128,8 +128,8 @@ Important options today:
 - `-O0`: no optimization
 - `-O1`: late target cleanup only; it runs after IR optimization and code generation, and today mainly enables the assembly peephole pass plus tiny backend fusions
 - `-O2`: the smart optimization baseline, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, direct control-condition lowering, counted-byte-loop narrowing, loop pointer-walk canonicalization, address/deref folding, duplicate-block cleanup, automatic TEMP preallocation, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; it also keeps the `-O1` late cleanup stage at the end
-- `-Of`: speed-biased smart optimization; it builds on the stable `-O2` baseline and may spend a little size for fewer cycles
-- `-O3`: reserved experimental slot; today it is intentionally identical to `-Of` so the stable presets are `-O2`, `-Of`, and `-Os`
+- `-Of`: `-Os`-based speed profile; it currently aliases `-Os`, and speed-biased hooks are added only after they prove profitable
+- `-O3`: reserved experimental layer on top of `-Of`; currently empty so new risky trials can be measured cleanly before graduation
 - `-Os`: size-biased smart optimization; it builds on the stable `-O2` baseline with size-oriented helper inlining and codegen choices
 - `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info

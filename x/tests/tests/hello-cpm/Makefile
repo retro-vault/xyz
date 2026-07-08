@@ -21,7 +21,7 @@ all: $(BUILD_DIR)/hello.com
 
 $(BUILD_DIR)/hello.com: hello.c
 	@mkdir -p $(BUILD_DIR)
-	$(XCC) hello.c -T $(DIST_DIR)/z80/lib/linker.lk --oformat=binary -o $@
+	$(XCC) hello.c --platform=cpm3 --oformat=binary -o $@
 
 test: $(BUILD_DIR)/hello.com
 	@if ! command -v $(TNYLPO) >/dev/null 2>&1; then \

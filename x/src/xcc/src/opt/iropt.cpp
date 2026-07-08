@@ -2360,6 +2360,148 @@ public:
     }
 };
 
+class one_trip_counted_loop_fold_pass final : public ir_pass {
+public:
+    const char *name() const override { return "one_trip_counted_loop_fold"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        control_flow_graph cfg(fn);
+        auto loops = cfg.natural_loops();
+        if (loops.empty())
+            return false;
+
+        auto mentions_temp_id = [](const icode &ic, int temp_id) {
+            auto mentions = [&](const operand &op) {
+                return op.is_temp() && op.temp_id == temp_id;
+            };
+            return mentions(ic.result) || mentions(ic.left) || mentions(ic.right);
+        };
+
+        for (const auto &loop : loops) {
+            if (loop.outside_preds.size() != 1 || loop.latches.size() != 1)
+                continue;
+            if (loop.blocks.size() != 3)
+                continue;
+
+            const auto &header = cfg.block(loop.header);
+            const auto &preheader = cfg.block(loop.outside_preds.front());
+            const auto &latch = cfg.block(loop.latches.front());
+            if (header.end == 0 || latch.end == 0)
+                continue;
+
+            size_t ifx_idx = header.end - 1;
+            if (fn.icodes[ifx_idx].op != icode_op::IFX ||
+                !fn.icodes[ifx_idx].left.is_temp()) {
+                continue;
+            }
+            const icode &ifx = fn.icodes[ifx_idx];
+            auto body_block_id = cfg.block_for_label(ifx.true_lbl);
+            auto exit_block_id = cfg.block_for_label(ifx.false_lbl);
+            if (!body_block_id || !exit_block_id)
+                continue;
+            if (!loop.blocks.count(*body_block_id) ||
+                loop.blocks.count(*exit_block_id) ||
+                *body_block_id == loop.header ||
+                *body_block_id == loop.latches.front()) {
+                continue;
+            }
+            const auto &body = cfg.block(*body_block_id);
+
+            // Keep this first version simple: header, body, latch, then exit.
+            if (!(header.end == body.begin && body.end == latch.begin))
+                continue;
+            if (!body.succs.empty() &&
+                !(body.succs.size() == 1 && body.succs.front() == loop.latches.front())) {
+                continue;
+            }
+
+            const size_t header_first = first_non_label_index(fn, header);
+            if (header_first + 2 != header.end)
+                continue;
+            const icode &cmp = fn.icodes[header_first];
+            if (cmp.op != icode_op::LT ||
+                !cmp.result.is_temp() ||
+                cmp.result.temp_id != ifx.left.temp_id ||
+                !cmp.left.is_temp() ||
+                cmp.right.kind != operand_kind::INT_CONST ||
+                cmp.right.ival != 1) {
+                continue;
+            }
+            const int iv_temp = cmp.left.temp_id;
+
+            size_t init_idx = fn.icodes.size();
+            for (size_t i = preheader.begin; i < preheader.end; ++i) {
+                const auto &ic = fn.icodes[i];
+                if (ic.op == icode_op::ASSIGN &&
+                    ic.result.is_temp() &&
+                    ic.result.temp_id == iv_temp &&
+                    ic.left.kind == operand_kind::INT_CONST &&
+                    ic.left.ival == 0) {
+                    init_idx = i;
+                }
+            }
+            if (init_idx == fn.icodes.size())
+                continue;
+
+            const size_t latch_first = first_non_label_index(fn, latch);
+            if (latch_first + 3 != latch.end)
+                continue;
+            const icode &inc = fn.icodes[latch_first];
+            const icode &assign = fn.icodes[latch_first + 1];
+            const icode &back = fn.icodes[latch.end - 1];
+            if (inc.op != icode_op::ADD ||
+                !inc.result.is_temp() ||
+                !inc.left.is_temp() ||
+                inc.left.temp_id != iv_temp ||
+                inc.right.kind != operand_kind::INT_CONST ||
+                inc.right.ival != 1 ||
+                assign.op != icode_op::ASSIGN ||
+                !assign.result.is_temp() ||
+                assign.result.temp_id != iv_temp ||
+                !assign.left.is_temp() ||
+                assign.left.temp_id != inc.result.temp_id ||
+                back.op != icode_op::GOTO) {
+                continue;
+            }
+            const std::string header_label = first_label_in_block(fn, header);
+            if (header_label.empty() || back.label_name != header_label)
+                continue;
+            const int next_temp = inc.result.temp_id;
+
+            bool confined = true;
+            for (size_t i = 0; i < fn.icodes.size(); ++i) {
+                const bool loop_scaffold =
+                    i == init_idx ||
+                    (i >= header.begin && i < header.end) ||
+                    (i >= latch.begin && i < latch.end);
+                if (!loop_scaffold &&
+                    (mentions_temp_id(fn.icodes[i], iv_temp) ||
+                     mentions_temp_id(fn.icodes[i], next_temp))) {
+                    confined = false;
+                    break;
+                }
+            }
+            if (!confined)
+                continue;
+
+            std::unordered_set<size_t> erase;
+            erase.insert(init_idx);
+            for (size_t i = header.begin; i < header.end; ++i)
+                erase.insert(i);
+            for (size_t i = latch.begin; i < latch.end; ++i)
+                erase.insert(i);
+
+            fn.icodes = rebuild_with_insertions(fn.icodes, erase, {});
+            return true;
+        }
+
+        return false;
+    }
+};
+
 class loop_pointer_walk_pass final : public ir_pass {
 public:
     const char *name() const override { return "loop_pointer_walk"; }
@@ -3676,6 +3818,203 @@ public:
     }
 };
 
+static bool is_rematerializable_global_scalar(const operand &op,
+                                              const alias_info &alias) {
+    if (!op.is_symbol() || !op.is_global || op.is_param || op.is_func ||
+        op.is_tls || op.is_sfr || op.byte_offset != 0) {
+        return false;
+    }
+    if (!op.type || !op.type->is_scalar())
+        return false;
+    if (op.type->size() <= 0 || op.type->size() > 2)
+        return false;
+    return !base_symbol_address_taken(alias, op);
+}
+
+static bool global_remat_replacement_compatible(const operand &use,
+                                                const operand &replacement) {
+    if (!use.type || !replacement.type)
+        return true;
+    if (!use.type->is_scalar() || !replacement.type->is_scalar())
+        return false;
+    if (use.type->size() != replacement.type->size())
+        return false;
+    if (use.type->is_ptr() != replacement.type->is_ptr())
+        return false;
+    return true;
+}
+
+static bool global_remat_maps_equal(
+        const std::unordered_map<int, operand> &lhs,
+        const std::unordered_map<int, operand> &rhs) {
+    if (lhs.size() != rhs.size())
+        return false;
+    for (const auto &it : lhs) {
+        auto found = rhs.find(it.first);
+        if (found == rhs.end() ||
+            !same_value_operand(it.second, found->second)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+class global_scalar_remat_pass final : public ir_pass {
+public:
+    const char *name() const override { return "global_scalar_remat"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        alias_info alias = build_alias_info(fn);
+        std::unordered_map<int, int> temp_use_count;
+        for (const auto &ic : fn.icodes) {
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (op.is_temp())
+                    ++temp_use_count[op.temp_id];
+            });
+        }
+
+        auto direct_global_load = [&](const icode &ic, operand &global) {
+            if (ic.op != icode_op::ASSIGN || !ic.result.is_temp() ||
+                !is_rematerializable_global_scalar(ic.left, alias)) {
+                return false;
+            }
+            auto count_it = temp_use_count.find(ic.result.temp_id);
+            if (count_it == temp_use_count.end() || count_it->second != 1)
+                return false;
+            global = ic.left;
+            return true;
+        };
+
+        auto kills_global_values = [](const icode &ic) {
+            switch (ic.op) {
+            case icode_op::CALL:
+            case icode_op::SET_VALUE_AT:
+            case icode_op::INLINE_ASM:
+            case icode_op::ALLOCA:
+                return true;
+            case icode_op::ASSIGN:
+                return ic.result.is_symbol() &&
+                       (ic.result.is_global || ic.result.is_tls ||
+                        ic.result.is_sfr);
+            default:
+                return false;
+            }
+        };
+
+        auto transfer = [&](const basic_block &block,
+                            const std::unordered_map<int, operand> &start) {
+            std::unordered_map<int, operand> current = start;
+            for (size_t i = block.begin; i < block.end; ++i) {
+                const icode &ic = fn.icodes[i];
+
+                if (kills_global_values(ic))
+                    current.clear();
+
+                if (defines_result(ic) && ic.result.is_temp())
+                    current.erase(ic.result.temp_id);
+
+                operand global;
+                if (direct_global_load(ic, global))
+                    current[ic.result.temp_id] = global;
+            }
+            return current;
+        };
+
+        control_flow_graph cfg(fn);
+        auto reachable = cfg.reachable_blocks();
+        auto order = cfg.reverse_postorder();
+        const size_t nblocks = cfg.blocks().size();
+
+        std::vector<std::unordered_map<int, operand>> in(nblocks), out(nblocks);
+        bool dataflow_changed = true;
+        while (dataflow_changed) {
+            dataflow_changed = false;
+            for (size_t block_id : order) {
+                if (!reachable.count(block_id))
+                    continue;
+
+                std::unordered_map<int, operand> merged;
+                bool have_pred = false;
+                const auto &block = cfg.block(block_id);
+                for (size_t pred_id : block.preds) {
+                    if (!reachable.count(pred_id))
+                        continue;
+                    if (!have_pred) {
+                        merged = out[pred_id];
+                        have_pred = true;
+                        continue;
+                    }
+
+                    for (auto it = merged.begin(); it != merged.end();) {
+                        auto found = out[pred_id].find(it->first);
+                        if (found == out[pred_id].end() ||
+                            !same_value_operand(it->second, found->second)) {
+                            it = merged.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+                if (!have_pred)
+                    merged.clear();
+
+                if (!global_remat_maps_equal(in[block_id], merged)) {
+                    in[block_id] = merged;
+                    dataflow_changed = true;
+                }
+
+                auto new_out = transfer(block, in[block_id]);
+                if (!global_remat_maps_equal(out[block_id], new_out)) {
+                    out[block_id] = std::move(new_out);
+                    dataflow_changed = true;
+                }
+            }
+        }
+
+        bool changed = false;
+        for (size_t block_id : order) {
+            if (!reachable.count(block_id))
+                continue;
+
+            std::unordered_map<int, operand> current = in[block_id];
+            const auto &block = cfg.block(block_id);
+            for (size_t i = block.begin; i < block.end; ++i) {
+                icode &ic = fn.icodes[i];
+
+                for_each_use_operand(ic, [&](operand &op) {
+                    if (!op.is_temp())
+                        return;
+                    auto found = current.find(op.temp_id);
+                    if (found == current.end())
+                        return;
+                    if (!global_remat_replacement_compatible(op, found->second))
+                        return;
+                    operand replacement = found->second;
+                    if (op.type)
+                        replacement.type = op.type;
+                    op = replacement;
+                    changed = true;
+                });
+
+                if (kills_global_values(ic))
+                    current.clear();
+
+                if (defines_result(ic) && ic.result.is_temp())
+                    current.erase(ic.result.temp_id);
+
+                operand global;
+                if (direct_global_load(ic, global))
+                    current[ic.result.temp_id] = global;
+            }
+        }
+
+        return changed;
+    }
+};
+
 class calc_temp_fusion_pass final : public ir_pass {
 public:
     const char *name() const override { return "calc_temp_fusion"; }
@@ -3871,11 +4210,73 @@ public:
 
     bool run(ir_function &fn) override {
         control_flow_graph cfg(fn);
-        if (cfg.blocks().size() != 1)
-            return false;
-
         std::vector<bool> erase(fn.icodes.size(), false);
         bool changed = false;
+
+        std::vector<size_t> block_for_index(fn.icodes.size(), static_cast<size_t>(-1));
+        for (const auto &block : cfg.blocks()) {
+            for (size_t i = block.begin; i < block.end && i < fn.icodes.size(); ++i)
+                block_for_index[i] = block.id;
+        }
+
+        std::unordered_map<int, int> temp_def_count;
+        std::unordered_map<int, std::vector<size_t>> temp_def_indices;
+        std::unordered_map<int, std::vector<size_t>> temp_use_indices;
+
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            const auto &ic = fn.icodes[i];
+            if (ic.result.is_temp() && defines_result(ic)) {
+                ++temp_def_count[ic.result.temp_id];
+                temp_def_indices[ic.result.temp_id].push_back(i);
+            }
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (op.is_temp())
+                    temp_use_indices[op.temp_id].push_back(i);
+            });
+        }
+
+        const auto dom =
+            (cfg.blocks().size() <= control_flow_graph::kMaxLoopOptBlocks)
+                ? cfg.dominators()
+                : std::vector<std::unordered_set<size_t>>{};
+
+        auto temp_defined_after = [&](int temp_id, size_t index) {
+            auto it = temp_def_indices.find(temp_id);
+            if (it == temp_def_indices.end())
+                return false;
+            for (size_t def_idx : it->second)
+                if (def_idx > index)
+                    return true;
+            return false;
+        };
+
+        auto temp_defined_between = [&](int temp_id, size_t begin, size_t end) {
+            auto it = temp_def_indices.find(temp_id);
+            if (it == temp_def_indices.end())
+                return false;
+            for (size_t def_idx : it->second)
+                if (def_idx >= begin && def_idx <= end)
+                    return true;
+            return false;
+        };
+
+        auto copy_dominates_use = [&](size_t copy_idx, size_t use_idx) {
+            if (copy_idx >= block_for_index.size() ||
+                use_idx >= block_for_index.size()) {
+                return false;
+            }
+            const size_t copy_block = block_for_index[copy_idx];
+            const size_t use_block = block_for_index[use_idx];
+            if (copy_block == static_cast<size_t>(-1) ||
+                use_block == static_cast<size_t>(-1)) {
+                return false;
+            }
+            if (copy_block == use_block)
+                return use_idx > copy_idx;
+            return !dom.empty() &&
+                   use_block < dom.size() &&
+                   dom[use_block].count(copy_block) != 0;
+        };
 
         for (size_t i = 0; i < fn.icodes.size(); ++i) {
             const auto &ic = fn.icodes[i];
@@ -3885,6 +4286,63 @@ public:
                 continue;
             if (ic.result.temp_id != ic.left.temp_id)
                 continue;
+            erase[i] = true;
+            changed = true;
+        }
+
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            auto &ic = fn.icodes[i];
+            if (erase[i] || ic.op != icode_op::ASSIGN)
+                continue;
+            if (!ic.result.is_temp() || !ic.left.is_temp() || !ic.right.is_none())
+                continue;
+            if (ic.result.temp_id == ic.left.temp_id)
+                continue;
+            if (!same_type_shape(ic.result.type, ic.left.type))
+                continue;
+
+            const int dst_temp = ic.result.temp_id;
+            const int src_temp = ic.left.temp_id;
+            if (temp_def_count[dst_temp] != 1)
+                continue;
+
+            auto use_it = temp_use_indices.find(dst_temp);
+            if (use_it == temp_use_indices.end() || use_it->second.empty())
+                continue;
+
+            bool can_forward = true;
+            bool all_uses_same_block = true;
+            size_t max_use_idx = i;
+            for (size_t use_idx : use_it->second) {
+                if (erase[use_idx] || !copy_dominates_use(i, use_idx)) {
+                    can_forward = false;
+                    break;
+                }
+                if (block_for_index[use_idx] != block_for_index[i])
+                    all_uses_same_block = false;
+                max_use_idx = std::max(max_use_idx, use_idx);
+            }
+            if (!can_forward)
+                continue;
+            if (all_uses_same_block) {
+                if (temp_defined_between(src_temp, i + 1, max_use_idx))
+                    continue;
+            } else if (temp_defined_after(src_temp, i)) {
+                continue;
+            }
+
+            const operand src = ic.left;
+            for (size_t use_idx : use_it->second) {
+                for_each_use_operand(fn.icodes[use_idx], [&](operand &op) {
+                    if (op.is_temp() && op.temp_id == dst_temp) {
+                        operand repl = src;
+                        if (op.type && same_type_shape(op.type, repl.type))
+                            repl.type = op.type;
+                        op = repl;
+                    }
+                });
+            }
+
             erase[i] = true;
             changed = true;
         }
@@ -7221,6 +7679,8 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
     if (settings.value_propagation)
         passes.push_back(std::make_unique<value_propagation_pass>());
     if (settings.value_propagation)
+        passes.push_back(std::make_unique<global_scalar_remat_pass>());
+    if (settings.value_propagation)
         passes.push_back(std::make_unique<calc_temp_fusion_pass>());
     if (settings.value_propagation)
         passes.push_back(std::make_unique<noop_temp_assign_elide_pass>());
@@ -7238,6 +7698,8 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<loop_licm_pass>());
     if (settings.loop_induction)
         passes.push_back(std::make_unique<loop_induction_pass>());
+    if (settings.loop_induction)
+        passes.push_back(std::make_unique<one_trip_counted_loop_fold_pass>());
     if (settings.strength_reduction)
         passes.push_back(std::make_unique<strength_reduction_pass>());
     if (settings.local_cse)

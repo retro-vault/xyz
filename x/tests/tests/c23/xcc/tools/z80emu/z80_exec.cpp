@@ -7,6 +7,7 @@
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
 //
+#define Z80_CALLBACK_PER_INSTRUCTION
 #include "z80.h"
 
 #include <cstdint>
@@ -35,6 +36,7 @@ struct options {
     std::string stdout_file;
     std::string fs_root = ".";
     bool        print_output = false;
+    bool        z88dk_trap = false;
 };
 
 constexpr uint16_t EMU_REQ_FD      = 0xff11;
@@ -86,6 +88,7 @@ struct machine {
     std::string console_out;
     std::string fs_root = ".";
     std::vector<std::unique_ptr<file_handle>> files;
+    int executed_cycles = 0;
 
     machine() {
         cpu.setupCallback(
@@ -446,6 +449,10 @@ struct machine {
             break;
         }
     }
+
+    void add_cycles(int clocks) {
+        executed_cycles += clocks;
+    }
 };
 
 [[noreturn]] void die(const char *msg) {
@@ -587,6 +594,8 @@ options parse_args(int argc, char **argv) {
             opts.fs_root = need_value("--fs-root");
         } else if (arg == "--print-output") {
             opts.print_output = true;
+        } else if (arg == "--z88dk-trap") {
+            opts.z88dk_trap = true;
         } else if (!arg.empty() && arg[0] == '-') {
             dief("unknown option '%s'", arg);
         } else if (opts.image_path.empty()) {
@@ -600,7 +609,8 @@ options parse_args(int argc, char **argv) {
         std::fprintf(stderr,
                      "Usage: z80_exec [--ihx|--bin] [--cycles N] "
                      "[--fs-root DIR] [--stdin TEXT|--stdin-file FILE] "
-                     "[--stdout FILE] [--print-output] image\n");
+                     "[--stdout FILE] [--print-output] "
+                     "[--z88dk-trap] image\n");
         std::exit(3);
     }
 
@@ -629,6 +639,9 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "%s\n", msg);
         });
     }
+    m.cpu.setConsumeClockCallback([](void *arg, int clocks) {
+        static_cast<machine *>(arg)->add_cycles(clocks);
+    });
 
     for (unsigned char ch : opts.stdin_text)
         m.console_in.push_back(ch);
@@ -651,10 +664,21 @@ int main(int argc, char **argv) {
 
     m.cpu.reg.PC = opts.start_pc;
     int executed = 0;
+    bool z88dk_trapped = false;
     try {
         executed = m.cpu.execute(opts.cycle_budget);
     } catch (const std::exception &ex) {
         const uint16_t pc = m.cpu.reg.PC;
+        if (opts.z88dk_trap &&
+            m.mem[(pc - 2) & 0xffff] == 0xed &&
+            m.mem[(pc - 1) & 0xffff] == 0xfe) {
+            m.done = true;
+            z88dk_trapped = true;
+            executed = m.executed_cycles;
+            m.write16(opts.result_addr,
+                      static_cast<uint16_t>(m.cpu.reg.pair.L |
+                      (static_cast<uint16_t>(m.cpu.reg.pair.H) << 8)));
+        } else {
         std::fprintf(stderr,
                      "z80_exec: emulator exception at pc=0x%04x "
                      "bytes=%02x %02x %02x %02x: %s\n",
@@ -665,6 +689,7 @@ int main(int argc, char **argv) {
                      m.mem[(pc + 3) & 0xffff],
                      ex.what());
         return 4;
+        }
     }
     const uint16_t result = static_cast<uint16_t>(
         m.mem[opts.result_addr] |
@@ -672,6 +697,9 @@ int main(int argc, char **argv) {
 
     std::printf("done=%d return=%u cycles=%d pc=0x%04x\n",
                 m.done ? 1 : 0, result, executed, m.cpu.reg.PC);
+    if (z88dk_trapped && std::getenv("Z80_EXEC_TRACE")) {
+        std::fprintf(stderr, "z88dk trap exit at pc=0x%04x\n", m.cpu.reg.PC);
+    }
 
     if (!opts.stdout_file.empty()) {
         std::ofstream out(opts.stdout_file, std::ios::binary);

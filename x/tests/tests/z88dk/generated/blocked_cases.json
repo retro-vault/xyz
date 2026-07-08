@@ -239,7 +239,8 @@
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
       "-DNO_LOG_RUNNING",
       "-DNO_LOG_PASSED",
-      "-Os"
+      "-Os",
+      "-fsigned-char"
     ],
     "expect_build_failure": false,
     "marker": null,
@@ -257,7 +258,8 @@
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
       "-DNO_LOG_RUNNING",
       "-DNO_LOG_PASSED",
-      "-Os"
+      "-Os",
+      "-fsigned-char"
     ],
     "expect_build_failure": false,
     "marker": null,
@@ -275,7 +277,8 @@
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
       "-DNO_LOG_RUNNING",
       "-DNO_LOG_PASSED",
-      "-Os"
+      "-Os",
+      "-fsigned-char"
     ],
     "expect_build_failure": false,
     "marker": null,
@@ -293,7 +296,8 @@
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
       "-DNO_LOG_RUNNING",
       "-DNO_LOG_PASSED",
-      "-Os"
+      "-Os",
+      "-fsigned-char"
     ],
     "expect_build_failure": false,
     "marker": null,
@@ -311,7 +315,8 @@
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
       "-DNO_LOG_RUNNING",
       "-DNO_LOG_PASSED",
-      "-Os"
+      "-Os",
+      "-fsigned-char"
     ],
     "expect_build_failure": false,
     "marker": null,
@@ -323,13 +328,33 @@
     "stage": "link",
     "timeout_seconds": 45
   },
+  "z88dk_test_suites_sccz80_rshift": {
+    "compiler_args": [
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
+      "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
+      "-DNO_LOG_RUNNING",
+      "-DNO_LOG_PASSED",
+      "-Os",
+      "-fsigned-char"
+    ],
+    "expect_build_failure": false,
+    "marker": null,
+    "reason": "z88dk SCCZ80 signed hex-literal right-shift expectation",
+    "sources": [
+      "upstream/test/suites/sccz80/rshift.c",
+      "upstream/test/framework/test.c"
+    ],
+    "stage": "link",
+    "timeout_seconds": 90
+  },
   "z88dk_test_suites_sccz80_sizeof": {
     "compiler_args": [
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/framework",
       "-I/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk/upstream/test/suites/sccz80",
       "-DNO_LOG_RUNNING",
       "-DNO_LOG_PASSED",
-      "-Os"
+      "-Os",
+      "-fsigned-char"
     ],
     "expect_build_failure": false,
     "marker": null,

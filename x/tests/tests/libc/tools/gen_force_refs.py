@@ -70,7 +70,7 @@ def find_x_root(test_main: Path) -> Path:
     if env_x_root:
         candidates.append(Path(env_x_root).resolve())
 
-    candidates.append(Path(__file__).resolve().parents[3])
+    candidates.extend(Path(__file__).resolve().parents)
 
     probe = test_main.resolve()
     candidates.extend(probe.parents)
@@ -96,7 +96,12 @@ def main() -> int:
             x_root / "platforms/none",
         ]
     )
-    refs = [(name, exported[name]) for name in read_rt_names(test_main) if name in exported]
+    refs: list[tuple[str, str]] = []
+    for name in read_rt_names(test_main):
+        if name in exported:
+            refs.append((name, exported[name]))
+        elif name.endswith("_case") or name.endswith("_cases"):
+            refs.append((name, f"_{name}"))
     emit(out_path, refs)
     return 0
 

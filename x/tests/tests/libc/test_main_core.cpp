@@ -800,17 +800,8 @@ TEST(double_math_wrappers)
 // ---------------------------------------------------------------------------
 // legacy math entry points now use the real double ABI
 // ---------------------------------------------------------------------------
-TEST(legacy_double_math_wrappers)
+TEST(legacy_double_rounding_wrappers)
 {
-    auto readd = [](uint16_t addr) {
-        uint64_t bits = 0;
-        for (int i = 0; i < 8; ++i)
-            bits |= (uint64_t)g_rt->mem.read(addr + i) << (8 * i);
-        double d;
-        std::memcpy(&d, &bits, sizeof d);
-        return d;
-    };
-
     REQUIRE(g_rt->call_c_double1(rt_sym::fabs, -2.5));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 2.5) <= 1e-12);
 
@@ -828,7 +819,10 @@ TEST(legacy_double_math_wrappers)
 
     REQUIRE(g_rt->call_c_double1(rt_sym::round, 2.6));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+}
 
+TEST(legacy_double_scale_extrema_wrappers)
+{
     REQUIRE(g_rt->call_c_double1_int(rt_sym::ldexp, 1.5, 2));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 6.0) <= 1e-12);
 
@@ -843,26 +837,50 @@ TEST(legacy_double_math_wrappers)
 
     REQUIRE(g_rt->call_c_double2(rt_sym::fdim, 5.0, 2.0));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+}
 
+TEST(legacy_double_frexp_wrapper)
+{
     const uint16_t EP = S1;
     REQUIRE(g_rt->call_c_double1_ptr(rt_sym::frexp, 8.0, EP));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 0.5) <= 1e-12);
     REQUIRE_EQ((int16_t)readw(EP), 4);
+}
+
+TEST(legacy_double_modf_wrapper)
+{
+    auto readd = [](uint16_t addr) {
+        uint64_t bits = 0;
+        for (int i = 0; i < 8; ++i)
+            bits |= (uint64_t)g_rt->mem.read(addr + i) << (8 * i);
+        double d;
+        std::memcpy(&d, &bits, sizeof d);
+        return d;
+    };
 
     const uint16_t DP = S1 + 0x10;
     REQUIRE(g_rt->call_c_double1_ptr(rt_sym::modf, 3.75, DP));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 0.75) <= 1e-12);
     REQUIRE(std::fabs(readd(DP) - 3.0) <= 1e-12);
+}
 
+TEST(legacy_double_logb_wrappers)
+{
     REQUIRE(g_rt->call_c_double1(rt_sym::ilogb, 8.0));
     REQUIRE_EQ((int16_t)g_rt->snap().de, (int16_t)3);
 
     REQUIRE(g_rt->call_c_double1(rt_sym::logb, 8.0));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-12);
+}
 
+TEST(legacy_double_sqrt_wrapper)
+{
     REQUIRE(g_rt->call_c_double1(rt_sym::sqrt, 9.0));
     REQUIRE(std::fabs(g_rt->result_double_regs() - 3.0) <= 1e-9);
+}
 
+TEST(legacy_double_inverse_trig_wrappers)
+{
     REQUIRE(g_rt->call_c_double2(rt_sym::atan2, 1.0, 0.0));
     REQUIRE(std::fabs(g_rt->result_double_regs() - (3.14159265358979323846 / 2.0)) <= 1e-3);
 
@@ -874,7 +892,10 @@ TEST(legacy_double_math_wrappers)
 
     REQUIRE(g_rt->call_c_double1(rt_sym::acos, 0.5));
     REQUIRE(std::fabs(g_rt->result_double_regs() - std::acos(0.5)) <= 5e-2);
+}
 
+TEST(legacy_double_trig_misc_wrappers)
+{
     REQUIRE(g_rt->call_c_double1(rt_sym::sin, 1.0));
     REQUIRE(std::fabs(g_rt->result_double_regs() - std::sin(1.0)) <= 3e-2);
 

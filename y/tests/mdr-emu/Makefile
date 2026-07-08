@@ -30,7 +30,7 @@ $(MDR_LIB):
 	$(MAKE) -C $(Y_ROOT)/pkg/microdrive all ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT)
 
 $(YOS_ROM) $(YOS_CDB):
-	$(MAKE) -C $(Y_ROOT)/src ROOT=$(REPO_ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(REPO_ROOT)/x BUILD_DIR=$(REPO_ROOT)/build/yos DIST_DIR=$(REPO_ROOT)/bin/y ZX_ROMS_DIR=$(REPO_ROOT)/bin/y/z80/spectrum/bin
+	$(MAKE) -C $(Y_ROOT)/src ROOT=$(REPO_ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(REPO_ROOT)/x BUILD_DIR=$(REPO_ROOT)/build/yos DIST_DIR=$(REPO_ROOT)/bin/y ZX_ROMS_DIR=$(REPO_ROOT)/bin/y/z80/spectrum/bin YOS_DEBUG=1
 
 $(BIN_DIR)/mdr_emu: $(BUILD_DIR)/mdr_emu.o $(BUILD_DIR)/z80.o $(MDR_LIB)
 	@mkdir -p $(BIN_DIR)

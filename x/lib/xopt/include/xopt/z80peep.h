@@ -26,6 +26,7 @@
 //   push hl; pop bc                             — replaced with ld b,h; ld c,l
 //   ld a,(ix+N); ld (ix+N),a                   — self-store removed
 //   ld hl,#n; ld hl,X                           — dead first load removed
+//   ld hl,#n; ld l,X; ld h,Y                    — dead first load removed
 //   push hl;ld hl,#0;pop de;or a,a;sbc hl,de   — zero-compare → ld a,h; or a,l
 //
 // MIT License (see: LICENSE)
@@ -75,7 +76,6 @@ public:
     //
     static std::string optimize(const std::string &asm_text,
                                 bool speed_bias = false,
-                                bool enable_spaghetti = false,
                                 int normal_passes = 10);
 
 private:
@@ -84,11 +84,7 @@ private:
 
     void load(const std::string &text);
     void apply_passes(int passes = 3);
-    void apply_spaghetti_passes(int passes = 2);
-    void apply_spaghetti_tail_passes(int passes = 2);
     bool apply_once();
-    bool apply_spaghetti_once();
-    bool apply_spaghetti_tail_once();
     std::string dump() const;
 
     // ----- pattern rules ---------------------------------------------
@@ -98,14 +94,6 @@ private:
 
     // Remove push hl / pop hl pairs with nothing in between.
     bool rule_push_pop_hl(size_t i);
-
-    // call target; ret  →  jp target
-    // call target; label: ret  →  jp target; label: ret
-    bool rule_call_ret_to_jp(size_t i);
-
-    // Disabled: push hl; pop de is not equivalent to ex de,hl because the
-    // stack form preserves HL while the exchange form swaps it away.
-    bool rule_push_hl_pop_de(size_t i);
 
     // Remove jp label when label: is the immediately following line.
     bool rule_jp_next(size_t i);
@@ -145,6 +133,13 @@ private:
     // ld l,lo; ld h,hi; ld de,#0; or a,a; sbc hl,de; jp p/m,L
     //   → bit 7,hi; jp z/nz,L when HL/DE/flags die on both paths.
     bool rule_signed_zero_branch_from_high_bit(size_t i);
+
+    // ld l,lo; ld h,hi; ld de,#N00; or a,a; sbc hl,de; jp c/nc/p/m,L
+    //   → ld a,hi; cp #N; jp c/nc/p/m,L for page-aligned bounds.
+    bool rule_page_aligned_word_bound_branch(size_t i);
+
+    // ld a,r; and #255; ld r,a  →  removed when A/flags are dead afterwards.
+    bool rule_redundant_u8_self_mask(size_t i);
 
     // ld a,#0  →  xor a  (when not immediately followed by a conditional branch)
     bool rule_ld_a_zero(size_t i);
@@ -262,10 +257,40 @@ private:
     //   → keep S in E and shifted byte in D when T is dead afterwards.
     bool rule_ix_byte_right_shift_xor_temp_elide(size_t i);
 
+    // sign-extend two IX bytes to 16-bit, xor them, then store only low byte
+    //   → xor the bytes directly when flags/HL are dead afterwards.
+    bool rule_truncated_promoted_byte_xor_elide(size_t i);
+
+    // ld T,e; ld T+1,d; ld l,T; ld h,T+1; ld a,h; ...; ld a,l
+    //   → use D/E directly for switch-key high/low byte tests.
+    bool rule_ix_word_temp_switch_key_de_direct(size_t i);
+
+    // ld T,e; ld T+1,d; [DE-preserving address calculation]; ld e,T; ld d,T+1
+    //   → keep the word in DE when T/T+1 are temp-frame slots dead afterwards.
+    bool rule_de_word_temp_reload_after_address_calc_elide(size_t i);
+
+    // ld T,e; ld T+1,d; [SP-preserving span]; ld l,T; ld h,T+1
+    //   → preserve the word with push de / pop hl instead of an IX temp.
+    bool rule_de_word_temp_reload_to_hl_stack_preserve(size_t i);
+
+    // ld T,l; ld T+1,h; [address calculation]; ld e,T; ld d,T+1; ld (hl),e...
+    //   → keep the word result in DE and calculate the address with BC.
+    bool rule_hl_word_temp_reload_after_address_calc_elide(size_t i);
+
     // ld l,I(ix); ld h,#0; add hl,hl; ld T(ix),l; ld T+1(ix),h;
     // ld l,B(ix); ld h,B+1(ix); ld e,T(ix); ld d,T+1(ix); add hl,de
     //   → keep doubled offset in DE directly when T/T+1 are dead afterwards.
     bool rule_ix_scaled_offset_temp_elide(size_t i);
+
+    // ld l,I(ix); ld h,I+1(ix); [inc/dec hl]; add hl,hl;
+    // ld T(ix),l; ld T+1(ix),h; ld hl,#BASE; ld e,T(ix); ld d,T+1(ix); add hl,de
+    //   → keep the scaled offset in HL and add the static base directly.
+    bool rule_ix_scaled_offset_immediate_base_elide(size_t i);
+
+    // ld b,d; ld c,e; ld h,b; ld l,c; add hl,hl;
+    // ld T(ix),l; ld T+1(ix),h; ld hl,#BASE; ld e,T(ix); ld d,T+1(ix); add hl,de
+    //   → keep the scaled DE index in HL and add the static base directly.
+    bool rule_de_scaled_offset_immediate_base_elide(size_t i);
 
     // ld hl,S(ix); spill to T(ix); loop: reload T; ld a,(hl); ...; inc T; jr loop
     //   → keep the loop scan pointer in HL when T dies at the forward exit.
@@ -329,6 +354,10 @@ private:
     // ld b,h; ld c,l; ld d,b; ld e,c  →  ld d,h; ld e,l
     // when BC is dead on every following path.
     bool rule_dead_bc_hl_to_de_copy(size_t i);
+    bool rule_dead_bc_hl_roundtrip(size_t i);
+    bool rule_bc_base_add_direct(size_t i);
+    bool rule_bc_index_add_reloaded_hl_to_de(size_t i);
+    bool rule_bc_saved_hl_push_word_to_de_direct(size_t i);
 
     // push de/bc; pop hl/de/bc  →  register-register copy
     // Same size as the stack shuttle, but much faster. Only enabled for
@@ -342,6 +371,10 @@ private:
     // push de; pop hl; <stores/tests that only read H/L>
     //   → rewrite those reads to D/E and remove the stack copy when HL is dead.
     bool rule_de_result_hl_forward(size_t i);
+
+    // Adjacent byte stores through base+index and base+index+1 followed by
+    // index += 2  → compute the address once and use inc hl between stores.
+    bool rule_adjacent_indexed_byte_stores_postinc(size_t i);
 
     // ld l,A(ix); ld h,A+1(ix); ex de,hl; ld l,B(ix); ld h,B+1(ix); or a,a; sbc hl,de
     //   → ld e,A(ix); ld d,A+1(ix); ld l,B(ix); ld h,B+1(ix); or a,a; sbc hl,de
@@ -719,10 +752,6 @@ private:
     // for rr in {hl,de,bc}. This is a conservative liveness-aware
     // extension of the adjacent push/pop removal.
     bool rule_push_pop_same_reg_span(size_t i);
-
-    // Disabled: the stack form copies one pair into the other while
-    // preserving the source pair, so it cannot be reduced to ex de,hl.
-    bool rule_push_pair_exchange_span(size_t i);
 
     // push hl/de; <small span preserving source and destination>; pop bc/hl
     //   →  ld hi,src_hi; ld lo,src_lo; <span>

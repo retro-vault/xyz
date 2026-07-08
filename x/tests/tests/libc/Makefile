@@ -18,7 +18,9 @@ LIBC_FLOAT ?= 1
 LIBC_DOUBLE ?= 1
 LIBC_LONG ?= 1
 LIBC_LONGLONG ?= 1
-LIBC_BUILD_FLAVOR := $(LIBC_PROFILE)-f$(LIBC_FLOAT)-d$(LIBC_DOUBLE)-l$(LIBC_LONG)-ll$(LIBC_LONGLONG)
+LIBC_STDIO_FLOAT ?= 1
+X_MODEL ?= L
+LIBC_BUILD_FLAVOR := $(LIBC_PROFILE)-$(X_MODEL)-f$(LIBC_FLOAT)-d$(LIBC_DOUBLE)-l$(LIBC_LONG)-ll$(LIBC_LONGLONG)-sf$(LIBC_STDIO_FLOAT)
 LIBC_ARCHIVE := $(BUILD)/sys-none/lib/libc/$(LIBC_BUILD_FLAVOR)/libc.a
 LIBC_ARCHIVE_SRCS := $(sort \
   $(wildcard $(X_ROOT)/libc/src/*.c) \
@@ -39,6 +41,8 @@ C8FLAGS     ?= -I$(X_ROOT)/libc/include
 ASM         ?= $(REPO_ROOT)/bin/x/bin/xas
 ASMFLAGS    ?= --mode=sdcc
 LINK        ?= $(REPO_ROOT)/bin/x/bin/xld
+XAR         ?= $(REPO_ROOT)/bin/x/bin/xar
+XARFLAGS    ?= --mode=gnu rcs
 # Keep only text anchored for the host-driven libc images. Some split test
 # images legitimately grow past 0xF000 before RAM areas begin, so forcing a
 # fixed -Tdata there creates a false linker failure.
@@ -193,6 +197,8 @@ SRCS := \
   $(X_ROOT)/tests/tests/sysmock/sys_putchar.s \
   $(X_ROOT)/tests/tests/sysmock/gettimeofday.s \
   $(X_ROOT)/tests/tests/sysmock/settimeofday.s \
+  $(RT_SRC)/common/enter_ix.s \
+  $(RT_SRC)/common/leave_ix.s \
   $(RT_SRC)/int32/divslong.s \
   $(RT_SRC)/int32/modslong.s \
   $(RT_SRC)/int32/divulong.s \
@@ -229,6 +235,7 @@ SRCS := \
   $(RT_SRC)/double/dbneg.s \
   $(RT_SRC)/double/dbsub.s \
   $(RT_SRC)/double/sint2db.s \
+  $(RT_SRC)/double/slong2db.s \
   $(RT_SRC)/double/ull2db.s \
   $(RT_SRC)/double/db_zero.s \
   $(RT_SRC)/int64/divsll.s \
@@ -406,30 +413,77 @@ SRCS := \
 RUNTIME_SRCS := $(filter $(RT_SRC)/%,$(SRCS))
 SYSMOCK_SRCS := $(sort $(wildcard $(X_ROOT)/tests/tests/sysmock/*.s))
 SYSMOCK_RELS := $(patsubst $(X_ROOT)/tests/tests/sysmock/%.s,$(BUILD)/objs/sysmock_%.rel,$(SYSMOCK_SRCS))
-DIRECT_RELS := $(patsubst %.s,$(BUILD)/objs/%.rel,$(notdir $(RUNTIME_SRCS))) $(SYSMOCK_RELS)
-CORE_RELS := $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel
+SYSMOCK_ARCHIVE := $(BUILD)/objs/libsysmock.a
+DIRECT_RELS := $(patsubst %.s,$(BUILD)/objs/%.rel,$(notdir $(RUNTIME_SRCS)))
+CORE_CASE_RELS := $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel
+CORE_CASE_ARCHIVE := $(BUILD)/objs/libc_core_cases.a
+CORE_RELS := $(DIRECT_RELS) $(CORE_CASE_ARCHIVE)
 CORE_RELS += $(BUILD)/objs/core_force_refs.rel
 SCAN_RELS := $(DIRECT_RELS) $(BUILD)/objs/stdio_scan_cases.rel
 
-CORE_PARTS := 1 2 3
+CORE_PART_COUNT ?= $(shell grep -c '^TEST' test_main_core.cpp)
+CORE_PARTS := $(shell awk 'BEGIN { for (i = 1; i <= $(CORE_PART_COUNT); ++i) printf "%d ", i }')
+CORE_TEST_TARGETS := $(foreach part,$(CORE_PARTS),core$(part)-test)
 CORE_CPP_1 := $(BUILD)/test_main_core_1.cpp
 CORE_CPP_2 := $(BUILD)/test_main_core_2.cpp
 CORE_CPP_3 := $(BUILD)/test_main_core_3.cpp
+CORE_CPP_4 := $(BUILD)/test_main_core_4.cpp
+CORE_CPP_5 := $(BUILD)/test_main_core_5.cpp
+CORE_CPP_6 := $(BUILD)/test_main_core_6.cpp
+CORE_CPP_7 := $(BUILD)/test_main_core_7.cpp
+CORE_CPP_8 := $(BUILD)/test_main_core_8.cpp
+CORE_CPP_9 := $(BUILD)/test_main_core_9.cpp
+CORE_CPP_10 := $(BUILD)/test_main_core_10.cpp
 CORE_IHX_1 := $(BUILD)/libc_core_1.ihx
 CORE_IHX_2 := $(BUILD)/libc_core_2.ihx
 CORE_IHX_3 := $(BUILD)/libc_core_3.ihx
+CORE_IHX_4 := $(BUILD)/libc_core_4.ihx
+CORE_IHX_5 := $(BUILD)/libc_core_5.ihx
+CORE_IHX_6 := $(BUILD)/libc_core_6.ihx
+CORE_IHX_7 := $(BUILD)/libc_core_7.ihx
+CORE_IHX_8 := $(BUILD)/libc_core_8.ihx
+CORE_IHX_9 := $(BUILD)/libc_core_9.ihx
+CORE_IHX_10 := $(BUILD)/libc_core_10.ihx
 CORE_MAP_1 := $(BUILD)/libc_core_1.map
 CORE_MAP_2 := $(BUILD)/libc_core_2.map
 CORE_MAP_3 := $(BUILD)/libc_core_3.map
+CORE_MAP_4 := $(BUILD)/libc_core_4.map
+CORE_MAP_5 := $(BUILD)/libc_core_5.map
+CORE_MAP_6 := $(BUILD)/libc_core_6.map
+CORE_MAP_7 := $(BUILD)/libc_core_7.map
+CORE_MAP_8 := $(BUILD)/libc_core_8.map
+CORE_MAP_9 := $(BUILD)/libc_core_9.map
+CORE_MAP_10 := $(BUILD)/libc_core_10.map
 CORE_BIN_1 := $(BUILD)/libc_core_1.bin
 CORE_BIN_2 := $(BUILD)/libc_core_2.bin
 CORE_BIN_3 := $(BUILD)/libc_core_3.bin
+CORE_BIN_4 := $(BUILD)/libc_core_4.bin
+CORE_BIN_5 := $(BUILD)/libc_core_5.bin
+CORE_BIN_6 := $(BUILD)/libc_core_6.bin
+CORE_BIN_7 := $(BUILD)/libc_core_7.bin
+CORE_BIN_8 := $(BUILD)/libc_core_8.bin
+CORE_BIN_9 := $(BUILD)/libc_core_9.bin
+CORE_BIN_10 := $(BUILD)/libc_core_10.bin
 CORE_HDR_1 := $(BUILD)/libc_core_symbols_1.hpp
 CORE_HDR_2 := $(BUILD)/libc_core_symbols_2.hpp
 CORE_HDR_3 := $(BUILD)/libc_core_symbols_3.hpp
+CORE_HDR_4 := $(BUILD)/libc_core_symbols_4.hpp
+CORE_HDR_5 := $(BUILD)/libc_core_symbols_5.hpp
+CORE_HDR_6 := $(BUILD)/libc_core_symbols_6.hpp
+CORE_HDR_7 := $(BUILD)/libc_core_symbols_7.hpp
+CORE_HDR_8 := $(BUILD)/libc_core_symbols_8.hpp
+CORE_HDR_9 := $(BUILD)/libc_core_symbols_9.hpp
+CORE_HDR_10 := $(BUILD)/libc_core_symbols_10.hpp
 CORE_TST_1 := $(BUILD)/libc_core_tests_1
 CORE_TST_2 := $(BUILD)/libc_core_tests_2
 CORE_TST_3 := $(BUILD)/libc_core_tests_3
+CORE_TST_4 := $(BUILD)/libc_core_tests_4
+CORE_TST_5 := $(BUILD)/libc_core_tests_5
+CORE_TST_6 := $(BUILD)/libc_core_tests_6
+CORE_TST_7 := $(BUILD)/libc_core_tests_7
+CORE_TST_8 := $(BUILD)/libc_core_tests_8
+CORE_TST_9 := $(BUILD)/libc_core_tests_9
+CORE_TST_10 := $(BUILD)/libc_core_tests_10
 
 SCAN_IHX := $(BUILD)/libc_scan.ihx
 SCAN_MAP := $(BUILD)/libc_scan.map
@@ -487,12 +541,12 @@ WIDE_TST := $(BUILD)/libc_wide_tests
 
 XZ80_SRCS := $(XZ80_SRC)/cpu.cpp $(XZ80_SRC)/memory.cpp $(XZ80_SRC)/disassembler.cpp
 
-.PHONY: all test core-test core1-test core2-test core3-test scan-test wide-test clean
+.PHONY: all test core-test scan-test wide-test clean
 all: test
 
 test: core-test scan-test wide-test
 
-core-test: core1-test core2-test core3-test
+core-test: $(CORE_TEST_TARGETS)
 
 core1-test: $(CORE_TST_1)
 	$(CORE_TST_1) $(CORE_BIN_1)
@@ -502,6 +556,30 @@ core2-test: $(CORE_TST_2)
 
 core3-test: $(CORE_TST_3)
 	$(CORE_TST_3) $(CORE_BIN_3)
+
+core4-test: $(CORE_TST_4)
+	$(CORE_TST_4) $(CORE_BIN_4)
+
+core5-test: $(CORE_TST_5)
+	$(CORE_TST_5) $(CORE_BIN_5)
+
+core6-test: $(CORE_TST_6)
+	$(CORE_TST_6) $(CORE_BIN_6)
+
+core7-test: $(CORE_TST_7)
+	$(CORE_TST_7) $(CORE_BIN_7)
+
+core8-test: $(CORE_TST_8)
+	$(CORE_TST_8) $(CORE_BIN_8)
+
+core9-test: $(CORE_TST_9)
+	$(CORE_TST_9) $(CORE_BIN_9)
+
+core10-test: $(CORE_TST_10)
+	$(CORE_TST_10) $(CORE_BIN_10)
+
+core%-test: $(BUILD)/libc_core_tests_%
+	$< $(BUILD)/libc_core_$*.bin
 
 scan-test: $(SCAN_TST)
 	$(SCAN_TST) $(SCAN_BIN)
@@ -518,6 +596,30 @@ $(CORE_TST_2): $(CORE_HDR_2) $(CORE_BIN_2) $(CORE_CPP_2) $(RT_TESTS)/runtime_mac
 $(CORE_TST_3): $(CORE_HDR_3) $(CORE_BIN_3) $(CORE_CPP_3) $(RT_TESTS)/runtime_machine.hpp
 	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_3) -o $@
 
+$(CORE_TST_4): $(CORE_HDR_4) $(CORE_BIN_4) $(CORE_CPP_4) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_4) -o $@
+
+$(CORE_TST_5): $(CORE_HDR_5) $(CORE_BIN_5) $(CORE_CPP_5) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_5) -o $@
+
+$(CORE_TST_6): $(CORE_HDR_6) $(CORE_BIN_6) $(CORE_CPP_6) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_6) -o $@
+
+$(CORE_TST_7): $(CORE_HDR_7) $(CORE_BIN_7) $(CORE_CPP_7) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_7) -o $@
+
+$(CORE_TST_8): $(CORE_HDR_8) $(CORE_BIN_8) $(CORE_CPP_8) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_8) -o $@
+
+$(CORE_TST_9): $(CORE_HDR_9) $(CORE_BIN_9) $(CORE_CPP_9) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_9) -o $@
+
+$(CORE_TST_10): $(CORE_HDR_10) $(CORE_BIN_10) $(CORE_CPP_10) $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(CORE_CPP_10) -o $@
+
+$(BUILD)/libc_core_tests_%: $(BUILD)/libc_core_symbols_%.hpp $(BUILD)/libc_core_%.bin $(BUILD)/test_main_core_%.cpp $(RT_TESTS)/runtime_machine.hpp
+	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) $(BUILD)/test_main_core_$*.cpp -o $@
+
 $(SCAN_TST): $(SCAN_HDR) $(SCAN_BIN) test_main_scan.cpp $(RT_TESTS)/runtime_machine.hpp
 	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) test_main_scan.cpp -o $@
 
@@ -532,6 +634,30 @@ $(CORE_HDR_2): $(CORE_IHX_2)
 
 $(CORE_HDR_3): $(CORE_IHX_3)
 	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_3) $@
+
+$(CORE_HDR_4): $(CORE_IHX_4)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_4) $@
+
+$(CORE_HDR_5): $(CORE_IHX_5)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_5) $@
+
+$(CORE_HDR_6): $(CORE_IHX_6)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_6) $@
+
+$(CORE_HDR_7): $(CORE_IHX_7)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_7) $@
+
+$(CORE_HDR_8): $(CORE_IHX_8)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_8) $@
+
+$(CORE_HDR_9): $(CORE_IHX_9)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_9) $@
+
+$(CORE_HDR_10): $(CORE_IHX_10)
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(CORE_MAP_10) $@
+
+$(BUILD)/libc_core_symbols_%.hpp: $(BUILD)/libc_core_%.ihx
+	python3 $(RT_TESTS)/tools/gen_symbols.py $(BUILD)/libc_core_$*.map $@
 
 $(SCAN_HDR): $(SCAN_IHX)
 	python3 $(RT_TESTS)/tools/gen_symbols.py $(SCAN_MAP) $@
@@ -548,6 +674,30 @@ $(CORE_BIN_2): $(CORE_IHX_2)
 $(CORE_BIN_3): $(CORE_IHX_3)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
+$(CORE_BIN_4): $(CORE_IHX_4)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_5): $(CORE_IHX_5)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_6): $(CORE_IHX_6)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_7): $(CORE_IHX_7)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_8): $(CORE_IHX_8)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_9): $(CORE_IHX_9)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(CORE_BIN_10): $(CORE_IHX_10)
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
+$(BUILD)/libc_core_%.bin: $(BUILD)/libc_core_%.ihx
+	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
+
 $(SCAN_BIN): $(SCAN_IHX)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
@@ -555,22 +705,54 @@ $(WIDE_BIN): $(WIDE_IHX)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
 $(LIBC_ARCHIVE): $(LIBC_ARCHIVE_SRCS)
-	$(MAKE) -C $(X_ROOT)/libc/src ROOT=$(abspath $(X_ROOT)) BUILD_DIR=$(abspath $(BUILD))/sys-none DIST_DIR=$(REPO_ROOT)/bin/x HOST_BIN_DIR=$(REPO_ROOT)/bin/x/bin SYS=none LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG) AR8FLAGS="--mode=gnu rcs" -j1
+	$(MAKE) -C $(X_ROOT)/libc/src ROOT=$(abspath $(X_ROOT)) BUILD_DIR=$(abspath $(BUILD))/sys-none DIST_DIR=$(REPO_ROOT)/bin/x HOST_BIN_DIR=$(REPO_ROOT)/bin/x/bin WITH_SYS=0 SYS=none LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG) LIBC_STDIO_FLOAT=$(LIBC_STDIO_FLOAT) X_MODEL=$(X_MODEL) AR8FLAGS="--mode=gnu rcs" -j1
 
-$(CORE_IHX_1): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_1.rel $(LIBC_ARCHIVE)
-	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_1) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_1.rel $(LIBC_ARCHIVE)
+$(SYSMOCK_ARCHIVE): $(SYSMOCK_RELS) | $(BUILD)/objs
+	rm -f $@
+	$(XAR) $(XARFLAGS) $@ $^
 
-$(CORE_IHX_2): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_2.rel $(LIBC_ARCHIVE)
-	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_2) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_2.rel $(LIBC_ARCHIVE)
+$(CORE_CASE_ARCHIVE): $(CORE_CASE_RELS) | $(BUILD)/objs
+	rm -f $@
+	$(XAR) $(XARFLAGS) $@ $^
 
-$(CORE_IHX_3): $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_3.rel $(LIBC_ARCHIVE)
-	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_3) -o $@ $(DIRECT_RELS) $(BUILD)/objs/stdio_cases.rel $(BUILD)/objs/c23_cases.rel $(BUILD)/objs/core_force_refs_3.rel $(LIBC_ARCHIVE)
+$(CORE_IHX_1): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_1.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_1) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_1.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
 
-$(SCAN_IHX): $(SCAN_RELS) $(LIBC_ARCHIVE)
-	$(LINK) $(LINKFLAGS) -Map=$(SCAN_MAP) -o $@ $(SCAN_RELS) $(LIBC_ARCHIVE)
+$(CORE_IHX_2): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_2.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_2) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_2.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
 
-$(WIDE_IHX): $(WIDE_RELS) $(LIBC_ARCHIVE)
-	$(LINK) $(LINKFLAGS) -Map=$(WIDE_MAP) -o $@ $(WIDE_RELS) $(LIBC_ARCHIVE)
+$(CORE_IHX_3): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_3.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_3) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_3.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_4): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_4.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_4) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_4.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_5): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_5.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_5) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_5.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_6): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_6.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_6) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_6.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_7): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_7.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_7) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_7.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_8): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_8.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_8) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_8.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_9): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_9.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_9) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_9.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(CORE_IHX_10): $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_10.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(CORE_MAP_10) -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_10.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(BUILD)/libc_core_%.ihx: $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_%.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(BUILD)/libc_core_$*.map -o $@ $(DIRECT_RELS) $(BUILD)/objs/core_force_refs_$*.rel $(CORE_CASE_ARCHIVE) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(SCAN_IHX): $(SCAN_RELS) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(SCAN_MAP) -o $@ $(SCAN_RELS) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+
+$(WIDE_IHX): $(WIDE_RELS) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
+	$(LINK) $(LINKFLAGS) -Map=$(WIDE_MAP) -o $@ $(WIDE_RELS) $(LIBC_ARCHIVE) $(SYSMOCK_ARCHIVE)
 
 # Pattern rules: each .rel comes from one of the source directories.
 $(BUILD)/objs/%.rel: $(LIBC_SRC)/stdlib/%.s | $(BUILD)/objs
@@ -590,6 +772,8 @@ $(BUILD)/objs/%.rel: $(LIBC_SRC)/stdio/%.s | $(BUILD)/objs
 $(BUILD)/objs/%.rel: $(X_ROOT)/tests/tests/sysmock/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/sysmock_%.rel: $(X_ROOT)/tests/tests/sysmock/%.s | $(BUILD)/objs
+	$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD)/objs/%.rel: $(RT_SRC)/common/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 $(BUILD)/objs/%.rel: $(RT_SRC)/int32/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
@@ -656,13 +840,37 @@ $(BUILD)/objs/c23_cases.s: c23_cases.c | $(BUILD)/objs
 	$(C8C) -S $(C8FLAGS) -o $@ $<
 
 $(CORE_CPP_1): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
-	python3 tools/split_core_tests.py $< 3 1 $@
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 1 $@
 
 $(CORE_CPP_2): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
-	python3 tools/split_core_tests.py $< 3 2 $@
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 2 $@
 
 $(CORE_CPP_3): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
-	python3 tools/split_core_tests.py $< 3 3 $@
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 3 $@
+
+$(CORE_CPP_4): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 4 $@
+
+$(CORE_CPP_5): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 5 $@
+
+$(CORE_CPP_6): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 6 $@
+
+$(CORE_CPP_7): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 7 $@
+
+$(CORE_CPP_8): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 8 $@
+
+$(CORE_CPP_9): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 9 $@
+
+$(CORE_CPP_10): test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) 10 $@
+
+$(BUILD)/test_main_core_%.cpp: test_main_core.cpp tools/split_core_tests.py | $(BUILD)/objs
+	python3 tools/split_core_tests.py $< $(CORE_PART_COUNT) $* $@
 
 $(BUILD)/objs/core_force_refs_1.s: $(CORE_CPP_1) tools/gen_force_refs.py | $(BUILD)/objs
 	python3 tools/gen_force_refs.py $< $@
@@ -671,6 +879,30 @@ $(BUILD)/objs/core_force_refs_2.s: $(CORE_CPP_2) tools/gen_force_refs.py | $(BUI
 	python3 tools/gen_force_refs.py $< $@
 
 $(BUILD)/objs/core_force_refs_3.s: $(CORE_CPP_3) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_4.s: $(CORE_CPP_4) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_5.s: $(CORE_CPP_5) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_6.s: $(CORE_CPP_6) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_7.s: $(CORE_CPP_7) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_8.s: $(CORE_CPP_8) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_9.s: $(CORE_CPP_9) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_10.s: $(CORE_CPP_10) tools/gen_force_refs.py | $(BUILD)/objs
+	python3 tools/gen_force_refs.py $< $@
+
+$(BUILD)/objs/core_force_refs_%.s: $(BUILD)/test_main_core_%.cpp tools/gen_force_refs.py | $(BUILD)/objs
 	python3 tools/gen_force_refs.py $< $@
 
 # Also ensure it is part of the core image for the "another test" (compiler C23 focus)

@@ -292,12 +292,10 @@ void abi_convention::exact_stack_drop(z80_gen &g, int bytes)
 
 void abi_convention::callee_stack_return(z80_gen &g, int bytes)
 {
-    g.emit_line("pop\thl");
-    for (int n = 0; n < bytes / 2; ++n)
-        g.emit_line("pop\taf");
-    if (bytes & 1)
-        exact_stack_drop(g, 1);
-    g.emit_line("jp\t(hl)");
+    g.emit_line("pop\tbc");
+    exact_stack_drop(g, bytes);
+    g.emit_line("push\tbc");
+    g.emit_line("ret");
 }
 
 void abi_convention::emit_bc_indirect_call(z80_gen &g, const operand &target,

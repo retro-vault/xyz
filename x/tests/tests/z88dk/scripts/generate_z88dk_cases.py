@@ -144,6 +144,8 @@ def preblocked_case(source: Path, text: str) -> tuple[str, str | None] | None:
         return "z88dk signed remainder semantics expectation", None
     if rel == Path("suites/sccz80/mult.c"):
         return "z88dk signed-overflow multiplication expectation", None
+    if rel == Path("suites/sccz80/rshift.c"):
+        return "z88dk SCCZ80 signed hex-literal right-shift expectation", None
     if rel == Path("suites/sccz80/sizeof.c"):
         return "z88dk ABI and far-pointer extension dependency", None
     if rel == Path("suites/string/strrev.c"):
@@ -319,6 +321,8 @@ def suite_extra_args(source: Path) -> list[str]:
         args.append("-DMAX_TESTS=300")
     if suite == "far":
         args.extend(["-D__TESTTARGET__", "-D__Z80"])
+    if suite == "sccz80":
+        args.append("-fsigned-char")
 
     return args
 

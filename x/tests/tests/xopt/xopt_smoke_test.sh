@@ -56,9 +56,15 @@ _other:
 	ret
 ASM
 
+"$XOPT" -Os "$TMPDIR/spaghetti.s" -o "$TMPDIR/spaghetti.os.out.s"
+if grep -q '__xopt_spaghetti_' "$TMPDIR/spaghetti.os.out.s"; then
+    echo "xopt smoke: stable -Os unexpectedly fired Spaghetti outlining" >&2
+    exit 1
+fi
+
 "$XOPT" -O3 "$TMPDIR/spaghetti.s" -o "$TMPDIR/spaghetti.out.s"
 if grep -q '__xopt_spaghetti_' "$TMPDIR/spaghetti.out.s"; then
-    echo "xopt smoke: disabled Spaghetti outlining lane unexpectedly fired" >&2
+    echo "xopt smoke: O3 unexpectedly fired disabled Spaghetti outlining" >&2
     exit 1
 fi
 
@@ -101,7 +107,7 @@ ASM
 "$XOPT" -O3 "$TMPDIR/spaghetti_tail.s" -o "$TMPDIR/spaghetti_tail.out.s"
 grep -q 'call	__xopt_spaghetti_0' "$TMPDIR/spaghetti_tail.out.s"
 if grep -Eq '^[[:space:]]+j[pr][[:space:]]+__xopt_spaghetti_0' "$TMPDIR/spaghetti_tail.out.s"; then
-    echo "xopt smoke: disabled Spaghetti tail threading unexpectedly fired" >&2
+    echo "xopt smoke: O3 unexpectedly fired disabled Spaghetti tail threading" >&2
     exit 1
 fi
 
@@ -161,6 +167,570 @@ if grep -q 'ld	d, b' "$TMPDIR/bc_sbc.out.s"; then
     exit 1
 fi
 
+cat >"$TMPDIR/scaled_imm_base.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0)
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	dec	hl
+	add	hl, hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, #_stk
+	ld	e, -4(ix)
+	ld	d, -3(ix)
+	add	hl, de
+	ld	a, (hl)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/scaled_imm_base.s" -o "$TMPDIR/scaled_imm_base.out.s"
+grep -q 'ld	de, #_stk' "$TMPDIR/scaled_imm_base.out.s"
+if grep -Eq 'ld[[:space:]]+-[34]\(ix\)' "$TMPDIR/scaled_imm_base.out.s"; then
+    echo "xopt smoke: scaled immediate-base temp elide did not fire" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/de_scaled_imm_base.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0)
+	ld	b, d
+	ld	c, e
+	ld	h, b
+	ld	l, c
+	add	hl, hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	ld	hl, #_mem
+	ld	e, -4(ix)
+	ld	d, -3(ix)
+	add	hl, de
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	bc, #0
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_scaled_imm_base.s" -o "$TMPDIR/de_scaled_imm_base.out.s"
+grep -q 'ld	de, #_mem' "$TMPDIR/de_scaled_imm_base.out.s"
+grep -Eq 'ld[[:space:]]+h,[[:space:]]*d|ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/de_scaled_imm_base.out.s"
+if grep -Eq 'ld[[:space:]]+-[34]\(ix\)|ld[[:space:]]+b,[[:space:]]*d|ld[[:space:]]+c,[[:space:]]*e' "$TMPDIR/de_scaled_imm_base.out.s"; then
+    echo "xopt smoke: DE scaled immediate-base temp elide did not fire" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/truncated_byte_xor.s" <<'ASM'
+_demo:
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	a, -13(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	b, h
+	ld	c, l
+	ld	a, -2(ix)
+	ld	l, a
+	rlca
+	sbc	a, a
+	ld	h, a
+	ld	a, l
+	xor	a, c
+	ld	l, a
+	ld	a, h
+	xor	a, b
+	ld	h, a
+	ld	a, l
+	ld	-2(ix), a
+	inc	-9(ix)
+	ld	l, -9(ix)
+	ld	h, -8(ix)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/truncated_byte_xor.s" -o "$TMPDIR/truncated_byte_xor.out.s"
+grep -q 'xor	a, -13(ix)' "$TMPDIR/truncated_byte_xor.out.s"
+if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h|xor[[:space:]]+a,[[:space:]]*b|xor[[:space:]]+a,[[:space:]]*c' "$TMPDIR/truncated_byte_xor.out.s"; then
+    echo "xopt smoke: truncated promoted byte xor was not collapsed" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/switch_key_direct.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=12, stack_params=0)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-10(ix), e
+	ld	-9(ix), d
+	ld	l, -10(ix)
+	ld	h, -9(ix)
+	ld	a, h
+	or	a, a
+	jp	nz, _default
+	ld	a, l
+	cp	#12
+	ret
+_default:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/switch_key_direct.s" -o "$TMPDIR/switch_key_direct.out.s"
+grep -q 'ld	a, d' "$TMPDIR/switch_key_direct.out.s"
+grep -q 'ld	a, e' "$TMPDIR/switch_key_direct.out.s"
+if grep -Eq -- '-1[09]\(ix\)' "$TMPDIR/switch_key_direct.out.s"; then
+    echo "xopt smoke: switch key temp spill was not removed" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/de_temp_branch_reuse.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=12, stack_params=0)
+	ld	-8(ix), e
+	ld	-7(ix), d
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	pop	de
+	ex	de, hl
+	or	a, a
+	sbc	hl, de
+	jp	m, _left
+	jp	_right
+_left:
+	ret
+_right:
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	push	hl
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	pop	de
+	ex	de, hl
+	or	a, a
+	sbc	hl, de
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_temp_branch_reuse.s" -o "$TMPDIR/de_temp_branch_reuse.out.s"
+grep -Eq 'ld[[:space:]]+-8\(ix\),[[:space:]]*e' "$TMPDIR/de_temp_branch_reuse.out.s"
+grep -Eq 'ld[[:space:]]+-7\(ix\),[[:space:]]*d' "$TMPDIR/de_temp_branch_reuse.out.s"
+grep -Eq 'ld[[:space:]]+e,[[:space:]]*-8[[:space:]]*\(ix\)' "$TMPDIR/de_temp_branch_reuse.out.s"
+grep -Eq 'ld[[:space:]]+d,[[:space:]]*-7[[:space:]]*\(ix\)' "$TMPDIR/de_temp_branch_reuse.out.s"
+
+cat >"$TMPDIR/de_temp_reload_addr.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=16, stack_params=0)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-12(ix), e
+	ld	-11(ix), d
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	inc	hl
+	ld	-4(ix), l
+	ld	-3(ix), h
+	add	hl, hl
+	ld	bc, #_stk
+	add	hl, bc
+	ld	e, -12(ix)
+	ld	d, -11(ix)
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_temp_reload_addr.s" -o "$TMPDIR/de_temp_reload_addr.out.s"
+if grep -Eq -- '-1[12]\(ix\)' "$TMPDIR/de_temp_reload_addr.out.s"; then
+    echo "xopt smoke: DE temp reload across address calc was not elided" >&2
+    exit 1
+fi
+grep -q 'ld	(hl), e' "$TMPDIR/de_temp_reload_addr.out.s"
+
+cat >"$TMPDIR/hl_temp_reload_addr.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=16, stack_params=0)
+	add	hl, bc
+	ld	-8(ix), l
+	ld	-7(ix), h
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	dec	hl
+	add	hl, hl
+	ld	de, #_stk
+	add	hl, de
+	ld	e, -8(ix)
+	ld	d, -7(ix)
+	ld	(hl), e
+	inc	hl
+	ld	(hl), d
+	ld	bc, #0
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/hl_temp_reload_addr.s" -o "$TMPDIR/hl_temp_reload_addr.out.s"
+grep -Eq 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/hl_temp_reload_addr.out.s"
+grep -Eq 'ld[[:space:]]+bc,[[:space:]]*#_stk' "$TMPDIR/hl_temp_reload_addr.out.s"
+if grep -Eq -- '-[78]\(ix\)' "$TMPDIR/hl_temp_reload_addr.out.s"; then
+    echo "xopt smoke: HL temp reload across address calc was not elided" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/de_temp_to_hl_stack.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=16, stack_params=0)
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	-8(ix), e
+	ld	-7(ix), d
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	add	hl, hl
+	ld	bc, #_stk
+	add	hl, bc
+	ld	e, (hl)
+	inc	hl
+	ld	d, (hl)
+	ld	b, d
+	ld	c, e
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	add	hl, bc
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_temp_to_hl_stack.s" -o "$TMPDIR/de_temp_to_hl_stack.out.s"
+grep -Eq 'push[[:space:]]+de' "$TMPDIR/de_temp_to_hl_stack.out.s"
+grep -Eq 'pop[[:space:]]+hl' "$TMPDIR/de_temp_to_hl_stack.out.s"
+if grep -Eq -- '-[78]\(ix\)' "$TMPDIR/de_temp_to_hl_stack.out.s"; then
+    echo "xopt smoke: DE temp reload to HL was not stack-preserved" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/signed_zero_branch_m.s" <<'ASM'
+_demo:
+	ld	de,#0
+	or	a,a
+	sbc	hl,de
+	jp	m,_neg
+	ld	de,#1
+	xor	a
+	ret
+_neg:
+	ld	de,#2
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/signed_zero_branch_m.s" -o "$TMPDIR/signed_zero_branch_m.out.s"
+grep -Eq 'bit[[:space:]]+7,[[:space:]]*h' "$TMPDIR/signed_zero_branch_m.out.s"
+grep -Eq 'j[pr][[:space:]]+nz,[[:space:]]*_neg' "$TMPDIR/signed_zero_branch_m.out.s"
+if grep -Eq 'ld[[:space:]]+de,[[:space:]]*#0|sbc[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/signed_zero_branch_m.out.s"; then
+    echo "xopt smoke: signed zero negative branch did not use high-bit test" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/signed_zero_branch_p.s" <<'ASM'
+_demo:
+	ld	de,#0
+	or	a,a
+	sbc	hl,de
+	jp	p,_nonneg
+	ld	de,#1
+	xor	a
+	ret
+_nonneg:
+	ld	de,#2
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/signed_zero_branch_p.s" -o "$TMPDIR/signed_zero_branch_p.out.s"
+grep -Eq 'bit[[:space:]]+7,[[:space:]]*h' "$TMPDIR/signed_zero_branch_p.out.s"
+grep -Eq 'j[pr][[:space:]]+z,[[:space:]]*_nonneg' "$TMPDIR/signed_zero_branch_p.out.s"
+if grep -Eq 'ld[[:space:]]+de,[[:space:]]*#0|sbc[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/signed_zero_branch_p.out.s"; then
+    echo "xopt smoke: signed zero nonnegative branch did not use high-bit test" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/page_bound_branch.s" <<'ASM'
+_demo:
+	ld	l,-3(ix)
+	ld	h,-2(ix)
+	ld	de,#1024
+	or	a,a
+	sbc	hl,de
+	jp	nc,_done
+	ld	de,#1
+	xor	a
+	ret
+_done:
+	ld	de,#2
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/page_bound_branch.s" -o "$TMPDIR/page_bound_branch.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/page_bound_branch.out.s"
+grep -Eq 'cp[[:space:]]+#4' "$TMPDIR/page_bound_branch.out.s"
+grep -Eq 'j[pr][[:space:]]+nc,[[:space:]]*_done' "$TMPDIR/page_bound_branch.out.s"
+if grep -Eq 'ld[[:space:]]+l,[[:space:]]*-3\(ix\)|ld[[:space:]]+de,[[:space:]]*#1024|sbc[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/page_bound_branch.out.s"; then
+    echo "xopt smoke: page-aligned unsigned bound branch did not use high-byte compare" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/page_bound_branch_signed.s" <<'ASM'
+_demo:
+	ld	l,-4(ix)
+	ld	h,-3(ix)
+	ld	de,#256
+	or	a,a
+	sbc	hl,de
+	jp	p,_done
+	ld	de,#1
+	xor	a
+	ret
+_done:
+	ld	de,#2
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/page_bound_branch_signed.s" -o "$TMPDIR/page_bound_branch_signed.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*-3\(ix\)' "$TMPDIR/page_bound_branch_signed.out.s"
+grep -Eq 'cp[[:space:]]+#1' "$TMPDIR/page_bound_branch_signed.out.s"
+grep -Eq 'j[pr][[:space:]]+p,[[:space:]]*_done' "$TMPDIR/page_bound_branch_signed.out.s"
+if grep -Eq 'ld[[:space:]]+l,[[:space:]]*-4\(ix\)|ld[[:space:]]+de,[[:space:]]*#256|sbc[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/page_bound_branch_signed.out.s"; then
+    echo "xopt smoke: signed page-aligned bound branch did not use high-byte compare" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/page_bound_branch_de_return.s" <<'ASM'
+_demo:
+	ld	l,-3(ix)
+	ld	h,-2(ix)
+	ld	de,#1024
+	or	a,a
+	sbc	hl,de
+	jp	nc,_ret
+	ld	de,#0
+	xor	a
+	ret
+_ret:
+	ld	e,-5(ix)
+	ld	d,-4(ix)
+	ld	sp,ix
+	pop	ix
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/page_bound_branch_de_return.s" -o "$TMPDIR/page_bound_branch_de_return.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/page_bound_branch_de_return.out.s"
+grep -Eq 'cp[[:space:]]+#4' "$TMPDIR/page_bound_branch_de_return.out.s"
+if grep -Eq 'ld[[:space:]]+de,[[:space:]]*#1024|sbc[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/page_bound_branch_de_return.out.s"; then
+    echo "xopt smoke: page-aligned bound did not fold before DE return tail" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/page_bound_branch_a_live.s" <<'ASM'
+_demo:
+	ld	l,-3(ix)
+	ld	h,-2(ix)
+	ld	de,#1024
+	or	a,a
+	sbc	hl,de
+	jp	nc,_done
+	ld	e,a
+	ret
+_done:
+	ld	e,a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/page_bound_branch_a_live.s" -o "$TMPDIR/page_bound_branch_a_live.out.s"
+grep -Eq 'ld[[:space:]]+de,[[:space:]]*#1024' "$TMPDIR/page_bound_branch_a_live.out.s"
+grep -Eq 'sbc[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/page_bound_branch_a_live.out.s"
+
+cat >"$TMPDIR/redundant_u8_self_mask.s" <<'ASM'
+_demo:
+	ld	a,l
+	and	#255
+	ld	l,a
+	ld	a,h
+	and	#7
+	ld	h,a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/redundant_u8_self_mask.s" -o "$TMPDIR/redundant_u8_self_mask.out.s"
+grep -Eq 'and[[:space:]]+#7' "$TMPDIR/redundant_u8_self_mask.out.s"
+if grep -Eq 'and[[:space:]]+#255|ld[[:space:]]+a,[[:space:]]*l|ld[[:space:]]+l,[[:space:]]*a' "$TMPDIR/redundant_u8_self_mask.out.s"; then
+    echo "xopt smoke: redundant u8 self-mask was not removed" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/redundant_u8_self_mask_flags_live.s" <<'ASM'
+_demo:
+	ld	a,l
+	and	#255
+	ld	l,a
+	jr	z,_done
+	ld	a,h
+_done:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/redundant_u8_self_mask_flags_live.s" -o "$TMPDIR/redundant_u8_self_mask_flags_live.out.s"
+grep -Eq 'and[[:space:]]+#255' "$TMPDIR/redundant_u8_self_mask_flags_live.out.s"
+grep -Eq 'jr[[:space:]]+z,' "$TMPDIR/redundant_u8_self_mask_flags_live.out.s"
+
+cat >"$TMPDIR/hl_bc_roundtrip.s" <<'ASM'
+_demo:
+	ld	hl,#1234
+	ld	b,h
+	ld	c,l
+	ld	h,b
+	ld	l,c
+	ex	de,hl
+	ld	b,#0
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/hl_bc_roundtrip.s" -o "$TMPDIR/hl_bc_roundtrip.out.s"
+if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/hl_bc_roundtrip.out.s" ||
+   grep -Eq 'ld[[:space:]]+h,[[:space:]]*b' "$TMPDIR/hl_bc_roundtrip.out.s"; then
+    echo "xopt smoke: dead HL->BC->HL roundtrip was not removed" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/hl_bc_roundtrip_live.s" <<'ASM'
+_demo:
+	ld	hl,#1234
+	ld	b,h
+	ld	c,l
+	ld	h,b
+	ld	l,c
+	ld	a,c
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/hl_bc_roundtrip_live.s" -o "$TMPDIR/hl_bc_roundtrip_live.out.s"
+grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/hl_bc_roundtrip_live.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*c' "$TMPDIR/hl_bc_roundtrip_live.out.s"
+
+cat >"$TMPDIR/bc_base_add.s" <<'ASM'
+_demo:
+	ld	l,-1(ix)
+	ld	h,-2(ix)
+	add	hl,hl
+	ld	b,h
+	ld	c,l
+	ld	hl,#_arr
+	add	hl,bc
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_base_add.s" -o "$TMPDIR/bc_base_add.out.s"
+grep -Eq 'ld[[:space:]]+bc,[[:space:]]*#_arr' "$TMPDIR/bc_base_add.out.s"
+if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/bc_base_add.out.s"; then
+    echo "xopt smoke: BC base-add direct fold did not fire" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/bc_base_add_live.s" <<'ASM'
+_demo:
+	ld	l,-1(ix)
+	ld	h,-2(ix)
+	add	hl,hl
+	ld	b,h
+	ld	c,l
+	ld	hl,#_arr
+	add	hl,bc
+	ld	a,c
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_base_add_live.s" -o "$TMPDIR/bc_base_add_live.out.s"
+grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/bc_base_add_live.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*c' "$TMPDIR/bc_base_add_live.out.s"
+
+cat >"$TMPDIR/bc_index_add_reload.s" <<'ASM'
+_demo:
+	ld	hl,#3
+	ld	b,h
+	ld	c,l
+	ld	l,-1(ix)
+	ld	h,-2(ix)
+	add	hl,bc
+	ld	de,#0
+	ld	bc,#0
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_index_add_reload.s" -o "$TMPDIR/bc_index_add_reload.out.s"
+grep -Eq 'ld[[:space:]]+de,[[:space:]]*#3|ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/bc_index_add_reload.out.s"
+grep -Eq 'add[[:space:]]+hl,[[:space:]]*de' "$TMPDIR/bc_index_add_reload.out.s"
+if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/bc_index_add_reload.out.s"; then
+    echo "xopt smoke: BC index add reload did not switch to DE" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/bc_index_add_reload_de_live.s" <<'ASM'
+_demo:
+	ld	hl,#3
+	ld	b,h
+	ld	c,l
+	ld	l,-1(ix)
+	ld	h,-2(ix)
+	add	hl,bc
+	ld	a,e
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_index_add_reload_de_live.s" -o "$TMPDIR/bc_index_add_reload_de_live.out.s"
+grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/bc_index_add_reload_de_live.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*e' "$TMPDIR/bc_index_add_reload_de_live.out.s"
+
+cat >"$TMPDIR/bc_saved_hl_push_word_to_de_direct.s" <<'ASM'
+_demo:
+	ld	l,-1(ix)
+	ld	h,-2(ix)
+	or	a,a
+	sbc	hl,de
+	ld	b,h
+	ld	c,l
+	ld	l,-17(ix)
+	ld	h,-16(ix)
+	push	hl
+	ld	h,b
+	ld	l,c
+	pop	de
+	or	a,a
+	sbc	hl,de
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_saved_hl_push_word_to_de_direct.s" -o "$TMPDIR/bc_saved_hl_push_word_to_de_direct.out.s"
+grep -Eq 'ld[[:space:]]+e,[[:space:]]*-17\(ix\)' "$TMPDIR/bc_saved_hl_push_word_to_de_direct.out.s"
+grep -Eq 'ld[[:space:]]+d,[[:space:]]*-16\(ix\)' "$TMPDIR/bc_saved_hl_push_word_to_de_direct.out.s"
+if grep -Eq 'push[[:space:]]+hl|pop[[:space:]]+de' "$TMPDIR/bc_saved_hl_push_word_to_de_direct.out.s"; then
+    echo "xopt smoke: BC-saved HL stack word to DE direct rewrite did not fire" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/de_store_forward.s" <<'ASM'
 _demo:
 	ld	h,d
@@ -179,6 +749,86 @@ grep -q 'ld	b, d' "$TMPDIR/de_store_forward.out.s"
 grep -q 'ld	-3(ix), e' "$TMPDIR/de_store_forward.out.s"
 if grep -q 'ld	h, d' "$TMPDIR/de_store_forward.out.s"; then
     echo "xopt smoke: dead HL DE-store forwarding did not fire" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/de_result_hl_forward_label_overwrite.s" <<'ASM'
+_demo:
+	call	_r
+	push	de
+	pop	hl
+	ld	b,h
+	ld	c,l
+	ld	-2(ix),l
+	ld	-1(ix),h
+_fallthrough:
+	ld	hl,#0
+	inc	-3(ix)
+	call	_next
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_result_hl_forward_label_overwrite.s" -o "$TMPDIR/de_result_hl_forward_label_overwrite.out.s"
+grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*e' "$TMPDIR/de_result_hl_forward_label_overwrite.out.s"
+grep -Eq 'ld[[:space:]]+-1\(ix\),[[:space:]]*d' "$TMPDIR/de_result_hl_forward_label_overwrite.out.s"
+if grep -Eq 'push[[:space:]]+de|pop[[:space:]]+hl' "$TMPDIR/de_result_hl_forward_label_overwrite.out.s"; then
+    echo "xopt smoke: DE result through fallthrough label was not forwarded" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/de_result_hl_forward_call_arg_guard.s" <<'ASM'
+_demo:
+	call	_r
+	push	de
+	pop	hl
+	ld	b,h
+	ld	c,l
+	ld	-2(ix),l
+	ld	-1(ix),h
+_fallthrough:
+	inc	-3(ix)
+	call	_next
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_result_hl_forward_call_arg_guard.s" -o "$TMPDIR/de_result_hl_forward_call_arg_guard.out.s"
+grep -Eq 'push[[:space:]]+de' "$TMPDIR/de_result_hl_forward_call_arg_guard.out.s"
+grep -Eq 'pop[[:space:]]+hl' "$TMPDIR/de_result_hl_forward_call_arg_guard.out.s"
+
+cat >"$TMPDIR/adjacent_indexed_byte_stores_postinc.s" <<'ASM'
+_demo:
+	ld	l,-5(ix)
+	ld	h,-4(ix)
+	inc	hl
+	ld	-11(ix),l
+	ld	-10(ix),h
+	ld	hl,#_outb
+	ld	e,-5(ix)
+	ld	d,-4(ix)
+	add	hl,de
+	ld	(hl),a
+	ld	l,-11(ix)
+	ld	h,-10(ix)
+	inc	hl
+	ld	-5(ix),l
+	ld	-4(ix),h
+	ld	hl,#_outb
+	ld	e,-11(ix)
+	ld	d,-10(ix)
+	add	hl,de
+	ld	a,-1(ix)
+	ld	(hl),a
+	ld	hl,#0
+	ld	de,#0
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/adjacent_indexed_byte_stores_postinc.s" -o "$TMPDIR/adjacent_indexed_byte_stores_postinc.out.s"
+grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#_outb' "$TMPDIR/adjacent_indexed_byte_stores_postinc.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*-1\(ix\)' "$TMPDIR/adjacent_indexed_byte_stores_postinc.out.s"
+if grep -Eq -- '-11\(ix\)|-10\(ix\)' "$TMPDIR/adjacent_indexed_byte_stores_postinc.out.s"; then
+    echo "xopt smoke: adjacent indexed byte stores still use the temporary index" >&2
     exit 1
 fi
 
@@ -2104,6 +2754,34 @@ if grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#305|add[[:space:]]+hl,[[:space:]]*bc|
     echo "xopt smoke: low-byte sum return did not collapse to A arithmetic" >&2
     exit 1
 fi
+
+cat >"$TMPDIR/dead_hl_before_pair_load.s" <<'ASM'
+_dead_hl_pair:
+	ld	hl, #0
+	ld	l, -16(ix)
+	ld	h, -15(ix)
+	ex	de, hl
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/dead_hl_before_pair_load.s" -o "$TMPDIR/dead_hl_before_pair_load.out.s"
+if grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#0' "$TMPDIR/dead_hl_before_pair_load.out.s"; then
+    echo "xopt smoke: dead HL immediate before pair load was not removed" >&2
+    exit 1
+fi
+grep -Eq 'ld[[:space:]]+l,[[:space:]]*-16\(ix\)' "$TMPDIR/dead_hl_before_pair_load.out.s"
+grep -Eq 'ld[[:space:]]+h,[[:space:]]*-15\(ix\)' "$TMPDIR/dead_hl_before_pair_load.out.s"
+
+cat >"$TMPDIR/dead_hl_before_pair_load_live.s" <<'ASM'
+_dead_hl_pair_live:
+	ld	hl, #4660
+	ld	a, l
+	ld	h, #0
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/dead_hl_before_pair_load_live.s" -o "$TMPDIR/dead_hl_before_pair_load_live.out.s"
+grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#4660' "$TMPDIR/dead_hl_before_pair_load_live.out.s"
 
 cat >"$TMPDIR/scaled_offset_temp.s" <<'ASM'
 _scaled:

@@ -66,7 +66,7 @@ semantic check
   ->
 IR generator
   ->
-IR optimizer (-O2, -Of / -Os promoted baseline, and experimental -O3)
+IR optimizer (-O2, Os-based -Of / -Os profiles, and a reserved -O3 layer)
   ->
 Z80 code generator
   ->
@@ -128,8 +128,8 @@ Important options today:
 - `-O0`: no optimization
 - `-O1`: peephole optimizer after assembly generation; the simplest fixed-window peepholes are now table-driven while the more contextual ones still use custom matchers
 - `-O2`: general optimization, including dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, conservative size-profitable static helper inlining for the benchmark-proven subset of private helpers, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, direct control-condition lowering, counted-byte-loop narrowing, loop pointer-walk canonicalization, and the bounded stable backend temp register allocator for short straight-line 16-bit temp windows; the core local algebraic identities are now shared through one small declarative rule table instead of duplicated `switch` logic
-- `-Of`: speed optimization; it shares the current proven aggressive baseline and may spend a little size for fewer cycles, including O3-proven speed-biased peepholes
-- `-O3`: experimental optimization; it keeps the proven `-Os` baseline, then adds speed, size, shape-changing, and superoptimizer-inspired peephole experiments. Here be dragons
+- `-Of`: `-Os`-based speed profile; it currently aliases `-Os`, and speed-biased hooks are added only after they prove profitable
+- `-O3`: reserved experimental layer on top of `-Of`; currently empty so new risky trials can be measured cleanly before graduation
 - `-Os`: size optimization; it is the protected record-setting aggressive size baseline
 - `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info

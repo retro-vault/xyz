@@ -1023,11 +1023,18 @@ std::vector<std::string> build_compiler_args(
     const cli_options& cli)
 {
     std::vector<std::string> args;
+    bool saw_opt = false;
     for (const auto& arg : test.base.compiler_args) {
-        args.push_back(expand_placeholders(arg, cli, test));
+        const auto expanded = expand_placeholders(arg, cli, test);
+        if (expanded.rfind("-O", 0) == 0) {
+            saw_opt = true;
+        }
+        args.push_back(expanded);
     }
     if (test.opt_level.has_value()) {
         args.push_back("-" + test.opt_level.value());
+    } else if (!saw_opt) {
+        args.push_back("-Os");
     }
     if (test.float_format.has_value()) {
         args.push_back("--float-format="

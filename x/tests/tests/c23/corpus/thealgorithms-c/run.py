@@ -995,7 +995,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keep-wrappers", action="store_true", help="keep generated host/target artifacts")
     parser.add_argument("--source-commit", default=None, help="pin the source repository to a specific commit")
     parser.add_argument("--xcc", default=os.environ.get("XCC", str(DEFAULT_XCC)), help="path to xcc binary")
-    parser.add_argument("--xcc-opt", default=os.environ.get("XCC_OPT", "-O0"), help="xcc optimization flag")
+    parser.add_argument("--xcc-opt", default=os.environ.get("XCC_OPT", "-Os"), help="xcc optimization flag")
     parser.add_argument("--host-cc", default=os.environ.get("HOST_CC", "gcc"), help="host C compiler")
     parser.add_argument("--host-opt", default=os.environ.get("HOST_OPT", "-O2"), help="host compiler optimization flag")
     return parser.parse_args()

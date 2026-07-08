@@ -154,8 +154,7 @@ def add_common_manifest_lines(
             "component = xcc\n",
             f"summary = {summary}\n",
             f"source = {source_rel}\n",
-            "matrix_opt = O1\n",
-            "matrix_opt = O2\n",
+            "matrix_opt = Os\n",
             "matrix_opt = O3\n",
         ]
     )

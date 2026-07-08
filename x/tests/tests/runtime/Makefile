@@ -25,7 +25,10 @@ ASMFLAGS    ?= --mode=sdcc
 LINK        ?= $(REPO_ROOT)/bin/x/bin/xld
 LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000 -nostdlib
 
-RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' | sort)
+# The direct runtime harness links with -nostdlib.  ieee16 contains thin
+# libc-facing wrappers (for example ieee16_acos -> acosf), so keep this
+# standalone image to the self-contained runtime helpers that it exercises.
+RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' ! -path '*/ieee16/*' | sort)
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(BUILD)/objs/%.rel,$(RUNTIME_SRCS))
 
 RUNTIME_IHX  := $(BUILD)/runtime.ihx

@@ -3673,12 +3673,9 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
     if (settings.const_arg_propagation)
         passes.push_back(std::make_unique<constant_arg_propagation_pass>());
     if (settings.const_call_eval) {
-        const bool experimental_fixed_specialization =
-            settings.level == opt_level::O3 || settings.level == opt_level::Of;
         passes.push_back(
-            std::make_unique<const_call_eval_pass>(experimental_fixed_specialization));
-        if (experimental_fixed_specialization)
-            passes.push_back(std::make_unique<single_const_local_propagation_pass>());
+            std::make_unique<const_call_eval_pass>(true));
+        passes.push_back(std::make_unique<single_const_local_propagation_pass>());
     }
     if (settings.function_const_eval)
         passes.push_back(std::make_unique<function_const_eval_pass>());
@@ -3687,20 +3684,15 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
     if (settings.inline_trivial_internal_functions)
         passes.push_back(std::make_unique<trivial_internal_leaf_inline_pass>(
             settings));
-    if (settings.inline_static_functions)
+    if (settings.inline_static_functions) {
+        const bool size_profile = settings.level == opt_level::Os;
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
-            (settings.level == opt_level::O3 ||
-             settings.level == opt_level::Of ||
-             settings.level == opt_level::Os) ? 32 : 12,
-            (settings.level == opt_level::O3 ||
-             settings.level == opt_level::Of ||
-             settings.level == opt_level::Os) ? 96 : 24,
-            (settings.level == opt_level::O3 ||
-             settings.level == opt_level::Of ||
-             settings.level == opt_level::Os) ? 64 : 16,
-            settings.level == opt_level::O3 ||
-            settings.level == opt_level::Of,
+            size_profile ? 32 : 12,
+            size_profile ? 96 : 24,
+            size_profile ? 64 : 16,
+            false,
             settings));
+    }
     if (settings.merge_identical_functions)
         passes.push_back(std::make_unique<merge_identical_helpers_pass>());
     if (settings.dead_static_functions)

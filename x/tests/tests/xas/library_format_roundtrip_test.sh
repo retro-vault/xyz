@@ -31,6 +31,7 @@ LIBC_DEFINES=(
     -D__XCC_LIBC_DOUBLE="${LIBC_DOUBLE:-1}"
     -D__XCC_LIBC_LONG="${LIBC_LONG:-1}"
     -D__XCC_LIBC_LONGLONG="${LIBC_LONGLONG:-1}"
+    -D__XCC_LIBC_STDIO_FLOAT="${LIBC_STDIO_FLOAT:-1}"
 )
 
 if ! command -v "$SDAS" >/dev/null 2>&1; then

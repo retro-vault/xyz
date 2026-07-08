@@ -22,13 +22,21 @@ namespace xld {
         if (ctx.code_occupancy.empty())
             return std::nullopt;
 
+        // Flat Z80 outputs can address only 64 KiB.  Some link images include
+        // virtual/reserved areas whose end address reaches past 0xFFFF (for
+        // example a heap ending at 0x10C00); do not let that wrap the detected
+        // end address back into the low page.
+        const uint32_t limit = std::min<uint32_t>(
+            static_cast<uint32_t>(ctx.code_occupancy.size()),
+            0x10000u);
+
         uint32_t first = 0;
-        while (first < ctx.code_occupancy.size() && ctx.code_occupancy[first] == 0x00)
+        while (first < limit && ctx.code_occupancy[first] == 0x00)
             ++first;
-        if (first >= ctx.code_occupancy.size())
+        if (first >= limit)
             return std::nullopt;
 
-        uint32_t last = ctx.code_occupancy.size();
+        uint32_t last = limit;
         while (last > first && ctx.code_occupancy[last - 1] == 0x00)
             --last;
 

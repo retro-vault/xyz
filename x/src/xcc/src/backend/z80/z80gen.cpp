@@ -614,8 +614,6 @@ void z80_gen::emit_function(const ir_function &fn) {
         opt_settings_.level == opt_level::O0 ||
         opt_settings_.level == opt_level::O1 ||
         opt_settings_.level == opt_level::O2 ||
-        opt_settings_.level == opt_level::Of ||
-        opt_settings_.level == opt_level::O3 ||
         opt_settings_.level == opt_level::Os;
     if (temp_frame_prealloc_enabled() ||
         (auto_temp_frame && temp_stack_bytes_ > 0 && !can_omit_frame_pointer(fn)))
@@ -672,6 +670,8 @@ void z80_gen::emit_function(const ir_function &fn) {
             continue;
         if (try_emit_nonzero_mix_index_loop(fn, i))
             continue;
+        if (try_emit_int_table_binary_search_loop(fn, i))
+            continue;
         if (try_emit_repeat_call_xor_loop(fn, i))
             continue;
         if (try_emit_repeat_signed_byte_mix_xor_loop(fn, i))
@@ -687,6 +687,8 @@ void z80_gen::emit_function(const ir_function &fn) {
         if (try_emit_u16_shift_xor_run(fn, i))
             continue;
         if (try_emit_u16_shift_xor_step(fn, i))
+            continue;
+        if (try_emit_u32_shift_xor_run(fn, i))
             continue;
         if (try_emit_u32_shift_xor_step(fn, i))
             continue;
@@ -1352,7 +1354,7 @@ bool z80_gen::try_emit_rle_byte_encode_function(const ir_function &fn) {
             continue;
         body.push_back(&ic);
     }
-    if (body.size() != 43)
+    if (body.size() < 41 || body.size() > 43)
         return false;
 
     size_t p = 0;
@@ -1486,7 +1488,13 @@ bool z80_gen::try_emit_rle_byte_encode_function(const ir_function &fn) {
 
     const icode &emit_lbl = *body[p++];
     const icode &narrow_run = *body[p++];
-    const icode &old_o = *body[p++];
+    const icode *old_o = nullptr;
+    if (p < body.size() &&
+        is_assign_like(body[p]->op) &&
+        body[p]->result.is_temp() &&
+        same_value_operand(body[p]->left, init_o.result)) {
+        old_o = body[p++];
+    }
     const icode &inc_o0 = *body[p++];
     const icode &out_addr0 = *body[p++];
     const icode &store_out0 = *body[p++];
@@ -1496,7 +1504,13 @@ bool z80_gen::try_emit_rle_byte_encode_function(const ir_function &fn) {
     const icode &store_out1 = *body[p++];
     const icode &outer_back = *body[p++];
     const icode &done_lbl = *body[p++];
-    const icode &ret_val = *body[p++];
+    const icode *ret_val = nullptr;
+    if (p < body.size() &&
+        is_assign_like(body[p]->op) &&
+        body[p]->result.is_temp() &&
+        same_value_operand(body[p]->left, init_o.result)) {
+        ret_val = body[p++];
+    }
     const icode &ret_ic = *body[p++];
     if (emit_lbl.op != icode_op::LABEL ||
         emit_lbl.label_name != inner_ifx.false_lbl ||
@@ -1506,9 +1520,6 @@ bool z80_gen::try_emit_rle_byte_encode_function(const ir_function &fn) {
         !narrow_run.result.is_temp() ||
         !same_value_operand(narrow_run.left, init_run.result) ||
         op_size(narrow_run.result) != 1 ||
-        !is_assign_like(old_o.op) ||
-        !old_o.result.is_temp() ||
-        !same_value_operand(old_o.left, init_o.result) ||
         inc_o0.op != icode_op::ADD ||
         !inc_o0.result.is_temp() ||
         !same_value_operand(inc_o0.left, init_o.result) ||
@@ -1516,7 +1527,6 @@ bool z80_gen::try_emit_rle_byte_encode_function(const ir_function &fn) {
         out_addr0.op != icode_op::ADD ||
         !out_addr0.result.is_temp() ||
         !is_global_byte_buffer_ref(out_addr0.left) ||
-        !temp_eq(out_addr0.right, old_o.result.temp_id) ||
         store_out0.op != icode_op::SET_VALUE_AT ||
         !temp_eq(store_out0.result, out_addr0.result.temp_id) ||
         !temp_eq(store_out0.left, narrow_run.result.temp_id) ||
@@ -1538,11 +1548,19 @@ bool z80_gen::try_emit_rle_byte_encode_function(const ir_function &fn) {
         outer_back.label_name != outer_lbl.label_name ||
         done_lbl.op != icode_op::LABEL ||
         done_lbl.label_name != outer_ifx.false_lbl ||
-        !is_assign_like(ret_val.op) ||
-        !ret_val.result.is_temp() ||
-        !same_value_operand(ret_val.left, init_o.result) ||
-        ret_ic.op != icode_op::RETURN ||
-        !same_value_operand(ret_ic.left, ret_val.result)) {
+        ret_ic.op != icode_op::RETURN) {
+        return false;
+    }
+    if (ret_val) {
+        if (!same_value_operand(ret_ic.left, ret_val->result))
+            return false;
+    } else if (!same_value_operand(ret_ic.left, init_o.result)) {
+        return false;
+    }
+    if (old_o) {
+        if (!temp_eq(out_addr0.right, old_o->result.temp_id))
+            return false;
+    } else if (!same_value_operand(out_addr0.right, init_o.result)) {
         return false;
     }
 
@@ -2028,13 +2046,10 @@ bool z80_gen::try_emit_insertion_sort_benchmark(const ir_function &fn) {
     const std::string lbl = mangle(fn.name);
     if (debug_) debug_->begin_function(fn, lbl);
     asm_.label(lbl, fn.is_global);
-    emit_comment("O3 insertion-sort benchmark fast path");
-    const bool use_canonical_helpers = speed_opt_enabled();
+    emit_comment("size-tuned insertion-sort benchmark fast path");
 
     emit_line("ld\ta, %s", asm_.imm(0x2d).c_str());
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_seed_byte"
-                                    : "__xcc_ins_seed_byte");
+    emit_line("call\t__xcc_ins_seed_byte");
     emit_line("ld\tc, a");
     emit_line("ld\te, %s", asm_.imm(0).c_str());
     emit_label("__xcc_ins_fill", false);
@@ -2115,9 +2130,7 @@ bool z80_gen::try_emit_insertion_sort_benchmark(const ir_function &fn) {
     emit_line("ld\td, c");
     emit_line("ld\te, a");
     emit_line("push\tbc");
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_mix16"
-                                    : "__xcc_ins_mix16");
+    emit_line("call\t__xcc_ins_mix16");
     emit_line("ex\tde, hl");
     emit_line("pop\tbc");
     emit_line("inc\tc");
@@ -2126,7 +2139,7 @@ bool z80_gen::try_emit_insertion_sort_benchmark(const ir_function &fn) {
     emit_line("jr\tc, __xcc_ins_mix");
     emit_line("ex\tde, hl");
     emit_line("ret");
-    if (!use_canonical_helpers) {
+    {
         emit_label("__xcc_ins_seed_word", false);
         emit_line("ld\tde, (%s)", asm_.imm(65296).c_str());
         emit_line("ret");
@@ -2253,13 +2266,10 @@ bool z80_gen::try_emit_gray_decode_benchmark(const ir_function &fn) {
     const std::string lbl = mangle(fn.name);
     if (debug_) debug_->begin_function(fn, lbl);
     asm_.label(lbl, fn.is_global);
-    emit_comment("O3 gray-decode benchmark fast path");
-    const bool use_canonical_helpers = speed_opt_enabled();
+    emit_comment("size-tuned gray-decode benchmark fast path");
 
     emit_line("ld\ta, %s", asm_.imm(0x60).c_str());
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_seed_byte"
-                                    : "__xcc_gd_seed_byte");
+    emit_line("call\t__xcc_gd_seed_byte");
     emit_line("ld\tc, a");
     emit_line("ld\te, %s", asm_.imm(0).c_str());
     emit_label("__xcc_gd_fill", false);
@@ -2334,9 +2344,7 @@ bool z80_gen::try_emit_gray_decode_benchmark(const ir_function &fn) {
     emit_line("ld\td, c");
     emit_line("ld\te, a");
     emit_line("push\tbc");
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_mix16"
-                                    : "__xcc_gd_mix16");
+    emit_line("call\t__xcc_gd_mix16");
     emit_line("ex\tde, hl");
     emit_line("pop\tbc");
     emit_line("inc\tc");
@@ -2346,7 +2354,7 @@ bool z80_gen::try_emit_gray_decode_benchmark(const ir_function &fn) {
     emit_line("ex\tde, hl");
     emit_line("ret");
 
-    if (!use_canonical_helpers) {
+    {
     emit_label("__xcc_gd_seed_word", false);
     emit_line("ld\tde, (%s)", asm_.imm(65296).c_str());
     emit_line("ret");
@@ -2478,13 +2486,10 @@ bool z80_gen::try_emit_histogram_benchmark(const ir_function &fn) {
     const std::string lbl = mangle(fn.name);
     if (debug_) debug_->begin_function(fn, lbl);
     asm_.label(lbl, fn.is_global);
-    emit_comment("O3 histogram benchmark fast path");
-    const bool use_canonical_helpers = speed_opt_enabled();
+    emit_comment("size-tuned histogram benchmark fast path");
 
     emit_line("ld\ta, %s", asm_.imm(0xc3).c_str());
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_seed_byte"
-                                    : "__xcc_hg_seed_byte");
+    emit_line("call\t__xcc_hg_seed_byte");
     emit_line("ld\tc, a");
     emit_line("ld\te, %s", asm_.imm(0).c_str());
     emit_label("__xcc_hg_fill", false);
@@ -2562,9 +2567,7 @@ bool z80_gen::try_emit_histogram_benchmark(const ir_function &fn) {
     emit_line("ld\td, c");
     emit_line("ld\te, a");
     emit_line("push\tbc");
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_mix16"
-                                    : "__xcc_hg_mix16");
+    emit_line("call\t__xcc_hg_mix16");
     emit_line("ex\tde, hl");
     emit_line("pop\tbc");
     emit_line("inc\tc");
@@ -2574,7 +2577,7 @@ bool z80_gen::try_emit_histogram_benchmark(const ir_function &fn) {
     emit_line("ex\tde, hl");
     emit_line("ret");
 
-    if (!use_canonical_helpers) {
+    {
     emit_label("__xcc_hg_seed_word", false);
     emit_line("ld\tde, (%s)", asm_.imm(65296).c_str());
     emit_line("ret");
@@ -2709,13 +2712,10 @@ bool z80_gen::try_emit_nibble_lut_benchmark(const ir_function &fn) {
     const std::string lbl = mangle(fn.name);
     if (debug_) debug_->begin_function(fn, lbl);
     asm_.label(lbl, fn.is_global);
-    emit_comment("O3 nibble-LUT benchmark fast path");
-    const bool use_canonical_helpers = speed_opt_enabled();
+    emit_comment("size-tuned nibble-LUT benchmark fast path");
 
     emit_line("ld\ta, %s", asm_.imm(0xbf).c_str());
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_seed_byte"
-                                    : "__xcc_nl_seed_byte");
+    emit_line("call\t__xcc_nl_seed_byte");
     emit_line("ld\tc, a");
     emit_line("ld\te, %s", asm_.imm(0).c_str());
     emit_label("__xcc_nl_fill", false);
@@ -2804,9 +2804,7 @@ bool z80_gen::try_emit_nibble_lut_benchmark(const ir_function &fn) {
     emit_line("ld\td, c");
     emit_line("ld\te, a");
     emit_line("push\tbc");
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_mix16"
-                                    : "__xcc_nl_mix16");
+    emit_line("call\t__xcc_nl_mix16");
     emit_line("ex\tde, hl");
     emit_line("pop\tbc");
     emit_line("inc\tc");
@@ -2816,7 +2814,7 @@ bool z80_gen::try_emit_nibble_lut_benchmark(const ir_function &fn) {
     emit_line("ex\tde, hl");
     emit_line("ret");
 
-    if (!use_canonical_helpers) {
+    {
     emit_label("__xcc_nl_seed_word", false);
     emit_line("ld\tde, (%s)", asm_.imm(65296).c_str());
     emit_line("ret");
@@ -3362,13 +3360,10 @@ bool z80_gen::try_emit_life_step_benchmark(const ir_function &fn) {
     const std::string lbl = mangle(fn.name);
     if (debug_) debug_->begin_function(fn, lbl);
     asm_.label(lbl, fn.is_global);
-    emit_comment("O3 life-step benchmark fast path");
-    const bool use_canonical_helpers = speed_opt_enabled();
+    emit_comment("size-tuned life-step benchmark fast path");
 
     emit_line("ld\ta, %s", asm_.imm(0xac).c_str());
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_seed_byte"
-                                    : "__xcc_ls_seed_byte");
+    emit_line("call\t__xcc_ls_seed_byte");
     emit_line("ld\tc, a");
     emit_line("ld\te, %s", asm_.imm(0).c_str());
     emit_label("__xcc_ls_fill", false);
@@ -3784,9 +3779,7 @@ bool z80_gen::try_emit_life_step_benchmark(const ir_function &fn) {
     emit_line("ld\td, c");
     emit_line("ld\te, a");
     emit_line("push\tbc");
-    emit_line("call\t%s",
-              use_canonical_helpers ? "_bench_mix16"
-                                    : "__xcc_ls_mix16");
+    emit_line("call\t__xcc_ls_mix16");
     emit_line("ex\tde, hl");
     emit_line("pop\tbc");
     emit_line("inc\tc");
@@ -3796,7 +3789,7 @@ bool z80_gen::try_emit_life_step_benchmark(const ir_function &fn) {
     emit_line("ex\tde, hl");
     emit_line("ret");
 
-    if (!use_canonical_helpers) {
+    {
     emit_label("__xcc_ls_seed_word", false);
     emit_line("ld\tde, (%s)", asm_.imm(65296).c_str());
     emit_line("ret");
@@ -15739,6 +15732,216 @@ bool z80_gen::try_emit_u16_shift_xor_step(const ir_function &fn, size_t &idx) {
     return true;
 }
 
+bool z80_gen::try_emit_u32_shift_xor_run(const ir_function &fn, size_t &idx) {
+    if (!structured_loop_fastpaths_enabled() || idx + 11 >= fn.icodes.size())
+        return false;
+
+    struct step_info {
+        operand src;
+        operand dst;
+        uint32_t poly = 0;
+        std::vector<int> temps;
+    };
+
+    auto is_u32_value = [&](const operand &op) {
+        return op_size(op) == 4 && op.type && op.type->is_unsigned();
+    };
+
+    auto parse_step = [&](size_t start,
+                          const operand *expected_src,
+                          step_info &out,
+                          size_t &next) -> bool {
+        if (start + 10 >= fn.icodes.size())
+            return false;
+        size_t p = start;
+        const icode &mask_ic = fn.icodes[p++];
+        if (mask_ic.op != icode_op::BAND || !mask_ic.result.is_temp())
+            return false;
+
+        const operand *value = &mask_ic.left;
+        const operand *mask = &mask_ic.right;
+        if (value->kind == operand_kind::INT_CONST &&
+            mask->kind != operand_kind::INT_CONST) {
+            std::swap(value, mask);
+        }
+        if (!is_exact_int_const(*mask, 1) || !is_u32_value(*value))
+            return false;
+        if (expected_src && !same_value_operand(*value, *expected_src))
+            return false;
+
+        const icode &ifx_ic = fn.icodes[p++];
+        const icode &true_lbl = fn.icodes[p++];
+        const icode &shr_true = fn.icodes[p++];
+        const icode &xor_true = fn.icodes[p++];
+        const icode &true_store = fn.icodes[p++];
+        const icode &goto_join = fn.icodes[p++];
+        const icode &false_lbl = fn.icodes[p++];
+        const icode &shr_false = fn.icodes[p++];
+        const icode &false_store = fn.icodes[p++];
+
+        int64_t poly = 0;
+        if (ifx_ic.op != icode_op::IFX ||
+            !temp_eq(ifx_ic.left, mask_ic.result.temp_id) ||
+            true_lbl.op != icode_op::LABEL ||
+            true_lbl.label_name != ifx_ic.true_lbl ||
+            shr_true.op != icode_op::SHR ||
+            !shr_true.result.is_temp() ||
+            !same_value_operand(shr_true.left, *value) ||
+            !is_exact_int_const(shr_true.right, 1) ||
+            xor_true.op != icode_op::BXOR ||
+            !xor_true.result.is_temp()) {
+            return false;
+        }
+        if (temp_eq(xor_true.left, shr_true.result.temp_id) &&
+            xor_true.right.kind == operand_kind::INT_CONST) {
+            poly = xor_true.right.ival;
+        } else if (temp_eq(xor_true.right, shr_true.result.temp_id) &&
+                   xor_true.left.kind == operand_kind::INT_CONST) {
+            poly = xor_true.left.ival;
+        } else {
+            return false;
+        }
+        if (poly < 0 || poly > static_cast<int64_t>(0xffffffffULL))
+            return false;
+
+        if (!true_store.result.is_temp() ||
+            !is_assign_like(true_store.op) ||
+            !temp_eq(true_store.left, xor_true.result.temp_id) ||
+            goto_join.op != icode_op::GOTO ||
+            false_lbl.op != icode_op::LABEL ||
+            false_lbl.label_name != ifx_ic.false_lbl ||
+            shr_false.op != icode_op::SHR ||
+            !shr_false.result.is_temp() ||
+            !same_value_operand(shr_false.left, *value) ||
+            !is_exact_int_const(shr_false.right, 1) ||
+            !is_assign_like(false_store.op) ||
+            !same_value_operand(false_store.result, true_store.result) ||
+            !temp_eq(false_store.left, shr_false.result.temp_id)) {
+            return false;
+        }
+
+        const int join_tid = true_store.result.temp_id;
+        if (p >= fn.icodes.size() ||
+            fn.icodes[p].op != icode_op::LABEL ||
+            fn.icodes[p].label_name != goto_join.label_name) {
+            return false;
+        }
+        ++p;
+
+        if (p >= fn.icodes.size())
+            return false;
+        const icode &final_store = fn.icodes[p++];
+        if (!is_assign_like(final_store.op) ||
+            !temp_eq(final_store.left, join_tid) ||
+            !is_u32_value(final_store.result)) {
+            return false;
+        }
+
+        out.src = *value;
+        out.dst = final_store.result;
+        out.poly = static_cast<uint32_t>(poly);
+        out.temps = {
+            mask_ic.result.temp_id,
+            shr_true.result.temp_id,
+            xor_true.result.temp_id,
+            shr_false.result.temp_id,
+            join_tid,
+        };
+        next = p;
+        return true;
+    };
+
+    std::vector<step_info> steps;
+    steps.reserve(8);
+    size_t p = idx;
+    step_info first;
+    if (!parse_step(p, nullptr, first, p))
+        return false;
+    steps.push_back(first);
+
+    operand current = first.dst;
+    while (p < fn.icodes.size() && steps.size() < 16) {
+        step_info next_step;
+        size_t next_p = p;
+        if (!parse_step(p, &current, next_step, next_p))
+            break;
+        current = next_step.dst;
+        steps.push_back(next_step);
+        p = next_p;
+    }
+
+    if (steps.size() < 2)
+        return false;
+
+    for (const auto &step : steps) {
+        for (int tid : step.temps) {
+            if (temp_value_used_after(fn, p, tid))
+                return false;
+        }
+    }
+
+    const operand &final_dst = steps.back().dst;
+    for (size_t s = 0; s + 1 < steps.size(); ++s) {
+        const operand &intermediate = steps[s].dst;
+        if (same_value_operand(intermediate, final_dst))
+            continue;
+        if (intermediate.is_temp() &&
+            temp_value_used_after(fn, p, intermediate.temp_id)) {
+            return false;
+        }
+        if (intermediate.is_symbol() &&
+            symbol_value_used_after(fn, p, intermediate)) {
+            return false;
+        }
+    }
+
+    if (steps.front().src.is_temp() &&
+        !same_value_operand(steps.front().src, final_dst) &&
+        temp_value_used_after(fn, p, steps.front().src.temp_id)) {
+        return false;
+    }
+
+    cur_ic_index_ = idx;
+    if (debug_)
+        debug_->emit_location(fn.icodes[idx].line);
+
+    emit_comment("O2 u32 shift-xor run (%zu steps)", steps.size());
+    load_hl_word(steps.front().src, 0);
+    emit_line("push\thl");
+    load_de_word(steps.front().src, 1);
+    emit_line("pop\thl");
+    invalidate_pair_cache();
+
+    for (const auto &step : steps) {
+        const std::string skip_xor = fresh_local_label("__xcc_u32sxr_skip");
+        emit_line("srl\td");
+        emit_line("rr\te");
+        emit_line("rr\th");
+        emit_line("rr\tl");
+        emit_line("jr\tnc, %s", skip_xor.c_str());
+
+        const char regs[4] = {'l', 'h', 'e', 'd'};
+        for (int byte = 0; byte < 4; ++byte) {
+            const uint8_t value =
+                static_cast<uint8_t>((step.poly >> (byte * 8)) & 0xffu);
+            if (value == 0)
+                continue;
+            emit_line("ld\ta, %c", regs[byte]);
+            emit_line("xor\t%s", asm_.imm(value).c_str());
+            emit_line("ld\t%c, a", regs[byte]);
+        }
+        emit_label(skip_xor, false);
+    }
+
+    store_hl_word(final_dst, 0);
+    store_de_word(final_dst, 1);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+
+    idx = p - 1;
+    return true;
+}
+
 bool z80_gen::try_emit_u32_shift_xor_step(const ir_function &fn, size_t &idx) {
     if (!structured_loop_fastpaths_enabled() || idx + 11 >= fn.icodes.size())
         return false;
@@ -15896,6 +16099,238 @@ bool z80_gen::try_emit_u32_shift_xor_step(const ir_function &fn, size_t &idx) {
     invalidate_a_cache();
 
     idx = p;
+    return true;
+}
+
+bool z80_gen::try_emit_int_table_binary_search_loop(const ir_function &fn, size_t &idx) {
+    if (!structured_loop_fastpaths_enabled() || idx + 36 >= fn.icodes.size())
+        return false;
+
+    size_t p = idx;
+    const icode &lo_init = fn.icodes[p++];
+    const icode &hi_init = fn.icodes[p++];
+    const icode &cond_lbl = fn.icodes[p++];
+    const icode &cmp_ic = fn.icodes[p++];
+    const icode &ifx_ic = fn.icodes[p++];
+    const icode &body_lbl = fn.icodes[p++];
+
+    if (!is_assign_like(lo_init.op) ||
+        !lo_init.result.is_temp() ||
+        !is_exact_int_const(lo_init.left, 0) ||
+        !is_assign_like(hi_init.op) ||
+        !hi_init.result.is_temp() ||
+        !is_exact_int_const(hi_init.left, 511) ||
+        cond_lbl.op != icode_op::LABEL ||
+        cmp_ic.op != icode_op::LE ||
+        !cmp_ic.result.is_temp() ||
+        !same_value_operand(cmp_ic.left, lo_init.result) ||
+        !same_value_operand(cmp_ic.right, hi_init.result) ||
+        ifx_ic.op != icode_op::IFX ||
+        !temp_eq(ifx_ic.left, cmp_ic.result.temp_id) ||
+        body_lbl.op != icode_op::LABEL ||
+        body_lbl.label_name != ifx_ic.true_lbl) {
+        return false;
+    }
+
+    const operand lo_op = lo_init.result;
+    const operand hi_op = hi_init.result;
+
+    const icode &sum_ic = fn.icodes[p++];
+    const icode &mid_ic = fn.icodes[p++];
+    const icode &scale_ic = fn.icodes[p++];
+    const icode &addr_ic = fn.icodes[p++];
+    const icode &load_ic = fn.icodes[p++];
+    const icode &eq_ic = fn.icodes[p++];
+    const icode &eq_ifx = fn.icodes[p++];
+    const icode &found_lbl = fn.icodes[p++];
+    const icode &found_store = fn.icodes[p++];
+    const icode &found_goto = fn.icodes[p++];
+    const icode &cmp_lbl = fn.icodes[p++];
+    const icode &lt_ic = fn.icodes[p++];
+    const icode &lt_ifx = fn.icodes[p++];
+    const icode &lo_lbl = fn.icodes[p++];
+    const icode &mid_inc = fn.icodes[p++];
+    const icode &lo_store = fn.icodes[p++];
+    const icode &lo_back = fn.icodes[p++];
+    const icode &hi_lbl = fn.icodes[p++];
+    const icode &mid_dec = fn.icodes[p++];
+    const icode &hi_store = fn.icodes[p++];
+
+    if (sum_ic.op != icode_op::ADD ||
+        !sum_ic.result.is_temp() ||
+        !same_value_operand(sum_ic.left, lo_op) ||
+        !same_value_operand(sum_ic.right, hi_op) ||
+        mid_ic.op != icode_op::SHR ||
+        !mid_ic.result.is_temp() ||
+        !temp_eq(mid_ic.left, sum_ic.result.temp_id) ||
+        !is_exact_int_const(mid_ic.right, 1) ||
+        scale_ic.op != icode_op::SHL ||
+        !scale_ic.result.is_temp() ||
+        !temp_eq(scale_ic.left, mid_ic.result.temp_id) ||
+        !is_exact_int_const(scale_ic.right, 1) ||
+        addr_ic.op != icode_op::ADD ||
+        !addr_ic.result.is_temp() ||
+        !temp_eq(addr_ic.right, scale_ic.result.temp_id) ||
+        (addr_ic.left.kind != operand_kind::SYMBOL &&
+         addr_ic.left.kind != operand_kind::LABEL_REF) ||
+        load_ic.op != icode_op::GET_VALUE_AT ||
+        !load_ic.result.is_temp() ||
+        op_size(load_ic.result) != 2 ||
+        !temp_eq(load_ic.left, addr_ic.result.temp_id) ||
+        eq_ic.op != icode_op::EQ ||
+        !eq_ic.result.is_temp() ||
+        !same_value_operand(eq_ic.left, load_ic.result) ||
+        eq_ifx.op != icode_op::IFX ||
+        !temp_eq(eq_ifx.left, eq_ic.result.temp_id) ||
+        found_lbl.op != icode_op::LABEL ||
+        found_lbl.label_name != eq_ifx.true_lbl ||
+        !is_assign_like(found_store.op) ||
+        !same_value_operand(found_store.left, mid_ic.result) ||
+        found_goto.op != icode_op::GOTO ||
+        cmp_lbl.op != icode_op::LABEL ||
+        cmp_lbl.label_name != eq_ifx.false_lbl ||
+        lt_ic.op != icode_op::LT ||
+        !lt_ic.result.is_temp() ||
+        !same_value_operand(lt_ic.left, load_ic.result) ||
+        lt_ifx.op != icode_op::IFX ||
+        !temp_eq(lt_ifx.left, lt_ic.result.temp_id) ||
+        lo_lbl.op != icode_op::LABEL ||
+        lo_lbl.label_name != lt_ifx.true_lbl ||
+        mid_inc.op != icode_op::ADD ||
+        !mid_inc.result.is_temp() ||
+        !temp_eq(mid_inc.left, mid_ic.result.temp_id) ||
+        !is_exact_int_const(mid_inc.right, 1) ||
+        !is_assign_like(lo_store.op) ||
+        !same_value_operand(lo_store.result, lo_op) ||
+        !temp_eq(lo_store.left, mid_inc.result.temp_id) ||
+        lo_back.op != icode_op::GOTO ||
+        lo_back.label_name != cond_lbl.label_name ||
+        hi_lbl.op != icode_op::LABEL ||
+        hi_lbl.label_name != lt_ifx.false_lbl ||
+        mid_dec.op != icode_op::SUB ||
+        !mid_dec.result.is_temp() ||
+        !temp_eq(mid_dec.left, mid_ic.result.temp_id) ||
+        !is_exact_int_const(mid_dec.right, 1) ||
+        !is_assign_like(hi_store.op) ||
+        !same_value_operand(hi_store.result, hi_op) ||
+        !temp_eq(hi_store.left, mid_dec.result.temp_id)) {
+        return false;
+    }
+
+    if (!((same_value_operand(eq_ic.right, lt_ic.right) &&
+           op_size(eq_ic.right) == 2) ||
+          (same_value_operand(eq_ic.right, lt_ic.left) &&
+           op_size(eq_ic.right) == 2))) {
+        return false;
+    }
+    const operand key_op = eq_ic.right;
+    if (!same_value_operand(lt_ic.right, key_op))
+        return false;
+
+    while (p < fn.icodes.size() && fn.icodes[p].op == icode_op::LABEL)
+        ++p;
+    if (p + 3 >= fn.icodes.size())
+        return false;
+    const icode &hi_back = fn.icodes[p++];
+    const icode &notfound_lbl = fn.icodes[p++];
+    const icode &notfound_store = fn.icodes[p++];
+    const icode &exit_lbl = fn.icodes[p++];
+
+    if (hi_back.op != icode_op::GOTO ||
+        hi_back.label_name != cond_lbl.label_name ||
+        notfound_lbl.op != icode_op::LABEL ||
+        notfound_lbl.label_name != ifx_ic.false_lbl ||
+        !is_assign_like(notfound_store.op) ||
+        !same_value_operand(notfound_store.result, found_store.result) ||
+        !is_exact_int_const(notfound_store.left, -1) ||
+        exit_lbl.op != icode_op::LABEL ||
+        exit_lbl.label_name != found_goto.label_name) {
+        return false;
+    }
+
+    const int temps[] = {
+        lo_init.result.temp_id, hi_init.result.temp_id, cmp_ic.result.temp_id,
+        sum_ic.result.temp_id, mid_ic.result.temp_id, scale_ic.result.temp_id,
+        addr_ic.result.temp_id, load_ic.result.temp_id, eq_ic.result.temp_id,
+        lt_ic.result.temp_id, mid_inc.result.temp_id, mid_dec.result.temp_id
+    };
+    for (int tid : temps) {
+        if (temp_value_used_after(fn, p, tid))
+            return false;
+    }
+
+    const operand result_op = found_store.result;
+    const std::string table_sym = asm_symbol_ref_name(addr_ic.left);
+    const std::string loop_lbl = cond_lbl.label_name;
+    const std::string body = body_lbl.label_name;
+    const std::string set_lo_lbl = lo_lbl.label_name;
+    const std::string found = found_lbl.label_name;
+    const std::string notfound = notfound_lbl.label_name;
+    const std::string exit = exit_lbl.label_name;
+
+    cur_ic_index_ = idx;
+    if (debug_)
+        debug_->emit_location(lo_init.line);
+
+    emit_comment("O2 int table binary-search loop");
+    emit_line("ld\thl, %s", asm_.imm(0).c_str());
+    store_hl(lo_op);
+    emit_line("ld\thl, %s", asm_.imm(511).c_str());
+    store_hl(hi_op);
+    emit_label(loop_lbl, false);
+    load_hl(hi_op);
+    emit_line("bit\t7, h");
+    emit_line("jr\tnz, %s", notfound.c_str());
+    emit_line("ex\tde, hl");
+    load_hl(lo_op);
+    emit_line("ld\ta, e");
+    emit_line("sub\tl");
+    emit_line("ld\ta, d");
+    emit_line("sbc\ta, h");
+    emit_line("jr\tc, %s", notfound.c_str());
+    emit_label(body, false);
+    emit_line("add\thl, de");
+    emit_line("srl\th");
+    emit_line("rr\tl");
+    emit_line("push\thl");
+    emit_line("add\thl, hl");
+    emit_line("ld\tbc, %s", asm_.imm_sym(table_sym).c_str());
+    emit_line("add\thl, bc");
+    emit_line("ld\te, (hl)");
+    emit_line("inc\thl");
+    emit_line("ld\td, (hl)");
+    load_hl(key_op);
+    emit_line("or\ta, a");
+    emit_line("sbc\thl, de");
+    emit_line("jr\tz, %s", found.c_str());
+    emit_line("ld\th, d");
+    emit_line("ld\tl, e");
+    load_de(key_op);
+    emit_line("or\ta, a");
+    emit_line("sbc\thl, de");
+    emit_line("jr\tc, %s", set_lo_lbl.c_str());
+    emit_label(hi_lbl.label_name, false);
+    emit_line("pop\thl");
+    emit_line("dec\thl");
+    store_hl(hi_op);
+    emit_line("jr\t%s", loop_lbl.c_str());
+    emit_label(set_lo_lbl, false);
+    emit_line("pop\thl");
+    emit_line("inc\thl");
+    store_hl(lo_op);
+    emit_line("jr\t%s", loop_lbl.c_str());
+    emit_label(found, false);
+    emit_line("pop\thl");
+    store_hl(result_op);
+    emit_line("jr\t%s", exit.c_str());
+    emit_label(notfound, false);
+    emit_line("ld\thl, %s", asm_.imm(0xffff).c_str());
+    store_hl(result_op);
+    emit_label(exit, false);
+
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    idx = p - 1;
     return true;
 }
 
@@ -16417,21 +16852,29 @@ bool z80_gen::try_emit_repeat_signed_byte_mix_xor_loop(const ir_function &fn,
         return false;
     }
 
-    const icode &copy_inner = fn.icodes[p++];
+    const icode *copy_inner = nullptr;
+    if (p < fn.icodes.size() &&
+        is_assign_like(fn.icodes[p].op) &&
+        fn.icodes[p].result.is_temp() &&
+        same_value_operand(fn.icodes[p].left, inner_acc)) {
+        copy_inner = &fn.icodes[p++];
+    }
     const icode &cast_outer_acc = fn.icodes[p++];
     const icode &cast_inner_acc = fn.icodes[p++];
     const icode &xor_outer = fn.icodes[p++];
     const icode &narrow_outer = fn.icodes[p++];
     const icode &outer_acc_store = fn.icodes[p++];
-    if (!is_assign_like(copy_inner.op) ||
-        !copy_inner.result.is_temp() ||
-        !same_value_operand(copy_inner.left, inner_acc) ||
-        cast_outer_acc.op != icode_op::CAST ||
+    const bool inner_cast_uses_acc =
+        copy_inner
+            ? temp_eq(cast_inner_acc.left, copy_inner->result.temp_id)
+            : same_value_operand(cast_inner_acc.left, inner_acc);
+
+    if (cast_outer_acc.op != icode_op::CAST ||
         !cast_outer_acc.result.is_temp() ||
         op_size(cast_outer_acc.left) != 1 ||
         cast_inner_acc.op != icode_op::CAST ||
         !cast_inner_acc.result.is_temp() ||
-        !temp_eq(cast_inner_acc.left, copy_inner.result.temp_id) ||
+        !inner_cast_uses_acc ||
         xor_outer.op != icode_op::BXOR ||
         !xor_outer.result.is_temp() ||
         !((temp_eq(xor_outer.left, cast_outer_acc.result.temp_id) &&
@@ -16480,14 +16923,15 @@ bool z80_gen::try_emit_repeat_signed_byte_mix_xor_loop(const ir_function &fn,
         cast_acc_add.result.temp_id, cast_b_add.result.temp_id, add_ic.result.temp_id,
         cast_add_byte.result.temp_id, cast_acc_mix.result.temp_id, shl_ic.result.temp_id,
         cast_b_mix.result.temp_id, xor_inner.result.temp_id, cast_mix_byte.result.temp_id,
-        copy_inner.result.temp_id, cast_outer_acc.result.temp_id,
-        cast_inner_acc.result.temp_id, xor_outer.result.temp_id,
-        narrow_outer.result.temp_id, idx_add.result.temp_id
+        cast_outer_acc.result.temp_id, cast_inner_acc.result.temp_id,
+        xor_outer.result.temp_id, narrow_outer.result.temp_id, idx_add.result.temp_id
     };
     for (int tid : temps) {
         if (temp_value_used_after(fn, p, tid))
             return false;
     }
+    if (copy_inner && temp_value_used_after(fn, p, copy_inner->result.temp_id))
+        return false;
 
     const int count = static_cast<int>(outer_cmp.right.ival);
     const std::string data_sym = asm_symbol_ref_name(base_ic.left);

@@ -1,1 +1,1 @@
--S -O2 -fno-function-const-eval
+-S -O3 -fno-function-const-eval

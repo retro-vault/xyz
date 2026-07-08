@@ -314,7 +314,7 @@ phase_chain() {
 
         printf '%s\n' "$src" > "$dir/${name}.c"
 
-        if ! "$XCC" -S -O0 "$dir/${name}.c" -o "$dir/${name}.s" 2>/dev/null; then
+        if ! "$XCC" -S -Os "$dir/${name}.c" -o "$dir/${name}.s" 2>/dev/null; then
             echo "  ${RED}FAIL${RESET} $name [xcc]"; return 1
         fi
         if ! "$XAS" --mode=sdcc "$dir/${name}.s" -o "$dir/${name}.rel" 2>/dev/null; then

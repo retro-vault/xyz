@@ -96,7 +96,7 @@ run_case_opt() {
 }
 
 run_case() {
-    run_case_opt "-O0" "$@"
+    run_case_opt "-Os" "$@"
 }
 
 run_case emu-fs \
