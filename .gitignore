@@ -43,6 +43,10 @@ build
 /root-build.log
 orig
 
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
 # Keep the C23 suite's checked-in setup drivers trackable even though their
 # directories are named "bin".
 !tests/c23/setups/sdcc-z80/bin/
