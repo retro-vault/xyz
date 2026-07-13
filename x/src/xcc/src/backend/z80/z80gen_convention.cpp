@@ -199,6 +199,8 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
         // been clobbered inside the loop body.
         if (scan.op == icode_op::LABEL)
             return false;
+        if (scan.op == icode_op::CALL)
+            return false;
         if (ic.result.is_temp()) {
             if (icode_uses_temp(scan, ic.result.temp_id))
                 return true;
@@ -663,13 +665,18 @@ void abi_convention::materialize_modern_receive(z80_gen &g, const icode &ic)
     if (!ic.result.is_temp())
         return;
 
+    if (ic.arg_loc == abi_arg_loc::REG_A) {
+        g.temp_regs_[ic.result.temp_id] = temp_home::stack;
+        g.store_frame_byte(g.ix_offset_of(ic.result), 'a');
+        return;
+    }
+
     auto temp_home_it = g.temp_regs_.find(ic.result.temp_id);
     if (temp_home_it != g.temp_regs_.end() &&
         ic.result.byte_offset == 0) {
         switch (temp_home_it->second) {
         case temp_home::main_a:
-            if (ic.arg_loc == abi_arg_loc::REG_A)
-                return;
+            temp_home_it->second = temp_home::stack;
             break;
         case temp_home::main_b:
             switch (ic.arg_loc) {
@@ -1111,12 +1118,11 @@ struct cc_sdcccall1 final : abi_convention {
                 g.emit_line("add\tix, sp");
             }
             g.set_known_sp_ix_delta(0);
-            bool retain_incoming_regs =
-                g.opt_settings_.level == opt_level::O2 ||
-                g.tuned_profile_enabled();
+            const bool retain_incoming_regs = g.opt_settings_.regalloc;
             std::unordered_map<size_t, temp_home> retained;
             bool retain_hl_like = false;
             bool retain_de = false;
+            bool retain_bc = false;
             if (retain_incoming_regs) {
                 for (size_t i = 1; i < fn.icodes.size(); ++i) {
                     const auto &ic = fn.icodes[i];
@@ -1141,8 +1147,9 @@ struct cc_sdcccall1 final : abi_convention {
                         preferred_home == temp_home::arg_hl ||
                         preferred_home == temp_home::arg_l;
                     retain_de = retain_de || preferred_home == temp_home::arg_de;
+                    retain_bc = retain_bc || preferred_home == temp_home::main_bc;
                 }
-                if (retain_hl_like && retain_de) {
+                if (retain_hl_like && (retain_de || retain_bc)) {
                     for (auto it = retained.begin(); it != retained.end();) {
                         if (it->second == temp_home::arg_hl ||
                             it->second == temp_home::arg_l) {

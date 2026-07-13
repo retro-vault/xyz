@@ -13,6 +13,8 @@
 #ifndef _TGMATH_H
 #define _TGMATH_H
 
+#define __STDC_VERSION_TGMATH_H__ 202311L
+
 #include <complex.h>
 #include <math.h>
 

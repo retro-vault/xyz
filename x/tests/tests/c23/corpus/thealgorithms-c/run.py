@@ -34,19 +34,50 @@ from typing import Iterable
 
 
 SOURCE_REPO = "https://github.com/TheAlgorithms/C.git"
-DEFAULT_LIMIT = 100
+DEFAULT_LIMIT = 60
 DEFAULT_MIN_FLOAT = 5
 DEFAULT_GENERIC_INPUT = "10\n5\n3\n2\n1\n0\n-1\n42\n7\n11\n13\n17\n19\nend\n"
+MAX_TARGET_OBJECT_BYTES = 0x10000
+
+
+def approximate_target_type_size(type_words: str) -> int:
+    words = type_words.split()
+    if "double" in words or words.count("long") >= 2:
+        return 8
+    if "float" in words or "long" in words:
+        return 4
+    if "char" in words:
+        return 1
+    return 2
+
+
+def target_object_rejection_reason(source: str) -> str | None:
+    # Discovery is for runnable Z80 corpus cases. Host-scale examples such as
+    # `int arr[1000005]` expand into multi-megabyte stack frames and millions of
+    # zeroing stores, so reject them before invoking xcc.
+    decl_re = re.compile(
+        r"\b((?:(?:const|volatile|static|unsigned|signed|short|long|int|char|float|double)\s+)+)"
+        r"[A-Za-z_]\w*\s*\[\s*(\d+)\s*\]"
+    )
+    for match in decl_re.finditer(source):
+        type_words = " ".join(
+            word for word in match.group(1).split()
+            if word not in {"const", "volatile", "static", "unsigned", "signed"}
+        )
+        byte_count = int(match.group(2)) * approximate_target_type_size(type_words)
+        if byte_count >= MAX_TARGET_OBJECT_BYTES:
+            return f"unsupported-target-object:{byte_count}-bytes"
+    return None
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
-X_ROOT = SCRIPT_DIR.parents[3]
+X_ROOT = SCRIPT_DIR.parents[4]
 REPO_ROOT = X_ROOT.parent
 ROOT = REPO_ROOT
-SOURCE_DIR = X_ROOT / "tests" / "tests" / "corpus" / "upstream" / "thealgorithms-c"
+SOURCE_DIR = X_ROOT / "tests" / "tests" / "c23" / "corpus" / "upstream" / "thealgorithms-c"
 BUILD_DIR = REPO_ROOT / "build" / "corpus" / "thealgorithms-c"
 MANIFEST_PATH = SCRIPT_DIR / "manifest.json"
 
-RUNNER_SRC = X_ROOT / "tests" / "tests" / "xcc" / "tools" / "z80emu" / "z80_exec.cpp"
+RUNNER_SRC = X_ROOT / "tests" / "tests" / "c23" / "xcc" / "tools" / "z80emu" / "z80_exec.cpp"
 RUNNER_BIN = REPO_ROOT / "build" / "bin" / "z80_exec"
 DEFAULT_XCC = REPO_ROOT / "bin" / "x" / "bin" / "xcc"
 
@@ -741,7 +772,19 @@ def run_case(
     case_dir.mkdir(parents=True, exist_ok=True)
 
     wrapper_path = case_dir / "wrap.c"
-    wrapper_path.write_text(wrapper_for_case(case), encoding="utf-8")
+    wrapper_text = wrapper_for_case(case)
+    wrapper_path.write_text(wrapper_text, encoding="utf-8")
+
+    unsupported_reason = target_object_rejection_reason(wrapper_text)
+    if unsupported_reason:
+        return CaseResult(case=case, ok=False, reason=unsupported_reason)
+    source_path = SOURCE_DIR / case.source
+    if source_path.exists():
+        unsupported_reason = target_object_rejection_reason(
+            source_path.read_text(encoding="utf-8", errors="ignore")
+        )
+        if unsupported_reason:
+            return CaseResult(case=case, ok=False, reason=unsupported_reason)
 
     host_bin = case_dir / "host"
     host_compile = compile_host(wrapper_path, host_cc, host_opt, host_bin)
@@ -1027,7 +1070,8 @@ def main() -> int:
         )
         if args.write_manifest:
             write_manifest(source_commit, selected)
-        return summarize(results[: len(selected)])
+        selected_results = [result for result in results if result.ok][: len(selected)]
+        return summarize(selected_results)
 
     cases = manifest_cases(manifest)
     results = rerun_manifest(

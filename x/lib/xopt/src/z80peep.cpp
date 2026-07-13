@@ -600,6 +600,42 @@ static bool is_spaghetti_helper_label(const asm_line &line) {
     return line.label.rfind("__xopt_spaghetti_", 0) == 0;
 }
 
+static bool is_outline_helper_transfer(const asm_line &line) {
+    return (line.mnemonic == "call" || line.mnemonic == "jp") &&
+           trim(line.operands).rfind("__xopt_outline_", 0) == 0;
+}
+
+static bool outline_helper_may_access_ix_offset(const asm_line &line,
+                                                int offset) {
+    if (!is_outline_helper_transfer(line))
+        return false;
+    constexpr const char *prefix = "xopt-ix:";
+    if (line.comment.rfind(prefix, 0) != 0)
+        return true;
+
+    const std::string values = line.comment.substr(std::strlen(prefix));
+    if (values == "any")
+        return true;
+    if (values == "none")
+        return false;
+
+    size_t start = 0;
+    while (start <= values.size()) {
+        const size_t comma = values.find(',', start);
+        const size_t end = comma == std::string::npos ? values.size() : comma;
+        try {
+            if (std::stoi(values.substr(start, end - start)) == offset)
+                return true;
+        } catch (...) {
+            return true;
+        }
+        if (comma == std::string::npos)
+            break;
+        start = comma + 1;
+    }
+    return false;
+}
+
 static bool is_or_a_self(const asm_line &line) {
     if (line.mnemonic != "or")
         return false;
@@ -648,6 +684,26 @@ static bool bit_operand_supported(const std::string &operand) {
     int ignored = 0;
     return is_plain_8bit_reg(op) || parse_ixiy_ref(op, ignored) ||
            op == "(hl)";
+}
+
+static int single_u8_bit_index(int value) {
+    value = u8_value(value);
+    if (value == 0 || (value & (value - 1)) != 0)
+        return -1;
+    int bit = 0;
+    while ((value >> bit) != 1)
+        ++bit;
+    return bit;
+}
+
+static int single_u16_bit_index(int value) {
+    value &= 0xffff;
+    if (value == 0 || (value & (value - 1)) != 0)
+        return -1;
+    int bit = 0;
+    while ((value >> bit) != 1)
+        ++bit;
+    return bit;
 }
 
 static bool is_pure_register_load_source(const std::string &operand) {
@@ -1345,6 +1401,21 @@ static bool is_modern_return_tail(const std::vector<asm_line> &lines,
     return is_modern_return_tail(lines, start, 8, active);
 }
 
+static bool is_inside_sdcccall1_function(const std::vector<asm_line> &lines,
+                                         size_t index) {
+    for (size_t scan = std::min(index + 1, lines.size()); scan > 0;) {
+        const asm_line &line = lines[--scan];
+        if (line.comment.rfind("sdcccall(1) prologue:", 0) == 0)
+            return true;
+        if (line.comment.find(" prologue:") != std::string::npos ||
+            is_section_directive(line) ||
+            line.label.rfind("__xopt_", 0) == 0) {
+            return false;
+        }
+    }
+    return false;
+}
+
 static bool hl_dead_before_read_or_modern_return(
         const std::vector<asm_line> &lines,
         size_t start,
@@ -1353,7 +1424,10 @@ static bool hl_dead_before_read_or_modern_return(
     if (start >= lines.size() || budget == 0)
         return false;
     if (!active.insert(start).second)
-        return false;
+        // Revisiting the same live-value state without an intervening read
+        // is a no-read cycle. Any exit path was already explored at the
+        // branch entering the cycle, so the old value is dead here.
+        return true;
 
     auto finish = [&](bool result) {
         active.erase(start);
@@ -1368,6 +1442,10 @@ static bool hl_dead_before_read_or_modern_return(
             return finish(true);
         if (is_modern_return_tail(lines, k))
             return finish(true);
+        if (is_ex_de_hl(line) &&
+            path_overwrites_pair_before_read(lines, k + 1, "de", 'e', 'd')) {
+            return finish(true);
+        }
 
         std::string cc;
         std::string target;
@@ -1415,7 +1493,7 @@ static bool pair_value_dead_or_call_or_modern_return_before_read(
     if (start >= lines.size() || budget == 0)
         return false;
     if (!active.insert(start).second)
-        return false;
+        return true;
 
     auto finish = [&](bool result) {
         active.erase(start);
@@ -1666,6 +1744,8 @@ static bool ix_offset_in_temp_frame(int offset, int locals, int temp_frame) {
 static bool line_writes_ix_offset(const asm_line &line, int offset) {
     if (line.mnemonic.empty())
         return false;
+    if (outline_helper_may_access_ix_offset(line, offset))
+        return true;
     if (line.mnemonic == "ld") {
         std::string dst;
         std::string src;
@@ -1682,14 +1762,39 @@ static bool line_writes_ix_offset(const asm_line &line, int offset) {
     return false;
 }
 
+static bool line_writes_any_ix_offset(const asm_line &line) {
+    std::string dst;
+    std::string src;
+    int offset = 0;
+    if (line.mnemonic == "ld" && split_ld(line.operands, dst, src))
+        return parse_ix_ref(trim(dst), offset);
+    if (line.mnemonic == "inc" || line.mnemonic == "dec")
+        return parse_ix_ref(trim(line.operands), offset);
+    return false;
+}
+
 static size_t function_end_after_prologue(const std::vector<asm_line> &lines,
                                           size_t prologue_index);
 
 static bool line_reads_ix_offset(const asm_line &line, int offset);
+static bool ix_slot_read_in_function(const std::vector<asm_line> &lines,
+                                     size_t begin,
+                                     size_t end,
+                                     int offset,
+                                     size_t ignore_index);
 static bool ix_slot_not_read_before_rewrite(const std::vector<asm_line> &lines,
                                             size_t begin,
                                             size_t end,
                                             int offset);
+static bool ix_value_may_be_read_before_rewrite(
+    const std::vector<asm_line> &lines,
+    size_t function_begin,
+    size_t function_end,
+    size_t start,
+    int offset);
+static bool ix_slot_referenced_after(const std::vector<asm_line> &lines,
+                                     size_t start,
+                                     int offset);
 
 static bool match_const_hl_temp_pair_store(
         const std::vector<asm_line> &lines,
@@ -2141,6 +2246,8 @@ static bool flags_overwritten_or_de_return_before_read(
             continue;
         if (line_overwrites_flags_without_reading_carry(line))
             return finish(true);
+        if (is_modern_return_tail(lines, k))
+            return finish(true);
         if (de_return_tail_from(k))
             return finish(true);
 
@@ -2160,11 +2267,134 @@ static bool flags_overwritten_or_de_return_before_read(
     return finish(false);
 }
 
-static bool flags_overwritten_or_de_return_before_read(
+[[maybe_unused]] static bool flags_overwritten_or_de_return_before_read(
         const std::vector<asm_line> &lines,
         size_t start) {
     std::unordered_set<size_t> active;
     return flags_overwritten_or_de_return_before_read(lines, start, 64, active);
+}
+
+static bool condition_reads_carry(const std::string &cc) {
+    return cc == "c" || cc == "nc";
+}
+
+static bool condition_reads_noncarry(const std::string &cc) {
+    return !condition_reads_carry(cc);
+}
+
+static bool is_8bit_inc_dec_target(const std::string &operand) {
+    const std::string op = lower_copy(trim(operand));
+    if (op == "bc" || op == "de" || op == "hl" || op == "sp" ||
+        op == "ix" || op == "iy") {
+        return false;
+    }
+    int ignored = 0;
+    return is_plain_8bit_reg(op) || op == "(hl)" || parse_ixiy_ref(op, ignored);
+}
+
+static bool line_overwrites_noncarry_flags_without_reading_flags(
+        const asm_line &line) {
+    const std::string &m = line.mnemonic;
+    if (line_overwrites_flags_without_reading_carry(line))
+        return true;
+    if ((m == "inc" || m == "dec") &&
+        is_8bit_inc_dec_target(line.operands)) {
+        return true;
+    }
+    if (m == "bit") {
+        int bit = 0;
+        std::string reg;
+        return parse_bit_reg_operands(line.operands, bit, reg);
+    }
+    return false;
+}
+
+static bool flags_from_compare_dead_before_read(
+        const std::vector<asm_line> &lines,
+        size_t start,
+        bool carry_live,
+        bool noncarry_live,
+        size_t budget,
+        std::unordered_set<size_t> &active) {
+    if (!carry_live && !noncarry_live)
+        return true;
+    if (start >= lines.size() || budget == 0)
+        return false;
+
+    const size_t state_key =
+        (start << 2) | (carry_live ? 1u : 0u) |
+        (noncarry_live ? 2u : 0u);
+    if (!active.insert(state_key).second)
+        return true;
+
+    auto finish = [&](bool result) {
+        active.erase(state_key);
+        return result;
+    };
+
+    for (size_t k = start; k < lines.size() && budget > 0; ++k, --budget) {
+        const auto &line = lines[k];
+        if (line.mnemonic.empty())
+            continue;
+        if (is_modern_return_tail(lines, k))
+            return finish(true);
+
+        if (line_overwrites_flags_without_reading_carry(line))
+            return finish(true);
+
+        if (line_overwrites_noncarry_flags_without_reading_flags(line)) {
+            noncarry_live = false;
+            if (!carry_live)
+                return finish(true);
+            continue;
+        }
+
+        if (line.mnemonic == "scf" && trim(line.operands).empty()) {
+            carry_live = false;
+            if (!noncarry_live)
+                return finish(true);
+            continue;
+        }
+
+        std::string cc;
+        std::string target;
+        if (split_conditional_branch_target(line, cc, target)) {
+            if ((condition_reads_carry(cc) && carry_live) ||
+                (condition_reads_noncarry(cc) && noncarry_live)) {
+                return finish(false);
+            }
+
+            const size_t target_idx = find_label_index(lines, target);
+            if (target_idx == lines.size())
+                return finish(false);
+            const bool taken = flags_from_compare_dead_before_read(
+                lines, target_idx, carry_live, noncarry_live, budget, active);
+            const bool fallthrough = flags_from_compare_dead_before_read(
+                lines, k + 1, carry_live, noncarry_live, budget, active);
+            return finish(taken && fallthrough);
+        }
+
+        if (parse_unconditional_jump(line, target)) {
+            const size_t target_idx = find_label_index(lines, target);
+            if (target_idx == lines.size())
+                return finish(false);
+            return finish(flags_from_compare_dead_before_read(
+                lines, target_idx, carry_live, noncarry_live, budget, active));
+        }
+
+        if (line_may_read_flags_or_escape(line))
+            return finish(false);
+    }
+
+    return finish(false);
+}
+
+static bool flags_from_compare_dead_before_read(
+        const std::vector<asm_line> &lines,
+        size_t start) {
+    std::unordered_set<size_t> active;
+    return flags_from_compare_dead_before_read(
+        lines, start, true, true, 96, active);
 }
 
 static bool flags_overwritten_or_call_before_read(
@@ -2439,6 +2669,8 @@ static bool a_overwritten_or_de_return_before_read(
         if (line.mnemonic.empty())
             continue;
         if (line_overwrites_a_without_reading_it(line))
+            return finish(true);
+        if (is_modern_return_tail(lines, k))
             return finish(true);
         if (de_return_tail_from(k))
             return finish(true);
@@ -2848,29 +3080,58 @@ std::string z80_peep::dump() const {
 
 bool z80_peep::apply_once() {
     bool changed = false;
+    const bool pareto_bias = speed_bias_ || size_bias_;
     for (size_t i = 0; i + 1 < lines_.size(); ++i) {
         if (apply_structural_rules(lines_, i)) { changed = true; continue; }
         if (rule_bool_ifx_shortcircuit(i)) { changed = true; continue; }
         if (rule_signed_le_fallthrough(lines_, i)) { changed = true; continue; }
         if (rule_invert_branch_skip(i))  { changed = true; continue; }
         if (rule_cp_threshold_branch_fold(i)) { changed = true; continue; }
+        if (pareto_bias && rule_cp_zero_branch_to_or(i)) { changed = true; continue; }
         if (rule_zero_cmp_optimize(i))   { changed = true; continue; }
         if (rule_signed_zero_branch_from_high_bit(i)) { changed = true; continue; }
+        if (rule_de_eq_small_const_branch(i)) { changed = true; continue; }
+        if (rule_de_word_ne_branch_split(i)) { changed = true; continue; }
+        if (rule_signed_byte_zero_branch(i)) { changed = true; continue; }
         if (rule_page_aligned_word_bound_branch(i)) { changed = true; continue; }
+        if (rule_hl_high_byte_mask_branch(i)) { changed = true; continue; }
+        if (rule_word_mask_zero_high_branch(i)) { changed = true; continue; }
+        if (rule_bit7_shift_xor_diamond(i)) { changed = true; continue; }
+        if (rule_zero_extended_bit7_shift_xor_diamond(i)) { changed = true; continue; }
+        if (rule_signed_byte_low_arith(i)) { changed = true; continue; }
+        if (rule_de_byte_alu_shuttle(i)) { changed = true; continue; }
+        if (rule_c_byte_alu_shuttle(i)) { changed = true; continue; }
+        if (rule_zero_extended_byte_shr_to_a(i)) { changed = true; continue; }
+        if (rule_low_byte_shift_add_to_a(i)) { changed = true; continue; }
+        if (rule_dead_a_store_before_join_store(i)) { changed = true; continue; }
+        if (rule_ix_byte_branch_temp_to_d(i)) { changed = true; continue; }
+        if (rule_bit15_shift_xor_diamond(i)) { changed = true; continue; }
+        if (rule_masked_bit15_shift_xor_diamond(i)) { changed = true; continue; }
+        if (rule_lsb32_shift_xor_diamond(i)) { changed = true; continue; }
         if (rule_redundant_u8_self_mask(i)) { changed = true; continue; }
+        if (rule_zero_extended_byte_mask_branch(i)) { changed = true; continue; }
+        if (rule_zero_extended_byte_store_direct(i)) { changed = true; continue; }
+        if (rule_zero_extended_mask_inc_word_store(i)) { changed = true; continue; }
+        if (rule_word_reload_low_byte_to_a(i)) { changed = true; continue; }
         if (rule_hl_nonzero_materialize(i)) { changed = true; continue; }
         if (rule_ix_word_store_zero_test_from_pair(i)) { changed = true; continue; }
         if (rule_ix_hl_store_zero_test_reload_elide(i)) { changed = true; continue; }
         if (rule_ix_word_zero_test_direct(i)) { changed = true; continue; }
         if (rule_ex_de_hl_load_double(i)) { changed = true; continue; }
         if (rule_ix_store_reload(i))     { changed = true; continue; }
+        if (rule_ix_store32_low_reload(i)) { changed = true; continue; }
+        if (rule_ix_postinc_indirect_load_a(i)) { changed = true; continue; }
+        if (rule_ix_postinc_indexed_store_a(i)) { changed = true; continue; }
+        if (rule_adjacent_postinc_indexed_stores_direct(i)) { changed = true; continue; }
         if (rule_ix_indexed_stack_immediate_store_run(i)) { changed = true; continue; }
+        if (size_bias_ && rule_small_stack_alloc_push_af(i)) { changed = true; continue; }
         if (rule_ix_postinc_local_immediate_store(i)) { changed = true; continue; }
         if (rule_dead_a_indexed_load_shuttle(i)) { changed = true; continue; }
         if (rule_dead_a_indexed_immediate_store(i)) { changed = true; continue; }
         if (rule_a_temp_reload_after_preserving_branch(i)) { changed = true; continue; }
         if (rule_byte_temp_zero_extend_after_test(i)) { changed = true; continue; }
         if (rule_dead_de_spill_reload_exchange(i)) { changed = true; continue; }
+        if (rule_call_result_byte_commute_direct(i)) { changed = true; continue; }
         if (rule_hl_to_de_before_hl_reload_exchange(i)) { changed = true; continue; }
         if (rule_adjacent_byte_arg_push_pair(i)) { changed = true; continue; }
         if (rule_ix_local_byte_store_direct(i)) { changed = true; continue; }
@@ -2907,8 +3168,12 @@ bool z80_peep::apply_once() {
         if (rule_push_de_pop_hl_to_ex(i)) { changed = true; continue; }
         if (rule_pop_bc_run_sp_adjust(i)) { changed = true; continue; }
         if (rule_dead_bc_zero_extend_from_a(i)) { changed = true; continue; }
+        if (rule_bc_indirect_through_hl(i)) { changed = true; continue; }
+        if (rule_dead_bc_copy_from_hl(i)) { changed = true; continue; }
         if (rule_dead_bc_hl_roundtrip(i)) { changed = true; continue; }
         if (rule_bc_base_add_direct(i)) { changed = true; continue; }
+        if (rule_bc_offset_base_add_de_direct(i)) { changed = true; continue; }
+        if (rule_bc_index_add_hl_word_load_direct(i)) { changed = true; continue; }
         if (rule_bc_index_add_reloaded_hl_to_de(i)) { changed = true; continue; }
         if (rule_bc_saved_hl_push_word_to_de_direct(i)) { changed = true; continue; }
         if (rule_dead_bc_hl_to_de_copy(i)) { changed = true; continue; }
@@ -2919,15 +3184,23 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_accumulator_sequences(i)) {
+        if (pareto_bias && rule_add_a_one_to_inc(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_lowbit_pair_sequences(i)) {
+        if (pareto_bias && rule_redundant_a_reload_after_zero_extend(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_srl_a_const_shift(i)) {
+        if (pareto_bias && rule_superopt_accumulator_sequences(i)) {
+            changed = true;
+            continue;
+        }
+        if (pareto_bias && rule_superopt_lowbit_pair_sequences(i)) {
+            changed = true;
+            continue;
+        }
+        if (pareto_bias && rule_superopt_srl_a_const_shift(i)) {
             changed = true;
             continue;
         }
@@ -2939,7 +3212,7 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_flag_setter(i)) {
+        if (pareto_bias && rule_superopt_dead_flag_setter(i)) {
             changed = true;
             continue;
         }
@@ -2947,7 +3220,7 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_separated_pair_immediate_load(i)) {
+        if (pareto_bias && rule_superopt_separated_pair_immediate_load(i)) {
             changed = true;
             continue;
         }
@@ -2959,15 +3232,15 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_call_result_store_de_direct(i)) {
+        if (pareto_bias && rule_superopt_call_result_store_de_direct(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_bc_store_copy(i)) {
+        if (pareto_bias && rule_superopt_dead_bc_store_copy(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_lowbyte_zero_extend_to_de(i)) {
+        if (pareto_bias && rule_superopt_lowbyte_zero_extend_to_de(i)) {
             changed = true;
             continue;
         }
@@ -3039,15 +3312,15 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_ix_byte_load_forward(i)) {
+        if (pareto_bias && rule_superopt_ix_byte_load_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_ix_byte_alu_forward(i)) {
+        if (pareto_bias && rule_superopt_ix_byte_alu_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_a_zero_reg(i)) {
+        if (pareto_bias && rule_superopt_dead_a_zero_reg(i)) {
             changed = true;
             continue;
         }
@@ -3059,31 +3332,31 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_redundant_zero_store_chain(i)) {
+        if (pareto_bias && rule_superopt_redundant_zero_store_chain(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_zero_extend_pair_test_shortcut(i)) {
+        if (pareto_bias && rule_superopt_zero_extend_pair_test_shortcut(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_low_byte_xor_forward(i)) {
+        if (pareto_bias && rule_superopt_low_byte_xor_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_bc_xor_hl_forward(i)) {
+        if (pareto_bias && rule_superopt_dead_bc_xor_hl_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_c_xor_hl_forward(i)) {
+        if (pareto_bias && rule_superopt_dead_c_xor_hl_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_de_xor_right5(i)) {
+        if (pareto_bias && rule_superopt_de_xor_right5(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_hl_xor_right5_stack(i)) {
+        if (pareto_bias && rule_superopt_hl_xor_right5_stack(i)) {
             changed = true;
             continue;
         }
@@ -3095,19 +3368,19 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_zero_extend_truth_test(i)) {
+        if (pareto_bias && rule_superopt_zero_extend_truth_test(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_zero_extend_dead_hl_truth_test(i)) {
+        if (pareto_bias && rule_superopt_zero_extend_dead_hl_truth_test(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_zero_extend_dead_bc_truth_test(i)) {
+        if (pareto_bias && rule_superopt_zero_extend_dead_bc_truth_test(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_hl_byte_load_forward(i)) {
+        if (pareto_bias && rule_superopt_hl_byte_load_forward(i)) {
             changed = true;
             continue;
         }
@@ -3131,27 +3404,31 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
+        if (pareto_bias && rule_superopt_hl_return_de_exchange(i)) {
+            changed = true;
+            continue;
+        }
         if (rule_superopt_lowbyte_sum_return_direct(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_bc_to_de_alu_forward(i)) {
+        if (pareto_bias && rule_superopt_bc_to_de_alu_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_hl_de_return_store_forward(i)) {
+        if (pareto_bias && rule_superopt_dead_hl_de_return_store_forward(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_modern_const_return_direct(i)) {
+        if (pareto_bias && rule_superopt_modern_const_return_direct(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_cancel_exx_pair(i)) {
+        if (pareto_bias && rule_superopt_cancel_exx_pair(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_call_arg_de_direct(i)) {
+        if (pareto_bias && rule_superopt_call_arg_de_direct(i)) {
             changed = true;
             continue;
         }
@@ -3159,7 +3436,7 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_equal_de_hl_exchange(i)) {
+        if (pareto_bias && rule_superopt_equal_de_hl_exchange(i)) {
             changed = true;
             continue;
         }
@@ -3167,11 +3444,11 @@ bool z80_peep::apply_once() {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_pair_stack_discard_pop(i)) {
+        if (pareto_bias && rule_superopt_dead_pair_stack_discard_pop(i)) {
             changed = true;
             continue;
         }
-        if (speed_bias_ && rule_superopt_dead_pair_pop_push(i)) {
+        if (pareto_bias && rule_superopt_dead_pair_pop_push(i)) {
             changed = true;
             continue;
         }
@@ -3225,12 +3502,56 @@ void z80_peep::apply_passes(int passes) {
 
 std::string z80_peep::optimize(const std::string &asm_text,
 	                               bool speed_bias,
-                                   int normal_passes) {
+	                                   int normal_passes,
+                                       bool size_bias) {
     z80_peep p;
     p.speed_bias_ = speed_bias;
+    p.size_bias_ = size_bias;
     p.load(asm_text);
     if (normal_passes > 0)
         p.apply_passes(normal_passes);
+    return p.dump();
+}
+
+std::string z80_peep::optimize_outlined_layout(const std::string &asm_text) {
+    z80_peep p;
+    p.load(asm_text);
+
+    for (int pass = 0; pass < 4; ++pass) {
+        bool changed = false;
+        for (size_t i = 0; i < p.lines_.size();) {
+            asm_line &line = p.lines_[i];
+
+            if (i + 1 < p.lines_.size() &&
+                line.mnemonic == "call" &&
+                trim(line.operands).rfind("__xopt_outline_", 0) == 0 &&
+                p.lines_[i + 1].label.empty() &&
+                is_plain_ret(p.lines_[i + 1])) {
+                line.mnemonic = "jp";
+                p.lines_.erase(p.lines_.begin() +
+                               static_cast<std::ptrdiff_t>(i + 1));
+                changed = true;
+                continue;
+            }
+
+            if (i + 1 < p.lines_.size() && line.label.empty() &&
+                (line.mnemonic == "jp" || line.mnemonic == "jr") &&
+                line.operands.find(',') == std::string::npos &&
+                !p.lines_[i + 1].label.empty() &&
+                trim(line.operands) == p.lines_[i + 1].label) {
+                p.lines_.erase(p.lines_.begin() +
+                               static_cast<std::ptrdiff_t>(i));
+                changed = true;
+                continue;
+            }
+
+            if (p.rule_jp_to_jr(i))
+                changed = true;
+            ++i;
+        }
+        if (!changed)
+            break;
+    }
     return p.dump();
 }
 
@@ -3313,6 +3634,60 @@ bool z80_peep::rule_cp_threshold_branch_fold(size_t i) {
         }
     }
 
+    return false;
+}
+
+bool z80_peep::rule_cp_zero_branch_to_or(size_t i) {
+    if (i >= lines_.size() || !lines_[i].label.empty())
+        return false;
+
+    int value = 0;
+    if (!parse_accumulator_immediate_alu(lines_[i], "cp", value) ||
+        u8_value(value) != 0) {
+        return false;
+    }
+
+    const size_t end = std::min(lines_.size(), i + 6);
+    for (size_t branch = i + 1; branch < end; ++branch) {
+        const asm_line &line = lines_[branch];
+        if (!line.label.empty())
+            return false;
+        if (line.mnemonic.empty())
+            continue;
+
+        std::string cc;
+        std::string target;
+        if (split_conditional_branch_target(line, cc, target)) {
+            if (cc != "z" && cc != "nz" && cc != "c" && cc != "nc" &&
+                cc != "m" && cc != "p") {
+                return false;
+            }
+
+            const size_t target_idx = find_label_index(lines_, target);
+            if (target_idx == lines_.size() ||
+                !flags_from_compare_dead_before_read(lines_, branch + 1) ||
+                !flags_from_compare_dead_before_read(lines_, target_idx)) {
+                return false;
+            }
+
+            lines_[i].mnemonic = "or";
+            lines_[i].operands = "a, a";
+            return true;
+        }
+
+        const std::string operand = lower_copy(trim(line.operands));
+        const bool preserves_flags =
+            line.mnemonic == "ld" || line.mnemonic == "push" ||
+            (line.mnemonic == "pop" && operand != "af") ||
+            line.mnemonic == "exx" || line.mnemonic == "nop" ||
+            (line.mnemonic == "ex" &&
+             operand != "af, af'" && operand != "af', af") ||
+            ((line.mnemonic == "inc" || line.mnemonic == "dec") &&
+             (operand == "bc" || operand == "de" || operand == "hl" ||
+              operand == "sp" || operand == "ix" || operand == "iy"));
+        if (!preserves_flags)
+            return false;
+    }
     return false;
 }
 
@@ -3658,8 +4033,8 @@ bool z80_peep::rule_signed_zero_branch_from_high_bit(size_t i) {
             if (target_idx == lines_.size())
                 return false;
             const size_t fallthrough = i + 4;
-            if (!flags_overwritten_before_read_or_escape(lines_, fallthrough) ||
-                !flags_overwritten_before_read_or_escape(lines_, target_idx)) {
+            if (!flags_from_compare_dead_before_read(lines_, fallthrough) ||
+                !flags_from_compare_dead_before_read(lines_, target_idx)) {
                 return false;
             }
             if (!pair_value_dead_or_call_or_modern_return_before_read(
@@ -3734,8 +4109,8 @@ full_load_form:
         return false;
 
     const size_t fallthrough = i + 6;
-    if (!flags_overwritten_before_read_or_escape(lines_, fallthrough) ||
-        !flags_overwritten_before_read_or_escape(lines_, target_idx)) {
+    if (!flags_from_compare_dead_before_read(lines_, fallthrough) ||
+        !flags_from_compare_dead_before_read(lines_, target_idx)) {
         return false;
     }
     if (!hl_dead_before_read_or_modern_return(lines_, fallthrough) ||
@@ -3756,6 +4131,238 @@ full_load_form:
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
     return true;
+}
+
+bool z80_peep::rule_de_eq_small_const_branch(size_t i) {
+    if (i + 3 >= lines_.size())
+        return false;
+
+    bool has_ex = false;
+    size_t ld_idx = i;
+    if (is_ex_de_hl(lines_[i])) {
+        has_ex = true;
+        ld_idx = i + 1;
+    }
+
+    if (ld_idx + 3 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= ld_idx + 3; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    std::string dst;
+    std::string src;
+    int value = 0;
+    if (lines_[ld_idx].mnemonic != "ld" ||
+        !split_ld(lines_[ld_idx].operands, dst, src) ||
+        trim(dst) != "hl" ||
+        !parse_immediate_value(src, value) ||
+        value < 0 || value > 0xff ||
+        !is_or_a_self(lines_[ld_idx + 1]) ||
+        lines_[ld_idx + 2].mnemonic != "sbc" ||
+        !split_ld(lines_[ld_idx + 2].operands, dst, src) ||
+        trim(dst) != "hl" ||
+        trim(src) != "de") {
+        return false;
+    }
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[ld_idx + 3], cc, target))
+        return false;
+    if (cc != "z" && cc != "nz")
+        return false;
+
+    const size_t target_idx = find_label_index(lines_, target);
+    if (target_idx == lines_.size())
+        return false;
+
+    const size_t fallthrough = ld_idx + 4;
+    const bool a_dead_fallthrough =
+        a_overwritten_or_call_before_read(lines_, fallthrough) ||
+        a_overwritten_or_de_return_before_read(lines_, fallthrough);
+    const bool a_dead_target =
+        a_overwritten_or_call_before_read(lines_, target_idx) ||
+        a_overwritten_or_de_return_before_read(lines_, target_idx);
+    if (!a_dead_fallthrough ||
+        !a_dead_target ||
+        !hl_dead_before_read_or_modern_return(lines_, fallthrough) ||
+        !hl_dead_before_read_or_modern_return(lines_, target_idx) ||
+        !flags_from_compare_dead_before_read(lines_, fallthrough) ||
+        !flags_from_compare_dead_before_read(lines_, target_idx)) {
+        return false;
+    }
+
+    if (has_ex) {
+        lines_[i] = asm_line::parse("\tex\tde, hl");
+        lines_[i + 1] = asm_line::parse("\tld\ta, e");
+        lines_[i + 2] = asm_line::parse("\tsub\t#" + std::to_string(value));
+        lines_[i + 3] = asm_line::parse("\tor\td");
+        lines_[i + 4] = lines_[ld_idx + 3];
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 5),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(ld_idx + 4));
+    } else {
+        lines_[i] = asm_line::parse("\tld\ta, e");
+        lines_[i + 1] = asm_line::parse("\tsub\t#" + std::to_string(value));
+        lines_[i + 2] = asm_line::parse("\tor\td");
+        lines_[i + 3] = lines_[ld_idx + 3];
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 4),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(ld_idx + 4));
+    }
+    return true;
+}
+
+bool z80_peep::rule_de_word_ne_branch_split(size_t i) {
+    if (i + 4 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 4; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    if (lines_[i].mnemonic != "ld" ||
+        lines_[i + 1].mnemonic != "ld" ||
+        !is_or_a_self(lines_[i + 2]) ||
+        lines_[i + 3].mnemonic != "sbc" ||
+        lines_[i + 4].mnemonic != "jr") {
+        return false;
+    }
+
+    std::string d0;
+    std::string lo_src;
+    std::string d1;
+    std::string hi_src;
+    std::string d3;
+    std::string s3;
+    if (!split_ld(lines_[i].operands, d0, lo_src) ||
+        !split_ld(lines_[i + 1].operands, d1, hi_src) ||
+        !split_ld(lines_[i + 3].operands, d3, s3) ||
+        trim(d0) != "l" ||
+        trim(d1) != "h" ||
+        trim(d3) != "hl" ||
+        trim(s3) != "de") {
+        return false;
+    }
+
+    lo_src = lower_copy(trim(lo_src));
+    hi_src = lower_copy(trim(hi_src));
+    auto safe_byte_source = [](const std::string &src) {
+        int ignored = 0;
+        if (src == "(hl)")
+            return false;
+        if (operand_mentions_pair_or_bytes(src, "hl", 'l', 'h') ||
+            operand_mentions_pair_or_bytes(src, "de", 'e', 'd')) {
+            return false;
+        }
+        return is_plain_8bit_reg(src) || is_immediate_operand(src) ||
+               is_numeric_literal(src) || parse_ixiy_ref(src, ignored);
+    };
+    if (!safe_byte_source(lo_src) || !safe_byte_source(hi_src))
+        return false;
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[i + 4], cc, target) ||
+        cc != "nz") {
+        return false;
+    }
+
+    const size_t target_idx = find_label_index(lines_, target);
+    if (target_idx == lines_.size())
+        return false;
+    const size_t fallthrough = i + 5;
+    if (!a_overwritten_or_de_return_before_read(lines_, fallthrough) ||
+        !a_overwritten_or_de_return_before_read(lines_, target_idx) ||
+        !hl_dead_before_read_or_modern_return(lines_, fallthrough) ||
+        !hl_dead_before_read_or_modern_return(lines_, target_idx) ||
+        !flags_from_compare_dead_before_read(lines_, fallthrough) ||
+        !flags_from_compare_dead_before_read(lines_, target_idx)) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tld\ta, " + lo_src);
+    lines_[i + 1] = asm_line::parse("\tcp\te");
+    lines_[i + 2] = lines_[i + 4];
+    lines_[i + 3] = asm_line::parse("\tld\ta, " + hi_src);
+    lines_[i + 4] = asm_line::parse("\tcp\td");
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i + 5),
+                  lines_[i + 2]);
+    return true;
+}
+
+bool z80_peep::rule_signed_byte_zero_branch(size_t i) {
+    auto rewrite_branch = [&](size_t xor_idx,
+                              const std::string &bit_operand,
+                              size_t branch_idx) {
+        int xor_value = 0;
+        int cp_value = 0;
+        if (lines_[xor_idx].mnemonic != "xor" ||
+            !parse_immediate_value(lines_[xor_idx].operands, xor_value) ||
+            u8_value(xor_value) != 0x80 ||
+            xor_idx + 1 >= lines_.size() ||
+            lines_[xor_idx + 1].mnemonic != "cp" ||
+            !parse_immediate_value(lines_[xor_idx + 1].operands, cp_value) ||
+            u8_value(cp_value) != 0x80) {
+            return false;
+        }
+
+        std::string cc;
+        std::string target;
+        if (!split_conditional_branch_target(lines_[branch_idx], cc, target))
+            return false;
+        if (cc != "c" && cc != "nc" && cc != "m" && cc != "p")
+            return false;
+
+        const size_t target_idx = find_label_index(lines_, target);
+        if (target_idx == lines_.size())
+            return false;
+
+        const size_t fallthrough = branch_idx + 1;
+        if (!a_overwritten_before_read(lines_, fallthrough) ||
+            !a_overwritten_before_read(lines_, target_idx) ||
+            !flags_overwritten_before_read_or_escape(lines_, fallthrough) ||
+            !flags_overwritten_before_read_or_escape(lines_, target_idx)) {
+            return false;
+        }
+
+        const bool branch_on_negative = (cc == "c" || cc == "m");
+        lines_[xor_idx] = asm_line::parse("\tbit\t7, " + bit_operand);
+        lines_[xor_idx + 1] = asm_line::parse(
+            "\t" + lines_[branch_idx].mnemonic + "\t" +
+            std::string(branch_on_negative ? "nz, " : "z, ") + target);
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(xor_idx + 2),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(branch_idx + 1));
+        return true;
+    };
+
+    if (i + 2 < lines_.size()) {
+        bool labels = false;
+        for (size_t j = i; j <= i + 2; ++j)
+            labels = labels || !lines_[j].label.empty();
+        if (!labels && rewrite_branch(i, "a", i + 2))
+            return true;
+    }
+
+    if (i + 3 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 3; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "a") {
+        return false;
+    }
+    src = lower_copy(trim(src));
+    if (!bit_operand_supported(src))
+        return false;
+
+    return rewrite_branch(i + 1, src, i + 3);
 }
 
 bool z80_peep::rule_page_aligned_word_bound_branch(size_t i) {
@@ -3824,8 +4431,8 @@ bool z80_peep::rule_page_aligned_word_bound_branch(size_t i) {
         return false;
 
     const size_t fallthrough = i + 6;
-    if (!flags_overwritten_or_de_return_before_read(lines_, fallthrough) ||
-        !flags_overwritten_or_de_return_before_read(lines_, target_idx)) {
+    if (!flags_from_compare_dead_before_read(lines_, fallthrough) ||
+        !flags_from_compare_dead_before_read(lines_, target_idx)) {
         return false;
     }
     if (!hl_dead_before_read_or_modern_return(lines_, fallthrough) ||
@@ -3856,6 +4463,2412 @@ bool z80_peep::rule_page_aligned_word_bound_branch(size_t i) {
         lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 3),
                      lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
     }
+    return true;
+}
+
+bool z80_peep::rule_hl_high_byte_mask_branch(size_t i) {
+    if (i + 7 >= lines_.size())
+        return false;
+
+    auto no_labels = [&](size_t end_inclusive) {
+        if (end_inclusive >= lines_.size())
+            return false;
+        for (size_t k = i; k <= end_inclusive; ++k) {
+            if (!lines_[k].label.empty())
+                return false;
+        }
+        return true;
+    };
+
+    if (lines_[i].mnemonic != "ld" ||
+        lines_[i + 1].mnemonic != "and" ||
+        lines_[i + 2].mnemonic != "ld" ||
+        lines_[i + 3].mnemonic != "ld" ||
+        lines_[i + 4].mnemonic != "and" ||
+        lines_[i + 5].mnemonic != "ld") {
+        return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "l") {
+        return false;
+    }
+    if (!immediate_is(lines_[i + 1].operands, 0))
+        return false;
+    if (!split_ld(lines_[i + 2].operands, dst, src) ||
+        trim(dst) != "l" || trim(src) != "a") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 3].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "h") {
+        return false;
+    }
+
+    int mask = 0;
+    if (!parse_immediate_value(lines_[i + 4].operands, mask))
+        return false;
+    const int bit = single_u8_bit_index(mask);
+    if (bit < 0)
+        return false;
+
+    if (!split_ld(lines_[i + 5].operands, dst, src) ||
+        trim(dst) != "h" || trim(src) != "a") {
+        return false;
+    }
+
+    size_t cursor = i + 6;
+    bool copied_to_bc = false;
+    if (cursor + 1 < lines_.size() &&
+        lines_[cursor].mnemonic == "ld" &&
+        lines_[cursor + 1].mnemonic == "ld") {
+        std::string dst0;
+        std::string src0;
+        std::string dst1;
+        std::string src1;
+        if (split_ld(lines_[cursor].operands, dst0, src0) &&
+            split_ld(lines_[cursor + 1].operands, dst1, src1) &&
+            trim(dst0) == "b" && trim(src0) == "h" &&
+            trim(dst1) == "c" && trim(src1) == "l") {
+            copied_to_bc = true;
+            cursor += 2;
+        }
+    }
+
+    if (cursor + 2 >= lines_.size() || !no_labels(cursor + 2))
+        return false;
+    if (lines_[cursor].mnemonic != "ld" ||
+        !split_ld(lines_[cursor].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "h") {
+        return false;
+    }
+    if (lines_[cursor + 1].mnemonic != "or")
+        return false;
+    const std::string or_ops = trim(lines_[cursor + 1].operands);
+    if (or_ops != "a, l" && or_ops != "a,l" && or_ops != "l")
+        return false;
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[cursor + 2], cc, target))
+        return false;
+    if (cc != "z" && cc != "nz")
+        return false;
+
+    const size_t target_idx = find_label_index(lines_, target);
+    if (target_idx == lines_.size())
+        return false;
+    const size_t fallthrough = cursor + 3;
+    if (!a_overwritten_before_read(lines_, fallthrough) ||
+        !a_overwritten_before_read(lines_, target_idx) ||
+        !path_overwrites_hl_before_read(lines_, fallthrough) ||
+        !path_overwrites_hl_before_read(lines_, target_idx) ||
+        !flags_overwritten_before_read_or_escape(lines_, fallthrough) ||
+        !flags_overwritten_before_read_or_escape(lines_, target_idx)) {
+        return false;
+    }
+    if (copied_to_bc &&
+        (!path_overwrites_bc_before_read_or_call(lines_, fallthrough) ||
+         !path_overwrites_bc_before_read_or_call(lines_, target_idx))) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tbit\t" + std::to_string(bit) + ", h");
+    lines_[i + 1] = lines_[cursor + 2];
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(cursor + 3));
+    return true;
+}
+
+bool z80_peep::rule_word_mask_zero_high_branch(size_t i) {
+    if (i + 24 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 24; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    auto and_a_reg = [](const asm_line &line, const std::string &reg) {
+        if (line.mnemonic != "and")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == reg || ops == "a, " + reg || ops == "a," + reg;
+    };
+    auto or_a_operand = [](const asm_line &line, const std::string &operand) {
+        if (line.mnemonic != "or")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == operand || ops == "a, " + operand ||
+               ops == "a," + operand;
+    };
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "l") {
+        return false;
+    }
+    const std::string lo_src = lower_copy(trim(src));
+
+    if (lines_[i + 1].mnemonic != "ld" ||
+        !split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "h") {
+        return false;
+    }
+    const std::string hi_src = lower_copy(trim(src));
+
+    if (lines_[i + 2].mnemonic != "ex" ||
+        trim(lines_[i + 2].operands) != "de, hl") {
+        return false;
+    }
+
+    int mask = 0;
+    if (lines_[i + 3].mnemonic != "ld" ||
+        !split_ld(lines_[i + 3].operands, dst, src) ||
+        trim(dst) != "hl" ||
+        !parse_immediate_value(src, mask)) {
+        return false;
+    }
+    const int bit = single_u16_bit_index(mask);
+    if (bit < 0)
+        return false;
+    const std::string bit_src = bit < 8 ? lo_src : hi_src;
+    if (!bit_operand_supported(bit_src))
+        return false;
+
+    if (lines_[i + 4].mnemonic != "ld" ||
+        !split_ld(lines_[i + 4].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "l" ||
+        !and_a_reg(lines_[i + 5], "e") ||
+        lines_[i + 6].mnemonic != "ld" ||
+        !split_ld(lines_[i + 6].operands, dst, src) ||
+        trim(dst) != "l" || trim(src) != "a" ||
+        lines_[i + 7].mnemonic != "ld" ||
+        !split_ld(lines_[i + 7].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "h" ||
+        !and_a_reg(lines_[i + 8], "d") ||
+        lines_[i + 9].mnemonic != "ld" ||
+        !split_ld(lines_[i + 9].operands, dst, src) ||
+        trim(dst) != "h" || trim(src) != "a") {
+        return false;
+    }
+
+    int temp_lo = 0;
+    int temp_hi = 0;
+    if (lines_[i + 10].mnemonic != "ld" ||
+        !split_ld(lines_[i + 10].operands, dst, src) ||
+        !parse_ix_ref(trim(dst), temp_lo) ||
+        trim(src) != "l" ||
+        lines_[i + 11].mnemonic != "ld" ||
+        !split_ld(lines_[i + 11].operands, dst, src) ||
+        !parse_ix_ref(trim(dst), temp_hi) ||
+        temp_hi != temp_lo + 1 ||
+        trim(src) != "h") {
+        return false;
+    }
+
+    if (lines_[i + 12].mnemonic != "ld" ||
+        !split_ld(lines_[i + 12].operands, dst, src) ||
+        trim(dst) != "l" ||
+        lines_[i + 13].mnemonic != "ld" ||
+        !split_ld(lines_[i + 13].operands, dst, src) ||
+        trim(dst) != "h" ||
+        lines_[i + 14].mnemonic != "ex" ||
+        trim(lines_[i + 14].operands) != "de, hl") {
+        return false;
+    }
+
+    if (lines_[i + 15].mnemonic != "ld" ||
+        !split_ld(lines_[i + 15].operands, dst, src) ||
+        trim(dst) != "hl" ||
+        !immediate_is(src, 0) ||
+        lines_[i + 16].mnemonic != "ld" ||
+        !split_ld(lines_[i + 16].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "l" ||
+        !and_a_reg(lines_[i + 17], "e") ||
+        lines_[i + 18].mnemonic != "ld" ||
+        !split_ld(lines_[i + 18].operands, dst, src) ||
+        trim(dst) != "l" || trim(src) != "a" ||
+        lines_[i + 19].mnemonic != "ld" ||
+        !split_ld(lines_[i + 19].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "h" ||
+        !and_a_reg(lines_[i + 20], "d") ||
+        lines_[i + 21].mnemonic != "ld" ||
+        !split_ld(lines_[i + 21].operands, dst, src) ||
+        trim(dst) != "h" || trim(src) != "a") {
+        return false;
+    }
+
+    int reload_hi = 0;
+    if (lines_[i + 22].mnemonic != "ld" ||
+        !split_ld(lines_[i + 22].operands, dst, src) ||
+        trim(dst) != "a" ||
+        !parse_ix_ref(trim(src), reload_hi) ||
+        reload_hi != temp_hi) {
+        return false;
+    }
+
+    const std::string temp_lo_operand =
+        std::to_string(temp_lo) + "(ix)";
+    if (!or_a_operand(lines_[i + 23], temp_lo_operand))
+        return false;
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[i + 24], cc, target))
+        return false;
+    if (cc != "z" && cc != "nz")
+        return false;
+
+    const size_t target_idx = find_label_index(lines_, target);
+    if (target_idx == lines_.size() || target_idx < i + 25)
+        return false;
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame, prologue_index))
+        return false;
+    if (!ix_offset_in_temp_frame(temp_lo, locals, temp_frame) ||
+        !ix_offset_in_temp_frame(temp_hi, locals, temp_frame)) {
+        return false;
+    }
+    const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
+    if (ix_slot_read_in_function(lines_, prologue_index, fn_end,
+                                 temp_lo, i + 23) ||
+        ix_slot_read_in_function(lines_, prologue_index, fn_end,
+                                 temp_hi, i + 22)) {
+        return false;
+    }
+
+    const size_t fallthrough = i + 25;
+    if (!a_overwritten_before_read(lines_, fallthrough) ||
+        !a_overwritten_before_read(lines_, target_idx) ||
+        !path_overwrites_hl_before_read(lines_, fallthrough) ||
+        !path_overwrites_hl_before_read(lines_, target_idx) ||
+        !path_overwrites_pair_before_read(lines_, fallthrough, "de", 'e', 'd') ||
+        !path_overwrites_pair_before_read(lines_, target_idx, "de", 'e', 'd') ||
+        !flags_overwritten_before_read_or_escape(lines_, fallthrough) ||
+        !flags_overwritten_before_read_or_escape(lines_, target_idx)) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tbit\t" +
+                                std::to_string(bit & 7) + ", " + bit_src);
+    lines_[i + 1] = lines_[i + 24];
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 25));
+    return true;
+}
+
+bool z80_peep::rule_bit7_shift_xor_diamond(size_t i) {
+    if (i >= lines_.size())
+        return false;
+    if (!lines_[i].label.empty())
+        return false;
+
+    auto is_add_a_a = [](const asm_line &line) {
+        if (line.mnemonic != "add")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == "a, a" || ops == "a,a";
+    };
+
+    // Same register recurrence when both arms end by jumping to a common
+    // continuation rather than meeting at a local join label.
+    if (i + 13 < lines_.size()) {
+        int bit = -1;
+        int xor_value = 0;
+        std::string reg;
+        std::string cc;
+        std::string else_label;
+        std::string true_target;
+        std::string false_target;
+        std::string dst;
+        std::string src;
+        auto is_ld = [&](size_t index, const std::string &want_dst,
+                         const std::string &want_src) {
+            if (lines_[index].mnemonic != "ld" ||
+                !split_ld(lines_[index].operands, dst, src)) {
+                return false;
+            }
+            return lower_copy(trim(dst)) == want_dst &&
+                   lower_copy(trim(src)) == want_src;
+        };
+
+        const bool matched =
+            lines_[i].mnemonic == "bit" &&
+            parse_bit_reg_operands(lines_[i].operands, bit, reg) &&
+            bit == 7 && is_plain_8bit_reg(reg) && reg != "a" &&
+            split_conditional_branch_target(lines_[i + 1], cc, else_label) &&
+            cc == "z" &&
+            !lines_[i + 2].label.empty() &&
+            lines_[i + 2].mnemonic.empty() &&
+            is_ld(i + 3, "a", reg) &&
+            is_add_a_a(lines_[i + 4]) &&
+            lines_[i + 5].mnemonic == "xor" &&
+            parse_immediate_value(lines_[i + 5].operands, xor_value) &&
+            is_ld(i + 6, reg, "a") &&
+            parse_unconditional_jump(lines_[i + 7], true_target) &&
+            lines_[i + 8].label == else_label &&
+            lines_[i + 8].mnemonic.empty() &&
+            is_ld(i + 9, "a", reg) &&
+            is_add_a_a(lines_[i + 10]) &&
+            is_ld(i + 11, reg, "a") &&
+            !lines_[i + 12].label.empty() &&
+            lines_[i + 12].mnemonic.empty() &&
+            parse_unconditional_jump(lines_[i + 13], false_target) &&
+            true_target == false_target &&
+            lines_[i + 2].label != else_label &&
+            !label_has_other_control_references(
+                lines_, lines_[i + 2].label, lines_.size()) &&
+            !label_has_other_control_references(lines_, else_label, i + 1) &&
+            !label_has_other_control_references(
+                lines_, lines_[i + 12].label, lines_.size());
+
+        if (matched) {
+            const std::string xor_operand = trim(lines_[i + 5].operands);
+            const std::string final_comment =
+                !lines_[i + 11].comment.empty()
+                    ? lines_[i + 11].comment
+                    : lines_[i + 6].comment;
+            lines_[i] = asm_line::parse("\tld\ta, " + reg);
+            lines_[i + 1] = asm_line::parse("\tadd\ta, a");
+            lines_[i + 2] = asm_line::parse("\tjr\tnc, " + else_label);
+            lines_[i + 3] = asm_line::parse("\txor\t" + xor_operand);
+            lines_[i + 4] = lines_[i + 8];
+            lines_[i + 5] = asm_line::parse("\tld\t" + reg + ", a");
+            lines_[i + 5].comment = final_comment;
+            lines_[i + 6] = lines_[i + 13];
+            lines_.erase(
+                lines_.begin() + static_cast<std::ptrdiff_t>(i + 7),
+                lines_.begin() + static_cast<std::ptrdiff_t>(i + 14));
+            return true;
+        }
+    }
+
+    // Register-carried form of the same truncating byte recurrence:
+    //
+    //   bit 7,r; jr z,else
+    //   ld a,r; add a,a; xor #K; ld r,a; jr join
+    // else: ld a,r; add a,a; ld r,a
+    // join:
+    //
+    // ADD exposes the tested bit as carry, so the duplicated shift can be
+    // shared without changing the final A, r, or flags on either path.
+    if (i + 12 < lines_.size()) {
+        int bit = -1;
+        int xor_value = 0;
+        std::string reg;
+        std::string cc;
+        std::string else_label;
+        std::string join_label;
+        std::string dst;
+        std::string src;
+        auto is_ld = [&](size_t index, const std::string &want_dst,
+                         const std::string &want_src) {
+            if (lines_[index].mnemonic != "ld" ||
+                !split_ld(lines_[index].operands, dst, src)) {
+                return false;
+            }
+            return lower_copy(trim(dst)) == want_dst &&
+                   lower_copy(trim(src)) == want_src;
+        };
+
+        const bool matched =
+            lines_[i].mnemonic == "bit" &&
+            parse_bit_reg_operands(lines_[i].operands, bit, reg) &&
+            bit == 7 && is_plain_8bit_reg(reg) && reg != "a" &&
+            split_conditional_branch_target(lines_[i + 1], cc, else_label) &&
+            cc == "z" &&
+            !lines_[i + 2].label.empty() &&
+            lines_[i + 2].mnemonic.empty() &&
+            is_ld(i + 3, "a", reg) &&
+            is_add_a_a(lines_[i + 4]) &&
+            lines_[i + 5].mnemonic == "xor" &&
+            parse_immediate_value(lines_[i + 5].operands, xor_value) &&
+            is_ld(i + 6, reg, "a") &&
+            parse_unconditional_jump(lines_[i + 7], join_label) &&
+            lines_[i + 8].label == else_label &&
+            lines_[i + 8].mnemonic.empty() &&
+            is_ld(i + 9, "a", reg) &&
+            is_add_a_a(lines_[i + 10]) &&
+            is_ld(i + 11, reg, "a") &&
+            lines_[i + 12].label == join_label &&
+            lines_[i + 12].mnemonic.empty() &&
+            lines_[i + 2].label != else_label &&
+            !label_has_other_control_references(
+                lines_, lines_[i + 2].label, lines_.size()) &&
+            !label_has_other_control_references(lines_, else_label, i + 1) &&
+            !label_has_other_control_references(lines_, join_label, i + 7);
+
+        if (matched) {
+            const std::string xor_operand = trim(lines_[i + 5].operands);
+            const std::string final_comment =
+                !lines_[i + 11].comment.empty()
+                    ? lines_[i + 11].comment
+                    : lines_[i + 6].comment;
+            lines_[i] = asm_line::parse("\tld\ta, " + reg);
+            lines_[i + 1] = asm_line::parse("\tadd\ta, a");
+            lines_[i + 2] = asm_line::parse("\tjr\tnc, " + join_label);
+            lines_[i + 3] = asm_line::parse("\txor\t" + xor_operand);
+            lines_[i + 4] = lines_[i + 12];
+            lines_[i + 5] = asm_line::parse("\tld\t" + reg + ", a");
+            lines_[i + 5].comment = final_comment;
+            lines_.erase(
+                lines_.begin() + static_cast<std::ptrdiff_t>(i + 6),
+                lines_.begin() + static_cast<std::ptrdiff_t>(i + 13));
+            return true;
+        }
+    }
+
+    // Coalescing can write both arms directly back to the same byte slot:
+    //
+    //   ld slot,a; bit 7,a; jr z,else
+    //   ld a,slot; add a,a; xor #K; ld slot,a; jr join
+    // else: ld a,slot; add a,a; ld slot,a
+    // join:
+    //
+    // ADD exposes the old top bit in carry, so the whole diamond can keep
+    // the value in A. A later generic rule removes the now-redundant leading
+    // store when another update or the final store follows.
+    if (i + 13 < lines_.size()) {
+        std::string dst;
+        std::string src;
+        if (lines_[i].mnemonic == "ld" &&
+            split_ld(lines_[i].operands, dst, src) &&
+            trim(src) == "a") {
+            const std::string slot = lower_copy(trim(dst));
+            int slot_off = 0;
+            int bit = -1;
+            std::string bit_reg;
+            std::string cc;
+            std::string else_label;
+            std::string join_label;
+            std::string true_load_dst;
+            std::string true_load_src;
+            std::string true_store_dst;
+            std::string true_store_src;
+            std::string else_load_dst;
+            std::string else_load_src;
+            std::string else_store_dst;
+            std::string else_store_src;
+            int xor_value = 0;
+
+            const bool slot_supported =
+                parse_ix_ref(slot, slot_off) ||
+                (is_plain_8bit_reg(slot) && slot != "a");
+            const bool matched =
+                slot_supported &&
+                lines_[i + 1].mnemonic == "bit" &&
+                parse_bit_reg_operands(lines_[i + 1].operands,
+                                       bit, bit_reg) &&
+                bit == 7 && bit_reg == "a" &&
+                split_conditional_branch_target(lines_[i + 2], cc,
+                                                else_label) &&
+                cc == "z" &&
+                !lines_[i + 3].label.empty() &&
+                lines_[i + 3].mnemonic.empty() &&
+                lines_[i + 4].mnemonic == "ld" &&
+                split_ld(lines_[i + 4].operands,
+                         true_load_dst, true_load_src) &&
+                trim(true_load_dst) == "a" &&
+                lower_copy(trim(true_load_src)) == slot &&
+                is_add_a_a(lines_[i + 5]) &&
+                lines_[i + 6].mnemonic == "xor" &&
+                parse_immediate_value(lines_[i + 6].operands, xor_value) &&
+                lines_[i + 7].mnemonic == "ld" &&
+                split_ld(lines_[i + 7].operands,
+                         true_store_dst, true_store_src) &&
+                lower_copy(trim(true_store_dst)) == slot &&
+                trim(true_store_src) == "a" &&
+                parse_unconditional_jump(lines_[i + 8], join_label) &&
+                lines_[i + 9].label == else_label &&
+                lines_[i + 9].mnemonic.empty() &&
+                lines_[i + 10].mnemonic == "ld" &&
+                split_ld(lines_[i + 10].operands,
+                         else_load_dst, else_load_src) &&
+                trim(else_load_dst) == "a" &&
+                lower_copy(trim(else_load_src)) == slot &&
+                is_add_a_a(lines_[i + 11]) &&
+                lines_[i + 12].mnemonic == "ld" &&
+                split_ld(lines_[i + 12].operands,
+                         else_store_dst, else_store_src) &&
+                lower_copy(trim(else_store_dst)) == slot &&
+                trim(else_store_src) == "a" &&
+                lines_[i + 13].label == join_label &&
+                lines_[i + 13].mnemonic.empty() &&
+                lines_[i + 3].label != else_label &&
+                !label_has_other_control_references(lines_,
+                                                    lines_[i + 3].label,
+                                                    lines_.size()) &&
+                !label_has_other_control_references(lines_, else_label,
+                                                    i + 2) &&
+                !label_has_other_control_references(lines_, join_label,
+                                                    i + 8);
+
+            if (matched) {
+                const std::string xor_operand = trim(lines_[i + 6].operands);
+                const std::string final_comment =
+                    !lines_[i + 12].comment.empty()
+                        ? lines_[i + 12].comment
+                        : lines_[i + 7].comment;
+                lines_[i + 1] = asm_line::parse("\tadd\ta, a");
+                lines_[i + 2] =
+                    asm_line::parse("\tjr\tnc, " + join_label);
+                lines_[i + 3] =
+                    asm_line::parse("\txor\t" + xor_operand);
+                lines_[i + 4] = lines_[i + 13];
+                lines_[i + 5] =
+                    asm_line::parse("\tld\t" + slot + ", a");
+                lines_[i + 5].comment = final_comment;
+                lines_.erase(
+                    lines_.begin() + static_cast<std::ptrdiff_t>(i + 6),
+                    lines_.begin() + static_cast<std::ptrdiff_t>(i + 14));
+                return true;
+            }
+        }
+    }
+
+    if (i + 15 >= lines_.size())
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(src) != "a") {
+        return false;
+    }
+    const std::string slot = lower_copy(trim(dst));
+    int slot_off = 0;
+    if (!parse_ix_ref(slot, slot_off))
+        return false;
+
+    int bit = -1;
+    std::string bit_reg;
+    if (lines_[i + 1].mnemonic != "bit" ||
+        !parse_bit_reg_operands(lines_[i + 1].operands, bit, bit_reg) ||
+        bit != 7 || bit_reg != "a") {
+        return false;
+    }
+
+    std::string cc;
+    std::string else_label;
+    if (!split_conditional_branch_target(lines_[i + 2], cc, else_label) ||
+        cc != "z") {
+        return false;
+    }
+
+    if (lines_[i + 3].label.empty() ||
+        !lines_[i + 3].mnemonic.empty() ||
+        label_has_other_control_references(lines_, lines_[i + 3].label,
+                                           lines_.size())) {
+        return false;
+    }
+
+    if (lines_[i + 4].mnemonic != "ld" ||
+        !split_ld(lines_[i + 4].operands, dst, src) ||
+        trim(dst) != "a" || lower_copy(trim(src)) != slot ||
+        !is_add_a_a(lines_[i + 5]) ||
+        lines_[i + 6].mnemonic != "xor") {
+        return false;
+    }
+    const std::string xor_operand = trim(lines_[i + 6].operands);
+    int ignored_xor = 0;
+    if (!parse_immediate_value(xor_operand, ignored_xor))
+        return false;
+
+    int temp_off = 0;
+    if (lines_[i + 7].mnemonic != "ld" ||
+        !split_ld(lines_[i + 7].operands, dst, src) ||
+        !parse_ix_ref(trim(dst), temp_off) ||
+        trim(src) != "a") {
+        return false;
+    }
+
+    std::string join_label;
+    if (!parse_unconditional_jump(lines_[i + 8], join_label))
+        return false;
+    if (lines_[i + 9].label != else_label ||
+        !lines_[i + 9].mnemonic.empty()) {
+        return false;
+    }
+    if (label_has_other_control_references(lines_, else_label, i + 2))
+        return false;
+
+    if (lines_[i + 10].mnemonic != "ld" ||
+        !split_ld(lines_[i + 10].operands, dst, src) ||
+        trim(dst) != "a" || lower_copy(trim(src)) != slot ||
+        !is_add_a_a(lines_[i + 11])) {
+        return false;
+    }
+
+    int else_temp_off = 0;
+    if (lines_[i + 12].mnemonic != "ld" ||
+        !split_ld(lines_[i + 12].operands, dst, src) ||
+        !parse_ix_ref(trim(dst), else_temp_off) ||
+        else_temp_off != temp_off ||
+        trim(src) != "a") {
+        return false;
+    }
+
+    if (lines_[i + 13].label != join_label ||
+        !lines_[i + 13].mnemonic.empty()) {
+        return false;
+    }
+    if (label_has_other_control_references(lines_, join_label, i + 8))
+        return false;
+
+    int reload_temp_off = 0;
+    if (lines_[i + 14].mnemonic != "ld" ||
+        !split_ld(lines_[i + 14].operands, dst, src) ||
+        trim(dst) != "a" ||
+        !parse_ix_ref(trim(src), reload_temp_off) ||
+        reload_temp_off != temp_off) {
+        return false;
+    }
+
+    if (lines_[i + 15].mnemonic != "ld" ||
+        !split_ld(lines_[i + 15].operands, dst, src) ||
+        lower_copy(trim(dst)) != slot ||
+        trim(src) != "a") {
+        return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame, prologue_index))
+        return false;
+    if (!ix_offset_in_temp_frame(temp_off, locals, temp_frame))
+        return false;
+    const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
+    if (ix_slot_read_in_function(lines_, prologue_index, fn_end,
+                                 temp_off, i + 14)) {
+        return false;
+    }
+
+    const std::string final_store_comment =
+        !lines_[i + 15].comment.empty() ? lines_[i + 15].comment
+                                        : lines_[i].comment;
+
+    lines_[i] = asm_line::parse("\tadd\ta, a");
+    lines_[i + 1] = asm_line::parse("\tjr\tnc, " + join_label);
+    lines_[i + 2] = asm_line::parse("\txor\t" + xor_operand);
+    lines_[i + 3] = lines_[i + 13];
+    lines_[i + 4] = asm_line::parse("\tld\t" + slot + ", a");
+    lines_[i + 4].comment = final_store_comment;
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 5),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 16));
+    return true;
+}
+
+bool z80_peep::rule_zero_extended_bit7_shift_xor_diamond(size_t i) {
+    if (i + 15 >= lines_.size())
+        return false;
+    if (!lines_[i].label.empty())
+        return false;
+
+    auto is_add_a_a = [](const asm_line &line) {
+        if (line.mnemonic != "add")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == "a, a" || ops == "a,a";
+    };
+    auto is_ld_l_a = [](const asm_line &line) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == "l" && trim(src) == "a";
+    };
+    auto is_ld_h_zero = [](const asm_line &line) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == "h" && immediate_is(src, 0);
+    };
+    auto parse_temp_store = [&](size_t pos, const std::string &src_reg,
+                                int &off) {
+        if (pos >= lines_.size() || lines_[pos].mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(lines_[pos].operands, dst, src) &&
+               trim(src) == src_reg &&
+               parse_ix_ref(lower_copy(trim(dst)), off);
+    };
+    auto parse_shift_store = [&](size_t &pos, int &temp_off) {
+        if (pos >= lines_.size() || !is_add_a_a(lines_[pos]))
+            return false;
+        ++pos;
+        if (parse_temp_store(pos, "a", temp_off)) {
+            ++pos;
+            return true;
+        }
+        if (pos + 2 >= lines_.size() ||
+            !is_ld_l_a(lines_[pos]) ||
+            !is_ld_h_zero(lines_[pos + 1]) ||
+            !parse_temp_store(pos + 2, "l", temp_off)) {
+            return false;
+        }
+        pos += 3;
+        return true;
+    };
+    auto parse_shift_xor_store = [&](size_t &pos, int &temp_off,
+                                     int &xor_value) {
+        if (pos >= lines_.size() || !is_add_a_a(lines_[pos]))
+            return false;
+        ++pos;
+        if (pos + 1 < lines_.size() &&
+            lines_[pos].mnemonic == "xor" &&
+            parse_immediate_value(lines_[pos].operands, xor_value) &&
+            parse_temp_store(pos + 1, "a", temp_off)) {
+            pos += 2;
+            return true;
+        }
+        if (pos + 8 >= lines_.size() ||
+            !is_ld_l_a(lines_[pos]) ||
+            !is_ld_h_zero(lines_[pos + 1])) {
+            return false;
+        }
+        std::string dst;
+        std::string src;
+        if (lines_[pos + 2].mnemonic != "ld" ||
+            !split_ld(lines_[pos + 2].operands, dst, src) ||
+            trim(dst) != "a" || trim(src) != "l" ||
+            lines_[pos + 3].mnemonic != "xor" ||
+            !parse_immediate_value(lines_[pos + 3].operands, xor_value) ||
+            lines_[pos + 4].mnemonic != "ld" ||
+            !split_ld(lines_[pos + 4].operands, dst, src) ||
+            trim(dst) != "l" || trim(src) != "a" ||
+            lines_[pos + 5].mnemonic != "ld" ||
+            !split_ld(lines_[pos + 5].operands, dst, src) ||
+            trim(dst) != "a" || trim(src) != "h" ||
+            lines_[pos + 6].mnemonic != "xor" ||
+            !immediate_is(lines_[pos + 6].operands, 0) ||
+            lines_[pos + 7].mnemonic != "ld" ||
+            !split_ld(lines_[pos + 7].operands, dst, src) ||
+            trim(dst) != "h" || trim(src) != "a" ||
+            !parse_temp_store(pos + 8, "l", temp_off)) {
+            return false;
+        }
+        pos += 9;
+        return true;
+    };
+
+    if (!is_ld_l_a(lines_[i]) || !is_ld_h_zero(lines_[i + 1]))
+        return false;
+    int bit = -1;
+    std::string bit_reg;
+    if (lines_[i + 2].mnemonic != "bit" ||
+        !parse_bit_reg_operands(lines_[i + 2].operands, bit, bit_reg) ||
+        bit != 7 || bit_reg != "l") {
+        return false;
+    }
+
+    std::string cc;
+    std::string else_label;
+    if (!split_conditional_branch_target(lines_[i + 3], cc, else_label) ||
+        cc != "z") {
+        return false;
+    }
+
+    size_t pos = i + 4;
+    const size_t true_label_idx = pos;
+    const bool has_true_label = pos < lines_.size() &&
+                                !lines_[pos].label.empty() &&
+                                lines_[pos].mnemonic.empty();
+    if (has_true_label) {
+        if (label_has_other_control_references(lines_, lines_[pos].label,
+                                               lines_.size())) {
+            return false;
+        }
+        ++pos;
+    }
+
+    int true_temp_off = 0;
+    int xor_value = 0;
+    if (!parse_shift_xor_store(pos, true_temp_off, xor_value))
+        return false;
+
+    const size_t goto_idx = pos;
+    std::string join_label;
+    if (!parse_unconditional_jump(lines_[pos], join_label))
+        return false;
+    ++pos;
+
+    const size_t else_label_idx = pos;
+    if (pos >= lines_.size() ||
+        lines_[pos].label != else_label ||
+        !lines_[pos].mnemonic.empty()) {
+        return false;
+    }
+    if (label_has_other_control_references(lines_, else_label, i + 3))
+        return false;
+    ++pos;
+
+    int false_temp_off = 0;
+    if (!parse_shift_store(pos, false_temp_off) ||
+        false_temp_off != true_temp_off) {
+        return false;
+    }
+
+    const size_t join_label_idx = pos;
+    if (pos >= lines_.size() ||
+        lines_[pos].label != join_label ||
+        !lines_[pos].mnemonic.empty()) {
+        return false;
+    }
+    if (label_has_other_control_references(lines_, join_label, goto_idx))
+        return false;
+    ++pos;
+
+    int reload_temp_off = 0;
+    std::string dst;
+    std::string src;
+    if (pos + 1 >= lines_.size() ||
+        lines_[pos].mnemonic != "ld" ||
+        !split_ld(lines_[pos].operands, dst, src) ||
+        trim(dst) != "a" ||
+        !parse_ix_ref(lower_copy(trim(src)), reload_temp_off) ||
+        reload_temp_off != true_temp_off) {
+        return false;
+    }
+    ++pos;
+
+    const size_t reload_idx = pos - 1;
+    bool has_final_store = false;
+    std::string final_slot;
+    size_t end_idx = reload_idx;
+    size_t after = reload_idx + 1;
+    std::string final_store_comment;
+    if (pos < lines_.size() && lines_[pos].mnemonic == "ld" &&
+        split_ld(lines_[pos].operands, dst, src) &&
+        trim(src) == "a") {
+        int final_slot_off = 0;
+        if (parse_ix_ref(lower_copy(trim(dst)), final_slot_off)) {
+            has_final_store = true;
+            final_slot = lower_copy(trim(dst));
+            end_idx = pos;
+            after = pos + 1;
+            final_store_comment = lines_[pos].comment;
+        }
+    }
+
+    for (size_t k = i; k <= end_idx; ++k) {
+        const bool allowed_label =
+            (has_true_label && k == true_label_idx) ||
+            k == else_label_idx ||
+            k == join_label_idx;
+        if (!allowed_label && !lines_[k].label.empty())
+            return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame, prologue_index))
+        return false;
+    if (!ix_offset_in_temp_frame(true_temp_off, locals, temp_frame))
+        return false;
+    const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
+    if (ix_slot_read_in_function(lines_, prologue_index, fn_end,
+                                 true_temp_off, reload_idx)) {
+        return false;
+    }
+    const bool preserve_hl = !path_overwrites_hl_before_read(lines_, after);
+    if (!flags_overwritten_before_read_or_escape(lines_, after)) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tadd\ta, a");
+    lines_[i + 1] = asm_line::parse("\tjr\tnc, " + join_label);
+    lines_[i + 2] = asm_line::parse("\txor\t" + imm8_text(xor_value));
+    lines_[i + 3] = lines_[join_label_idx];
+    if (has_final_store) {
+        lines_[i + 4] = asm_line::parse("\tld\t" + final_slot + ", a");
+        lines_[i + 4].comment = final_store_comment;
+        size_t erase_begin = i + 5;
+        if (preserve_hl) {
+            lines_[i + 5] = asm_line::parse("\tld\tl, a");
+            lines_[i + 6] = asm_line::parse("\tld\th, #0");
+            erase_begin = i + 7;
+        }
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(erase_begin),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(end_idx + 1));
+    } else {
+        size_t erase_begin = i + 4;
+        if (preserve_hl) {
+            lines_[i + 4] = asm_line::parse("\tld\tl, a");
+            lines_[i + 5] = asm_line::parse("\tld\th, #0");
+            erase_begin = i + 6;
+        }
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(erase_begin),
+                     lines_.begin() + static_cast<std::ptrdiff_t>(end_idx + 1));
+    }
+    return true;
+}
+
+bool z80_peep::rule_signed_byte_low_arith(size_t i) {
+    if (i + 12 >= lines_.size())
+        return false;
+
+    auto no_labels = [&](size_t end_inclusive) {
+        if (end_inclusive >= lines_.size())
+            return false;
+        for (size_t k = i; k <= end_inclusive; ++k) {
+            if (!lines_[k].label.empty())
+                return false;
+        }
+        return true;
+    };
+    auto is_ld_reg_reg = [](const asm_line &line,
+                            const std::string &dst_reg,
+                            const std::string &src_reg) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == dst_reg && trim(src) == src_reg;
+    };
+    auto is_or_a_a = [](const asm_line &line) {
+        if (line.mnemonic != "or")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == "a, a" || ops == "a,a" || ops == "a";
+    };
+    auto is_add_hl_hl = [](const asm_line &line) {
+        if (line.mnemonic != "add")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == "hl, hl" || ops == "hl,hl";
+    };
+    auto parse_signext_hl = [&](size_t pos, std::string &src) {
+        if (pos + 4 >= lines_.size())
+            return false;
+        std::string dst;
+        std::string value;
+        if (lines_[pos].mnemonic != "ld" ||
+            !split_ld(lines_[pos].operands, dst, value) ||
+            trim(dst) != "a") {
+            return false;
+        }
+        src = lower_copy(trim(value));
+        return is_ld_reg_reg(lines_[pos + 1], "l", "a") &&
+               lines_[pos + 2].mnemonic == "rlca" &&
+               lines_[pos + 3].mnemonic == "sbc" &&
+               trim(lines_[pos + 3].operands) == "a, a" &&
+               is_ld_reg_reg(lines_[pos + 4], "h", "a");
+    };
+    auto parse_store_a_to = [&](size_t pos, const std::string &slot) {
+        if (pos >= lines_.size() || lines_[pos].mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(lines_[pos].operands, dst, src) &&
+               lower_copy(trim(dst)) == slot &&
+               trim(src) == "a";
+    };
+    auto parse_store_hl_to_temp = [&](size_t pos, int &lo, int &hi) {
+        if (pos + 1 >= lines_.size() ||
+            lines_[pos].mnemonic != "ld" ||
+            lines_[pos + 1].mnemonic != "ld") {
+            return false;
+        }
+        std::string dst;
+        std::string src;
+        if (!split_ld(lines_[pos].operands, dst, src) ||
+            trim(src) != "l" ||
+            !parse_ix_ref(lower_copy(trim(dst)), lo)) {
+            return false;
+        }
+        if (!split_ld(lines_[pos + 1].operands, dst, src) ||
+            trim(src) != "h" ||
+            !parse_ix_ref(lower_copy(trim(dst)), hi)) {
+            return false;
+        }
+        return hi == lo + 1;
+    };
+    auto is_ld_reg_from_ix = [](const asm_line &line,
+                                const std::string &reg,
+                                int offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        int parsed = 0;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == reg &&
+               parse_ix_ref(lower_copy(trim(src)), parsed) &&
+               parsed == offset;
+    };
+
+    auto validate_low_byte_slots = [&](const std::string &acc,
+                                       const std::string &rhs) {
+        int acc_off = 0;
+        int rhs_off = 0;
+        return parse_ix_ref(acc, acc_off) && parse_ix_ref(rhs, rhs_off);
+    };
+    auto validate_tail_dead = [&](size_t after) {
+        return path_overwrites_hl_before_read(lines_, after) &&
+               path_overwrites_pair_before_read(lines_, after, "bc", 'c', 'b') &&
+               flags_overwritten_before_read_or_escape(lines_, after);
+    };
+
+    std::string acc0;
+    std::string rhs0;
+    std::string acc1;
+
+    // (signed char)acc +/- (signed char)rhs, immediately stored as a byte.
+    if (i + 27 < lines_.size() &&
+        parse_signext_hl(i, acc0) &&
+        parse_signext_hl(i + 5, rhs0) &&
+        is_ld_reg_reg(lines_[i + 10], "b", "h") &&
+        is_ld_reg_reg(lines_[i + 11], "c", "l") &&
+        parse_signext_hl(i + 12, acc1) &&
+        acc1 == acc0 &&
+        validate_low_byte_slots(acc0, rhs0)) {
+        const bool is_sub =
+            lines_[i + 17].mnemonic == "push" &&
+            trim(lines_[i + 17].operands) == "hl" &&
+            lines_[i + 18].mnemonic == "ld" &&
+            is_ld_reg_reg(lines_[i + 19], "e", "a") &&
+            lines_[i + 20].mnemonic == "rlca" &&
+            lines_[i + 21].mnemonic == "sbc" &&
+            trim(lines_[i + 21].operands) == "a, a" &&
+            is_ld_reg_reg(lines_[i + 22], "d", "a") &&
+            lines_[i + 23].mnemonic == "pop" &&
+            trim(lines_[i + 23].operands) == "hl" &&
+            is_or_a_a(lines_[i + 24]) &&
+            lines_[i + 25].mnemonic == "sbc" &&
+            trim(lines_[i + 25].operands) == "hl, de" &&
+            is_ld_reg_reg(lines_[i + 26], "a", "l") &&
+            parse_store_a_to(i + 27, acc0);
+        if (is_sub && no_labels(i + 27)) {
+            std::string dst;
+            std::string src;
+            split_ld(lines_[i + 18].operands, dst, src);
+            if (lower_copy(trim(src)) == rhs0 && validate_tail_dead(i + 28)) {
+                lines_[i] = asm_line::parse("\tld\ta, " + acc0);
+                lines_[i + 1] = asm_line::parse("\tsub\ta, " + rhs0);
+                lines_[i + 2] = asm_line::parse("\tld\t" + acc0 + ", a");
+                lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 3),
+                             lines_.begin() + static_cast<std::ptrdiff_t>(i + 28));
+                return true;
+            }
+        }
+
+        const bool is_add =
+            lines_[i + 17].mnemonic == "add" &&
+            trim(lines_[i + 17].operands) == "hl, bc" &&
+            is_ld_reg_reg(lines_[i + 18], "a", "l") &&
+            parse_store_a_to(i + 19, acc0);
+        if (is_add && no_labels(i + 19) && validate_tail_dead(i + 20)) {
+            lines_[i] = asm_line::parse("\tld\ta, " + acc0);
+            lines_[i + 1] = asm_line::parse("\tadd\ta, " + rhs0);
+            lines_[i + 2] = asm_line::parse("\tld\t" + acc0 + ", a");
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 3),
+                         lines_.begin() + static_cast<std::ptrdiff_t>(i + 20));
+            return true;
+        }
+    }
+
+    // ((signed char)acc << 1) ^ (signed char)rhs, immediately stored as byte.
+    if (i + 24 < lines_.size() && no_labels(i + 24) &&
+        parse_signext_hl(i, acc0) &&
+        is_add_hl_hl(lines_[i + 5])) {
+        int temp_lo = 0;
+        int temp_hi = 0;
+        if (parse_store_hl_to_temp(i + 6, temp_lo, temp_hi) &&
+            parse_signext_hl(i + 8, rhs0) &&
+            validate_low_byte_slots(acc0, rhs0) &&
+            is_ld_reg_reg(lines_[i + 13], "b", "h") &&
+            is_ld_reg_reg(lines_[i + 14], "c", "l") &&
+            is_ld_reg_from_ix(lines_[i + 15], "l", temp_lo) &&
+            is_ld_reg_from_ix(lines_[i + 16], "h", temp_hi) &&
+            is_ld_reg_reg(lines_[i + 17], "a", "l") &&
+            lines_[i + 18].mnemonic == "xor" &&
+            trim(lines_[i + 18].operands) == "a, c" &&
+            is_ld_reg_reg(lines_[i + 19], "l", "a") &&
+            is_ld_reg_reg(lines_[i + 20], "a", "h") &&
+            lines_[i + 21].mnemonic == "xor" &&
+            trim(lines_[i + 21].operands) == "a, b" &&
+            is_ld_reg_reg(lines_[i + 22], "h", "a") &&
+            is_ld_reg_reg(lines_[i + 23], "a", "l") &&
+            parse_store_a_to(i + 24, acc0) &&
+            validate_tail_dead(i + 25)) {
+            lines_[i] = asm_line::parse("\tld\ta, " + acc0);
+            lines_[i + 1] = asm_line::parse("\tadd\ta, a");
+            lines_[i + 2] = asm_line::parse("\txor\ta, " + rhs0);
+            lines_[i + 3] = asm_line::parse("\tld\t" + acc0 + ", a");
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 4),
+                         lines_.begin() + static_cast<std::ptrdiff_t>(i + 25));
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool z80_peep::rule_de_byte_alu_shuttle(size_t i) {
+    if (i + 3 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 3; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    std::string dst_e;
+    std::string src_e;
+    std::string dst_d;
+    std::string src_d;
+    std::string dst_a;
+    std::string src_a;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst_e, src_e) ||
+        trim(dst_e) != "e" ||
+        lines_[i + 1].mnemonic != "ld" ||
+        !split_ld(lines_[i + 1].operands, dst_d, src_d) ||
+        trim(dst_d) != "d" ||
+        lines_[i + 2].mnemonic != "ld" ||
+        !split_ld(lines_[i + 2].operands, dst_a, src_a) ||
+        trim(dst_a) != "a" ||
+        trim(src_a) != "e") {
+        return false;
+    }
+
+    src_e = lower_copy(trim(src_e));
+    src_d = lower_copy(trim(src_d));
+    if (operand_mentions_pair_or_bytes(src_e, "de", 'e', 'd') ||
+        operand_mentions_pair_or_bytes(src_d, "de", 'e', 'd') ||
+        operand_has_token(src_d, "a") ||
+        operand_has_token(src_d, "af")) {
+        return false;
+    }
+
+    auto byte_source_supported = [](const std::string &src) {
+        int ignored = 0;
+        return is_plain_8bit_reg(src) || is_immediate_operand(src) ||
+               is_numeric_literal(src) || parse_ixiy_ref(src, ignored) ||
+               src == "(hl)";
+    };
+    if (!byte_source_supported(src_e) || !byte_source_supported(src_d))
+        return false;
+
+    const std::string alu = lines_[i + 3].mnemonic;
+    if (alu != "xor" && alu != "add" && alu != "adc" && alu != "sub" &&
+        alu != "sbc" && alu != "and" && alu != "or" && alu != "cp") {
+        return false;
+    }
+
+    const std::string ops = trim(lines_[i + 3].operands);
+    const bool d_operand =
+        ops == "d" || ops == "a, d" || ops == "a,d";
+    if (!d_operand)
+        return false;
+
+    if (!path_overwrites_pair_before_read(lines_, i + 4, "de", 'e', 'd'))
+        return false;
+
+    lines_[i] = asm_line::parse("\tld\ta, " + src_e);
+    lines_[i + 1] = asm_line::parse("\t" + alu + "\ta, " + src_d);
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 4));
+    return true;
+}
+
+bool z80_peep::rule_c_byte_alu_shuttle(size_t i) {
+    if (i + 1 >= lines_.size())
+        return false;
+    if (!lines_[i].label.empty() || !lines_[i + 1].label.empty())
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "c") {
+        return false;
+    }
+    src = lower_copy(trim(src));
+    if (operand_mentions_pair_or_bytes(src, "bc", 'c', 'b'))
+        return false;
+
+    auto byte_source_supported = [](const std::string &value) {
+        int ignored = 0;
+        return is_plain_8bit_reg(value) || is_immediate_operand(value) ||
+               is_numeric_literal(value) || parse_ixiy_ref(value, ignored) ||
+               value == "(hl)";
+    };
+    if (!byte_source_supported(src))
+        return false;
+
+    const std::string alu = lines_[i + 1].mnemonic;
+    if (alu != "xor" && alu != "add" && alu != "adc" && alu != "sub" &&
+        alu != "sbc" && alu != "and" && alu != "or" && alu != "cp") {
+        return false;
+    }
+
+    const std::string ops = trim(lines_[i + 1].operands);
+    if (ops != "c" && ops != "a, c" && ops != "a,c")
+        return false;
+
+    if (!c_overwritten_or_call_before_read(lines_, i + 2) &&
+        !bc_dead_before_read_or_ret(lines_, i + 2)) {
+        return false;
+    }
+
+    if (alu == "add" || alu == "adc" || alu == "sub" || alu == "sbc") {
+        lines_[i] = asm_line::parse("\t" + alu + "\ta, " + src);
+    } else {
+        lines_[i] = asm_line::parse("\t" + alu + "\t" + src);
+    }
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1));
+    return true;
+}
+
+bool z80_peep::rule_zero_extended_byte_shr_to_a(size_t i) {
+    if (i + 4 >= lines_.size())
+        return false;
+
+    auto byte_source_supported = [](const std::string &value) {
+        int ignored = 0;
+        return is_plain_8bit_reg(value) || is_immediate_operand(value) ||
+               is_numeric_literal(value) || parse_ixiy_ref(value, ignored) ||
+               value == "(hl)";
+    };
+
+    std::string dst;
+    std::string src;
+    if (!lines_[i].label.empty() ||
+        lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "l") {
+        return false;
+    }
+    const std::string value_src = lower_copy(trim(src));
+    if (!byte_source_supported(value_src))
+        return false;
+
+    if (!lines_[i + 1].label.empty() ||
+        lines_[i + 1].mnemonic != "ld" ||
+        !split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "h" ||
+        !immediate_is(src, 0)) {
+        return false;
+    }
+
+    size_t pos = i + 2;
+    int shifts = 0;
+    while (pos + 1 < lines_.size() && shifts < 8) {
+        if (!lines_[pos].label.empty() || !lines_[pos + 1].label.empty())
+            return false;
+        if (lines_[pos].mnemonic != "sra" ||
+            trim(lines_[pos].operands) != "h" ||
+            lines_[pos + 1].mnemonic != "rr" ||
+            trim(lines_[pos + 1].operands) != "l") {
+            break;
+        }
+        pos += 2;
+        ++shifts;
+    }
+    if (shifts == 0 || pos >= lines_.size())
+        return false;
+    if (!lines_[pos].label.empty() ||
+        lines_[pos].mnemonic != "ld" ||
+        !split_ld(lines_[pos].operands, dst, src) ||
+        trim(dst) != "a" ||
+        trim(src) != "l") {
+        return false;
+    }
+
+    if (!path_overwrites_hl_before_read(lines_, pos + 1))
+        return false;
+
+    std::vector<asm_line> replacement;
+    if (value_src != "a")
+        replacement.push_back(asm_line::parse("\tld\ta, " + value_src));
+    for (int n = 0; n < shifts; ++n)
+        replacement.push_back(asm_line::parse("\tsrl\ta"));
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(pos + 1));
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                  replacement.begin(), replacement.end());
+    return true;
+}
+
+bool z80_peep::rule_low_byte_shift_add_to_a(size_t i) {
+    if (i + 9 >= lines_.size())
+        return false;
+
+    auto byte_source_supported = [](const std::string &value) {
+        int ignored = 0;
+        return is_plain_8bit_reg(value) || is_immediate_operand(value) ||
+               is_numeric_literal(value) || parse_ixiy_ref(value, ignored) ||
+               value == "(hl)";
+    };
+    auto is_ld = [&](size_t pos,
+                     const std::string &want_dst,
+                     const std::string &want_src) {
+        if (pos >= lines_.size() || !lines_[pos].label.empty() ||
+            lines_[pos].mnemonic != "ld") {
+            return false;
+        }
+        std::string dst;
+        std::string src;
+        return split_ld(lines_[pos].operands, dst, src) &&
+               trim(dst) == want_dst && trim(src) == want_src;
+    };
+    auto is_add_hl_hl = [&](size_t pos) {
+        return pos < lines_.size() && lines_[pos].label.empty() &&
+               lines_[pos].mnemonic == "add" &&
+               (trim(lines_[pos].operands) == "hl, hl" ||
+                trim(lines_[pos].operands) == "hl,hl");
+    };
+    auto is_add_hl_source = [&](size_t pos) {
+        if (pos >= lines_.size() || !lines_[pos].label.empty() ||
+            lines_[pos].mnemonic != "add") {
+            return false;
+        }
+        const std::string ops = trim(lines_[pos].operands);
+        return ops == "hl, de" || ops == "hl,de" ||
+               ops == "hl, bc" || ops == "hl,bc";
+    };
+
+    std::string dst;
+    std::string src;
+    if (!lines_[i].label.empty() ||
+        lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "a") {
+        return false;
+    }
+    const std::string value_src = lower_copy(trim(src));
+    if (!byte_source_supported(value_src))
+        return false;
+
+    if (!is_ld(i + 1, "c", "a") ||
+        !is_ld(i + 2, "b", "#0") ||
+        !is_ld(i + 3, "e", "a") ||
+        !is_ld(i + 4, "d", "#0")) {
+        return false;
+    }
+    if (!is_ld(i + 5, "h", "d") &&
+        !is_ld(i + 5, "h", "#0")) {
+        return false;
+    }
+    if (!is_ld(i + 6, "l", "e"))
+        return false;
+
+    std::vector<std::string> ops;
+    size_t pos = i + 7;
+    while (pos < lines_.size() && ops.size() < 24) {
+        if (!lines_[pos].label.empty())
+            return false;
+        if (is_add_hl_hl(pos)) {
+            ops.push_back("double");
+            ++pos;
+            continue;
+        }
+        if (is_add_hl_source(pos)) {
+            ops.push_back("add_source");
+            ++pos;
+            continue;
+        }
+        if (lines_[pos].mnemonic == "inc" &&
+            trim(lines_[pos].operands) == "hl") {
+            ops.push_back("inc");
+            ++pos;
+            continue;
+        }
+        break;
+    }
+    if (ops.empty() || pos >= lines_.size())
+        return false;
+    if (!lines_[pos].label.empty() ||
+        lines_[pos].mnemonic != "ld" ||
+        !split_ld(lines_[pos].operands, dst, src) ||
+        trim(dst) != "a" ||
+        trim(src) != "l") {
+        return false;
+    }
+
+    const size_t after = pos + 1;
+    if (!path_overwrites_hl_before_read(lines_, after) ||
+        !path_overwrites_pair_before_read(lines_, after, "de", 'e', 'd') ||
+        !path_overwrites_pair_before_read(lines_, after, "bc", 'c', 'b') ||
+        !flags_overwritten_before_read_or_escape(lines_, after)) {
+        return false;
+    }
+
+    std::vector<asm_line> replacement;
+    replacement.push_back(asm_line::parse("\tld\ta, " + value_src));
+    replacement.push_back(asm_line::parse("\tld\te, a"));
+    for (const std::string &op : ops) {
+        if (op == "double") {
+            replacement.push_back(asm_line::parse("\tadd\ta, a"));
+        } else if (op == "add_source") {
+            replacement.push_back(asm_line::parse("\tadd\ta, e"));
+        } else if (op == "inc") {
+            replacement.push_back(asm_line::parse("\tinc\ta"));
+        }
+    }
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(pos + 1));
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                  replacement.begin(), replacement.end());
+    return true;
+}
+
+bool z80_peep::rule_dead_a_store_before_join_store(size_t i) {
+    if (i + 5 >= lines_.size())
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        !lines_[i].label.empty() ||
+        trim(src) != "a") {
+        return false;
+    }
+    const std::string slot = lower_copy(trim(dst));
+    int ignored = 0;
+    if (!parse_ixiy_ref(slot, ignored))
+        return false;
+
+    size_t pos = i + 1;
+    bool saw_diamond = false;
+    for (int diamonds = 0; diamonds < 6; ++diamonds) {
+        if (pos + 3 >= lines_.size())
+            return false;
+
+        for (size_t k = pos; k <= pos + 2; ++k) {
+            if (!lines_[k].label.empty())
+                return false;
+        }
+
+        if (lines_[pos].mnemonic != "add")
+            return false;
+        const std::string add_ops = trim(lines_[pos].operands);
+        if (add_ops != "a, a" && add_ops != "a,a")
+            return false;
+
+        std::string cc;
+        std::string target;
+        if (!split_conditional_branch_target(lines_[pos + 1], cc, target))
+            return false;
+
+        int xor_value = 0;
+        if (lines_[pos + 2].mnemonic != "xor" ||
+            !parse_immediate_value(lines_[pos + 2].operands, xor_value)) {
+            return false;
+        }
+
+        if (lines_[pos + 3].label != target ||
+            !lines_[pos + 3].mnemonic.empty() ||
+            label_has_other_control_references(lines_, target, pos + 1)) {
+            return false;
+        }
+
+        saw_diamond = true;
+        pos += 4;
+
+        if (pos >= lines_.size())
+            return false;
+        if (!lines_[pos].label.empty())
+            return false;
+        if (lines_[pos].mnemonic == "ld" &&
+            split_ld(lines_[pos].operands, dst, src) &&
+            lower_copy(trim(dst)) == slot &&
+            trim(src) == "a") {
+            break;
+        }
+    }
+
+    if (!saw_diamond)
+        return false;
+    if (pos >= lines_.size() || lines_[pos].mnemonic != "ld" ||
+        !split_ld(lines_[pos].operands, dst, src) ||
+        lower_copy(trim(dst)) != slot ||
+        trim(src) != "a") {
+        return false;
+    }
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i));
+    return true;
+}
+
+bool z80_peep::rule_ix_byte_branch_temp_to_d(size_t i) {
+    if (i + 16 >= lines_.size())
+        return false;
+
+    auto unexpected_label = [&](size_t k) {
+        return k != i + 3 && k != i + 8 && k != i + 12 &&
+               !lines_[k].label.empty();
+    };
+    for (size_t k = i; k <= i + 16; ++k) {
+        if (unexpected_label(k))
+            return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(src) != "a") {
+        return false;
+    }
+    const std::string byte_slot = lower_copy(trim(dst));
+    int ignored = 0;
+    if (!parse_ixiy_ref(byte_slot, ignored))
+        return false;
+
+    int bit = -1;
+    std::string bit_reg;
+    if (lines_[i + 1].mnemonic != "bit" ||
+        !parse_bit_reg_operands(lines_[i + 1].operands, bit, bit_reg) ||
+        bit != 7 || bit_reg != "a") {
+        return false;
+    }
+
+    std::string cc;
+    std::string positive_label;
+    if (!split_conditional_branch_target(lines_[i + 2], cc, positive_label))
+        return false;
+
+    if (!lines_[i + 3].label.empty() &&
+        label_has_other_control_references(lines_, lines_[i + 3].label,
+                                           lines_.size())) {
+        return false;
+    }
+
+    if (lines_[i + 8].label != positive_label ||
+        !lines_[i + 8].mnemonic.empty() ||
+        label_has_other_control_references(lines_, positive_label, i + 2)) {
+        return false;
+    }
+
+    std::string join_label;
+    if (!parse_unconditional_jump(lines_[i + 7], join_label))
+        return false;
+    if (lines_[i + 12].label != join_label ||
+        !lines_[i + 12].mnemonic.empty() ||
+        label_has_other_control_references(lines_, join_label, i + 7)) {
+        return false;
+    }
+
+    auto parse_ld_a_from = [&](size_t pos, std::string &source) {
+        if (lines_[pos].mnemonic != "ld")
+            return false;
+        std::string local_dst;
+        std::string local_src;
+        if (!split_ld(lines_[pos].operands, local_dst, local_src) ||
+            trim(local_dst) != "a") {
+            return false;
+        }
+        source = lower_copy(trim(local_src));
+        return true;
+    };
+
+    auto parse_ld_to_same = [&](size_t pos, const std::string &target) {
+        if (lines_[pos].mnemonic != "ld")
+            return false;
+        std::string local_dst;
+        std::string local_src;
+        return split_ld(lines_[pos].operands, local_dst, local_src) &&
+               lower_copy(trim(local_dst)) == target &&
+               trim(local_src) == "a";
+    };
+
+    auto alu_uses_slot = [&](size_t pos, const char *mnemonic) {
+        if (lines_[pos].mnemonic != mnemonic)
+            return false;
+        const std::string ops = lower_copy(trim(lines_[pos].operands));
+        return ops == byte_slot || ops == std::string("a, ") + byte_slot ||
+               ops == std::string("a,") + byte_slot;
+    };
+
+    std::string acc_slot;
+    if (!parse_ld_a_from(i + 4, acc_slot) ||
+        !parse_ixiy_ref(acc_slot, ignored) ||
+        !alu_uses_slot(i + 5, "sub") ||
+        !parse_ld_to_same(i + 6, acc_slot) ||
+        !parse_ld_a_from(i + 9, src) ||
+        src != acc_slot ||
+        !alu_uses_slot(i + 10, "add") ||
+        !parse_ld_to_same(i + 11, acc_slot) ||
+        !parse_ld_a_from(i + 13, src) ||
+        src != acc_slot) {
+        return false;
+    }
+
+    const std::string add_ops = trim(lines_[i + 14].operands);
+    if (lines_[i + 14].mnemonic != "add" ||
+        (add_ops != "a, a" && add_ops != "a,a")) {
+        return false;
+    }
+    if (!alu_uses_slot(i + 15, "xor") ||
+        !parse_ld_to_same(i + 16, acc_slot)) {
+        return false;
+    }
+
+    if (!path_overwrites_pair_before_read(lines_, i + 17, "de", 'e', 'd'))
+        return false;
+
+    lines_[i] = asm_line::parse("\tld\td, a");
+    lines_[i + 5] = asm_line::parse("\tsub\ta, d");
+    lines_[i + 10] = asm_line::parse("\tadd\ta, d");
+    lines_[i + 15] = asm_line::parse("\txor\ta, d");
+    return true;
+}
+
+bool z80_peep::rule_bit15_shift_xor_diamond(size_t i) {
+    if (i + 27 >= lines_.size())
+        return false;
+
+    auto is_add_hl_hl = [](const asm_line &line) {
+        if (line.mnemonic != "add")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == "hl, hl" || ops == "hl,hl";
+    };
+
+    auto parse_ld_ix_from_reg = [](const asm_line &line,
+                                   const std::string &reg,
+                                   int &offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(src) == reg &&
+               parse_ix_ref(lower_copy(trim(dst)), offset);
+    };
+
+    auto is_ld_reg_from_ix = [](const asm_line &line,
+                                const std::string &reg,
+                                int offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        int parsed = 0;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == reg &&
+               parse_ix_ref(lower_copy(trim(src)), parsed) &&
+               parsed == offset;
+    };
+
+    auto is_ld_reg_reg = [](const asm_line &line,
+                            const std::string &dst_reg,
+                            const std::string &src_reg) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == dst_reg && trim(src) == src_reg;
+    };
+
+    int slot_lo = 0;
+    int slot_hi = 0;
+    if (!parse_ld_ix_from_reg(lines_[i], "l", slot_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 1], "h", slot_hi) ||
+        slot_hi != slot_lo + 1) {
+        return false;
+    }
+    const std::string slot_lo_ref = std::to_string(slot_lo) + "(ix)";
+    const std::string slot_hi_ref = std::to_string(slot_hi) + "(ix)";
+
+    int bit = -1;
+    std::string bit_reg;
+    if (lines_[i + 2].mnemonic != "bit" ||
+        !parse_bit_reg_operands(lines_[i + 2].operands, bit, bit_reg) ||
+        bit != 7 || (bit_reg != "h" && bit_reg != slot_hi_ref)) {
+        return false;
+    }
+
+    std::string cc;
+    std::string else_label;
+    if (!split_conditional_branch_target(lines_[i + 3], cc, else_label) ||
+        cc != "z") {
+        return false;
+    }
+
+    if (lines_[i + 4].label.empty() ||
+        !lines_[i + 4].mnemonic.empty() ||
+        label_has_other_control_references(lines_, lines_[i + 4].label,
+                                           lines_.size())) {
+        return false;
+    }
+
+    size_t tail_shift = 0;
+    int dead_shift_lo = 0;
+    int dead_shift_hi = 0;
+    if (parse_ld_ix_from_reg(lines_[i + 8], "l", dead_shift_lo) &&
+        parse_ld_ix_from_reg(lines_[i + 9], "h", dead_shift_hi) &&
+        dead_shift_hi == dead_shift_lo + 1) {
+        tail_shift = 2;
+    }
+    if (i + 27 + tail_shift >= lines_.size())
+        return false;
+
+    auto unexpected_label = [&](size_t k) {
+        return k != i + 4 &&
+               k != i + 17 + tail_shift &&
+               k != i + 23 + tail_shift &&
+               !lines_[k].label.empty();
+    };
+    for (size_t k = i; k <= i + 27 + tail_shift; ++k) {
+        if (unexpected_label(k))
+            return false;
+    }
+
+    if (!is_ld_reg_from_ix(lines_[i + 5], "l", slot_lo) ||
+        !is_ld_reg_from_ix(lines_[i + 6], "h", slot_hi) ||
+        !is_add_hl_hl(lines_[i + 7]) ||
+        !is_ld_reg_reg(lines_[i + 8 + tail_shift], "a", "l") ||
+        lines_[i + 9 + tail_shift].mnemonic != "xor" ||
+        !is_ld_reg_reg(lines_[i + 10 + tail_shift], "l", "a") ||
+        !is_ld_reg_reg(lines_[i + 11 + tail_shift], "a", "h") ||
+        lines_[i + 12 + tail_shift].mnemonic != "xor" ||
+        !is_ld_reg_reg(lines_[i + 13 + tail_shift], "h", "a")) {
+        return false;
+    }
+
+    const std::string xor_lo_operand =
+        trim(lines_[i + 9 + tail_shift].operands);
+    const std::string xor_hi_operand =
+        trim(lines_[i + 12 + tail_shift].operands);
+    int ignored = 0;
+    if (!parse_immediate_value(xor_lo_operand, ignored) ||
+        !parse_immediate_value(xor_hi_operand, ignored)) {
+        return false;
+    }
+
+    int temp_lo = 0;
+    int temp_hi = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 14 + tail_shift], "l", temp_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 15 + tail_shift], "h", temp_hi) ||
+        temp_hi != temp_lo + 1 ||
+        temp_lo == slot_lo) {
+        return false;
+    }
+
+    std::string join_label;
+    if (!parse_unconditional_jump(lines_[i + 16 + tail_shift], join_label))
+        return false;
+
+    if (lines_[i + 17 + tail_shift].label != else_label ||
+        !lines_[i + 17 + tail_shift].mnemonic.empty() ||
+        label_has_other_control_references(lines_, else_label, i + 3)) {
+        return false;
+    }
+
+    int else_temp_lo = 0;
+    int else_temp_hi = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 18 + tail_shift], "l", slot_lo) ||
+        !is_ld_reg_from_ix(lines_[i + 19 + tail_shift], "h", slot_hi) ||
+        !is_add_hl_hl(lines_[i + 20 + tail_shift]) ||
+        !parse_ld_ix_from_reg(lines_[i + 21 + tail_shift], "l", else_temp_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 22 + tail_shift], "h", else_temp_hi) ||
+        else_temp_lo != temp_lo ||
+        else_temp_hi != temp_hi) {
+        return false;
+    }
+
+    if (lines_[i + 23 + tail_shift].label != join_label ||
+        !lines_[i + 23 + tail_shift].mnemonic.empty() ||
+        label_has_other_control_references(lines_, join_label,
+                                           i + 16 + tail_shift)) {
+        return false;
+    }
+
+    int final_slot_lo = 0;
+    int final_slot_hi = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 24 + tail_shift], "l", temp_lo) ||
+        !is_ld_reg_from_ix(lines_[i + 25 + tail_shift], "h", temp_hi) ||
+        !parse_ld_ix_from_reg(lines_[i + 26 + tail_shift], "l", final_slot_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 27 + tail_shift], "h", final_slot_hi) ||
+        final_slot_lo != slot_lo ||
+        final_slot_hi != slot_hi) {
+        return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame, prologue_index))
+        return false;
+    if (!ix_offset_in_temp_frame(temp_lo, locals, temp_frame) ||
+        !ix_offset_in_temp_frame(temp_hi, locals, temp_frame)) {
+        return false;
+    }
+    if (tail_shift != 0 &&
+        (!ix_offset_in_temp_frame(dead_shift_lo, locals, temp_frame) ||
+         !ix_offset_in_temp_frame(dead_shift_hi, locals, temp_frame))) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tadd\thl, hl");
+    lines_[i + 1] = asm_line::parse("\tjr\tnc, " + join_label);
+    lines_[i + 2] = asm_line::parse("\tld\ta, l");
+    lines_[i + 3] = asm_line::parse("\txor\t" + xor_lo_operand);
+    lines_[i + 4] = asm_line::parse("\tld\tl, a");
+    lines_[i + 5] = asm_line::parse("\tld\ta, h");
+    lines_[i + 6] = asm_line::parse("\txor\t" + xor_hi_operand);
+    lines_[i + 7] = asm_line::parse("\tld\th, a");
+    lines_[i + 8] = lines_[i + 23 + tail_shift];
+    lines_[i + 9] = asm_line::parse("\tld\t" + slot_lo_ref + ", l");
+    lines_[i + 10] = asm_line::parse("\tld\t" + slot_hi_ref + ", h");
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 11),
+                 lines_.begin() +
+                     static_cast<std::ptrdiff_t>(i + 28 + tail_shift));
+    return true;
+}
+
+bool z80_peep::rule_masked_bit15_shift_xor_diamond(size_t i) {
+    if (i + 36 >= lines_.size())
+        return false;
+
+    for (size_t k = i; k <= i + 36; ++k) {
+        if (k != i + 13 && k != i + 26 && k != i + 32 &&
+            !lines_[k].label.empty()) {
+            return false;
+        }
+    }
+
+    auto is_add_hl_hl = [](const asm_line &line) {
+        if (line.mnemonic != "add")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == "hl, hl" || ops == "hl,hl";
+    };
+
+    auto parse_ld_ix_from_reg = [](const asm_line &line,
+                                   const std::string &reg,
+                                   int &offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(src) == reg &&
+               parse_ix_ref(lower_copy(trim(dst)), offset);
+    };
+
+    auto is_ld_reg_from_ix = [](const asm_line &line,
+                                const std::string &reg,
+                                int offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        int parsed = 0;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == reg &&
+               parse_ix_ref(lower_copy(trim(src)), parsed) &&
+               parsed == offset;
+    };
+
+    auto is_ld_reg_reg = [](const asm_line &line,
+                            const std::string &dst_reg,
+                            const std::string &src_reg) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == dst_reg && trim(src) == src_reg;
+    };
+
+    int slot_lo = 0;
+    int slot_hi = 0;
+    if (!parse_ld_ix_from_reg(lines_[i], "l", slot_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 1], "h", slot_hi) ||
+        slot_hi != slot_lo + 1) {
+        return false;
+    }
+
+    if (!is_ld_reg_reg(lines_[i + 2], "a", "l") ||
+        lines_[i + 3].mnemonic != "and" ||
+        !immediate_is(lines_[i + 3].operands, 0) ||
+        !is_ld_reg_reg(lines_[i + 4], "l", "a") ||
+        !is_ld_reg_reg(lines_[i + 5], "a", "h") ||
+        lines_[i + 6].mnemonic != "and" ||
+        !immediate_is(lines_[i + 6].operands, 128) ||
+        !is_ld_reg_reg(lines_[i + 7], "h", "a") ||
+        !is_ld_reg_reg(lines_[i + 8], "b", "h") ||
+        !is_ld_reg_reg(lines_[i + 9], "c", "l") ||
+        !is_ld_reg_reg(lines_[i + 10], "a", "h") ||
+        lines_[i + 11].mnemonic != "or") {
+        return false;
+    }
+    const std::string or_ops = trim(lines_[i + 11].operands);
+    if (or_ops != "a, l" && or_ops != "a,l" && or_ops != "l")
+        return false;
+
+    std::string cc;
+    std::string else_label;
+    if (!split_conditional_branch_target(lines_[i + 12], cc, else_label) ||
+        cc != "z") {
+        return false;
+    }
+
+    if (lines_[i + 13].label.empty() ||
+        !lines_[i + 13].mnemonic.empty() ||
+        label_has_other_control_references(lines_, lines_[i + 13].label,
+                                           lines_.size())) {
+        return false;
+    }
+
+    if (!is_ld_reg_from_ix(lines_[i + 14], "l", slot_lo) ||
+        !is_ld_reg_from_ix(lines_[i + 15], "h", slot_hi) ||
+        !is_add_hl_hl(lines_[i + 16]) ||
+        !is_ld_reg_reg(lines_[i + 17], "a", "l") ||
+        lines_[i + 18].mnemonic != "xor" ||
+        !is_ld_reg_reg(lines_[i + 19], "l", "a") ||
+        !is_ld_reg_reg(lines_[i + 20], "a", "h") ||
+        lines_[i + 21].mnemonic != "xor" ||
+        !is_ld_reg_reg(lines_[i + 22], "h", "a")) {
+        return false;
+    }
+
+    const std::string xor_lo_operand = trim(lines_[i + 18].operands);
+    const std::string xor_hi_operand = trim(lines_[i + 21].operands);
+    int ignored = 0;
+    if (!parse_immediate_value(xor_lo_operand, ignored) ||
+        !parse_immediate_value(xor_hi_operand, ignored)) {
+        return false;
+    }
+
+    int temp_lo = 0;
+    int temp_hi = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 23], "l", temp_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 24], "h", temp_hi) ||
+        temp_hi != temp_lo + 1 ||
+        temp_lo == slot_lo) {
+        return false;
+    }
+
+    std::string join_label;
+    if (!parse_unconditional_jump(lines_[i + 25], join_label))
+        return false;
+
+    if (lines_[i + 26].label != else_label ||
+        !lines_[i + 26].mnemonic.empty() ||
+        label_has_other_control_references(lines_, else_label, i + 12)) {
+        return false;
+    }
+
+    int else_temp_lo = 0;
+    int else_temp_hi = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 27], "l", slot_lo) ||
+        !is_ld_reg_from_ix(lines_[i + 28], "h", slot_hi) ||
+        !is_add_hl_hl(lines_[i + 29]) ||
+        !parse_ld_ix_from_reg(lines_[i + 30], "l", else_temp_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 31], "h", else_temp_hi) ||
+        else_temp_lo != temp_lo ||
+        else_temp_hi != temp_hi) {
+        return false;
+    }
+
+    if (lines_[i + 32].label != join_label ||
+        !lines_[i + 32].mnemonic.empty() ||
+        label_has_other_control_references(lines_, join_label, i + 25)) {
+        return false;
+    }
+
+    int final_slot_lo = 0;
+    int final_slot_hi = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 33], "l", temp_lo) ||
+        !is_ld_reg_from_ix(lines_[i + 34], "h", temp_hi) ||
+        !parse_ld_ix_from_reg(lines_[i + 35], "l", final_slot_lo) ||
+        !parse_ld_ix_from_reg(lines_[i + 36], "h", final_slot_hi) ||
+        final_slot_lo != slot_lo ||
+        final_slot_hi != slot_hi) {
+        return false;
+    }
+
+    const size_t after_window = i + 37;
+    if (!a_overwritten_before_read(lines_, after_window) ||
+        !path_overwrites_bc_before_read_or_call(lines_, after_window)) {
+        return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame, prologue_index))
+        return false;
+    if (!ix_offset_in_temp_frame(temp_lo, locals, temp_frame) ||
+        !ix_offset_in_temp_frame(temp_hi, locals, temp_frame)) {
+        return false;
+    }
+    const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
+    if (ix_slot_read_in_function(lines_, prologue_index, fn_end,
+                                 temp_lo, i + 33) ||
+        ix_slot_read_in_function(lines_, prologue_index, fn_end,
+                                 temp_hi, i + 34)) {
+        return false;
+    }
+
+    const std::string slot_lo_ref = std::to_string(slot_lo) + "(ix)";
+    const std::string slot_hi_ref = std::to_string(slot_hi) + "(ix)";
+    lines_[i] = asm_line::parse("\tadd\thl, hl");
+    lines_[i + 1] = asm_line::parse("\tjr\tnc, " + join_label);
+    lines_[i + 2] = asm_line::parse("\tld\ta, l");
+    lines_[i + 3] = asm_line::parse("\txor\t" + xor_lo_operand);
+    lines_[i + 4] = asm_line::parse("\tld\tl, a");
+    lines_[i + 5] = asm_line::parse("\tld\ta, h");
+    lines_[i + 6] = asm_line::parse("\txor\t" + xor_hi_operand);
+    lines_[i + 7] = asm_line::parse("\tld\th, a");
+    lines_[i + 8] = lines_[i + 32];
+    lines_[i + 9] = asm_line::parse("\tld\t" + slot_lo_ref + ", l");
+    lines_[i + 10] = asm_line::parse("\tld\t" + slot_hi_ref + ", h");
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 11),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 37));
+    return true;
+}
+
+bool z80_peep::rule_lsb32_shift_xor_diamond(size_t i) {
+    if (i + 77 >= lines_.size())
+        return false;
+
+    for (size_t k = i; k <= i + 77; ++k) {
+        if (k != i + 2 && k != i + 48 && k != i + 69 &&
+            !lines_[k].label.empty()) {
+            return false;
+        }
+    }
+
+    auto is_shift_right_32 = [&](size_t base) {
+        return base + 3 < lines_.size() &&
+               lines_[base].mnemonic == "srl" &&
+               trim(lines_[base].operands) == "d" &&
+               lines_[base + 1].mnemonic == "rr" &&
+               trim(lines_[base + 1].operands) == "e" &&
+               lines_[base + 2].mnemonic == "rr" &&
+               trim(lines_[base + 2].operands) == "h" &&
+               lines_[base + 3].mnemonic == "rr" &&
+               trim(lines_[base + 3].operands) == "l";
+    };
+
+    auto parse_ld_ix_from_reg = [](const asm_line &line,
+                                   const std::string &reg,
+                                   int &offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(src) == reg &&
+               parse_ix_ref(lower_copy(trim(dst)), offset);
+    };
+
+    auto is_ld_reg_from_ix = [](const asm_line &line,
+                                const std::string &reg,
+                                int offset) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        int parsed = 0;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == reg &&
+               parse_ix_ref(lower_copy(trim(src)), parsed) &&
+               parsed == offset;
+    };
+
+    auto is_ld_reg_reg = [](const asm_line &line,
+                            const std::string &dst_reg,
+                            const std::string &src_reg) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == dst_reg && trim(src) == src_reg;
+    };
+
+    auto is_xor_a_reg = [](const asm_line &line, const std::string &reg) {
+        if (line.mnemonic != "xor")
+            return false;
+        const std::string ops = trim(line.operands);
+        return ops == reg || ops == "a, " + reg || ops == "a," + reg;
+    };
+
+    auto parse_ld_pair_immediate = [](const asm_line &line,
+                                      const std::string &pair,
+                                      int &value) {
+        if (line.mnemonic != "ld")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == pair &&
+               parse_immediate_value(src, value);
+    };
+
+    int bit = -1;
+    std::string bit_operand;
+    int src0 = 0;
+    if (lines_[i].mnemonic != "bit" ||
+        !parse_bit_reg_operands(lines_[i].operands, bit, bit_operand) ||
+        bit != 0 ||
+        !parse_ix_ref(lower_copy(trim(bit_operand)), src0)) {
+        return false;
+    }
+    const int src1 = src0 + 1;
+    const int src2 = src0 + 2;
+    const int src3 = src0 + 3;
+
+    std::string cc;
+    std::string else_label;
+    if (!split_conditional_branch_target(lines_[i + 1], cc, else_label) ||
+        cc != "z") {
+        return false;
+    }
+
+    if (lines_[i + 2].label.empty() ||
+        !lines_[i + 2].mnemonic.empty() ||
+        label_has_other_control_references(lines_, lines_[i + 2].label,
+                                           lines_.size())) {
+        return false;
+    }
+
+    if (!is_ld_reg_from_ix(lines_[i + 3], "e", src2) ||
+        !is_ld_reg_from_ix(lines_[i + 4], "d", src3) ||
+        !is_ld_reg_from_ix(lines_[i + 5], "l", src0) ||
+        !is_ld_reg_from_ix(lines_[i + 6], "h", src1) ||
+        !is_shift_right_32(i + 7)) {
+        return false;
+    }
+
+    int t0 = 0;
+    int t1 = 0;
+    int t2 = 0;
+    int t3 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 11], "l", t0) ||
+        !parse_ld_ix_from_reg(lines_[i + 12], "h", t1) ||
+        !parse_ld_ix_from_reg(lines_[i + 13], "e", t2) ||
+        !parse_ld_ix_from_reg(lines_[i + 14], "d", t3)) {
+        return false;
+    }
+
+    int low_poly = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 15], "l", t0) ||
+        !is_ld_reg_from_ix(lines_[i + 16], "h", t1) ||
+        lines_[i + 17].mnemonic != "ex" ||
+        trim(lines_[i + 17].operands) != "de, hl" ||
+        !parse_ld_pair_immediate(lines_[i + 18], "hl", low_poly) ||
+        !is_ld_reg_reg(lines_[i + 19], "a", "l") ||
+        !is_xor_a_reg(lines_[i + 20], "e") ||
+        !is_ld_reg_reg(lines_[i + 21], "l", "a") ||
+        !is_ld_reg_reg(lines_[i + 22], "a", "h") ||
+        !is_xor_a_reg(lines_[i + 23], "d") ||
+        !is_ld_reg_reg(lines_[i + 24], "h", "a")) {
+        return false;
+    }
+
+    int x0 = 0;
+    int x1 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 25], "l", x0) ||
+        !parse_ld_ix_from_reg(lines_[i + 26], "h", x1)) {
+        return false;
+    }
+
+    int high_poly = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 27], "l", t2) ||
+        !is_ld_reg_from_ix(lines_[i + 28], "h", t3) ||
+        lines_[i + 29].mnemonic != "ex" ||
+        trim(lines_[i + 29].operands) != "de, hl" ||
+        !parse_ld_pair_immediate(lines_[i + 30], "hl", high_poly) ||
+        !is_ld_reg_reg(lines_[i + 31], "a", "l") ||
+        !is_xor_a_reg(lines_[i + 32], "e") ||
+        !is_ld_reg_reg(lines_[i + 33], "l", "a") ||
+        !is_ld_reg_reg(lines_[i + 34], "a", "h") ||
+        !is_xor_a_reg(lines_[i + 35], "d") ||
+        !is_ld_reg_reg(lines_[i + 36], "h", "a")) {
+        return false;
+    }
+
+    int x2 = 0;
+    int x3 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 37], "l", x2) ||
+        !parse_ld_ix_from_reg(lines_[i + 38], "h", x3) ||
+        !is_ld_reg_from_ix(lines_[i + 39], "l", x0) ||
+        !is_ld_reg_from_ix(lines_[i + 40], "h", x1)) {
+        return false;
+    }
+
+    int out0 = 0;
+    int out1 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 41], "l", out0) ||
+        !parse_ld_ix_from_reg(lines_[i + 42], "h", out1) ||
+        !is_ld_reg_from_ix(lines_[i + 43], "l", x2) ||
+        !is_ld_reg_from_ix(lines_[i + 44], "h", x3)) {
+        return false;
+    }
+
+    int out2 = 0;
+    int out3 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 45], "l", out2) ||
+        !parse_ld_ix_from_reg(lines_[i + 46], "h", out3)) {
+        return false;
+    }
+
+    std::string join_label;
+    if (!parse_unconditional_jump(lines_[i + 47], join_label))
+        return false;
+
+    if (lines_[i + 48].label != else_label ||
+        !lines_[i + 48].mnemonic.empty() ||
+        label_has_other_control_references(lines_, else_label, i + 1)) {
+        return false;
+    }
+
+    if (!is_ld_reg_from_ix(lines_[i + 49], "e", src2) ||
+        !is_ld_reg_from_ix(lines_[i + 50], "d", src3) ||
+        !is_ld_reg_from_ix(lines_[i + 51], "l", src0) ||
+        !is_ld_reg_from_ix(lines_[i + 52], "h", src1) ||
+        !is_shift_right_32(i + 53)) {
+        return false;
+    }
+
+    int e0 = 0;
+    int e1 = 0;
+    int e2 = 0;
+    int e3 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 57], "l", e0) ||
+        !parse_ld_ix_from_reg(lines_[i + 58], "h", e1) ||
+        !parse_ld_ix_from_reg(lines_[i + 59], "e", e2) ||
+        !parse_ld_ix_from_reg(lines_[i + 60], "d", e3) ||
+        !is_ld_reg_from_ix(lines_[i + 61], "l", e0) ||
+        !is_ld_reg_from_ix(lines_[i + 62], "h", e1)) {
+        return false;
+    }
+
+    int else_out0 = 0;
+    int else_out1 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 63], "l", else_out0) ||
+        !parse_ld_ix_from_reg(lines_[i + 64], "h", else_out1) ||
+        else_out0 != out0 ||
+        else_out1 != out1 ||
+        !is_ld_reg_from_ix(lines_[i + 65], "l", e2) ||
+        !is_ld_reg_from_ix(lines_[i + 66], "h", e3)) {
+        return false;
+    }
+
+    int else_out2 = 0;
+    int else_out3 = 0;
+    if (!parse_ld_ix_from_reg(lines_[i + 67], "l", else_out2) ||
+        !parse_ld_ix_from_reg(lines_[i + 68], "h", else_out3) ||
+        else_out2 != out2 ||
+        else_out3 != out3) {
+        return false;
+    }
+
+    if (lines_[i + 69].label != join_label ||
+        !lines_[i + 69].mnemonic.empty() ||
+        label_has_other_control_references(lines_, join_label, i + 47)) {
+        return false;
+    }
+
+    int final0 = 0;
+    int final1 = 0;
+    int final2 = 0;
+    int final3 = 0;
+    if (!is_ld_reg_from_ix(lines_[i + 70], "l", out0) ||
+        !is_ld_reg_from_ix(lines_[i + 71], "h", out1) ||
+        !parse_ld_ix_from_reg(lines_[i + 72], "l", final0) ||
+        !parse_ld_ix_from_reg(lines_[i + 73], "h", final1) ||
+        final0 != src0 ||
+        final1 != src1 ||
+        !is_ld_reg_from_ix(lines_[i + 74], "l", out2) ||
+        !is_ld_reg_from_ix(lines_[i + 75], "h", out3) ||
+        !parse_ld_ix_from_reg(lines_[i + 76], "l", final2) ||
+        !parse_ld_ix_from_reg(lines_[i + 77], "h", final3) ||
+        final2 != src2 ||
+        final3 != src3) {
+        return false;
+    }
+
+    std::vector<int> temp_offsets = {
+        t0, t1, t2, t3, x0, x1, x2, x3,
+        out0, out1, out2, out3, e0, e1, e2, e3
+    };
+    std::sort(temp_offsets.begin(), temp_offsets.end());
+    temp_offsets.erase(std::unique(temp_offsets.begin(), temp_offsets.end()),
+                       temp_offsets.end());
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame, prologue_index))
+        return false;
+    const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
+    for (int off : temp_offsets) {
+        if (off == src0 || off == src1 || off == src2 || off == src3)
+            return false;
+        if (!ix_offset_in_temp_frame(off, locals, temp_frame))
+            return false;
+        for (size_t k = prologue_index; k < fn_end; ++k) {
+            if (k >= i && k <= i + 77)
+                continue;
+            if (line_reads_ix_offset(lines_[k], off))
+                return false;
+        }
+    }
+
+    const std::string src0_ref = std::to_string(src0) + "(ix)";
+    const std::string src1_ref = std::to_string(src1) + "(ix)";
+    const std::string src2_ref = std::to_string(src2) + "(ix)";
+    const std::string src3_ref = std::to_string(src3) + "(ix)";
+    const int low0 = low_poly & 0xff;
+    const int low1 = (low_poly >> 8) & 0xff;
+    const int high0 = high_poly & 0xff;
+    const int high1 = (high_poly >> 8) & 0xff;
+
+    lines_[i] = asm_line::parse("\tld\te, " + src2_ref);
+    lines_[i + 1] = asm_line::parse("\tld\td, " + src3_ref);
+    lines_[i + 2] = asm_line::parse("\tld\tl, " + src0_ref);
+    lines_[i + 3] = asm_line::parse("\tld\th, " + src1_ref);
+    lines_[i + 4] = asm_line::parse("\tsrl\td");
+    lines_[i + 5] = asm_line::parse("\trr\te");
+    lines_[i + 6] = asm_line::parse("\trr\th");
+    lines_[i + 7] = asm_line::parse("\trr\tl");
+    lines_[i + 8] = asm_line::parse("\tjr\tnc, " + join_label);
+    lines_[i + 9] = asm_line::parse("\tld\ta, l");
+    lines_[i + 10] = asm_line::parse("\txor\t#" + std::to_string(low0));
+    lines_[i + 11] = asm_line::parse("\tld\tl, a");
+    lines_[i + 12] = asm_line::parse("\tld\ta, h");
+    lines_[i + 13] = asm_line::parse("\txor\t#" + std::to_string(low1));
+    lines_[i + 14] = asm_line::parse("\tld\th, a");
+    lines_[i + 15] = asm_line::parse("\tld\ta, e");
+    lines_[i + 16] = asm_line::parse("\txor\t#" + std::to_string(high0));
+    lines_[i + 17] = asm_line::parse("\tld\te, a");
+    lines_[i + 18] = asm_line::parse("\tld\ta, d");
+    lines_[i + 19] = asm_line::parse("\txor\t#" + std::to_string(high1));
+    lines_[i + 20] = asm_line::parse("\tld\td, a");
+    lines_[i + 21] = lines_[i + 69];
+    lines_[i + 22] = asm_line::parse("\tld\t" + src0_ref + ", l");
+    lines_[i + 23] = asm_line::parse("\tld\t" + src1_ref + ", h");
+    lines_[i + 24] = asm_line::parse("\tld\t" + src2_ref + ", e");
+    lines_[i + 25] = asm_line::parse("\tld\t" + src3_ref + ", d");
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 26),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 78));
     return true;
 }
 
@@ -3896,6 +6909,381 @@ bool z80_peep::rule_redundant_u8_self_mask(size_t i) {
         return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 3));
+    return true;
+}
+
+bool z80_peep::rule_zero_extended_byte_mask_branch(size_t i) {
+    if (i + 9 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 9; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    if (lines_[i].mnemonic != "ld" ||
+        lines_[i + 1].mnemonic != "ld" ||
+        lines_[i + 2].mnemonic != "ld" ||
+        lines_[i + 3].mnemonic != "and" ||
+        lines_[i + 4].mnemonic != "ld" ||
+        lines_[i + 5].mnemonic != "ld" ||
+        lines_[i + 6].mnemonic != "and" ||
+        lines_[i + 7].mnemonic != "ld" ||
+        lines_[i + 8].mnemonic != "or") {
+        return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "l") {
+        return false;
+    }
+    const std::string test_src = lower_copy(trim(src));
+    if (!bit_operand_supported(test_src))
+        return false;
+
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "h" || !immediate_is(src, 0)) {
+        return false;
+    }
+    if (!split_ld(lines_[i + 2].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "l") {
+        return false;
+    }
+
+    int mask = 0;
+    if (!parse_immediate_value(lines_[i + 3].operands, mask))
+        return false;
+    const int bit = single_u8_bit_index(mask);
+    if (bit < 0)
+        return false;
+
+    if (!split_ld(lines_[i + 4].operands, dst, src) ||
+        trim(dst) != "l" || trim(src) != "a") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 5].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "h") {
+        return false;
+    }
+    if (!immediate_is(lines_[i + 6].operands, 0))
+        return false;
+    if (!split_ld(lines_[i + 7].operands, dst, src) ||
+        trim(dst) != "h" || trim(src) != "a") {
+        return false;
+    }
+    if (trim(lines_[i + 8].operands) != "a, l" &&
+        trim(lines_[i + 8].operands) != "a,l" &&
+        trim(lines_[i + 8].operands) != "l") {
+        return false;
+    }
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[i + 9], cc, target))
+        return false;
+    if (cc != "z" && cc != "nz")
+        return false;
+
+    const size_t target_idx = find_label_index(lines_, target);
+    if (target_idx == lines_.size())
+        return false;
+    const size_t fallthrough = i + 10;
+    if (!a_overwritten_before_read(lines_, fallthrough) ||
+        !a_overwritten_before_read(lines_, target_idx) ||
+        !path_overwrites_hl_before_read(lines_, fallthrough) ||
+        !path_overwrites_hl_before_read(lines_, target_idx) ||
+        !flags_overwritten_before_read_or_escape(lines_, fallthrough) ||
+        !flags_overwritten_before_read_or_escape(lines_, target_idx)) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tbit\t" + std::to_string(bit) + ", " + test_src);
+    lines_[i + 1] = lines_[i + 9];
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 10));
+    return true;
+}
+
+bool z80_peep::rule_zero_extended_byte_store_direct(size_t i) {
+    if (i + 5 >= lines_.size())
+        return false;
+
+    auto no_labels = [&](size_t end_inclusive) {
+        if (end_inclusive >= lines_.size())
+            return false;
+        for (size_t k = i; k <= end_inclusive; ++k) {
+            if (!lines_[k].label.empty())
+                return false;
+        }
+        return true;
+    };
+
+    auto is_add_a_a = [&](const asm_line &line) {
+        if (line.mnemonic != "add")
+            return false;
+        std::string dst;
+        std::string src;
+        return split_ld(line.operands, dst, src) &&
+               trim(dst) == "a" && trim(src) == "a";
+    };
+
+    auto parse_adjacent_indexed_stores = [&](size_t lo_idx,
+                                             size_t hi_idx,
+                                             int &lo_off,
+                                             int &hi_off) {
+        std::string dst;
+        std::string src;
+        if (lines_[lo_idx].mnemonic != "ld" ||
+            !split_ld(lines_[lo_idx].operands, dst, src) ||
+            trim(src) != "l" ||
+            !parse_ix_ref(trim(dst), lo_off)) {
+            return false;
+        }
+        if (lines_[hi_idx].mnemonic != "ld" ||
+            !split_ld(lines_[hi_idx].operands, dst, src) ||
+            trim(src) != "h" ||
+            !parse_ix_ref(trim(dst), hi_off)) {
+            return false;
+        }
+        return hi_off == lo_off + 1;
+    };
+
+    auto common_prefix_matches = [&]() {
+        std::string dst;
+        std::string src;
+        if (lines_[i].mnemonic != "ld" ||
+            !split_ld(lines_[i].operands, dst, src) ||
+            trim(dst) != "a") {
+            return false;
+        }
+        if (!is_add_a_a(lines_[i + 1]))
+            return false;
+        if (lines_[i + 2].mnemonic != "ld" ||
+            !split_ld(lines_[i + 2].operands, dst, src) ||
+            trim(dst) != "l" || trim(src) != "a") {
+            return false;
+        }
+        return lines_[i + 3].mnemonic == "ld" &&
+               split_ld(lines_[i + 3].operands, dst, src) &&
+               trim(dst) == "h" && immediate_is(src, 0);
+    };
+
+    if (!common_prefix_matches())
+        return false;
+
+    int lo_off = 0;
+    int hi_off = 0;
+
+    if (i + 11 < lines_.size() && no_labels(i + 11)) {
+        std::string dst;
+        std::string src;
+        int xor_value = 0;
+        if (lines_[i + 4].mnemonic == "ld" &&
+            split_ld(lines_[i + 4].operands, dst, src) &&
+            trim(dst) == "a" && trim(src) == "l" &&
+            lines_[i + 5].mnemonic == "xor" &&
+            parse_immediate_value(lines_[i + 5].operands, xor_value) &&
+            lines_[i + 6].mnemonic == "ld" &&
+            split_ld(lines_[i + 6].operands, dst, src) &&
+            trim(dst) == "l" && trim(src) == "a" &&
+            lines_[i + 7].mnemonic == "ld" &&
+            split_ld(lines_[i + 7].operands, dst, src) &&
+            trim(dst) == "a" && trim(src) == "h" &&
+            lines_[i + 8].mnemonic == "xor" &&
+            immediate_is(lines_[i + 8].operands, 0) &&
+            lines_[i + 9].mnemonic == "ld" &&
+            split_ld(lines_[i + 9].operands, dst, src) &&
+            trim(dst) == "h" && trim(src) == "a" &&
+            parse_adjacent_indexed_stores(i + 10, i + 11, lo_off, hi_off) &&
+            a_overwritten_before_read(lines_, i + 12) &&
+            path_overwrites_hl_before_read(lines_, i + 12) &&
+            flags_overwritten_before_read_or_escape(lines_, i + 12)) {
+            lines_[i + 2] = asm_line::parse("\txor\t" + imm8_text(xor_value));
+            lines_[i + 3] = asm_line::parse(
+                "\tld\t" + std::to_string(lo_off) + "(ix), a");
+            lines_[i + 4] = asm_line::parse(
+                "\tld\t" + std::to_string(hi_off) + "(ix), #0");
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 5),
+                         lines_.begin() + static_cast<std::ptrdiff_t>(i + 12));
+            return true;
+        }
+    }
+
+    if (!no_labels(i + 5))
+        return false;
+    if (!parse_adjacent_indexed_stores(i + 4, i + 5, lo_off, hi_off))
+        return false;
+    if (!path_overwrites_hl_before_read(lines_, i + 6) ||
+        !flags_overwritten_before_read_or_escape(lines_, i + 6)) {
+        return false;
+    }
+
+    lines_[i + 2] = asm_line::parse(
+        "\tld\t" + std::to_string(lo_off) + "(ix), a");
+    lines_[i + 3] = asm_line::parse(
+        "\tld\t" + std::to_string(hi_off) + "(ix), #0");
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 4),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
+    return true;
+}
+
+bool z80_peep::rule_zero_extended_mask_inc_word_store(size_t i) {
+    if (i + 7 >= lines_.size())
+        return false;
+    for (size_t k = i; k <= i + 7; ++k) {
+        if (!lines_[k].label.empty())
+            return false;
+    }
+
+    if (lines_[i].mnemonic != "ld" ||
+        lines_[i + 1].mnemonic != "ld" ||
+        lines_[i + 2].mnemonic != "ld" ||
+        lines_[i + 3].mnemonic != "and" ||
+        lines_[i + 4].mnemonic != "ld" ||
+        lines_[i + 5].mnemonic != "inc" ||
+        lines_[i + 6].mnemonic != "ld" ||
+        lines_[i + 7].mnemonic != "ld") {
+        return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "l") {
+        return false;
+    }
+    const std::string value_src = trim(src);
+    if (!is_plain_8bit_reg(value_src) && !is_immediate_operand(value_src) &&
+        !is_numeric_literal(value_src)) {
+        int ignored = 0;
+        if (!parse_ixiy_ref(value_src, ignored) && value_src != "(hl)")
+            return false;
+    }
+
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "h" || !immediate_is(src, 0)) {
+        return false;
+    }
+    if (!split_ld(lines_[i + 2].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "l") {
+        return false;
+    }
+
+    int mask = 0;
+    if (!parse_immediate_value(lines_[i + 3].operands, mask))
+        return false;
+    mask = u8_value(mask);
+    if (mask == 0xff)
+        return false;
+
+    if (!split_ld(lines_[i + 4].operands, dst, src) ||
+        trim(dst) != "l" || trim(src) != "a") {
+        return false;
+    }
+    if (trim(lines_[i + 5].operands) != "hl")
+        return false;
+
+    std::string lo_slot;
+    std::string hi_slot;
+    int lo_off = 0;
+    int hi_off = 0;
+    if (!split_ld(lines_[i + 6].operands, dst, src) ||
+        trim(src) != "l" ||
+        !parse_ix_ref(trim(dst), lo_off)) {
+        return false;
+    }
+    lo_slot = trim(dst);
+    if (!split_ld(lines_[i + 7].operands, dst, src) ||
+        trim(src) != "h" ||
+        !parse_ix_ref(trim(dst), hi_off) ||
+        hi_off != lo_off + 1) {
+        return false;
+    }
+    hi_slot = trim(dst);
+
+    const size_t after = i + 8;
+    const bool preserve_hl = !path_overwrites_hl_before_read(lines_, after);
+    if (!a_overwritten_before_read(lines_, after) ||
+        !flags_overwritten_before_read_or_escape(lines_, after)) {
+        return false;
+    }
+
+    size_t out = i;
+    if (value_src != "a") {
+        lines_[out++] = asm_line::parse("\tld\ta, " + value_src);
+    }
+    lines_[out++] = asm_line::parse("\tand\t" + imm8_text(mask));
+    lines_[out++] = asm_line::parse("\tinc\ta");
+    if (preserve_hl) {
+        lines_[out++] = asm_line::parse("\tld\tl, a");
+        lines_[out++] = asm_line::parse("\tld\th, #0");
+        lines_[out++] = asm_line::parse("\tld\t" + lo_slot + ", l");
+        lines_[out++] = asm_line::parse("\tld\t" + hi_slot + ", h");
+    } else {
+        lines_[out++] = asm_line::parse("\tld\t" + lo_slot + ", a");
+        lines_[out++] = asm_line::parse("\tld\t" + hi_slot + ", #0");
+    }
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(out),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 8));
+    return true;
+}
+
+bool z80_peep::rule_word_reload_low_byte_to_a(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+    for (size_t k = i; k <= i + 2; ++k) {
+        if (!lines_[k].label.empty())
+            return false;
+    }
+
+    if (lines_[i].mnemonic != "ld" ||
+        lines_[i + 1].mnemonic != "ld" ||
+        lines_[i + 2].mnemonic != "ld") {
+        return false;
+    }
+
+    std::string lo_dst;
+    std::string lo_src;
+    std::string hi_dst;
+    std::string hi_src;
+    std::string a_dst;
+    std::string a_src;
+    if (!split_ld(lines_[i].operands, lo_dst, lo_src) ||
+        !split_ld(lines_[i + 1].operands, hi_dst, hi_src) ||
+        !split_ld(lines_[i + 2].operands, a_dst, a_src)) {
+        return false;
+    }
+
+    lo_dst = trim(lo_dst);
+    lo_src = trim(lo_src);
+    hi_dst = trim(hi_dst);
+    hi_src = trim(hi_src);
+    a_dst = trim(a_dst);
+    a_src = trim(a_src);
+    if (lo_dst != "l" || hi_dst != "h" || a_dst != "a" || a_src != "l")
+        return false;
+
+    int lo_off = 0;
+    int hi_off = 0;
+    if (parse_ix_ref(lo_src, lo_off)) {
+        if (!parse_ix_ref(hi_src, hi_off))
+            return false;
+    } else if (parse_iy_ref(lo_src, lo_off)) {
+        if (!parse_iy_ref(hi_src, hi_off))
+            return false;
+    } else {
+        return false;
+    }
+    if (hi_off != lo_off + 1)
+        return false;
+    if (!path_overwrites_hl_before_read(lines_, i + 3))
+        return false;
+
+    lines_[i] = asm_line::parse("\tld\ta, " + lo_src);
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 3));
     return true;
 }
@@ -4126,8 +7514,10 @@ bool z80_peep::rule_a_temp_reload_after_preserving_branch(size_t i) {
     };
 
     auto erase_reload_and_maybe_store = [&](size_t reload_idx) {
+        const bool temp_frame_store =
+            have_frame && ix_offset_in_temp_frame(temp_off, locals, temp_frame);
         const bool store_is_dead =
-            have_frame &&
+            temp_frame_store &&
             ix_slot_not_read_before_rewrite(lines_, reload_idx + 1,
                                             function_end, temp_off);
         lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(reload_idx));
@@ -4183,6 +7573,13 @@ bool z80_peep::rule_a_temp_reload_after_preserving_branch(size_t i) {
         std::string cc;
         std::string target;
         if (split_conditional_branch_target(line, cc, target)) {
+            const size_t target_idx = find_label_index(lines_, target);
+            // A backward edge can execute arbitrary code (including calls)
+            // before returning to this store. The local A-preservation scan
+            // cannot prove that path, so keep both the spill and reload.
+            if (target_idx != lines_.size() && target_idx <= i)
+                return false;
+
             size_t reload_idx = lines_.size();
             if (first_instruction_after_labels(k + 1, "", lines_.size(),
                                                reload_idx) &&
@@ -4190,7 +7587,6 @@ bool z80_peep::rule_a_temp_reload_after_preserving_branch(size_t i) {
                 return erase_reload_and_maybe_store(reload_idx);
             }
 
-            const size_t target_idx = find_label_index(lines_, target);
             if (target_idx > k && target_idx < end &&
                 !label_has_other_control_references(lines_, target, k)) {
                 const size_t prev_idx =
@@ -4206,6 +7602,17 @@ bool z80_peep::rule_a_temp_reload_after_preserving_branch(size_t i) {
                     return erase_reload_and_maybe_store(reload_idx);
                 }
             }
+        }
+
+        std::string jump_target;
+        const bool unconditional =
+            parse_unconditional_jump(line, jump_target) ||
+            (line.mnemonic == "djnz" &&
+             !(jump_target = trim(line.operands)).empty());
+        if (unconditional) {
+            const size_t target_idx = find_label_index(lines_, jump_target);
+            if (target_idx != lines_.size() && target_idx <= i)
+                return false;
         }
 
         if (line_writes_ix_offset(line, temp_off) || !line_preserves_a_value(line))
@@ -4262,6 +7669,80 @@ bool z80_peep::rule_dead_de_spill_reload_exchange(size_t i) {
         return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 5));
+    return true;
+}
+
+bool z80_peep::rule_call_result_byte_commute_direct(size_t i) {
+    if (i + 4 >= lines_.size() || lines_[i].mnemonic != "call")
+        return false;
+    for (size_t k = i + 1; k <= i + 4; ++k) {
+        if (!lines_[k].label.empty())
+            return false;
+    }
+
+    std::string dst;
+    std::string src;
+    int spill_off = 0;
+    if (lines_[i + 1].mnemonic != "ld" ||
+        !split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(src) != "a" || !parse_ix_ref(trim(dst), spill_off)) {
+        return false;
+    }
+
+    int accumulator_off = 0;
+    if (lines_[i + 2].mnemonic != "ld" ||
+        !split_ld(lines_[i + 2].operands, dst, src) ||
+        trim(dst) != "a" ||
+        !parse_ix_ref(trim(src), accumulator_off) ||
+        accumulator_off == spill_off) {
+        return false;
+    }
+
+    const std::string alu = lines_[i + 3].mnemonic;
+    if (alu != "add" && alu != "and" && alu != "or" && alu != "xor")
+        return false;
+    std::string alu_dst;
+    std::string alu_src;
+    if (split_ld(lines_[i + 3].operands, alu_dst, alu_src)) {
+        if (trim(alu_dst) != "a")
+            return false;
+        alu_src = trim(alu_src);
+    } else {
+        alu_src = trim(lines_[i + 3].operands);
+    }
+    int alu_off = 0;
+    if (!parse_ix_ref(alu_src, alu_off) || alu_off != spill_off)
+        return false;
+
+    int store_off = 0;
+    if (lines_[i + 4].mnemonic != "ld" ||
+        !split_ld(lines_[i + 4].operands, dst, src) ||
+        trim(src) != "a" || !parse_ix_ref(trim(dst), store_off) ||
+        store_off != accumulator_off) {
+        return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame,
+                                prologue_index) ||
+        !ix_offset_in_temp_frame(spill_off, locals, temp_frame)) {
+        return false;
+    }
+    const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
+    if (ix_value_may_be_read_before_rewrite(
+            lines_, prologue_index, fn_end, i + 5, spill_off))
+        return false;
+
+    const std::string accumulator_ref =
+        std::to_string(accumulator_off) + "(ix)";
+    lines_[i + 1] = asm_line::parse(
+        "\t" + alu + "\ta, " + accumulator_ref);
+    lines_[i + 2] = asm_line::parse(
+        "\tld\t" + accumulator_ref + ", a");
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 3),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 5));
     return true;
 }
@@ -4888,6 +8369,532 @@ bool z80_peep::rule_ix_store_reload(size_t i) {
     int off_hi2; if (!parse_ix_ref(s3, off_hi2) || off_hi2 != off_hi) return false;
 
     lines_.erase(lines_.begin() + i + 2, lines_.begin() + i + 4);
+    return true;
+}
+
+bool z80_peep::rule_ix_store32_low_reload(size_t i) {
+    if (i + 5 >= lines_.size())
+        return false;
+
+    auto parse_ld_ix_from_reg = [&](size_t idx, const char *reg, int &off) {
+        if (idx >= lines_.size() || !lines_[idx].label.empty() ||
+            lines_[idx].mnemonic != "ld") {
+            return false;
+        }
+        std::string dst;
+        std::string src;
+        if (!split_ld(lines_[idx].operands, dst, src) ||
+            trim(src) != reg) {
+            return false;
+        }
+        return parse_ix_ref(lower_copy(trim(dst)), off);
+    };
+
+    auto parse_ld_reg_from_ix = [&](size_t idx, const char *reg, int &off) {
+        if (idx >= lines_.size() || !lines_[idx].label.empty() ||
+            lines_[idx].mnemonic != "ld") {
+            return false;
+        }
+        std::string dst;
+        std::string src;
+        if (!split_ld(lines_[idx].operands, dst, src) ||
+            trim(dst) != reg) {
+            return false;
+        }
+        return parse_ix_ref(lower_copy(trim(src)), off);
+    };
+
+    int lo = 0;
+    int hi = 0;
+    int upper_lo = 0;
+    int upper_hi = 0;
+    if (!parse_ld_ix_from_reg(i, "l", lo) ||
+        !parse_ld_ix_from_reg(i + 1, "h", hi) ||
+        !parse_ld_ix_from_reg(i + 2, "e", upper_lo) ||
+        !parse_ld_ix_from_reg(i + 3, "d", upper_hi) ||
+        hi != lo + 1 ||
+        upper_lo != lo + 2 ||
+        upper_hi != lo + 3) {
+        return false;
+    }
+
+    size_t reload = i + 4;
+    while (reload < lines_.size() &&
+           lines_[reload].label.empty() &&
+           (lines_[reload].is_comment ||
+            lines_[reload].mnemonic.empty())) {
+        ++reload;
+    }
+    if (reload + 1 >= lines_.size())
+        return false;
+
+    int reload_lo = 0;
+    int reload_hi = 0;
+    if (!parse_ld_reg_from_ix(reload, "l", reload_lo) ||
+        !parse_ld_reg_from_ix(reload + 1, "h", reload_hi) ||
+        reload_lo != lo ||
+        reload_hi != hi) {
+        return false;
+    }
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(reload),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(reload + 2));
+    return true;
+}
+
+bool z80_peep::rule_ix_postinc_indirect_load_a(size_t i) {
+    if (i + 10 >= lines_.size())
+        return false;
+
+    for (size_t k = i; k <= i + 10; ++k) {
+        if (k == i + 7)
+            continue;
+        if (!lines_[k].label.empty())
+            return false;
+    }
+    if (lines_[i + 7].label.empty() || !lines_[i + 7].mnemonic.empty())
+        return false;
+
+    auto parse_ld = [&](size_t pos, std::string &dst, std::string &src) {
+        if (lines_[pos].mnemonic != "ld")
+            return false;
+        if (!split_ld(lines_[pos].operands, dst, src))
+            return false;
+        dst = trim(dst);
+        src = trim(src);
+        return true;
+    };
+
+    std::string dst;
+    std::string src;
+    int ptr_lo = 0;
+    int ptr_hi = 0;
+    int temp_lo = 0;
+    int temp_hi = 0;
+    if (!parse_ld(i, dst, src) ||
+        dst != "l" ||
+        !parse_ix_ref(src, ptr_lo) ||
+        !parse_ld(i + 1, dst, src) ||
+        dst != "h" ||
+        !parse_ix_ref(src, ptr_hi) ||
+        ptr_hi != ptr_lo + 1 ||
+        !parse_ld(i + 2, dst, src) ||
+        src != "l" ||
+        !parse_ix_ref(dst, temp_lo) ||
+        !parse_ld(i + 3, dst, src) ||
+        src != "h" ||
+        !parse_ix_ref(dst, temp_hi) ||
+        temp_hi != temp_lo + 1) {
+        return false;
+    }
+
+    int inc_lo = 0;
+    int inc_hi = 0;
+    if (lines_[i + 4].mnemonic != "inc" ||
+        !parse_ix_ref(trim(lines_[i + 4].operands), inc_lo) ||
+        inc_lo != ptr_lo) {
+        return false;
+    }
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[i + 5], cc, target) ||
+        cc != "nz" ||
+        trim(target) != lines_[i + 7].label) {
+        return false;
+    }
+
+    if (lines_[i + 6].mnemonic != "inc" ||
+        !parse_ix_ref(trim(lines_[i + 6].operands), inc_hi) ||
+        inc_hi != ptr_hi) {
+        return false;
+    }
+
+    if (!parse_ld(i + 8, dst, src) ||
+        dst != "l" ||
+        !parse_ix_ref(src, inc_lo) ||
+        inc_lo != temp_lo ||
+        !parse_ld(i + 9, dst, src) ||
+        dst != "h" ||
+        !parse_ix_ref(src, inc_hi) ||
+        inc_hi != temp_hi ||
+        !parse_ld(i + 10, dst, src) ||
+        dst != "a" ||
+        src != "(hl)") {
+        return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    const bool have_frame =
+        current_function_frame(lines_, i, locals, temp_frame, prologue_index);
+    if (have_frame) {
+        if (!ix_offset_in_temp_frame(temp_lo, locals, temp_frame) ||
+            !ix_offset_in_temp_frame(temp_hi, locals, temp_frame)) {
+            return false;
+        }
+    }
+    const size_t fn_end = have_frame
+        ? function_end_after_prologue(lines_, prologue_index)
+        : lines_.size();
+    auto slot_referenced_between = [&](int offset) {
+        const std::string ref = std::to_string(offset) + "(ix)";
+        for (size_t k = i + 11; k < fn_end && k < lines_.size(); ++k) {
+            if (lines_[k].operands.find(ref) != std::string::npos)
+                return true;
+        }
+        return false;
+    };
+    if (slot_referenced_between(temp_lo) || slot_referenced_between(temp_hi)) {
+        return false;
+    }
+
+    std::vector<asm_line> replacement;
+    replacement.push_back(lines_[i]);
+    replacement.push_back(lines_[i + 1]);
+    replacement.push_back(asm_line::parse("\tld\ta, (hl)"));
+    replacement.push_back(lines_[i + 4]);
+    replacement.push_back(lines_[i + 5]);
+    replacement.push_back(lines_[i + 6]);
+    replacement.push_back(lines_[i + 7]);
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 11));
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                  replacement.begin(), replacement.end());
+    return true;
+}
+
+bool z80_peep::rule_ix_postinc_indexed_store_a(size_t i) {
+    if (i + 12 >= lines_.size())
+        return false;
+
+    for (size_t k = i; k <= i + 12; ++k) {
+        if (k == i + 7)
+            continue;
+        if (!lines_[k].label.empty())
+            return false;
+    }
+    if (lines_[i + 7].label.empty() || !lines_[i + 7].mnemonic.empty())
+        return false;
+
+    auto parse_ld = [&](size_t pos, std::string &dst, std::string &src) {
+        if (lines_[pos].mnemonic != "ld")
+            return false;
+        if (!split_ld(lines_[pos].operands, dst, src))
+            return false;
+        dst = trim(dst);
+        src = trim(src);
+        return true;
+    };
+
+    std::string dst;
+    std::string src;
+    int index_lo = 0;
+    int index_hi = 0;
+    int temp_lo = 0;
+    int temp_hi = 0;
+    if (!parse_ld(i, dst, src) ||
+        dst != "l" ||
+        !parse_ix_ref(src, index_lo) ||
+        !parse_ld(i + 1, dst, src) ||
+        dst != "h" ||
+        !parse_ix_ref(src, index_hi) ||
+        index_hi != index_lo + 1 ||
+        !parse_ld(i + 2, dst, src) ||
+        src != "l" ||
+        !parse_ix_ref(dst, temp_lo) ||
+        !parse_ld(i + 3, dst, src) ||
+        src != "h" ||
+        !parse_ix_ref(dst, temp_hi) ||
+        temp_hi != temp_lo + 1) {
+        return false;
+    }
+
+    int parsed = 0;
+    if (lines_[i + 4].mnemonic != "inc" ||
+        !parse_ix_ref(trim(lines_[i + 4].operands), parsed) ||
+        parsed != index_lo) {
+        return false;
+    }
+
+    std::string cc;
+    std::string target;
+    if (!split_conditional_branch_target(lines_[i + 5], cc, target) ||
+        cc != "nz" ||
+        trim(target) != lines_[i + 7].label) {
+        return false;
+    }
+
+    if (lines_[i + 6].mnemonic != "inc" ||
+        !parse_ix_ref(trim(lines_[i + 6].operands), parsed) ||
+        parsed != index_hi) {
+        return false;
+    }
+
+    std::string base_src;
+    if (!parse_ld(i + 8, dst, base_src) || dst != "hl")
+        return false;
+    if (!parse_ld(i + 9, dst, src) ||
+        dst != "e" ||
+        !parse_ix_ref(src, parsed) ||
+        parsed != temp_lo ||
+        !parse_ld(i + 10, dst, src) ||
+        dst != "d" ||
+        !parse_ix_ref(src, parsed) ||
+        parsed != temp_hi) {
+        return false;
+    }
+    if (lines_[i + 11].mnemonic != "add" ||
+        !split_ld(lines_[i + 11].operands, dst, src) ||
+        trim(dst) != "hl" ||
+        trim(src) != "de") {
+        return false;
+    }
+
+    bool has_value_load = false;
+    asm_line value_load;
+    size_t store_idx = i + 12;
+    if (lines_[store_idx].mnemonic == "ld" &&
+        split_ld(lines_[store_idx].operands, dst, src) &&
+        trim(dst) == "a") {
+        has_value_load = true;
+        value_load = lines_[store_idx];
+        src = trim(src);
+        int value_off = 0;
+        if (parse_ix_ref(src, value_off) &&
+            (value_off == index_lo || value_off == index_hi ||
+             value_off == temp_lo || value_off == temp_hi)) {
+            return false;
+        }
+        ++store_idx;
+    }
+
+    if (store_idx >= lines_.size() ||
+        !lines_[store_idx].label.empty() ||
+        !parse_ld(store_idx, dst, src) ||
+        dst != "(hl)" ||
+        src != "a") {
+        return false;
+    }
+
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    const bool have_frame =
+        current_function_frame(lines_, i, locals, temp_frame, prologue_index);
+    if (have_frame) {
+        if (!ix_offset_in_temp_frame(temp_lo, locals, temp_frame) ||
+            !ix_offset_in_temp_frame(temp_hi, locals, temp_frame)) {
+            return false;
+        }
+    }
+    const size_t fn_end = have_frame
+        ? function_end_after_prologue(lines_, prologue_index)
+        : lines_.size();
+    auto slot_referenced_between = [&](int offset) {
+        const std::string ref = std::to_string(offset) + "(ix)";
+        for (size_t k = store_idx + 1; k < fn_end && k < lines_.size(); ++k) {
+            if (lines_[k].operands.find(ref) != std::string::npos)
+                return true;
+        }
+        return false;
+    };
+    if (slot_referenced_between(temp_lo) || slot_referenced_between(temp_hi))
+        return false;
+
+    if (!flags_from_compare_dead_before_read(lines_, store_idx + 1))
+        return false;
+
+    std::vector<asm_line> replacement;
+    replacement.push_back(lines_[i + 8]);
+    replacement.push_back(asm_line::parse(
+        "\tld\te, " + std::to_string(index_lo) + "(ix)"));
+    replacement.push_back(asm_line::parse(
+        "\tld\td, " + std::to_string(index_hi) + "(ix)"));
+    replacement.push_back(lines_[i + 11]);
+    if (has_value_load)
+        replacement.push_back(value_load);
+    replacement.push_back(lines_[store_idx]);
+    replacement.push_back(lines_[i + 4]);
+    replacement.push_back(lines_[i + 5]);
+    replacement.push_back(lines_[i + 6]);
+    replacement.push_back(lines_[i + 7]);
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(store_idx + 1));
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                  replacement.begin(), replacement.end());
+    return true;
+}
+
+bool z80_peep::rule_adjacent_postinc_indexed_stores_direct(size_t i) {
+    if (i + 17 >= lines_.size())
+        return false;
+
+    auto parse_ld = [&](size_t pos, std::string &dst, std::string &src) {
+        if (pos >= lines_.size() || lines_[pos].mnemonic != "ld")
+            return false;
+        if (!split_ld(lines_[pos].operands, dst, src))
+            return false;
+        dst = trim(dst);
+        src = trim(src);
+        return true;
+    };
+
+    auto value_load_is_safe = [&](const asm_line &line,
+                                  int index_lo,
+                                  int index_hi) {
+        std::string dst;
+        std::string src;
+        if (!split_ld(line.operands, dst, src) || trim(dst) != "a")
+            return false;
+        src = trim(src);
+        int off = 0;
+        if (parse_ix_ref(src, off) && (off == index_lo || off == index_hi))
+            return false;
+        return !operand_mentions_pair_or_bytes(src, "hl", 'l', 'h') &&
+               !operand_mentions_pair_or_bytes(src, "de", 'e', 'd');
+    };
+
+    struct store_match {
+        size_t value_idx = static_cast<size_t>(-1);
+        size_t store_idx = 0;
+        size_t label_idx = 0;
+        size_t next = 0;
+        std::string base_src;
+        int index_lo = 0;
+        int index_hi = 0;
+    };
+
+    auto match_store = [&](size_t pos,
+                           const std::string &expected_base,
+                           int expected_lo,
+                           int expected_hi,
+                           store_match &out) {
+        if (pos + 8 >= lines_.size())
+            return false;
+        std::string dst;
+        std::string src;
+        int parsed = 0;
+        if (!parse_ld(pos, dst, out.base_src) || dst != "hl")
+            return false;
+        if (!expected_base.empty() && out.base_src != expected_base)
+            return false;
+        if (!parse_ld(pos + 1, dst, src) ||
+            dst != "e" ||
+            !parse_ix_ref(src, out.index_lo)) {
+            return false;
+        }
+        if (!parse_ld(pos + 2, dst, src) ||
+            dst != "d" ||
+            !parse_ix_ref(src, out.index_hi) ||
+            out.index_hi != out.index_lo + 1) {
+            return false;
+        }
+        if (expected_lo != 0x7fffffff &&
+            (out.index_lo != expected_lo || out.index_hi != expected_hi)) {
+            return false;
+        }
+        if (lines_[pos + 3].mnemonic != "add" ||
+            !split_ld(lines_[pos + 3].operands, dst, src) ||
+            trim(dst) != "hl" ||
+            trim(src) != "de") {
+            return false;
+        }
+
+        size_t store_idx = pos + 4;
+        if (lines_[store_idx].mnemonic == "ld" &&
+            value_load_is_safe(lines_[store_idx], out.index_lo, out.index_hi)) {
+            out.value_idx = store_idx;
+            ++store_idx;
+        }
+        if (!parse_ld(store_idx, dst, src) ||
+            dst != "(hl)" ||
+            src != "a") {
+            return false;
+        }
+        out.store_idx = store_idx;
+
+        if (store_idx + 4 >= lines_.size() ||
+            lines_[store_idx + 1].mnemonic != "inc" ||
+            !parse_ix_ref(trim(lines_[store_idx + 1].operands), parsed) ||
+            parsed != out.index_lo) {
+            return false;
+        }
+        std::string cc;
+        std::string target;
+        if (!split_conditional_branch_target(lines_[store_idx + 2], cc, target) ||
+            cc != "nz") {
+            return false;
+        }
+        if (lines_[store_idx + 3].mnemonic != "inc" ||
+            !parse_ix_ref(trim(lines_[store_idx + 3].operands), parsed) ||
+            parsed != out.index_hi) {
+            return false;
+        }
+        if (lines_[store_idx + 4].label.empty() ||
+            !lines_[store_idx + 4].mnemonic.empty() ||
+            trim(target) != lines_[store_idx + 4].label) {
+            return false;
+        }
+        out.label_idx = store_idx + 4;
+        out.next = store_idx + 5;
+
+        for (size_t k = pos; k < out.next; ++k) {
+            if (k == out.label_idx)
+                continue;
+            if (!lines_[k].label.empty())
+                return false;
+        }
+        return true;
+    };
+
+    store_match first;
+    if (!match_store(i, "", 0x7fffffff, 0x7fffffff, first))
+        return false;
+    store_match second;
+    if (!match_store(first.next, first.base_src,
+                     first.index_lo, first.index_hi, second)) {
+        return false;
+    }
+
+    const size_t after = second.next;
+    if (!flags_from_compare_dead_before_read(lines_, after) ||
+        !hl_dead_before_read_or_modern_return(lines_, after) ||
+        !pair_value_dead_or_call_or_modern_return_before_read(
+            lines_, after, "de", 'e', 'd')) {
+        return false;
+    }
+
+    std::vector<asm_line> replacement;
+    replacement.push_back(lines_[i]);
+    replacement.push_back(lines_[i + 1]);
+    replacement.push_back(lines_[i + 2]);
+    replacement.push_back(lines_[i + 3]);
+    if (first.value_idx != static_cast<size_t>(-1))
+        replacement.push_back(lines_[first.value_idx]);
+    replacement.push_back(lines_[first.store_idx]);
+    replacement.push_back(asm_line::parse("\tinc\thl"));
+    if (second.value_idx != static_cast<size_t>(-1))
+        replacement.push_back(lines_[second.value_idx]);
+    replacement.push_back(lines_[second.store_idx]);
+    replacement.push_back(asm_line::parse(
+        "\tld\tl, " + std::to_string(first.index_lo) + "(ix)"));
+    replacement.push_back(asm_line::parse(
+        "\tld\th, " + std::to_string(first.index_hi) + "(ix)"));
+    replacement.push_back(asm_line::parse("\tinc\thl"));
+    replacement.push_back(asm_line::parse("\tinc\thl"));
+    replacement.push_back(asm_line::parse(
+        "\tld\t" + std::to_string(first.index_lo) + "(ix), l"));
+    replacement.push_back(asm_line::parse(
+        "\tld\t" + std::to_string(first.index_hi) + "(ix), h"));
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(after));
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                  replacement.begin(), replacement.end());
     return true;
 }
 
@@ -5609,6 +9616,13 @@ bool z80_peep::rule_small_stack_alloc_push_af(size_t i) {
                 in_prologue_alloc = false;
                 break;
             }
+            // PUSH allocates by writing each newly claimed word.  Codegen can
+            // spill incoming registers to their final deep IX offsets before
+            // performing the remaining SP adjustment; replacing that adjust
+            // with PUSH would overwrite those already-live values.
+            if (line_writes_any_ix_offset(line)) {
+                return false;
+            }
             if (line.mnemonic == "call" &&
                 trim(line.operands) != "__sdcc_enter_ix" &&
                 trim(line.operands) != "___sdcc_enter_ix") {
@@ -6178,6 +10192,8 @@ static bool operands_read_ix_offset(const std::string &operands, int offset) {
 static bool line_reads_ix_offset(const asm_line &line, int offset) {
     if (line.mnemonic.empty())
         return false;
+    if (outline_helper_may_access_ix_offset(line, offset))
+        return true;
 
     if (line.mnemonic == "ld") {
         std::string dst;
@@ -6207,17 +10223,119 @@ static bool ix_slot_read_in_function(const std::vector<asm_line> &lines,
     return false;
 }
 
+static bool line_branches_to_before(const std::vector<asm_line> &lines,
+                                    size_t line_index,
+                                    size_t before_index) {
+    if (line_index >= lines.size())
+        return false;
+
+    const asm_line &line = lines[line_index];
+    std::string target;
+    std::string cc;
+    bool has_target = split_conditional_branch_target(line, cc, target) ||
+                      parse_unconditional_jump(line, target);
+    if (!has_target && line.mnemonic == "djnz") {
+        target = trim(line.operands);
+        has_target = !target.empty();
+    }
+    if (!has_target)
+        return false;
+
+    const size_t target_index = find_label_index(lines, target);
+    return target_index != lines.size() &&
+           target_index < before_index &&
+           target_index < line_index;
+
+}
+
 static bool ix_slot_not_read_before_rewrite(const std::vector<asm_line> &lines,
                                             size_t begin,
                                             size_t end,
                                             int offset) {
     for (size_t k = begin; k < end; ++k) {
+        if (line_branches_to_before(lines, k, begin))
+            return false;
         if (line_reads_ix_offset(lines[k], offset))
             return false;
         if (line_writes_ix_offset(lines[k], offset))
             return true;
     }
     return true;
+}
+
+static bool ix_value_may_be_read_before_rewrite(
+        const std::vector<asm_line> &lines,
+        size_t function_begin,
+        size_t function_end,
+        size_t start,
+        int offset) {
+    if (function_begin >= function_end || start >= function_end)
+        return false;
+
+    const size_t count = function_end - function_begin;
+    std::vector<unsigned char> live_in(count, 0);
+
+    auto target_is_live = [&](const std::string &target) {
+        const size_t target_index = find_label_index(lines, target);
+        return target_index >= function_begin && target_index < function_end &&
+               live_in[target_index - function_begin] != 0;
+    };
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t scan = function_end; scan > function_begin; --scan) {
+            const size_t k = scan - 1;
+            const asm_line &line = lines[k];
+            bool needed = line_reads_ix_offset(line, offset);
+
+            if (!needed && !line_writes_ix_offset(line, offset)) {
+                std::string cc;
+                std::string target;
+                if (split_conditional_branch_target(line, cc, target)) {
+                    needed = target_is_live(target) ||
+                             (k + 1 < function_end &&
+                              live_in[k + 1 - function_begin] != 0);
+                } else if (line.mnemonic == "djnz") {
+                    target = trim(line.operands);
+                    needed = target_is_live(target) ||
+                             (k + 1 < function_end &&
+                              live_in[k + 1 - function_begin] != 0);
+                } else if (parse_unconditional_jump(line, target)) {
+                    const size_t target_index = find_label_index(lines, target);
+                    if (target_index >= function_begin &&
+                        target_index < function_end) {
+                        needed = live_in[target_index - function_begin] != 0;
+                    } else if (!target.empty() && target.front() == '(') {
+                        // An indirect jump may select any local jump-table
+                        // destination.  Joining all in-function states is
+                        // conservative without requiring table recognition.
+                        needed = std::any_of(live_in.begin(), live_in.end(),
+                                             [](unsigned char value) {
+                                                 return value != 0;
+                                             });
+                    }
+                } else if (line.mnemonic == "ret") {
+                    // A conditional return can still fall through.
+                    needed = !trim(line.operands).empty() &&
+                             k + 1 < function_end &&
+                             live_in[k + 1 - function_begin] != 0;
+                } else if (line.mnemonic != "reti" &&
+                           line.mnemonic != "retn") {
+                    needed = k + 1 < function_end &&
+                             live_in[k + 1 - function_begin] != 0;
+                }
+            }
+
+            unsigned char &entry = live_in[k - function_begin];
+            if (needed && entry == 0) {
+                entry = 1;
+                changed = true;
+            }
+        }
+    }
+
+    return live_in[start - function_begin] != 0;
 }
 
 bool z80_peep::rule_byte_temp_zero_extend_after_test(size_t i) {
@@ -6708,10 +10826,10 @@ bool z80_peep::rule_de_word_temp_reload_to_hl_stack_preserve(size_t i) {
     const size_t fn_end = function_end_after_prologue(lines_, prologue_index);
 
     auto span_preserves_sp = [&](const asm_line &line) {
-        if (line.mnemonic.empty())
-            return true;
         if (!line.label.empty())
             return false;
+        if (line.mnemonic.empty())
+            return true;
         if (!line.mnemonic.empty() && line.mnemonic[0] == '.')
             return line.mnemonic == ".globl" || line.mnemonic == ".global";
         if (line.mnemonic == "push" || line.mnemonic == "pop" ||
@@ -8604,11 +12722,84 @@ bool z80_peep::rule_dead_bc_zero_extend_from_a(size_t i) {
         trim(dst) != "b" || !immediate_is(src, 0)) {
         return false;
     }
-    if (!bc_overwritten_or_call_before_read_allowing_unrelated(lines_, i + 2))
+    if (!bc_dead_before_read_or_ret(lines_, i + 2))
         return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    return true;
+}
+
+bool z80_peep::rule_dead_bc_copy_from_hl(size_t i) {
+    if (i + 1 >= lines_.size())
+        return false;
+    if (!lines_[i].label.empty() || !lines_[i + 1].label.empty())
+        return false;
+    if (lines_[i].mnemonic != "ld" || lines_[i + 1].mnemonic != "ld")
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "b" || trim(src) != "h") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "c" || trim(src) != "l") {
+        return false;
+    }
+    if (!path_overwrites_pair_before_read(lines_, i + 2, "bc", 'c', 'b'))
+        return false;
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    return true;
+}
+
+bool z80_peep::rule_bc_indirect_through_hl(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+
+    for (size_t j = i; j <= i + 2; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+    if (lines_[i].mnemonic != "ld" ||
+        lines_[i + 1].mnemonic != "ld" ||
+        lines_[i + 2].mnemonic != "ld") {
+        return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "b" || trim(src) != "h") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "c" || trim(src) != "l") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 2].operands, dst, src))
+        return false;
+
+    dst = trim(dst);
+    src = trim(src);
+    std::string replacement;
+    if (dst == "a" && src == "(bc)") {
+        replacement = "a, (hl)";
+    } else if (dst == "(bc)" && src == "a") {
+        replacement = "(hl), a";
+    } else {
+        return false;
+    }
+
+    if (!path_overwrites_bc_before_read_or_call(lines_, i + 3))
+        return false;
+
+    lines_[i].operands = replacement;
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 3));
     return true;
 }
 
@@ -8689,6 +12880,151 @@ bool z80_peep::rule_bc_base_add_direct(size_t i) {
     lines_[i + 1].operands = "hl, bc";
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 4));
+    return true;
+}
+
+bool z80_peep::rule_bc_offset_base_add_de_direct(size_t i) {
+    if (i + 5 >= lines_.size())
+        return false;
+
+    for (size_t j = i; j <= i + 5; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+    for (size_t j = i; j <= i + 4; ++j) {
+        if (lines_[j].mnemonic != "ld")
+            return false;
+    }
+    if (lines_[i + 5].mnemonic != "add")
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "b" || trim(src) != "h") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "c" || trim(src) != "l") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 2].operands, dst, src) ||
+        trim(dst) != "hl") {
+        return false;
+    }
+    src = trim(src);
+    if (!is_immediate_operand(src) && !is_numeric_literal(src))
+        return false;
+    if (!split_ld(lines_[i + 3].operands, dst, src) ||
+        trim(dst) != "d" || trim(src) != "b") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 4].operands, dst, src) ||
+        trim(dst) != "e" || trim(src) != "c") {
+        return false;
+    }
+    if (trim(lines_[i + 5].operands) != "hl,de" &&
+        trim(lines_[i + 5].operands) != "hl, de") {
+        return false;
+    }
+
+    if (!path_overwrites_bc_before_read_or_call(lines_, i + 6))
+        return false;
+
+    lines_[i].mnemonic = "ex";
+    lines_[i].operands = "de, hl";
+    lines_[i + 1] = lines_[i + 2];
+    lines_[i + 2].mnemonic = "add";
+    lines_[i + 2].operands = "hl, de";
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 3),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
+    return true;
+}
+
+bool z80_peep::rule_bc_index_add_hl_word_load_direct(size_t i) {
+    if (i + 7 >= lines_.size())
+        return false;
+
+    for (size_t j = i; j <= i + 3; ++j) {
+        if (!lines_[j].label.empty() || lines_[j].mnemonic != "ld")
+            return false;
+    }
+    if (lines_[i + 4].mnemonic != "add")
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "b" || trim(src) != "h") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "c" || trim(src) != "l") {
+        return false;
+    }
+
+    std::string lo_src;
+    std::string hi_src;
+    if (!split_ld(lines_[i + 2].operands, dst, lo_src) ||
+        trim(dst) != "l") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 3].operands, dst, hi_src) ||
+        trim(dst) != "h") {
+        return false;
+    }
+    lo_src = trim(lo_src);
+    hi_src = trim(hi_src);
+    if (operand_has_token(lo_src, "d") || operand_has_token(lo_src, "e") ||
+        operand_has_token(lo_src, "de") || operand_has_token(hi_src, "d") ||
+        operand_has_token(hi_src, "e") || operand_has_token(hi_src, "de")) {
+        return false;
+    }
+    if (trim(lines_[i + 4].operands) != "hl,bc" &&
+        trim(lines_[i + 4].operands) != "hl, bc") {
+        return false;
+    }
+
+    size_t load_lo = i + 5;
+    while (load_lo < lines_.size() &&
+           load_lo <= i + 9 &&
+           lines_[load_lo].label.empty() &&
+           lines_[load_lo].mnemonic == "inc" &&
+           trim(lines_[load_lo].operands) == "hl") {
+        ++load_lo;
+    }
+    if (load_lo + 2 >= lines_.size())
+        return false;
+    for (size_t j = i + 5; j <= load_lo + 2; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    if (lines_[load_lo].mnemonic != "ld" ||
+        !split_ld(lines_[load_lo].operands, dst, src) ||
+        trim(dst) != "e" || trim(src) != "(hl)") {
+        return false;
+    }
+    if (lines_[load_lo + 1].mnemonic != "inc" ||
+        trim(lines_[load_lo + 1].operands) != "hl") {
+        return false;
+    }
+    if (lines_[load_lo + 2].mnemonic != "ld" ||
+        !split_ld(lines_[load_lo + 2].operands, dst, src) ||
+        trim(dst) != "d" || trim(src) != "(hl)") {
+        return false;
+    }
+
+    if (!path_overwrites_bc_before_read_or_call(lines_, load_lo + 3))
+        return false;
+
+    lines_[i].mnemonic = "ex";
+    lines_[i].operands = "de, hl";
+    lines_[i + 1].operands = "l, " + lo_src;
+    lines_[i + 2].operands = "h, " + hi_src;
+    lines_[i + 3].mnemonic = "add";
+    lines_[i + 3].operands = "hl, de";
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 4));
     return true;
 }
 
@@ -9020,6 +13356,51 @@ bool z80_peep::rule_push_pair_copy_adjacent_speed(size_t i) {
         return true;
     }
     return false;
+}
+
+bool z80_peep::rule_add_a_one_to_inc(size_t i) {
+    if (i >= lines_.size() || !lines_[i].label.empty())
+        return false;
+
+    int value = 0;
+    if (!parse_accumulator_immediate_alu(lines_[i], "add", value) ||
+        u8_value(value) != 1 ||
+        !flags_overwritten_before_read_or_escape(lines_, i + 1)) {
+        return false;
+    }
+
+    lines_[i].mnemonic = "inc";
+    lines_[i].operands = "a";
+    return true;
+}
+
+bool z80_peep::rule_redundant_a_reload_after_zero_extend(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 2; ++j)
+        if (!lines_[j].label.empty())
+            return false;
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "l" || trim(src) != "a") {
+        return false;
+    }
+    if (lines_[i + 1].mnemonic != "ld" ||
+        !split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "h" || !immediate_is(src, 0)) {
+        return false;
+    }
+    if (lines_[i + 2].mnemonic != "ld" ||
+        !split_ld(lines_[i + 2].operands, dst, src) ||
+        trim(dst) != "a" || trim(src) != "l") {
+        return false;
+    }
+
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    return true;
 }
 
 bool z80_peep::rule_superopt_accumulator_sequences(size_t i) {
@@ -9621,6 +14002,22 @@ bool z80_peep::rule_superopt_register_move_sequences(size_t i) {
         return true;
     }
 
+    // ld l,pure; ld hl,#N -> ld hl,#N (and likewise for DE/BC).
+    // A separated pair-immediate fold can expose this form after moving the
+    // second byte load earlier.  The pair load overwrites both component
+    // bytes, so retaining the preceding pure byte move only costs space and
+    // cycles.
+    int pair_immediate = 0;
+    const bool component_overwritten =
+        (b_dst == "hl" && (a_dst == "h" || a_dst == "l")) ||
+        (b_dst == "de" && (a_dst == "d" || a_dst == "e")) ||
+        (b_dst == "bc" && (a_dst == "b" || a_dst == "c"));
+    if (component_overwritten && is_pure_register_load_source(a_src) &&
+        parse_immediate_value(b_src, pair_immediate)) {
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i));
+        return true;
+    }
+
     return false;
 }
 
@@ -9685,6 +14082,16 @@ bool z80_peep::rule_superopt_separated_pair_immediate_load(size_t i) {
                     imm16_text((u8_value(hi_value) << 8) | u8_value(lo_value)));
                 lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(j));
                 return true;
+            }
+
+            // If the first component is replaced without being read, leave
+            // the two loads separate.  The normal dead-load cleanup can then
+            // discard the first load; folding it into a pair load would keep
+            // an otherwise dead initialization alive.
+            if (is_ld_to_reg_without_pair_source(
+                    line, std::string(1, loaded), pair.pair,
+                    pair.lo, pair.hi)) {
+                break;
             }
 
             if (line_touches_byte_or_pair(line, delayed, pair.pair))
@@ -9974,10 +14381,6 @@ bool z80_peep::rule_superopt_lowbyte_zero_extend_to_de(size_t i) {
 bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
     if (i + 4 >= lines_.size())
         return false;
-    for (size_t k = 0; k < 5; ++k) {
-        if (!lines_[i + k].label.empty())
-            return false;
-    }
 
     std::string dst, src;
     int lo_load = 0;
@@ -10001,14 +14404,56 @@ bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
         trim(lines_[i + 2].operands) != "hl") {
         return false;
     }
-    if (lines_[i + 3].mnemonic != "ld" ||
-        !split_ld(lines_[i + 3].operands, dst, src) ||
+
+    auto parse_pair_store = [&](size_t pos, int &lo, int &hi) {
+        if (pos + 1 >= lines_.size() ||
+            lines_[pos].mnemonic != "ld" ||
+            lines_[pos + 1].mnemonic != "ld") {
+            return false;
+        }
+        std::string d0, s0, d1, s1;
+        return split_ld(lines_[pos].operands, d0, s0) &&
+               split_ld(lines_[pos + 1].operands, d1, s1) &&
+               parse_ix_ref(trim(d0), lo) && trim(s0) == "l" &&
+               parse_ix_ref(trim(d1), hi) && trim(s1) == "h" &&
+               hi == lo + 1;
+    };
+
+    size_t cursor = i + 3;
+    int temp_lo = 0;
+    int temp_hi = 0;
+    const bool has_temp_copy =
+        parse_pair_store(cursor, temp_lo, temp_hi) &&
+        (temp_lo != lo_load || temp_hi != hi_load);
+    if (has_temp_copy)
+        cursor += 2;
+
+    const bool has_bc_copy =
+        cursor + 1 < lines_.size() &&
+        lines_[cursor].mnemonic == "ld" &&
+        trim(lines_[cursor].operands) == "b, h" &&
+        lines_[cursor + 1].mnemonic == "ld" &&
+        trim(lines_[cursor + 1].operands) == "c, l";
+    if (has_bc_copy)
+        cursor += 2;
+
+    const size_t store_index = cursor;
+    const size_t end_index = store_index + 2;
+    if (end_index > lines_.size())
+        return false;
+    for (size_t k = i; k < end_index; ++k) {
+        if (!lines_[k].label.empty())
+            return false;
+    }
+
+    if (lines_[store_index].mnemonic != "ld" ||
+        !split_ld(lines_[store_index].operands, dst, src) ||
         !parse_ix_ref(trim(dst), lo_store) ||
         trim(src) != "l") {
         return false;
     }
-    if (lines_[i + 4].mnemonic != "ld" ||
-        !split_ld(lines_[i + 4].operands, dst, src) ||
+    if (lines_[store_index + 1].mnemonic != "ld" ||
+        !split_ld(lines_[store_index + 1].operands, dst, src) ||
         !parse_ix_ref(trim(dst), hi_store) ||
         trim(src) != "h") {
         return false;
@@ -10018,9 +14463,22 @@ bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
         hi_store != hi_load) {
         return false;
     }
-    if (!flags_overwritten_before_read_or_escape(lines_, i + 5))
+    if (has_temp_copy) {
+        int locals = 0;
+        int temp_frame = 0;
+        size_t prologue_index = 0;
+        if (!current_function_frame(lines_, i, locals, temp_frame,
+                                    prologue_index) ||
+            !ix_offset_in_temp_frame(temp_lo, locals, temp_frame) ||
+            !ix_offset_in_temp_frame(temp_hi, locals, temp_frame)) {
+            return false;
+        }
+    }
+    if (has_bc_copy && !bc_dead_before_read_or_ret(lines_, end_index))
         return false;
-    if (!hl_dead_before_read_or_modern_return(lines_, i + 5))
+    if (!flags_overwritten_before_read_or_escape(lines_, end_index))
+        return false;
+    if (!hl_dead_before_read_or_modern_return(lines_, end_index))
         return false;
 
     std::string done;
@@ -10039,7 +14497,7 @@ bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
     repl.push_back(asm_line::parse(done + ":"));
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
-                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 5));
+                 lines_.begin() + static_cast<std::ptrdiff_t>(end_index));
     lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
                   repl.begin(), repl.end());
     return true;
@@ -10048,8 +14506,16 @@ bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
 bool z80_peep::rule_superopt_ix_word_add1_direct(size_t i) {
     if (i + 5 >= lines_.size())
         return false;
-    for (size_t k = 0; k < 6; ++k) {
-        if (!lines_[i + k].label.empty())
+    const bool has_bc_copy =
+        i + 7 < lines_.size() &&
+        lines_[i + 4].mnemonic == "ld" && trim(lines_[i + 4].operands) == "b, h" &&
+        lines_[i + 5].mnemonic == "ld" && trim(lines_[i + 5].operands) == "c, l";
+    const size_t store_index = has_bc_copy ? i + 6 : i + 4;
+    const size_t end_index = has_bc_copy ? i + 8 : i + 6;
+    if (end_index > lines_.size())
+        return false;
+    for (size_t k = i; k < end_index; ++k) {
+        if (!lines_[k].label.empty())
             return false;
     }
 
@@ -10081,14 +14547,14 @@ bool z80_peep::rule_superopt_ix_word_add1_direct(size_t i) {
         trim(dst) != "hl" || trim(src) != "de") {
         return false;
     }
-    if (lines_[i + 4].mnemonic != "ld" ||
-        !split_ld(lines_[i + 4].operands, dst, src) ||
+    if (lines_[store_index].mnemonic != "ld" ||
+        !split_ld(lines_[store_index].operands, dst, src) ||
         !parse_ix_ref(trim(dst), lo_store) ||
         trim(src) != "l") {
         return false;
     }
-    if (lines_[i + 5].mnemonic != "ld" ||
-        !split_ld(lines_[i + 5].operands, dst, src) ||
+    if (lines_[store_index + 1].mnemonic != "ld" ||
+        !split_ld(lines_[store_index + 1].operands, dst, src) ||
         !parse_ix_ref(trim(dst), hi_store) ||
         trim(src) != "h") {
         return false;
@@ -10098,11 +14564,13 @@ bool z80_peep::rule_superopt_ix_word_add1_direct(size_t i) {
         hi_store != hi_load) {
         return false;
     }
-    if (!flags_overwritten_before_read_or_escape(lines_, i + 6))
+    if (has_bc_copy && !bc_dead_before_read_or_ret(lines_, end_index))
         return false;
-    if (!hl_dead_before_read_or_modern_return(lines_, i + 6))
+    if (!flags_overwritten_before_read_or_escape(lines_, end_index))
         return false;
-    if (!path_overwrites_pair_before_read(lines_, i + 6, "de", 'e', 'd'))
+    if (!hl_dead_before_read_or_modern_return(lines_, end_index))
+        return false;
+    if (!path_overwrites_pair_before_read(lines_, end_index, "de", 'e', 'd'))
         return false;
 
     std::string done;
@@ -10121,7 +14589,7 @@ bool z80_peep::rule_superopt_ix_word_add1_direct(size_t i) {
     repl.push_back(asm_line::parse(done + ":"));
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
-                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
+                 lines_.begin() + static_cast<std::ptrdiff_t>(end_index));
     lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
                   repl.begin(), repl.end());
     return true;
@@ -12473,6 +16941,33 @@ bool z80_peep::rule_superopt_ix_word_return_de_direct(size_t i) {
     return true;
 }
 
+bool z80_peep::rule_superopt_hl_return_de_exchange(size_t i) {
+    if (i + 1 >= lines_.size() ||
+        !is_inside_sdcccall1_function(lines_, i)) {
+        return false;
+    }
+    if (!lines_[i].label.empty() || !lines_[i + 1].label.empty() ||
+        lines_[i].mnemonic != "ld" || lines_[i + 1].mnemonic != "ld") {
+        return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (!split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "d" || trim(src) != "h") {
+        return false;
+    }
+    if (!split_ld(lines_[i + 1].operands, dst, src) ||
+        trim(dst) != "e" || trim(src) != "l" ||
+        !is_modern_return_tail(lines_, i + 2)) {
+        return false;
+    }
+
+    lines_[i] = asm_line::parse("\tex\tde, hl");
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1));
+    return true;
+}
+
 bool z80_peep::rule_superopt_lowbyte_sum_return_direct(size_t i) {
     if (i + 5 >= lines_.size())
         return false;
@@ -13734,10 +18229,33 @@ bool z80_peep::rule_dead_temp_ix_store(size_t i) {
 
     const size_t function_end = function_end_after_prologue(lines_,
                                                             prologue_index);
-    if (ix_slot_read_in_function(lines_, prologue_index + 1, function_end,
-                                 offset, i)) {
-        return false;
+
+    // A compiler temp is frequently reused for the value loaded through an
+    // address that was just spilled to that same slot.  Prove the first store
+    // dead within the basic block before falling back to the more conservative
+    // whole-function check below.  Stopping at every possible control-flow
+    // boundary keeps this valid even when the slot is live around a loop.
+    for (size_t k = i + 1; k < function_end; ++k) {
+        const asm_line &next = lines_[k];
+        if (!next.label.empty() || is_section_directive(next))
+            break;
+        if (line_reads_ix_offset(next, offset))
+            break;
+        if (line_writes_ix_offset(next, offset)) {
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+        if (next.mnemonic == "ret" || next.mnemonic == "reti" ||
+            next.mnemonic == "retn" || next.mnemonic == "rst" ||
+            next.mnemonic == "jp" || next.mnemonic == "jr" ||
+            next.mnemonic == "djnz") {
+            break;
+        }
     }
+
+    if (ix_value_may_be_read_before_rewrite(lines_, prologue_index,
+                                            function_end, i + 1, offset))
+        return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i));
     return true;

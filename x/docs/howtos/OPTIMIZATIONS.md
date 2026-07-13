@@ -30,7 +30,7 @@ These are presets, not additive flags. You normally pick one of them.
 
 `-Of`, `-O3`, and `-Os` now share the same proven aggressive baseline.
 That baseline includes the helper-inline budget, denser switch lowering,
-the structured-loop pipeline, and the benchmark-proven direct emitters
+the structured-loop pipeline, and the profitability-checked direct emitters
 that survived the full execution and benchmark oracle.
 
 `-Os` is deliberately conservative: it keeps that current record-setting

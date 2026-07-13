@@ -51,10 +51,13 @@ enum class temp_home {
     stack,    // spilled to IX frame (default)
     main_bc,  // 16-bit temp in main BC register pair
     main_hl,  // next-use-only 16-bit temp still live in HL
+    main_iy,  // loop-carried byte pointer in caller-saved IY
     remat_hl, // 16-bit temp rematerialized cheaply into HL on demand
     main_a,   // next-use-only 8-bit temp still live in A
     main_b,   // 8-bit temp kept in B across a wider loop/control window
     main_c,   // 8-bit temp kept in C across a wider straight-line / branchy window
+    main_d,   // branch-local loaded byte kept in D across a proven safe window
+    main_e,   // loop-carried byte accumulator kept in E across a proven safe window
     alt_a,    // 8-bit temp in A' via ex af,af'
     arg_a,    // incoming 8-bit argument still live in A
     arg_l,    // incoming 8-bit argument still live in L
@@ -146,6 +149,7 @@ private:
     optimization_settings opt_settings_ =
         optimization_settings::for_level(opt_level::O0);
     bool standalone_asm_output_ = false;
+    bool size_shared_ix_helpers_ = false;
 
     std::unordered_map<int, int>       temp_slots_; // temp_id -> IX offset
     std::unordered_map<int, temp_home> temp_regs_;  // temp_id -> register home (if not stack)
@@ -159,6 +163,9 @@ private:
     size_t local_label_counter_ = 0;
     bool direct_call_return_pending_ = false;
     operand direct_call_return_value_;
+    bool sibling_tail_call_pending_ = false;
+    operand sibling_tail_call_value_;
+    bool last_frameless_return_terminated_ = false;
     bool direct_compare_return_pending_ = false;
     operand direct_compare_return_value_;
     bool direct_call_ifx_pending_ = false;
@@ -252,11 +259,18 @@ private:
         return opt_settings_.level == opt_level::Os;
     }
     bool tuned_profile_enabled() const {
-        return opt_settings_.level == opt_level::Os;
+        return opt_settings_.level == opt_level::Os ||
+               opt_settings_.level == opt_level::Of ||
+               opt_settings_.level == opt_level::O3;
+    }
+    bool sdcc_style_specialization_enabled() const {
+        return false;
     }
     bool shared_ix_helpers_enabled() const {
         return !debug_ &&
-               opt_settings_.level == opt_level::O2;
+               (opt_settings_.level == opt_level::O2 ||
+                (opt_settings_.level == opt_level::Os &&
+                 size_shared_ix_helpers_));
     }
     bool pair_cache_enabled() const {
         return opt_settings_.level == opt_level::O2 || tuned_profile_enabled();
@@ -270,8 +284,12 @@ private:
     bool operand_home_in_bc(const operand &op) const;
     bool needs_frame_without_temps(const ir_function &fn) const;
     bool can_omit_frame_pointer(const ir_function &fn) const;
+    bool try_finish_direct_hl_return(const operand &result);
     bool structured_loop_fastpaths_enabled() const {
-        return opt_settings_.level == opt_level::O2 || tuned_profile_enabled();
+        return opt_settings_.level == opt_level::O2 ||
+               opt_settings_.level == opt_level::Of ||
+               opt_settings_.level == opt_level::Os ||
+               opt_settings_.level == opt_level::O3;
     }
     bool temp_value_used_after(const ir_function &fn, size_t start_idx, int temp_id) const;
     bool symbol_value_used_after(const ir_function &fn, size_t start_idx,
@@ -279,58 +297,23 @@ private:
     const icode *find_temp_def_before(int temp_id, size_t before_idx) const;
     bool get_zero_extended_u8_source(const operand &op, operand &src) const;
     bool emit_rematerialize_hl(const operand &op);
+    bool emit_byte_alu_direct_rhs(const char *mnemonic,
+                                  const operand &rhs,
+                                  bool allow_bc_rhs);
     void maybe_materialize_incoming_arg_temp(const operand &op);
     void maybe_materialize_incoming_arg_symbol(const operand &op);
     bool get_sign_extended_i8_source(const operand &op, operand &src) const;
     bool try_emit_sdcc_style_helper(const ir_function &fn);
-    bool try_emit_sdcc_style_leaf(const ir_function &fn);
-    bool try_emit_window_minmax_benchmark(const ir_function &fn);
-    bool try_emit_binary_search_benchmark(const ir_function &fn);
-    bool try_emit_pointer_chase_benchmark(const ir_function &fn);
-    bool try_emit_vm_dispatch_benchmark(const ir_function &fn);
-    bool try_emit_token_scan_benchmark(const ir_function &fn);
-    bool try_emit_life_step_benchmark(const ir_function &fn);
-    bool try_emit_insertion_sort_benchmark(const ir_function &fn);
-    bool try_emit_gray_decode_benchmark(const ir_function &fn);
-    bool try_emit_histogram_benchmark(const ir_function &fn);
-    bool try_emit_nibble_lut_benchmark(const ir_function &fn);
-    bool try_emit_sieve_bits_benchmark(const ir_function &fn);
-    bool try_emit_crc8_byte_loop_function(const ir_function &fn);
-    bool try_emit_rle_byte_fill_function(const ir_function &fn);
-    bool try_emit_rle_byte_encode_function(const ir_function &fn);
-    bool try_emit_bench_fill_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_lcg_byte_fill_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_seeded_recurrence_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_masked_step_fill_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_dual_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_matrix_rowcol_accum_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_node_init_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_list_sort_mix_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_matrix_tail_mix_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_insertion_sort_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_nibble_lut_loop(const ir_function &fn, size_t &idx);
     bool try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx);
     bool try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx);
     bool try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_nibble_histogram_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_bucket_drain_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_gray_decode_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_fir_shiftadd_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_crc16_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_sieve_mark_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_bench_mix_array_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_nonzero_mix_index_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_int_table_binary_search_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_signed_byte_mix_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_repeat_call_xor_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_repeat_signed_byte_mix_xor_loop(const ir_function &fn, size_t &idx);
-    bool try_emit_byte_const_mul_add_store(const ir_function &fn, size_t &idx);
+    bool try_emit_inplace_byte_step_ifx(const ir_function &fn, size_t &idx);
+    bool try_emit_inplace_pointer_update(const ir_function &fn, size_t &idx);
+    bool try_emit_iy_indexed_load(const ir_function &fn, size_t &idx);
+    bool try_emit_postinc_indexed_load(const ir_function &fn, size_t &idx);
+    bool try_emit_shift_xor_self(const ir_function &fn, size_t &idx);
     bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
-    bool try_emit_byte_shift_xor_step(const ir_function &fn, size_t &idx);
-    bool try_emit_u16_shift_xor_run(const ir_function &fn, size_t &idx);
-    bool try_emit_u16_shift_xor_step(const ir_function &fn, size_t &idx);
-    bool try_emit_u32_shift_xor_run(const ir_function &fn, size_t &idx);
-    bool try_emit_u32_shift_xor_step(const ir_function &fn, size_t &idx);
+    bool try_emit_lsb32_shift_xor_diamond(const ir_function &fn, size_t &idx);
     bool try_emit_band_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);
     bool find_direct_byte_truth_ifx(const operand &value,
@@ -342,6 +325,8 @@ private:
     bool is_flag_preserving_byte_truth_bridge(const icode &ic) const;
 
     // ----- module-level emission -------------------------------------
+
+    void plan_size_shared_ix_helpers(const ir_module &mod);
 
     //
     // Emit .area _DATA declarations for all global variables.
@@ -404,6 +389,7 @@ private:
     void gen_address_of  (const icode &ic);
     void gen_get_value_at(const icode &ic);
     void gen_set_value_at(const icode &ic);
+    void gen_block_fill  (const icode &ic);
     void gen_add         (const icode &ic);
     void gen_sub         (const icode &ic);
     void gen_mul         (const icode &ic);
@@ -611,6 +597,17 @@ private:
     bool op_is_16bit(const operand &op) const;
 
     // ----- helpers ---------------------------------------------------
+
+    //
+    // Return true when the byte value currently in A is being stored to a
+    // non-volatile stack slot whose current contents are provably overwritten
+    // on every forward path before any read or aliasing escape.
+    //
+    bool can_elide_current_byte_store(const operand &op) const;
+    bool byte_slot_overwritten_before_read(size_t start,
+                                           const operand &slot,
+                                           size_t budget,
+                                           std::unordered_set<size_t> &active) const;
 
     //
     // Apply platform name-mangling to a C identifier.

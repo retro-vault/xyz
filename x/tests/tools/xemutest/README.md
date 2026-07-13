@@ -36,8 +36,11 @@ Supported keys:
 - `kind = compile` or `kind = run`
 - `source = main.c`
 - `compiler_arg = -Os`
-- `matrix_opt = Os`
+- `matrix_opt = O0`
+- `matrix_opt = O2`
 - `matrix_opt = O3`
+- `matrix_opt = Of`
+- `matrix_opt = Os`
 - `matrix_float = ieee32|ieee16|fixed8_8|fixed16_16|fixed24_8`
 - `host_golden = gcc`
 - `host_arg = -std=c2x`

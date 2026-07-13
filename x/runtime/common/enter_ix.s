@@ -8,7 +8,7 @@
         ;   [sp+0..1] return address (inside the function being entered)
         ;
         ; on exit:
-        ;   ix = caller's sp (frame pointer)
+        ;   ix = sp after saving old ix (frame pointer)
         ;   old ix saved on stack
         ;   execution continues at the return address
         ;
@@ -27,15 +27,10 @@ ___sdcc_enter_ix:
         ; __sdcc_enter_ix
         ; inputs:  stack = return address (caller's code)
         ; outputs: ix = frame pointer (sp after push ix)
-        ; clobbers: alternate bc
+        ; clobbers: none
 __sdcc_enter_ix:
-        exx
-        pop     bc                      ; bc' = return address
-        exx
-        push    ix                      ; save caller's frame pointer
-        ld      ix, #0
+        ex      (sp), ix                ; ix = continuation, stack = old ix
+        push    ix                      ; restore continuation above old ix
+        ld      ix, #2
         add     ix, sp
-        exx
-        push    bc                      ; restore continuation for RET
-        exx
         ret                             ; resume in the calling function

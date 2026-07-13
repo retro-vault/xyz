@@ -34,6 +34,7 @@ const char *icode_op_name(icode_op op) {
     CASE(FUNCTION); CASE(ENDFUNCTION); CASE(RETURN);
     CASE(SEND); CASE(RECEIVE); CASE(CALL);
     CASE(ASSIGN); CASE(ADDRESS_OF); CASE(GET_VALUE_AT); CASE(SET_VALUE_AT);
+    CASE(BLOCK_FILL);
     CASE(ADD); CASE(SUB); CASE(MUL); CASE(DIV); CASE(MOD); CASE(NEG);
     CASE(BAND); CASE(BOR); CASE(BXOR); CASE(BNOT); CASE(SHL); CASE(SHR);
     CASE(ROL); CASE(ROR); CASE(PACK_BYTES);
@@ -129,6 +130,11 @@ void icode::dump() const {
     case icode_op::SET_VALUE_AT:
         printf("  *%s = %s\n",
                result.to_string().c_str(), left.to_string().c_str());
+        break;
+    case icode_op::BLOCK_FILL:
+        printf("  block_fill(%s, %s, %s)\n",
+               result.to_string().c_str(), left.to_string().c_str(),
+               right.to_string().c_str());
         break;
     case icode_op::CAST:
         printf("  %s = (%s)%s\n",

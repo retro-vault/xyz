@@ -18,6 +18,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/z80/z80gen.h"
+#include <functional>
 
 namespace xcc {
 
@@ -560,8 +561,8 @@ void z80_gen::gen_add(const icode &ic) {
         if (rhs->kind == operand_kind::INT_CONST) {
             emit_line("add\ta, %s",
                       asm_.imm(static_cast<int>(rhs->ival & 0xff)).c_str());
-        } else if (rhs_available_in_bc(*rhs)) {
-            emit_line("add\ta, c");
+        } else if (emit_byte_alu_direct_rhs(
+                       "add", *rhs, lhs_load_preserves_bc(*lhs))) {
         } else {
             emit_line("ld\te, a");
             load_a(*rhs);
@@ -821,6 +822,7 @@ void z80_gen::gen_sub(const icode &ic) {
             }
             if (ic.right.kind == operand_kind::SYMBOL && symbol_home_in_bc(ic.right)) {
                 emit_line("sub\ta, c");
+            } else if (emit_byte_alu_direct_rhs("sub", ic.right, false)) {
             } else {
                 emit_line("ld\te, a");
                 load_a(ic.right);
@@ -896,6 +898,46 @@ void z80_gen::gen_sub(const icode &ic) {
 }
 
 void z80_gen::gen_mul(const icode &ic) {
+    if (op_size(ic.result) == 1 && op_size(ic.left) == 1 &&
+        op_size(ic.right) == 1) {
+        const operand *value = nullptr;
+        const operand *constant = nullptr;
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            ic.right.kind != operand_kind::INT_CONST) {
+            value = &ic.right;
+            constant = &ic.left;
+        } else if (ic.right.kind == operand_kind::INT_CONST &&
+                   ic.left.kind != operand_kind::INT_CONST) {
+            value = &ic.left;
+            constant = &ic.right;
+        }
+
+        if (value && constant) {
+            const uint8_t k = static_cast<uint8_t>(constant->ival & 0xff);
+            if (k == 0) {
+                emit_line("xor\ta");
+                store_a(ic.result);
+                return;
+            }
+
+            load_a(*value);
+            if (k != 1) {
+                int msb = 7;
+                while (msb > 0 && ((k >> msb) & 1u) == 0)
+                    --msb;
+                if ((k & (k - 1u)) != 0)
+                    emit_line("ld\te, a");
+                for (int bit = msb - 1; bit >= 0; --bit) {
+                    emit_line("add\ta, a");
+                    if ((k >> bit) & 1u)
+                        emit_line("add\ta, e");
+                }
+            }
+            store_a(ic.result);
+            return;
+        }
+    }
+
     if (op_size(ic.left) == 1 && op_size(ic.right) == 1) {
         const bool left_unsigned =
             ic.left.type && ic.left.type->is_unsigned();
@@ -1431,6 +1473,73 @@ void z80_gen::gen_neg(const icode &ic) {
     store_hl(ic.result);
 }
 
+bool z80_gen::emit_byte_alu_direct_rhs(const char *mnemonic,
+                                       const operand &rhs,
+                                       bool allow_bc_rhs) {
+    auto emit_reg = [&](char reg) {
+        emit_line("%s\ta, %c", mnemonic, reg);
+        return true;
+    };
+
+    if (a_cache_matches(a_load_cache_key(rhs)))
+        return emit_reg('a');
+
+    auto emit_home = [&](temp_home home, int byte_offset) -> bool {
+        switch (home) {
+        case temp_home::main_b:
+            return allow_bc_rhs && byte_offset == 0 && emit_reg('b');
+        case temp_home::main_c:
+            return allow_bc_rhs && byte_offset == 0 && emit_reg('c');
+        case temp_home::main_d:
+            return byte_offset == 0 && emit_reg('d');
+        case temp_home::main_e:
+            return byte_offset == 0 && emit_reg('e');
+        case temp_home::main_bc:
+            if (!allow_bc_rhs || (byte_offset != 0 && byte_offset != 1))
+                return false;
+            return emit_reg(byte_offset == 0 ? 'c' : 'b');
+        default:
+            return false;
+        }
+    };
+
+    if (rhs.kind == operand_kind::TEMP) {
+        auto ri = temp_regs_.find(rhs.temp_id);
+        if (ri != temp_regs_.end()) {
+            if (emit_home(ri->second, rhs.byte_offset))
+                return true;
+            if (ri->second != temp_home::stack)
+                return false;
+        }
+
+        const int off = ix_offset_of(rhs);
+        if (fits_ix_disp(off)) {
+            emit_line("%s\ta, %s", mnemonic, asm_.ix_rel(off).c_str());
+            return true;
+        }
+        return false;
+    }
+
+    if (rhs.kind == operand_kind::SYMBOL && !rhs.is_global) {
+        auto sri = symbol_regs_.find(symbol_reg_key(rhs));
+        if (sri != symbol_regs_.end()) {
+            if (emit_home(sri->second, rhs.byte_offset))
+                return true;
+            return false;
+        }
+        if (incoming_symbol_homes_.count(rhs.stack_offset))
+            return false;
+
+        const int off = ix_offset_of(rhs);
+        if (fits_ix_disp(off)) {
+            emit_line("%s\ta, %s", mnemonic, asm_.ix_rel(off).c_str());
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void z80_gen::gen_band(const icode &ic) {
     operand direct_byte_band_ifx_value;
     const bool direct_byte_band_ifx =
@@ -1523,7 +1632,8 @@ void z80_gen::gen_band(const icode &ic) {
         const uint16_t imm = static_cast<uint16_t>(rhs->ival);
         if (op_size(ic.result) == 1) {
             load_a(*lhs);
-            emit_line("and\t%s", asm_.imm(imm & 0xFF).c_str());
+            if ((imm & 0xFF) != 0xFF)
+                emit_line("and\t%s", asm_.imm(imm & 0xFF).c_str());
             if (direct_byte_band_ifx) {
                 direct_byte_load_ifx_pending_ = true;
                 direct_byte_load_ifx_value_ = direct_byte_band_ifx_value;
@@ -1534,21 +1644,36 @@ void z80_gen::gen_band(const icode &ic) {
         }
 
         load_hl(*lhs);
-        emit_line("ld\ta, l");
-        emit_line("and\t%s", asm_.imm(imm & 0xFF).c_str());
-        emit_line("ld\tl, a");
-        emit_line("ld\ta, h");
-        emit_line("and\t%s", asm_.imm((imm >> 8) & 0xFF).c_str());
-        emit_line("ld\th, a");
+        const uint8_t lo_mask = imm & 0xFF;
+        const uint8_t hi_mask = (imm >> 8) & 0xFF;
+        if (lo_mask == 0) {
+            emit_line("ld\tl, %s", asm_.imm(0).c_str());
+        } else if (lo_mask != 0xFF) {
+            emit_line("ld\ta, l");
+            emit_line("and\t%s", asm_.imm(lo_mask).c_str());
+            emit_line("ld\tl, a");
+        }
+        if (hi_mask == 0) {
+            // Do not elide this based on a previous temp definition: the
+            // current linear def scan is not loop-aware, so a loop-carried
+            // 16-bit induction value may have a non-zero high byte even when
+            // its preheader initializer was byte-sized.
+            emit_line("ld\th, %s", asm_.imm(0).c_str());
+        } else if (hi_mask != 0xFF) {
+            emit_line("ld\ta, h");
+            emit_line("and\t%s", asm_.imm(hi_mask).c_str());
+            emit_line("ld\th, a");
+        }
+        if (try_finish_direct_hl_return(ic.result))
+            return;
         store_hl(ic.result);
         return;
     }
 
     if (op_size(ic.result) == 1) {
         load_a(*lhs);
-        if (rhs_available_in_bc(*rhs) && lhs_load_preserves_bc(*lhs)) {
-            emit_line("and\ta, c");
-        } else {
+        if (!emit_byte_alu_direct_rhs("and", *rhs,
+                                      lhs_load_preserves_bc(*lhs))) {
             emit_line("ld\te, a");
             load_a(*rhs);
             emit_line("ld\td, a");
@@ -1574,6 +1699,8 @@ void z80_gen::gen_band(const icode &ic) {
         emit_line("and\ta, e");
         emit_line("ld\tl, a");
         emit_line("ld\th, %s", asm_.imm(0).c_str());
+        if (try_finish_direct_hl_return(ic.result))
+            return;
         store_hl(ic.result);
         return;
     }
@@ -1596,6 +1723,8 @@ void z80_gen::gen_band(const icode &ic) {
         emit_line("ld\ta, l"); emit_line("and\ta, e"); emit_line("ld\tl, a");
         emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
     }
+    if (try_finish_direct_hl_return(ic.result))
+        return;
     store_hl(ic.result);
 }
 
@@ -1736,9 +1865,8 @@ void z80_gen::gen_bor(const icode &ic) {
 
     if (op_size(ic.result) == 1) {
         load_a(*lhs);
-        if (rhs_available_in_bc(*rhs) && lhs_load_preserves_bc(*lhs)) {
-            emit_line("or\ta, c");
-        } else {
+        if (!emit_byte_alu_direct_rhs("or", *rhs,
+                                      lhs_load_preserves_bc(*lhs))) {
             emit_line("ld\te, a");
             load_a(*rhs);
             emit_line("ld\td, a");
@@ -1784,9 +1912,11 @@ void z80_gen::gen_bor(const icode &ic) {
 }
 
 void z80_gen::gen_pack_bytes(const icode &ic) {
+    load_a(ic.left);
+    emit_line("push\taf");
     load_a(ic.right);
     emit_line("ld\th, a");
-    load_a(ic.left);
+    emit_line("pop\taf");
     emit_line("ld\tl, a");
     store_hl(ic.result);
 }
@@ -1865,8 +1995,16 @@ void z80_gen::gen_bxor(const icode &ic) {
         };
     const operand *lhs = &ic.left;
     const operand *rhs = &ic.right;
+    auto available_in_a = [this](const operand &op) {
+        if (!op.is_temp())
+            return false;
+        auto it = temp_regs_.find(op.temp_id);
+        return it != temp_regs_.end() && it->second == temp_home::main_a;
+    };
     if (lhs->kind == operand_kind::INT_CONST &&
         rhs->kind != operand_kind::INT_CONST)
+        std::swap(lhs, rhs);
+    if (available_in_a(*rhs) && !available_in_a(*lhs))
         std::swap(lhs, rhs);
     if (rhs_available_in_bc(*lhs) && available_in_hl(*rhs))
         std::swap(lhs, rhs);
@@ -1893,9 +2031,8 @@ void z80_gen::gen_bxor(const icode &ic) {
 
     if (op_size(ic.result) == 1) {
         load_a(*lhs);
-        if (rhs_available_in_bc(*rhs) && lhs_load_preserves_bc(*lhs)) {
-            emit_line("xor\ta, c");
-        } else {
+        if (!emit_byte_alu_direct_rhs("xor", *rhs,
+                                      lhs_load_preserves_bc(*lhs))) {
             emit_line("ld\te, a");
             load_a(*rhs);
             emit_line("ld\td, a");
@@ -2103,7 +2240,10 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
                 return;
             }
 
-            if (count <= 5) {
+            const int byte_unroll_limit =
+                size_opt_enabled() ? 5 :
+                (tuned_profile_enabled() ? 7 : 5);
+            if (count <= byte_unroll_limit) {
                 for (int k = 0; k < count; ++k) {
                     if (!right)
                         emit_line("add\ta, a");
@@ -2188,7 +2328,9 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         }
 
         // Small constant shifts are smaller and faster fully unrolled.
-        const int unroll_limit = 5;
+        const int unroll_limit =
+            size_opt_enabled() ? 5 :
+            (tuned_profile_enabled() ? 7 : 5);
         if (count <= unroll_limit) {
             for (int k = 0; k < count; ++k) {
                 if (!right)
@@ -2656,6 +2798,33 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         }
     };
 
+    // For an unsigned word, x < K*256 (or x >= K*256) depends only on
+    // x's high byte. Avoid materializing both words and doing a 16-bit
+    // subtraction for aligned bounds such as array and buffer sizes.
+    if (op_size(ic.left) == 2 && op_size(ic.right) == 2 &&
+        ic.left.kind != operand_kind::INT_CONST &&
+        ic.right.kind == operand_kind::INT_CONST &&
+        ic.right.ival > 0 && ic.right.ival <= 0xffff &&
+        (ic.right.ival & 0xff) == 0 &&
+        ic.left.type &&
+        (ic.left.type->is_unsigned() || ic.left.type->is_ptr()) &&
+        (cmp == icode_op::LT || cmp == icode_op::GE)) {
+        operand high = ic.left;
+        high.byte_offset += 1;
+        high.type = type::make_uchar();
+        load_a(high);
+        emit_line("cp\t%s",
+                  asm_.imm((ic.right.ival >> 8) & 0xff).c_str());
+        if (!true_lbl.empty()) {
+            emit_line("jp\t%s, %s",
+                      cmp == icode_op::LT ? "c" : "nc",
+                      true_lbl.c_str());
+        }
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        return;
+    }
+
     if ((cmp == icode_op::EQ || cmp == icode_op::NE) &&
         can_use_direct_byte_eq_ne_compare(ic)) {
         const operand *lhs = &ic.left;
@@ -2727,6 +2896,11 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             if (rhs->kind == operand_kind::SYMBOL && rhs->is_global &&
                 !rhs->is_tls) {
                 emit_line("ld\tc, (%s)", mangle(rhs->name).c_str());
+            } else if ((rhs->kind == operand_kind::SYMBOL ||
+                        rhs->kind == operand_kind::TEMP) &&
+                       fits_ix_disp(ix_offset_of(*rhs))) {
+                emit_line("cp\t%s", asm_.ix_rel(ix_offset_of(*rhs)).c_str());
+                return;
             } else if (rhs->kind == operand_kind::SYMBOL ||
                        rhs->kind == operand_kind::TEMP) {
                 load_frame_byte('c', ix_offset_of(*rhs));
@@ -2929,6 +3103,12 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             if (ic.right.kind == operand_kind::SYMBOL && ic.right.is_global &&
                 !ic.right.is_tls) {
                 emit_line("ld\tc, (%s)", mangle(ic.right.name).c_str());
+            } else if ((ic.right.kind == operand_kind::SYMBOL ||
+                        ic.right.kind == operand_kind::TEMP) &&
+                       fits_ix_disp(ix_offset_of(ic.right))) {
+                emit_line("cp\t%s",
+                          asm_.ix_rel(ix_offset_of(ic.right)).c_str());
+                return;
             } else if (ic.right.kind == operand_kind::SYMBOL ||
                        ic.right.kind == operand_kind::TEMP) {
                 load_frame_byte('c', ix_offset_of(ic.right));
@@ -2979,6 +3159,172 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         case icode_op::GE:
             if (!true_lbl.empty())
                 emit_line("jp\tnc, %s", true_lbl.c_str());
+            break;
+        default:
+            break;
+        }
+
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        return;
+    }
+
+    auto operand_in_main_bc = [&](const operand &op) {
+        if (op.byte_offset != 0)
+            return false;
+        if (op.kind == operand_kind::TEMP) {
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() && it->second == temp_home::main_bc;
+        }
+        return op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op);
+    };
+    auto operand_in_main_iy = [&](const operand &op) {
+        if (op.kind != operand_kind::TEMP || op.byte_offset != 0)
+            return false;
+        auto it = temp_regs_.find(op.temp_id);
+        return it != temp_regs_.end() &&
+               it->second == temp_home::main_iy;
+    };
+
+    if (op_size(ic.left) == 2 && op_size(ic.right) == 2 &&
+        operand_in_main_bc(ic.left) && !operand_in_main_bc(ic.right) &&
+        ic.left.type &&
+        (ic.left.type->is_unsigned() || ic.left.type->is_ptr()) &&
+        !true_lbl.empty() && !false_lbl.empty()) {
+        // Keep a BC-resident cursor intact. Comparing high bytes first avoids
+        // the DE shuttle and 16-bit SBC used by the generic path, while also
+        // leaving DE available for byte values carried through the loop body.
+        if (ic.right.kind == operand_kind::INT_CONST &&
+            (ic.right.ival & 0xff) == 0 && ic.right.ival > 0 &&
+            ic.right.ival <= 0xffff &&
+            (cmp == icode_op::LT || cmp == icode_op::GE)) {
+            emit_line("ld\ta, b");
+            emit_line("cp\t%s",
+                      asm_.imm((ic.right.ival >> 8) & 0xff).c_str());
+            if (cmp == icode_op::LT) {
+                emit_line("jp\tc, %s", true_lbl.c_str());
+                emit_line("jp\t%s", false_lbl.c_str());
+            } else {
+                emit_line("jp\tnc, %s", true_lbl.c_str());
+                emit_line("jp\t%s", false_lbl.c_str());
+            }
+            return;
+        }
+
+        load_hl(ic.right);
+        emit_line("ld\ta, b");
+        emit_line("cp\th");
+
+        switch (cmp) {
+        case icode_op::EQ:
+            emit_line("jp\tnz, %s", false_lbl.c_str());
+            emit_line("ld\ta, c");
+            emit_line("cp\tl");
+            emit_line("jp\tz, %s", true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        case icode_op::NE:
+            emit_line("jp\tnz, %s", true_lbl.c_str());
+            emit_line("ld\ta, c");
+            emit_line("cp\tl");
+            emit_line("jp\tnz, %s", true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        case icode_op::LT:
+            emit_line("jp\tc, %s", true_lbl.c_str());
+            emit_line("jp\tnz, %s", false_lbl.c_str());
+            emit_line("ld\ta, c");
+            emit_line("cp\tl");
+            emit_line("jp\tc, %s", true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        case icode_op::LE:
+            emit_line("jp\tc, %s", true_lbl.c_str());
+            emit_line("jp\tnz, %s", false_lbl.c_str());
+            emit_line("ld\ta, c");
+            emit_line("cp\tl");
+            emit_line("jp\tc, %s", true_lbl.c_str());
+            emit_line("jp\tz, %s", true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        case icode_op::GT:
+            emit_line("jp\tc, %s", false_lbl.c_str());
+            emit_line("jp\tnz, %s", true_lbl.c_str());
+            emit_line("ld\ta, c");
+            emit_line("cp\tl");
+            emit_line("jp\tc, %s", false_lbl.c_str());
+            emit_line("jp\tz, %s", false_lbl.c_str());
+            emit_line("jp\t%s", true_lbl.c_str());
+            return;
+        case icode_op::GE:
+            emit_line("jp\tc, %s", false_lbl.c_str());
+            emit_line("jp\tnz, %s", true_lbl.c_str());
+            emit_line("ld\ta, c");
+            emit_line("cp\tl");
+            emit_line("jp\tnc, %s", true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        default:
+            break;
+        }
+    }
+
+    const bool right_in_bc = operand_in_main_bc(ic.right);
+    const bool right_in_iy = operand_in_main_iy(ic.right);
+    if (op_size(ic.left) <= 2 && op_size(ic.right) <= 2 &&
+        (right_in_iy || (right_in_bc && !operand_in_main_bc(ic.left)))) {
+        load_hl(ic.left);
+        if (right_in_iy) {
+            emit_line("push\tiy");
+            emit_line("pop\tde");
+        } else {
+            emit_line("ld\td, b");
+            emit_line("ld\te, c");
+        }
+        const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+        emit_line("or\ta, a");
+        emit_line("sbc\thl, de");
+
+        switch (cmp) {
+        case icode_op::EQ:
+            if (!true_lbl.empty())
+                emit_line("jp\tz, %s", true_lbl.c_str());
+            break;
+        case icode_op::NE:
+            if (!true_lbl.empty())
+                emit_line("jp\tnz, %s", true_lbl.c_str());
+            break;
+        case icode_op::LT:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s, %s",
+                          is_unsigned ? "c" : "m", true_lbl.c_str());
+            break;
+        case icode_op::LE:
+            if (!true_lbl.empty()) {
+                emit_line("jp\tz, %s", true_lbl.c_str());
+                emit_line("jp\t%s, %s",
+                          is_unsigned ? "c" : "m", true_lbl.c_str());
+            }
+            break;
+        case icode_op::GT:
+            if (!false_lbl.empty()) {
+                emit_line("jp\tz, %s", false_lbl.c_str());
+                if (!true_lbl.empty())
+                    emit_line("jp\t%s, %s",
+                              is_unsigned ? "nc" : "p", true_lbl.c_str());
+            } else {
+                std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
+                emit_line("jp\tz, %s", skip_lbl.c_str());
+                if (!true_lbl.empty())
+                    emit_line("jp\t%s, %s",
+                              is_unsigned ? "nc" : "p", true_lbl.c_str());
+                asm_.label(skip_lbl, false);
+            }
+            break;
+        case icode_op::GE:
+            if (!true_lbl.empty())
+                emit_line("jp\t%s, %s",
+                          is_unsigned ? "nc" : "p", true_lbl.c_str());
             break;
         default:
             break;
@@ -3540,6 +3886,11 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             if (rhs->kind == operand_kind::SYMBOL && rhs->is_global &&
                 !rhs->is_tls) {
                 emit_line("ld\tc, (%s)", mangle(rhs->name).c_str());
+            } else if ((rhs->kind == operand_kind::SYMBOL ||
+                        rhs->kind == operand_kind::TEMP) &&
+                       fits_ix_disp(ix_offset_of(*rhs))) {
+                emit_line("cp\t%s", asm_.ix_rel(ix_offset_of(*rhs)).c_str());
+                return;
             } else if (rhs->kind == operand_kind::SYMBOL ||
                        rhs->kind == operand_kind::TEMP) {
                 load_frame_byte('c', ix_offset_of(*rhs));
@@ -3685,6 +4036,12 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             if (ic.right.kind == operand_kind::SYMBOL && ic.right.is_global &&
                 !ic.right.is_tls) {
                 emit_line("ld\tc, (%s)", mangle(ic.right.name).c_str());
+            } else if ((ic.right.kind == operand_kind::SYMBOL ||
+                        ic.right.kind == operand_kind::TEMP) &&
+                       fits_ix_disp(ix_offset_of(ic.right))) {
+                emit_line("cp\t%s",
+                          asm_.ix_rel(ix_offset_of(ic.right)).c_str());
+                return;
             } else if (ic.right.kind == operand_kind::SYMBOL ||
                        ic.right.kind == operand_kind::TEMP) {
                 load_frame_byte('c', ix_offset_of(ic.right));

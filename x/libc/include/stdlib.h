@@ -57,6 +57,7 @@ size_t memalignment(const void *ptr);
 /* C23 sized/aligned free (new) */
 void free_sized(void *ptr, size_t size);
 void free_aligned(void *ptr, size_t alignment);
+void free_aligned_sized(void *ptr, size_t alignment, size_t size);
 
 /*
  * Multi-heap allocator (xyz extension).

@@ -15,6 +15,7 @@ OUT_ROOT = X_ROOT / "tests" / "tests" / "c23" / "cases" / "xcc"
 
 FLOAT_ALL = ["ieee32", "fixed8_8", "fixed16_16", "fixed16_8"]
 FLOAT_IEEE_ONLY = ["ieee32"]
+DEFAULT_MATRIX_OPTS = ["O0", "O2", "O3", "Of", "Os"]
 
 
 def rel_to_case(path: Path, case_dir: Path) -> str:
@@ -154,10 +155,10 @@ def add_common_manifest_lines(
             "component = xcc\n",
             f"summary = {summary}\n",
             f"source = {source_rel}\n",
-            "matrix_opt = Os\n",
-            "matrix_opt = O3\n",
         ]
     )
+    for opt in DEFAULT_MATRIX_OPTS:
+        lines.append(f"matrix_opt = {opt}\n")
     for arg in compiler_args:
         lines.append(f"compiler_arg = {arg}\n")
     if float_present:

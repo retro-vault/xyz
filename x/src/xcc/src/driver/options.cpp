@@ -60,7 +60,11 @@ static constexpr opt_flag_binding k_opt_flag_bindings[] = {
     {"dead-code-elim", &optimization_settings::dead_code_elim},
     {"scalar-local-promotion", &optimization_settings::scalar_local_promotion},
     {"reg-param-promotion", &optimization_settings::reg_param_promotion},
+    {"tail-recursion-elim", &optimization_settings::tail_recursion_elim},
     {"short-circuit-bool-ifx", &optimization_settings::short_circuit_bool_ifx},
+    {"branch-bool-arithmetic", &optimization_settings::branch_bool_arithmetic},
+    {"countdown-dead-loops", &optimization_settings::countdown_dead_loops},
+    {"block-fill-loops", &optimization_settings::block_fill_loops},
     {"narrow-counted-byte-loops", &optimization_settings::narrow_counted_byte_loops},
     {"loop-pointer-walk", &optimization_settings::loop_pointer_walk},
     {"promoted-byte-compare", &optimization_settings::promoted_byte_compare},
@@ -437,8 +441,8 @@ void options::usage(const char *argv0) {
         "  -O0               No optimization (default)\n"
         "  -O1               Late target cleanup only (peephole + tiny backend fusions)\n"
         "  -O2               Smart optimizer baseline (IR + backend + O1 cleanup)\n"
-        "  -Of               Os-based speed profile; currently aliases -Os\n"
-        "  -O3               Reserved experimental layer; currently aliases -Of\n"
+        "  -Of               O2-based speed profile with validated speed hooks\n"
+        "  -O3               Separately routed experimental speed profile\n"
         "  -Os               Size-biased smart optimization\n"
         "  --opt-code-size   Alias for -Os (SDCC compatibility)\n"
         "  --opt-code-speed  Alias for -Of (SDCC compatibility)\n"

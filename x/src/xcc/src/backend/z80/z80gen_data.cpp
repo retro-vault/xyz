@@ -22,6 +22,64 @@ std::string banked_data_section_name(int bank) {
 
 } // namespace
 
+void z80_gen::plan_size_shared_ix_helpers(const ir_module &mod) {
+    size_shared_ix_helpers_ = false;
+    if (debug_ || opt_settings_.level != opt_level::Os)
+        return;
+
+    int shared_enter_count = 0;
+    int shared_leave_count = 0;
+    for (const auto &fn : mod.functions) {
+        const call_abi abi = effective_call_abi(fn.abi);
+        if (abi == call_abi::NAKED)
+            continue;
+
+        cur_fn_ = &fn;
+        local_bytes_ = fn.local_bytes;
+        cur_convention_ = &get_abi_convention(fn.abi);
+        temp_slots_.clear();
+        temp_regs_.clear();
+        incoming_symbol_homes_.clear();
+        symbol_regs_.clear();
+        next_temp_slot_ = 0;
+        temp_stack_bytes_ = 0;
+        temp_frame_bytes_ = 0;
+
+        if (regalloc_enabled())
+            regalloc_prepass(fn);
+        temp_stack_bytes_ = compute_temp_frame_bytes(fn);
+        if (can_omit_frame_pointer(fn))
+            continue;
+
+        ++shared_enter_count;
+        if (fn.is_noreturn || abi == call_abi::INTERRUPT ||
+            abi == call_abi::CRITICAL) {
+            continue;
+        }
+
+        const bool callee_repairs_stack =
+            abi == call_abi::Z88DK_CALLEE ||
+            (abi == call_abi::SDCCCALL1 && fn.callee_cleans_stack);
+        if (!(callee_repairs_stack && fn.stack_param_bytes > 0))
+            ++shared_leave_count;
+    }
+
+    cur_fn_ = nullptr;
+    cur_convention_ = nullptr;
+    temp_slots_.clear();
+    temp_regs_.clear();
+    incoming_symbol_homes_.clear();
+    symbol_regs_.clear();
+    temp_stack_bytes_ = 0;
+    temp_frame_bytes_ = 0;
+
+    // Enter saves 5 bytes per frame and leave saves 2. Later tail and
+    // peephole sharing can recover up to 8 bytes from inline forms, so use
+    // the measured 24-byte break-even rather than the helper's raw size.
+    const int site_savings = shared_enter_count * 5 + shared_leave_count * 2;
+    size_shared_ix_helpers_ = site_savings > 24;
+}
+
 void z80_gen::emit_module(const ir_module &mod) {
     asm_.module_header();
     asm_.default_calling_convention(get_default_call_abi());
@@ -41,6 +99,8 @@ void z80_gen::emit_module(const ir_module &mod) {
     emit_globals(mod);
     emit_strings(mod);
     emit_external_data_refs(mod);
+
+    plan_size_shared_ix_helpers(mod);
 
     for (auto &fn : mod.functions)
         emit_function(fn);

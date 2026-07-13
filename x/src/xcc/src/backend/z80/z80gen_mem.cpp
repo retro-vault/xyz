@@ -48,6 +48,8 @@ static bool load_byte_preserves_hl(const operand &op,
                 it->second == temp_home::main_a ||
                 it->second == temp_home::main_b ||
                 it->second == temp_home::main_c ||
+                it->second == temp_home::main_d ||
+                it->second == temp_home::main_e ||
                 it->second == temp_home::arg_a ||
                 it->second == temp_home::arg_l);
     }
@@ -217,6 +219,20 @@ bool z80_gen::gen_far_set_value_at(const icode &ic) {
 void z80_gen::gen_get_value_at(const icode &ic) {
     if (gen_far_get_value_at(ic))
         return;
+    if (ic.result.is_temp()) {
+        auto ri = temp_regs_.find(ic.result.temp_id);
+        if (ri != temp_regs_.end() &&
+            ri->second == temp_home::remat_hl &&
+            op_size(ic.result) == 2 &&
+            ic.right.is_none() &&
+            ic.left.type &&
+            ic.left.type->is_ptr() &&
+            !ic.left.type->is_far_ptr() &&
+            !(ic.result.type && ic.result.type->is_volatile) &&
+            !(ic.left.type->base && ic.left.type->base->is_volatile)) {
+            return;
+        }
+    }
     auto clear_direct_postinc_load = [&]() {
         direct_postinc_load_pending_ = false;
         direct_postinc_load_cursor_ = operand{};
@@ -450,31 +466,48 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         }
         return false;
     };
+    auto is_iy_pointer_home = [&](const operand &op) {
+        if (!op.is_temp())
+            return false;
+        auto it = temp_regs_.find(op.temp_id);
+        return it != temp_regs_.end() && it->second == temp_home::main_iy;
+    };
     if (ic.left.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
-        op_size(ic.result) == 1) {
+        (op_size(ic.result) == 1 || op_size(ic.result) == 2)) {
         const std::string label_sym = asm_label_ref_name(ic.left.name);
         operand byte_src;
         if (get_zero_extended_u8_source(ic.right, byte_src)) {
             load_de_zero_extended_u8(byte_src);
-            emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
-            emit_line("add\thl, de");
+        } else {
+            load_de(ic.right);
+        }
+        emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
+        emit_line("add\thl, de");
+        if (op_size(ic.result) == 1) {
             emit_line("ld\ta, (hl)");
             if (direct_byte_load_ifx) {
                 emit_line("or\ta, a");
             } else {
                 store_a(ic.result);
             }
-            return;
-        }
-        load_de(ic.right);
-        emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
-        emit_line("add\thl, de");
-        emit_line("ld\ta, (hl)");
-        if (direct_byte_load_ifx) {
-            emit_line("or\ta, a");
         } else {
-            store_a(ic.result);
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            if (direct_word_load_ifx) {
+                emit_line("ld\ta, d");
+                emit_line("or\ta, e");
+                direct_word_load_ifx_pending_ = true;
+                direct_word_load_ifx_value_ = direct_word_load_ifx_value;
+                direct_word_value_pending_ = true;
+                direct_word_value_ = ic.result;
+            } else if (direct_word_forward) {
+                direct_word_value_pending_ = true;
+                direct_word_value_ = ic.result;
+            } else {
+                store_de(ic.result);
+            }
         }
         return;
     }
@@ -538,6 +571,39 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         } else {
             emit_line("ld\thl, %s", abs.c_str());
             store_hl(ic.result);
+        }
+        return;
+    }
+
+    if (!use_pending_word_ptr &&
+        op_size(ic.result) == 1 &&
+        is_iy_pointer_home(ic.left)) {
+        emit_line("ld\ta, 0(iy)");
+        if (direct_byte_load_ifx) {
+            emit_line("or\ta, a");
+        } else {
+            store_a(ic.result);
+        }
+        return;
+    }
+
+    if (!use_pending_word_ptr &&
+        op_size(ic.result) == 2 &&
+        is_iy_pointer_home(ic.left)) {
+        emit_line("ld\te, 0(iy)");
+        emit_line("ld\td, 1(iy)");
+        if (direct_word_load_ifx) {
+            emit_line("ld\ta, d");
+            emit_line("or\ta, e");
+            direct_word_load_ifx_pending_ = true;
+            direct_word_load_ifx_value_ = direct_word_load_ifx_value;
+            direct_word_value_pending_ = true;
+            direct_word_value_ = ic.result;
+        } else if (direct_word_forward) {
+            direct_word_value_pending_ = true;
+            direct_word_value_ = ic.result;
+        } else {
+            store_de(ic.result);
         }
         return;
     }
@@ -609,6 +675,33 @@ void z80_gen::gen_get_value_at(const icode &ic) {
     }
 }
 
+void z80_gen::gen_block_fill(const icode &ic) {
+    if (ic.right.kind != operand_kind::INT_CONST || ic.right.ival <= 0)
+        return;
+
+    const int64_t count = ic.right.ival;
+    load_hl(ic.result);
+    if (ic.left.kind == operand_kind::INT_CONST) {
+        load_a(ic.left);
+    } else {
+        emit_line("push\thl");
+        load_a(ic.left);
+        emit_line("pop\thl");
+    }
+    emit_line("ld\t(hl), a");
+
+    if (count > 1) {
+        emit_line("ld\td, h");
+        emit_line("ld\te, l");
+        emit_line("inc\tde");
+        emit_line("ld\tbc, %s",
+                  asm_.imm(count - 1).c_str());
+        emit_line("ldir");
+    }
+    invalidate_pair_cache();
+    invalidate_a_cache();
+}
+
 void z80_gen::gen_set_value_at(const icode &ic) {
     if (gen_far_set_value_at(ic))
         return;
@@ -622,6 +715,12 @@ void z80_gen::gen_set_value_at(const icode &ic) {
             return it != symbol_regs_.end() && it->second == temp_home::main_bc;
         }
         return false;
+    };
+    auto is_iy_pointer_home = [&](const operand &op) {
+        if (!op.is_temp())
+            return false;
+        auto it = temp_regs_.find(op.temp_id);
+        return it != temp_regs_.end() && it->second == temp_home::main_iy;
     };
     auto byte_load_preserves_hl_here = [&](const operand &op) {
         if (load_byte_preserves_hl(op, temp_regs_))
@@ -641,6 +740,8 @@ void z80_gen::gen_set_value_at(const icode &ic) {
                 case temp_home::main_a:
                 case temp_home::main_b:
                 case temp_home::main_c:
+                case temp_home::main_d:
+                case temp_home::main_e:
                 case temp_home::alt_a:
                     return true;
                 case temp_home::arg_a:
@@ -693,30 +794,35 @@ void z80_gen::gen_set_value_at(const icode &ic) {
     };
     if (ic.result.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
-        op_size(ic.left) == 1) {
+        (op_size(ic.left) == 1 || op_size(ic.left) == 2)) {
         const std::string label_sym = asm_label_ref_name(ic.result.name);
         operand byte_src;
         if (get_zero_extended_u8_source(ic.right, byte_src)) {
             load_de_zero_extended_u8(byte_src);
-            emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
-            emit_line("add\thl, de");
-            if (!byte_load_preserves_hl_here(ic.left))
-                emit_line("push\thl");
-            load_a(ic.left);
-            if (!byte_load_preserves_hl_here(ic.left))
-                emit_line("pop\thl");
-            emit_line("ld\t(hl), a");
-            return;
+        } else {
+            load_de(ic.right);
         }
-        load_de(ic.right);
         emit_line("ld\thl, %s", asm_.imm_sym(label_sym).c_str());
         emit_line("add\thl, de");
-        if (!byte_load_preserves_hl_here(ic.left))
-            emit_line("push\thl");
-        load_a(ic.left);
-        if (!byte_load_preserves_hl_here(ic.left))
-            emit_line("pop\thl");
-        emit_line("ld\t(hl), a");
+        if (op_size(ic.left) == 1) {
+            const bool preserves_hl = byte_load_preserves_hl_here(ic.left);
+            if (!preserves_hl)
+                emit_line("push\thl");
+            load_a(ic.left);
+            if (!preserves_hl)
+                emit_line("pop\thl");
+            emit_line("ld\t(hl), a");
+        } else {
+            const bool preserves_hl = word_load_preserves_hl_here(ic.left);
+            if (!preserves_hl)
+                emit_line("push\thl");
+            load_de(ic.left);
+            if (!preserves_hl)
+                emit_line("pop\thl");
+            emit_line("ld\t(hl), e");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), d");
+        }
         return;
     }
 
@@ -829,6 +935,19 @@ void z80_gen::gen_set_value_at(const icode &ic) {
             load_hl(ic.left);
             emit_line("ld\t%s, hl", abs.c_str());
         }
+        return;
+    }
+
+    if (op_size(ic.left) == 1 && is_iy_pointer_home(ic.result)) {
+        load_a(ic.left);
+        emit_line("ld\t0(iy), a");
+        return;
+    }
+
+    if (op_size(ic.left) == 2 && is_iy_pointer_home(ic.result)) {
+        load_de(ic.left);
+        emit_line("ld\t0(iy), e");
+        emit_line("ld\t1(iy), d");
         return;
     }
 

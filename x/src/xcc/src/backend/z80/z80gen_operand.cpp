@@ -51,6 +51,42 @@ bool is_16bit_sfr_port(const operand &op) {
     return op.is_sfr && op.sfr_port > 0xff;
 }
 
+bool same_stack_storage_base(const operand &a, const operand &b) {
+    if (a.kind != b.kind)
+        return false;
+    switch (a.kind) {
+    case operand_kind::TEMP:
+        return a.temp_id == b.temp_id;
+    case operand_kind::SYMBOL:
+        return !a.is_global && !b.is_global &&
+               a.is_param == b.is_param &&
+               a.is_func == b.is_func &&
+               a.is_tls == b.is_tls &&
+               a.is_sfr == b.is_sfr &&
+               a.sfr_port == b.sfr_port &&
+               a.stack_offset == b.stack_offset &&
+               a.name == b.name;
+    default:
+        return false;
+    }
+}
+
+bool byte_store_memory_barrier(const icode &ic) {
+    switch (ic.op) {
+    case icode_op::CALL:
+    case icode_op::GET_VALUE_AT:
+    case icode_op::SET_VALUE_AT:
+    case icode_op::BLOCK_FILL:
+    case icode_op::ALLOCA:
+    case icode_op::INLINE_ASM:
+    case icode_op::FUNCTION:
+    case icode_op::ENDFUNCTION:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // namespace
 
 bool z80_gen::fits_ix_disp(int off) {
@@ -294,9 +330,15 @@ int z80_gen::param_ix_offset(const operand &op) const {
 
 std::string z80_gen::addr_of(const operand &op) {
     if (op.kind == operand_kind::SYMBOL) {
-        if (op.is_global) return mangle(op.name);
-        if (op.is_param)  return std::to_string(param_ix_offset(op)) + "(ix)";
-        return std::to_string(op.stack_offset) + "(ix)";
+        if (op.is_global) {
+            std::string name = mangle(op.name);
+            if (op.byte_offset != 0)
+                name += " + " + std::to_string(op.byte_offset);
+            return name;
+        }
+        const int off = (op.is_param ? param_ix_offset(op) : op.stack_offset) +
+                        op.byte_offset;
+        return std::to_string(off) + "(ix)";
     }
     if (op.kind == operand_kind::TEMP) {
         int off = ix_offset_of(op);
@@ -314,6 +356,154 @@ int z80_gen::ix_offset_of(const operand &op) const {
         base = op.is_param ? param_ix_offset(op) : op.stack_offset;
     }
     return base + op.byte_offset;
+}
+
+bool z80_gen::can_elide_current_byte_store(const operand &op) const {
+    if (opt_settings_.level != opt_level::Os &&
+        opt_settings_.level != opt_level::Of &&
+        opt_settings_.level != opt_level::O3) {
+        return false;
+    }
+    if (!cur_fn_ || cur_ic_index_ + 1 >= cur_fn_->icodes.size())
+        return false;
+    if (cur_fn_->icodes[cur_ic_index_].op == icode_op::RECEIVE)
+        return false;
+    if (op_size(op) != 1)
+        return false;
+    if (op.kind == operand_kind::SYMBOL) {
+        if (op.is_global || op.is_tls || op.is_sfr || op.is_func)
+            return false;
+        if (op.type && op.type->is_volatile)
+            return false;
+    } else if (op.kind != operand_kind::TEMP) {
+        return false;
+    }
+
+    for (const auto &ic : cur_fn_->icodes) {
+        if (ic.op != icode_op::RECEIVE)
+            continue;
+        if (same_stack_storage_base(ic.result, op))
+            return false;
+    }
+
+    std::unordered_set<size_t> active;
+    return byte_slot_overwritten_before_read(cur_ic_index_ + 1, op, 160, active);
+}
+
+bool z80_gen::byte_slot_overwritten_before_read(
+        size_t start,
+        const operand &slot,
+        size_t budget,
+        std::unordered_set<size_t> &active) const {
+    if (!cur_fn_ || start >= cur_fn_->icodes.size() || budget == 0)
+        return false;
+    if (!active.insert(start).second)
+        return false;
+
+    auto finish = [&](bool result) {
+        active.erase(start);
+        return result;
+    };
+
+    auto label_index = [&](const std::string &label) -> size_t {
+        if (label.empty())
+            return cur_fn_->icodes.size();
+        for (size_t i = 0; i < cur_fn_->icodes.size(); ++i) {
+            const icode &ic = cur_fn_->icodes[i];
+            if (ic.op == icode_op::LABEL && ic.label_name == label)
+                return i;
+        }
+        return cur_fn_->icodes.size();
+    };
+
+    auto overlaps_slot = [&](const operand &op) {
+        if (!same_stack_storage_base(op, slot))
+            return false;
+        const int op_width = std::max(1, op_size(op));
+        const int op_begin = op.byte_offset;
+        const int op_end = op_begin + op_width;
+        const int slot_begin = slot.byte_offset;
+        const int slot_end = slot_begin + 1;
+        return op_begin < slot_end && slot_begin < op_end;
+    };
+
+    auto reads_slot = [&](const icode &ic) {
+        switch (ic.op) {
+        case icode_op::LABEL:
+        case icode_op::FUNCTION:
+        case icode_op::ENDFUNCTION:
+        case icode_op::RECEIVE:
+        case icode_op::GOTO:
+        case icode_op::CALL:
+        case icode_op::INLINE_ASM:
+            return false;
+        default:
+            return overlaps_slot(ic.left) || overlaps_slot(ic.right);
+        }
+    };
+
+    auto writes_slot = [&](const icode &ic) {
+        switch (ic.op) {
+        case icode_op::LABEL:
+        case icode_op::GOTO:
+        case icode_op::IFX:
+        case icode_op::FUNCTION:
+        case icode_op::ENDFUNCTION:
+        case icode_op::RETURN:
+        case icode_op::SEND:
+        case icode_op::ADDRESS_OF:
+        case icode_op::SET_VALUE_AT:
+        case icode_op::ALLOCA:
+        case icode_op::INLINE_ASM:
+            return false;
+        default:
+            return overlaps_slot(ic.result);
+        }
+    };
+
+    for (size_t k = start; k < cur_fn_->icodes.size() && budget > 0;
+         ++k, --budget) {
+        if (skipped_icodes_.find(k) != skipped_icodes_.end())
+            return finish(false);
+
+        const icode &ic = cur_fn_->icodes[k];
+        if (ic.op == icode_op::LABEL)
+            continue;
+
+        if (ic.op == icode_op::GOTO) {
+            const size_t target = label_index(ic.label_name);
+            if (target == cur_fn_->icodes.size())
+                return finish(false);
+            return finish(byte_slot_overwritten_before_read(target, slot,
+                                                            budget - 1, active));
+        }
+
+        if (ic.op == icode_op::IFX) {
+            if (reads_slot(ic))
+                return finish(false);
+
+            auto branch_ok = [&](const std::string &label) {
+                const size_t next = label.empty() ? (k + 1) : label_index(label);
+                if (next >= cur_fn_->icodes.size())
+                    return false;
+                return byte_slot_overwritten_before_read(next, slot,
+                                                         budget - 1, active);
+            };
+
+            return finish(branch_ok(ic.true_lbl) && branch_ok(ic.false_lbl));
+        }
+
+        if (reads_slot(ic))
+            return finish(false);
+        if (byte_store_memory_barrier(ic))
+            return finish(false);
+        if (writes_slot(ic))
+            return finish(true);
+        if (ic.op == icode_op::RETURN)
+            return finish(false);
+    }
+
+    return finish(false);
 }
 
 void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
@@ -477,6 +667,14 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                     return;
                 case temp_home::main_c:
                     emit_line("ld\t%c, c", r.lo);
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::main_d:
+                    emit_line("ld\t%c, d", r.lo);
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::main_e:
+                    emit_line("ld\t%c, e", r.lo);
                     extend_loaded_byte(r.lo, r.hi);
                     return;
                 case temp_home::main_bc:
@@ -649,6 +847,10 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 if (r.lo == 'l') { emit_line("ld\th, b"); emit_line("ld\tl, c"); }
                 else             { emit_line("ld\td, b"); emit_line("ld\te, c"); }
                 break;
+            case temp_home::main_iy:
+                emit_line("push\tiy");
+                emit_line(r.lo == 'l' ? "pop\thl" : "pop\tde");
+                break;
             case temp_home::arg_hl:
                 if (r.lo != 'l') {
                     emit_line("ld\td, h");
@@ -749,6 +951,10 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
             case temp_home::main_bc:
                 if (r.lo == 'l') { emit_line("ld\tb, h"); emit_line("ld\tc, l"); }
                 else             { emit_line("ld\tb, d"); emit_line("ld\tc, e"); }
+                break;
+            case temp_home::main_iy:
+                emit_line(r.lo == 'l' ? "push\thl" : "push\tde");
+                emit_line("pop\tiy");
                 break;
             default:
                 ri->second = temp_home::stack;
@@ -948,6 +1154,14 @@ void z80_gen::load_a(const operand &op) {
                 emit_line("ld\ta, c");
                 set_a_cache(cache_key);
                 return;
+            case temp_home::main_d:
+                emit_line("ld\ta, d");
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_e:
+                emit_line("ld\ta, e");
+                set_a_cache(cache_key);
+                return;
             case temp_home::main_bc:
                 emit_line("ld\ta, %c", op.byte_offset == 0 ? 'c' : 'b');
                 set_a_cache(cache_key);
@@ -1069,6 +1283,14 @@ void z80_gen::store_a(const operand &op) {
                 emit_line("ld\tc, a");
                 set_a_cache(cache_key);
                 return;
+            case temp_home::main_d:
+                emit_line("ld\td, a");
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_e:
+                emit_line("ld\te, a");
+                set_a_cache(cache_key);
+                return;
             case temp_home::alt_a:
                 emit_line("ex\taf, af'");
                 invalidate_a_cache();
@@ -1079,7 +1301,12 @@ void z80_gen::store_a(const operand &op) {
             }
         }
     }
-    store_frame_byte(ix_offset_of(op), 'a');
+    if (can_elide_current_byte_store(op)) {
+        invalidate_a_cache();
+        return;
+    }
+    const int frame_off = ix_offset_of(op);
+    store_frame_byte(frame_off, 'a');
     set_a_cache(cache_key);
 }
 
@@ -1105,6 +1332,12 @@ void z80_gen::load_hl_word(const operand &op, int word_index) {
             if (ri->second == temp_home::main_bc) {
                 emit_line("ld\th, b");
                 emit_line("ld\tl, c");
+                set_pair_cache(reg_pair{"hl", 'l', 'h', false}, cache_key);
+                return;
+            }
+            if (ri->second == temp_home::main_iy) {
+                emit_line("push\tiy");
+                emit_line("pop\thl");
                 set_pair_cache(reg_pair{"hl", 'l', 'h', false}, cache_key);
                 return;
             }
@@ -1158,6 +1391,12 @@ void z80_gen::load_de_word(const operand &op, int word_index) {
                 set_pair_cache(reg_pair{"de", 'e', 'd', true}, cache_key);
                 return;
             }
+            if (ri->second == temp_home::main_iy) {
+                emit_line("push\tiy");
+                emit_line("pop\tde");
+                set_pair_cache(reg_pair{"de", 'e', 'd', true}, cache_key);
+                return;
+            }
         }
     }
     if (op.kind == operand_kind::INT_CONST) {
@@ -1203,6 +1442,13 @@ void z80_gen::store_hl_word(const operand &op, int word_index) {
                                pair_word_cache_key(op, word_index));
                 return;
             }
+            if (ri->second == temp_home::main_iy) {
+                emit_line("push\thl");
+                emit_line("pop\tiy");
+                set_pair_cache(reg_pair{"hl", 'l', 'h', false},
+                               pair_word_cache_key(op, word_index));
+                return;
+            }
         }
     }
     if (op.kind == operand_kind::SYMBOL && op.is_global) {
@@ -1234,6 +1480,14 @@ void z80_gen::store_de_word(const operand &op, int word_index) {
         if (ri != temp_regs_.end() && word_index == 0 && ri->second == temp_home::main_bc) {
             emit_line("ld\tb, d");
             emit_line("ld\tc, e");
+            set_pair_cache(reg_pair{"de", 'e', 'd', true},
+                           pair_word_cache_key(op, word_index));
+            return;
+        }
+        if (ri != temp_regs_.end() && word_index == 0 &&
+            ri->second == temp_home::main_iy) {
+            emit_line("push\tde");
+            emit_line("pop\tiy");
             set_pair_cache(reg_pair{"de", 'e', 'd', true},
                            pair_word_cache_key(op, word_index));
             return;

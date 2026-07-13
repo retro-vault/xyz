@@ -45,6 +45,44 @@ bool is_truth_test_preserving_integer_cast(const icode &ic) {
 
 } // namespace
 
+bool z80_gen::try_finish_direct_hl_return(const operand &result) {
+    if (!cur_fn_ || !result.is_temp() || !op_is_16bit(result))
+        return false;
+    if (cur_ic_index_ + 1 >= cur_fn_->icodes.size())
+        return false;
+
+    const icode &next = cur_fn_->icodes[cur_ic_index_ + 1];
+    if (next.op != icode_op::RETURN ||
+        !same_call_result_operand(next.left, result) ||
+        temp_value_used_after(*cur_fn_, cur_ic_index_ + 2, result.temp_id)) {
+        return false;
+    }
+
+    switch (effective_call_abi(cur_fn_->abi)) {
+    case call_abi::SDCCCALL1:
+    case call_abi::Z88DK_SMALLC:
+    case call_abi::Z88DK_FASTCALL:
+        emit_line("ex\tde, hl");
+        break;
+    case call_abi::SDCCCALL0:
+    case call_abi::Z88DK_CALLEE:
+    case call_abi::NAKED:
+    case call_abi::INTERRUPT:
+    case call_abi::CRITICAL:
+        break;
+    default:
+        return false;
+    }
+
+    direct_compare_return_pending_ = false;
+    direct_compare_return_value_ = operand{};
+    direct_call_return_pending_ = true;
+    direct_call_return_value_ = result;
+    direct_word_value_pending_ = false;
+    direct_word_value_ = operand{};
+    return true;
+}
+
 void z80_gen::gen_label(const icode &ic) {
     emit_label(ic.label_name, false);
 }
@@ -169,6 +207,9 @@ void z80_gen::gen_ifx(const icode &ic) {
 void z80_gen::gen_function(const icode &) {
     direct_call_return_pending_ = false;
     direct_call_return_value_ = operand{};
+    sibling_tail_call_pending_ = false;
+    sibling_tail_call_value_ = operand{};
+    last_frameless_return_terminated_ = false;
     direct_compare_return_pending_ = false;
     direct_compare_return_value_ = operand{};
     direct_call_ifx_pending_ = false;
@@ -180,10 +221,20 @@ void z80_gen::gen_function(const icode &) {
 }
 
 void z80_gen::gen_endfunction(const icode &) {
-    if (cur_fn_) emit_epilogue(*cur_fn_);
+    if (cur_fn_ && !last_frameless_return_terminated_)
+        emit_epilogue(*cur_fn_);
 }
 
 void z80_gen::gen_return(const icode &ic) {
+    if (sibling_tail_call_pending_ &&
+        (ic.left.is_none() ||
+         same_call_result_operand(ic.left, sibling_tail_call_value_))) {
+        sibling_tail_call_pending_ = false;
+        sibling_tail_call_value_ = operand{};
+        last_frameless_return_terminated_ = true;
+        return;
+    }
+
     if (direct_compare_return_pending_ &&
         same_call_result_operand(ic.left, direct_compare_return_value_)) {
         direct_compare_return_pending_ = false;
@@ -208,7 +259,12 @@ void z80_gen::gen_return(const icode &ic) {
     direct_call_ifx_abi_ = call_abi::DEFAULT;
     direct_call_ifx_reg_size_ = 0;
     direct_call_ifx_keep_word_pending_ = false;
-    emit_line("jp\t%s", fn_end_lbl_.c_str());
+    if (cur_fn_ && !debug_ && can_omit_frame_pointer(*cur_fn_)) {
+        emit_line("ret");
+        last_frameless_return_terminated_ = true;
+    } else {
+        emit_line("jp\t%s", fn_end_lbl_.c_str());
+    }
 }
 
 void z80_gen::gen_send(const icode &ic) {
@@ -291,6 +347,32 @@ void z80_gen::gen_call(const icode &ic) {
     const bool large_indirect_result =
         !ic.result.is_none() && op_size(ic.result) > 8;
 
+    bool sibling_tail_call = false;
+    if (cur_fn_ && !debug_ && !ic.func_name.empty() &&
+        ic.arg_bytes == 0 && !large_indirect_result &&
+        can_omit_frame_pointer(*cur_fn_) &&
+        effective_call_abi(cur_fn_->abi) ==
+            effective_call_abi(ic.callee_abi) &&
+        cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+        const auto &ret = cur_fn_->icodes[cur_ic_index_ + 1];
+        const auto &end = cur_fn_->icodes[cur_ic_index_ + 2];
+        sibling_tail_call =
+            ret.op == icode_op::RETURN &&
+            end.op == icode_op::ENDFUNCTION &&
+            ((ic.result.is_none() && ret.left.is_none()) ||
+             (!ic.result.is_none() &&
+              same_call_result_operand(ret.left, ic.result)));
+    }
+
+    if (sibling_tail_call) {
+        std::string callee = mangle(ic.func_name);
+        asm_.global_decl(callee);
+        emit_line("jp\t%s", callee.c_str());
+        sibling_tail_call_pending_ = true;
+        sibling_tail_call_value_ = ic.result;
+        return;
+    }
+
     // Emit the CALL instruction.
     if (!ic.func_name.empty()) {
         std::string callee = mangle(ic.func_name);
@@ -316,7 +398,7 @@ void z80_gen::gen_call(const icode &ic) {
         cur_fn_ &&
         ic.result.is_temp() &&
         !temp_value_used_after(*cur_fn_, cur_ic_index_ + 1, ic.result.temp_id);
-    auto has_direct_call_ifx_fallthrough_send =
+    auto has_direct_call_ifx_fallthrough_consumer =
         [&](size_t ifx_index, const operand &value) {
             if (!cur_fn_ || !value.is_temp() ||
                 ifx_index + 2 >= cur_fn_->icodes.size()) {
@@ -336,23 +418,28 @@ void z80_gen::gen_call(const icode &ic) {
                 return false;
             }
 
-            size_t send_idx = ifx_index + 2;
-            while (send_idx < cur_fn_->icodes.size() &&
-                   cur_fn_->icodes[send_idx].op == icode_op::LABEL) {
-                ++send_idx;
+            size_t consumer_idx = ifx_index + 2;
+            while (consumer_idx < cur_fn_->icodes.size() &&
+                   cur_fn_->icodes[consumer_idx].op == icode_op::LABEL) {
+                ++consumer_idx;
             }
-            if (send_idx >= cur_fn_->icodes.size())
+            if (consumer_idx >= cur_fn_->icodes.size())
                 return false;
 
-            const auto &send = cur_fn_->icodes[send_idx];
-            if (send.op != icode_op::SEND ||
-                !same_call_result_operand(send.left, value) ||
-                (send.arg_loc != abi_arg_loc::REG_HL &&
-                 send.arg_loc != abi_arg_loc::REG_DE)) {
+            const auto &consumer = cur_fn_->icodes[consumer_idx];
+            const bool direct_return =
+                consumer.op == icode_op::RETURN &&
+                same_call_result_operand(consumer.left, value);
+            const bool direct_send =
+                consumer.op == icode_op::SEND &&
+                same_call_result_operand(consumer.left, value) &&
+                (consumer.arg_loc == abi_arg_loc::REG_HL ||
+                 consumer.arg_loc == abi_arg_loc::REG_DE);
+            if (!direct_return && !direct_send) {
                 return false;
             }
 
-            return !temp_value_used_after(*cur_fn_, send_idx + 1,
+            return !temp_value_used_after(*cur_fn_, consumer_idx + 1,
                                           value.temp_id);
         };
     if (cur_fn_ && !ic.result.is_none() &&
@@ -367,14 +454,14 @@ void z80_gen::gen_call(const icode &ic) {
                      (!temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
                                              ic.result.temp_id) ||
                       (op_size(ic.result) == 2 &&
-                       has_direct_call_ifx_fallthrough_send(cur_ic_index_ + 1,
-                                                            ic.result)));
+                       has_direct_call_ifx_fallthrough_consumer(
+                           cur_ic_index_ + 1, ic.result)));
         if (direct_ifx)
             direct_ifx_reg_size = op_size(ic.result);
         if (direct_ifx && op_size(ic.result) == 2) {
             keep_direct_ifx_word_pending =
-                has_direct_call_ifx_fallthrough_send(cur_ic_index_ + 1,
-                                                     ic.result);
+                has_direct_call_ifx_fallthrough_consumer(
+                    cur_ic_index_ + 1, ic.result);
         }
         if (!direct_ifx &&
             ic.result.is_temp() &&

@@ -89,6 +89,270 @@ if grep -q '__xopt_spaghetti_' "$TMPDIR/spaghetti_no_branch.out.s"; then
     exit 1
 fi
 
+cat >"$TMPDIR/size_outline.s" <<'ASM'
+	.area	_CODE
+_outline_a:
+	ld	a,#1
+	ld	b,#2
+	ld	c,#3
+	ld	d,#4
+	ld	e,#5
+	inc	a
+	ret
+_outline_b:
+	ld	a,#1
+	ld	b,#2
+	ld	c,#3
+	ld	d,#4
+	ld	e,#5
+	dec	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/size_outline.s" -o "$TMPDIR/size_outline.os.s"
+if [[ "$(grep -Ec '^[[:space:]]+call[[:space:]]+__xopt_outline_' "$TMPDIR/size_outline.os.s")" != "2" ]]; then
+    echo "xopt smoke: -Os did not share a profitable repeated sequence" >&2
+    exit 1
+fi
+grep -Eq '^__xopt_outline_[0-9]+:' "$TMPDIR/size_outline.os.s"
+
+"$XOPT" -Of "$TMPDIR/size_outline.s" -o "$TMPDIR/size_outline.of.s"
+if grep -q '__xopt_outline_' "$TMPDIR/size_outline.of.s"; then
+    echo "xopt smoke: speed mode unexpectedly enabled size outlining" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/outline_register_result.s" <<'ASM'
+	.area	_CODE
+_result_0:
+	inc	hl
+	inc	hl
+	ld	b,h
+	ld	c,l
+	ld	a,#0
+	ld	(bc),a
+	ret
+_result_1:
+	inc	hl
+	inc	hl
+	ld	b,h
+	ld	c,l
+	ld	a,#1
+	ld	(bc),a
+	ret
+_result_2:
+	inc	hl
+	inc	hl
+	ld	b,h
+	ld	c,l
+	ld	a,#2
+	ld	(bc),a
+	ret
+_result_3:
+	inc	hl
+	inc	hl
+	ld	b,h
+	ld	c,l
+	ld	a,#3
+	ld	(bc),a
+	ret
+_result_4:
+	inc	hl
+	inc	hl
+	ld	b,h
+	ld	c,l
+	ld	a,#4
+	ld	(bc),a
+	ret
+_result_5:
+	inc	hl
+	inc	hl
+	ld	b,h
+	ld	c,l
+	ld	a,#5
+	ld	(bc),a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/outline_register_result.s" -o "$TMPDIR/outline_register_result.out.s"
+grep -Eq '^[[:space:]]+call[[:space:]]+__xopt_outline_' "$TMPDIR/outline_register_result.out.s"
+if ! grep -Eq '^[[:space:]]+ld[[:space:]]+b, ?h' "$TMPDIR/outline_register_result.out.s" ||
+   ! grep -Eq '^[[:space:]]+ld[[:space:]]+c, ?l' "$TMPDIR/outline_register_result.out.s"; then
+    echo "xopt smoke: outlined helper lost a live register result" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/outline_final_layout.s" <<'ASM'
+	.area	_CODE
+_outline_tail_caller:
+	call	__xopt_outline_900	; xopt-ix:none
+	ret
+__xopt_outline_900:
+	ld	a,#1
+	inc	a
+	ret
+_outline_jump_next:
+	jr	_outline_next
+_outline_next:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/outline_final_layout.s" -o "$TMPDIR/outline_final_layout.out.s"
+if grep -Eq '^[[:space:]]+call[[:space:]]+__xopt_outline_900|^[[:space:]]+jr[[:space:]]+_outline_next' "$TMPDIR/outline_final_layout.out.s"; then
+    echo "xopt smoke: outlined final layout was not compacted" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/size_tail_merge.s" <<'ASM'
+	.area	_CODE
+_tail_a:
+	ld	a,#1
+	ld	b,#2
+	ret
+_tail_b:
+	ld	a,#1
+	ld	b,#2
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/size_tail_merge.s" -o "$TMPDIR/size_tail_merge.os.s"
+grep -Eq '^__xopt_tail_[0-9]+:' "$TMPDIR/size_tail_merge.os.s"
+grep -Eq '^[[:space:]]+j[pr][[:space:]]+__xopt_tail_' "$TMPDIR/size_tail_merge.os.s"
+
+cat >"$TMPDIR/size_stack_tail_merge.s" <<'ASM'
+	.area	_CODE
+_stack_tail_a:
+	ld	sp,ix
+	pop	ix
+	ret
+_stack_tail_b:
+	ld	sp,ix
+	pop	ix
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/size_stack_tail_merge.s" -o "$TMPDIR/size_stack_tail_merge.os.s"
+grep -Eq '^__xopt_tail_[0-9]+:' "$TMPDIR/size_stack_tail_merge.os.s"
+grep -Eq '^[[:space:]]+j[pr][[:space:]]+__xopt_tail_' "$TMPDIR/size_stack_tail_merge.os.s"
+
+cat >"$TMPDIR/size_outline_control.s" <<'ASM'
+	.area	_CODE
+_control_a:
+	ld	a,#1
+	ld	b,#2
+	jr	z,_control_a_done
+	ld	c,#3
+	ld	d,#4
+_control_a_done:
+	ret
+_control_b:
+	ld	a,#1
+	ld	b,#2
+	jr	z,_control_b_done
+	ld	c,#3
+	ld	d,#4
+_control_b_done:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/size_outline_control.s" -o "$TMPDIR/size_outline_control.out.s"
+if grep -q '__xopt_outline_' "$TMPDIR/size_outline_control.out.s"; then
+    echo "xopt smoke: -Os outlined through control flow" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/outline_ix_barrier.s" <<'ASM'
+	.area	_CODE
+_outline_ix_caller:
+	; sdcccall(1) prologue: outline_ix_caller (locals=0, temp_frame=2, stack_params=0)
+	ld	-2(ix),#17
+	call	__xopt_outline_0
+	ret
+	.area	_CODE
+__xopt_outline_0:
+	ld	a,-2(ix)
+	inc	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/outline_ix_barrier.s" -o "$TMPDIR/outline_ix_barrier.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+-2\(ix\), ?#17' "$TMPDIR/outline_ix_barrier.out.s"
+
+cat >"$TMPDIR/register_shift_xor_diamond.s" <<'ASM'
+	.area	_CODE
+_register_shift_xor:
+	bit	7,e
+	jr	z,_register_shift_else
+_register_shift_true:
+	ld	a,e
+	add	a,a
+	xor	#7
+	ld	e,a
+	jr	_register_shift_join
+_register_shift_else:
+	ld	a,e
+	add	a,a
+	ld	e,a
+_register_shift_join:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/register_shift_xor_diamond.s" -o "$TMPDIR/register_shift_xor_diamond.out.s"
+if grep -Eq '^[[:space:]]+bit[[:space:]]+7, ?e' "$TMPDIR/register_shift_xor_diamond.out.s"; then
+    echo "xopt smoke: register shift/XOR diamond was not folded" >&2
+    exit 1
+fi
+grep -Eq '^[[:space:]]+jr[[:space:]]+nc, ?_register_shift_join' "$TMPDIR/register_shift_xor_diamond.out.s"
+
+cat >"$TMPDIR/register_shift_xor_tail_diamond.s" <<'ASM'
+	.area	_CODE
+_register_shift_xor_tail:
+	bit	7,e
+	jr	z,_register_tail_else
+_register_tail_true:
+	ld	a,e
+	add	a,a
+	xor	#7
+	ld	e,a
+	jr	_register_tail_continue
+_register_tail_else:
+	ld	a,e
+	add	a,a
+	ld	e,a
+_register_tail_fallthrough:
+	jr	_register_tail_continue
+_register_tail_continue:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/register_shift_xor_tail_diamond.s" -o "$TMPDIR/register_shift_xor_tail_diamond.out.s"
+if grep -Eq '^[[:space:]]+bit[[:space:]]+7, ?e' "$TMPDIR/register_shift_xor_tail_diamond.out.s"; then
+    echo "xopt smoke: register tail shift/XOR diamond was not folded" >&2
+    exit 1
+fi
+grep -Eq '^[[:space:]]+jr[[:space:]]+nc, ?_register_tail_else' "$TMPDIR/register_shift_xor_tail_diamond.out.s"
+
+cat >"$TMPDIR/prewritten_stack_alloc.s" <<'ASM'
+	.area	_CODE
+_prewritten_stack_alloc:
+	; sdcccall(1) prologue: prewritten_stack_alloc (locals=0, temp_frame=8, stack_params=0)
+	dec	sp
+	dec	sp
+	ld	-10(ix),l
+	ld	-9(ix),h
+	ld	hl,#-8
+	add	hl,sp
+	ld	sp,hl
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/prewritten_stack_alloc.s" -o "$TMPDIR/prewritten_stack_alloc.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+hl, ?#-8' "$TMPDIR/prewritten_stack_alloc.out.s"
+if grep -Eq '^[[:space:]]+push[[:space:]]+af' "$TMPDIR/prewritten_stack_alloc.out.s"; then
+    echo "xopt smoke: PUSH allocation overwrote a prewritten IX slot" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/spaghetti_tail.s" <<'ASM'
 _demo:
 	call	__xopt_spaghetti_0
@@ -1208,7 +1472,11 @@ _demo:
 ASM
 
 "$XOPT" -O3 "$TMPDIR/ix_byte_inc_a_live.s" -o "$TMPDIR/ix_byte_inc_a_live.out.s"
-grep -q 'add	a,#1' "$TMPDIR/ix_byte_inc_a_live.out.s"
+grep -Eq '^[[:space:]]+inc[[:space:]]+a' "$TMPDIR/ix_byte_inc_a_live.out.s"
+if grep -q 'add	a,#1' "$TMPDIR/ix_byte_inc_a_live.out.s"; then
+    echo "xopt smoke: A-live byte increment kept larger ADD encoding" >&2
+    exit 1
+fi
 if grep -q 'inc	-4(ix)' "$TMPDIR/ix_byte_inc_a_live.out.s"; then
     echo "xopt smoke: direct IX byte increment clobbered live A" >&2
     exit 1
@@ -1353,7 +1621,10 @@ ASM
 
 "$XOPT" -Os "$TMPDIR/de_spill_reload_exchange_hl_live.s" -o "$TMPDIR/de_spill_reload_exchange_hl_live.os.s"
 grep -Eq 'ld[[:space:]]+l,[[:space:]]*-5\(ix\)' "$TMPDIR/de_spill_reload_exchange_hl_live.os.s"
-grep -Eq 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/de_spill_reload_exchange_hl_live.os.s"
+if grep -Eq 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/de_spill_reload_exchange_hl_live.os.s"; then
+    echo "xopt smoke: equal DE/HL spill reload kept a no-op exchange" >&2
+    exit 1
+fi
 
 cat >"$TMPDIR/hl_to_de_before_hl_reload.s" <<'ASM'
 _hl_to_de_before_hl_reload:
@@ -1466,8 +1737,8 @@ ASM
 "$XOPT" -O3 "$TMPDIR/ix_byte_alu_forward.s" -o "$TMPDIR/ix_byte_alu_forward.out.s"
 grep -Eq 'ld[[:space:]]+a,[[:space:]]*-4\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"
 grep -Eq 'add[[:space:]]+a,[[:space:]]*-5\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"
-grep -Eq 'xor[[:space:]]+-7\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"
-grep -Eq 'xor[[:space:]]+-8\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"
+grep -Eq 'xor[[:space:]]+(a,[[:space:]]*)?-7\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"
+grep -Eq 'xor[[:space:]]+(a,[[:space:]]*)?-8\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"
 if grep -Eq 'ld[[:space:]]+e,[[:space:]]*(-[46]\(ix\)|a)|ld[[:space:]]+d,[[:space:]]*-[578]\(ix\)' "$TMPDIR/ix_byte_alu_forward.out.s"; then
     echo "xopt smoke: IX byte ALU forwarding did not fire" >&2
     exit 1
@@ -1757,8 +2028,9 @@ _done:
 ASM
 
 "$XOPT" -Os "$TMPDIR/a_local_branch_reload_dead.s" -o "$TMPDIR/a_local_branch_reload_dead.out.s"
-if grep -Eq -- '-2\(ix\)' "$TMPDIR/a_local_branch_reload_dead.out.s"; then
-    echo "xopt smoke: dead A local branch reload/store was not elided" >&2
+grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*a' "$TMPDIR/a_local_branch_reload_dead.out.s"
+if grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/a_local_branch_reload_dead.out.s"; then
+    echo "xopt smoke: A local branch reload was not forwarded" >&2
     exit 1
 fi
 grep -Eq 'cp[[:space:]]+#37' "$TMPDIR/a_local_branch_reload_dead.out.s"
@@ -1878,8 +2150,16 @@ if grep -q 'or	a,l' "$TMPDIR/zero_extend_pair_test.out.s"; then
 fi
 
 "$XOPT" -Os "$TMPDIR/zero_extend_pair_test.s" -o "$TMPDIR/zero_extend_pair_test.os.s"
-grep -q 'ld	h,b' "$TMPDIR/zero_extend_pair_test.os.s"
-grep -q 'or	a,l' "$TMPDIR/zero_extend_pair_test.os.s"
+grep -q 'ld	a, l' "$TMPDIR/zero_extend_pair_test.os.s"
+grep -q 'or	a, a' "$TMPDIR/zero_extend_pair_test.os.s"
+if grep -q 'ld	h,b' "$TMPDIR/zero_extend_pair_test.os.s"; then
+    echo "xopt smoke: -Os zero-extend pair test kept copy-back high byte" >&2
+    exit 1
+fi
+if grep -q 'or	a,l' "$TMPDIR/zero_extend_pair_test.os.s"; then
+    echo "xopt smoke: -Os zero-extend pair test kept wide OR test" >&2
+    exit 1
+fi
 
 cat >"$TMPDIR/ix_word_zero_fallthrough_reload.s" <<'ASM'
 _demo:
@@ -2085,8 +2365,8 @@ if grep -Eq '^[[:space:]]+exx([[:space:]]|$)' "$TMPDIR/exx_cancel.out.s"; then
 fi
 
 "$XOPT" -Os "$TMPDIR/exx_cancel.s" -o "$TMPDIR/exx_cancel.os.s"
-if [[ "$(grep -Ec '^[[:space:]]+exx([[:space:]]|$)' "$TMPDIR/exx_cancel.os.s")" != "2" ]]; then
-    echo "xopt smoke: adjacent exx pair should stay outside O3/Of dragons" >&2
+if grep -Eq '^[[:space:]]+exx([[:space:]]|$)' "$TMPDIR/exx_cancel.os.s"; then
+    echo "xopt smoke: adjacent exx pair was not cancelled in -Os" >&2
     exit 1
 fi
 
@@ -2130,10 +2410,10 @@ if grep -Eq 'push[[:space:]]+hl|ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/call_a
 fi
 
 "$XOPT" -Os "$TMPDIR/call_arg_de_same.s" -o "$TMPDIR/call_arg_de_same.os.s"
-grep -Eq 'push[[:space:]]+hl' "$TMPDIR/call_arg_de_same.os.s"
+grep -Eq 'push[[:space:]]+de' "$TMPDIR/call_arg_de_same.os.s"
 grep -q 'ld	de, #0' "$TMPDIR/call_arg_de_same.os.s"
-if grep -Eq 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/call_arg_de_same.os.s"; then
-    echo "xopt smoke: -Os same-immediate call argument kept exchange" >&2
+if grep -Eq 'push[[:space:]]+hl|ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/call_arg_de_same.os.s"; then
+    echo "xopt smoke: -Os same-immediate call argument kept old HL path" >&2
     exit 1
 fi
 
@@ -2200,8 +2480,8 @@ if grep -Eq 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/equal_de_hl_exchange.out.
 fi
 
 "$XOPT" -Os "$TMPDIR/equal_de_hl_exchange.s" -o "$TMPDIR/equal_de_hl_exchange.os.s"
-if [[ "$(grep -Ec 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/equal_de_hl_exchange.os.s")" != "2" ]]; then
-    echo "xopt smoke: equal DE/HL exchange cleanup should stay outside -Os" >&2
+if grep -Eq 'ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/equal_de_hl_exchange.os.s"; then
+    echo "xopt smoke: -Os equal DE/HL exchange cleanup kept no-op exchange" >&2
     exit 1
 fi
 
@@ -2268,8 +2548,9 @@ if grep -Eq '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/dead_bc_stack_discard.out.
 fi
 
 "$XOPT" -Os "$TMPDIR/dead_bc_stack_discard.s" -o "$TMPDIR/dead_bc_stack_discard.os.s"
-if [[ "$(grep -Ec '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/dead_bc_stack_discard.os.s")" != "2" ]]; then
-    echo "xopt smoke: dead-BC stack discard should stay outside O3/Of dragons" >&2
+grep -Eq '^[[:space:]]+pop[[:space:]]+bc' "$TMPDIR/dead_bc_stack_discard.os.s"
+if grep -Eq '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/dead_bc_stack_discard.os.s"; then
+    echo "xopt smoke: -Os dead-BC stack discard did not become pop bc" >&2
     exit 1
 fi
 
@@ -2320,8 +2601,10 @@ if grep -Eq '^[[:space:]]+(pop|push)[[:space:]]+hl' "$TMPDIR/dead_pair_pop_push.
 fi
 
 "$XOPT" -Os "$TMPDIR/dead_pair_pop_push.s" -o "$TMPDIR/dead_pair_pop_push.os.s"
-grep -Eq '^[[:space:]]+pop[[:space:]]+hl' "$TMPDIR/dead_pair_pop_push.os.s"
-grep -Eq '^[[:space:]]+push[[:space:]]+hl' "$TMPDIR/dead_pair_pop_push.os.s"
+if grep -Eq '^[[:space:]]+(pop|push)[[:space:]]+hl' "$TMPDIR/dead_pair_pop_push.os.s"; then
+    echo "xopt smoke: -Os dead pair pop/push cleanup did not fire" >&2
+    exit 1
+fi
 
 cat >"$TMPDIR/dead_pair_pop_push_live.s" <<'ASM'
 _demo:
@@ -2361,8 +2644,12 @@ if grep -Eq '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/long_inc_sp.out.s"; then
 fi
 
 "$XOPT" -Os "$TMPDIR/long_inc_sp.s" -o "$TMPDIR/long_inc_sp.os.s"
-if [[ "$(grep -Ec '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/long_inc_sp.os.s")" != "8" ]]; then
-    echo "xopt smoke: long inc-sp run should stay outside O3/Of dragons" >&2
+if [[ "$(grep -Ec '^[[:space:]]+pop[[:space:]]+bc' "$TMPDIR/long_inc_sp.os.s")" != "4" ]]; then
+    echo "xopt smoke: -Os long stack discard did not use compact dead pops" >&2
+    exit 1
+fi
+if grep -Eq '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/long_inc_sp.os.s"; then
+    echo "xopt smoke: -Os long stack discard kept inc-sp instructions" >&2
     exit 1
 fi
 
@@ -2406,8 +2693,13 @@ _done:
 ASM
 
 "$XOPT" -O3 "$TMPDIR/long_inc_sp_live_flags.s" -o "$TMPDIR/long_inc_sp_live_flags.out.s"
-if [[ "$(grep -Ec '^[[:space:]]+inc[[:space:]]+sp' "$TMPDIR/long_inc_sp_live_flags.out.s")" != "6" ]]; then
-    echo "xopt smoke: long inc-sp run crossed a live flag read" >&2
+if [[ "$(grep -Ec '^[[:space:]]+pop[[:space:]]+hl' "$TMPDIR/long_inc_sp_live_flags.out.s")" != "3" ]]; then
+    echo "xopt smoke: live-flag stack discard did not use flag-preserving pops" >&2
+    exit 1
+fi
+grep -Eq '^[[:space:]]+jr[[:space:]]+c,' "$TMPDIR/long_inc_sp_live_flags.out.s"
+if grep -Eq '^[[:space:]]+(inc[[:space:]]+sp|add[[:space:]]+hl,sp)' "$TMPDIR/long_inc_sp_live_flags.out.s"; then
+    echo "xopt smoke: live-flag stack discard kept a larger or flag-clobbering form" >&2
     exit 1
 fi
 
@@ -3626,11 +3918,13 @@ _small_stack_alloc_push_af:
 ASM
 
 "$XOPT" -Os "$TMPDIR/small_stack_alloc_push_af.s" -o "$TMPDIR/small_stack_alloc_push_af.out.s"
-grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#-5' "$TMPDIR/small_stack_alloc_push_af.out.s"
-grep -Eq 'add[[:space:]]+hl,[[:space:]]*sp' "$TMPDIR/small_stack_alloc_push_af.out.s"
-grep -Eq 'ld[[:space:]]+sp,[[:space:]]*hl' "$TMPDIR/small_stack_alloc_push_af.out.s"
-if grep -Eq 'push[[:space:]]+af|dec[[:space:]]+sp' "$TMPDIR/small_stack_alloc_push_af.out.s"; then
-    echo "xopt smoke: disabled small stack allocation rewrite fired" >&2
+if [[ "$(grep -Ec '^[[:space:]]+push[[:space:]]+af' "$TMPDIR/small_stack_alloc_push_af.out.s")" != "2" ]]; then
+    echo "xopt smoke: small odd stack allocation did not use compact pushes" >&2
+    exit 1
+fi
+grep -Eq '^[[:space:]]+dec[[:space:]]+sp' "$TMPDIR/small_stack_alloc_push_af.out.s"
+if grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#-5|add[[:space:]]+hl,[[:space:]]*sp|ld[[:space:]]+sp,[[:space:]]*hl' "$TMPDIR/small_stack_alloc_push_af.out.s"; then
+    echo "xopt smoke: small stack allocation kept arithmetic setup" >&2
     exit 1
 fi
 
@@ -3647,6 +3941,79 @@ ASM
 "$XOPT" -Os "$TMPDIR/small_stack_alloc_flags_live.s" -o "$TMPDIR/small_stack_alloc_flags_live.out.s"
 grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#-4' "$TMPDIR/small_stack_alloc_flags_live.out.s"
 grep -Eq 'jr[[:space:]]+c,' "$TMPDIR/small_stack_alloc_flags_live.out.s"
+
+cat >"$TMPDIR/accumulator_one_inc.s" <<'ASM'
+_accumulator_one_inc:
+	add	a, #1
+	ld	-1(ix), a
+	and	#15
+	ret
+_accumulator_one_carry_live:
+	add	a, #1
+	jr	c, _carry
+_carry:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/accumulator_one_inc.s" -o "$TMPDIR/accumulator_one_inc.out.s"
+grep -Eq '^[[:space:]]+inc[[:space:]]+a' "$TMPDIR/accumulator_one_inc.out.s"
+grep -Eq '^[[:space:]]+add[[:space:]]+a,[[:space:]]*#1' "$TMPDIR/accumulator_one_inc.out.s"
+
+cat >"$TMPDIR/redundant_a_zero_extend_reload.s" <<'ASM'
+_redundant_a_zero_extend_reload:
+	ld	l, a
+	ld	h, #0
+	ld	a, l
+	and	#7
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/redundant_a_zero_extend_reload.s" -o "$TMPDIR/redundant_a_zero_extend_reload.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+l,[[:space:]]*a' "$TMPDIR/redundant_a_zero_extend_reload.out.s"
+if grep -Eq '^[[:space:]]+ld[[:space:]]+a,[[:space:]]*l' "$TMPDIR/redundant_a_zero_extend_reload.out.s"; then
+    echo "xopt smoke: zero extension kept redundant A reload" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/cp_zero_branch_to_or.s" <<'ASM'
+_cp_zero_branch_to_or:
+	cp	#0
+	ld	hl, #1
+	jr	z, _zero
+	dec	hl
+_zero:
+	xor	a
+	ret
+_cp_zero_parity_live:
+	cp	#0
+	jr	pe, _parity
+	xor	a
+_parity:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/cp_zero_branch_to_or.s" -o "$TMPDIR/cp_zero_branch_to_or.out.s"
+grep -Eq '^[[:space:]]+or[[:space:]]+a,[[:space:]]*a' "$TMPDIR/cp_zero_branch_to_or.out.s"
+grep -Eq '^[[:space:]]+cp[[:space:]]+#0' "$TMPDIR/cp_zero_branch_to_or.out.s"
+
+cat >"$TMPDIR/modern_return_pair_exchange.s" <<'ASM'
+	.area _CODE
+_modern_return_pair_exchange:
+	; sdcccall(1) prologue: modern_return_pair_exchange (locals=0, temp_frame=0, stack_params=0)
+	ld	d, h
+	ld	e, l
+	ret
+_legacy_return_pair_copy:
+	; z88dk fastcall prologue: legacy_return_pair_copy (locals=0, temp_frame=0, stack_params=0)
+	ld	d, h
+	ld	e, l
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/modern_return_pair_exchange.s" -o "$TMPDIR/modern_return_pair_exchange.out.s"
+grep -Eq '^[[:space:]]+ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/modern_return_pair_exchange.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+d,[[:space:]]*h' "$TMPDIR/modern_return_pair_exchange.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+e,[[:space:]]*l' "$TMPDIR/modern_return_pair_exchange.out.s"
 
 cat >"$TMPDIR/cp_threshold_branch_fold.s" <<'ASM'
 _cp_threshold_branch_fold:
@@ -3676,6 +4043,252 @@ if grep -Eq 'jr[[:space:]]+z,[[:space:]]*_small|jr[[:space:]]+z,[[:space:]]*_ok'
     echo "xopt smoke: cp threshold branch fold kept redundant z branch" >&2
     exit 1
 fi
+
+cat >"$TMPDIR/dead_internal_label_outline.s" <<'ASM'
+	.area _CODE
+_dead_internal_label_outline_a:
+	ld	a, -1(ix)
+	add	a, #7
+__xcc_dead_join:
+	xor	#85
+	ld	-1(ix), a
+	ret
+_dead_internal_label_outline_b:
+	ld	a, -1(ix)
+	add	a, #7
+__worker_end:
+	xor	#85
+	ld	-1(ix), a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/dead_internal_label_outline.s" -o "$TMPDIR/dead_internal_label_outline.out.s"
+grep -Eq '(call|jp|jr)[[:space:]]+__xopt_(outline|tail)_' "$TMPDIR/dead_internal_label_outline.out.s"
+if grep -Eq '^__xcc_dead_join:' "$TMPDIR/dead_internal_label_outline.out.s"; then
+    echo "xopt smoke: unreferenced compiler-internal label survived size cleanup" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/referenced_internal_label.s" <<'ASM'
+	.area _CODE
+	.globl	__exported_end
+_referenced_internal_label:
+	ld	hl, #__xcc_live_join
+	ret
+__xcc_live_join:
+	.dw	__xcc_live_join
+__exported_end:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/referenced_internal_label.s" -o "$TMPDIR/referenced_internal_label.out.s"
+grep -Eq '^__xcc_live_join:' "$TMPDIR/referenced_internal_label.out.s"
+grep -Eq '\.dw[[:space:]]+__xcc_live_join' "$TMPDIR/referenced_internal_label.out.s"
+grep -Eq '^__exported_end:' "$TMPDIR/referenced_internal_label.out.s"
+
+cat >"$TMPDIR/temp_frame_compact.s" <<'ASM'
+	.area	_CODE
+_temp_frame_compact:
+	; sdcccall(1) prologue: temp_frame_compact (locals=0, temp_frame=6, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	push	af
+	push	af
+	push	af
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_temp_frame_sp_guard:
+	; sdcccall(1) prologue: temp_frame_sp_guard (locals=0, temp_frame=6, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	push	af
+	push	af
+	push	af
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_temp_frame_hole:
+	; sdcccall(1) prologue: temp_frame_hole (locals=2, temp_frame=8, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	push	af
+	push	af
+	push	af
+	push	af
+	push	af
+	ld	a, -1(ix)
+	ld	e, -10(ix)
+	ld	d, -9(ix)
+	ld	sp, ix
+	pop	ix
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/temp_frame_compact.s" -o "$TMPDIR/temp_frame_compact.out.s"
+grep -q 'temp_frame_compact (locals=0, temp_frame=2, stack_params=0)' \
+    "$TMPDIR/temp_frame_compact.out.s"
+grep -q 'temp_frame_sp_guard (locals=0, temp_frame=6, stack_params=0)' \
+    "$TMPDIR/temp_frame_compact.out.s"
+grep -q 'temp_frame_hole (locals=2, temp_frame=2, stack_params=0)' \
+    "$TMPDIR/temp_frame_compact.out.s"
+grep -Eq 'ld[[:space:]]+e,[[:space:]]*-4\(ix\)' \
+    "$TMPDIR/temp_frame_compact.out.s"
+grep -Eq 'ld[[:space:]]+d,[[:space:]]*-3\(ix\)' \
+    "$TMPDIR/temp_frame_compact.out.s"
+if grep -Eq -- '-(9|10)\(ix\)' "$TMPDIR/temp_frame_compact.out.s"; then
+    echo "xopt smoke: -Os left an interior temporary-frame hole" >&2
+    exit 1
+fi
+if [[ "$(awk '/^_temp_frame_compact:/{in_fn=1;next} /^[^[:space:]].*:/{in_fn=0} in_fn && /push[[:space:]]+af/{n++} END{print n+0}' "$TMPDIR/temp_frame_compact.out.s")" != "1" ]]; then
+    echo "xopt smoke: -Os did not compact a dead temporary-frame tail" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/call_result_byte_commute.s" <<'ASM'
+	.area	_CODE
+_call_result_byte_commute:
+	; sdcccall(1) prologue: call_result_byte_commute (locals=0, temp_frame=2, stack_params=0)
+	call	_produce_byte
+	ld	-2(ix), a
+	ld	a, -1(ix)
+	xor	a, -2(ix)
+	ld	-1(ix), a
+	ld	e, -1(ix)
+	ret
+	.area	_CODE
+_call_result_byte_live:
+	; sdcccall(1) prologue: call_result_byte_live (locals=0, temp_frame=2, stack_params=0)
+	call	_produce_byte
+	ld	-2(ix), a
+	ld	a, -1(ix)
+	xor	a, -2(ix)
+	ld	-1(ix), a
+	ld	e, -2(ix)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/call_result_byte_commute.s" -o "$TMPDIR/call_result_byte_commute.out.s"
+grep -Eq 'xor[[:space:]]+a,[[:space:]]*-1\(ix\)' \
+    "$TMPDIR/call_result_byte_commute.out.s"
+if awk '/^_call_result_byte_commute:/{in_fn=1;next} /^_call_result_byte_live:/{in_fn=0} in_fn && /-2\(ix\)/{found=1} END{exit found ? 0 : 1}' \
+    "$TMPDIR/call_result_byte_commute.out.s"; then
+    echo "xopt smoke: dead byte call-result spill survived direct forwarding" >&2
+    exit 1
+fi
+awk '/^_call_result_byte_live:/{in_fn=1;next} in_fn && /ld[[:space:]]+-2\(ix\),[[:space:]]*a/{found=1} END{exit found ? 0 : 1}' \
+    "$TMPDIR/call_result_byte_commute.out.s"
+
+cat >"$TMPDIR/loop_carried_a_spill.s" <<'ASM'
+	.area	_CODE
+_loop_carried_a_spill:
+	; sdcccall(1) prologue: loop_carried_a_spill (locals=0, temp_frame=2, stack_params=0)
+__loop_carried_body:
+	call	_next_byte
+	add	a, -1(ix)
+	ld	-1(ix), a
+	dec	-2(ix)
+	jr	nz, __loop_carried_body
+	ld	a, -1(ix)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/loop_carried_a_spill.s" -o "$TMPDIR/loop_carried_a_spill.out.s"
+grep -Eq 'ld[[:space:]]+-1\(ix\),[[:space:]]*a' \
+    "$TMPDIR/loop_carried_a_spill.out.s"
+grep -Eq 'ld[[:space:]]+a,[[:space:]]*-1\(ix\)' \
+    "$TMPDIR/loop_carried_a_spill.out.s"
+
+cat >"$TMPDIR/adjacent_postinc_loop.s" <<'ASM'
+	.area	_CODE
+_adjacent_postinc_loop:
+	ld	hl, #_bytes
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	add	hl, de
+	ld	a, -4(ix)
+	ld	(hl), a
+	inc	-2(ix)
+	jr	nz, __postinc_0
+	inc	-1(ix)
+__postinc_0:
+	ld	hl, #_bytes
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	add	hl, de
+	ld	a, -3(ix)
+	ld	(hl), a
+	inc	-2(ix)
+	jr	nz, __postinc_1
+	inc	-1(ix)
+__postinc_1:
+	jr	__scan_head
+__scan_head:
+	cp	#4
+	jr	nc, __scan_exit
+__scan_inner:
+	inc	a
+	jr	nz, __scan_inner
+	jr	_adjacent_postinc_loop
+__scan_exit:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/adjacent_postinc_loop.s" -o "$TMPDIR/adjacent_postinc_loop.out.s"
+if [[ "$(grep -Ec 'ld[[:space:]]+hl,[[:space:]]*#_bytes' "$TMPDIR/adjacent_postinc_loop.out.s")" != "1" ]]; then
+    echo "xopt smoke: -Os did not combine adjacent post-increment stores across a loop" >&2
+    exit 1
+fi
+if grep -Eq 'call[[:space:]]+__xopt_outline_' "$TMPDIR/adjacent_postinc_loop.out.s"; then
+    echo "xopt smoke: -Os outlined instead of combining adjacent post-increment stores" >&2
+    exit 1
+fi
+grep -Eq 'inc[[:space:]]+hl' "$TMPDIR/adjacent_postinc_loop.out.s"
+
+cat >"$TMPDIR/outline_unallocated_ix.s" <<'ASM'
+	.area	_CODE
+_outline_unallocated_ix_a:
+	call	__sdcc_enter_ix
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	ld	a, #1
+	ret
+_outline_unallocated_ix_b:
+	call	__sdcc_enter_ix
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	ld	a, #2
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/outline_unallocated_ix.s" \
+    -o "$TMPDIR/outline_unallocated_ix.out.s"
+if awk '
+    /^_outline_unallocated_ix_[ab]:/ { in_prologue=1; next }
+    in_prologue && /ld[[:space:]]+sp,[[:space:]]*hl/ { in_prologue=0 }
+    in_prologue && /call[[:space:]]+__xopt_outline_/ { bad=1 }
+    END { exit bad ? 0 : 1 }
+' "$TMPDIR/outline_unallocated_ix.out.s"; then
+    echo "xopt smoke: -Os outlined an IX spill before allocating its frame" >&2
+    exit 1
+fi
+grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*l' \
+    "$TMPDIR/outline_unallocated_ix.out.s"
 
 "$XOPT" -O3 --cross-file "$TMPDIR/in.s" "$TMPDIR/in.s" --stdout >/dev/null
 

@@ -150,6 +150,20 @@ static inline type_name __stdbit_bit_floor_##width_name(type_name value) { \
 } \
 static inline type_name __stdbit_bit_ceil_##width_name(type_name value) { \
     return (type_name)__stdbit_bit_ceil_ull((unsigned long long)value, (type_bits)); \
+} \
+static inline type_name __stdbit_rotate_left_##width_name(type_name value, unsigned int count) { \
+    count %= (type_bits); \
+    if (count == 0U) { \
+        return value; \
+    } \
+    return (type_name)((type_name)(value << count) | (type_name)(value >> ((type_bits) - count))); \
+} \
+static inline type_name __stdbit_rotate_right_##width_name(type_name value, unsigned int count) { \
+    count %= (type_bits); \
+    if (count == 0U) { \
+        return value; \
+    } \
+    return (type_name)((type_name)(value >> count) | (type_name)(value << ((type_bits) - count))); \
 }
 
 __STDBIT_DECLARE(uc,  unsigned char,      8U)
@@ -166,6 +180,14 @@ __STDBIT_DECLARE(ull, unsigned long long, 64U)
     unsigned long long: __stdbit_##name##_ull \
 )(value)
 
+#define __STDBIT_DISPATCH2(name, value, arg) _Generic((value), \
+    unsigned char: __stdbit_##name##_uc, \
+    unsigned short: __stdbit_##name##_us, \
+    unsigned int: __stdbit_##name##_ui, \
+    unsigned long: __stdbit_##name##_ul, \
+    unsigned long long: __stdbit_##name##_ull \
+)(value, arg)
+
 #define stdc_leading_zeros(value)        __STDBIT_DISPATCH(leading_zeros, (value))
 #define stdc_leading_ones(value)         __STDBIT_DISPATCH(leading_ones, (value))
 #define stdc_trailing_zeros(value)       __STDBIT_DISPATCH(trailing_zeros, (value))
@@ -180,5 +202,7 @@ __STDBIT_DECLARE(ull, unsigned long long, 64U)
 #define stdc_bit_width(value)            __STDBIT_DISPATCH(bit_width, (value))
 #define stdc_bit_floor(value)            __STDBIT_DISPATCH(bit_floor, (value))
 #define stdc_bit_ceil(value)             __STDBIT_DISPATCH(bit_ceil, (value))
+#define stdc_rotate_left(value, count)   __STDBIT_DISPATCH2(rotate_left, (value), (count))
+#define stdc_rotate_right(value, count)  __STDBIT_DISPATCH2(rotate_right, (value), (count))
 
 #endif /* _STDBIT_H */

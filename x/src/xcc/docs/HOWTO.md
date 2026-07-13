@@ -31,9 +31,9 @@
 | `-O0`       | No optimisation (default). |
 | `-O1`       | Enable late target cleanup only. This stage runs after IR optimisation and code generation, and today mainly covers the assembly peephole pass plus tiny backend fusions. |
 | `-O2`       | Enable the smart optimisation baseline: module-level dead static-function and unused inline-definition elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested private-helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same safe subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, CFG jump threading through label-only and `goto`-only blocks, scalar local promotion for simple helper-free 16-bit locals, IR constant-fold/DCE, strength reduction (multiply/divide/mod by power-of-two → shift), conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, dead-local frame compaction, the bounded stable temp register allocator for short straight-line 16-bit temp windows, automatic TEMP preallocation, duplicate-block cleanup, frameless zero-frame functions when safe, plus the `-O1` late cleanup stage. |
-| `-Of`       | Enable the `-Os`-based speed profile. It currently aliases `-Os`; speed hooks are added only after they beat the baseline. |
-| `-O3`       | Reserved experimental layer on top of `-Of`; currently empty so new risky trials have a clean runway. |
-| `-Os`       | Enable size-biased smart optimisation: the stable `-O2` baseline plus size-biased helper inlining and codegen choices. |
+| `-Of`       | Enable the `-O2`-based speed profile: broader safe helper inlining, byte-width preservation, scalar promotion, register allocation, and cycle-biased late Z80 rules. |
+| `-O3`       | Select the separately routed experimental speed profile. It currently starts with the `-Of` pass set so new cycle-oriented work can diverge without changing `-Of`. |
+| `-Os`       | Enable the distinct size profile. It may trade cycles for shared IX-frame helpers, common tails, exact repeated-sequence outlining, and byte-count-biased Z80 rules. |
 
 `xcc` also supports fine-grained overrides with `-f<name>` and
 `-fno-<name>`. Current names include:

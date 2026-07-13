@@ -2,10 +2,12 @@
 
 ## Goal
 
-Improve generated code for an 8-bit Z80 target with a size-first bias.
-The compiler should prefer:
+Improve generated code for an 8-bit Z80 target without forcing size and
+speed through the same compromise policy. The compiler should prefer:
 
-- fewer bytes over desktop-style instruction count heuristics
+- linked bytes under `-Os`, even when sharing adds call overhead
+- measured Z80 cycles under `-Of` and experimental `-O3`, even when a
+  faster sequence costs more bytes
 - fixed, repeatable local rewrites over expensive global analysis
 - small shared runtime helpers when they remove repeated inline
   sequences
@@ -15,6 +17,40 @@ This document is based on the current optimizer/backend structure in
 `src/opt/iropt.cpp`, `src/backend/z80/z80gen.cpp`,
 `src/backend/z80/z80gen_arith.cpp`, `lib/xopt/src/z80peep.cpp`, and
 `lib/runtime.s`.
+
+## Implemented Size Cycle (2026-07-12)
+
+The current optimizer now includes several of the transformations proposed
+below. They are structural compiler optimizations; none inspect source paths,
+function names, constants unique to a benchmark, or benchmark output values.
+
+- `-Os` narrows canonical word induction variables to bytes when a natural-loop
+  proof bounds the complete lifetime to `0..255`. Later lifetimes of a reused C
+  variable are analyzed independently, while latches with coupled pointer or
+  offset induction are left to the dedicated lockstep-pointer pass.
+- Dead ascending counters with constant or proven-positive dynamic byte bounds
+  become downward trip counts. This exposes `dec`/`jr nz` code without changing
+  loops that can execute zero times or whose counter is observable.
+- Truncated byte multiplication stays byte-wide when only the low byte can
+  reach an observable sink.
+- Post-update dependency sinking converts promoted `old=i; i=i+1; use(old)`
+  chains back into target-friendly post-increment order. It follows the full
+  address/store dependency chain and rejects branches, escaping temporaries,
+  or uses of the new value.
+- Local and linear-expression CSE now invalidate dependent expressions
+  transitively and treat copies/casts as value snapshots, preventing stale
+  address reuse after mutable temps are redefined.
+- `-Os`, `-Of`, and `-O3` recognize constant-byte fills of direct global/static
+  objects as `BLOCK_FILL`. The Z80 backend lowers this standard loop idiom to a
+  seed store plus `LDIR`; the proof requires one store, unit pointer and counter
+  strides, a constant trip count, and dead loop-control lifetimes.
+- `-Os` repeated-sequence outlining tracks allocated IX-frame depth at every
+  call site. A helper may access a negative IX slot only after that slot has
+  been allocated, so the helper return address cannot overlap an incoming-arg
+  spill during a split prologue.
+- The corresponding expert controls are `-fcountdown-dead-loops`,
+  `-fblock-fill-loops`, and `-fnarrow-counted-byte-loops`, with `-fno-*` forms
+  available for isolation and regression work.
 
 ## Current Baseline
 
@@ -52,11 +88,13 @@ bloat remain:
 
 ## Guiding Principles
 
-### 1. Optimize for code size first
+### 1. Keep the profile objective explicit
 
-On Z80, every extra spill, `push`/`pop`, label, or helper setup sequence
-shows up immediately in output size. The first question for each
-optimization should be "does this remove bytes from common code?"
+On Z80, every spill, `push`/`pop`, label, and helper setup is visible in
+both bytes and cycles. Under `-Os`, the first question is whether a rewrite
+reduces linked bytes. Under `-Of` and `-O3`, the first question is whether it
+reduces executed cycles on general code. A transformation belongs in both
+profiles only when it is Pareto-neutral or better for both objectives.
 
 ### 2. Prefer target-shaped canonical forms
 
@@ -231,7 +269,7 @@ Implementation approach:
 Current status:
 
 - implemented as `-fprealloc-temp-frame`
-- now also enabled automatically at `-O2` / `-O3` / `-Os` when the function
+- now also enabled automatically at `-O2` / `-Of` / `-O3` / `-Os` when the function
   already needs an IX frame for locals, stack parameters, or fixed-frame
   hazards
 - compute `max_temp_bytes`

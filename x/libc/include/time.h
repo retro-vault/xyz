@@ -22,6 +22,8 @@
 #ifndef _TIME_H
 #define _TIME_H
 
+#define __STDC_VERSION_TIME_H__ 202311L
+
 #include <stddef.h>     /* size_t, NULL */
 
 typedef long time_t;    /* seconds since 1970-01-01 00:00:00 UTC */
@@ -54,6 +56,7 @@ clock_t clock(void);
 time_t  time(time_t *timer);
 double  difftime(time_t end, time_t beginning);
 time_t  mktime(struct tm *timeptr);
+time_t  timegm(struct tm *timeptr);
 int     timespec_get(struct timespec *ts, int base);
 int     timespec_getres(struct timespec *ts, int base);
 

@@ -125,7 +125,6 @@ realloc_copy_have_len:
         ld      d,REALLOC_USER_HI(ix)         ; source visible to the caller
         push    bc                              ; memcpy byte count argument
         call    _memcpy
-        pop     bc
         push    de
         ld      l,REALLOC_PTR_LO(ix)
         ld      h,REALLOC_PTR_HI(ix)

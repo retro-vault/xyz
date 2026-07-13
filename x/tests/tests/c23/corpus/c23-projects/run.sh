@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-X_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+X_ROOT="$(cd "$SCRIPT_DIR/../../../../.." && pwd)"
 REPO_ROOT="$(cd "$X_ROOT/.." && pwd)"
 XCC="${XCC:-$REPO_ROOT/bin/x/bin/xcc}"
 RUNNER="${RUNNER:-$REPO_ROOT/build/bin/z80_exec}"
@@ -197,6 +197,7 @@ run_case c-algorithms \
 
 run_case portable-snippets \
     -I"$ORIG/portable-snippets/exact-int" \
+    -DPSNIP_EXACT_INT_HAVE_STDINT=1 \
     "$SRC/portable_snippets_harness.c"
 
 echo

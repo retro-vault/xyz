@@ -350,10 +350,10 @@ static int compile_source_to_text(const std::string &input_path,
             xopt_opts.level = xopt::optimization_level::os;
             break;
         case opt_level::Of:
-            xopt_opts.level = xopt::optimization_level::os;
+            xopt_opts.level = xopt::optimization_level::of;
             break;
         case opt_level::O3:
-            xopt_opts.level = xopt::optimization_level::os;
+            xopt_opts.level = xopt::optimization_level::o3;
             break;
         }
         asm_text = xopt::optimize_assembly(asm_text, xopt_opts);

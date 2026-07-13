@@ -66,6 +66,7 @@ enum class icode_op : uint8_t {
     ADDRESS_OF,     // result = &left   (left must be a symbol)
     GET_VALUE_AT,   // result = *left   (pointer dereference)
     SET_VALUE_AT,   // *result = left   (result is pointer, left is value)
+    BLOCK_FILL,     // fill result[0..right) with byte left
 
     // ----- arithmetic ------------------------------------------------
     ADD,
@@ -288,6 +289,7 @@ struct ir_function {
     bool                is_variadic      = false;
     bool                callee_cleans_stack = false; // epilogue drops stack params before returning
     bool                is_noreturn      = false; // [[noreturn]]: epilogue unreachable
+    bool                tail_local_addresses_noescape = false;
 
     //
     // Dump all instructions of this function to stdout.

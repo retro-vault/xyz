@@ -2,10 +2,12 @@
 
 ## Goal
 
-Improve generated code for an 8-bit Z80 target with a size-first bias.
-The compiler should prefer:
+Improve generated code for an 8-bit Z80 target without forcing size and
+speed through the same compromise policy. The compiler should prefer:
 
-- fewer bytes over desktop-style instruction count heuristics
+- linked bytes under `-Os`, even when sharing adds call overhead
+- measured Z80 cycles under `-Of` and experimental `-O3`, even when a
+  faster sequence costs more bytes
 - fixed, repeatable local rewrites over expensive global analysis
 - small shared runtime helpers when they remove repeated inline
   sequences
@@ -15,6 +17,22 @@ This document is based on the current optimizer/backend structure in
 `src/opt/iropt.cpp`, `src/backend/z80/z80gen.cpp`,
 `src/backend/z80/z80gen_arith.cpp`, `lib/xopt/src/z80peep.cpp`, and
 `lib/runtime.s`.
+
+## Implemented Size Cycle (2026-07-12)
+
+The current optimizer now includes structural bounded-byte induction,
+constant/proven-positive countdown conversion, low-byte multiplication,
+dependency-aware post-update sinking, transitive CSE invalidation, and
+constant-byte block-fill recognition. `BLOCK_FILL` is lowered to a seed store
+plus Z80 `LDIR` under `-Os`, `-Of`, and `-O3`. Repeated-sequence outlining in
+`-Os` also proves that every negative IX slot touched by a helper has already
+been allocated, preventing helper return addresses from overlapping split
+prologue spills.
+
+These passes match IR and control-flow properties only. They do not inspect
+source paths, function names, benchmark constants, or expected outputs. Expert
+controls include `-fcountdown-dead-loops`, `-fblock-fill-loops`, and
+`-fnarrow-counted-byte-loops`, together with their `-fno-*` forms.
 
 ## Current Baseline
 
@@ -52,11 +70,13 @@ bloat remain:
 
 ## Guiding Principles
 
-### 1. Optimize for code size first
+### 1. Keep the profile objective explicit
 
-On Z80, every extra spill, `push`/`pop`, label, or helper setup sequence
-shows up immediately in output size. The first question for each
-optimization should be "does this remove bytes from common code?"
+On Z80, every spill, `push`/`pop`, label, and helper setup is visible in
+both bytes and cycles. Under `-Os`, the first question is whether a rewrite
+reduces linked bytes. Under `-Of` and `-O3`, the first question is whether it
+reduces executed cycles on general code. A transformation belongs in both
+profiles only when it is Pareto-neutral or better for both objectives.
 
 ### 2. Prefer target-shaped canonical forms
 

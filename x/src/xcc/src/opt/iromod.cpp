@@ -62,6 +62,7 @@ struct inline_candidate {
 struct constant_arg_candidate {
     std::vector<operand> params;
     std::unordered_map<std::string, operand> replacements;
+    std::unordered_map<int, operand> temp_replacements;
 };
 
 struct dead_param_candidate {
@@ -433,8 +434,8 @@ static bool analyze_inline_candidate(const ir_function &fn,
         // Removing a tiny out-of-line arithmetic helper saves more than just
         // SEND/CALL sites: the helper prologue/epilogue and receive/spill
         // scaffolding disappear too. Use a conservative fixed bonus so
-        // repeated tiny helpers like bench_mix16 can inline when it is still
-        // size-profitable overall.
+        // repeated tiny helpers can inline when it is still size-profitable
+        // overall.
         out.helper_definition_bonus =
             out.approx_inline_cost + fn.num_params * 3 + 8;
     }
@@ -681,6 +682,28 @@ static bool same_constant_value(const operand &lhs, const operand &rhs) {
         return lhs.ival == rhs.ival;
     if (lhs.kind == operand_kind::FLOAT_CONST)
         return lhs.fval == rhs.fval;
+    if (lhs.kind == operand_kind::LABEL_REF)
+        return lhs.name == rhs.name;
+    if (lhs.kind == operand_kind::SYMBOL && lhs.is_func && rhs.is_func)
+        return lhs.name == rhs.name && lhs.byte_offset == rhs.byte_offset;
+    return false;
+}
+
+static bool is_constant_argument_value(const operand &op) {
+    return op.is_const() || op.kind == operand_kind::LABEL_REF ||
+           (op.kind == operand_kind::SYMBOL && op.is_func &&
+            op.byte_offset == 0);
+}
+
+static bool same_parameter_value(const operand &arg, const operand &param) {
+    if (arg.kind != param.kind || arg.byte_offset != 0 ||
+        param.byte_offset != 0) {
+        return false;
+    }
+    if (arg.is_temp())
+        return arg.temp_id == param.temp_id;
+    if (arg.is_symbol())
+        return base_symbol_key(arg) == base_symbol_key(param);
     return false;
 }
 
@@ -1741,27 +1764,55 @@ static bool replace_symbol_read_with_constant(
     return true;
 }
 
+static bool replace_temp_read_with_constant(
+    operand &op, const std::unordered_map<int, operand> &replacements)
+{
+    if (!op.is_temp())
+        return false;
+    auto it = replacements.find(op.temp_id);
+    if (it == replacements.end())
+        return false;
+
+    operand repl = it->second;
+    repl.type = op.type ? op.type : repl.type;
+    op = std::move(repl);
+    return true;
+}
+
 static bool apply_constant_arg_replacements(
-    ir_function &fn, const std::unordered_map<std::string, operand> &replacements)
+    ir_function &fn,
+    const std::unordered_map<std::string, operand> &replacements,
+    const std::unordered_map<int, operand> &temp_replacements = {})
 {
     bool changed = false;
+    auto replace_read = [&](operand &op) {
+        return replace_symbol_read_with_constant(op, replacements) ||
+               replace_temp_read_with_constant(op, temp_replacements);
+    };
 
     for (auto &ic : fn.icodes) {
         switch (ic.op) {
         case icode_op::IFX:
         case icode_op::RETURN:
         case icode_op::SEND:
-            changed = replace_symbol_read_with_constant(ic.left, replacements) || changed;
+            changed = replace_read(ic.left) || changed;
             break;
 
         case icode_op::CALL:
-            if (ic.func_name.empty())
-                changed = replace_symbol_read_with_constant(ic.left, replacements) || changed;
+            if (ic.func_name.empty()) {
+                changed = replace_read(ic.left) || changed;
+                if (ic.left.kind == operand_kind::SYMBOL && ic.left.is_func &&
+                    ic.left.byte_offset == 0) {
+                    ic.func_name = ic.left.name;
+                    ic.left = operand::make_none();
+                    changed = true;
+                }
+            }
             break;
 
         case icode_op::SET_VALUE_AT:
-            changed = replace_symbol_read_with_constant(ic.result, replacements) || changed;
-            changed = replace_symbol_read_with_constant(ic.left, replacements) || changed;
+            changed = replace_read(ic.result) || changed;
+            changed = replace_read(ic.left) || changed;
             break;
 
         case icode_op::FUNCTION:
@@ -1773,8 +1824,8 @@ static bool apply_constant_arg_replacements(
             break;
 
         default:
-            changed = replace_symbol_read_with_constant(ic.left, replacements) || changed;
-            changed = replace_symbol_read_with_constant(ic.right, replacements) || changed;
+            changed = replace_read(ic.left) || changed;
+            changed = replace_read(ic.right) || changed;
             break;
         }
     }
@@ -2072,7 +2123,13 @@ static bool analyze_constant_arg_candidate(
             for (size_t arg_i = 0; arg_i < args.size(); ++arg_i) {
                 if (!still_constant[arg_i])
                     continue;
-                if (!args[arg_i].is_const()) {
+                if (caller.name == fn.name &&
+                    same_parameter_value(args[arg_i], out.params[arg_i])) {
+                    // A recursive call that forwards its own argument does
+                    // not introduce a new value into the fixed point.
+                    continue;
+                }
+                if (!is_constant_argument_value(args[arg_i])) {
                     still_constant[arg_i] = false;
                     continue;
                 }
@@ -2090,36 +2147,59 @@ static bool analyze_constant_arg_candidate(
     if (matched_calls != call_count_it->second)
         return false;
 
-    for (size_t i = 0; i < out.params.size(); ++i) {
-        if (!have_value[i] || !still_constant[i])
-            continue;
-        out.replacements.emplace(base_symbol_key(out.params[i]), common_args[i]);
-    }
-    if (out.replacements.empty())
-        return false;
+    std::vector<bool> eligible(out.params.size(), false);
+    for (size_t i = 0; i < out.params.size(); ++i)
+        eligible[i] = have_value[i] && still_constant[i];
 
     for (auto &ic : fn.icodes) {
-        auto drop_candidate = [&](const operand &op) {
-            if (!op.is_symbol())
-                return;
-            if (op.byte_offset != 0)
-                out.replacements.erase(base_symbol_key(op));
+        auto matches_param_base = [&](const operand &op, const operand &param) {
+            if (op.kind != param.kind)
+                return false;
+            if (op.is_temp())
+                return op.temp_id == param.temp_id;
+            if (op.is_symbol())
+                return base_symbol_key(op) == base_symbol_key(param);
+            return false;
         };
 
-        drop_candidate(ic.result);
-        drop_candidate(ic.left);
-        drop_candidate(ic.right);
+        for (size_t i = 0; i < out.params.size(); ++i) {
+            if (!eligible[i])
+                continue;
+            const operand &param = out.params[i];
+            auto reject_offset_use = [&](const operand &op) {
+                if (matches_param_base(op, param) && op.byte_offset != 0)
+                    eligible[i] = false;
+            };
+            reject_offset_use(ic.result);
+            reject_offset_use(ic.left);
+            reject_offset_use(ic.right);
 
-        if (ic.op == icode_op::ADDRESS_OF && ic.left.is_symbol())
-            out.replacements.erase(base_symbol_key(ic.left));
+            if (ic.op == icode_op::ADDRESS_OF &&
+                matches_param_base(ic.left, param)) {
+                eligible[i] = false;
+            }
 
-        if (ic.op != icode_op::RECEIVE &&
-            op_writes_result_symbol(ic.op) && ic.result.is_symbol()) {
-            out.replacements.erase(base_symbol_key(ic.result));
+            if (ic.op != icode_op::RECEIVE &&
+                op_writes_result_symbol(ic.op) &&
+                matches_param_base(ic.result, param)) {
+                eligible[i] = false;
+            }
         }
     }
 
-    return !out.replacements.empty();
+    for (size_t i = 0; i < out.params.size(); ++i) {
+        if (!eligible[i])
+            continue;
+        if (out.params[i].is_symbol()) {
+            out.replacements.emplace(base_symbol_key(out.params[i]),
+                                     common_args[i]);
+        } else if (out.params[i].is_temp()) {
+            out.temp_replacements.emplace(out.params[i].temp_id,
+                                          common_args[i]);
+        }
+    }
+
+    return !out.replacements.empty() || !out.temp_replacements.empty();
 }
 
 static bool evaluate_const_call_impl(const ir_module *mod,
@@ -3130,7 +3210,9 @@ public:
             constant_arg_candidate candidate;
             if (!analyze_constant_arg_candidate(mod, fn, info, candidate))
                 continue;
-            changed = apply_constant_arg_replacements(fn, candidate.replacements) || changed;
+            changed = apply_constant_arg_replacements(
+                fn, candidate.replacements, candidate.temp_replacements) ||
+                changed;
         }
 
         return changed;
@@ -3323,6 +3405,199 @@ public:
     }
 };
 
+static bool same_parameter_storage(const operand &op, const operand &param) {
+    if (op.kind != param.kind)
+        return false;
+    if (op.is_temp())
+        return op.temp_id == param.temp_id && op.byte_offset == 0;
+    if (op.is_symbol())
+        return base_symbol_key(op) == base_symbol_key(param) &&
+               op.byte_offset == 0;
+    return false;
+}
+
+static bool pointer_parameter_is_dereference_only(const ir_function &callee,
+                                                  int argreg) {
+    std::vector<operand> params;
+    if (!collect_param_operands(callee, params) || argreg < 0 ||
+        argreg >= static_cast<int>(params.size())) {
+        return false;
+    }
+    const operand &param = params[static_cast<size_t>(argreg)];
+    if (!param.type ||
+        !(param.type->is_ptr() || param.type->is_array())) {
+        return false;
+    }
+
+    std::unordered_set<int> derived_temps;
+    bool expanded;
+    do {
+        expanded = false;
+        for (const auto &ic : callee.icodes) {
+            const bool source_tracked =
+                same_parameter_storage(ic.left, param) ||
+                (ic.left.is_temp() &&
+                 derived_temps.count(ic.left.temp_id) != 0);
+            if (!source_tracked || !ic.result.is_temp() ||
+                (ic.op != icode_op::ASSIGN && ic.op != icode_op::CAST)) {
+                continue;
+            }
+            if (derived_temps.insert(ic.result.temp_id).second)
+                expanded = true;
+        }
+    } while (expanded);
+
+    auto tracked = [&](const operand &op) {
+        return same_parameter_storage(op, param) ||
+               (op.is_temp() && derived_temps.count(op.temp_id) != 0);
+    };
+
+    bool saw_dereference = false;
+    for (const auto &ic : callee.icodes) {
+        if (ic.op == icode_op::RECEIVE)
+            continue;
+        const bool in_result = tracked(ic.result);
+        const bool in_left = tracked(ic.left);
+        const bool in_right = tracked(ic.right);
+        if (!in_result && !in_left && !in_right)
+            continue;
+
+        if ((ic.op == icode_op::ASSIGN || ic.op == icode_op::CAST) &&
+            in_left && ic.result.is_temp() &&
+            derived_temps.count(ic.result.temp_id) != 0 && !in_right) {
+            continue;
+        }
+
+        if (ic.op == icode_op::GET_VALUE_AT && in_left &&
+            !in_result && !in_right) {
+            saw_dereference = true;
+            continue;
+        }
+        if (ic.op == icode_op::SET_VALUE_AT && in_result &&
+            !in_left && !in_right) {
+            saw_dereference = true;
+            continue;
+        }
+        return false;
+    }
+    return saw_dereference;
+}
+
+class tail_address_noescape_pass final : public ir_module_pass {
+public:
+    const char *name() const override { return "tail_address_noescape"; }
+
+    bool run(ir_module &mod) override {
+        bool changed = false;
+        for (auto &fn : mod.functions) {
+            bool saw_local_address = false;
+            bool proven = true;
+
+            for (size_t def_idx = 0; def_idx < fn.icodes.size(); ++def_idx) {
+                const icode &def = fn.icodes[def_idx];
+                if (def.op != icode_op::ADDRESS_OF ||
+                    !def.left.is_symbol() || def.left.is_global) {
+                    continue;
+                }
+                saw_local_address = true;
+                if (!def.result.is_temp()) {
+                    proven = false;
+                    break;
+                }
+
+                std::unordered_set<int> address_temps{def.result.temp_id};
+                bool expanded;
+                do {
+                    expanded = false;
+                    for (const auto &copy : fn.icodes) {
+                        if ((copy.op != icode_op::ASSIGN &&
+                             copy.op != icode_op::CAST) ||
+                            !copy.left.is_temp() || !copy.result.is_temp() ||
+                            address_temps.count(copy.left.temp_id) == 0) {
+                            continue;
+                        }
+                        if (address_temps.insert(copy.result.temp_id).second)
+                            expanded = true;
+                    }
+                } while (expanded);
+
+                bool saw_use = false;
+                for (size_t use_idx = def_idx + 1;
+                     use_idx < fn.icodes.size(); ++use_idx) {
+                    const icode &use = fn.icodes[use_idx];
+                    const bool in_left = use.left.is_temp() &&
+                        address_temps.count(use.left.temp_id) != 0;
+                    const bool in_right = use.right.is_temp() &&
+                        address_temps.count(use.right.temp_id) != 0;
+                    const bool in_result = use.op == icode_op::SET_VALUE_AT &&
+                        use.result.is_temp() &&
+                        address_temps.count(use.result.temp_id) != 0;
+                    if (!in_left && !in_right && !in_result) {
+                        if (use.result.is_temp() &&
+                            address_temps.count(use.result.temp_id) != 0 &&
+                            use_idx != def_idx) {
+                            proven = false;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    saw_use = true;
+                    if ((use.op == icode_op::ASSIGN ||
+                         use.op == icode_op::CAST) && in_left && !in_right &&
+                        use.result.is_temp() &&
+                        address_temps.count(use.result.temp_id) != 0) {
+                        continue;
+                    }
+                    if (use.op == icode_op::GET_VALUE_AT && in_left &&
+                        !in_right && !in_result) {
+                        continue;
+                    }
+                    if (use.op == icode_op::SET_VALUE_AT && in_result &&
+                        !in_left && !in_right) {
+                        continue;
+                    }
+                    if (use.op != icode_op::SEND || !in_left ||
+                        in_right || in_result) {
+                        proven = false;
+                        break;
+                    }
+
+                    size_t call_idx = use_idx + 1;
+                    while (call_idx < fn.icodes.size() &&
+                           fn.icodes[call_idx].op == icode_op::SEND) {
+                        ++call_idx;
+                    }
+                    if (call_idx >= fn.icodes.size() ||
+                        fn.icodes[call_idx].op != icode_op::CALL ||
+                        fn.icodes[call_idx].func_name.empty()) {
+                        proven = false;
+                        break;
+                    }
+                    const ir_function *callee = find_function(
+                        mod, fn.icodes[call_idx].func_name);
+                    if (!callee || !pointer_parameter_is_dereference_only(
+                                       *callee, use.argreg)) {
+                        proven = false;
+                        break;
+                    }
+                }
+                if (!proven)
+                    break;
+                if (!saw_use)
+                    continue;
+            }
+
+            const bool safe = saw_local_address && proven;
+            if (fn.tail_local_addresses_noescape != safe) {
+                fn.tail_local_addresses_noescape = safe;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+};
+
 class dead_param_elimination_pass final : public ir_module_pass {
 public:
     const char *name() const override { return "dead_param_elimination"; }
@@ -3498,11 +3773,15 @@ public:
                                        int single_use_max_inline_ops,
                                        int few_use_max_inline_ops,
                                        bool widen_few_use_analysis,
+                                       bool speed_inline_small_helpers,
+                                       bool broad_speed_inline,
                                        optimization_settings analysis_settings)
         : max_inline_ops_(max_inline_ops),
           single_use_max_inline_ops_(single_use_max_inline_ops),
           few_use_max_inline_ops_(few_use_max_inline_ops),
           widen_few_use_analysis_(widen_few_use_analysis),
+          speed_inline_small_helpers_(speed_inline_small_helpers),
+          broad_speed_inline_(broad_speed_inline),
           analysis_settings_(std::move(analysis_settings)) {}
 
     const char *name() const override { return "size_profitable_static_inline"; }
@@ -3518,7 +3797,6 @@ public:
         };
 
         std::optional<choice> best;
-
         for (size_t callee_idx = 0; callee_idx < mod.functions.size(); ++callee_idx) {
             const auto &callee = mod.functions[callee_idx];
             if (info.address_taken_funcs.find(callee.name) !=
@@ -3557,12 +3835,27 @@ public:
             }
 
             const int use_count = static_cast<int>(sites.size());
+            const bool speed_profile =
+                speed_inline_small_helpers_ || broad_speed_inline_;
+            const bool speed_safe_leaf_helper =
+                !candidate.contains_call &&
+                candidate.local_frame_bytes == 0 &&
+                !candidate_has_internal_control_flow(candidate) &&
+                candidate.op_count <= few_use_max_inline_ops_;
+            if (speed_profile && !speed_safe_leaf_helper) {
+                continue;
+            }
+
             const bool caller_already_has_locals =
                 use_count == 1 &&
                 mod.functions[sites.front().first].local_bytes >= 8;
+            // Promotion can remove the analyzed frame without removing the
+            // register pressure that made a stack-local CFG helper costly to
+            // inline into an already-large caller.
+            const bool callee_had_stack_locals = callee.local_bytes > 0;
             const bool stack_local_cfg_candidate =
                 use_count == 1 &&
-                candidate.local_frame_bytes > 0 &&
+                (candidate.local_frame_bytes > 0 || callee_had_stack_locals) &&
                 caller_already_has_locals &&
                 candidate_has_internal_control_flow(candidate);
             if (stack_local_cfg_candidate) {
@@ -3574,14 +3867,14 @@ public:
                 // looks profitable in raw IR, but it can bloat final Z80
                 // code by increasing frame pressure and duplicating rotate /
                 // mix chains at every site. Keep that path very narrow and
-                // reserve the broader O3 repeated-inline budget for
+                // allow a broader tuned-profile repeated-inline budget for
                 // non-pure-leaf helpers that can remove larger call/receive
                 // scaffolding.
                 const bool allow_repeated_pure_leaf_inline =
                     candidate.pure_leaf_arith &&
                     candidate.op_count <= 4 &&
                     use_count <= 2;
-                const bool allow_experimental_o3_inline =
+                const bool allow_broader_tuned_inline =
                     widen_few_use_analysis_ &&
                     !candidate.pure_leaf_arith &&
                     !candidate.contains_call &&
@@ -3592,21 +3885,40 @@ public:
                     !candidate.contains_call &&
                     use_count <= 3 &&
                     candidate.op_count <= few_use_max_inline_ops_;
+                const bool allow_speed_profile_inline =
+                    speed_inline_small_helpers_ &&
+                    !candidate.contains_call &&
+                    candidate.local_frame_bytes == 0 &&
+                    !candidate_has_internal_control_flow(candidate) &&
+                    use_count <= 2 &&
+                    candidate.op_count <= 18;
+                const bool allow_broad_speed_inline =
+                    broad_speed_inline_ &&
+                    !candidate.contains_call &&
+                    candidate.local_frame_bytes == 0 &&
+                    !candidate_has_internal_control_flow(candidate) &&
+                    use_count <= 4 &&
+                    candidate.op_count <= 24;
                 const bool allow_few_use_inline =
                     allow_repeated_pure_leaf_inline ||
-                    allow_experimental_o3_inline ||
+                    allow_broader_tuned_inline ||
                     allow_small_repeated_helper_inline;
-                if (!allow_few_use_inline) {
+                const bool bypass_size_profit_gate =
+                    allow_speed_profile_inline ||
+                    allow_broad_speed_inline;
+                if (!allow_few_use_inline && !bypass_size_profit_gate) {
                     continue;
                 }
 
-                const int replicated_body_cost =
-                    (use_count - 1) * candidate.approx_inline_cost;
-                const int total_savings =
-                    total_overhead +
-                    (candidate.pure_leaf_arith ? candidate.helper_definition_bonus : 0);
-                if (total_savings <= replicated_body_cost) {
-                    continue;
+                if (!bypass_size_profit_gate) {
+                    const int replicated_body_cost =
+                        (use_count - 1) * candidate.approx_inline_cost;
+                    const int total_savings =
+                        total_overhead +
+                        (candidate.pure_leaf_arith ? candidate.helper_definition_bonus : 0);
+                    if (total_savings <= replicated_body_cost) {
+                        continue;
+                    }
                 }
             }
 
@@ -3660,6 +3972,8 @@ private:
     int single_use_max_inline_ops_ = 24;
     int few_use_max_inline_ops_ = 16;
     bool widen_few_use_analysis_ = false;
+    bool speed_inline_small_helpers_ = false;
+    bool broad_speed_inline_ = false;
     optimization_settings analysis_settings_;
 };
 
@@ -3681,15 +3995,18 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<function_const_eval_pass>());
     if (settings.dead_params)
         passes.push_back(std::make_unique<dead_param_elimination_pass>());
+    if (settings.tail_recursion_elim)
+        passes.push_back(std::make_unique<tail_address_noescape_pass>());
     if (settings.inline_trivial_internal_functions)
         passes.push_back(std::make_unique<trivial_internal_leaf_inline_pass>(
             settings));
     if (settings.inline_static_functions) {
-        const bool size_profile = settings.level == opt_level::Os;
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
-            size_profile ? 32 : 12,
-            size_profile ? 96 : 24,
-            size_profile ? 64 : 16,
+            12,
+            24,
+            16,
+            false,
+            false,
             false,
             settings));
     }

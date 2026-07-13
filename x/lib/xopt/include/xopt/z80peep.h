@@ -76,11 +76,18 @@ public:
     //
     static std::string optimize(const std::string &asm_text,
                                 bool speed_bias = false,
-                                int normal_passes = 10);
+                                int normal_passes = 10,
+                                bool size_bias = false);
+
+    // Perform only control-flow-size cleanup that is safe after outlining.
+    // This deliberately excludes register and flag liveness rewrites because
+    // an outlined helper's live-ins and live-outs are not ordinary call ABI.
+    static std::string optimize_outlined_layout(const std::string &asm_text);
 
 private:
     std::vector<asm_line> lines_;
     bool speed_bias_ = false;
+    bool size_bias_ = false;
 
     void load(const std::string &text);
     void apply_passes(int passes = 3);
@@ -103,6 +110,10 @@ private:
 
     // Fold inclusive byte-threshold branches after cp #N.
     bool rule_cp_threshold_branch_fold(size_t i);
+
+    // cp #0; <flag-preserving instructions>; jr/jp ordinary-cc,L
+    //   -> or a,a; ... when parity/overflow is not observed.
+    bool rule_cp_zero_branch_to_or(size_t i);
 
     // Elide dec sp;dec sp;ld N(ix),l;ld N+1(ix),h;ld l,N(ix);ld h,N+1(ix)
     // when the temp slot is not referenced anywhere after the reload.
@@ -134,12 +145,98 @@ private:
     //   → bit 7,hi; jp z/nz,L when HL/DE/flags die on both paths.
     bool rule_signed_zero_branch_from_high_bit(size_t i);
 
+    // [ex de,hl;] ld hl,#K; or a,a; sbc hl,de; jr/jp z/nz,L
+    //   → [ex de,hl;] ld a,e; sub #K; or d; jr/jp z/nz,L for byte K.
+    bool rule_de_eq_small_const_branch(size_t i);
+
+    // ld l,lo; ld h,hi; or a,a; sbc hl,de; jr nz,L
+    //   → ld a,lo; cp e; jr nz,L; ld a,hi; cp d; jr nz,L.
+    bool rule_de_word_ne_branch_split(size_t i);
+
+    // ld a,src; xor #128; cp #128; jr/jp c/nc,L
+    //   → bit 7,src; jr/jp nz/z,L when A/flags die on both paths.
+    bool rule_signed_byte_zero_branch(size_t i);
+
     // ld l,lo; ld h,hi; ld de,#N00; or a,a; sbc hl,de; jp c/nc/p/m,L
     //   → ld a,hi; cp #N; jp c/nc/p/m,L for page-aligned bounds.
     bool rule_page_aligned_word_bound_branch(size_t i);
 
+    // ld a,l; and #0; ld l,a; ld a,h; and #bit; ld h,a; ...; or a,l; jr/jp z/nz,L
+    //   → bit n,h; jr/jp z/nz,L when the masked HL value dies on both paths.
+    bool rule_hl_high_byte_mask_branch(size_t i);
+
+    // ld word; and #onehot; store temp; zero high word; or temp; jr/jp z/nz,L
+    //   → bit n,source; jr/jp z/nz,L when the temporary word dies.
+    bool rule_word_mask_zero_high_branch(size_t i);
+
+    // ld slot,a; bit 7,a; branch diamond around add/xor/store
+    //   -> add a,a; jr nc,join; xor #K; join: ld slot,a.
+    bool rule_bit7_shift_xor_diamond(size_t i);
+
+    // ld l,a; ld h,#0; bit 7,l; branch diamond around byte shift/xor
+    //   -> add a,a; jr nc,join; xor #K; join: ld slot,a.
+    bool rule_zero_extended_bit7_shift_xor_diamond(size_t i);
+
+    // Sign-extended byte add/sub/shift-xor sequences whose high byte is
+    // immediately discarded -> direct low-byte arithmetic in A.
+    bool rule_signed_byte_low_arith(size_t i);
+
+    // ld e,X; ld d,Y; ld a,e; ALU a,d
+    //   → ld a,X; ALU a,Y when DE is only a dead shuttle.
+    bool rule_de_byte_alu_shuttle(size_t i);
+
+    // ld c,X; ALU a,c
+    //   → ALU a,X when C is only a dead byte shuttle.
+    bool rule_c_byte_alu_shuttle(size_t i);
+
+    // ld l,X; ld h,#0; (sra h; rr l)+; ld a,l
+    //   → ld a,X; srl a... when the widened HL value is dead.
+    bool rule_zero_extended_byte_shr_to_a(size_t i);
+
+    // Zero-extended byte shift/add chains that only keep the low byte
+    //   → compute directly in A when widened BC/DE/HL results are dead.
+    bool rule_low_byte_shift_add_to_a(size_t i);
+
+    // ld slot,a; one or more A shift/xor diamonds; ld same_slot,a
+    //   -> remove the first store because A carries the value to the later
+    //      same-slot store.
+    bool rule_dead_a_store_before_join_store(size_t i);
+
+    // ld byte_tmp,a; small branch/ALU region repeatedly uses byte_tmp
+    //   → keep the byte in D when DE is dead after the region.
+    bool rule_ix_byte_branch_temp_to_d(size_t i);
+
+    // ld slot,hl; bit 7,h; branch diamond around add hl,hl / xor polynomial
+    //   -> add hl,hl; jr nc,join; xor polynomial; join: ld slot,hl.
+    bool rule_bit15_shift_xor_diamond(size_t i);
+
+    // ld slot,hl; mask high bit through HL/BC; branch diamond around shift/xor
+    //   -> carry-based shift/xor when A and BC die after the diamond.
+    bool rule_masked_bit15_shift_xor_diamond(size_t i);
+
+    // bit 0,slot; branch diamond around 32-bit right shift / xor polynomial
+    //   -> shift; jr nc,join; xor polynomial; join: store 32-bit result.
+    bool rule_lsb32_shift_xor_diamond(size_t i);
+
     // ld a,r; and #255; ld r,a  →  removed when A/flags are dead afterwards.
     bool rule_redundant_u8_self_mask(size_t i);
+
+    // ld l,X; ld h,#0; ld a,l; and #bit; ...; or a,l; jr/jp z/nz,L
+    //   → bit n,X; jr/jp z/nz,L
+    // when A, HL, and flags die on both branch paths.
+    bool rule_zero_extended_byte_mask_branch(size_t i);
+
+    // ld a,X; add a,a; [xor #K through zero-extended HL]; ld T,l; ld T+1,h
+    //   → compute in A and store T=a, T+1=#0 when HL/flags die afterwards.
+    bool rule_zero_extended_byte_store_direct(size_t i);
+
+    // ld l,X; ld h,#0; ld a,l; and #mask; ld l,a; inc hl; ld T,l; ld T+1,h
+    //   → byte mask/inc in A and direct T=a, T+1=#0 stores when safe.
+    bool rule_zero_extended_mask_inc_word_store(size_t i);
+
+    // ld l,T; ld h,T+1; ld a,l  →  ld a,T
+    // for indexed word reloads when HL dies after the low-byte extraction.
+    bool rule_word_reload_low_byte_to_a(size_t i);
 
     // ld a,#0  →  xor a  (when not immediately followed by a conditional branch)
     bool rule_ld_a_zero(size_t i);
@@ -167,6 +264,9 @@ private:
     // ld T(ix),e; ld T+1(ix),d; ld l,T(ix); ld h,T+1(ix); ex de,hl
     //   → keep the existing DE value when HL is dead afterwards.
     bool rule_dead_de_spill_reload_exchange(size_t i);
+
+    // Forward a dead byte call-result spill into a commutative accumulator.
+    bool rule_call_result_byte_commute_direct(size_t i);
 
     // ld d,h; ld e,l; <full HL reload>  →  ex de,hl; <full HL reload>
     // when the exchange's old-DE value in HL is overwritten before any read.
@@ -205,6 +305,22 @@ private:
     // ld N(ix),l; ld N+1(ix),h; ld l,N(ix); ld h,N+1(ix)  →  first 2 only
     // (store HL to IX slot then immediately reload it — HL is unchanged)
     bool rule_ix_store_reload(size_t i);
+
+    // ld N(ix),l/h/e/d; [comments]; ld l,N(ix); ld h,N+1(ix)
+    //   → remove the low-word reload because HL survives the stores.
+    bool rule_ix_store32_low_reload(size_t i);
+
+    // ld hl,P(ix); save HL to temps; inc P(ix); reload temps; ld a,(hl)
+    //   → ld hl,P(ix); ld a,(hl); inc P(ix), preserving increment flags.
+    bool rule_ix_postinc_indirect_load_a(size_t i);
+
+    // ld hl,I(ix); save to temps; inc I(ix); base+temps; ld (hl),a
+    //   → base+I(ix); ld (hl),a; inc I(ix), when flags are dead afterwards.
+    bool rule_ix_postinc_indexed_store_a(size_t i);
+
+    // Two adjacent base+index byte stores with index++ after each store
+    //   → compute base+index once, use inc hl, then write index += 2.
+    bool rule_adjacent_postinc_indexed_stores_direct(size_t i);
 
     // push ix; pop hl; ld bc,#N; add hl,bc; [inc hl...]; ld/xor a; ld (hl),a
     //   → ld/xor a; ld N+k(ix),a
@@ -351,11 +467,20 @@ private:
     // ld c,a; ld b,#0  → removed when BC is overwritten/clobbered before read.
     bool rule_dead_bc_zero_extend_from_a(size_t i);
 
+    // ld b,h; ld c,l  → removed when BC is overwritten/clobbered before read.
+    bool rule_dead_bc_copy_from_hl(size_t i);
+
+    // ld b,h; ld c,l; ld a,(bc)/(bc),a  ->  ld a,(hl)/(hl),a
+    // when BC is dead afterwards.
+    bool rule_bc_indirect_through_hl(size_t i);
+
     // ld b,h; ld c,l; ld d,b; ld e,c  →  ld d,h; ld e,l
     // when BC is dead on every following path.
     bool rule_dead_bc_hl_to_de_copy(size_t i);
     bool rule_dead_bc_hl_roundtrip(size_t i);
     bool rule_bc_base_add_direct(size_t i);
+    bool rule_bc_offset_base_add_de_direct(size_t i);
+    bool rule_bc_index_add_hl_word_load_direct(size_t i);
     bool rule_bc_index_add_reloaded_hl_to_de(size_t i);
     bool rule_bc_saved_hl_push_word_to_de_direct(size_t i);
 
@@ -381,9 +506,13 @@ private:
     bool rule_ix_pair_compare_load_de_direct(size_t i);
 
     // Experimental superoptimizer-inspired length-2 accumulator rewrites.
-    // These are exact Z80 flag/value equivalents, but live only in the
-    // speed-biased "here be dragons" lane.
     bool rule_superopt_accumulator_sequences(size_t i);
+
+    // add a,#1 -> inc a when flags die before use.
+    bool rule_add_a_one_to_inc(size_t i);
+
+    // ld l,a; ld h,#0; ld a,l -> ld l,a; ld h,#0.
+    bool rule_redundant_a_reload_after_zero_extend(size_t i);
 
     // Experimental low-bit pair shortcuts, e.g. set 0,l; dec hl → res 0,l.
     bool rule_superopt_lowbit_pair_sequences(size_t i);
@@ -661,6 +790,9 @@ private:
     //     -> ld e,N(ix); ld d,M(ix); <epilogue>
     // because the modern ABI returns 16-bit values in DE.
     bool rule_superopt_ix_word_return_de_direct(size_t i);
+
+    // ld d,h; ld e,l; <modern return tail> -> ex de,hl; <tail>.
+    bool rule_superopt_hl_return_de_exchange(size_t i);
 
     // Low-byte return synthesis:
     //   ld b,#0; ld hl,#K; add hl,bc; add hl,de; ld a,l; ret
