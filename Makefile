@@ -255,13 +255,13 @@ x-l:
 		PACKAGE_NAME=x-l
 
 test-x-s: x-s
-	bash x/tests/run_tests.sh $(OUT_DIR)/x-s/bin/xcc --filter model-s
+	bash x/tests/run_tests.sh $(OUT_DIR)/x-s/bin/xcc --filter model-s --work $(BUILD_DIR)/tests/model-s
 
 test-x-m: x-m
-	bash x/tests/run_tests.sh $(OUT_DIR)/x-m/bin/xcc --filter model-m
+	bash x/tests/run_tests.sh $(OUT_DIR)/x-m/bin/xcc --filter model-m --work $(BUILD_DIR)/tests/model-m
 
 test-x-l: x-l
-	bash x/tests/run_tests.sh $(OUT_DIR)/x-l/bin/xcc --filter model-l
+	bash x/tests/run_tests.sh $(OUT_DIR)/x-l/bin/xcc --filter model-l --work $(BUILD_DIR)/tests/model-l
 
 test-x-models: test-x-s test-x-m test-x-l
 

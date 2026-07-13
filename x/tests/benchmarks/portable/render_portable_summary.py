@@ -145,7 +145,7 @@ def emit_summary(args: argparse.Namespace, rows: list[dict[str, str]]) -> str:
         benchmark = row["benchmark"]
         results = {spec.prefix: parse_result(row, spec) for spec in MODE_SPECS}
         xcc_size = results["xcc_Os"]
-        xcc_speed = results["xcc_Of"]
+        xcc_speed = results["xcc_O3"]
         competitors = [results[prefix] for prefix in COMPETITOR_PREFIXES]
         best_size = best_by_size(competitors)
         best_speed = best_by_speed(competitors)
@@ -241,13 +241,13 @@ def emit_summary(args: argparse.Namespace, rows: list[dict[str, str]]) -> str:
             "more cycles",
         )
         lines.append(
-            f"- `xcc -Of` vs fastest competing result: {size_text}, {cycle_text} on {best_speed_common} common passing benchmarks"
+            f"- `xcc -O3` vs fastest competing result: {size_text}, {cycle_text} on {best_speed_common} common passing benchmarks"
         )
         lines.append(
-            f"- `xcc -Of` wins speed on {xcc_vs_fastest_speed_wins}/{best_speed_common} and size on {xcc_vs_fastest_size_wins}/{best_speed_common} against the fastest competitor"
+            f"- `xcc -O3` wins speed on {xcc_vs_fastest_speed_wins}/{best_speed_common} and size on {xcc_vs_fastest_size_wins}/{best_speed_common} against the fastest competitor"
         )
     else:
-        lines.append("- `xcc -Of` vs fastest competing result: n/a")
+        lines.append("- `xcc -O3` vs fastest competing result: n/a")
     lines.append("")
     lines.append("## Size Violators")
     lines.append("")
@@ -262,7 +262,7 @@ def emit_summary(args: argparse.Namespace, rows: list[dict[str, str]]) -> str:
     lines.append("")
     lines.append("## Speed Violators")
     lines.append("")
-    lines.append("| benchmark | xcc -Of bytes/cycles | fastest competing mode | best bytes/cycles | xcc cycle gap |")
+    lines.append("| benchmark | xcc -O3 bytes/cycles | fastest competing mode | best bytes/cycles | xcc cycle gap |")
     lines.append("| --- | ---: | --- | ---: | ---: |")
     for gap, benchmark, xcc, best in speed_violators[:20]:
         lines.append(

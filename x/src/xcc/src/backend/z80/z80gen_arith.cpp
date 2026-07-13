@@ -1831,8 +1831,24 @@ void z80_gen::gen_bor(const icode &ic) {
                         emit_line("set\t%d, (hl)", bit);
                         return true;
                     }
-                    if ((dst.kind == operand_kind::SYMBOL && !dst.is_global) ||
-                        dst.kind == operand_kind::TEMP) {
+                    if (dst.kind == operand_kind::TEMP) {
+                        auto home = temp_regs_.find(dst.temp_id);
+                        if (home != temp_regs_.end() &&
+                            home->second != temp_home::stack) {
+                            return false;
+                        }
+                    } else if (dst.kind == operand_kind::SYMBOL &&
+                               !dst.is_global) {
+                        if (symbol_regs_.count(symbol_reg_key(dst)) != 0 ||
+                            symbol_home_in_bc(dst) ||
+                            incoming_symbol_homes_.count(dst.stack_offset) != 0) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+
+                    {
                         int off = ix_offset_of(dst);
                         if (fits_ix_disp(off)) {
                             emit_line("set\t%d, %s", bit, asm_.ix_rel(off).c_str());
@@ -1842,8 +1858,14 @@ void z80_gen::gen_bor(const icode &ic) {
                     return false;
                 };
 
-                if (emit_inplace_set(ic.result))
+                if (emit_inplace_set(ic.result)) {
+                    // The memory destination now differs from every cached
+                    // register copy. In particular, A may still contain the
+                    // value from before SET and must not satisfy a later load.
+                    invalidate_pair_cache();
+                    invalidate_a_cache();
                     return;
+                }
             }
 
             load_a(*lhs);
@@ -2453,6 +2475,17 @@ void z80_gen::gen_rotate(const icode &ic, bool right) {
 void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                                   const std::string &true_lbl,
                                   const std::string &false_lbl) {
+    auto bias_signed_word_operands = [&]() {
+        // Flipping both sign bits maps signed order onto unsigned order, so
+        // carry remains correct even when left-right overflows.
+        emit_line("ld\ta, h");
+        emit_line("xor\t%s", asm_.imm(0x80).c_str());
+        emit_line("ld\th, a");
+        emit_line("ld\ta, d");
+        emit_line("xor\t%s", asm_.imm(0x80).c_str());
+        emit_line("ld\td, a");
+    };
+
     if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
         const bool half_compare =
             is_float16_op(ic.left) || is_float16_op(ic.right);
@@ -3281,7 +3314,12 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             emit_line("ld\td, b");
             emit_line("ld\te, c");
         }
-        const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+        const bool is_unsigned =
+            ic.left.type &&
+            (ic.left.type->is_unsigned() || ic.left.type->is_ptr());
+        const bool ordered = cmp != icode_op::EQ && cmp != icode_op::NE;
+        if (!is_unsigned && ordered)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
 
@@ -3296,35 +3334,30 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             break;
         case icode_op::LT:
             if (!true_lbl.empty())
-                emit_line("jp\t%s, %s",
-                          is_unsigned ? "c" : "m", true_lbl.c_str());
+                emit_line("jp\tc, %s", true_lbl.c_str());
             break;
         case icode_op::LE:
             if (!true_lbl.empty()) {
                 emit_line("jp\tz, %s", true_lbl.c_str());
-                emit_line("jp\t%s, %s",
-                          is_unsigned ? "c" : "m", true_lbl.c_str());
+                emit_line("jp\tc, %s", true_lbl.c_str());
             }
             break;
         case icode_op::GT:
             if (!false_lbl.empty()) {
                 emit_line("jp\tz, %s", false_lbl.c_str());
                 if (!true_lbl.empty())
-                    emit_line("jp\t%s, %s",
-                              is_unsigned ? "nc" : "p", true_lbl.c_str());
+                    emit_line("jp\tnc, %s", true_lbl.c_str());
             } else {
                 std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
                 emit_line("jp\tz, %s", skip_lbl.c_str());
                 if (!true_lbl.empty())
-                    emit_line("jp\t%s, %s",
-                              is_unsigned ? "nc" : "p", true_lbl.c_str());
+                    emit_line("jp\tnc, %s", true_lbl.c_str());
                 asm_.label(skip_lbl, false);
             }
             break;
         case icode_op::GE:
             if (!true_lbl.empty())
-                emit_line("jp\t%s, %s",
-                          is_unsigned ? "nc" : "p", true_lbl.c_str());
+                emit_line("jp\tnc, %s", true_lbl.c_str());
             break;
         default:
             break;
@@ -3339,7 +3372,9 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
     emit_line("push\thl");
     load_hl(ic.right);
     emit_line("pop\tde");  // DE = left, HL = right
-    const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+    const bool is_unsigned =
+        ic.left.type &&
+        (ic.left.type->is_unsigned() || ic.left.type->is_ptr());
 
     switch (cmp) {
     case icode_op::EQ:
@@ -3356,59 +3391,51 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         break;
     case icode_op::LT:
         emit_line("ex\tde, hl");  // HL=left, DE=right
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
-        if (!true_lbl.empty()) {
-            if (is_unsigned)
-                emit_line("jp\tc, %s", true_lbl.c_str());
-            else
-                emit_line("jp\tm, %s", true_lbl.c_str());
-        }
+        if (!true_lbl.empty())
+            emit_line("jp\tc, %s", true_lbl.c_str());
         break;
     case icode_op::LE:
         emit_line("ex\tde, hl");
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
         if (!true_lbl.empty()) {
             emit_line("jp\tz, %s", true_lbl.c_str());
-            emit_line("jp\t%s, %s", is_unsigned ? "c" : "m", true_lbl.c_str());
+            emit_line("jp\tc, %s", true_lbl.c_str());
         }
         break;
     case icode_op::GT: {
         emit_line("ex\tde, hl");
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
         if (!false_lbl.empty()) {
             emit_line("jp\tz, %s", false_lbl.c_str());
-            if (!true_lbl.empty()) {
-                if (is_unsigned)
-                    emit_line("jp\tnc, %s", true_lbl.c_str());
-                else
-                    emit_line("jp\tp, %s", true_lbl.c_str());
-            }
+            if (!true_lbl.empty())
+                emit_line("jp\tnc, %s", true_lbl.c_str());
         } else {
             std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
             emit_line("jp\tz, %s", skip_lbl.c_str());
-            if (!true_lbl.empty()) {
-                if (is_unsigned)
-                    emit_line("jp\tnc, %s", true_lbl.c_str());
-                else
-                    emit_line("jp\tp, %s", true_lbl.c_str());
-            }
+            if (!true_lbl.empty())
+                emit_line("jp\tnc, %s", true_lbl.c_str());
             asm_.label(skip_lbl, false);
         }
         break;
     }
     case icode_op::GE:
         emit_line("ex\tde, hl");
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
-        if (!true_lbl.empty()) {
-            if (is_unsigned)
-                emit_line("jp\tnc, %s", true_lbl.c_str());
-            else
-                emit_line("jp\tp, %s", true_lbl.c_str());
-        }
+        if (!true_lbl.empty())
+            emit_line("jp\tnc, %s", true_lbl.c_str());
         break;
     default:
         break;
@@ -3427,6 +3454,14 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         case icode_op::GE: return icode_op::LE;
         default: return op;
         }
+    };
+    auto bias_signed_word_operands = [&]() {
+        emit_line("ld\ta, h");
+        emit_line("xor\t%s", asm_.imm(0x80).c_str());
+        emit_line("ld\th, a");
+        emit_line("ld\ta, d");
+        emit_line("xor\t%s", asm_.imm(0x80).c_str());
+        emit_line("ld\td, a");
     };
 
     bool direct_return = false;
@@ -4106,7 +4141,9 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
     emit_line("pop\tde");  // DE = left, HL = right
 
     std::string end_lbl  = "__cmp_e_" + std::to_string(rand() % 100000);
-    const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
+    const bool is_unsigned =
+        ic.left.type &&
+        (ic.left.type->is_unsigned() || ic.left.type->is_ptr());
 
     switch (cmp) {
     case icode_op::EQ:
@@ -4125,36 +4162,44 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         break;
     case icode_op::LT:
         emit_line("ex\tde, hl");  // HL=left, DE=right
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
         emit_line("ld\thl, %s", asm_.imm(1).c_str());
-        emit_line("jp\t%s, %s", is_unsigned ? "c" : "m", end_lbl.c_str());
+        emit_line("jp\tc, %s", end_lbl.c_str());
         emit_line("dec\thl");
         break;
     case icode_op::LE:
         emit_line("ex\tde, hl");
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
         emit_line("ld\thl, %s", asm_.imm(1).c_str());
         emit_line("jp\tz, %s", end_lbl.c_str());
-        emit_line("jp\t%s, %s", is_unsigned ? "c" : "m", end_lbl.c_str());
+        emit_line("jp\tc, %s", end_lbl.c_str());
         emit_line("dec\thl");
         break;
     case icode_op::GT:
         emit_line("ex\tde, hl");
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
         emit_line("ld\thl, %s", asm_.imm(0).c_str());
         emit_line("jp\tz, %s", end_lbl.c_str());
-        emit_line("jp\t%s, %s", is_unsigned ? "c" : "m", end_lbl.c_str());
+        emit_line("jp\tc, %s", end_lbl.c_str());
         emit_line("inc\tl");
         break;
     case icode_op::GE:
         emit_line("ex\tde, hl");
+        if (!is_unsigned)
+            bias_signed_word_operands();
         emit_line("or\ta, a");
         emit_line("sbc\thl, de");
         emit_line("ld\thl, %s", asm_.imm(1).c_str());
-        emit_line("jp\t%s, %s", is_unsigned ? "nc" : "p", end_lbl.c_str());
+        emit_line("jp\tnc, %s", end_lbl.c_str());
         emit_line("dec\thl");
         break;
     default:
@@ -4249,7 +4294,12 @@ void z80_gen::gen_cast(const icode &ic) {
                  use_ic.arg_loc == abi_arg_loc::REG_DE) &&
                 !temp_value_used_after(*cur_fn_, first_use + 1,
                                        ic.result.temp_id)) {
-                if (delayed_remat_safe) {
+                // A stable source can be rediscovered by gen_send().  An
+                // incoming register source cannot: its temporary may have an
+                // allocated result home (for example BC) that has not been
+                // defined yet.  Preserve that immediate hand-off explicitly
+                // instead of silently dropping the widening cast.
+                if (source_safe_for_delayed_byte_remat(ic.left)) {
                     return;
                 }
                 if (first_use == cur_ic_index_ + 1) {

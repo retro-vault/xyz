@@ -3061,7 +3061,8 @@ static bool inline_call_site(ir_function &caller, size_t call_idx,
             continue;
         label_map.emplace(
             body_ic.label_name,
-            make_unique_inline_label(caller, "__xcc_inl_" + body_ic.label_name + "_"));
+            make_unique_inline_label(caller, "__xcc_inl_" + caller.name + "_" +
+                                                 body_ic.label_name + "_"));
     }
     std::vector<icode> replacement;
     replacement.reserve(init_assigns.size() + candidate.body.size() + 4);
@@ -3142,7 +3143,8 @@ static bool inline_call_site(ir_function &caller, size_t call_idx,
 
             if (idx + 1 < candidate.body.size()) {
                 if (exit_label.empty())
-                    exit_label = make_unique_inline_label(caller, "__xcc_inl_exit_");
+                    exit_label = make_unique_inline_label(
+                        caller, "__xcc_inl_" + caller.name + "_exit_");
                 icode goto_ic;
                 goto_ic.op = icode_op::GOTO;
                 goto_ic.label_name = exit_label;
@@ -3898,7 +3900,7 @@ public:
                     candidate.local_frame_bytes == 0 &&
                     !candidate_has_internal_control_flow(candidate) &&
                     use_count <= 4 &&
-                    candidate.op_count <= 24;
+                    candidate.op_count <= few_use_max_inline_ops_;
                 const bool allow_few_use_inline =
                     allow_repeated_pure_leaf_inline ||
                     allow_broader_tuned_inline ||
@@ -4001,13 +4003,14 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<trivial_internal_leaf_inline_pass>(
             settings));
     if (settings.inline_static_functions) {
+        const bool experimental_speed = settings.level == opt_level::O3;
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
-            12,
-            24,
-            16,
-            false,
-            false,
-            false,
+            experimental_speed ? 20 : 12,
+            experimental_speed ? 40 : 24,
+            experimental_speed ? 32 : 16,
+            experimental_speed,
+            experimental_speed,
+            experimental_speed,
             settings));
     }
     if (settings.merge_identical_functions)

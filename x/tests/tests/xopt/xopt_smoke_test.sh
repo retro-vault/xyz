@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-XOPT="${1:-../../../../bin/x/bin/xopt}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+XOPT="${1:-$SCRIPT_DIR/../../../../bin/x/bin/xopt}"
+if [[ ! -x "$XOPT" ]]; then
+    echo "xopt smoke: executable not found: $XOPT" >&2
+    exit 1
+fi
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -19,6 +24,68 @@ ASM
 
 if grep -q 'push	hl' "$TMPDIR/out.s"; then
     echo "xopt smoke: push/pop was not optimized" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/ix_rmw.s" <<'ASM'
+	.area	_CODE
+_ix_rmw:
+	; sdcccall(1) prologue: ix_rmw (locals=0, temp_frame=1, stack_params=0)
+	ld	-1(ix), a
+	set	1, -1(ix)
+	ld	hl, #_sink
+	ld	a, -1(ix)
+	ld	(hl), a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/ix_rmw.s" -o "$TMPDIR/ix_rmw.out.s"
+if ! grep -Eq 'ld[[:space:]]+-1\(ix\), ?a' "$TMPDIR/ix_rmw.out.s" ||
+   ! grep -Eq 'ld[[:space:]]+a, ?-1\(ix\)' "$TMPDIR/ix_rmw.out.s"; then
+    echo "xopt smoke: SET lost the reaching IX store or modified-byte reload" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/reused_local_label.s" <<'ASM'
+	.area	_CODE
+_reused_label_first:
+	; sdcccall(1) prologue: reused_label_first (locals=0, temp_frame=2, stack_params=0)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	jp	__reused_inline_exit
+__reused_inline_exit:
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	ret
+	.area	_CODE
+_reused_label_second:
+	; sdcccall(1) prologue: reused_label_second (locals=0, temp_frame=4, stack_params=0)
+	ld	-2(ix), l
+	ld	-1(ix), h
+	ld	l, -2(ix)
+	ld	h, -1(ix)
+	ld	-4(ix), l
+	ld	-3(ix), h
+	jp	__reused_inline_exit
+	ld	hl, #0
+	ld	-4(ix), l
+	ld	-3(ix), h
+__reused_inline_exit:
+	ld	e, -4(ix)
+	ld	d, -3(ix)
+	ret
+ASM
+
+"$XOPT" -O2 "$TMPDIR/reused_local_label.s" \
+    -o "$TMPDIR/reused_local_label.out.s"
+if ! awk '
+    /^_reused_label_second:/ { in_fn=1; next }
+    in_fn && /^[[:space:]]*\.area/ { in_fn=0 }
+    in_fn && /ld[[:space:]]+-4\(ix\),[[:space:]]*l/ { low=1 }
+    in_fn && /ld[[:space:]]+-3\(ix\),[[:space:]]*h/ { high=1 }
+    END { exit low && high ? 0 : 1 }
+' "$TMPDIR/reused_local_label.out.s"; then
+    echo "xopt smoke: duplicate local label hid a live IX result store" >&2
     exit 1
 fi
 
@@ -1037,6 +1104,24 @@ grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*e' "$TMPDIR/de_result_hl_forward_la
 grep -Eq 'ld[[:space:]]+-1\(ix\),[[:space:]]*d' "$TMPDIR/de_result_hl_forward_label_overwrite.out.s"
 if grep -Eq 'push[[:space:]]+de|pop[[:space:]]+hl' "$TMPDIR/de_result_hl_forward_label_overwrite.out.s"; then
     echo "xopt smoke: DE result through fallthrough label was not forwarded" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/legacy_de_result_return.s" <<'ASM'
+_legacy_de_result_return:
+	; sdcccall(0) prologue: legacy_de_result_return (locals=0, temp_frame=0, stack_params=0)
+	call	_modern_result
+	push	de
+	pop	hl
+	ld	b,h
+	ld	c,l
+	; epilogue: legacy_de_result_return
+	jp	__sdcc_leave_ix
+ASM
+
+"$XOPT" -Os "$TMPDIR/legacy_de_result_return.s" -o "$TMPDIR/legacy_de_result_return.out.s"
+if ! grep -Eq 'pop[[:space:]]+hl|ex[[:space:]]+de,[[:space:]]*hl' "$TMPDIR/legacy_de_result_return.out.s"; then
+    echo "xopt smoke: legacy HL return conversion was discarded" >&2
     exit 1
 fi
 

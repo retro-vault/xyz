@@ -296,6 +296,17 @@ int z80_gen::alloc_temp(int temp_id, int sz) {
     int offset = next_temp_slot_ - local_bytes_;
     temp_slots_[temp_id] = offset;
 
+    // RECEIVE lowering runs before the prologue allocates its frame. If a
+    // fused consumer made an incoming argument look spill-free during frame
+    // planning, reserve the late slot in that same frame rather than moving
+    // SP early. Early movement made local-address calculations overlap the
+    // newly allocated slot.
+    if (reserving_prologue_spills_) {
+        temp_stack_bytes_ += sz;
+        temp_frame_bytes_ += sz;
+        return offset;
+    }
+
     // Some temps are intentionally left in incoming argument registers for an
     // initial use and only spill later if another use appears. Those late
     // materializations need real stack space even when the precomputed temp

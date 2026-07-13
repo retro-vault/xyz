@@ -1556,11 +1556,20 @@ public:
 
         auto is_foldable_base = [](const operand &op) {
             return op.is_symbol() &&
+                   !op.is_global &&
                    !op.is_func &&
                    !op.is_tls &&
                    !op.is_sfr &&
-                   op.type;
+                   op.type &&
+                   op.type->is_integer() &&
+                   op.type->size() <= 2;
         };
+
+        std::unordered_map<int, int> temp_def_count;
+        for (const auto &ic : fn.icodes) {
+            if (defines_result(ic) && ic.result.is_temp())
+                ++temp_def_count[ic.result.temp_id];
+        }
 
         std::unordered_map<int, addr_expr> temp_addr;
         bool changed = false;
@@ -1568,6 +1577,8 @@ public:
             switch (ic.op) {
             case icode_op::FUNCTION:
             case icode_op::ENDFUNCTION:
+                temp_addr.clear();
+                break;
             case icode_op::LABEL:
             case icode_op::GOTO:
             case icode_op::IFX:
@@ -1575,7 +1586,24 @@ public:
             case icode_op::BLOCK_FILL:
             case icode_op::RETURN:
             case icode_op::INLINE_ASM:
-                temp_addr.clear();
+                // A single-definition address of a small integer local is
+                // invariant across control-flow boundaries. Keep arrays,
+                // floating objects, aggregates, pointers, and globals
+                // conservative across loop backedges.
+                for (auto it = temp_addr.begin(); it != temp_addr.end();) {
+                    auto count = temp_def_count.find(it->first);
+                    const bool scalar_base =
+                        !it->second.base.is_global &&
+                        it->second.base.type &&
+                        it->second.base.type->is_integer() &&
+                        it->second.base.type->size() <= 2;
+                    if (count == temp_def_count.end() || count->second != 1 ||
+                        !scalar_base) {
+                        it = temp_addr.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
                 break;
             default:
                 break;
@@ -4394,12 +4422,50 @@ public:
 
     bool run(ir_function &fn) override {
         std::unordered_map<int, int> use_counts;
+        std::unordered_map<int, std::vector<const icode *>> temp_defs;
         for (const auto &ic : fn.icodes) {
             for_each_use_operand(ic, [&](const operand &op) {
                 if (op.is_temp())
                     ++use_counts[op.temp_id];
             });
+            if (ic.result.is_temp())
+                temp_defs[ic.result.temp_id].push_back(&ic);
         }
+
+        std::function<bool(const operand &, int,
+                           std::unordered_set<int> &)> is_boolean_value;
+        is_boolean_value = [&](const operand &value, int depth,
+                               std::unordered_set<int> &visiting) {
+            if (value.type && value.type->kind == type_kind::BOOL)
+                return true;
+            if (value.kind == operand_kind::INT_CONST)
+                return value.ival == 0 || value.ival == 1;
+            if (!value.is_temp() || depth > 8 || visiting.count(value.temp_id))
+                return false;
+
+            auto defs = temp_defs.find(value.temp_id);
+            if (defs == temp_defs.end() || defs->second.empty())
+                return false;
+
+            visiting.insert(value.temp_id);
+            for (const icode *def : defs->second) {
+                if (is_compare_op(def->op))
+                    continue;
+                if ((def->op == icode_op::ASSIGN || def->op == icode_op::CAST) &&
+                    is_boolean_value(def->left, depth + 1, visiting)) {
+                    continue;
+                }
+                visiting.erase(value.temp_id);
+                return false;
+            }
+            visiting.erase(value.temp_id);
+            return true;
+        };
+
+        auto is_boolean_value_root = [&](const operand &value) {
+            std::unordered_set<int> visiting;
+            return is_boolean_value(value, 0, visiting);
+        };
 
         std::vector<bool> erase(fn.icodes.size(), false);
         bool changed = false;
@@ -4424,12 +4490,13 @@ public:
 
             operand source = left_temp ? ic.left : ic.right;
             const int64_t other = left_temp ? ic.right.ival : ic.left.ival;
-            if ((ic.op == icode_op::NE && other == 0) ||
-                (ic.op == icode_op::EQ && other == 1))
+            if (ic.op == icode_op::NE && other == 0)
                 return std::make_pair(source, true);
-            if ((ic.op == icode_op::EQ && other == 0) ||
-                (ic.op == icode_op::NE && other == 1))
+            if (ic.op == icode_op::EQ && other == 0)
                 return std::make_pair(source, false);
+            if (other == 1 && is_boolean_value_root(source)) {
+                return std::make_pair(source, ic.op == icode_op::EQ);
+            }
             return std::nullopt;
         };
 
@@ -5340,6 +5407,17 @@ public:
 
     bool run(ir_function &fn) override {
         if (fn.icodes.empty()) return false;
+
+        // Large lowered switch dispatchers create high-fanout cyclic CFGs.
+        // The current symbol-value merge is not conservative enough for
+        // those graphs (notably VM dispatch loops), so leave them to the
+        // temp-only propagation pass below.
+        const size_t branch_count = static_cast<size_t>(std::count_if(
+            fn.icodes.begin(), fn.icodes.end(), [](const icode &ic) {
+                return ic.op == icode_op::IFX;
+            }));
+        if (branch_count > 8)
+            return false;
 
         alias_info alias = build_alias_info(fn);
         control_flow_graph cfg(fn);
@@ -6900,6 +6978,18 @@ public:
 
                 for (size_t j = i + 3; j < block.end; ++j) {
                     const icode &consumer = fn.icodes[j];
+                    // SEND materializes an ABI argument in a physical register
+                    // or on the machine stack.  Moving the update past it can
+                    // clobber that argument before CALL (for example in
+                    // `putc(*cursor++, ctx)`).  Calls and inline assembly are
+                    // barriers for the same reason, even when they do not
+                    // mention the recovered value explicitly.
+                    if (consumer.op == icode_op::SEND ||
+                        consumer.op == icode_op::CALL ||
+                        consumer.op == icode_op::INLINE_ASM) {
+                        safe = false;
+                        break;
+                    }
                     if (references_temp(consumer.result, base_temp) ||
                         references_temp(consumer.left, base_temp) ||
                         references_temp(consumer.right, base_temp) ||
@@ -6927,8 +7017,7 @@ public:
                     if (consumer.op == icode_op::GOTO ||
                         consumer.op == icode_op::IFX ||
                         consumer.op == icode_op::RETURN ||
-                        consumer.op == icode_op::CALL ||
-                        consumer.op == icode_op::INLINE_ASM) {
+                        consumer.op == icode_op::CALL) {
                         safe = false;
                         break;
                     }
@@ -9655,7 +9744,8 @@ public:
                    !op.is_tls &&
                    !op.is_sfr &&
                    !op.is_func &&
-                   !op.is_param;
+                   !op.is_param &&
+                   op.type && op.type->kind == type_kind::ARRAY;
         };
 
         std::function<bool(const operand &, operand &,

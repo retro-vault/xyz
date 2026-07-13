@@ -26,9 +26,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-X_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-REPO_ROOT="$(cd "$X_ROOT/.." && pwd)"
-TEST_ROOT="$SCRIPT_DIR/data/exec"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../../.." && pwd)"
+X_ROOT="$REPO_ROOT/x"
+TEST_ROOT="$X_ROOT/tests/tests/c23/xcc/data/exec"
 INCLUDE_DIR="$TEST_ROOT/include"
 DEFAULT_XCC="$REPO_ROOT/bin/x/bin/xcc"
 

@@ -1416,6 +1416,23 @@ static bool is_inside_sdcccall1_function(const std::vector<asm_line> &lines,
     return false;
 }
 
+static bool is_inside_legacy_hl_return_function(
+        const std::vector<asm_line> &lines, size_t index) {
+    for (size_t scan = std::min(index + 1, lines.size()); scan > 0;) {
+        const asm_line &line = lines[--scan];
+        if (line.comment.rfind("sdcccall(0) prologue:", 0) == 0 ||
+            line.comment.rfind("z88dk callee prologue:", 0) == 0) {
+            return true;
+        }
+        if (line.comment.find(" prologue:") != std::string::npos ||
+            is_section_directive(line) ||
+            line.label.rfind("__xopt_", 0) == 0) {
+            return false;
+        }
+    }
+    return false;
+}
+
 static bool hl_dead_before_read_or_modern_return(
         const std::vector<asm_line> &lines,
         size_t start,
@@ -1440,7 +1457,8 @@ static bool hl_dead_before_read_or_modern_return(
             continue;
         if (overwrites_hl_without_reading_it(lines, k))
             return finish(true);
-        if (is_modern_return_tail(lines, k))
+        if (!is_inside_legacy_hl_return_function(lines, k) &&
+            is_modern_return_tail(lines, k))
             return finish(true);
         if (is_ex_de_hl(line) &&
             path_overwrites_pair_before_read(lines, k + 1, "de", 'e', 'd')) {
@@ -1754,7 +1772,19 @@ static bool line_writes_ix_offset(const asm_line &line, int offset) {
                parse_ix_ref(trim(dst), dst_offset) &&
                dst_offset == offset;
     }
-    if (line.mnemonic == "inc" || line.mnemonic == "dec") {
+    if (line.mnemonic == "set" || line.mnemonic == "res") {
+        std::string bit;
+        std::string target;
+        int target_offset = 0;
+        return split_ld(line.operands, bit, target) &&
+               parse_ix_ref(trim(target), target_offset) &&
+               target_offset == offset;
+    }
+    if (line.mnemonic == "inc" || line.mnemonic == "dec" ||
+        line.mnemonic == "rl" || line.mnemonic == "rr" ||
+        line.mnemonic == "rlc" || line.mnemonic == "rrc" ||
+        line.mnemonic == "sla" || line.mnemonic == "sra" ||
+        line.mnemonic == "srl" || line.mnemonic == "sll") {
         int op_offset = 0;
         return parse_ix_ref(trim(line.operands), op_offset) &&
                op_offset == offset;
@@ -1768,7 +1798,17 @@ static bool line_writes_any_ix_offset(const asm_line &line) {
     int offset = 0;
     if (line.mnemonic == "ld" && split_ld(line.operands, dst, src))
         return parse_ix_ref(trim(dst), offset);
-    if (line.mnemonic == "inc" || line.mnemonic == "dec")
+    if (line.mnemonic == "set" || line.mnemonic == "res") {
+        std::string bit;
+        std::string target;
+        return split_ld(line.operands, bit, target) &&
+               parse_ix_ref(trim(target), offset);
+    }
+    if (line.mnemonic == "inc" || line.mnemonic == "dec" ||
+        line.mnemonic == "rl" || line.mnemonic == "rr" ||
+        line.mnemonic == "rlc" || line.mnemonic == "rrc" ||
+        line.mnemonic == "sla" || line.mnemonic == "sra" ||
+        line.mnemonic == "srl" || line.mnemonic == "sll")
         return parse_ix_ref(trim(line.operands), offset);
     return false;
 }
@@ -10275,8 +10315,16 @@ static bool ix_value_may_be_read_before_rewrite(
     const size_t count = function_end - function_begin;
     std::vector<unsigned char> live_in(count, 0);
 
+    auto find_function_label = [&](const std::string &target) {
+        for (size_t k = function_begin; k < function_end; ++k) {
+            if (lines[k].label == target)
+                return k;
+        }
+        return lines.size();
+    };
+
     auto target_is_live = [&](const std::string &target) {
-        const size_t target_index = find_label_index(lines, target);
+        const size_t target_index = find_function_label(target);
         return target_index >= function_begin && target_index < function_end &&
                live_in[target_index - function_begin] != 0;
     };
@@ -10302,7 +10350,7 @@ static bool ix_value_may_be_read_before_rewrite(
                              (k + 1 < function_end &&
                               live_in[k + 1 - function_begin] != 0);
                 } else if (parse_unconditional_jump(line, target)) {
-                    const size_t target_index = find_label_index(lines, target);
+                    const size_t target_index = find_function_label(target);
                     if (target_index >= function_begin &&
                         target_index < function_end) {
                         needed = live_in[target_index - function_begin] != 0;
@@ -13968,6 +14016,25 @@ bool z80_peep::rule_superopt_register_move_sequences(size_t i) {
     auto &b = lines_[i + 1];
     if (!a.label.empty() || !b.label.empty())
         return false;
+
+    // ex de,hl; ld h,d; ld l,e leaves both pairs holding the original HL.
+    // Copying HL to DE directly has identical register/flag semantics.
+    if (i + 2 < lines_.size() &&
+        a.mnemonic == "ex" && trim(a.operands) == "de, hl" &&
+        b.mnemonic == "ld" && lines_[i + 2].label.empty()) {
+        std::string b_dst, b_src, c_dst, c_src;
+        if (split_ld(b.operands, b_dst, b_src) &&
+            trim(b_dst) == "h" && trim(b_src) == "d" &&
+            lines_[i + 2].mnemonic == "ld" &&
+            split_ld(lines_[i + 2].operands, c_dst, c_src) &&
+            trim(c_dst) == "l" && trim(c_src) == "e") {
+            lines_[i] = asm_line::parse("\tld\td, h");
+            lines_[i + 1] = asm_line::parse("\tld\te, l");
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
+            return true;
+        }
+    }
+
     if (a.mnemonic != "ld" || b.mnemonic != "ld")
         return false;
 
@@ -13980,6 +14047,34 @@ bool z80_peep::rule_superopt_register_move_sequences(size_t i) {
     a_src = trim(a_src);
     b_dst = trim(b_dst);
     b_src = trim(b_src);
+
+    // Preserve the exact final A/DE values of the common byte-ALU shuttle,
+    // but use the original source registers directly.
+    if (i + 5 < lines_.size()) {
+        static const char *const dsts[] = {"a", "e", "a", "d", "a"};
+        static const char *const srcs[] = {"l", "a", "c", "a", "e"};
+        bool match = true;
+        for (size_t k = 0; k < 5; ++k) {
+            std::string d, s;
+            if (!lines_[i + k].label.empty() ||
+                lines_[i + k].mnemonic != "ld" ||
+                !split_ld(lines_[i + k].operands, d, s) ||
+                trim(d) != dsts[k] || trim(s) != srcs[k]) {
+                match = false;
+                break;
+            }
+        }
+        if (match && lines_[i + 5].label.empty() &&
+            is_accumulator_reg_alu(lines_[i + 5], "xor", "d")) {
+            lines_[i] = asm_line::parse("\tld\te, l");
+            lines_[i + 1] = asm_line::parse("\tld\td, c");
+            lines_[i + 2] = asm_line::parse("\tld\ta, l");
+            lines_[i + 3] = asm_line::parse("\txor\tc");
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 4),
+                         lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
+            return true;
+        }
+    }
 
     // ld r1,r2; ld r2,r1  ->  ld r1,r2
     // After the first move, the second writes r2 with the value it already
@@ -16312,6 +16407,80 @@ bool z80_peep::rule_superopt_de_xor_right5(size_t i) {
 }
 
 bool z80_peep::rule_superopt_hl_xor_right5_stack(size_t i) {
+    // Preserve a word in BC while computing its logical right shift by seven,
+    // then reload it for the XOR.  The generated stack reload costs 38 cycles;
+    // four register copies cost 16 and are also two bytes smaller.  Require
+    // the following full-word XOR to overwrite BC, preserving exact liveness.
+    if (i + 26 < lines_.size()) {
+        bool labels_clear = true;
+        for (size_t j = i; j <= i + 26; ++j) {
+            if (!lines_[j].label.empty()) {
+                labels_clear = false;
+                break;
+            }
+        }
+
+        std::string dst, src;
+        int lo_off = 0, hi_off = 0, reload_lo = 0, reload_hi = 0;
+        bool match = labels_clear &&
+            lines_[i].mnemonic == "ld" &&
+            split_ld(lines_[i].operands, dst, src) &&
+            parse_ix_ref(trim(dst), lo_off) && trim(src) == "l";
+        if (match) {
+            match = lines_[i + 1].mnemonic == "ld" &&
+                split_ld(lines_[i + 1].operands, dst, src) &&
+                parse_ix_ref(trim(dst), hi_off) && hi_off == lo_off + 1 &&
+                trim(src) == "h";
+        }
+        for (size_t k = 0; match && k < 7; ++k) {
+            const size_t s = i + 2 + 2 * k;
+            match = lines_[s].mnemonic == "srl" &&
+                    trim(lines_[s].operands) == "h" &&
+                    lines_[s + 1].mnemonic == "rr" &&
+                    trim(lines_[s + 1].operands) == "l";
+        }
+        if (match)
+            match = lines_[i + 16].mnemonic == "ex" &&
+                    trim(lines_[i + 16].operands) == "de, hl";
+        if (match)
+            match = lines_[i + 17].mnemonic == "ld" &&
+                    split_ld(lines_[i + 17].operands, dst, src) &&
+                    trim(dst) == "l" && parse_ix_ref(trim(src), reload_lo) &&
+                    reload_lo == lo_off;
+        if (match)
+            match = lines_[i + 18].mnemonic == "ld" &&
+                    split_ld(lines_[i + 18].operands, dst, src) &&
+                    trim(dst) == "h" && parse_ix_ref(trim(src), reload_hi) &&
+                    reload_hi == hi_off;
+
+        auto match_ld = [&](size_t pos, const char *want_dst,
+                            const char *want_src) {
+            return lines_[pos].mnemonic == "ld" &&
+                   split_ld(lines_[pos].operands, dst, src) &&
+                   trim(dst) == want_dst && trim(src) == want_src;
+        };
+        if (match)
+            match = match_ld(i + 19, "a", "l") &&
+                    is_accumulator_reg_alu(lines_[i + 20], "xor", "e") &&
+                    match_ld(i + 21, "l", "a") &&
+                    match_ld(i + 22, "a", "h") &&
+                    is_accumulator_reg_alu(lines_[i + 23], "xor", "d") &&
+                    match_ld(i + 24, "h", "a") &&
+                    match_ld(i + 25, "b", "h") &&
+                    match_ld(i + 26, "c", "l");
+
+        if (match) {
+            lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                          asm_line::parse("\tld\tb, h"));
+            lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i + 3),
+                          asm_line::parse("\tld\tc, l"));
+            // The two insertions move the reloads from +17/+18 to +19/+20.
+            lines_[i + 19] = asm_line::parse("\tld\tl, c");
+            lines_[i + 20] = asm_line::parse("\tld\th, b");
+            return true;
+        }
+    }
+
     if (i + 21 >= lines_.size())
         return false;
 

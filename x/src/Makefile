@@ -6,7 +6,7 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 DEFAULT_PLATFORM ?= none
 
-SUBDIRS := xld xgdb xemu xcc xopt xas xar xobjcopy
+SUBDIRS := xld xgdb xemu xopt xcc xas xar xobjcopy
 
 .PHONY: all clean $(SUBDIRS)
 
@@ -20,6 +20,9 @@ $(SUBDIRS):
 		HOST_BIN_DIR=$(HOST_BIN_DIR) \
 		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
 		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM)
+
+# xcc links libxopt, so even parallel product builds must finish xopt first.
+xcc: xopt
 
 clean:
 	@for d in $(SUBDIRS); do \

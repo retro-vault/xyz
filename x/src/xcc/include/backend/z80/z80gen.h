@@ -158,6 +158,7 @@ private:
     int next_temp_slot_ = 0;
     int temp_stack_bytes_ = 0;
     int temp_frame_bytes_ = 0;
+    bool reserving_prologue_spills_ = false;
     size_t cur_ic_index_ = 0;
     std::unordered_set<size_t> skipped_icodes_;
     size_t local_label_counter_ = 0;

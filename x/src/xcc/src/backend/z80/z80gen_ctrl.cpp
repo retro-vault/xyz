@@ -33,6 +33,30 @@ bool supports_direct_call_ifx(call_abi abi, int size) {
     return size == 1 || size == 2;
 }
 
+bool compatible_direct_return_abis(call_abi caller, call_abi callee) {
+    caller = effective_call_abi(caller);
+    callee = effective_call_abi(callee);
+    if (caller == callee)
+        return true;
+
+    auto return_family = [](call_abi abi) {
+        switch (abi) {
+        case call_abi::SDCCCALL0:
+        case call_abi::Z88DK_CALLEE:
+            return 1; // Legacy byte/word results use L/HL.
+        case call_abi::SDCCCALL1:
+        case call_abi::Z88DK_SMALLC:
+        case call_abi::Z88DK_FASTCALL:
+            return 2; // Modern byte/word results use A/DE.
+        default:
+            return 0;
+        }
+    };
+
+    const int caller_family = return_family(caller);
+    return caller_family != 0 && caller_family == return_family(callee);
+}
+
 bool is_truth_test_preserving_integer_cast(const icode &ic) {
     if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type)
         return false;
@@ -445,7 +469,9 @@ void z80_gen::gen_call(const icode &ic) {
     if (cur_fn_ && !ic.result.is_none() &&
         cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
         const auto &next = cur_fn_->icodes[cur_ic_index_ + 1];
-        direct_return = next.op == icode_op::RETURN &&
+        direct_return = compatible_direct_return_abis(cur_fn_->abi,
+                                                       ic.callee_abi) &&
+                        next.op == icode_op::RETURN &&
                         same_call_result_operand(next.left, ic.result);
         direct_ifx = ic.result.is_temp() &&
                      next.op == icode_op::IFX &&

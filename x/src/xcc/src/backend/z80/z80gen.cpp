@@ -540,6 +540,7 @@ void z80_gen::emit_function(const ir_function &fn) {
     next_temp_slot_ = 0;
     temp_stack_bytes_ = 0;
     temp_frame_bytes_ = 0;
+    reserving_prologue_spills_ = false;
     cur_convention_ = &get_abi_convention(fn.abi);
     cur_ic_index_ = 0;
     skipped_icodes_.clear();
@@ -4990,7 +4991,9 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
 }
 
 void z80_gen::emit_prologue(const ir_function &fn) {
+    reserving_prologue_spills_ = true;
     cur_convention_->emit_prologue(*this, fn);
+    reserving_prologue_spills_ = false;
 }
 
 void z80_gen::emit_epilogue(const ir_function &fn) {
@@ -5064,6 +5067,15 @@ bool z80_gen::get_zero_extended_u8_source(const operand &op, operand &src) const
         [&](const operand &candidate) {
             if (!candidate.is_temp())
                 return true;
+            // Recursive widening rematerialization creates a use that is not
+            // visible to frame-slot liveness. Require an ordinary IR use at
+            // or beyond this point so the source's colored slot/register is
+            // still reserved; otherwise load the already-widened value.
+            if (!cur_fn_ ||
+                !temp_value_used_after(*cur_fn_, cur_ic_index_,
+                                       candidate.temp_id)) {
+                return false;
+            }
             auto home_it = temp_regs_.find(candidate.temp_id);
             if (home_it == temp_regs_.end())
                 return true;
@@ -5195,6 +5207,11 @@ bool z80_gen::get_sign_extended_i8_source(const operand &op, operand &src) const
         [&](const operand &candidate) {
             if (!candidate.is_temp())
                 return true;
+            if (!cur_fn_ ||
+                !temp_value_used_after(*cur_fn_, cur_ic_index_,
+                                       candidate.temp_id)) {
+                return false;
+            }
             auto home_it = temp_regs_.find(candidate.temp_id);
             if (home_it == temp_regs_.end())
                 return true;

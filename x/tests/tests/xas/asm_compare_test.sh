@@ -3,7 +3,7 @@
 #
 # For each xcc core test: compile C → assembly with xcc, then assemble
 # with both xas and sdasz80, link both with xld, and compare the
-# resulting Z80 code bytes (stripping the XL binary header).
+# resulting Z80 code bytes (stripping an XL header when one is present).
 #
 # A test is SKIPPED (not FAILED) when both assemblers produce output that
 # xld can't link for the same reason (e.g. missing runtime library).
@@ -49,16 +49,20 @@ done
 
 # Extract code bytes from an XL binary, skipping the 12-byte base header
 # and any reloc table entries (4 bytes each, count at bytes 8-9).
-xl_code_bytes() {
+linked_code_bytes() {
     local f="$1"
     python3 - "$f" <<'EOF'
 import sys, struct
 data = open(sys.argv[1], 'rb').read()
-if data[:2] != b'XL':
-    sys.exit(1)
-reloc_count = struct.unpack_from('<H', data, 8)[0]
-code_start = 12 + reloc_count * 4
-sys.stdout.buffer.write(data[code_start:])
+if data[:2] == b'XL':
+    if len(data) < 12:
+        sys.exit(1)
+    reloc_count = struct.unpack_from('<H', data, 8)[0]
+    code_start = 12 + reloc_count * 4
+    if code_start > len(data):
+        sys.exit(1)
+    data = data[code_start:]
+sys.stdout.buffer.write(data)
 EOF
 }
 
@@ -137,13 +141,13 @@ for c_file in "$TESTS_DIR"/*.c; do
 
     # Step 3a: link xas output (with runtime library).
     xas_link_ok=true
-    if ! "$XLD" -e "$entry" -o "$bin_xas" "$rel_xas" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_xas_err.txt"; then
+    if ! "$XLD" -nostdlib -e "$entry" -o "$bin_xas" "$rel_xas" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_xas_err.txt"; then
         xas_link_ok=false
     fi
 
     # Step 3b: link sdasz80 output (with runtime library).
     sdcc_link_ok=true
-    if ! "$XLD" -e "$entry" -o "$bin_sdcc" "$rel_sdcc" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_sdcc_err.txt"; then
+    if ! "$XLD" -nostdlib -e "$entry" -o "$bin_sdcc" "$rel_sdcc" "$RUNTIME_LIB" 2>"$TMPDIR/xlink_sdcc_err.txt"; then
         sdcc_link_ok=false
     fi
 
@@ -166,12 +170,12 @@ for c_file in "$TESTS_DIR"/*.c; do
     fi
 
     # Step 4: extract code bytes.
-    if ! xl_code_bytes "$bin_xas" > "$code_xas" 2>/dev/null; then
-        echo "${RED}FAIL${RESET} $name  [could not parse xas binary header]"
+    if ! linked_code_bytes "$bin_xas" > "$code_xas" 2>/dev/null; then
+        echo "${RED}FAIL${RESET} $name  [could not parse xas linked output]"
         FAIL=$((FAIL+1)); continue
     fi
-    if ! xl_code_bytes "$bin_sdcc" > "$code_sdcc" 2>/dev/null; then
-        echo "${RED}FAIL${RESET} $name  [could not parse sdcc binary header]"
+    if ! linked_code_bytes "$bin_sdcc" > "$code_sdcc" 2>/dev/null; then
+        echo "${RED}FAIL${RESET} $name  [could not parse sdcc linked output]"
         FAIL=$((FAIL+1)); continue
     fi
 

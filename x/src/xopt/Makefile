@@ -11,6 +11,7 @@ CXXFLAGS += -DXTOOLS_VERSION=\"$(XTOOLS_VERSION)\"
 XOPT_DIR := $(ROOT)/lib/xopt
 XOPT_INC := $(XOPT_DIR)/include
 XOPT_LIB := $(BUILD_DIR)/lib/libxopt.a
+XOPT_SRCS := $(wildcard $(XOPT_DIR)/src/*.cpp $(XOPT_DIR)/include/xopt/*.h)
 
 INCLUDE := -I$(XOPT_INC)
 TARGET := $(HOST_BIN_DIR)/xopt
@@ -20,14 +21,15 @@ SRCS := src/main.cpp
 OBJS := $(patsubst src/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all test clean xopt-lib
+.PHONY: all test clean
 
 TEST_DIR := $(ROOT)/tests/tests/xopt
 
-all: xopt-lib $(TARGET)
+all: $(TARGET)
 
-xopt-lib:
-	$(MAKE) -C $(XOPT_DIR)
+$(XOPT_LIB): $(XOPT_SRCS)
+	$(MAKE) -C $(XOPT_DIR) ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) \
+		DIST_DIR=$(DIST_DIR)
 
 $(TARGET): $(OBJS) $(XOPT_LIB) | $(HOST_BIN_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(XOPT_LIB)

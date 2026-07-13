@@ -165,6 +165,11 @@ struct optimization_settings {
         case opt_level::O3:
             s = for_level(opt_level::Of);
             s.level = level;
+            // O3 is the experimental speed profile.  Re-enable cross-block
+            // value propagation here so the wider O3 inliner does not leave
+            // every remapped helper temporary as a separate stack value.
+            s.value_propagation = true;
+            s.address_deref_fold = true;
             break;
 
         case opt_level::Os:
