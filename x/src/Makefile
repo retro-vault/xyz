@@ -8,11 +8,22 @@ DEFAULT_PLATFORM ?= none
 
 SUBDIRS := xld xgdb xemu xopt xcc xas xar xobjcopy
 
-.PHONY: all clean $(SUBDIRS)
+.PHONY: all clean host-libs $(SUBDIRS)
 
 all: $(SUBDIRS)
 
-$(SUBDIRS):
+# Build the shared host libraries once before parallel tool builds.  Several
+# tools also retain their standalone recursive prerequisites, but funnelling
+# the initial build through this target prevents concurrent `ar` writers when
+# x/src is invoked directly with -j.
+host-libs:
+	$(MAKE) -C $(X_ROOT)/lib \
+		ROOT=$(X_ROOT) \
+		BUILD_DIR=$(BUILD_DIR) \
+		DIST_DIR=$(DIST_DIR) \
+		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
+
+$(SUBDIRS): host-libs
 	$(MAKE) -C $@ \
 		ROOT=$(X_ROOT) \
 		BUILD_DIR=$(BUILD_DIR) \

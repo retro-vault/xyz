@@ -14,6 +14,7 @@ BARE_ROOT="$BENCH_ROOT/bare"
 NUMERIC_ROOT="$BENCH_ROOT/numeric"
 PORTABLE_ROOT="$BENCH_ROOT/portable"
 Z88DK_ROOT="$BENCH_ROOT/z88dk"
+Z88DK24_ROOT="$BENCH_ROOT/z88dk24"
 BARE_INCLUDE_DIR="$BARE_ROOT/include"
 NUMERIC_INCLUDE_DIR="$NUMERIC_ROOT/include"
 PORTABLE_INCLUDE_DIR="$PORTABLE_ROOT/include"
@@ -78,6 +79,7 @@ BARE_FILTER=""
 NUMERIC_FILTER=""
 PORTABLE_FILTER=""
 Z88DK_FILTER=""
+Z88DK24_FILTER=""
 BARE_CYCLES=20000000
 NUMERIC_CYCLES=200000000
 PORTABLE_CYCLES=800000000
@@ -97,6 +99,7 @@ NUMERIC_BENCHMARKS_RUN="n/a"
 NUMERIC_KINDS_RUN="n/a"
 PORTABLE_BENCHMARKS_RUN="n/a"
 Z88DK_BENCHMARKS_RUN="n/a"
+Z88DK24_BENCHMARKS_RUN="n/a"
 
 declare -A EXPECTED_RETURNS
 
@@ -111,7 +114,8 @@ Arguments:
                          Default: $DEFAULT_XCC
 
 Options:
-  --suite <name>         Select suite: all, bare, numeric, portable, z88dk.
+  --suite <name>         Select suite: all, bare, numeric, portable, z88dk,
+                         or z88dk24 (complete upstream full programs).
                          Default: $SUITE
   --outdir <dir>         Output root for generated reports.
                          Default: $OUTDIR
@@ -120,6 +124,7 @@ Options:
   --numeric-filter <re>  Filter only numeric benchmarks.
   --portable-filter <re> Filter only portable benchmarks.
   --z88dk-filter <regex> Filter only z88dk benchmarks.
+  --z88dk24-filter <re>  Filter only full-program z88dk benchmarks.
   --cycles <n>           Backward-compatible alias for --bare-cycles.
   --bare-cycles <n>      Cycle budget for bare-metal benchmarks.
                          Default: $BARE_CYCLES
@@ -205,6 +210,11 @@ parse_args() {
         --z88dk-filter)
             [[ $# -ge 2 ]] || die "--z88dk-filter requires a value"
             Z88DK_FILTER="$2"
+            shift 2
+            ;;
+        --z88dk24-filter)
+            [[ $# -ge 2 ]] || die "--z88dk24-filter requires a value"
+            Z88DK24_FILTER="$2"
             shift 2
             ;;
         --cycles|--bare-cycles)
@@ -1524,6 +1534,14 @@ run_numeric_suite() {
     echo "${GREEN}Wrote numeric benchmark results to:${RESET} $suite_outdir"
 }
 
+run_z88dk24_suite() {
+    local suite_outdir="$OUTDIR/z88dk24"
+    XCC="$XCC" OUT="$suite_outdir" FILTER="$Z88DK24_FILTER" CYCLES="$Z88DK_CYCLES" \
+        bash "$Z88DK24_ROOT/run.sh"
+    Z88DK24_BENCHMARKS_RUN="$(awk 'END { print NR > 0 ? NR - 1 : 0 }' \
+        "$suite_outdir/results.csv")"
+}
+
 write_top_summary() {
     local summary_md="$OUTDIR/summary.md"
 
@@ -1564,6 +1582,14 @@ write_top_summary() {
                 "$OUTDIR/z88dk/summary.md" \
                 "$OUTDIR/z88dk/results.csv"
         fi
+        if [[ "$SUITE" == "all" || "$SUITE" == "z88dk24" ]]; then
+            printf '| `%s` | %s | `%s` | `%s` | `%s` |\n' \
+                "z88dk-full-program" \
+                "$Z88DK24_BENCHMARKS_RUN" \
+                "xcc M Os/Of + z88dk sccz80/sdcc/80cc frame/stack" \
+                "$OUTDIR/z88dk24/summary.md" \
+                "$OUTDIR/z88dk24/results.csv"
+        fi
     } > "$summary_md"
 
     cat "$summary_md"
@@ -1575,8 +1601,8 @@ main() {
     parse_args "$@"
 
     case "$SUITE" in
-    all|bare|numeric|portable|z88dk) ;;
-    *) die "unknown suite '$SUITE' (expected: all, bare, numeric, portable, z88dk)" ;;
+    all|bare|numeric|portable|z88dk|z88dk24) ;;
+    *) die "unknown suite '$SUITE' (expected: all, bare, numeric, portable, z88dk, z88dk24)" ;;
     esac
 
     [[ -x "$XCC" ]] || die "xcc not found at '$XCC'"
@@ -1595,6 +1621,9 @@ main() {
     fi
     if [[ -z "$Z88DK_FILTER" ]]; then
         Z88DK_FILTER="$FILTER"
+    fi
+    if [[ -z "$Z88DK24_FILTER" ]]; then
+        Z88DK24_FILTER="$FILTER"
     fi
 
     need_cmd python3
@@ -1631,6 +1660,13 @@ main() {
         echo "Running z88dk benchmarks..."
         echo ""
         run_z88dk_suite
+        echo ""
+    fi
+
+    if [[ "$SUITE" == "all" || "$SUITE" == "z88dk24" ]]; then
+        echo "Running complete z88dk full-program benchmarks..."
+        echo ""
+        run_z88dk24_suite
         echo ""
     fi
 

@@ -344,6 +344,11 @@ private:
     // for small stack-frame allocations where the add flags are dead.
     bool rule_small_stack_alloc_push_af(size_t i);
 
+    // ld rr,#N; ld (absolute),rr; ...; ld rr,#N
+    //   → remove the repeated load while intervening instructions are only
+    //     absolute stores from the unchanged pair.
+    bool rule_size_redundant_pair_immediate_across_stores(size_t i);
+
     // push ix; pop hl; ld bc,#N; add hl,bc; [inc/dec hl]*
     //   → ld hl,#(N-current_sp_ix_delta); add hl,sp
     // when the fixed frame allocation and current stack delta are visible.

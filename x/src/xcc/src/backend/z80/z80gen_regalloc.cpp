@@ -1035,7 +1035,13 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
             return total;
         }();
 
-        if (size_opt_enabled() ||
+        // Dedicated slots become actively harmful in ordinary large
+        // functions: frame offsets grow beyond the compact IX range and every
+        // short-lived expression gets a distinct home.  The CFG allocator
+        // already computes exact temp liveness and interference, so use it for
+        // substantial frames in every profile, not only -Os.  Keep tiny frames
+        // on the simpler path to avoid needless analysis and slot churn.
+        if (size_opt_enabled() || dedicated_bytes >= 32 ||
             (dedicated_bytes >= 200 && has_large_eq_ifx_dispatch())) {
             int high_water = assign_cfg_liveness_slots(ordered);
             next_temp_slot_ = -high_water;
@@ -1056,6 +1062,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     temp_regs_.clear();
     symbol_regs_.clear();
     incoming_symbol_homes_.clear();
+    iy_preserved_call_indices_.clear();
+    bc_preserved_call_indices_.clear();
 
     struct interval {
         int  first_def   = -1;
@@ -1066,6 +1074,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         bool has_addr_of = false;
         bool loop_extended = false;
         abi_arg_loc receive_loc = abi_arg_loc::STACK;
+        int weighted_mentions = 0;
     };
     struct sym_interval {
         operand base;
@@ -1140,22 +1149,15 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         mark_symbol(ic.right);
     }
 
-    int raw_temp_bytes = 0;
-    for (const auto &[tid, iv] : ivs) {
-        int sz = iv.size > 0 ? iv.size : 2;
-        if (sz < 1)
-            sz = 1;
-        raw_temp_bytes += sz;
-    }
-    int frame_upper_bound = raw_temp_bytes;
-    if (size_opt_enabled()) {
-        // CFG coloring without register homes includes every temporary, so it
-        // is a safe upper bound for the final colored frame and much tighter
-        // than summing mutually exclusive SSA-like values.
-        frame_upper_bound = compute_temp_frame_bytes(fn);
-        temp_slots_.clear();
-        next_temp_slot_ = 0;
-    }
+    // CFG coloring without register homes includes every temporary, so it is
+    // a safe upper bound for the final colored frame and much tighter than
+    // summing mutually exclusive SSA-like values.  Use it for every tuned
+    // profile: speed code generation also uses the preallocated coloured
+    // frame, and treating mutually exclusive switch-arm temps as simultaneous
+    // needlessly disables otherwise safe BC live ranges.
+    int frame_upper_bound = compute_temp_frame_bytes(fn);
+    temp_slots_.clear();
+    next_temp_slot_ = 0;
     const bool direct_ix_frame =
         (fn.local_bytes + frame_upper_bound) <= 120;
 
@@ -1171,6 +1173,51 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (ic.op == icode_op::LABEL)
             label_indices[ic.label_name] = idx;
     }
+
+    // Estimate dynamic spill cost from loop nesting.  A textual mention in a
+    // loop is more expensive than a cold straight-line mention; nested loops
+    // receive progressively more weight, capped to keep heuristic scores
+    // stable on deeply nested or irreducible control flow.
+    std::vector<int> loop_depth(n, 0);
+    auto mark_loop_depth = [&](const std::string &label, int backedge_idx) {
+        auto it = label_indices.find(label);
+        if (it == label_indices.end() || it->second >= backedge_idx)
+            return;
+        for (int k = it->second; k <= backedge_idx; ++k)
+            loop_depth[k] = std::min(loop_depth[k] + 1, 3);
+    };
+    for (int idx = 0; idx < n; ++idx) {
+        const icode &ic = fn.icodes[idx];
+        if (ic.op == icode_op::GOTO) {
+            mark_loop_depth(ic.label_name, idx);
+        } else if (ic.op == icode_op::IFX) {
+            mark_loop_depth(ic.true_lbl, idx);
+            mark_loop_depth(ic.false_lbl, idx);
+        }
+    }
+    for (auto &[tid, iv] : ivs)
+        iv.weighted_mentions = iv.mentions;
+    for (int idx = 0; idx < n; ++idx) {
+        const int bonus = (1 << loop_depth[idx]) - 1;
+        if (bonus == 0)
+            continue;
+        auto add_use_bonus = [&](const operand &op) {
+            if (op.is_temp())
+                ivs[op.temp_id].weighted_mentions += bonus;
+        };
+        add_use_bonus(fn.icodes[idx].left);
+        add_use_bonus(fn.icodes[idx].right);
+        if (fn.icodes[idx].op == icode_op::SET_VALUE_AT)
+            add_use_bonus(fn.icodes[idx].result);
+    }
+    auto hot_mentions = [&](const interval &iv) {
+        // -Os values compactness over dynamic spill frequency; retain its
+        // established textual-use ordering and apply loop weighting to the
+        // speed/balanced profiles.
+        return size_opt_enabled()
+                   ? iv.mentions
+                   : std::max(iv.mentions, iv.weighted_mentions);
+    };
 
     auto extend_loop_carried_symbols = [&]() {
         auto extend_for_backedge = [&](const std::string &label,
@@ -1270,6 +1317,181 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     };
     extend_loop_invariant_temps();
 
+    // Pair a reusable word index in DE with the word loaded through its
+    // scaled global address in HL.  This is the natural Z80 register layout
+    // for search/table probes: DE survives address formation, while HL can
+    // carry the loaded value through an equality branch and a following
+    // ordered comparison.  Treat the pair as one allocation decision so the
+    // independent IY and loaded-value passes cannot choose conflicting homes.
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+            iv.first_def < 0 || iv.last_use <= iv.first_def ||
+            iv.mentions < 3 || temp_regs_.find(tid) != temp_regs_.end()) {
+            continue;
+        }
+        const icode &def = fn.icodes[iv.first_def];
+        if (!def.result.is_temp() || def.result.temp_id != tid ||
+            (def.op != icode_op::SHR && def.op != icode_op::SHL &&
+             def.op != icode_op::ADD && def.op != icode_op::SUB)) {
+            continue;
+        }
+
+        int scale_idx = -1;
+        bool index_uses_safe = true;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            const bool left = ic.left.is_temp() && ic.left.temp_id == tid;
+            const bool right = ic.right.is_temp() && ic.right.temp_id == tid;
+            const bool result = ic.result.is_temp() && ic.result.temp_id == tid;
+            if (!left && !right && !result)
+                continue;
+            const bool scale_use =
+                ic.op == icode_op::SHL && left && !right && !result &&
+                ic.right.kind == operand_kind::INT_CONST &&
+                ic.right.ival >= 1 && ic.right.ival <= 7 &&
+                ic.result.is_temp();
+            const bool small_update =
+                (ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                left && !right && !result &&
+                ic.right.kind == operand_kind::INT_CONST;
+            const bool direct_return =
+                ic.op == icode_op::RETURN && left && !right && !result;
+            if (scale_use && scale_idx < 0)
+                scale_idx = k;
+            else if (!small_update && !direct_return) {
+                index_uses_safe = false;
+                break;
+            }
+        }
+        if (!index_uses_safe || scale_idx < 0 || scale_idx + 2 >= n)
+            continue;
+
+        const icode &scale = fn.icodes[scale_idx];
+        const icode &address = fn.icodes[scale_idx + 1];
+        const icode &load = fn.icodes[scale_idx + 2];
+        if (address.op != icode_op::ADD || !address.result.is_temp() ||
+            load.op != icode_op::GET_VALUE_AT || !load.result.is_temp() ||
+            !load.left.is_temp() ||
+            load.left.temp_id != address.result.temp_id ||
+            !load.right.is_none() || op_size(load.result) != 2) {
+            continue;
+        }
+        const operand *base = nullptr;
+        if (address.left.is_temp() &&
+            address.left.temp_id == scale.result.temp_id)
+            base = &address.right;
+        else if (address.right.is_temp() &&
+                 address.right.temp_id == scale.result.temp_id)
+            base = &address.left;
+        if (!base)
+            continue;
+
+        bool global_base = base->kind == operand_kind::SYMBOL &&
+                           base->is_global && !base->is_tls && !base->is_func;
+        if (!global_base && base->is_temp()) {
+            auto bit = ivs.find(base->temp_id);
+            if (bit != ivs.end() && bit->second.first_def >= 0) {
+                const icode &base_def = fn.icodes[bit->second.first_def];
+                global_base = base_def.op == icode_op::ADDRESS_OF &&
+                              base_def.left.kind == operand_kind::SYMBOL &&
+                              base_def.left.is_global &&
+                              !base_def.left.is_tls &&
+                              !base_def.left.is_func;
+            }
+        }
+        if (!global_base)
+            continue;
+
+        auto loaded_iv = ivs.find(load.result.temp_id);
+        if (loaded_iv == ivs.end() || loaded_iv->second.size != 2 ||
+            loaded_iv->second.has_addr_of ||
+            loaded_iv->second.first_def != scale_idx + 2 ||
+            loaded_iv->second.last_use <= scale_idx + 2 ||
+            temp_regs_.find(load.result.temp_id) != temp_regs_.end()) {
+            continue;
+        }
+        int compared_value_tid = load.result.temp_id;
+        int compare_scan_begin = scale_idx + 3;
+        bool coalesced_transform = false;
+        if (scale_idx + 3 < n) {
+            const icode &transform = fn.icodes[scale_idx + 3];
+            const bool load_on_left = transform.left.is_temp() &&
+                transform.left.temp_id == load.result.temp_id;
+            const bool load_on_right = transform.right.is_temp() &&
+                transform.right.temp_id == load.result.temp_id;
+            if (transform.op == icode_op::BAND &&
+                load_on_left != load_on_right && transform.result.is_temp() &&
+                ((load_on_left &&
+                  transform.right.kind == operand_kind::INT_CONST) ||
+                 (load_on_right &&
+                  transform.left.kind == operand_kind::INT_CONST))) {
+                auto transformed_iv = ivs.find(transform.result.temp_id);
+                if (loaded_iv->second.last_use == scale_idx + 3 &&
+                    transformed_iv != ivs.end() &&
+                    transformed_iv->second.size == 2 &&
+                    transformed_iv->second.first_def == scale_idx + 3 &&
+                    temp_regs_.find(transform.result.temp_id) ==
+                        temp_regs_.end()) {
+                    compared_value_tid = transform.result.temp_id;
+                    compare_scan_begin = scale_idx + 4;
+                    coalesced_transform = true;
+                }
+            }
+        }
+
+        auto compared_iv = ivs.find(compared_value_tid);
+        if (compared_iv == ivs.end() ||
+            compared_iv->second.last_use < compare_scan_begin)
+            continue;
+        bool loaded_uses_safe = true;
+        int comparisons = 0;
+        std::unordered_set<int> compared_temp_ids;
+        for (int k = compare_scan_begin;
+             k <= compared_iv->second.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            const bool left = ic.left.is_temp() &&
+                              ic.left.temp_id == compared_value_tid;
+            const bool right = ic.right.is_temp() &&
+                               ic.right.temp_id == compared_value_tid;
+            const bool result = ic.result.is_temp() &&
+                                ic.result.temp_id == compared_value_tid;
+            if (left || right || result) {
+                if (result || left == right || !is_compare_op(ic.op)) {
+                    loaded_uses_safe = false;
+                    break;
+                }
+                const operand &other = left ? ic.right : ic.left;
+                if (other.is_temp())
+                    compared_temp_ids.insert(other.temp_id);
+                ++comparisons;
+                continue;
+            }
+            if (ic.op != icode_op::LABEL && ic.op != icode_op::IFX &&
+                ic.op != icode_op::GOTO && ic.op != icode_op::RETURN) {
+                loaded_uses_safe = false;
+                break;
+            }
+        }
+        if (!loaded_uses_safe || comparisons < 2)
+            continue;
+
+        temp_regs_[tid] = temp_home::main_de;
+        temp_regs_[load.result.temp_id] = temp_home::main_hl;
+        if (coalesced_transform)
+            temp_regs_[compared_value_tid] = temp_home::main_hl;
+        // A comparison operand in IY would need a push/pop through DE and
+        // overwrite the paired index.  Reserve such ordinary word values in
+        // their compact frame slot, which the direct HL compare reads without
+        // disturbing any pair.
+        for (int other_tid : compared_temp_ids) {
+            auto other = ivs.find(other_tid);
+            if (other != ivs.end() && other->second.size == 2 &&
+                temp_regs_.find(other_tid) == temp_regs_.end()) {
+                temp_regs_[other_tid] = temp_home::stack;
+            }
+        }
+    }
+
     struct iy_candidate {
         int tid = -1;
         int start = -1;
@@ -1277,11 +1499,26 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         int score = 0;
     };
     std::vector<iy_candidate> iy_candidates;
+    std::vector<iy_candidate> spare_iy_cursor_candidates;
     for (const auto &[tid, iv] : ivs) {
         if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0)
             continue;
 
         const icode &init = fn.icodes[iv.first_def];
+        const auto near_pointer = [](const operand &op) {
+            return op.type && op.type->is_ptr() &&
+                   !op.type->is_far_ptr();
+        };
+        const auto narrow_integer = [](const operand &op) {
+            return op.kind == operand_kind::INT_CONST ||
+                   (op.type && op.type->is_integer() &&
+                    op.type->size() > 0 && op.type->size() <= 2);
+        };
+        const bool pointer_arithmetic_init =
+            (init.op == icode_op::ADD || init.op == icode_op::SUB) &&
+            ((near_pointer(init.left) && narrow_integer(init.right)) ||
+             (init.op == icode_op::ADD && near_pointer(init.right) &&
+              narrow_integer(init.left)));
         if (!init.result.is_temp() || init.result.temp_id != tid ||
             !init.result.type || !init.result.type->is_ptr() ||
             init.result.type->is_far_ptr() || !init.result.type->base ||
@@ -1289,6 +1526,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             (init.op != icode_op::ASSIGN &&
              init.op != icode_op::ADDRESS_OF &&
              init.op != icode_op::CAST &&
+             !pointer_arithmetic_init &&
              !(init.op == icode_op::RECEIVE &&
                (init.arg_loc == abi_arg_loc::REG_HL ||
                 init.arg_loc == abi_arg_loc::REG_DE)))) {
@@ -1325,10 +1563,21 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         bool saw_commit = false;
         bool safe = true;
         std::unordered_set<int> step_temps;
+        std::unordered_set<int> chase_temps;
         for (int k = iv.first_def + 1; k <= loop_end; ++k) {
             const icode &ic = fn.icodes[k];
-            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
-                ic.op == icode_op::INLINE_ASM) {
+            if (ic.op == icode_op::CALL) {
+                // IY is caller-clobbered, but a direct call with no stack
+                // arguments can preserve it locally without changing the
+                // callee ABI or argument layout.  The exact save sites are
+                // recorded after register assignment below.
+                if (ic.func_name.empty() || ic.arg_bytes != 0) {
+                    safe = false;
+                    break;
+                }
+                continue;
+            }
+            if (ic.op == icode_op::ALLOCA || ic.op == icode_op::INLINE_ASM) {
                 safe = false;
                 break;
             }
@@ -1342,11 +1591,44 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 break;
             }
 
+            // Null-terminated walks test the cursor itself at the loop head.
+            // The backend can branch directly on an IY-resident pointer, and
+            // the test neither changes nor aliases the cursor.
+            if (ic.op == icode_op::IFX && ic.left.is_temp() &&
+                ic.left.temp_id == tid) {
+                continue;
+            }
+
+            if (ic.op == icode_op::SEND && ic.left.is_temp() &&
+                ic.left.temp_id == tid &&
+                (ic.arg_loc == abi_arg_loc::REG_HL ||
+                 ic.arg_loc == abi_arg_loc::REG_DE)) {
+                continue;
+            }
+
+            if (is_compare_op(ic.op) &&
+                ((ic.left.is_temp() && ic.left.temp_id == tid) ||
+                 (ic.right.is_temp() && ic.right.temp_id == tid)) &&
+                !(ic.result.is_temp() && ic.result.temp_id == tid)) {
+                continue;
+            }
+
             if (ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
                 ic.left.temp_id == tid && ic.right.is_none() &&
                 ic.result.type &&
                 (ic.result.type->size() == 1 || ic.result.type->size() == 2)) {
                 saw_mem = true;
+                // A loop cursor may advance by following a link instead of by
+                // adding a constant: `next = *cursor; cursor = next`.  This is
+                // still a genuine loop-carried pointer and benefits from the
+                // same IY residency as a strided walk.  Record only near
+                // pointer loads so an unrelated scalar reload cannot become a
+                // cursor update.
+                if (ic.result.is_temp() && ic.result.type->is_ptr() &&
+                    !ic.result.type->is_far_ptr()) {
+                    chase_temps.insert(ic.result.temp_id);
+                    saw_update = true;
+                }
                 continue;
             }
             if (ic.op == icode_op::SET_VALUE_AT && ic.result.is_temp() &&
@@ -1356,20 +1638,47 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 saw_mem = true;
                 continue;
             }
+            const bool scalar_step =
+                ic.right.kind == operand_kind::INT_CONST ||
+                (ic.right.type && ic.right.type->is_integer() &&
+                 ic.right.type->size() > 0 && ic.right.type->size() <= 2);
             if ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
                 ic.left.is_temp() && ic.left.temp_id == tid &&
-                ic.right.kind == operand_kind::INT_CONST &&
-                ic.right.ival != 0 && ic.right.ival >= -32767 &&
-                ic.right.ival <= 32767 && ic.result.is_temp()) {
+                scalar_step && ic.result.is_temp()) {
                 step_temps.insert(ic.result.temp_id);
                 saw_update = true;
+                if (ic.result.temp_id == tid)
+                    saw_commit = true;
+                continue;
+            }
+            if (ic.op == icode_op::ASSIGN && ic.left.is_temp() &&
+                ic.left.temp_id == tid && ic.result.is_temp() &&
+                ic.result.temp_id != tid && ic.result.type &&
+                ic.result.type->is_ptr() &&
+                !ic.result.type->is_far_ptr()) {
+                // Read-only snapshots such as `previous = cursor` do not end
+                // cursor residency.  The copy is materialized normally.
                 continue;
             }
             if (ic.op == icode_op::ASSIGN && ic.result.is_temp() &&
                 ic.result.temp_id == tid && ic.left.is_temp() &&
-                step_temps.count(ic.left.temp_id)) {
+                (step_temps.count(ic.left.temp_id) ||
+                 chase_temps.count(ic.left.temp_id))) {
                 saw_commit = true;
                 continue;
+            }
+            if (ic.op == icode_op::ASSIGN && ic.result.is_temp() &&
+                ic.result.temp_id == tid && ic.left.is_temp() &&
+                ic.left.type && ic.left.type->is_ptr() &&
+                !ic.left.type->is_far_ptr()) {
+                auto source = ivs.find(ic.left.temp_id);
+                if (source != ivs.end() && source->second.first_def >= 0 &&
+                    source->second.first_def < iv.first_def) {
+                    // A cursor can be reset to the same loop-invariant base
+                    // for a second pass over a chain.  The base predates the
+                    // cursor live range, so this is not an unproven update.
+                    continue;
+                }
             }
             if (mentions_temp(ic, tid)) {
                 safe = false;
@@ -1381,7 +1690,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         iy_candidates.push_back(
             {tid, iv.first_def, loop_end,
-             2400 + iv.mentions * 20 - (loop_end - iv.first_def)});
+             2400 + hot_mentions(iv) * 20 - (loop_end - iv.first_def)});
     }
 
     // Keep a register-passed near pointer in IY across a straight-line leaf
@@ -1442,8 +1751,354 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         iy_candidates.push_back(
             {tid, iv.first_def, iv.last_use,
-             2200 + iv.mentions * 20 - (iv.last_use - iv.first_def)});
+             2200 + hot_mentions(iv) * 20 - (iv.last_use - iv.first_def)});
     }
+
+    // Keep a stationary near-pointer base in IY when a hot loop repeatedly
+    // accesses the base and constant-offset pointers derived from it.  C
+    // front ends commonly hoist `p + field_offset` before the loop; treating
+    // those derived temporaries as IY displacements avoids reloading five or
+    // six separate frame-resident pointers on every aggregate update.  Every
+    // derived pointer must be single-definition and dereference-only, and the
+    // complete window must be free of calls or opaque code.
+    for (const auto &[tid, iv] : ivs) {
+        if (opt_settings_.level != opt_level::Of &&
+            opt_settings_.level != opt_level::Os)
+            break;
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+            iv.last_use <= iv.first_def) {
+            continue;
+        }
+        auto existing_home = temp_regs_.find(tid);
+        if (existing_home != temp_regs_.end() &&
+            existing_home->second != temp_home::arg_hl &&
+            existing_home->second != temp_home::arg_de) {
+            continue;
+        }
+
+        const icode &init = fn.icodes[iv.first_def];
+        if (!init.result.is_temp() || init.result.temp_id != tid ||
+            !init.result.type || !init.result.type->is_ptr() ||
+            init.result.type->is_far_ptr() || !init.result.type->base ||
+            init.result.type->base->is_volatile ||
+            (init.op != icode_op::ASSIGN &&
+             init.op != icode_op::ADDRESS_OF &&
+             init.op != icode_op::CAST &&
+             !(init.op == icode_op::RECEIVE &&
+               (init.arg_loc == abi_arg_loc::REG_HL ||
+                init.arg_loc == abi_arg_loc::REG_DE)))) {
+            continue;
+        }
+
+        bool safe = true;
+        int hot_accesses = 0;
+        int window_end = iv.last_use;
+        std::unordered_set<int> derived_tids;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (!mentions_temp(ic, tid))
+                continue;
+
+            const bool direct_load =
+                ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
+                ic.left.temp_id == tid && ic.right.is_none() &&
+                (op_size(ic.result) == 1 || op_size(ic.result) == 2 ||
+                 op_size(ic.result) == 4);
+            const bool direct_store =
+                ic.op == icode_op::SET_VALUE_AT && ic.result.is_temp() &&
+                ic.result.temp_id == tid && ic.right.is_none() &&
+                (op_size(ic.left) == 1 || op_size(ic.left) == 2 ||
+                 op_size(ic.left) == 4);
+            if (direct_load || direct_store) {
+                ++hot_accesses;
+                continue;
+            }
+
+            if (ic.op != icode_op::ADD || !ic.result.is_temp() ||
+                !ic.result.type || !ic.result.type->is_ptr() ||
+                ic.result.type->is_far_ptr()) {
+                safe = false;
+                break;
+            }
+            const operand *base = &ic.left;
+            const operand *offset = &ic.right;
+            if (base->kind == operand_kind::INT_CONST)
+                std::swap(base, offset);
+            if (!base->is_temp() || base->temp_id != tid ||
+                offset->kind != operand_kind::INT_CONST ||
+                offset->ival < -128 || offset->ival > 126) {
+                safe = false;
+                break;
+            }
+
+            auto derived_iv = ivs.find(ic.result.temp_id);
+            if (derived_iv == ivs.end() ||
+                derived_iv->second.first_def != k ||
+                derived_iv->second.last_use <= k) {
+                safe = false;
+                break;
+            }
+            derived_tids.insert(ic.result.temp_id);
+            window_end = std::max(window_end, derived_iv->second.last_use);
+        }
+        if (!safe)
+            continue;
+
+        for (int derived_tid : derived_tids) {
+            const interval &derived_iv = ivs.at(derived_tid);
+            for (int k = derived_iv.first_def + 1;
+                 k <= derived_iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (!mentions_temp(ic, derived_tid))
+                    continue;
+                const bool load =
+                    ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
+                    ic.left.temp_id == derived_tid && ic.right.is_none() &&
+                    (op_size(ic.result) == 1 || op_size(ic.result) == 2 ||
+                     op_size(ic.result) == 4);
+                const bool store =
+                    ic.op == icode_op::SET_VALUE_AT &&
+                    ic.result.is_temp() &&
+                    ic.result.temp_id == derived_tid && ic.right.is_none() &&
+                    (op_size(ic.left) == 1 || op_size(ic.left) == 2 ||
+                     op_size(ic.left) == 4);
+                if (!load && !store) {
+                    safe = false;
+                    break;
+                }
+                ++hot_accesses;
+            }
+            if (!safe)
+                break;
+        }
+        if (!safe || hot_accesses < 4)
+            continue;
+
+        for (int k = iv.first_def + 1; k <= window_end; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                ic.op == icode_op::INLINE_ASM) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe)
+            continue;
+
+        iy_candidates.push_back(
+            {tid, iv.first_def, window_end,
+             3000 + hot_accesses * 140 - (window_end - iv.first_def)});
+    }
+
+    // A branch-hoisted computed pointer is another natural IY value.  Switch
+    // and parser arms frequently dereference the same table address, while
+    // the ordinary arithmetic pairs are needed to form local addresses and
+    // values inside each arm.  Require a single definition, three direct
+    // loads in distinct blocks, and no other use or opaque barrier throughout
+    // the live range.  This is independent of how the expression was exposed
+    // (PRE, source factoring, or hand-written code).
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+            iv.first_def < 0 || iv.last_use <= iv.first_def ||
+            temp_regs_.find(tid) != temp_regs_.end()) {
+            continue;
+        }
+        const icode &def = fn.icodes[iv.first_def];
+        if (def.op != icode_op::ADD || !def.result.is_temp() ||
+            def.result.temp_id != tid || !def.result.type ||
+            !def.result.type->is_ptr() || def.result.type->is_far_ptr() ||
+            !def.result.type->base || def.result.type->base->is_volatile) {
+            continue;
+        }
+
+        bool safe = true;
+        int direct_loads = 0;
+        std::unordered_set<int> load_regions;
+        int region = 0;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::LABEL)
+                ++region;
+            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                ic.op == icode_op::INLINE_ASM) {
+                safe = false;
+                break;
+            }
+            if (!mentions_temp(ic, tid))
+                continue;
+            const bool direct_load =
+                ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
+                ic.left.temp_id == tid && ic.right.is_none() &&
+                ic.result.type &&
+                (ic.result.type->size() == 1 ||
+                 ic.result.type->size() == 2);
+            if (!direct_load) {
+                safe = false;
+                break;
+            }
+            ++direct_loads;
+            load_regions.insert(region);
+        }
+        if (!safe || direct_loads < 3 || load_regions.size() < 3)
+            continue;
+
+        iy_candidates.push_back(
+            {tid, iv.first_def, iv.last_use,
+             2600 + direct_loads * 120 + hot_mentions(iv) * 16 -
+                 (iv.last_use - iv.first_def)});
+    }
+
+    // IY can also carry a short-lived computed integer across a call-free
+    // section of a loop.  Z80 has only three ordinary arithmetic pairs, so a
+    // value reused for index formation and two alternative updates otherwise
+    // tends to be spilled at every use.  Restrict this to single-definition
+    // word values whose uses are read-only arithmetic/control consumers; IY
+    // windows below prevent it from displacing a more valuable live cursor.
+    if (size_opt_enabled() || tuned_profile_enabled()) {
+        for (const auto &[tid, iv] : ivs) {
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+                iv.first_def < 0 || iv.last_use <= iv.first_def ||
+                hot_mentions(iv) < 3 || loop_depth[iv.first_def] == 0 ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+
+            const icode &def = fn.icodes[iv.first_def];
+            if (!def.result.is_temp() || def.result.temp_id != tid ||
+                !def.result.type || !def.result.type->is_integer() ||
+                (def.op != icode_op::ADD && def.op != icode_op::SUB &&
+                 def.op != icode_op::SHL && def.op != icode_op::SHR)) {
+                continue;
+            }
+
+            bool safe = true;
+            int useful_reads = 0;
+            for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                    ic.op == icode_op::INLINE_ASM) {
+                    safe = false;
+                    break;
+                }
+                if (!mentions_temp(ic, tid))
+                    continue;
+                const bool reads_left =
+                    ic.left.is_temp() && ic.left.temp_id == tid;
+                const bool reads_right =
+                    ic.right.is_temp() && ic.right.temp_id == tid;
+                const bool writes_value =
+                    ic.result.is_temp() && ic.result.temp_id == tid;
+                if (writes_value || (!reads_left && !reads_right)) {
+                    safe = false;
+                    break;
+                }
+                switch (ic.op) {
+                case icode_op::ADD:
+                case icode_op::SUB:
+                case icode_op::SHL:
+                case icode_op::SHR:
+                case icode_op::EQ:
+                case icode_op::NE:
+                case icode_op::LT:
+                case icode_op::LE:
+                case icode_op::GT:
+                case icode_op::GE:
+                case icode_op::RETURN:
+                    ++useful_reads;
+                    break;
+                default:
+                    safe = false;
+                    break;
+                }
+                if (!safe)
+                    break;
+            }
+            if (!safe || useful_reads < 3)
+                continue;
+
+            iy_candidates.push_back(
+                {tid, iv.first_def, iv.last_use,
+                 2100 + hot_mentions(iv) * 24 -
+                     (iv.last_use - iv.first_def)});
+        }
+    }
+
+    // A loop-carried word offset can use IY just as profitably as a pointer.
+    // This covers lockstep byte offsets used to address arrays: the value is
+    // initialized before the loop, advances by a small constant, and is only
+    // otherwise consumed to form a near pointer.  IY is not a backend scratch
+    // register, so ordinary arithmetic is safe; reject real calls and opaque
+    // code across the live window.
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+            !fn.icodes[iv.first_def].result.type ||
+            !fn.icodes[iv.first_def].result.type->is_integer())
+            continue;
+
+        int last_touch = iv.first_def;
+        int loop_end = -1;
+        for (int k = iv.first_def + 1; k < n; ++k) {
+            if (mentions_temp(fn.icodes[k], tid))
+                last_touch = k;
+            auto note_backedge = [&](const std::string &label) {
+                auto found = label_indices.find(label);
+                if (found != label_indices.end() &&
+                    found->second > iv.first_def &&
+                    found->second <= last_touch && found->second < k)
+                    loop_end = std::max(loop_end, k);
+            };
+            if (fn.icodes[k].op == icode_op::GOTO)
+                note_backedge(fn.icodes[k].label_name);
+            else if (fn.icodes[k].op == icode_op::IFX) {
+                note_backedge(fn.icodes[k].true_lbl);
+                note_backedge(fn.icodes[k].false_lbl);
+            }
+        }
+        if (loop_end < 0)
+            continue;
+
+        bool saw_update = false;
+        bool saw_address_use = false;
+        bool safe = true;
+        for (int k = iv.first_def + 1; k <= loop_end; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                ic.op == icode_op::INLINE_ASM) {
+                safe = false;
+                break;
+            }
+            if (!mentions_temp(ic, tid))
+                continue;
+            const bool update =
+                ic.op == icode_op::ADD && ic.result.is_temp() &&
+                ic.result.temp_id == tid && ic.left.is_temp() &&
+                ic.left.temp_id == tid &&
+                ic.right.kind == operand_kind::INT_CONST &&
+                ic.right.ival >= 1 && ic.right.ival <= 4;
+            if (update) {
+                saw_update = true;
+                continue;
+            }
+            const bool address_use =
+                ic.op == icode_op::ADD && ic.result.is_temp() &&
+                ic.result.temp_id != tid && ic.result.type &&
+                ic.result.type->is_ptr() &&
+                ((ic.left.is_temp() && ic.left.temp_id == tid) ||
+                 (ic.right.is_temp() && ic.right.temp_id == tid));
+            if (address_use) {
+                saw_address_use = true;
+                continue;
+            }
+            safe = false;
+            break;
+        }
+        if (!safe || !saw_update || !saw_address_use)
+            continue;
+        iy_candidates.push_back(
+            {tid, iv.first_def, loop_end,
+             2500 + hot_mentions(iv) * 20 - (loop_end - iv.first_def)});
+    }
+
     std::sort(iy_candidates.begin(), iy_candidates.end(),
               [](const iy_candidate &lhs, const iy_candidate &rhs) {
                   if (lhs.score != rhs.score)
@@ -1465,6 +2120,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         temp_regs_[cand.tid] = temp_home::main_iy;
         iy_windows.push_back({cand.start, cand.end});
+    }
+    for (const auto &cand : iy_candidates) {
+        if (temp_regs_.find(cand.tid) == temp_regs_.end())
+            spare_iy_cursor_candidates.push_back(cand);
     }
 
     // IY is also profitable for a call-free loop invariant that is only read
@@ -1518,7 +2177,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         invariant_iy_candidates.push_back(
             {tid, iv.first_def, iv.last_use,
-             2000 + compare_uses * 100 + iv.mentions * 8 -
+             2000 + compare_uses * 100 + hot_mentions(iv) * 8 -
                  (iv.last_use - iv.first_def)});
     }
     std::sort(invariant_iy_candidates.begin(),
@@ -1867,7 +2526,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (iv_it == ivs.end())
             return false;
         const interval &iv = iv_it->second;
-        if (iv.size != 2 || iv.first_def < 0 || iv.last_use <= iv.first_def)
+        if (iv.size != 2 || iv.definitions != 1 ||
+            iv.first_def < 0 || iv.last_use <= iv.first_def)
             return false;
         if (iv.has_addr_of)
             return false;
@@ -2111,7 +2771,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (!saw_mem_use || !saw_update)
             return false;
 
-        score_out = 240 + iv.mentions * 10 - (iv.last_use - iv.first_def);
+        score_out = 240 + hot_mentions(iv) * 10 -
+                    (iv.last_use - iv.first_def);
         return true;
     };
     auto loop_pointer_bc_candidate = [&](int temp_id, const interval &iv,
@@ -2185,7 +2846,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 break;
             }
         }
-        if (old_temp < 0 || step_temp < 0 || commit_idx < 0)
+        // A post-increment expression introduces an explicit copy of the old
+        // cursor, but the more common `value = *cursor; ++cursor` form does
+        // not.  Both have the same register-safety requirements below: the
+        // dereference may use the live cursor directly, while the optional
+        // old value is only needed when it actually appears in the IR.
+        if (step_temp < 0 || commit_idx < 0)
             return false;
 
         int loop_end = -1;
@@ -2212,7 +2878,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return op.is_temp() && op.temp_id == temp_id;
         };
         auto is_old_cursor = [&](const operand &op) {
-            return op.is_temp() && op.temp_id == old_temp;
+            return old_temp >= 0 && op.is_temp() && op.temp_id == old_temp;
         };
 
         for (int k = iv.first_def + 1; k <= loop_end; ++k) {
@@ -2267,7 +2933,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 saw_mem_use = true;
                 continue;
             }
-            if (mentions_temp(ic, temp_id) || mentions_temp(ic, old_temp))
+            if (mentions_temp(ic, temp_id) ||
+                (old_temp >= 0 && mentions_temp(ic, old_temp)))
                 return false;
             const bool byte_immediate_compare =
                 is_compare_op(ic.op) && ic.result.is_temp() &&
@@ -2281,6 +2948,46 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 fn.icodes[k + 1].left.temp_id == ic.result.temp_id) {
                 continue;
             }
+            auto is_iy_home = [&](const operand &op) {
+                if (!op.is_temp())
+                    return false;
+                auto home = temp_regs_.find(op.temp_id);
+                return home != temp_regs_.end() &&
+                       home->second == temp_home::main_iy;
+            };
+            auto is_iy_constant_offset = [&](const operand &op) {
+                if (!op.is_temp())
+                    return false;
+                auto derived_iv = ivs.find(op.temp_id);
+                if (derived_iv == ivs.end() ||
+                    derived_iv->second.first_def < 0)
+                    return false;
+                const icode &def = fn.icodes[derived_iv->second.first_def];
+                return (def.op == icode_op::ADD ||
+                        def.op == icode_op::SUB) &&
+                       def.result.is_temp() &&
+                       def.result.temp_id == op.temp_id &&
+                       is_iy_home(def.left) &&
+                       def.right.kind == operand_kind::INT_CONST &&
+                       def.right.ival >= -128 && def.right.ival <= 127;
+            };
+            const bool safe_iy_operation =
+                (ic.op == icode_op::GET_VALUE_AT &&
+                 (is_iy_home(ic.left) ||
+                  is_iy_constant_offset(ic.left)) &&
+                 ic.right.is_none() &&
+                 op_size(ic.result) >= 1 && op_size(ic.result) <= 2) ||
+                (ic.op == icode_op::SET_VALUE_AT &&
+                 (is_iy_home(ic.result) ||
+                  is_iy_constant_offset(ic.result)) &&
+                 ic.right.is_none() &&
+                 op_size(ic.left) >= 1 && op_size(ic.left) <= 2) ||
+                ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                 is_iy_home(ic.left) &&
+                 ic.right.kind == operand_kind::INT_CONST) ||
+                (ic.op == icode_op::ASSIGN && is_iy_home(ic.result));
+            if (safe_iy_operation)
+                continue;
             if (bc_backend_hazard(ic, direct_ix_frame))
                 return false;
         }
@@ -2289,7 +2996,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return false;
 
         end_out = loop_end;
-        score_out = 1800 + iv.mentions * 16 - (loop_end - iv.first_def);
+        score_out = 1800 + hot_mentions(iv) * 16 -
+                    (loop_end - iv.first_def);
         return true;
     };
     auto symbol_bc_backend_hazard = [&](const icode &ic,
@@ -2665,11 +3373,289 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     std::vector<std::pair<int, int>> c_windows;
     std::vector<std::pair<int, int>> hl_windows;
 
+    // A canonical dead induction variable may already have been rewritten
+    // by countdown_dead_loops to:
+    //
+    //     count = trip_count;
+    //   body:
+    //     ...
+    //     count = count - 1;
+    //     if (count) goto body;
+    //
+    // Keep that counter in BC when the body has BC-preserving lowerings.  The
+    // older induction candidate below only recognizes ascending zero-based
+    // counters that still feed a comparison, so it cannot see this cheaper
+    // post-canonicalization form.
+    struct loop_countdown_candidate {
+        int tid = -1;
+        int start = -1;
+        int end = -1;
+        int score = 0;
+    };
+    std::vector<loop_countdown_candidate> loop_countdown_candidates;
+
+    auto inline_word_const_mul_preserves_bc = [&](const icode &ic) {
+        if (ic.op != icode_op::MUL || op_size(ic.result) != 2 ||
+            op_size(ic.left) != 2 || op_size(ic.right) != 2)
+            return false;
+
+        const operand *value = nullptr;
+        const operand *constant = nullptr;
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            ic.right.kind != operand_kind::INT_CONST) {
+            value = &ic.right;
+            constant = &ic.left;
+        } else if (ic.right.kind == operand_kind::INT_CONST &&
+                   ic.left.kind != operand_kind::INT_CONST) {
+            value = &ic.left;
+            constant = &ic.right;
+        }
+        if (!value || !constant)
+            return false;
+
+        // The inline multiplier keeps the source in DE and accumulates in HL.
+        // Restrict the source to a compact frame value so loading it cannot
+        // require BC as an address scratch pair.
+        if (value->kind != operand_kind::TEMP ||
+            temp_regs_.count(value->temp_id))
+            return false;
+        const int off = ix_offset_of(*value);
+        if (!fits_ix_disp(off) || !fits_ix_disp(off + 1))
+            return false;
+
+        const uint16_t k = static_cast<uint16_t>(constant->ival);
+        int msb = -1;
+        for (int bit = 15; bit >= 0; --bit) {
+            if ((k >> bit) & 1u) {
+                msb = bit;
+                break;
+            }
+        }
+        int operation_count = 0;
+        if (msb >= 0) {
+            operation_count = msb;
+            for (int bit = msb - 1; bit >= 0; --bit)
+                if ((k >> bit) & 1u)
+                    ++operation_count;
+        }
+        const int max_inline_operations = size_opt_enabled() ? 20 : 30;
+        return msb < 0 || operation_count <= max_inline_operations;
+    };
+
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+            iv.last_use <= iv.first_def || temp_regs_.count(tid))
+            continue;
+
+        const icode &init = fn.icodes[iv.first_def];
+        if (init.op != icode_op::ASSIGN || !init.result.is_temp() ||
+            init.result.temp_id != tid ||
+            init.left.kind != operand_kind::INT_CONST ||
+            init.left.ival <= 1 || init.left.ival > 65535)
+            continue;
+
+        bool safe = true;
+        bool saw_step = false;
+        bool saw_backedge = false;
+        int end = -1;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (mentions_temp(ic, tid)) {
+                const bool step =
+                    ic.op == icode_op::SUB && ic.result.is_temp() &&
+                    ic.result.temp_id == tid && ic.left.is_temp() &&
+                    ic.left.temp_id == tid &&
+                    ic.right.kind == operand_kind::INT_CONST &&
+                    ic.right.ival == 1;
+                if (step) {
+                    saw_step = true;
+                    continue;
+                }
+                const bool branch =
+                    ic.op == icode_op::IFX && ic.left.is_temp() &&
+                    ic.left.temp_id == tid;
+                if (branch && saw_step) {
+                    auto note_target = [&](const std::string &label) {
+                        auto it = label_indices.find(label);
+                        if (it != label_indices.end() &&
+                            it->second > iv.first_def && it->second < k) {
+                            saw_backedge = true;
+                            end = k;
+                        }
+                    };
+                    note_target(ic.true_lbl);
+                    note_target(ic.false_lbl);
+                    if (saw_backedge)
+                        continue;
+                }
+                safe = false;
+                break;
+            }
+
+            if (inline_word_const_mul_preserves_bc(ic))
+                continue;
+            // A direct call with register-only arguments can cheaply save a
+            // loop-carried BC value at the call site.  All preceding SENDs
+            // are still checked normally, so this admits the call only when
+            // argument lowering itself preserves BC.
+            if (ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0) {
+                continue;
+            }
+            const bool simple_direct_operation =
+                direct_ix_frame &&
+                (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO ||
+                 ic.op == icode_op::IFX || ic.op == icode_op::ASSIGN ||
+                 ic.op == icode_op::CAST || ic.op == icode_op::ADD ||
+                 ic.op == icode_op::SUB || ic.op == icode_op::BAND ||
+                 ic.op == icode_op::BOR || ic.op == icode_op::BXOR ||
+                 ic.op == icode_op::BNOT || ic.op == icode_op::SHL ||
+                 ic.op == icode_op::SHR || ic.op == icode_op::ADDRESS_OF ||
+                 ic.op == icode_op::GET_VALUE_AT ||
+                 ic.op == icode_op::SET_VALUE_AT) &&
+                !clobbers_bc(ic) &&
+                !uses_tls_global(ic.result) &&
+                !uses_tls_global(ic.left) &&
+                !uses_tls_global(ic.right) &&
+                !(ic.op == icode_op::ADDRESS_OF &&
+                  address_of_may_need_bc_scratch(ic.left)) &&
+                !symbol_word_access_may_need_bc_scratch(ic.result) &&
+                !symbol_word_access_may_need_bc_scratch(ic.left) &&
+                !symbol_word_access_may_need_bc_scratch(ic.right);
+            if (!simple_direct_operation && loop_bc_scratch_hazard(ic)) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe || !saw_step || !saw_backedge || end < 0)
+            continue;
+        loop_countdown_candidates.push_back(
+            {tid, iv.first_def, end,
+             3600 + hot_mentions(iv) * 20 - (end - iv.first_def)});
+    }
+    std::sort(loop_countdown_candidates.begin(),
+              loop_countdown_candidates.end(),
+              [](const loop_countdown_candidate &lhs,
+                 const loop_countdown_candidate &rhs) {
+                  if (lhs.score != rhs.score)
+                      return lhs.score > rhs.score;
+                  if (lhs.start != rhs.start)
+                      return lhs.start < rhs.start;
+                  return lhs.tid < rhs.tid;
+              });
+    for (const auto &cand : loop_countdown_candidates) {
+        bool overlaps = false;
+        for (const auto &[start, end] : pair_windows) {
+            if (!(cand.end < start || cand.start > end)) {
+                overlaps = true;
+                break;
+            }
+        }
+        if (overlaps)
+            continue;
+        temp_regs_[cand.tid] = temp_home::main_bc;
+        pair_windows.push_back({cand.start, cand.end});
+        for (int k = cand.start + 1; k < cand.end; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0) {
+                bc_preserved_call_indices_.insert(static_cast<size_t>(k));
+            }
+        }
+        break;
+    }
+
+    // IY can hold only one cursor at a time.  In a call-free dual-cursor loop
+    // (string comparison is the archetypal case), retain the other cursor in
+    // BC when every instruction in the shared window has a BC-preserving
+    // lowering.  The candidates come from the same structural pointer-walk
+    // proof used for IY; this is ordinary live-range allocation, not a helper
+    // or source-pattern substitution.
+    for (const auto &cand : spare_iy_cursor_candidates) {
+        auto iv_it = ivs.find(cand.tid);
+        if (iv_it == ivs.end() || temp_regs_.count(cand.tid))
+            continue;
+
+        bool safe = true;
+        for (int k = cand.start + 1; k <= cand.end; ++k) {
+            const icode &ic = fn.icodes[k];
+            auto is_cursor = [&](const operand &op) {
+                return op.is_temp() && op.temp_id == cand.tid;
+            };
+            auto is_iy_home = [&](const operand &op) {
+                if (!op.is_temp())
+                    return false;
+                auto home = temp_regs_.find(op.temp_id);
+                return home != temp_regs_.end() &&
+                       home->second == temp_home::main_iy;
+            };
+
+            if (mentions_temp(ic, cand.tid)) {
+                const bool cursor_use =
+                    (ic.op == icode_op::GET_VALUE_AT &&
+                     is_cursor(ic.left) && ic.right.is_none() &&
+                     op_size(ic.result) >= 1 && op_size(ic.result) <= 2) ||
+                    (ic.op == icode_op::SET_VALUE_AT &&
+                     is_cursor(ic.result) && ic.right.is_none() &&
+                     op_size(ic.left) >= 1 && op_size(ic.left) <= 2) ||
+                    ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                     is_cursor(ic.left) &&
+                     ic.right.kind == operand_kind::INT_CONST) ||
+                    (ic.op == icode_op::ASSIGN && is_cursor(ic.result)) ||
+                    (ic.op == icode_op::IFX && is_cursor(ic.left)) ||
+                    (is_compare_op(ic.op) &&
+                     (is_cursor(ic.left) || is_cursor(ic.right)));
+                if (!cursor_use) {
+                    safe = false;
+                    break;
+                }
+                continue;
+            }
+
+            if (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO ||
+                ic.op == icode_op::IFX)
+                continue;
+            const bool safe_iy_operation =
+                (ic.op == icode_op::GET_VALUE_AT &&
+                 is_iy_home(ic.left) && ic.right.is_none() &&
+                 op_size(ic.result) >= 1 && op_size(ic.result) <= 2) ||
+                (ic.op == icode_op::SET_VALUE_AT &&
+                 is_iy_home(ic.result) && ic.right.is_none() &&
+                 op_size(ic.left) >= 1 && op_size(ic.left) <= 2) ||
+                ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                 is_iy_home(ic.left) &&
+                 ic.right.kind == operand_kind::INT_CONST) ||
+                (ic.op == icode_op::ASSIGN && is_iy_home(ic.result));
+            if (safe_iy_operation)
+                continue;
+            const bool fused_byte_compare =
+                is_compare_op(ic.op) && ic.result.is_temp() &&
+                op_size(ic.left) == 1 && op_size(ic.right) == 1 &&
+                k + 1 <= cand.end &&
+                fn.icodes[k + 1].op == icode_op::IFX &&
+                fn.icodes[k + 1].left.is_temp() &&
+                fn.icodes[k + 1].left.temp_id == ic.result.temp_id;
+            if (fused_byte_compare)
+                continue;
+            if (clobbers_bc(ic) ||
+                bc_backend_hazard(ic, direct_ix_frame)) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe)
+            continue;
+        temp_regs_[cand.tid] = temp_home::main_bc;
+        pair_windows.push_back({cand.start, cand.end});
+        break;
+    }
+
     struct loop_accumulator_candidate {
         int tid = -1;
         int start = -1;
         int end = -1;
         int score = 0;
+        std::vector<int> aliases;
     };
     std::vector<loop_accumulator_candidate> loop_accumulator_candidates;
     for (const auto &[tid, iv] : ivs) {
@@ -2690,6 +3676,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         bool saw_update = false;
         bool saw_backedge = false;
         int update_count = 0;
+        int current_accumulator = tid;
+        std::vector<int> accumulator_aliases;
         for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
             const icode &ic = fn.icodes[k];
 
@@ -2706,17 +3694,46 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 note_backedge(ic.true_lbl);
                 note_backedge(ic.false_lbl);
             }
+            if (saw_backedge && current_accumulator != tid) {
+                safe = false;
+                break;
+            }
 
-            const bool direct_add_update =
+            const bool reduction_add_update =
                 ic.op == icode_op::ADD && ic.result.is_temp() &&
-                ic.result.temp_id == tid && ic.left.is_temp() &&
-                ic.left.temp_id == tid && !ic.right.is_none() &&
+                ic.left.is_temp() &&
+                ic.left.temp_id == current_accumulator &&
+                !ic.right.is_none() &&
                 ic.right.kind != operand_kind::INT_CONST &&
-                !(ic.right.is_temp() && ic.right.temp_id == tid) &&
+                !(ic.right.is_temp() &&
+                  (ic.right.temp_id == tid ||
+                   ic.right.temp_id == current_accumulator)) &&
                 op_size(ic.right) <= 2 &&
                 !uses_tls_global(ic.right) &&
                 !symbol_word_access_may_need_bc_scratch(ic.right);
-            if (direct_add_update) {
+            if (reduction_add_update) {
+                if (current_accumulator != tid) {
+                    auto current_iv = ivs.find(current_accumulator);
+                    if (current_iv == ivs.end() ||
+                        current_iv->second.last_use != k) {
+                        safe = false;
+                        break;
+                    }
+                }
+                const int result_tid = ic.result.temp_id;
+                if (result_tid != tid) {
+                    auto result_iv = ivs.find(result_tid);
+                    if (result_iv == ivs.end() ||
+                        result_iv->second.first_def != k ||
+                        result_iv->second.last_use <= k ||
+                        result_iv->second.has_addr_of ||
+                        temp_regs_.find(result_tid) != temp_regs_.end()) {
+                        safe = false;
+                        break;
+                    }
+                    accumulator_aliases.push_back(result_tid);
+                }
+                current_accumulator = result_tid;
                 saw_update = true;
                 ++update_count;
                 continue;
@@ -2731,7 +3748,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                      (!ic.result.is_temp() || ic.result.temp_id != tid)) ||
                     ((ic.op == icode_op::ASSIGN || ic.op == icode_op::CAST) &&
                      ic.left.is_temp() && ic.left.temp_id == tid &&
-                     (!ic.result.is_temp() || ic.result.temp_id != tid));
+                     (!ic.result.is_temp() || ic.result.temp_id != tid)) ||
+                    ((ic.op == icode_op::BAND || ic.op == icode_op::BOR ||
+                      ic.op == icode_op::BXOR) &&
+                     ic.left.is_temp() && ic.left.temp_id == tid &&
+                     (!ic.result.is_temp() || ic.result.temp_id != tid) &&
+                     op_size(ic.right) <= 2);
                 if (!final_read) {
                     safe = false;
                     break;
@@ -2746,12 +3768,35 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 return home != temp_regs_.end() &&
                        home->second == temp_home::main_iy;
             };
+            auto is_iy_offset = [&](const operand &op, int size) {
+                if (!op.is_temp())
+                    return false;
+                auto q = ivs.find(op.temp_id);
+                if (q == ivs.end() || q->second.first_def < 0 ||
+                    q->second.first_def >= k)
+                    return false;
+                const icode &def = fn.icodes[q->second.first_def];
+                if (def.op != icode_op::ADD || !def.result.is_temp() ||
+                    def.result.temp_id != op.temp_id)
+                    return false;
+                const operand *base = &def.left;
+                const operand *offset = &def.right;
+                if (base->kind == operand_kind::INT_CONST)
+                    std::swap(base, offset);
+                return is_iy_home(*base) &&
+                       offset->kind == operand_kind::INT_CONST &&
+                       offset->ival >= -128 &&
+                       offset->ival + size - 1 <= 127;
+            };
             const bool safe_iy_operation =
                 (ic.op == icode_op::GET_VALUE_AT &&
-                 is_iy_home(ic.left) && ic.right.is_none() &&
+                 is_iy_home(ic.left) &&
+                 ic.right.is_none() &&
                  op_size(ic.result) >= 1 && op_size(ic.result) <= 2) ||
                 (ic.op == icode_op::SET_VALUE_AT &&
-                 is_iy_home(ic.result) && ic.right.is_none() &&
+                 (is_iy_home(ic.result) ||
+                  is_iy_offset(ic.result, op_size(ic.left))) &&
+                 ic.right.is_none() &&
                  op_size(ic.left) >= 1 && op_size(ic.left) <= 2) ||
                 ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
                  is_iy_home(ic.left) &&
@@ -2770,6 +3815,26 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (safe_global_address)
                 continue;
 
+            // Preserve a loop reduction in BC across a direct call whose
+            // arguments are register-only. SEND lowering is still examined
+            // independently above/below, so only BC-safe argument setup is
+            // admitted. This lets checksums and counters consume call results
+            // without a spill/reload on every iteration.
+            if (ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0) {
+                continue;
+            }
+
+            const bool fused_byte_compare =
+                is_compare_op(ic.op) && ic.result.is_temp() &&
+                op_size(ic.left) == 1 && op_size(ic.right) == 1 &&
+                k + 1 <= iv.last_use &&
+                fn.icodes[k + 1].op == icode_op::IFX &&
+                fn.icodes[k + 1].left.is_temp() &&
+                fn.icodes[k + 1].left.temp_id == ic.result.temp_id;
+            if (fused_byte_compare)
+                continue;
+
             if (loop_bc_scratch_hazard(ic)) {
                 safe = false;
                 break;
@@ -2777,11 +3842,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         if (!safe || !saw_update || !saw_backedge)
             continue;
-
         loop_accumulator_candidates.push_back(
             {tid, iv.first_def, iv.last_use,
-             3000 + update_count * 200 + iv.mentions * 16 -
-                 (iv.last_use - iv.first_def)});
+             3000 + update_count * 200 + hot_mentions(iv) * 16 -
+                 (iv.last_use - iv.first_def),
+             std::move(accumulator_aliases)});
     }
     std::sort(loop_accumulator_candidates.begin(),
               loop_accumulator_candidates.end(),
@@ -2804,8 +3869,235 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (overlaps)
             continue;
         temp_regs_[cand.tid] = temp_home::main_bc;
+        for (int alias_tid : cand.aliases)
+            temp_regs_[alias_tid] = temp_home::main_bc;
         pair_windows.push_back({cand.start, cand.end});
-        break;
+        for (int k = cand.start + 1; k < cand.end; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0) {
+                bc_preserved_call_indices_.insert(static_cast<size_t>(k));
+            }
+        }
+    }
+
+    // Prove the range of canonical zero-based induction values independently
+    // of whether BC is available for them.  For `i = 0; i < K; ++i`, K <=
+    // 255 guarantees a zero high byte and permits comparing only the low
+    // byte; K == 256 permits testing only the high byte.  Require a top-test,
+    // one +1 update, and a backedge to that test, with no payload use of the
+    // induction value.  This is a range proof, not a source-level loop-name
+    // or benchmark pattern.
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0)
+            continue;
+        const icode &init = fn.icodes[iv.first_def];
+        if (init.op != icode_op::ASSIGN || !init.result.is_temp() ||
+            init.result.temp_id != tid ||
+            init.left.kind != operand_kind::INT_CONST || init.left.ival != 0)
+            continue;
+
+        for (int cmp_idx = iv.first_def + 1; cmp_idx + 1 < n; ++cmp_idx) {
+            const icode &cmp = fn.icodes[cmp_idx];
+            const icode &ifx = fn.icodes[cmp_idx + 1];
+            if (cmp.op != icode_op::LT || !cmp.result.is_temp() ||
+                !cmp.left.is_temp() || cmp.left.temp_id != tid ||
+                cmp.left.byte_offset != 0 ||
+                cmp.right.kind != operand_kind::INT_CONST ||
+                cmp.right.ival <= 1 || cmp.right.ival > 256 ||
+                ifx.op != icode_op::IFX || !ifx.left.is_temp() ||
+                ifx.left.temp_id != cmp.result.temp_id)
+                continue;
+
+            int backedge_idx = -1;
+            int header_idx = -1;
+            for (int k = cmp_idx + 2; k < n; ++k) {
+                auto note_backedge = [&](const std::string &label) {
+                    auto found = label_indices.find(label);
+                    if (found != label_indices.end() &&
+                        found->second > iv.first_def &&
+                        found->second <= cmp_idx) {
+                        backedge_idx = k;
+                        header_idx = found->second;
+                    }
+                };
+                if (fn.icodes[k].op == icode_op::GOTO)
+                    note_backedge(fn.icodes[k].label_name);
+                else if (fn.icodes[k].op == icode_op::IFX) {
+                    note_backedge(fn.icodes[k].true_lbl);
+                    note_backedge(fn.icodes[k].false_lbl);
+                }
+                if (backedge_idx >= 0)
+                    break;
+            }
+            if (backedge_idx < 0 || header_idx < 0)
+                continue;
+
+            auto target_index = [&](const std::string &label) {
+                auto found = label_indices.find(label);
+                return found == label_indices.end() ? -1 : found->second;
+            };
+            const int true_idx = target_index(ifx.true_lbl);
+            const int false_idx = target_index(ifx.false_lbl);
+            const bool true_is_body =
+                true_idx > cmp_idx && true_idx <= backedge_idx;
+            const bool false_is_body =
+                false_idx > cmp_idx && false_idx <= backedge_idx;
+            const bool true_is_exit = true_idx > backedge_idx;
+            const bool false_is_exit = false_idx > backedge_idx;
+            if (!((true_is_body && false_is_exit) ||
+                  (false_is_body && true_is_exit)))
+                continue;
+
+            int step_tid = -1;
+            int step_count = 0;
+            bool safe = true;
+            for (int k = header_idx; k <= backedge_idx; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (k == cmp_idx)
+                    continue;
+                if (!mentions_temp(ic, tid))
+                    continue;
+                const bool step =
+                    ic.op == icode_op::ADD && ic.left.is_temp() &&
+                    ic.left.temp_id == tid &&
+                    ic.right.kind == operand_kind::INT_CONST &&
+                    ic.right.ival == 1 && ic.result.is_temp();
+                if (step) {
+                    step_tid = ic.result.temp_id;
+                    ++step_count;
+                    continue;
+                }
+                const bool commit =
+                    step_tid >= 0 && ic.op == icode_op::ASSIGN &&
+                    ic.result.is_temp() && ic.result.temp_id == tid &&
+                    ic.left.is_temp() && ic.left.temp_id == step_tid;
+                if (!commit) {
+                    safe = false;
+                    break;
+                }
+            }
+            if (safe && step_count == 1) {
+                bounded_induction_limits_[tid] =
+                    static_cast<int>(cmp.right.ival);
+                break;
+            }
+        }
+    }
+
+    // Apply the same range proof to direct local variables.  Unlike SSA-like
+    // temps, one source variable can be reused by several loops, so record the
+    // exact comparison and increment instructions rather than attaching a
+    // function-wide fact to the symbol.  Payload reads are harmless: only
+    // definitions can invalidate the proven [0, K] range.
+    for (const auto &[key, siv] : syms) {
+        (void)key;
+        if (!siv.base.type || siv.base.type->size() != 2 ||
+            !siv.base.type->is_integer() || siv.has_addr_of)
+            continue;
+
+        auto is_induction_symbol = [&](const operand &op) {
+            return op.is_symbol() && !op.is_global && !op.is_tls &&
+                   !op.is_sfr && !op.is_func && op.byte_offset == 0 &&
+                   same_local_symbol_base(op, siv.base);
+        };
+        auto target_index = [&](const std::string &label) {
+            auto found = label_indices.find(label);
+            return found == label_indices.end() ? -1 : found->second;
+        };
+
+        for (int cmp_idx = std::max(0, siv.first_idx);
+             cmp_idx + 1 < n; ++cmp_idx) {
+            const icode &cmp = fn.icodes[cmp_idx];
+            const icode &ifx = fn.icodes[cmp_idx + 1];
+            if (cmp.op != icode_op::LT || !cmp.result.is_temp() ||
+                !is_induction_symbol(cmp.left) ||
+                cmp.right.kind != operand_kind::INT_CONST ||
+                cmp.right.ival <= 1 || cmp.right.ival > 256 ||
+                ifx.op != icode_op::IFX || !ifx.left.is_temp() ||
+                ifx.left.temp_id != cmp.result.temp_id)
+                continue;
+
+            int init_idx = -1;
+            bool init_is_zero = false;
+            for (int k = siv.first_idx; k < cmp_idx; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (!is_induction_symbol(ic.result))
+                    continue;
+                init_idx = k;
+                init_is_zero =
+                    ic.op == icode_op::ASSIGN &&
+                    ic.left.kind == operand_kind::INT_CONST &&
+                    ic.left.ival == 0;
+            }
+            if (init_idx < 0 || !init_is_zero)
+                continue;
+
+            int backedge_idx = -1;
+            int header_idx = -1;
+            for (int k = cmp_idx + 2; k < n; ++k) {
+                auto note_backedge = [&](const std::string &label) {
+                    auto found = label_indices.find(label);
+                    if (found != label_indices.end() &&
+                        found->second > init_idx &&
+                        found->second <= cmp_idx) {
+                        backedge_idx = k;
+                        header_idx = found->second;
+                    }
+                };
+                if (fn.icodes[k].op == icode_op::GOTO)
+                    note_backedge(fn.icodes[k].label_name);
+                else if (fn.icodes[k].op == icode_op::IFX) {
+                    note_backedge(fn.icodes[k].true_lbl);
+                    note_backedge(fn.icodes[k].false_lbl);
+                }
+                if (backedge_idx >= 0)
+                    break;
+            }
+            if (backedge_idx < 0 || header_idx < 0)
+                continue;
+
+            const int true_idx = target_index(ifx.true_lbl);
+            const int false_idx = target_index(ifx.false_lbl);
+            const bool true_is_body =
+                true_idx > cmp_idx && true_idx <= backedge_idx;
+            const bool false_is_body =
+                false_idx > cmp_idx && false_idx <= backedge_idx;
+            const bool true_is_exit = true_idx > backedge_idx;
+            const bool false_is_exit = false_idx > backedge_idx;
+            if (!((true_is_body && false_is_exit) ||
+                  (false_is_body && true_is_exit)))
+                continue;
+
+            int step_idx = -1;
+            int step_count = 0;
+            bool safe = true;
+            for (int k = header_idx; k <= backedge_idx; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (!is_induction_symbol(ic.result))
+                    continue;
+                const bool direct_step =
+                    ic.op == icode_op::ADD &&
+                    is_induction_symbol(ic.left) &&
+                    ic.right.kind == operand_kind::INT_CONST &&
+                    ic.right.ival == 1;
+                if (!direct_step) {
+                    safe = false;
+                    break;
+                }
+                step_idx = k;
+                ++step_count;
+            }
+            if (!safe || step_count != 1)
+                continue;
+
+            bounded_symbol_induction_comparisons_[
+                static_cast<size_t>(cmp_idx)] =
+                static_cast<int>(cmp.right.ival);
+            if (cmp.right.ival <= 255)
+                bounded_symbol_induction_increments_.insert(
+                    static_cast<size_t>(step_idx));
+        }
     }
 
     struct loop_induction_candidate {
@@ -2898,6 +4190,29 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                     ic.left.is_temp() && ic.left.temp_id == tid) {
                     continue;
                 }
+                if ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                    ic.result.is_temp() && ic.result.temp_id != tid &&
+                    ic.result.type && ic.result.type->size() == 2 &&
+                    temp_regs_.find(ic.result.temp_id) == temp_regs_.end()) {
+                    const bool use_left =
+                        ic.left.is_temp() && ic.left.temp_id == tid;
+                    const bool use_right =
+                        ic.right.is_temp() && ic.right.temp_id == tid;
+                    const operand &other = use_left ? ic.right : ic.left;
+                    const bool direct_other =
+                        other.kind == operand_kind::INT_CONST ||
+                        (direct_ix_frame && other.is_temp() &&
+                         temp_regs_.find(other.temp_id) == temp_regs_.end()) ||
+                        (direct_ix_frame && other.is_symbol() &&
+                         !other.is_global && !other.is_tls);
+                    if (use_left != use_right && direct_other) {
+                        // Loading the BC value into HL/DE is a pair copy; a
+                        // direct IX-slot counterpart and result also avoid BC.
+                        // This lets induction values participate in address or
+                        // distance arithmetic without forcing a spill.
+                        continue;
+                    }
+                }
                 safe = false;
                 break;
             }
@@ -2914,8 +4229,20 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             case icode_op::GE:
                 continue;
             case icode_op::SET_VALUE_AT:
-                if (ic.left.type && ic.left.type->size() == 1 &&
-                    direct_ix_frame) {
+                if (direct_ix_frame && ic.left.type &&
+                    (ic.left.type->size() == 1 ||
+                     ic.left.type->size() == 2) &&
+                    ic.result.is_temp() &&
+                    temp_regs_.find(ic.result.temp_id) == temp_regs_.end() &&
+                    (!ic.left.is_temp() ||
+                     temp_regs_.find(ic.left.temp_id) == temp_regs_.end())) {
+                    // A plain IX-slot value stored through a plain IX-slot
+                    // near pointer uses HL for the address and A/DE for the
+                    // payload.  It therefore preserves a loop induction
+                    // value in BC even for a word store.  The direct-frame
+                    // requirement guarantees both slots fit indexed loads;
+                    // allocated/rematerialized operands stay excluded because
+                    // their lowering may need BC as scratch.
                     continue;
                 }
                 safe = false;
@@ -2933,7 +4260,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         loop_induction_candidates.push_back(
             {tid, iv.first_def, allocation_end,
-             2200 + compare_uses * 160 + iv.mentions * 12 -
+             2200 + compare_uses * 160 + hot_mentions(iv) * 12 -
                  (allocation_end - iv.first_def)});
     }
     std::sort(loop_induction_candidates.begin(),
@@ -3025,6 +4352,174 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         return true;
     };
     std::vector<bc_candidate> bc_candidates;
+
+    // A scaled byte offset reused for two or more accesses to global tables is
+    // especially valuable in BC: each address then becomes `ld hl,table` /
+    // `add hl,bc`, and the intervening load can use DE.  This is a short,
+    // straight-line live range (parsers, bytecode engines and lookup kernels
+    // commonly produce it), so admit it only when every interior lowering is
+    // known to preserve BC.
+    for (auto &[fd, tid] : order) {
+        const interval &iv = ivs[tid];
+        auto existing_home = temp_regs_.find(tid);
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+            iv.last_use <= iv.first_def || iv.mentions < 2 ||
+            (existing_home != temp_regs_.end() &&
+             existing_home->second != temp_home::stack)) {
+            continue;
+        }
+        const icode &def = fn.icodes[iv.first_def];
+        if (def.op != icode_op::SHL || !def.result.is_temp() ||
+            def.result.temp_id != tid ||
+            def.right.kind != operand_kind::INT_CONST ||
+            def.right.ival < 1 || def.right.ival > 7) {
+            continue;
+        }
+
+        auto is_global_table_base = [&](const operand &op) {
+            if (op.kind == operand_kind::LABEL_REF)
+                return true;
+            if (op.kind == operand_kind::SYMBOL && op.is_global &&
+                !op.is_tls && !op.is_func)
+                return true;
+            if (!op.is_temp())
+                return false;
+            auto base_iv = ivs.find(op.temp_id);
+            if (base_iv == ivs.end() || base_iv->second.first_def < 0 ||
+                base_iv->second.first_def >= iv.first_def)
+                return false;
+            const icode &base_def = fn.icodes[base_iv->second.first_def];
+            return base_def.op == icode_op::ADDRESS_OF &&
+                   base_def.left.kind == operand_kind::SYMBOL &&
+                   base_def.left.is_global && !base_def.left.is_tls &&
+                   !base_def.left.is_func;
+        };
+
+        bool safe = true;
+        int table_uses = 0;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &use = fn.icodes[k];
+            const bool left = use.left.is_temp() && use.left.temp_id == tid;
+            const bool right = use.right.is_temp() && use.right.temp_id == tid;
+            const bool result = use.result.is_temp() &&
+                                use.result.temp_id == tid;
+            if (left || right || result) {
+                if (result || left == right || use.op != icode_op::ADD ||
+                    !use.result.is_temp() ||
+                    !is_global_table_base(left ? use.right : use.left)) {
+                    safe = false;
+                    break;
+                }
+                ++table_uses;
+                continue;
+            }
+            if (clobbers_bc(use) || bc_backend_hazard(use, direct_ix_frame)) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe || table_uses < 2)
+            continue;
+        // Earlier paired-probe planning may have reserved an ordinary stack
+        // home for a comparison operand.  This independently proven BC-safe
+        // table offset has a stronger, non-overlapping local use case.
+        if (existing_home != temp_regs_.end())
+            temp_regs_.erase(existing_home);
+        auto overlaps = [&](const auto &windows) {
+            for (const auto &[start, end] : windows) {
+                if (!(iv.last_use < start || iv.first_def > end))
+                    return true;
+            }
+            return false;
+        };
+        if (overlaps(pair_windows) || overlaps(b_windows) ||
+            overlaps(c_windows)) {
+            continue;
+        }
+        temp_regs_[tid] = temp_home::main_bc;
+        pair_windows.push_back({iv.first_def, iv.last_use});
+    }
+
+    // When an incoming pointer is copied into an IY-resident loop cursor and
+    // the original value is needed again after the copy, retain that immutable
+    // base in BC.  This is the common shape of pointer-distance loops such as
+    // `cursor = base; while (...) ++cursor; return cursor - base`.  Treat the
+    // two values independently: IY advances, while BC survives the loop.
+    for (auto &[fd, tid] : order) {
+        if (size_opt_enabled())
+            continue;
+        const interval &iv = ivs[tid];
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+            iv.last_use <= iv.first_def + 1 ||
+            temp_regs_.find(tid) != temp_regs_.end()) {
+            continue;
+        }
+        const icode &def = fn.icodes[iv.first_def];
+        if (def.op != icode_op::RECEIVE ||
+            (def.arg_loc != abi_arg_loc::REG_HL &&
+             def.arg_loc != abi_arg_loc::REG_DE) ||
+            !def.result.type || !def.result.type->is_ptr() ||
+            def.result.type->is_far_ptr()) {
+            continue;
+        }
+
+        int copy_idx = -1;
+        int cursor_tid = -1;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &use = fn.icodes[k];
+            const bool use_left =
+                use.left.is_temp() && use.left.temp_id == tid;
+            const bool use_right =
+                use.right.is_temp() && use.right.temp_id == tid;
+            if (!use_left && !use_right)
+                continue;
+            if (use_left && !use_right && use.op == icode_op::ASSIGN &&
+                use.result.is_temp()) {
+                copy_idx = k;
+                cursor_tid = use.result.temp_id;
+            }
+            break;
+        }
+        auto cursor_home = temp_regs_.find(cursor_tid);
+        if (copy_idx < 0 || cursor_home == temp_regs_.end() ||
+            cursor_home->second != temp_home::main_iy ||
+            iv.last_use <= copy_idx ||
+            !bc_temp_uses_are_backend_safe(tid, iv.first_def, iv.last_use)) {
+            continue;
+        }
+
+        bool backend_safe = true;
+        for (int k = iv.first_def + 1; k < iv.last_use; ++k) {
+            const icode &inside = fn.icodes[k];
+            if (inside.op == icode_op::LABEL ||
+                inside.op == icode_op::GOTO ||
+                inside.op == icode_op::IFX) {
+                continue;
+            }
+            if (bc_backend_hazard(inside, direct_ix_frame) ||
+                clobbers_bc(inside)) {
+                backend_safe = false;
+                break;
+            }
+        }
+        if (!backend_safe)
+            continue;
+        auto overlaps_existing = [&](const auto &windows) {
+            for (const auto &[start, end] : windows) {
+                if (!(iv.last_use < start || iv.first_def > end))
+                    return true;
+            }
+            return false;
+        };
+        if (overlaps_existing(pair_windows) ||
+            overlaps_existing(b_windows) ||
+            overlaps_existing(c_windows)) {
+            continue;
+        }
+        temp_regs_[tid] = temp_home::main_bc;
+        pair_windows.push_back({iv.first_def, iv.last_use});
+    }
+
     for (auto &[fd, tid] : order) {
         const interval &iv = ivs[tid];
         int score = 0;
@@ -3034,10 +4529,63 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             {iv.first_def, iv.last_use, score, false, tid});
     }
 
-    // A loaded word used only by comparisons can remain in BC across branch
-    // labels when all executable instructions in its live range preserve BC.
-    // This is common in small ordering helpers and avoids materializing the
-    // same scalar in an IX slot for each relational test.
+    // Keep one ordinary loop-carried word local in BC when every operation in
+    // its lifetime has a BC-preserving lowering.  The generic symbol windows
+    // below reject labels and backedges; that is unnecessarily conservative
+    // for scalar loops such as binary searches, where the local is explicitly
+    // updated on either branch and then reused at the header.  This remains a
+    // normal live-range allocation: calls, TLS/deep-frame accesses and real
+    // BC clobbers all reject the candidate.
+    for (const auto &[key, iv] : syms) {
+        if (!iv.base.type || iv.base.type->size() != 2 ||
+            iv.base.is_param || iv.has_addr_of || iv.unsupported ||
+            iv.mentions < 4 || iv.first_idx < 0 ||
+            iv.last_idx <= iv.first_idx) {
+            continue;
+        }
+
+        bool crosses_backedge = false;
+        bool backend_safe = true;
+        for (int k = iv.first_idx; k <= iv.last_idx; ++k) {
+            const icode &inside = fn.icodes[k];
+            if (inside.op == icode_op::GOTO) {
+                auto target = label_indices.find(inside.label_name);
+                if (target != label_indices.end() && target->second <= k)
+                    crosses_backedge = true;
+            } else if (inside.op == icode_op::IFX) {
+                for (const std::string *label :
+                     {&inside.true_lbl, &inside.false_lbl}) {
+                    auto target = label_indices.find(*label);
+                    if (target != label_indices.end() && target->second <= k)
+                        crosses_backedge = true;
+                }
+            }
+            if (inside.op == icode_op::LABEL ||
+                inside.op == icode_op::GOTO ||
+                inside.op == icode_op::IFX ||
+                inside.op == icode_op::RETURN) {
+                continue;
+            }
+            if (symbol_bc_backend_hazard(inside, iv.base) ||
+                clobbers_bc(inside)) {
+                backend_safe = false;
+                break;
+            }
+        }
+        if (!crosses_backedge || !backend_safe)
+            continue;
+
+        bc_candidates.push_back(
+            {iv.first_idx, iv.last_idx,
+             1700 + iv.mentions * 12 - (iv.last_idx - iv.first_idx),
+             true, key});
+    }
+
+    // A loaded word used by comparisons and simple word ALU consumers can
+    // remain in BC across branch labels when all executable instructions in
+    // its live range preserve BC. This is common in ordering/conflict helpers
+    // and avoids materializing the same scalar in an IX slot before both a
+    // predicate and its follow-up difference calculation.
     for (auto &[fd, tid] : order) {
         const interval &iv = ivs[tid];
         if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
@@ -3055,7 +4603,18 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
             const icode &ic = fn.icodes[k];
             if (mentions_temp(ic, tid)) {
-                if (!is_compare_op(ic.op)) {
+                const bool use_left =
+                    ic.left.is_temp() && ic.left.temp_id == tid;
+                const bool use_right =
+                    ic.right.is_temp() && ic.right.temp_id == tid;
+                const bool simple_alu =
+                    (ic.op == icode_op::ADD || ic.op == icode_op::SUB ||
+                     ic.op == icode_op::BAND || ic.op == icode_op::BOR ||
+                     ic.op == icode_op::BXOR) &&
+                    use_left != use_right && ic.result.is_temp() &&
+                    ic.result.type && ic.result.type->size() == 2 &&
+                    !hl_load_may_clobber_bc(use_left ? ic.right : ic.left, 0);
+                if (!is_compare_op(ic.op) && !simple_alu) {
                     safe = false;
                     break;
                 }
@@ -3074,7 +4633,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         bc_candidates.push_back(
             {iv.first_def, iv.last_use,
-             1300 + iv.mentions * 12 - (iv.last_use - iv.first_def),
+             1300 + hot_mentions(iv) * 12 - (iv.last_use - iv.first_def),
              false, tid});
     }
 
@@ -3124,7 +4683,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (!backend_safe)                         continue;
         bc_candidates.push_back(
             {iv.first_def, iv.last_use,
-             14 + iv.mentions * 3 - (iv.last_use - iv.first_def),
+             14 + hot_mentions(iv) * 3 - (iv.last_use - iv.first_def),
              false, tid});
     }
 
@@ -3156,7 +4715,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (!backend_safe)                         continue;
         bc_candidates.push_back(
             {iv.first_def, iv.last_use,
-             24 + iv.mentions * 3 - (iv.last_use - iv.first_def),
+             24 + hot_mentions(iv) * 3 - (iv.last_use - iv.first_def),
              false, tid});
     }
 
@@ -3185,7 +4744,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (!backend_safe)                         continue;
             bc_candidates.push_back(
                 {iv.first_def, iv.last_use,
-                 1100 + iv.mentions * 8 - (iv.last_use - iv.first_def),
+                 1100 + hot_mentions(iv) * 8 - (iv.last_use - iv.first_def),
                  false, tid});
         }
     }
@@ -3562,13 +5121,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (compare_uses == 0) {
                 c_candidates.push_back(
                     {tid, iv.first_def, iv.last_use,
-                     220 + iv.mentions * 10 + mask_uses * 8 -
+                     220 + hot_mentions(iv) * 10 + mask_uses * 8 -
                          (iv.last_use - iv.first_def)});
             }
 
             b_candidates.push_back(
                 {tid, iv.first_def, iv.last_use,
-                 180 + iv.mentions * 8 + compare_uses * 10 +
+                 180 + hot_mentions(iv) * 8 + compare_uses * 10 +
                      mask_uses * 6 -
                      (iv.last_use - iv.first_def)});
         }
@@ -3623,12 +5182,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (compare_uses == 0) {
                 c_candidates.push_back(
                     {tid, iv.first_def, iv.last_use,
-                     170 + iv.mentions * 10 + mask_uses * 6 -
+                     170 + hot_mentions(iv) * 10 + mask_uses * 6 -
                          (iv.last_use - iv.first_def)});
             }
             b_candidates.push_back(
                 {tid, iv.first_def, iv.last_use,
-                 150 + iv.mentions * 8 + compare_uses * 8 +
+                 150 + hot_mentions(iv) * 8 + compare_uses * 8 +
                      mask_uses * 6 - (iv.last_use - iv.first_def)});
         }
 
@@ -3738,7 +5297,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         for (const auto &cand : c_candidates) {
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
-                overlaps_windows(b_windows, cand.start, cand.end) ||
                 overlaps_windows(c_windows, cand.start, cand.end))
                 continue;
             temp_regs_[cand.tid] = temp_home::main_c;
@@ -3748,7 +5306,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (symbol_regs_.find(cand.key) != symbol_regs_.end())
                 continue;
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
-                overlaps_windows(b_windows, cand.start, cand.end) ||
                 overlaps_windows(c_windows, cand.start, cand.end))
                 continue;
             symbol_regs_[cand.key] = temp_home::main_c;
@@ -3756,7 +5313,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         for (const auto &cand : b_candidates) {
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
-                overlaps_windows(c_windows, cand.start, cand.end) ||
                 overlaps_windows(b_windows, cand.start, cand.end))
                 continue;
             temp_regs_[cand.tid] = temp_home::main_b;
@@ -3766,7 +5322,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (symbol_regs_.find(cand.key) != symbol_regs_.end())
                 continue;
             if (overlaps_windows(pair_windows, cand.start, cand.end) ||
-                overlaps_windows(c_windows, cand.start, cand.end) ||
                 overlaps_windows(b_windows, cand.start, cand.end))
                 continue;
             symbol_regs_[cand.key] = temp_home::main_b;
@@ -3794,6 +5349,193 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
+    // A word freshly loaded from memory commonly feeds an equality test and,
+    // on the unequal edge, an ordered comparison (binary search and tree/hash
+    // probes are typical examples).  The load generator already produces the
+    // value in DE, so retain it there when the intervening control-flow-only
+    // instructions provably cannot need DE.  Earlier equality comparisons use
+    // DE as the right operand without modifying it; the final use may consume
+    // the pair normally.
+    std::vector<std::pair<int, int>> de_windows;
+    if (size_opt_enabled() || tuned_profile_enabled()) {
+        for (auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+                iv.last_use <= iv.first_def || iv.mentions < 2 ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+            const icode &def_ic = fn.icodes[iv.first_def];
+            if (def_ic.op != icode_op::GET_VALUE_AT ||
+                !def_ic.result.is_temp() || def_ic.result.temp_id != tid ||
+                !def_ic.right.is_none()) {
+                continue;
+            }
+
+            int compare_uses = 0;
+            bool safe = true;
+            for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                const bool use_left =
+                    ic.left.is_temp() && ic.left.temp_id == tid;
+                const bool use_right =
+                    ic.right.is_temp() && ic.right.temp_id == tid;
+                const bool use_result =
+                    ic.result.is_temp() && ic.result.temp_id == tid;
+                if (use_result || (use_left && use_right)) {
+                    safe = false;
+                    break;
+                }
+                if (use_left || use_right) {
+                    const bool final_simple_alu =
+                        k == iv.last_use && use_left != use_right &&
+                        (ic.op == icode_op::ADD || ic.op == icode_op::SUB ||
+                         ic.op == icode_op::BAND || ic.op == icode_op::BOR ||
+                         ic.op == icode_op::BXOR) &&
+                        ic.result.is_temp() && ic.result.type &&
+                        ic.result.type->size() == 2;
+                    if (!is_compare_op(ic.op) && !final_simple_alu) {
+                        safe = false;
+                        break;
+                    }
+                    if (is_compare_op(ic.op))
+                        ++compare_uses;
+                    if (!final_simple_alu && k != iv.last_use &&
+                        (ic.op != icode_op::EQ && ic.op != icode_op::NE)) {
+                        safe = false;
+                        break;
+                    }
+                    continue;
+                }
+                switch (ic.op) {
+                case icode_op::LABEL:
+                case icode_op::IFX:
+                case icode_op::RETURN:
+                    break;
+                default:
+                    safe = false;
+                    break;
+                }
+                if (!safe)
+                    break;
+            }
+            if (!safe || compare_uses < 1 ||
+                overlaps_windows(de_windows, iv.first_def, iv.last_use)) {
+                continue;
+            }
+            temp_regs_[tid] = temp_home::main_de;
+            de_windows.push_back({iv.first_def, iv.last_use});
+        }
+    }
+
+    // Coalesce a consumed DE input with a signed word result that is
+    // conditionally negated before its final comparison.  Absolute-value and
+    // distance calculations commonly have this SSA-like shape:
+    //
+    //     diff = lhs - rhs;
+    //     if (diff < 0) diff = -diff;
+    //     ... compare diff ...
+    //
+    // The input and result intervals touch at the defining instruction but do
+    // not overlap dynamically.  Keeping the result in DE avoids stores on
+    // both control-flow arms.  Limit the intervening arithmetic to direct
+    // operations against a BC-resident value, whose lowering uses SBC HL,BC
+    // and therefore preserves DE.
+    if (size_opt_enabled() || tuned_profile_enabled()) {
+        auto operand_home_is = [&](const operand &op, temp_home home) {
+            if (!op.is_temp())
+                return false;
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() && it->second == home;
+        };
+        for (auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+                iv.last_use <= iv.first_def || iv.definitions < 2 ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+            const icode &def = fn.icodes[iv.first_def];
+            if ((def.op != icode_op::ADD && def.op != icode_op::SUB) ||
+                !def.result.is_temp() || def.result.temp_id != tid ||
+                !(operand_home_is(def.left, temp_home::main_de) ||
+                  operand_home_is(def.right, temp_home::main_de))) {
+                continue;
+            }
+
+            bool saw_sign_test = false;
+            bool saw_self_negate = false;
+            bool saw_final_compare = false;
+            bool safe = true;
+            for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                const bool use_left =
+                    ic.left.is_temp() && ic.left.temp_id == tid;
+                const bool use_right =
+                    ic.right.is_temp() && ic.right.temp_id == tid;
+                const bool use_result =
+                    ic.result.is_temp() && ic.result.temp_id == tid;
+                if (use_left || use_right || use_result) {
+                    const bool sign_test =
+                        !use_result && use_left && !use_right &&
+                        (ic.op == icode_op::LT || ic.op == icode_op::GE) &&
+                        ic.right.kind == operand_kind::INT_CONST &&
+                        ic.right.ival == 0;
+                    const bool self_negate =
+                        ic.op == icode_op::NEG && use_left && !use_right &&
+                        use_result;
+                    const bool final_compare =
+                        k == iv.last_use && !use_result &&
+                        use_left != use_right && is_compare_op(ic.op);
+                    if (sign_test)
+                        saw_sign_test = true;
+                    else if (self_negate)
+                        saw_self_negate = true;
+                    else if (final_compare)
+                        saw_final_compare = true;
+                    else {
+                        safe = false;
+                        break;
+                    }
+                    continue;
+                }
+
+                if (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO ||
+                    ic.op == icode_op::IFX) {
+                    continue;
+                }
+                const bool bc_rhs_arithmetic =
+                    (ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                    ic.result.is_temp() && ic.result.type &&
+                    ic.result.type->size() == 2 &&
+                    temp_regs_.find(ic.result.temp_id) == temp_regs_.end() &&
+                    operand_home_is(ic.right, temp_home::main_bc);
+                if (!bc_rhs_arithmetic) {
+                    safe = false;
+                    break;
+                }
+            }
+            if (!safe || !saw_sign_test || !saw_self_negate ||
+                !saw_final_compare) {
+                continue;
+            }
+
+            bool overlaps = false;
+            for (const auto &[start, end] : de_windows) {
+                if (iv.first_def == end)
+                    continue;
+                if (!(iv.last_use < start || iv.first_def > end)) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (overlaps)
+                continue;
+            temp_regs_[tid] = temp_home::main_de;
+            de_windows.push_back({iv.first_def, iv.last_use});
+        }
+    }
+
     struct d_candidate {
         int tid = -1;
         int start = -1;
@@ -3806,13 +5548,22 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return op.is_none() || op.kind == operand_kind::INT_CONST ||
                    (op.type && op.type->size() == 1);
         };
+        auto iy_byte_load_preserves_de = [&](const icode &ic) {
+            if (ic.op != icode_op::GET_VALUE_AT || !ic.left.is_temp() ||
+                !ic.right.is_none() || !ic.result.type ||
+                ic.result.type->size() != 1) {
+                return false;
+            }
+            auto ptr = temp_regs_.find(ic.left.temp_id);
+            return ptr != temp_regs_.end() &&
+                   (ptr->second == temp_home::main_iy ||
+                    ptr->second == temp_home::main_bc);
+        };
         auto byte_op_preserves_de = [&](const icode &ic) {
             switch (ic.op) {
-            case icode_op::ASSIGN:
             case icode_op::CAST:
             case icode_op::NEG:
             case icode_op::BNOT:
-            case icode_op::ADD:
             case icode_op::SUB:
             case icode_op::BAND:
             case icode_op::BOR:
@@ -3824,10 +5575,54 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 return ic.result.type && ic.result.type->size() == 1 &&
                        byte_or_immediate(ic.left) &&
                        byte_or_immediate(ic.right);
+            case icode_op::ASSIGN:
+                if (ic.result.type && ic.result.type->size() == 2 &&
+                    ic.result.is_temp() && ic.left.is_temp()) {
+                    auto result_home = temp_regs_.find(ic.result.temp_id);
+                    if (result_home != temp_regs_.end() &&
+                        (result_home->second == temp_home::main_iy ||
+                         result_home->second == temp_home::main_bc))
+                        return true;
+                }
+                return ic.result.type && ic.result.type->size() == 1 &&
+                       byte_or_immediate(ic.left) &&
+                       byte_or_immediate(ic.right);
+            case icode_op::ADD:
+                if (ic.result.type && ic.result.type->size() == 2 &&
+                    ic.right.kind == operand_kind::INT_CONST &&
+                    ic.right.ival == 1 && ic.left.is_temp()) {
+                    const bool direct_self_update =
+                        ic.result.is_temp() &&
+                        ic.result.temp_id == ic.left.temp_id;
+                    auto left_home = temp_regs_.find(ic.left.temp_id);
+                    const bool direct_pair_update =
+                        left_home != temp_regs_.end() &&
+                        (left_home->second == temp_home::main_iy ||
+                         left_home->second == temp_home::main_bc);
+                    if (direct_self_update || direct_pair_update)
+                        return true;
+                }
+                return ic.result.type && ic.result.type->size() == 1 &&
+                       byte_or_immediate(ic.left) &&
+                       byte_or_immediate(ic.right);
             case icode_op::LABEL:
             case icode_op::GOTO:
             case icode_op::IFX:
                 return true;
+            case icode_op::GET_VALUE_AT:
+                // A byte load through IY is just "ld a, 0(iy)" plus the
+                // result store, so it does not consume the DE scratch pair.
+                return iy_byte_load_preserves_de(ic);
+            case icode_op::EQ:
+            case icode_op::NE:
+            case icode_op::LT:
+            case icode_op::LE:
+            case icode_op::GT:
+            case icode_op::GE:
+                return ((ic.left.kind == operand_kind::INT_CONST &&
+                         ic.right.type && ic.right.type->size() == 1) ||
+                        (ic.right.kind == operand_kind::INT_CONST &&
+                         ic.left.type && ic.left.type->size() == 1));
             default:
                 return false;
             }
@@ -3857,6 +5652,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                        byte_or_immediate(ic.right);
             case icode_op::EQ:
             case icode_op::NE:
+                return !use_result && use_left != use_right &&
+                       byte_or_immediate(use_left ? ic.right : ic.left);
             case icode_op::LT:
             case icode_op::LE:
             case icode_op::GT:
@@ -3865,6 +5662,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                         ic.right.kind == operand_kind::INT_CONST) ||
                        (use_right && !use_left &&
                         ic.left.kind == operand_kind::INT_CONST);
+            case icode_op::PACK_BYTES:
+                return !use_result && use_left != use_right &&
+                       ic.result.type && ic.result.type->size() == 2 &&
+                       byte_or_immediate(ic.left) &&
+                       byte_or_immediate(ic.right);
             default:
                 return false;
             }
@@ -3874,7 +5676,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             const interval &iv = ivs[tid];
             if (iv.size != 1 || iv.has_addr_of ||
                 iv.first_def < 0 || iv.last_use <= iv.first_def ||
-                iv.mentions < 3 ||
+                iv.mentions < 2 ||
                 temp_regs_.find(tid) != temp_regs_.end()) {
                 continue;
             }
@@ -3891,7 +5693,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
                     ic.op == icode_op::INLINE_ASM ||
                     ic.op == icode_op::ADDRESS_OF ||
-                    ic.op == icode_op::GET_VALUE_AT ||
                     ic.op == icode_op::SET_VALUE_AT ||
                     !d_temp_use_safe(ic, tid)) {
                     safe = false;
@@ -3902,7 +5703,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             d_candidates.push_back(
                 {tid, iv.first_def, iv.last_use,
-                 300 + iv.mentions * 12 - (iv.last_use - iv.first_def)});
+                 300 + hot_mentions(iv) * 12 -
+                     (iv.last_use - iv.first_def)});
         }
     }
     std::sort(d_candidates.begin(), d_candidates.end(),
@@ -3913,7 +5715,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
               });
     std::vector<std::pair<int, int>> d_windows;
     for (const auto &cand : d_candidates) {
-        if (overlaps_windows(d_windows, cand.start, cand.end))
+        if (overlaps_windows(de_windows, cand.start, cand.end) ||
+            overlaps_windows(d_windows, cand.start, cand.end))
             continue;
         temp_regs_[cand.tid] = temp_home::main_d;
         d_windows.push_back({cand.start, cand.end});
@@ -3936,6 +5739,29 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         auto byte_or_immediate = [](const operand &op) {
             return op.is_none() || op.kind == operand_kind::INT_CONST ||
                    (op.type && op.type->size() == 1);
+        };
+        auto iy_byte_load_preserves_e = [&](const icode &ic) {
+            if (ic.op != icode_op::GET_VALUE_AT || !ic.left.is_temp() ||
+                !ic.right.is_none() || !ic.result.type ||
+                ic.result.type->size() != 1) {
+                return false;
+            }
+            auto ptr = temp_regs_.find(ic.left.temp_id);
+            return ptr != temp_regs_.end() &&
+                   ptr->second == temp_home::main_iy;
+        };
+        auto iy_word_load_to_bc_preserves_e = [&](const icode &ic) {
+            if (ic.op != icode_op::GET_VALUE_AT || !ic.left.is_temp() ||
+                !ic.right.is_none() || !ic.result.is_temp() ||
+                !ic.result.type || ic.result.type->size() != 2) {
+                return false;
+            }
+            auto ptr = temp_regs_.find(ic.left.temp_id);
+            auto dst = temp_regs_.find(ic.result.temp_id);
+            return ptr != temp_regs_.end() &&
+                   ptr->second == temp_home::main_iy &&
+                   dst != temp_regs_.end() &&
+                   dst->second == temp_home::main_bc;
         };
         auto candidate_byte_use_safe = [&](const icode &ic, int tid) {
             const bool use_result =
@@ -3966,6 +5792,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                        byte_or_immediate(ic.right);
             case icode_op::EQ:
             case icode_op::NE:
+                return !use_result && use_left != use_right &&
+                       byte_or_immediate(use_left ? ic.right : ic.left);
             case icode_op::LT:
             case icode_op::LE:
             case icode_op::GT:
@@ -3973,6 +5801,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 return !use_result &&
                        ((use_left && ic.right.kind == operand_kind::INT_CONST) ||
                         (use_right && ic.left.kind == operand_kind::INT_CONST));
+            case icode_op::PACK_BYTES:
+                return !use_result && use_left != use_right &&
+                       ic.result.type && ic.result.type->size() == 2 &&
+                       byte_or_immediate(ic.left) &&
+                       byte_or_immediate(ic.right);
             case icode_op::RETURN:
                 return use_left && !use_result && !use_right;
             default:
@@ -3982,6 +5815,14 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         auto byte_op_preserves_e = [&](const icode &ic) {
             switch (ic.op) {
             case icode_op::ASSIGN:
+                if (ic.result.type && ic.result.type->size() == 2 &&
+                    ic.result.is_temp() && ic.left.is_temp()) {
+                    auto result_home = temp_regs_.find(ic.result.temp_id);
+                    if (result_home != temp_regs_.end() &&
+                        result_home->second == temp_home::main_iy)
+                        return true;
+                }
+                [[fallthrough]];
             case icode_op::CAST:
                 if (ic.result.type && ic.result.type->size() == 2 &&
                     ic.left.type && ic.left.type->size() == 1 &&
@@ -3991,7 +5832,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 [[fallthrough]];
             case icode_op::NEG:
             case icode_op::BNOT:
-            case icode_op::ADD:
             case icode_op::SUB:
             case icode_op::BAND:
             case icode_op::BOR:
@@ -4003,8 +5843,27 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 return ic.result.type && ic.result.type->size() == 1 &&
                        byte_or_immediate(ic.left) &&
                        byte_or_immediate(ic.right);
+            case icode_op::ADD:
+                if (ic.result.type && ic.result.type->size() == 2 &&
+                    ic.right.kind == operand_kind::INT_CONST &&
+                    ic.right.ival == 1 && ic.left.is_temp()) {
+                    const bool direct_self_update =
+                        ic.result.is_temp() &&
+                        ic.result.temp_id == ic.left.temp_id;
+                    auto left_home = temp_regs_.find(ic.left.temp_id);
+                    const bool direct_iy_update =
+                        left_home != temp_regs_.end() &&
+                        left_home->second == temp_home::main_iy;
+                    if (direct_self_update || direct_iy_update)
+                        return true;
+                }
+                return ic.result.type && ic.result.type->size() == 1 &&
+                       byte_or_immediate(ic.left) &&
+                       byte_or_immediate(ic.right);
             case icode_op::EQ:
             case icode_op::NE:
+                return ic.left.type && ic.left.type->size() == 1 &&
+                       ic.right.type && ic.right.type->size() == 1;
             case icode_op::LT:
             case icode_op::LE:
             case icode_op::GT:
@@ -4017,6 +5876,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             case icode_op::GOTO:
             case icode_op::IFX:
                 return true;
+            case icode_op::GET_VALUE_AT:
+                return iy_byte_load_preserves_e(ic) ||
+                       iy_word_load_to_bc_preserves_e(ic);
             default:
                 return false;
             }
@@ -4084,7 +5946,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             const interval &iv = ivs[tid];
             if (iv.size != 1 || iv.has_addr_of ||
                 iv.first_def < 0 || iv.last_use <= iv.first_def ||
-                iv.mentions < 4 ||
+                iv.mentions < 2 ||
                 temp_regs_.find(tid) != temp_regs_.end()) {
                 continue;
             }
@@ -4136,7 +5998,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             e_candidates.push_back(
                 {tid, iv.first_def, iv.last_use,
-                 360 + iv.mentions * 14 - (iv.last_use - iv.first_def)});
+                 360 + hot_mentions(iv) * 14 -
+                     (iv.last_use - iv.first_def)});
         }
     }
     std::sort(e_candidates.begin(), e_candidates.end(),
@@ -4147,10 +6010,63 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
               });
     std::vector<std::pair<int, int>> e_windows;
     for (const auto &cand : e_candidates) {
-        if (overlaps_windows(e_windows, cand.start, cand.end))
+        if (overlaps_windows(de_windows, cand.start, cand.end) ||
+            overlaps_windows(e_windows, cand.start, cand.end))
             continue;
         temp_regs_[cand.tid] = temp_home::main_e;
         e_windows.push_back({cand.start, cand.end});
+    }
+
+    // Keep a freshly loaded byte in A across a short, pair-only address
+    // calculation until it is stored.  Word ASSIGN/ADD lowering does not use
+    // A, so this safely removes the otherwise pointless spill/reload around
+    // post-incremented indexed stores and similar pointer arithmetic.
+    std::vector<std::pair<int, int>> main_a_windows;
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 1 || iv.has_addr_of || iv.definitions != 1 ||
+            iv.first_def < 0 || iv.last_use <= iv.first_def + 1 ||
+            iv.last_use - iv.first_def > 5 ||
+            temp_regs_.find(tid) != temp_regs_.end()) {
+            continue;
+        }
+        const icode &def = fn.icodes[iv.first_def];
+        if (def.op != icode_op::GET_VALUE_AT || !def.result.is_temp() ||
+            def.result.temp_id != tid ||
+            (def.result.type && def.result.type->is_volatile) ||
+            (def.left.type && def.left.type->base &&
+             def.left.type->base->is_volatile)) {
+            continue;
+        }
+
+        bool safe = true;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (mentions_temp(ic, tid)) {
+                const bool final_store =
+                    k == iv.last_use && ic.op == icode_op::SET_VALUE_AT &&
+                    ic.left.is_temp() && ic.left.temp_id == tid &&
+                    op_size(ic.left) == 1;
+                if (!final_store) {
+                    safe = false;
+                    break;
+                }
+                continue;
+            }
+            const bool pair_assign =
+                ic.op == icode_op::ASSIGN && op_size(ic.result) == 2 &&
+                op_size(ic.left) == 2;
+            const bool pair_add =
+                ic.op == icode_op::ADD && op_size(ic.result) == 2 &&
+                op_size(ic.left) <= 2 && op_size(ic.right) <= 2;
+            if (!pair_assign && !pair_add) {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe)
+            continue;
+        temp_regs_[tid] = temp_home::main_a;
+        main_a_windows.push_back({iv.first_def, iv.last_use});
     }
 
     // Step 4b: allocate a very narrow stable subset of one-step temps to
@@ -4174,10 +6090,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
     const bool one_step_temp_homes_enabled = true;
     const bool one_step_a_enabled = true;
-    // One-step word temps in HL can hide backend address/scratch clobbers in
-    // pointer-heavy heap/free-list code. Keep byte A homes, but spill word
-    // temps until the HL proof models those hazards more precisely.
-    const bool one_step_hl_enabled = false;
+    // Retaining a just-produced word in HL is safe for consumers that use HL
+    // directly before preparing any other address or operand. Wider binary
+    // cases remain on the separately proven commutative-RHS path below.
+    const bool one_step_hl_enabled = !size_opt_enabled();
     if (one_step_temp_homes_enabled) {
         std::vector<std::pair<int, int>> one_step_hl_windows = hl_windows;
         for (const auto &[other_tid, home] : temp_regs_) {
@@ -4196,7 +6112,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             const icode &def_ic = fn.icodes[iv.first_def];
             const icode &use_ic = fn.icodes[iv.last_use];
             if (iv.has_addr_of)                    continue;
-            if (alt_a_use_hazard(use_ic))          continue;
             if ((use_ic.op == icode_op::ASSIGN || use_ic.op == icode_op::CAST) &&
                 use_ic.result.is_temp()) {
                 continue;
@@ -4207,14 +6122,21 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             }
 
             if (one_step_a_enabled &&
+                !alt_a_use_hazard(use_ic) &&
                 iv.size == 1 && alt_a_def_safe(def_ic) &&
-                immediate_use_safe_in_a(use_ic, tid)) {
+                immediate_use_safe_in_a(use_ic, tid) &&
+                !overlaps_windows(main_a_windows, iv.first_def, iv.last_use)) {
                 temp_regs_[tid] = temp_home::main_a;
+                main_a_windows.push_back({iv.first_def, iv.last_use});
                 continue;
             }
             if (one_step_hl_enabled &&
                 iv.size == 2 && main_hl_def_safe(def_ic) &&
-                immediate_use_safe_in_hl(use_ic, tid)) {
+                immediate_use_safe_in_hl(use_ic, tid) &&
+                ((use_ic.op == icode_op::RETURN &&
+                  use_ic.left.is_temp() && use_ic.left.temp_id == tid) ||
+                 (use_ic.op == icode_op::GET_VALUE_AT &&
+                  use_ic.left.is_temp() && use_ic.left.temp_id == tid))) {
                 temp_regs_[tid] = temp_home::main_hl;
                 one_step_hl_windows.push_back({iv.first_def, iv.last_use});
                 continue;
@@ -4238,13 +6160,14 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    // Keep arbitrary pointer rematerialization disabled until the alias and
-    // liveness proof can distinguish loop-carried pointer values from safe
-    // invariant address expressions. The narrower u8-index remat below is
-    // still enabled and tested.
+    // Keep broad pointer rematerialization disabled. Expression-shape and
+    // single-definition checks alone do not prove the pointed-to allocator
+    // state stable; the realloc/free-list regression catches that distinction.
+    // The narrower ADDRESS_OF and u8-index paths below remain proven.
     const bool general_pointer_remat_enabled = false;
 
-    if (general_pointer_remat_enabled) {
+    if (general_pointer_remat_enabled &&
+        (size_opt_enabled() || tuned_profile_enabled())) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
             const bool ok = remat_pointer_temp_ok(tid, 0);
@@ -4286,8 +6209,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
-    // Word-load rematerialization needs a stronger memory-version proof before
-    // it can be enabled across pointer-heavy kernels.
+    // Keep word-load rematerialization disabled as well. Even the branch-free,
+    // call-free, store-free, single-definition filter is insufficient for the
+    // heap free-list case; enabling this requires real memory SSA/versioning.
     const bool word_load_remat_enabled = false;
     if (word_load_remat_enabled &&
         (size_opt_enabled() || tuned_profile_enabled())) {
@@ -4297,6 +6221,142 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (!remat_word_load_temp_ok(tid, 0))
                 continue;
             temp_regs_[tid] = temp_home::remat_hl;
+        }
+    }
+
+    // Prefer BC's seven-cycle indirect byte access for a walking cursor and
+    // leave IY to an overlapping invariant pointer that is only copied or
+    // used arithmetically.  Initial allocation cannot always see this swap:
+    // IY cursors are selected before the general BC candidates.  Re-homing
+    // the proven pair here changes no live ranges and avoids the much slower
+    // indexed-IY load on every loop iteration.
+    for (const auto &[cursor_tid, cursor_home] : temp_regs_) {
+        if (opt_settings_.level != opt_level::Of &&
+            opt_settings_.level != opt_level::Os)
+            break;
+        if (cursor_home != temp_home::main_iy)
+            continue;
+        auto cursor_iv = ivs.find(cursor_tid);
+        if (cursor_iv == ivs.end() || cursor_iv->second.first_def < 0)
+            continue;
+
+        bool byte_walk = false;
+        bool cursor_safe = true;
+        for (int k = cursor_iv->second.first_def + 1;
+             k <= cursor_iv->second.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (!mentions_temp(ic, cursor_tid))
+                continue;
+            const bool byte_load =
+                ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
+                ic.left.temp_id == cursor_tid && ic.right.is_none() &&
+                op_size(ic.result) == 1;
+            const bool constant_step =
+                (ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                ic.left.is_temp() && ic.left.temp_id == cursor_tid &&
+                ic.right.kind == operand_kind::INT_CONST;
+            const bool update_commit =
+                ic.op == icode_op::ASSIGN && ic.result.is_temp() &&
+                ic.result.temp_id == cursor_tid;
+            const bool arithmetic_read =
+                (ic.op == icode_op::ADD || ic.op == icode_op::SUB ||
+                 is_compare_op(ic.op) || ic.op == icode_op::RETURN) &&
+                !(ic.result.is_temp() && ic.result.temp_id == cursor_tid);
+            if (byte_load) {
+                byte_walk = true;
+                continue;
+            }
+            if (constant_step || update_commit || arithmetic_read)
+                continue;
+            cursor_safe = false;
+            break;
+        }
+        if (!cursor_safe || !byte_walk)
+            continue;
+
+        // Symbol homes participate in the same physical BC pair but are kept
+        // in a separate map.  A post-allocation temp swap must therefore
+        // reject any overlapping BC-resident symbol explicitly; otherwise a
+        // promoted loop counter and the cursor silently alias one another.
+        bool bc_symbol_conflict = false;
+        for (const auto &[key, home] : symbol_regs_) {
+            if (home != temp_home::main_bc)
+                continue;
+            auto sym = syms.find(key);
+            if (sym == syms.end())
+                continue;
+            if (!(sym->second.last_idx < cursor_iv->second.first_def ||
+                  sym->second.first_idx > cursor_iv->second.last_use)) {
+                bc_symbol_conflict = true;
+                break;
+            }
+        }
+        if (bc_symbol_conflict)
+            continue;
+
+        bool placed_in_bc = false;
+        for (const auto &[base_tid, base_home] : temp_regs_) {
+            if (base_home != temp_home::main_bc || base_tid == cursor_tid)
+                continue;
+            auto base_iv = ivs.find(base_tid);
+            if (base_iv == ivs.end() || base_iv->second.size != 2 ||
+                base_iv->second.first_def < 0 ||
+                base_iv->second.last_use < cursor_iv->second.first_def ||
+                base_iv->second.first_def > cursor_iv->second.last_use)
+                continue;
+            const icode &base_def = fn.icodes[base_iv->second.first_def];
+            if (!base_def.result.type || !base_def.result.type->is_ptr() ||
+                base_def.result.type->is_far_ptr())
+                continue;
+
+            bool invariant_safe = true;
+            for (int k = base_iv->second.first_def + 1;
+                 k <= base_iv->second.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (!mentions_temp(ic, base_tid))
+                    continue;
+                const bool copied_to_cursor =
+                    ic.op == icode_op::ASSIGN && ic.left.is_temp() &&
+                    ic.left.temp_id == base_tid && ic.result.is_temp() &&
+                    ic.result.temp_id == cursor_tid;
+                const bool arithmetic_read =
+                    (ic.op == icode_op::ADD || ic.op == icode_op::SUB ||
+                     is_compare_op(ic.op)) &&
+                    !(ic.result.is_temp() && ic.result.temp_id == base_tid);
+                if (!copied_to_cursor && !arithmetic_read) {
+                    invariant_safe = false;
+                    break;
+                }
+            }
+            if (!invariant_safe)
+                continue;
+
+            temp_regs_[cursor_tid] = temp_home::main_bc;
+            temp_regs_[base_tid] = temp_home::main_iy;
+            placed_in_bc = true;
+            break;
+        }
+        if (placed_in_bc)
+            continue;
+    }
+
+    // Record the precise direct calls at which a selected IY live range must
+    // be caller-saved.  Candidate validation above admits only direct calls
+    // with register-only arguments; assert the same properties here so later
+    // allocator extensions cannot accidentally alter a stack-call layout.
+    for (const auto &[tid, home] : temp_regs_) {
+        if (home != temp_home::main_iy)
+            continue;
+        auto iv_it = ivs.find(tid);
+        if (iv_it == ivs.end())
+            continue;
+        const interval &iv = iv_it->second;
+        for (int k = iv.first_def + 1; k < iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0) {
+                iy_preserved_call_indices_.insert(static_cast<size_t>(k));
+            }
         }
     }
 

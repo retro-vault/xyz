@@ -51,6 +51,7 @@ enum class temp_home {
     stack,    // spilled to IX frame (default)
     main_bc,  // 16-bit temp in main BC register pair
     main_hl,  // next-use-only 16-bit temp still live in HL
+    main_de,  // loaded 16-bit temp retained through a comparison chain
     main_iy,  // loop-carried byte pointer in caller-saved IY
     remat_hl, // 16-bit temp rematerialized cheaply into HL on demand
     main_a,   // next-use-only 8-bit temp still live in A
@@ -150,11 +151,39 @@ private:
         optimization_settings::for_level(opt_level::O0);
     bool standalone_asm_output_ = false;
     bool size_shared_ix_helpers_ = false;
+    bool compact_codegen_ = false;
 
     std::unordered_map<int, int>       temp_slots_; // temp_id -> IX offset
     std::unordered_map<int, temp_home> temp_regs_;  // temp_id -> register home (if not stack)
     std::unordered_map<int, temp_home> incoming_symbol_homes_; // local symbol stack_offset -> incoming arg home
     std::unordered_map<int, temp_home> symbol_regs_; // local symbol key -> register home (if not stack)
+    // Direct, register-argument calls at which a live IY allocation is
+    // caller-saved.  Keeping this per-call (rather than treating IY as
+    // globally callee-saved) avoids changing the public ABI.
+    std::unordered_set<size_t> iy_preserved_call_indices_;
+    // Direct local helpers whose selected machine-code form is known not to
+    // touch IY.  This is populated as those helpers are emitted and lets a
+    // later caller avoid a redundant caller-save pair.
+    std::unordered_set<std::string> iy_preserving_local_callees_;
+    // Likewise, a profitable loop counter may occupy BC across a direct
+    // register-only call.  These are the exact sites where it is saved.
+    std::unordered_set<size_t> bc_preserved_call_indices_;
+    // Canonical zero-based +1 induction values whose controlling upper bound
+    // proves that only one byte is needed for their loop comparison.
+    std::unordered_map<int, int> bounded_induction_limits_;
+    // Local C variables are memory symbols rather than SSA temporaries.  Keep
+    // the exact proven compare/update sites for their bounded loops so reuse
+    // of the same source variable elsewhere cannot inherit the range fact.
+    std::unordered_map<size_t, int> bounded_symbol_induction_comparisons_;
+    std::unordered_set<size_t> bounded_symbol_induction_increments_;
+    // Byte loads immediately consumed by a selected jump-table dispatch stay
+    // in A; materializing their otherwise dead allocator home is unnecessary.
+    std::unordered_set<size_t> jump_table_selector_loads_;
+    // Single-use 32-bit loads through a proven IY base can be rematerialized
+    // word-by-word by their immediately following arithmetic consumer.  This
+    // avoids a four-byte spill/reload while preserving the source load's
+    // exact address and ordering.
+    std::unordered_map<int, int64_t> iy_u32_remat_offsets_;
     int next_temp_slot_ = 0;
     int temp_stack_bytes_ = 0;
     int temp_frame_bytes_ = 0;
@@ -257,7 +286,7 @@ private:
     bool temp_frame_prealloc_enabled() const { return opt_settings_.prealloc_temp_frame; }
     bool switch_jump_tables_enabled() const { return opt_settings_.switch_jump_tables; }
     bool size_opt_enabled() const {
-        return opt_settings_.level == opt_level::Os;
+        return opt_settings_.level == opt_level::Os || compact_codegen_;
     }
     bool tuned_profile_enabled() const {
         return opt_settings_.level == opt_level::Os ||
@@ -301,6 +330,10 @@ private:
     bool emit_byte_alu_direct_rhs(const char *mnemonic,
                                   const operand &rhs,
                                   bool allow_bc_rhs);
+    bool try_emit_u32_frame_add_chain(const icode &ic);
+    bool try_emit_u32_frame_add(const icode &ic);
+    bool try_emit_u32_frame_alu(const icode &ic, const char *mnemonic);
+    bool try_emit_u32_bitwise_add_chain(const icode &ic);
     void maybe_materialize_incoming_arg_temp(const operand &op);
     void maybe_materialize_incoming_arg_symbol(const operand &op);
     bool get_sign_extended_i8_source(const operand &op, operand &src) const;
@@ -311,11 +344,18 @@ private:
     bool try_emit_inplace_byte_step_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_inplace_pointer_update(const ir_function &fn, size_t &idx);
     bool try_emit_iy_indexed_load(const ir_function &fn, size_t &idx);
+    bool try_emit_iy_indexed_store(const ir_function &fn, size_t &idx);
+    bool try_emit_scaled_frame_load(const ir_function &fn, size_t &idx);
+    bool try_emit_scaled_global_load(const ir_function &fn, size_t &idx);
     bool try_emit_postinc_indexed_load(const ir_function &fn, size_t &idx);
+    bool try_emit_postinc_indexed_store(const ir_function &fn, size_t &idx);
+    bool try_emit_postdec_truth(const ir_function &fn, size_t &idx);
     bool try_emit_shift_xor_self(const ir_function &fn, size_t &idx);
+    bool try_emit_shift_add_byte_accumulate(const ir_function &fn, size_t &idx);
     bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
     bool try_emit_lsb32_shift_xor_diamond(const ir_function &fn, size_t &idx);
     bool try_emit_band_ifx(const ir_function &fn, size_t &idx);
+    bool try_emit_byte_load_compare_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);
     bool find_direct_byte_truth_ifx(const operand &value,
                                     size_t start_idx,

@@ -118,6 +118,20 @@ namespace xas {
             return -1;
         }
 
+        // Undocumented but universally implemented Z80 index-register halves.
+        // They occupy the normal H/L register-code slots behind DD/FD.  A
+        // prefixed H or L operand would name the index half too, so transfers
+        // involving an ordinary H/L register are not encodable and remain
+        // rejected by the instruction selectors below.
+        static bool index_half(const std::string& r, uint8_t& prefix, int& code)
+        {
+            if (r == "IXH") { prefix = 0xDD; code = 4; return true; }
+            if (r == "IXL") { prefix = 0xDD; code = 5; return true; }
+            if (r == "IYH") { prefix = 0xFD; code = 4; return true; }
+            if (r == "IYL") { prefix = 0xFD; code = 5; return true; }
+            return false;
+        }
+
         // 16-bit register pair code for LD/INC/DEC/ADD (BC=0 DE=1 HL=2 SP=3).
         static int reg16_sp(const std::string& r)
         {
@@ -750,6 +764,20 @@ namespace xas {
             if (dst.kind == operand_kind::reg && src.kind == operand_kind::reg) {
                 int d = reg8(dst.reg_name);
                 int s8 = reg8(src.reg_name);
+                uint8_t dp = 0, sp = 0;
+                int dh = -1, sh = -1;
+                const bool dst_half = index_half(dst.reg_name, dp, dh);
+                const bool src_half = index_half(src.reg_name, sp, sh);
+                if ((dst_half || src_half) &&
+                    (!dst_half || !src_half || dp == sp) &&
+                    (dst_half || (d >= 0 && d != 4 && d != 5)) &&
+                    (src_half || (s8 >= 0 && s8 != 4 && s8 != 5))) {
+                    emit_byte_val(dst_half ? dp : sp);
+                    emit_byte_val(static_cast<uint8_t>(
+                        0x40 | ((dst_half ? dh : d) << 3) |
+                        (src_half ? sh : s8)));
+                    return;
+                }
                 if (d >= 0 && s8 >= 0) {
                     emit_byte_val(static_cast<uint8_t>(0x40 | (d << 3) | s8));
                     return;
@@ -783,6 +811,14 @@ namespace xas {
             // LD r, n
             if (dst.kind == operand_kind::reg && src.kind == operand_kind::imm) {
                 int d = reg8(dst.reg_name);
+                uint8_t prefix = 0;
+                int half = -1;
+                if (index_half(dst.reg_name, prefix, half)) {
+                    emit_byte_val(prefix);
+                    emit_byte_val(static_cast<uint8_t>(0x06 | (half << 3)));
+                    emit_byte_expr(*src.value, line);
+                    return;
+                }
                 if (d >= 0) {
                     emit_byte_val(static_cast<uint8_t>(0x06 | (d << 3)));
                     emit_byte_expr(*src.value, line);
@@ -1028,6 +1064,13 @@ namespace xas {
 
             if (src.kind == operand_kind::reg) {
                 int s8 = reg8(src.reg_name);
+                uint8_t prefix = 0;
+                int half = -1;
+                if (index_half(src.reg_name, prefix, half)) {
+                    emit_byte_val(prefix);
+                    emit_byte_val(static_cast<uint8_t>(base | half));
+                    return;
+                }
                 if (s8 >= 0) { emit_byte_val(base | s8); return; }
             }
             if (src.kind == operand_kind::ind_reg && src.reg_name == "HL") {
@@ -1577,10 +1620,17 @@ namespace xas {
 
             // r, r'
             if (dst.kind == operand_kind::reg && src.kind == operand_kind::reg) {
+                uint8_t dp = 0, sp = 0;
+                int dh = -1, sh = -1;
+                if (index_half(dst.reg_name, dp, dh) ||
+                    index_half(src.reg_name, sp, sh)) return 2;
                 if (reg8(dst.reg_name) >= 0 && reg8(src.reg_name) >= 0) return 1;
             }
             // r, n
             if (dst.kind == operand_kind::reg && src.kind == operand_kind::imm) {
+                uint8_t prefix = 0;
+                int half = -1;
+                if (index_half(dst.reg_name, prefix, half)) return 3;
                 if (reg8(dst.reg_name) >= 0) return 2;
                 if (dst.reg_name == "IX" || dst.reg_name == "IY") return 4;
                 if (reg16_sp(dst.reg_name) >= 0) return 3;
@@ -1644,7 +1694,11 @@ namespace xas {
                 && (s.operands[0].reg_name == "IX" || s.operands[0].reg_name == "IY"))
                 return 2;
 
-            if (src->kind == operand_kind::reg) return 1;
+            if (src->kind == operand_kind::reg) {
+                uint8_t prefix = 0;
+                int half = -1;
+                return index_half(src->reg_name, prefix, half) ? 2 : 1;
+            }
             if (src->kind == operand_kind::ind_reg && src->reg_name == "HL") return 1;
             if (src->kind == operand_kind::ind_ix_off
                 || src->kind == operand_kind::ind_iy_off) return 3;

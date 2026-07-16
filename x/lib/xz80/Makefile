@@ -21,10 +21,10 @@ TEST_SOURCES = $(wildcard $(TEST_DIR)/test_*.cpp)
 
 all: $(LIB_TARGET)
 
-$(LIB_TARGET): $(LIB_OUTPUT) $(OUTPUT_DIR) $(OBJECTS)
+$(LIB_TARGET): $(OBJECTS) | $(LIB_OUTPUT) $(OUTPUT_DIR)
 	ar rcs $@ $(OBJECTS)
 
-$(OUTPUT_DIR)/%.o: src/%.cpp
+$(OUTPUT_DIR)/%.o: src/%.cpp | $(OUTPUT_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 test: $(OUTPUT_DIR) $(LIB_OUTPUT)

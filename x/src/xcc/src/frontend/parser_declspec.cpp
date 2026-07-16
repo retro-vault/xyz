@@ -182,7 +182,17 @@ decl_spec parser::parse_declaration_specifiers() {
 
         // Function specifiers
         if (k == tk::KW_INLINE)     { is_inline = true; consume(); continue; }
-        if (k == tk::KW__NORETURN)  { consume(); continue; }
+        if (k == tk::KW__NORETURN) {
+            // Preserve the legacy C11 function specifier through the same
+            // semantic attribute path as C23 [[noreturn]].  Discarding it
+            // here meant call IR could not know that standard functions such
+            // as exit() have no return edge.
+            attr a;
+            a.name = "noreturn";
+            a.loc = consume().loc;
+            local_attrs.push_back(std::move(a));
+            continue;
+        }
 
         // Qualifiers
         if (k == tk::KW_CONST)    { is_const    = true; consume(); continue; }

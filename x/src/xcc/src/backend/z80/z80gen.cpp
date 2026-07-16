@@ -531,12 +531,30 @@ std::string z80_gen::asm_symbol_ref_name(const operand &op) const {
 
 void z80_gen::emit_function(const ir_function &fn) {
     cur_fn_         = &fn;
+    // Very large straight-line functions can make the speed profile exceed
+    // the Z80's 64 KiB address space (MD5's fully unrolled transform is the
+    // practical example).  Retain the speed-profile IR but select compact
+    // backend forms for such a function so the generated program is viable.
+    // Keep the threshold below the point where a successful IR combine can
+    // accidentally switch a still-large straight-line function back to the
+    // dedicated-slot speed backend.  A 32-bit rotate combine, for example,
+    // removes many IR shifts but the remaining hash round still benefits from
+    // liveness-coloured spill slots and compact address forms.
+    compact_codegen_ =
+        opt_settings_.level != opt_level::Os && fn.icodes.size() > 500;
     local_bytes_    = fn.local_bytes;
     fn_end_lbl_     = "__" + fn.name + "_end";
     temp_slots_.clear();
     temp_regs_.clear();
     incoming_symbol_homes_.clear();
     symbol_regs_.clear();
+    iy_preserved_call_indices_.clear();
+    bc_preserved_call_indices_.clear();
+    bounded_induction_limits_.clear();
+    bounded_symbol_induction_comparisons_.clear();
+    bounded_symbol_induction_increments_.clear();
+    jump_table_selector_loads_.clear();
+    iy_u32_remat_offsets_.clear();
     next_temp_slot_ = 0;
     temp_stack_bytes_ = 0;
     temp_frame_bytes_ = 0;
@@ -563,9 +581,12 @@ void z80_gen::emit_function(const ir_function &fn) {
     if (fn.bank < 0) asm_.section_code();
     else asm_.section_code_named(banked_code_section_name(fn.bank));
 
-    if (sdcc_style_specialization_enabled() &&
-        try_emit_sdcc_style_helper(fn)) {
+    // This selector also owns a small set of target-independent, frameless
+    // leaf-loop forms that are enabled in the tuned profiles even while the
+    // legacy SDCC-style helper specializations remain disabled.
+    if (tuned_profile_enabled() && try_emit_sdcc_style_helper(fn)) {
         cur_fn_ = nullptr;
+        compact_codegen_ = false;
         return;
     }
 
@@ -576,7 +597,7 @@ void z80_gen::emit_function(const ir_function &fn) {
         opt_settings_.level == opt_level::O0 ||
         opt_settings_.level == opt_level::O1 ||
         opt_settings_.level == opt_level::O2 ||
-        opt_settings_.level == opt_level::Os;
+        opt_settings_.level == opt_level::Os || compact_codegen_;
     if (temp_frame_prealloc_enabled() ||
         (auto_temp_frame && temp_stack_bytes_ > 0 && !can_omit_frame_pointer(fn)))
         temp_frame_bytes_ = temp_stack_bytes_;
@@ -587,6 +608,59 @@ void z80_gen::emit_function(const ir_function &fn) {
     // functions (e.g. the C23 translation-limit stress test) none of these
     // small-loop patterns can match, so skip them and emit straight-line code.
     const bool structured_match = fn.icodes.size() <= 1200;
+
+    // The jump-table matcher runs at the first compare, one instruction after
+    // a common byte-load selector.  Discover those exact loads up front so
+    // store_a can leave the selector in A instead of writing a register home
+    // that the jump-table dispatch immediately supersedes.
+    if (structured_match && switch_jump_tables_enabled()) {
+        for (size_t start = 1; start + 1 < fn.icodes.size(); ++start) {
+            std::vector<int64_t> values;
+            int selector_tid = -1;
+            size_t pos = start;
+            while (pos + 1 < fn.icodes.size()) {
+                const icode &cmp = fn.icodes[pos];
+                const icode &ifx = fn.icodes[pos + 1];
+                if (cmp.op != icode_op::EQ ||
+                    ifx.op != icode_op::IFX ||
+                    ifx.true_lbl.empty() || !ifx.false_lbl.empty() ||
+                    !cmp.result.is_temp() || !ifx.left.is_temp() ||
+                    cmp.result.temp_id != ifx.left.temp_id)
+                    break;
+                const operand *selector = &cmp.left;
+                const operand *constant = &cmp.right;
+                if (selector->kind == operand_kind::INT_CONST)
+                    std::swap(selector, constant);
+                if (!selector->is_temp() ||
+                    constant->kind != operand_kind::INT_CONST ||
+                    op_size(*selector) != 1 ||
+                    (selector_tid >= 0 &&
+                     selector_tid != selector->temp_id))
+                    break;
+                selector_tid = selector->temp_id;
+                values.push_back(constant->ival);
+                pos += 2;
+            }
+            if (values.size() < 4 || pos >= fn.icodes.size() ||
+                fn.icodes[pos].op != icode_op::GOTO)
+                continue;
+            std::sort(values.begin(), values.end());
+            if (values.front() < 0 || values.back() > 255 ||
+                std::adjacent_find(values.begin(), values.end()) !=
+                    values.end())
+                continue;
+            const int64_t span = values.back() - values.front() + 1;
+            if (span <= 0 || span > 16 ||
+                span > static_cast<int64_t>(values.size() * 2))
+                continue;
+            const icode &load = fn.icodes[start - 1];
+            if (load.op == icode_op::GET_VALUE_AT &&
+                load.result.is_temp() &&
+                load.result.temp_id == selector_tid &&
+                op_size(load.result) == 1)
+                jump_table_selector_loads_.insert(start - 1);
+        }
+    }
 
     for (size_t i = 0; i < fn.icodes.size(); ++i) {
       if (structured_match) {
@@ -600,17 +674,31 @@ void z80_gen::emit_function(const ir_function &fn) {
             continue;
         if (try_emit_inplace_pointer_update(fn, i))
             continue;
+        if (try_emit_scaled_frame_load(fn, i))
+            continue;
+        if (try_emit_scaled_global_load(fn, i))
+            continue;
         if (try_emit_iy_indexed_load(fn, i))
+            continue;
+        if (try_emit_iy_indexed_store(fn, i))
             continue;
         if (try_emit_postinc_indexed_load(fn, i))
             continue;
+        if (try_emit_postinc_indexed_store(fn, i))
+            continue;
+        if (try_emit_postdec_truth(fn, i))
+            continue;
         if (try_emit_shift_xor_self(fn, i))
+            continue;
+        if (try_emit_shift_add_byte_accumulate(fn, i))
             continue;
         if (try_emit_switch_jump_table(fn, i))
             continue;
         if (try_emit_lsb32_shift_xor_diamond(fn, i))
             continue;
         if (try_emit_band_ifx(fn, i))
+            continue;
+        if (try_emit_byte_load_compare_ifx(fn, i))
             continue;
         if (try_emit_compare_ifx(fn, i))
             continue;
@@ -619,6 +707,7 @@ void z80_gen::emit_function(const ir_function &fn) {
     }
 
     cur_fn_ = nullptr;
+    compact_codegen_ = false;
 }
 
 bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
@@ -667,6 +756,785 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
     auto is_global_addr_ref = [&](const operand &op, const char *name) {
         return (op.kind == operand_kind::LABEL_REF && op.name == name) ||
                is_plain_global_symbol(op, name);
+    };
+
+    // A widened unsigned 16x16 multiply narrowed after an eight-bit shift is
+    // a complete register-to-register leaf on Z80.  Select it before frame
+    // planning so the two incoming register arguments are never spilled for
+    // virtual 32-bit intermediates that the runtime helper already returns in
+    // registers.  The match is purely structural and applies to ordinary
+    // Q-format, colour, checksum and scaling helpers alike.
+    auto match_frameless_u16_mul_shr8 = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.local_bytes != 0 || fn.stack_param_bytes != 0 ||
+            body.size() != 6 || !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+        const icode &recv_left = *body[0];
+        const icode &recv_right = *body[1];
+        const icode &mul = *body[2];
+        const icode &shift = *body[3];
+        const icode &narrow = *body[4];
+        const icode &ret = *body[5];
+        if (recv_left.op != icode_op::RECEIVE ||
+            recv_left.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv_left.result) ||
+            recv_right.op != icode_op::RECEIVE ||
+            recv_right.arg_loc != abi_arg_loc::REG_DE ||
+            !is_word_temp(recv_right.result) ||
+            !recv_left.result.type || !recv_right.result.type ||
+            !recv_left.result.type->is_unsigned() ||
+            !recv_right.result.type->is_unsigned() ||
+            mul.op != icode_op::MUL || !mul.result.is_temp() ||
+            op_size(mul.result) != 4 ||
+            !operands_equivalent(mul.left, recv_left.result) ||
+            !operands_equivalent(mul.right, recv_right.result) ||
+            shift.op != icode_op::SHR || !shift.result.is_temp() ||
+            !operands_equivalent(shift.left, mul.result) ||
+            !is_exact_int_const(shift.right, 8) ||
+            !shift.left.type || !shift.left.type->is_unsigned() ||
+            narrow.op != icode_op::CAST ||
+            !is_word_temp(narrow.result) ||
+            !operands_equivalent(narrow.left, shift.result) ||
+            ret.op != icode_op::RETURN ||
+            !operands_equivalent(ret.left, narrow.result)) {
+            return false;
+        }
+
+        emit_helper_header();
+        emit_comment("frameless unsigned 16x16 multiply, shift-8 narrow");
+        asm_.global_decl("___muluint2ulong");
+        emit_line("call\t___muluint2ulong");
+        emit_line("ld\ta, l");
+        emit_line("ld\tl, d");
+        emit_line("ld\th, a");
+        emit_line("ex\tde, hl");
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
+    };
+
+    // Select complete frameless leaf loops before conservative TEMP-frame
+    // planning gets a chance to reserve slots for values that never need to
+    // exist in memory.  These are structural IR forms, independent of source
+    // names: an advancing byte cursor returning its distance, two advancing
+    // cursors returning the first byte difference, and a copy-until-zero
+    // loop.  Treating the whole loop as one allocation region also lets HL,
+    // DE and BC carry multiple live pointers without an IX frame.
+    auto match_frameless_byte_distance = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.local_bytes != 0 || fn.stack_param_bytes != 0 ||
+            body.size() != 13 || !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+
+        const auto &recv = *body[0];
+        const auto &cursor_init = *body[1];
+        const auto &loop = *body[2];
+        const auto &load = *body[3];
+        const auto &truth_cast = *body[4];
+        const auto &branch = *body[5];
+        const auto &advance_label = *body[6];
+        const auto &advance = *body[7];
+        const auto &cursor_store = *body[8];
+        const auto &backedge = *body[9];
+        const auto &done = *body[10];
+        const auto &distance = *body[11];
+        const auto &ret = *body[12];
+
+        if (recv.op != icode_op::RECEIVE ||
+            recv.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv.result) ||
+            cursor_init.op != icode_op::ASSIGN ||
+            !is_word_temp(cursor_init.result) ||
+            !operands_equivalent(cursor_init.left, recv.result) ||
+            loop.op != icode_op::LABEL ||
+            load.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load.result) ||
+            !operands_equivalent(load.left, cursor_init.result) ||
+            !load.right.is_none() ||
+            truth_cast.op != icode_op::CAST ||
+            !is_word_temp(truth_cast.result) ||
+            !operands_equivalent(truth_cast.left, load.result) ||
+            branch.op != icode_op::IFX ||
+            !operands_equivalent(branch.left, truth_cast.result) ||
+            advance_label.op != icode_op::LABEL ||
+            advance_label.label_name != branch.true_lbl ||
+            advance.op != icode_op::ADD ||
+            !is_word_temp(advance.result) ||
+            !operands_equivalent(advance.left, cursor_init.result) ||
+            !is_exact_int_const(advance.right, 1) ||
+            cursor_store.op != icode_op::ASSIGN ||
+            !operands_equivalent(cursor_store.result, cursor_init.result) ||
+            !operands_equivalent(cursor_store.left, advance.result) ||
+            backedge.op != icode_op::GOTO ||
+            backedge.label_name != loop.label_name ||
+            done.op != icode_op::LABEL ||
+            done.label_name != branch.false_lbl ||
+            distance.op != icode_op::SUB ||
+            !is_word_temp(distance.result) ||
+            !operands_equivalent(distance.left, cursor_init.result) ||
+            !operands_equivalent(distance.right, recv.result) ||
+            ret.op != icode_op::RETURN ||
+            !operands_equivalent(ret.left, distance.result)) {
+            return false;
+        }
+
+        emit_helper_header();
+        emit_comment("frameless byte-cursor distance loop");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_label(loop.label_name, false);
+        emit_line("ld\ta, (bc)");
+        emit_line("or\ta, a");
+        emit_line("jr\tz, %s", done.label_name.c_str());
+        emit_line("inc\tbc");
+        emit_line("jr\t%s", loop.label_name.c_str());
+        emit_label(done.label_name, false);
+        emit_line("ld\ta, c");
+        emit_line("sub\tl");
+        emit_line("ld\te, a");
+        emit_line("ld\ta, b");
+        emit_line("sbc\ta, h");
+        emit_line("ld\td, a");
+        emit_line("ret");
+        emit_helper_footer();
+        iy_preserving_local_callees_.insert(fn.name);
+        return true;
+    };
+
+    auto match_frameless_byte_compare = [&]() -> bool {
+        const bool reloaded_byte_difference =
+            body.size() == 22 && body[7]->op == icode_op::GET_VALUE_AT &&
+            body[8]->op == icode_op::GET_VALUE_AT &&
+            body[9]->op == icode_op::EQ;
+        const bool direct_byte_difference =
+            body.size() == 20 || reloaded_byte_difference;
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.local_bytes != 0 || fn.stack_param_bytes != 0 ||
+            (!direct_byte_difference && body.size() != 22) ||
+            !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+
+        const auto &recv_a = *body[0];
+        const auto &recv_b = *body[1];
+        const auto &loop = *body[2];
+        const auto &load_a = *body[3];
+        const auto &truth_cast = *body[4];
+        const auto &truth_branch = *body[5];
+        const auto &compare_label = *body[6];
+        const icode &compare_a =
+            reloaded_byte_difference ? *body[7] : load_a;
+        const auto &load_b = *body[reloaded_byte_difference ? 8 : 7];
+        const auto &equal = *body[reloaded_byte_difference ? 9 : 8];
+        const auto &equal_branch =
+            *body[reloaded_byte_difference ? 10 : 9];
+        const auto &advance_label =
+            *body[reloaded_byte_difference ? 11 : 10];
+        const auto &advance_a =
+            *body[reloaded_byte_difference ? 12 : 11];
+        const auto &store_a = *body[reloaded_byte_difference ? 13 : 12];
+        const auto &advance_b =
+            *body[reloaded_byte_difference ? 14 : 13];
+        const auto &store_b = *body[reloaded_byte_difference ? 15 : 14];
+        const auto &backedge = *body[reloaded_byte_difference ? 16 : 15];
+        const auto &done = *body[reloaded_byte_difference ? 17 : 16];
+        const icode *final_a =
+            reloaded_byte_difference ? body[18] : nullptr;
+        const auto &final_b = *body[reloaded_byte_difference ? 19 : 17];
+        const icode *cast_a =
+            direct_byte_difference ? nullptr : body[18];
+        const icode *cast_b =
+            direct_byte_difference ? nullptr : body[19];
+        const auto &difference =
+            *body[body.size() == 20 ? 18 : 20];
+        const auto &ret = *body[body.size() == 20 ? 19 : 21];
+
+        if (recv_a.op != icode_op::RECEIVE ||
+            recv_a.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv_a.result) ||
+            recv_b.op != icode_op::RECEIVE ||
+            recv_b.arg_loc != abi_arg_loc::REG_DE ||
+            !is_word_temp(recv_b.result) ||
+            loop.op != icode_op::LABEL ||
+            load_a.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load_a.result) ||
+            !operands_equivalent(load_a.left, recv_a.result) ||
+            !load_a.right.is_none() ||
+            truth_cast.op != icode_op::CAST ||
+            !is_word_temp(truth_cast.result) ||
+            !operands_equivalent(truth_cast.left, load_a.result) ||
+            truth_branch.op != icode_op::IFX ||
+            !operands_equivalent(truth_branch.left, truth_cast.result) ||
+            compare_label.op != icode_op::LABEL ||
+            compare_label.label_name != truth_branch.true_lbl ||
+            (reloaded_byte_difference &&
+             (compare_a.op != icode_op::GET_VALUE_AT ||
+              !is_byte_temp(compare_a.result) ||
+              !operands_equivalent(compare_a.left, recv_a.result) ||
+              !compare_a.right.is_none())) ||
+            load_b.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load_b.result) ||
+            !operands_equivalent(load_b.left, recv_b.result) ||
+            !load_b.right.is_none() ||
+            equal.op != icode_op::EQ || !is_byte_temp(equal.left) ||
+            !((operands_equivalent(equal.left, compare_a.result) &&
+               operands_equivalent(equal.right, load_b.result)) ||
+              (operands_equivalent(equal.right, compare_a.result) &&
+               operands_equivalent(equal.left, load_b.result))) ||
+            equal_branch.op != icode_op::IFX ||
+            !operands_equivalent(equal_branch.left, equal.result) ||
+            advance_label.op != icode_op::LABEL ||
+            advance_label.label_name != equal_branch.true_lbl ||
+            advance_a.op != icode_op::ADD ||
+            !is_word_temp(advance_a.result) ||
+            !operands_equivalent(advance_a.left, recv_a.result) ||
+            !is_exact_int_const(advance_a.right, 1) ||
+            store_a.op != icode_op::ASSIGN ||
+            !operands_equivalent(store_a.result, recv_a.result) ||
+            !operands_equivalent(store_a.left, advance_a.result) ||
+            advance_b.op != icode_op::ADD ||
+            !is_word_temp(advance_b.result) ||
+            !operands_equivalent(advance_b.left, recv_b.result) ||
+            !is_exact_int_const(advance_b.right, 1) ||
+            store_b.op != icode_op::ASSIGN ||
+            !operands_equivalent(store_b.result, recv_b.result) ||
+            !operands_equivalent(store_b.left, advance_b.result) ||
+            backedge.op != icode_op::GOTO ||
+            backedge.label_name != loop.label_name ||
+            done.op != icode_op::LABEL ||
+            done.label_name != truth_branch.false_lbl ||
+            done.label_name != equal_branch.false_lbl ||
+            final_b.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(final_b.result) ||
+            !operands_equivalent(final_b.left, recv_b.result) ||
+            !final_b.right.is_none() ||
+            (reloaded_byte_difference &&
+             (final_a->op != icode_op::GET_VALUE_AT ||
+              !is_byte_temp(final_a->result) ||
+              !operands_equivalent(final_a->left, recv_a.result) ||
+              !final_a->right.is_none())) ||
+            (!direct_byte_difference &&
+             (cast_a->op != icode_op::CAST ||
+              !is_word_temp(cast_a->result) ||
+              !operands_equivalent(cast_a->left, load_a.result) ||
+              cast_b->op != icode_op::CAST ||
+              !is_word_temp(cast_b->result) ||
+              !operands_equivalent(cast_b->left, final_b.result))) ||
+            difference.op != icode_op::SUB ||
+            !is_word_temp(difference.result) ||
+            !operands_equivalent(
+                difference.left,
+                reloaded_byte_difference
+                    ? final_a->result
+                    : (direct_byte_difference ? load_a.result
+                                              : cast_a->result)) ||
+            !operands_equivalent(
+                difference.right,
+                direct_byte_difference ? final_b.result : cast_b->result) ||
+            ret.op != icode_op::RETURN ||
+            !operands_equivalent(ret.left, difference.result)) {
+            return false;
+        }
+
+        emit_helper_header();
+        emit_comment("frameless dual byte-cursor compare loop");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_label(loop.label_name, false);
+        emit_line("ld\ta, (bc)");
+        emit_line("ld\tl, a");
+        emit_line("or\ta, a");
+        emit_line("jr\tz, %s", done.label_name.c_str());
+        emit_line("ld\ta, (de)");
+        emit_line("cp\tl");
+        emit_line("jr\tnz, %s", done.label_name.c_str());
+        emit_line("inc\tbc");
+        emit_line("inc\tde");
+        emit_line("jr\t%s", loop.label_name.c_str());
+        emit_label(done.label_name, false);
+        emit_line("ld\ta, (de)");
+        emit_line("ld\th, a");
+        emit_line("ld\ta, l");
+        emit_line("sub\th");
+        emit_line("ld\te, a");
+        emit_line("sbc\ta, a");
+        emit_line("ld\td, a");
+        emit_line("ret");
+        emit_helper_footer();
+        iy_preserving_local_callees_.insert(fn.name);
+        return true;
+    };
+
+    auto match_frameless_byte_copy_until_zero = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.local_bytes != 0 || fn.stack_param_bytes != 0 ||
+            body.size() != 13 || !fn.ret_type ||
+            fn.ret_type->kind != type_kind::VOID) {
+            return false;
+        }
+
+        const auto &recv_dst = *body[0];
+        const auto &recv_src = *body[1];
+        const auto &loop = *body[2];
+        const auto &old_src = *body[3];
+        const auto &advance_src = *body[4];
+        const auto &store_src = *body[5];
+        const auto &load = *body[6];
+        const auto &copy = *body[7];
+        const auto &advance_dst = *body[8];
+        const auto &store_dst = *body[9];
+        const auto &truth_cast = *body[10];
+        const auto &branch = *body[11];
+        const auto &done = *body[12];
+
+        if (recv_dst.op != icode_op::RECEIVE ||
+            recv_dst.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv_dst.result) ||
+            recv_src.op != icode_op::RECEIVE ||
+            recv_src.arg_loc != abi_arg_loc::REG_DE ||
+            !is_word_temp(recv_src.result) ||
+            loop.op != icode_op::LABEL ||
+            old_src.op != icode_op::ASSIGN ||
+            !is_word_temp(old_src.result) ||
+            !operands_equivalent(old_src.left, recv_src.result) ||
+            advance_src.op != icode_op::ADD ||
+            !is_word_temp(advance_src.result) ||
+            !operands_equivalent(advance_src.left, recv_src.result) ||
+            !is_exact_int_const(advance_src.right, 1) ||
+            store_src.op != icode_op::ASSIGN ||
+            !operands_equivalent(store_src.result, recv_src.result) ||
+            !operands_equivalent(store_src.left, advance_src.result) ||
+            load.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load.result) ||
+            !operands_equivalent(load.left, old_src.result) ||
+            !load.right.is_none() ||
+            copy.op != icode_op::SET_VALUE_AT ||
+            !operands_equivalent(copy.result, recv_dst.result) ||
+            !operands_equivalent(copy.left, load.result) ||
+            !copy.right.is_none() ||
+            advance_dst.op != icode_op::ADD ||
+            !is_word_temp(advance_dst.result) ||
+            !operands_equivalent(advance_dst.left, recv_dst.result) ||
+            !is_exact_int_const(advance_dst.right, 1) ||
+            store_dst.op != icode_op::ASSIGN ||
+            !operands_equivalent(store_dst.result, recv_dst.result) ||
+            !operands_equivalent(store_dst.left, advance_dst.result) ||
+            truth_cast.op != icode_op::CAST ||
+            !is_word_temp(truth_cast.result) ||
+            !operands_equivalent(truth_cast.left, load.result) ||
+            branch.op != icode_op::IFX ||
+            !operands_equivalent(branch.left, truth_cast.result) ||
+            branch.true_lbl != loop.label_name ||
+            done.op != icode_op::LABEL ||
+            done.label_name != branch.false_lbl) {
+            return false;
+        }
+
+        emit_helper_header();
+        emit_comment("frameless copy-until-zero byte loop");
+        emit_line("ld\tb, d");
+        emit_line("ld\tc, e");
+        emit_label(loop.label_name, false);
+        emit_line("ld\ta, (bc)");
+        emit_line("inc\tbc");
+        emit_line("ld\t(hl), a");
+        emit_line("inc\thl");
+        emit_line("or\ta, a");
+        emit_line("jr\tnz, %s", loop.label_name.c_str());
+        emit_line("ret");
+        emit_helper_footer();
+        iy_preserving_local_callees_.insert(fn.name);
+        return true;
+    };
+
+    auto match_frameless_fixed_byte_equality = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.stack_param_bytes != 0 || body.size() != 24 ||
+            !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+
+        const auto &recv_a = *body[0];
+        const auto &recv_b = *body[1];
+        const auto &index_init = *body[2];
+        const auto &cursor_a_init = *body[3];
+        const auto &cursor_b_init = *body[4];
+        const auto &loop = *body[5];
+        const auto &bound_cmp = *body[6];
+        const auto &bound_branch = *body[7];
+        const auto &body_label = *body[8];
+        const auto &load_a = *body[9];
+        const auto &load_b = *body[10];
+        const auto &different = *body[11];
+        const auto &different_branch = *body[12];
+        const auto &different_label = *body[13];
+        const auto &return_false = *body[14];
+        const auto &step_label = *body[15];
+        const auto &index_step = *body[16];
+        const auto &cursor_b_step = *body[17];
+        const auto &cursor_b_store = *body[18];
+        const auto &cursor_a_step = *body[19];
+        const auto &cursor_a_store = *body[20];
+        const auto &backedge = *body[21];
+        const auto &done = *body[22];
+        const auto &return_true = *body[23];
+
+        if (recv_a.op != icode_op::RECEIVE ||
+            recv_a.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv_a.result) ||
+            recv_b.op != icode_op::RECEIVE ||
+            recv_b.arg_loc != abi_arg_loc::REG_DE ||
+            !is_word_temp(recv_b.result) ||
+            index_init.op != icode_op::ASSIGN ||
+            !index_init.result.is_temp() ||
+            !is_exact_int_const(index_init.left, 0) ||
+            cursor_a_init.op != icode_op::ASSIGN ||
+            !is_word_temp(cursor_a_init.result) ||
+            !operands_equivalent(cursor_a_init.left, recv_a.result) ||
+            cursor_b_init.op != icode_op::ASSIGN ||
+            !is_word_temp(cursor_b_init.result) ||
+            !operands_equivalent(cursor_b_init.left, recv_b.result) ||
+            loop.op != icode_op::LABEL ||
+            bound_cmp.op != icode_op::LT ||
+            !operands_equivalent(bound_cmp.left, index_init.result) ||
+            bound_cmp.right.kind != operand_kind::INT_CONST ||
+            bound_cmp.right.ival <= 0 || bound_cmp.right.ival > 255 ||
+            bound_branch.op != icode_op::IFX ||
+            !operands_equivalent(bound_branch.left, bound_cmp.result) ||
+            body_label.op != icode_op::LABEL ||
+            body_label.label_name != bound_branch.true_lbl ||
+            load_a.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load_a.result) ||
+            !operands_equivalent(load_a.left, cursor_a_init.result) ||
+            !load_a.right.is_none() ||
+            load_b.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load_b.result) ||
+            !operands_equivalent(load_b.left, cursor_b_init.result) ||
+            !load_b.right.is_none() ||
+            different.op != icode_op::NE ||
+            !((operands_equivalent(different.left, load_a.result) &&
+               operands_equivalent(different.right, load_b.result)) ||
+              (operands_equivalent(different.right, load_a.result) &&
+               operands_equivalent(different.left, load_b.result))) ||
+            different_branch.op != icode_op::IFX ||
+            !operands_equivalent(different_branch.left, different.result) ||
+            different_label.op != icode_op::LABEL ||
+            different_label.label_name != different_branch.true_lbl ||
+            return_false.op != icode_op::RETURN ||
+            !is_exact_int_const(return_false.left, 0) ||
+            step_label.op != icode_op::LABEL ||
+            step_label.label_name != different_branch.false_lbl ||
+            index_step.op != icode_op::ADD ||
+            !operands_equivalent(index_step.result, index_init.result) ||
+            !operands_equivalent(index_step.left, index_init.result) ||
+            !is_exact_int_const(index_step.right, 1) ||
+            cursor_b_step.op != icode_op::ADD ||
+            !is_word_temp(cursor_b_step.result) ||
+            !operands_equivalent(cursor_b_step.left, cursor_b_init.result) ||
+            !is_exact_int_const(cursor_b_step.right, 1) ||
+            cursor_b_store.op != icode_op::ASSIGN ||
+            !operands_equivalent(cursor_b_store.result, cursor_b_init.result) ||
+            !operands_equivalent(cursor_b_store.left, cursor_b_step.result) ||
+            cursor_a_step.op != icode_op::ADD ||
+            !is_word_temp(cursor_a_step.result) ||
+            !operands_equivalent(cursor_a_step.left, cursor_a_init.result) ||
+            !is_exact_int_const(cursor_a_step.right, 1) ||
+            cursor_a_store.op != icode_op::ASSIGN ||
+            !operands_equivalent(cursor_a_store.result, cursor_a_init.result) ||
+            !operands_equivalent(cursor_a_store.left, cursor_a_step.result) ||
+            backedge.op != icode_op::GOTO ||
+            backedge.label_name != loop.label_name ||
+            done.op != icode_op::LABEL ||
+            done.label_name != bound_branch.false_lbl ||
+            return_true.op != icode_op::RETURN ||
+            !is_exact_int_const(return_true.left, 1)) {
+            return false;
+        }
+
+        const int count = static_cast<int>(bound_cmp.right.ival);
+        emit_helper_header();
+        emit_comment("frameless fixed-length byte equality loop");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_line("push\tde");
+        emit_line("pop\tiy");
+        emit_line("ld\te, %s", asm_.imm(count).c_str());
+        emit_label(loop.label_name, false);
+        emit_line("ld\ta, (bc)");
+        emit_line("cp\t0(iy)");
+        emit_line("jr\tnz, %s", different_label.label_name.c_str());
+        emit_line("inc\tbc");
+        emit_line("inc\tiy");
+        emit_line("dec\te");
+        emit_line("jr\tnz, %s", loop.label_name.c_str());
+        emit_line("ld\tde, %s", asm_.imm(1).c_str());
+        emit_line("ret");
+        emit_label(different_label.label_name, false);
+        emit_line("ld\tde, %s", asm_.imm(0).c_str());
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
+    };
+
+    auto match_frameless_fixed_shift_add_byte_fold = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.stack_param_bytes != 0 ||
+            (body.size() != 19 && body.size() != 20) ||
+            !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+
+        // The terminal widened-byte forwarding pass consumes the explicit
+        // byte-to-word CAST, leaving the same operation with a direct byte
+        // operand.  Accept both equivalent IR spellings.
+        const bool has_widen = body.size() == 20;
+
+        const auto &recv = *body[0];
+        const auto &acc_init = *body[1];
+        const auto &index_init = *body[2];
+        const auto &cursor_init = *body[3];
+        const auto &loop = *body[4];
+        const auto &bound_cmp = *body[5];
+        const auto &bound_branch = *body[6];
+        const auto &body_label = *body[7];
+        const auto &shift = *body[8];
+        const auto &add_old = *body[9];
+        const auto &load = *body[10];
+        const icode *widen = has_widen ? body[11] : nullptr;
+        const auto &add_byte = *body[has_widen ? 12 : 11];
+        const auto &step_label = *body[has_widen ? 13 : 12];
+        const auto &index_step = *body[has_widen ? 14 : 13];
+        const auto &cursor_step = *body[has_widen ? 15 : 14];
+        const auto &cursor_store = *body[has_widen ? 16 : 15];
+        const auto &backedge = *body[has_widen ? 17 : 16];
+        const auto &done = *body[has_widen ? 18 : 17];
+        const auto &ret = *body[has_widen ? 19 : 18];
+        const operand &byte_value = has_widen ? widen->result : load.result;
+
+        if (recv.op != icode_op::RECEIVE ||
+            recv.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv.result) ||
+            acc_init.op != icode_op::ASSIGN ||
+            !is_word_temp(acc_init.result) ||
+            acc_init.left.kind != operand_kind::INT_CONST ||
+            index_init.op != icode_op::ASSIGN ||
+            !index_init.result.is_temp() ||
+            !is_exact_int_const(index_init.left, 0) ||
+            cursor_init.op != icode_op::ASSIGN ||
+            !is_word_temp(cursor_init.result) ||
+            !operands_equivalent(cursor_init.left, recv.result) ||
+            loop.op != icode_op::LABEL ||
+            bound_cmp.op != icode_op::LT ||
+            !operands_equivalent(bound_cmp.left, index_init.result) ||
+            bound_cmp.right.kind != operand_kind::INT_CONST ||
+            bound_cmp.right.ival <= 0 || bound_cmp.right.ival > 255 ||
+            bound_branch.op != icode_op::IFX ||
+            !operands_equivalent(bound_branch.left, bound_cmp.result) ||
+            body_label.op != icode_op::LABEL ||
+            body_label.label_name != bound_branch.true_lbl ||
+            shift.op != icode_op::SHL || !is_word_temp(shift.result) ||
+            !operands_equivalent(shift.left, acc_init.result) ||
+            shift.right.kind != operand_kind::INT_CONST ||
+            shift.right.ival <= 0 || shift.right.ival > 7 ||
+            add_old.op != icode_op::ADD || !is_word_temp(add_old.result) ||
+            !((operands_equivalent(add_old.left, shift.result) &&
+               operands_equivalent(add_old.right, acc_init.result)) ||
+              (operands_equivalent(add_old.right, shift.result) &&
+               operands_equivalent(add_old.left, acc_init.result))) ||
+            load.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load.result) || !load.result.type ||
+            !load.result.type->is_unsigned() ||
+            !operands_equivalent(load.left, cursor_init.result) ||
+            !load.right.is_none() ||
+            (has_widen &&
+             (widen->op != icode_op::CAST || !is_word_temp(widen->result) ||
+              !widen->result.type || !widen->result.type->is_unsigned() ||
+              !operands_equivalent(widen->left, load.result))) ||
+            add_byte.op != icode_op::ADD ||
+            !operands_equivalent(add_byte.result, acc_init.result) ||
+            !((operands_equivalent(add_byte.left, add_old.result) &&
+               operands_equivalent(add_byte.right, byte_value)) ||
+              (operands_equivalent(add_byte.right, add_old.result) &&
+               operands_equivalent(add_byte.left, byte_value))) ||
+            step_label.op != icode_op::LABEL ||
+            index_step.op != icode_op::ADD ||
+            !operands_equivalent(index_step.result, index_init.result) ||
+            !operands_equivalent(index_step.left, index_init.result) ||
+            !is_exact_int_const(index_step.right, 1) ||
+            cursor_step.op != icode_op::ADD ||
+            !is_word_temp(cursor_step.result) ||
+            !operands_equivalent(cursor_step.left, cursor_init.result) ||
+            !is_exact_int_const(cursor_step.right, 1) ||
+            cursor_store.op != icode_op::ASSIGN ||
+            !operands_equivalent(cursor_store.result, cursor_init.result) ||
+            !operands_equivalent(cursor_store.left, cursor_step.result) ||
+            backedge.op != icode_op::GOTO ||
+            backedge.label_name != loop.label_name ||
+            done.op != icode_op::LABEL ||
+            done.label_name != bound_branch.false_lbl ||
+            ret.op != icode_op::RETURN ||
+            !operands_equivalent(ret.left, acc_init.result)) {
+            return false;
+        }
+
+        const int count = static_cast<int>(bound_cmp.right.ival);
+        const int shift_count = static_cast<int>(shift.right.ival);
+        const int initial = static_cast<int>(acc_init.left.ival & 0xffff);
+        emit_helper_header();
+        emit_comment("frameless fixed-count shift-add byte fold");
+        emit_line("push\thl");
+        emit_line("pop\tiy");
+        emit_line("ld\tde, %s", asm_.imm(initial).c_str());
+        emit_line("ld\tb, %s", asm_.imm(count).c_str());
+        emit_label(loop.label_name, false);
+        emit_line("ld\th, d");
+        emit_line("ld\tl, e");
+        for (int i = 0; i < shift_count; ++i)
+            emit_line("add\thl, hl");
+        emit_line("add\thl, de");
+        emit_line("ld\te, 0(iy)");
+        emit_line("ld\td, %s", asm_.imm(0).c_str());
+        emit_line("add\thl, de");
+        emit_line("ex\tde, hl");
+        emit_line("inc\tiy");
+        emit_line("djnz\t%s", loop.label_name.c_str());
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
+    };
+
+    // Size-oriented IR commonly advances one cursor explicitly while spelling
+    // the second as base+index.  Prove the index and first cursor advance in
+    // lockstep, then allocate the equivalent second cursor to IY for the
+    // complete equality region.
+    auto match_frameless_indexed_fixed_byte_equality = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+            fn.stack_param_bytes != 0 || body.size() != 23 ||
+            !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+
+        const auto &recv_a = *body[0];
+        const auto &recv_b = *body[1];
+        const auto &index_init = *body[2];
+        const auto &cursor_a_init = *body[3];
+        const auto &loop = *body[4];
+        const auto &bound_cmp = *body[5];
+        const auto &bound_branch = *body[6];
+        const auto &body_label = *body[7];
+        const auto &wide_index = *body[8];
+        const auto &load_a = *body[9];
+        const auto &address_b = *body[10];
+        const auto &load_b = *body[11];
+        const auto &different = *body[12];
+        const auto &different_branch = *body[13];
+        const auto &different_label = *body[14];
+        const auto &return_false = *body[15];
+        const auto &step_label = *body[16];
+        const auto &index_step = *body[17];
+        const auto &cursor_a_step = *body[18];
+        const auto &cursor_a_store = *body[19];
+        const auto &backedge = *body[20];
+        const auto &done = *body[21];
+        const auto &return_true = *body[22];
+
+        const bool b_address_matches =
+            address_b.op == icode_op::ADD &&
+            ((operands_equivalent(address_b.left, recv_b.result) &&
+              operands_equivalent(address_b.right, wide_index.result)) ||
+             (operands_equivalent(address_b.right, recv_b.result) &&
+              operands_equivalent(address_b.left, wide_index.result)));
+        if (recv_a.op != icode_op::RECEIVE ||
+            recv_a.arg_loc != abi_arg_loc::REG_HL ||
+            !is_word_temp(recv_a.result) ||
+            recv_b.op != icode_op::RECEIVE ||
+            recv_b.arg_loc != abi_arg_loc::REG_DE ||
+            !is_word_temp(recv_b.result) ||
+            index_init.op != icode_op::ASSIGN ||
+            !index_init.result.is_temp() ||
+            !is_exact_int_const(index_init.left, 0) ||
+            cursor_a_init.op != icode_op::ASSIGN ||
+            !is_word_temp(cursor_a_init.result) ||
+            !operands_equivalent(cursor_a_init.left, recv_a.result) ||
+            loop.op != icode_op::LABEL ||
+            bound_cmp.op != icode_op::LT ||
+            !operands_equivalent(bound_cmp.left, index_init.result) ||
+            bound_cmp.right.kind != operand_kind::INT_CONST ||
+            bound_cmp.right.ival <= 0 || bound_cmp.right.ival > 255 ||
+            bound_branch.op != icode_op::IFX ||
+            !operands_equivalent(bound_branch.left, bound_cmp.result) ||
+            body_label.op != icode_op::LABEL ||
+            body_label.label_name != bound_branch.true_lbl ||
+            wide_index.op != icode_op::CAST ||
+            !is_word_temp(wide_index.result) ||
+            !operands_equivalent(wide_index.left, index_init.result) ||
+            load_a.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load_a.result) ||
+            !operands_equivalent(load_a.left, cursor_a_init.result) ||
+            !load_a.right.is_none() || !b_address_matches ||
+            !is_word_temp(address_b.result) ||
+            load_b.op != icode_op::GET_VALUE_AT ||
+            !is_byte_temp(load_b.result) ||
+            !operands_equivalent(load_b.left, address_b.result) ||
+            !load_b.right.is_none() ||
+            different.op != icode_op::NE ||
+            !((operands_equivalent(different.left, load_a.result) &&
+               operands_equivalent(different.right, load_b.result)) ||
+              (operands_equivalent(different.right, load_a.result) &&
+               operands_equivalent(different.left, load_b.result))) ||
+            different_branch.op != icode_op::IFX ||
+            !operands_equivalent(different_branch.left, different.result) ||
+            different_label.op != icode_op::LABEL ||
+            different_label.label_name != different_branch.true_lbl ||
+            return_false.op != icode_op::RETURN ||
+            !is_exact_int_const(return_false.left, 0) ||
+            step_label.op != icode_op::LABEL ||
+            step_label.label_name != different_branch.false_lbl ||
+            index_step.op != icode_op::ADD ||
+            !operands_equivalent(index_step.result, index_init.result) ||
+            !operands_equivalent(index_step.left, index_init.result) ||
+            !is_exact_int_const(index_step.right, 1) ||
+            cursor_a_step.op != icode_op::ADD ||
+            !is_word_temp(cursor_a_step.result) ||
+            !operands_equivalent(cursor_a_step.left, cursor_a_init.result) ||
+            !is_exact_int_const(cursor_a_step.right, 1) ||
+            cursor_a_store.op != icode_op::ASSIGN ||
+            !operands_equivalent(cursor_a_store.result, cursor_a_init.result) ||
+            !operands_equivalent(cursor_a_store.left, cursor_a_step.result) ||
+            backedge.op != icode_op::GOTO ||
+            backedge.label_name != loop.label_name ||
+            done.op != icode_op::LABEL ||
+            done.label_name != bound_branch.false_lbl ||
+            return_true.op != icode_op::RETURN ||
+            !is_exact_int_const(return_true.left, 1)) {
+            return false;
+        }
+
+        const int count = static_cast<int>(bound_cmp.right.ival);
+        emit_helper_header();
+        emit_comment("frameless indexed fixed-length byte equality loop");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_line("push\tde");
+        emit_line("pop\tiy");
+        emit_line("ld\te, %s", asm_.imm(count).c_str());
+        emit_label(loop.label_name, false);
+        emit_line("ld\ta, (bc)");
+        emit_line("cp\t0(iy)");
+        emit_line("jr\tnz, %s", different_label.label_name.c_str());
+        emit_line("inc\tbc");
+        emit_line("inc\tiy");
+        emit_line("dec\te");
+        emit_line("jr\tnz, %s", loop.label_name.c_str());
+        emit_line("ld\tde, %s", asm_.imm(1).c_str());
+        emit_line("ret");
+        emit_label(different_label.label_name, false);
+        emit_line("ld\tde, %s", asm_.imm(0).c_str());
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
     };
 
     auto match_list_match_eq = [&]() -> bool {
@@ -4964,6 +5832,18 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         return true;
     };
 
+    if (match_frameless_u16_mul_shr8() ||
+        match_frameless_byte_distance() ||
+        match_frameless_byte_compare() ||
+        match_frameless_byte_copy_until_zero() ||
+        match_frameless_fixed_byte_equality() ||
+        match_frameless_fixed_shift_add_byte_fold() ||
+        match_frameless_indexed_fixed_byte_equality()) {
+        return true;
+    }
+    if (!sdcc_style_specialization_enabled())
+        return false;
+
     return match_list_match_eq() ||
            match_list_insert() ||
            match_list_find() ||
@@ -6042,9 +6922,56 @@ bool z80_gen::try_emit_iy_indexed_load(const ir_function &fn, size_t &idx) {
         !load_ic.left.is_temp() ||
         load_ic.left.temp_id != add_ic.result.temp_id ||
         !load_ic.right.is_none() ||
-        (op_size(load_ic.result) != 1 && op_size(load_ic.result) != 2) ||
-        temp_value_used_after(fn, idx + 2, add_ic.result.temp_id)) {
+        (op_size(load_ic.result) != 1 && op_size(load_ic.result) != 2 &&
+         op_size(load_ic.result) != 4)) {
         return false;
+    }
+
+    // Leave an adjacent read/modify/write chain to gen_get_value_at(), which
+    // can update the addressed memory in place.  Consuming ADD+GET here would
+    // hide that stronger fusion and force the updated value through a temp.
+    if (idx + 3 < fn.icodes.size()) {
+        const icode &update = fn.icodes[idx + 2];
+        const icode &store = fn.icodes[idx + 3];
+        const bool update_uses_load =
+            update.left.is_temp() && load_ic.result.is_temp() &&
+            update.left.temp_id == load_ic.result.temp_id;
+        const bool stores_update =
+            update.result.is_temp() && store.left.is_temp() &&
+            store.left.temp_id == update.result.temp_id;
+        const bool same_address =
+            store.op == icode_op::SET_VALUE_AT && store.result.is_temp() &&
+            store.result.temp_id == add_ic.result.temp_id &&
+            store.right.is_none();
+        if (update_uses_load && stores_update && same_address)
+            return false;
+    }
+
+    // A derived address may remain live after the first load.  Omit its
+    // materialization when every use is a narrow direct dereference; later
+    // accesses recover the IY displacement from this IR definition.
+    const int address_tid = add_ic.result.temp_id;
+    for (size_t k = idx + 1; k < fn.icodes.size(); ++k) {
+        const icode &use = fn.icodes[k];
+        const bool in_result = use.result.is_temp() &&
+                               use.result.temp_id == address_tid;
+        const bool in_left = use.left.is_temp() &&
+                             use.left.temp_id == address_tid;
+        const bool in_right = use.right.is_temp() &&
+                              use.right.temp_id == address_tid;
+        if (!in_result && !in_left && !in_right)
+            continue;
+        const bool direct_load =
+            use.op == icode_op::GET_VALUE_AT && in_left && !in_result &&
+            !in_right && use.right.is_none() &&
+            (op_size(use.result) == 1 || op_size(use.result) == 2 ||
+             op_size(use.result) == 4);
+        const bool direct_store =
+            use.op == icode_op::SET_VALUE_AT && in_result && !in_left &&
+            !in_right && use.right.is_none() &&
+            (op_size(use.left) == 1 || op_size(use.left) == 2);
+        if (!direct_load && !direct_store)
+            return false;
     }
 
     const operand *cursor = &add_ic.left;
@@ -6066,13 +6993,313 @@ bool z80_gen::try_emit_iy_indexed_load(const ir_function &fn, size_t &idx) {
         debug_->emit_location(load_ic.line ? load_ic.line : add_ic.line);
     invalidate_pair_cache();
     invalidate_a_cache();
+    if (size == 4 && idx + 2 < fn.icodes.size()) {
+        const icode &consumer = fn.icodes[idx + 2];
+        const bool used_by_consumer =
+            load_ic.result.is_temp() &&
+            ((consumer.left.is_temp() &&
+              consumer.left.temp_id == load_ic.result.temp_id) ||
+             (consumer.right.is_temp() &&
+              consumer.right.temp_id == load_ic.result.temp_id));
+        if (consumer.op == icode_op::ADD && op_size(consumer.result) == 4 &&
+            used_by_consumer &&
+            !temp_value_used_after(fn, idx + 3, load_ic.result.temp_id)) {
+            iy_u32_remat_offsets_[load_ic.result.temp_id] = disp;
+            idx += 1;
+            return true;
+        }
+    }
     if (size == 1) {
         emit_line("ld\ta, %lld(iy)", static_cast<long long>(disp));
         store_a(load_ic.result);
-    } else {
+    } else if (size == 2) {
         emit_line("ld\te, %lld(iy)", static_cast<long long>(disp));
         emit_line("ld\td, %lld(iy)", static_cast<long long>(disp + 1));
         store_de(load_ic.result);
+    } else {
+        emit_line("ld\te, %lld(iy)", static_cast<long long>(disp));
+        emit_line("ld\td, %lld(iy)", static_cast<long long>(disp + 1));
+        store_de_word(load_ic.result, 0);
+        emit_line("ld\te, %lld(iy)", static_cast<long long>(disp + 2));
+        emit_line("ld\td, %lld(iy)", static_cast<long long>(disp + 3));
+        store_de_word(load_ic.result, 1);
+    }
+    idx += 1;
+    return true;
+}
+
+bool z80_gen::try_emit_scaled_frame_load(const ir_function &fn,
+                                         size_t &idx) {
+    if (idx + 2 >= fn.icodes.size())
+        return false;
+
+    const icode &scale = fn.icodes[idx];
+    const icode &address = fn.icodes[idx + 1];
+    const icode &load = fn.icodes[idx + 2];
+    if (scale.op != icode_op::SHL || !scale.result.is_temp() ||
+        scale.right.kind != operand_kind::INT_CONST ||
+        scale.right.ival < 1 || scale.right.ival > 7 ||
+        op_size(scale.left) != 2 || op_size(scale.result) != 2 ||
+        address.op != icode_op::ADD || !address.result.is_temp() ||
+        load.op != icode_op::GET_VALUE_AT || !load.left.is_temp() ||
+        load.left.temp_id != address.result.temp_id ||
+        !load.right.is_none() ||
+        (op_size(load.result) != 1 && op_size(load.result) != 2) ||
+        (load.result.type && load.result.type->is_volatile) ||
+        (load.left.type && load.left.type->base &&
+         load.left.type->base->is_volatile)) {
+        return false;
+    }
+
+    const operand *base = nullptr;
+    if (address.left.is_temp() &&
+        address.left.temp_id == scale.result.temp_id) {
+        base = &address.right;
+    } else if (address.right.is_temp() &&
+               address.right.temp_id == scale.result.temp_id) {
+        base = &address.left;
+    } else {
+        return false;
+    }
+
+    const operand *frame_object = nullptr;
+    if (base->kind == operand_kind::SYMBOL && !base->is_global &&
+        !base->is_tls && !base->is_func) {
+        frame_object = base;
+    } else if (base->is_temp()) {
+        const icode *base_def = find_temp_def_before(base->temp_id, idx + 1);
+        if (base_def && base_def->op == icode_op::ADDRESS_OF &&
+            !base_def->left.is_global && !base_def->left.is_tls &&
+            !base_def->left.is_func &&
+            (base_def->left.kind == operand_kind::SYMBOL ||
+             base_def->left.kind == operand_kind::TEMP)) {
+            frame_object = &base_def->left;
+        }
+    }
+    if (!frame_object ||
+        (frame_object->type && frame_object->type->is_volatile) ||
+        temp_value_used_after(fn, idx + 2, scale.result.temp_id)) {
+        return false;
+    }
+
+    // If the derived pointer remains live, materialize it in its ordinary
+    // spill slot before loading through it.  A register-resident pointer
+    // cannot be preserved generically because the dereference may own the
+    // same pair; leave that uncommon case to the normal lowering.
+    const bool address_live =
+        temp_value_used_after(fn, idx + 3, address.result.temp_id);
+    if (address_live && temp_regs_.count(address.result.temp_id))
+        return false;
+
+    int frame_off = frame_object->is_param
+                        ? param_ix_offset(*frame_object)
+                        : frame_object->stack_offset;
+    if (frame_object->kind == operand_kind::TEMP)
+        frame_off = ix_offset_of(*frame_object);
+    frame_off += frame_object->byte_offset + base->byte_offset;
+
+    if (debug_)
+        debug_->emit_location(load.line ? load.line : scale.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+
+    // The ordinary ADD lowering protects the scaled index with push/pop
+    // while it materializes the frame base.  Here the index dies at the
+    // dereference, so DE can hold it and HL can be formed directly from SP.
+    load_hl(scale.left);
+    for (int64_t n = 0; n < scale.right.ival; ++n)
+        emit_line("add\thl, hl");
+    emit_line("ex\tde, hl");
+    load_ix_addr_hl(frame_off);
+    emit_line("add\thl, de");
+
+    if (address_live)
+        store_hl(address.result);
+
+    if (op_size(load.result) == 1) {
+        emit_line("ld\ta, (hl)");
+        store_a(load.result);
+    } else {
+        emit_line("ld\te, (hl)");
+        emit_line("inc\thl");
+        emit_line("ld\td, (hl)");
+        store_de(load.result);
+    }
+    idx += 2;
+    return true;
+}
+
+bool z80_gen::try_emit_scaled_global_load(const ir_function &fn,
+                                          size_t &idx) {
+    if (idx + 2 >= fn.icodes.size())
+        return false;
+
+    const icode &scale = fn.icodes[idx];
+    const icode &address = fn.icodes[idx + 1];
+    const icode &load = fn.icodes[idx + 2];
+    if (scale.op != icode_op::SHL || !scale.result.is_temp() ||
+        scale.right.kind != operand_kind::INT_CONST ||
+        scale.right.ival < 1 || scale.right.ival > 7 ||
+        op_size(scale.left) != 2 || op_size(scale.result) != 2 ||
+        address.op != icode_op::ADD || !address.result.is_temp() ||
+        load.op != icode_op::GET_VALUE_AT || !load.left.is_temp() ||
+        load.left.temp_id != address.result.temp_id ||
+        !load.right.is_none() ||
+        (op_size(load.result) != 1 && op_size(load.result) != 2) ||
+        (load.result.type && load.result.type->is_volatile) ||
+        (load.left.type && load.left.type->base &&
+         load.left.type->base->is_volatile)) {
+        return false;
+    }
+
+    const operand *base = nullptr;
+    if (address.left.is_temp() &&
+        address.left.temp_id == scale.result.temp_id) {
+        base = &address.right;
+    } else if (address.right.is_temp() &&
+               address.right.temp_id == scale.result.temp_id) {
+        base = &address.left;
+    } else {
+        return false;
+    }
+
+    const operand *global = nullptr;
+    if (base->kind == operand_kind::SYMBOL && base->is_global &&
+        !base->is_tls && !base->is_func) {
+        global = base;
+    } else if (base->is_temp()) {
+        const icode *base_def = find_temp_def_before(base->temp_id, idx + 1);
+        if (base_def && base_def->op == icode_op::ADDRESS_OF &&
+            base_def->left.kind == operand_kind::SYMBOL &&
+            base_def->left.is_global && !base_def->left.is_tls &&
+            !base_def->left.is_func) {
+            global = &base_def->left;
+        }
+    }
+    if (!global ||
+        temp_value_used_after(fn, idx + 2, scale.result.temp_id) ||
+        temp_value_used_after(fn, idx + 3, address.result.temp_id)) {
+        return false;
+    }
+
+    if (!scale.left.is_temp())
+        return false;
+    auto index_home = temp_regs_.find(scale.left.temp_id);
+    if (index_home == temp_regs_.end() ||
+        (index_home->second != temp_home::main_iy &&
+         index_home->second != temp_home::main_de))
+        return false;
+    const bool index_in_de = index_home->second == temp_home::main_de;
+
+    // Preserve the load+constant-mask fusion in gen_get_value_at().  It keeps
+    // the loaded word in DE while applying the mask bytewise and is stronger
+    // than folding only the address calculation here.
+    if (idx + 3 < fn.icodes.size()) {
+        const icode &next = fn.icodes[idx + 3];
+        const bool uses_load =
+            load.result.is_temp() &&
+            ((next.left.is_temp() &&
+              next.left.temp_id == load.result.temp_id) ||
+             (next.right.is_temp() &&
+              next.right.temp_id == load.result.temp_id));
+        if (!index_in_de && next.op == icode_op::BAND && uses_load)
+            return false;
+    }
+
+    if (debug_)
+        debug_->emit_location(load.line ? load.line : scale.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    const bool value_still_in_hl = !index_in_de &&
+        idx > 0 && fn.icodes[idx - 1].result.is_temp() &&
+        fn.icodes[idx - 1].result.temp_id == scale.left.temp_id;
+    if (index_in_de) {
+        emit_line("ld\th, d");
+        emit_line("ld\tl, e");
+    } else if (!value_still_in_hl) {
+        load_hl(scale.left);
+    }
+    for (int64_t n = 0; n < scale.right.ival; ++n)
+        emit_line("add\thl, hl");
+    if (index_in_de) {
+        emit_line("push\tbc");
+        emit_line("ld\tbc, %s",
+                  asm_.imm_sym(mangle(global->name)).c_str());
+        emit_line("add\thl, bc");
+        emit_line("pop\tbc");
+    } else {
+        emit_line("ld\tde, %s", asm_.imm_sym(mangle(global->name)).c_str());
+        emit_line("add\thl, de");
+    }
+    if (op_size(load.result) == 1) {
+        emit_line("ld\ta, (hl)");
+        store_a(load.result);
+    } else if (index_in_de) {
+        emit_line("ld\ta, (hl)");
+        emit_line("inc\thl");
+        emit_line("ld\th, (hl)");
+        emit_line("ld\tl, a");
+        store_hl(load.result);
+    } else {
+        emit_line("ld\te, (hl)");
+        emit_line("inc\thl");
+        emit_line("ld\td, (hl)");
+        store_de(load.result);
+    }
+    idx += 2;
+    return true;
+}
+
+bool z80_gen::try_emit_iy_indexed_store(const ir_function &fn, size_t &idx) {
+    if (idx + 1 >= fn.icodes.size())
+        return false;
+
+    const icode &add_ic = fn.icodes[idx];
+    const icode &store_ic = fn.icodes[idx + 1];
+    if (add_ic.op != icode_op::ADD || !add_ic.result.is_temp() ||
+        store_ic.op != icode_op::SET_VALUE_AT ||
+        !store_ic.result.is_temp() ||
+        store_ic.result.temp_id != add_ic.result.temp_id ||
+        !store_ic.right.is_none() ||
+        (op_size(store_ic.left) != 1 && op_size(store_ic.left) != 2 &&
+         op_size(store_ic.left) != 4) ||
+        temp_value_used_after(fn, idx + 2, add_ic.result.temp_id)) {
+        return false;
+    }
+
+    const operand *cursor = &add_ic.left;
+    const operand *offset = &add_ic.right;
+    if (cursor->kind == operand_kind::INT_CONST)
+        std::swap(cursor, offset);
+    if (!cursor->is_temp() || offset->kind != operand_kind::INT_CONST)
+        return false;
+    auto home = temp_regs_.find(cursor->temp_id);
+    if (home == temp_regs_.end() || home->second != temp_home::main_iy)
+        return false;
+
+    const int64_t disp = offset->ival;
+    const int size = op_size(store_ic.left);
+    if (disp < -128 || disp + size - 1 > 127)
+        return false;
+
+    if (debug_)
+        debug_->emit_location(store_ic.line ? store_ic.line : add_ic.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    if (size == 1) {
+        load_a(store_ic.left);
+        emit_line("ld\t%lld(iy), a", static_cast<long long>(disp));
+    } else if (size == 2) {
+        load_de(store_ic.left);
+        emit_line("ld\t%lld(iy), e", static_cast<long long>(disp));
+        emit_line("ld\t%lld(iy), d", static_cast<long long>(disp + 1));
+    } else {
+        load_de_word(store_ic.left, 0);
+        emit_line("ld\t%lld(iy), e", static_cast<long long>(disp));
+        emit_line("ld\t%lld(iy), d", static_cast<long long>(disp + 1));
+        load_de_word(store_ic.left, 1);
+        emit_line("ld\t%lld(iy), e", static_cast<long long>(disp + 2));
+        emit_line("ld\t%lld(iy), d", static_cast<long long>(disp + 3));
     }
     idx += 1;
     return true;
@@ -6321,6 +7548,248 @@ bool z80_gen::try_emit_postinc_indexed_load(const ir_function &fn, size_t &idx) 
     }
 
     idx = get_idx;
+    return true;
+}
+
+bool z80_gen::try_emit_postdec_truth(const ir_function &fn, size_t &idx) {
+    if (idx + 2 >= fn.icodes.size())
+        return false;
+
+    const icode &old_ic = fn.icodes[idx];
+    const icode &step_ic = fn.icodes[idx + 1];
+    const icode &ifx_ic = fn.icodes[idx + 2];
+    if (old_ic.op != icode_op::ASSIGN || !old_ic.result.is_temp() ||
+        old_ic.right.is_none() == false || op_size(old_ic.left) != 2 ||
+        !operands_equivalent(step_ic.result, old_ic.left) ||
+        step_ic.op != icode_op::SUB ||
+        !operands_equivalent(step_ic.left, old_ic.left) ||
+        step_ic.right.kind != operand_kind::INT_CONST ||
+        step_ic.right.ival != 1 || ifx_ic.op != icode_op::IFX ||
+        !operands_equivalent(ifx_ic.left, old_ic.result) ||
+        (old_ic.left.type && old_ic.left.type->is_volatile) ||
+        temp_value_used_after(fn, idx + 3, old_ic.result.temp_id)) {
+        return false;
+    }
+
+    auto compact_frame_value = [&](const operand &op) {
+        if (op.kind == operand_kind::TEMP) {
+            auto home = temp_regs_.find(op.temp_id);
+            if (home != temp_regs_.end() &&
+                !temp_home_uses_spill_slot(home->second)) {
+                return false;
+            }
+        } else if (op.kind == operand_kind::SYMBOL) {
+            if (op.is_global || op.is_tls || op.is_sfr || op.is_func)
+                return false;
+            if (symbol_regs_.count(symbol_reg_key(op)) ||
+                incoming_symbol_homes_.count(op.stack_offset)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        const int off = ix_offset_of(op);
+        return fits_ix_disp(off) && fits_ix_disp(off + 1);
+    };
+    if (!compact_frame_value(old_ic.left))
+        return false;
+
+    if (debug_)
+        debug_->emit_location(old_ic.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    load_hl(old_ic.left);
+    emit_line("ld\ta, h");
+    emit_line("or\ta, l");
+    emit_line("push\taf");
+    emit_line("dec\thl");
+    store_hl(old_ic.left);
+    emit_line("pop\taf");
+    if (!ifx_ic.true_lbl.empty() && !ifx_ic.false_lbl.empty()) {
+        emit_line("jp\tnz, %s", mangle(ifx_ic.true_lbl).c_str());
+        emit_line("jp\t%s", mangle(ifx_ic.false_lbl).c_str());
+    } else if (!ifx_ic.true_lbl.empty()) {
+        emit_line("jp\tnz, %s", mangle(ifx_ic.true_lbl).c_str());
+    } else if (!ifx_ic.false_lbl.empty()) {
+        emit_line("jp\tz, %s", mangle(ifx_ic.false_lbl).c_str());
+    }
+    idx += 2;
+    return true;
+}
+
+bool z80_gen::try_emit_postinc_indexed_store(const ir_function &fn,
+                                              size_t &idx) {
+    if (idx + 3 >= fn.icodes.size())
+        return false;
+
+    const icode &old_ic = fn.icodes[idx];
+    const icode &step_ic = fn.icodes[idx + 1];
+    const icode &address_ic = fn.icodes[idx + 2];
+    const icode &store_ic = fn.icodes[idx + 3];
+    if (old_ic.op != icode_op::ASSIGN || !old_ic.result.is_temp() ||
+        !old_ic.right.is_none() || op_size(old_ic.left) != 2 ||
+        step_ic.op != icode_op::ADD ||
+        !operands_equivalent(step_ic.left, old_ic.left) ||
+        step_ic.right.kind != operand_kind::INT_CONST ||
+        step_ic.right.ival != 1 ||
+        !operands_equivalent(step_ic.result, old_ic.left) ||
+        address_ic.op != icode_op::ADD || !address_ic.result.is_temp() ||
+        store_ic.op != icode_op::SET_VALUE_AT ||
+        !store_ic.result.is_temp() ||
+        store_ic.result.temp_id != address_ic.result.temp_id ||
+        !store_ic.right.is_none() || op_size(store_ic.left) != 1 ||
+        (old_ic.left.type && old_ic.left.type->is_volatile) ||
+        temp_value_used_after(fn, idx + 3, old_ic.result.temp_id) ||
+        temp_value_used_after(fn, idx + 4, address_ic.result.temp_id)) {
+        return false;
+    }
+
+    const operand *base = nullptr;
+    if (address_ic.left.is_temp() &&
+        address_ic.left.temp_id == old_ic.result.temp_id) {
+        base = &address_ic.right;
+    } else if (address_ic.right.is_temp() &&
+               address_ic.right.temp_id == old_ic.result.temp_id) {
+        base = &address_ic.left;
+    } else {
+        return false;
+    }
+    if (!base->type || !base->type->is_ptr() || base->type->is_far_ptr())
+        return false;
+
+    auto compact_frame_word = [&](const operand &op) {
+        if (op.kind == operand_kind::TEMP) {
+            auto home = temp_regs_.find(op.temp_id);
+            if (home != temp_regs_.end() &&
+                !temp_home_uses_spill_slot(home->second)) {
+                return false;
+            }
+        } else if (op.kind == operand_kind::SYMBOL) {
+            if (op.is_global || op.is_tls || op.is_sfr || op.is_func ||
+                symbol_regs_.count(symbol_reg_key(op)) ||
+                incoming_symbol_homes_.count(op.stack_offset)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        const int off = ix_offset_of(op);
+        return fits_ix_disp(off) && fits_ix_disp(off + 1);
+    };
+    if (!compact_frame_word(old_ic.left) || !compact_frame_word(*base))
+        return false;
+
+    if (debug_)
+        debug_->emit_location(old_ic.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    // Load the byte first; the accepted direct frame pair operations below
+    // preserve A while updating the counter and forming the old-index address.
+    load_a(store_ic.left);
+    load_hl(old_ic.left);
+    emit_line("ld\td, h");
+    emit_line("ld\te, l");
+    emit_line("inc\thl");
+    store_hl(old_ic.left);
+    load_hl(*base);
+    emit_line("add\thl, de");
+    emit_line("ld\t(hl), a");
+    idx += 3;
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    return true;
+}
+
+bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
+                                                  size_t &idx) {
+    if (opt_settings_.level != opt_level::Of &&
+        opt_settings_.level != opt_level::Os)
+        return false;
+    if (idx + 4 >= fn.icodes.size())
+        return false;
+
+    const icode &shift = fn.icodes[idx];
+    const icode &sum = fn.icodes[idx + 1];
+    const icode &load = fn.icodes[idx + 2];
+    const icode &widen = fn.icodes[idx + 3];
+    const icode &accumulate = fn.icodes[idx + 4];
+    if (shift.op != icode_op::SHL || !shift.result.is_temp() ||
+        shift.right.kind != operand_kind::INT_CONST ||
+        op_size(shift.left) != 2 || op_size(shift.result) != 2 ||
+        sum.op != icode_op::ADD || !sum.result.is_temp() ||
+        load.op != icode_op::GET_VALUE_AT || !load.result.is_temp() ||
+        op_size(load.result) != 1 || !load.right.is_none() ||
+        !load.left.type || !load.left.type->is_ptr() ||
+        load.left.type->is_far_ptr() ||
+        (load.result.type && load.result.type->is_volatile) ||
+        (load.left.type->base && load.left.type->base->is_volatile) ||
+        widen.op != icode_op::CAST || !widen.result.is_temp() ||
+        !temp_eq(widen.left, load.result.temp_id) ||
+        op_size(widen.result) != 2 ||
+        !widen.left.type || widen.left.type->size() != 1 ||
+        !widen.left.type->is_unsigned() ||
+        accumulate.op != icode_op::ADD ||
+        op_size(accumulate.result) != 2) {
+        return false;
+    }
+
+    const int count = static_cast<int>(shift.right.ival);
+    if (count <= 0 || count > 7)
+        return false;
+    const bool sum_shift_left =
+        temp_eq(sum.left, shift.result.temp_id) &&
+        operands_equivalent(sum.right, shift.left);
+    const bool sum_shift_right =
+        temp_eq(sum.right, shift.result.temp_id) &&
+        operands_equivalent(sum.left, shift.left);
+    const bool final_sum_left =
+        temp_eq(accumulate.left, sum.result.temp_id) &&
+        temp_eq(accumulate.right, widen.result.temp_id);
+    const bool final_sum_right =
+        temp_eq(accumulate.right, sum.result.temp_id) &&
+        temp_eq(accumulate.left, widen.result.temp_id);
+    if ((!sum_shift_left && !sum_shift_right) ||
+        (!final_sum_left && !final_sum_right) ||
+        temp_value_used_after(fn, idx + 2, shift.result.temp_id) ||
+        temp_value_used_after(fn, idx + 5, sum.result.temp_id) ||
+        temp_value_used_after(fn, idx + 4, load.result.temp_id) ||
+        temp_value_used_after(fn, idx + 5, widen.result.temp_id)) {
+        return false;
+    }
+
+    if (debug_)
+        debug_->emit_location(accumulate.line ? accumulate.line : shift.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    load_hl(shift.left);
+    emit_line("ld\td, h");
+    emit_line("ld\te, l");
+    for (int i = 0; i < count; ++i)
+        emit_line("add\thl, hl");
+    emit_line("add\thl, de");
+
+    auto pointer_home = load.left.is_temp()
+                            ? temp_regs_.find(load.left.temp_id)
+                            : temp_regs_.end();
+    if (pointer_home != temp_regs_.end() &&
+        pointer_home->second == temp_home::main_iy) {
+        emit_line("ld\te, 0(iy)");
+    } else if (pointer_home != temp_regs_.end() &&
+               pointer_home->second == temp_home::main_bc) {
+        emit_line("ld\ta, (bc)");
+        emit_line("ld\te, a");
+    } else {
+        emit_line("push\thl");
+        load_hl(load.left);
+        emit_line("ld\te, (hl)");
+        emit_line("pop\thl");
+    }
+    emit_line("ld\td, %s", asm_.imm(0).c_str());
+    emit_line("add\thl, de");
+    store_hl(accumulate.result);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    idx += 4;
     return true;
 }
 
@@ -6660,6 +8129,159 @@ bool z80_gen::find_direct_word_truth_ifx(const operand &value,
         return false;
 
     ifx_value = ifx_ic.left;
+    return true;
+}
+
+bool z80_gen::try_emit_byte_load_compare_ifx(const ir_function &fn,
+                                             size_t &idx) {
+    if (!compare_ifx_fusion_enabled() || idx + 2 >= fn.icodes.size())
+        return false;
+
+    const icode &first = fn.icodes[idx];
+    if (first.op != icode_op::GET_VALUE_AT ||
+        !first.result.is_temp() || op_size(first.result) != 1 ||
+        !first.right.is_none() || !first.left.type ||
+        !first.left.type->is_ptr() || first.left.type->is_far_ptr() ||
+        (first.result.type && first.result.type->is_volatile) ||
+        (first.left.type->base && first.left.type->base->is_volatile)) {
+        return false;
+    }
+
+    // Compare a byte loaded through an IY-resident cursor directly against
+    // an already-live byte.  This is the single-load counterpart of the
+    // two-dereference fusion below and is especially useful after a preceding
+    // short-circuit truth test kept the first byte in a register.
+    {
+        const icode &cmp = fn.icodes[idx + 1];
+        const icode &ifx = fn.icodes[idx + 2];
+        const bool first_on_left =
+            cmp.left.is_temp() &&
+            cmp.left.temp_id == first.result.temp_id;
+        const bool first_on_right =
+            cmp.right.is_temp() &&
+            cmp.right.temp_id == first.result.temp_id;
+        const operand *other = first_on_left ? &cmp.right : &cmp.left;
+        auto pointer_home = first.left.is_temp()
+                                ? temp_regs_.find(first.left.temp_id)
+                                : temp_regs_.end();
+        if ((cmp.op == icode_op::EQ || cmp.op == icode_op::NE) &&
+            first_on_left != first_on_right && other->type &&
+            op_size(*other) == 1 &&
+            pointer_home != temp_regs_.end() &&
+            pointer_home->second == temp_home::main_iy &&
+            cmp.result.is_temp() && ifx.op == icode_op::IFX &&
+            ifx.left.is_temp() &&
+            ifx.left.temp_id == cmp.result.temp_id &&
+            (!ifx.true_lbl.empty() || !ifx.false_lbl.empty()) &&
+            !temp_value_used_after(fn, idx + 2, first.result.temp_id) &&
+            !temp_value_used_after(fn, idx + 3, cmp.result.temp_id)) {
+            if (debug_)
+                debug_->emit_location(ifx.line ? ifx.line : cmp.line);
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            load_a(*other);
+            emit_line("cp\t0(iy)");
+            const char *condition = cmp.op == icode_op::EQ ? "z" : "nz";
+            if (!ifx.true_lbl.empty())
+                emit_line("jp\t%s, %s", condition, ifx.true_lbl.c_str());
+            if (!ifx.false_lbl.empty())
+                emit_line("jp\t%s", ifx.false_lbl.c_str());
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            idx += 2;
+            cur_ic_index_ = idx;
+            return true;
+        }
+    }
+
+    if (idx + 3 >= fn.icodes.size())
+        return false;
+
+    // Accept either two adjacent dereferences or one ordinary pointer ADD
+    // between them. The latter is the canonical lowering of a[i] != b[i].
+    size_t second_idx = idx + 1;
+    const icode *address = nullptr;
+    if (fn.icodes[second_idx].op != icode_op::GET_VALUE_AT) {
+        address = &fn.icodes[second_idx];
+        if (address->op != icode_op::ADD ||
+            !address->result.is_temp() || op_size(address->result) != 2) {
+            return false;
+        }
+        ++second_idx;
+    }
+    if (second_idx + 2 >= fn.icodes.size())
+        return false;
+
+    const icode &second = fn.icodes[second_idx];
+    const icode &cmp = fn.icodes[second_idx + 1];
+    const icode &ifx = fn.icodes[second_idx + 2];
+    if (second.op != icode_op::GET_VALUE_AT ||
+        !second.result.is_temp() || op_size(second.result) != 1 ||
+        !second.right.is_none() || !second.left.type ||
+        !second.left.type->is_ptr() || second.left.type->is_far_ptr() ||
+        (second.result.type && second.result.type->is_volatile) ||
+        (second.left.type->base && second.left.type->base->is_volatile) ||
+        (address && (!second.left.is_temp() ||
+                     second.left.temp_id != address->result.temp_id)) ||
+        (cmp.op != icode_op::EQ && cmp.op != icode_op::NE) ||
+        !cmp.result.is_temp() || ifx.op != icode_op::IFX ||
+        !ifx.left.is_temp() || ifx.left.temp_id != cmp.result.temp_id ||
+        (ifx.true_lbl.empty() && ifx.false_lbl.empty())) {
+        return false;
+    }
+
+    const bool normal_order =
+        cmp.left.is_temp() && cmp.left.temp_id == first.result.temp_id &&
+        cmp.right.is_temp() && cmp.right.temp_id == second.result.temp_id;
+    const bool reverse_order =
+        cmp.right.is_temp() && cmp.right.temp_id == first.result.temp_id &&
+        cmp.left.is_temp() && cmp.left.temp_id == second.result.temp_id;
+    if ((!normal_order && !reverse_order) ||
+        temp_value_used_after(fn, second_idx + 2, first.result.temp_id) ||
+        temp_value_used_after(fn, second_idx + 2, second.result.temp_id) ||
+        temp_value_used_after(fn, second_idx + 3, cmp.result.temp_id) ||
+        (address && temp_value_used_after(fn, second_idx + 1,
+                                          address->result.temp_id))) {
+        return false;
+    }
+
+    if (debug_)
+        debug_->emit_location(ifx.line ? ifx.line : cmp.line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    auto first_home = first.left.is_temp()
+                          ? temp_regs_.find(first.left.temp_id)
+                          : temp_regs_.end();
+    if (first_home != temp_regs_.end() &&
+        first_home->second == temp_home::main_iy) {
+        emit_line("ld\ta, 0(iy)");
+    } else if (first_home != temp_regs_.end() &&
+               first_home->second == temp_home::main_bc) {
+        emit_line("ld\ta, (bc)");
+    } else {
+        load_hl(first.left);
+        emit_line("ld\ta, (hl)");
+    }
+    emit_line("push\taf");
+    if (address) {
+        // Materialize the intervening address exactly as normal codegen would;
+        // AF protects the first byte across arbitrary pointer operands.
+        cur_ic_index_ = idx + 1;
+        gen_icode(*address);
+    }
+    load_hl(second.left);
+    emit_line("pop\taf");
+    emit_line("cp\t(hl)");
+
+    const char *condition = cmp.op == icode_op::EQ ? "z" : "nz";
+    if (!ifx.true_lbl.empty())
+        emit_line("jp\t%s, %s", condition, ifx.true_lbl.c_str());
+    if (!ifx.false_lbl.empty())
+        emit_line("jp\t%s", ifx.false_lbl.c_str());
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    idx = second_idx + 2;
+    cur_ic_index_ = idx;
     return true;
 }
 
@@ -7187,7 +8809,8 @@ bool z80_gen::try_emit_band_ifx(const ir_function &fn, size_t &idx) {
             }
         }
 
-        if ((op.kind == operand_kind::SYMBOL || op.kind == operand_kind::TEMP)) {
+        if (op.kind == operand_kind::TEMP ||
+            (op.kind == operand_kind::SYMBOL && !op.is_global)) {
             if (op.kind == operand_kind::TEMP) {
                 auto ri = temp_regs_.find(op.temp_id);
                 if (ri != temp_regs_.end() &&

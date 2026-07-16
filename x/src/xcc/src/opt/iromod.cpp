@@ -358,6 +358,36 @@ static bool analyze_inline_candidate(const ir_function &fn,
                                           &out.stack_local_keys))
             return false;
 
+        // Per-function optimization may already have converted an operation
+        // to a Z80 backend form whose narrow operands are interpreted at the
+        // wider result width (u16*u16->u32 and u8-u8->int are examples).
+        // That form is intentionally terminal.  Inlining it would feed it
+        // through another language-level propagation/folding round, where
+        // the narrower operand types can be mistaken for the operation
+        // width.  Keep such helpers out of the module inliner; their compact
+        // backend lowering still applies out of line.
+        if (ic.result.type && ic.left.type &&
+            ic.result.type->is_integer() && ic.left.type->is_integer() &&
+            ic.result.type->size() > ic.left.type->size()) {
+            switch (ic.op) {
+            case icode_op::ADD:
+            case icode_op::SUB:
+            case icode_op::MUL:
+            case icode_op::DIV:
+            case icode_op::MOD:
+            case icode_op::BAND:
+            case icode_op::BOR:
+            case icode_op::BXOR:
+            case icode_op::SHL:
+            case icode_op::SHR:
+            case icode_op::ROL:
+            case icode_op::ROR:
+                return false;
+            default:
+                break;
+            }
+        }
+
         // Parameter locals are pass-by-value and must not be assigned to.
         if (ic.result.is_symbol() &&
             out.param_keys.find(base_symbol_key(ic.result)) != out.param_keys.end()) {
@@ -979,6 +1009,18 @@ static bool evaluate_const_binary(const icode &ic, int64_t lhs, int64_t rhs,
     }
     if (!eval_type)
         eval_type = value_type;
+    // Backend-form lowering may retain narrow unsigned source operands while
+    // recording the actual arithmetic width in the result (notably
+    // u16*u16->u32).  Honour that width when interpreting an optimized helper;
+    // comparisons are the exception because their result is Boolean.
+    const bool comparison =
+        ic.op == icode_op::EQ || ic.op == icode_op::NE ||
+        ic.op == icode_op::LT || ic.op == icode_op::LE ||
+        ic.op == icode_op::GT || ic.op == icode_op::GE;
+    if (!comparison && value_type &&
+        (!eval_type || value_type->size() > eval_type->size())) {
+        eval_type = value_type;
+    }
 
     const bool use_unsigned = eval_type && eval_type->is_unsigned();
     lhs = normalize_integer_value(lhs, eval_type);

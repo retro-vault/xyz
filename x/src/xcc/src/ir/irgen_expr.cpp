@@ -628,10 +628,13 @@ void ir_gen::visit(cast_expr &e) {
 
 void ir_gen::visit(call_expr &e) {
     std::string direct_func_name;
+    bool direct_callee_noreturn = false;
     operand indirect_callee;
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
-        if (id->sym && id->sym->kind == sym_kind::FUNC)
+        if (id->sym && id->sym->kind == sym_kind::FUNC) {
             direct_func_name = alternate_float_call_name(id->name);
+            direct_callee_noreturn = id->sym->attr_noreturn;
+        }
     }
     if (direct_func_name.empty() && e.callee) {
         // Evaluate an indirect callee before SENDs.  On register ABIs the SEND
@@ -743,6 +746,7 @@ void ir_gen::visit(call_expr &e) {
     ic.callee_abi = c_abi;
     ic.callee_cleans_stack =
         abi_callee_cleans_stack(c_abi, ret_type, arg_types, callee_variadic);
+    ic.callee_noreturn = direct_callee_noreturn;
 
     if (!direct_func_name.empty())
         ic.func_name = direct_func_name;

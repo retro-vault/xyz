@@ -5,6 +5,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "ir/irgen.h"
+#include "frontend/const_eval.h"
 
 namespace xcc {
 
@@ -203,11 +204,21 @@ void ir_gen::visit(continue_stmt &) {
 }
 
 void ir_gen::visit(goto_stmt &s) {
-    icode ic; ic.op = icode_op::GOTO; ic.label_name = s.label; emit(ic);
+    // C labels have function scope, while assembler labels share the whole
+    // translation-unit namespace.  Qualifying them also prevents legal C
+    // names such as C, NC, Z and NZ from being parsed as Z80 conditions in a
+    // generated `jp label` instruction.
+    const std::string fn_name = cur_fn_ ? cur_fn_->name : "anonymous";
+    icode ic;
+    ic.op = icode_op::GOTO;
+    ic.label_name = "__xcc_user_" + fn_name + "_" + s.label;
+    emit(ic);
 }
 
 void ir_gen::visit(label_stmt &s) {
-    { icode ic; ic.op = icode_op::LABEL; ic.label_name = s.name; emit(ic); }
+    const std::string fn_name = cur_fn_ ? cur_fn_->name : "anonymous";
+    { icode ic; ic.op = icode_op::LABEL;
+      ic.label_name = "__xcc_user_" + fn_name + "_" + s.name; emit(ic); }
     if (s.body) gen_stmt(*s.body);
 }
 
@@ -230,8 +241,15 @@ void ir_gen::visit(switch_stmt &s) {
             e.node  = c;
             e.label = new_label();
             if (!c->is_default && c->value) {
-                operand v = gen_expr(*c->value);
-                e.value = v.ival;
+                // A case label is an integer constant expression, not an IR
+                // expression to evaluate at run time.  Reading `ival` from a
+                // generated temporary silently turned forms such as
+                // `case BASE + 1:` into zero and collapsed rich switches
+                // (the regex OPEN+n/CLOSE+n dispatch is a representative
+                // victim).
+                const auto value =
+                    const_expr_evaluator::evaluate(c->value.get());
+                e.value = value.value_or(0);
             } else {
                 e.value = 0;
             }

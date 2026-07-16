@@ -254,6 +254,139 @@ void z80_gen::gen_get_value_at(const icode &ic) {
     }
     if (direct_word_result_size <= 0)
         direct_word_result_size = 2;
+
+    // Keep a freshly loaded word in DE when its only consumer masks it with
+    // a constant.  The normal lowering stores the load temporary and reloads
+    // it for BAND, even though both operations are adjacent.  Folding this
+    // general load/use pair avoids that round trip without relying on alias
+    // assumptions: volatile reads are excluded and the loaded temporary must
+    // be dead immediately after the mask.
+    if (cur_fn_ && ic.result.is_temp() && ic.right.is_none() &&
+        direct_word_result_size == 2 &&
+        !(ic.result.type && ic.result.type->is_volatile) &&
+        !(ic.left.type && ic.left.type->base &&
+          ic.left.type->base->is_volatile) &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+        const icode &mask_ic = cur_fn_->icodes[cur_ic_index_ + 1];
+        const operand *mask_op = nullptr;
+        const bool value_on_left =
+            mask_ic.left.is_temp() &&
+            mask_ic.left.temp_id == ic.result.temp_id;
+        const bool value_on_right =
+            mask_ic.right.is_temp() &&
+            mask_ic.right.temp_id == ic.result.temp_id;
+        if (mask_ic.op == icode_op::BAND && op_size(mask_ic.result) == 2) {
+            if (value_on_left && mask_ic.right.kind == operand_kind::INT_CONST)
+                mask_op = &mask_ic.right;
+            else if (value_on_right &&
+                     mask_ic.left.kind == operand_kind::INT_CONST)
+                mask_op = &mask_ic.left;
+        }
+
+        if (mask_op &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id)) {
+            const uint16_t mask = static_cast<uint16_t>(mask_op->ival);
+            const unsigned low_mask = mask & 0xffu;
+            const unsigned high_mask = mask >> 8;
+
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            load_hl(ic.left);
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+
+            auto mask_byte = [&](const char *reg, unsigned byte_mask) {
+                if (byte_mask == 0xffu)
+                    return;
+                if (byte_mask == 0u) {
+                    emit_line("ld\t%s, #0", reg);
+                    return;
+                }
+                emit_line("ld\ta, %s", reg);
+                emit_line("and\t#%u", byte_mask);
+                emit_line("ld\t%s, a", reg);
+            };
+            mask_byte("e", low_mask);
+            mask_byte("d", high_mask);
+            store_de(mask_ic.result);
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            return;
+        }
+    }
+
+    // Fold a local read/modify/write chain while the computed address is
+    // still in HL:
+    //
+    //     value = *address;
+    //     updated = value +/- 1;
+    //     *address = updated;
+    //
+    // Re-materializing the same data-dependent address for the store is both
+    // slower and larger.  Require exact pointer identity, no indexed operand,
+    // single-use temporaries, and non-volatile memory before consuming the
+    // following two IR instructions.
+    if (cur_fn_ && ic.result.is_temp() && ic.left.is_temp() &&
+        ic.right.is_none() &&
+        (direct_word_result_size == 1 || direct_word_result_size == 2) &&
+        !(ic.result.type && ic.result.type->is_volatile) &&
+        !(ic.left.type && ic.left.type->base &&
+          ic.left.type->base->is_volatile) &&
+        cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+        const icode &update = cur_fn_->icodes[cur_ic_index_ + 1];
+        const icode &store = cur_fn_->icodes[cur_ic_index_ + 2];
+        const bool value_on_left =
+            update.left.is_temp() &&
+            update.left.temp_id == ic.result.temp_id &&
+            update.right.kind == operand_kind::INT_CONST;
+        const bool value_on_right =
+            update.op == icode_op::ADD && update.right.is_temp() &&
+            update.right.temp_id == ic.result.temp_id &&
+            update.left.kind == operand_kind::INT_CONST;
+        const int64_t delta =
+            value_on_left ? update.right.ival
+                          : (value_on_right ? update.left.ival : 0);
+        const bool small_update =
+            ((update.op == icode_op::ADD) ||
+             (update.op == icode_op::SUB && value_on_left)) &&
+            delta >= 1 && delta <= 3;
+        const bool same_store_address =
+            store.op == icode_op::SET_VALUE_AT && store.result.is_temp() &&
+            store.result.temp_id == ic.left.temp_id && store.right.is_none();
+        const bool stores_update =
+            update.result.is_temp() && store.left.is_temp() &&
+            store.left.temp_id == update.result.temp_id;
+        if (small_update && same_store_address && stores_update &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id) &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 3,
+                                   update.result.temp_id)) {
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            load_hl(ic.left);
+            if (direct_word_result_size == 1) {
+                for (int64_t step = 0; step < delta; ++step)
+                    emit_line(update.op == icode_op::ADD ? "inc\t(hl)"
+                                                         : "dec\t(hl)");
+            } else {
+                emit_line("ld\te, (hl)");
+                emit_line("inc\thl");
+                emit_line("ld\td, (hl)");
+                emit_line("dec\thl");
+                for (int64_t step = 0; step < delta; ++step)
+                    emit_line(update.op == icode_op::ADD ? "inc\tde"
+                                                         : "dec\tde");
+                emit_line("ld\t(hl), e");
+                emit_line("inc\thl");
+                emit_line("ld\t(hl), d");
+            }
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            skipped_icodes_.insert(cur_ic_index_ + 2);
+            return;
+        }
+    }
+
     const bool direct_word_forward =
         cur_fn_ &&
         ic.result.is_temp() &&
@@ -472,6 +605,28 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         auto it = temp_regs_.find(op.temp_id);
         return it != temp_regs_.end() && it->second == temp_home::main_iy;
     };
+    auto iy_pointer_displacement = [&](const operand &op, int size,
+                                       int64_t &disp) {
+        if (is_iy_pointer_home(op)) {
+            disp = 0;
+            return true;
+        }
+        if (!op.is_temp())
+            return false;
+        const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
+        if (!def || def->op != icode_op::ADD)
+            return false;
+        const operand *base = &def->left;
+        const operand *offset = &def->right;
+        if (base->kind == operand_kind::INT_CONST)
+            std::swap(base, offset);
+        if (!is_iy_pointer_home(*base) ||
+            offset->kind != operand_kind::INT_CONST ||
+            offset->ival < -128 || offset->ival + size - 1 > 127)
+            return false;
+        disp = offset->ival;
+        return true;
+    };
     if (ic.left.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         (op_size(ic.result) == 1 || op_size(ic.result) == 2)) {
@@ -575,10 +730,11 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         return;
     }
 
+    int64_t iy_disp = 0;
     if (!use_pending_word_ptr &&
         op_size(ic.result) == 1 &&
-        is_iy_pointer_home(ic.left)) {
-        emit_line("ld\ta, 0(iy)");
+        iy_pointer_displacement(ic.left, 1, iy_disp)) {
+        emit_line("ld\ta, %lld(iy)", static_cast<long long>(iy_disp));
         if (direct_byte_load_ifx) {
             emit_line("or\ta, a");
         } else {
@@ -589,9 +745,25 @@ void z80_gen::gen_get_value_at(const icode &ic) {
 
     if (!use_pending_word_ptr &&
         op_size(ic.result) == 2 &&
-        is_iy_pointer_home(ic.left)) {
-        emit_line("ld\te, 0(iy)");
-        emit_line("ld\td, 1(iy)");
+        iy_pointer_displacement(ic.left, 2, iy_disp)) {
+        const auto result_home = ic.result.is_temp()
+                                     ? temp_regs_.find(ic.result.temp_id)
+                                     : temp_regs_.end();
+        const bool direct_to_bc =
+            result_home != temp_regs_.end() &&
+            result_home->second == temp_home::main_bc &&
+            !direct_word_load_ifx && !direct_word_forward;
+        if (direct_to_bc) {
+            // Honour the allocator's destination pair instead of loading
+            // through DE and copying the value afterwards.  Besides saving
+            // two moves, this leaves DE available for an independent byte or
+            // word live range in pointer-walking loops.
+            emit_line("ld\tc, %lld(iy)", static_cast<long long>(iy_disp));
+            emit_line("ld\tb, %lld(iy)", static_cast<long long>(iy_disp + 1));
+        } else {
+            emit_line("ld\te, %lld(iy)", static_cast<long long>(iy_disp));
+            emit_line("ld\td, %lld(iy)", static_cast<long long>(iy_disp + 1));
+        }
         if (direct_word_load_ifx) {
             emit_line("ld\ta, d");
             emit_line("or\ta, e");
@@ -602,9 +774,21 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         } else if (direct_word_forward) {
             direct_word_value_pending_ = true;
             direct_word_value_ = ic.result;
-        } else {
+        } else if (!direct_to_bc) {
             store_de(ic.result);
         }
+        return;
+    }
+
+    if (!use_pending_word_ptr &&
+        op_size(ic.result) == 4 &&
+        iy_pointer_displacement(ic.left, 4, iy_disp)) {
+        emit_line("ld\te, %lld(iy)", static_cast<long long>(iy_disp));
+        emit_line("ld\td, %lld(iy)", static_cast<long long>(iy_disp + 1));
+        store_de_word(ic.result, 0);
+        emit_line("ld\te, %lld(iy)", static_cast<long long>(iy_disp + 2));
+        emit_line("ld\td, %lld(iy)", static_cast<long long>(iy_disp + 3));
+        store_de_word(ic.result, 1);
         return;
     }
 
@@ -721,6 +905,28 @@ void z80_gen::gen_set_value_at(const icode &ic) {
             return false;
         auto it = temp_regs_.find(op.temp_id);
         return it != temp_regs_.end() && it->second == temp_home::main_iy;
+    };
+    auto iy_pointer_displacement = [&](const operand &op, int size,
+                                       int64_t &disp) {
+        if (is_iy_pointer_home(op)) {
+            disp = 0;
+            return true;
+        }
+        if (!op.is_temp())
+            return false;
+        const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
+        if (!def || def->op != icode_op::ADD)
+            return false;
+        const operand *base = &def->left;
+        const operand *offset = &def->right;
+        if (base->kind == operand_kind::INT_CONST)
+            std::swap(base, offset);
+        if (!is_iy_pointer_home(*base) ||
+            offset->kind != operand_kind::INT_CONST ||
+            offset->ival < -128 || offset->ival + size - 1 > 127)
+            return false;
+        disp = offset->ival;
+        return true;
     };
     auto byte_load_preserves_hl_here = [&](const operand &op) {
         if (load_byte_preserves_hl(op, temp_regs_))
@@ -938,16 +1144,30 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         return;
     }
 
-    if (op_size(ic.left) == 1 && is_iy_pointer_home(ic.result)) {
+    int64_t iy_disp = 0;
+    if (op_size(ic.left) == 1 &&
+        iy_pointer_displacement(ic.result, 1, iy_disp)) {
         load_a(ic.left);
-        emit_line("ld\t0(iy), a");
+        emit_line("ld\t%lld(iy), a", static_cast<long long>(iy_disp));
         return;
     }
 
-    if (op_size(ic.left) == 2 && is_iy_pointer_home(ic.result)) {
+    if (op_size(ic.left) == 2 &&
+        iy_pointer_displacement(ic.result, 2, iy_disp)) {
         load_de(ic.left);
-        emit_line("ld\t0(iy), e");
-        emit_line("ld\t1(iy), d");
+        emit_line("ld\t%lld(iy), e", static_cast<long long>(iy_disp));
+        emit_line("ld\t%lld(iy), d", static_cast<long long>(iy_disp + 1));
+        return;
+    }
+
+    if (op_size(ic.left) == 4 &&
+        iy_pointer_displacement(ic.result, 4, iy_disp)) {
+        load_de_word(ic.left, 0);
+        emit_line("ld\t%lld(iy), e", static_cast<long long>(iy_disp));
+        emit_line("ld\t%lld(iy), d", static_cast<long long>(iy_disp + 1));
+        load_de_word(ic.left, 1);
+        emit_line("ld\t%lld(iy), e", static_cast<long long>(iy_disp + 2));
+        emit_line("ld\t%lld(iy), d", static_cast<long long>(iy_disp + 3));
         return;
     }
 

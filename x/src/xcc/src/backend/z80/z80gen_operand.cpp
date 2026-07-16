@@ -693,6 +693,11 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                               op.byte_offset == 0 ? 'c' : 'b');
                     extend_loaded_byte(r.lo, r.hi);
                     return;
+                case temp_home::main_de:
+                    emit_line("ld\t%c, %c", r.lo,
+                              op.byte_offset == 0 ? 'e' : 'd');
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
                 case temp_home::alt_a:
                     emit_line("ex\taf, af'");
                     emit_line("ld\t%c, a", r.lo);
@@ -858,9 +863,17 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 if (r.lo == 'l') { emit_line("ld\th, b"); emit_line("ld\tl, c"); }
                 else             { emit_line("ld\td, b"); emit_line("ld\te, c"); }
                 break;
+            case temp_home::main_de:
+                if (r.lo == 'l') { emit_line("ld\th, d"); emit_line("ld\tl, e"); }
+                break;
             case temp_home::main_iy:
-                emit_line("push\tiy");
-                emit_line(r.lo == 'l' ? "pop\thl" : "pop\tde");
+                if (opt_settings_.level == opt_level::Of && r.lo != 'l') {
+                    emit_line("ld\td, iyh");
+                    emit_line("ld\te, iyl");
+                } else {
+                    emit_line("push\tiy");
+                    emit_line(r.lo == 'l' ? "pop\thl" : "pop\tde");
+                }
                 break;
             case temp_home::arg_hl:
                 if (r.lo != 'l') {
@@ -963,9 +976,17 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
                 if (r.lo == 'l') { emit_line("ld\tb, h"); emit_line("ld\tc, l"); }
                 else             { emit_line("ld\tb, d"); emit_line("ld\tc, e"); }
                 break;
+            case temp_home::main_de:
+                if (r.lo == 'l') { emit_line("ld\td, h"); emit_line("ld\te, l"); }
+                break;
             case temp_home::main_iy:
-                emit_line(r.lo == 'l' ? "push\thl" : "push\tde");
-                emit_line("pop\tiy");
+                if (opt_settings_.level == opt_level::Of && r.lo != 'l') {
+                    emit_line("ld\tiyh, d");
+                    emit_line("ld\tiyl, e");
+                } else {
+                    emit_line(r.lo == 'l' ? "push\thl" : "push\tde");
+                    emit_line("pop\tiy");
+                }
                 break;
             default:
                 ri->second = temp_home::stack;
@@ -1151,6 +1172,13 @@ void z80_gen::load_a(const operand &op) {
         }
     }
     if (op.kind == operand_kind::TEMP) {
+        auto remat = iy_u32_remat_offsets_.find(op.temp_id);
+        if (remat != iy_u32_remat_offsets_.end()) {
+            const int64_t disp = remat->second + op.byte_offset;
+            emit_line("ld\ta, %lld(iy)", static_cast<long long>(disp));
+            set_a_cache(cache_key);
+            return;
+        }
         auto ri = temp_regs_.find(op.temp_id);
         if (ri != temp_regs_.end()) {
             switch (ri->second) {
@@ -1175,6 +1203,10 @@ void z80_gen::load_a(const operand &op) {
                 return;
             case temp_home::main_bc:
                 emit_line("ld\ta, %c", op.byte_offset == 0 ? 'c' : 'b');
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_de:
+                emit_line("ld\ta, %c", op.byte_offset == 0 ? 'e' : 'd');
                 set_a_cache(cache_key);
                 return;
             case temp_home::alt_a:
@@ -1223,6 +1255,10 @@ void z80_gen::load_a(const operand &op) {
 void z80_gen::store_a(const operand &op) {
     invalidate_pair_cache();
     const std::string cache_key = a_load_cache_key(op);
+    if (jump_table_selector_loads_.count(cur_ic_index_) && op.is_temp()) {
+        set_a_cache(cache_key);
+        return;
+    }
     // [[sdcc::sfr(N)]]: write via OUT instruction
     if (op.is_sfr && op.sfr_port >= 0) {
         if (is_16bit_sfr_port(op)) {
@@ -1327,6 +1363,16 @@ void z80_gen::load_hl_word(const operand &op, int word_index) {
         return;
 
     int word_byte = word_index * 2;
+    if (op.is_temp()) {
+        auto remat = iy_u32_remat_offsets_.find(op.temp_id);
+        if (remat != iy_u32_remat_offsets_.end()) {
+            const int64_t disp = remat->second + word_byte;
+            emit_line("ld\tl, %lld(iy)", static_cast<long long>(disp));
+            emit_line("ld\th, %lld(iy)", static_cast<long long>(disp + 1));
+            set_pair_cache(reg_pair{"hl", 'l', 'h', false}, cache_key);
+            return;
+        }
+    }
     if (op.kind == operand_kind::TEMP) {
         auto ri = temp_regs_.find(op.temp_id);
         if (ri != temp_regs_.end() && word_index == 0) {
@@ -1379,6 +1425,16 @@ void z80_gen::load_de_word(const operand &op, int word_index) {
         return;
 
     int word_byte = word_index * 2;
+    if (op.is_temp()) {
+        auto remat = iy_u32_remat_offsets_.find(op.temp_id);
+        if (remat != iy_u32_remat_offsets_.end()) {
+            const int64_t disp = remat->second + word_byte;
+            emit_line("ld\te, %lld(iy)", static_cast<long long>(disp));
+            emit_line("ld\td, %lld(iy)", static_cast<long long>(disp + 1));
+            set_pair_cache(reg_pair{"de", 'e', 'd', true}, cache_key);
+            return;
+        }
+    }
     if (op.kind == operand_kind::TEMP) {
         auto ri = temp_regs_.find(op.temp_id);
         if (ri != temp_regs_.end() && word_index == 0) {
@@ -1403,8 +1459,13 @@ void z80_gen::load_de_word(const operand &op, int word_index) {
                 return;
             }
             if (ri->second == temp_home::main_iy) {
-                emit_line("push\tiy");
-                emit_line("pop\tde");
+                if (opt_settings_.level == opt_level::Of) {
+                    emit_line("ld\td, iyh");
+                    emit_line("ld\te, iyl");
+                } else {
+                    emit_line("push\tiy");
+                    emit_line("pop\tde");
+                }
                 set_pair_cache(reg_pair{"de", 'e', 'd', true}, cache_key);
                 return;
             }
@@ -1497,8 +1558,13 @@ void z80_gen::store_de_word(const operand &op, int word_index) {
         }
         if (ri != temp_regs_.end() && word_index == 0 &&
             ri->second == temp_home::main_iy) {
-            emit_line("push\tde");
-            emit_line("pop\tiy");
+            if (opt_settings_.level == opt_level::Of) {
+                emit_line("ld\tiyh, d");
+                emit_line("ld\tiyl, e");
+            } else {
+                emit_line("push\tde");
+                emit_line("pop\tiy");
+            }
             set_pair_cache(reg_pair{"de", 'e', 'd', true},
                            pair_word_cache_key(op, word_index));
             return;

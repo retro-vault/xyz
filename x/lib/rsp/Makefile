@@ -25,7 +25,7 @@ $(LIB_DIR):
 $(OBJECTS): $(SOURCES) $(HEADERS) | $(OUTPUT_DIR)
 	$(CXX) $(CXXFLAGS) -pthread -Iinclude -c src/rsp.cpp -o $(OBJECTS)
 
-$(LIB_TARGET): $(LIB_DIR) $(OBJECTS)
+$(LIB_TARGET): $(OBJECTS) | $(LIB_DIR)
 	ar rcs $@ $(OBJECTS)
 
 clean:

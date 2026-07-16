@@ -27,6 +27,41 @@ if grep -q 'push	hl' "$TMPDIR/out.s"; then
     exit 1
 fi
 
+cat >"$TMPDIR/exx_island.s" <<'ASM'
+	.area	_CODE
+_exx_island:
+	exx
+	ld	a, 3(ix)
+	xor	#0x5a
+	ld	4(iy), a
+	exx
+	ret
+_exx_live_pair:
+	exx
+	ld	a, c
+	exx
+	ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/exx_island.s" -o "$TMPDIR/exx_island.out.s"
+if awk '
+    /^_exx_island:/ { in_fn=1; next }
+    /^_exx_live_pair:/ { in_fn=0 }
+    in_fn && /^[[:space:]]*exx/ { found=1 }
+    END { exit found ? 0 : 1 }
+' "$TMPDIR/exx_island.out.s"; then
+    echo "xopt smoke: register-independent EXX island was not collapsed" >&2
+    exit 1
+fi
+if ! awk '
+    /^_exx_live_pair:/ { in_fn=1; next }
+    in_fn && /^[[:space:]]*exx/ { count++ }
+    END { exit count == 2 ? 0 : 1 }
+' "$TMPDIR/exx_island.out.s"; then
+    echo "xopt smoke: EXX cleanup crossed a live swapped register" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/ix_rmw.s" <<'ASM'
 	.area	_CODE
 _ix_rmw:
@@ -86,6 +121,36 @@ if ! awk '
     END { exit low && high ? 0 : 1 }
 ' "$TMPDIR/reused_local_label.out.s"; then
     echo "xopt smoke: duplicate local label hid a live IX result store" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/de_reload_loop_join.s" <<'ASM'
+	.area	_CODE
+_de_reload_loop_join:
+	; sdcccall(1) prologue: de_reload_loop_join (locals=0, temp_frame=2, stack_params=0)
+	ld	-2(ix), e
+	ld	-1(ix), d
+	ld	a, #5
+_de_reload_loop:
+	ld	e, -2(ix)
+	ld	d, -1(ix)
+	inc	de
+	ld	-2(ix), e
+	ld	-1(ix), d
+	dec	a
+	jr	nz, _de_reload_loop
+	ret
+ASM
+
+"$XOPT" -Of "$TMPDIR/de_reload_loop_join.s" \
+    -o "$TMPDIR/de_reload_loop_join.out.s"
+if ! awk '
+    /^_de_reload_loop:/ { in_loop=1; next }
+    in_loop && /ld[[:space:]]+e, ?-2\(ix\)/ { low=1 }
+    in_loop && /ld[[:space:]]+d, ?-1\(ix\)/ { high=1 }
+    END { exit low && high ? 0 : 1 }
+' "$TMPDIR/de_reload_loop_join.out.s"; then
+    echo "xopt smoke: DE reload was forwarded across a loop join" >&2
     exit 1
 fi
 
@@ -4010,6 +4075,25 @@ fi
 grep -Eq '^[[:space:]]+dec[[:space:]]+sp' "$TMPDIR/small_stack_alloc_push_af.out.s"
 if grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#-5|add[[:space:]]+hl,[[:space:]]*sp|ld[[:space:]]+sp,[[:space:]]*hl' "$TMPDIR/small_stack_alloc_push_af.out.s"; then
     echo "xopt smoke: small stack allocation kept arithmetic setup" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/large_stack_alloc_stays_compact.s" <<'ASM'
+_large_stack_alloc_stays_compact:
+	ld	hl, #-11
+	add	hl, sp
+	ld	sp, hl
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/large_stack_alloc_stays_compact.s" \
+    -o "$TMPDIR/large_stack_alloc_stays_compact.out.s"
+grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#-11' \
+    "$TMPDIR/large_stack_alloc_stays_compact.out.s"
+if grep -Eq '^[[:space:]]+push[[:space:]]+af|^[[:space:]]+dec[[:space:]]+sp' \
+    "$TMPDIR/large_stack_alloc_stays_compact.out.s"; then
+    echo "xopt smoke: -Os expanded a five-byte stack adjustment" >&2
     exit 1
 fi
 

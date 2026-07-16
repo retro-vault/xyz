@@ -468,71 +468,88 @@ std::string preprocessor::expand(const std::string &text,
             body = tmp;
         }
 
-        // Substitute named parameters.
-        // C standard §6.10.3.1: arguments adjacent to ## are NOT expanded
-        // before substitution; all other arguments ARE fully expanded first.
+        // Substitute all named parameters in one pass.  Replacement is
+        // simultaneous: tokens introduced for one argument must not then be
+        // mistaken for another formal parameter (for example FF(d,a,b,c)).
+        // C standard §6.10.3.1 also requires arguments adjacent to ## to stay
+        // unexpanded; all other arguments are expanded before substitution.
+        struct macro_arg_text {
+            std::string raw;
+            std::string expanded;
+        };
+        std::unordered_map<std::string, macro_arg_text> named_args;
         for (size_t pi = 0; pi < params.size(); ++pi) {
-            const std::string &param = params[pi];
-            const std::string &raw   = (pi < args.size()) ? args[pi] : "";
-            // Pre-expand for non-## contexts
+            macro_arg_text arg;
+            arg.raw = (pi < args.size()) ? args[pi] : "";
             std::vector<std::string> ag;
-            std::string exp = expand(raw, ag);
-
-            std::string sub;
-            size_t p = 0;
-            while (p < body.size()) {
-                // Token-paste operator: pass ## through unchanged
-                if (body[p] == '#' && p + 1 < body.size() && body[p+1] == '#') {
-                    sub += '#'; sub += '#'; p += 2; continue;
-                }
-                // Stringify operator
-                if (body[p] == '#' && p + 1 < body.size() && body[p+1] != '#') {
-                    ++p;
-                    while (p < body.size() && body[p] == ' ') ++p;
-                    std::string tok = read_ident(body, p);
-                    if (tok == param) {
-                        sub += '"';
-                        for (char c : raw) {   // stringify uses raw arg
-                            if (c == '"' || c == '\\') sub += '\\';
-                            sub += c;
-                        }
-                        sub += '"';
-                        p += tok.size();
-                    } else {
-                        sub += '#';
-                    }
-                    continue;
-                }
-                if (is_id_start(body[p])) {
-                    std::string tok = read_ident(body, p);
-                    if (tok == param) {
-                        // Check if adjacent to ## (before or after)
-                        size_t after = p + tok.size();
-                        while (after < body.size() && body[after] == ' ') ++after;
-                        bool after_paste = (after + 1 < body.size() &&
-                                            body[after] == '#' && body[after+1] == '#');
-                        // Check before: walk backward in sub
-                        size_t back = sub.size();
-                        while (back > 0 && sub[back-1] == ' ') --back;
-                        bool before_paste = (back >= 2 &&
-                                             sub[back-2] == '#' && sub[back-1] == '#');
-                        bool adjacent = after_paste || before_paste;
-                        // Use raw arg when adjacent to ##, expanded otherwise.
-                        // When adjacent and empty, use placemarker \x01 so that
-                        // the ## is consumed but no tokens are pasted across it.
-                        const std::string &val = adjacent ? raw : exp;
-                        sub += (adjacent && val.empty()) ? "\x01" : val;
-                        p += tok.size();
-                    } else {
-                        sub += tok;
-                        p += tok.size();
-                    }
-                } else {
-                    sub += body[p++];
-                }
-            }
-            body = sub;
+            arg.expanded = expand(arg.raw, ag);
+            named_args.emplace(params[pi], std::move(arg));
         }
+
+        std::string sub;
+        size_t p = 0;
+        while (p < body.size()) {
+            // Token-paste operator: pass ## through unchanged for the paste
+            // phase below.
+            if (body[p] == '#' && p + 1 < body.size() && body[p + 1] == '#') {
+                sub += "##";
+                p += 2;
+                continue;
+            }
+            // Stringification consumes a formal parameter and uses its raw
+            // spelling.  A non-parameter # is retained for later diagnostics.
+            if (body[p] == '#') {
+                const size_t hash_pos = p++;
+                size_t token_pos = p;
+                while (token_pos < body.size() && body[token_pos] == ' ')
+                    ++token_pos;
+                std::string tok = read_ident(body, token_pos);
+                auto ai = named_args.find(tok);
+                if (ai != named_args.end()) {
+                    sub += '"';
+                    for (char c : ai->second.raw) {
+                        if (c == '"' || c == '\\')
+                            sub += '\\';
+                        sub += c;
+                    }
+                    sub += '"';
+                    p = token_pos + tok.size();
+                } else {
+                    sub += body[hash_pos];
+                }
+                continue;
+            }
+            if (!is_id_start(body[p])) {
+                sub += body[p++];
+                continue;
+            }
+
+            std::string tok = read_ident(body, p);
+            auto ai = named_args.find(tok);
+            if (ai == named_args.end()) {
+                sub += tok;
+                p += tok.size();
+                continue;
+            }
+
+            size_t after = p + tok.size();
+            while (after < body.size() && body[after] == ' ')
+                ++after;
+            const bool after_paste =
+                after + 1 < body.size() && body[after] == '#' &&
+                body[after + 1] == '#';
+            size_t back = sub.size();
+            while (back > 0 && sub[back - 1] == ' ')
+                --back;
+            const bool before_paste =
+                back >= 2 && sub[back - 2] == '#' && sub[back - 1] == '#';
+            const bool adjacent = after_paste || before_paste;
+            const std::string &value =
+                adjacent ? ai->second.raw : ai->second.expanded;
+            sub += (adjacent && value.empty()) ? "\x01" : value;
+            p += tok.size();
+        }
+        body = std::move(sub);
 
         // Token-paste ##
         // \x01 is a placemarker for an empty argument adjacent to ##.

@@ -73,16 +73,19 @@ void z80_gen::plan_size_shared_ix_helpers(const ir_module &mod) {
     temp_stack_bytes_ = 0;
     temp_frame_bytes_ = 0;
 
-    // Enter saves 5 bytes per frame and leave saves 2. Later tail and
-    // peephole sharing can recover up to 8 bytes from inline forms, so use
-    // the measured 24-byte break-even rather than the helper's raw size.
+    // Enter saves 5 bytes per frame and leave saves 2.  The two runtime
+    // helpers occupy 16 bytes in total, so use them only when the module's
+    // direct site savings exceed their complete cost.  The previous
+    // 24-byte gate double-counted unrelated late tail sharing and missed the
+    // common three-framed-function break-even case.
     const int site_savings = shared_enter_count * 5 + shared_leave_count * 2;
-    size_shared_ix_helpers_ = site_savings > 24;
+    size_shared_ix_helpers_ = site_savings > 16;
 }
 
 void z80_gen::emit_module(const ir_module &mod) {
     asm_.module_header();
     asm_.default_calling_convention(get_default_call_abi());
+    iy_preserving_local_callees_.clear();
 
     if (debug_) debug_->begin_module();
 

@@ -43,10 +43,10 @@ $(OUTPUT_DIR):
 $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
 
-$(OUTPUT_DIR)/%.o: src/%.cpp $(HEADERS)
+$(OUTPUT_DIR)/%.o: src/%.cpp $(HEADERS) | $(OUTPUT_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude $(RSP_INCLUDE) $(XZ80_INCLUDE) -c $< -o $@
 
-$(LIB_TARGET): $(OUTPUT_DIR) $(LIB_DIR) $(OBJECTS)
+$(LIB_TARGET): $(OBJECTS) | $(OUTPUT_DIR) $(LIB_DIR)
 	ar rcs $@ $(OBJECTS)
 
 $(XZ80_LIB):

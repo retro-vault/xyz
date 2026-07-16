@@ -217,6 +217,24 @@ void z80_gen::gen_ifx(const icode &ic) {
     } else if (auto byte_src = byte_truth_source(ic.left)) {
         load_a(*byte_src);
         emit_line("or\ta, a");
+    } else if (operand_home_in_bc(ic.left)) {
+        emit_line("ld\ta, b");
+        emit_line("or\ta, c");
+    } else if (opt_settings_.level == opt_level::Of &&
+               ic.left.is_temp()) {
+        auto home = temp_regs_.find(ic.left.temp_id);
+        if (home != temp_regs_.end() &&
+            home->second == temp_home::main_iy) {
+            // The speed profile can test an IY-resident word directly through
+            // the Z80 index halves.  This avoids a 21-cycle push iy/pop hl
+            // transfer before every pointer/null test.
+            emit_line("ld\ta, iyh");
+            emit_line("or\tiyl");
+        } else {
+            load_hl(ic.left);
+            emit_line("ld\ta, h");
+            emit_line("or\ta, l");
+        }
     } else {
         load_hl(ic.left);
         emit_line("ld\ta, h");
@@ -372,6 +390,39 @@ void z80_gen::gen_call(const icode &ic) {
         !ic.result.is_none() && op_size(ic.result) > 8;
 
     bool sibling_tail_call = false;
+    // A terminal direct call to a noreturn function needs neither a return
+    // address nor this function's epilogue when every argument is already in
+    // registers.  Leaving the current frame allocated is harmless because
+    // the callee is contractually unable to return, and avoids manufacturing
+    // dead frame teardown after calls such as exit().
+    const bool noreturn_before_end =
+        cur_fn_ && cur_ic_index_ + 1 < cur_fn_->icodes.size() &&
+        cur_fn_->icodes[cur_ic_index_ + 1].op == icode_op::ENDFUNCTION;
+    const bool noreturn_before_return =
+        cur_fn_ && cur_ic_index_ + 2 < cur_fn_->icodes.size() &&
+        cur_fn_->icodes[cur_ic_index_ + 1].op == icode_op::RETURN &&
+        cur_fn_->icodes[cur_ic_index_ + 2].op == icode_op::ENDFUNCTION;
+    const bool terminal_noreturn_jump =
+        cur_fn_ && !debug_ && opt_settings_.level == opt_level::Os &&
+        ic.callee_noreturn &&
+        effective_call_abi(cur_fn_->abi) != call_abi::INTERRUPT &&
+        effective_call_abi(cur_fn_->abi) != call_abi::CRITICAL &&
+        !ic.func_name.empty() && ic.arg_bytes == 0 &&
+        !large_indirect_result &&
+        (noreturn_before_end || noreturn_before_return);
+    if (terminal_noreturn_jump) {
+        std::string callee = mangle(ic.func_name);
+        asm_.global_decl(callee);
+        emit_line("jp\t%s", callee.c_str());
+        if (noreturn_before_end) {
+            last_frameless_return_terminated_ = true;
+        } else {
+            sibling_tail_call_pending_ = true;
+            sibling_tail_call_value_ = ic.result;
+        }
+        return;
+    }
+
     if (cur_fn_ && !debug_ && !ic.func_name.empty() &&
         ic.arg_bytes == 0 && !large_indirect_result &&
         can_omit_frame_pointer(*cur_fn_) &&
@@ -397,6 +448,23 @@ void z80_gen::gen_call(const icode &ic) {
         return;
     }
 
+    // IY remains caller-clobbered in every supported ABI.  The allocator may
+    // nevertheless keep one profitable live value there across a direct call
+    // with register-only arguments.  Save it after SEND lowering has filled
+    // the argument registers and restore it before consuming the return
+    // value.  Stack-argument and indirect calls are intentionally ineligible,
+    // because inserting a word here would change their stack layout.
+    const bool preserve_iy =
+        iy_preserved_call_indices_.count(cur_ic_index_) != 0 &&
+        (ic.func_name.empty() ||
+         iy_preserving_local_callees_.count(ic.func_name) == 0);
+    const bool preserve_bc =
+        bc_preserved_call_indices_.count(cur_ic_index_) != 0;
+    if (preserve_iy)
+        emit_line("push\tiy");
+    if (preserve_bc)
+        emit_line("push\tbc");
+
     // Emit the CALL instruction.
     if (!ic.func_name.empty()) {
         std::string callee = mangle(ic.func_name);
@@ -405,6 +473,11 @@ void z80_gen::gen_call(const icode &ic) {
     } else {
         conv.emit_indirect_call(*this, ic);
     }
+
+    if (preserve_bc)
+        emit_line("pop\tbc");
+    if (preserve_iy)
+        emit_line("pop\tiy");
 
     // When the callee pops stack-passed arguments, the machine SP has already
     // advanced on return even though we emit no caller-side cleanup sequence.

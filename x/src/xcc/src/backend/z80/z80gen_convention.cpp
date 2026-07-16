@@ -292,8 +292,23 @@ void abi_convention::exact_stack_drop(z80_gen &g, int bytes)
         g.emit_line("inc\tsp");
 }
 
-void abi_convention::callee_stack_return(z80_gen &g, int bytes)
+void abi_convention::callee_stack_return(z80_gen &g, int bytes,
+                                         bool hl_is_scratch)
 {
+    // In size mode a modern-ABI void/small-integer result leaves HL free.
+    // Use it as the return-address carrier and jump directly after discarding
+    // the arguments.  This is smaller than preserving the address in BC,
+    // adjusting SP byte by byte, pushing it again, and executing RET.
+    if (g.size_opt_enabled() && hl_is_scratch) {
+        g.emit_line("pop\thl");
+        for (int n = 0; n < bytes / 2; ++n)
+            g.emit_line("pop\tbc");
+        if (bytes & 1)
+            exact_stack_drop(g, 1);
+        g.emit_line("jp\t(hl)");
+        return;
+    }
+
     g.emit_line("pop\tbc");
     exact_stack_drop(g, bytes);
     g.emit_line("push\tbc");
@@ -878,7 +893,9 @@ struct stack_linkage_convention : abi_convention {
         }
         if (!fn.is_noreturn) {
             if (callee_repairs_stack() && fn.stack_param_bytes > 0)
-                callee_stack_return(g, fn.stack_param_bytes);
+                callee_stack_return(
+                    g, fn.stack_param_bytes,
+                    fn.ret_type && fn.ret_type->kind == type_kind::VOID);
             else if (!use_shared_leave)
                 g.emit_line("ret");
         }
@@ -1132,6 +1149,13 @@ struct cc_sdcccall1 final : abi_convention {
                     if (ic.result.is_temp()) {
                         auto ti = g.temp_regs_.find(ic.result.temp_id);
                         if (ti != g.temp_regs_.end() &&
+                            ti->second == temp_home::main_iy) {
+                            // The early-materialization pass below must see
+                            // this receive before frame allocation; retaining
+                            // its ABI register here would hide the IY home.
+                            continue;
+                        }
+                        if (ti != g.temp_regs_.end() &&
                             ti->second == temp_home::main_bc) {
                             preferred_home = temp_home::main_bc;
                         }
@@ -1161,10 +1185,31 @@ struct cc_sdcccall1 final : abi_convention {
                     retain_hl_like = false;
                 }
             }
+            // Materializing an incoming pointer directly in IY uses
+            // push rr/pop iy.  Do that before spilling any other incoming
+            // register to an IX-relative slot: the frame has not been
+            // allocated yet, so a later push would overwrite slots just
+            // written below SP (notably HL followed by DE->IY).
+            std::unordered_set<size_t> early_materialized;
             for (size_t i = 1; i < fn.icodes.size(); ++i) {
                 const auto &ic = fn.icodes[i];
                 if (ic.op != icode_op::RECEIVE)
                     break;
+                if (!ic.result.is_temp() || retained.count(i) != 0)
+                    continue;
+                auto home = g.temp_regs_.find(ic.result.temp_id);
+                if (home == g.temp_regs_.end() ||
+                    home->second != temp_home::main_iy)
+                    continue;
+                materialize_modern_receive(g, ic);
+                early_materialized.insert(i);
+            }
+            for (size_t i = 1; i < fn.icodes.size(); ++i) {
+                const auto &ic = fn.icodes[i];
+                if (ic.op != icode_op::RECEIVE)
+                    break;
+                if (early_materialized.count(i) != 0)
+                    continue;
                 auto keep_it = retained.find(i);
                 if (keep_it != retained.end()) {
                     if (ic.result.is_temp()) {
@@ -1252,7 +1297,10 @@ struct cc_sdcccall1 final : abi_convention {
         }
         if (!fn.is_noreturn) {
             if (fn.callee_cleans_stack && fn.stack_param_bytes > 0)
-                callee_stack_return(g, fn.stack_param_bytes);
+                callee_stack_return(
+                    g, fn.stack_param_bytes,
+                    !fn.ret_type || fn.ret_type->kind == type_kind::VOID ||
+                        fn.ret_type->size() <= 2);
             else if (!use_shared_leave)
                 g.emit_line("ret");
         }

@@ -159,6 +159,15 @@ struct optimization_settings {
             // This lets leaf helpers keep values in registers instead of
             // manufacturing stack locals solely for reloads.
             s.scalar_local_promotion = true;
+            // Prefer branch-form updates such as `count -= !predicate` when
+            // the Boolean is consumed only by adjacent arithmetic.  Besides
+            // avoiding a materialized 0/1 value, this shortens the taken hot
+            // path on the Z80, so it belongs in the speed profile too.
+            s.branch_bool_arithmetic = true;
+            // Pointer-walk lowering can make an induction variable control
+            // only.  Rewriting that newly dead upward counter as a countdown
+            // saves a full-width compare on the Z80 hot path.
+            s.countdown_dead_loops = true;
             s.value_propagation = false;
             break;
 
@@ -175,6 +184,11 @@ struct optimization_settings {
         case opt_level::Os:
             s = for_level(opt_level::O2);
             s.level = level;
+            // Fold constant-offset dereferences of known objects back into
+            // direct object accesses.  Besides deleting address arithmetic,
+            // this frequently lets the backend keep register parameters
+            // frameless when they are stored into struct fields or arrays.
+            s.address_deref_fold = true;
             // Size mode uses the same restricted static helper inliner as
             // speed mode: the module pass accepts only small leaf helpers and
             // rejects broad loop/control-flow flattening.

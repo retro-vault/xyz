@@ -3001,6 +3001,12 @@ static int estimate_instruction_size(const asm_line &line) {
             return 4;
         if ((src == "ix" || src == "iy") && uses_abs_indirect(dst))
             return 4;
+        // LD (IX/IY+d),n carries both an index prefix/displacement and the
+        // immediate byte (DD/FD 36 d n): four bytes, unlike an indexed
+        // register load/store.  Underestimating a run of aggregate
+        // initializers here can make JP-to-JR relaxation exceed ±127 bytes.
+        if (uses_ixiy_disp(dst) && is_numeric_literal(src))
+            return 4;
         if (uses_ixiy_disp(dst) || uses_ixiy_disp(src))
             return 3;
         if (dst == "(hl)" && is_numeric_literal(src))
@@ -3165,6 +3171,10 @@ bool z80_peep::apply_once() {
         if (rule_adjacent_postinc_indexed_stores_direct(i)) { changed = true; continue; }
         if (rule_ix_indexed_stack_immediate_store_run(i)) { changed = true; continue; }
         if (size_bias_ && rule_small_stack_alloc_push_af(i)) { changed = true; continue; }
+        if (size_bias_ && rule_size_redundant_pair_immediate_across_stores(i)) {
+            changed = true;
+            continue;
+        }
         if (rule_ix_postinc_local_immediate_store(i)) { changed = true; continue; }
         if (rule_dead_a_indexed_load_shuttle(i)) { changed = true; continue; }
         if (rule_dead_a_indexed_immediate_store(i)) { changed = true; continue; }
@@ -9639,7 +9649,11 @@ bool z80_peep::rule_small_stack_alloc_push_af(size_t i) {
     }
 
     const int replacement_bytes = bytes / 2 + (bytes & 1);
-    if (replacement_bytes >= 7)
+    // `ld hl,-n; add hl,sp; ld sp,hl` is five bytes on Z80.  PUSH/DEC is a
+    // size win only when it uses fewer than five one-byte instructions;
+    // accepting nine-to-twelve-byte frames used to turn a five-byte adjust
+    // into five or six bytes in the size profile.
+    if (replacement_bytes >= 5)
         return false;
 
     int locals = 0;
@@ -9696,6 +9710,62 @@ bool z80_peep::rule_small_stack_alloc_push_af(size_t i) {
     lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
                   replacement.begin(), replacement.end());
     return true;
+}
+
+bool z80_peep::rule_size_redundant_pair_immediate_across_stores(size_t i) {
+    if (i + 2 >= lines_.size() || !lines_[i].label.empty() ||
+        lines_[i].mnemonic != "ld") {
+        return false;
+    }
+
+    std::string pair;
+    std::string immediate;
+    int value = 0;
+    if (!split_ld(lines_[i].operands, pair, immediate) ||
+        (trim(pair) != "hl" && trim(pair) != "de" && trim(pair) != "bc") ||
+        !parse_immediate_value(immediate, value)) {
+        return false;
+    }
+    pair = trim(pair);
+
+    const size_t end = std::min(lines_.size(), i + 9);
+    bool saw_store = false;
+    for (size_t j = i + 1; j < end; ++j) {
+        const asm_line &line = lines_[j];
+        if (!line.label.empty() || is_section_directive(line) ||
+            line.mnemonic != "ld") {
+            return false;
+        }
+
+        std::string dst;
+        std::string src;
+        if (!split_ld(line.operands, dst, src))
+            return false;
+        dst = trim(dst);
+        src = trim(src);
+
+        int repeated_value = 0;
+        if (dst == pair && parse_immediate_value(src, repeated_value)) {
+            if (!saw_store || repeated_value != value)
+                return false;
+            lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(j));
+            return true;
+        }
+
+        // An absolute-memory store reads the pair but changes neither it nor
+        // flags.  Exclude indexed/indirect destinations: those can mention a
+        // pair as both address and data in target-specific forms.
+        if (src != pair || dst.size() < 4 || dst.front() != '(' ||
+            dst.back() != ')' || dst.find("(hl)") != std::string::npos ||
+            dst.find("(bc)") != std::string::npos ||
+            dst.find("(de)") != std::string::npos ||
+            dst.find("(ix)") != std::string::npos ||
+            dst.find("(iy)") != std::string::npos) {
+            return false;
+        }
+        saw_store = true;
+    }
+    return false;
 }
 
 bool z80_peep::rule_ix_addr_materialize_sp_relative(size_t i) {
@@ -10970,10 +11040,14 @@ bool z80_peep::rule_de_word_temp_reload_after_address_calc_elide(size_t i) {
     size_t reload = lines_.size();
     const size_t end = std::min(lines_.size(), i + 18);
     for (size_t j = i + 2; j + 1 < end; ++j) {
-        if (lines_[j].mnemonic.empty())
-            continue;
+        // A label is a control-flow join even when it has no mnemonic.  Test
+        // it before skipping blank/comment-only lines; otherwise a reload can
+        // be elided across a loop header on the false assumption that DE still
+        // contains the value stored on the fallthrough path.
         if (!lines_[j].label.empty())
             return false;
+        if (lines_[j].mnemonic.empty())
+            continue;
 
         std::string d0, s0, d1, s1;
         int reload_lo = 0;
@@ -17336,18 +17410,42 @@ bool z80_peep::rule_superopt_modern_const_return_direct(size_t i) {
 }
 
 bool z80_peep::rule_superopt_cancel_exx_pair(size_t i) {
-    if (i + 1 >= lines_.size())
+    if (i >= lines_.size() || !lines_[i].label.empty() ||
+        lines_[i].mnemonic != "exx")
         return false;
 
-    const auto &first = lines_[i];
-    const auto &second = lines_[i + 1];
-    if (!first.label.empty() || !second.label.empty())
-        return false;
-    if (first.mnemonic != "exx" || second.mnemonic != "exx")
+    // EXX is an involution. It may be removed around a short block that does
+    // not observe or modify any of the six swapped bytes. This extends the
+    // adjacent-pair cleanup to A/flags/IX/IY-only instruction islands while
+    // rejecting labels, control flow, implicit block-register users, and
+    // every explicit BC/DE/HL reference.
+    const size_t limit = std::min(lines_.size(), i + 10);
+    size_t second = i + 1;
+    for (; second < limit; ++second) {
+        const asm_line &line = lines_[second];
+        if (line.mnemonic == "exx" && line.label.empty())
+            break;
+        if (!line.label.empty() || line_is_control_flow_boundary(line) ||
+            is_section_directive(line)) {
+            return false;
+        }
+        if (line.mnemonic.empty() || line.mnemonic == "rrd" ||
+            line.mnemonic == "rld" ||
+            line_touches_byte_or_pair(line, 'b', "bc") ||
+            line_touches_byte_or_pair(line, 'c', "bc") ||
+            line_touches_byte_or_pair(line, 'd', "de") ||
+            line_touches_byte_or_pair(line, 'e', "de") ||
+            line_touches_byte_or_pair(line, 'h', "hl") ||
+            line_touches_byte_or_pair(line, 'l', "hl")) {
+            return false;
+        }
+    }
+    if (second >= limit || lines_[second].mnemonic != "exx")
         return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
-                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 1));
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(second - 1));
     return true;
 }
 

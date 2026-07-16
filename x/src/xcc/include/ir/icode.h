@@ -83,8 +83,8 @@ enum class icode_op : uint8_t {
     BNOT,           // ~left
     SHL,
     SHR,
-    ROL,            // rotate left  (16-bit integer)
-    ROR,            // rotate right (16-bit integer)
+    ROL,            // rotate left  (16- or 32-bit unsigned integer)
+    ROR,            // rotate right (16- or 32-bit unsigned integer)
     PACK_BYTES,     // result(16-bit) = low-byte left | (high-byte right << 8)
 
     // ----- comparison (result is int 0 or 1) -------------------------
@@ -263,6 +263,7 @@ struct icode {
     int      arg_bytes   = 0;               // CALL: total bytes pushed by SEND (for SP cleanup)
     call_abi callee_abi  = call_abi::DEFAULT; // SEND/CALL: ABI of the callee function
     bool     callee_cleans_stack = false;   // CALL: callee drops stack-passed args before returning
+    bool     callee_noreturn = false;        // CALL: direct callee cannot return
 
     //
     // Print a human-readable dump of this instruction to stdout.

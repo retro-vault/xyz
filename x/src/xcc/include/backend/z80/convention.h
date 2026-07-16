@@ -72,7 +72,8 @@ protected:
     static void std_send_push     (z80_gen &g, const icode &ic);
     static void std_call_cleanup  (z80_gen &g, const icode &ic);
     static void exact_stack_drop  (z80_gen &g, int bytes);
-    static void callee_stack_return(z80_gen &g, int bytes);
+    static void callee_stack_return(z80_gen &g, int bytes,
+                                    bool hl_is_scratch = false);
     static void emit_bc_indirect_call(z80_gen &g, const operand &target,
                                       bool preserve_af,
                                       bool preserve_hl,

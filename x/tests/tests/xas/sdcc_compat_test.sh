@@ -43,6 +43,26 @@ EOF
 "$XAS" -o "$tmpdir/retc.rel" "$tmpdir/retc.s" \
     || fail "ret c was rejected"
 
+cat > "$tmpdir/index_halves.s" <<'EOF'
+            .area _CODE
+_index_halves:
+            ld a,iyh
+            or iyl
+            ld iyh,d
+            ld iyl,e
+            ld ixh,#0x12
+            ld b,ixl
+            and ixh
+            ret
+EOF
+"$XAS" -o "$tmpdir/index_halves.rel" "$tmpdir/index_halves.s" \
+    || fail "IX/IY half-register instructions were rejected"
+"$XLD" -nostdlib -e _index_halves --oformat=ihx \
+       --section-start=_CODE=0x9000 \
+       "$tmpdir/index_halves.rel" -o "$tmpdir/index_halves.ihx"
+grep -qi "fd7cfdb5fd62fd6bdd2612dd45dda4c9" "$tmpdir/index_halves.ihx" \
+    || fail "IX/IY half-register instructions encoded incorrectly"
+
 cat > "$tmpdir/abs.s" <<'EOF'
             .area _CODE
 K == 5

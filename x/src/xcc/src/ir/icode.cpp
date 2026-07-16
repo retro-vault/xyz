@@ -110,10 +110,11 @@ void icode::dump() const {
                abi_arg_loc_name(arg_loc));
         break;
     case icode_op::CALL:
-        printf("  %s = call %s (%d%s)\n",
+        printf("  %s = call %s (%d%s%s)\n",
                result.is_none() ? "_" : result.to_string().c_str(),
                func_name.c_str(), num_params,
-               callee_cleans_stack ? ", callee-cleans" : "");
+               callee_cleans_stack ? ", callee-cleans" : "",
+               callee_noreturn ? ", noreturn" : "");
         break;
     case icode_op::ASSIGN:
         printf("  %s = %s\n",
