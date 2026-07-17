@@ -163,7 +163,8 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
     }
 
     if (target->is_integer()) {
-        if (auto cv = const_expr_evaluator::evaluate(init)) {
+        if (auto cv = const_expr_evaluator::evaluate_integer_conversion(
+                init, target)) {
             out.push_back(init_elem(narrow_static_int(*cv, target),
                                     target->size()));
             return;

@@ -6,6 +6,17 @@ Release status:
 
 ## Unreleased
 
+- Added pinned, executable upstream z88dk torture coverage for the micro-Max
+  chess engine and Henry Spencer regexp implementation.  Deterministic
+  harnesses exercise the complete recursive chess search and varied regexp
+  compile/match, capture, repetition, character-class, and error paths across
+  the optimizer profiles; both the normal and M-model toolchains pass all 9
+  configured variants.  The chess source exposed a generic front-end defect:
+  arithmetic floating constant expressions in static integer initializers
+  (notably `long I = 8e3`) were emitted as zero.  Static scalar, array,
+  aggregate, and compound initializers now apply the target integer conversion
+  after evaluating the full floating expression, with a focused five-profile
+  regression.  The canonical compiler/libc suite passes 4033/4033.
 - Completed the final size-only optimization pass without changing `-Of`.
   `-Os` now folds bounds-checked constant offsets of fixed global objects into
   direct accesses, uses scratch HL as the return-address carrier when a modern

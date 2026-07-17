@@ -254,7 +254,8 @@ static void collect_global_init(expr *init, type_ptr target,
     }
 
     if (target->is_integer()) {
-        if (auto cv = const_expr_evaluator::evaluate(init)) {
+        if (auto cv = const_expr_evaluator::evaluate_integer_conversion(
+                init, target)) {
             out.push_back(make_init_elem(narrow_static_int(*cv, target),
                                          target->size()));
             return;
@@ -396,7 +397,8 @@ void ir_gen::visit(var_decl &vd) {
             } else if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
                 collect_global_init(il, vd.type, *mod_, next_lbl_, gv.init_vals);
             } else if (vd.type && vd.type->is_integer()) {
-                if (auto cv = const_expr_evaluator::evaluate(vd.init.get()))
+                if (auto cv = const_expr_evaluator::evaluate_integer_conversion(
+                        vd.init.get(), vd.type))
                     gv.init_val = narrow_static_int(*cv, vd.type);
             } else if (auto *flit = dynamic_cast<float_literal_expr*>(vd.init.get())) {
                 gv.init_val = encode_float_constant(flit->value, vd.type);

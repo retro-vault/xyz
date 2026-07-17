@@ -466,4 +466,49 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
     return std::nullopt;
 }
 
+std::optional<int64_t> const_expr_evaluator::evaluate_integer_conversion(
+    const expr *e, type_ptr target) {
+    if (!e || !target || !target->is_integer())
+        return std::nullopt;
+
+    const bool floating_expression = e->type &&
+        (e->type->kind == type_kind::FLOAT ||
+         e->type->kind == type_kind::DOUBLE);
+    if (!floating_expression) {
+        if (auto value = evaluate(e))
+            return apply_integer_cast(*value, target.get());
+    }
+
+    auto value = evaluate_float(e);
+    if (!value || !std::isfinite(*value))
+        return std::nullopt;
+    if (target->kind == type_kind::BOOL)
+        return *value != 0.0 ? 1 : 0;
+
+    const int bits = target->size() * 8;
+    if (bits <= 0 || bits > 64)
+        return std::nullopt;
+    const long double truncated = std::trunc(static_cast<long double>(*value));
+
+    if (target->is_unsigned()) {
+        const long double maximum = bits == 64
+            ? static_cast<long double>(std::numeric_limits<uint64_t>::max())
+            : static_cast<long double>((uint64_t{1} << bits) - 1);
+        if (truncated < 0.0L || truncated > maximum)
+            return std::nullopt;
+        const uint64_t converted = static_cast<uint64_t>(truncated);
+        return apply_integer_cast(static_cast<int64_t>(converted), target.get());
+    }
+
+    const long double minimum = bits == 64
+        ? static_cast<long double>(std::numeric_limits<int64_t>::min())
+        : -static_cast<long double>(uint64_t{1} << (bits - 1));
+    const long double maximum = bits == 64
+        ? static_cast<long double>(std::numeric_limits<int64_t>::max())
+        : static_cast<long double>((uint64_t{1} << (bits - 1)) - 1);
+    if (truncated < minimum || truncated > maximum)
+        return std::nullopt;
+    return apply_integer_cast(static_cast<int64_t>(truncated), target.get());
+}
+
 } // namespace xcc

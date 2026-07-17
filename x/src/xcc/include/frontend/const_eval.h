@@ -36,6 +36,12 @@ public:
     // Returns the value on success, std::nullopt if e is not a constant.
     //
     static std::optional<double> evaluate_float(const expr *e);
+
+    // Evaluate an arithmetic constant expression as if converted to the
+    // supplied integer type.  Unlike evaluate(), this deliberately accepts
+    // floating constants used by static integer initializers.
+    static std::optional<int64_t> evaluate_integer_conversion(
+        const expr *e, type_ptr target);
 };
 
 } // namespace xcc
