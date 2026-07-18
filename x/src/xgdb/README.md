@@ -13,7 +13,8 @@ Related sibling tool:
 ## What xgdb does
 
 - provides a GDB-like command-line debugger
-- loads SDCC `.cdb` debug information and optional `.map` linker output
+- loads linked ELF debug/symbol information, SDCC `.cdb` debug information,
+  and optional `.map` linker output
 - talks to remote targets through `librsp`
 - falls back cleanly to symbol/disassembly-only debugging when a linked
   function has no source file
@@ -40,7 +41,7 @@ bin/x/bin/xgdb --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:900
 
 Supported startup switches:
 
-- `--exec <file>`
+- `--exec <file>` target image; ELF files also provide embedded symbols/debug
 - `--cdb <file>`   SDCC CDB debug information
 - `--map <file>`   SDCC MAP linker output (optional, supplements CDB)
 - `--remote <host:port>`
@@ -50,8 +51,9 @@ Supported startup switches:
 - `--version`
 - `-h`, `--help`
 
-If `--cdb` is not given and `--exec foo.bin` is set, `xgdb` also tries
-`foo.bin.cdb` and `foo.bin.map` as sidecars.
+If `--cdb` is not given and `--exec foo.elf` is set, `xgdb` first loads
+embedded ELF symbols/debug information. For raw images such as `foo.bin`,
+it tries `foo.cdb`, `foo.bin.cdb`, `foo.map`, and `foo.bin.map` sidecars.
 
 For machine-interface (IDE) integration use:
 

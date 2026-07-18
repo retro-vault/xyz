@@ -36,7 +36,24 @@ namespace xld {
                 || name == "_DABS"
                 || name == "_CABS"
                 || name.rfind("_DATA_BANK_", 0) == 0
-                || name.rfind(".data.bank.", 0) == 0;
+                || name == ".data"
+                || name == ".bss"
+                || name == ".rodata"
+                || name == ".tdata"
+                || name == ".tbss"
+                || name.rfind(".data.", 0) == 0
+                || name.rfind(".bss.", 0) == 0
+                || name.rfind(".rodata.", 0) == 0
+                || name.rfind(".tdata.", 0) == 0
+                || name.rfind(".tbss.", 0) == 0;
+        }
+
+        static symbol_kind bfd_symbol_kind(const bfd::symbol& sym) {
+            if (bfd::has_flag(sym.flags, bfd::symbol_flags::function))
+                return symbol_kind::function;
+            if (bfd::has_flag(sym.flags, bfd::symbol_flags::object))
+                return symbol_kind::object;
+            return symbol_kind::notype;
         }
 
         static bool is_code_like_symbol_name(
@@ -165,7 +182,13 @@ namespace xld {
                 int idx = static_cast<int>(mod->symbols().size());
                 xld::symbol xs(sym.name, stype,
                                   static_cast<uint16_t>(sym.value),
-                                  idx, area_idx);
+                                  idx, area_idx, sym.is_absolute(),
+                                  bfd_symbol_kind(sym),
+                                  static_cast<uint16_t>(
+                                      std::min<uint64_t>(sym.size, 0xFFFFu)),
+                                  sym.is_global(),
+                                  bfd::has_flag(sym.flags,
+                                                bfd::symbol_flags::weak));
                 xs.set_absolute(sym.is_absolute());
                 xs.set_owner(mod.get());
                 mod->symbols().push_back(xs);
@@ -259,7 +282,7 @@ namespace xld {
             if (!obj->check_format(bfd::format::object)) return {};
             std::vector<std::string> defs;
             for (const auto& sym : obj->symbols()) {
-                if (sym.is_defined())
+                if (sym.is_defined() && sym.is_global())
                     defs.push_back(sym.name);
             }
             return defs;
@@ -277,7 +300,7 @@ namespace xld {
             if (!obj->check_format(bfd::format::object)) return {};
             std::vector<std::string> defs;
             for (const auto& sym : obj->symbols()) {
-                if (sym.is_defined())
+                if (sym.is_defined() && sym.is_global())
                     defs.push_back(sym.name);
             }
             return defs;

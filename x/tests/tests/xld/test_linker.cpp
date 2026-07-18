@@ -158,6 +158,124 @@ TEST(linker_duplicate_symbol_error) {
     ASSERT_THROWS(xld::linker::link(ctx, opts), xld::symbol_error);
 }
 
+TEST(linker_allows_duplicate_local_elf_symbols) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+
+    auto mod1 = std::make_shared<xld::module>("mod1", "mod1.o");
+    mod1->areas().emplace_back(".text", 1, xld::area_flags::none, 0);
+    mod1->texts().push_back({0, 0, {0xC9}, {}});
+    mod1->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0,
+                                 false, xld::symbol_kind::function, 1, true);
+    mod1->symbols().emplace_back("__str_0", xld::symbol_type::def, 0, 1, 0,
+                                 false, xld::symbol_kind::object, 1, false);
+    ctx.modules.push_back(mod1);
+
+    auto mod2 = std::make_shared<xld::module>("mod2", "mod2.o");
+    mod2->areas().emplace_back(".text", 1, xld::area_flags::none, 0);
+    mod2->texts().push_back({0, 0, {0xC9}, {}});
+    mod2->symbols().emplace_back("_helper", xld::symbol_type::def, 0, 0, 0,
+                                 false, xld::symbol_kind::function, 1, true);
+    mod2->symbols().emplace_back("__str_0", xld::symbol_type::def, 0, 1, 0,
+                                 false, xld::symbol_kind::object, 1, false);
+    ctx.modules.push_back(mod2);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    ASSERT(ctx.global_symbols.find("_main") != ctx.global_symbols.end());
+    ASSERT(ctx.global_symbols.find("_helper") != ctx.global_symbols.end());
+    ASSERT(ctx.global_symbols.find("__str_0") == ctx.global_symbols.end());
+}
+
+TEST(linker_allows_weak_definition_to_be_overridden_by_strong_definition) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+
+    auto weak_mod = std::make_shared<xld::module>("weak", "weak.o");
+    weak_mod->areas().emplace_back(".text", 1, xld::area_flags::none, 0);
+    weak_mod->texts().push_back({0, 0, {0xC9}, {}});
+    weak_mod->symbols().emplace_back("_hook", xld::symbol_type::def, 0, 0, 0,
+                                     false, xld::symbol_kind::function, 1,
+                                     true, true);
+    ctx.modules.push_back(weak_mod);
+
+    auto strong_mod = std::make_shared<xld::module>("strong", "strong.o");
+    strong_mod->areas().emplace_back(".text", 1, xld::area_flags::none, 0);
+    strong_mod->texts().push_back({0, 0, {0xC9}, {}});
+    strong_mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0,
+                                       false, xld::symbol_kind::function, 1,
+                                       true);
+    strong_mod->symbols().emplace_back("_hook", xld::symbol_type::def, 0, 1, 0,
+                                       false, xld::symbol_kind::function, 1,
+                                       true);
+    ctx.modules.push_back(strong_mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    auto it = ctx.global_symbols.find("_hook");
+    ASSERT(it != ctx.global_symbols.end());
+    ASSERT_EQ(it->second.first->name(), std::string("strong"));
+}
+
+TEST(linker_allows_duplicate_weak_definitions_and_keeps_first) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+
+    auto main_mod = std::make_shared<xld::module>("main", "main.o");
+    main_mod->areas().emplace_back(".text", 1, xld::area_flags::none, 0);
+    main_mod->texts().push_back({0, 0, {0xC9}, {}});
+    main_mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0,
+                                     false, xld::symbol_kind::function, 1,
+                                     true);
+    main_mod->symbols().emplace_back("_hook", xld::symbol_type::def, 0, 1, 0,
+                                     false, xld::symbol_kind::function, 1,
+                                     true, true);
+    ctx.modules.push_back(main_mod);
+
+    auto weak_mod = std::make_shared<xld::module>("weak2", "weak2.o");
+    weak_mod->areas().emplace_back(".text", 1, xld::area_flags::none, 0);
+    weak_mod->texts().push_back({0, 0, {0xC9}, {}});
+    weak_mod->symbols().emplace_back("_hook", xld::symbol_type::def, 0, 0, 0,
+                                     false, xld::symbol_kind::function, 1,
+                                     true, true);
+    ctx.modules.push_back(weak_mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    auto it = ctx.global_symbols.find("_hook");
+    ASSERT(it != ctx.global_symbols.end());
+    ASSERT_EQ(it->second.first->name(), std::string("main"));
+}
+
+TEST(linker_resolves_unresolved_weak_reference_to_zero) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+
+    auto mod = std::make_shared<xld::module>("main", "main.o");
+    mod->areas().emplace_back(".text", 3, xld::area_flags::none, 0);
+
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::word | xld::reloc_mode::sym;
+    re.offset_in_t = 1;
+    re.ref_index = 1;
+    mod->texts().push_back({0, 0, {0xC3, 0x34, 0x12}, {re}});
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0,
+                                false, xld::symbol_kind::function, 3, true);
+    mod->symbols().emplace_back("_missing", xld::symbol_type::ref, 0, 1, -1,
+                                false, xld::symbol_kind::function, 0,
+                                true, true);
+    ctx.modules.push_back(mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    ASSERT_EQ(ctx.code_buffer[1], 0x34);
+    ASSERT_EQ(ctx.code_buffer[2], 0x12);
+}
+
 TEST(linker_unresolved_symbol_error) {
     xld::link_context ctx;
     ctx.entry_name = "_main";

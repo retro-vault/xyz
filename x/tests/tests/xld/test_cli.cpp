@@ -194,6 +194,55 @@ TEST(cli_supports_ihx_output_and_map_file) {
     ASSERT_EQ(opts.map_file->string(), std::string("out.map"));
 }
 
+TEST(cli_supports_elf_output_format) {
+    std::vector<std::string> args = {
+        "xld",
+        "--mode=gnu",
+        "--oformat=elf",
+        "main.o"
+    };
+
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (auto& arg : args)
+        argv.push_back(arg.data());
+
+    auto opts = xld::cli::parse(static_cast<int>(argv.size()), argv.data());
+
+    ASSERT_EQ(opts.format, xld::output_format::elf);
+    ASSERT_EQ(opts.entry_symbol, std::string("_start"));
+}
+
+TEST(cli_gnu_script_can_request_elf_output) {
+    auto script = std::filesystem::temp_directory_path()
+                / "xld-cli-elf-script.ld";
+    {
+        std::ofstream out(script);
+        out << "ENTRY(_start)\n"
+            << "OUTPUT_FORMAT(elf)\n"
+            << "SECTIONS { .text : { *(.text) } }\n";
+    }
+
+    std::vector<std::string> args = {
+        "xld",
+        "--mode=gnu",
+        "-T", script.string(),
+        "main.o"
+    };
+
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (auto& arg : args)
+        argv.push_back(arg.data());
+
+    auto opts = xld::cli::parse(static_cast<int>(argv.size()), argv.data());
+
+    ASSERT_EQ(opts.format, xld::output_format::elf);
+    ASSERT_EQ(opts.entry_symbol, std::string("_start"));
+
+    std::filesystem::remove(script);
+}
+
 TEST(cli_resolves_dash_l_against_dash_L_paths) {
     auto dir = std::filesystem::temp_directory_path() / "xld-cli-dash-l-test";
     std::filesystem::remove_all(dir);

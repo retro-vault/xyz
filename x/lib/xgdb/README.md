@@ -9,9 +9,9 @@ It has two jobs:
 - provide a pluggable disassembly interface, with a Z80 backend and an
   SDCC-style formatter today
 
-Source-level debug symbols are loaded elsewhere in the toolchain from SDCC
-`.cdb` and `.map` files; this library only provides the in-memory model and
-disassembly surface.
+Source-level debug symbols are loaded elsewhere in the toolchain from linked
+ELF files or SDCC `.cdb`/`.map` sidecars; this library only provides the
+in-memory model and disassembly surface.
 
 The library is intended for tools such as:
 
@@ -53,8 +53,8 @@ Important enums:
 - `xgdb::storage_kind`: `address`, `stack`, `register_name`, `register_pair`, `frame_relative`
 
 This covers both C and assembly debug data.  The document is populated by
-`debugger_session` via translation from SDCC `.cdb` and `.map` sidecars;
-`libxgdb` itself provides no file I/O.
+`debugger_session` via translation from linked ELF files or SDCC `.cdb`/`.map`
+sidecars; `libxgdb` itself provides no file I/O.
 
 ## Disassembly API
 

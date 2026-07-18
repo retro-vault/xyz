@@ -52,6 +52,9 @@ public:
 
     virtual void global_decl(const std::string &name) = 0;
     virtual void symbol_assign(const std::string &name, long long val) = 0;
+    virtual void symbol_type_function(const std::string &) {}
+    virtual void symbol_type_object(const std::string &) {}
+    virtual void symbol_size(const std::string &, const std::string &) {}
 
     // -- Data directives --------------------------------------------------
 

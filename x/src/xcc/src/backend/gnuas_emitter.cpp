@@ -61,6 +61,18 @@ void gnuas_emitter::symbol_assign(const std::string &name, long long val) {
     out_ << "\t.set " << name << ", " << val << "\n";
 }
 
+void gnuas_emitter::symbol_type_function(const std::string &name) {
+    out_ << "\t.type " << name << ", @function\n";
+}
+
+void gnuas_emitter::symbol_type_object(const std::string &name) {
+    out_ << "\t.type " << name << ", @object\n";
+}
+
+void gnuas_emitter::symbol_size(const std::string &name, const std::string &expr) {
+    out_ << "\t.size " << name << ", " << expr << "\n";
+}
+
 void gnuas_emitter::db(int val) {
     out_ << "\t.byte " << val << "\n";
 }

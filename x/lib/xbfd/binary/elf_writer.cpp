@@ -31,7 +31,15 @@ static constexpr uint32_t SHF_WRITE    = 0x01;
 static constexpr uint32_t SHF_ALLOC    = 0x02;
 static constexpr uint32_t SHF_EXECINSTR= 0x04;
 static constexpr uint16_t EM_Z80       = 220;
+static constexpr uint16_t ET_REL       = 1;
+static constexpr uint16_t ET_EXEC      = 2;
+static constexpr uint8_t  STT_NOTYPE   = 0;
+static constexpr uint8_t  STT_OBJECT   = 1;
+static constexpr uint8_t  STT_FUNC     = 2;
 static constexpr uint8_t  STT_SECTION  = 3;
+static constexpr uint8_t  STB_LOCAL    = 0;
+static constexpr uint8_t  STB_GLOBAL   = 1;
+static constexpr uint8_t  STB_WEAK     = 2;
 
 static constexpr uint16_t DW_TAG_compile_unit = 0x11;
 static constexpr uint16_t DW_TAG_subprogram   = 0x2e;
@@ -428,7 +436,7 @@ private:
     }
 
     void build_symbol_table(const xbfd::object& obj) {
-        sym_entries_.push_back({0, 0, 0, 0});
+        sym_entries_.push_back({0, 0, 0, 0, 0});
         sec_shidx_.resize(obj.sections.size());
         sec_symidx_.resize(obj.sections.size(), 0);
         for (size_t i = 0; i < obj.sections.size(); ++i)
@@ -436,15 +444,22 @@ private:
 
         for (size_t i = 0; i < obj.sections.size(); ++i) {
             sec_symidx_[i] = static_cast<uint32_t>(sym_entries_.size());
-            sym_entries_.push_back({0, 0, STT_SECTION, sec_shidx_[i]});
+            sym_entries_.push_back({0, 0, 0, STT_SECTION, sec_shidx_[i]});
         }
 
         auto add_syms = [&](bool want_global) {
             for (const auto& sym : obj.symbols) {
                 if (sym.is_global() != want_global) continue;
                 const uint32_t name_off = strtab_add(strtab_, sym.name);
-                const uint8_t  bind     = want_global ? 1 : 0;
-                const uint8_t  info     = static_cast<uint8_t>(bind << 4);
+                const uint8_t  bind     = has_flag(sym.flags, xbfd::symbol_flags::weak)
+                    ? STB_WEAK
+                    : (want_global ? STB_GLOBAL : STB_LOCAL);
+                uint8_t        type     = STT_NOTYPE;
+                if (has_flag(sym.flags, xbfd::symbol_flags::function))
+                    type = STT_FUNC;
+                else if (has_flag(sym.flags, xbfd::symbol_flags::object))
+                    type = STT_OBJECT;
+                const uint8_t  info     = static_cast<uint8_t>((bind << 4) | type);
                 uint16_t       shndx    = 0;
                 if (!sym.is_absolute() && !sym.section_name.empty())
                     for (size_t i = 0; i < obj.sections.size(); ++i)
@@ -453,7 +468,8 @@ private:
                 if (sym.is_absolute()) shndx = 0xFFF1;
                 sym_name_to_index_[sym.name] =
                     static_cast<uint32_t>(sym_entries_.size());
-                sym_entries_.push_back({name_off, static_cast<uint32_t>(sym.value), info, shndx});
+                sym_entries_.push_back({name_off, static_cast<uint32_t>(sym.value),
+                                        static_cast<uint32_t>(sym.size), info, shndx});
             }
         };
         add_syms(false);
@@ -477,7 +493,7 @@ private:
         symtab_off_ = static_cast<uint32_t>(buf_.size());
         for (const auto& se : sym_entries_) {
             write_u32le(se.st_name); write_u32le(se.st_value);
-            write_u32le(0);          write_u8(se.st_info);
+            write_u32le(se.st_size); write_u8(se.st_info);
             write_u8(0);             write_u16le(se.st_shndx);
         }
         symtab_size_ = static_cast<uint32_t>(buf_.size()) - symtab_off_;
@@ -562,14 +578,17 @@ private:
         h[0]=0x7F; h[1]='E'; h[2]='L'; h[3]='F';
         h[4]=1; h[5]=1; h[6]=1;
         std::fill(h+7, h+16, 0);
-        wu16le(h+16, 1); wu16le(h+18, EM_Z80); wu32le(h+20, 1);
-        wu32le(h+24, 0); wu32le(h+28, 0); wu32le(h+32, shoff_);
+        const uint16_t type = obj.format == xbfd::obj_format::executable
+            ? ET_EXEC
+            : ET_REL;
+        wu16le(h+16, type); wu16le(h+18, EM_Z80); wu32le(h+20, 1);
+        wu32le(h+24, static_cast<uint32_t>(obj.entry)); wu32le(h+28, 0); wu32le(h+32, shoff_);
         wu32le(h+36, 0); wu16le(h+40, 52); wu16le(h+42, 0);
         wu16le(h+44, 0); wu16le(h+46, 40); wu16le(h+48, total_sh);
         wu16le(h+50, shstrndx);
     }
 
-    struct sym_entry { uint32_t st_name, st_value; uint8_t st_info; uint16_t st_shndx; };
+    struct sym_entry { uint32_t st_name, st_value, st_size; uint8_t st_info; uint16_t st_shndx; };
     struct rel_info  { uint32_t offset, size, target_shidx; };
 
     void write_u8  (uint8_t  v) { buf_.push_back(v); }

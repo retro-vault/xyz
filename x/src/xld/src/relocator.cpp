@@ -68,10 +68,16 @@ namespace xld {
                             auto it = ctx.global_symbols.find(sym.name());
                             if (it == ctx.global_symbols.end()) {
                                 auto lit = ctx.linker_symbols.find(sym.name());
-                                if (lit == ctx.linker_symbols.end())
+                                if (lit == ctx.linker_symbols.end()) {
+                                    if (sym.is_weak()) {
+                                        target = 0;
+                                    } else {
                                     throw reloc_error(
                                         "unresolved symbol: " + sym.name());
-                                target = lit->second;
+                                    }
+                                } else {
+                                    target = lit->second;
+                                }
                             } else {
                                 auto [def_mod, def_idx] = it->second;
                                 auto& def_sym =

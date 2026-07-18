@@ -6,6 +6,7 @@
 // copyright (C) 2026 tomaz stih
 //
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <xas/backend/emitter.h>
@@ -101,12 +102,53 @@ namespace xas {
                             const std::string& section_name,
                             bool global) override
         {
-            if (defined_syms_.count(name)) return;
+            if (defined_syms_.count(name)) {
+                if (auto* sym = find_symbol(name)) {
+                    sym->value = value;
+                    sym->section_name = section_name;
+                    sym->flags = merge_binding(sym->flags,
+                        global || sym->is_global());
+                }
+                return;
+            }
             defined_syms_.insert(name);
             bfd::symbol_flags sf = global
                 ? (bfd::symbol_flags::global | bfd::symbol_flags::function)
                 : bfd::symbol_flags::local;
-            obj_->add_symbol(name, sf, value, section_name);
+            if (auto it = pending_type_flags_.find(name);
+                it != pending_type_flags_.end()) {
+                sf = replace_type_flags(sf, it->second);
+            }
+            auto* existing = find_symbol(name);
+            auto& sym = existing
+                ? *existing
+                : obj_->add_symbol(name, sf, value, section_name);
+            if (existing) {
+                sym.flags = merge_binding(sym.flags, global || sym.is_global());
+                if (auto it = pending_type_flags_.find(name);
+                    it != pending_type_flags_.end()) {
+                    sym.flags = replace_type_flags(sym.flags, it->second);
+                }
+                sym.value = value;
+                sym.section_name = section_name;
+            }
+            if (auto it = pending_sizes_.find(name); it != pending_sizes_.end())
+                sym.size = it->second;
+        }
+
+        void set_symbol_type(const std::string& name,
+                             bfd::symbol_flags type_flags) override
+        {
+            pending_type_flags_[name] = type_flags;
+            if (auto* sym = find_symbol(name))
+                sym->flags = replace_type_flags(sym->flags, type_flags);
+        }
+
+        void set_symbol_size(const std::string& name, uint64_t size) override
+        {
+            pending_sizes_[name] = size;
+            if (auto* sym = find_symbol(name))
+                sym->size = size;
         }
 
         void mark_label(int) override {}
@@ -118,7 +160,13 @@ namespace xas {
             ref_syms_.insert(name);
             bfd::symbol_flags sf = bfd::symbol_flags::global
                                  | bfd::symbol_flags::undefined;
-            obj_->add_symbol(name, sf, 0, "");
+            if (auto it = pending_type_flags_.find(name);
+                it != pending_type_flags_.end()) {
+                sf = replace_type_flags(sf, it->second);
+            }
+            auto& sym = obj_->add_symbol(name, sf, 0, "");
+            if (auto it = pending_sizes_.find(name); it != pending_sizes_.end())
+                sym.size = it->second;
         }
 
         void end_module() override
@@ -129,6 +177,40 @@ namespace xas {
         uint32_t current_offset() const override { return cur_offset_; }
 
     private:
+        bfd::symbol* find_symbol(const std::string& name)
+        {
+            for (auto& sym : obj_->object().symbols) {
+                if (sym.name == name)
+                    return &sym;
+            }
+            return nullptr;
+        }
+
+        static bfd::symbol_flags replace_type_flags(
+            bfd::symbol_flags flags,
+            bfd::symbol_flags type_flags)
+        {
+            constexpr uint32_t type_mask =
+                static_cast<uint32_t>(bfd::symbol_flags::function)
+              | static_cast<uint32_t>(bfd::symbol_flags::object);
+            uint32_t raw = static_cast<uint32_t>(flags) & ~type_mask;
+            raw |= static_cast<uint32_t>(type_flags) & type_mask;
+            return static_cast<bfd::symbol_flags>(raw);
+        }
+
+        static bfd::symbol_flags merge_binding(bfd::symbol_flags flags,
+                                               bool global)
+        {
+            constexpr uint32_t bind_mask =
+                static_cast<uint32_t>(bfd::symbol_flags::local)
+              | static_cast<uint32_t>(bfd::symbol_flags::global)
+              | static_cast<uint32_t>(bfd::symbol_flags::undefined);
+            uint32_t raw = static_cast<uint32_t>(flags) & ~bind_mask;
+            raw |= static_cast<uint32_t>(
+                global ? bfd::symbol_flags::global : bfd::symbol_flags::local);
+            return static_cast<bfd::symbol_flags>(raw);
+        }
+
         std::string                output_path_;
         std::unique_ptr<bfd::bfd>  obj_;
         std::string                module_name_;
@@ -136,6 +218,8 @@ namespace xas {
         uint32_t                   cur_offset_ = 0;
         std::unordered_set<std::string> defined_syms_;
         std::unordered_set<std::string> ref_syms_;
+        std::unordered_map<std::string, bfd::symbol_flags> pending_type_flags_;
+        std::unordered_map<std::string, uint64_t> pending_sizes_;
     };
 
     std::unique_ptr<emitter> make_elf_emitter(const std::string& path)

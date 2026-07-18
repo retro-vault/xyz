@@ -723,9 +723,12 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         std::string lbl = mangle(fn.name);
         if (debug_)
             debug_->begin_function(fn, lbl);
+        asm_.symbol_type_function(lbl);
         asm_.label(lbl, fn.is_global);
     };
     auto emit_helper_footer = [&]() {
+        const std::string lbl = mangle(fn.name);
+        asm_.symbol_size(lbl, ". - " + lbl);
         if (debug_)
             debug_->end_function(fn);
     };

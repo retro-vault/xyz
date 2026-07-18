@@ -45,7 +45,7 @@ namespace xbfd {
 // ===========================================================================
 
 enum class byte_order   { little_endian, big_endian };
-enum class obj_format   { unknown, object, archive, core };
+enum class obj_format   { unknown, object, executable, archive, core };
 enum class obj_flavour  { unknown, rel, elf, ar_text, ar_binary };
 enum class debug_lang   { unknown, c, assembly };
 enum class var_storage  { unknown, stack, reg, external };
@@ -144,9 +144,11 @@ struct symbol {
     symbol_flags flags        = symbol_flags::none;
     uint64_t     value        = 0;
     std::string  section_name;
+    uint64_t     size         = 0;
 
     bool is_defined()  const { return !has_flag(flags, symbol_flags::undefined); }
     bool is_global()   const { return  has_flag(flags, symbol_flags::global);    }
+    bool is_weak()     const { return  has_flag(flags, symbol_flags::weak);      }
     bool is_absolute() const { return  has_flag(flags, symbol_flags::absolute);  }
 };
 
@@ -211,6 +213,7 @@ struct object {
     obj_format                   format  = obj_format::unknown;
     obj_flavour                  flavour = obj_flavour::unknown;
     byte_order                   endian  = byte_order::little_endian;
+    uint64_t                     entry   = 0;
     std::vector<section>         sections;
     std::vector<symbol>          symbols;
     std::vector<archive_member>  members;

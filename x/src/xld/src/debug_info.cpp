@@ -68,8 +68,21 @@ namespace xld {
                 || name == "_HEAP"
                 || name == "_INITIALIZED"
                 || name == "_INITIALIZER"
+                || name == "_GSINIT"
+                || name == "_GSFINAL"
                 || name == "_DABS"
-                || name == "_CABS";
+                || name == "_CABS"
+                || name == ".data"
+                || name == ".bss"
+                || name == ".rodata"
+                || name == ".tdata"
+                || name == ".tbss"
+                || name.rfind("_DATA_BANK_", 0) == 0
+                || name.rfind(".data.", 0) == 0
+                || name.rfind(".bss.", 0) == 0
+                || name.rfind(".rodata.", 0) == 0
+                || name.rfind(".tdata.", 0) == 0
+                || name.rfind(".tbss.", 0) == 0;
         }
 
         static bool is_code_area_name(const std::string& name) {

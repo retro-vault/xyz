@@ -259,12 +259,19 @@ void z80_gen::gen_function(const icode &) {
     direct_call_ifx_abi_ = call_abi::DEFAULT;
     direct_call_ifx_reg_size_ = 0;
     direct_call_ifx_keep_word_pending_ = false;
-    if (cur_fn_) emit_prologue(*cur_fn_);
+    if (cur_fn_) {
+        asm_.symbol_type_function(mangle(cur_fn_->name));
+        emit_prologue(*cur_fn_);
+    }
 }
 
 void z80_gen::gen_endfunction(const icode &) {
     if (cur_fn_ && !last_frameless_return_terminated_)
         emit_epilogue(*cur_fn_);
+    if (cur_fn_) {
+        const std::string lbl = mangle(cur_fn_->name);
+        asm_.symbol_size(lbl, ". - " + lbl);
+    }
 }
 
 void z80_gen::gen_return(const icode &ic) {

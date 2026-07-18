@@ -111,8 +111,7 @@ namespace xld {
         case xbfd::lscript_output_format::ihx:
             return xld::output_format::ihx;
         case xbfd::lscript_output_format::elf:
-            throw xld_error("linker script '" + script_path.string()
-                            + "' requests an output format not implemented by xld");
+            return xld::output_format::elf;
         default:
             return xld::output_format::xl;
         }
@@ -326,8 +325,7 @@ namespace xld {
                 } else if (format == "ihx") {
                     opts.format = output_format::ihx;
                 } else if (format == "elf") {
-                    throw xld_error("output format '" + format
-                                      + "' is not implemented yet");
+                    opts.format = output_format::elf;
                 } else {
                     throw xld_error("unsupported output format: " + format);
                 }
@@ -341,8 +339,7 @@ namespace xld {
                 } else if (format == "ihx") {
                     opts.format = output_format::ihx;
                 } else if (format == "elf") {
-                    throw xld_error("output format '" + format
-                                      + "' is not implemented yet");
+                    opts.format = output_format::elf;
                 } else {
                     throw xld_error("unsupported output format: " + format);
                 }
@@ -460,10 +457,10 @@ next_library:
             << "  -nostartfiles              Do not use implicit startup files\n"
             << "  -nostdlib                  Do not use implicit startup files or default libs\n"
             << "  --no-default-runtime       Do not auto-probe ../lib for runtime assets\n"
-            << "  -f <fmt>                   Output format alias: xl, bin, binary, ihx\n"
+            << "  -f <fmt>                   Output format alias: xl, bin, binary, ihx, elf\n"
             << "  --oformat=xl               Emit XL relocatable image (default)\n"
             << "  --oformat=binary           Emit flat binary image\n"
-            << "  --oformat=elf              Reserved; not yet implemented as primary output\n"
+            << "  --oformat=elf              Emit linked ELF executable image\n"
             << "  --oformat=ihx              Emit Intel HEX image\n"
             << "  -T <file>                  Use linker script\n"
             << "  --script <file>            Use linker script (long form)\n"

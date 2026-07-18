@@ -7,12 +7,14 @@
 #include <array>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <ios>
 #include <istream>
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -21,6 +23,7 @@
 #include <vector>
 
 #include <rsp/rsp.h>
+#include <xbfd/xbfd.h>
 #include <xemu/xemu.h>
 #include <xz80/cpu.h>
 #include <xz80/memory.h>
@@ -70,6 +73,43 @@ std::vector<uint8_t> read_file_bytes(const std::filesystem::path& path) {
     return std::vector<uint8_t>(
         std::istreambuf_iterator<char>(file),
         std::istreambuf_iterator<char>());
+}
+
+uint16_t load_elf_sections(
+    const std::filesystem::path& path,
+    const std::function<void(uint16_t, std::span<const uint8_t>)>& load)
+{
+    try {
+        auto obj = bfd::bfd::open_r(path);
+        if (obj->get_flavour() != bfd::flavour::elf
+            || (!obj->check_format(bfd::format::object)
+                && !obj->check_format(bfd::format::executable))) {
+            throw std::runtime_error("not an ELF object/executable: "
+                                     + path.string());
+        }
+
+        for (const auto& sec : obj->sections()) {
+            if (!xbfd::has_flag(sec.flags, xbfd::section_flags::alloc))
+                continue;
+            if (xbfd::has_flag(sec.flags, xbfd::section_flags::debugging))
+                continue;
+            if (sec.data.empty())
+                continue;
+            if (sec.vma > 0xFFFFu || sec.vma + sec.data.size() > 0x10000u) {
+                throw std::runtime_error("ELF section out of Z80 address range: "
+                                         + sec.name);
+            }
+            load(static_cast<uint16_t>(sec.vma),
+                 std::span<const uint8_t>(sec.data.data(), sec.data.size()));
+        }
+
+        if (obj->object().entry > 0xFFFFu)
+            throw std::runtime_error("ELF entry is outside Z80 address range");
+        return static_cast<uint16_t>(obj->object().entry);
+    } catch (const xbfd::bfd_error& e) {
+        throw std::runtime_error("cannot load ELF: "
+                                 + path.string() + ": " + e.what());
+    }
 }
 
 struct ihx_chunk {
@@ -1227,6 +1267,14 @@ void machine::load_ihx(const std::filesystem::path& path) {
                    std::span<const uint8_t>(chunk.bytes.data(), chunk.bytes.size()));
 }
 
+uint16_t machine::load_elf(const std::filesystem::path& path) {
+    return load_elf_sections(
+        path,
+        [this](uint16_t address, std::span<const uint8_t> bytes) {
+            load_bytes(address, bytes);
+        });
+}
+
 void machine::load_bytes(uint16_t origin, std::span<const uint8_t> bytes) noexcept {
     impl_->mem.load(origin, bytes);
 }
@@ -1546,6 +1594,14 @@ void remote_session::load_ihx(const std::filesystem::path& path) {
     for (const auto& chunk : read_ihx_chunks(path))
         write_memory(chunk.address,
                      std::span<const uint8_t>(chunk.bytes.data(), chunk.bytes.size()));
+}
+
+uint16_t remote_session::load_elf(const std::filesystem::path& path) {
+    return load_elf_sections(
+        path,
+        [this](uint16_t address, std::span<const uint8_t> bytes) {
+            write_memory(address, bytes);
+        });
 }
 
 rsp::stop_reply remote_session::continue_execution() {

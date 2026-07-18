@@ -188,6 +188,8 @@ namespace xas {
         bool        defined  = false;
         bool        global   = false;
         bool        external = false; // referenced but not defined
+        xbfd::symbol_flags type_flags = xbfd::symbol_flags::none;
+        uint64_t    size     = 0;
     };
 
     using sym_table = std::map<std::string, sym_entry>;
@@ -597,6 +599,95 @@ namespace xas {
         void note_section_offset()
         {
             section_offsets_[cur_section_] = cur_offset_;
+        }
+
+        uint32_t alignment_padding(uint32_t boundary, uint32_t at) const
+        {
+            if (boundary <= 1)
+                return 0;
+            const uint32_t rem = at % boundary;
+            return rem == 0 ? 0 : boundary - rem;
+        }
+
+        uint32_t directive_alignment_boundary(const stmt& s)
+        {
+            if (s.directive_name == "p2align") {
+                if (s.args.empty())
+                    return 1;
+                auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                if (!v)
+                    return 1;
+                if (*v < 0 || *v > 30)
+                    throw codegen_error(src_file_, s.source_line,
+                                        ".p2align exponent out of range");
+                return static_cast<uint32_t>(1u << static_cast<uint32_t>(*v));
+            }
+
+            if (s.args.empty())
+                return 1;
+            auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+            if (!v)
+                return 1;
+            if (*v < 0)
+                throw codegen_error(src_file_, s.source_line,
+                                    "." + s.directive_name +
+                                    " alignment must be non-negative");
+            return static_cast<uint32_t>(*v);
+        }
+
+        uint32_t directive_alignment_padding(const stmt& s)
+        {
+            uint32_t n = alignment_padding(directive_alignment_boundary(s), cur_offset_);
+            if (s.args.size() >= 3) {
+                auto max_skip = eval_expr(*s.args[2], syms_, cur_offset_);
+                if (max_skip && *max_skip >= 0
+                    && n > static_cast<uint32_t>(*max_skip))
+                    n = 0;
+            }
+            return n;
+        }
+
+        std::optional<uint8_t> directive_fill_byte(const stmt& s) const
+        {
+            if (s.args.size() < 2)
+                return std::nullopt;
+            auto v = eval_expr(*s.args[1], syms_, cur_offset_);
+            if (!v)
+                return std::nullopt;
+            return static_cast<uint8_t>(*v);
+        }
+
+        xbfd::symbol_flags symbol_type_flags(std::string text) const
+        {
+            text.erase(std::remove_if(text.begin(), text.end(),
+                                      [](unsigned char ch) {
+                                          return ch == '@' || ch == '%'
+                                              || ch == '#'
+                                              || std::isspace(ch) != 0;
+                                      }),
+                       text.end());
+            text = lowercase(text);
+            if (text == "function" || text == "func")
+                return xbfd::symbol_flags::function;
+            if (text == "object" || text == "data")
+                return xbfd::symbol_flags::object;
+            return xbfd::symbol_flags::none;
+        }
+
+        void emit_fill_or_space(uint32_t n, std::optional<uint8_t> fill,
+                                int source_line)
+        {
+            if (pass_ == 2) {
+                ensure_section();
+                if (fill) {
+                    for (uint32_t i = 0; i < n; ++i)
+                        emit_.emit_byte(*fill);
+                } else {
+                    emit_.emit_space(n, source_line);
+                }
+            }
+            cur_offset_ += n;
+            note_section_offset();
         }
 
         void switch_section(const std::string& name)
@@ -1729,6 +1820,19 @@ namespace xas {
                 return;
             }
 
+            if (dn == "extern" || dn == "external"
+                || dn == "ref" || dn == "xref") {
+                for (const auto& arg : s.args) {
+                    if (arg->kind != expr_kind::symbol)
+                        continue;
+                    syms_[arg->name].global = true;
+                    syms_[arg->name].external = true;
+                    if (pass_ == 2)
+                        emit_.refer_symbol(arg->name);
+                }
+                return;
+            }
+
             if (dn == "org" || dn == "origin") {
                 if (!s.args.empty()) {
                     auto v = eval_expr(*s.args[0], syms_, cur_offset_);
@@ -1767,12 +1871,13 @@ namespace xas {
                     auto v = eval_expr(*s.args[0], syms_, cur_offset_);
                     if (v) n = static_cast<uint32_t>(*v);
                 }
-                if (pass_ == 2) {
-                    ensure_section();
-                    emit_.emit_space(n, s.source_line);
-                }
-                cur_offset_ += n;
-                note_section_offset();
+                emit_fill_or_space(n, directive_fill_byte(s), s.source_line);
+                return;
+            }
+
+            if (dn == "align" || dn == "balign" || dn == "p2align") {
+                const uint32_t n = directive_alignment_padding(s);
+                emit_fill_or_space(n, directive_fill_byte(s), s.source_line);
                 return;
             }
 
@@ -1842,6 +1947,27 @@ namespace xas {
                 }
                 return;
             }
+            if (dn == "type") {
+                if (!s.string_arg.empty()) {
+                    auto flags = symbol_type_flags(s.string_arg2);
+                    syms_[s.string_arg].type_flags = flags;
+                    if (pass_ == 2)
+                        emit_.set_symbol_type(s.string_arg, flags);
+                }
+                return;
+            }
+            if (dn == "size") {
+                if (!s.string_arg.empty() && !s.args.empty()) {
+                    auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                    if (v) {
+                        syms_[s.string_arg].size = static_cast<uint64_t>(*v);
+                        if (pass_ == 2)
+                            emit_.set_symbol_size(s.string_arg,
+                                                  static_cast<uint64_t>(*v));
+                    }
+                }
+                return;
+            }
             if (dn == "optsdcc") {
                 if (pass_ == 2) {
                     if (auto cc = parse_optsdcc_cc(s.string_arg2))
@@ -1874,6 +2000,15 @@ namespace xas {
                                   && syms_[s.label_name].global;
                     emit_.define_symbol(s.label_name, cur_offset_,
                                         cur_section_, is_global);
+                    auto sit = syms_.find(s.label_name);
+                    if (sit != syms_.end()) {
+                        if (sit->second.type_flags != xbfd::symbol_flags::none)
+                            emit_.set_symbol_type(s.label_name,
+                                                  sit->second.type_flags);
+                        if (sit->second.size != 0)
+                            emit_.set_symbol_size(s.label_name,
+                                                  sit->second.size);
+                    }
                     emit_.mark_label(s.source_line);
                 }
                 return;
@@ -2007,6 +2142,18 @@ namespace xas {
                         }
                         continue;
                     }
+                    if (dn == "type" && !s.string_arg.empty()) {
+                        syms_[s.string_arg].type_flags =
+                            symbol_type_flags(s.string_arg2);
+                        continue;
+                    }
+                    if (dn == "size"
+                        && !s.string_arg.empty() && !s.args.empty()) {
+                        auto v = eval_expr(*s.args[0], syms_, cur_offset_);
+                        if (v)
+                            syms_[s.string_arg].size = static_cast<uint64_t>(*v);
+                        continue;
+                    }
                     if (dn == "byte" || dn == "db")
                         cur_offset_ += static_cast<uint32_t>(s.string_arg.size()
                                                               + s.args.size());
@@ -2028,6 +2175,8 @@ namespace xas {
                             if (v) cur_offset_ += static_cast<uint32_t>(*v);
                         }
                     }
+                    else if (dn == "align" || dn == "balign" || dn == "p2align")
+                        cur_offset_ += directive_alignment_padding(s);
                     note_section_offset();
                 }
             }
@@ -2038,7 +2187,11 @@ namespace xas {
                 if (s.kind == stmt_kind::comment)
                     continue;
                 if (s.kind == stmt_kind::directive
-                    && (s.directive_name == "globl" || s.directive_name == "global")) {
+                    && (s.directive_name == "globl" || s.directive_name == "global"
+                        || s.directive_name == "extern"
+                        || s.directive_name == "external"
+                        || s.directive_name == "ref"
+                        || s.directive_name == "xref")) {
                     for (const auto& arg : s.args) {
                         if (arg->kind == expr_kind::symbol)
                             syms_[arg->name].global = true;

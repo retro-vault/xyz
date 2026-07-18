@@ -91,8 +91,7 @@ namespace xld {
         case xbfd::lscript_output_format::ihx:
             return output_format::ihx;
         case xbfd::lscript_output_format::elf:
-            throw xld_error("linker script '" + script_path.string()
-                            + "' requests an output format not implemented by xld");
+            return output_format::elf;
         default:
             return output_format::xl;
         }

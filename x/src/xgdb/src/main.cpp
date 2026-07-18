@@ -58,7 +58,7 @@ namespace {
             << "Usage: xgdb [options] [program]\n\n"
             << "X Tools Debugger (xgdb) — remote Z80 debugger\n\n"
             << "startup:\n"
-            << "  --exec <file>           target binary image\n"
+            << "  --exec <file>           target image; ELF also supplies symbols/debug\n"
             << "  --cdb <file>            SDCC CDB debug information file\n"
             << "  --map <file>            SDCC MAP linker output file (optional)\n"
             << "  --remote <host:port>    connect to remote target\n"

@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 
@@ -134,6 +135,47 @@ namespace {
         }
     }
 
+    bool debug_info_has_symbol(const xbfd::debug_info& info,
+                               const std::string& name)
+    {
+        for (const auto& fn : info.functions)
+            if (fn.name == name)
+                return true;
+        for (const auto& sym : info.symbols)
+            if (sym.name == name)
+                return true;
+        return false;
+    }
+
+    xbfd::debug_info debug_info_from_elf_object(const xbfd::object& obj) {
+        xbfd::debug_info info = obj.debug;
+
+        for (const auto& sym : obj.symbols) {
+            if (!sym.is_defined())
+                continue;
+            if (sym.name.empty())
+                continue;
+            if (debug_info_has_symbol(info, sym.name))
+                continue;
+
+            if (xbfd::has_flag(sym.flags, xbfd::symbol_flags::function)) {
+                xbfd::debug_function fn;
+                fn.name = sym.name;
+                fn.start = static_cast<uint32_t>(sym.value);
+                fn.end = static_cast<uint32_t>(
+                    sym.value + std::max<uint64_t>(sym.size, 1));
+                info.functions.push_back(std::move(fn));
+            } else {
+                info.symbols.push_back({
+                    sym.name,
+                    static_cast<uint32_t>(sym.value)
+                });
+            }
+        }
+
+        return info;
+    }
+
     xgdb::variable make_variable(const xbfd::debug_variable& v,
                                   uint32_t scope_start = 0,
                                   uint32_t scope_end   = 0)
@@ -176,7 +218,7 @@ namespace {
 } // namespace
 
 // ---------------------------------------------------------------------------
-// CDB/MAP → xgdb::document translator
+// xbfd debug/symbol metadata → xgdb::document translator
 // ---------------------------------------------------------------------------
 
 void debugger_session::rebuild_document() {
@@ -191,6 +233,8 @@ void debugger_session::rebuild_document() {
 
     xgdb::document doc;
     doc.version = 1;
+    if (exec_path_.has_value())
+        doc.image_path = exec_path_->string();
 
     // Source files.
     for (const auto& f : info.files) {
@@ -270,7 +314,33 @@ void debugger_session::load_cdb_file(const std::filesystem::path& path) {
         throw std::runtime_error("cannot parse CDB file: " + path.string());
     cdb_info_ = std::move(*result);
     cdb_path_ = path;
+    symbol_path_ = path;
     rebuild_document();
+}
+
+void debugger_session::load_elf_file(const std::filesystem::path& path) {
+    try {
+        auto obj = bfd::bfd::open_r(path);
+        if (obj->get_flavour() != bfd::flavour::elf
+            || (!obj->check_format(bfd::format::object)
+                && !obj->check_format(bfd::format::executable))) {
+            throw std::runtime_error("not an ELF object/executable: "
+                                     + path.string());
+        }
+
+        auto info = debug_info_from_elf_object(obj->object());
+        if (info.empty())
+            throw std::runtime_error("ELF file contains no debug symbols: "
+                                     + path.string());
+
+        cdb_info_ = std::move(info);
+        cdb_path_ = std::nullopt;
+        symbol_path_ = path;
+        rebuild_document();
+    } catch (const xbfd::bfd_error& e) {
+        throw std::runtime_error("cannot parse ELF file: "
+                                 + path.string() + ": " + e.what());
+    }
 }
 
 void debugger_session::load_map_file(const std::filesystem::path& path) {
@@ -280,6 +350,20 @@ void debugger_session::load_map_file(const std::filesystem::path& path) {
 
 void debugger_session::maybe_load_default_symbols() {
     if (!exec_path_.has_value()) return;
+
+    if (std::filesystem::exists(exec_path_.value())) {
+        try {
+            auto obj = bfd::bfd::open_r(exec_path_.value());
+            if (obj->get_flavour() == bfd::flavour::elf
+                && (obj->check_format(bfd::format::object)
+                    || obj->check_format(bfd::format::executable))) {
+                load_elf_file(exec_path_.value());
+                return;
+            }
+        } catch (const std::exception&) {
+            // Non-ELF binaries continue through the legacy sidecar path.
+        }
+    }
 
     auto try_cdb = [&](std::filesystem::path p) {
         if (std::filesystem::exists(p)) { load_cdb_file(p); return true; }
@@ -299,6 +383,10 @@ void debugger_session::maybe_load_default_symbols() {
 
 const std::optional<std::filesystem::path>& debugger_session::cdb_path() const {
     return cdb_path_;
+}
+
+const std::optional<std::filesystem::path>& debugger_session::symbol_path() const {
+    return symbol_path_;
 }
 
 const std::optional<std::filesystem::path>& debugger_session::map_path() const {

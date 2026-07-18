@@ -20,6 +20,11 @@ std::string banked_data_section_name(int bank) {
     return "_DATA_BANK_" + std::to_string(bank);
 }
 
+int global_object_size(const ir_module::global_var &g) {
+    int sz = g.type ? g.type->size() : 2;
+    return sz > 0 ? sz : 2;
+}
+
 } // namespace
 
 void z80_gen::plan_size_shared_ix_helpers(const ir_module &mod) {
@@ -126,7 +131,7 @@ void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template
             } else asm_.ds(e.size);
         }
     } else {
-        int sz = g.type ? g.type->size() : 2;
+        int sz = global_object_size(g);
         if (!tls_template && g.has_init && g.init_val != 0) {
             if (sz == 1)      asm_.db((int)g.init_val);
             else if (sz == 2) asm_.dw((int)g.init_val);
@@ -140,7 +145,7 @@ void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template
                 asm_.ds(sz > 0 ? sz : 2);
             }
         } else {
-            asm_.ds(sz > 0 ? sz : 2);
+            asm_.ds(sz);
         }
     }
 }
@@ -181,8 +186,10 @@ void z80_gen::emit_globals(const ir_module &mod) {
         std::string lbl = mangle(g.name);
         if (!g.is_static) asm_.global_decl(lbl);
         if (debug_) debug_->emit_global(g.name, g.type.get(), g.is_static);
+        asm_.symbol_type_object(lbl);
         asm_.label(lbl, false);
         emit_global_body(g, false);
+        asm_.symbol_size(lbl, std::to_string(global_object_size(g)));
         emitted_data = true;
     }
     if (emitted_data) {
@@ -192,6 +199,7 @@ void z80_gen::emit_globals(const ir_module &mod) {
     if (tls_size_ > 0) {
         asm_.section_tls();
         asm_.global_decl("__tls_template");
+        asm_.symbol_type_object("__tls_template");
         asm_.label("__tls_template", false);
         for (auto &g : mod.globals) {
             if (!g.is_tls) continue;
@@ -199,6 +207,7 @@ void z80_gen::emit_globals(const ir_module &mod) {
             asm_.comment("tls: " + lbl + " @ offset " + std::to_string(tls_offsets_[lbl]));
             emit_global_body(g, true);
         }
+        asm_.symbol_size("__tls_template", std::to_string(tls_size_));
         asm_.global_decl("__tls_size");
         asm_.symbol_assign("__tls_size", tls_size_);
         asm_.raw("\n");
@@ -247,7 +256,9 @@ void z80_gen::emit_strings(const ir_module &mod) {
     else
         asm_.section_rodata();
     for (auto &s : mod.string_literals) {
-        asm_.label(mangle(s.name), false);
+        const std::string lbl = mangle(s.name);
+        asm_.symbol_type_object(lbl);
+        asm_.label(lbl, false);
         if (s.char_width <= 1) {
             std::vector<int> bytes;
             for (unsigned char c : s.str_init) bytes.push_back((int)c);
@@ -260,6 +271,7 @@ void z80_gen::emit_strings(const ir_module &mod) {
             for (unsigned char c : s.str_init) asm_.dl((int)c);
             asm_.dl(0);
         }
+        asm_.symbol_size(lbl, std::to_string(global_object_size(s)));
     }
     asm_.raw("\n");
 }

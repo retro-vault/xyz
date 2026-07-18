@@ -65,10 +65,12 @@ $(HOST_BIN_DIR):
 -include $(DEPS)
 
 test: all
-	bash $(TEST_DIR)/format_test.sh
-	bash $(TEST_DIR)/macro_test.sh
-	bash $(TEST_DIR)/macro_convert_test.sh
-	bash $(TEST_DIR)/sdcc_compat_test.sh
+	XAS=$(abspath $(TARGET)) bash $(TEST_DIR)/format_test.sh
+	XAS=$(abspath $(TARGET)) bash $(TEST_DIR)/include_test.sh
+	XAS=$(abspath $(TARGET)) bash $(TEST_DIR)/directive_compat_test.sh
+	XAS=$(abspath $(TARGET)) bash $(TEST_DIR)/macro_test.sh
+	XAS=$(abspath $(TARGET)) bash $(TEST_DIR)/macro_convert_test.sh
+	XAS=$(abspath $(TARGET)) bash $(TEST_DIR)/sdcc_compat_test.sh
 
 test-libs: all
 	bash $(TEST_DIR)/library_format_roundtrip_test.sh

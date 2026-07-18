@@ -227,6 +227,9 @@ namespace xld {
     void binary_emitter::emit(const std::filesystem::path& path,
                               const link_context& ctx)
     {
+        if (ctx.format == output_format::elf)
+            throw xld_error("ELF output must be emitted through elf_emitter");
+
         std::ofstream out(path, std::ios::binary);
         if (!out.is_open())
             throw xld_error("cannot open output file: " + path.string());

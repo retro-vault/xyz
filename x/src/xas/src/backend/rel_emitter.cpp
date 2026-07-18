@@ -141,6 +141,11 @@ namespace xas {
             obj_->add_symbol(name, sf, value, section_name);
         }
 
+        void set_symbol_type(const std::string&,
+                             bfd::symbol_flags) override {}
+
+        void set_symbol_size(const std::string&, uint64_t) override {}
+
         void mark_label(int source_line) override
         {
             auto* sec = obj_->find_section(cur_section_);

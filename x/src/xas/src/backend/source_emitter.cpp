@@ -478,7 +478,9 @@ protected:
             return line;
         }
 
-        if (name == "globl" || name == "global") {
+        if (name == "globl" || name == "global"
+            || name == "extern" || name == "external"
+            || name == "ref" || name == "xref") {
             append_directive_name(line, format_ == output_format::sdcc ? ".globl" : ".global");
             if (!stmt.args.empty())
                 append(line, fragment_kind::whitespace, " ");
@@ -611,6 +613,10 @@ protected:
             if (!stmt.args.empty()) {
                 append(line, fragment_kind::whitespace, " ");
                 append_expr_arg(line, stmt.args.front());
+                if (format_ == output_format::gnu && stmt.args.size() >= 2) {
+                    append_comma(line);
+                    append_expr_arg(line, stmt.args[1]);
+                }
             }
             append_comment(line, stmt.trailing_comment);
             return line;
@@ -650,9 +656,55 @@ protected:
             return line;
         }
 
+        if (name == "align" || name == "balign" || name == "p2align") {
+            append_directive_name(line, name == "p2align" ? ".p2align" : ".align");
+            if (!stmt.args.empty()) {
+                append(line, fragment_kind::whitespace, " ");
+                for (size_t i = 0; i < stmt.args.size(); ++i) {
+                    if (i != 0)
+                        append_comma(line);
+                    append_expr_arg(line, stmt.args[i]);
+                }
+            }
+            append_comment(line, stmt.trailing_comment);
+            return line;
+        }
+
+        if (name == "type") {
+            append_directive_name(line, ".type");
+            if (!stmt.string_arg.empty()) {
+                append(line, fragment_kind::whitespace, " ");
+                append(line, fragment_kind::symbol, stmt.string_arg);
+            }
+            if (!stmt.string_arg2.empty()) {
+                append_comma(line);
+                append(line, fragment_kind::value, stmt.string_arg2);
+            }
+            append_comment(line, stmt.trailing_comment);
+            return line;
+        }
+
+        if (name == "size") {
+            append_directive_name(line, ".size");
+            if (!stmt.string_arg.empty()) {
+                append(line, fragment_kind::whitespace, " ");
+                append(line, fragment_kind::symbol, stmt.string_arg);
+            }
+            if (!stmt.args.empty()) {
+                append_comma(line);
+                append_expr_arg(line, stmt.args.front());
+            }
+            append_comment(line, stmt.trailing_comment);
+            return line;
+        }
+
         if (name == "if" || name == "ifdef" || name == "ifndef"
             || name == "else" || name == "endif"
-            || name == "optsdcc" || name == "24bit" || name == "32bit") {
+            || name == "optsdcc" || name == "24bit" || name == "32bit"
+            || name == "end" || name == "title" || name == "sbttl"
+            || name == "ident" || name == "list" || name == "nlist"
+            || name == "page" || name == "local" || name == "type"
+            || name == "size") {
             append_directive_name(line, "." + name);
             if (!stmt.args.empty()) {
                 append(line, fragment_kind::whitespace, " ");
@@ -715,7 +767,10 @@ private:
             && (stmt.directive_name == "ds"
                 || stmt.directive_name == "space"
                 || stmt.directive_name == "blkb"
-                || stmt.directive_name == "blkw");
+                || stmt.directive_name == "blkw"
+                || stmt.directive_name == "align"
+                || stmt.directive_name == "balign"
+                || stmt.directive_name == "p2align");
     }
 
     static bool is_payload_directive(const stmt& stmt) {
@@ -725,6 +780,7 @@ private:
                 || stmt.directive_name == "word"
                 || stmt.directive_name == "dw"
                 || stmt.directive_name == "2byte"
+                || stmt.directive_name == "dl"
                 || stmt.directive_name == "ascii"
                 || stmt.directive_name == "asciz"
                 || stmt.directive_name == "string");

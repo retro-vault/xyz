@@ -113,6 +113,7 @@ public:
 
     void load_binary(const std::filesystem::path& path, uint16_t origin);
     void load_ihx(const std::filesystem::path& path);
+    uint16_t load_elf(const std::filesystem::path& path);
     void load_bytes(uint16_t origin, std::span<const uint8_t> bytes) noexcept;
 
     void configure_memory_map(const memory_map_config& config);
@@ -199,6 +200,7 @@ public:
     void write_memory(uint32_t address, std::span<const uint8_t> data);
     void load_binary(const std::filesystem::path& path, uint16_t origin);
     void load_ihx(const std::filesystem::path& path);
+    uint16_t load_elf(const std::filesystem::path& path);
 
     rsp::stop_reply continue_execution();
     rsp::stop_reply step_instruction();

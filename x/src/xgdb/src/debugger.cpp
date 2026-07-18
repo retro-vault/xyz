@@ -26,14 +26,21 @@ void debugger::load_cdb_file(const std::filesystem::path& path) {
     }
 }
 
+void debugger::load_elf_file(const std::filesystem::path& path) {
+    host_.load_elf_file(path);
+    if (sink_ != nullptr) {
+        sink_->on_symbols_loaded(path);
+    }
+}
+
 void debugger::load_map_file(const std::filesystem::path& path) {
     host_.load_map_file(path);
 }
 
 void debugger::maybe_load_default_symbols() {
-    const auto before = host_.cdb_path();
+    const auto before = host_.symbol_path();
     host_.maybe_load_default_symbols();
-    const auto after = host_.cdb_path();
+    const auto after = host_.symbol_path();
     if (sink_ != nullptr && after.has_value() &&
         (!before.has_value() || before.value() != after.value())) {
         sink_->on_symbols_loaded(after.value());

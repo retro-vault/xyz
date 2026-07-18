@@ -1,5 +1,5 @@
-// Declares the concrete debugger session that binds CDB/MAP symbol handling,
-// source lookup, breakpoint tracking, and RSP transport together.
+// Declares the concrete debugger session that binds ELF/CDB/MAP symbol
+// handling, source lookup, breakpoint tracking, and RSP transport together.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
@@ -30,12 +30,16 @@ public:
 
     // Load CDB debug information from a file.
     void load_cdb_file(const std::filesystem::path& path) override;
+    // Load debug/symbol information from an ELF file.
+    void load_elf_file(const std::filesystem::path& path) override;
     // Load supplemental MAP symbol information from a file.
     void load_map_file(const std::filesystem::path& path) override;
     // Load the default sidecar CDB and MAP files when available.
     void maybe_load_default_symbols() override;
     // Return the current CDB file path when set.
     const std::optional<std::filesystem::path>& cdb_path() const override;
+    // Return the current symbol source path when set.
+    const std::optional<std::filesystem::path>& symbol_path() const override;
     // Return the current MAP file path when set.
     const std::optional<std::filesystem::path>& map_path() const override;
     // Check whether debug symbols are currently loaded.
@@ -111,7 +115,7 @@ public:
     void add_source_dir(const std::filesystem::path& dir);
 
 private:
-    // Translate parsed CDB modules and MAP info into the internal document.
+    // Translate parsed debug/symbol info into the internal document.
     void rebuild_document();
     // Convert raw target status into the richer xgdb stop model.
     stop_snapshot make_stop_snapshot(const rsp::stop_reply& reply, const xgdb::cpu_state& cpu);
@@ -157,6 +161,7 @@ private:
 
     std::optional<std::filesystem::path> exec_path_;
     std::optional<std::filesystem::path> cdb_path_;
+    std::optional<std::filesystem::path> symbol_path_;
     std::optional<std::filesystem::path> map_path_;
 
     // Parsed CDB data (MAP symbols are merged in during rebuild).

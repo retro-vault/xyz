@@ -8,6 +8,9 @@
 set -euo pipefail
 
 XEMU="$(realpath "${1:?usage: xemu_stdio_smoke_test.sh /path/to/xemu}")"
+TOOL_BIN_DIR="$(cd "$(dirname "$XEMU")" && pwd)"
+XAS="${XAS:-$TOOL_BIN_DIR/xas}"
+XLD="${XLD:-$TOOL_BIN_DIR/xld}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -87,5 +90,20 @@ bank_output="$(
 )"
 
 [[ "$bank_output" == "AB" ]] || fail "expected banked stdout 'AB', got '$bank_output'"
+
+if [[ -x "$XAS" && -x "$XLD" ]]; then
+    cat > "$tmpdir/halt_elf.s" <<'EOF'
+        .globl _start
+        .text
+_start:
+        .byte 0x76
+EOF
+
+    "$XAS" --mode=gnu -g -o "$tmpdir/halt_elf.o" "$tmpdir/halt_elf.s"
+    "$XLD" --mode=gnu --oformat=elf -g -e _start -Ttext=0100 \
+        -o "$tmpdir/halt_elf.elf" "$tmpdir/halt_elf.o"
+
+    "$XEMU" --run --quiet --load-elf "$tmpdir/halt_elf.elf"
+fi
 
 echo "${GREEN}PASS${RESET}: xemu stdio smoke"

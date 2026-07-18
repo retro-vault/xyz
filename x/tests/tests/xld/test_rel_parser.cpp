@@ -9,6 +9,7 @@
 #include <fstream>
 #include <xld/rel_parser.h>
 #include <xld/errors.h>
+#include <xbfd/xbfd.h>
 
 static std::filesystem::path fixture(const std::string& name) {
     // Try relative to cwd first, then relative to executable.
@@ -62,6 +63,78 @@ TEST(rel_parser_scan_defs) {
     auto defs = xld::rel_parser::scan_defs(fixture("lib_mod1.rel"));
     ASSERT_EQ(static_cast<int>(defs.size()), 1);
     ASSERT_EQ(defs[0], "_helper");
+}
+
+TEST(rel_parser_preserves_elf_symbol_metadata) {
+    auto path = std::filesystem::temp_directory_path()
+              / "xld_test_elf_symbol_metadata.o";
+
+    xbfd::object obj;
+    obj.module_name = "elf_symbol_metadata";
+    obj.format = xbfd::obj_format::object;
+    obj.flavour = xbfd::obj_flavour::elf;
+
+    xbfd::section text;
+    text.name = ".text";
+    text.flags = xbfd::section_flags::alloc
+               | xbfd::section_flags::load
+               | xbfd::section_flags::code;
+    text.size = 3;
+    text.data = {0x00, 0x00, 0xC9};
+    obj.sections.push_back(text);
+
+    xbfd::section data;
+    data.name = ".rodata";
+    data.flags = xbfd::section_flags::alloc
+               | xbfd::section_flags::load
+               | xbfd::section_flags::readonly
+               | xbfd::section_flags::data;
+    data.size = 4;
+    data.data = {1, 2, 3, 0};
+    obj.sections.push_back(data);
+
+    obj.symbols.push_back({
+        "_fn",
+        xbfd::symbol_flags::global
+            | xbfd::symbol_flags::weak
+            | xbfd::symbol_flags::function,
+        0,
+        ".text",
+        3
+    });
+    obj.symbols.push_back({
+        "_table",
+        xbfd::symbol_flags::local | xbfd::symbol_flags::object,
+        0,
+        ".rodata",
+        4
+    });
+
+    xbfd::elf_writer writer;
+    writer.write(path.string(), obj);
+
+    auto mod = xld::rel_parser::parse(path);
+    ASSERT_EQ(static_cast<int>(mod->symbols().size()), 2);
+
+    const xld::symbol* fn = nullptr;
+    const xld::symbol* table = nullptr;
+    for (const auto& sym : mod->symbols()) {
+        if (sym.name() == "_fn")
+            fn = &sym;
+        else if (sym.name() == "_table")
+            table = &sym;
+    }
+    ASSERT(fn != nullptr);
+    ASSERT(fn->is_global());
+    ASSERT(fn->is_weak());
+    ASSERT(fn->is_function());
+    ASSERT_EQ(fn->size(), 3);
+    ASSERT(table != nullptr);
+    ASSERT(table->is_local());
+    ASSERT(table->is_object());
+    ASSERT_EQ(table->size(), 4);
+
+    std::filesystem::remove(path);
 }
 
 TEST(rel_parser_nonexistent_file) {

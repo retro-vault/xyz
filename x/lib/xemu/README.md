@@ -12,6 +12,7 @@ It provides:
 - split stdin status/data port binding for the `platform=emu` console ABI
 - a convenience `bind_emu_stdio()` helper for the default `platform=emu`
   console ports (`0xe2`/`0xe3` in, `0xe1` out)
+- loaders for raw binary, Intel HEX, and linked ELF images
 - optional compatibility helpers for the older 4x16K page-switching model
 - an `rsp::target` adapter so the same machine can be exposed to `xgdb`
 - a small remote-session wrapper for talking to a running `xemu`

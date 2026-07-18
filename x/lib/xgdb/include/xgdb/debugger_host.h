@@ -103,6 +103,15 @@ public:
     //      Nothing.
     virtual void load_cdb_file(const std::filesystem::path& path) = 0;
 
+    // Load debug/symbol information embedded in an ELF file.
+    //
+    // Parameters:
+    //      path        - Path to the ELF file.
+    //
+    // Returns:
+    //      Nothing.
+    virtual void load_elf_file(const std::filesystem::path& path) = 0;
+
     // Load supplemental MAP symbol information produced by the SDCC linker.
     //
     // Parameters:
@@ -133,6 +142,15 @@ public:
     // Returns:
     //      Reference to the optional CDB path.
     virtual const std::optional<std::filesystem::path>& cdb_path() const = 0;
+
+    // Return the current symbol source path, regardless of file format.
+    //
+    // Parameters:
+    //      None.
+    //
+    // Returns:
+    //      Reference to the optional symbol source path.
+    virtual const std::optional<std::filesystem::path>& symbol_path() const = 0;
 
     // Return the current MAP file path.
     //

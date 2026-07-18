@@ -87,6 +87,15 @@ namespace xas {
                                     bool global) = 0;
 
         //
+        // Optional symbol metadata used by ELF-style directives such as
+        // .type and .size.  Formats that cannot encode it may ignore it.
+        //
+        virtual void set_symbol_type(const std::string& /*name*/,
+                                     xbfd::symbol_flags /*type_flags*/) {}
+        virtual void set_symbol_size(const std::string& /*name*/,
+                                     uint64_t /*size*/) {}
+
+        //
         // Record a label boundary at the current section offset.
         // SDCC REL output uses these to break T/R records at label lines.
         //

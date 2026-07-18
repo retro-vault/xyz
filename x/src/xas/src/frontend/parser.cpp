@@ -410,8 +410,10 @@ namespace xas {
             return s;
         }
 
-        // .globl / .global — one or more symbol names
-        if (name == "globl" || name == "global") {
+        // .globl / .global / .extern — one or more symbol names
+        if (name == "globl" || name == "global"
+            || name == "extern" || name == "external"
+            || name == "ref" || name == "xref") {
             while (peek().kind == token_kind::ident) {
                 const token& a = advance();
                 s.args.push_back(expr::make_sym(a.raw.empty() ? a.text : a.raw, peek().line));
@@ -453,16 +455,23 @@ namespace xas {
             return s;
         }
 
-        // .word / .dw / .2byte — emit 16-bit words
-        if (name == "word" || name == "dw" || name == "2byte") {
+        // .word / .dw / .2byte / .short — emit 16-bit words
+        if (name == "word" || name == "dw" || name == "2byte"
+            || name == "short" || name == "hword") {
+            if (name == "short" || name == "hword")
+                s.directive_name = "word";
             do { s.args.push_back(parse_expr()); } while (eat(token_kind::comma));
             finish_stmt(s);
             return s;
         }
 
-        // .ds / .space — reserve bytes
-        if (name == "ds" || name == "space") {
+        // .ds / .space / .skip / .zero — reserve bytes
+        if (name == "ds" || name == "space" || name == "skip" || name == "zero") {
+            if (name == "skip" || name == "zero")
+                s.directive_name = "space";
             s.args.push_back(parse_expr());
+            if (eat(token_kind::comma) && !at_end() && peek().kind != token_kind::newline)
+                s.args.push_back(parse_expr()); // fill value
             finish_stmt(s);
             return s;
         }
@@ -497,11 +506,30 @@ namespace xas {
             return s;
         }
 
-        // .dl / .long expr — emit 32-bit value
-        if (name == "dl" || name == "long") {
-            if (name == "long")
+        // .dl / .long / .4byte / .dword / .int expr — emit 32-bit value
+        if (name == "dl" || name == "long" || name == "4byte"
+            || name == "dword" || name == "int") {
+            if (name != "dl")
                 s.directive_name = "dl"; // normalize GNU spelling
             do { s.args.push_back(parse_expr()); } while (eat(token_kind::comma));
+            finish_stmt(s);
+            return s;
+        }
+
+        // Alignment directives.  .align/.balign use byte boundaries here;
+        // .p2align uses a power-of-two exponent; .even is shorthand for 2.
+        if (name == "align" || name == "balign" || name == "p2align") {
+            s.args.push_back(parse_expr());
+            if (eat(token_kind::comma) && !at_end() && peek().kind != token_kind::newline)
+                s.args.push_back(parse_expr()); // fill value
+            if (eat(token_kind::comma) && !at_end() && peek().kind != token_kind::newline)
+                s.args.push_back(parse_expr()); // max skip, GNU-compatible
+            finish_stmt(s);
+            return s;
+        }
+        if (name == "even") {
+            s.directive_name = "align";
+            s.args.push_back(expr::make_int(2, s.source_line));
             finish_stmt(s);
             return s;
         }
@@ -547,8 +575,47 @@ namespace xas {
             return s;
         }
 
-        // .24bit / .32bit — SDCC pointer-size hints (no-op for xas)
-        if (name == "24bit" || name == "32bit") { finish_stmt(s); return s; }
+        if (name == "type") {
+            if (peek().kind == token_kind::ident) {
+                const token& a = advance();
+                s.string_arg = a.raw.empty() ? a.text : a.raw;
+            }
+            eat(token_kind::comma);
+            while (!at_end() && peek().kind != token_kind::newline
+                   && peek().kind != token_kind::comment) {
+                const token& extra = advance();
+                s.string_arg2 += extra.raw.empty() ? extra.text : extra.raw;
+            }
+            finish_stmt(s);
+            return s;
+        }
+
+        if (name == "size") {
+            if (peek().kind == token_kind::ident) {
+                const token& a = advance();
+                s.string_arg = a.raw.empty() ? a.text : a.raw;
+            }
+            eat(token_kind::comma);
+            s.args.push_back(parse_expr());
+            finish_stmt(s);
+            return s;
+        }
+
+        // Common metadata/listing directives that do not affect object bytes.
+        if (name == "24bit" || name == "32bit"
+            || name == "end" || name == "title" || name == "sbttl"
+            || name == "ident" || name == "list" || name == "nlist"
+            || name == "page" || name == "local") {
+            while (!at_end() && peek().kind != token_kind::newline
+                   && peek().kind != token_kind::comment) {
+                if (!s.string_arg2.empty())
+                    s.string_arg2 += ' ';
+                const token& extra = advance();
+                s.string_arg2 += extra.raw.empty() ? extra.text : extra.raw;
+            }
+            finish_stmt(s);
+            return s;
+        }
 
         // Unknown directive — collect remaining tokens as string_arg.
         while (!at_end() && peek().kind != token_kind::newline) {

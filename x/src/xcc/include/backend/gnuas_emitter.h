@@ -40,6 +40,9 @@ public:
 
     void global_decl(const std::string &name) override;
     void symbol_assign(const std::string &name, long long val) override;
+    void symbol_type_function(const std::string &name) override;
+    void symbol_type_object(const std::string &name) override;
+    void symbol_size(const std::string &name, const std::string &expr) override;
 
     void db(int val) override;
     void db_list(const std::vector<int> &vals) override;

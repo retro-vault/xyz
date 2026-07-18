@@ -52,7 +52,8 @@ std::unique_ptr<bfd> bfd::open_r(const std::filesystem::path& path)
         obj->obj_.members = parse_archive(path, raw_str);
     } else if (is_elf_magic(raw_str)) {
         parse_elf(obj->obj_, path.string(), {raw_str.begin(), raw_str.end()});
-        obj->obj_.format  = xbfd::obj_format::object;
+        if (obj->obj_.format == xbfd::obj_format::unknown)
+            obj->obj_.format = xbfd::obj_format::object;
         obj->obj_.flavour = xbfd::obj_flavour::elf;
     } else if (is_rel_magic(raw_str)) {
         std::istringstream iss(raw_str);
@@ -81,7 +82,8 @@ std::unique_ptr<bfd> bfd::open_r_stream(const std::string& name, std::istream& i
         obj->obj_.members = parse_archive(obj->path_, raw_str);
     } else if (is_elf_magic(raw_str)) {
         parse_elf(obj->obj_, name, {raw_str.begin(), raw_str.end()});
-        obj->obj_.format  = xbfd::obj_format::object;
+        if (obj->obj_.format == xbfd::obj_format::unknown)
+            obj->obj_.format = xbfd::obj_format::object;
         obj->obj_.flavour = xbfd::obj_flavour::elf;
     } else if (is_rel_magic(raw_str)) {
         std::istringstream iss(raw_str);

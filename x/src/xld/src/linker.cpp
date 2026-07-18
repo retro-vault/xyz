@@ -131,7 +131,7 @@ namespace xld {
 
             for (auto& mod : ctx.modules) {
                 for (auto& sym : mod->symbols()) {
-                    if (sym.is_def())
+                    if (sym.is_def() && sym.is_global())
                         defined.insert(sym.name());
                 }
             }
@@ -177,7 +177,7 @@ namespace xld {
             for (int i = 0;
                  i < static_cast<int>(mod->symbols().size()); ++i) {
                 auto& sym = mod->symbols()[i];
-                if (!sym.is_def()) continue;
+                if (!sym.is_def() || !sym.is_global()) continue;
 
                 // Skip SDCC internal pseudo-symbols (e.g. .__.ABS.).
                 // These are defined in every module and must not enter
@@ -189,11 +189,18 @@ namespace xld {
 
                 auto it = ctx.global_symbols.find(sname);
                 if (it != ctx.global_symbols.end()) {
-                    throw symbol_error(
-                        "duplicate symbol '" + sname
-                        + "' defined in modules '"
-                        + it->second.first->name() + "' and '"
-                        + mod->name() + "'");
+                    auto& existing_sym =
+                        it->second.first->symbol_by_index(it->second.second);
+                    if (existing_sym.is_weak() && sym.is_strong()) {
+                        it->second = {mod.get(), i};
+                    } else if (existing_sym.is_strong() && sym.is_strong()) {
+                        throw symbol_error(
+                            "duplicate symbol '" + sname
+                            + "' defined in modules '"
+                            + it->second.first->name() + "' and '"
+                            + mod->name() + "'");
+                    }
+                    continue;
                 }
                 ctx.global_symbols[sname] = {mod.get(), i};
             }
@@ -205,7 +212,8 @@ namespace xld {
                 if (!sym.is_ref()) continue;
                 if (ctx.global_symbols.find(sym.name()) ==
                         ctx.global_symbols.end()
-                    && !is_linker_generated_symbol(sym.name())) {
+                    && !is_linker_generated_symbol(sym.name())
+                    && !sym.is_weak()) {
                     throw symbol_error(
                         "unresolved symbol '" + sym.name()
                         + "' referenced in module '" + mod->name() + "'");

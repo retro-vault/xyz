@@ -51,6 +51,12 @@ namespace xld {
         ref
     };
 
+    enum class symbol_kind {
+        notype,
+        function,
+        object
+    };
+
     // Relocation mode flags from SDCC R records.
     // Bit 0: byte (0) or word (1)
     // Bit 1: area (0) or symbol (1) reference
@@ -87,7 +93,8 @@ namespace xld {
     enum class output_format {
         xl,
         bin,
-        ihx
+        ihx,
+        elf
     };
 
 } // namespace xld

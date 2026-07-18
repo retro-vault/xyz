@@ -17,6 +17,7 @@
 #include <xld/binary_emitter.h>
 #include <xld/debug_emitter.h>
 #include <xld/elf_debug_emitter.h>
+#include <xld/elf_emitter.h>
 #include <xld/errors.h>
 #include <xld/map_emitter.h>
 #include <xld/runtime.h>
@@ -65,7 +66,10 @@ int main(int argc, char* argv[]) {
             std::cout << "xld " << XLD_VERSION << "\n";
 
         xld::linker::link(ctx, opts);
-        xld::binary_emitter::emit(opts.output_file, ctx);
+        if (ctx.format == xld::output_format::elf)
+            xld::elf_emitter::emit(opts.output_file, ctx, opts.debug_info);
+        else
+            xld::binary_emitter::emit(opts.output_file, ctx);
 
         if (opts.print_map) {
             xld::map_emitter::emit(std::cout, ctx);
@@ -80,7 +84,7 @@ int main(int argc, char* argv[]) {
                 opts.mode == xld::link_mode::gnu ? ".elf" : ".cdb");
         }
 
-        if (opts.cdb_file.has_value()) {
+        if (opts.cdb_file.has_value() && ctx.format != xld::output_format::elf) {
             if (opts.mode == xld::link_mode::gnu) {
                 xld::elf_debug_emitter emitter;
                 const xld::debug_emitter& debug = emitter;
@@ -98,6 +102,8 @@ int main(int argc, char* argv[]) {
                 output_size = 12
                             + static_cast<uint32_t>(ctx.reloc_table.size()) * 4
                             + ctx.code_size;
+            } else if (ctx.format == xld::output_format::elf) {
+                output_size = ctx.code_size;
             } else if (ctx.output_range.has_value()) {
                 output_size = static_cast<uint32_t>(
                     ctx.output_range->end - ctx.output_range->start + 1);

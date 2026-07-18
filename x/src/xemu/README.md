@@ -31,7 +31,8 @@ make -C x/src/xemu test
 - `~/.config/x/xemu.conf`
 
 The format is one `key = value` assignment per line, with `#` or `;`
-comments. Command-line flags override config-file values.
+comments. Command-line flags override config-file values. Image keys are
+`loadbin`, `loadihx`, and `loadelf`.
 
 Run as a remote target for `xgdb`:
 
@@ -43,6 +44,13 @@ Run a sparse Intel HEX image directly:
 
 ```sh
 bin/x/bin/xemu --run --load-ihx test.ihx --pc 0x0000
+```
+
+Run a linked ELF image directly. If `--pc` is omitted, `xemu` starts at the
+ELF entry address:
+
+```sh
+bin/x/bin/xemu --run --load-elf test.elf
 ```
 
 Run a raw program directly, mapping Z80 port `0` to host stdin and Z80
@@ -192,8 +200,9 @@ Common switches:
 - `--max-steps N`
 - `--load-bin FILE`
 - `--load-ihx FILE`
+- `--load-elf FILE`
 - `--origin ADDR`
-- `--pc ADDR`
+- `--pc ADDR` (default: ELF entry for `--load-elf`, otherwise `--origin`)
 - `--sp ADDR`
 - `--emu-stdio`, `--no-emu-stdio`
 - `--fs-root DIR`

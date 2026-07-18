@@ -39,6 +39,7 @@ static constexpr uint8_t  ELFMAG0     = 0x7F;
 static constexpr uint8_t  ELFCLASS32  = 1;
 static constexpr uint8_t  ELFDATA2LSB = 1;
 static constexpr uint16_t ET_REL      = 1;
+static constexpr uint16_t ET_EXEC     = 2;
 static constexpr uint16_t EM_Z80      = 220;
 static constexpr uint32_t SHT_PROGBITS= 1;
 static constexpr uint32_t SHT_SYMTAB  = 2;
@@ -52,6 +53,9 @@ static constexpr uint32_t SHF_EXECINSTR = 0x04;
 static constexpr uint16_t SHN_UNDEF   = 0;
 static constexpr uint16_t SHN_ABS     = 0xFFF1;
 static constexpr uint8_t  STB_GLOBAL  = 1;
+static constexpr uint8_t  STB_WEAK    = 2;
+static constexpr uint8_t  STT_OBJECT  = 1;
+static constexpr uint8_t  STT_FUNC    = 2;
 static constexpr uint8_t  STT_SECTION = 3;
 
 static uint16_t u16le(const uint8_t* p) {
@@ -143,8 +147,12 @@ private:
 
         const uint16_t type    = u16le(reinterpret_cast<const uint8_t*>(&hdr_->e_type));
         const uint16_t machine = u16le(reinterpret_cast<const uint8_t*>(&hdr_->e_machine));
-        if (type    != ET_REL) throw xbfd::format_error(src_, 0, "only ET_REL ELF files supported");
+        if (type != ET_REL && type != ET_EXEC)
+            throw xbfd::format_error(src_, 0, "only ET_REL/ET_EXEC ELF files supported");
         if (machine != EM_Z80) throw xbfd::format_error(src_, 0, "only EM_Z80 ELF files supported");
+        obj_.format = type == ET_EXEC ? xbfd::obj_format::executable
+                                      : xbfd::obj_format::object;
+        obj_.entry = u32le(reinterpret_cast<const uint8_t*>(&hdr_->e_entry));
     }
 
     void load_section_headers() {
@@ -246,13 +254,20 @@ private:
             raw_symbols_[i].is_section = (sym.st_info & 0x0F) == STT_SECTION;
             if (i == 0 || !nm || nm[0] == '\0') continue;
 
-            const bool is_global = (sym.st_info >> 4) == STB_GLOBAL;
+            const uint8_t bind = sym.st_info >> 4;
+            const bool is_global = bind == STB_GLOBAL || bind == STB_WEAK;
             const bool is_undef  = sym.st_shndx == SHN_UNDEF;
             const bool is_abs    = sym.st_shndx == SHN_ABS;
 
             auto sf = is_global ? xbfd::symbol_flags::global : xbfd::symbol_flags::local;
+            if (bind == STB_WEAK)
+                sf = sf | xbfd::symbol_flags::weak;
             if (is_undef) sf = sf | xbfd::symbol_flags::undefined;
             if (is_abs)   sf = sf | xbfd::symbol_flags::absolute;
+            if ((sym.st_info & 0x0F) == STT_FUNC)
+                sf = sf | xbfd::symbol_flags::function;
+            if ((sym.st_info & 0x0F) == STT_OBJECT)
+                sf = sf | xbfd::symbol_flags::object;
 
             std::string sec_name;
             if (!is_undef && !is_abs && sym.st_shndx < static_cast<uint32_t>(shnum_))
@@ -260,6 +275,7 @@ private:
 
             xbfd::symbol s;
             s.name = nm; s.flags = sf; s.value = sym.st_value; s.section_name = sec_name;
+            s.size = sym.st_size;
             obj_.symbols.push_back(std::move(s));
         }
     }
@@ -458,7 +474,8 @@ std::optional<object> elf_reader::read(const std::string& path) {
     std::string raw_str((std::istreambuf_iterator<char>(file)), {});
     object obj;
     bfd::parse_elf(obj, path, {raw_str.begin(), raw_str.end()});
-    obj.format  = obj_format::object;
+    if (obj.format == obj_format::unknown)
+        obj.format = obj_format::object;
     obj.flavour = obj_flavour::elf;
     return obj;
 }

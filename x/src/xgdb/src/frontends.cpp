@@ -287,9 +287,9 @@ int cli_frontend::run() {
             << "\n"
             << "For help, type \"help\".\n"
             << "Type \"target remote HOST:PORT\" to connect to a Z80 gdbserver.\n";
-    if (debugger_.session().cdb_path().has_value()) {
+    if (debugger_.session().symbol_path().has_value()) {
         output_ << "Symbols loaded from \""
-                << debugger_.session().cdb_path().value() << "\".\n";
+                << debugger_.session().symbol_path().value() << "\".\n";
     }
 
     for (const auto& command : execute_commands_) {

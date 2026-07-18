@@ -23,6 +23,9 @@ XZ80_LIB = $(PUBLIC_LIB_DIR)/libxz80.a
 RSP_DIR ?= $(ROOT)/lib/rsp
 RSP_INCLUDE = -I$(RSP_DIR)/include
 RSP_LIB = $(PUBLIC_LIB_DIR)/librsp.a
+XBFD_DIR ?= $(ROOT)/lib/xbfd
+XBFD_INCLUDE = -I$(XBFD_DIR)/include
+XBFD_LIB = $(PUBLIC_LIB_DIR)/libxbfd.a
 
 SOURCES = $(wildcard src/*.cpp)
 HEADERS = $(wildcard include/xemu/*.h)
@@ -44,7 +47,7 @@ $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
 
 $(OUTPUT_DIR)/%.o: src/%.cpp $(HEADERS) | $(OUTPUT_DIR)
-	$(CXX) $(CXXFLAGS) -Iinclude $(RSP_INCLUDE) $(XZ80_INCLUDE) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Iinclude $(RSP_INCLUDE) $(XZ80_INCLUDE) $(XBFD_INCLUDE) -c $< -o $@
 
 $(LIB_TARGET): $(OBJECTS) | $(OUTPUT_DIR) $(LIB_DIR)
 	ar rcs $@ $(OBJECTS)
@@ -56,8 +59,9 @@ $(RSP_LIB):
 	$(MAKE) -C $(RSP_DIR) ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
 
 test: $(OUTPUT_DIR) $(LIB_TARGET) $(XZ80_LIB) $(RSP_LIB) $(TEST_DIR)/test_main.cpp
-	$(CXX) $(CXXFLAGS) -Iinclude $(RSP_INCLUDE) $(XZ80_INCLUDE) \
-		$(TEST_DIR)/test_main.cpp $(LIB_TARGET) $(RSP_LIB) $(XZ80_LIB) $(SOCKET_LIBS) -pthread -o $(TEST_TARGET)
+	$(MAKE) -C $(XBFD_DIR) ROOT=$(ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude $(RSP_INCLUDE) $(XZ80_INCLUDE) $(XBFD_INCLUDE) \
+		$(TEST_DIR)/test_main.cpp $(LIB_TARGET) $(RSP_LIB) $(XBFD_LIB) $(XZ80_LIB) $(SOCKET_LIBS) -pthread -o $(TEST_TARGET)
 	$(TEST_TARGET)
 
 clean:

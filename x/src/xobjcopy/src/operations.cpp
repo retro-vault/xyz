@@ -99,10 +99,15 @@ namespace xobjcopy {
                     "cannot infer output target; use -O or an output extension");
 
             const auto flavour = to_xbfd_flavour(opts.output_target.value());
-            if (input_format == xbfd::obj_format::object
+            if ((input_format == xbfd::obj_format::object
+                    || input_format == xbfd::obj_format::executable)
                 && (flavour == xbfd::obj_flavour::ar_text
                     || flavour == xbfd::obj_flavour::ar_binary)) {
                 throw usage_error("object input requires object output target");
+            }
+            if (input_format == xbfd::obj_format::executable
+                && flavour != xbfd::obj_flavour::elf) {
+                throw usage_error("executable input requires ELF output target");
             }
             if (input_format == xbfd::obj_format::archive
                 && (flavour == xbfd::obj_flavour::rel
@@ -114,9 +119,10 @@ namespace xobjcopy {
 
         static void write_object(const std::filesystem::path& path,
                                  xbfd::object obj,
+                                 xbfd::obj_format format,
                                  xbfd::obj_flavour flavour)
         {
-            obj.format = xbfd::obj_format::object;
+            obj.format = format;
             obj.flavour = flavour;
             auto out = bfd::bfd::open_w(path, flavour);
             out->object() = std::move(obj);
@@ -140,6 +146,7 @@ namespace xobjcopy {
         try {
             auto in = bfd::bfd::open_r(opts.input_file);
             if (!in->check_format(xbfd::obj_format::object)
+                && !in->check_format(xbfd::obj_format::executable)
                 && !in->check_format(xbfd::obj_format::archive)) {
                 throw error("unsupported input format");
             }
@@ -153,14 +160,20 @@ namespace xobjcopy {
 
             auto obj = in->object();
             if (opts.strip_debug) {
-                if (input_format != xbfd::obj_format::object)
-                    throw usage_error("--strip-debug currently supports object inputs only");
+                if (input_format != xbfd::obj_format::object
+                    && input_format != xbfd::obj_format::executable) {
+                    throw usage_error(
+                        "--strip-debug currently supports object/executable inputs only");
+                }
                 strip_debug_from_object(obj);
             }
 
             const auto output_flavour = require_output_flavour(opts, input_format);
-            if (input_format == xbfd::obj_format::object)
-                write_object(opts.output_file, std::move(obj), output_flavour);
+            if (input_format == xbfd::obj_format::object
+                || input_format == xbfd::obj_format::executable) {
+                write_object(opts.output_file, std::move(obj), input_format,
+                             output_flavour);
+            }
             else
                 write_archive(opts.output_file, std::move(obj), output_flavour);
         } catch (const xbfd::bfd_error& e) {

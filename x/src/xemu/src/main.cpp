@@ -21,7 +21,8 @@ namespace {
 
 enum class image_format {
     bin,
-    ihx
+    ihx,
+    elf
 };
 
 struct partial_store_config {
@@ -65,6 +66,7 @@ struct options {
     std::optional<std::filesystem::path> config_path;
     std::optional<std::filesystem::path> loaded_config_path;
     std::optional<std::filesystem::path> image_path;
+    std::optional<uint16_t> image_entry;
     std::optional<xemu::memory_map_config> memory_map;
     image_format image = image_format::bin;
     uint16_t origin = 0x0000;
@@ -105,8 +107,9 @@ void print_help() {
         << "  --max-steps N        step budget for --run (default 1000000)\n"
         << "  --load-bin FILE      load raw binary into memory\n"
         << "  --load-ihx FILE      load Intel HEX records into memory\n"
+        << "  --load-elf FILE      load ELF sections into memory\n"
         << "  --origin ADDR        binary load address (default 0x0000)\n"
-        << "  --pc ADDR            initial program counter (default: origin)\n"
+        << "  --pc ADDR            initial program counter (default: ELF entry or origin)\n"
         << "  --sp ADDR            initial stack pointer (default 0xFFFF)\n"
         << "  --emu-stdio          map platform=emu stdio ports to host stdin/stdout\n"
         << "  --no-emu-stdio       disable platform=emu stdio even if enabled in config\n"
@@ -461,6 +464,9 @@ void apply_config_entry(
     } else if (key == "loadihx") {
         opts.image_path = resolve_config_path(base_dir, value);
         opts.image = image_format::ihx;
+    } else if (key == "loadelf") {
+        opts.image_path = resolve_config_path(base_dir, value);
+        opts.image = image_format::elf;
     } else if (key == "origin") {
         opts.origin = static_cast<uint16_t>(parse_u32(value));
     } else if (key == "pc") {
@@ -553,6 +559,10 @@ options parse_options(int argc, char* argv[]) {
             if (++i >= argc) throw std::runtime_error("--load-ihx requires a path");
             opts.image_path = argv[i];
             opts.image = image_format::ihx;
+        } else if (arg == "--load-elf") {
+            if (++i >= argc) throw std::runtime_error("--load-elf requires a path");
+            opts.image_path = argv[i];
+            opts.image = image_format::elf;
         } else if (arg == "--origin") {
             if (++i >= argc) throw std::runtime_error("--origin requires a value");
             opts.origin = static_cast<uint16_t>(parse_u32(argv[i]));
@@ -668,7 +678,7 @@ void print_memory_map_summary(const xemu::memory_map_config& config) {
               << config.port_rules.size() << " port rules\n";
 }
 
-void configure_machine(xemu::machine& emu, const options& opts) {
+void configure_machine(xemu::machine& emu, options& opts) {
     const bool has_simple_stdin = opts.stdin_port.has_value();
     const bool has_split_stdin =
         opts.stdin_status_port.has_value() || opts.stdin_data_port.has_value();
@@ -689,10 +699,13 @@ void configure_machine(xemu::machine& emu, const options& opts) {
     }
 
     if (opts.image_path.has_value()) {
-        if (opts.image == image_format::ihx)
+        if (opts.image == image_format::ihx) {
             emu.load_ihx(opts.image_path.value());
-        else
+        } else if (opts.image == image_format::elf) {
+            opts.image_entry = emu.load_elf(opts.image_path.value());
+        } else {
             emu.load_binary(opts.image_path.value(), opts.origin);
+        }
     }
     if (opts.fs_root.has_value())
         emu.bind_host_filesystem(*opts.fs_root);
@@ -731,7 +744,9 @@ void configure_machine(xemu::machine& emu, const options& opts) {
         emu.bind_stdout(opts.stdout_port.value(), std::cout);
     }
 
-    emu.set_pc(opts.pc.has_value() ? opts.pc.value() : opts.origin);
+    emu.set_pc(opts.pc.has_value()
+        ? opts.pc.value()
+        : opts.image_entry.value_or(opts.origin));
     emu.set_sp(opts.sp);
 }
 
@@ -780,6 +795,8 @@ int serve_debugger(xemu::machine& emu, const options& opts) {
             std::cout << "loaded " << opts.image_path.value();
             if (opts.image == image_format::bin)
                 std::cout << " at 0x" << std::hex << opts.origin << std::dec;
+            else if (opts.image == image_format::elf && opts.image_entry.has_value())
+                std::cout << " entry 0x" << std::hex << *opts.image_entry << std::dec;
             std::cout << "\n";
         }
         if (opts.memory_map.has_value()) {
@@ -841,7 +858,7 @@ int serve_debugger(xemu::machine& emu, const options& opts) {
 
 int main(int argc, char* argv[]) {
     try {
-        const auto opts = parse_options(argc, argv);
+        auto opts = parse_options(argc, argv);
         if (opts.show_help) {
             print_help();
             return 0;

@@ -86,6 +86,7 @@ auto printable(T v) {
 #include "test_binary_emitter.cpp"
 #include "test_relocator.cpp"
 #include "test_linker.cpp"
+#include "test_elf_emitter.cpp"
 #include "test_runtime.cpp"
 #include "test_adb_parser.cpp"
 #include "test_cdb_emitter.cpp"

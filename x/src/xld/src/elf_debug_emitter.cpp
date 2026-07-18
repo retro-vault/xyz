@@ -44,7 +44,16 @@ namespace xld {
                 || name == "_DABS"
                 || name == "_CABS"
                 || name == ".data"
-                || name == ".bss";
+                || name == ".bss"
+                || name == ".rodata"
+                || name == ".tdata"
+                || name == ".tbss"
+                || name.rfind("_DATA_BANK_", 0) == 0
+                || name.rfind(".data.", 0) == 0
+                || name.rfind(".bss.", 0) == 0
+                || name.rfind(".rodata.", 0) == 0
+                || name.rfind(".tdata.", 0) == 0
+                || name.rfind(".tbss.", 0) == 0;
         }
 
         static bool is_bss_area_name(const std::string& name) {
@@ -114,14 +123,35 @@ namespace xld {
         }
 
         static xbfd::symbol_flags xbfd_symbol_flags(bool is_global,
-                                                    bool is_function)
+                                                    bool is_weak,
+                                                    symbol_kind kind)
         {
             auto flags = xbfd::symbol_flags::absolute;
             flags = flags | (is_global ? xbfd::symbol_flags::global
                                        : xbfd::symbol_flags::local);
-            if (is_function)
+            if (is_weak)
+                flags = flags | xbfd::symbol_flags::weak;
+            if (kind == symbol_kind::function)
                 flags = flags | xbfd::symbol_flags::function;
+            else if (kind == symbol_kind::object)
+                flags = flags | xbfd::symbol_flags::object;
             return flags;
+        }
+
+        static symbol_kind infer_symbol_kind(const module* mod,
+                                             const symbol& sym)
+        {
+            if (sym.kind() != symbol_kind::notype)
+                return sym.kind();
+
+            const auto& areas = mod->areas();
+            if (sym.area_index() < 0
+                || sym.area_index() >= static_cast<int>(areas.size())) {
+                return symbol_kind::notype;
+            }
+            return is_data_area_name(areas[sym.area_index()].name())
+                ? symbol_kind::object
+                : symbol_kind::function;
         }
 
         static void add_final_symbols(xbfd::object& obj, const link_context& ctx) {
@@ -135,15 +165,13 @@ namespace xld {
                 if (!seen.insert(name).second)
                     continue;
 
-                const auto& areas = mod->areas();
-                bool is_function = sym.area_index() >= 0
-                    && sym.area_index() < static_cast<int>(areas.size())
-                    && !is_data_area_name(areas[sym.area_index()].name());
                 obj.symbols.push_back({
                     name,
-                    xbfd_symbol_flags(true, is_function),
+                    xbfd_symbol_flags(true, sym.is_weak(),
+                                      infer_symbol_kind(mod, sym)),
                     debug_info_builder::symbol_absolute_addr(mod, sym),
-                    ""
+                    "",
+                    sym.size()
                 });
             }
 
@@ -154,7 +182,8 @@ namespace xld {
                     name,
                     xbfd::symbol_flags::global | xbfd::symbol_flags::absolute,
                     address,
-                    ""
+                    "",
+                    0
                 });
             }
         }
@@ -189,8 +218,7 @@ namespace xld {
                     || sym.area_index() >= static_cast<int>(mod.areas().size())) {
                     continue;
                 }
-                const auto& area = mod.area_by_index(sym.area_index());
-                if (is_data_area_name(area.name()))
+                if (infer_symbol_kind(&mod, sym) != symbol_kind::function)
                     continue;
 
                 debug_function_info fn;
@@ -198,7 +226,8 @@ namespace xld {
                 fn.fallback_name = sym.name();
                 fn.start_address = debug_info_builder::symbol_absolute_addr(
                     &mod, sym);
-                fn.end_address = static_cast<uint32_t>(fn.start_address + 1);
+                fn.end_address = static_cast<uint32_t>(
+                    fn.start_address + std::max<uint16_t>(sym.size(), 1));
                 result.push_back(std::move(fn));
             }
 

@@ -37,6 +37,7 @@ public:
 
     void set_exec_path(const std::filesystem::path& path);
     void load_cdb_file(const std::filesystem::path& path);
+    void load_elf_file(const std::filesystem::path& path);
     void load_map_file(const std::filesystem::path& path);
     void maybe_load_default_symbols();
     void connect_remote(const std::string& target);

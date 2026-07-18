@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include <xbfd/xbfd.h>
 #include <xemu/xemu.h>
 
 struct test_case {
@@ -158,6 +159,45 @@ TEST(machine_loads_sparse_ihx_image) {
     ASSERT_EQ(emu.read_byte(0x0102), static_cast<uint8_t>(0x76));
     ASSERT_EQ(emu.read_byte(0x00FF), static_cast<uint8_t>(0x00));
     ASSERT_EQ(emu.read_byte(0xFF00), static_cast<uint8_t>(0x76));
+
+    std::filesystem::remove(path);
+}
+
+TEST(machine_loads_elf_sections_and_returns_entry) {
+    const auto path = std::filesystem::temp_directory_path() / "xemu-load-elf-test.elf";
+
+    xbfd::object obj;
+    obj.module_name = "xemu_load_elf";
+    obj.format = xbfd::obj_format::executable;
+    obj.flavour = xbfd::obj_flavour::elf;
+    obj.entry = 0x0100;
+
+    xbfd::section text;
+    text.name = ".text";
+    text.flags = xbfd::section_flags::alloc
+               | xbfd::section_flags::load
+               | xbfd::section_flags::code;
+    text.vma = 0x0100;
+    text.size = 1;
+    text.data = {0x76};
+    obj.sections.push_back(text);
+
+    xbfd::section debug;
+    debug.name = ".debug_info";
+    debug.flags = xbfd::section_flags::debugging;
+    debug.size = 2;
+    debug.data = {1, 2};
+    obj.sections.push_back(debug);
+
+    xbfd::elf_writer writer;
+    writer.write(path.string(), obj);
+
+    xemu::machine emu;
+    const auto entry = emu.load_elf(path);
+
+    ASSERT_EQ(entry, static_cast<uint16_t>(0x0100));
+    ASSERT_EQ(emu.read_byte(0x0100), static_cast<uint8_t>(0x76));
+    ASSERT_EQ(emu.read_byte(0x0000), static_cast<uint8_t>(0x00));
 
     std::filesystem::remove(path);
 }
