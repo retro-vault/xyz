@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -454,6 +455,10 @@ namespace xas {
         int        pass_       = 1;
         std::string src_file_;
         bool       section_ready_ = false;
+        std::map<uint32_t, std::string> debug_files_;
+        std::optional<uint32_t> current_debug_file_;
+        std::optional<uint32_t> current_debug_line_;
+        uint32_t debug_line_marker_seq_ = 0;
 
         codegen(emitter& e, const std::string& src)
             : emit_(e), src_file_(src) {}
@@ -599,6 +604,29 @@ namespace xas {
         void note_section_offset()
         {
             section_offsets_[cur_section_] = cur_offset_;
+        }
+
+        std::string debug_source_path(uint32_t file_id) const
+        {
+            auto it = debug_files_.find(file_id);
+            if (it != debug_files_.end() && !it->second.empty())
+                return it->second;
+            return src_file_;
+        }
+
+        void define_debug_line_marker(uint32_t file_id, uint32_t line)
+        {
+            if (pass_ != 2 || line == 0)
+                return;
+            ensure_section();
+            const std::string path =
+                std::filesystem::path(debug_source_path(file_id))
+                    .lexically_normal()
+                    .string();
+            const std::string name = "C$" + path + "$"
+                + std::to_string(line) + "$loc"
+                + std::to_string(debug_line_marker_seq_++);
+            emit_.define_symbol(name, cur_offset_, cur_section_, false);
         }
 
         uint32_t alignment_padding(uint32_t boundary, uint32_t at) const
@@ -1809,6 +1837,28 @@ namespace xas {
                 std::string sec_name = s.string_arg;
                 if (sec_name.empty()) sec_name = "_CODE";
                 switch_section(sec_name);
+                return;
+            }
+
+            if (dn == "file") {
+                if (!s.args.empty() && !s.string_arg.empty()) {
+                    if (auto id = eval_expr(*s.args[0], syms_, cur_offset_))
+                        debug_files_[static_cast<uint32_t>(*id)] = s.string_arg;
+                }
+                return;
+            }
+
+            if (dn == "loc") {
+                if (s.args.size() >= 2) {
+                    auto file_id = eval_expr(*s.args[0], syms_, cur_offset_);
+                    auto line = eval_expr(*s.args[1], syms_, cur_offset_);
+                    if (file_id && line) {
+                        current_debug_file_ = static_cast<uint32_t>(*file_id);
+                        current_debug_line_ = static_cast<uint32_t>(*line);
+                        define_debug_line_marker(*current_debug_file_,
+                                                 *current_debug_line_);
+                    }
+                }
                 return;
             }
 

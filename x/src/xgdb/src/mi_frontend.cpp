@@ -142,8 +142,12 @@ namespace {
             {"level", mi_string("0")},
             {"addr", mi_string(hex_u32(snapshot.pc))}
         };
+        if (snapshot.function_name.has_value()) {
+            fields.push_back({"func", mi_string(snapshot.function_name.value())});
+        }
         if (snapshot.source.has_value()) {
-            if (snapshot.source->function_name.has_value()) {
+            if (!snapshot.function_name.has_value()
+                && snapshot.source->function_name.has_value()) {
                 fields.push_back({"func", mi_string(snapshot.source->function_name.value())});
             }
             fields.push_back({"file", mi_string(std::filesystem::path(snapshot.source->file_path).filename().string())});
@@ -352,6 +356,13 @@ bool mi_frontend::handle_line(const std::string& line) {
         return true;
     }
 
+    if (command.name == "target-download") {
+        const auto pc = debugger_.session().download_program();
+        std::cout << token << "^done,pc=" << mi_string(hex_u32(pc.value_or(0))) << "\n";
+        std::cout << "(gdb)\n" << std::flush;
+        return true;
+    }
+
     if (command.name == "break-insert") {
         std::string location;
         for (const auto& arg : command.args) {
@@ -387,15 +398,18 @@ bool mi_frontend::handle_line(const std::string& line) {
         return true;
     }
 
+    if (command.name == "kill") {
+        std::cout << token << "^done\n";
+        std::cout << "(gdb)\n" << std::flush;
+        return true;
+    }
+
     if (command.name == "exec-run" || command.name == "exec-continue") {
         std::cout << token << "^running\n";
         std::cout << "*running,thread-id=" << mi_string("all") << "\n";
         stop_snapshot stop;
         if (command.name == "exec-run") {
-            stop = debugger_.status();
-            if (!stop.source.has_value()) {
-                stop = debugger_.step_instruction();
-            }
+            stop = debugger_.continue_execution();
         } else {
             stop = debugger_.continue_execution();
         }

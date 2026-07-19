@@ -367,8 +367,17 @@ namespace xas {
                               "' (no matching definition or terminator)");
         }
 
-        // .module / .file — just a module name string
+        // .module / .file — module name, or GNU `.file N "path"`.
         if (name == "module" || name == "file") {
+            if (name == "file" && peek().kind == token_kind::integer) {
+                s.args.push_back(parse_expr());
+                if (peek().kind == token_kind::string_lit) {
+                    const token& a = advance();
+                    s.string_arg = a.raw.empty() ? a.text : a.raw;
+                }
+                finish_stmt(s);
+                return s;
+            }
             if (peek().kind == token_kind::ident
                 || peek().kind == token_kind::string_lit) {
                 const token& a = advance(); s.string_arg = a.raw.empty() ? a.text : a.raw;
@@ -584,6 +593,24 @@ namespace xas {
             while (!at_end() && peek().kind != token_kind::newline
                    && peek().kind != token_kind::comment) {
                 const token& extra = advance();
+                s.string_arg2 += extra.raw.empty() ? extra.text : extra.raw;
+            }
+            finish_stmt(s);
+            return s;
+        }
+
+        if (name == "loc") {
+            s.args.push_back(parse_expr()); // file id
+            s.args.push_back(parse_expr()); // source line
+            if (!at_end() && peek().kind != token_kind::newline
+                && peek().kind != token_kind::comment) {
+                s.args.push_back(parse_expr()); // column, optional
+            }
+            while (!at_end() && peek().kind != token_kind::newline
+                   && peek().kind != token_kind::comment) {
+                const token& extra = advance();
+                if (!s.string_arg2.empty())
+                    s.string_arg2 += ' ';
                 s.string_arg2 += extra.raw.empty() ? extra.text : extra.raw;
             }
             finish_stmt(s);

@@ -49,6 +49,14 @@ public:
 
     // Connect to a remote target identified by `host:port`.
     void connect_remote(const std::string& target) override;
+    // Enable or disable program download after remote connect.
+    void set_download_enabled(bool enabled) override;
+    // Set the raw binary origin or XL relocation base.
+    void set_download_origin(uint32_t origin) override;
+    // Set or clear the explicit download PC.
+    void set_download_pc(std::optional<uint32_t> pc) override;
+    // Download the current executable image to the connected target.
+    std::optional<uint32_t> download_program() override;
     // Check whether the remote session is active.
     bool is_connected() const override;
 
@@ -117,6 +125,10 @@ public:
 private:
     // Translate parsed debug/symbol info into the internal document.
     void rebuild_document();
+    // Return the current symbol address bias implied by the selected image.
+    uint32_t symbol_address_bias() const;
+    // Re-resolve saved breakpoint expressions after the symbol address map moves.
+    void refresh_breakpoint_addresses();
     // Convert raw target status into the richer xgdb stop model.
     stop_snapshot make_stop_snapshot(const rsp::stop_reply& reply, const xgdb::cpu_state& cpu);
     // Read one source line from disk when available.
@@ -177,6 +189,9 @@ private:
     std::vector<breakpoint_entry> breakpoints_;
     int next_breakpoint_id_ = 1;
     std::vector<std::filesystem::path> source_dirs_;
+    bool download_enabled_ = true;
+    uint32_t download_origin_ = 0;
+    std::optional<uint32_t> download_pc_;
 };
 
 #endif

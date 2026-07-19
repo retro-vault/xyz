@@ -43,6 +43,8 @@ CLI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxgdb_cli.a
 MI_PROTOCOL_LIB = $(LIB_OUTPUT)/libxgdb_mi.a
 TEST_DIR = $(ROOT)/tests/tests/xgdb
 MI_SMOKE_TEST = $(TEST_DIR)/mi_smoke_test.sh
+VSCODE_CPPTOOLS_SMOKE_TEST = $(TEST_DIR)/vscode_cpptools_smoke_test.sh
+DAP_SMOKE_TEST = $(TEST_DIR)/dap_smoke_test.sh
 
 .PHONY: all test clean
 
@@ -89,6 +91,8 @@ $(BIN_OUTPUT):
 
 test: all
 	bash $(MI_SMOKE_TEST) $(XGDB_TARGET)
+	bash $(VSCODE_CPPTOOLS_SMOKE_TEST) $(XGDB_TARGET)
+	bash $(DAP_SMOKE_TEST) $(XGDB_TARGET)
 
 clean:
 	rm -rf $(OUTPUT_DIR)

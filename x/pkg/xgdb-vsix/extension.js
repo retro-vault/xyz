@@ -26,12 +26,6 @@ class xgdb_configuration_provider {
             ).then(() => undefined);
         }
 
-        if (!resolved_config.symbols) {
-            return vscode.window.showErrorMessage(
-                "xgdb launch configuration requires a symbols path."
-            ).then(() => undefined);
-        }
-
         if (!resolved_config.remoteTarget) {
             return vscode.window.showErrorMessage(
                 "xgdb launch configuration requires a remoteTarget value."

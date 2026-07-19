@@ -60,6 +60,7 @@ struct disassembly_line {
 struct stop_snapshot {
     xgdb::stop_reason reason = xgdb::stop_reason::none;  // Reason the target stopped.
     uint32_t pc = 0;                                             // Program counter at the stop point.
+    std::optional<std::string> function_name;                    // Optional containing function.
     std::optional<source_location> source;                       // Optional resolved source location.
     std::optional<std::string> source_text;                      // Optional current source line text.
 };
@@ -187,6 +188,18 @@ public:
     // Returns:
     //      Nothing.
     virtual void connect_remote(const std::string& target) = 0;
+
+    // Enable or disable program download after connecting to a remote target.
+    virtual void set_download_enabled(bool enabled) = 0;
+
+    // Configure the raw-binary load origin used when downloading non-ELF images.
+    virtual void set_download_origin(uint32_t origin) = 0;
+
+    // Configure an explicit program counter used after download.
+    virtual void set_download_pc(std::optional<uint32_t> pc) = 0;
+
+    // Download the current executable image to the connected target.
+    virtual std::optional<uint32_t> download_program() = 0;
 
     // Check whether the remote target is currently connected.
     //

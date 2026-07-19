@@ -30,8 +30,11 @@ Then use the usual debugger commands: `break main`, `run`, `stepi`,
 | `--cdb <file>` | Debug information file (produced by `xld -g`) |
 | `--map <file>` | Linker map file (optional) |
 | `--remote <host:port>` | Connect to a remote target |
+| `--origin <addr>` | Raw/XL download origin |
+| `--pc <addr>` | PC to set after download |
+| `--no-load` | Do not download `--exec` after connecting |
 | `-d <dir>`, `--directory <dir>` | Add source search directory |
-| `--interpreter cli\|mi\|mi2`, `--mi` | Front-end mode (CLI default; MI for IDEs) |
+| `--interpreter cli\|mi\|mi2\|dap`, `--mi` | Front-end mode (CLI default; MI and DAP for IDEs) |
 | `-ex <command>` | Execute a debugger command on startup |
 | `--log <file>` | Log all protocol I/O |
 | `--version` | Print version and exit |
@@ -49,3 +52,11 @@ currently ignored:
 - `--tty=<path>`
 
 For target-side emulator options, see `XEMU.md`.
+
+When `--remote` and `--exec` are both set, `xgdb` downloads the program to the
+RSP target before installing breakpoints. ELF files are loaded by section VMA
+and default PC to the ELF entry. Intel HEX records use their encoded
+addresses. XL files are relocated at `--origin` and default PC to
+`origin + entry_point`; when the selected program is XL, CDB/ELF/MAP symbol
+addresses are biased by the same origin. Raw binaries are written at
+`--origin`.

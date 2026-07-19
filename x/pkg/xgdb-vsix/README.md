@@ -5,26 +5,22 @@ This directory contains the Visual Studio Code extension scaffolding for
 
 ## Current Status
 
-This is not yet a supported end-to-end debugger workflow.
+This VSIX launches `xgdb --interpreter=dap --quiet` as a native Debug Adapter
+Protocol server. `xgdb` then connects to the target through GDB Remote Serial
+Protocol, usually `xemu --listen HOST:PORT`.
 
-What exists today:
+The supported flow is:
 
-- a VS Code extension manifest that contributes the `xgdb` debugger type
-- an adapter launcher in `extension.js`
-- local packaging and staging into `bin/pkg/vsix/`
+```text
+VS Code / xgdb-vsix
+  <-> DAP
+xgdb
+  <-> RSP
+xemu or hardware target
+```
 
-What is not aligned yet:
-
-- the extension launcher currently tries `xgdb --interpreter=dap --quiet`
-- the current `xgdb` command-line entry point only exposes `cli` and `mi`
-- the extension manifest still models a `symbols` / `.xgdb` input, while
-  current debugger flows are centered on `.cdb` plus optional `.map`
-
-So the honest state is:
-
-- packaging the VSIX works
-- the extension source is a useful starting point
-- native F5 debugging through this VSIX is still in progress
+Native DAP smoke tests cover source breakpoints and stack frames for both C
+and assembly files.
 
 ## Layout
 
@@ -39,12 +35,29 @@ The extension manifest currently defines these configuration fields:
 - `program`
 - `symbols`
 - `remoteTarget`
+- `origin`
+- `pc`
+- `startAddress`
+- `noLoad`
 - `debuggerPath`
 - `cwd`
 - `stopOnEntry`
+- `cdbFile`
+- `mapFile`
+- `sourceRoot`
+- `sourceRoots`
+- `includeRoots`
 
-Treat that schema as provisional until the debugger-side DAP path is wired
-through the live `xgdb` binary.
+When `program` is an ELF file, `xgdb` loads embedded symbols/debug
+information automatically. Use `cdbFile` and `mapFile` for raw image or
+sidecar-debug flows.
+
+On launch, `xgdb` downloads `program` to the RSP target. ELF sections are
+written to their linked VMAs and PC is set to the ELF entry unless `pc` or
+`startAddress` is supplied. XL files are relocated at `origin` and default PC
+to `origin + entry_point`; CDB/ELF/MAP symbol addresses are biased by the same
+origin for source-level debugging. Raw binaries also use `origin`, defaulting
+to `0x0000`. Set `noLoad` for an already-loaded target.
 
 ## Local Validation
 

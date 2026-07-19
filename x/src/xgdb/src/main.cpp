@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -23,7 +24,8 @@ namespace {
 
     enum class frontend_mode {
         cli,
-        mi
+        mi,
+        dap
     };
 
     struct options {
@@ -32,9 +34,12 @@ namespace {
         std::optional<std::filesystem::path> cdb_file;
         std::optional<std::filesystem::path> map_file;
         std::optional<std::string> remote_target;
+        std::optional<uint32_t> download_origin;
+        std::optional<uint32_t> download_pc;
         std::vector<std::string> execute_commands;
         std::vector<std::filesystem::path> source_dirs;
         std::optional<std::filesystem::path> log_file;
+        bool download_enabled = true;
         bool show_help = false;
         bool show_version = false;
     };
@@ -62,11 +67,14 @@ namespace {
             << "  --cdb <file>            SDCC CDB debug information file\n"
             << "  --map <file>            SDCC MAP linker output file (optional)\n"
             << "  --remote <host:port>    connect to remote target\n"
+            << "  --origin <addr>         raw/XL download origin (default 0x0000)\n"
+            << "  --pc <addr>             PC to set after debugger-driven download\n"
+            << "  --no-load               do not download --exec to target on connect\n"
             << "  -d <dir>                add source search directory\n"
             << "  --directory <dir>       add source search directory\n"
             << "  --log <file>            log all protocol I/O to file\n"
-            << "  --interpreter <mode>    frontend mode: cli, mi, or mi2\n"
-            << "  --interpreter=<mode>    frontend mode: cli, mi, or mi2\n"
+            << "  --interpreter <mode>    frontend mode: cli, mi, mi2, or dap\n"
+            << "  --interpreter=<mode>    frontend mode: cli, mi, mi2, or dap\n"
             << "  --mi                    shorthand for --interpreter=mi\n"
             << "  -ex <command>           execute debugger command\n"
             << "\n"
@@ -79,6 +87,14 @@ namespace {
             << "\n"
             << "  --version               print version\n"
             << "  -h, --help              show this help\n";
+    }
+
+    uint32_t parse_number(const std::string& value) {
+        char* end = nullptr;
+        const unsigned long parsed = std::strtoul(value.c_str(), &end, 0);
+        if (end == value.c_str() || *end != '\0')
+            throw std::runtime_error("invalid number: " + value);
+        return static_cast<uint32_t>(parsed);
     }
 
     options parse_options(int argc, char* argv[]) {
@@ -99,6 +115,8 @@ namespace {
                 }
                 if (std::string(argv[i]) == "mi" || std::string(argv[i]) == "mi2") {
                     opts.mode = frontend_mode::mi;
+                } else if (std::string(argv[i]) == "dap") {
+                    opts.mode = frontend_mode::dap;
                 } else if (std::string(argv[i]) == "cli") {
                     opts.mode = frontend_mode::cli;
                 } else {
@@ -108,6 +126,8 @@ namespace {
                 const auto mode = arg.substr(std::string("--interpreter=").size());
                 if (mode == "mi" || mode == "mi2") {
                     opts.mode = frontend_mode::mi;
+                } else if (mode == "dap") {
+                    opts.mode = frontend_mode::dap;
                 } else if (mode == "cli") {
                     opts.mode = frontend_mode::cli;
                 } else {
@@ -133,6 +153,18 @@ namespace {
                     throw std::runtime_error("--remote requires host:port");
                 }
                 opts.remote_target = argv[i];
+            } else if (arg == "--origin") {
+                if (++i >= argc) {
+                    throw std::runtime_error("--origin requires an address");
+                }
+                opts.download_origin = parse_number(argv[i]);
+            } else if (arg == "--pc") {
+                if (++i >= argc) {
+                    throw std::runtime_error("--pc requires an address");
+                }
+                opts.download_pc = parse_number(argv[i]);
+            } else if (arg == "--no-load") {
+                opts.download_enabled = false;
             } else if (arg == "--log") {
                 if (++i >= argc) {
                     throw std::runtime_error("--log requires a file path");
@@ -217,6 +249,11 @@ int main(int argc, char* argv[]) {
         if (opts.exec_file.has_value()) {
             session.set_exec_path(opts.exec_file.value());
         }
+        session.set_download_enabled(opts.download_enabled);
+        if (opts.download_origin.has_value()) {
+            session.set_download_origin(opts.download_origin.value());
+        }
+        session.set_download_pc(opts.download_pc);
         if (opts.cdb_file.has_value()) {
             session.load_cdb_file(opts.cdb_file.value());
         } else {
@@ -242,6 +279,10 @@ int main(int argc, char* argv[]) {
             auto mi = std::make_unique<mi_frontend>(session);
             if (log_stream.is_open()) mi->set_log(&log_stream);
             ui = std::move(mi);
+        } else if (opts.mode == frontend_mode::dap) {
+            auto dap = std::make_unique<dap_frontend>(session);
+            if (log_stream.is_open()) dap->set_log(&log_stream);
+            ui = std::move(dap);
         } else {
             auto cli = std::make_unique<cli_frontend>(
                 session, std::cin, std::cout, std::cerr, true);

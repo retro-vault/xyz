@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -176,6 +177,240 @@ namespace {
         return info;
     }
 
+    std::vector<uint8_t> read_file_bytes(const std::filesystem::path& path) {
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+            throw std::runtime_error("cannot open binary: " + path.string());
+        return std::vector<uint8_t>(
+            std::istreambuf_iterator<char>(file),
+            std::istreambuf_iterator<char>());
+    }
+
+    uint16_t u16le(const std::vector<uint8_t>& data, std::size_t offset) {
+        if (offset + 1 >= data.size())
+            throw std::runtime_error("truncated 16-bit field");
+        return static_cast<uint16_t>(data[offset])
+             | static_cast<uint16_t>(
+                   static_cast<uint16_t>(data[offset + 1]) << 8);
+    }
+
+    void put_u16le(std::vector<uint8_t>& data, std::size_t offset, uint16_t value) {
+        if (offset + 1 >= data.size())
+            throw std::runtime_error("relocation offset out of range");
+        data[offset] = static_cast<uint8_t>(value & 0xff);
+        data[offset + 1] = static_cast<uint8_t>((value >> 8) & 0xff);
+    }
+
+    struct xl_image {
+        uint16_t entry = 0;
+        std::vector<uint8_t> code;
+        struct reloc {
+            uint16_t offset = 0;
+            uint8_t size = 0;
+            uint8_t pad = 0;
+        };
+        std::vector<reloc> relocs;
+    };
+
+    std::optional<xl_image> try_read_xl_image(const std::filesystem::path& path) {
+        const auto bytes = read_file_bytes(path);
+        if (bytes.size() < 2)
+            return std::nullopt;
+        if (bytes[0] != 'X' || bytes[1] != 'L')
+            return std::nullopt;
+        if (bytes.size() < 12)
+            throw std::runtime_error("truncated XL image: " + path.string());
+        if (bytes[2] != 0x01)
+            throw std::runtime_error("unsupported XL image version: "
+                                     + path.string());
+
+        xl_image image;
+        image.entry = u16le(bytes, 4);
+        const uint16_t code_size = u16le(bytes, 6);
+        const uint16_t reloc_count = u16le(bytes, 8);
+        const std::size_t table_offset = 12;
+        const std::size_t code_offset =
+            table_offset + static_cast<std::size_t>(reloc_count) * 4u;
+        if (code_offset > bytes.size()
+            || bytes.size() - code_offset < static_cast<std::size_t>(code_size)) {
+            throw std::runtime_error("truncated XL image: " + path.string());
+        }
+
+        image.relocs.reserve(reloc_count);
+        for (uint16_t i = 0; i < reloc_count; ++i) {
+            const std::size_t off = table_offset + static_cast<std::size_t>(i) * 4u;
+            image.relocs.push_back({
+                u16le(bytes, off),
+                bytes[off + 2],
+                bytes[off + 3]
+            });
+        }
+        image.code.assign(bytes.begin() + static_cast<std::ptrdiff_t>(code_offset),
+                          bytes.begin() + static_cast<std::ptrdiff_t>(
+                              code_offset + code_size));
+        return image;
+    }
+
+    void relocate_xl_image(xl_image& image, uint16_t base) {
+        for (const auto& reloc : image.relocs) {
+            if (reloc.offset >= image.code.size())
+                throw std::runtime_error("XL relocation offset out of range");
+            if (reloc.size == 2) {
+                const uint16_t old = u16le(image.code, reloc.offset);
+                put_u16le(image.code, reloc.offset,
+                          static_cast<uint16_t>(old + base));
+            } else if (reloc.size == 1) {
+                const uint32_t byte_offset =
+                    static_cast<uint32_t>(reloc.offset)
+                    + ((reloc.pad & 0x01u) ? 1u : 0u);
+                if (byte_offset >= image.code.size())
+                    throw std::runtime_error("XL byte relocation offset out of range");
+                const uint16_t old = static_cast<uint16_t>(
+                    image.code[byte_offset] << ((reloc.pad & 0x01u) ? 8 : 0));
+                const uint16_t patched = static_cast<uint16_t>(old + base);
+                image.code[byte_offset] = static_cast<uint8_t>(
+                    (reloc.pad & 0x01u) ? (patched >> 8) : patched);
+            } else {
+                throw std::runtime_error("unsupported XL relocation size");
+            }
+        }
+    }
+
+    bool file_looks_like_xl(const std::filesystem::path& path) {
+        if (path.extension() == ".xl" || path.extension() == ".XL")
+            return true;
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+            return false;
+        char magic[3] = {};
+        file.read(magic, sizeof(magic));
+        return file.gcount() == static_cast<std::streamsize>(sizeof(magic))
+            && magic[0] == 'X'
+            && magic[1] == 'L'
+            && magic[2] == 0x01;
+    }
+
+    uint32_t biased_address(uint32_t address,
+                            uint32_t bias,
+                            bool allow_exclusive_end = false) {
+        const uint32_t max = allow_exclusive_end ? 0x10000u : 0xFFFFu;
+        if (bias == 0)
+            return address;
+        if (address > max || bias > max || address + bias > max)
+            throw std::runtime_error("relocated debug address is outside Z80 range");
+        return address + bias;
+    }
+
+    void apply_document_address_bias(xgdb::document& doc, uint32_t bias) {
+        if (bias == 0)
+            return;
+        if (doc.entry_address.has_value())
+            doc.entry_address = biased_address(*doc.entry_address, bias);
+        for (auto& function : doc.functions) {
+            function.start_address = biased_address(function.start_address, bias);
+            function.end_address = biased_address(function.end_address, bias, true);
+        }
+        for (auto& line : doc.lines)
+            line.address = biased_address(line.address, bias);
+        for (auto& symbol : doc.symbols)
+            symbol.address = biased_address(symbol.address, bias);
+        for (auto& variable : doc.variables) {
+            if (variable.address.has_value())
+                variable.address = biased_address(*variable.address, bias);
+            if (variable.start_address.has_value())
+                variable.start_address = biased_address(*variable.start_address, bias);
+            if (variable.end_address.has_value())
+                variable.end_address = biased_address(*variable.end_address, bias, true);
+        }
+    }
+
+    struct ihx_chunk {
+        uint16_t address = 0;
+        std::vector<uint8_t> bytes;
+    };
+
+    int hex_nibble(char ch) {
+        if (ch >= '0' && ch <= '9') return ch - '0';
+        if (ch >= 'a' && ch <= 'f') return 10 + (ch - 'a');
+        if (ch >= 'A' && ch <= 'F') return 10 + (ch - 'A');
+        throw std::runtime_error("bad Intel HEX digit");
+    }
+
+    uint8_t parse_hex_byte(const std::string& line, std::size_t offset) {
+        return static_cast<uint8_t>((hex_nibble(line.at(offset)) << 4)
+                                    | hex_nibble(line.at(offset + 1)));
+    }
+
+    std::vector<ihx_chunk> read_ihx_chunks(const std::filesystem::path& path) {
+        std::ifstream input(path);
+        if (!input.is_open())
+            throw std::runtime_error("cannot open Intel HEX: " + path.string());
+
+        std::vector<ihx_chunk> chunks;
+        std::string line;
+        uint32_t ext_base = 0;
+
+        while (std::getline(input, line)) {
+            if (line.empty()) continue;
+            if (line[0] != ':')
+                throw std::runtime_error("invalid Intel HEX record in " + path.string());
+            if (line.size() < 11)
+                throw std::runtime_error("truncated Intel HEX record in " + path.string());
+
+            const uint8_t len = parse_hex_byte(line, 1);
+            const std::size_t expected_size =
+                11u + static_cast<std::size_t>(len) * 2u;
+            if (line.size() < expected_size)
+                throw std::runtime_error("short Intel HEX record in " + path.string());
+
+            const uint16_t addr = static_cast<uint16_t>(
+                (parse_hex_byte(line, 3) << 8) | parse_hex_byte(line, 5));
+            const uint8_t type = parse_hex_byte(line, 7);
+            uint8_t checksum = static_cast<uint8_t>(
+                len + static_cast<uint8_t>((addr >> 8) & 0xff)
+                + static_cast<uint8_t>(addr & 0xff) + type);
+
+            std::vector<uint8_t> bytes;
+            bytes.reserve(len);
+            for (uint8_t i = 0; i < len; ++i) {
+                const uint8_t byte = parse_hex_byte(line, 9 + i * 2);
+                checksum = static_cast<uint8_t>(checksum + byte);
+                bytes.push_back(byte);
+            }
+            checksum = static_cast<uint8_t>(
+                checksum + parse_hex_byte(line, 9 + len * 2));
+            if (checksum != 0)
+                throw std::runtime_error("bad Intel HEX checksum in " + path.string());
+
+            if (type == 0x00) {
+                const uint32_t full = ext_base + addr;
+                if (full + bytes.size() > 0x10000u)
+                    throw std::runtime_error(
+                        "Intel HEX image exceeds 64K: " + path.string());
+                if (!chunks.empty()
+                    && static_cast<uint32_t>(
+                        chunks.back().address + chunks.back().bytes.size()) == full) {
+                    chunks.back().bytes.insert(
+                        chunks.back().bytes.end(), bytes.begin(), bytes.end());
+                } else {
+                    chunks.push_back({static_cast<uint16_t>(full), std::move(bytes)});
+                }
+            } else if (type == 0x01) {
+                break;
+            } else if (type == 0x04) {
+                if (bytes.size() != 2)
+                    throw std::runtime_error(
+                        "bad Intel HEX extended address in " + path.string());
+                ext_base = static_cast<uint32_t>(
+                    (static_cast<uint32_t>(bytes[0]) << 24)
+                    | (static_cast<uint32_t>(bytes[1]) << 16));
+            }
+        }
+
+        return chunks;
+    }
+
     xgdb::variable make_variable(const xbfd::debug_variable& v,
                                   uint32_t scope_start = 0,
                                   uint32_t scope_end   = 0)
@@ -293,7 +528,35 @@ void debugger_session::rebuild_document() {
         doc.variables.push_back(make_variable(v, scope_start, scope_end));
     }
 
+    apply_document_address_bias(doc, symbol_address_bias());
     document_ = std::move(doc);
+}
+
+uint32_t debugger_session::symbol_address_bias() const {
+    if (!exec_path_.has_value())
+        return 0;
+    if (!file_looks_like_xl(exec_path_.value()))
+        return 0;
+    return download_origin_;
+}
+
+void debugger_session::refresh_breakpoint_addresses() {
+    if (breakpoints_.empty())
+        return;
+
+    const bool connected = remote_.is_connected();
+    if (connected) {
+        for (const auto& bp : breakpoints_)
+            remote_.remove_breakpoint(bp.address);
+    }
+
+    for (auto& bp : breakpoints_)
+        bp.address = resolve_address_expression(bp.expression);
+
+    if (connected) {
+        for (const auto& bp : breakpoints_)
+            remote_.insert_breakpoint(bp.address);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +565,8 @@ void debugger_session::rebuild_document() {
 
 void debugger_session::set_exec_path(const std::filesystem::path& path) {
     exec_path_ = path;
+    rebuild_document();
+    refresh_breakpoint_addresses();
 }
 
 const std::optional<std::filesystem::path>& debugger_session::exec_path() const {
@@ -316,6 +581,7 @@ void debugger_session::load_cdb_file(const std::filesystem::path& path) {
     cdb_path_ = path;
     symbol_path_ = path;
     rebuild_document();
+    refresh_breakpoint_addresses();
 }
 
 void debugger_session::load_elf_file(const std::filesystem::path& path) {
@@ -337,6 +603,7 @@ void debugger_session::load_elf_file(const std::filesystem::path& path) {
         cdb_path_ = std::nullopt;
         symbol_path_ = path;
         rebuild_document();
+        refresh_breakpoint_addresses();
     } catch (const xbfd::bfd_error& e) {
         throw std::runtime_error("cannot parse ELF file: "
                                  + path.string() + ": " + e.what());
@@ -346,6 +613,7 @@ void debugger_session::load_elf_file(const std::filesystem::path& path) {
 void debugger_session::load_map_file(const std::filesystem::path& path) {
     map_path_ = path;
     rebuild_document();
+    refresh_breakpoint_addresses();
 }
 
 void debugger_session::maybe_load_default_symbols() {
@@ -402,13 +670,115 @@ const xgdb::document* debugger_session::symbols() const {
 void debugger_session::connect_remote(const std::string& target) {
     const auto [host, port] = split_host_port(target);
     remote_.connect(host, port);
+    if (download_enabled_ && exec_path_.has_value()) {
+        download_program();
+    } else {
+        for (const auto& bp : breakpoints_)
+            remote_.insert_breakpoint(bp.address);
+    }
+}
+
+void debugger_session::set_download_enabled(bool enabled) {
+    download_enabled_ = enabled;
+}
+
+void debugger_session::set_download_origin(uint32_t origin) {
+    if (origin > 0xFFFFu)
+        throw std::runtime_error("download origin is outside Z80 address range");
+    if (origin == download_origin_)
+        return;
+    download_origin_ = origin;
+    rebuild_document();
+    refresh_breakpoint_addresses();
+}
+
+void debugger_session::set_download_pc(std::optional<uint32_t> pc) {
+    if (pc.has_value() && pc.value() > 0xFFFFu)
+        throw std::runtime_error("download PC is outside Z80 address range");
+    download_pc_ = pc;
+}
+
+std::optional<uint32_t> debugger_session::download_program() {
+    if (!remote_.is_connected())
+        throw std::runtime_error("not connected to remote target");
+    if (!exec_path_.has_value())
+        throw std::runtime_error("no executable file selected");
+
+    const auto& path = exec_path_.value();
+    std::optional<uint32_t> entry;
+    bool loaded = false;
+
+    if (std::filesystem::exists(path)) {
+        try {
+            auto obj = bfd::bfd::open_r(path);
+            if (obj->get_flavour() == bfd::flavour::elf
+                && (obj->check_format(bfd::format::object)
+                    || obj->check_format(bfd::format::executable))) {
+                for (const auto& sec : obj->sections()) {
+                    if (!xbfd::has_flag(sec.flags, xbfd::section_flags::alloc))
+                        continue;
+                    if (xbfd::has_flag(sec.flags, xbfd::section_flags::debugging))
+                        continue;
+                    if (sec.data.empty())
+                        continue;
+                    if (sec.vma > 0xFFFFu
+                        || sec.vma + sec.data.size() > 0x10000u) {
+                        throw std::runtime_error(
+                            "ELF section out of Z80 address range: " + sec.name);
+                    }
+                    remote_.write_memory(
+                        static_cast<uint32_t>(sec.vma), sec.data);
+                }
+                if (obj->object().entry > 0xFFFFu)
+                    throw std::runtime_error("ELF entry is outside Z80 address range");
+                entry = static_cast<uint32_t>(obj->object().entry);
+                loaded = true;
+            }
+        } catch (const xbfd::bfd_error&) {
+            // Non-ELF images continue through the extension-based loaders.
+        }
+    }
+
+    if (!loaded) {
+        const auto ext = path.extension().string();
+        if (ext == ".ihx" || ext == ".hex") {
+            for (const auto& chunk : read_ihx_chunks(path))
+                remote_.write_memory(chunk.address, chunk.bytes);
+            loaded = true;
+        } else if (auto xl = try_read_xl_image(path); xl.has_value()) {
+            if (download_origin_ + xl->code.size() > 0x10000u)
+                throw std::runtime_error("XL image exceeds Z80 address range");
+            relocate_xl_image(*xl, static_cast<uint16_t>(download_origin_));
+            remote_.write_memory(download_origin_, xl->code);
+            entry = download_origin_ + xl->entry;
+            if (entry.value() > 0xFFFFu)
+                throw std::runtime_error("XL entry is outside Z80 address range");
+            loaded = true;
+        } else {
+            const auto bytes = read_file_bytes(path);
+            if (download_origin_ + bytes.size() > 0x10000u)
+                throw std::runtime_error("binary image exceeds Z80 address range");
+            remote_.write_memory(download_origin_, bytes);
+            entry = download_origin_;
+            loaded = true;
+        }
+    }
+
+    const uint32_t pc = download_pc_.value_or(entry.value_or(download_origin_));
+    auto regs = read_registers();
+    regs.pc = static_cast<uint16_t>(pc);
+    write_registers(regs);
+    for (const auto& bp : breakpoints_)
+        remote_.insert_breakpoint(bp.address);
+    return pc;
 }
 
 bool debugger_session::is_connected() const { return remote_.is_connected(); }
 
 breakpoint_entry debugger_session::add_breakpoint(const std::string& expression) {
     const uint32_t address = resolve_address_expression(expression);
-    remote_.insert_breakpoint(address);
+    if (remote_.is_connected())
+        remote_.insert_breakpoint(address);
     breakpoints_.push_back({next_breakpoint_id_++, address, expression});
     return breakpoints_.back();
 }
@@ -418,12 +788,14 @@ void debugger_session::delete_breakpoint(int id) {
         [id](const breakpoint_entry& e) { return e.id == id; });
     if (it == breakpoints_.end())
         throw std::runtime_error("breakpoint id not found");
-    remote_.remove_breakpoint(it->address);
+    if (remote_.is_connected())
+        remote_.remove_breakpoint(it->address);
     breakpoints_.erase(it);
 }
 
 void debugger_session::delete_all_breakpoints() {
-    for (const auto& bp : breakpoints_) remote_.remove_breakpoint(bp.address);
+    if (remote_.is_connected())
+        for (const auto& bp : breakpoints_) remote_.remove_breakpoint(bp.address);
     breakpoints_.clear();
 }
 
@@ -466,9 +838,14 @@ stop_snapshot debugger_session::make_stop_snapshot(
         break;
     }
     snap.pc     = cpu.pc;
+    if (const auto* function = find_function_for_pc(cpu.pc))
+        snap.function_name = function->name;
     snap.source = source_location_for_address(cpu.pc);
-    if (snap.source.has_value())
+    if (snap.source.has_value()) {
+        if (!snap.source->function_name.has_value() && snap.function_name.has_value())
+            snap.source->function_name = snap.function_name;
         snap.source_text = read_source_line(snap.source->file_path, snap.source->line);
+    }
     return snap;
 }
 
@@ -514,7 +891,11 @@ uint32_t debugger_session::resolve_address_expression(const std::string& express
         return parse_u32(normalized);
     if (normalized.find(':') != std::string::npos)
         return info_line_argument(normalized).location.address;
-    if (const auto* f = find_function_by_name(normalized)) return f->start_address;
+    if (const auto* f = find_function_by_name(normalized)) {
+        if (auto loc = source_location_for_function(f->name); loc.has_value())
+            return loc->address;
+        return f->start_address;
+    }
     if (const auto* s = find_symbol_by_name(normalized))   return s->address;
     throw std::runtime_error("unknown symbol or address: " + normalized);
 }

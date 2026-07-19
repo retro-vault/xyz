@@ -345,7 +345,7 @@ bool cli_frontend::execute_command(const std::string& line) {
             << "  cdb-file FILE\n"
             << "  map-file FILE\n"
             << "  directory DIR\n"
-            << "  load FILE ADDR [PC]  upload binary to target memory\n"
+            << "  load [FILE] [ADDR] [PC]  download ELF/IHX/XL/BIN to target\n"
             << "  file FILE\n"
             << "  break EXPR | b EXPR\n"
             << "  delete [ID]\n"
@@ -508,31 +508,21 @@ bool cli_frontend::execute_command(const std::string& line) {
     }
 
     if (head == "load") {
-        if (tokens.size() < 3) {
-            throw std::runtime_error("usage: load FILE ADDR [PC]");
-        }
-        const std::string& load_path = tokens[1];
-        const uint32_t load_addr = parse_u32(tokens[2]);
-        const uint32_t load_pc   = tokens.size() >= 4
-            ? parse_u32(tokens[3]) : load_addr;
+        if (tokens.size() >= 2)
+            debugger_.set_exec_path(tokens[1]);
+        if (tokens.size() >= 3)
+            debugger_.session().set_download_origin(parse_u32(tokens[2]));
+        if (tokens.size() >= 4)
+            debugger_.session().set_download_pc(parse_u32(tokens[3]));
+        if (tokens.size() > 4)
+            throw std::runtime_error("usage: load [FILE] [ADDR] [PC]");
 
-        std::ifstream bin(load_path, std::ios::binary);
-        if (!bin.is_open()) {
-            throw std::runtime_error("cannot open file: " + load_path);
-        }
-        const std::vector<uint8_t> bytes(
-            std::istreambuf_iterator<char>(bin),
-            std::istreambuf_iterator<char>{});
-
-        debugger_.session().write_memory(load_addr, bytes);
-
-        auto regs = debugger_.session().read_registers();
-        regs.pc = static_cast<uint16_t>(load_pc);
-        debugger_.session().write_registers(regs);
-
-        output_ << "Loaded " << bytes.size() << " bytes at "
-                << hex_u32(load_addr) << ", PC set to "
-                << hex_u32(load_pc) << "\n";
+        const auto pc = debugger_.session().download_program();
+        output_ << "Loaded "
+                << (debugger_.session().exec_path().has_value()
+                    ? debugger_.session().exec_path()->string()
+                    : "<no file>")
+                << ", PC set to " << hex_u32(pc.value_or(0)) << "\n";
         return true;
     }
 

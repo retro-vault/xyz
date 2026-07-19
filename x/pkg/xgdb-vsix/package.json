@@ -43,7 +43,6 @@
           "launch": {
             "required": [
               "program",
-              "symbols",
               "remoteTarget"
             ],
             "properties": {
@@ -67,15 +66,49 @@
               },
               "program": {
                 "type": "string",
-                "description": "Target program image passed to xgdb."
+                "description": "Target program image passed to xgdb. ELF files also provide symbols/debug information."
               },
               "symbols": {
                 "type": "string",
-                "description": "Companion .xgdb symbols file."
+                "description": "Optional explicit ELF symbol/debug file. Usually omit this when program is an ELF."
+              },
+              "cdbFile": {
+                "type": "string",
+                "description": "Optional SDCC/X debug information file."
+              },
+              "mapFile": {
+                "type": "string",
+                "description": "Optional linker map file."
               },
               "remoteTarget": {
                 "type": "string",
                 "description": "Remote target in host:port form."
+              },
+              "origin": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "description": "Raw binary download origin. Ignored for ELF section placement."
+              },
+              "pc": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "description": "Explicit program counter to set after download."
+              },
+              "startAddress": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "description": "Compatibility alias for pc."
+              },
+              "noLoad": {
+                "type": "boolean",
+                "default": false,
+                "description": "Do not download program to target on launch."
               },
               "debuggerPath": {
                 "type": "string",
@@ -85,6 +118,24 @@
               "cwd": {
                 "type": "string",
                 "description": "Working directory used when launching xgdb."
+              },
+              "sourceRoot": {
+                "type": "string",
+                "description": "Optional source root for compatibility with udap launch configurations."
+              },
+              "sourceRoots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Optional source search roots for compatibility with udap launch configurations."
+              },
+              "includeRoots": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Optional include/source search roots for compatibility with udap launch configurations."
               },
               "stopOnEntry": {
                 "type": "boolean",
@@ -99,13 +150,12 @@
         },
         "initialConfigurations": [
           {
-            "name": "xgdb sieve (dap)",
+            "name": "xgdb launch (dap)",
             "type": "xgdb",
             "request": "launch",
-            "program": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.bin",
-            "symbols": "${workspaceFolder}/../../bin/z80/bin/apps/debug/sieve.xgdb",
+            "program": "${workspaceFolder}/app.elf",
             "remoteTarget": "127.0.0.1:9000",
-            "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
+            "debuggerPath": "${workspaceFolder}/../../bin/x/bin/xgdb",
             "cwd": "${workspaceFolder}",
             "stopOnEntry": true
           }
@@ -118,8 +168,7 @@
               "name": "^\"xgdb launch\"",
               "type": "xgdb",
               "request": "launch",
-              "program": "^\"${workspaceFolder}/program.bin\"",
-              "symbols": "^\"${workspaceFolder}/program.xgdb\"",
+              "program": "^\"${workspaceFolder}/program.elf\"",
               "remoteTarget": "^\"127.0.0.1:9000\"",
               "debuggerPath": "^\"xgdb\"",
               "cwd": "^\"${workspaceFolder}\"",

@@ -4,8 +4,10 @@
 // copyright (C) 2026 tomaz stih
 //
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -78,6 +80,22 @@ static uint32_t read_uleb128(const std::vector<uint8_t>& data, std::size_t& pos)
     return value;
 }
 
+static int32_t read_sleb128(const std::vector<uint8_t>& data, std::size_t& pos) {
+    int32_t value = 0;
+    unsigned shift = 0;
+    uint8_t byte = 0;
+    while (pos < data.size()) {
+        byte = data[pos++];
+        value |= static_cast<int32_t>(byte & 0x7f) << shift;
+        shift += 7;
+        if ((byte & 0x80u) == 0)
+            break;
+    }
+    if ((shift < 32) && (byte & 0x40u))
+        value |= -static_cast<int32_t>(1u << shift);
+    return value;
+}
+
 static std::string read_cstring(const std::vector<uint8_t>& data, std::size_t& pos) {
     std::string out;
     while (pos < data.size() && data[pos] != 0)
@@ -105,6 +123,15 @@ static uint32_t read_addr(const std::vector<uint8_t>& data,
     return value;
 }
 
+static xbfd::debug_lang language_from_dwarf(uint16_t value) {
+    switch (value) {
+    case 0x0002: return xbfd::debug_lang::c;
+    case 0x000c: return xbfd::debug_lang::c;
+    case 0x8001: return xbfd::debug_lang::assembly;
+    default: return xbfd::debug_lang::unknown;
+    }
+}
+
 // -------------------------------------------------------------------------
 // elf_parser — parses raw ELF bytes into xbfd::object
 // -------------------------------------------------------------------------
@@ -122,6 +149,7 @@ public:
         load_symbols();
         load_relocations();
         load_debug_functions();
+        load_debug_lines();
         return std::move(obj_);
     }
 
@@ -130,6 +158,12 @@ private:
         std::string name;
         uint16_t shndx = SHN_UNDEF;
         bool is_section = false;
+    };
+
+    struct debug_line_program {
+        uint32_t file_id = 0;
+        std::string path;
+        xbfd::debug_lang language = xbfd::debug_lang::unknown;
     };
 
     void validate_header() {
@@ -351,20 +385,42 @@ private:
                 continue;
             }
 
+            std::string source_path;
+            uint32_t stmt_offset = 0;
+            xbfd::debug_lang language = xbfd::debug_lang::unknown;
             if (addr_size == 2) {
                 (void)read_cstring(*debug_info, pos); // producer
+                const uint16_t lang = pos + 2 <= unit_end
+                    ? u16le(debug_info->data() + pos)
+                    : 0;
+                language = language_from_dwarf(lang);
                 pos += 2;                             // language
-                (void)read_cstring(*debug_info, pos); // source path
+                source_path = read_cstring(*debug_info, pos);
                 (void)read_addr(*debug_info, pos, addr_size); // low_pc
                 (void)read_addr(*debug_info, pos, addr_size); // high_pc
                 pos += 4;                             // stmt_list
             } else {
                 (void)read_cstring(*debug_info, pos); // producer
-                (void)read_cstring(*debug_info, pos); // source path
+                source_path = read_cstring(*debug_info, pos);
+                if (pos + 4 <= unit_end)
+                    stmt_offset = u32le(debug_info->data() + pos);
                 pos += 4;                             // stmt_list
                 (void)read_addr(*debug_info, pos, addr_size); // low_pc
                 (void)read_addr(*debug_info, pos, addr_size); // high_pc
+                const uint16_t lang = pos + 2 <= unit_end
+                    ? u16le(debug_info->data() + pos)
+                    : 0;
+                language = language_from_dwarf(lang);
                 pos += 2;                             // language
+            }
+
+            uint32_t file_id = 0;
+            if (!source_path.empty()) {
+                file_id = static_cast<uint32_t>(obj_.debug.files.size() + 1);
+                obj_.debug.files.push_back({file_id, source_path, language});
+                debug_line_programs_[stmt_offset] = {
+                    file_id, source_path, language
+                };
             }
 
             while (pos < unit_end) {
@@ -380,6 +436,7 @@ private:
                 fn.name = read_cstring(*debug_info, pos);
                 fn.start = read_addr(*debug_info, pos, addr_size);
                 fn.end = read_addr(*debug_info, pos, addr_size);
+                fn.file_id = file_id;
                 if (pos < unit_end)
                     ++pos; // external flag
                 if (pos < unit_end)
@@ -405,6 +462,114 @@ private:
         }
         if (common.has_value())
             obj_.default_calling_convention = *common;
+    }
+
+    void load_debug_lines() {
+        const auto *debug_line = find_section_bytes(".debug_line");
+        if (!debug_line || debug_line->empty())
+            return;
+
+        std::size_t unit_pos = 0;
+        while (unit_pos + 10 <= debug_line->size()) {
+            const std::size_t unit_start = unit_pos;
+            const uint32_t unit_length = u32le(debug_line->data() + unit_pos);
+            if (unit_length == 0)
+                break;
+            const std::size_t unit_end = unit_pos + 4u + unit_length;
+            if (unit_end > debug_line->size())
+                break;
+            unit_pos += 4;
+
+            if (unit_pos + 6 > unit_end)
+                break;
+            (void)u16le(debug_line->data() + unit_pos);
+            unit_pos += 2;
+            const uint32_t header_length = u32le(debug_line->data() + unit_pos);
+            unit_pos += 4;
+            const std::size_t header_end = unit_pos + header_length;
+            if (header_end > unit_end || unit_pos + 5 > header_end)
+                break;
+
+            const uint8_t min_instruction_length = (*debug_line)[unit_pos++];
+            (void)(*debug_line)[unit_pos++];
+            (void)static_cast<int8_t>((*debug_line)[unit_pos++]);
+            (void)(*debug_line)[unit_pos++];
+            const uint8_t opcode_base = (*debug_line)[unit_pos++];
+            for (uint8_t i = 1; i < opcode_base && unit_pos < header_end; ++i)
+                ++unit_pos;
+
+            std::vector<std::string> dirs;
+            while (unit_pos < header_end && (*debug_line)[unit_pos] != 0)
+                dirs.push_back(read_cstring(*debug_line, unit_pos));
+            if (unit_pos < header_end)
+                ++unit_pos;
+
+            std::vector<std::string> files;
+            while (unit_pos < header_end && (*debug_line)[unit_pos] != 0) {
+                std::string name = read_cstring(*debug_line, unit_pos);
+                const uint32_t dir_index = read_uleb128(*debug_line, unit_pos);
+                (void)read_uleb128(*debug_line, unit_pos);
+                (void)read_uleb128(*debug_line, unit_pos);
+                if (dir_index > 0 && dir_index <= dirs.size())
+                    name = (std::filesystem::path(dirs[dir_index - 1]) / name)
+                        .lexically_normal().string();
+                files.push_back(std::move(name));
+            }
+            if (unit_pos < header_end)
+                ++unit_pos;
+
+            auto program_it = debug_line_programs_.find(
+                static_cast<uint32_t>(unit_start));
+            uint32_t file_id = program_it == debug_line_programs_.end()
+                ? 0
+                : program_it->second.file_id;
+            if (file_id == 0 && !files.empty()) {
+                file_id = static_cast<uint32_t>(obj_.debug.files.size() + 1);
+                obj_.debug.files.push_back({
+                    file_id, files.front(), xbfd::debug_lang::unknown
+                });
+            }
+
+            unit_pos = header_end;
+            uint32_t address = 0;
+            uint32_t line = 1;
+            bool ended = false;
+            while (unit_pos < unit_end && !ended) {
+                const uint8_t opcode = (*debug_line)[unit_pos++];
+                if (opcode == 0) {
+                    const std::size_t ext_len = read_uleb128(*debug_line, unit_pos);
+                    const std::size_t ext_end = unit_pos + ext_len;
+                    if (unit_pos >= unit_end || ext_end > unit_end)
+                        break;
+                    const uint8_t subop = (*debug_line)[unit_pos++];
+                    if (subop == 1) {
+                        ended = true;
+                    } else if (subop == 2) {
+                        address = read_addr(*debug_line, unit_pos, 4);
+                    }
+                    unit_pos = ext_end;
+                    continue;
+                }
+                if (opcode == 1) {
+                    if (file_id != 0)
+                        obj_.debug.lines.push_back({address, line, file_id});
+                    continue;
+                }
+                if (opcode == 2) {
+                    address += read_uleb128(*debug_line, unit_pos)
+                             * min_instruction_length;
+                    continue;
+                }
+                if (opcode == 3) {
+                    line = static_cast<uint32_t>(
+                        static_cast<int32_t>(line)
+                        + read_sleb128(*debug_line, unit_pos));
+                    continue;
+                }
+            }
+
+            unit_pos = unit_end;
+        }
     }
 
     const std::vector<uint8_t>* find_section_bytes(const std::string& name) const {
@@ -450,6 +615,7 @@ private:
     int                          symtab_idx_ = -1;
     std::vector<int>             shidx_to_bfd_;
     std::vector<raw_symbol>      raw_symbols_;
+    std::map<uint32_t, debug_line_program> debug_line_programs_;
     xbfd::object                 obj_;
 };
 

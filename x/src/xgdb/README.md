@@ -45,6 +45,9 @@ Supported startup switches:
 - `--cdb <file>`   SDCC CDB debug information
 - `--map <file>`   SDCC MAP linker output (optional, supplements CDB)
 - `--remote <host:port>`
+- `--origin <addr>` raw/XL download origin, default `0x0000`
+- `--pc <addr>` PC to set after debugger-driven download
+- `--no-load` do not download `--exec` to the target after connecting
 - `-d <dir>`, `--directory <dir>`
 - `--log <file>`
 - `-ex <command>`
@@ -55,10 +58,21 @@ If `--cdb` is not given and `--exec foo.elf` is set, `xgdb` first loads
 embedded ELF symbols/debug information. For raw images such as `foo.bin`,
 it tries `foo.cdb`, `foo.bin.cdb`, `foo.map`, and `foo.bin.map` sidecars.
 
+When `--remote` and `--exec` are both set, `xgdb` downloads the program to
+the target over RSP before installing breakpoints. ELF sections are written to
+their linked VMAs and PC defaults to the ELF entry. Intel HEX records are
+written to their encoded addresses. XL files are relocated and written at
+`--origin`, with PC defaulting to `origin + entry_point`; when the selected
+program is XL, CDB/ELF/MAP symbol addresses are biased by the same origin so
+source breakpoints and stack frames follow the relocated image. Raw binaries
+are written at `--origin`, defaulting to `0x0000`. Use `--no-load` when
+attaching to an already-loaded target.
+
 For machine-interface (IDE) integration use:
 
 - `--interpreter=mi` or `--mi`
 - `--interpreter=mi2`
+- `--interpreter=dap`
 
 Example:
 
@@ -66,9 +80,11 @@ Example:
 bin/x/bin/xgdb --interpreter=mi --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
 ```
 
-The protocol abstraction layer also has a DAP-shaped direction in the code,
-but the current `xgdb` entry point does not yet expose
-`--interpreter=dap`.
+For native VS Code integration through `xgdb-vsix`, use DAP:
+
+```sh
+bin/x/bin/xgdb --interpreter=dap --quiet
+```
 
 Compatibility flags accepted and currently ignored:
 
@@ -97,6 +113,7 @@ Current interactive commands are:
 - `target remote HOST:PORT`
 - `symbol-file FILE`
 - `file FILE`
+- `load [FILE] [ADDR] [PC]`
 - `break EXPR`
 - `b EXPR`
 - `delete [ID]`
@@ -136,13 +153,13 @@ Address expressions currently supported by `break`, `disassemble`, and
 Start the reference target:
 
 ```sh
-bin/x/bin/xemu --listen 127.0.0.1:9000 --load-bin yos.rom --origin 0x100 --pc 0x100
+bin/x/bin/xemu --listen 127.0.0.1:9000
 ```
 
 Connect with the debugger:
 
 ```sh
-bin/x/bin/xgdb --exec yos.rom --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
+bin/x/bin/xgdb --exec yos.rom --origin 0x100 --cdb yos.cdb --map yos.map --remote 127.0.0.1:9000
 ```
 
 Then inside `xgdb`:
@@ -210,7 +227,6 @@ What it is:
 
 What it is not yet:
 
-- a DAP mode exposed by the main `xgdb` executable
 - a source-level expression evaluator
 - a call stack unwinder
 

@@ -94,4 +94,16 @@ private:
     std::ostream* log_ = nullptr;
 };
 
+// Debug Adapter Protocol frontend for VS Code and other DAP clients.
+class dap_frontend final : public debug_protocol, public debugger_event_sink {
+public:
+    explicit dap_frontend(debugger_host& host);
+    int run() override;
+    void set_log(std::ostream* log);
+
+private:
+    debugger debugger_;
+    std::ostream* log_ = nullptr;
+};
+
 #endif
