@@ -17,12 +17,14 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -31,13 +33,370 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
-
-#include <boost/json.hpp>
-#include <boost/json/src.hpp>
+#include <variant>
+#include <vector>
 
 namespace {
 
-    namespace json = boost::json;
+    namespace json {
+
+        struct object;
+        struct array;
+
+        class value {
+        public:
+            using storage_type = std::variant<
+                std::nullptr_t, bool, int64_t, std::string,
+                std::shared_ptr<object>, std::shared_ptr<array>>;
+
+            value() : data_(nullptr) {}
+            value(std::nullptr_t) : data_(nullptr) {}
+            value(bool v) : data_(v) {}
+            value(int v) : data_(static_cast<int64_t>(v)) {}
+            value(unsigned int v) : data_(static_cast<int64_t>(v)) {}
+            value(int64_t v) : data_(v) {}
+            value(const char* v) : data_(std::string(v ? v : "")) {}
+            value(const std::string& v) : data_(v) {}
+            value(std::string&& v) : data_(std::move(v)) {}
+            value(const object& v);
+            value(object&& v);
+            value(const array& v);
+            value(array&& v);
+            value(std::initializer_list<std::pair<const char*, value>> init);
+
+            bool is_object() const {
+                return std::holds_alternative<std::shared_ptr<object>>(data_);
+            }
+            bool is_array() const {
+                return std::holds_alternative<std::shared_ptr<array>>(data_);
+            }
+            bool is_string() const {
+                return std::holds_alternative<std::string>(data_);
+            }
+            bool is_bool() const { return std::holds_alternative<bool>(data_); }
+            bool is_int64() const { return std::holds_alternative<int64_t>(data_); }
+            bool is_uint64() const {
+                return is_int64() && std::get<int64_t>(data_) >= 0;
+            }
+            const object& as_object() const {
+                return *std::get<std::shared_ptr<object>>(data_);
+            }
+            object& as_object() {
+                return *std::get<std::shared_ptr<object>>(data_);
+            }
+            const array& as_array() const {
+                return *std::get<std::shared_ptr<array>>(data_);
+            }
+            array& as_array() {
+                return *std::get<std::shared_ptr<array>>(data_);
+            }
+            const std::string& as_string() const {
+                return std::get<std::string>(data_);
+            }
+            bool as_bool() const { return std::get<bool>(data_); }
+            int64_t as_int64() const { return std::get<int64_t>(data_); }
+            uint64_t as_uint64() const {
+                return static_cast<uint64_t>(std::get<int64_t>(data_));
+            }
+
+            const storage_type& data() const { return data_; }
+
+        private:
+            storage_type data_;
+        };
+
+        struct object : std::map<std::string, value> {
+            using std::map<std::string, value>::map;
+        };
+
+        struct array : std::vector<value> {
+            using std::vector<value>::vector;
+        };
+
+        value::value(const object& v) : data_(std::make_shared<object>(v)) {}
+        value::value(object&& v)
+            : data_(std::make_shared<object>(std::move(v))) {}
+        value::value(const array& v) : data_(std::make_shared<array>(v)) {}
+        value::value(array&& v)
+            : data_(std::make_shared<array>(std::move(v))) {}
+        value::value(std::initializer_list<std::pair<const char*, value>> init)
+            : data_(std::make_shared<object>()) {
+            auto& obj = *std::get<std::shared_ptr<object>>(data_);
+            for (const auto& item : init)
+                obj.emplace(item.first, item.second);
+        }
+
+        class parser {
+        public:
+            explicit parser(std::string input) : input_(std::move(input)) {}
+
+            value parse() {
+                auto v = parse_value();
+                skip_ws();
+                if (pos_ != input_.size())
+                    throw std::runtime_error("trailing data after JSON value");
+                return v;
+            }
+
+        private:
+            void skip_ws() {
+                while (pos_ < input_.size()
+                       && std::isspace(static_cast<unsigned char>(input_[pos_])))
+                    ++pos_;
+            }
+
+            char peek() {
+                skip_ws();
+                if (pos_ >= input_.size())
+                    throw std::runtime_error("unexpected end of JSON input");
+                return input_[pos_];
+            }
+
+            bool consume(char c) {
+                skip_ws();
+                if (pos_ < input_.size() && input_[pos_] == c) {
+                    ++pos_;
+                    return true;
+                }
+                return false;
+            }
+
+            void expect(char c) {
+                if (!consume(c)) {
+                    std::string msg = "expected JSON character '";
+                    msg.push_back(c);
+                    msg += "'";
+                    throw std::runtime_error(msg);
+                }
+            }
+
+            value parse_value() {
+                const char c = peek();
+                if (c == '{') return parse_object();
+                if (c == '[') return parse_array();
+                if (c == '"') return parse_string();
+                if (c == '-' || std::isdigit(static_cast<unsigned char>(c)))
+                    return parse_number();
+                if (input_.compare(pos_, 4, "true") == 0) {
+                    pos_ += 4;
+                    return true;
+                }
+                if (input_.compare(pos_, 5, "false") == 0) {
+                    pos_ += 5;
+                    return false;
+                }
+                if (input_.compare(pos_, 4, "null") == 0) {
+                    pos_ += 4;
+                    return nullptr;
+                }
+                throw std::runtime_error("invalid JSON value");
+            }
+
+            object parse_object() {
+                expect('{');
+                object obj;
+                if (consume('}')) return obj;
+                for (;;) {
+                    auto key = parse_string().as_string();
+                    expect(':');
+                    obj[key] = parse_value();
+                    if (consume('}')) break;
+                    expect(',');
+                }
+                return obj;
+            }
+
+            array parse_array() {
+                expect('[');
+                array arr;
+                if (consume(']')) return arr;
+                for (;;) {
+                    arr.push_back(parse_value());
+                    if (consume(']')) break;
+                    expect(',');
+                }
+                return arr;
+            }
+
+            value parse_string() {
+                expect('"');
+                std::string out;
+                while (pos_ < input_.size()) {
+                    char c = input_[pos_++];
+                    if (c == '"') return out;
+                    if (c != '\\') {
+                        out.push_back(c);
+                        continue;
+                    }
+                    if (pos_ >= input_.size())
+                        throw std::runtime_error("unterminated JSON escape");
+                    c = input_[pos_++];
+                    switch (c) {
+                    case '"': out.push_back('"'); break;
+                    case '\\': out.push_back('\\'); break;
+                    case '/': out.push_back('/'); break;
+                    case 'b': out.push_back('\b'); break;
+                    case 'f': out.push_back('\f'); break;
+                    case 'n': out.push_back('\n'); break;
+                    case 'r': out.push_back('\r'); break;
+                    case 't': out.push_back('\t'); break;
+                    case 'u': {
+                        uint32_t codepoint = parse_hex4();
+                        if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
+                            if (pos_ + 6 > input_.size()
+                                || input_[pos_] != '\\'
+                                || input_[pos_ + 1] != 'u') {
+                                throw std::runtime_error("missing JSON surrogate pair");
+                            }
+                            pos_ += 2;
+                            const uint32_t low = parse_hex4();
+                            if (low < 0xdc00 || low > 0xdfff)
+                                throw std::runtime_error("invalid JSON surrogate pair");
+                            codepoint = 0x10000
+                                + ((codepoint - 0xd800) << 10)
+                                + (low - 0xdc00);
+                        } else if (codepoint >= 0xdc00 && codepoint <= 0xdfff) {
+                            throw std::runtime_error("unexpected JSON low surrogate");
+                        }
+                        append_utf8(out, codepoint);
+                        break;
+                    }
+                    default:
+                        throw std::runtime_error("invalid JSON escape");
+                    }
+                }
+                throw std::runtime_error("unterminated JSON string");
+            }
+
+            uint32_t parse_hex4() {
+                if (pos_ + 4 > input_.size())
+                    throw std::runtime_error("short JSON unicode escape");
+                uint32_t value = 0;
+                for (int i = 0; i < 4; ++i) {
+                    const char c = input_[pos_++];
+                    value <<= 4;
+                    if (c >= '0' && c <= '9') value |= static_cast<uint32_t>(c - '0');
+                    else if (c >= 'a' && c <= 'f')
+                        value |= static_cast<uint32_t>(c - 'a' + 10);
+                    else if (c >= 'A' && c <= 'F')
+                        value |= static_cast<uint32_t>(c - 'A' + 10);
+                    else
+                        throw std::runtime_error("invalid JSON unicode escape");
+                }
+                return value;
+            }
+
+            static void append_utf8(std::string& out, uint32_t codepoint) {
+                if (codepoint <= 0x7f) {
+                    out.push_back(static_cast<char>(codepoint));
+                } else if (codepoint <= 0x7ff) {
+                    out.push_back(static_cast<char>(0xc0 | (codepoint >> 6)));
+                    out.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+                } else if (codepoint <= 0xffff) {
+                    out.push_back(static_cast<char>(0xe0 | (codepoint >> 12)));
+                    out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+                    out.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+                } else if (codepoint <= 0x10ffff) {
+                    out.push_back(static_cast<char>(0xf0 | (codepoint >> 18)));
+                    out.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3f)));
+                    out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+                    out.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+                } else {
+                    throw std::runtime_error("JSON unicode codepoint out of range");
+                }
+            }
+
+            value parse_number() {
+                const auto start = pos_;
+                if (input_[pos_] == '-') ++pos_;
+                while (pos_ < input_.size()
+                       && std::isdigit(static_cast<unsigned char>(input_[pos_])))
+                    ++pos_;
+                if (pos_ < input_.size()
+                    && (input_[pos_] == '.' || input_[pos_] == 'e'
+                        || input_[pos_] == 'E')) {
+                    throw std::runtime_error("floating point JSON numbers are unsupported");
+                }
+                return static_cast<int64_t>(
+                    std::stoll(input_.substr(start, pos_ - start)));
+            }
+
+            std::string input_;
+            std::size_t pos_ = 0;
+        };
+
+        std::string escape_string(const std::string& s) {
+            std::ostringstream out;
+            out << '"';
+            for (unsigned char c : s) {
+                switch (c) {
+                case '"': out << "\\\""; break;
+                case '\\': out << "\\\\"; break;
+                case '\b': out << "\\b"; break;
+                case '\f': out << "\\f"; break;
+                case '\n': out << "\\n"; break;
+                case '\r': out << "\\r"; break;
+                case '\t': out << "\\t"; break;
+                default:
+                    if (c < 0x20) {
+                        out << "\\u" << std::hex << std::setw(4)
+                            << std::setfill('0') << static_cast<int>(c)
+                            << std::dec << std::setfill(' ');
+                    } else {
+                        out << static_cast<char>(c);
+                    }
+                    break;
+                }
+            }
+            out << '"';
+            return out.str();
+        }
+
+        std::string serialize(const value& v);
+
+        std::string serialize(const object& obj) {
+            std::ostringstream out;
+            out << '{';
+            bool first = true;
+            for (const auto& [key, item] : obj) {
+                if (!first) out << ',';
+                first = false;
+                out << escape_string(key) << ':' << serialize(item);
+            }
+            out << '}';
+            return out.str();
+        }
+
+        std::string serialize(const array& arr) {
+            std::ostringstream out;
+            out << '[';
+            for (std::size_t i = 0; i < arr.size(); ++i) {
+                if (i) out << ',';
+                out << serialize(arr[i]);
+            }
+            out << ']';
+            return out.str();
+        }
+
+        std::string serialize(const value& v) {
+            const auto& data = v.data();
+            if (std::holds_alternative<std::nullptr_t>(data)) return "null";
+            if (std::holds_alternative<bool>(data))
+                return std::get<bool>(data) ? "true" : "false";
+            if (std::holds_alternative<int64_t>(data))
+                return std::to_string(std::get<int64_t>(data));
+            if (std::holds_alternative<std::string>(data))
+                return escape_string(std::get<std::string>(data));
+            if (std::holds_alternative<std::shared_ptr<object>>(data))
+                return serialize(*std::get<std::shared_ptr<object>>(data));
+            return serialize(*std::get<std::shared_ptr<array>>(data));
+        }
+
+        value parse(const std::string& input) {
+            return parser(input).parse();
+        }
+
+    } // namespace json
 
     constexpr int THREAD_ID = 1;
     constexpr int FRAME_ID = 1;
@@ -57,16 +416,16 @@ namespace {
         if (!value.is_object()) return fallback;
         const auto& obj = value.as_object();
         auto it = obj.find(key);
-        if (it == obj.end() || !it->value().is_string()) return fallback;
-        return std::string(it->value().as_string());
+        if (it == obj.end() || !it->second.is_string()) return fallback;
+        return std::string(it->second.as_string());
     }
 
     bool json_bool(const json::value& value, const char* key, bool fallback = false) {
         if (!value.is_object()) return fallback;
         const auto& obj = value.as_object();
         auto it = obj.find(key);
-        if (it == obj.end() || !it->value().is_bool()) return fallback;
-        return it->value().as_bool();
+        if (it == obj.end() || !it->second.is_bool()) return fallback;
+        return it->second.as_bool();
     }
 
     int json_int(const json::value& value, const char* key, int fallback = 0) {
@@ -74,8 +433,8 @@ namespace {
         const auto& obj = value.as_object();
         auto it = obj.find(key);
         if (it == obj.end()) return fallback;
-        if (it->value().is_int64()) return static_cast<int>(it->value().as_int64());
-        if (it->value().is_uint64()) return static_cast<int>(it->value().as_uint64());
+        if (it->second.is_int64()) return static_cast<int>(it->second.as_int64());
+        if (it->second.is_uint64()) return static_cast<int>(it->second.as_uint64());
         return fallback;
     }
 
@@ -86,13 +445,13 @@ namespace {
         const auto& obj = value.as_object();
         auto it = obj.find(key);
         if (it == obj.end()) return std::nullopt;
-        if (it->value().is_int64())
-            return static_cast<uint32_t>(it->value().as_int64());
-        if (it->value().is_uint64())
-            return static_cast<uint32_t>(it->value().as_uint64());
-        if (it->value().is_string())
+        if (it->second.is_int64())
+            return static_cast<uint32_t>(it->second.as_int64());
+        if (it->second.is_uint64())
+            return static_cast<uint32_t>(it->second.as_uint64());
+        if (it->second.is_string())
             return static_cast<uint32_t>(
-                std::strtoul(std::string(it->value().as_string()).c_str(),
+                std::strtoul(std::string(it->second.as_string()).c_str(),
                              nullptr, 0));
         return std::nullopt;
     }
@@ -102,7 +461,7 @@ namespace {
         const auto& obj = value.as_object();
         auto it = obj.find(key);
         if (it == obj.end()) return std::nullopt;
-        return it->value();
+        return it->second;
     }
 
     uint32_t parse_u32(const std::string& value) {
