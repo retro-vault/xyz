@@ -15,6 +15,10 @@
 
 #include <sys/types.h>
 
+#ifndef __sdcccall
+#define __sdcccall(a)
+#endif
+
 #define O_RDONLY 0x0000
 #define O_WRONLY 0x0001
 #define O_RDWR   0x0002
@@ -30,7 +34,7 @@
 /* No file modes on the supported platforms: open takes exactly two
  * arguments so it can use the register calling convention that the
  * assembly backends and stdio expect. */
-int open(const char *path, int oflag);
+int open(const char *path, int oflag) __sdcccall(1);
 
 #define creat(path, mode) open((path), O_WRONLY | O_CREAT | O_TRUNC)
 

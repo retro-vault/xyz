@@ -106,6 +106,100 @@ static bool is_metadata_input(const std::string &path) {
     return ext == ".rel" || ext == ".lib" || ext == ".o" || ext == ".a";
 }
 
+static bool linker_args_contain(const options &opts, const char *flag) {
+    return std::find(opts.linker_args.begin(), opts.linker_args.end(), flag)
+        != opts.linker_args.end();
+}
+
+static std::string strip_target_arch_prefix(std::string target_name) {
+    if (target_name.rfind("z80-", 0) == 0)
+        return target_name.substr(4);
+    return target_name;
+}
+
+static bool path_exists_regular(const std::filesystem::path &path) {
+    std::error_code ec;
+    return std::filesystem::exists(path, ec)
+        && std::filesystem::is_regular_file(path, ec);
+}
+
+static bool path_exists_directory(const std::filesystem::path &path) {
+    std::error_code ec;
+    return std::filesystem::exists(path, ec)
+        && std::filesystem::is_directory(path, ec);
+}
+
+static std::optional<std::filesystem::path> find_runtime_dir_candidate(
+    const options &opts)
+{
+    if (opts.driver_dir.empty())
+        return std::nullopt;
+
+    const auto prefix = std::filesystem::path(opts.driver_dir).parent_path();
+    std::vector<std::filesystem::path> candidates;
+    if (!opts.platform_name.empty())
+        candidates.push_back(prefix / "targets" / opts.platform_name / "lib");
+    candidates.push_back(prefix / "z80" / "lib");
+    candidates.push_back(prefix / "lib");
+    candidates.push_back(prefix / "libexec" / "xcc" / "runtime");
+
+    for (const auto &candidate : candidates) {
+        if (path_exists_directory(candidate))
+            return candidate;
+    }
+    return std::nullopt;
+}
+
+static std::filesystem::path shared_library_dir(
+    const std::filesystem::path &runtime_dir)
+{
+    if (runtime_dir.filename() == "lib"
+        && runtime_dir.parent_path().parent_path().filename() == "targets") {
+        return runtime_dir.parent_path().parent_path().parent_path() / "lib";
+    }
+    return runtime_dir;
+}
+
+static void add_if_present(std::vector<std::filesystem::path> &paths,
+                           const std::filesystem::path &path) {
+    if (path_exists_regular(path))
+        paths.push_back(path);
+}
+
+static std::vector<std::filesystem::path> default_runtime_metadata_inputs(
+    const options &opts)
+{
+    std::vector<std::filesystem::path> result;
+    if (linker_args_contain(opts, "-nostdlib")
+        || linker_args_contain(opts, "--no-default-runtime")) {
+        return result;
+    }
+
+    const auto runtime_dir = find_runtime_dir_candidate(opts);
+    if (!runtime_dir.has_value())
+        return result;
+
+    const auto shared_dir = shared_library_dir(*runtime_dir);
+    add_if_present(result, shared_dir / "libruntime.a");
+    add_if_present(result, shared_dir / "libruntime.lib");
+    add_if_present(result, shared_dir / "z80.lib");
+    add_if_present(result, shared_dir / "runtime.lib");
+
+    add_if_present(result, shared_dir / "libc.a");
+    add_if_present(result, shared_dir / "libc.lib");
+    add_if_present(result, shared_dir / "z80" / "libc.a");
+    add_if_present(result, shared_dir / "z80" / "libc.lib");
+
+    const auto short_platform = strip_target_arch_prefix(opts.platform_name);
+    if (!short_platform.empty()) {
+        add_if_present(result, *runtime_dir / ("lib" + short_platform + ".a"));
+        add_if_present(result, *runtime_dir / ("lib" + short_platform + ".lib"));
+    }
+    add_if_present(result, *runtime_dir / "platform.lib");
+    add_if_present(result, *runtime_dir / "sys.lib");
+    return result;
+}
+
 static bool is_probable_function_symbol(const xbfd::object &obj,
                                         const xbfd::symbol &sym) {
     if (!sym.is_defined() || !sym.is_global() || sym.is_absolute())
@@ -127,7 +221,7 @@ static bool is_probable_function_symbol(const xbfd::object &obj,
 }
 
 static std::string canonical_function_name(const std::string &name) {
-    if (!name.empty() && name[0] == '_')
+    if (name.size() >= 2 && name[0] == '_' && name[1] != '_')
         return name.substr(1);
     return name;
 }
@@ -243,6 +337,12 @@ static int compile_source_to_text(const std::string &input_path,
     set_default_call_abi(opts.default_call_abi);
     set_plain_char_unsigned(opts.plain_char_unsigned);
 
+    optimization_settings effective_opt_settings = opts.opt_settings;
+    if (opts.default_call_abi == call_abi::SDCCCALL0 &&
+        opts.opt_settings.level != opt_level::O0) {
+        effective_opt_settings = optimization_settings::for_level(opt_level::O0);
+    }
+
     diag_engine diag;
     diag.set_options(opts.diagnostics);
     std::string src = raw;
@@ -280,12 +380,12 @@ static int compile_source_to_text(const std::string &input_path,
     auto  mod = irgen.lower(*tu);
 
     // ----- 3.5 IR optimization (-O2 / -O3 / -Os) ----------------------
-    if (opts.opt_settings.has_module_passes()) {
-        ir_module_optimizer::optimize(*mod, opts.opt_settings);
+    if (effective_opt_settings.has_module_passes()) {
+        ir_module_optimizer::optimize(*mod, effective_opt_settings);
     }
-    if (opts.opt_settings.has_function_ir_passes()) {
+    if (effective_opt_settings.has_function_ir_passes()) {
         for (auto &fn : mod->functions)
-            ir_optimizer::optimize(fn, opts.opt_settings);
+            ir_optimizer::optimize(fn, effective_opt_settings);
     }
     if (opts.dump_ir)
         mod->dump();
@@ -303,7 +403,7 @@ static int compile_source_to_text(const std::string &input_path,
             emitter->comment("Compiled in c1-mode from preprocessed input");
 
         z80_gen codegen(*emitter);
-        codegen.set_opt_settings(opts.opt_settings);
+        codegen.set_opt_settings(effective_opt_settings);
         codegen.set_standalone_assembly_output(opts.mode == output_mode::ASSEMBLY);
         if (opts.debug) {
             std::string base = out_path;
@@ -334,9 +434,9 @@ static int compile_source_to_text(const std::string &input_path,
     const size_t asm_line_count =
         static_cast<size_t>(std::count(asm_text.begin(), asm_text.end(), '\n'));
     constexpr size_t kMaxPeepholeLines = 8000;
-    if (opts.opt_settings.peephole && asm_line_count <= kMaxPeepholeLines) {
+    if (effective_opt_settings.peephole && asm_line_count <= kMaxPeepholeLines) {
         xopt::optimizer_options xopt_opts;
-        switch (opts.opt_settings.level) {
+        switch (effective_opt_settings.level) {
         case opt_level::O0:
             xopt_opts.level = xopt::optimization_level::none;
             break;
@@ -654,6 +754,15 @@ int main(int argc, char **argv) {
         } catch (const std::exception &e) {
             fprintf(stderr, "xcc: warning: failed to import ABI metadata from '%s': %s\n",
                     item.path.c_str(), e.what());
+        }
+    }
+    for (const auto &path : default_runtime_metadata_inputs(opts)) {
+        try {
+            import_abi_metadata(path.string(), imported_records);
+        } catch (const std::exception &e) {
+            fprintf(stderr,
+                    "xcc: warning: failed to import ABI metadata from default runtime '%s': %s\n",
+                    path.string().c_str(), e.what());
         }
     }
     std::unordered_map<std::string, call_abi> imported_abis;

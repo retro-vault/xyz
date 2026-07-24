@@ -19,6 +19,10 @@ XCC is benchmarked with the M distribution (`bin/x-m`): `long` remains
 available, while `double`, `long long`, and stdio floating conversions are
 excluded. This matches the intended integer-only comparison.
 
+The harness now records four XCC lanes: `-Os` and `-Of` with the default
+`sdcccall(1)` ABI, plus matching `-Os --sdcccall 0` and `-Of --sdcccall 0`
+runs so stack-ABI results can be compared directly against the same corpus.
+
 `compat/` contains only compiler/platform adapters needed to build an
 otherwise unchanged upstream source. In particular, the historical MD5
 source omits POSIX headers and calls the three-argument form of `open`.

@@ -19,6 +19,15 @@
 
 #include <stddef.h>
 
+#if defined(__SDCC_VERSION_MAJOR) && defined(__SDCC_VERSION_MINOR) && \
+    (__SDCC_VERSION_MAJOR == 4 && __SDCC_VERSION_MINOR == 0)
+#define __sdcccall(a)
+#endif
+
+#ifndef __sdcccall
+#define __sdcccall(a)
+#endif
+
 struct timespec;   /* <time.h> */
 
 /* ------------------------------------------------------------------------- *
@@ -26,7 +35,7 @@ struct timespec;   /* <time.h> */
  * ------------------------------------------------------------------------- */
 
 /* Terminate the program with `status`.  Does not return. */
-void _exit(int status);
+void _exit(int status) __sdcccall(1);
 
 /* ------------------------------------------------------------------------- *
  * Heap
@@ -38,7 +47,7 @@ void _exit(int status);
  *     returns  HL = base   (first usable byte)
  *              DE = limit  (one past the last usable byte)
  * ------------------------------------------------------------------------- */
-void heap_region(void);
+void heap_region(void) __sdcccall(1);
 
 /* ------------------------------------------------------------------------- *
  * Wall clock  (see <time.h>)
@@ -46,8 +55,8 @@ void heap_region(void);
  * Fill *tv with the current time (seconds + nanoseconds since the Unix epoch)
  * and return 0, or return -1 if no clock is available.  set is optional.
  * ------------------------------------------------------------------------- */
-int gettimeofday(struct timespec *tv);
-int settimeofday(const struct timespec *tv);   /* optional */
+int gettimeofday(struct timespec *tv) __sdcccall(1);
+int settimeofday(const struct timespec *tv) __sdcccall(1);   /* optional */
 
 /* ------------------------------------------------------------------------- *
  * Byte I/O  (POSIX-style, on integer file descriptors)
@@ -57,14 +66,14 @@ int settimeofday(const struct timespec *tv);   /* optional */
  * filesystem implements only console write()/read() and returns errors for the
  * file operations.
  * ------------------------------------------------------------------------- */
-int  open(const char *path, int flags, int mode);   /* fd >= 3, or -1        */
-int  close(int fd);                                  /* 0, or -1             */
-int  read(int fd, void *buf, unsigned len);          /* bytes, 0 = EOF, -1   */
-int  write(int fd, const void *buf, unsigned len);   /* bytes written, or -1 */
-long lseek(int fd, long offset, int whence);         /* new offset, or -1    */
+int  open(const char *path, int flags, int mode) __sdcccall(1);   /* fd >= 3, or -1        */
+int  close(int fd) __sdcccall(1);                                  /* 0, or -1             */
+int  read(int fd, void *buf, unsigned len) __sdcccall(1);          /* bytes, 0 = EOF, -1   */
+int  write(int fd, const void *buf, unsigned len) __sdcccall(1);   /* bytes written, or -1 */
+long lseek(int fd, long offset, int whence) __sdcccall(1);         /* new offset, or -1    */
 
 /* Remove / rename a file.  Return 0 on success, -1 on failure. */
-int  unlink(const char *path);
-int  rename(const char *oldpath, const char *newpath);
+int  unlink(const char *path) __sdcccall(1);
+int  rename(const char *oldpath, const char *newpath) __sdcccall(1);
 
 #endif /* XYZ_SYS_H */

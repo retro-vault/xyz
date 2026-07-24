@@ -7067,7 +7067,8 @@ bool z80_gen::try_emit_scaled_frame_load(const ir_function &fn,
 
     const operand *frame_object = nullptr;
     if (base->kind == operand_kind::SYMBOL && !base->is_global &&
-        !base->is_tls && !base->is_func) {
+        !base->is_tls && !base->is_func &&
+        base->type && base->type->kind == type_kind::ARRAY) {
         frame_object = base;
     } else if (base->is_temp()) {
         const icode *base_def = find_temp_def_before(base->temp_id, idx + 1);

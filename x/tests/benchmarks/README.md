@@ -31,7 +31,7 @@ Useful options:
 The runner prints markdown tables directly in the terminal and writes its
 detailed reports under `build/x/benchmarks/` by default.
 
-The full upstream comparison builds and runs six compiler/profile
+The full upstream comparison builds and runs eight compiler/profile
 combinations per program. It is available through the unified runner above
 or directly through:
 

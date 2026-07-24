@@ -46,7 +46,7 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT/work"
 RESULTS="$OUT/results.csv"
-printf 'benchmark,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,sccz80_status,sccz80_bytes,sccz80_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles\n' > "$RESULTS"
+printf 'benchmark,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Os_sdcc0_status,xcc_Os_sdcc0_bytes,xcc_Os_sdcc0_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,xcc_Of_sdcc0_status,xcc_Of_sdcc0_bytes,xcc_Of_sdcc0_cycles,sccz80_status,sccz80_bytes,sccz80_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles\n' > "$RESULTS"
 
 decode_fixture() {
     local src="$1" dst="$2"
@@ -58,12 +58,18 @@ run_xcc_mode() {
     local name="$1" rel="$2" mode="$3" work="$4"
     local src="$UPSTREAM/$rel"
     local build_src="$src"
+    local abi_flags=()
     local bin="$work/xcc_$mode.bin" map="$work/xcc_$mode.map"
     local log="$work/xcc_$mode.build.log" output="$work/xcc_$mode.output"
     local run_log="$work/xcc_$mode.run.log"
     local summary status bytes cycles ret done
     [[ "$name" == md5 ]] && build_src="$CORPUS/compat/md5.c"
+    if [[ "$mode" == *_sdcc0 ]]; then
+        abi_flags=(--sdcccall 0)
+        mode="${mode%_sdcc0}"
+    fi
     if ! "$XCC" "-$mode" --platform=emu --oformat=binary \
+        "${abi_flags[@]}" \
         -I"$FRAMEWORK" -DNO_LOG_RUNNING -DNO_LOG_PASSED \
         -Map="$map" "$FRAMEWORK/test.c" "$build_src" -o "$bin" >"$log" 2>&1; then
         printf 'BUILD,0,0\n'; return
@@ -128,12 +134,16 @@ while IFS=$'\t' read -r name rel; do
     fi
     echo "z88dk24: $name"
     xos="$(run_xcc_mode "$name" "$rel" Os "$work")"
+    xos0="$(run_xcc_mode "$name" "$rel" Os_sdcc0 "$work")"
     xof="$(run_xcc_mode "$name" "$rel" Of "$work")"
+    xof0="$(run_xcc_mode "$name" "$rel" Of_sdcc0 "$work")"
     scc="$(run_z88dk_mode "$name" "$rel" sccz80 '-compiler=sccz80' "$work")"
     sdc="$(run_z88dk_mode "$name" "$rel" sdcc '-compiler=sdcc' "$work")"
     ofp="$(run_z88dk_mode "$name" "$rel" 80cc_fp '-compiler=80cc -Cc-frameix' "$work")"
     osp="$(run_z88dk_mode "$name" "$rel" 80cc_sp '-compiler=80cc' "$work")"
-    printf '%s,%s,%s,%s,%s,%s,%s\n' "$name" "$xos" "$xof" "$scc" "$sdc" "$ofp" "$osp" >> "$RESULTS"
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        "$name" "$xos" "$xos0" "$xof" "$xof0" "$scc" "$sdc" "$ofp" "$osp" \
+        >> "$RESULTS"
 done < "$MANIFEST"
 
 python3 "$CORPUS/render.py" "$RESULTS" "$OUT/summary.md"

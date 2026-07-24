@@ -6,8 +6,26 @@ src, dst = sys.argv[1:]
 with open(src, newline="", encoding="utf-8") as f:
     rows = list(csv.DictReader(f))
 
-modes = ["xcc_Os", "xcc_Of", "sccz80", "sdcc", "80cc_fp", "80cc_sp"]
-labels = ["xcc -Os (M)", "xcc -Of (M)", "sccz80", "sdcc", "80cc-fp", "80cc-sp"]
+modes = [
+    "xcc_Os",
+    "xcc_Os_sdcc0",
+    "xcc_Of",
+    "xcc_Of_sdcc0",
+    "sccz80",
+    "sdcc",
+    "80cc_fp",
+    "80cc_sp",
+]
+labels = [
+    "xcc -Os (M, sdcc1)",
+    "xcc -Os (M, sdcc0)",
+    "xcc -Of (M, sdcc1)",
+    "xcc -Of (M, sdcc0)",
+    "sccz80",
+    "sdcc",
+    "80cc-fp",
+    "80cc-sp",
+]
 
 def cell(row, mode):
     status = row[f"{mode}_status"]
@@ -20,8 +38,10 @@ def cell(row, mode):
 lines = [
     "# z88dk Full-Program Integer Benchmarks",
     "",
-    "XCC uses the M model. Every size is the complete linked binary; every row",
-    "runs the original z88dk test framework and each compiler's own CRT/libc.",
+    "XCC uses the M model. The `sdcc1` rows keep the current default ABI and",
+    "the `sdcc0` rows force `--sdcccall 0`. Every size is the complete linked",
+    "binary; every row runs the original z88dk test framework and each",
+    "compiler's own CRT/libc.",
     "",
     "| bench | " + " | ".join(labels) + " |",
     "|---|" + "---:|" * len(labels),
