@@ -291,6 +291,56 @@ static void import_abi_metadata(
         import_abi_from_object(obj->object(), path, imports);
 }
 
+static optimization_settings abi0_optimized_settings(
+    const optimization_settings &requested)
+{
+    optimization_settings s = requested;
+
+    if (requested.level == opt_level::O0 ||
+        requested.level == opt_level::O1) {
+        return s;
+    }
+
+    // Keep ABI 0 on the broad-tested optimizer, but trim the late families
+    // that still have stack-ABI-specific regressions. ABI 1 remains unchanged.
+    s.peephole = false;
+    s.regalloc = false;
+
+    switch (requested.level) {
+    case opt_level::O2:
+        return s;
+
+    case opt_level::Os:
+        s.inline_static_functions = false;
+        s.scalar_local_promotion = false;
+        return s;
+
+    case opt_level::Of:
+        // The Of backend/profile hooks are still ABI 0-sensitive. Retain the
+        // safe extra IR wins while routing codegen, tuned backend paths, and
+        // xopt through the proven O2 pipeline.
+        s.level = opt_level::O2;
+        s.inline_static_functions = false;
+        s.scalar_local_promotion = false;
+        s.branch_bool_arithmetic = true;
+        s.countdown_dead_loops = true;
+        s.block_fill_loops = true;
+        s.promoted_byte_ops = true;
+        return s;
+
+    case opt_level::O3:
+        s.inline_static_functions = false;
+        s.scalar_local_promotion = false;
+        return s;
+
+    case opt_level::O0:
+    case opt_level::O1:
+        return s;
+    }
+
+    return s;
+}
+
 // ----- Read entire file into string ----------------------------------
 static std::string read_file(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
@@ -338,10 +388,8 @@ static int compile_source_to_text(const std::string &input_path,
     set_plain_char_unsigned(opts.plain_char_unsigned);
 
     optimization_settings effective_opt_settings = opts.opt_settings;
-    if (opts.default_call_abi == call_abi::SDCCCALL0 &&
-        opts.opt_settings.level != opt_level::O0) {
-        effective_opt_settings = optimization_settings::for_level(opt_level::O0);
-    }
+    if (opts.default_call_abi == call_abi::SDCCCALL0)
+        effective_opt_settings = abi0_optimized_settings(opts.opt_settings);
 
     diag_engine diag;
     diag.set_options(opts.diagnostics);
