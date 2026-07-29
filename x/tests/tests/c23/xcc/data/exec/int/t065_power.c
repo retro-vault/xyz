@@ -1,11 +1,11 @@
 #include "xcc_exec_test.h"
 
-extern unsigned int __mul16(unsigned int a, unsigned int b);
+extern unsigned int _mul16(unsigned int a, unsigned int b);
 
 static unsigned int upow(unsigned int base, unsigned int exp) {
     unsigned int result = 1u;
     while (exp > 0u) {
-        result = __mul16(result, base);
+        result = _mul16(result, base);
         exp = exp - 1u;
     }
     return result;

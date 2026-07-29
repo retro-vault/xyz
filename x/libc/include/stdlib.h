@@ -75,7 +75,7 @@ void free_aligned_sized(void *ptr, size_t alignment, size_t size);
  */
 typedef struct { unsigned char _opaque[8]; } heap_t;
 
-extern heap_t __libc_default_heap;
+extern heap_t _libc_default_heap;
 
 void *allocate(heap_t *heap, size_t size);
 void  deallocate(heap_t *heap, void *ptr);
@@ -109,6 +109,19 @@ int strfroml(char *restrict s, size_t n, const char *restrict format, long doubl
 int rand(void);
 void srand(unsigned int seed);
 
+#if defined(__XCC__) && __SDCCCALL == 0
+void *__bsearch_sdcc0(const void *key,
+                      const void *base,
+                      size_t      count,
+                      size_t      size,
+                      __libc_compare_fn compar) __sdcccall(1);
+void __qsort_sdcc0(void *base,
+                   size_t count,
+                   size_t size,
+                   __libc_compare_fn compar) __sdcccall(1);
+#define bsearch __bsearch_sdcc0
+#define qsort   __qsort_sdcc0
+#else
 void *bsearch(const void *key,
               const void *base,
               size_t      count,
@@ -118,6 +131,7 @@ void qsort(void *base,
            size_t count,
            size_t size,
            __libc_compare_fn compar);
+#endif
 
 int mblen(const char *s, size_t n);
 int mbtowc(wchar_t *restrict pwc, const char *restrict s, size_t n);

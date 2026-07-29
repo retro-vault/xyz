@@ -1479,15 +1479,22 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         temp_regs_[load.result.temp_id] = temp_home::main_hl;
         if (coalesced_transform)
             temp_regs_[compared_value_tid] = temp_home::main_hl;
-        // A comparison operand in IY would need a push/pop through DE and
-        // overwrite the paired index.  Reserve such ordinary word values in
-        // their compact frame slot, which the direct HL compare reads without
-        // disturbing any pair.
+        // Ordinary comparison operands use a compact frame slot so the paired
+        // index in DE survives.  Leave a register-passed loop invariant
+        // unassigned: the direct HL-vs-IY compare path can preserve DE and
+        // keep that value resident for the complete loop.
         for (int other_tid : compared_temp_ids) {
             auto other = ivs.find(other_tid);
             if (other != ivs.end() && other->second.size == 2 &&
                 temp_regs_.find(other_tid) == temp_regs_.end()) {
-                temp_regs_[other_tid] = temp_home::stack;
+                const interval &other_iv = other->second;
+                const bool incoming_loop_invariant =
+                    other_iv.loop_extended && other_iv.first_def >= 0 &&
+                    fn.icodes[other_iv.first_def].op == icode_op::RECEIVE &&
+                    (other_iv.receive_loc == abi_arg_loc::REG_HL ||
+                     other_iv.receive_loc == abi_arg_loc::REG_DE);
+                if (!incoming_loop_invariant)
+                    temp_regs_[other_tid] = temp_home::stack;
             }
         }
     }
@@ -1948,6 +1955,75 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                  (iv.last_use - iv.first_def)});
     }
 
+    // Keep a computed byte address in IY when a conditional update reads and
+    // then writes through the same pointer.  Without this home the address is
+    // normally spilled before the branch and rebuilt or reloaded for the
+    // store.  Calls and opaque operations remain barriers, and every use of
+    // the pointer must be one of the two direct memory accesses.
+    for (const auto &[tid, iv] : ivs) {
+        if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
+            iv.last_use <= iv.first_def ||
+            loop_depth[iv.first_def] == 0 ||
+            temp_regs_.find(tid) != temp_regs_.end()) {
+            continue;
+        }
+        const icode &def = fn.icodes[iv.first_def];
+        if (def.op != icode_op::ADD || !def.result.is_temp() ||
+            def.result.temp_id != tid || !def.result.type ||
+            !def.result.type->is_ptr() || def.result.type->is_far_ptr() ||
+            !def.result.type->base || def.result.type->base->is_volatile) {
+            continue;
+        }
+
+        bool safe = true;
+        int load_idx = -1;
+        int store_idx = -1;
+        for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                ic.op == icode_op::INLINE_ASM) {
+                safe = false;
+                break;
+            }
+            if (!mentions_temp(ic, tid))
+                continue;
+            const bool direct_load =
+                ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
+                ic.left.temp_id == tid && ic.right.is_none() &&
+                op_size(ic.result) == 1;
+            const bool direct_store =
+                ic.op == icode_op::SET_VALUE_AT && ic.result.is_temp() &&
+                ic.result.temp_id == tid && ic.right.is_none() &&
+                op_size(ic.left) == 1;
+            if (direct_load && load_idx < 0) {
+                load_idx = k;
+            } else if (direct_store && store_idx < 0) {
+                store_idx = k;
+            } else {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe || load_idx < 0 || store_idx <= load_idx)
+            continue;
+
+        bool control_split = false;
+        for (int k = load_idx + 1; k < store_idx; ++k) {
+            if (fn.icodes[k].op == icode_op::IFX ||
+                fn.icodes[k].op == icode_op::GOTO) {
+                control_split = true;
+                break;
+            }
+        }
+        if (!control_split)
+            continue;
+
+        iy_candidates.push_back(
+            {tid, iv.first_def, iv.last_use,
+             2850 + hot_mentions(iv) * 20 -
+                 (iv.last_use - iv.first_def)});
+    }
+
     // IY can also carry a short-lived computed integer across a call-free
     // section of a loop.  Z80 has only three ordinary arithmetic pairs, so a
     // value reused for index formation and two alternative updates otherwise
@@ -2134,7 +2210,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // code anywhere in the live range.
     std::vector<iy_candidate> invariant_iy_candidates;
     for (const auto &[tid, iv] : ivs) {
-        if (!size_opt_enabled() ||
+        if ((!size_opt_enabled() && !tuned_profile_enabled()) ||
             iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
             !iv.loop_extended || iv.first_def < 0 ||
             iv.last_use <= iv.first_def || iv.mentions < 2 ||
@@ -2200,6 +2276,120 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (overlaps)
             continue;
         temp_regs_[cand.tid] = temp_home::main_iy;
+        iy_windows.push_back({cand.start, cand.end});
+    }
+
+    // Stack linkage can profit from the same invariant IY compare path as a
+    // register argument.  Promote only an immutable word parameter whose
+    // complete live range is call-free and whose uses are comparisons inside
+    // a proven loop.  The RECEIVE then loads IY once after IX is established.
+    std::vector<iy_candidate> stack_param_iy_candidates;
+    for (const auto &[key, iv] : syms) {
+        if ((!size_opt_enabled() && !tuned_profile_enabled()) ||
+            !iv.base.is_param || !iv.base.type ||
+            iv.base.type->size() != 2 ||
+            iv.receive_loc != abi_arg_loc::STACK ||
+            iv.has_addr_of || iv.unsupported ||
+            iv.first_idx < 0 || iv.last_idx <= iv.first_idx) {
+            continue;
+        }
+
+        const icode &receive = fn.icodes[iv.first_idx];
+        if (receive.op != icode_op::RECEIVE ||
+            !receive.result.is_symbol() ||
+            symbol_reg_key(receive.result) != key ||
+            receive.result.byte_offset != 0) {
+            continue;
+        }
+
+        bool safe = true;
+        int compare_uses = 0;
+        std::vector<int> compare_indices;
+        for (int k = iv.first_idx + 1; k <= iv.last_idx; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                ic.op == icode_op::INLINE_ASM) {
+                safe = false;
+                break;
+            }
+            auto same_symbol = [&](const operand &op) {
+                return op.is_symbol() && !op.is_global &&
+                       symbol_reg_key(op) == key;
+            };
+            if ((same_symbol(ic.left) && ic.left.byte_offset != 0) ||
+                (same_symbol(ic.right) && ic.right.byte_offset != 0) ||
+                (same_symbol(ic.result) && ic.result.byte_offset != 0)) {
+                safe = false;
+                break;
+            }
+            const bool used_left = same_symbol(ic.left);
+            const bool used_right = same_symbol(ic.right);
+            const bool defined = same_symbol(ic.result);
+            if (defined || (used_left && used_right) ||
+                ((used_left || used_right) && !is_compare_op(ic.op))) {
+                safe = false;
+                break;
+            }
+            if (used_left || used_right) {
+                ++compare_uses;
+                compare_indices.push_back(k);
+            }
+        }
+        if (!safe || compare_uses == 0)
+            continue;
+
+        bool compared_in_loop = false;
+        for (int k = iv.first_idx + 1;
+             k <= iv.last_idx && !compared_in_loop; ++k) {
+            const icode &edge = fn.icodes[k];
+            auto note_backedge = [&](const std::string &label) {
+                auto target = label_indices.find(label);
+                if (target == label_indices.end() ||
+                    target->second >= k) {
+                    return;
+                }
+                for (int compare_idx : compare_indices) {
+                    if (compare_idx >= target->second && compare_idx <= k) {
+                        compared_in_loop = true;
+                        return;
+                    }
+                }
+            };
+            if (edge.op == icode_op::GOTO) {
+                note_backedge(edge.label_name);
+            } else if (edge.op == icode_op::IFX) {
+                note_backedge(edge.true_lbl);
+                note_backedge(edge.false_lbl);
+            }
+        }
+        if (!compared_in_loop)
+            continue;
+
+        stack_param_iy_candidates.push_back(
+            {key, iv.first_idx, iv.last_idx,
+             1900 + compare_uses * 100 -
+                 (iv.last_idx - iv.first_idx)});
+    }
+    std::sort(stack_param_iy_candidates.begin(),
+              stack_param_iy_candidates.end(),
+              [](const iy_candidate &lhs, const iy_candidate &rhs) {
+                  if (lhs.score != rhs.score)
+                      return lhs.score > rhs.score;
+                  if (lhs.start != rhs.start)
+                      return lhs.start < rhs.start;
+                  return lhs.tid < rhs.tid;
+              });
+    for (const iy_candidate &cand : stack_param_iy_candidates) {
+        bool overlaps = false;
+        for (const auto &[start, end] : iy_windows) {
+            if (!(cand.end < start || cand.start > end)) {
+                overlaps = true;
+                break;
+            }
+        }
+        if (overlaps)
+            continue;
+        symbol_regs_[cand.tid] = temp_home::main_iy;
         iy_windows.push_back({cand.start, cand.end});
     }
 
@@ -2808,6 +2998,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             def_ic.op == icode_op::RECEIVE &&
             (def_ic.arg_loc == abi_arg_loc::REG_HL ||
              def_ic.arg_loc == abi_arg_loc::REG_DE);
+        if (!init_ok && def_ic.op == icode_op::ASSIGN &&
+            def_ic.left.is_symbol() && def_ic.left.is_param &&
+            !def_ic.left.is_global && def_ic.left.byte_offset == 0 &&
+            effective_call_abi(fn.abi) == call_abi::SDCCCALL0) {
+            init_ok = true;
+        }
         if (!init_ok &&
             (def_ic.op == icode_op::ASSIGN ||
              def_ic.op == icode_op::CAST ||
@@ -2836,6 +3032,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 ic.left.is_temp() && ic.left.temp_id == temp_id &&
                 ic.right.kind == operand_kind::INT_CONST &&
                 ic.right.ival == 1) {
+                if (ic.result.temp_id == temp_id) {
+                    step_temp = temp_id;
+                    commit_idx = k;
+                    break;
+                }
                 step_temp = ic.result.temp_id;
                 continue;
             }
@@ -2873,6 +3074,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         if (loop_end < 0)
             return false;
+        const int allocation_end = std::max(loop_end, iv.last_use);
 
         auto is_cursor = [&](const operand &op) {
             return op.is_temp() && op.temp_id == temp_id;
@@ -2881,7 +3083,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return old_temp >= 0 && op.is_temp() && op.temp_id == old_temp;
         };
 
-        for (int k = iv.first_def + 1; k <= loop_end; ++k) {
+        for (int k = iv.first_def + 1; k <= allocation_end; ++k) {
             const icode &ic = fn.icodes[k];
             if (clobbers_bc(ic) || uses_tls_global(ic.result) ||
                 uses_tls_global(ic.left) || uses_tls_global(ic.right) ||
@@ -2942,7 +3144,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                   ic.right.type && ic.right.type->size() == 1) ||
                  (ic.right.kind == operand_kind::INT_CONST &&
                   ic.left.type && ic.left.type->size() == 1));
-            if (byte_immediate_compare && k + 1 <= loop_end &&
+            if (byte_immediate_compare && k + 1 <= allocation_end &&
                 fn.icodes[k + 1].op == icode_op::IFX &&
                 fn.icodes[k + 1].left.is_temp() &&
                 fn.icodes[k + 1].left.temp_id == ic.result.temp_id) {
@@ -2995,10 +3197,34 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (!saw_mem_use)
             return false;
 
-        end_out = loop_end;
+        end_out = allocation_end;
         score_out = 1800 + hot_mentions(iv) * 16 -
-                    (loop_end - iv.first_def);
+                    (allocation_end - iv.first_def);
         return true;
+    };
+    std::function<bool(const operand &, int)> hl_load_may_clobber_bc;
+    hl_load_may_clobber_bc = [&](const operand &op, int depth) -> bool {
+        if (depth > 4)
+            return true;
+        if (uses_tls_global(op) || symbol_word_access_may_need_bc_scratch(op))
+            return true;
+        if (!op.is_temp())
+            return false;
+
+        auto iv_it = ivs.find(op.temp_id);
+        if (iv_it == ivs.end() || iv_it->second.first_def < 0)
+            return false;
+        const icode &def_ic = fn.icodes[iv_it->second.first_def];
+        if (def_ic.op == icode_op::ADDRESS_OF)
+            return address_of_may_need_bc_scratch(def_ic.left);
+        if (def_ic.op == icode_op::ASSIGN || def_ic.op == icode_op::CAST)
+            return hl_load_may_clobber_bc(def_ic.left, depth + 1);
+        if ((def_ic.op == icode_op::ADD || def_ic.op == icode_op::SUB) &&
+            remat_pointer_temp_ok(op.temp_id, 0)) {
+            return hl_load_may_clobber_bc(def_ic.left, depth + 1) ||
+                   hl_load_may_clobber_bc(def_ic.right, depth + 1);
+        }
+        return false;
     };
     auto symbol_bc_backend_hazard = [&](const icode &ic,
                                         const operand &sym_base) {
@@ -3012,6 +3238,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
         if (ic.op == icode_op::ADDRESS_OF && address_of_may_need_bc_scratch(ic.left))
             return true;
+        if (hl_load_may_clobber_bc(ic.left, 0) ||
+            hl_load_may_clobber_bc(ic.right, 0)) {
+            return true;
+        }
 
         auto needs_bc_scratch = [&](const operand &op) {
             if (same_local_symbol_base(op, sym_base) &&
@@ -3416,10 +3646,18 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         // The inline multiplier keeps the source in DE and accumulates in HL.
         // Restrict the source to a compact frame value so loading it cannot
         // require BC as an address scratch pair.
-        if (value->kind != operand_kind::TEMP ||
-            temp_regs_.count(value->temp_id))
+        int off = 0;
+        if (value->kind == operand_kind::TEMP) {
+            if (temp_regs_.count(value->temp_id))
+                return false;
+            off = ix_offset_of(*value);
+        } else if (value->kind == operand_kind::SYMBOL &&
+                   !value->is_global && !value->is_tls &&
+                   !value->is_sfr && !value->is_func) {
+            off = ix_offset_of(*value);
+        } else {
             return false;
-        const int off = ix_offset_of(*value);
+        }
         if (!fits_ix_disp(off) || !fits_ix_disp(off + 1))
             return false;
 
@@ -3668,7 +3906,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         const icode &init = fn.icodes[iv.first_def];
         if (init.op != icode_op::ASSIGN || !init.result.is_temp() ||
             init.result.temp_id != tid ||
-            init.left.kind != operand_kind::INT_CONST || init.left.ival != 0) {
+            init.left.kind != operand_kind::INT_CONST) {
             continue;
         }
 
@@ -3699,19 +3937,20 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 break;
             }
 
-            const bool reduction_add_update =
-                ic.op == icode_op::ADD && ic.result.is_temp() &&
+            const bool reduction_update =
+                (ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                ic.result.is_temp() &&
                 ic.left.is_temp() &&
                 ic.left.temp_id == current_accumulator &&
                 !ic.right.is_none() &&
-                ic.right.kind != operand_kind::INT_CONST &&
                 !(ic.right.is_temp() &&
                   (ic.right.temp_id == tid ||
                    ic.right.temp_id == current_accumulator)) &&
                 op_size(ic.right) <= 2 &&
+                loop_depth[k] > 0 &&
                 !uses_tls_global(ic.right) &&
                 !symbol_word_access_may_need_bc_scratch(ic.right);
-            if (reduction_add_update) {
+            if (reduction_update) {
                 if (current_accumulator != tid) {
                     auto current_iv = ivs.find(current_accumulator);
                     if (current_iv == ivs.end() ||
@@ -3736,6 +3975,23 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 current_accumulator = result_tid;
                 saw_update = true;
                 ++update_count;
+                continue;
+            }
+
+            const bool commits_accumulator_alias =
+                current_accumulator != tid &&
+                ic.op == icode_op::ASSIGN &&
+                ic.result.is_temp() && ic.result.temp_id == tid &&
+                ic.left.is_temp() &&
+                ic.left.temp_id == current_accumulator;
+            if (commits_accumulator_alias) {
+                auto current_iv = ivs.find(current_accumulator);
+                if (current_iv == ivs.end() ||
+                    current_iv->second.last_use != k) {
+                    safe = false;
+                    break;
+                }
+                current_accumulator = tid;
                 continue;
             }
 
@@ -4308,30 +4564,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         return false;
     };
-    std::function<bool(const operand &, int)> hl_load_may_clobber_bc;
-    hl_load_may_clobber_bc = [&](const operand &op, int depth) -> bool {
-        if (depth > 4)
-            return true;
-        if (uses_tls_global(op) || symbol_word_access_may_need_bc_scratch(op))
-            return true;
-        if (!op.is_temp())
-            return false;
-
-        auto iv_it = ivs.find(op.temp_id);
-        if (iv_it == ivs.end() || iv_it->second.first_def < 0)
-            return false;
-        const icode &def_ic = fn.icodes[iv_it->second.first_def];
-        if (def_ic.op == icode_op::ADDRESS_OF)
-            return address_of_may_need_bc_scratch(def_ic.left);
-        if (def_ic.op == icode_op::ASSIGN || def_ic.op == icode_op::CAST)
-            return hl_load_may_clobber_bc(def_ic.left, depth + 1);
-        if ((def_ic.op == icode_op::ADD || def_ic.op == icode_op::SUB) &&
-            remat_pointer_temp_ok(op.temp_id, 0)) {
-            return hl_load_may_clobber_bc(def_ic.left, depth + 1) ||
-                   hl_load_may_clobber_bc(def_ic.right, depth + 1);
-        }
-        return false;
-    };
     auto bc_temp_uses_are_backend_safe = [&](int temp_id, int start, int end) {
         for (int k = start + 1; k <= end; ++k) {
             const icode &use_ic = fn.icodes[k];
@@ -4527,6 +4759,77 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         bc_candidates.push_back(
             {iv.first_def, iv.last_use, score, false, tid});
+    }
+
+    // A word-sized predicate passed after other stack arguments can remain in
+    // BC instead of being spilled to the frame.  Admit only a single-use
+    // result and argument setup made entirely from constants, global
+    // addresses, or stack SENDs whose operands have the same properties.
+    // Those lowerings use HL but preserve BC, and the final SEND can push BC
+    // directly.
+    for (auto &[fd, tid] : order) {
+        const interval &iv = ivs[tid];
+        if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+            iv.mentions != 1 || iv.first_def < 0 ||
+            iv.last_use <= iv.first_def ||
+            temp_regs_.find(tid) != temp_regs_.end()) {
+            continue;
+        }
+
+        const icode &def = fn.icodes[iv.first_def];
+        const icode &use = fn.icodes[iv.last_use];
+        if (!is_compare_op(def.op) || !def.result.is_temp() ||
+            def.result.temp_id != tid ||
+            use.op != icode_op::SEND ||
+            use.arg_loc != abi_arg_loc::STACK ||
+            !use.left.is_temp() || use.left.temp_id != tid) {
+            continue;
+        }
+
+        auto simple_stack_send = [&](const operand &op) {
+            if (simple_send_operand_for_bc_live_range(op))
+                return true;
+            if (!op.is_temp())
+                return false;
+            auto source_iv = ivs.find(op.temp_id);
+            if (source_iv == ivs.end() || source_iv->second.first_def < 0 ||
+                source_iv->second.first_def >= iv.last_use) {
+                return false;
+            }
+            const icode &source =
+                fn.icodes[source_iv->second.first_def];
+            return source.op == icode_op::ADDRESS_OF &&
+                   source.result.is_temp() &&
+                   source.result.temp_id == op.temp_id &&
+                   !address_of_may_need_bc_scratch(source.left);
+        };
+
+        bool safe = true;
+        for (int k = iv.first_def + 1; k < iv.last_use; ++k) {
+            const icode &mid = fn.icodes[k];
+            if (mentions_temp(mid, tid)) {
+                safe = false;
+                break;
+            }
+            if (mid.op == icode_op::ADDRESS_OF &&
+                mid.result.is_temp() &&
+                !address_of_may_need_bc_scratch(mid.left)) {
+                continue;
+            }
+            if (mid.op == icode_op::SEND &&
+                mid.arg_loc == abi_arg_loc::STACK &&
+                simple_stack_send(mid.left)) {
+                continue;
+            }
+            safe = false;
+            break;
+        }
+        if (!safe)
+            continue;
+
+        bc_candidates.push_back(
+            {iv.first_def, iv.last_use,
+             900 - (iv.last_use - iv.first_def), false, tid});
     }
 
     // Keep one ordinary loop-carried word local in BC when every operation in
@@ -4781,6 +5084,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (iv.has_addr_of || iv.unsupported)            continue;
         if (iv.mentions < 4)                             continue;
         if (iv.last_idx <= iv.first_idx)                 continue;
+        if (iv.base.is_param && iv.receive_loc == abi_arg_loc::STACK)
+            continue;
         if (contiguous_symbol_window(iv))                continue;
         if (!interior_safe(interval{iv.first_idx, iv.last_idx, 2, false}, bc_clob))
             continue;
@@ -5536,6 +5841,97 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
+    // Direct global-array indexing normally borrows DE while forming the
+    // address in HL.  The backend has a guarded path that saves/restores DE
+    // when either byte half carries a live value, so byte homes may cross
+    // these address calculations and their compact indirect stores.
+    auto de_preserving_indexed_memory_op = [&](const icode &ic) {
+        if (!direct_ix_frame)
+            return false;
+
+        auto direct_global_array = [](const operand &op) {
+            return op.kind == operand_kind::LABEL_REF ||
+                   (op.kind == operand_kind::SYMBOL && op.is_global &&
+                    !op.is_tls && !op.is_func && !op.is_param && op.type &&
+                    op.type->unqual() &&
+                    op.type->unqual()->kind == type_kind::ARRAY);
+        };
+        auto compact_frame_temp = [&](const operand &op) {
+            if (!op.is_temp())
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            if (home != temp_regs_.end() &&
+                home->second != temp_home::stack)
+                return false;
+            const int off = ix_offset_of(op);
+            return fits_ix_disp(off) && fits_ix_disp(off + 1);
+        };
+        auto compact_address_result = [&](const operand &op) {
+            if (!op.is_temp())
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            if (home != temp_regs_.end() &&
+                home->second != temp_home::stack &&
+                home->second != temp_home::main_hl)
+                return false;
+            const int off = ix_offset_of(op);
+            return home != temp_regs_.end() ||
+                   (fits_ix_disp(off) && fits_ix_disp(off + 1));
+        };
+
+        if (ic.op == icode_op::ADD && op_size(ic.result) == 2 &&
+            ic.result.type && ic.result.type->is_ptr() &&
+            compact_address_result(ic.result)) {
+            const operand *index = nullptr;
+            if (direct_global_array(ic.left))
+                index = &ic.right;
+            else if (direct_global_array(ic.right))
+                index = &ic.left;
+            return index && op_size(*index) == 2 &&
+                   compact_frame_temp(*index);
+        }
+
+        return ic.op == icode_op::SET_VALUE_AT &&
+               ic.right.is_none() && op_size(ic.left) == 1 &&
+               compact_address_result(ic.result);
+    };
+    auto direct_word_operand_preserves_de = [&](const operand &op) {
+        if (!direct_ix_frame || op_size(op) != 2)
+            return false;
+        if (op.is_temp()) {
+            auto home = temp_regs_.find(op.temp_id);
+            if (home != temp_regs_.end() &&
+                home->second != temp_home::stack &&
+                home->second != temp_home::main_hl &&
+                home->second != temp_home::main_bc &&
+                home->second != temp_home::main_iy)
+                return false;
+            if (home != temp_regs_.end())
+                return true;
+            const int off = ix_offset_of(op);
+            return fits_ix_disp(off) && fits_ix_disp(off + 1);
+        }
+        if (op.kind != operand_kind::SYMBOL || op.is_global ||
+            op.is_tls || op.is_func || op.is_sfr)
+            return false;
+        auto home = symbol_regs_.find(symbol_reg_key(op));
+        if (home != symbol_regs_.end() &&
+            home->second != temp_home::main_bc &&
+            home->second != temp_home::main_iy)
+            return false;
+        if (home != symbol_regs_.end())
+            return true;
+        const int off = ix_offset_of(op);
+        return fits_ix_disp(off) && fits_ix_disp(off + 1);
+    };
+    auto direct_small_word_step_preserves_de = [&](const icode &ic) {
+        return ic.op == icode_op::ADD && op_size(ic.result) == 2 &&
+               ic.right.kind == operand_kind::INT_CONST &&
+               ic.right.ival >= -3 && ic.right.ival <= 3 &&
+               direct_word_operand_preserves_de(ic.result) &&
+               direct_word_operand_preserves_de(ic.left);
+    };
+
     struct d_candidate {
         int tid = -1;
         int start = -1;
@@ -5544,6 +5940,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     };
     std::vector<d_candidate> d_candidates;
     if (size_opt_enabled() || tuned_profile_enabled()) {
+        auto operand_in_bc = [&](const operand &op) {
+            if (!op.is_temp())
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            return home != temp_regs_.end() &&
+                   home->second == temp_home::main_bc;
+        };
         auto byte_or_immediate = [](const operand &op) {
             return op.is_none() || op.kind == operand_kind::INT_CONST ||
                    (op.type && op.type->size() == 1);
@@ -5584,10 +5987,17 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                          result_home->second == temp_home::main_bc))
                         return true;
                 }
+                if (direct_word_operand_preserves_de(ic.result) &&
+                    direct_word_operand_preserves_de(ic.left))
+                    return true;
                 return ic.result.type && ic.result.type->size() == 1 &&
                        byte_or_immediate(ic.left) &&
                        byte_or_immediate(ic.right);
             case icode_op::ADD:
+                if (de_preserving_indexed_memory_op(ic))
+                    return true;
+                if (direct_small_word_step_preserves_de(ic))
+                    return true;
                 if (ic.result.type && ic.result.type->size() == 2 &&
                     ic.right.kind == operand_kind::INT_CONST &&
                     ic.right.ival == 1 && ic.left.is_temp()) {
@@ -5613,6 +6023,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 // A byte load through IY is just "ld a, 0(iy)" plus the
                 // result store, so it does not consume the DE scratch pair.
                 return iy_byte_load_preserves_de(ic);
+            case icode_op::SET_VALUE_AT:
+                return de_preserving_indexed_memory_op(ic);
             case icode_op::EQ:
             case icode_op::NE:
             case icode_op::LT:
@@ -5622,7 +6034,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 return ((ic.left.kind == operand_kind::INT_CONST &&
                          ic.right.type && ic.right.type->size() == 1) ||
                         (ic.right.kind == operand_kind::INT_CONST &&
-                         ic.left.type && ic.left.type->size() == 1));
+                         ic.left.type && ic.left.type->size() == 1) ||
+                        (ic.left.kind == operand_kind::INT_CONST &&
+                         operand_in_bc(ic.right)) ||
+                        (ic.right.kind == operand_kind::INT_CONST &&
+                         operand_in_bc(ic.left)));
             default:
                 return false;
             }
@@ -5667,6 +6083,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                        ic.result.type && ic.result.type->size() == 2 &&
                        byte_or_immediate(ic.left) &&
                        byte_or_immediate(ic.right);
+            case icode_op::SET_VALUE_AT:
+                return use_left && !use_right && !use_result &&
+                       de_preserving_indexed_memory_op(ic);
             default:
                 return false;
             }
@@ -5693,7 +6112,6 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
                     ic.op == icode_op::INLINE_ASM ||
                     ic.op == icode_op::ADDRESS_OF ||
-                    ic.op == icode_op::SET_VALUE_AT ||
                     !d_temp_use_safe(ic, tid)) {
                     safe = false;
                     break;
@@ -5808,6 +6226,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                        byte_or_immediate(ic.right);
             case icode_op::RETURN:
                 return use_left && !use_result && !use_right;
+            case icode_op::SET_VALUE_AT:
+                return use_left && !use_result && !use_right &&
+                       de_preserving_indexed_memory_op(ic);
             default:
                 return false;
             }
@@ -5819,9 +6240,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                     ic.result.is_temp() && ic.left.is_temp()) {
                     auto result_home = temp_regs_.find(ic.result.temp_id);
                     if (result_home != temp_regs_.end() &&
-                        result_home->second == temp_home::main_iy)
+                        (result_home->second == temp_home::main_iy ||
+                         result_home->second == temp_home::main_bc))
                         return true;
                 }
+                if (direct_word_operand_preserves_de(ic.result) &&
+                    direct_word_operand_preserves_de(ic.left))
+                    return true;
                 [[fallthrough]];
             case icode_op::CAST:
                 if (ic.result.type && ic.result.type->size() == 2 &&
@@ -5844,6 +6269,10 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                        byte_or_immediate(ic.left) &&
                        byte_or_immediate(ic.right);
             case icode_op::ADD:
+                if (de_preserving_indexed_memory_op(ic))
+                    return true;
+                if (direct_small_word_step_preserves_de(ic))
+                    return true;
                 if (ic.result.type && ic.result.type->size() == 2 &&
                     ic.right.kind == operand_kind::INT_CONST &&
                     ic.right.ival == 1 && ic.left.is_temp()) {
@@ -5879,6 +6308,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             case icode_op::GET_VALUE_AT:
                 return iy_byte_load_preserves_e(ic) ||
                        iy_word_load_to_bc_preserves_e(ic);
+            case icode_op::SET_VALUE_AT:
+                return de_preserving_indexed_memory_op(ic);
             default:
                 return false;
             }
@@ -6209,6 +6640,52 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
     }
 
+    // A single global word read used as a later argument can be delayed past
+    // other argument SENDs.  With no call, store, or control-flow instruction
+    // in between, the memory version cannot change; rematerializing at the
+    // final SEND removes an otherwise mandatory spill/reload pair.
+    if (size_opt_enabled() || tuned_profile_enabled()) {
+        for (auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+                iv.mentions != 1 || iv.first_def < 0 ||
+                iv.last_use <= iv.first_def ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+
+            const icode &def_ic = fn.icodes[iv.first_def];
+            const icode &use_ic = fn.icodes[iv.last_use];
+            if (def_ic.op != icode_op::ASSIGN ||
+                !def_ic.result.is_temp() ||
+                def_ic.result.temp_id != tid ||
+                !def_ic.right.is_none() ||
+                def_ic.left.kind != operand_kind::SYMBOL ||
+                !def_ic.left.is_global || def_ic.left.is_param ||
+                def_ic.left.is_func || def_ic.left.is_tls ||
+                def_ic.left.is_sfr || !def_ic.left.type ||
+                def_ic.left.type->is_volatile ||
+                op_size(def_ic.left) != 2 ||
+                use_ic.op != icode_op::SEND ||
+                !use_ic.left.is_temp() ||
+                use_ic.left.temp_id != tid) {
+                continue;
+            }
+
+            bool only_argument_sends = true;
+            for (int k = iv.first_def + 1; k < iv.last_use; ++k) {
+                if (fn.icodes[k].op != icode_op::SEND) {
+                    only_argument_sends = false;
+                    break;
+                }
+            }
+            if (!only_argument_sends)
+                continue;
+
+            temp_regs_[tid] = temp_home::remat_hl;
+        }
+    }
+
     // Keep word-load rematerialization disabled as well. Even the branch-free,
     // call-free, store-free, single-definition filter is insufficient for the
     // heap free-list case; enabling this requires real memory SSA/versioning.
@@ -6294,6 +6771,33 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (bc_symbol_conflict)
             continue;
 
+        // A later, independent BC allocation can overlap this cursor even
+        // when the pointer chosen as the swap partner is safe.  In
+        // particular, a reduction confined to a second loop may occupy BC
+        // while the cursor spans both loops.  Reject the swap when any
+        // overlapping non-pointer temp already owns BC; otherwise replacing
+        // the cursor's IY home would silently make the two values alias.
+        bool bc_value_conflict = false;
+        for (const auto &[other_tid, other_home] : temp_regs_) {
+            if (other_home != temp_home::main_bc ||
+                other_tid == cursor_tid)
+                continue;
+            auto other_iv = ivs.find(other_tid);
+            if (other_iv == ivs.end() ||
+                other_iv->second.last_use < cursor_iv->second.first_def ||
+                other_iv->second.first_def > cursor_iv->second.last_use)
+                continue;
+            const icode &other_def =
+                fn.icodes[other_iv->second.first_def];
+            if (!other_def.result.type ||
+                !other_def.result.type->is_ptr()) {
+                bc_value_conflict = true;
+                break;
+            }
+        }
+        if (bc_value_conflict)
+            continue;
+
         bool placed_in_bc = false;
         for (const auto &[base_tid, base_home] : temp_regs_) {
             if (base_home != temp_home::main_bc || base_tid == cursor_tid)
@@ -6358,6 +6862,82 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 iy_preserved_call_indices_.insert(static_cast<size_t>(k));
             }
         }
+    }
+
+    // A constant-offset pointer derived from an IY-resident base is
+    // rematerialized as (iy+d) by GET/SET lowering.  If direct dereferences
+    // are its only uses, emitting the original ADD merely computes and spills
+    // a value that no machine instruction reads.
+    for (size_t def_index = 0; def_index < fn.icodes.size(); ++def_index) {
+        const icode &def = fn.icodes[def_index];
+        if (def.op != icode_op::ADD || !def.result.is_temp() ||
+            !def.result.type || !def.result.type->is_ptr() ||
+            def.result.type->is_far_ptr()) {
+            continue;
+        }
+
+        const operand *base = &def.left;
+        const operand *offset = &def.right;
+        if (base->kind == operand_kind::INT_CONST)
+            std::swap(base, offset);
+        if (!base->is_temp() || offset->kind != operand_kind::INT_CONST)
+            continue;
+
+        auto base_home = temp_regs_.find(base->temp_id);
+        if (base_home == temp_regs_.end() ||
+            base_home->second != temp_home::main_iy ||
+            offset->ival < -128 || offset->ival > 126) {
+            continue;
+        }
+
+        const int derived_tid = def.result.temp_id;
+        auto derived_iv = ivs.find(derived_tid);
+        if (derived_iv == ivs.end() ||
+            derived_iv->second.definitions != 1 ||
+            derived_iv->second.first_def != static_cast<int>(def_index)) {
+            continue;
+        }
+        bool saw_use = false;
+        bool direct_dereferences_only = true;
+        for (size_t use_index = def_index + 1;
+             use_index < fn.icodes.size(); ++use_index) {
+            const icode &use = fn.icodes[use_index];
+            const bool in_result =
+                use.result.is_temp() &&
+                use.result.temp_id == derived_tid;
+            const bool in_left =
+                use.left.is_temp() && use.left.temp_id == derived_tid;
+            const bool in_right =
+                use.right.is_temp() && use.right.temp_id == derived_tid;
+            if (!in_result && !in_left && !in_right)
+                continue;
+
+            saw_use = true;
+            const bool direct_load =
+                use.op == icode_op::GET_VALUE_AT && in_left &&
+                !in_result && !in_right && use.right.is_none() &&
+                (op_size(use.result) == 1 || op_size(use.result) == 2 ||
+                 op_size(use.result) == 4) &&
+                offset->ival + op_size(use.result) - 1 <= 127 &&
+                !(use.result.type && use.result.type->is_volatile) &&
+                !(use.left.type && use.left.type->base &&
+                  use.left.type->base->is_volatile);
+            const bool direct_store =
+                use.op == icode_op::SET_VALUE_AT && in_result &&
+                !in_left && !in_right && use.right.is_none() &&
+                (op_size(use.left) == 1 || op_size(use.left) == 2) &&
+                offset->ival + op_size(use.left) - 1 <= 127 &&
+                !(use.left.type && use.left.type->is_volatile) &&
+                !(use.result.type && use.result.type->base &&
+                  use.result.type->base->is_volatile);
+            if (!direct_load && !direct_store) {
+                direct_dereferences_only = false;
+                break;
+            }
+        }
+
+        if (saw_use && direct_dereferences_only)
+            skipped_icodes_.insert(def_index);
     }
 
     // NOTE: BC'/DE'/HL' via EXX are not used — EXX swaps all three pairs

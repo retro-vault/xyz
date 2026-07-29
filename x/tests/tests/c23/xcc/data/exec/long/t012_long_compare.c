@@ -1,9 +1,9 @@
 #include "xcc_exec_test.h"
 
-extern unsigned long __mul32(unsigned long a, unsigned long b);
+extern unsigned long _mul32(unsigned long a, unsigned long b);
 
 int main(void) {
-    unsigned long a = __mul32(256ul, 256ul);
+    unsigned long a = _mul32(256ul, 256ul);
     unsigned long b = a + 0x1234ul;
     unsigned long c = b - 0x0034ul;
 

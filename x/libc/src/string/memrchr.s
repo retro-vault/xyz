@@ -12,8 +12,8 @@
 
 
         .globl  _memrchr
-        .globl  __string_return_zero_clean2
-        .globl  __string_return_hl_clean2
+        .globl  __string_return_zero
+        .globl  __string_return_hl
 
         .area   _CODE
 
@@ -43,7 +43,7 @@ memrchr_loop:
         jr      nz,memrchr_loop
 memrchr_not_found:
         pop     ix
-        jp      __string_return_zero_clean2
+        jp      __string_return_zero
 memrchr_found:
         pop     ix
-        jp      __string_return_hl_clean2
+        jp      __string_return_hl

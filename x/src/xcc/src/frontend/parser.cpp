@@ -259,6 +259,7 @@ static bool apply_call_abi_to_nested_function(type_ptr t, call_abi abi) {
         return false;
     if (t->kind == type_kind::FUNCTION) {
         t->func_abi = abi;
+        t->func_abi_explicit = true;
         return true;
     }
     if ((t->kind == type_kind::POINTER || t->kind == type_kind::ARRAY) && t->base)
@@ -657,6 +658,8 @@ decl_ptr parser::parse_function_definition(
         fsym->type && fsym->type->is_func() &&
         fsym->type->func_abi != call_abi::DEFAULT) {
         fd->type->func_abi = fsym->type->func_abi;
+        fd->type->func_abi_explicit =
+            fsym->type->func_abi_explicit;
     }
     fsym->type    = fd->type;
     fsym->storage = sc;

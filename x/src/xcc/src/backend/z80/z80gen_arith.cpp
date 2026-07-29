@@ -391,6 +391,59 @@ void z80_gen::gen_add(const icode &ic) {
         invalidate_pair_cache();
         return;
     }
+    auto direct_global_array = [](const operand &op) {
+        return op.kind == operand_kind::LABEL_REF ||
+               (op.kind == operand_kind::SYMBOL && op.is_global &&
+                !op.is_tls && !op.is_func && !op.is_param && op.type &&
+                op.type->unqual() &&
+                op.type->unqual()->kind == type_kind::ARRAY);
+    };
+    auto live_main_de_byte = [&]() {
+        if (!cur_fn_)
+            return false;
+        for (const auto &[tid, home] : temp_regs_) {
+            if ((home == temp_home::main_d || home == temp_home::main_e) &&
+                temp_value_used_after(*cur_fn_, cur_ic_index_ + 1, tid))
+                return true;
+        }
+        return false;
+    };
+    if (op_size(ic.result) == 2 && ic.result.type &&
+        ic.result.type->is_ptr() && live_main_de_byte()) {
+        const operand *base = nullptr;
+        const operand *index = nullptr;
+        if (direct_global_array(ic.left)) {
+            base = &ic.left;
+            index = &ic.right;
+        } else if (direct_global_array(ic.right)) {
+            base = &ic.right;
+            index = &ic.left;
+        }
+        auto compact_frame_index = [&](const operand &op) {
+            if (!op.is_temp() || op_size(op) != 2)
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            if (home != temp_regs_.end() &&
+                home->second != temp_home::stack)
+                return false;
+            const int off = ix_offset_of(op);
+            return fits_ix_disp(off) && fits_ix_disp(off + 1);
+        };
+        if (base && compact_frame_index(*index)) {
+            // Preserve independent byte values in D/E while DE serves as the
+            // transient array index.  HL retains the computed address.
+            invalidate_pair_cache();
+            emit_line("push\tde");
+            load_hl(*base);
+            invalidate_de_cache();
+            load_de(*index);
+            emit_line("add\thl, de");
+            emit_line("pop\tde");
+            invalidate_de_cache();
+            store_hl(ic.result);
+            return;
+        }
+    }
     if (bounded_symbol_induction_increments_.count(cur_ic_index_) &&
         ic.result.is_symbol() && !ic.result.is_global &&
         !ic.result.is_param && equivalent_operands(ic.left, ic.result) &&
@@ -2304,6 +2357,8 @@ bool z80_gen::try_emit_u32_bitwise_add_chain(const icode &ic) {
 
     const size_t original_index = cur_ic_index_;
     for (size_t producer_index : producer_indices) {
+        if (skipped_icodes_.find(producer_index) != skipped_icodes_.end())
+            continue;
         cur_ic_index_ = producer_index;
         const icode &producer = cur_fn_->icodes[producer_index];
         if (producer.op == icode_op::ADD)
@@ -4379,7 +4434,11 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         return op.kind == operand_kind::SYMBOL && symbol_home_in_bc(op);
     };
     auto operand_in_main_iy = [&](const operand &op) {
-        if (op.kind != operand_kind::TEMP || op.byte_offset != 0)
+        if (op.byte_offset != 0)
+            return false;
+        if (op.kind == operand_kind::SYMBOL)
+            return symbol_home_in_iy(op);
+        if (op.kind != operand_kind::TEMP)
             return false;
         auto it = temp_regs_.find(op.temp_id);
         return it != temp_regs_.end() &&
@@ -4403,7 +4462,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
     // hardware stack is especially wasteful in loop bounds and state-machine
     // tests, where the mismatch edge can exit after the low byte.
     if ((cmp == icode_op::EQ || cmp == icode_op::NE) &&
-        !true_lbl.empty() && !false_lbl.empty()) {
+        !true_lbl.empty()) {
         const operand *value = &ic.left;
         const operand *constant = &ic.right;
         if (value->kind == operand_kind::INT_CONST)
@@ -4428,22 +4487,40 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             return fits_ix_disp(off) && fits_ix_disp(off + 1);
         };
         if (constant->kind == operand_kind::INT_CONST &&
+            static_cast<uint16_t>(constant->ival) != 0 &&
             op_size(*value) == 2 && compact_frame_word(*value)) {
             const uint16_t raw = static_cast<uint16_t>(constant->ival);
+            const std::string skip_lbl =
+                false_lbl.empty() && cmp == icode_op::EQ
+                    ? fresh_local_label("__wcmp_mismatch")
+                    : std::string();
             const std::string &mismatch =
-                cmp == icode_op::EQ ? false_lbl : true_lbl;
+                cmp == icode_op::EQ
+                    ? (false_lbl.empty() ? skip_lbl : false_lbl)
+                    : true_lbl;
+            auto emit_compare_byte = [&](unsigned byte) {
+                if (byte == 0)
+                    emit_line("or\ta, a");
+                else if (byte == 1)
+                    emit_line("dec\ta");
+                else
+                    emit_line("cp\t%s", asm_.imm(byte).c_str());
+            };
             load_a(*value);
-            emit_line("cp\t%s", asm_.imm(raw & 0xff).c_str());
+            emit_compare_byte(raw & 0xff);
             emit_line("jp\tnz, %s", mismatch.c_str());
             operand high = *value;
             high.byte_offset += 1;
             high.type = type::make_uchar();
             load_a(high);
-            emit_line("cp\t%s", asm_.imm((raw >> 8) & 0xff).c_str());
+            emit_compare_byte((raw >> 8) & 0xff);
             emit_line("jp\t%s, %s",
                       cmp == icode_op::EQ ? "z" : "nz",
                       true_lbl.c_str());
-            emit_line("jp\t%s", false_lbl.c_str());
+            if (!false_lbl.empty())
+                emit_line("jp\t%s", false_lbl.c_str());
+            if (!skip_lbl.empty())
+                asm_.label(skip_lbl, false);
             return;
         }
     }
@@ -4714,6 +4791,66 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             emit_line("jp\tnz, %s", true_lbl.c_str());
             emit_line("jp\t%s", false_lbl.c_str());
         }
+        return;
+    }
+
+    if (op_size(ic.left) == 2 && op_size(ic.right) == 2 &&
+        operand_in_main_hl(ic.left) && operand_in_main_iy(ic.right) &&
+        !true_lbl.empty() && !false_lbl.empty()) {
+        // IY is a useful home for an invariant comparison operand while DE
+        // carries an index or midpoint.  Compare the index halves directly
+        // instead of transferring IY through DE and destroying that value.
+        if (cmp == icode_op::EQ || cmp == icode_op::NE) {
+            const std::string &mismatch =
+                cmp == icode_op::EQ ? false_lbl : true_lbl;
+            emit_line("ld\ta, l");
+            emit_line("cp\tiyl");
+            emit_line("jp\tnz, %s", mismatch.c_str());
+            emit_line("ld\ta, h");
+            emit_line("cp\tiyh");
+            emit_line("jp\t%s, %s",
+                      cmp == icode_op::EQ ? "z" : "nz",
+                      true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        }
+
+        const bool is_unsigned =
+            ic.left.type &&
+            (ic.left.type->is_unsigned() || ic.left.type->is_ptr());
+        icode_op effective_cmp = cmp;
+        bool swap = false;
+        if (cmp == icode_op::LE || cmp == icode_op::GT) {
+            swap = true;
+            effective_cmp =
+                cmp == icode_op::LE ? icode_op::GE : icode_op::LT;
+        }
+        if (swap) {
+            emit_line("ld\ta, iyl");
+            emit_line("sub\tl");
+            emit_line("ld\ta, iyh");
+            emit_line("sbc\ta, h");
+        } else {
+            emit_line("ld\ta, l");
+            emit_line("sub\tiyl");
+            emit_line("ld\ta, h");
+            emit_line("sbc\ta, iyh");
+        }
+        if (is_unsigned) {
+            emit_line("jp\t%s, %s",
+                      effective_cmp == icode_op::LT ? "c" : "nc",
+                      true_lbl.c_str());
+        } else {
+            const std::string no_overflow =
+                "__scmp_noov_" + std::to_string(rand() % 100000);
+            emit_line("jp\tpo, %s", no_overflow.c_str());
+            emit_line("xor\t%s", asm_.imm(0x80).c_str());
+            asm_.label(no_overflow, false);
+            emit_line("jp\t%s, %s",
+                      effective_cmp == icode_op::LT ? "m" : "p",
+                      true_lbl.c_str());
+        }
+        emit_line("jp\t%s", false_lbl.c_str());
         return;
     }
 

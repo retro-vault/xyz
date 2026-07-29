@@ -13,7 +13,6 @@
 
 
         .globl  _memset
-        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -47,4 +46,4 @@ _memset::
 memset_done:
         pop     de
         pop     ix
-        jp      __string_ret_clean2
+        ret

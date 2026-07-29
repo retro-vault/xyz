@@ -37,15 +37,15 @@
 )((y), (x))
 
 #define creal(value) _Generic((value), \
-    float _Complex: __creal, \
-    double _Complex: __creal, \
-    long double _Complex: __creal \
+    float _Complex: _creal, \
+    double _Complex: _creal, \
+    long double _Complex: _creal \
 )(value)
 
 #define cimag(value) _Generic((value), \
-    float _Complex: __cimag, \
-    double _Complex: __cimag, \
-    long double _Complex: __cimag \
+    float _Complex: _cimag, \
+    double _Complex: _cimag, \
+    long double _Complex: _cimag \
 )(value)
 
 #define conj(value) _Generic((value), \

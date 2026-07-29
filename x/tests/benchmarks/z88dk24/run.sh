@@ -13,7 +13,9 @@ TICKS="$Z88DK_ROOT/bin/z88dk-ticks"
 RUNNER="$ROOT/build/bin/z80_exec"
 OUT="${OUT:-$ROOT/build/x/benchmarks/z88dk24}"
 CYCLES="${CYCLES:-800000000}"
+TICKS_BUDGET="${TICKS_BUDGET:-60}"
 FILTER="${FILTER:-}"
+ARTIFACTS=""
 
 usage() {
     echo "usage: $0 [--filter REGEX] [--cycles N] [--outdir DIR] [--xcc PATH]"
@@ -39,12 +41,15 @@ if [[ "$OUT" != /* ]]; then
 fi
 
 [[ -x "$XCC" ]] || { echo "missing M-model xcc: $XCC (run: make x-m)" >&2; exit 2; }
+XCC="$(cd -- "$(dirname -- "$XCC")" && pwd -P)/$(basename -- "$XCC")"
 [[ -x "$ZCC" ]] || { echo "missing z88dk zcc: $ZCC" >&2; exit 2; }
 [[ -x "$TICKS" ]] || { echo "missing z88dk-ticks: $TICKS" >&2; exit 2; }
 [[ -x "$RUNNER" ]] || { echo "missing runner: $RUNNER" >&2; exit 2; }
 
 rm -rf "$OUT"
 mkdir -p "$OUT/work"
+mkdir -p "$OUT/artifacts"
+ARTIFACTS="$OUT/artifacts"
 RESULTS="$OUT/results.csv"
 printf 'benchmark,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Os_sdcc0_status,xcc_Os_sdcc0_bytes,xcc_Os_sdcc0_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,xcc_Of_sdcc0_status,xcc_Of_sdcc0_bytes,xcc_Of_sdcc0_cycles,sccz80_status,sccz80_bytes,sccz80_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles\n' > "$RESULTS"
 
@@ -54,26 +59,48 @@ decode_fixture() {
     base64 -D "$src" > "$dst"
 }
 
+stage_sources() {
+    local src="$1" work="$2"
+    local local_src
+    cp "$FRAMEWORK/test.c" "$work/test.c"
+    cp "$FRAMEWORK/test.h" "$work/test.h"
+    local_src="$(basename "$src")"
+    cp "$src" "$work/$local_src"
+    if [[ "$src" == "$CORPUS/compat/md5.c" ]]; then
+        cp "$UPSTREAM/md5/md5sum.c" "$work/md5sum.c"
+    fi
+    printf '%s\n' "$local_src"
+}
+
 run_xcc_mode() {
     local name="$1" rel="$2" mode="$3" work="$4"
     local src="$UPSTREAM/$rel"
     local build_src="$src"
     local abi_flags=()
-    local bin="$work/xcc_$mode.bin" map="$work/xcc_$mode.map"
-    local log="$work/xcc_$mode.build.log" output="$work/xcc_$mode.output"
-    local run_log="$work/xcc_$mode.run.log"
+    local mode_label="$mode"
+    local bin="$work/xcc_$mode_label.bin" map="$work/xcc_$mode_label.map"
+    local log="$work/xcc_$mode_label.build.log" output="$work/xcc_$mode_label.output"
+    local run_log="$work/xcc_$mode_label.run.log"
     local summary status bytes cycles ret done
+    local artifact_dir local_src local_bin local_map
     [[ "$name" == md5 ]] && build_src="$CORPUS/compat/md5.c"
+    local_src="$(stage_sources "$build_src" "$work")"
     if [[ "$mode" == *_sdcc0 ]]; then
         abi_flags=(--sdcccall 0)
         mode="${mode%_sdcc0}"
     fi
-    if ! "$XCC" "-$mode" --platform=emu --oformat=binary \
+    local_bin="$(basename "$bin")"
+    local_map="$(basename "$map")"
+    if ! (cd "$work" && "$XCC" "-$mode" --platform=emu --oformat=binary \
         "${abi_flags[@]}" \
-        -I"$FRAMEWORK" -DNO_LOG_RUNNING -DNO_LOG_PASSED \
-        -Map="$map" "$FRAMEWORK/test.c" "$build_src" -o "$bin" >"$log" 2>&1; then
+        -I. -DNO_LOG_RUNNING -DNO_LOG_PASSED \
+        "-Map=$local_map" test.c "$local_src" -o "$local_bin") >"$log" 2>&1; then
         printf 'BUILD,0,0\n'; return
     fi
+    artifact_dir="$ARTIFACTS/$name/xcc_$mode_label"
+    mkdir -p "$artifact_dir"
+    cp "$bin" "$artifact_dir/program.bin"
+    cp "$map" "$artifact_dir/program.map"
     bytes="$(wc -c < "$bin" | tr -d ' ')"
     set +e
     summary="$(cd "$work" && "$RUNNER" --bin --cycles "$CYCLES" \
@@ -98,17 +125,22 @@ run_z88dk_mode() {
     local src="$UPSTREAM/$rel" bin="$work/$label.bin"
     local log="$work/$label.build.log" run_log="$work/$label.run.log"
     local output status bytes cycles
+    local artifact_dir local_src
     local -a args
     read -r -a args <<< "$flags"
-    if ! env Z88DK_ROOT="$Z88DK_ROOT" ZCCCFG="$Z88DK_ROOT/lib/config" \
+    local_src="$(stage_sources "$src" "$work")"
+    if ! (cd "$work" && env Z88DK_ROOT="$Z88DK_ROOT" ZCCCFG="$Z88DK_ROOT/lib/config" \
         PATH="$Z88DK_ROOT/bin:$PATH" "$ZCC" +test -vn "${args[@]}" \
-        -I"$FRAMEWORK" -DNO_LOG_RUNNING -DNO_LOG_PASSED \
-        "$FRAMEWORK/test.c" "$src" -o "$bin" -m >"$log" 2>&1; then
+        -I. -DNO_LOG_RUNNING -DNO_LOG_PASSED \
+        test.c "$local_src" -o "$bin" -m) >"$log" 2>&1; then
         printf 'BUILD,0,0\n'; return
     fi
+    artifact_dir="$ARTIFACTS/$name/$label"
+    mkdir -p "$artifact_dir"
+    cp "$bin" "$artifact_dir/program.bin"
     bytes="$(wc -c < "$bin" | tr -d ' ')"
     set +e
-    output="$(cd "$work" && "$TICKS" -w 120 -b msx "$bin" 2>&1)"
+    output="$(cd "$work" && "$TICKS" -w "$TICKS_BUDGET" -b msx "$bin" 2>&1)"
     set -e
     printf '%s\n' "$output" > "$run_log"
     cycles="$(sed -n 's/.*Ticks: \([0-9][0-9]*\).*/\1/p' <<< "$output" | tail -1)"

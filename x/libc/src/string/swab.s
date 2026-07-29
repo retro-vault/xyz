@@ -12,7 +12,6 @@
 
 
         .globl  _swab
-        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -46,4 +45,4 @@ swab_loop:
         jr      swab_loop
 swab_done:
         pop     ix
-        jp      __string_ret_clean2
+        ret

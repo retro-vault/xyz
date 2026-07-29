@@ -1,12 +1,12 @@
 #include "xcc_exec_test.h"
 
-extern unsigned int __div16(unsigned int a, unsigned int b);
-extern unsigned int __mod16(unsigned int a, unsigned int b);
+extern unsigned int _div16(unsigned int a, unsigned int b);
+extern unsigned int _mod16(unsigned int a, unsigned int b);
 extern unsigned long __fsadd(unsigned long a, unsigned long b);
 
 int main(void) {
-    unsigned int q = __div16(3210u, 7u);
-    unsigned int r = __mod16(60000u, 7u);
+    unsigned int q = _div16(3210u, 7u);
+    unsigned int r = _mod16(60000u, 7u);
     unsigned long f = __fsadd(0x3f800000ul, 0x40800000ul);
 
     XCC_CHECK_EQ_UINT_ID(1, q, 458u);

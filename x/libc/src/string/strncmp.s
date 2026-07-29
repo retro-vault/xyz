@@ -13,7 +13,6 @@
 
         .globl  _strncmp
         .globl  __string_compare_result
-        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -41,7 +40,7 @@ strncmp_loop:
         jr      z,strncmp_same
         call    __string_compare_result
         pop     ix
-        jp      __string_ret_clean2
+        ret
 strncmp_same:
         or      a
         jr      z,strncmp_equal
@@ -52,4 +51,4 @@ strncmp_same:
 strncmp_equal:
         ld      de,#0x0000
         pop     ix
-        jp      __string_ret_clean2
+        ret

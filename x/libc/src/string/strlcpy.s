@@ -12,7 +12,6 @@
 
 
         .globl  _strlcpy
-        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -63,4 +62,4 @@ strlcpy_measure:
         ld      d,a
         dec     de                      ; exclude the NUL
         pop     ix
-        jp      __string_ret_clean2
+        ret

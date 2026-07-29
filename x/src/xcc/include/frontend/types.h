@@ -147,6 +147,7 @@ struct type {
     bool                  variadic     = false;
     bool                  is_prototyped = false; // true for f(void)/f(T)/f() in C23
     call_abi              func_abi      = call_abi::DEFAULT;
+    bool                  func_abi_explicit = false;
 
     // STRUCT / UNION: tag name, field list, and completeness flag
     std::string                tag;
@@ -274,6 +275,7 @@ struct type {
         t->params    = std::move(params);
         t->variadic  = variadic;
         t->func_abi  = abi;
+        t->func_abi_explicit = abi != call_abi::DEFAULT;
         return t;
     }
 

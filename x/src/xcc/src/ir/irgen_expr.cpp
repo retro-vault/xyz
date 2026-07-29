@@ -626,6 +626,33 @@ void ir_gen::visit(cast_expr &e) {
     expr_result_ = emit_unop(icode_op::CAST, gen_expr(*e.operand), e.target_type);
 }
 
+static bool uses_small_printf_format(const call_expr &e) {
+    if (e.args.empty())
+        return false;
+
+    const auto *format = dynamic_cast<const string_literal_expr*>(e.args[0].get());
+    if (!format || format->char_width != 1)
+        return false;
+
+    for (size_t i = 0; i < format->value.size(); ++i) {
+        const unsigned char ch =
+            static_cast<unsigned char>(format->value[i]);
+        if (ch == '\0')
+            break;
+        if (ch != '%')
+            continue;
+        if (++i == format->value.size())
+            return false;
+
+        const char conversion = format->value[i];
+        if (conversion != '%' && conversion != 'd' &&
+            conversion != 'i' && conversion != 's') {
+            return false;
+        }
+    }
+    return true;
+}
+
 void ir_gen::visit(call_expr &e) {
     std::string direct_func_name;
     bool direct_callee_noreturn = false;
@@ -633,6 +660,12 @@ void ir_gen::visit(call_expr &e) {
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
         if (id->sym && id->sym->kind == sym_kind::FUNC) {
             direct_func_name = alternate_float_call_name(id->name);
+            if (direct_func_name == "printf" &&
+                id->sym->type && id->sym->type->is_func() &&
+                id->sym->type->variadic &&
+                uses_small_printf_format(e)) {
+                direct_func_name = "__printf_sd";
+            }
             direct_callee_noreturn = id->sym->attr_noreturn;
         }
     }
@@ -710,23 +743,29 @@ void ir_gen::visit(call_expr &e) {
     int total_arg_bytes = 0;
     if (conv.caller_sends_right_to_left()) {
         for (int i = static_cast<int>(arg_ops.size()) - 1; i >= 0; --i) {
-            total_arg_bytes += conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
+            const int stack_bytes =
+                conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
+            total_arg_bytes += stack_bytes;
             icode ic;
             ic.op         = icode_op::SEND;
             ic.left       = arg_ops[i];
             ic.argreg     = i;
             ic.arg_loc    = arg_locs[i];
+            ic.send_bytes = stack_bytes;
             ic.callee_abi = c_abi;
             emit(ic);
         }
     } else {
         for (int i = 0; i < static_cast<int>(arg_ops.size()); ++i) {
-            total_arg_bytes += conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
+            const int stack_bytes =
+                conv.stack_arg_bytes(arg_types[i], arg_locs[i]);
+            total_arg_bytes += stack_bytes;
             icode ic;
             ic.op         = icode_op::SEND;
             ic.left       = arg_ops[i];
             ic.argreg     = i;
             ic.arg_loc    = arg_locs[i];
+            ic.send_bytes = stack_bytes;
             ic.callee_abi = c_abi;
             emit(ic);
         }

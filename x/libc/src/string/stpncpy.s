@@ -13,7 +13,7 @@
 
 
         .globl  _stpncpy
-        .globl  __string_return_hl_clean2
+        .globl  __string_return_hl
 
         .area   _CODE
 
@@ -55,4 +55,4 @@ stpncpy_pad_done:
         pop     hl                      ; restore return pointer (first NUL)
 stpncpy_end:
         pop     ix
-        jp      __string_return_hl_clean2
+        jp      __string_return_hl

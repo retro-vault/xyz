@@ -345,11 +345,13 @@ void ir_gen::visit(var_decl &vd) {
                 sz_ic.op         = icode_op::SEND;
                 sz_ic.left       = bytes;
                 sz_ic.argreg     = 1; // second arg (byte count)
+                sz_ic.send_bytes = 2;
                 emit(sz_ic);
                 icode ptr_ic;
                 ptr_ic.op        = icode_op::SEND;
                 ptr_ic.left      = ptr_res;
                 ptr_ic.argreg    = 0; // first arg (pointer)
+                ptr_ic.send_bytes = 2;
                 emit(ptr_ic);
                 icode call_ic;
                 call_ic.op        = icode_op::CALL;
@@ -461,6 +463,9 @@ void ir_gen::gen_func(func_decl &fd) {
     fn.abi              = fd.sym ? fd.sym->abi : call_abi::DEFAULT;
     fn.is_variadic      = fd.type ? fd.type->variadic : false;
     fn.is_noreturn      = fd.sym ? fd.sym->attr_noreturn : false;
+    fn.can_internalize_abi =
+        fd.storage == storage_class::STATIC && fd.sym &&
+        !fd.sym->abi_explicit;
 
     std::vector<type_ptr> param_types;
     param_types.reserve(fd.params.size());

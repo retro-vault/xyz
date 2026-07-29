@@ -12,8 +12,7 @@
 
 
         .globl  _memccpy
-        .globl  __string_ret_clean4
-        .globl  __string_return_zero_clean4
+        .globl  __string_return_zero
 
         .area   _CODE
 
@@ -54,7 +53,7 @@ memccpy_loop:
         jr      memccpy_loop
 memccpy_found:
         pop     ix
-        jp      __string_ret_clean4
+        ret
 memccpy_not_found:
         pop     ix
-        jp      __string_return_zero_clean4
+        jp      __string_return_zero

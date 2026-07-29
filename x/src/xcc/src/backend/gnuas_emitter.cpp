@@ -45,6 +45,10 @@ void gnuas_emitter::section_data_named(const std::string &name) {
     out_ << "\t.section\t" << name << ",\"aw\"\n";
 }
 
+void gnuas_emitter::section_bss() {
+    out_ << "\t.bss\n";
+}
+
 void gnuas_emitter::section_rodata() {
     out_ << "\t.section\t.rodata\n";
 }

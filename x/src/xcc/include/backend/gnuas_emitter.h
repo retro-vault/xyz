@@ -35,6 +35,7 @@ public:
     void section_code_named(const std::string &name) override;
     void section_data() override;
     void section_data_named(const std::string &name) override;
+    void section_bss() override;
     void section_rodata() override;
     void section_tls() override;
 

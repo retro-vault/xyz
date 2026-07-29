@@ -301,31 +301,14 @@ static optimization_settings abi0_optimized_settings(
         return s;
     }
 
-    // Keep ABI 0 on the broad-tested optimizer, but trim the late families
-    // that still have stack-ABI-specific regressions. ABI 1 remains unchanged.
-    s.peephole = false;
-    s.regalloc = false;
-
     switch (requested.level) {
     case opt_level::O2:
         return s;
 
     case opt_level::Os:
-        s.inline_static_functions = false;
-        s.scalar_local_promotion = false;
         return s;
 
     case opt_level::Of:
-        // The Of backend/profile hooks are still ABI 0-sensitive. Retain the
-        // safe extra IR wins while routing codegen, tuned backend paths, and
-        // xopt through the proven O2 pipeline.
-        s.level = opt_level::O2;
-        s.inline_static_functions = false;
-        s.scalar_local_promotion = false;
-        s.branch_bool_arithmetic = true;
-        s.countdown_dead_loops = true;
-        s.block_fill_loops = true;
-        s.promoted_byte_ops = true;
         return s;
 
     case opt_level::O3:
@@ -474,15 +457,16 @@ static int compile_source_to_text(const std::string &input_path,
     asm_text = asm_buf.str();
 
     // ----- 5. Peephole optimization ----------------------------------
-    // Skip the assembly peephole optimizer for pathologically large output:
-    // some layout-dependent rules (e.g. jp->jr) recompute the whole code
-    // layout per application, which is O(n^2) and dominates compile time on
-    // machine-generated stress inputs (e.g. the C23 translation-limit tests).
-    // Generated code is slightly larger but correct.
+    // Iterative peephole rules remain capped for pathologically large output.
+    // Large -Os units still enter xopt's scalable frame/tail/outlining path.
     const size_t asm_line_count =
         static_cast<size_t>(std::count(asm_text.begin(), asm_text.end(), '\n'));
     constexpr size_t kMaxPeepholeLines = 8000;
-    if (effective_opt_settings.peephole && asm_line_count <= kMaxPeepholeLines) {
+    const bool scalable_large_size_pass =
+        effective_opt_settings.level == opt_level::Os &&
+        asm_line_count > kMaxPeepholeLines;
+    if (effective_opt_settings.peephole &&
+        (asm_line_count <= kMaxPeepholeLines || scalable_large_size_pass)) {
         xopt::optimizer_options xopt_opts;
         switch (effective_opt_settings.level) {
         case opt_level::O0:

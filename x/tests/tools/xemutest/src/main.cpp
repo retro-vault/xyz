@@ -35,19 +35,21 @@ constexpr uint16_t k_emu_result_addr = 0xff00;
 constexpr uint16_t k_emu_done_addr = 0xff02;
 constexpr uint8_t k_emu_done_magic = 0xa5;
 
+enum class test_kind {
+    compile,
+    run
+};
+
 struct cli_options {
     fs::path xcc;
     std::string gcc = "gcc";
     fs::path suite_root;
     fs::path work_root;
     std::optional<std::string> filter;
+    std::optional<test_kind> kind;
+    std::optional<int> abi;
     bool list_only = false;
     bool verbose = false;
-};
-
-enum class test_kind {
-    compile,
-    run
 };
 
 enum class runner_kind {
@@ -114,6 +116,7 @@ struct test_case {
     std::vector<std::string> asm_not_contains;
     std::vector<std::string> matrix_opts;
     std::vector<std::string> matrix_floats;
+    std::optional<int> required_abi;
     std::optional<fs::path> stdin_path;
     std::optional<fs::path> stdout_path;
     std::optional<int> expect_exit;
@@ -767,6 +770,12 @@ test_case load_test_case(const fs::path& manifest_path) {
             test.matrix_opts.push_back(value);
         } else if (key == "matrixfloat") {
             test.matrix_floats.push_back(normalize_float_format(value));
+        } else if (key == "abi") {
+            const int abi = parse_int(value);
+            if (abi != 0 && abi != 1) {
+                fail("abi must be 0 or 1 in " + manifest_path.string());
+            }
+            test.required_abi = abi;
         } else if (key == "stdinstatusport") {
             if (normalize_key(value) == "none") {
                 test.stdin_status_port.reset();
@@ -1024,6 +1033,10 @@ std::vector<std::string> build_compiler_args(
 {
     std::vector<std::string> args;
     bool saw_opt = false;
+    if (cli.abi.has_value()) {
+        args.push_back("--sdcccall");
+        args.push_back(std::to_string(*cli.abi));
+    }
     for (const auto& arg : test.base.compiler_args) {
         const auto expanded = expand_placeholders(arg, cli, test);
         if (expanded.rfind("-O", 0) == 0) {
@@ -1039,6 +1052,10 @@ std::vector<std::string> build_compiler_args(
     if (test.float_format.has_value()) {
         args.push_back("--float-format="
             + compiler_float_format(test.float_format.value()));
+    }
+    if (test.base.required_abi.has_value()) {
+        args.push_back("--sdcccall");
+        args.push_back(std::to_string(*test.base.required_abi));
     }
     return args;
 }
@@ -1690,6 +1707,8 @@ void print_help() {
         << "  --suite DIR       root directory containing test.cfg manifests\n"
         << "  --work DIR        work/output directory (default build/tests/tools/xemutest/work)\n"
         << "  --filter TEXT     only run tests whose id, alias, tag, path, or component contains TEXT\n"
+        << "  --kind KIND       only run compile or run tests\n"
+        << "  --abi MODE        select ABI 0 or 1 and skip incompatible tests\n"
         << "  --list            list discovered tests and exit\n"
         << "  --verbose         print compile/link commands\n"
         << "  -h, --help        show this help\n";
@@ -1719,6 +1738,23 @@ cli_options parse_cli(int argc, char* argv[]) {
         } else if (arg == "--filter") {
             if (++i >= argc) fail("--filter requires text");
             options.filter = argv[i];
+        } else if (arg == "--kind") {
+            if (++i >= argc) fail("--kind requires compile or run");
+            const std::string kind = normalize_key(argv[i]);
+            if (kind == "compile") {
+                options.kind = test_kind::compile;
+            } else if (kind == "run") {
+                options.kind = test_kind::run;
+            } else {
+                fail("--kind requires compile or run");
+            }
+        } else if (arg == "--abi") {
+            if (++i >= argc) fail("--abi requires 0 or 1");
+            const int abi = parse_int(argv[i]);
+            if (abi != 0 && abi != 1) {
+                fail("--abi requires 0 or 1");
+            }
+            options.abi = abi;
         } else if (arg == "--list") {
             options.list_only = true;
         } else if (arg == "--verbose") {
@@ -1739,6 +1775,7 @@ int main(int argc, char* argv[]) {
     try {
         const auto cli = parse_cli(argc, argv);
         auto tests = expand_test_cases(discover_tests(cli.suite_root));
+        std::size_t abi_skipped = 0;
         if (cli.filter.has_value()) {
             tests.erase(
                 std::remove_if(
@@ -1749,8 +1786,38 @@ int main(int argc, char* argv[]) {
                     }),
                 tests.end());
         }
+        if (cli.kind.has_value()) {
+            tests.erase(
+                std::remove_if(
+                    tests.begin(),
+                    tests.end(),
+                    [&](const expanded_test_case& test) {
+                        return test.base.kind != *cli.kind;
+                    }),
+                tests.end());
+        }
+        if (cli.abi.has_value()) {
+            const auto before = tests.size();
+            tests.erase(
+                std::remove_if(
+                    tests.begin(),
+                    tests.end(),
+                    [&](const expanded_test_case& test) {
+                        return test.base.required_abi.has_value()
+                            && *test.base.required_abi != *cli.abi;
+                    }),
+                tests.end());
+            abi_skipped = before - tests.size();
+        }
 
         if (tests.empty()) {
+            if (abi_skipped != 0) {
+                if (!cli.list_only) {
+                    std::cout << "0 passed, 0 failed, "
+                              << abi_skipped << " skipped\n";
+                }
+                return 0;
+            }
             std::cerr << "xemutest: no tests discovered\n";
             return 1;
         }
@@ -1765,6 +1832,9 @@ int main(int argc, char* argv[]) {
                     std::cout << " - " << test.base.summary;
                 }
                 if (cli.verbose) {
+                    if (test.base.required_abi.has_value()) {
+                        std::cout << " abi=" << *test.base.required_abi;
+                    }
                     for (const auto& alias : test.base.aliases) {
                         std::cout << " alias=" << alias;
                     }
@@ -1805,7 +1875,11 @@ int main(int argc, char* argv[]) {
 
         std::cout << '\n'
                   << passed << " passed, "
-                  << failed << " failed\n";
+                  << failed << " failed";
+        if (abi_skipped != 0) {
+            std::cout << ", " << abi_skipped << " skipped";
+        }
+        std::cout << '\n';
         return failed == 0 ? 0 : 1;
     } catch (const std::exception& e) {
         std::cerr << "xemutest: " << e.what() << '\n';

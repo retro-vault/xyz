@@ -859,7 +859,10 @@ static bool path_overwrites_pair_before_read(
     if (start >= lines.size() || budget == 0)
         return false;
     if (!active.insert(start).second)
-        return pair == "bc";
+        // A back-edge can re-enter a block whose pair value is live on the
+        // next iteration.  Treat cycles conservatively: revisiting a state is
+        // not proof that every path overwrites the pair before reading it.
+        return false;
 
     auto finish = [&](bool result) {
         active.erase(start);
@@ -1122,6 +1125,28 @@ static bool bc_dead_before_read_or_ret(
         size_t start) {
     std::unordered_set<size_t> active;
     return bc_dead_before_read_or_ret(lines, start, 64, active);
+}
+
+static bool bc_dead_before_read_or_direct_c_call(
+        const std::vector<asm_line> &lines,
+        size_t start,
+        size_t budget = 24) {
+    const size_t end = std::min(lines.size(), start + budget);
+    for (size_t k = start; k < end; ++k) {
+        const asm_line &line = lines[k];
+        if (line.mnemonic.empty())
+            continue;
+        if (overwrites_pair_without_reading_it(lines, k, "bc", 'c', 'b'))
+            return true;
+        if (line.mnemonic == "call") {
+            const std::string target = trim(line.operands);
+            return target.size() > 1 && target[0] == '_' &&
+                   target[1] != '_' && target.find(',') == std::string::npos;
+        }
+        if (!line_preserves_pair_value(line, "bc", 'c', 'b'))
+            return false;
+    }
+    return false;
 }
 
 static bool bc_overwritten_or_call_before_read_allowing_unrelated(
@@ -1409,7 +1434,7 @@ static bool is_inside_sdcccall1_function(const std::vector<asm_line> &lines,
             return true;
         if (line.comment.find(" prologue:") != std::string::npos ||
             is_section_directive(line) ||
-            line.label.rfind("__xopt_", 0) == 0) {
+            line.label.rfind("__xopt_outline_", 0) == 0) {
             return false;
         }
     }
@@ -1426,7 +1451,7 @@ static bool is_inside_legacy_hl_return_function(
         }
         if (line.comment.find(" prologue:") != std::string::npos ||
             is_section_directive(line) ||
-            line.label.rfind("__xopt_", 0) == 0) {
+            line.label.rfind("__xopt_outline_", 0) == 0) {
             return false;
         }
     }
@@ -4974,6 +4999,118 @@ bool z80_peep::rule_bit7_shift_xor_diamond(size_t i) {
         }
     }
 
+    // A preceding folded recurrence may leave its result in both A and a
+    // byte slot before the next source-level bit test:
+    //
+    //   ld slot,a; bit 7,slot; jr z,else
+    //   [ld a,slot]; add a,a; xor #K; ld slot,a; jr join
+    // else: [ld a,slot]; add a,a; ld slot,a
+    // join:
+    //
+    // BIT does not change A, so ADD can consume the carried value directly
+    // and expose the tested top bit in carry. This also lets consecutive
+    // recurrences defer the slot write until the last update.
+    if (i + 8 < lines_.size()) {
+        std::string dst;
+        std::string src;
+        if (lines_[i].mnemonic == "ld" &&
+            split_ld(lines_[i].operands, dst, src) &&
+            trim(src) == "a") {
+            const std::string slot = lower_copy(trim(dst));
+            int ignored_slot = 0;
+            int bit = -1;
+            std::string bit_operand;
+            std::string cc;
+            std::string else_label;
+
+            const bool slot_supported =
+                parse_ixiy_ref(slot, ignored_slot) ||
+                (is_plain_8bit_reg(slot) && slot != "a");
+            if (slot_supported &&
+                lines_[i + 1].mnemonic == "bit" &&
+                parse_bit_reg_operands(lines_[i + 1].operands,
+                                       bit, bit_operand) &&
+                bit == 7 && lower_copy(trim(bit_operand)) == slot &&
+                split_conditional_branch_target(lines_[i + 2], cc,
+                                                else_label) &&
+                cc == "z" &&
+                !lines_[i + 3].label.empty() &&
+                lines_[i + 3].mnemonic.empty() &&
+                lines_[i + 3].label != else_label &&
+                !label_has_other_control_references(
+                    lines_, lines_[i + 3].label, lines_.size())) {
+                auto is_slot_reload = [&](size_t index) {
+                    return index < lines_.size() &&
+                           lines_[index].mnemonic == "ld" &&
+                           split_ld(lines_[index].operands, dst, src) &&
+                           trim(dst) == "a" &&
+                           lower_copy(trim(src)) == slot;
+                };
+                auto is_slot_store = [&](size_t index) {
+                    return index < lines_.size() &&
+                           lines_[index].mnemonic == "ld" &&
+                           split_ld(lines_[index].operands, dst, src) &&
+                           lower_copy(trim(dst)) == slot &&
+                           trim(src) == "a";
+                };
+
+                size_t true_pos = i + 4;
+                if (is_slot_reload(true_pos))
+                    ++true_pos;
+
+                int xor_value = 0;
+                std::string join_label;
+                if (true_pos + 4 < lines_.size() &&
+                    is_add_a_a(lines_[true_pos]) &&
+                    lines_[true_pos + 1].mnemonic == "xor" &&
+                    parse_immediate_value(lines_[true_pos + 1].operands,
+                                          xor_value) &&
+                    is_slot_store(true_pos + 2) &&
+                    parse_unconditional_jump(lines_[true_pos + 3],
+                                             join_label) &&
+                    lines_[true_pos + 4].label == else_label &&
+                    lines_[true_pos + 4].mnemonic.empty() &&
+                    !label_has_other_control_references(
+                        lines_, else_label, i + 2)) {
+                    size_t else_pos = true_pos + 5;
+                    if (is_slot_reload(else_pos))
+                        ++else_pos;
+
+                    if (else_pos + 2 < lines_.size() &&
+                        is_add_a_a(lines_[else_pos]) &&
+                        is_slot_store(else_pos + 1) &&
+                        lines_[else_pos + 2].label == join_label &&
+                        lines_[else_pos + 2].mnemonic.empty() &&
+                        !label_has_other_control_references(
+                            lines_, join_label, true_pos + 3)) {
+                        const std::string xor_operand =
+                            trim(lines_[true_pos + 1].operands);
+                        const std::string final_comment =
+                            !lines_[else_pos + 1].comment.empty()
+                                ? lines_[else_pos + 1].comment
+                                : lines_[true_pos + 2].comment;
+                        const asm_line join_line = lines_[else_pos + 2];
+                        lines_[i] = asm_line::parse("\tadd\ta, a");
+                        lines_[i + 1] =
+                            asm_line::parse("\tjr\tnc, " + join_label);
+                        lines_[i + 2] =
+                            asm_line::parse("\txor\t" + xor_operand);
+                        lines_[i + 3] = join_line;
+                        lines_[i + 4] =
+                            asm_line::parse("\tld\t" + slot + ", a");
+                        lines_[i + 4].comment = final_comment;
+                        lines_.erase(
+                            lines_.begin() +
+                                static_cast<std::ptrdiff_t>(i + 5),
+                            lines_.begin() +
+                                static_cast<std::ptrdiff_t>(else_pos + 3));
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
     // Coalescing can write both arms directly back to the same byte slot:
     //
     //   ld slot,a; bit 7,a; jr z,else
@@ -7566,11 +7703,14 @@ bool z80_peep::rule_a_temp_reload_after_preserving_branch(size_t i) {
     auto erase_reload_and_maybe_store = [&](size_t reload_idx) {
         const bool temp_frame_store =
             have_frame && ix_offset_in_temp_frame(temp_off, locals, temp_frame);
+        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(reload_idx));
+        const size_t updated_function_end =
+            reload_idx < function_end ? function_end - 1 : function_end;
         const bool store_is_dead =
             temp_frame_store &&
-            ix_slot_not_read_before_rewrite(lines_, reload_idx + 1,
-                                            function_end, temp_off);
-        lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(reload_idx));
+            !ix_value_may_be_read_before_rewrite(
+                lines_, prologue_index, updated_function_end,
+                i + 1, temp_off);
         if (store_is_dead) {
             lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i));
         }
@@ -12870,8 +13010,10 @@ bool z80_peep::rule_dead_bc_copy_from_hl(size_t i) {
         trim(dst) != "c" || trim(src) != "l") {
         return false;
     }
-    if (!path_overwrites_pair_before_read(lines_, i + 2, "bc", 'c', 'b'))
+    if (!path_overwrites_pair_before_read(lines_, i + 2, "bc", 'c', 'b') &&
+        !bc_dead_before_read_or_direct_c_call(lines_, i + 2)) {
         return false;
+    }
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));

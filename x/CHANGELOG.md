@@ -6,6 +6,31 @@ Release status:
 
 ## Unreleased
 
+- Optimized both `sdcccall(1)` and `sdcccall(0)` on the canonical 23-program
+  z88dk full-image corpus without benchmark recognition.  Immutable compare
+  operands and conditional byte addresses can remain in IY, while nonzero and
+  coupled loop values can remain in BC; `sieve` is now the fastest measured
+  lane at 5.08M cycles.  ABI0 additionally promotes only private, direct,
+  default-ABI helpers to the register ABI inside a translation unit; public,
+  indirect, variadic, inline-assembly, and explicitly attributed boundaries
+  retain their declared ABI.  Recursive calls are recollected after parameter
+  remapping, and BC cursor reservations now cover their complete live ranges.
+  Dead address producers are no longer regenerated inside fused 32-bit
+  expressions, and large `-Os` modules retain scalable tail merging and
+  repeated-sequence outlining beyond the full peephole optimizer's line
+  budget.  Unbanked all-zero globals now occupy startup-cleared `_BSS` rather
+  than physical image bytes.  Constant `printf` formats limited to `%s`,
+  `%d`, `%i`, and `%%` select a compact general formatter; dynamic or richer
+  formats retain the complete implementation.  All four XCC lanes pass 23/23
+  programs.  Both `-Os` ABIs are strictly smaller than every competitor on
+  23/23 rows, while both `-Of` ABIs are strictly fastest on 23/23.  Capped
+  byte scans now keep independent byte values in D/E across wide BC bounds
+  and preserve them only around indexed global-array address formation; this
+  reduces RLE from 11.64M to 9.26M cycles.  Inlining and frame-pointer
+  omission remain enabled.  The old reduced z88dk suite was removed in favor
+  of this corpus, whose reports retain all 184 emulator images and derive each
+  byte count directly from that binary.  The canonical Model-M suite passes
+  3696/3696 under ABI1 and 3686/3686 under ABI0.
 - Added pinned, executable upstream z88dk torture coverage for the micro-Max
   chess engine and Henry Spencer regexp implementation.  Deterministic
   harnesses exercise the complete recursive chess search and varied regexp

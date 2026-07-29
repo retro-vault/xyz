@@ -19,9 +19,9 @@
 #define EILSEQ 84
 
 /* Backing storage for the errno macro. */
-extern int __errno_value;
+extern int _errno_value;
 
 /* Modifiable lvalue designating the current error number. */
-#define errno (__errno_value)
+#define errno (_errno_value)
 
 #endif /* _ERRNO_H */

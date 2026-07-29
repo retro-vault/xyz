@@ -1131,8 +1131,8 @@ static bool evaluate_const_binary(const icode &ic, int64_t lhs, int64_t rhs,
 }
 
 static bool is_supported_const_runtime_helper(const std::string &name) {
-    return name == "__mul16" || name == "__div16" || name == "__mod16" ||
-           name == "__mul32" || name == "__div32" || name == "__mod32" ||
+    return name == "_mul16" || name == "_div16" || name == "_mod16" ||
+           name == "_mul32" || name == "_div32" || name == "_mod32" ||
            name.rfind("fixed8_8_", 0) == 0 ||
            name.rfind("fixed16_16_", 0) == 0 ||
            name.rfind("fixed24_8_", 0) == 0 ||
@@ -1518,6 +1518,7 @@ static bool rewrite_fixed_unary_specialized_call(ir_function &caller,
     send.left = arg;
     send.argreg = 0;
     send.arg_loc = arg_locs[0];
+    send.send_bytes = total_arg_bytes;
     send.callee_abi = call_ic.callee_abi;
     send.line = call_ic.line;
     replacement.push_back(std::move(send));
@@ -1615,9 +1616,9 @@ static bool evaluate_const_runtime_helper_call(const icode &call_ic,
     const uint64_t ul = unsigned_value_for_type(lhs, value_type);
     const uint64_t ur = unsigned_value_for_type(rhs, value_type);
 
-    if (call_ic.func_name == "__mul16" || call_ic.func_name == "__mul32") {
+    if (call_ic.func_name == "_mul16" || call_ic.func_name == "_mul32") {
         ret_value = normalize_integer_value(static_cast<int64_t>(ul * ur), value_type);
-    } else if (call_ic.func_name == "__div16" || call_ic.func_name == "__div32") {
+    } else if (call_ic.func_name == "_div16" || call_ic.func_name == "_div32") {
         if (rhs == 0) {
             ret_value = 0;
         } else if (use_unsigned) {
@@ -1627,7 +1628,7 @@ static bool evaluate_const_runtime_helper_call(const icode &call_ic,
         } else {
             ret_value = normalize_integer_value(lhs / rhs, value_type);
         }
-    } else if (call_ic.func_name == "__mod16" || call_ic.func_name == "__mod32") {
+    } else if (call_ic.func_name == "_mod16" || call_ic.func_name == "_mod32") {
         if (rhs == 0) {
             ret_value = 0;
         } else if (use_unsigned) {
@@ -2090,14 +2091,16 @@ static bool rewrite_dead_params_in_calls(
             replacement.reserve(kept_args.size() + 1);
 
             for (int arg_i = static_cast<int>(kept_args.size()) - 1; arg_i >= 0; --arg_i) {
-                total_arg_bytes += conv.stack_arg_bytes(
+                const int stack_bytes = conv.stack_arg_bytes(
                     kept_types[static_cast<size_t>(arg_i)],
                     kept_locs[static_cast<size_t>(arg_i)]);
+                total_arg_bytes += stack_bytes;
                 icode send;
                 send.op = icode_op::SEND;
                 send.left = kept_args[static_cast<size_t>(arg_i)];
                 send.argreg = arg_i;
                 send.arg_loc = kept_locs[static_cast<size_t>(arg_i)];
+                send.send_bytes = stack_bytes;
                 send.callee_abi = callee.abi;
                 send.line = ic.line;
                 replacement.push_back(std::move(send));
@@ -2123,6 +2126,191 @@ static bool rewrite_dead_params_in_calls(
         }
     }
 
+    return true;
+}
+
+struct internal_abi_call_site {
+    size_t caller_idx = 0;
+    size_t call_idx = 0;
+    size_t send_begin = 0;
+    std::vector<operand> args;
+};
+
+static bool collect_internal_abi_call_sites(
+    const ir_module &mod, const ir_function &callee,
+    std::vector<internal_abi_call_site> &sites)
+{
+    for (size_t caller_idx = 0; caller_idx < mod.functions.size();
+         ++caller_idx) {
+        const auto &caller = mod.functions[caller_idx];
+        for (size_t call_idx = 0; call_idx < caller.icodes.size();
+             ++call_idx) {
+            const auto &call = caller.icodes[call_idx];
+            if (call.op != icode_op::CALL ||
+                call.func_name != callee.name) {
+                continue;
+            }
+            if (effective_call_abi(call.callee_abi) !=
+                call_abi::SDCCCALL0) {
+                return false;
+            }
+
+            internal_abi_call_site site;
+            site.caller_idx = caller_idx;
+            site.call_idx = call_idx;
+            if (!collect_call_args(caller.icodes, call_idx, call,
+                                   site.send_begin, site.args) ||
+                static_cast<int>(site.args.size()) != callee.num_params) {
+                return false;
+            }
+            sites.push_back(std::move(site));
+        }
+    }
+    return !sites.empty();
+}
+
+static std::vector<int> abi_send_order(const abi_convention &conv,
+                                       int num_params)
+{
+    std::vector<int> order;
+    order.reserve(static_cast<size_t>(num_params));
+    if (conv.caller_sends_right_to_left()) {
+        for (int i = num_params - 1; i >= 0; --i)
+            order.push_back(i);
+    } else {
+        for (int i = 0; i < num_params; ++i)
+            order.push_back(i);
+    }
+    return order;
+}
+
+static bool promote_internal_calls_to_sdcccall1(
+    ir_module &mod, const ir_function &callee,
+    const std::vector<type_ptr> &param_types,
+    const std::vector<abi_arg_loc> &param_locs,
+    std::vector<internal_abi_call_site> sites)
+{
+    auto &conv = get_abi_convention(call_abi::SDCCCALL1);
+    const auto order = abi_send_order(conv, callee.num_params);
+
+    std::sort(sites.begin(), sites.end(),
+              [](const internal_abi_call_site &lhs,
+                 const internal_abi_call_site &rhs) {
+                  if (lhs.caller_idx != rhs.caller_idx)
+                      return lhs.caller_idx > rhs.caller_idx;
+                  return lhs.call_idx > rhs.call_idx;
+              });
+
+    for (const auto &site : sites) {
+        auto &caller = mod.functions[site.caller_idx];
+        const icode old_call = caller.icodes[site.call_idx];
+        std::vector<icode> replacement;
+        replacement.reserve(site.args.size() + 1);
+        int total_arg_bytes = 0;
+
+        for (int arg_i : order) {
+            const int stack_bytes = conv.stack_arg_bytes(
+                param_types[static_cast<size_t>(arg_i)],
+                param_locs[static_cast<size_t>(arg_i)]);
+            total_arg_bytes += stack_bytes;
+
+            icode send;
+            send.op = icode_op::SEND;
+            send.left = site.args[static_cast<size_t>(arg_i)];
+            send.argreg = arg_i;
+            send.arg_loc = param_locs[static_cast<size_t>(arg_i)];
+            send.send_bytes = stack_bytes;
+            send.callee_abi = call_abi::SDCCCALL1;
+            send.line = old_call.line;
+            replacement.push_back(std::move(send));
+        }
+
+        icode new_call = old_call;
+        new_call.arg_bytes = total_arg_bytes;
+        new_call.callee_abi = call_abi::SDCCCALL1;
+        new_call.callee_cleans_stack =
+            abi_callee_cleans_stack(call_abi::SDCCCALL1, callee.ret_type,
+                                    param_types, false);
+        replacement.push_back(std::move(new_call));
+
+        auto erase_begin =
+            caller.icodes.begin() +
+            static_cast<std::ptrdiff_t>(site.send_begin);
+        auto erase_end =
+            caller.icodes.begin() +
+            static_cast<std::ptrdiff_t>(site.call_idx + 1);
+        caller.icodes.erase(erase_begin, erase_end);
+        caller.icodes.insert(
+            caller.icodes.begin() +
+                static_cast<std::ptrdiff_t>(site.send_begin),
+            replacement.begin(), replacement.end());
+    }
+    return true;
+}
+
+static bool promote_internal_function_to_sdcccall1(
+    ir_function &fn, const std::vector<operand> &old_params,
+    const std::vector<type_ptr> &param_types,
+    const std::vector<abi_arg_loc> &param_locs)
+{
+    auto &conv = get_abi_convention(call_abi::SDCCCALL1);
+    std::vector<operand> new_params = old_params;
+    int spill_bytes = 0;
+    int stack_bytes = 0;
+
+    for (size_t i = 0; i < old_params.size(); ++i) {
+        if (!old_params[i].is_symbol())
+            return false;
+        if (param_locs[i] == abi_arg_loc::STACK)
+            continue;
+
+        spill_bytes += conv.spill_bytes(param_types[i], param_locs[i]);
+        new_params[i].stack_offset =
+            -(fn.orig_local_bytes + spill_bytes);
+        new_params[i].is_param = false;
+    }
+
+    const auto send_order = abi_send_order(conv, fn.num_params);
+    for (auto it = send_order.rbegin(); it != send_order.rend(); ++it) {
+        const int arg_i = *it;
+        if (param_locs[static_cast<size_t>(arg_i)] !=
+            abi_arg_loc::STACK) {
+            continue;
+        }
+        new_params[static_cast<size_t>(arg_i)].stack_offset = stack_bytes;
+        new_params[static_cast<size_t>(arg_i)].is_param = true;
+        stack_bytes += conv.stack_arg_bytes(
+            param_types[static_cast<size_t>(arg_i)],
+            param_locs[static_cast<size_t>(arg_i)]);
+    }
+
+    std::unordered_map<std::string, operand> param_map;
+    for (size_t i = 0; i < old_params.size(); ++i)
+        param_map.emplace(base_symbol_key(old_params[i]), new_params[i]);
+
+    for (auto &ic : fn.icodes) {
+        if (ic.op == icode_op::FUNCTION) {
+            ic.local_bytes = fn.orig_local_bytes + spill_bytes;
+            continue;
+        }
+        if (ic.op == icode_op::RECEIVE) {
+            if (ic.argreg < 0 || ic.argreg >= fn.num_params)
+                return false;
+            ic.result = new_params[static_cast<size_t>(ic.argreg)];
+            ic.arg_loc = param_locs[static_cast<size_t>(ic.argreg)];
+            continue;
+        }
+        remap_param_symbol(ic.result, param_map);
+        remap_param_symbol(ic.left, param_map);
+        remap_param_symbol(ic.right, param_map);
+    }
+
+    fn.abi = call_abi::SDCCCALL1;
+    fn.local_bytes = fn.orig_local_bytes + spill_bytes;
+    fn.stack_param_bytes = stack_bytes;
+    fn.callee_cleans_stack =
+        abi_callee_cleans_stack(fn.abi, fn.ret_type, param_types, false);
+    fn.can_internalize_abi = false;
     return true;
 }
 
@@ -3527,6 +3715,99 @@ static bool pointer_parameter_is_dereference_only(const ir_function &callee,
     return saw_dereference;
 }
 
+class internal_call_abi_promotion_pass final : public ir_module_pass {
+public:
+    const char *name() const override {
+        return "internal_call_abi_promotion";
+    }
+
+    bool run(ir_module &mod) override {
+        const auto info = build_module_use_info(mod);
+        bool changed = false;
+
+        for (size_t fn_idx = 0; fn_idx < mod.functions.size(); ++fn_idx) {
+            auto &fn = mod.functions[fn_idx];
+            if (fn.is_global || !fn.can_internalize_abi ||
+                fn.is_variadic ||
+                effective_call_abi(fn.abi) != call_abi::SDCCCALL0 ||
+                info.address_taken_funcs.find(fn.name) !=
+                    info.address_taken_funcs.end()) {
+                continue;
+            }
+
+            const bool has_opaque_code =
+                std::any_of(fn.icodes.begin(), fn.icodes.end(),
+                            [](const icode &ic) {
+                                return ic.op == icode_op::INLINE_ASM;
+                            });
+            if (has_opaque_code)
+                continue;
+
+            auto count_it = info.direct_call_counts.find(fn.name);
+            if (count_it == info.direct_call_counts.end() ||
+                count_it->second == 0) {
+                continue;
+            }
+
+            std::vector<operand> params;
+            if (!collect_param_operands(fn, params))
+                continue;
+            bool all_symbol_params = true;
+            std::vector<type_ptr> param_types;
+            param_types.reserve(params.size());
+            for (const auto &param : params) {
+                if (!param.is_symbol()) {
+                    all_symbol_params = false;
+                    break;
+                }
+                param_types.push_back(param.type ? param.type :
+                                                   type::make_int());
+            }
+            if (!all_symbol_params)
+                continue;
+
+            auto &conv = get_abi_convention(call_abi::SDCCCALL1);
+            const auto param_locs = conv.classify_args(param_types);
+            const bool has_register_arg =
+                std::any_of(param_locs.begin(), param_locs.end(),
+                            [](abi_arg_loc loc) {
+                                return loc != abi_arg_loc::STACK;
+                            });
+            const bool has_return_value =
+                fn.ret_type && fn.ret_type->kind != type_kind::VOID;
+            if (!has_register_arg && !has_return_value) {
+                continue;
+            }
+
+            std::vector<internal_abi_call_site> sites;
+            if (!collect_internal_abi_call_sites(mod, fn, sites) ||
+                static_cast<int>(sites.size()) != count_it->second) {
+                continue;
+            }
+
+            if (!promote_internal_function_to_sdcccall1(
+                    fn, params, param_types, param_locs)) {
+                continue;
+            }
+
+            // Function remapping changes parameter operands in recursive
+            // SENDs.  Recollect every call site so a self-call cannot retain
+            // the old ABI0 stack locations captured during validation.
+            sites.clear();
+            if (!collect_internal_abi_call_sites(mod, fn, sites) ||
+                static_cast<int>(sites.size()) != count_it->second) {
+                return changed;
+            }
+            if (!promote_internal_calls_to_sdcccall1(
+                    mod, fn, param_types, param_locs, std::move(sites))) {
+                return changed;
+            }
+            changed = true;
+        }
+        return changed;
+    }
+};
+
 class tail_address_noescape_pass final : public ir_module_pass {
 public:
     const char *name() const override { return "tail_address_noescape"; }
@@ -4039,6 +4320,9 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<function_const_eval_pass>());
     if (settings.dead_params)
         passes.push_back(std::make_unique<dead_param_elimination_pass>());
+    if (settings.internal_call_abi_promotion)
+        passes.push_back(
+            std::make_unique<internal_call_abi_promotion_pass>());
     if (settings.tail_recursion_elim)
         passes.push_back(std::make_unique<tail_address_noescape_pass>());
     if (settings.inline_trivial_internal_functions)

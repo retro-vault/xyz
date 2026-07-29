@@ -98,6 +98,7 @@ struct symbol {
 
     // ----- SDCC vendor attributes (namespace sdcc::) ----------------
     call_abi    abi       = call_abi::DEFAULT;
+    bool        abi_explicit = false;
     int64_t     at_address = -1;  // [[sdcc::at(addr)]] — absolute address (-1 = not set)
     int         sfr_port   = -1;  // [[sdcc::sfr(port)]] — SFR port number (-1 = not set)
     int         bank       = -1;  // [[xcc::bank(N)]] — place symbol into banked code/data section

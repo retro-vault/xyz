@@ -42,6 +42,7 @@ Supported keys:
 - `matrix_opt = Of`
 - `matrix_opt = Os`
 - `matrix_float = ieee32|ieee16|fixed8_8|fixed16_16|fixed24_8`
+- `abi = 0` or `abi = 1` for ABI-specific code-shape tests
 - `host_golden = gcc`
 - `host_arg = -std=c2x`
 - `timeout_seconds = 30`
@@ -94,4 +95,9 @@ make -C x/tests/tools/xemutest test
 
 ```sh
 XCC=bin/x/bin/xcc bash x/tests/run_tests.sh
+XCC=bin/x-m/bin/xcc bash x/tests/run_tests.sh --filter model-m --abi 0
 ```
+
+Use `--kind compile` or `--kind run` to select only compile-time or
+emulator-backed tests. Use `--abi 0` or `--abi 1` to set the compiler's
+default ABI and skip tests constrained to the other ABI.

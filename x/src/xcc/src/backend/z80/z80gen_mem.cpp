@@ -57,6 +57,14 @@ static bool load_byte_preserves_hl(const operand &op,
 }
 
 void z80_gen::gen_assign(const icode &ic) {
+    if (ic.result.is_temp()) {
+        auto home = temp_regs_.find(ic.result.temp_id);
+        if (home != temp_regs_.end() &&
+            home->second == temp_home::remat_hl) {
+            return;
+        }
+    }
+
     int sz = op_size(ic.result);
     if (sz <= 0)
         sz = op_size(ic.left);

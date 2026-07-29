@@ -15,11 +15,11 @@
         .module setjmp
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  __setjmp
+        .globl  ___setjmp
 
         .area   _CODE
 
-        ; __setjmp
+        ; ___setjmp (C identifier __setjmp)
         ; inputs:
         ;   HL = pointer to jmp_buf storage
         ; outputs:
@@ -29,7 +29,7 @@
         ;   The saved stack pointer is the caller-visible SP after RET, not the
         ;   callee entry SP. That lets longjmp recreate the exact post-call
         ;   stack layout before returning to the saved PC.
-__setjmp:
+___setjmp:
         ld      c, l
         ld      b, h                    ; BC = jmp_buf pointer
 

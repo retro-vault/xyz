@@ -58,27 +58,27 @@ typedef uintmax_t      atomic_uintmax_t;
 
 /* Runtime entry points for the currently supported widths. */
 
-extern unsigned char  __atomic_load_1(unsigned char *ptr);
-extern unsigned short __atomic_load_2(unsigned short *ptr);
-extern void __atomic_store_1(unsigned char  *ptr, unsigned char  val);
-extern void __atomic_store_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  __atomic_exchange_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short __atomic_exchange_2(unsigned short *ptr, unsigned short val);
-extern int __atomic_compare_exchange_1(unsigned char  *ptr, unsigned char  expected, unsigned char  desired);
-extern int __atomic_compare_exchange_2(unsigned short *ptr, unsigned short expected, unsigned short desired);
-extern unsigned char  __atomic_fetch_add_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short __atomic_fetch_add_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  __atomic_fetch_sub_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short __atomic_fetch_sub_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  __atomic_fetch_and_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short __atomic_fetch_and_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  __atomic_fetch_or_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short __atomic_fetch_or_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  __atomic_fetch_xor_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short __atomic_fetch_xor_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  __atomic_flag_test_set(unsigned char *flag);
-extern void           __atomic_flag_clear(unsigned char *flag);
-extern void           __atomic_width_not_supported(void);
+extern unsigned char  _atomic_load_1(unsigned char *ptr);
+extern unsigned short _atomic_load_2(unsigned short *ptr);
+extern void _atomic_store_1(unsigned char  *ptr, unsigned char  val);
+extern void _atomic_store_2(unsigned short *ptr, unsigned short val);
+extern unsigned char  _atomic_exchange_1(unsigned char  *ptr, unsigned char  val);
+extern unsigned short _atomic_exchange_2(unsigned short *ptr, unsigned short val);
+extern int _atomic_compare_exchange_1(unsigned char  *ptr, unsigned char  expected, unsigned char  desired);
+extern int _atomic_compare_exchange_2(unsigned short *ptr, unsigned short expected, unsigned short desired);
+extern unsigned char  _atomic_fetch_add_1(unsigned char  *ptr, unsigned char  val);
+extern unsigned short _atomic_fetch_add_2(unsigned short *ptr, unsigned short val);
+extern unsigned char  _atomic_fetch_sub_1(unsigned char  *ptr, unsigned char  val);
+extern unsigned short _atomic_fetch_sub_2(unsigned short *ptr, unsigned short val);
+extern unsigned char  _atomic_fetch_and_1(unsigned char  *ptr, unsigned char  val);
+extern unsigned short _atomic_fetch_and_2(unsigned short *ptr, unsigned short val);
+extern unsigned char  _atomic_fetch_or_1(unsigned char  *ptr, unsigned char  val);
+extern unsigned short _atomic_fetch_or_2(unsigned short *ptr, unsigned short val);
+extern unsigned char  _atomic_fetch_xor_1(unsigned char  *ptr, unsigned char  val);
+extern unsigned short _atomic_fetch_xor_2(unsigned short *ptr, unsigned short val);
+extern unsigned char  _atomic_flag_test_set(unsigned char *flag);
+extern void           _atomic_flag_clear(unsigned char *flag);
+extern void           _atomic_width_not_supported(void);
 
 /* Initialization helpers. */
 #define ATOMIC_VAR_INIT(val)    (val)
@@ -86,45 +86,45 @@ extern void           __atomic_width_not_supported(void);
 
 #define atomic_init(obj, val)   (*(obj) = (val))
 
-#define __atomic_unsupported_value(obj) (__atomic_width_not_supported(), *(obj))
-#define __atomic_unsupported_void()     ((void)__atomic_width_not_supported())
+#define __atomic_unsupported_value(obj) (_atomic_width_not_supported(), *(obj))
+#define __atomic_unsupported_void()     ((void)_atomic_width_not_supported())
 
 /* Type-dispatched atomic operations for the supported widths. */
 
 #define atomic_load(obj) _Generic(*(obj),                               \
-    char:           (char)__atomic_load_1((unsigned char *)(obj)),      \
-    signed char:    (signed char)__atomic_load_1((unsigned char *)(obj)),\
-    unsigned char:  __atomic_load_1((unsigned char *)(obj)),            \
-    short:          (short)__atomic_load_2((unsigned short *)(obj)),    \
-    unsigned short: __atomic_load_2((unsigned short *)(obj)),           \
-    int:            (int)__atomic_load_2((unsigned short *)(obj)),      \
-    unsigned int:   __atomic_load_2((unsigned short *)(obj)),           \
+    char:           (char)_atomic_load_1((unsigned char *)(obj)),      \
+    signed char:    (signed char)_atomic_load_1((unsigned char *)(obj)),\
+    unsigned char:  _atomic_load_1((unsigned char *)(obj)),            \
+    short:          (short)_atomic_load_2((unsigned short *)(obj)),    \
+    unsigned short: _atomic_load_2((unsigned short *)(obj)),           \
+    int:            (int)_atomic_load_2((unsigned short *)(obj)),      \
+    unsigned int:   _atomic_load_2((unsigned short *)(obj)),           \
     default:        __atomic_unsupported_value(obj)                     \
 )
 
 #define atomic_load_explicit(obj, order) atomic_load(obj)
 
 #define atomic_store(obj, val) _Generic(*(obj),                             \
-    char:           __atomic_store_1((unsigned char *)(obj),  (unsigned char)(val)),  \
-    signed char:    __atomic_store_1((unsigned char *)(obj),  (unsigned char)(val)),  \
-    unsigned char:  __atomic_store_1((unsigned char *)(obj),  (unsigned char)(val)),  \
-    short:          __atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
-    unsigned short: __atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
-    int:            __atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
-    unsigned int:   __atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
+    char:           _atomic_store_1((unsigned char *)(obj),  (unsigned char)(val)),  \
+    signed char:    _atomic_store_1((unsigned char *)(obj),  (unsigned char)(val)),  \
+    unsigned char:  _atomic_store_1((unsigned char *)(obj),  (unsigned char)(val)),  \
+    short:          _atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
+    unsigned short: _atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
+    int:            _atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
+    unsigned int:   _atomic_store_2((unsigned short *)(obj), (unsigned short)(val)), \
     default:        __atomic_unsupported_void()                                        \
 )
 
 #define atomic_store_explicit(obj, val, order) atomic_store(obj, val)
 
 #define atomic_exchange(obj, val) _Generic(*(obj),                              \
-    char:           (char)__atomic_exchange_1((unsigned char *)(obj),  (unsigned char)(val)),   \
-    signed char:    (signed char)__atomic_exchange_1((unsigned char *)(obj), (unsigned char)(val)), \
-    unsigned char:  __atomic_exchange_1((unsigned char *)(obj),  (unsigned char)(val)),         \
-    short:          (short)__atomic_exchange_2((unsigned short *)(obj),(unsigned short)(val)),  \
-    unsigned short: __atomic_exchange_2((unsigned short *)(obj),(unsigned short)(val)),         \
-    int:            (int)__atomic_exchange_2((unsigned short *)(obj),  (unsigned short)(val)),  \
-    unsigned int:   __atomic_exchange_2((unsigned short *)(obj),(unsigned short)(val)),         \
+    char:           (char)_atomic_exchange_1((unsigned char *)(obj),  (unsigned char)(val)),   \
+    signed char:    (signed char)_atomic_exchange_1((unsigned char *)(obj), (unsigned char)(val)), \
+    unsigned char:  _atomic_exchange_1((unsigned char *)(obj),  (unsigned char)(val)),         \
+    short:          (short)_atomic_exchange_2((unsigned short *)(obj),(unsigned short)(val)),  \
+    unsigned short: _atomic_exchange_2((unsigned short *)(obj),(unsigned short)(val)),         \
+    int:            (int)_atomic_exchange_2((unsigned short *)(obj),  (unsigned short)(val)),  \
+    unsigned int:   _atomic_exchange_2((unsigned short *)(obj),(unsigned short)(val)),         \
     default:        __atomic_unsupported_value(obj)                                               \
 )
 
@@ -132,15 +132,15 @@ extern void           __atomic_width_not_supported(void);
 
 /* Compare-exchange is always strong with the current DI/EI wrappers. */
 #define atomic_compare_exchange_strong(obj, exp, des) _Generic(*(obj),      \
-    unsigned char: __atomic_compare_exchange_1((unsigned char *)(obj),      \
+    unsigned char: _atomic_compare_exchange_1((unsigned char *)(obj),      \
         (unsigned char)*(exp), (unsigned char)(des)),                        \
-    char:          __atomic_compare_exchange_1((unsigned char *)(obj),      \
+    char:          _atomic_compare_exchange_1((unsigned char *)(obj),      \
         (unsigned char)*(exp), (unsigned char)(des)),                        \
-    unsigned short: __atomic_compare_exchange_2((unsigned short *)(obj),    \
+    unsigned short: _atomic_compare_exchange_2((unsigned short *)(obj),    \
         (unsigned short)*(exp), (unsigned short)(des)),                      \
-    int: __atomic_compare_exchange_2((unsigned short *)(obj),               \
+    int: _atomic_compare_exchange_2((unsigned short *)(obj),               \
         (unsigned short)*(exp), (unsigned short)(des)),                      \
-    default: (__atomic_width_not_supported(), 0)                             \
+    default: (_atomic_width_not_supported(), 0)                             \
 )
 
 #define atomic_compare_exchange_weak(obj, exp, des) \
@@ -152,60 +152,60 @@ extern void           __atomic_width_not_supported(void);
     atomic_compare_exchange_strong(obj, exp, des)
 
 #define atomic_fetch_add(obj, val) _Generic(*(obj),                         \
-    unsigned char: __atomic_fetch_add_1((unsigned char *)(obj),(unsigned char)(val)),       \
-    char:          (char)__atomic_fetch_add_1((unsigned char *)(obj),(unsigned char)(val)), \
-    unsigned short: __atomic_fetch_add_2((unsigned short *)(obj),(unsigned short)(val)),    \
-    int:           (int)__atomic_fetch_add_2((unsigned short *)(obj),(unsigned short)(val)),\
-    unsigned int:  __atomic_fetch_add_2((unsigned short *)(obj),(unsigned short)(val)),     \
+    unsigned char: _atomic_fetch_add_1((unsigned char *)(obj),(unsigned char)(val)),       \
+    char:          (char)_atomic_fetch_add_1((unsigned char *)(obj),(unsigned char)(val)), \
+    unsigned short: _atomic_fetch_add_2((unsigned short *)(obj),(unsigned short)(val)),    \
+    int:           (int)_atomic_fetch_add_2((unsigned short *)(obj),(unsigned short)(val)),\
+    unsigned int:  _atomic_fetch_add_2((unsigned short *)(obj),(unsigned short)(val)),     \
     default:       __atomic_unsupported_value(obj)                                            \
 )
 #define atomic_fetch_add_explicit(obj, val, order) atomic_fetch_add(obj, val)
 
 #define atomic_fetch_sub(obj, val) _Generic(*(obj),                         \
-    unsigned char: __atomic_fetch_sub_1((unsigned char *)(obj),(unsigned char)(val)),       \
-    char:          (char)__atomic_fetch_sub_1((unsigned char *)(obj),(unsigned char)(val)), \
-    unsigned short: __atomic_fetch_sub_2((unsigned short *)(obj),(unsigned short)(val)),    \
-    int:           (int)__atomic_fetch_sub_2((unsigned short *)(obj),(unsigned short)(val)),\
-    unsigned int:  __atomic_fetch_sub_2((unsigned short *)(obj),(unsigned short)(val)),     \
+    unsigned char: _atomic_fetch_sub_1((unsigned char *)(obj),(unsigned char)(val)),       \
+    char:          (char)_atomic_fetch_sub_1((unsigned char *)(obj),(unsigned char)(val)), \
+    unsigned short: _atomic_fetch_sub_2((unsigned short *)(obj),(unsigned short)(val)),    \
+    int:           (int)_atomic_fetch_sub_2((unsigned short *)(obj),(unsigned short)(val)),\
+    unsigned int:  _atomic_fetch_sub_2((unsigned short *)(obj),(unsigned short)(val)),     \
     default:       __atomic_unsupported_value(obj)                                            \
 )
 #define atomic_fetch_sub_explicit(obj, val, order) atomic_fetch_sub(obj, val)
 
 #define atomic_fetch_and(obj, val) _Generic(*(obj),                         \
-    unsigned char: __atomic_fetch_and_1((unsigned char *)(obj),(unsigned char)(val)),       \
-    char:          (char)__atomic_fetch_and_1((unsigned char *)(obj),(unsigned char)(val)), \
-    unsigned short: __atomic_fetch_and_2((unsigned short *)(obj),(unsigned short)(val)),    \
-    int:           (int)__atomic_fetch_and_2((unsigned short *)(obj),(unsigned short)(val)),\
-    unsigned int:  __atomic_fetch_and_2((unsigned short *)(obj),(unsigned short)(val)),     \
+    unsigned char: _atomic_fetch_and_1((unsigned char *)(obj),(unsigned char)(val)),       \
+    char:          (char)_atomic_fetch_and_1((unsigned char *)(obj),(unsigned char)(val)), \
+    unsigned short: _atomic_fetch_and_2((unsigned short *)(obj),(unsigned short)(val)),    \
+    int:           (int)_atomic_fetch_and_2((unsigned short *)(obj),(unsigned short)(val)),\
+    unsigned int:  _atomic_fetch_and_2((unsigned short *)(obj),(unsigned short)(val)),     \
     default:       __atomic_unsupported_value(obj)                                            \
 )
 #define atomic_fetch_and_explicit(obj, val, order) atomic_fetch_and(obj, val)
 
 #define atomic_fetch_or(obj, val) _Generic(*(obj),                          \
-    unsigned char: __atomic_fetch_or_1((unsigned char *)(obj),(unsigned char)(val)),        \
-    char:          (char)__atomic_fetch_or_1((unsigned char *)(obj),(unsigned char)(val)),  \
-    unsigned short: __atomic_fetch_or_2((unsigned short *)(obj),(unsigned short)(val)),     \
-    int:           (int)__atomic_fetch_or_2((unsigned short *)(obj),(unsigned short)(val)), \
-    unsigned int:  __atomic_fetch_or_2((unsigned short *)(obj),(unsigned short)(val)),      \
+    unsigned char: _atomic_fetch_or_1((unsigned char *)(obj),(unsigned char)(val)),        \
+    char:          (char)_atomic_fetch_or_1((unsigned char *)(obj),(unsigned char)(val)),  \
+    unsigned short: _atomic_fetch_or_2((unsigned short *)(obj),(unsigned short)(val)),     \
+    int:           (int)_atomic_fetch_or_2((unsigned short *)(obj),(unsigned short)(val)), \
+    unsigned int:  _atomic_fetch_or_2((unsigned short *)(obj),(unsigned short)(val)),      \
     default:       __atomic_unsupported_value(obj)                                            \
 )
 #define atomic_fetch_or_explicit(obj, val, order) atomic_fetch_or(obj, val)
 
 #define atomic_fetch_xor(obj, val) _Generic(*(obj),                         \
-    unsigned char: __atomic_fetch_xor_1((unsigned char *)(obj),(unsigned char)(val)),       \
-    char:          (char)__atomic_fetch_xor_1((unsigned char *)(obj),(unsigned char)(val)), \
-    unsigned short: __atomic_fetch_xor_2((unsigned short *)(obj),(unsigned short)(val)),    \
-    int:           (int)__atomic_fetch_xor_2((unsigned short *)(obj),(unsigned short)(val)),\
-    unsigned int:  __atomic_fetch_xor_2((unsigned short *)(obj),(unsigned short)(val)),     \
+    unsigned char: _atomic_fetch_xor_1((unsigned char *)(obj),(unsigned char)(val)),       \
+    char:          (char)_atomic_fetch_xor_1((unsigned char *)(obj),(unsigned char)(val)), \
+    unsigned short: _atomic_fetch_xor_2((unsigned short *)(obj),(unsigned short)(val)),    \
+    int:           (int)_atomic_fetch_xor_2((unsigned short *)(obj),(unsigned short)(val)),\
+    unsigned int:  _atomic_fetch_xor_2((unsigned short *)(obj),(unsigned short)(val)),     \
     default:       __atomic_unsupported_value(obj)                                            \
 )
 #define atomic_fetch_xor_explicit(obj, val, order) atomic_fetch_xor(obj, val)
 
 /* Atomic-flag helpers. */
-#define atomic_flag_test_and_set(flag)          __atomic_flag_test_set(flag)
-#define atomic_flag_test_and_set_explicit(f, o) __atomic_flag_test_set(f)
-#define atomic_flag_clear(flag)                 __atomic_flag_clear(flag)
-#define atomic_flag_clear_explicit(f, o)        __atomic_flag_clear(f)
+#define atomic_flag_test_and_set(flag)          _atomic_flag_test_set(flag)
+#define atomic_flag_test_and_set_explicit(f, o) _atomic_flag_test_set(f)
+#define atomic_flag_clear(flag)                 _atomic_flag_clear(flag)
+#define atomic_flag_clear_explicit(f, o)        _atomic_flag_clear(f)
 
 /* Fences collapse to no-ops on the current single-core target. */
 #define atomic_thread_fence(order)   ((void)(order))

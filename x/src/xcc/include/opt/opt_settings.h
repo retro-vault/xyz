@@ -39,6 +39,7 @@ struct optimization_settings {
     bool merge_identical_functions = false;
     bool inline_trivial_internal_functions = false;
     bool inline_static_functions = false;
+    bool internal_call_abi_promotion = false;
 
     // Per-function IR passes.
     bool cfg_cleanup = false;
@@ -144,6 +145,7 @@ struct optimization_settings {
             // broad loop/control-flow flattening until the allocator can
             // safely handle those larger regions.
             s.inline_static_functions = true;
+            s.internal_call_abi_promotion = true;
             s.block_fill_loops = true;
             // Keep promoted byte expressions narrow when they provably flow
             // back to byte sinks; this avoids Z80 stack-heavy 16-bit lowering
@@ -193,6 +195,7 @@ struct optimization_settings {
             // speed mode: the module pass accepts only small leaf helpers and
             // rejects broad loop/control-flow flattening.
             s.inline_static_functions = true;
+            s.internal_call_abi_promotion = true;
             // These two backend families are not benchmark recognizers:
             // byte-op promotion only keeps already-provable byte expressions
             // narrow, and the Z80 allocator rejects unsafe functions. In the
@@ -220,6 +223,7 @@ struct optimization_settings {
                merge_identical_functions ||
                inline_trivial_internal_functions ||
                inline_static_functions ||
+               internal_call_abi_promotion ||
                tail_recursion_elim;
     }
 

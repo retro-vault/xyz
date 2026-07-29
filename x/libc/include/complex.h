@@ -20,25 +20,25 @@
 #define complex   _Complex
 
 /* The imaginary unit constant for this target's float-complex layout. */
-extern float _Complex __complex_I;
-extern float _Complex __cmplxf(float real, float imag);
-#define _Complex_I  __complex_I
+extern float _Complex _complex_I;
+extern float _Complex _cmplxf(float real, float imag);
+#define _Complex_I  _complex_I
 #define I           _Complex_I
 
 /* Construct float-, double-, or long-double complex values. */
-#define CMPLXF(x, y)  __cmplxf((float)(x), (float)(y))
+#define CMPLXF(x, y)  _cmplxf((float)(x), (float)(y))
 #define CMPLX(x, y)   CMPLXF((x), (y))
 #define CMPLXL(x, y)  CMPLXF((x), (y))
 
 /* Component accessors. */
-extern float __creal(float _Complex z);
-extern float __cimag(float _Complex z);
-#define crealf(z)  __creal(z)
-#define cimagf(z)  __cimag(z)
-#define creal(z)   __creal(z)
-#define cimag(z)   __cimag(z)
-#define creall(z)  __creal(z)
-#define cimagl(z)  __cimag(z)
+extern float _creal(float _Complex z);
+extern float _cimag(float _Complex z);
+#define crealf(z)  _creal(z)
+#define cimagf(z)  _cimag(z)
+#define creal(z)   _creal(z)
+#define cimag(z)   _cimag(z)
+#define creall(z)  _creal(z)
+#define cimagl(z)  _cimag(z)
 
 /* Complex conjugation. */
 extern float _Complex conjf(float _Complex z);

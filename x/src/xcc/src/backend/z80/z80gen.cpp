@@ -36,7 +36,12 @@ std::string banked_code_section_name(int bank) {
 }
 
 bool is_asm_space_name(const std::string &name) {
-    return name.size() >= 2 && name[0] == '_' && name[1] == '_';
+    // These namespaces are reserved for labels created by xcc/xopt and
+    // already live in assembler symbol space. Ordinary C identifiers,
+    // including names beginning with two underscores, still receive the
+    // target's leading C-symbol underscore.
+    return name.rfind("__xcc_", 0) == 0 ||
+           name.rfind("__xopt_", 0) == 0;
 }
 
 bool is_compare_op(icode_op op) {
@@ -532,9 +537,9 @@ std::string z80_gen::asm_symbol_ref_name(const operand &op) const {
 void z80_gen::emit_function(const ir_function &fn) {
     cur_fn_         = &fn;
     // Very large straight-line functions can make the speed profile exceed
-    // the Z80's 64 KiB address space (MD5's fully unrolled transform is the
-    // practical example).  Retain the speed-profile IR but select compact
-    // backend forms for such a function so the generated program is viable.
+    // the Z80's 64 KiB address space. Retain the speed-profile IR but select
+    // compact backend forms for such functions so generated programs remain
+    // viable.
     // Keep the threshold below the point where a successful IR combine can
     // accidentally switch a still-large straight-line function back to the
     // dedicated-slot speed backend.  A 32-bit rotate combine, for example,
@@ -700,6 +705,10 @@ void z80_gen::emit_function(const ir_function &fn) {
             continue;
         if (try_emit_byte_load_compare_ifx(fn, i))
             continue;
+        if (try_emit_guarded_zero_arg_indirect_call(fn, i))
+            continue;
+        if (try_emit_word_select_send(fn, i))
+            continue;
         if (try_emit_compare_ifx(fn, i))
             continue;
       }
@@ -817,6 +826,442 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         return true;
     };
 
+    // A one-word parameter copied to an absolute object followed by constant
+    // global initialization is a complete frameless leaf. For stack ABI
+    // callers, extract and restore the caller-owned argument before issuing
+    // direct stores so RET sees the original stack layout.
+    auto match_frameless_global_initializer = [&]() -> bool {
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_arg =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_arg =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 2;
+        if ((!register_arg && !stack_arg) || fn.local_bytes != 0 ||
+            body.size() < 2 || !fn.ret_type ||
+            fn.ret_type->kind != type_kind::VOID) {
+            return false;
+        }
+
+        const icode &recv = *body[0];
+        if (recv.op != icode_op::RECEIVE || op_size(recv.result) != 2 ||
+            (register_arg &&
+             (recv.arg_loc != abi_arg_loc::REG_HL ||
+              !recv.result.is_temp())) ||
+            (stack_arg &&
+             (recv.arg_loc != abi_arg_loc::STACK ||
+              !recv.result.is_symbol() || !recv.result.is_param))) {
+            return false;
+        }
+
+        bool saw_parameter_store = false;
+        bool saw_constant_store = false;
+        for (size_t i = 1; i < body.size(); ++i) {
+            const icode &store = *body[i];
+            if (store.op != icode_op::ASSIGN || !store.right.is_none() ||
+                !store.result.is_symbol() || !store.result.is_global ||
+                store.result.is_tls || store.result.is_sfr ||
+                store.result.is_func || !store.result.type ||
+                store.result.type->is_volatile ||
+                op_size(store.result) != 2) {
+                return false;
+            }
+
+            if (operands_equivalent(store.left, recv.result)) {
+                if (saw_parameter_store || saw_constant_store)
+                    return false;
+                saw_parameter_store = true;
+                continue;
+            }
+            if (store.left.kind != operand_kind::INT_CONST)
+                return false;
+            saw_constant_store = true;
+        }
+        if (!saw_parameter_store || !saw_constant_store)
+            return false;
+
+        emit_helper_header();
+        emit_comment("frameless global word initializer");
+        if (stack_arg) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
+
+        std::optional<uint16_t> loaded_constant;
+        for (size_t i = 1; i < body.size(); ++i) {
+            const icode &store = *body[i];
+            if (store.left.kind == operand_kind::INT_CONST) {
+                const uint16_t value =
+                    static_cast<uint16_t>(store.left.ival);
+                if (!loaded_constant || *loaded_constant != value) {
+                    emit_line("ld\thl, %s", asm_.imm(value).c_str());
+                    loaded_constant = value;
+                }
+            }
+            emit_line("ld\t%s, hl",
+                      asm_.indir_global(mangle(store.result.name),
+                                        store.result.byte_offset).c_str());
+        }
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
+    };
+
+    // Two register-passed words stored once to absolute objects need neither
+    // an IX frame nor an argument spill. Z80 has direct (nn),HL and (nn),DE
+    // forms, so preserve both incoming pairs and emit the stores in IR order.
+    auto match_frameless_dual_global_store = [&]() -> bool {
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_args =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_args =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 4;
+        if ((!register_args && !stack_args) || fn.local_bytes != 0 ||
+            (body.size() != 4 && body.size() != 8) || !fn.ret_type ||
+            fn.ret_type->kind != type_kind::VOID) {
+            return false;
+        }
+
+        const icode &recv_hl = *body[0];
+        const icode &recv_de = *body[1];
+        const auto word_receive = [&](const icode &recv,
+                                      abi_arg_loc register_loc) {
+            if (recv.op != icode_op::RECEIVE ||
+                op_size(recv.result) != 2) {
+                return false;
+            }
+            if (register_args)
+                return recv.arg_loc == register_loc &&
+                       recv.result.is_temp();
+            return recv.arg_loc == abi_arg_loc::STACK &&
+                   recv.result.is_symbol() && recv.result.is_param;
+        };
+        if (!word_receive(recv_hl, abi_arg_loc::REG_HL) ||
+            !word_receive(recv_de, abi_arg_loc::REG_DE)) {
+            return false;
+        }
+
+        struct absolute_store {
+            std::string name;
+            int64_t offset = 0;
+            const operand *value = nullptr;
+        };
+        auto direct_store = [&](const icode &store,
+                                absolute_store &target) {
+            if (store.op != icode_op::ASSIGN || !store.right.is_none() ||
+                !store.result.is_symbol() || !store.result.is_global ||
+                store.result.is_tls || store.result.is_sfr ||
+                store.result.is_func || op_size(store.result) != 2) {
+                return false;
+            }
+            target.name = store.result.name;
+            target.offset = store.result.byte_offset;
+            target.value = &store.left;
+            return true;
+        };
+        auto indirect_store = [&](const icode &address_of,
+                                  const icode &add,
+                                  const icode &store,
+                                  absolute_store &target) {
+            if (address_of.op != icode_op::ADDRESS_OF ||
+                !address_of.result.is_temp() ||
+                (!address_of.left.is_symbol() &&
+                 address_of.left.kind != operand_kind::LABEL_REF) ||
+                (address_of.left.is_symbol() &&
+                 (!address_of.left.is_global || address_of.left.is_tls ||
+                  address_of.left.is_sfr || address_of.left.is_func)) ||
+                add.op != icode_op::ADD || !add.result.is_temp()) {
+                return false;
+            }
+            const operand *base = &add.left;
+            const operand *constant = &add.right;
+            if (base->kind == operand_kind::INT_CONST)
+                std::swap(base, constant);
+            if (!operands_equivalent(*base, address_of.result) ||
+                constant->kind != operand_kind::INT_CONST ||
+                store.op != icode_op::SET_VALUE_AT ||
+                !operands_equivalent(store.result, add.result) ||
+                store.right.is_none() == false || op_size(store.left) != 2) {
+                return false;
+            }
+            target.name = address_of.left.name;
+            target.offset =
+                address_of.left.byte_offset + constant->ival;
+            target.value = &store.left;
+            return true;
+        };
+        auto store_pair = [&](const absolute_store &store) -> const char * {
+            if (!store.value)
+                return nullptr;
+            if (operands_equivalent(*store.value, recv_hl.result))
+                return "hl";
+            if (operands_equivalent(*store.value, recv_de.result))
+                return "de";
+            return nullptr;
+        };
+
+        absolute_store first_store;
+        absolute_store second_store;
+        const bool stores_match =
+            body.size() == 4
+                ? direct_store(*body[2], first_store) &&
+                      direct_store(*body[3], second_store)
+                : indirect_store(*body[2], *body[3], *body[4],
+                                 first_store) &&
+                      indirect_store(*body[5], *body[6], *body[7],
+                                     second_store);
+        if (!stores_match)
+            return false;
+
+        const char *first_pair = store_pair(first_store);
+        const char *second_pair = store_pair(second_store);
+        if (!first_pair || !second_pair ||
+            std::string(first_pair) == std::string(second_pair)) {
+            return false;
+        }
+
+        emit_helper_header();
+        emit_comment("frameless dual absolute word store");
+        if (stack_args) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("pop\tde");
+            emit_line("push\tde");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
+        const absolute_store stores[] = {first_store, second_store};
+        const char *pairs[] = {first_pair, second_pair};
+        for (size_t index = 0; index < 2; ++index) {
+            emit_line("ld\t%s, %s",
+                      asm_.indir_global(mangle(stores[index].name),
+                                        stores[index].offset).c_str(),
+                      pairs[index]);
+        }
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
+    };
+
+    // Append two register-passed words to parallel global arrays using one
+    // scaled old counter value. The generic allocator otherwise spills both
+    // incoming pairs and rebuilds the same base+index address twice.
+    auto match_frameless_parallel_word_append = [&]() -> bool {
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_args =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_args =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 4;
+        if ((!register_args && !stack_args) || fn.local_bytes != 0 ||
+            (body.size() != 12 && body.size() != 14) || !fn.ret_type ||
+            fn.ret_type->kind != type_kind::VOID) {
+            return false;
+        }
+
+        const bool direct_counter = body.size() == 12;
+        const icode &recv_hl = *body[0];
+        const icode &recv_de = *body[1];
+        const icode *counter_address =
+            direct_counter ? nullptr : body[2];
+        const icode &counter_load =
+            *body[direct_counter ? 2 : 3];
+        const icode &counter_inc =
+            *body[direct_counter ? 3 : 4];
+        const icode *counter_store =
+            direct_counter ? nullptr : body[5];
+        const size_t first_base_index = direct_counter ? 4 : 6;
+        const icode &base_first = *body[first_base_index];
+        const icode &scale_first = *body[first_base_index + 1];
+        const icode &address_first = *body[first_base_index + 2];
+        const icode &store_first = *body[first_base_index + 3];
+        const icode &base_second = *body[first_base_index + 4];
+        const icode &scale_second = *body[first_base_index + 5];
+        const icode &address_second = *body[first_base_index + 6];
+        const icode &store_second = *body[first_base_index + 7];
+
+        auto plain_global_word = [&](const operand &op) {
+            return op.is_symbol() && op.is_global && !op.is_tls &&
+                   !op.is_sfr && !op.is_func && op_size(op) == 2;
+        };
+        auto global_base_plus = [&](const icode &ic, std::string &name,
+                                    int64_t &offset) {
+            if (ic.op != icode_op::ADD || !ic.result.is_temp())
+                return false;
+            const operand *base = &ic.left;
+            const operand *constant = &ic.right;
+            if (base->kind == operand_kind::INT_CONST)
+                std::swap(base, constant);
+            const bool global_address =
+                base->kind == operand_kind::LABEL_REF ||
+                (base->is_symbol() && base->is_global && !base->is_tls &&
+                 !base->is_sfr && !base->is_func);
+            if (!global_address ||
+                constant->kind != operand_kind::INT_CONST) {
+                return false;
+            }
+            name = base->name;
+            offset = constant->ival + base->byte_offset;
+            return true;
+        };
+        auto scaled_old_index = [&](const icode &ic) {
+            return ic.op == icode_op::SHL && ic.result.is_temp() &&
+                   operands_equivalent(ic.left, counter_load.result) &&
+                   is_exact_int_const(ic.right, 1);
+        };
+        auto address_sum = [&](const icode &ic, const icode &base,
+                               const icode &scale) {
+            return ic.op == icode_op::ADD && ic.result.is_temp() &&
+                   ((operands_equivalent(ic.left, base.result) &&
+                     operands_equivalent(ic.right, scale.result)) ||
+                    (operands_equivalent(ic.right, base.result) &&
+                     operands_equivalent(ic.left, scale.result)));
+        };
+        auto indirect_word_store = [&](const icode &ic,
+                                       const icode &address,
+                                       const operand &value) {
+            return ic.op == icode_op::SET_VALUE_AT &&
+                   operands_equivalent(ic.result, address.result) &&
+                   operands_equivalent(ic.left, value) &&
+                   ic.right.is_none() && op_size(ic.left) == 2;
+        };
+        const auto word_receive = [&](const icode &recv,
+                                      abi_arg_loc register_loc) {
+            if (recv.op != icode_op::RECEIVE ||
+                op_size(recv.result) != 2) {
+                return false;
+            }
+            if (register_args)
+                return recv.arg_loc == register_loc &&
+                       recv.result.is_temp();
+            return recv.arg_loc == abi_arg_loc::STACK &&
+                   recv.result.is_symbol() && recv.result.is_param;
+        };
+
+        std::string first_name;
+        std::string second_name;
+        std::string counter_name;
+        int64_t first_offset = 0;
+        int64_t second_offset = 0;
+        int64_t counter_offset = 0;
+        bool counter_matches = false;
+        if (direct_counter) {
+            counter_matches =
+                counter_load.op == icode_op::ASSIGN &&
+                counter_load.result.is_temp() &&
+                plain_global_word(counter_load.left) &&
+                counter_load.right.is_none() &&
+                counter_inc.op == icode_op::ADD &&
+                operands_equivalent(counter_inc.result,
+                                    counter_load.left) &&
+                operands_equivalent(counter_inc.left,
+                                    counter_load.result) &&
+                is_exact_int_const(counter_inc.right, 1);
+            if (counter_matches) {
+                counter_name = counter_load.left.name;
+                counter_offset = counter_load.left.byte_offset;
+            }
+        } else {
+            const bool counter_address_matches =
+                counter_address &&
+                global_base_plus(*counter_address, counter_name,
+                                 counter_offset);
+            const bool load_uses_counter_address =
+                counter_address &&
+                operands_equivalent(counter_load.left,
+                                    counter_address->result) &&
+                counter_load.right.is_none();
+            const bool load_uses_indexed_global =
+                counter_load.left.name == counter_name &&
+                (counter_load.left.kind == operand_kind::LABEL_REF ||
+                 (counter_load.left.is_symbol() &&
+                  counter_load.left.is_global)) &&
+                counter_load.right.kind == operand_kind::INT_CONST &&
+                counter_load.left.byte_offset +
+                    counter_load.right.ival == counter_offset;
+            counter_matches =
+                counter_address_matches &&
+                counter_load.op == icode_op::GET_VALUE_AT &&
+                counter_load.result.is_temp() &&
+                (load_uses_counter_address ||
+                 load_uses_indexed_global) &&
+                counter_inc.op == icode_op::ADD &&
+                counter_inc.result.is_temp() &&
+                operands_equivalent(counter_inc.left,
+                                    counter_load.result) &&
+                is_exact_int_const(counter_inc.right, 1) &&
+                counter_store &&
+                counter_store->op == icode_op::SET_VALUE_AT &&
+                operands_equivalent(counter_store->result,
+                                    counter_address->result) &&
+                operands_equivalent(counter_store->left,
+                                    counter_inc.result) &&
+                counter_store->right.is_none();
+        }
+        if (!word_receive(recv_hl, abi_arg_loc::REG_HL) ||
+            !word_receive(recv_de, abi_arg_loc::REG_DE) ||
+            !counter_matches ||
+            !global_base_plus(base_first, first_name, first_offset) ||
+            !global_base_plus(base_second, second_name, second_offset) ||
+            first_name != second_name ||
+            !scaled_old_index(scale_first) ||
+            !scaled_old_index(scale_second) ||
+            !address_sum(address_first, base_first, scale_first) ||
+            !address_sum(address_second, base_second, scale_second) ||
+            !indirect_word_store(store_first, address_first, recv_hl.result) ||
+            !indirect_word_store(store_second, address_second, recv_de.result) ||
+            counter_offset < -32768 || counter_offset > 32767 ||
+            first_offset < -32768 || first_offset > 32767 ||
+            second_offset < -32768 || second_offset > 32767) {
+            return false;
+        }
+
+        std::string first_base = mangle(first_name);
+        if (first_offset > 0)
+            first_base += "+" + std::to_string(first_offset);
+        else if (first_offset < 0)
+            first_base += std::to_string(first_offset);
+        const int64_t address_delta = second_offset - first_offset - 1;
+
+        emit_helper_header();
+        emit_comment("frameless parallel global word append");
+        if (stack_args) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("pop\tde");
+            emit_line("push\tde");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
+        emit_line("push\thl");
+        emit_line("ld\thl, %s",
+                  asm_.indir_global(mangle(counter_name),
+                                    counter_offset).c_str());
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_line("inc\thl");
+        emit_line("ld\t%s, hl",
+                  asm_.indir_global(mangle(counter_name),
+                                    counter_offset).c_str());
+        emit_line("ld\th, b");
+        emit_line("ld\tl, c");
+        emit_line("add\thl, hl");
+        emit_line("ld\tbc, %s", asm_.imm_sym(first_base).c_str());
+        emit_line("add\thl, bc");
+        emit_line("pop\tbc");
+        emit_line("ld\t(hl), c");
+        emit_line("inc\thl");
+        emit_line("ld\t(hl), b");
+        emit_line("ld\tbc, %s", asm_.imm(address_delta).c_str());
+        emit_line("add\thl, bc");
+        emit_line("ld\t(hl), e");
+        emit_line("inc\thl");
+        emit_line("ld\t(hl), d");
+        emit_line("ret");
+        emit_helper_footer();
+        return true;
+    };
+
     // Select complete frameless leaf loops before conservative TEMP-frame
     // planning gets a chance to reserve slots for values that never need to
     // exist in memory.  These are structural IR forms, independent of source
@@ -825,32 +1270,50 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
     // loop.  Treating the whole loop as one allocation region also lets HL,
     // DE and BC carry multiple live pointers without an IX frame.
     auto match_frameless_byte_distance = [&]() -> bool {
-        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
-            fn.local_bytes != 0 || fn.stack_param_bytes != 0 ||
-            body.size() != 13 || !fn.ret_type || fn.ret_type->size() != 2) {
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_arg =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_arg =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 2;
+        const size_t receive_copy_count = stack_arg ? 1 : 0;
+        if ((!register_arg && !stack_arg) || fn.local_bytes != 0 ||
+            body.size() != 13 + receive_copy_count ||
+            !fn.ret_type || fn.ret_type->size() != 2) {
             return false;
         }
 
         const auto &recv = *body[0];
-        const auto &cursor_init = *body[1];
-        const auto &loop = *body[2];
-        const auto &load = *body[3];
-        const auto &truth_cast = *body[4];
-        const auto &branch = *body[5];
-        const auto &advance_label = *body[6];
-        const auto &advance = *body[7];
-        const auto &cursor_store = *body[8];
-        const auto &backedge = *body[9];
-        const auto &done = *body[10];
-        const auto &distance = *body[11];
-        const auto &ret = *body[12];
+        const icode *receive_copy = stack_arg ? body[1] : nullptr;
+        const operand &received_value =
+            stack_arg ? receive_copy->result : recv.result;
+        const size_t q = receive_copy_count;
+        const auto &cursor_init = *body[1 + q];
+        const auto &loop = *body[2 + q];
+        const auto &load = *body[3 + q];
+        const auto &truth_cast = *body[4 + q];
+        const auto &branch = *body[5 + q];
+        const auto &advance_label = *body[6 + q];
+        const auto &advance = *body[7 + q];
+        const auto &cursor_store = *body[8 + q];
+        const auto &backedge = *body[9 + q];
+        const auto &done = *body[10 + q];
+        const auto &distance = *body[11 + q];
+        const auto &ret = *body[12 + q];
 
         if (recv.op != icode_op::RECEIVE ||
-            recv.arg_loc != abi_arg_loc::REG_HL ||
-            !is_word_temp(recv.result) ||
+            (register_arg &&
+             (recv.arg_loc != abi_arg_loc::REG_HL ||
+              !is_word_temp(recv.result))) ||
+            (stack_arg &&
+             (recv.arg_loc != abi_arg_loc::STACK ||
+              !recv.result.is_symbol() || !recv.result.is_param ||
+              !receive_copy ||
+              receive_copy->op != icode_op::ASSIGN ||
+              !is_word_temp(receive_copy->result) ||
+              !operands_equivalent(receive_copy->left, recv.result))) ||
             cursor_init.op != icode_op::ASSIGN ||
             !is_word_temp(cursor_init.result) ||
-            !operands_equivalent(cursor_init.left, recv.result) ||
+            !operands_equivalent(cursor_init.left, received_value) ||
             loop.op != icode_op::LABEL ||
             load.op != icode_op::GET_VALUE_AT ||
             !is_byte_temp(load.result) ||
@@ -877,7 +1340,7 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
             distance.op != icode_op::SUB ||
             !is_word_temp(distance.result) ||
             !operands_equivalent(distance.left, cursor_init.result) ||
-            !operands_equivalent(distance.right, recv.result) ||
+            !operands_equivalent(distance.right, received_value) ||
             ret.op != icode_op::RETURN ||
             !operands_equivalent(ret.left, distance.result)) {
             return false;
@@ -885,6 +1348,12 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
 
         emit_helper_header();
         emit_comment("frameless byte-cursor distance loop");
+        if (stack_arg) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
         emit_line("ld\tb, h");
         emit_line("ld\tc, l");
         emit_label(loop.label_name, false);
@@ -896,10 +1365,217 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         emit_label(done.label_name, false);
         emit_line("ld\ta, c");
         emit_line("sub\tl");
-        emit_line("ld\te, a");
+        emit_line("ld\t%s, a", stack_arg ? "l" : "e");
         emit_line("ld\ta, b");
         emit_line("sbc\ta, h");
-        emit_line("ld\td, a");
+        emit_line("ld\t%s, a", stack_arg ? "h" : "d");
+        emit_line("ret");
+        emit_helper_footer();
+        iy_preserving_local_callees_.insert(fn.name);
+        return true;
+    };
+
+    // Stack linkage leaves both cursors addressable through IX.  For this
+    // complete leaf-loop shape it is cheaper to restore the arguments once
+    // and keep them in BC/DE than to maintain an IX frame on every byte.
+    auto match_frameless_stack_byte_compare = [&]() -> bool {
+        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL0 ||
+            fn.local_bytes != 0 || fn.stack_param_bytes != 4 ||
+            body.size() < 20 || body.size() > 24 ||
+            !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+
+        const auto &recv_a = *body[0];
+        const auto &recv_b = *body[1];
+        const auto &receive_copy = *body[2];
+        if (recv_a.op != icode_op::RECEIVE ||
+            recv_a.arg_loc != abi_arg_loc::STACK ||
+            !recv_a.result.is_symbol() || !recv_a.result.is_param ||
+            recv_b.op != icode_op::RECEIVE ||
+            recv_b.arg_loc != abi_arg_loc::STACK ||
+            !recv_b.result.is_symbol() || !recv_b.result.is_param ||
+            receive_copy.op != icode_op::ASSIGN ||
+            !is_word_temp(receive_copy.result)) {
+            return false;
+        }
+
+        const bool copied_a =
+            operands_equivalent(receive_copy.left, recv_a.result);
+        const bool copied_b =
+            operands_equivalent(receive_copy.left, recv_b.result);
+        if (copied_a == copied_b)
+            return false;
+
+        const operand &cursor_a =
+            copied_a ? receive_copy.result : recv_a.result;
+        const operand &cursor_b =
+            copied_b ? receive_copy.result : recv_b.result;
+        size_t p = 3;
+        auto next = [&]() -> const icode * {
+            return p < body.size() ? body[p++] : nullptr;
+        };
+        auto is_cursor_load = [&](const icode *ic,
+                                  const operand &cursor) {
+            return ic && ic->op == icode_op::GET_VALUE_AT &&
+                   is_byte_temp(ic->result) &&
+                   operands_equivalent(ic->left, cursor) &&
+                   ic->right.is_none();
+        };
+        auto consume_cursor_advance = [&](const operand &cursor) {
+            if (p >= body.size())
+                return false;
+            const icode &advance = *body[p];
+            if (advance.op != icode_op::ADD ||
+                !operands_equivalent(advance.left, cursor) ||
+                !is_exact_int_const(advance.right, 1)) {
+                return false;
+            }
+            if (operands_equivalent(advance.result, cursor)) {
+                ++p;
+                return true;
+            }
+            if (!is_word_temp(advance.result) || p + 1 >= body.size())
+                return false;
+            const icode &store = *body[p + 1];
+            if (store.op != icode_op::ASSIGN ||
+                !operands_equivalent(store.result, cursor) ||
+                !operands_equivalent(store.left, advance.result)) {
+                return false;
+            }
+            p += 2;
+            return true;
+        };
+
+        const icode *loop = next();
+        const icode *load_a = next();
+        const icode *truth_cast = next();
+        const icode *truth_branch = next();
+        const icode *compare_label = next();
+        if (!loop || loop->op != icode_op::LABEL ||
+            !is_cursor_load(load_a, cursor_a) ||
+            !truth_cast || truth_cast->op != icode_op::CAST ||
+            !is_word_temp(truth_cast->result) ||
+            !operands_equivalent(truth_cast->left, load_a->result) ||
+            !truth_branch || truth_branch->op != icode_op::IFX ||
+            !operands_equivalent(truth_branch->left, truth_cast->result) ||
+            !compare_label || compare_label->op != icode_op::LABEL ||
+            compare_label->label_name != truth_branch->true_lbl) {
+            return false;
+        }
+
+        const icode *compare_a = load_a;
+        const icode *load_b = nullptr;
+        bool reloaded_byte_difference = false;
+        if (p + 2 < body.size() &&
+            is_cursor_load(body[p], cursor_a) &&
+            is_cursor_load(body[p + 1], cursor_b) &&
+            body[p + 2]->op == icode_op::EQ) {
+            compare_a = body[p++];
+            load_b = body[p++];
+            reloaded_byte_difference = true;
+        } else {
+            load_b = next();
+            if (!is_cursor_load(load_b, cursor_b))
+                return false;
+        }
+
+        const icode *equal = next();
+        const icode *equal_branch = next();
+        const icode *advance_label = next();
+        if (!equal || equal->op != icode_op::EQ ||
+            !((operands_equivalent(equal->left, compare_a->result) &&
+               operands_equivalent(equal->right, load_b->result)) ||
+              (operands_equivalent(equal->right, compare_a->result) &&
+               operands_equivalent(equal->left, load_b->result))) ||
+            !equal_branch || equal_branch->op != icode_op::IFX ||
+            !operands_equivalent(equal_branch->left, equal->result) ||
+            !advance_label || advance_label->op != icode_op::LABEL ||
+            advance_label->label_name != equal_branch->true_lbl ||
+            !consume_cursor_advance(cursor_a) ||
+            !consume_cursor_advance(cursor_b)) {
+            return false;
+        }
+
+        const icode *backedge = next();
+        const icode *done = next();
+        if (!backedge || backedge->op != icode_op::GOTO ||
+            backedge->label_name != loop->label_name ||
+            !done || done->op != icode_op::LABEL ||
+            done->label_name != truth_branch->false_lbl ||
+            done->label_name != equal_branch->false_lbl) {
+            return false;
+        }
+
+        const icode *final_a =
+            reloaded_byte_difference ? next() : load_a;
+        const icode *final_b = next();
+        if (!is_cursor_load(final_a, cursor_a) ||
+            !is_cursor_load(final_b, cursor_b)) {
+            return false;
+        }
+
+        const icode *difference_left = final_a;
+        const icode *difference_right = final_b;
+        if (p < body.size() && body[p]->op == icode_op::CAST) {
+            const icode *cast_a = next();
+            const icode *cast_b = next();
+            if (!cast_a || !cast_b ||
+                cast_a->op != icode_op::CAST ||
+                cast_b->op != icode_op::CAST ||
+                !is_word_temp(cast_a->result) ||
+                !is_word_temp(cast_b->result) ||
+                !operands_equivalent(cast_a->left, final_a->result) ||
+                !operands_equivalent(cast_b->left, final_b->result)) {
+                return false;
+            }
+            difference_left = cast_a;
+            difference_right = cast_b;
+        }
+
+        const icode *difference = next();
+        const icode *ret = next();
+        if (!difference || difference->op != icode_op::SUB ||
+            !is_word_temp(difference->result) ||
+            !operands_equivalent(difference->left,
+                                 difference_left->result) ||
+            !operands_equivalent(difference->right,
+                                 difference_right->result) ||
+            !ret || ret->op != icode_op::RETURN ||
+            !operands_equivalent(ret->left, difference->result) ||
+            p != body.size()) {
+            return false;
+        }
+
+        emit_helper_header();
+        emit_comment("frameless stack dual byte-cursor compare loop");
+        emit_line("pop\taf");
+        emit_line("pop\thl");
+        emit_line("pop\tde");
+        emit_line("push\tde");
+        emit_line("push\thl");
+        emit_line("push\taf");
+        emit_line("ld\tb, h");
+        emit_line("ld\tc, l");
+        emit_label(loop->label_name, false);
+        emit_line("ld\ta, (bc)");
+        emit_line("ld\tl, a");
+        emit_line("or\ta, a");
+        emit_line("jr\tz, %s", done->label_name.c_str());
+        emit_line("ld\ta, (de)");
+        emit_line("cp\tl");
+        emit_line("jr\tnz, %s", done->label_name.c_str());
+        emit_line("inc\tbc");
+        emit_line("inc\tde");
+        emit_line("jr\t%s", loop->label_name.c_str());
+        emit_label(done->label_name, false);
+        emit_line("ld\ta, (de)");
+        emit_line("ld\th, a");
+        emit_line("ld\ta, l");
+        emit_line("sub\th");
+        emit_line("ld\tl, a");
+        emit_line("sbc\ta, a");
+        emit_line("ld\th, a");
         emit_line("ret");
         emit_helper_footer();
         iy_preserving_local_callees_.insert(fn.name);
@@ -1153,52 +1829,78 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
     };
 
     auto match_frameless_fixed_byte_equality = [&]() -> bool {
-        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
-            fn.stack_param_bytes != 0 || body.size() != 24 ||
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_args =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_args =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 4;
+        const size_t receive_copy_count = stack_args ? 2 : 0;
+        if ((!register_args && !stack_args) ||
+            body.size() != 24 + receive_copy_count ||
             !fn.ret_type || fn.ret_type->size() != 2) {
             return false;
         }
 
         const auto &recv_a = *body[0];
         const auto &recv_b = *body[1];
-        const auto &index_init = *body[2];
-        const auto &cursor_a_init = *body[3];
-        const auto &cursor_b_init = *body[4];
-        const auto &loop = *body[5];
-        const auto &bound_cmp = *body[6];
-        const auto &bound_branch = *body[7];
-        const auto &body_label = *body[8];
-        const auto &load_a = *body[9];
-        const auto &load_b = *body[10];
-        const auto &different = *body[11];
-        const auto &different_branch = *body[12];
-        const auto &different_label = *body[13];
-        const auto &return_false = *body[14];
-        const auto &step_label = *body[15];
-        const auto &index_step = *body[16];
-        const auto &cursor_b_step = *body[17];
-        const auto &cursor_b_store = *body[18];
-        const auto &cursor_a_step = *body[19];
-        const auto &cursor_a_store = *body[20];
-        const auto &backedge = *body[21];
-        const auto &done = *body[22];
-        const auto &return_true = *body[23];
+        const icode *receive_copy_a = stack_args ? body[2] : nullptr;
+        const icode *receive_copy_b = stack_args ? body[3] : nullptr;
+        const operand &received_a =
+            stack_args ? receive_copy_a->result : recv_a.result;
+        const operand &received_b =
+            stack_args ? receive_copy_b->result : recv_b.result;
+        const size_t q = receive_copy_count;
+        const auto &index_init = *body[2 + q];
+        const auto &cursor_a_init = *body[3 + q];
+        const auto &cursor_b_init = *body[4 + q];
+        const auto &loop = *body[5 + q];
+        const auto &bound_cmp = *body[6 + q];
+        const auto &bound_branch = *body[7 + q];
+        const auto &body_label = *body[8 + q];
+        const auto &load_a = *body[9 + q];
+        const auto &load_b = *body[10 + q];
+        const auto &different = *body[11 + q];
+        const auto &different_branch = *body[12 + q];
+        const auto &different_label = *body[13 + q];
+        const auto &return_false = *body[14 + q];
+        const auto &step_label = *body[15 + q];
+        const auto &index_step = *body[16 + q];
+        const auto &cursor_b_step = *body[17 + q];
+        const auto &cursor_b_store = *body[18 + q];
+        const auto &cursor_a_step = *body[19 + q];
+        const auto &cursor_a_store = *body[20 + q];
+        const auto &backedge = *body[21 + q];
+        const auto &done = *body[22 + q];
+        const auto &return_true = *body[23 + q];
 
         if (recv_a.op != icode_op::RECEIVE ||
-            recv_a.arg_loc != abi_arg_loc::REG_HL ||
-            !is_word_temp(recv_a.result) ||
             recv_b.op != icode_op::RECEIVE ||
-            recv_b.arg_loc != abi_arg_loc::REG_DE ||
-            !is_word_temp(recv_b.result) ||
+            (register_args &&
+             (recv_a.arg_loc != abi_arg_loc::REG_HL ||
+              !is_word_temp(recv_a.result) ||
+              recv_b.arg_loc != abi_arg_loc::REG_DE ||
+              !is_word_temp(recv_b.result))) ||
+            (stack_args &&
+             (recv_a.arg_loc != abi_arg_loc::STACK ||
+              recv_b.arg_loc != abi_arg_loc::STACK ||
+              !recv_a.result.is_symbol() || !recv_a.result.is_param ||
+              !recv_b.result.is_symbol() || !recv_b.result.is_param ||
+              !receive_copy_a || !receive_copy_b ||
+              receive_copy_a->op != icode_op::ASSIGN ||
+              receive_copy_b->op != icode_op::ASSIGN ||
+              !is_word_temp(receive_copy_a->result) ||
+              !is_word_temp(receive_copy_b->result) ||
+              !operands_equivalent(receive_copy_a->left, recv_a.result) ||
+              !operands_equivalent(receive_copy_b->left, recv_b.result))) ||
             index_init.op != icode_op::ASSIGN ||
             !index_init.result.is_temp() ||
             !is_exact_int_const(index_init.left, 0) ||
             cursor_a_init.op != icode_op::ASSIGN ||
             !is_word_temp(cursor_a_init.result) ||
-            !operands_equivalent(cursor_a_init.left, recv_a.result) ||
+            !operands_equivalent(cursor_a_init.left, received_a) ||
             cursor_b_init.op != icode_op::ASSIGN ||
             !is_word_temp(cursor_b_init.result) ||
-            !operands_equivalent(cursor_b_init.left, recv_b.result) ||
+            !operands_equivalent(cursor_b_init.left, received_b) ||
             loop.op != icode_op::LABEL ||
             bound_cmp.op != icode_op::LT ||
             !operands_equivalent(bound_cmp.left, index_init.result) ||
@@ -1259,6 +1961,14 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         const int count = static_cast<int>(bound_cmp.right.ival);
         emit_helper_header();
         emit_comment("frameless fixed-length byte equality loop");
+        if (stack_args) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("pop\tde");
+            emit_line("push\tde");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
         emit_line("ld\tb, h");
         emit_line("ld\tc, l");
         emit_line("push\tde");
@@ -1272,53 +1982,76 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         emit_line("inc\tiy");
         emit_line("dec\te");
         emit_line("jr\tnz, %s", loop.label_name.c_str());
-        emit_line("ld\tde, %s", asm_.imm(1).c_str());
+        emit_line("ld\t%s, %s",
+                  stack_args ? "hl" : "de", asm_.imm(1).c_str());
         emit_line("ret");
         emit_label(different_label.label_name, false);
-        emit_line("ld\tde, %s", asm_.imm(0).c_str());
+        emit_line("ld\t%s, %s",
+                  stack_args ? "hl" : "de", asm_.imm(0).c_str());
         emit_line("ret");
         emit_helper_footer();
         return true;
     };
 
     auto match_frameless_fixed_shift_add_byte_fold = [&]() -> bool {
-        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
-            fn.stack_param_bytes != 0 ||
-            (body.size() != 19 && body.size() != 20) ||
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_arg =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_arg =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 2;
+        const size_t receive_copy_count = stack_arg ? 1 : 0;
+        if ((!register_arg && !stack_arg) ||
+            body.size() < receive_copy_count ||
             !fn.ret_type || fn.ret_type->size() != 2) {
+            return false;
+        }
+        const size_t logical_size = body.size() - receive_copy_count;
+        if (logical_size != 19 && logical_size != 20) {
             return false;
         }
 
         // The terminal widened-byte forwarding pass consumes the explicit
         // byte-to-word CAST, leaving the same operation with a direct byte
         // operand.  Accept both equivalent IR spellings.
-        const bool has_widen = body.size() == 20;
+        const bool has_widen = logical_size == 20;
 
         const auto &recv = *body[0];
-        const auto &acc_init = *body[1];
-        const auto &index_init = *body[2];
-        const auto &cursor_init = *body[3];
-        const auto &loop = *body[4];
-        const auto &bound_cmp = *body[5];
-        const auto &bound_branch = *body[6];
-        const auto &body_label = *body[7];
-        const auto &shift = *body[8];
-        const auto &add_old = *body[9];
-        const auto &load = *body[10];
-        const icode *widen = has_widen ? body[11] : nullptr;
-        const auto &add_byte = *body[has_widen ? 12 : 11];
-        const auto &step_label = *body[has_widen ? 13 : 12];
-        const auto &index_step = *body[has_widen ? 14 : 13];
-        const auto &cursor_step = *body[has_widen ? 15 : 14];
-        const auto &cursor_store = *body[has_widen ? 16 : 15];
-        const auto &backedge = *body[has_widen ? 17 : 16];
-        const auto &done = *body[has_widen ? 18 : 17];
-        const auto &ret = *body[has_widen ? 19 : 18];
+        const icode *receive_copy = stack_arg ? body[1] : nullptr;
+        const operand &received_value =
+            stack_arg ? receive_copy->result : recv.result;
+        const size_t q = receive_copy_count;
+        const auto &acc_init = *body[1 + q];
+        const auto &index_init = *body[2 + q];
+        const auto &cursor_init = *body[3 + q];
+        const auto &loop = *body[4 + q];
+        const auto &bound_cmp = *body[5 + q];
+        const auto &bound_branch = *body[6 + q];
+        const auto &body_label = *body[7 + q];
+        const auto &shift = *body[8 + q];
+        const auto &add_old = *body[9 + q];
+        const auto &load = *body[10 + q];
+        const icode *widen = has_widen ? body[11 + q] : nullptr;
+        const auto &add_byte = *body[(has_widen ? 12 : 11) + q];
+        const auto &step_label = *body[(has_widen ? 13 : 12) + q];
+        const auto &index_step = *body[(has_widen ? 14 : 13) + q];
+        const auto &cursor_step = *body[(has_widen ? 15 : 14) + q];
+        const auto &cursor_store = *body[(has_widen ? 16 : 15) + q];
+        const auto &backedge = *body[(has_widen ? 17 : 16) + q];
+        const auto &done = *body[(has_widen ? 18 : 17) + q];
+        const auto &ret = *body[(has_widen ? 19 : 18) + q];
         const operand &byte_value = has_widen ? widen->result : load.result;
 
         if (recv.op != icode_op::RECEIVE ||
-            recv.arg_loc != abi_arg_loc::REG_HL ||
-            !is_word_temp(recv.result) ||
+            (register_arg &&
+             (recv.arg_loc != abi_arg_loc::REG_HL ||
+              !is_word_temp(recv.result))) ||
+            (stack_arg &&
+             (recv.arg_loc != abi_arg_loc::STACK ||
+              !recv.result.is_symbol() || !recv.result.is_param ||
+              !receive_copy ||
+              receive_copy->op != icode_op::ASSIGN ||
+              !is_word_temp(receive_copy->result) ||
+              !operands_equivalent(receive_copy->left, recv.result))) ||
             acc_init.op != icode_op::ASSIGN ||
             !is_word_temp(acc_init.result) ||
             acc_init.left.kind != operand_kind::INT_CONST ||
@@ -1327,7 +2060,7 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
             !is_exact_int_const(index_init.left, 0) ||
             cursor_init.op != icode_op::ASSIGN ||
             !is_word_temp(cursor_init.result) ||
-            !operands_equivalent(cursor_init.left, recv.result) ||
+            !operands_equivalent(cursor_init.left, received_value) ||
             loop.op != icode_op::LABEL ||
             bound_cmp.op != icode_op::LT ||
             !operands_equivalent(bound_cmp.left, index_init.result) ||
@@ -1387,6 +2120,12 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         const int initial = static_cast<int>(acc_init.left.ival & 0xffff);
         emit_helper_header();
         emit_comment("frameless fixed-count shift-add byte fold");
+        if (stack_arg) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
         emit_line("push\thl");
         emit_line("pop\tiy");
         emit_line("ld\tde, %s", asm_.imm(initial).c_str());
@@ -1403,6 +2142,10 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         emit_line("ex\tde, hl");
         emit_line("inc\tiy");
         emit_line("djnz\t%s", loop.label_name.c_str());
+        if (stack_arg) {
+            emit_line("ld\th, d");
+            emit_line("ld\tl, e");
+        }
         emit_line("ret");
         emit_helper_footer();
         return true;
@@ -1413,54 +2156,80 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
     // lockstep, then allocate the equivalent second cursor to IY for the
     // complete equality region.
     auto match_frameless_indexed_fixed_byte_equality = [&]() -> bool {
-        if (effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
-            fn.stack_param_bytes != 0 || body.size() != 23 ||
+        const call_abi abi = effective_call_abi(fn.abi);
+        const bool register_args =
+            abi == call_abi::SDCCCALL1 && fn.stack_param_bytes == 0;
+        const bool stack_args =
+            abi == call_abi::SDCCCALL0 && fn.stack_param_bytes == 4;
+        const size_t receive_copy_count = stack_args ? 2 : 0;
+        if ((!register_args && !stack_args) ||
+            body.size() != 23 + receive_copy_count ||
             !fn.ret_type || fn.ret_type->size() != 2) {
             return false;
         }
 
         const auto &recv_a = *body[0];
         const auto &recv_b = *body[1];
-        const auto &index_init = *body[2];
-        const auto &cursor_a_init = *body[3];
-        const auto &loop = *body[4];
-        const auto &bound_cmp = *body[5];
-        const auto &bound_branch = *body[6];
-        const auto &body_label = *body[7];
-        const auto &wide_index = *body[8];
-        const auto &load_a = *body[9];
-        const auto &address_b = *body[10];
-        const auto &load_b = *body[11];
-        const auto &different = *body[12];
-        const auto &different_branch = *body[13];
-        const auto &different_label = *body[14];
-        const auto &return_false = *body[15];
-        const auto &step_label = *body[16];
-        const auto &index_step = *body[17];
-        const auto &cursor_a_step = *body[18];
-        const auto &cursor_a_store = *body[19];
-        const auto &backedge = *body[20];
-        const auto &done = *body[21];
-        const auto &return_true = *body[22];
+        const icode *receive_copy_a = stack_args ? body[2] : nullptr;
+        const icode *receive_copy_b = stack_args ? body[3] : nullptr;
+        const operand &received_a =
+            stack_args ? receive_copy_a->result : recv_a.result;
+        const operand &received_b =
+            stack_args ? receive_copy_b->result : recv_b.result;
+        const size_t q = receive_copy_count;
+        const auto &index_init = *body[2 + q];
+        const auto &cursor_a_init = *body[3 + q];
+        const auto &loop = *body[4 + q];
+        const auto &bound_cmp = *body[5 + q];
+        const auto &bound_branch = *body[6 + q];
+        const auto &body_label = *body[7 + q];
+        const auto &wide_index = *body[8 + q];
+        const auto &load_a = *body[9 + q];
+        const auto &address_b = *body[10 + q];
+        const auto &load_b = *body[11 + q];
+        const auto &different = *body[12 + q];
+        const auto &different_branch = *body[13 + q];
+        const auto &different_label = *body[14 + q];
+        const auto &return_false = *body[15 + q];
+        const auto &step_label = *body[16 + q];
+        const auto &index_step = *body[17 + q];
+        const auto &cursor_a_step = *body[18 + q];
+        const auto &cursor_a_store = *body[19 + q];
+        const auto &backedge = *body[20 + q];
+        const auto &done = *body[21 + q];
+        const auto &return_true = *body[22 + q];
 
         const bool b_address_matches =
             address_b.op == icode_op::ADD &&
-            ((operands_equivalent(address_b.left, recv_b.result) &&
+            ((operands_equivalent(address_b.left, received_b) &&
               operands_equivalent(address_b.right, wide_index.result)) ||
-             (operands_equivalent(address_b.right, recv_b.result) &&
+             (operands_equivalent(address_b.right, received_b) &&
               operands_equivalent(address_b.left, wide_index.result)));
         if (recv_a.op != icode_op::RECEIVE ||
-            recv_a.arg_loc != abi_arg_loc::REG_HL ||
-            !is_word_temp(recv_a.result) ||
             recv_b.op != icode_op::RECEIVE ||
-            recv_b.arg_loc != abi_arg_loc::REG_DE ||
-            !is_word_temp(recv_b.result) ||
+            (register_args &&
+             (recv_a.arg_loc != abi_arg_loc::REG_HL ||
+              !is_word_temp(recv_a.result) ||
+              recv_b.arg_loc != abi_arg_loc::REG_DE ||
+              !is_word_temp(recv_b.result))) ||
+            (stack_args &&
+             (recv_a.arg_loc != abi_arg_loc::STACK ||
+              recv_b.arg_loc != abi_arg_loc::STACK ||
+              !recv_a.result.is_symbol() || !recv_a.result.is_param ||
+              !recv_b.result.is_symbol() || !recv_b.result.is_param ||
+              !receive_copy_a || !receive_copy_b ||
+              receive_copy_a->op != icode_op::ASSIGN ||
+              receive_copy_b->op != icode_op::ASSIGN ||
+              !is_word_temp(receive_copy_a->result) ||
+              !is_word_temp(receive_copy_b->result) ||
+              !operands_equivalent(receive_copy_a->left, recv_a.result) ||
+              !operands_equivalent(receive_copy_b->left, recv_b.result))) ||
             index_init.op != icode_op::ASSIGN ||
             !index_init.result.is_temp() ||
             !is_exact_int_const(index_init.left, 0) ||
             cursor_a_init.op != icode_op::ASSIGN ||
             !is_word_temp(cursor_a_init.result) ||
-            !operands_equivalent(cursor_a_init.left, recv_a.result) ||
+            !operands_equivalent(cursor_a_init.left, received_a) ||
             loop.op != icode_op::LABEL ||
             bound_cmp.op != icode_op::LT ||
             !operands_equivalent(bound_cmp.left, index_init.result) ||
@@ -1518,6 +2287,14 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         const int count = static_cast<int>(bound_cmp.right.ival);
         emit_helper_header();
         emit_comment("frameless indexed fixed-length byte equality loop");
+        if (stack_args) {
+            emit_line("pop\taf");
+            emit_line("pop\thl");
+            emit_line("pop\tde");
+            emit_line("push\tde");
+            emit_line("push\thl");
+            emit_line("push\taf");
+        }
         emit_line("ld\tb, h");
         emit_line("ld\tc, l");
         emit_line("push\tde");
@@ -1531,10 +2308,12 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
         emit_line("inc\tiy");
         emit_line("dec\te");
         emit_line("jr\tnz, %s", loop.label_name.c_str());
-        emit_line("ld\tde, %s", asm_.imm(1).c_str());
+        emit_line("ld\t%s, %s",
+                  stack_args ? "hl" : "de", asm_.imm(1).c_str());
         emit_line("ret");
         emit_label(different_label.label_name, false);
-        emit_line("ld\tde, %s", asm_.imm(0).c_str());
+        emit_line("ld\t%s, %s",
+                  stack_args ? "hl" : "de", asm_.imm(0).c_str());
         emit_line("ret");
         emit_helper_footer();
         return true;
@@ -4855,8 +5634,8 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
 
             emit_helper_header();
             emit_comment("O3 sdcc-style helper fast path: select next thread");
-            asm_.global_decl(mangle("__sdcc_enter_ix"));
-            emit_line("call\t%s", mangle("__sdcc_enter_ix").c_str());
+            asm_.global_decl("__sdcc_enter_ix");
+            emit_line("call\t__sdcc_enter_ix");
             emit_line("push\taf");
             emit_line("push\taf");
             emit_line("ld\tbc, (%s)",
@@ -5836,7 +6615,11 @@ bool z80_gen::try_emit_sdcc_style_helper(const ir_function &fn) {
     };
 
     if (match_frameless_u16_mul_shr8() ||
+        match_frameless_global_initializer() ||
+        match_frameless_dual_global_store() ||
+        match_frameless_parallel_word_append() ||
         match_frameless_byte_distance() ||
+        match_frameless_stack_byte_compare() ||
         match_frameless_byte_compare() ||
         match_frameless_byte_copy_until_zero() ||
         match_frameless_fixed_byte_equality() ||
@@ -6394,6 +7177,13 @@ bool z80_gen::symbol_home_in_bc(const operand &op) const {
         return false;
     auto it = symbol_regs_.find(symbol_reg_key(op));
     return it != symbol_regs_.end() && it->second == temp_home::main_bc;
+}
+
+bool z80_gen::symbol_home_in_iy(const operand &op) const {
+    if (op.kind != operand_kind::SYMBOL || op.is_global)
+        return false;
+    auto it = symbol_regs_.find(symbol_reg_key(op));
+    return it != symbol_regs_.end() && it->second == temp_home::main_iy;
 }
 
 bool z80_gen::operand_home_in_bc(const operand &op) const {
@@ -7610,12 +8400,12 @@ bool z80_gen::try_emit_postdec_truth(const ir_function &fn, size_t &idx) {
     store_hl(old_ic.left);
     emit_line("pop\taf");
     if (!ifx_ic.true_lbl.empty() && !ifx_ic.false_lbl.empty()) {
-        emit_line("jp\tnz, %s", mangle(ifx_ic.true_lbl).c_str());
-        emit_line("jp\t%s", mangle(ifx_ic.false_lbl).c_str());
+        emit_line("jp\tnz, %s", ifx_ic.true_lbl.c_str());
+        emit_line("jp\t%s", ifx_ic.false_lbl.c_str());
     } else if (!ifx_ic.true_lbl.empty()) {
-        emit_line("jp\tnz, %s", mangle(ifx_ic.true_lbl).c_str());
+        emit_line("jp\tnz, %s", ifx_ic.true_lbl.c_str());
     } else if (!ifx_ic.false_lbl.empty()) {
-        emit_line("jp\tz, %s", mangle(ifx_ic.false_lbl).c_str());
+        emit_line("jp\tz, %s", ifx_ic.false_lbl.c_str());
     }
     idx += 2;
     return true;
@@ -8285,6 +9075,186 @@ bool z80_gen::try_emit_byte_load_compare_ifx(const ir_function &fn,
     invalidate_pair_cache();
     invalidate_a_cache();
     idx = second_idx + 2;
+    cur_ic_index_ = idx;
+    return true;
+}
+
+bool z80_gen::try_emit_guarded_zero_arg_indirect_call(
+    const ir_function &fn, size_t &idx) {
+    if (!compare_ifx_fusion_enabled() || idx + 2 >= fn.icodes.size())
+        return false;
+
+    auto is_plain_callback_global = [&](const operand &op) {
+        return op.kind == operand_kind::SYMBOL && op.is_global &&
+               !op.is_param && !op.is_func && !op.is_tls && !op.is_sfr &&
+               op.type && !op.type->is_volatile && op_size(op) == 2;
+    };
+    auto target_count = [&](const std::string &label) {
+        size_t count = 0;
+        for (const icode &ic : fn.icodes) {
+            if (ic.op == icode_op::GOTO && ic.label_name == label)
+                ++count;
+            if (ic.op == icode_op::IFX) {
+                if (ic.true_lbl == label)
+                    ++count;
+                if (ic.false_lbl == label)
+                    ++count;
+            }
+        }
+        return count;
+    };
+    auto emit_guarded_call = [&](const operand &target,
+                                 const icode &branch,
+                                 const icode &call_label,
+                                 size_t consumed) {
+        cur_ic_index_ = idx;
+        if (debug_)
+            debug_->emit_location(branch.line);
+        load_hl(target);
+        emit_line("ld\ta, h");
+        emit_line("or\ta, l");
+        emit_line("jp\tz, %s", branch.false_lbl.c_str());
+        emit_label(call_label.label_name, false);
+        asm_.global_decl("__sdcc_call_hl");
+        emit_line("call\t__sdcc_call_hl");
+        invalidate_pair_cache();
+        invalidate_a_cache();
+        idx += consumed;
+        cur_ic_index_ = idx;
+        return true;
+    };
+
+    const icode &direct_branch = fn.icodes[idx];
+    const icode &direct_label = fn.icodes[idx + 1];
+    const icode &direct_call = fn.icodes[idx + 2];
+    if (direct_branch.op == icode_op::IFX &&
+        is_plain_callback_global(direct_branch.left) &&
+        !direct_branch.true_lbl.empty() &&
+        !direct_branch.false_lbl.empty() &&
+        direct_label.op == icode_op::LABEL &&
+        direct_label.label_name == direct_branch.true_lbl &&
+        direct_call.op == icode_op::CALL &&
+        direct_call.func_name.empty() && direct_call.result.is_none() &&
+        operands_equivalent(direct_call.left, direct_branch.left) &&
+        direct_call.num_params == 0 && direct_call.arg_bytes == 0 &&
+        target_count(direct_label.label_name) == 1) {
+        return emit_guarded_call(direct_branch.left, direct_branch,
+                                 direct_label, 2);
+    }
+
+    if (idx + 4 >= fn.icodes.size())
+        return false;
+
+    const icode &load = fn.icodes[idx];
+    const icode &branch = fn.icodes[idx + 1];
+    const icode &call_label = fn.icodes[idx + 2];
+    const icode &reload = fn.icodes[idx + 3];
+    const icode &call = fn.icodes[idx + 4];
+
+    if (load.op != icode_op::ASSIGN || !load.result.is_temp() ||
+        !load.right.is_none() || !is_plain_callback_global(load.left) ||
+        branch.op != icode_op::IFX || !branch.left.is_temp() ||
+        branch.left.temp_id != load.result.temp_id ||
+        branch.true_lbl.empty() || branch.false_lbl.empty() ||
+        call_label.op != icode_op::LABEL ||
+        call_label.label_name != branch.true_lbl ||
+        reload.op != icode_op::ASSIGN || !reload.result.is_temp() ||
+        !reload.right.is_none() ||
+        !operands_equivalent(reload.left, load.left) ||
+        call.op != icode_op::CALL || !call.func_name.empty() ||
+        !call.result.is_none() || !call.left.is_temp() ||
+        call.left.temp_id != reload.result.temp_id ||
+        call.num_params != 0 || call.arg_bytes != 0 ||
+        temp_value_used_after(fn, idx + 2, load.result.temp_id) ||
+        temp_value_used_after(fn, idx + 5, reload.result.temp_id)) {
+        return false;
+    }
+
+    if (target_count(call_label.label_name) != 1)
+        return false;
+
+    return emit_guarded_call(load.left, branch, call_label, 4);
+}
+
+bool z80_gen::try_emit_word_select_send(const ir_function &fn, size_t &idx) {
+    if (!compare_ifx_fusion_enabled() || idx + 8 >= fn.icodes.size())
+        return false;
+
+    const icode &compare = fn.icodes[idx];
+    const icode &branch = fn.icodes[idx + 1];
+    const icode &true_label = fn.icodes[idx + 2];
+    const icode &true_value = fn.icodes[idx + 3];
+    const icode &true_goto = fn.icodes[idx + 4];
+    const icode &false_label = fn.icodes[idx + 5];
+    const icode &false_value = fn.icodes[idx + 6];
+    const icode &join_label = fn.icodes[idx + 7];
+    const icode &send = fn.icodes[idx + 8];
+
+    if (!is_compare_op(compare.op) || !compare.result.is_temp() ||
+        branch.op != icode_op::IFX || !branch.left.is_temp() ||
+        branch.left.temp_id != compare.result.temp_id ||
+        branch.true_lbl.empty() || branch.false_lbl.empty() ||
+        true_label.op != icode_op::LABEL ||
+        true_label.label_name != branch.true_lbl ||
+        false_label.op != icode_op::LABEL ||
+        false_label.label_name != branch.false_lbl ||
+        true_value.op != icode_op::ASSIGN ||
+        false_value.op != icode_op::ASSIGN ||
+        !true_value.result.is_temp() || !false_value.result.is_temp() ||
+        true_value.result.temp_id != false_value.result.temp_id ||
+        !true_value.right.is_none() || !false_value.right.is_none() ||
+        op_size(true_value.result) != 2 ||
+        op_size(false_value.result) != 2 ||
+        op_size(true_value.left) != 2 ||
+        op_size(false_value.left) != 2 ||
+        true_goto.op != icode_op::GOTO ||
+        join_label.op != icode_op::LABEL ||
+        true_goto.label_name != join_label.label_name ||
+        send.op != icode_op::SEND || send.arg_loc != abi_arg_loc::STACK ||
+        !send.left.is_temp() ||
+        send.left.temp_id != true_value.result.temp_id ||
+        op_size(send.left) != 2 ||
+        temp_value_used_after(fn, idx + 2, compare.result.temp_id) ||
+        temp_value_used_after(fn, idx + 9, true_value.result.temp_id)) {
+        return false;
+    }
+
+    auto target_count = [&](const std::string &label) {
+        size_t count = 0;
+        for (const icode &ic : fn.icodes) {
+            if (ic.op == icode_op::GOTO && ic.label_name == label)
+                ++count;
+            if (ic.op == icode_op::IFX) {
+                if (ic.true_lbl == label)
+                    ++count;
+                if (ic.false_lbl == label)
+                    ++count;
+            }
+        }
+        return count;
+    };
+    if (target_count(true_label.label_name) != 1 ||
+        target_count(false_label.label_name) != 1 ||
+        target_count(join_label.label_name) != 1) {
+        return false;
+    }
+
+    cur_ic_index_ = idx;
+    if (debug_)
+        debug_->emit_location(branch.line ? branch.line : compare.line);
+    emit_compare_branch(compare, compare.op,
+                        branch.true_lbl, branch.false_lbl);
+    emit_label(true_label.label_name, false);
+    load_hl(true_value.left);
+    emit_line("jp\t%s", join_label.label_name.c_str());
+    emit_label(false_label.label_name, false);
+    load_hl(false_value.left);
+    emit_label(join_label.label_name, false);
+    emit_line("push\thl");
+    invalidate_pair_cache();
+    invalidate_a_cache();
+
+    idx += 8;
     cur_ic_index_ = idx;
     return true;
 }

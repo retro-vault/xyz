@@ -154,6 +154,36 @@ if ! awk '
     exit 1
 fi
 
+cat >"$TMPDIR/bc_live_loop.s" <<'ASM'
+	.area	_CODE
+_bc_live_loop:
+	ld	hl, #0
+	ld	b, h
+	ld	c, l
+	add	hl, hl
+	push	hl
+	pop	iy
+_bc_live_loop_body:
+	ld	a, c
+	sub	a, -2(ix)
+	ld	a, b
+	sbc	a, -1(ix)
+	jr	nc, _bc_live_loop_exit
+	inc	bc
+	inc	iy
+	inc	iy
+	jr	_bc_live_loop_body
+_bc_live_loop_exit:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_live_loop.s" -o "$TMPDIR/bc_live_loop.out.s"
+if ! grep -Eq 'ld[[:space:]]+b, ?h' "$TMPDIR/bc_live_loop.out.s" ||
+   ! grep -Eq 'ld[[:space:]]+c, ?l' "$TMPDIR/bc_live_loop.out.s"; then
+    echo "xopt smoke: live BC initialization was removed across a loop" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/equ_case.s" <<'ASM'
 XLO     .equ    -6
 THI     .equ    -1
@@ -251,6 +281,39 @@ grep -Eq '^__xopt_outline_[0-9]+:' "$TMPDIR/size_outline.os.s"
 "$XOPT" -Of "$TMPDIR/size_outline.s" -o "$TMPDIR/size_outline.of.s"
 if grep -q '__xopt_outline_' "$TMPDIR/size_outline.of.s"; then
     echo "xopt smoke: speed mode unexpectedly enabled size outlining" >&2
+    exit 1
+fi
+
+{
+    printf '\t.area\t_CODE\n'
+    for ((i = 0; i < 4010; ++i)); do
+        printf '_large_barrier_%d:\n\tnop\n' "$i"
+    done
+    cat <<'ASM'
+_large_outline_a:
+	ld	a,#1
+	ld	b,#2
+	ld	c,#3
+	ld	d,#4
+	ld	e,#5
+	inc	a
+	ret
+_large_outline_b:
+	ld	a,#1
+	ld	b,#2
+	ld	c,#3
+	ld	d,#4
+	ld	e,#5
+	dec	a
+	ret
+ASM
+} >"$TMPDIR/large_size_outline.s"
+
+"$XOPT" -Os "$TMPDIR/large_size_outline.s" \
+    -o "$TMPDIR/large_size_outline.out.s"
+if [[ "$(grep -Ec '^[[:space:]]+call[[:space:]]+__xopt_outline_' \
+        "$TMPDIR/large_size_outline.out.s")" != "2" ]]; then
+    echo "xopt smoke: scalable large -Os path did not outline" >&2
     exit 1
 fi
 
@@ -463,6 +526,49 @@ if grep -Eq '^[[:space:]]+bit[[:space:]]+7, ?e' "$TMPDIR/register_shift_xor_tail
     exit 1
 fi
 grep -Eq '^[[:space:]]+jr[[:space:]]+nc, ?_register_tail_else' "$TMPDIR/register_shift_xor_tail_diamond.out.s"
+
+cat >"$TMPDIR/slot_shift_xor_chain.s" <<'ASM'
+	.area	_CODE
+_slot_shift_xor_chain:
+	; sdcccall(0) prologue: slot_shift_xor_chain (locals=0, temp_frame=1, stack_params=0)
+	ld	-1(ix),a
+	bit	7,-1(ix)
+	jr	z,_slot_shift_else
+_slot_shift_true:
+	add	a,a
+	xor	#7
+	ld	-1(ix),a
+	jr	_slot_shift_join
+_slot_shift_else:
+	add	a,a
+	ld	-1(ix),a
+_slot_shift_join:
+	bit	7,-1(ix)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/slot_shift_xor_chain.s" -o "$TMPDIR/slot_shift_xor_chain.out.s"
+if [[ "$(grep -Ec '^[[:space:]]+bit[[:space:]]+7, ?-1\(ix\)' "$TMPDIR/slot_shift_xor_chain.out.s")" != "1" ]]; then
+    echo "xopt smoke: slot-backed shift/XOR recurrence was not folded" >&2
+    exit 1
+fi
+grep -Eq '^[[:space:]]+jr[[:space:]]+nc, ?_slot_shift_join' "$TMPDIR/slot_shift_xor_chain.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+-1\(ix\), ?a' "$TMPDIR/slot_shift_xor_chain.out.s"
+
+cat >"$TMPDIR/legacy_return_after_xopt_label.s" <<'ASM'
+_legacy_return_after_xopt_label:
+	; sdcccall(0) prologue: legacy_return_after_xopt_label (locals=0, temp_frame=0, stack_params=0)
+__xopt_inc16_0:
+	ld	h,b
+	ld	l,c
+	jr	_legacy_return_after_xopt_label_end
+_legacy_return_after_xopt_label_end:
+	jp	__sdcc_leave_ix
+ASM
+
+"$XOPT" -Os "$TMPDIR/legacy_return_after_xopt_label.s" -o "$TMPDIR/legacy_return_after_xopt_label.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+h, ?b' "$TMPDIR/legacy_return_after_xopt_label.out.s"
+grep -Eq '^[[:space:]]+ld[[:space:]]+l, ?c' "$TMPDIR/legacy_return_after_xopt_label.out.s"
 
 cat >"$TMPDIR/prewritten_stack_alloc.s" <<'ASM'
 	.area	_CODE
@@ -3544,6 +3650,36 @@ if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h|ld[[:space:]]+c,[[:space:]]*l' "$TMPD
     exit 1
 fi
 
+cat >"$TMPDIR/dead_bc_copy_before_c_call.s" <<'ASM'
+_dead_bc_copy_before_c_call:
+	ld	b, h
+	ld	c, l
+	push	hl
+	.globl	_consume_hl
+	call	_consume_hl
+	inc	sp
+	inc	sp
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/dead_bc_copy_before_c_call.s" -o "$TMPDIR/dead_bc_copy_before_c_call.out.s"
+if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h|ld[[:space:]]+c,[[:space:]]*l' "$TMPDIR/dead_bc_copy_before_c_call.out.s"; then
+    echo "xopt smoke: dead BC copy before a direct C call survived" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/bc_copy_before_internal_call.s" <<'ASM'
+_bc_copy_before_internal_call:
+	ld	b, h
+	ld	c, l
+	call	__sdcc_call_bc
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/bc_copy_before_internal_call.s" -o "$TMPDIR/bc_copy_before_internal_call.out.s"
+grep -Eq 'ld[[:space:]]+b,[[:space:]]*h' "$TMPDIR/bc_copy_before_internal_call.out.s"
+grep -Eq 'ld[[:space:]]+c,[[:space:]]*l' "$TMPDIR/bc_copy_before_internal_call.out.s"
+
 cat >"$TMPDIR/dead_bc_store_copy_live.s" <<'ASM'
 _dead_bc_store_copy_live:
 	ld	b, h
@@ -3643,6 +3779,75 @@ if grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*a' "$TMPDIR/dead_temp_ix_store.o
     echo "xopt smoke: dead compiler temp IX store was not removed" >&2
     exit 1
 fi
+
+cat >"$TMPDIR/temp_store_read_before_preserved_reload.s" <<'ASM'
+_temp_store_read_before_preserved_reload:
+	; sdcccall(0) prologue: temp_store_read_before_preserved_reload (locals=0, temp_frame=6, stack_params=0)
+	ld	-6(ix), a
+	ld	a, -3(ix)
+	xor	a, -6(ix)
+	ld	-3(ix), a
+	bit	7, a
+	jp	z, L_first_else
+L_first_true:
+	ld	a, -3(ix)
+	add	a, a
+	xor	#7
+	ld	-3(ix), a
+	jr	L_first_join
+L_first_else:
+	ld	a, -3(ix)
+	add	a, a
+	ld	-3(ix), a
+L_first_join:
+	bit	7, -3(ix)
+	jp	z, L_second_else
+L_second_true:
+	ld	a, -3(ix)
+	add	a, a
+	xor	#7
+	ld	-3(ix), a
+	jr	L_second_join
+L_second_else:
+	ld	a, -3(ix)
+	add	a, a
+	ld	-3(ix), a
+L_second_join:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/temp_store_read_before_preserved_reload.s" -o "$TMPDIR/temp_store_read_before_preserved_reload.out.s"
+if grep -Eq 'bit[[:space:]]+7,[[:space:]]*-3\(ix\)' "$TMPDIR/temp_store_read_before_preserved_reload.out.s" &&
+   ! sed -n '/^L_first_join:/,+2p' "$TMPDIR/temp_store_read_before_preserved_reload.out.s" |
+       grep -Eq 'ld[[:space:]]+-3\(ix\),[[:space:]]*a'; then
+    echo "xopt smoke: IX store read before an A-preserved reload was removed" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/temp_store_branch_read_before_rewrite.s" <<'ASM'
+_temp_store_branch_read_before_rewrite:
+	; sdcccall(0) prologue: temp_store_branch_read_before_rewrite (locals=0, temp_frame=2, stack_params=0)
+	ld	-1(ix), a
+	cp	#32
+	jr	z, L_return_zero
+	xor	a, a
+	jr	L_compare_more
+L_return_zero:
+	ld	-2(ix), #0
+	ld	-1(ix), #0
+	jr	L_done
+L_compare_more:
+	ld	a, -1(ix)
+	cp	#9
+	jr	z, L_done
+	ld	a, -1(ix)
+	cp	#10
+L_done:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/temp_store_branch_read_before_rewrite.s" -o "$TMPDIR/temp_store_branch_read_before_rewrite.out.s"
+grep -Eq 'ld[[:space:]]+-1\(ix\),[[:space:]]*a' "$TMPDIR/temp_store_branch_read_before_rewrite.out.s"
 
 cat >"$TMPDIR/pair_imm_copy_reload.s" <<'ASM'
 _pair_imm_copy_reload:

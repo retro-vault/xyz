@@ -12,7 +12,6 @@
 
 
         .globl  _strncpy
-        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -56,4 +55,4 @@ strncpy_pad:
 strncpy_done:
         pop     de
         pop     ix
-        jp      __string_ret_clean2
+        ret

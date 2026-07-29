@@ -35,8 +35,8 @@ typedef struct fenv_t {
 #define FE_UPWARD     2
 #define FE_TOWARDZERO 3
 
-extern const fenv_t __fe_dfl_env;
-#define FE_DFL_ENV (&__fe_dfl_env)
+extern const fenv_t _fe_dfl_env;
+#define FE_DFL_ENV (&_fe_dfl_env)
 
 int feclearexcept(int excepts);
 int fegetexceptflag(fexcept_t *restrict flagp, int excepts);

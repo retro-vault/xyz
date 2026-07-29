@@ -147,11 +147,21 @@ preprocessor::preprocessor(diag_engine                   &diag,
     auto predef = [&](const char *name, const char *body) {
         macro_def m; m.body = body; macros_[name] = m;
     };
+    auto predef_function = [&](const char *name,
+                               std::vector<std::string> params,
+                               const char *body) {
+        macro_def m;
+        m.is_function_like = true;
+        m.params = std::move(params);
+        m.body = body;
+        macros_[name] = std::move(m);
+    };
     predef("__STDC__",                 "1");
     predef("__STDC_HOSTED__",          "1");
     predef("__STDC_VERSION__",         "202311L"); // C23
     predef("__XCC__",                  "1");
     predef("__xcc__",                  "1");
+    predef_function("__sdcccall",      {"abi"}, "[[sdcc::sdccall(abi)]]");
     // xcc accepts the common GNU attributes and keywords used by portable C
     // libraries, so advertise a conservative GCC-compatible preprocessor face.
     predef("__GNUC__",                 "4");

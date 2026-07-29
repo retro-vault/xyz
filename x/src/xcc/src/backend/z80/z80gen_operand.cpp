@@ -814,6 +814,16 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 }
                 break;
             }
+            if (symbol_home_in_iy(op) && op.byte_offset == 0) {
+                if (opt_settings_.level == opt_level::Of && r.lo != 'l') {
+                    emit_line("ld\td, iyh");
+                    emit_line("ld\te, iyl");
+                } else {
+                    emit_line("push\tiy");
+                    emit_line(r.lo == 'l' ? "pop\thl" : "pop\tde");
+                }
+                break;
+            }
             auto si = incoming_symbol_homes_.find(op.stack_offset);
             if (si != incoming_symbol_homes_.end() && op.byte_offset == 0) {
                 switch (si->second) {
@@ -1411,6 +1421,10 @@ void z80_gen::load_hl_word(const operand &op, int word_index) {
                op.byte_offset + word_byte == 0) {
         emit_line("ld\th, b");
         emit_line("ld\tl, c");
+    } else if (op.kind == operand_kind::SYMBOL && symbol_home_in_iy(op) &&
+               op.byte_offset + word_byte == 0) {
+        emit_line("push\tiy");
+        emit_line("pop\thl");
     } else {
         load_frame_word(reg_pair{"hl", 'l', 'h', false},
                         ix_offset_of(op) + word_byte);

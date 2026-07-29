@@ -12,7 +12,6 @@
 
 
         .globl  _strlcat
-        .globl  __string_ret_clean2
 
         .area   _CODE
 
@@ -84,4 +83,4 @@ strlcat_sldone:
         ex      de,hl                   ; DE = result
         ld      sp,ix                   ; discard the three locals
         pop     ix
-        jp      __string_ret_clean2
+        ret

@@ -805,7 +805,8 @@ void abi_convention::std_epilogue_frame(z80_gen &g, const ir_function &fn)
 
 void abi_convention::std_send_push(z80_gen &g, const icode &ic)
 {
-    int sz = g.op_size(ic.left);
+    const int value_size = g.op_size(ic.left);
+    const int sz = ic.send_bytes > 0 ? ic.send_bytes : value_size;
     auto push_byte = [&](int byte_offset) {
         operand byte = ic.left;
         byte.byte_offset += byte_offset;
@@ -817,6 +818,11 @@ void abi_convention::std_send_push(z80_gen &g, const icode &ic)
 
     if (sz == 1) {
         push_byte(0);
+    } else if (sz == 2 && value_size == 1) {
+        // Optimizers may narrow a range-proven value, but the callee still
+        // owns the original two-byte ABI slot.
+        g.load_hl(ic.left);
+        g.emit_line("push\thl");
     } else if (sz > 2) {
         if (sz & 1)
             push_byte(sz - 1);
@@ -825,6 +831,20 @@ void abi_convention::std_send_push(z80_gen &g, const icode &ic)
             g.emit_line("push\thl");
         }
     } else {
+        if (ic.left.byte_offset == 0 && ic.left.is_temp() &&
+            g.operand_home_in_bc(ic.left)) {
+            const icode *def =
+                g.find_temp_def_before(ic.left.temp_id, g.cur_ic_index_);
+            if (def && (def->op == icode_op::EQ ||
+                        def->op == icode_op::NE ||
+                        def->op == icode_op::LT ||
+                        def->op == icode_op::LE ||
+                        def->op == icode_op::GT ||
+                        def->op == icode_op::GE)) {
+                g.emit_line("push\tbc");
+                return;
+            }
+        }
         g.load_hl(ic.left);
         g.emit_line("push\thl");
     }
@@ -893,6 +913,18 @@ struct stack_linkage_convention : abi_convention {
     }
 
     void emit_receive(z80_gen &g, const icode &ic) override {
+        if (ic.arg_loc == abi_arg_loc::STACK &&
+            ic.result.is_symbol() && ic.result.byte_offset == 0 &&
+            g.symbol_home_in_iy(ic.result)) {
+            g.emit_comment("keep stack parameter %s live in IY",
+                           ic.result.name.c_str());
+            g.load_frame_word(
+                z80_gen::reg_pair{"hl", 'l', 'h', false},
+                g.ix_offset_of(ic.result));
+            g.emit_line("push\thl");
+            g.emit_line("pop\tiy");
+            return;
+        }
         g.emit_comment("receive (%s) param %s at %s",
                        name(), ic.result.name.c_str(), g.addr_of(ic.result).c_str());
     }

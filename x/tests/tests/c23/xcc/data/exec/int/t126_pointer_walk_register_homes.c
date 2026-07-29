@@ -1,5 +1,11 @@
 #include "xcc_exec_test.h"
 
+#ifdef XCC_FORCE_STACK_LEAVES
+#define XCC_STACK_LEAF [[sdcc::sdccall(0)]]
+#else
+#define XCC_STACK_LEAF
+#endif
+
 struct triple {
     unsigned int x;
     unsigned int y;
@@ -20,7 +26,7 @@ segment_length(const unsigned char *text)
     return length;
 }
 
-static unsigned int
+XCC_STACK_LEAF static unsigned int
 cursor_length(const unsigned char *text)
 {
     const unsigned char *cursor = text;
@@ -88,7 +94,7 @@ side_exit_accumulator(int enter_loop)
     return sum;
 }
 
-static int
+XCC_STACK_LEAF static int
 compare_bytes(const unsigned char *left, const unsigned char *right)
 {
     while (*left != 0 && *left == *right) {
@@ -109,7 +115,7 @@ copy_bytes(unsigned char *destination, const unsigned char *source)
     return (unsigned int)(destination - start);
 }
 
-static int
+XCC_STACK_LEAF static int
 equal_prefix4(const unsigned char *left, const unsigned char *right)
 {
     for (int i = 0; i < 4; ++i) {

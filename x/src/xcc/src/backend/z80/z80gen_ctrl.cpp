@@ -33,28 +33,29 @@ bool supports_direct_call_ifx(call_abi abi, int size) {
     return size == 1 || size == 2;
 }
 
+int word_return_family(call_abi abi) {
+    switch (effective_call_abi(abi)) {
+    case call_abi::SDCCCALL0:
+    case call_abi::Z88DK_CALLEE:
+        return 1; // Legacy word results use HL.
+    case call_abi::SDCCCALL1:
+    case call_abi::Z88DK_SMALLC:
+    case call_abi::Z88DK_FASTCALL:
+        return 2; // Modern word results use DE.
+    default:
+        return 0;
+    }
+}
+
 bool compatible_direct_return_abis(call_abi caller, call_abi callee) {
     caller = effective_call_abi(caller);
     callee = effective_call_abi(callee);
     if (caller == callee)
         return true;
 
-    auto return_family = [](call_abi abi) {
-        switch (abi) {
-        case call_abi::SDCCCALL0:
-        case call_abi::Z88DK_CALLEE:
-            return 1; // Legacy byte/word results use L/HL.
-        case call_abi::SDCCCALL1:
-        case call_abi::Z88DK_SMALLC:
-        case call_abi::Z88DK_FASTCALL:
-            return 2; // Modern byte/word results use A/DE.
-        default:
-            return 0;
-        }
-    };
-
-    const int caller_family = return_family(caller);
-    return caller_family != 0 && caller_family == return_family(callee);
+    const int caller_family = word_return_family(caller);
+    return caller_family != 0 &&
+           caller_family == word_return_family(callee);
 }
 
 bool is_truth_test_preserving_integer_cast(const icode &ic) {
@@ -496,6 +497,8 @@ void z80_gen::gen_call(const icode &ic) {
 
     bool direct_return = false;
     bool direct_ifx = false;
+    bool direct_word_send = false;
+    abi_arg_loc direct_word_send_loc = abi_arg_loc::STACK;
     int direct_ifx_reg_size = 0;
     bool keep_direct_ifx_word_pending = false;
     const bool drop_unused_result =
@@ -553,6 +556,17 @@ void z80_gen::gen_call(const icode &ic) {
                                                        ic.callee_abi) &&
                         next.op == icode_op::RETURN &&
                         same_call_result_operand(next.left, ic.result);
+        direct_word_send =
+            ic.arg_bytes == 0 && op_size(ic.result) == 2 &&
+            word_return_family(ic.callee_abi) != 0 &&
+            next.op == icode_op::SEND &&
+            same_call_result_operand(next.left, ic.result) &&
+            (next.arg_loc == abi_arg_loc::REG_HL ||
+             next.arg_loc == abi_arg_loc::REG_DE) &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id);
+        if (direct_word_send)
+            direct_word_send_loc = next.arg_loc;
         direct_ifx = ic.result.is_temp() &&
                      next.op == icode_op::IFX &&
                      same_call_result_operand(next.left, ic.result) &&
@@ -593,6 +607,8 @@ void z80_gen::gen_call(const icode &ic) {
         direct_return = false;
     if (large_indirect_result)
         direct_ifx = false;
+    if (large_indirect_result)
+        direct_word_send = false;
 
     if (large_indirect_result) {
         // Large aggregate results currently come back as a pointer into
@@ -608,6 +624,14 @@ void z80_gen::gen_call(const icode &ic) {
         if (direct_return) {
             direct_call_return_pending_ = true;
             direct_call_return_value_ = ic.result;
+        } else if (direct_word_send) {
+            const bool result_in_hl =
+                word_return_family(ic.callee_abi) == 1;
+            const bool target_is_hl =
+                direct_word_send_loc == abi_arg_loc::REG_HL;
+            if (result_in_hl != target_is_hl)
+                emit_line("ex\tde, hl");
+            skipped_icodes_.insert(cur_ic_index_ + 1);
         } else if (direct_ifx) {
             direct_call_ifx_pending_ = true;
             direct_call_ifx_value_ = ic.result;

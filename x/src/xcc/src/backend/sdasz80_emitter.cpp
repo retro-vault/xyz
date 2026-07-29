@@ -59,6 +59,10 @@ void sdasz80_emitter::section_data_named(const std::string &name) {
     out_ << "\t.area " << name << "\n";
 }
 
+void sdasz80_emitter::section_bss() {
+    out_ << "\t.area _BSS\n";
+}
+
 void sdasz80_emitter::section_rodata() {
     out_ << "\t.area _CONST\n";
 }

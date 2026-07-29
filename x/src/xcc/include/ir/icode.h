@@ -258,6 +258,7 @@ struct icode {
     int         local_bytes = 0;
     int         argreg      = 0; // SEND/RECEIVE: argument slot index
     abi_arg_loc arg_loc     = abi_arg_loc::STACK; // SEND/RECEIVE: concrete ABI location
+    int         send_bytes  = 0; // SEND: physical bytes reserved in a stack slot
 
     int      line        = 0;
     int      arg_bytes   = 0;               // CALL: total bytes pushed by SEND (for SP cleanup)
@@ -290,6 +291,7 @@ struct ir_function {
     bool                is_variadic      = false;
     bool                callee_cleans_stack = false; // epilogue drops stack params before returning
     bool                is_noreturn      = false; // [[noreturn]]: epilogue unreachable
+    bool                can_internalize_abi = false;
     bool                tail_local_addresses_noescape = false;
 
     //

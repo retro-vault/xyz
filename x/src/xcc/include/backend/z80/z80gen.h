@@ -311,6 +311,7 @@ private:
     static bool temp_home_uses_spill_slot(temp_home home);
     static int symbol_reg_key(const operand &op);
     bool symbol_home_in_bc(const operand &op) const;
+    bool symbol_home_in_iy(const operand &op) const;
     bool operand_home_in_bc(const operand &op) const;
     bool needs_frame_without_temps(const ir_function &fn) const;
     bool can_omit_frame_pointer(const ir_function &fn) const;
@@ -356,6 +357,9 @@ private:
     bool try_emit_lsb32_shift_xor_diamond(const ir_function &fn, size_t &idx);
     bool try_emit_band_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_byte_load_compare_ifx(const ir_function &fn, size_t &idx);
+    bool try_emit_guarded_zero_arg_indirect_call(const ir_function &fn,
+                                                 size_t &idx);
+    bool try_emit_word_select_send(const ir_function &fn, size_t &idx);
     bool try_emit_compare_ifx(const ir_function &fn, size_t &idx);
     bool find_direct_byte_truth_ifx(const operand &value,
                                     size_t start_idx,
@@ -653,8 +657,8 @@ private:
     //
     // Apply platform name-mangling to a C identifier.
     // User-visible C symbols always gain one assembler leading underscore,
-    // so "foo" -> "_foo" and "_foo" -> "__foo". Compiler/runtime-private
-    // assembler-space names that already begin with "__" are preserved.
+    // so "foo" -> "_foo" and "_foo" -> "__foo". Only the compiler-reserved
+    // __xcc_/__xopt_ label namespaces already live in assembler space.
     //
     std::string mangle(const std::string &name) const;
 

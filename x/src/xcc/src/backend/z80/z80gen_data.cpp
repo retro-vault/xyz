@@ -25,6 +25,17 @@ int global_object_size(const ir_module::global_var &g) {
     return sz > 0 ? sz : 2;
 }
 
+bool has_all_zero_initializer(const ir_module::global_var &g) {
+    if (!g.init_vals.empty()) {
+        for (const auto &e : g.init_vals) {
+            if (!e.label.empty() || e.value != 0)
+                return false;
+        }
+        return true;
+    }
+    return !g.has_init || g.init_val == 0;
+}
+
 } // namespace
 
 void z80_gen::plan_size_shared_ix_helpers(const ir_module &mod) {
@@ -176,6 +187,7 @@ void z80_gen::emit_globals(const ir_module &mod) {
     for (auto &g : mod.globals) {
         if (g.is_tls) continue;
         if (g.at_address >= 0 || g.sfr_port >= 0) continue; // handled above
+        if (g.bank < 0 && has_all_zero_initializer(g)) continue;
 
         if (g.bank != current_data_bank) {
             if (g.bank < 0) asm_.section_data();
@@ -195,6 +207,28 @@ void z80_gen::emit_globals(const ir_module &mod) {
     if (emitted_data) {
         asm_.raw("\n");
     }
+
+    bool emitted_bss = false;
+    for (const auto &g : mod.globals) {
+        if (g.is_tls || g.bank >= 0 ||
+            g.at_address >= 0 || g.sfr_port >= 0 ||
+            !has_all_zero_initializer(g)) {
+            continue;
+        }
+        if (!emitted_bss)
+            asm_.section_bss();
+
+        const std::string lbl = mangle(g.name);
+        if (!g.is_static) asm_.global_decl(lbl);
+        if (debug_) debug_->emit_global(g.name, g.type.get(), g.is_static);
+        asm_.symbol_type_object(lbl);
+        asm_.label(lbl, false);
+        asm_.ds(global_object_size(g));
+        asm_.symbol_size(lbl, std::to_string(global_object_size(g)));
+        emitted_bss = true;
+    }
+    if (emitted_bss)
+        asm_.raw("\n");
 
     if (tls_size_ > 0) {
         asm_.section_tls();

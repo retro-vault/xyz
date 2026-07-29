@@ -45,6 +45,7 @@ public:
     virtual void section_code_named(const std::string &name) = 0;
     virtual void section_data() = 0;
     virtual void section_data_named(const std::string &name) = 0;
+    virtual void section_bss() = 0;
     virtual void section_rodata() = 0;
     virtual void section_tls() = 0;
 

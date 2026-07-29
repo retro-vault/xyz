@@ -302,6 +302,7 @@ void sema::apply_imported_call_abi(symbol &sym,
 
     if (sym.abi == call_abi::DEFAULT)
         sym.abi = imported;
+    sym.abi_explicit = true;
 }
 
 void sema::normalize_variadic_call_abi(func_decl &d) {
@@ -637,10 +638,23 @@ void sema::visit(var_decl &d) {
 
 void sema::visit(func_decl &d) {
     sync_function_symbol_abi_from_type(d);
+    if (d.sym && d.type && d.type->is_func() &&
+        d.type->func_abi_explicit) {
+        d.sym->abi_explicit = true;
+    }
     if (d.sym && !d.attrs.empty())
         apply_attrs(*d.sym, d.attrs, d.loc);
     if (d.sym)
         apply_imported_call_abi(*d.sym, d.attrs, d.loc);
+    // Startup objects call the external C entry point with the platform ABI.
+    // Keep that boundary stable when --sdcccall changes the default used by
+    // ordinary functions in the translation unit.
+    if (d.sym && d.name == "main" &&
+        d.storage != storage_class::STATIC) {
+        d.sym->abi = call_abi::SDCCCALL1;
+        sync_nested_function_type_abi(d.type, d.sym->abi);
+        sync_nested_function_type_abi(d.sym->type, d.sym->abi);
+    }
     normalize_variadic_call_abi(d);
     if (d.sym) {
         sync_nested_function_type_abi(d.type, d.sym->abi);

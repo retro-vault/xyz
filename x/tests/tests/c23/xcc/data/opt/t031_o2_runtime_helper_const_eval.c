@@ -1,7 +1,7 @@
-extern unsigned int __mul16(unsigned int a, unsigned int b);
+extern unsigned int _mul16(unsigned int a, unsigned int b);
 
 static unsigned int square(unsigned int x) {
-    return __mul16(x, x);
+    return _mul16(x, x);
 }
 
 int f(void) {

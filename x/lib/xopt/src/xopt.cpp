@@ -757,7 +757,6 @@ std::string merge_repeated_tails(const std::string &asm_text) {
     std::vector<std::string> sections;
     std::unordered_map<std::string, asm_line> section_lines;
     collect_executable_sections(lines, sections, section_lines);
-
     std::unordered_map<std::string, outline_candidate> candidate_map;
     for (size_t end = 0; end < lines.size(); ++end) {
         if (sections[end].empty() || !unconditional_tail_instruction(lines[end]))
@@ -1131,8 +1130,15 @@ std::string optimize_z80_assembly(const std::string &asm_text,
         return asm_text;
     const int pass_budget = choose_pass_budget(asm_text, level);
     const bool size_bias = level == optimization_level::os;
-    std::string optimized = z80_peep::optimize(
-        asm_text, uses_speed_biased_rules(level), pass_budget, size_bias);
+    const size_t asm_line_count =
+        static_cast<size_t>(std::count(asm_text.begin(), asm_text.end(), '\n'));
+    constexpr size_t kMaxIterativePeepholeLines = 8000;
+    const bool scalable_size_only =
+        size_bias && asm_line_count > kMaxIterativePeepholeLines;
+    std::string optimized = scalable_size_only
+        ? asm_text
+        : z80_peep::optimize(
+              asm_text, uses_speed_biased_rules(level), pass_budget, size_bias);
     if (level == optimization_level::os) {
         optimized = compact_unused_temp_frames(optimized);
         for (int round = 0; round < 2; ++round) {

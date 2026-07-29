@@ -11,9 +11,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _memmem
-        .globl  __string_ret_clean4
-        .globl  __string_return_zero_clean4
-        .globl  __string_return_hl_clean4
+        .globl  __string_return_zero
+        .globl  __string_return_hl
 
         .area   _CODE
 
@@ -29,7 +28,7 @@ _memmem::
         or      c
         jr      nz,__memmem_nonempty
         pop     ix
-        jp      __string_return_hl_clean4
+        jp      __string_return_hl
 
 __memmem_nonempty:
         ;; Compute how many candidate starts remain: hlen - nlen + 1.
@@ -71,7 +70,7 @@ __memmem_found:
         pop     bc                      ; discard saved candidate count
         pop     de                      ; DE = matching candidate
         pop     ix
-        jp      __string_ret_clean4
+        ret
 
 __memmem_mismatch:
         pop     de                      ; restore candidate count
@@ -84,4 +83,4 @@ __memmem_too_short:
         pop     hl                      ; drop saved haystack base
 __memmem_not_found:
         pop     ix
-        jp      __string_return_zero_clean4
+        jp      __string_return_zero

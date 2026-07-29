@@ -15,11 +15,11 @@
         .module longjmp
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  __longjmp
+        .globl  ___longjmp
 
         .area   _CODE
 
-        ; __longjmp
+        ; ___longjmp (C identifier __longjmp)
         ; inputs:
         ;   HL = pointer to jmp_buf
         ;   DE = value that setjmp should appear to return
@@ -29,7 +29,7 @@
         ; notes:
         ;   The saved program counter is pushed onto the restored stack so a
         ;   plain RET re-enters the original caller with the right stack shape.
-__longjmp:
+___longjmp:
         push    de                      ; preserve requested setjmp return value
 
         ld      c, (hl)

@@ -47,6 +47,7 @@ static constexpr opt_flag_binding k_opt_flag_bindings[] = {
     {"merge-identical-functions", &optimization_settings::merge_identical_functions},
     {"inline-trivial-internal-functions", &optimization_settings::inline_trivial_internal_functions},
     {"inline-static-functions", &optimization_settings::inline_static_functions},
+    {"internal-call-abi-promotion", &optimization_settings::internal_call_abi_promotion},
     {"cfg-cleanup", &optimization_settings::cfg_cleanup},
     {"jump-threading", &optimization_settings::jump_threading},
     {"address-deref-fold", &optimization_settings::address_deref_fold},

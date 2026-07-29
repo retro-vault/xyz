@@ -13,15 +13,12 @@ BENCH_ROOT="$TEST_ROOT/benchmarks"
 BARE_ROOT="$BENCH_ROOT/bare"
 NUMERIC_ROOT="$BENCH_ROOT/numeric"
 PORTABLE_ROOT="$BENCH_ROOT/portable"
-Z88DK_ROOT="$BENCH_ROOT/z88dk"
 Z88DK24_ROOT="$BENCH_ROOT/z88dk24"
 BARE_INCLUDE_DIR="$BARE_ROOT/include"
 NUMERIC_INCLUDE_DIR="$NUMERIC_ROOT/include"
 PORTABLE_INCLUDE_DIR="$PORTABLE_ROOT/include"
-Z88DK_INCLUDE_DIR="$Z88DK_ROOT/include"
 EXPECTED_CSV="$BARE_ROOT/expected.csv"
 PORTABLE_EXPECTED_CSV="$PORTABLE_ROOT/expected.csv"
-Z88DK_EXPECTED_CSV="$Z88DK_ROOT/expected.csv"
 CRT0_S="$TEST_ROOT/tests/c23/xcc/tools/z80emu/crt0_sdasz80.s"
 NUMERIC_CRT0="$NUMERIC_ROOT/crt0.s"
 IHX2BIN="$TEST_ROOT/tests/runtime/tools/ihx2bin.py"
@@ -78,7 +75,6 @@ FILTER=""
 BARE_FILTER=""
 NUMERIC_FILTER=""
 PORTABLE_FILTER=""
-Z88DK_FILTER=""
 Z88DK24_FILTER=""
 BARE_CYCLES=20000000
 NUMERIC_CYCLES=200000000
@@ -89,6 +85,7 @@ XCC_ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0"
 CURRENT_INCLUDE_DIR="$BARE_INCLUDE_DIR"
 CURRENT_CYCLES="$BARE_CYCLES"
 CURRENT_SIZE_METRIC="flat"
+CURRENT_ARTIFACTS_DIR=""
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -98,7 +95,6 @@ BARE_BENCHMARKS_RUN="n/a"
 NUMERIC_BENCHMARKS_RUN="n/a"
 NUMERIC_KINDS_RUN="n/a"
 PORTABLE_BENCHMARKS_RUN="n/a"
-Z88DK_BENCHMARKS_RUN="n/a"
 Z88DK24_BENCHMARKS_RUN="n/a"
 
 declare -A EXPECTED_RETURNS
@@ -114,8 +110,9 @@ Arguments:
                          Default: $DEFAULT_XCC
 
 Options:
-  --suite <name>         Select suite: all, bare, numeric, portable, z88dk,
-                         or z88dk24 (complete upstream full programs).
+  --suite <name>         Select suite: all, bare, numeric, portable, or
+                         z88dk (complete upstream full programs).
+                         z88dk24 is a backward-compatible alias.
                          Default: $SUITE
   --outdir <dir>         Output root for generated reports.
                          Default: $OUTDIR
@@ -123,8 +120,8 @@ Options:
   --bare-filter <regex>  Filter only bare-metal benchmarks.
   --numeric-filter <re>  Filter only numeric benchmarks.
   --portable-filter <re> Filter only portable benchmarks.
-  --z88dk-filter <regex> Filter only z88dk benchmarks.
-  --z88dk24-filter <re>  Filter only full-program z88dk benchmarks.
+  --z88dk-filter <regex> Filter full-program z88dk benchmarks.
+  --z88dk24-filter <re>  Backward-compatible alias for --z88dk-filter.
   --cycles <n>           Backward-compatible alias for --bare-cycles.
   --bare-cycles <n>      Cycle budget for bare-metal benchmarks.
                          Default: $BARE_CYCLES
@@ -148,6 +145,21 @@ die() {
 
 need_cmd() {
     command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"
+}
+
+publish_artifact_copy() {
+    local source="$1"
+    local bench_name="$2"
+    local mode_name="$3"
+    local filename="$4"
+    local dest_dir
+
+    [[ -n "$CURRENT_ARTIFACTS_DIR" ]] || return 0
+    [[ -f "$source" ]] || return 0
+
+    dest_dir="$CURRENT_ARTIFACTS_DIR/$bench_name/$mode_name"
+    mkdir -p "$dest_dir"
+    cp "$source" "$dest_dir/$filename"
 }
 
 run_xcc() {
@@ -207,13 +219,8 @@ parse_args() {
             PORTABLE_FILTER="$2"
             shift 2
             ;;
-        --z88dk-filter)
-            [[ $# -ge 2 ]] || die "--z88dk-filter requires a value"
-            Z88DK_FILTER="$2"
-            shift 2
-            ;;
-        --z88dk24-filter)
-            [[ $# -ge 2 ]] || die "--z88dk24-filter requires a value"
+        --z88dk-filter|--z88dk24-filter)
+            [[ $# -ge 2 ]] || die "$1 requires a value"
             Z88DK24_FILTER="$2"
             shift 2
             ;;
@@ -433,6 +440,9 @@ run_xcc_mode() {
     local ret
     local cycles
     local bytes
+    local bench_name
+
+    bench_name="$(basename "$bench_dir")"
 
     if ! build_xcc_rel "$c_file" "$mode" "$main_rel" >/dev/null 2>&1; then
         printf 'build_error,0,0,0\n'
@@ -448,6 +458,9 @@ run_xcc_mode() {
     else
         bytes="$(payload_bytes_from_ihx "$ihx" "$bin" "$crt0_size")"
     fi
+    publish_artifact_copy "$ihx" "$bench_name" "$tag" "program.ihx"
+    publish_artifact_copy "$bin" "$bench_name" "$tag" "program.bin"
+    publish_artifact_copy "$map" "$bench_name" "$tag" "program.map"
     IFS=, read -r status ret cycles <<< "$(run_image "$CURRENT_CYCLES" "$ihx")"
     printf '%s,%s,%s,%s\n' "$status" "$ret" "$bytes" "$cycles"
 }
@@ -467,6 +480,9 @@ run_sdcc_mode() {
     local ret
     local cycles
     local bytes
+    local bench_name
+
+    bench_name="$(basename "$bench_dir")"
 
     if ! sdcc -mz80 --sdcccall 1 --fomit-frame-pointer \
         "$( [[ "$mode" == "size" ]] && printf '%s' '--opt-code-size' || printf '%s' '--opt-code-speed' )" \
@@ -484,6 +500,9 @@ run_sdcc_mode() {
     else
         bytes="$(payload_bytes_from_ihx "$ihx" "$bin" "$crt0_size")"
     fi
+    publish_artifact_copy "$ihx" "$bench_name" "$tag" "program.ihx"
+    publish_artifact_copy "$bin" "$bench_name" "$tag" "program.bin"
+    publish_artifact_copy "$map" "$bench_name" "$tag" "program.map"
     IFS=, read -r status ret cycles <<< "$(run_image "$CURRENT_CYCLES" "$ihx")"
     printf '%s,%s,%s,%s\n' "$status" "$ret" "$bytes" "$cycles"
 }
@@ -572,6 +591,9 @@ run_z88dk_mode() {
     local cycles
     local bytes
     local total_bytes
+    local bench_name
+
+    bench_name="$(basename "$bench_dir")"
 
     if ! z88dk_env "$ORIG_Z88DK_ZCC" +test -vn "-compiler=$compiler" \
         "-I$CURRENT_INCLUDE_DIR" -m -s "$c_file" -o "$out" >"$bench_dir/$tag.log" 2>&1; then
@@ -585,6 +607,8 @@ run_z88dk_mode() {
     else
         bytes=0
     fi
+    publish_artifact_copy "$out" "$bench_name" "$tag" "program.bin"
+    publish_artifact_copy "$map" "$bench_name" "$tag" "program.map"
     IFS=, read -r status ret cycles <<< "$(run_z88dk_image "$CURRENT_CYCLES" "$out")"
     printf '%s,%s,%s,%s\n' "$status" "$ret" "$bytes" "$cycles"
 }
@@ -595,6 +619,7 @@ run_bare_suite() {
     local summary_md="$suite_outdir/summary.md"
     local versions_txt="$suite_outdir/versions.txt"
     local workdir="$suite_outdir/work"
+    local artifacts_dir="$suite_outdir/artifacts"
     local crt0_rel
     local crt0_hex
     local crt0_size
@@ -646,6 +671,8 @@ run_bare_suite() {
 
     rm -rf "$suite_outdir"
     mkdir -p "$workdir"
+    mkdir -p "$artifacts_dir"
+    CURRENT_ARTIFACTS_DIR="$artifacts_dir"
 
     crt0_rel="$workdir/crt0.rel"
     sdasz80 -o "$crt0_rel" "$CRT0_S" >/dev/null
@@ -908,6 +935,7 @@ The size numbers below are **payload bytes**:
 
 - [results.csv](results.csv)
 - [versions.txt](versions.txt)
+- [artifacts/](artifacts/)
 - \`work/\` contains the intermediate \`.s\`, \`.rel\`, \`.ihx\`, and \`.bin\` files for inspection
 EOF
 
@@ -946,6 +974,7 @@ EOF
     cat "$summary_md"
     echo ""
     echo "${GREEN}Wrote bare benchmark results to:${RESET} $suite_outdir"
+    CURRENT_ARTIFACTS_DIR=""
 }
 
 run_z88dk_suite() {
@@ -954,6 +983,7 @@ run_z88dk_suite() {
     local summary_md="$suite_outdir/summary.md"
     local versions_txt="$suite_outdir/versions.txt"
     local workdir="$suite_outdir/work"
+    local artifacts_dir="$suite_outdir/artifacts"
     local crt0_rel
     local crt0_hex
     local crt0_size
@@ -992,6 +1022,8 @@ run_z88dk_suite() {
 
     rm -rf "$suite_outdir"
     mkdir -p "$workdir"
+    mkdir -p "$artifacts_dir"
+    CURRENT_ARTIFACTS_DIR="$artifacts_dir"
 
     z88dk_sdcc_baseline="$(build_z88dk_baseline "sdcc" "$workdir")"
     z88dk_80cc_baseline="$(build_z88dk_baseline "80cc" "$workdir")"
@@ -1199,12 +1231,14 @@ run_z88dk_suite() {
         echo ""
         echo "- [results.csv](results.csv)"
         echo "- [versions.txt](versions.txt)"
+        echo "- [artifacts/](artifacts/)"
         echo "- \`work/\` contains the intermediate \`.s\`, \`.rel\`, \`.ihx\`, and \`.bin\` files for inspection"
     } >> "$summary_md"
 
     cat "$summary_md"
     echo ""
     echo "${GREEN}Wrote z88dk benchmark results to:${RESET} $suite_outdir"
+    CURRENT_ARTIFACTS_DIR=""
 }
 
 run_portable_suite() {
@@ -1213,6 +1247,7 @@ run_portable_suite() {
     local summary_md="$suite_outdir/summary.md"
     local versions_txt="$suite_outdir/versions.txt"
     local workdir="$suite_outdir/work"
+    local artifacts_dir="$suite_outdir/artifacts"
     local crt0_rel
     local crt0_hex
     local crt0_size
@@ -1252,6 +1287,8 @@ run_portable_suite() {
 
     rm -rf "$suite_outdir"
     mkdir -p "$workdir"
+    mkdir -p "$artifacts_dir"
+    CURRENT_ARTIFACTS_DIR="$artifacts_dir"
 
     z88dk_sdcc_baseline="$(build_z88dk_baseline "sdcc" "$workdir")"
     z88dk_80cc_baseline="$(build_z88dk_baseline "80cc" "$workdir")"
@@ -1346,8 +1383,17 @@ run_portable_suite() {
         --versions "$versions_txt" \
         --cycle-limit "$PORTABLE_CYCLES" \
         --bench-count "${#benchmarks[@]}"
+    {
+        echo ""
+        echo "## Outputs"
+        echo ""
+        echo "- [results.csv](results.csv)"
+        echo "- [versions.txt](versions.txt)"
+        echo "- [artifacts/](artifacts/)"
+    } >> "$summary_md"
     echo ""
     echo "${GREEN}Wrote portable benchmark results to:${RESET} $suite_outdir"
+    CURRENT_ARTIFACTS_DIR=""
 }
 
 collect_numeric_benchmarks() {
@@ -1369,9 +1415,11 @@ run_numeric_case() {
     local ret=0
     local cycles=0
     local bytes
+    local mode_name
 
     bench_name="$(basename "$(dirname "$c_file")")"
     work="$suite_outdir/work/$bench_name/$kind_name"
+    mode_name="xcc_${kind_name}"
     mkdir -p "$work"
     ihx="$work/image.ihx"
     bin="$work/image.bin"
@@ -1385,6 +1433,8 @@ run_numeric_case() {
 
     python3 "$IHX2BIN" "$ihx" "$bin"
     bytes="$(wc -c < "$bin" | tr -d '[:space:]')"
+    publish_artifact_copy "$ihx" "$bench_name" "$mode_name" "program.ihx"
+    publish_artifact_copy "$bin" "$bench_name" "$mode_name" "program.bin"
 
     set +e
     output="$("$RUNNER_BIN" --cycles "$NUMERIC_CYCLES" --ihx "$ihx" 2>&1)"
@@ -1414,6 +1464,7 @@ run_numeric_suite() {
     local suite_outdir="$OUTDIR/numeric"
     local results_csv="$suite_outdir/results.csv"
     local summary_md="$suite_outdir/summary.md"
+    local artifacts_dir="$suite_outdir/artifacts"
     local -a benchmarks
     local -a filtered=()
     local -a kinds=(
@@ -1431,6 +1482,8 @@ run_numeric_suite() {
 
     rm -rf "$suite_outdir"
     mkdir -p "$suite_outdir/work"
+    mkdir -p "$artifacts_dir"
+    CURRENT_ARTIFACTS_DIR="$artifacts_dir"
 
     printf 'benchmark,kind,status,return,bytes,cycles\n' > "$results_csv"
 
@@ -1529,16 +1582,25 @@ run_numeric_suite() {
         ' "$results_csv"
     } >> "$summary_md"
 
+    {
+        echo ""
+        echo "## Outputs"
+        echo ""
+        echo "- [results.csv](results.csv)"
+        echo "- [artifacts/](artifacts/)"
+    } >> "$summary_md"
+
     cat "$summary_md"
     echo ""
     echo "${GREEN}Wrote numeric benchmark results to:${RESET} $suite_outdir"
+    CURRENT_ARTIFACTS_DIR=""
 }
 
 run_z88dk24_suite() {
     local suite_outdir="$OUTDIR/z88dk24"
     XCC="$XCC" OUT="$suite_outdir" FILTER="$Z88DK24_FILTER" CYCLES="$Z88DK_CYCLES" \
         bash "$Z88DK24_ROOT/run.sh"
-    Z88DK24_BENCHMARKS_RUN="$(awk 'END { print NR > 0 ? NR - 1 : 0 }' \
+    Z88DK24_BENCHMARKS_RUN="$(awk 'END { print (NR > 0 ? NR - 1 : 0) }' \
         "$suite_outdir/results.csv")"
 }
 
@@ -1574,15 +1636,8 @@ write_top_summary() {
                 "$OUTDIR/portable/summary.md" \
                 "$OUTDIR/portable/results.csv"
         fi
-        if [[ "$SUITE" == "all" || "$SUITE" == "z88dk" ]]; then
-            printf '| `%s` | %s | `%s` | `%s` | `%s` |\n' \
-                "z88dk" \
-                "$Z88DK_BENCHMARKS_RUN" \
-                "xcc O2/Of/O3/Os + sdcc size/speed + z88dk sdcc/80cc/sccz80" \
-                "$OUTDIR/z88dk/summary.md" \
-                "$OUTDIR/z88dk/results.csv"
-        fi
-        if [[ "$SUITE" == "all" || "$SUITE" == "z88dk24" ]]; then
+        if [[ "$SUITE" == "all" || "$SUITE" == "z88dk" ||
+              "$SUITE" == "z88dk24" ]]; then
             printf '| `%s` | %s | `%s` | `%s` | `%s` |\n' \
                 "z88dk-full-program" \
                 "$Z88DK24_BENCHMARKS_RUN" \
@@ -1602,7 +1657,7 @@ main() {
 
     case "$SUITE" in
     all|bare|numeric|portable|z88dk|z88dk24) ;;
-    *) die "unknown suite '$SUITE' (expected: all, bare, numeric, portable, z88dk, z88dk24)" ;;
+    *) die "unknown suite '$SUITE' (expected: all, bare, numeric, portable, z88dk)" ;;
     esac
 
     [[ -x "$XCC" ]] || die "xcc not found at '$XCC'"
@@ -1618,9 +1673,6 @@ main() {
     fi
     if [[ -z "$PORTABLE_FILTER" ]]; then
         PORTABLE_FILTER="$FILTER"
-    fi
-    if [[ -z "$Z88DK_FILTER" ]]; then
-        Z88DK_FILTER="$FILTER"
     fi
     if [[ -z "$Z88DK24_FILTER" ]]; then
         Z88DK24_FILTER="$FILTER"
@@ -1656,14 +1708,8 @@ main() {
         echo ""
     fi
 
-    if [[ "$SUITE" == "all" || "$SUITE" == "z88dk" ]]; then
-        echo "Running z88dk benchmarks..."
-        echo ""
-        run_z88dk_suite
-        echo ""
-    fi
-
-    if [[ "$SUITE" == "all" || "$SUITE" == "z88dk24" ]]; then
+    if [[ "$SUITE" == "all" || "$SUITE" == "z88dk" ||
+          "$SUITE" == "z88dk24" ]]; then
         echo "Running complete z88dk full-program benchmarks..."
         echo ""
         run_z88dk24_suite

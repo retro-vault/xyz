@@ -4,10 +4,10 @@ This directory vendors the complete compiler-comparison corpus from z88dk's
 `80cc-codegen` branch at commit
 `460ec34769f01324ca49b66145f09babdbe507fc` (2026-07-13).
 
-Unlike the older `../z88dk/` directory, these are the original full-program
-sources. They run with z88dk's `test.h` framework and link each compiler's
-CRT and integer-formatting C library. Binary size is the complete linked
-image; no empty-program baseline is subtracted.
+These are the original full-program sources. They run with z88dk's `test.h`
+framework and link each compiler's CRT and integer-formatting C library.
+Binary size is the complete linked image; no empty-program baseline is
+subtracted.
 
 The upstream comparison is commonly referred to as the 24-test corpus, but
 the referenced branch and published table contain 23 integer programs. This
@@ -32,3 +32,9 @@ Run the complete comparison with:
 ```sh
 bash x/tests/benchmarks/z88dk24/run.sh
 ```
+
+The default output is `build/x/benchmarks/z88dk24/`.  Every image actually
+uploaded to an emulator is copied to
+`artifacts/<benchmark>/<lane>/program.bin`; the byte value in `results.csv`
+and `summary.md` is exactly `wc -c` for that file.  XCC map files are kept
+beside its binaries, and `work/<benchmark>/` retains build and run logs.
