@@ -126,7 +126,7 @@ TEST(imaxabs_values)
 }
 
 // ---------------------------------------------------------------------------
-// div — num in HL, den in DE; quot in DE, rem in HL (C truncation semantics)
+// div — num in HL, den in DE; hidden pointer receives div_t
 // ---------------------------------------------------------------------------
 TEST(div_values)
 {
@@ -136,10 +136,12 @@ TEST(div_values)
         {12345,100},{-12345,100},{5,10},{-5,10}
     };
     for (auto c : cases) {
-        REQUIRE(g_rt->call16(rt_sym::div, (uint16_t)c.n, (uint16_t)c.d));
-        auto s = g_rt->snap();
-        int16_t quot = (int16_t)s.de;
-        int16_t rem  = (int16_t)s.hl;
+        REQUIRE(g_rt->call16_sret(rt_sym::div, (uint16_t)c.n,
+                                  (uint16_t)c.d, S1));
+        int16_t quot = (int16_t)(g_rt->mem.read(S1)
+                               | (g_rt->mem.read(S1 + 1) << 8));
+        int16_t rem = (int16_t)(g_rt->mem.read(S1 + 2)
+                              | (g_rt->mem.read(S1 + 3) << 8));
         int16_t rq = (int16_t)(c.n / c.d);
         int16_t rr = (int16_t)(c.n % c.d);
         REQUIRE_EQ(quot, rq);
@@ -1617,6 +1619,16 @@ TEST(stdio_printf_family)
     REQUIRE_EQ((int)g_rt->snap().de, 0);
     REQUIRE(g_rt->call16(rt_sym::stdio_misc_cases, out, 0));
     REQUIRE_EQ((int)g_rt->snap().de, 0);
+
+    g_rt = old;
+}
+
+TEST(c23_compiler_surface)
+{
+    runtime_machine fresh(std::span<const uint8_t>(g_code_image.data(),
+                                                   g_code_image.size()));
+    runtime_machine* old = g_rt;
+    g_rt = &fresh;
 
     /* C23 compiler-focused test (another dedicated test for xcc C23 support).
        Exercises all C23 structures (div_t, lldiv_t, imaxdiv_t, tm, timespec,

@@ -24,8 +24,8 @@ namespace xld {
 
         // Find next free address >= cursor that can fit `size` bytes
         // without overlapping any hole.
-        static uint16_t next_free_address(
-            uint16_t cursor, uint16_t size,
+        static uint32_t next_free_address(
+            uint32_t cursor, uint32_t size,
             const std::vector<address_range>& holes);
     };
 

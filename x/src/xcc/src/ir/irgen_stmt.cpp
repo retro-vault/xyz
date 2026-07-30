@@ -92,7 +92,17 @@ void ir_gen::visit(return_stmt &s) {
     icode ic;
     ic.op = icode_op::RETURN;
     if (s.value) {
-        ic.left = gen_expr(*s.value);
+        operand value = gen_expr(*s.value);
+        if (!sret_result_ptr_.is_none()) {
+            icode store;
+            store.op = icode_op::SET_VALUE_AT;
+            store.result = sret_result_ptr_;
+            store.left = value;
+            emit(store);
+            emit(ic);
+            return;
+        }
+        ic.left = value;
         if (cur_fn_ && cur_fn_->ret_type &&
             cur_fn_->ret_type->kind != type_kind::VOID &&
             ic.left.type != cur_fn_->ret_type) {

@@ -1256,7 +1256,8 @@ static std::string icode_signature(
            std::to_string(ic.arg_bytes) + "|" +
            std::to_string(static_cast<int>(ic.callee_abi)) + "|" +
            std::to_string(ic.callee_cleans_stack ? 1 : 0) + "|" +
-           std::to_string(ic.callee_noreturn ? 1 : 0);
+           std::to_string(ic.callee_noreturn ? 1 : 0) + "|" +
+           std::to_string(ic.result_via_sret ? 1 : 0);
 }
 
 static std::string block_body_signature(const ir_function &fn,
@@ -1342,7 +1343,8 @@ static bool icodes_equivalent_for_tail_merge(
         lhs.arg_bytes != rhs.arg_bytes ||
         lhs.callee_abi != rhs.callee_abi ||
         lhs.callee_cleans_stack != rhs.callee_cleans_stack ||
-        lhs.callee_noreturn != rhs.callee_noreturn) {
+        lhs.callee_noreturn != rhs.callee_noreturn ||
+        lhs.result_via_sret != rhs.result_via_sret) {
         return false;
     }
 
@@ -1548,6 +1550,9 @@ public:
 
 class address_deref_fold_pass final : public ir_pass {
 public:
+    explicit address_deref_fold_pass(bool canonicalize_fixed_addresses)
+        : canonicalize_fixed_addresses_(canonicalize_fixed_addresses) {}
+
     const char *name() const override { return "address_deref_fold"; }
 
     bool run(ir_function &fn) override {
@@ -1701,12 +1706,32 @@ public:
                 if (ic.op == icode_op::ADD) {
                     if (propagate_add(ic.left, ic.right, +1) ||
                         propagate_add(ic.right, ic.left, +1)) {
+                        if (canonicalize_fixed_addresses_) {
+                            const auto &address =
+                                temp_addr.at(ic.result.temp_id);
+                            operand direct = address.base;
+                            direct.byte_offset += address.byte_offset;
+                            ic.op = icode_op::ADDRESS_OF;
+                            ic.left = std::move(direct);
+                            ic.right = operand::make_none();
+                            changed = true;
+                        }
                         continue;
                     }
                 }
 
                 if (ic.op == icode_op::SUB) {
                     if (propagate_add(ic.left, ic.right, -1)) {
+                        if (canonicalize_fixed_addresses_) {
+                            const auto &address =
+                                temp_addr.at(ic.result.temp_id);
+                            operand direct = address.base;
+                            direct.byte_offset += address.byte_offset;
+                            ic.op = icode_op::ADDRESS_OF;
+                            ic.left = std::move(direct);
+                            ic.right = operand::make_none();
+                            changed = true;
+                        }
                         continue;
                     }
                 }
@@ -1715,6 +1740,9 @@ public:
 
         return changed;
     }
+
+private:
+    bool canonicalize_fixed_addresses_ = false;
 };
 
 class jump_threading_pass final : public ir_pass {
@@ -1906,11 +1934,26 @@ public:
 
     bool run(ir_function &fn) override {
         std::unordered_map<int, operand> global_addr_defs;
+        std::unordered_map<int, int> temp_def_counts;
+
+        for (const auto &ic : fn.icodes) {
+            if (defines_result(ic) && ic.result.is_temp())
+                ++temp_def_counts[ic.result.temp_id];
+        }
 
         for (const auto &ic : fn.icodes) {
             if (ic.op != icode_op::ADDRESS_OF || !ic.result.is_temp())
                 continue;
+            auto count = temp_def_counts.find(ic.result.temp_id);
+            if (count == temp_def_counts.end() || count->second != 1)
+                continue;
             if (!ic.left.is_global || ic.left.is_tls || ic.left.is_sfr)
+                continue;
+            // A bare label reference represents the object's base.  Keep an
+            // offset ADDRESS_OF explicit until label-reference offsets are
+            // represented by this pass; otherwise `&object[n]` silently
+            // collapses to `&object[0]`.
+            if (ic.left.byte_offset != 0)
                 continue;
 
             operand ref = operand::make_label(ic.left.name);
@@ -13064,8 +13107,13 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<jump_threading_pass>());
     if (settings.jump_threading)
         passes.push_back(std::make_unique<repeated_compare_edge_fold_pass>());
-    if (settings.address_deref_fold)
-        passes.push_back(std::make_unique<address_deref_fold_pass>());
+    if (settings.address_deref_fold) {
+        const bool canonicalize_fixed_addresses =
+            settings.level == opt_level::Of ||
+            settings.level == opt_level::O3;
+        passes.push_back(std::make_unique<address_deref_fold_pass>(
+            canonicalize_fixed_addresses));
+    }
     if (settings.value_propagation ||
         settings.algebraic_simplify ||
         settings.dead_code_elim)

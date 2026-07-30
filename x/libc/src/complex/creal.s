@@ -9,6 +9,7 @@
         ;; Copyright (C) 2026 tomaz stih
 
         .module creal
+        .optsdcc -mz80 sdcccall(1)
         .area   _CODE
         .globl  __creal
 

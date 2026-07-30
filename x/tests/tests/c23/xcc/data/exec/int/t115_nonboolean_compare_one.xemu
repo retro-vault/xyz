@@ -1,0 +1,3 @@
+# Keep the ABI1 frameless incoming-register path covered at every public
+# optimization level; O1 has a smaller pass set than the O2-based profiles.
+matrix_opt = O1

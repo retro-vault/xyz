@@ -47,10 +47,13 @@ memccpy_loop:
         ex      de,hl
         cp      (hl)                    ; compare copied byte with delimiter
         ex      de,hl
+        jr      z,memccpy_found_restore
         ex      af,af'
         inc     de
-        jr      z,memccpy_found
         jr      memccpy_loop
+memccpy_found_restore:
+        ex      af,af'
+        inc     de
 memccpy_found:
         pop     ix
         ret

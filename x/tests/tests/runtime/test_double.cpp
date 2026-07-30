@@ -1,15 +1,8 @@
 // test_double.cpp — IEEE-754 double (64-bit float) runtime tests.
 //
-// ALL TESTS ARE DEACTIVATED.
-//
-// To enable a group, change its PENDING_TEST calls to TEST, or define
-//   #define PENDING_TEST TEST
-// before including this file (or globally), which activates everything.
-//
-// Before activating:
-//   1. Implement the function in src/xc/xcc/lib/runtime/*.s
-//   2. Set the matching constant in runtime_symbols_future.hpp.
-//   3. Rebuild the runtime binary (make in tests/runtime/).
+// All PENDING_TEST spellings in this file are deliberately registered as
+// active tests below.  The historical name is retained only to keep the
+// individual case declarations stable.
 //
 // -----------------------------------------------------------------------
 // Calling convention (mirrors the proposed runtime_machine ABI):
@@ -33,9 +26,6 @@
 #include "float_helpers.hpp"
 #include <cmath>
 
-// ACTIVATED for large test base (user request for full coverage).
-// If the 64-bit runtime symbols/implementation are not yet ready, some will fail
-// at link/runtime — that's expected during development.
 #define PENDING_TEST TEST
 
 #ifndef PENDING_TEST

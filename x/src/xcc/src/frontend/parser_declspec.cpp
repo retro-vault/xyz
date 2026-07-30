@@ -9,6 +9,7 @@
 //
 #include "frontend/parser.h"
 #include "frontend/const_eval.h"
+#include <algorithm>
 #include <unordered_map>
 
 namespace xcc {
@@ -287,13 +288,17 @@ decl_spec parser::parse_declaration_specifiers() {
             if (peek().kind == tk::IDENT) tag = consume().text; // optional tag
             // C23: optional underlying-type specifier after ':'
             type_ptr enum_base = type::make_int(); // default: int
+            bool explicit_underlying = false;
             if (check(tk::COLON)) {
                 consume();
+                explicit_underlying = true;
                 decl_spec uds = parse_declaration_specifiers();
                 if (uds.base_type) enum_base = uds.base_type->unqual();
             }
             if (peek().kind == tk::LBRACE) {
-                parse_enum_body();
+                type_ptr inferred_base = parse_enum_body();
+                if (!explicit_underlying && inferred_base)
+                    enum_base = inferred_base;
                 if (!tag.empty()) syms_.insert_tag(tag, enum_base);
             } else if (!tag.empty()) {
                 if (auto existing = syms_.lookup_tag(tag))
@@ -535,9 +540,12 @@ void parser::parse_struct_body(type_ptr stype, bool is_union) {
 
 // ----- parse_enum_body -----------------------------------------------
 
-void parser::parse_enum_body() {
+type_ptr parser::parse_enum_body() {
     consume(); // consume '{'
     int64_t val = 0;
+    int64_t min_val = 0;
+    int64_t max_val = 0;
+    std::vector<std::shared_ptr<symbol>> enumerators;
     while (!check(tk::RBRACE) && !check(tk::END_OF_FILE)) {
         std::string ename = expect(tk::IDENT).text;
         if (match(tk::EQ)) {
@@ -550,10 +558,29 @@ void parser::parse_enum_body() {
         sym->kind      = sym_kind::ENUM_CONST;
         sym->type      = type::make_int();
         sym->enum_val  = val++;
+        min_val = std::min(min_val, sym->enum_val);
+        max_val = std::max(max_val, sym->enum_val);
         syms_.insert(sym);
+        enumerators.push_back(sym);
         match(tk::COMMA);
     }
     expect(tk::RBRACE);
+
+    type_ptr base;
+    if (min_val >= -32768 && max_val <= 32767)
+        base = type::make_int();
+    else if (min_val >= 0 && static_cast<uint64_t>(max_val) <= 65535u)
+        base = type::make_uint();
+    else if (min_val >= INT32_MIN && max_val <= INT32_MAX)
+        base = type::make_long();
+    else if (min_val >= 0 && static_cast<uint64_t>(max_val) <= UINT32_MAX)
+        base = type::make_ulong();
+    else
+        base = type::make_llong();
+
+    for (auto &sym : enumerators)
+        sym->type = base;
+    return base;
 }
 
 } // namespace xcc

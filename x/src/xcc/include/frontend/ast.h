@@ -188,6 +188,11 @@ struct member_expr : expr {
     expr_ptr    object;
     std::string member;
     bool        is_arrow = false;
+    // Canonical complete record selected while parsing. Self-referential
+    // member types intentionally carry an incomplete, acyclic owner copy;
+    // retaining this resolved owner lets later `p->next->field` accesses
+    // recover offsets without rebuilding a type cycle.
+    type_ptr    owner_type;
     void accept(expr_visitor &v) override;
 };
 

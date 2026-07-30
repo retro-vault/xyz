@@ -474,7 +474,12 @@ expr_ptr parser::parse_postfix_expression() {
             // Resolve member type for __typeof__ and type-based operations.
             if (mem->object && mem->object->type) {
                 type_ptr st = mem->object->type->unqual();
+                if (st && !st->complete && !st->tag.empty()) {
+                    if (auto complete = syms_.lookup_tag(st->tag))
+                        st = complete->unqual();
+                }
                 if (st && (st->kind == type_kind::STRUCT || st->kind == type_kind::UNION)) {
+                    mem->owner_type = st;
                     for (auto &f : st->fields)
                         if (f.name == mem->member) { mem->type = f.type; break; }
                 }
@@ -491,7 +496,12 @@ expr_ptr parser::parse_postfix_expression() {
             if (mem->object && mem->object->type) {
                 type_ptr st = mem->object->type->unqual();
                 if (st && st->is_ptr()) st = st->base ? st->base->unqual() : nullptr;
+                if (st && !st->complete && !st->tag.empty()) {
+                    if (auto complete = syms_.lookup_tag(st->tag))
+                        st = complete->unqual();
+                }
                 if (st && (st->kind == type_kind::STRUCT || st->kind == type_kind::UNION)) {
+                    mem->owner_type = st;
                     for (auto &f : st->fields)
                         if (f.name == mem->member) { mem->type = f.type; break; }
                 }
@@ -804,15 +814,36 @@ expr_ptr parser::parse_primary_expression() {
                 cast->type        = ap_type;
                 rhs = std::move(cast);
             } else {
-                auto zero = std::make_unique<int_literal_expr>();
-                zero->loc   = t.loc;
-                zero->value = 0;
-                zero->type  = type::make_int();
+                // C23's va_start(ap) form is used by a function declared
+                // with a bare ellipsis.  Under the mandatory stack ABI its
+                // first anonymous argument is the first parameter slot,
+                // IX+4.  Model that slot as a synthetic parameter lvalue so
+                // normal address lowering remains ABI-aware.
+                auto first_sym = std::make_shared<symbol>();
+                first_sym->name         = "__va_first";
+                first_sym->kind         = sym_kind::VAR;
+                first_sym->type         = type::make_char();
+                first_sym->is_param     = true;
+                first_sym->stack_offset = 0;
+
+                auto first = std::make_unique<ident_expr>();
+                first->loc       = t.loc;
+                first->name      = first_sym->name;
+                first->sym       = first_sym;
+                first->type      = first_sym->type;
+                first->is_lvalue = true;
+
+                auto addr = std::make_unique<unary_expr>();
+                addr->loc       = t.loc;
+                addr->op        = unary_op::ADDR;
+                addr->operand   = std::move(first);
+                addr->type      = type::make_pointer(type::make_char());
+                addr->is_lvalue = false;
 
                 auto cast = std::make_unique<cast_expr>();
                 cast->loc         = t.loc;
                 cast->target_type = ap_type;
-                cast->operand     = std::move(zero);
+                cast->operand     = std::move(addr);
                 cast->type        = ap_type;
                 rhs = std::move(cast);
             }

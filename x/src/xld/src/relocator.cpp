@@ -33,8 +33,21 @@ namespace xld {
                     throw reloc_error("area '" + area.name()
                         + "' not placed in module " + mod->name());
 
-                uint16_t base = area.placed_addr().value();
-                uint16_t dest = base + tr.offset;
+                const uint32_t record_end =
+                    static_cast<uint32_t>(tr.offset) + tr.data.size();
+                if (record_end > area.size()) {
+                    throw reloc_error(
+                        "T record exceeds declared size of area '"
+                        + area.name() + "' in module " + mod->name());
+                }
+
+                const uint32_t base = area.placed_addr().value();
+                const uint32_t dest = base + tr.offset;
+                if (dest + tr.data.size() > 0x10000u) {
+                    throw reloc_error(
+                        "T record exceeds 64 KiB address space in module "
+                        + mod->name());
+                }
 
                 // Copy T data into code buffer.
                 if (dest + tr.data.size() > ctx.code_buffer.size()) {
@@ -140,7 +153,7 @@ namespace xld {
                     }
 
                     // Calculate the patch address in the code buffer.
-                    uint16_t patch_offset = dest + re.offset_in_t;
+                    uint32_t patch_offset = dest + re.offset_in_t;
                     bool is_word = has_flag(re.mode, reloc_mode::word);
                     bool is_pc_rel = has_flag(re.mode, reloc_mode::pc_rel);
                     bool is_msb = has_flag(re.mode, reloc_mode::msb);
@@ -196,7 +209,7 @@ namespace xld {
                     // absolute relocations.
                     if (!is_pc_rel) {
                         output_reloc or_entry;
-                        or_entry.offset = patch_offset;
+                        or_entry.offset = static_cast<uint16_t>(patch_offset);
                         or_entry.size = is_word ? 2 : 1;
                         or_entry.pad = is_msb ? 0x01 : 0x00;
                         ctx.reloc_table.push_back(or_entry);

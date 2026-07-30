@@ -9,6 +9,7 @@
 #include "ir/irgen.h"
 #include "frontend/const_eval.h"
 
+#include <algorithm>
 #include <functional>
 
 namespace xcc {
@@ -92,6 +93,79 @@ uint64_t bitfield_mask_bits(int width) {
     return (uint64_t{1} << width) - 1;
 }
 
+struct aggregate_init_slot {
+    struct_field field;
+};
+
+void collect_flat_init_slots(type_ptr target, int base_offset,
+                             std::vector<aggregate_init_slot> &out) {
+    if (!target)
+        return;
+
+    if (target->kind == type_kind::ARRAY && target->base) {
+        const int elem_size = target->base->size();
+        for (int i = 0; i < target->array_size; ++i) {
+            collect_flat_init_slots(
+                target->base, base_offset + i * elem_size, out);
+        }
+        return;
+    }
+
+    if ((target->kind == type_kind::STRUCT ||
+         target->kind == type_kind::UNION) &&
+        !target->fields.empty()) {
+        std::vector<std::pair<int, int>> occupied;
+        for (const auto &source_field : target->fields) {
+            struct_field field = source_field;
+            field.offset += base_offset;
+            const int field_size =
+                field.type ? std::max(field.type->size(), 1) : 1;
+            const int begin = field.offset;
+            const int end = begin + field_size;
+
+            bool overlaps_prior_member = false;
+            if (field.bit_width < 0) {
+                for (const auto &[prior_begin, prior_end] : occupied) {
+                    if (begin < prior_end && prior_begin < end) {
+                        overlaps_prior_member = true;
+                        break;
+                    }
+                }
+            }
+            if (overlaps_prior_member)
+                continue;
+
+            if (field.bit_width < 0)
+                occupied.emplace_back(begin, end);
+
+            if (field.bit_width < 0 && field.type &&
+                (field.type->kind == type_kind::ARRAY ||
+                 field.type->kind == type_kind::STRUCT ||
+                 field.type->kind == type_kind::UNION)) {
+                collect_flat_init_slots(field.type, field.offset, out);
+            } else {
+                out.push_back({field});
+            }
+        }
+        return;
+    }
+
+    struct_field field;
+    field.type = target;
+    field.offset = base_offset;
+    out.push_back({field});
+}
+
+bool is_flat_aggregate_initializer(const init_list_expr &list) {
+    for (const auto &elem : list.elements) {
+        if (elem.field_name || elem.array_index ||
+            dynamic_cast<init_list_expr *>(elem.value.get())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                          int &next_lbl,
                          std::vector<ir_module::global_var::init_elem> &out) {
@@ -137,6 +211,39 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
         if ((target->kind == type_kind::STRUCT ||
              target->kind == type_kind::UNION) &&
             !target->fields.empty()) {
+            if (is_flat_aggregate_initializer(*il)) {
+                std::vector<aggregate_init_slot> slots;
+                collect_flat_init_slots(target, 0, slots);
+                if (std::none_of(
+                        slots.begin(), slots.end(),
+                        [](const aggregate_init_slot &slot) {
+                            return slot.field.bit_width >= 0;
+                        })) {
+                    int cursor = 0;
+                    const size_t count =
+                        std::min(il->elements.size(), slots.size());
+                    for (size_t i = 0; i < count; ++i) {
+                        const auto &slot = slots[i].field;
+                        while (cursor < slot.offset) {
+                            out.push_back(init_elem(0, 1));
+                            ++cursor;
+                        }
+                        std::vector<ir_module::global_var::init_elem> value;
+                        collect_static_init(
+                            il->elements[i].value.get(), slot.type,
+                            mod, next_lbl, value);
+                        for (auto &elem : value)
+                            out.push_back(std::move(elem));
+                        cursor = slot.offset + (slot.type ? slot.type->size() : 0);
+                    }
+                    while (cursor < target->size()) {
+                        out.push_back(init_elem(0, 1));
+                        ++cursor;
+                    }
+                    return;
+                }
+            }
+
             size_t seq_idx = 0;
             for (auto &e : il->elements) {
                 const struct_field *fld = nullptr;
@@ -182,7 +289,7 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                                 target->size()));
     } else if (const auto *str = unwrap_string_literal(init);
                str && is_char_pointer_type(target)) {
-        std::string lbl = "__str_" + std::to_string(next_lbl++);
+        std::string lbl = "__xcc_str_" + std::to_string(next_lbl++);
         ir_module::global_var gv;
         gv.name       = lbl;
         gv.type       = type::make_array(type::make_char(),
@@ -233,8 +340,9 @@ void ir_gen::visit(init_list_expr &e) {
         expr_result_ = operand::make_int(0, type::make_int());
 }
 
-void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il) {
-    if (!type || il.elements.empty()) return;
+void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il,
+                           const operand *base_override) {
+    if (!type) return;
 
     auto coerce_init_store = [&](operand value, const type_ptr &target) -> operand {
         if (!target)
@@ -258,9 +366,19 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il)
         return emit_unop(icode_op::CAST, value, target);
     };
 
-    operand base_sym = sym_to_operand(sym, type);
-    operand base_ptr = new_temp(type::make_pointer(type));
-    { icode ic; ic.op = icode_op::ADDRESS_OF; ic.result = base_ptr; ic.left = base_sym; emit(ic); }
+    operand base_ptr;
+    if (base_override) {
+        base_ptr = *base_override;
+        base_ptr.type = type::make_pointer(type);
+    } else {
+        operand base_sym = sym_to_operand(sym, type);
+        base_ptr = new_temp(type::make_pointer(type));
+        icode ic;
+        ic.op = icode_op::ADDRESS_OF;
+        ic.result = base_ptr;
+        ic.left = base_sym;
+        emit(ic);
+    }
 
     auto ptr_at = [&](const operand &ptr, int64_t offset,
                       const type_ptr &pointee) -> operand {
@@ -373,6 +491,30 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il)
         } else if ((dst_type->kind == type_kind::STRUCT ||
                     dst_type->kind == type_kind::UNION) &&
                    !dst_type->fields.empty()) {
+            if (is_flat_aggregate_initializer(list)) {
+                std::vector<aggregate_init_slot> slots;
+                collect_flat_init_slots(dst_type, 0, slots);
+                const size_t count =
+                    std::min(list.elements.size(), slots.size());
+                for (size_t i = 0; i < count; ++i) {
+                    const struct_field &field = slots[i].field;
+                    operand value = gen_expr(*list.elements[i].value);
+                    if (field.bit_width >= 0) {
+                        emit_bitfield_store(dst_ptr, field, value);
+                    } else {
+                        operand field_ptr =
+                            ptr_at(dst_ptr, field.offset, field.type);
+                        value = coerce_init_store(value, field.type);
+                        icode ic;
+                        ic.op = icode_op::SET_VALUE_AT;
+                        ic.result = field_ptr;
+                        ic.left = value;
+                        emit(ic);
+                    }
+                }
+                return;
+            }
+
             size_t seq_idx = 0;
             for (auto &e : list.elements) {
                 const struct_field *fld = nullptr;

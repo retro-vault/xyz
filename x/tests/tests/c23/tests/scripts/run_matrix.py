@@ -431,7 +431,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int:
     args = parse_args()
     if args.profile:
         profile = load_profile(args.profile)
@@ -475,7 +475,16 @@ def main() -> None:
 
     write_json(RESULT_ROOT / f"{label}.json", json_payload)
     write_matrix(label, results)
+    passed = sum(result.status == "PASS" for result in results)
+    failed = sum(result.status == "FAIL" for result in results)
+    not_claimed = sum(result.status == "NOT-CLAIMED" for result in results)
+    not_run = sum(result.status == "NOT-RUN" for result in results)
+    print(
+        f"{passed} passed, {failed} failed, "
+        f"{not_claimed} not claimed, {not_run} not run"
+    )
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

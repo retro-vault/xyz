@@ -65,6 +65,7 @@ struct symbol {
     bool is_param     = false;
     bool is_global    = false;
     bool is_tls       = false; // _Thread_local: access via __tls_base + offset
+    bool is_dynamic_aligned = false; // local slot stores an aligned object pointer
     int  requested_align = 0;  // _Alignas/alignas override for alignof(expr)
 
     // Set for sym_kind::ENUM_CONST; holds the integer value.

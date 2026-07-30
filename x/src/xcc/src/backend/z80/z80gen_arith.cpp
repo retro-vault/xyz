@@ -4470,8 +4470,12 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         auto compact_frame_word = [&](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
                 auto home = temp_regs_.find(op.temp_id);
+                // Incoming ABI register homes may have a reserved spill slot,
+                // but it is not initialized until materialization.  Probing
+                // that slot in a frameless function also grows SP without an
+                // epilogue repair, so only an actual stack home is eligible.
                 if (home != temp_regs_.end() &&
-                    !temp_home_uses_spill_slot(home->second)) {
+                    home->second != temp_home::stack) {
                     return false;
                 }
             } else if (op.kind == operand_kind::SYMBOL) {
@@ -4736,8 +4740,10 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         auto compact_frame_word = [&](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
                 auto home = temp_regs_.find(op.temp_id);
+                // A live incoming ABI register is not yet a frame operand,
+                // even if frame planning reserved a possible spill slot.
                 if (home != temp_regs_.end() &&
-                    !temp_home_uses_spill_slot(home->second))
+                    home->second != temp_home::stack)
                     return false;
             } else if (op.kind == operand_kind::SYMBOL) {
                 if (op.is_global || op.is_tls || op.is_sfr || op.is_func ||

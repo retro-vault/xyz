@@ -3195,8 +3195,11 @@ bool z80_peep::apply_once() {
         if (rule_ix_postinc_indexed_store_a(i)) { changed = true; continue; }
         if (rule_adjacent_postinc_indexed_stores_direct(i)) { changed = true; continue; }
         if (rule_ix_indexed_stack_immediate_store_run(i)) { changed = true; continue; }
-        if (size_bias_ && rule_small_stack_alloc_push_af(i)) { changed = true; continue; }
-        if (size_bias_ && rule_size_redundant_pair_immediate_across_stores(i)) {
+        if (pareto_bias && rule_small_stack_alloc_push_af(i)) {
+            changed = true;
+            continue;
+        }
+        if (pareto_bias && rule_redundant_pair_immediate_across_stores(i)) {
             changed = true;
             continue;
         }
@@ -9795,6 +9798,11 @@ bool z80_peep::rule_small_stack_alloc_push_af(size_t i) {
     // into five or six bytes in the size profile.
     if (replacement_bytes >= 5)
         return false;
+    // PUSH AF is also a speed win for two- and four-byte adjustments:
+    // 11/22 cycles rather than 27 for LD/ADD/LD.  At five bytes and above
+    // the compact sequence is slower, so retain it only for -Os.
+    if (speed_bias_ && bytes > 4)
+        return false;
 
     int locals = 0;
     int temp_frame = 0;
@@ -9852,7 +9860,7 @@ bool z80_peep::rule_small_stack_alloc_push_af(size_t i) {
     return true;
 }
 
-bool z80_peep::rule_size_redundant_pair_immediate_across_stores(size_t i) {
+bool z80_peep::rule_redundant_pair_immediate_across_stores(size_t i) {
     if (i + 2 >= lines_.size() || !lines_[i].label.empty() ||
         lines_[i].mnemonic != "ld") {
         return false;

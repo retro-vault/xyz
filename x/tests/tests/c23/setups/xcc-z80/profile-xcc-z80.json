@@ -1,8 +1,8 @@
 {
-  "compiler": "../../../bin/x/bin/xcc",
+  "compiler": "../../../../bin/x/bin/xcc",
   "label": "xcc-z80",
   "std_flag": "",
-  "artifact_name": "case.ihx",
+  "artifact_name": "case.bin",
   "common_flags": [],
   "compile_flags": [],
   "compile_template": [
@@ -24,7 +24,7 @@
     "{build_dir}"
   ],
   "version_command": [
-    "../../../bin/x/bin/xcc",
+    "../../../../bin/x/bin/xcc",
     "--version"
   ]
 }

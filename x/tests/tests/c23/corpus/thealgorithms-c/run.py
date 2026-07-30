@@ -3,12 +3,12 @@
 
 The harness has two modes:
 
-1. Discovery mode (`--discover`):
-   - syncs the source repository into `tests/corpus/upstream/thealgorithms-c`
+1. Selection mode (`--discover`):
+   - uses the source snapshot in `tests/corpus/upstream/thealgorithms-c`
    - generates wrappers around external samples
    - runs them under host gcc and xcc+z80 emulator
-   - selects a requested number of passing cases
-   - optionally writes `manifest.json`
+   - selects a requested number of cases before observing compiler results
+   - optionally writes the complete selection to `manifest.json`
 
 2. Manifest mode (default when `manifest.json` exists):
    - syncs the pinned source commit
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
 import os
 import pathlib
@@ -112,6 +113,9 @@ class CorpusCase:
     source: str
     float_rich: bool
     input_text: str = ""
+    argv: tuple[str, ...] = ()
+    skip_reason: str = ""
+    cycle_budget: int = 0
 
 
 @dataclasses.dataclass
@@ -134,6 +138,7 @@ class CaseResult:
     case: CorpusCase
     ok: bool
     reason: str
+    skipped: bool = False
     host_return: int | None = None
     xcc_return: int | None = None
     host_stdout: str = ""
@@ -214,6 +219,20 @@ def ensure_runner() -> None:
         raise RuntimeError(f"failed to build z80_exec:\n{result.stderr}")
 
 
+def source_snapshot_id() -> str:
+    digest = hashlib.sha256()
+    for path in sorted(SOURCE_DIR.rglob("*")):
+        if not path.is_file() or ".git" in path.parts:
+            continue
+        relative = path.relative_to(SOURCE_DIR).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(4, "little"))
+        digest.update(relative)
+        with path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+    return "snapshot-sha256:" + digest.hexdigest()
+
+
 def ensure_source_repo(commit: str | None) -> str:
     SOURCE_DIR.parent.mkdir(parents=True, exist_ok=True)
     if not SOURCE_DIR.exists():
@@ -224,7 +243,20 @@ def ensure_source_repo(commit: str | None) -> str:
         )
         if result.returncode != 0:
             raise RuntimeError(f"failed to clone source repo:\n{result.stderr}")
-    else:
+
+    # The project normally carries a vendored snapshot without nested Git
+    # metadata.  Never let `git -C` walk upward and operate on the enclosing
+    # xyz checkout.
+    git_marker = SOURCE_DIR / ".git"
+    if not git_marker.exists():
+        snapshot = source_snapshot_id()
+        if commit and commit != snapshot:
+            raise RuntimeError(
+                f"vendored source snapshot mismatch: expected {commit}, got {snapshot}"
+            )
+        return snapshot
+
+    if SOURCE_DIR.exists():
         result = run_cmd(["git", "-C", str(SOURCE_DIR), "fetch", "--depth", "1", "origin"], timeout=300)
         if result.returncode != 0 and commit is None:
             raise RuntimeError(f"failed to fetch source repo:\n{result.stderr}")
@@ -278,7 +310,12 @@ def analyze_source(relpath: str) -> SourceMeta:
         has_main=has_main,
         main_kind=main_kind,
         has_assert="assert(" in text,
-        has_simple_test=bool(re.search(r"\b(?:static\s+)?void\s+test\s*\(", text)),
+        has_simple_test=bool(
+            re.search(
+                r"\b(?:static\s+)?void\s+test\s*\(\s*(?:void\s*)?\)",
+                text,
+            )
+        ),
         float_rich=bool(re.search(r"\b(float|double)\b", text)),
         uses_scanf="scanf(" in text,
         uses_getchar="getchar(" in text,
@@ -324,6 +361,9 @@ def manifest_cases(manifest: dict) -> list[CorpusCase]:
             source=entry["source"],
             float_rich=bool(entry.get("float_rich", False)),
             input_text=entry.get("input_text", ""),
+            argv=tuple(entry.get("argv", [])),
+            skip_reason=entry.get("skip_reason", ""),
+            cycle_budget=int(entry.get("cycle_budget", 0)),
         )
         for entry in manifest.get("cases", [])
     ]
@@ -336,6 +376,22 @@ def corpus_prelude(input_text: str) -> str:
         #include <stddef.h>
         #include <stdarg.h>
         #include <time.h>
+
+        #ifdef __XCC__
+        #include <assert.h>
+        static _Noreturn void corpus_target_assert_fail(unsigned int line) {{
+            volatile unsigned int *result =
+                (volatile unsigned int *)0xff00u;
+            volatile unsigned char *done =
+                (volatile unsigned char *)0xff02u;
+            *result = 0x8000u | (line & 0x7fffu);
+            *done = 0xa5u;
+            for (;;) {{}}
+        }}
+        #undef assert
+        #define assert(condition) \
+            ((condition) ? (void)0 : corpus_target_assert_fail(__LINE__))
+        #endif
 
         static const char corpus_input_data[] = {escaped_input};
         static const char *corpus_input_cursor = corpus_input_data;
@@ -465,6 +521,10 @@ def corpus_prelude(input_text: str) -> str:
             if (t)
                 *t = now;
             return now;
+        }}
+
+        clock_t corpus_clock(void) {{
+            return (clock_t)0;
         }}
 
         int corpus_getchar(void) {{
@@ -606,11 +666,13 @@ def generic_wrapper(case: CorpusCase, meta: SourceMeta) -> str:
         "#define rand corpus_rand",
         "#define srand corpus_srand",
         "#define time corpus_time",
+        "#define clock corpus_clock",
         "#define scanf corpus_scanf",
         "#define main ta_algorithm_main",
         f'#include "{include_path}"',
         "#undef main",
         "#undef scanf",
+        "#undef clock",
         "#undef time",
         "#undef srand",
         "#undef rand",
@@ -621,9 +683,12 @@ def generic_wrapper(case: CorpusCase, meta: SourceMeta) -> str:
     if meta.main_kind == "void":
         lines.append("int main(void) { corpus_srand(1u); return ta_algorithm_main(); }")
     else:
+        argv = ("ta_algorithm",) + case.argv
+        argv_init = ", ".join(json.dumps(arg) for arg in argv)
         lines.append(
-            "int main(void) { const char *argv[] = {\"ta_algorithm\", NULL}; "
-            "corpus_srand(1u); return ta_algorithm_main(1, (char **)argv); }"
+            f"int main(void) {{ const char *argv[] = {{{argv_init}, NULL}}; "
+            f"corpus_srand(1u); return ta_algorithm_main({len(argv)}, "
+            "(char **)argv); }"
         )
     return "\n".join(lines) + "\n"
 
@@ -771,6 +836,14 @@ def run_case(
         shutil.rmtree(case_dir)
     case_dir.mkdir(parents=True, exist_ok=True)
 
+    if case.skip_reason:
+        return CaseResult(
+            case=case,
+            ok=False,
+            reason=case.skip_reason,
+            skipped=True,
+        )
+
     wrapper_path = case_dir / "wrap.c"
     wrapper_text = wrapper_for_case(case)
     wrapper_path.write_text(wrapper_text, encoding="utf-8")
@@ -811,8 +884,18 @@ def run_case(
 
     target_bin = case_dir / "target.bin"
     xcc_compile = compile_xcc(wrapper_path, xcc_path, xcc_opt, target_bin)
-    (case_dir / "xcc.compile.log").write_text(xcc_compile.stdout + xcc_compile.stderr, encoding="utf-8")
+    xcc_compile_log = xcc_compile.stdout + xcc_compile.stderr
+    (case_dir / "xcc.compile.log").write_text(xcc_compile_log, encoding="utf-8")
     if xcc_compile.returncode != 0:
+        if "area placement exceeds 64 KiB address space" in xcc_compile_log:
+            return CaseResult(
+                case=case,
+                ok=False,
+                reason="target-image-exceeds-16-bit-address-space-for-profile",
+                skipped=True,
+                host_return=host_run.returncode,
+                host_stdout=host_stdout,
+            )
         return CaseResult(
             case=case,
             ok=False,
@@ -828,7 +911,7 @@ def run_case(
                 str(RUNNER_BIN),
                 "--bin",
                 "--cycles",
-                str(cycles),
+                str(case.cycle_budget or cycles),
                 "--stdout",
                 str(target_stdout_path),
                 str(target_bin),
@@ -867,6 +950,16 @@ def run_case(
         )
 
     if xcc_return != host_run.returncode:
+        if xcc_return is not None and xcc_return & 0x8000:
+            return CaseResult(
+                case=case,
+                ok=False,
+                reason=f"target-assertion-failed:line-{xcc_return & 0x7fff}",
+                host_return=host_run.returncode,
+                xcc_return=xcc_return,
+                host_stdout=host_stdout,
+                xcc_stdout=xcc_stdout,
+            )
         return CaseResult(
             case=case,
             ok=False,
@@ -931,11 +1024,22 @@ def discover(
     cycles: int,
     keep_wrappers: bool,
 ) -> tuple[list[CorpusCase], list[CaseResult]]:
-    selected: list[CorpusCase] = []
+    selected = discovery_cases(limit)[:limit]
     results: list[CaseResult] = []
-    float_count = 0
 
-    for case in discovery_cases(limit):
+    if len(selected) < limit:
+        raise RuntimeError(
+            f"selection found only {len(selected)} eligible cases, need {limit}"
+        )
+    float_count = sum(1 for case in selected if case.float_rich)
+    if float_count < min_float:
+        raise RuntimeError(
+            f"selection found only {float_count} float-rich cases, need {min_float}"
+        )
+
+    # The selection is fixed before running either compiler.  Failed cases
+    # remain in the manifest and in the reported result.
+    for case in selected:
         result = run_case(
             case,
             host_cc=host_cc,
@@ -947,21 +1051,9 @@ def discover(
         )
         results.append(result)
         status = "PASS" if result.ok else "FAIL"
-        print(f"{status} {case.case_id} [{case.source}] {result.reason}")
+        print(f"{status} {case.case_id} [{case.source}] {result.reason}",
+              flush=True)
 
-        if not result.ok:
-            continue
-
-        selected.append(case)
-        if case.float_rich:
-            float_count += 1
-        if len(selected) >= limit and float_count >= min_float:
-            break
-
-    if len(selected) < limit:
-        raise RuntimeError(f"discovery found only {len(selected)} passing cases, need {limit}")
-    if float_count < min_float:
-        raise RuntimeError(f"discovery found only {float_count} float-rich cases, need {min_float}")
     return selected, results
 
 
@@ -976,6 +1068,10 @@ def write_manifest(source_commit: str, cases: Iterable[CorpusCase]) -> None:
                 "source": case.source,
                 "float_rich": case.float_rich,
                 "input_text": case.input_text,
+                **({"argv": list(case.argv)} if case.argv else {}),
+                **({"skip_reason": case.skip_reason} if case.skip_reason else {}),
+                **({"cycle_budget": case.cycle_budget}
+                   if case.cycle_budget else {}),
             }
             for case in cases
         ],
@@ -1009,30 +1105,40 @@ def rerun_manifest(
             keep_wrappers=keep_wrappers,
         )
         results.append(result)
-        status = "PASS" if result.ok else "FAIL"
-        print(f"{status} {case.case_id} [{case.source}] {result.reason}")
+        status = "SKIP" if result.skipped else ("PASS" if result.ok else "FAIL")
+        print(f"{status} {case.case_id} [{case.source}] {result.reason}",
+              flush=True)
     return results
 
 
 def summarize(results: list[CaseResult]) -> int:
     passed = sum(1 for r in results if r.ok)
-    failed = len(results) - passed
+    skipped = sum(1 for r in results if r.skipped)
+    failed = len(results) - passed - skipped
     float_cases = sum(1 for r in results if r.case.float_rich and r.ok)
     print()
-    print(f"Results: {passed} passed, {failed} failed, {float_cases} float-rich passed")
+    print(
+        f"Results: {passed} passed, {failed} failed, {skipped} skipped, "
+        f"{float_cases} float-rich passed"
+    )
     if failed:
         print("Failures:")
         for result in results:
-            if not result.ok:
+            if not result.ok and not result.skipped:
+                print(f"  - {result.case.case_id}: {result.reason}")
+    if skipped:
+        print("Not applicable:")
+        for result in results:
+            if result.skipped:
                 print(f"  - {result.case.case_id}: {result.reason}")
     return 0 if failed == 0 else 1
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--discover", action="store_true", help="discover passing cases instead of using manifest")
-    parser.add_argument("--write-manifest", action="store_true", help="write manifest.json after discovery")
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="number of passing cases to select")
+    parser.add_argument("--discover", action="store_true", help="select a deterministic case set instead of using the manifest")
+    parser.add_argument("--write-manifest", action="store_true", help="write the complete selected set to manifest.json")
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="number of cases to select before testing")
     parser.add_argument("--min-float", type=int, default=DEFAULT_MIN_FLOAT, help="minimum number of float-rich cases")
     parser.add_argument("--cycles", type=int, default=200_000_000, help="emulator cycle budget")
     parser.add_argument("--keep-wrappers", action="store_true", help="keep generated host/target artifacts")
@@ -1050,6 +1156,11 @@ def main() -> int:
     ensure_runner()
 
     manifest = load_manifest() if MANIFEST_PATH.exists() else None
+    if manifest is None and not args.discover:
+        raise RuntimeError(
+            f"corpus manifest not found: {MANIFEST_PATH}; "
+            "run once with --discover --write-manifest"
+        )
     pinned_commit = args.source_commit or (manifest.get("source_commit") if manifest and not args.discover else None)
     source_commit = ensure_source_repo(pinned_commit)
 
@@ -1070,8 +1181,7 @@ def main() -> int:
         )
         if args.write_manifest:
             write_manifest(source_commit, selected)
-        selected_results = [result for result in results if result.ok][: len(selected)]
-        return summarize(selected_results)
+        return summarize(results)
 
     cases = manifest_cases(manifest)
     results = rerun_manifest(

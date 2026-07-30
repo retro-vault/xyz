@@ -177,3 +177,23 @@ TEST(area_placer_abs_overlap_error) {
 
     ASSERT_THROWS(xld::area_placer::place(ctx), xld::placement_error);
 }
+
+TEST(area_placer_rejects_concatenation_past_address_space) {
+    xld::link_context ctx;
+    auto first = std::make_shared<xld::module>("first", "first.rel");
+    auto second = std::make_shared<xld::module>("second", "second.rel");
+    first->areas().emplace_back("_CODE", 0x9000, xld::area_flags::none, 0);
+    second->areas().emplace_back("_CODE", 0x8000, xld::area_flags::none, 0);
+    ctx.modules.push_back(first);
+    ctx.modules.push_back(second);
+
+    ASSERT_THROWS(xld::area_placer::place(ctx), xld::placement_error);
+}
+
+TEST(area_placer_rejects_hole_skip_past_address_space) {
+    std::vector<xld::address_range> holes = {{0xFFF0, 0xFFFF}};
+
+    ASSERT_THROWS(
+        xld::area_placer::next_free_address(0xFFE0, 0x20, holes),
+        xld::placement_error);
+}

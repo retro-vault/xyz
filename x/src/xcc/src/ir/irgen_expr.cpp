@@ -203,7 +203,7 @@ void ir_gen::visit(char_literal_expr &e) {
 }
 
 void ir_gen::visit(string_literal_expr &e) {
-    std::string lbl = "__str_" + std::to_string(next_lbl_++);
+    std::string lbl = "__xcc_str_" + std::to_string(next_lbl_++);
     ir_module::global_var gv;
     gv.name       = lbl;
     gv.type       = type::make_array(type::make_char(), static_cast<int>(e.value.size()) + 1);
@@ -227,11 +227,17 @@ void ir_gen::visit(ident_expr &e) {
         return;
     }
     if (e.sym->kind == sym_kind::ENUM_CONST) {
-        expr_result_ = operand::make_int(e.sym->enum_val, type::make_int());
+        expr_result_ = operand::make_int(
+            e.sym->enum_val, e.sym->type ? e.sym->type : type::make_int());
         return;
     }
     operand sym_op = sym_to_operand(*e.sym, e.type);
     if (e.type && e.type->is_array() && e.type->base) {
+        if (e.sym->is_dynamic_aligned) {
+            expr_result_ = sym_to_operand(
+                *e.sym, type::make_pointer(e.type->base));
+            return;
+        }
         expr_result_ = emit_unop(icode_op::ADDRESS_OF, sym_op,
                                  type::make_pointer(e.type->base));
         return;
@@ -738,6 +744,20 @@ void ir_gen::visit(call_expr &e) {
     const auto &conv = get_abi_convention(c_abi);
     auto arg_locs = conv.classify_args(arg_types);
 
+    type_ptr ret_type = e.type ? e.type : type::make_int();
+    const bool result_via_sret =
+        abi_returns_aggregate_via_hidden_pointer(c_abi, ret_type);
+
+    operand result;
+    if (ret_type->kind != type_kind::VOID)
+        result = new_temp(ret_type);
+
+    operand sret_address;
+    if (result_via_sret) {
+        sret_address = emit_unop(
+            icode_op::ADDRESS_OF, result, type::make_pointer(ret_type));
+    }
+
     // Emit SEND icodes in ABI order so the caller stack matches the callee's
     // expected parameter layout.
     int total_arg_bytes = 0;
@@ -771,11 +791,46 @@ void ir_gen::visit(call_expr &e) {
         }
     }
 
-    type_ptr ret_type = e.type ? e.type : type::make_int();
+    // SDCC passes a pointer to caller-owned aggregate result storage in the
+    // stack slot nearest the return address. It is outside source parameter
+    // numbering and is pushed after every ordinary argument under both ABI 0
+    // and ABI 1.
+    if (result_via_sret) {
+        icode hidden;
+        hidden.op = icode_op::SEND;
+        hidden.left = sret_address;
+        hidden.argreg = -1;
+        hidden.arg_loc = abi_arg_loc::STACK;
+        hidden.send_bytes = 2;
+        hidden.callee_abi = c_abi;
+        emit(hidden);
+        total_arg_bytes += 2;
 
-    operand result;
-    if (ret_type->kind != type_kind::VOID)
-        result = new_temp(ret_type);
+        // Materializing and pushing the hidden pointer uses HL and can also
+        // disturb other argument registers. Reload ABI 1 register arguments
+        // after the push; stack arguments stay below the hidden slot.
+        if (effective_call_abi(c_abi) == call_abi::SDCCCALL1) {
+            auto resend_register_arg = [&](int i) {
+                if (arg_locs[i] == abi_arg_loc::STACK)
+                    return;
+                icode resend;
+                resend.op = icode_op::SEND;
+                resend.left = arg_ops[i];
+                resend.argreg = i;
+                resend.arg_loc = arg_locs[i];
+                resend.send_bytes = 0;
+                resend.callee_abi = c_abi;
+                emit(resend);
+            };
+            if (conv.caller_sends_right_to_left()) {
+                for (int i = static_cast<int>(arg_ops.size()) - 1; i >= 0; --i)
+                    resend_register_arg(i);
+            } else {
+                for (int i = 0; i < static_cast<int>(arg_ops.size()); ++i)
+                    resend_register_arg(i);
+            }
+        }
+    }
 
     icode ic;
     ic.op         = icode_op::CALL;
@@ -786,6 +841,7 @@ void ir_gen::visit(call_expr &e) {
     ic.callee_cleans_stack =
         abi_callee_cleans_stack(c_abi, ret_type, arg_types, callee_variadic);
     ic.callee_noreturn = direct_callee_noreturn;
+    ic.result_via_sret = result_via_sret;
 
     if (!direct_func_name.empty())
         ic.func_name = direct_func_name;

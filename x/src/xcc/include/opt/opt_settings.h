@@ -18,7 +18,7 @@ enum class opt_level {
     O0 = 0, // no optimization
     O1 = 1, // late target cleanup only (peephole + tiny backend fusions)
     O2 = 2, // smart optimizer baseline (IR + backend + O1 cleanup)
-    O3 = 3, // separately routed experimental speed profile
+    O3 = 3, // command-line compatibility alias for the stable speed profile
     Of = 4, // O2-based speed profile with validated speed hooks
     Os = 5, // size-biased smart optimization
 };
@@ -112,8 +112,9 @@ struct optimization_settings {
             s.loop_induction = true;
             s.strength_reduction = true;
             s.dead_code_elim = true;
-            // Keep scalar promotion opt-in for now; it can change byte-local
-            // lifetimes across pointer-heavy loops.
+            // Keep scalar promotion opt-in. Promoted locals can acquire
+            // incorrect live ranges when they cross complex CFG joins and
+            // are subsequently assigned by the Z80 register allocator.
             s.scalar_local_promotion = false;
             s.reg_param_promotion = true;
             s.tail_recursion_elim = true;
@@ -128,9 +129,10 @@ struct optimization_settings {
             s.duplicate_block_merge = true;
             s.merge_tails = false;
             s.local_frame_compaction = true;
-            // Keep the allocator opt-in until its Z80 lowering is proven on
-            // larger stack-heavy kernels and pointer-heavy control flow.
-            s.regalloc = true;
+            // Keep the physical-home allocator opt-in. Independent corpus
+            // cases still expose incorrect values in otherwise ordinary
+            // search, sort, hash, and 64-bit-helper control flow.
+            s.regalloc = false;
             s.compare_ifx_fusion = true;
             s.frame_omit = true;
             s.prealloc_temp_frame = true;
@@ -146,21 +148,15 @@ struct optimization_settings {
             // safely handle those larger regions.
             s.inline_static_functions = true;
             s.internal_call_abi_promotion = true;
+            s.address_deref_fold = true;
             s.block_fill_loops = true;
-            // Keep promoted byte expressions narrow when they provably flow
-            // back to byte sinks; this avoids Z80 stack-heavy 16-bit lowering
-            // for ordinary unsigned/signed char arithmetic.
-            s.promoted_byte_ops = true;
-            // Speed mode can use the conservative Z80 temp/register allocator:
-            // the allocator itself rejects calls, clobbers, address-taking,
-            // deep-frame hazards, and unsafe pointer rematerialization.
-            // -Os enables the same allocator below after separate size/cycle
-            // validation.
-            s.regalloc = true;
-            // Promote simple scalar locals to temps before backend allocation.
-            // This lets leaf helpers keep values in registers instead of
-            // manufacturing stack locals solely for reloads.
-            s.scalar_local_promotion = true;
+            // Keep promoted-byte rewriting opt-in.  It still narrows
+            // full-width induction state when a byte array sink appears in a
+            // large frame, so it is not release-grade for the speed profile.
+            s.promoted_byte_ops = false;
+            // Physical register allocation remains an explicit experimental
+            // flag until its CFG liveness and helper clobber model pass the
+            // independent corpus.
             // Prefer branch-form updates such as `count -= !predicate` when
             // the Boolean is consumed only by adjacent arithmetic.  Besides
             // avoiding a materialized 0/1 value, this shortens the taken hot
@@ -175,12 +171,11 @@ struct optimization_settings {
 
         case opt_level::O3:
             s = for_level(opt_level::Of);
-            s.level = level;
-            // O3 is the experimental speed profile.  Re-enable cross-block
-            // value propagation here so the wider O3 inliner does not leave
-            // every remapped helper temporary as a separate stack value.
-            s.value_propagation = true;
-            s.address_deref_fold = true;
+            // Keep -O3 as a compatibility spelling of the fully validated
+            // speed pipeline.  Experimental cross-block value propagation
+            // and the wider inliner previously made this preset differ by
+            // ABI and retained transformations that were not release-grade.
+            // New speed work is stabilized in -Of before it reaches -O3.
             break;
 
         case opt_level::Os:
@@ -196,14 +191,10 @@ struct optimization_settings {
             // rejects broad loop/control-flow flattening.
             s.inline_static_functions = true;
             s.internal_call_abi_promotion = true;
-            // These two backend families are not benchmark recognizers:
-            // byte-op promotion only keeps already-provable byte expressions
-            // narrow, and the Z80 allocator rejects unsafe functions. In the
-            // z88dk kernels they reduce both generated size and cycles for
-            // stack-heavy byte/switch code, so they belong in -Os as well.
-            s.promoted_byte_ops = true;
-            s.regalloc = true;
-            s.scalar_local_promotion = true;
+            // Promoted-byte rewriting remains opt-in for the same reason as
+            // the speed profile: byte-array sinks do not prove that every
+            // related induction value is narrow.
+            s.promoted_byte_ops = false;
             s.branch_bool_arithmetic = true;
             s.countdown_dead_loops = true;
             s.block_fill_loops = true;

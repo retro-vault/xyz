@@ -19,6 +19,10 @@
 #include <stdint.h>
 #include <wchar.h>
 
+#ifndef __sdcccall
+#define __sdcccall(a)
+#endif
+
 typedef struct imaxdiv_t {
     intmax_t quot;
     intmax_t rem;
@@ -211,7 +215,7 @@ typedef struct imaxdiv_t {
 #define SCNxPTR "hx"
 
 intmax_t  imaxabs(intmax_t j);
-imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom);
+imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom) __sdcccall(1);
 intmax_t  strtoimax(const char *restrict nptr, char **restrict endptr, int base);
 uintmax_t strtoumax(const char *restrict nptr, char **restrict endptr, int base);
 intmax_t  wcstoimax(const wchar_t *restrict nptr, wchar_t **restrict endptr, int base);

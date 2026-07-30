@@ -370,7 +370,8 @@ bool outline_occurrence_stack_safe(const std::vector<asm_line> &lines,
     return required_depth == 0 || allocated_depth >= required_depth;
 }
 
-std::string compact_unused_temp_frames(const std::string &asm_text) {
+std::string compact_unused_temp_frames(const std::string &asm_text,
+                                       bool size_bias) {
     std::vector<asm_line> lines;
     std::istringstream input(asm_text);
     std::string raw;
@@ -613,7 +614,11 @@ std::string compact_unused_temp_frames(const std::string &asm_text) {
             continue;
 
         std::vector<asm_line> replacement;
-        if (new_total <= 12) {
+        // PUSH/DEC minimizes size through eight bytes.  For speed it wins
+        // only through four bytes (22 cycles versus 27 for LD/ADD/LD);
+        // a five-byte PUSH/PUSH/DEC sequence already costs 28 cycles.
+        const int push_threshold = size_bias ? 8 : 4;
+        if (new_total <= push_threshold) {
             for (int i = 0; i < new_total / 2; ++i)
                 replacement.push_back(asm_line::parse("\tpush\taf"));
             if (new_total & 1)
@@ -1139,8 +1144,9 @@ std::string optimize_z80_assembly(const std::string &asm_text,
         ? asm_text
         : z80_peep::optimize(
               asm_text, uses_speed_biased_rules(level), pass_budget, size_bias);
+    if (size_bias || uses_speed_biased_rules(level))
+        optimized = compact_unused_temp_frames(optimized, size_bias);
     if (level == optimization_level::os) {
-        optimized = compact_unused_temp_frames(optimized);
         for (int round = 0; round < 2; ++round) {
             const std::string before = optimized;
             optimized = remove_unreferenced_internal_labels(optimized);

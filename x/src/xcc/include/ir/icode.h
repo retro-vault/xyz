@@ -265,6 +265,7 @@ struct icode {
     call_abi callee_abi  = call_abi::DEFAULT; // SEND/CALL: ABI of the callee function
     bool     callee_cleans_stack = false;   // CALL: callee drops stack-passed args before returning
     bool     callee_noreturn = false;        // CALL: direct callee cannot return
+    bool     result_via_sret = false;         // CALL: hidden stack pointer owns aggregate result
 
     //
     // Print a human-readable dump of this instruction to stdout.

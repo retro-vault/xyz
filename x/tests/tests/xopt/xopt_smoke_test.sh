@@ -4283,6 +4283,61 @@ if grep -Eq 'ld[[:space:]]+hl,[[:space:]]*#-5|add[[:space:]]+hl,[[:space:]]*sp|l
     exit 1
 fi
 
+cat >"$TMPDIR/speed_stack_alloc_push_af.s" <<'ASM'
+_speed_stack_alloc_push_af:
+	ld	hl, #-4
+	add	hl, sp
+	ld	sp, hl
+	xor	a
+	ret
+_speed_stack_alloc_five_bytes:
+	ld	hl, #-5
+	add	hl, sp
+	ld	sp, hl
+	xor	a
+	ret
+ASM
+
+"$XOPT" -Of "$TMPDIR/speed_stack_alloc_push_af.s" \
+    -o "$TMPDIR/speed_stack_alloc_push_af.out.s"
+if [[ "$(awk '
+    /^_speed_stack_alloc_push_af:/ { in_fn=1; next }
+    /^_speed_stack_alloc_five_bytes:/ { in_fn=0 }
+    in_fn && /^[[:space:]]+push[[:space:]]+af/ { count++ }
+    END { print count+0 }
+' "$TMPDIR/speed_stack_alloc_push_af.out.s")" != "2" ]]; then
+    echo "xopt smoke: -Of did not promote the faster four-byte stack allocation" >&2
+    exit 1
+fi
+if ! awk '
+    /^_speed_stack_alloc_five_bytes:/ { in_fn=1; next }
+    in_fn && /ld[[:space:]]+hl,[[:space:]]*#-5/ { load=1 }
+    in_fn && /add[[:space:]]+hl,[[:space:]]*sp/ { add=1 }
+    in_fn && /ld[[:space:]]+sp,[[:space:]]*hl/ { store=1 }
+    END { exit load && add && store ? 0 : 1 }
+' "$TMPDIR/speed_stack_alloc_push_af.out.s"; then
+    echo "xopt smoke: -Of selected slower PUSH/DEC allocation for five bytes" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/redundant_pair_immediate_stores.s" <<'ASM'
+_redundant_pair_immediate_stores:
+	ld	hl, #4660
+	ld	(_first), hl
+	ld	(_second), hl
+	ld	hl, #4660
+	ld	(_third), hl
+	ret
+ASM
+
+"$XOPT" -Of "$TMPDIR/redundant_pair_immediate_stores.s" \
+    -o "$TMPDIR/redundant_pair_immediate_stores.out.s"
+if [[ "$(grep -Ec 'ld[[:space:]]+hl,[[:space:]]*#4660' \
+        "$TMPDIR/redundant_pair_immediate_stores.out.s")" != "1" ]]; then
+    echo "xopt smoke: -Of retained a redundant pair immediate across stores" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/large_stack_alloc_stays_compact.s" <<'ASM'
 _large_stack_alloc_stays_compact:
 	ld	hl, #-11
@@ -4525,6 +4580,19 @@ if grep -Eq -- '-(9|10)\(ix\)' "$TMPDIR/temp_frame_compact.out.s"; then
 fi
 if [[ "$(awk '/^_temp_frame_compact:/{in_fn=1;next} /^[^[:space:]].*:/{in_fn=0} in_fn && /push[[:space:]]+af/{n++} END{print n+0}' "$TMPDIR/temp_frame_compact.out.s")" != "1" ]]; then
     echo "xopt smoke: -Os did not compact a dead temporary-frame tail" >&2
+    exit 1
+fi
+
+"$XOPT" -Of "$TMPDIR/temp_frame_compact.s" \
+    -o "$TMPDIR/temp_frame_compact.of.out.s"
+grep -q 'temp_frame_compact (locals=0, temp_frame=2, stack_params=0)' \
+    "$TMPDIR/temp_frame_compact.of.out.s"
+grep -q 'temp_frame_sp_guard (locals=0, temp_frame=6, stack_params=0)' \
+    "$TMPDIR/temp_frame_compact.of.out.s"
+grep -q 'temp_frame_hole (locals=2, temp_frame=2, stack_params=0)' \
+    "$TMPDIR/temp_frame_compact.of.out.s"
+if [[ "$(awk '/^_temp_frame_compact:/{in_fn=1;next} /^[^[:space:]].*:/{in_fn=0} in_fn && /push[[:space:]]+af/{n++} END{print n+0}' "$TMPDIR/temp_frame_compact.of.out.s")" != "1" ]]; then
+    echo "xopt smoke: -Of did not promote faster dead-frame compaction" >&2
     exit 1
 fi
 

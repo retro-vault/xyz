@@ -9,11 +9,9 @@ MANIFEST="$CORPUS/manifest.tsv"
 XCC="${XCC:-$ROOT/bin/x-m/bin/xcc}"
 Z88DK_ROOT="${ORIG_Z88DK_ROOT:-$ROOT/orig/z88dk}"
 ZCC="$Z88DK_ROOT/bin/zcc"
-TICKS="$Z88DK_ROOT/bin/z88dk-ticks"
 RUNNER="$ROOT/build/bin/z80_exec"
 OUT="${OUT:-$ROOT/build/x/benchmarks/z88dk24}"
 CYCLES="${CYCLES:-800000000}"
-TICKS_BUDGET="${TICKS_BUDGET:-60}"
 FILTER="${FILTER:-}"
 ARTIFACTS=""
 
@@ -43,7 +41,6 @@ fi
 [[ -x "$XCC" ]] || { echo "missing M-model xcc: $XCC (run: make x-m)" >&2; exit 2; }
 XCC="$(cd -- "$(dirname -- "$XCC")" && pwd -P)/$(basename -- "$XCC")"
 [[ -x "$ZCC" ]] || { echo "missing z88dk zcc: $ZCC" >&2; exit 2; }
-[[ -x "$TICKS" ]] || { echo "missing z88dk-ticks: $TICKS" >&2; exit 2; }
 [[ -x "$RUNNER" ]] || { echo "missing runner: $RUNNER" >&2; exit 2; }
 
 rm -rf "$OUT"
@@ -124,7 +121,7 @@ run_z88dk_mode() {
     local name="$1" rel="$2" label="$3" flags="$4" work="$5"
     local src="$UPSTREAM/$rel" bin="$work/$label.bin"
     local log="$work/$label.build.log" run_log="$work/$label.run.log"
-    local output status bytes cycles
+    local output="$work/$label.output" summary status bytes cycles ret done
     local artifact_dir local_src
     local -a args
     read -r -a args <<< "$flags"
@@ -140,15 +137,20 @@ run_z88dk_mode() {
     cp "$bin" "$artifact_dir/program.bin"
     bytes="$(wc -c < "$bin" | tr -d ' ')"
     set +e
-    output="$(cd "$work" && "$TICKS" -w "$TICKS_BUDGET" -b msx "$bin" 2>&1)"
+    summary="$(cd "$work" && "$RUNNER" --bin --z88dk-trap \
+        --cycles "$CYCLES" --fs-root "$work" --stdout "$output" "$bin" 2>&1)"
     set -e
-    printf '%s\n' "$output" > "$run_log"
-    cycles="$(sed -n 's/.*Ticks: \([0-9][0-9]*\).*/\1/p' <<< "$output" | tail -1)"
-    if grep -qE '[0-9]+ run, [0-9]+ passed, 0 failed' <<< "$output"; then
+    printf '%s\n' "$summary" > "$run_log"
+    done="$(sed -n 's/.*done=\([0-9][0-9]*\).*/\1/p' <<< "$summary" | tail -1)"
+    ret="$(sed -n 's/.*return=\([0-9][0-9]*\).*/\1/p' <<< "$summary" | tail -1)"
+    cycles="$(sed -n 's/.*cycles=\([0-9][0-9]*\).*/\1/p' <<< "$summary" | tail -1)"
+    if [[ "$done" == 1 && "$ret" == 0 ]] &&
+        grep -qE '[0-9]+ run, [0-9]+ passed, 0 failed' "$output"; then
         status=OK
-    elif grep -qE '[1-9][0-9]* failed' <<< "$output"; then
+    elif [[ "$done" == 1 ]] &&
+        grep -qE '[1-9][0-9]* failed' "$output"; then
         status=FAIL
-    elif [[ -z "$cycles" ]]; then
+    elif [[ "$done" != 1 || -z "$cycles" ]]; then
         status=HANG
     else
         status=ERROR

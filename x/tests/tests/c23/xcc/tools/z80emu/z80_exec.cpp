@@ -450,6 +450,252 @@ struct machine {
         }
     }
 
+    uint16_t get_hl() const {
+        return static_cast<uint16_t>(
+            cpu.reg.pair.L |
+            (static_cast<uint16_t>(cpu.reg.pair.H) << 8));
+    }
+
+    uint16_t get_de() const {
+        return static_cast<uint16_t>(
+            cpu.reg.pair.E |
+            (static_cast<uint16_t>(cpu.reg.pair.D) << 8));
+    }
+
+    void set_hl(uint16_t value) {
+        cpu.reg.pair.L = static_cast<uint8_t>(value);
+        cpu.reg.pair.H = static_cast<uint8_t>(value >> 8);
+    }
+
+    void set_de(uint16_t value) {
+        cpu.reg.pair.E = static_cast<uint8_t>(value);
+        cpu.reg.pair.D = static_cast<uint8_t>(value >> 8);
+    }
+
+    void set_z88dk_error(bool error, uint8_t code = 0) {
+        if (error) {
+            cpu.reg.pair.F |= 0x01;
+            cpu.reg.pair.A = code;
+        } else {
+            cpu.reg.pair.F &= static_cast<uint8_t>(~0x01u);
+        }
+    }
+
+    bool handle_z88dk_trap() {
+        constexpr uint8_t CMD_EXIT       = 0;
+        constexpr uint8_t CMD_PRINTCHAR  = 1;
+        constexpr uint8_t CMD_OPENF      = 4;
+        constexpr uint8_t CMD_CLOSEF     = 5;
+        constexpr uint8_t CMD_WRITEBYTE  = 6;
+        constexpr uint8_t CMD_READBYTE   = 7;
+        constexpr uint8_t CMD_WRITEBLOCK = 8;
+        constexpr uint8_t CMD_READBLOCK  = 9;
+        constexpr uint8_t CMD_SEEK       = 10;
+
+        switch (cpu.reg.pair.A) {
+        case CMD_EXIT:
+            done = true;
+            write16(result_addr, get_hl());
+            return true;
+
+        case CMD_PRINTCHAR: {
+            const char ch = static_cast<char>(cpu.reg.pair.L);
+            console_out.push_back((ch == '\r' || ch == '\n') ? '\n' : ch);
+            set_z88dk_error(false);
+            return true;
+        }
+
+        case CMD_OPENF: {
+            const std::string path = resolve_path(read_c_string(get_hl()));
+            const uint16_t zflags = get_de();
+            uint16_t flags = zflags & O_ACCMODE;
+            if (zflags & 0x0100) flags |= O_APPEND;
+            if (zflags & 0x0200) flags |= O_TRUNC;
+            if (zflags & 0x0400) flags |= O_CREAT;
+            if (path.empty()) {
+                set_hl(0xffff);
+                set_z88dk_error(true, 5);
+                return true;
+            }
+
+            std::ios::openmode mode = std::ios::binary;
+            const uint16_t acc = flags & O_ACCMODE;
+            if (acc == O_WRONLY)
+                mode |= std::ios::out;
+            else if (acc == O_RDWR)
+                mode |= std::ios::in | std::ios::out;
+            else
+                mode |= std::ios::in;
+            if (flags & O_TRUNC)
+                mode |= std::ios::trunc;
+            if (flags & O_APPEND)
+                mode |= std::ios::app;
+            if (flags & O_CREAT) {
+                std::ofstream create(path, std::ios::binary | std::ios::app);
+            }
+
+            auto fh = std::make_unique<file_handle>();
+            fh->flags = flags;
+            fh->stream.open(path, mode);
+            if (!fh->stream) {
+                set_hl(0xffff);
+                set_z88dk_error(true, 5);
+                return true;
+            }
+            set_hl(static_cast<uint16_t>(alloc_fd(std::move(fh))));
+            set_z88dk_error(false);
+            return true;
+        }
+
+        case CMD_CLOSEF: {
+            const uint16_t fd = cpu.reg.pair.B;
+            if (fd < 3) {
+                set_hl(0);
+                set_z88dk_error(false);
+                return true;
+            }
+            const size_t index = static_cast<size_t>(fd - 3);
+            if (index >= files.size() || !files[index]) {
+                set_hl(0xffff);
+                set_z88dk_error(true, 2);
+                return true;
+            }
+            files[index]->stream.close();
+            files[index].reset();
+            set_hl(0);
+            set_z88dk_error(false);
+            return true;
+        }
+
+        case CMD_WRITEBYTE: {
+            const uint16_t fd = cpu.reg.pair.B;
+            if (fd == 1 || fd == 2) {
+                console_out.push_back(static_cast<char>(cpu.reg.pair.L));
+                set_hl(1);
+                set_z88dk_error(false);
+                return true;
+            }
+            auto *fh = get_file(fd);
+            if (!fh) {
+                set_hl(0xffff);
+                set_z88dk_error(true, 2);
+                return true;
+            }
+            fh->stream.put(static_cast<char>(cpu.reg.pair.L));
+            fh->stream.flush();
+            set_hl(fh->stream ? 1 : 0xffff);
+            set_z88dk_error(!fh->stream, 2);
+            return true;
+        }
+
+        case CMD_READBYTE: {
+            const uint16_t fd = cpu.reg.pair.B;
+            uint8_t value = 0;
+            bool ok = false;
+            if (fd == 0 && !console_in.empty()) {
+                value = console_in.front();
+                console_in.pop_front();
+                ok = true;
+            } else if (auto *fh = get_file(fd)) {
+                char ch = 0;
+                fh->stream.get(ch);
+                if (fh->stream) {
+                    value = static_cast<uint8_t>(ch);
+                    ok = true;
+                } else if (fh->stream.eof()) {
+                    fh->stream.clear();
+                }
+            }
+            set_hl(ok ? value : 0xffff);
+            set_z88dk_error(!ok, ok ? 0 : 4);
+            return true;
+        }
+
+        case CMD_WRITEBLOCK:
+        case CMD_READBLOCK: {
+            const uint16_t fd = cpu.reg.pair.B;
+            const uint16_t ptr = get_de();
+            const uint16_t len = get_hl();
+            uint16_t count = 0;
+            bool ok = true;
+            if (cpu.reg.pair.A == CMD_WRITEBLOCK &&
+                (fd == 1 || fd == 2)) {
+                while (count < len) {
+                    console_out.push_back(
+                        static_cast<char>(read8(ptr + count)));
+                    ++count;
+                }
+            } else if (cpu.reg.pair.A == CMD_READBLOCK && fd == 0) {
+                while (count < len && !console_in.empty()) {
+                    write8(ptr + count, console_in.front());
+                    console_in.pop_front();
+                    ++count;
+                }
+            } else if (auto *fh = get_file(fd)) {
+                if (cpu.reg.pair.A == CMD_WRITEBLOCK) {
+                    while (count < len && fh->stream) {
+                        fh->stream.put(
+                            static_cast<char>(read8(ptr + count)));
+                        if (fh->stream)
+                            ++count;
+                    }
+                    fh->stream.flush();
+                    ok = static_cast<bool>(fh->stream);
+                } else {
+                    std::vector<char> bytes(len);
+                    fh->stream.read(bytes.data(), len);
+                    count = static_cast<uint16_t>(fh->stream.gcount());
+                    for (uint16_t i = 0; i < count; ++i)
+                        write8(ptr + i, static_cast<uint8_t>(bytes[i]));
+                    if (fh->stream.eof())
+                        fh->stream.clear();
+                }
+            } else {
+                ok = false;
+            }
+            set_hl(ok ? count : 0xffff);
+            set_z88dk_error(!ok, ok ? 0 : 2);
+            return true;
+        }
+
+        case CMD_SEEK: {
+            const uint16_t fd = cpu.reg.pair.B;
+            auto *fh = get_file(fd);
+            if (!fh) {
+                set_z88dk_error(true, 2);
+                return true;
+            }
+            const int32_t offset = static_cast<int32_t>(
+                static_cast<uint32_t>(get_hl()) |
+                (static_cast<uint32_t>(get_de()) << 16));
+            std::ios::seekdir direction;
+            switch (cpu.reg.pair.C) {
+            case 0: direction = std::ios::beg; break;
+            case 1: direction = std::ios::end; break;
+            case 2: direction = std::ios::cur; break;
+            default:
+                set_z88dk_error(true, 4);
+                return true;
+            }
+            fh->stream.clear();
+            fh->stream.seekg(offset, direction);
+            const std::streampos position = fh->stream.tellg();
+            if (position < 0) {
+                set_z88dk_error(true, 4);
+                return true;
+            }
+            const uint32_t value = static_cast<uint32_t>(position);
+            set_hl(static_cast<uint16_t>(value));
+            set_de(static_cast<uint16_t>(value >> 16));
+            set_z88dk_error(false);
+            return true;
+        }
+
+        default:
+            return false;
+        }
+    }
+
     void add_cycles(int clocks) {
         executed_cycles += clocks;
     }
@@ -665,30 +911,32 @@ int main(int argc, char **argv) {
     m.cpu.reg.PC = opts.start_pc;
     int executed = 0;
     bool z88dk_trapped = false;
-    try {
-        executed = m.cpu.execute(opts.cycle_budget);
-    } catch (const std::exception &ex) {
-        const uint16_t pc = m.cpu.reg.PC;
-        if (opts.z88dk_trap &&
-            m.mem[(pc - 2) & 0xffff] == 0xed &&
-            m.mem[(pc - 1) & 0xffff] == 0xfe) {
-            m.done = true;
-            z88dk_trapped = true;
+    while (!m.done && m.executed_cycles < opts.cycle_budget) {
+        try {
+            const int remaining = opts.cycle_budget - m.executed_cycles;
+            m.cpu.execute(remaining);
             executed = m.executed_cycles;
-            m.write16(opts.result_addr,
-                      static_cast<uint16_t>(m.cpu.reg.pair.L |
-                      (static_cast<uint16_t>(m.cpu.reg.pair.H) << 8)));
-        } else {
-        std::fprintf(stderr,
-                     "z80_exec: emulator exception at pc=0x%04x "
-                     "bytes=%02x %02x %02x %02x: %s\n",
-                     pc,
-                     m.mem[pc],
-                     m.mem[(pc + 1) & 0xffff],
-                     m.mem[(pc + 2) & 0xffff],
-                     m.mem[(pc + 3) & 0xffff],
-                     ex.what());
-        return 4;
+            break;
+        } catch (const std::exception &ex) {
+            const uint16_t pc = m.cpu.reg.PC;
+            if (opts.z88dk_trap &&
+                m.mem[(pc - 2) & 0xffff] == 0xed &&
+                m.mem[(pc - 1) & 0xffff] == 0xfe &&
+                m.handle_z88dk_trap()) {
+                z88dk_trapped = true;
+                executed = m.executed_cycles;
+                continue;
+            }
+            std::fprintf(stderr,
+                         "z80_exec: emulator exception at pc=0x%04x "
+                         "bytes=%02x %02x %02x %02x: %s\n",
+                         pc,
+                         m.mem[pc],
+                         m.mem[(pc + 1) & 0xffff],
+                         m.mem[(pc + 2) & 0xffff],
+                         m.mem[(pc + 3) & 0xffff],
+                         ex.what());
+            return 4;
         }
     }
     const uint16_t result = static_cast<uint16_t>(

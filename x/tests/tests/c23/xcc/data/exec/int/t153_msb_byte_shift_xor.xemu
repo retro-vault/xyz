@@ -1,0 +1,3 @@
+# O1 enables the backend compare/branch fusion used by this transform, so
+# cover it in addition to the suite-wide O0/O2/O3/Of/Os matrix.
+matrix_opt = O1

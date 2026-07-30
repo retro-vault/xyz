@@ -2,8 +2,7 @@
         ;;
         ;; libc ldiv() for the xcc Z80 libc.
         ;; Computes quotient and remainder for two signed 32-bit longs and
-        ;; returns ldiv_t as an 8-byte aggregate in the normal 64-bit
-        ;; DE:HL:DE':HL' register layout.
+        ;; writes ldiv_t to the SDCC hidden aggregate-result pointer.
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
@@ -19,7 +18,8 @@
 
 _ldiv::
         ;; First arg numer arrives in DE:HL. The second long denom is stacked
-        ;; at ix+4..7 (low word first) under sdcccall(1).
+        ;; at ix+6..9 (low word first) under sdcccall(1); the hidden result
+        ;; pointer occupies ix+4..5.
         push    ix
         ld      ix,#0
         add     ix,sp
@@ -36,11 +36,11 @@ _ldiv::
         add     hl,sp
         ld      sp,hl
 
+        ld      l,8(ix)
+        ld      h,9(ix)
+        push    hl
         ld      l,6(ix)
         ld      h,7(ix)
-        push    hl
-        ld      l,4(ix)
-        ld      h,5(ix)
         push    hl                      ; denom low
         ld      l,-4(ix)
         ld      h,-3(ix)
@@ -61,11 +61,11 @@ _ldiv::
         ld      -6(ix),l
         ld      -5(ix),h               ; quotient high
 
+        ld      l,8(ix)
+        ld      h,9(ix)
+        push    hl
         ld      l,6(ix)
         ld      h,7(ix)
-        push    hl
-        ld      l,4(ix)
-        ld      h,5(ix)
         push    hl
         ld      l,-4(ix)
         ld      h,-3(ix)
@@ -77,21 +77,31 @@ _ldiv::
         pop     bc
         pop     bc
 
-        push    hl                      ; rem high
-        ex      de,hl
-        push    hl                      ; rem low
-        ld      l,-6(ix)
-        ld      h,-5(ix)
-        push    hl                      ; quot high
-        ld      l,-8(ix)
-        ld      h,-7(ix)
-        push    hl                      ; quot low
-        pop     de
-        pop     hl
-        exx
-        pop     de
-        pop     hl
-        exx
+        ld      c,4(ix)
+        ld      b,5(ix)                 ; BC = caller result
+        ld      a,-8(ix)
+        ld      (bc),a                  ; quotient low to high
+        inc     bc
+        ld      a,-7(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-6(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-5(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,e
+        ld      (bc),a                  ; remainder low to high
+        inc     bc
+        ld      a,d
+        ld      (bc),a
+        inc     bc
+        ld      a,l
+        ld      (bc),a
+        inc     bc
+        ld      a,h
+        ld      (bc),a
         ld      sp,ix
         pop     ix
         ret

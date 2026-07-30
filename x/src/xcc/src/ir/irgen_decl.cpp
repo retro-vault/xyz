@@ -44,7 +44,7 @@ static const string_literal_expr *unwrap_string_literal(expr *init)
 static std::string add_global_string_literal(ir_module &mod, int &next_lbl,
                                              const string_literal_expr &str)
 {
-    std::string lbl = "__str_" + std::to_string(next_lbl++);
+    std::string lbl = "__xcc_str_" + std::to_string(next_lbl++);
     ir_module::global_var gv;
     gv.name       = lbl;
     gv.type       = type::make_array(type::make_char(),
@@ -56,15 +56,20 @@ static std::string add_global_string_literal(ir_module &mod, int &next_lbl,
     return lbl;
 }
 
-static bool is_char_array_type(type_ptr ty)
+static bool is_string_array_type(type_ptr ty, int char_width = 0)
 {
     if (!ty || ty->kind != type_kind::ARRAY || !ty->base)
         return false;
     type_kind elem = ty->base->unqual()->kind;
-    return elem == type_kind::CHAR ||
-           elem == type_kind::SCHAR ||
-           elem == type_kind::UCHAR ||
-           elem == type_kind::CHAR8T;
+    if (char_width == 8)
+        return elem == type_kind::CHAR8T;
+    if (char_width == 2)
+        return elem == type_kind::USHORT;
+    if (char_width == 4)
+        return elem == type_kind::ULONG;
+    return elem == type_kind::CHAR || elem == type_kind::SCHAR ||
+           elem == type_kind::UCHAR || elem == type_kind::CHAR8T ||
+           elem == type_kind::USHORT || elem == type_kind::ULONG;
 }
 
 static ir_module::global_var::init_elem make_init_elem(int64_t value, int size,
@@ -141,13 +146,13 @@ static void collect_global_init(expr *init, type_ptr target,
     }
 
     if (const auto *str = unwrap_string_literal(init);
-        str && is_char_array_type(target)) {
+        str && is_string_array_type(target, str->char_width)) {
         append_string_bytes(*str, target, out);
         return;
     }
 
     if (auto *il = dynamic_cast<init_list_expr*>(init)) {
-        if (is_char_array_type(target) && il->elements.size() == 1) {
+        if (is_string_array_type(target) && il->elements.size() == 1) {
             if (const auto *str =
                     unwrap_string_literal(il->elements[0].value.get())) {
                 append_string_bytes(*str, target, out);
@@ -309,6 +314,66 @@ void ir_gen::visit(var_decl &vd) {
         return emit_unop(icode_op::CAST, value, target);
     };
 
+    if (vd.sym->is_dynamic_aligned && cur_fn_ && vd.type &&
+        vd.type->kind == type_kind::ARRAY && vd.type->base) {
+        const int alignment = vd.sym->requested_align;
+        const int object_bytes = vd.type->size();
+        type_ptr ptr_type = type::make_pointer(vd.type->base);
+
+        operand raw = new_temp(ptr_type);
+        icode alloc;
+        alloc.op = icode_op::ALLOCA;
+        alloc.result = raw;
+        alloc.left = operand::make_int(
+            object_bytes + alignment - 1, type::make_uint());
+        emit(alloc);
+
+        operand biased = emit_binop(
+            icode_op::ADD, raw,
+            operand::make_int(alignment - 1, type::make_uint()), ptr_type);
+        operand as_uint = emit_unop(icode_op::CAST, biased, type::make_uint());
+        operand masked = emit_binop(
+            icode_op::BAND, as_uint,
+            operand::make_int(-alignment, type::make_uint()),
+            type::make_uint());
+        operand aligned = emit_unop(icode_op::CAST, masked, ptr_type);
+
+        emit_assign(sym_to_operand(*vd.sym, ptr_type), aligned);
+
+        if (vd.init) {
+            if (const auto *str = unwrap_string_literal(vd.init.get());
+                str && is_string_array_type(vd.type, str->char_width)) {
+                const int elem_size = vd.type->base->size();
+                const int count = vd.type->array_size;
+                int init_units = static_cast<int>(str->value.size()) + 1;
+                if (init_units > count)
+                    init_units = count;
+                for (int i = 0; i < count; ++i) {
+                    int ch = 0;
+                    if (i < init_units - 1)
+                        ch = static_cast<unsigned char>(str->value[i]);
+                    operand dst = aligned;
+                    const int offset = i * elem_size;
+                    if (offset != 0) {
+                        dst = emit_binop(
+                            icode_op::ADD, aligned,
+                            operand::make_int(offset, type::make_int()),
+                            ptr_type);
+                    }
+                    icode store;
+                    store.op = icode_op::SET_VALUE_AT;
+                    store.result = dst;
+                    store.left = operand::make_int(ch, vd.type->base);
+                    emit(store);
+                }
+            } else if (auto *il =
+                           dynamic_cast<init_list_expr*>(vd.init.get())) {
+                gen_init_list(*vd.sym, vd.type, *il, &aligned);
+            }
+        }
+        return;
+    }
+
     if (vd.vla_size && cur_fn_) {
         operand count = gen_expr(*vd.vla_size);
         int elem_sz = vd.type->is_ptr() ? vd.type->base->size() : 1;
@@ -383,7 +448,7 @@ void ir_gen::visit(var_decl &vd) {
         gv.bank       = vd.sym->bank;
         if (vd.init) {
             if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
-                str && is_char_array_type(vd.type)) {
+                str && is_string_array_type(vd.type, str->char_width)) {
                 int n = vd.type ? vd.type->size() : 0;
                 int init_bytes = static_cast<int>(str->value.size()) + 1;
                 if (n > 0 && init_bytes > n)
@@ -415,19 +480,20 @@ void ir_gen::visit(var_decl &vd) {
     }
 
     if (vd.init && cur_fn_) {
-        if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
-            str && is_char_array_type(vd.type)) {
+        if (const auto *str = unwrap_string_literal(vd.init.get());
+            str && is_string_array_type(vd.type, str->char_width)) {
             operand base = sym_to_operand(*vd.sym, vd.type->base);
-            int n = vd.type->size();
-            int init_bytes = static_cast<int>(str->value.size()) + 1;
-            if (init_bytes > n)
-                init_bytes = n;
-            for (int i = 0; i < init_bytes; ++i) {
+            const int elem_size = vd.type->base->size();
+            const int count = vd.type->array_size;
+            int init_units = static_cast<int>(str->value.size()) + 1;
+            if (init_units > count)
+                init_units = count;
+            for (int i = 0; i < init_units; ++i) {
                 int ch = 0;
                 if (i < static_cast<int>(str->value.size()))
                     ch = static_cast<unsigned char>(str->value[i]);
                 operand dst = base;
-                dst.byte_offset += i;
+                dst.byte_offset += i * elem_size;
                 dst.type = vd.type->base;
                 emit_assign(dst, operand::make_int(ch, vd.type->base));
             }
@@ -474,8 +540,10 @@ void ir_gen::gen_func(func_decl &fd) {
 
     const auto &conv = get_abi_convention(fn.abi);
     auto param_locs = conv.classify_args(param_types);
+    const bool result_via_sret =
+        abi_returns_aggregate_via_hidden_pointer(fn.abi, fn.ret_type);
     int spill_bytes = 0;
-    int stack_bytes = 0;
+    int stack_bytes = result_via_sret ? 2 : 0;
 
     for (int i = 0; i < static_cast<int>(fd.params.size()); ++i) {
         auto &p = fd.params[i];
@@ -522,6 +590,11 @@ void ir_gen::gen_func(func_decl &fd) {
 
     mod_->functions.push_back(std::move(fn));
     cur_fn_ = &mod_->functions.back();
+    sret_result_ptr_ = result_via_sret
+        ? operand::make_symbol("__xcc_sret_result",
+                               type::make_pointer(cur_fn_->ret_type),
+                               false, true, 0)
+        : operand::make_none();
 
     {
         icode ic;
@@ -554,6 +627,7 @@ void ir_gen::gen_func(func_decl &fd) {
     }
 
     cur_fn_ = nullptr;
+    sret_result_ptr_ = operand::make_none();
 }
 
 } // namespace xcc

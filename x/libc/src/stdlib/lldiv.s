@@ -1,11 +1,8 @@
         ;; lldiv.s
         ;;
         ;; libc lldiv() for the xcc Z80 libc.
-        ;; xcc currently materializes 16-byte aggregate returns by having the
-        ;; caller copy from a callee-returned pointer.  To keep that ABI while
-        ;; avoiding shared writable scratch, this routine reuses the caller's
-        ;; own 16-byte argument block as transient result storage and returns a
-        ;; pointer to that stack region in DE.
+        ;; Writes the 16-byte lldiv_t result through the SDCC hidden aggregate
+        ;; result pointer. No shared writable scratch is used.
         ;;
         ;; MIT License (see: LICENSE)
         ;; Copyright (C) 2026 tomaz stih
@@ -23,11 +20,15 @@ _lldiv::
         push    ix
         ld      ix,#0
         add     ix,sp
-        ld      hl,#-8
+        ld      hl,#-16
         add     hl,sp
-        ld      sp,hl                   ; local quotient spill [ix-8..ix-1]
+        ld      sp,hl                   ; quotient [-8..-1], rem [-16..-9]
 
-        ;; Numerator arrives on stack at ix+4..11, denominator at ix+12..19.
+        ;; Hidden result pointer is at ix+4..5. Numerator follows at ix+6..13
+        ;; and denominator at ix+14..21.
+        ld      l,20(ix)
+        ld      h,21(ix)
+        push    hl
         ld      l,18(ix)
         ld      h,19(ix)
         push    hl
@@ -48,9 +49,6 @@ _lldiv::
         push    hl
         ld      l,6(ix)
         ld      h,7(ix)
-        push    hl
-        ld      l,4(ix)
-        ld      h,5(ix)
         push    hl
         pop     de
         pop     hl
@@ -79,6 +77,9 @@ _lldiv::
         exx
 
         ;; Rebuild the arguments for the remainder helper.
+        ld      l,20(ix)
+        ld      h,21(ix)
+        push    hl
         ld      l,18(ix)
         ld      h,19(ix)
         push    hl
@@ -100,9 +101,6 @@ _lldiv::
         ld      l,6(ix)
         ld      h,7(ix)
         push    hl
-        ld      l,4(ix)
-        ld      h,5(ix)
-        push    hl
         pop     de
         pop     hl
         exx
@@ -115,49 +113,68 @@ _lldiv::
         pop     bc
         pop     bc
 
-        ;; Quotient occupies bytes [0..7] of the caller-visible result.
+        ;; Spill the remainder beside the quotient before using BC as the
+        ;; caller-result cursor (EXX would otherwise swap that cursor).
+        ld      -16(ix),e
+        ld      -15(ix),d
+        ld      -14(ix),l
+        ld      -13(ix),h
+        exx
+        ld      -12(ix),e
+        ld      -11(ix),d
+        ld      -10(ix),l
+        ld      -9(ix),h
+        exx
+
+        ld      c,4(ix)
+        ld      b,5(ix)
         ld      a,-8(ix)
-        ld      4(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-7(ix)
-        ld      5(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-6(ix)
-        ld      6(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-5(ix)
-        ld      7(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-4(ix)
-        ld      8(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-3(ix)
-        ld      9(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-2(ix)
-        ld      10(ix),a
+        ld      (bc),a
+        inc     bc
         ld      a,-1(ix)
-        ld      11(ix),a
-
-        ;; Remainder occupies bytes [8..15].
-        ld      a,e
-        ld      12(ix),a
-        ld      a,d
-        ld      13(ix),a
-        ld      a,l
-        ld      14(ix),a
-        ld      a,h
-        ld      15(ix),a
-        exx
-        ld      a,e
-        ld      16(ix),a
-        ld      a,d
-        ld      17(ix),a
-        ld      a,l
-        ld      18(ix),a
-        ld      a,h
-        ld      19(ix),a
-        exx
-
-        push    ix
-        pop     hl
-        ld      de,#4
-        add     hl,de
-        ex      de,hl                   ; DE = caller argument block / result
+        ld      (bc),a
+        inc     bc
+        ld      a,-16(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-15(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-14(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-13(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-12(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-11(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-10(ix)
+        ld      (bc),a
+        inc     bc
+        ld      a,-9(ix)
+        ld      (bc),a
         ld      sp,ix
         pop     ix
         ret

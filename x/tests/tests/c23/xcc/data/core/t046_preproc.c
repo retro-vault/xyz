@@ -3,11 +3,21 @@
 #define ANSWER 42
 #define DOUBLE(x) ((x) + (x))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define STRINGIFY(x) #x
+
+static const char multiline_stringified[] = STRINGIFY(alpha +
+                                                       beta);
+_Static_assert(sizeof(multiline_stringified) == 13,
+               "macro stringification must fold whitespace");
+static const char comment_text[] = "/* not a comment */";
+_Static_assert(sizeof(comment_text) == 20,
+               "comment markers inside strings must survive preprocessing");
 
 #define UNUSED 999
 #undef UNUSED
 
 int preproc_test(void) {
+    int slash_comment = 1; //* line comment containing a block-comment end */
     int a = ANSWER;
     int b = DOUBLE(3);
     int c = MAX(a, b);
@@ -24,5 +34,5 @@ int preproc_test(void) {
 #else
     c = c - 2;
 #endif
-    return c;
+    return c + slash_comment;
 }

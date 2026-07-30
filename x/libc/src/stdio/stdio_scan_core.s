@@ -226,11 +226,11 @@ __stdio_scan_parse_length:
         ld      SC_LENGTH(ix),a
         ld      a,(hl)
         cp      #'h'
-        jr      nz,__stdio_scan_parse_length_store
+        jp      nz,__stdio_scan_parse_length_store
         inc     hl
         ld      a,#SCAN_LEN_CHAR
         ld      SC_LENGTH(ix),a
-        jr      __stdio_scan_parse_length_store
+        jp      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_l:
         ld      a,(hl)
         cp      #'l'
@@ -240,33 +240,80 @@ __stdio_scan_parse_length_l:
         ld      SC_LENGTH(ix),a
         ld      a,(hl)
         cp      #'l'
-        jr      nz,__stdio_scan_parse_length_store
+        jp      nz,__stdio_scan_parse_length_store
         inc     hl
         ld      a,#SCAN_LEN_LLONG
         ld      SC_LENGTH(ix),a
-        jr      __stdio_scan_parse_length_store
+        jp      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_j:
         cp      #'j'
         jr      nz,__stdio_scan_parse_length_zt
         inc     hl
         ld      a,#SCAN_LEN_LLONG
         ld      SC_LENGTH(ix),a
-        jr      __stdio_scan_parse_length_store
+        jp      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_zt:
         cp      #'L'
         jr      nz,__stdio_scan_parse_length_zt_lower
         inc     hl
         ld      a,#SCAN_LEN_LDOUBLE
         ld      SC_LENGTH(ix),a
-        jr      __stdio_scan_parse_length_store
+        jp      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_zt_lower:
         cp      #'z'
         jr      z,__stdio_scan_parse_length_word
         cp      #'t'
-        jr      nz,__stdio_scan_parse_length_store
+        jr      z,__stdio_scan_parse_length_word
+        cp      #'w'
+        jr      z,__stdio_scan_parse_length_w
+        jp      __stdio_scan_parse_length_store
 __stdio_scan_parse_length_word:
         inc     hl
         xor     a
+        ld      SC_LENGTH(ix),a
+        jp      __stdio_scan_parse_length_store
+__stdio_scan_parse_length_w:
+        inc     hl
+        ld      a,(hl)
+        cp      #'8'
+        jr      z,__stdio_scan_parse_length_w8
+        cp      #'1'
+        jr      z,__stdio_scan_parse_length_w16
+        cp      #'3'
+        jr      z,__stdio_scan_parse_length_w32
+        cp      #'6'
+        jr      z,__stdio_scan_parse_length_w64
+        jp      __stdio_scan_parse_length_store
+__stdio_scan_parse_length_w8:
+        inc     hl
+        ld      a,#SCAN_LEN_CHAR
+        ld      SC_LENGTH(ix),a
+        jr      __stdio_scan_parse_length_store
+__stdio_scan_parse_length_w16:
+        inc     hl
+        ld      a,(hl)
+        cp      #'6'
+        jp      nz,__stdio_scan_parse_length_store
+        inc     hl
+        xor     a
+        ld      SC_LENGTH(ix),a
+        jp      __stdio_scan_parse_length_store
+__stdio_scan_parse_length_w32:
+        inc     hl
+        ld      a,(hl)
+        cp      #'2'
+        jp      nz,__stdio_scan_parse_length_store
+        inc     hl
+        ld      a,#SCAN_LEN_LONG
+        ld      SC_LENGTH(ix),a
+        jp      __stdio_scan_parse_length_store
+__stdio_scan_parse_length_w64:
+        inc     hl
+        ld      a,(hl)
+        cp      #'4'
+        jp      nz,__stdio_scan_parse_length_store
+        inc     hl
+        ld      a,#SCAN_LEN_LLONG
         ld      SC_LENGTH(ix),a
 __stdio_scan_parse_length_store:
         ld      SC_FMT_LO(ix),l
@@ -1239,6 +1286,10 @@ __stdio_scan_conv_have_spec:
         cp      #'x'
         jp      z,__stdio_scan_conv_unsigned
         cp      #'X'
+        jp      z,__stdio_scan_conv_unsigned
+        cp      #'b'
+        jp      z,__stdio_scan_conv_unsigned
+        cp      #'B'
         jp      z,__stdio_scan_conv_unsigned
         cp      #'p'
         jp      z,__stdio_scan_conv_pointer

@@ -2,14 +2,16 @@
 # x/tests/tests/e2e/run.sh
 #
 # End-to-end regression test for the XYZ toolchain.
-# Runs in phases: build, xz80 tests, xcc unit + execution tests,
-# xcc C23 compile matrix, xld tests, xas parity, xar smoke tests,
-# xgdb/xemu tests, mdr-emu end-to-end tests, and full-chain integration.
+# Runs in phases: build, component unit tests, the complete unified compiler
+# suite, external compatibility matrices, tool smoke tests, and full-chain
+# integration.
 #
 # Usage: ./x/tests/e2e_test.sh [--no-build] [--phase <name>]
 #   --no-build   skip the build step (assume binaries are current)
 #   --phase      run only the named phase
-#                (build|xz80|xcc|xcc-exec|c23|xld|xas|xar|xgdb|xemu|mdr|chain)
+#                (build|xz80|runtime|libc|xcc|xcc-exec|xcc-metadata|c23|
+#                 c23-corpus|z88dk|xld|xobjcopy|xopt|xas|xar|xgdb|xemu|
+#                 cpm|y-apps|mdr|chain)
 #
 # Exit: 0 if all selected phases pass, 1 otherwise.
 
@@ -57,7 +59,14 @@ run_phase() {
 
     echo ""
     echo "${BOLD}=== Phase: $label ===${RESET}"
-    if "$@"; then
+    # Do not invoke the phase function directly as an `if` condition: Bash
+    # disables errexit throughout functions used as conditional commands,
+    # which can hide an early failing test when a later command succeeds.
+    set +e
+    ( set -e; "$@" )
+    local phase_status=$?
+    set -e
+    if [[ $phase_status -eq 0 ]]; then
         echo "${GREEN}PHASE PASS${RESET}: $label"
         PHASE_PASS=$((PHASE_PASS+1))
     else
@@ -129,17 +138,38 @@ phase_xz80() {
 }
 
 # ---------------------------------------------------------------------------
-# Phase: xcc unit tests
+# Phase: runtime and libc tests
+# ---------------------------------------------------------------------------
+phase_runtime() {
+    make -C "$X_ROOT/tests/tests/runtime" test
+}
+
+phase_libc() {
+    make -C "$X_ROOT/tests/tests/libc" test
+}
+
+# ---------------------------------------------------------------------------
+# Phase: complete unified xcc suite, split once by kind
 # ---------------------------------------------------------------------------
 phase_xcc() {
-    bash "$X_ROOT/tests/run_tests.sh" "$XCC" --filter xcc
+    bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
+        --kind compile --abi 0 --work "$ROOT/build/tests/e2e/xcc-compile-abi0"
+    bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
+        --kind compile --abi 1 --work "$ROOT/build/tests/e2e/xcc-compile-abi1"
 }
 
 # ---------------------------------------------------------------------------
 # Phase: xcc execution tests
 # ---------------------------------------------------------------------------
 phase_xcc_exec() {
-    bash "$X_ROOT/tests/run_tests.sh" "$XCC" --filter xcc_exec_
+    bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
+        --kind run --abi 0 --work "$ROOT/build/tests/e2e/xcc-run-abi0"
+    bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
+        --kind run --abi 1 --work "$ROOT/build/tests/e2e/xcc-run-abi1"
+}
+
+phase_xcc_metadata() {
+    XCC="$XCC" XAS="$XAS" bash "$X_ROOT/tests/tests/xcc/symbol_metadata_test.sh"
 }
 
 # ---------------------------------------------------------------------------
@@ -148,7 +178,21 @@ phase_xcc_exec() {
 phase_c23() {
     make -C "$X_ROOT/tests/tests/c23" matrix \
         PROFILE=setups/xcc-z80/profile-xcc-z80.json \
-        RUN_MODE=never
+        RUN_MODE=auto
+}
+
+# ---------------------------------------------------------------------------
+# Phase: fixed external C project and algorithm corpora
+# ---------------------------------------------------------------------------
+phase_c23_corpus() {
+    XCC="$XCC" bash "$X_ROOT/tests/tests/c23/corpus/run_all.sh"
+}
+
+# ---------------------------------------------------------------------------
+# Phase: imported z88dk compiler and execution suite
+# ---------------------------------------------------------------------------
+phase_z88dk() {
+    make -C "$X_ROOT/tests/tests/z88dk" XCC_BIN="$XCC" test
 }
 
 # ---------------------------------------------------------------------------
@@ -159,11 +203,31 @@ phase_xld() {
 }
 
 # ---------------------------------------------------------------------------
-# Phase: xas parity (compare with sdasz80 across all xcc test inputs)
+# Phase: remaining host-tool tests
+# ---------------------------------------------------------------------------
+phase_xobjcopy() {
+    make -C "$X_ROOT/src/xobjcopy" \
+        ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" \
+        HOST_BIN_DIR="$ROOT/bin/x/bin" PUBLIC_LIB_DIR="$ROOT/bin/x/lib" test
+}
+
+phase_xopt() {
+    make -C "$X_ROOT/src/xopt" \
+        ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" \
+        HOST_BIN_DIR="$ROOT/bin/x/bin" PUBLIC_LIB_DIR="$ROOT/bin/x/lib" test
+}
+
+# ---------------------------------------------------------------------------
+# Phase: all xas tests, plus parity with sdasz80 when available
 # ---------------------------------------------------------------------------
 phase_xas() {
+    make -C "$X_ROOT/src/xas" \
+        ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" \
+        HOST_BIN_DIR="$ROOT/bin/x/bin" PUBLIC_LIB_DIR="$ROOT/bin/x/lib" \
+        test test-libs
+
     if ! command -v sdasz80 &>/dev/null; then
-        echo "${YELLOW}SKIP${RESET}: sdasz80 not found, skipping xas parity phase"
+        echo "${YELLOW}OPTIONAL${RESET}: sdasz80 not found; local xas tests ran, parity did not"
         return 0
     fi
     ensure_host_tool "$XAS" "$X_ROOT/src/xas" || return 1
@@ -256,6 +320,9 @@ EOF
 # ---------------------------------------------------------------------------
 phase_xgdb() {
     make -C "$X_ROOT/lib/xgdb" ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" test
+    make -C "$X_ROOT/src/xgdb" \
+        ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" \
+        HOST_BIN_DIR="$ROOT/bin/x/bin" PUBLIC_LIB_DIR="$ROOT/bin/x/lib" test
 }
 
 # ---------------------------------------------------------------------------
@@ -267,13 +334,31 @@ phase_xemu() {
 }
 
 # ---------------------------------------------------------------------------
-# Phase: mdr-emu end-to-end tests
+# Phase: CP/M integration
+# ---------------------------------------------------------------------------
+phase_cpm() {
+    local tnylpo="${TNYLPO:-$ROOT/orig/tnylpo/tnylpo}"
+    make -C "$X_ROOT/tests/tests/hello-cpm" TNYLPO="$tnylpo" test
+}
+
+# ---------------------------------------------------------------------------
+# Phase: all YOS-side test applications and media images
+# ---------------------------------------------------------------------------
+phase_y_apps() {
+    local app
+    for app in hello-yos mdrsave-yos mdrstep-yos mdrtst-yos; do
+        make -C "$Y_ROOT/tests/$app" image
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Phase: every mdr-emu end-to-end mode
 # ---------------------------------------------------------------------------
 phase_mdr() {
     make -C "$Y_ROOT/tests/mdr-emu" \
         REPO_ROOT="$ROOT" \
         Y_ROOT="$Y_ROOT" \
-        test
+        test stress repro-strict size
 }
 
 # ---------------------------------------------------------------------------
@@ -363,17 +448,26 @@ if $DO_BUILD && [[ -z "$ONLY_PHASE" || "$ONLY_PHASE" == "build" ]]; then
     fi
 fi
 
-run_phase "xz80"     "xz80 unit tests"             phase_xz80
-run_phase "xcc"      "xcc unit tests"              phase_xcc
-run_phase "xcc-exec" "xcc execution tests"         phase_xcc_exec
-run_phase "c23"      "xcc C23 compile matrix"      phase_c23
-run_phase "xld"      "xld unit tests"              phase_xld
-run_phase "xas"      "xas parity (vs sdasz80)"     phase_xas
-run_phase "xar"      "xar smoke tests"             phase_xar
-run_phase "xgdb"     "xgdb library tests"          phase_xgdb
-run_phase "xemu"     "xemu library and smoke tests" phase_xemu
-run_phase "mdr"      "mdr-emu end-to-end tests"    phase_mdr
-run_phase "chain"    "Full-chain integration"      phase_chain
+run_phase "xz80"        "xz80 unit tests"                    phase_xz80
+run_phase "runtime"     "runtime tests"                       phase_runtime
+run_phase "libc"        "libc tests"                          phase_libc
+run_phase "xcc"         "all unified compiler tests"          phase_xcc
+run_phase "xcc-exec"    "all unified execution tests"         phase_xcc_exec
+run_phase "xcc-metadata" "xcc symbol metadata"                phase_xcc_metadata
+run_phase "c23"         "xcc C23 compile and execution matrix" phase_c23
+run_phase "c23-corpus"  "fixed external C project corpora"     phase_c23_corpus
+run_phase "z88dk"       "imported z88dk compatibility suite"   phase_z88dk
+run_phase "xld"         "xld unit tests"                      phase_xld
+run_phase "xobjcopy"    "xobjcopy unit tests"                 phase_xobjcopy
+run_phase "xopt"        "xopt smoke tests"                    phase_xopt
+run_phase "xas"         "xas tests and sdasz80 parity"        phase_xas
+run_phase "xar"         "xar smoke tests"                     phase_xar
+run_phase "xgdb"        "xgdb library and protocol tests"     phase_xgdb
+run_phase "xemu"        "xemu library and smoke tests"        phase_xemu
+run_phase "cpm"         "CP/M integration test"               phase_cpm
+run_phase "y-apps"      "YOS test application images"         phase_y_apps
+run_phase "mdr"         "all mdr-emu end-to-end modes"        phase_mdr
+run_phase "chain"       "Full-chain integration"              phase_chain
 
 echo ""
 echo "${BOLD}=== E2E Summary ===${RESET}"

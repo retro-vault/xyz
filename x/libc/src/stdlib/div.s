@@ -2,9 +2,8 @@
         ;
         ; libc div implementation for the xcc Z80 libc.
         ; Computes the signed 16-bit quotient and remainder in one call.
-        ; The div_t result {int quot; int rem;} fits in 4 bytes and is
-        ; returned in DE:HL (DE = quot, HL = rem), matching the xcc
-        ; small-struct return convention.
+        ; The SDCC ABI passes a hidden pointer to caller-owned div_t storage
+        ; in the stack word nearest the return address.
         ;
         ; Delegates to the shared signed-divide core: __divsint produces the
         ; quotient (DE) and an unsigned remainder (HL), and __get_remainder
@@ -26,8 +25,28 @@
 
         ; _div
         ; inputs:  HL = numerator, DE = denominator (both signed int)
-        ; outputs: DE = quotient, HL = remainder (sign matches numerator)
-        ; clobbers: AF, BC
+        ; hidden:  result pointer at 4(ix)
+        ; clobbers: AF, BC, DE, HL
 _div::
+        push    ix
+        ld      ix,#0
+        add     ix,sp
         call    __divsint               ; DE = quot, HL = unsigned rem
-        jp      __get_remainder         ; HL = signed rem, DE preserved
+        call    __get_remainder         ; HL = signed rem, DE = quot
+
+        push    hl                      ; preserve remainder
+        push    de                      ; preserve quotient
+        ld      l,4(ix)
+        ld      h,5(ix)                 ; HL = caller result
+        pop     de
+        ld      (hl),e                  ; quot
+        inc     hl
+        ld      (hl),d
+        inc     hl
+        pop     bc
+        ld      (hl),c                  ; rem
+        inc     hl
+        ld      (hl),b
+
+        pop     ix
+        ret

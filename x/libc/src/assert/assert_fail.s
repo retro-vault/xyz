@@ -12,6 +12,7 @@
         .module assert_fail
         .optsdcc -mz80 sdcccall(1)
 
+        .globl  ___assert_fail
         .globl  __assert_fail
         .globl  __assert_expr
         .globl  __assert_file
@@ -19,7 +20,10 @@
         .globl  __assert_line
 
         .area   _CODE
-__assert_fail:
+        ; C external names receive the normal leading underscore.  Keep the
+        ; older assembler-facing spelling as an alias for debugger scripts.
+___assert_fail::
+__assert_fail::
         push    ix
         ld      ix, #0
         add     ix, sp
@@ -38,4 +42,3 @@ __assert_fail:
 __assert_fail_halt:
         halt
         jp      __assert_fail_halt
-

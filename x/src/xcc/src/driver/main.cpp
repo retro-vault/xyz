@@ -312,10 +312,6 @@ static optimization_settings abi0_optimized_settings(
         return s;
 
     case opt_level::O3:
-        s.inline_static_functions = false;
-        s.scalar_local_promotion = false;
-        return s;
-
     case opt_level::O0:
     case opt_level::O1:
         return s;

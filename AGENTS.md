@@ -149,6 +149,9 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
 - Large dual-style test base (direct emulator calls + xcc-compiled C cases) for both libc and runtime.
 - Integration of an external C23 compatibility suite (`x/tests/tests/c23/`) for compiler testing.
 - Discussion and planning of repo restructuring for independent toolchain distribution (see `x/docs/ARCHITECTURE.md`).
+- XCC optimization profiles now treat `-O3` as an exact compatibility alias
+  of the validated `-Of` speed pipeline. Keep experimental transformations
+  behind explicit flags until they are stable in both ABI modes.
 
 Update this file and the architecture documents when major structural or philosophical changes are made.
 

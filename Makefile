@@ -105,7 +105,7 @@ export VSIX_STAGE_DIR     := $(PKG_DIR)/vsix
 DOCKER_CLEAN_IMAGE ?= wischner/gcc-x86_64-windows-mingw-w64
 
 .PHONY: all packages x x-s x-m x-l x-models clean help
-.PHONY: test-x-s test-x-m test-x-l test-x-models
+.PHONY: test test-x-all test-x-s test-x-m test-x-l test-x-models
 .PHONY: stage-includes stage-target-assets stage-xcc-support
 .PHONY: stage-layout-cleanup stage-toolchain-targets
 .PHONY: stage-toolchain-prefixes stage-dist-docs
@@ -265,6 +265,11 @@ test-x-l: x-l
 
 test-x-models: test-x-s test-x-m test-x-l
 
+test-x-all: all test-x-models
+	bash x/tests/tests/e2e/run.sh --no-build
+
+test: test-x-all
+
 stage-includes:
 	@$(MAKE) -C $(X_ROOT) stage-includes REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(X_DIST_DIR) OUT_DIR=$(OUT_DIR) Z_DIST_DIR=$(Z_DIST_DIR)
 
@@ -302,6 +307,8 @@ help:
 		'  test-x-m             Build x-m and run the model-m compatible suite.' \
 		'  test-x-l             Build x-l and run the model-l compatible suite.' \
 		'  test-x-models        Build all x models and run all compatible suites.' \
+		'  test-x-all           Run every active X/Y test surface after all model suites.' \
+		'  test                 Alias for test-x-all.' \
 		'  stage-includes       Stage host and target headers into bin/x.' \
 		'  stage-target-assets  Stage target output directories and assets.' \
 		'  stage-xcc-support    Build and stage runtime, libc, crt0, and linker files.' \

@@ -115,6 +115,17 @@ sf_spec:
         inc     hl
         ld      SF_FMT(ix),l
         ld      SF_FMT + 1(ix),h
+        cp      #0x4f                   ; 'O' alternative numeric/name form
+        jr      nz,sf_spec_dispatch
+        ; The C locale has no alternative representation, so %Ox is the
+        ; same as %x.  Consume and dispatch the following conversion.
+        ld      a,(hl)
+        or      a
+        jp      z,sf_done
+        inc     hl
+        ld      SF_FMT(ix),l
+        ld      SF_FMT + 1(ix),h
+sf_spec_dispatch:
         call    sf_dispatch
         jr      sf_loop
 sf_done:

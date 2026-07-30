@@ -203,7 +203,21 @@ stmt_ptr parser::parse_compound_statement() {
                     }
 
                     type_ptr alloc_type = dspec.is_deduced ? type::make_int() : vtype;
-                    vd->sym = make_local_sym(vname, alloc_type, dspec.sc);
+                    const bool dynamic_aligned_array =
+                        !dspec.is_deduced && vtype &&
+                        vtype->kind == type_kind::ARRAY &&
+                        dspec.align_req > vtype->align();
+                    if (dynamic_aligned_array) {
+                        // Reserve a pointer slot.  IR lowering allocates the
+                        // object dynamically and stores its aligned address
+                        // here while preserving the declared array type.
+                        vd->sym = make_local_sym(
+                            vname, type::make_pointer(vtype->base), dspec.sc);
+                        vd->sym->type = vtype;
+                        vd->sym->is_dynamic_aligned = true;
+                    } else {
+                        vd->sym = make_local_sym(vname, alloc_type, dspec.sc);
+                    }
                     vd->sym->requested_align = dspec.align_req;
                     if (pending_init || match(tk::EQ)) {
                         if (!pending_init) {
@@ -222,7 +236,14 @@ stmt_ptr parser::parse_compound_statement() {
                             // (The alloc_local already advanced local_offset by 2;
                             //  adjust if the real type is smaller or larger.)
                             int real_sz = vtype->size() > 0 ? vtype->size() : 2;
-                            frame_.local_offset -= (real_sz - (alloc_type->size() > 0 ? alloc_type->size() : 2));
+                            int placeholder_sz =
+                                alloc_type->size() > 0 ? alloc_type->size() : 2;
+                            int growth = real_sz - placeholder_sz;
+                            frame_.local_offset -= growth;
+                            // Locals are addressed from the low end of their
+                            // IX-relative slot.  Growing a deduced object must
+                            // therefore move its symbol down with the frame.
+                            vd->sym->stack_offset -= growth;
                         } else if (dspec.is_deduced) {
                             error("'auto' variable requires an initializer with a known type");
                         }

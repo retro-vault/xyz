@@ -67,6 +67,9 @@ private:
     // Result of the most recently visited expression.
     operand expr_result_;
 
+    // Hidden SDCC ABI aggregate-result pointer for the current function.
+    operand sret_result_ptr_;
+
     // ----- helpers ---------------------------------------------------
 
     //
@@ -176,10 +179,13 @@ private:
     //
     // Emit the icode sequence to initialise a local aggregate (array or
     // struct) from il.  sym identifies the local variable, type is its
-    // declared type.
+    // declared type.  base_override supplies the object address for locals
+    // whose storage is allocated dynamically (for example over-aligned
+    // automatic arrays).
     //
     void gen_init_list(const symbol &sym, type_ptr type,
-                       init_list_expr &il);
+                       init_list_expr &il,
+                       const operand *base_override = nullptr);
 
     void gen_binary_arith   (binary_expr &e);
     void gen_complex_arith  (operand lhs, operand rhs, operand result, bin_op op);

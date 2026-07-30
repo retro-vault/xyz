@@ -1,16 +1,8 @@
 // test_ll.cpp — 64-bit integer (long long) runtime tests.
 //
-// ALL TESTS ARE DEACTIVATED.
-//
-// To enable a group, change its PENDING_TEST calls to TEST, or define
-//   #define PENDING_TEST TEST
-// before including this file (or globally), which activates everything.
-//
-// Before activating:
-//   1. Implement the function in src/xc/xcc/lib/runtime/*.s
-//   2. Set the matching constant in runtime_symbols_future.hpp to the
-//      correct linker address.
-//   3. Rebuild the runtime binary (make in tests/runtime/).
+// All PENDING_TEST spellings in this file are deliberately registered as
+// active tests below.  The historical name is retained only to keep the
+// individual case declarations stable.
 //
 // -----------------------------------------------------------------------
 // Calling convention (mirrors the proposed runtime_machine ABI):
@@ -32,13 +24,6 @@
 #include "runtime_symbols_future.hpp"
 #include "runtime_machine.hpp"
 
-// PENDING_TEST compiles the body for type-checking but never registers
-// the test with the framework.  Change to TEST (or define
-// PENDING_TEST TEST globally) to activate.
-// ACTIVATED for large test base (user request for full coverage).
-#define PENDING_TEST TEST
-
-// ACTIVATED for large test base (user request for full coverage).
 #define PENDING_TEST TEST
 
 #ifndef PENDING_TEST

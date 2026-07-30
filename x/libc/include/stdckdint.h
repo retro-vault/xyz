@@ -17,16 +17,29 @@
 #ifndef _STDCKDINT_H
 #define _STDCKDINT_H
 
+#include <limits.h>
+
 #define __STDC_VERSION_STDCKDINT_H__ 202311L
 
-/* Checked addition etc. Now use real asm helpers in existing strtox_core.s for overflow detection (no statics in new code). */
+/*
+ * xcc currently implements C int as 16 bits and long as 32 bits, so a long
+ * can represent every int addition, subtraction, and multiplication result.
+ * Keep the operations in that wider type: this avoids signed-overflow UB and
+ * also avoids exposing private assembler entry points through a public header.
+ */
 #define ckd_add(result, a, b) \
-    ( { int __r; int __ov = __ckd_add_sint(&__r, (a), (b)); *(result) = __r; __ov; } )
+    ({ long __w = (long)(a) + (long)(b); \
+       *(result) = (int)__w; \
+       (__w > (long)INT_MAX || __w < (long)INT_MIN); })
 
 #define ckd_sub(result, a, b) \
-    ( { int __r; int __ov = __ckd_sub_sint(&__r, (a), (b)); *(result) = __r; __ov; } )
+    ({ long __w = (long)(a) - (long)(b); \
+       *(result) = (int)__w; \
+       (__w > (long)INT_MAX || __w < (long)INT_MIN); })
 
 #define ckd_mul(result, a, b) \
-    ( { int __r; int __ov = __ckd_mul_sint(&__r, (a), (b)); *(result) = __r; __ov; } )
+    ({ long __w = (long)(a) * (long)(b); \
+       *(result) = (int)__w; \
+       (__w > (long)INT_MAX || __w < (long)INT_MIN); })
 
 #endif /* _STDCKDINT_H */

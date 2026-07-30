@@ -33,6 +33,24 @@ TEST(relocator_copy_text_data) {
     ASSERT_EQ(ctx.code_buffer[3], 0x42);
 }
 
+TEST(relocator_rejects_text_past_declared_area_size) {
+    xld::link_context ctx;
+    auto mod = std::make_shared<xld::module>("oversized", "oversized.rel");
+    mod->areas().emplace_back("_CODE", 4, xld::area_flags::none, 0);
+    mod->areas()[0].set_placed_addr(0);
+
+    xld::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0x00, 0x00, 0x00, 0x00, 0x00};
+    mod->texts().push_back(tr);
+
+    ctx.modules.push_back(mod);
+    ctx.code_size = 4;
+
+    ASSERT_THROWS(xld::relocator::relocate(ctx), xld::reloc_error);
+}
+
 TEST(relocator_area_relocation) {
     xld::link_context ctx;
     auto mod = std::make_shared<xld::module>("test", "test.rel");

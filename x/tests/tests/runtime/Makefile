@@ -30,6 +30,8 @@ LINKFLAGS   ?= --mode=sdcc --oformat=ihx -Ttext=0x0000 -nostdlib
 # standalone image to the self-contained runtime helpers that it exercises.
 RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' ! -path '*/ieee16/*' | sort)
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(BUILD)/objs/%.rel,$(RUNTIME_SRCS))
+SUPPORT_SRCS := $(wildcard support/*.s)
+SUPPORT_RELS := $(patsubst support/%.s,$(BUILD)/support/%.rel,$(SUPPORT_SRCS))
 
 RUNTIME_IHX  := $(BUILD)/runtime.ihx
 RUNTIME_MAP  := $(BUILD)/runtime.map
@@ -54,6 +56,7 @@ $(TEST_TARGET): $(SYMBOLS_HDR) $(RUNTIME_BIN) test_main.cpp \
                 test_int32.cpp test_int32_edge.cpp \
                 test_float_arith.cpp test_float_conv.cpp test_float_edge.cpp \
                 test_ll.cpp test_double.cpp \
+                test_sys.cpp \
                 runtime_machine.hpp float_helpers.hpp \
                 runtime_symbols_future.hpp
 	$(CXX) $(CXXFLAGS) $(XZ80_SRCS) test_main.cpp -o $@
@@ -68,11 +71,15 @@ $(RUNTIME_BIN): $(RUNTIME_IHX)
 	python3 tools/ihx2bin.py $< $@
 
 # Link all assembled .rel files into one image
-$(RUNTIME_IHX): $(RUNTIME_RELS)
+$(RUNTIME_IHX): $(RUNTIME_RELS) $(SUPPORT_RELS)
 	$(LINK) $(LINKFLAGS) -Map=$(RUNTIME_MAP) -o $@ $^
 
 # Assemble each .s file
 $(BUILD)/objs/%.rel: $(RUNTIME_DIR)/%.s | $(BUILD)/objs
+	mkdir -p $(dir $@)
+	$(ASM) $(ASMFLAGS) -o $@ $<
+
+$(BUILD)/support/%.rel: support/%.s
 	mkdir -p $(dir $@)
 	$(ASM) $(ASMFLAGS) -o $@ $<
 

@@ -5,13 +5,14 @@
 // used by the runtime:
 //
 //   call16          HL=a, DE=b  →  result in HL or DE
+//   call16_sret     HL=a, DE=b, hidden result pointer on stack
 //   call8           A=a, L=b   →  result in DE (quotient) and HL (remainder)
 //   call_shift      HL=val, B=count  →  result in HL
 //   call32          DE:HL=a(lo:hi), b on stack  →  result DE:HL(lo:hi)
 //   call_float1     float a in HL:DE (HL=high), float b on stack
 //   call_float_stackonly  entire float arg on stack (fsneg)
 //
-// 64-bit / double ABI (proposed — used by the PENDING_TEST suite):
+// 64-bit / double ABI used by the active long-long and double suites:
 //
 // The Z80 has four 16-bit alternate register pairs (DE', HL', BC', AF').
 // Together with the main DE and HL they provide 64 bits of register
@@ -126,6 +127,25 @@ struct runtime_machine {
     {
         uint16_t sp = STACK_BASE;
         sp = push16(sp, HALT_ADDR); // return address
+
+        xz80::cpu_state s{};
+        s.hl = hl;
+        s.de = de;
+        s.sp = sp;
+        s.pc = fn;
+        cpu.restore(s);
+        return run_to_halt_already_set();
+    }
+
+    // 16-bit register arguments with a hidden aggregate-result pointer.
+    // After the callee saves IX, ix+2 is the return address and ix+4 is
+    // result_ptr, matching the sdcccall(0/1) small-aggregate convention.
+    bool call16_sret(uint16_t fn, uint16_t hl, uint16_t de,
+                     uint16_t result_ptr)
+    {
+        uint16_t sp = STACK_BASE;
+        sp = push16(sp, result_ptr);
+        sp = push16(sp, HALT_ADDR);
 
         xz80::cpu_state s{};
         s.hl = hl;

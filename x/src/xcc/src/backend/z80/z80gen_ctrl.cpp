@@ -495,6 +495,13 @@ void z80_gen::gen_call(const icode &ic) {
         set_known_sp_ix_delta(current_sp_ix_delta() + ic.arg_bytes);
     }
 
+    if (ic.result_via_sret) {
+        // The callee has already copied into the caller-owned result temp.
+        // Only remove the hidden pointer and ordinary stack arguments.
+        conv.emit_call_cleanup(*this, ic);
+        return;
+    }
+
     bool direct_return = false;
     bool direct_ifx = false;
     bool direct_word_send = false;

@@ -103,5 +103,7 @@ bool abi_callee_cleans_stack(call_abi abi,
                              type_ptr ret_type,
                              const std::vector<type_ptr> &arg_types,
                              bool variadic);
+bool abi_returns_aggregate_via_hidden_pointer(call_abi abi,
+                                              type_ptr ret_type);
 abi_convention &get_abi_convention(call_abi abi);
 } // namespace xcc

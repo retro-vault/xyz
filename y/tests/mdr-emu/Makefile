@@ -16,6 +16,7 @@ Z80_DIR := $(THIS_DIR)/vendor/superzazu-z80
 MDR_LIB := $(PUBLIC_LIB_DIR)/libmicrodrive.a
 YOS_ROM := $(REPO_ROOT)/bin/y/z80/spectrum/bin/yos.rom
 YOS_CDB := $(REPO_ROOT)/bin/y/z80/spectrum/bin/yos.cdb
+MDRSTEP_IMAGE := $(REPO_ROOT)/bin/z/z80/spectrum/bin/mdr/mdrstep.mdr
 
 .DEFAULT_GOAL := all
 
@@ -31,6 +32,9 @@ $(MDR_LIB):
 
 $(YOS_ROM) $(YOS_CDB):
 	$(MAKE) -C $(Y_ROOT)/src ROOT=$(REPO_ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(REPO_ROOT)/x BUILD_DIR=$(REPO_ROOT)/build/yos DIST_DIR=$(REPO_ROOT)/bin/y ZX_ROMS_DIR=$(REPO_ROOT)/bin/y/z80/spectrum/bin YOS_DEBUG=1
+
+$(MDRSTEP_IMAGE):
+	$(MAKE) -C $(Y_ROOT)/tests/mdrstep-yos image REPO_ROOT=$(REPO_ROOT)
 
 $(BIN_DIR)/mdr_emu: $(BUILD_DIR)/mdr_emu.o $(BUILD_DIR)/z80.o $(MDR_LIB)
 	@mkdir -p $(BIN_DIR)
@@ -53,7 +57,7 @@ stress: $(BIN_DIR)/mdr_emu $(YOS_ROM) $(YOS_CDB)
 	$(BIN_DIR)/mdr_emu stress 5
 
 .PHONY: repro-strict
-repro-strict: $(BIN_DIR)/mdr_emu $(YOS_ROM) $(YOS_CDB)
+repro-strict: $(BIN_DIR)/mdr_emu $(YOS_ROM) $(YOS_CDB) $(MDRSTEP_IMAGE)
 	$(BIN_DIR)/mdr_emu repro-strict
 
 .PHONY: size

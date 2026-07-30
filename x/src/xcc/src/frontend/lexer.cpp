@@ -430,8 +430,46 @@ token lexer::lex_string_literal(int char_width) {
     while (pos_ < src_.size() && cur() != '"' && cur() != '\n') {
         if (cur() == '\\') {
             advance();
-            char c = lex_escape();
-            raw += '\\'; decoded += c;
+            if (cur() == 'u' || cur() == 'U') {
+                const char marker = advance();
+                const int digits = marker == 'u' ? 4 : 8;
+                uint32_t codepoint = 0;
+                for (int i = 0; i < digits && hex_digit(cur()) >= 0; ++i)
+                    codepoint = codepoint * 16u +
+                                static_cast<uint32_t>(hex_digit(advance()));
+                raw += '\\';
+                raw += marker;
+                if (char_width == 8) {
+                    if (codepoint <= 0x7fu) {
+                        decoded += static_cast<char>(codepoint);
+                    } else if (codepoint <= 0x7ffu) {
+                        decoded += static_cast<char>(0xc0u | (codepoint >> 6));
+                        decoded += static_cast<char>(0x80u | (codepoint & 0x3fu));
+                    } else if (codepoint <= 0xffffu) {
+                        decoded += static_cast<char>(0xe0u | (codepoint >> 12));
+                        decoded += static_cast<char>(
+                            0x80u | ((codepoint >> 6) & 0x3fu));
+                        decoded += static_cast<char>(
+                            0x80u | (codepoint & 0x3fu));
+                    } else {
+                        decoded += static_cast<char>(0xf0u | (codepoint >> 18));
+                        decoded += static_cast<char>(
+                            0x80u | ((codepoint >> 12) & 0x3fu));
+                        decoded += static_cast<char>(
+                            0x80u | ((codepoint >> 6) & 0x3fu));
+                        decoded += static_cast<char>(
+                            0x80u | (codepoint & 0x3fu));
+                    }
+                } else {
+                    // Wide literal storage represents one code unit per byte
+                    // in the lexer; lowering widens each unit to 16/32 bits.
+                    decoded += static_cast<char>(codepoint & 0xffu);
+                }
+            } else {
+                char c = lex_escape();
+                raw += '\\';
+                decoded += c;
+            }
         } else {
             char c = advance();
             raw += c; decoded += c;

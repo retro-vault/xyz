@@ -326,6 +326,31 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
                (size == 1 || size == 2);
     };
 
+    auto word_return_family = [](call_abi abi) {
+        switch (effective_call_abi(abi)) {
+        case call_abi::SDCCCALL0:
+        case call_abi::Z88DK_CALLEE:
+            return 1; // Legacy word results use HL.
+        case call_abi::SDCCCALL1:
+        case call_abi::Z88DK_SMALLC:
+        case call_abi::Z88DK_FASTCALL:
+            return 2; // Modern word results use DE.
+        default:
+            return 0;
+        }
+    };
+
+    auto compatible_direct_return_abis =
+        [&](call_abi caller, call_abi callee) {
+            caller = effective_call_abi(caller);
+            callee = effective_call_abi(callee);
+            if (caller == callee)
+                return true;
+            const int caller_family = word_return_family(caller);
+            return caller_family != 0 &&
+                   caller_family == word_return_family(callee);
+        };
+
     auto supports_direct_compare_return = [&](const operand &op) {
         if (!op.type)
             return false;
@@ -497,7 +522,8 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
 
             if (next.op == icode_op::RETURN &&
                 same_call_result_operand(next.left, ic.result) &&
-                !temp_used_after(idx + 2, ic.result.temp_id)) {
+                !temp_used_after(idx + 2, ic.result.temp_id) &&
+                compatible_direct_return_abis(fn.abi, ic.callee_abi)) {
                 no_spill_temps.insert(ic.result.temp_id);
                 continue;
             }
@@ -1064,6 +1090,21 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     incoming_symbol_homes_.clear();
     iy_preserved_call_indices_.clear();
     bc_preserved_call_indices_.clear();
+
+    // The physical-home allocator currently reasons about byte, word, and
+    // 32-bit values.  A function containing a wider value can call helpers
+    // whose 64-bit register convention uses both the main and alternate
+    // register sets; assigning an otherwise unrelated narrow temporary to
+    // one of those homes can corrupt a value across that helper sequence.
+    // Keep the normal frame allocator for the complete function until wide
+    // helper clobbers are represented explicitly in allocator liveness.
+    const auto is_wide = [](const operand &op) {
+        return op.type && op.type->size() > 4;
+    };
+    for (const auto &ic : fn.icodes) {
+        if (is_wide(ic.result) || is_wide(ic.left) || is_wide(ic.right))
+            return;
+    }
 
     struct interval {
         int  first_def   = -1;
@@ -3095,6 +3136,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
 
             if (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO ||
                 ic.op == icode_op::IFX) {
+                continue;
+            }
+            if ((opt_settings_.level == opt_level::Of ||
+                 opt_settings_.level == opt_level::O3) &&
+                ic.op == icode_op::ADDRESS_OF &&
+                !address_of_may_need_bc_scratch(ic.left)) {
                 continue;
             }
             if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||

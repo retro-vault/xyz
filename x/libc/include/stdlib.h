@@ -18,6 +18,10 @@
 
 #include <stddef.h>
 
+#ifndef __sdcccall
+#define __sdcccall(a)
+#endif
+
 typedef struct div_t {
     int quot;
     int rem;
@@ -85,9 +89,9 @@ int abs(int value);
 long labs(long value);
 long long llabs(long long value);
 
-div_t div(int numer, int denom);
-ldiv_t ldiv(long numer, long denom);
-lldiv_t lldiv(long long numer, long long denom);
+div_t div(int numer, int denom) __sdcccall(1);
+ldiv_t ldiv(long numer, long denom) __sdcccall(1);
+lldiv_t lldiv(long long numer, long long denom) __sdcccall(1);
 
 int atoi(const char *nptr);
 double atof(const char *nptr);

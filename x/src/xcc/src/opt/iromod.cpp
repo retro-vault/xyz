@@ -658,6 +658,12 @@ static bool collect_call_args(const std::vector<icode> &icodes, size_t call_idx,
                               const icode &call_ic,
                               size_t &send_begin,
                               std::vector<operand> &args) {
+    // Hidden aggregate-result pointers are deliberately outside the source
+    // parameter numbering. Module transforms that rebuild SEND sequences
+    // must leave such calls alone until they explicitly model that ABI slot.
+    if (call_ic.result_via_sret)
+        return false;
+
     if (call_ic.num_params == 0) {
         send_begin = call_idx;
         args.clear();
@@ -4329,14 +4335,13 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<trivial_internal_leaf_inline_pass>(
             settings));
     if (settings.inline_static_functions) {
-        const bool experimental_speed = settings.level == opt_level::O3;
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
-            experimental_speed ? 20 : 12,
-            experimental_speed ? 40 : 24,
-            experimental_speed ? 32 : 16,
-            experimental_speed,
-            experimental_speed,
-            experimental_speed,
+            12,
+            24,
+            16,
+            false,
+            false,
+            false,
             settings));
     }
     if (settings.merge_identical_functions)

@@ -55,6 +55,23 @@ emu_output="$(
 
 [[ "$emu_output" == "R" ]] || fail "expected platform=emu stdout 'R', got '$emu_output'"
 
+emu_exit_program="$tmpdir/emu_exit.bin"
+printf '\x21\x2A\x00\x22\x00\xFF\x3E\xA5\x32\x02\xFF\x76' > "$emu_exit_program"
+
+set +e
+"$XEMU" \
+    --run \
+    --quiet \
+    --load-bin "$emu_exit_program" \
+    --origin 0x0000 \
+    --pc 0x0000 \
+    --emu-exit-status
+emu_exit_status=$?
+set -e
+
+[[ $emu_exit_status -eq 42 ]] \
+    || fail "expected platform=emu host exit status 42, got $emu_exit_status"
+
 bank_program="$tmpdir/banked.bin"
 printf '\x3E\x41\x32\x00\x80\x3E\x01\xD3\x10\x3E\x42\x32\x00\x80\xAF\xD3\x10\x3A\x00\x80\xD3\x01\x3E\x01\xD3\x10\x3A\x00\x80\xD3\x01\x76' > "$bank_program"
 

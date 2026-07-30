@@ -9,10 +9,12 @@
         ;; Copyright (C) 2026 tomaz stih
 
         .module unreachable
+        .globl ___builtin_unreachable
         .globl __builtin_unreachable
 
         .area _CODE
 
+___builtin_unreachable:
 __builtin_unreachable:
         halt
-        jp      __builtin_unreachable
+        jp      ___builtin_unreachable

@@ -36,5 +36,12 @@ _clock::
         ld      l,2(ix)
         ld      h,3(ix)
         ld      sp,ix
+        ; Discard the eight-byte timeval object before restoring the caller's
+        ; frame pointer.  Popping IX directly here used to load tv_sec's low
+        ; word into IX, violating both sdcccall(0) and sdcccall(1).
+        pop     bc
+        pop     bc
+        pop     bc
+        pop     bc
         pop     ix
         ret

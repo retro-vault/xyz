@@ -118,6 +118,11 @@ namespace xld {
 
             // Build area list from bfd sections.
             for (const auto& sec : obj.sections()) {
+                if (sec.size > 0xFFFFu) {
+                    throw parse_error(
+                        path_str + ": section '" + sec.name
+                        + "' exceeds the 16-bit Z80 address space");
+                }
                 uint8_t raw_flags = 0;
                 if (bfd::has_flag(sec.flags, bfd::section_flags::overlay))
                     raw_flags |= 0x01;

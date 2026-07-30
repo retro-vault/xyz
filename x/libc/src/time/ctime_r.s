@@ -21,25 +21,29 @@
         ; outputs: DE = buf
 _ctime_r::
         push    ix
-        ld      hl,#0
-        push    hl
-        push    hl
-        push    hl
-        push    hl
-        push    hl
-        push    hl
-        push    hl
-        push    hl
-        push    hl
+        push    hl                      ; save timer
         push    de                      ; save buf
         ld      ix,#0
         add     ix,sp
+        ld      hl,#-18                 ; local struct tm
+        add     hl,sp
+        ld      sp,hl
         push    ix
-        pop     de
+        pop     hl
+        ld      bc,#-18
+        add     hl,bc
+        ex      de,hl                   ; DE = &tmp
+        ld      l,2(ix)
+        ld      h,3(ix)                 ; HL = timer
         call    _localtime_r            ; __ctime_tm = *timer broken down
         push    ix
         pop     hl
-        pop     de                      ; DE = buf
+        ld      bc,#-18
+        add     hl,bc                   ; HL = &tmp
+        ld      e,0(ix)
+        ld      d,1(ix)                 ; DE = buf
         ld      sp,ix
+        pop     bc                      ; discard saved buf
+        pop     bc                      ; discard saved timer
         pop     ix
         jp      _asctime_r

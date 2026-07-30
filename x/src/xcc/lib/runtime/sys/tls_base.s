@@ -1,22 +1,20 @@
-        ; Thread-local storage base stub for the merged xcc runtime.
-        ; Returns NULL until the host operating system overrides it.
+        ; Thread-local storage base fallback for the merged xcc runtime.
+        ; A threaded host can override this archive member with its own
+        ; implementation.  A single-threaded program uses the linked TLS
+        ; initialization template itself as its live TLS block.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
 
-        ; The final system should replace this helper with code that
-        ; returns the active thread TLS base address in HL.
-
         .module tls_base
         .area   _CODE
         .globl  __tls_base
+        .globl  __tls_template
 
-        ; NULL.
         ; inputs: none.
-        ; outputs: HL = pointer to the current thread TLS block, or
+        ; outputs: HL = pointer to the current thread TLS block
         ; clobbers: HL.
 
 __tls_base:
-        ; stub returns NULL
-        ld      hl, #0
+        ld      hl, #__tls_template
         ret

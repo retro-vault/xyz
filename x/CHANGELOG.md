@@ -6,11 +6,42 @@ Release status:
 
 ## Unreleased
 
-- Optimized both `sdcccall(1)` and `sdcccall(0)` on the canonical 23-program
-  z88dk full-image corpus without benchmark recognition.  Immutable compare
-  operands and conditional byte addresses can remain in IY, while nonzero and
-  coupled loop values can remain in BC; `sieve` is now the fastest measured
-  lane at 5.08M cycles.  ABI0 additionally promotes only private, direct,
+- Completed the final XCC optimization audit and retracted the earlier
+  tuned-corpus leaderboard. The exact whole-function
+  `try_emit_sdcc_style_helper` selector and pending fixed-global
+  interprocedural specialization were removed because complete-function IR
+  recognition is benchmark overfitting even without filename checks.
+  Scalar-local promotion, physical register allocation, and promoted-byte
+  operations remain outside every public preset after frozen holdouts exposed
+  miscompilations; `-O3` is an exact alias of the stable `-Of` pipeline.
+  Twenty-seven stale exact-assembly assertions tied to the removed recipes
+  were retired while their manifests and executable coverage were retained.
+  The frozen ABI matrices execute 8301 variants with zero failures
+  (ABI0: 2684 compile + 1477 run; ABI1: 2688 compile + 1452 run), plus 73
+  manifest-declared opposite-ABI skips.
+  Every compiler lane in the 23-program comparison now uses the same
+  `z80_exec` timing model. All four XCC lanes pass 23/23. `-Os` is strictly
+  smaller than the best successful competitor on 22/23 programs, but `-Of`
+  is strictly faster on only 1/23; its geometric-mean cycle count is 46.40%
+  above that envelope under ABI1 and 46.18% above it under ABI0. The earlier
+  speed-lead claim was therefore an artifact, not a general result.
+  The independent portable corpus passes 40/40 in every lane, but XCC wins
+  neither size nor speed there; the separate bare-metal holdout passes 20/20
+  for every XCC profile, and the numeric holdout passes 50/50.
+  Promoted only Pareto-safe size transforms to the speed path: redundant
+  pair-immediate reload removal, two-/four-byte `push af` stack allocation,
+  and unused temporary-frame compaction through four bytes. Slower
+  call-introducing and five-byte-or-larger size transforms remain `-Os`-only.
+  Also fixed an ABI1 compact-frame comparison defect where a reserved spill
+  slot for an incoming register parameter was treated as initialized stack
+  storage and could leave a frameless function's SP unbalanced.
+- Historical tuning of both `sdcccall(1)` and `sdcccall(0)` on the canonical
+  23-program z88dk full-image corpus added several generally useful changes,
+  but the associated perfect-sweep performance claim is retracted by the
+  overfitting audit above. Immutable compare operands and conditional byte
+  addresses can remain in IY, while nonzero and coupled loop values can remain
+  in BC. The former tuned build's reported `sieve` speed record is not a
+  result of the audited compiler. ABI0 additionally promotes only private, direct,
   default-ABI helpers to the register ABI inside a translation unit; public,
   indirect, variadic, inline-assembly, and explicitly attributed boundaries
   retain their declared ABI.  Recursive calls are recollected after parameter
@@ -21,9 +52,9 @@ Release status:
   budget.  Unbanked all-zero globals now occupy startup-cleared `_BSS` rather
   than physical image bytes.  Constant `printf` formats limited to `%s`,
   `%d`, `%i`, and `%%` select a compact general formatter; dynamic or richer
-  formats retain the complete implementation.  All four XCC lanes pass 23/23
-  programs.  Both `-Os` ABIs are strictly smaller than every competitor on
-  23/23 rows, while both `-Of` ABIs are strictly fastest on 23/23.  Capped
+  formats retain the complete implementation. All four XCC lanes passed 23/23
+  programs, but the original leaderboard counts included the now-quarantined
+  whole-function selector and must be treated as tuned-corpus results. Capped
   byte scans now keep independent byte values in D/E across wide BC bounds
   and preserve them only around indexed global-array address formation; this
   reduces RLE from 11.64M to 9.26M cycles.  Inlining and frame-pointer

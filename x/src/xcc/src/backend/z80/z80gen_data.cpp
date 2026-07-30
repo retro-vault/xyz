@@ -127,8 +127,8 @@ void z80_gen::emit_module(const ir_module &mod) {
     if (debug_) debug_->end_module(std::string("xcc ") + XCC_VERSION);
 }
 
-void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template) {
-    if (!g.init_vals.empty() && !tls_template) {
+void z80_gen::emit_global_body(const ir_module::global_var &g, bool zero_fill) {
+    if (!g.init_vals.empty() && !zero_fill) {
         for (auto &e : g.init_vals) {
             if (!e.label.empty()) asm_.dw_sym(mangle(e.label));
             else if (e.size == 1) asm_.db((int)e.value);
@@ -143,7 +143,7 @@ void z80_gen::emit_global_body(const ir_module::global_var &g, bool tls_template
         }
     } else {
         int sz = global_object_size(g);
-        if (!tls_template && g.has_init && g.init_val != 0) {
+        if (!zero_fill && g.has_init && g.init_val != 0) {
             if (sz == 1)      asm_.db((int)g.init_val);
             else if (sz == 2) asm_.dw((int)g.init_val);
             else if (sz == 4) {
@@ -239,7 +239,8 @@ void z80_gen::emit_globals(const ir_module &mod) {
             if (!g.is_tls) continue;
             std::string lbl = mangle(g.name);
             asm_.comment("tls: " + lbl + " @ offset " + std::to_string(tls_offsets_[lbl]));
-            emit_global_body(g, true);
+            // The template supplies each new thread's declared initial values.
+            emit_global_body(g, false);
         }
         asm_.symbol_size("__tls_template", std::to_string(tls_size_));
         asm_.global_decl("__tls_size");

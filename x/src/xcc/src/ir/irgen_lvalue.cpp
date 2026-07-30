@@ -43,8 +43,11 @@ static void normalize_subscript_operands(operand &base, operand &index) {
 } // namespace
 
 static const struct_field *find_member(const member_expr &e) {
-    type_ptr st = e.object->type;
-    if (e.is_arrow && st && st->is_ptr()) st = st->base;
+    type_ptr st = e.owner_type;
+    if (!st) {
+        st = e.object->type;
+        if (e.is_arrow && st && st->is_ptr()) st = st->base;
+    }
     if (!st) return nullptr;
     for (auto &f : st->fields)
         if (f.name == e.member) return &f;
@@ -184,9 +187,12 @@ void ir_gen::visit(index_expr &e) {
 }
 
 operand ir_gen::gen_member_ptr(member_expr &e) {
-    type_ptr struct_type = e.object->type;
-    if (e.is_arrow && struct_type && struct_type->is_ptr())
-        struct_type = struct_type->base;
+    type_ptr struct_type = e.owner_type;
+    if (!struct_type) {
+        struct_type = e.object->type;
+        if (e.is_arrow && struct_type && struct_type->is_ptr())
+            struct_type = struct_type->base;
+    }
 
     int      field_offset = 0;
     type_ptr field_type   = e.type ? e.type : type::make_int();

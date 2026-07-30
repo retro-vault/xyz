@@ -48,7 +48,7 @@ daily-sized feature entries with generated-assembly examples.
 | Section | What it covers |
 |---|---|
 | [§11. Standalone Z80 Optimizer](#11-standalone-z80-optimizer) | Run `xopt` independently on one or many assembly files. |
-| [§12. Experimental Whole-Module Optimization](#12-experimental-whole-module-optimization) | `-O3` dragon country: cross-function and aggressive Z80 rewrites. |
+| [§12. Stable Speed And Manual Whole-Module Optimization](#12-stable-speed-and-manual-whole-module-optimization) | `xcc -Of` / `-O3` are stable aliases; aggressive `xopt --cross-file` use stays explicit. |
 | [§13. Selectable Float Representation](#13-selectable-float-representation) | Choose IEEE `float` or fixed 8.8, 16.16, and 24.8 formats. |
 | [§14. 64-Bit Integer And Double Runtime Support](#14-64-bit-integer-and-double-runtime-support) | `long long`, software `double`, and S/M/L libc feature switches. |
 | [§15. Retargetable Platform Model](#15-retargetable-platform-model) | Add new boards, ROMs, CP/M-like targets, or bare-metal platforms. |
@@ -619,7 +619,8 @@ script). XL does not.
 files directly.
 
 **When:** Hand-written assembly, compiler output you want to squeeze further,
-or measuring size/cycle savings before committing to `-O3` in the driver.
+or measuring size/cycle savings before applying an assembly rewrite to
+compiler output.
 
 **How it works:** Peephole and cross-instruction rewrites at `-O2`/`-Os`.
 `-O3`/`-Of` add speed-biased rules. `--cross-file` concatenates inputs and
@@ -643,17 +644,20 @@ xas main.opt.s -o main.rel
 
 ---
 
-## 12. Experimental Whole-Module Optimization
+## 12. Stable Speed And Manual Whole-Module Optimization
 
-**What:** `-O3` in `xcc` and `xopt` — aggressive, cross-function optimization.
+**What:** In `xcc`, `-O3` is an exact compatibility spelling of the stable
+`-Of` speed profile. In standalone `xopt`, aggressive assembly optimization
+and `--cross-file` operation remain explicit tools.
 
-**When:** You need maximum speed or minimum size and are willing to inspect the
-generated assembly. Not the default for production until you have verified it.
+**When:** Use `-Of` or `-O3` for the validated compiler speed pipeline. Use
+`xopt --cross-file` only when you are willing to inspect and test the combined
+assembly.
 
-**How it works:** The compiler inlines across functions, applies superoptimizer
-experiments, and specializes helpers (for example constant divisors in
-fixed-point). `xopt --cross-file` extends the same idea to separately compiled
-`.s` files. Treat regressions as possible — diff the output when upgrading.
+**How it works:** The compiler applies only stabilized IR, backend, and
+assembly transformations. The former whole-function structural selector was
+removed after the overfitting audit. `xopt --cross-file` can still optimize
+separately compiled `.s` files as an explicit post-link-style experiment.
 
 ```
 xcc -O3 main.c util.c -o app.xl
@@ -665,7 +669,8 @@ xopt -O3 --cross-file main.s util.s -o combined.s
 xas combined.s -o app.rel
 ```
 
-**Rule:** Pair with tests or `--stats` before shipping firmware.
+**Rule:** `xcc -O3` and `xcc -Of` must remain identical. Pair explicit
+standalone `xopt` experiments with tests or `--stats` before shipping.
 
 ---
 
@@ -1498,8 +1503,8 @@ runtime cost on Z80.
 **How it works:** With `-O2` and above, `xcc` constant-folds arithmetic,
 pointer differences, calls to `constexpr`-like pure helpers, and wide integer
 operations when all inputs are known. The optimizer test suite (`t026`–`t045`,
-`t028`–`t033`) locks this behaviour. `-O3` adds superoptimizer-inspired
-peepholes and cross-block merges on top.
+`t028`–`t033`) locks this behaviour. `-Of` and its `-O3` alias add the same
+validated speed-biased pipeline on top.
 
 ```
 /* With -O2, the loop folds to return 10; no runtime addition loop remains. */
@@ -1517,8 +1522,8 @@ xcc -S -O2 sum.c -o sum.s    # inspect: often just ld hl, #10 / ret
 xcc -O3 hotpath.c -o hotpath.xl
 ```
 
-**Rule:** Treat `-O3` as opt-in (§12). `-O2` is the sensible default for const
-evaluation without the experimental lane.
+**Rule:** `-O2` is the general default; use `-Of` or its identical `-O3`
+spelling for the stable speed profile.
 
 ---
 
@@ -2106,8 +2111,8 @@ xcc -O2 -fno-regalloc -fno-frame-omit main.c -o main.xl
 # Size profile with one explicit enable and one explicit disable
 xcc -Os -fconst-call-eval -fno-inline-static-functions app.c -o app.xl
 
-# Probe O3-only shape-changing passes individually
-xcc -O3 -fno-duplicate-block-merge -fno-merge-tails hot.c -o hot.xl
+# Probe named shape-changing passes individually
+xcc -Of -fno-duplicate-block-merge -fmerge-tails hot.c -o hot.xl
 ```
 
 This is especially useful when a benchmark win is clear but you want to prove

@@ -19,9 +19,12 @@ XCC is benchmarked with the M distribution (`bin/x-m`): `long` remains
 available, while `double`, `long long`, and stdio floating conversions are
 excluded. This matches the intended integer-only comparison.
 
-The harness now records four XCC lanes: `-Os` and `-Of` with the default
+The harness records four XCC lanes: `-Os` and `-Of` with the default
 `sdcccall(1)` ABI, plus matching `-Os --sdcccall 0` and `-Of --sdcccall 0`
 runs so stack-ABI results can be compared directly against the same corpus.
+All XCC and z88dk-family images now execute in the same `z80_exec` Z80 model.
+The runner implements z88dk's test-CRT trap protocol for console and file I/O,
+so cycle comparisons no longer mix emulator models.
 
 `compat/` contains only compiler/platform adapters needed to build an
 otherwise unchanged upstream source. In particular, the historical MD5
@@ -38,3 +41,7 @@ uploaded to an emulator is copied to
 `artifacts/<benchmark>/<lane>/program.bin`; the byte value in `results.csv`
 and `summary.md` is exactly `wc -c` for that file.  XCC map files are kept
 beside its binaries, and `work/<benchmark>/` retains build and run logs.
+
+See [RESULTS.md](RESULTS.md) for the audited and holdout-stabilized 2026-07-29 run,
+including exact pins, the overfitting ablation, measurement caveats, and
+validation totals.

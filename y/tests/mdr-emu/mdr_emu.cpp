@@ -1246,7 +1246,8 @@ int run_repro_strict(const fs::path& root,
                      const std::unordered_map<std::string, uint16_t>& symbols) {
     Machine machine;
     load_rom(machine, root / kYosRomRelativePath);
-    auto base_image = microdrive::image_t::load(root / "y/tests/microdrives/mdrstep.mdr");
+    auto base_image = microdrive::image_t::load(
+        root / "bin/z/z80/spectrum/bin/mdr/mdrstep.mdr");
     (void)base_image.remove("t123");
     std::vector<uint8_t> before;
     before.reserve(microdrive::k_image_size);

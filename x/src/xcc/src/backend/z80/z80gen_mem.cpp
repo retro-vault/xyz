@@ -109,9 +109,17 @@ void z80_gen::gen_address_of(const icode &ic) {
             return;
     }
     if (ic.left.is_global) {
-        emit_line("ld\thl, %s", asm_.imm_sym(mangle(ic.left.name)).c_str());
+        std::string address = mangle(ic.left.name);
+        if (ic.left.byte_offset > 0)
+            address += " + " + std::to_string(ic.left.byte_offset);
+        else if (ic.left.byte_offset < 0)
+            address += " - " + std::to_string(-ic.left.byte_offset);
+        emit_line("ld\thl, %s", asm_.imm_sym(address).c_str());
     } else {
-        int off = ic.left.is_param ? param_ix_offset(ic.left) : ic.left.stack_offset;
+        int off = (ic.left.is_param
+                       ? param_ix_offset(ic.left)
+                       : ic.left.stack_offset) +
+                  ic.left.byte_offset;
         if (ic.left.kind == operand_kind::TEMP)
             off = ix_offset_of(ic.left);
         load_ix_addr_hl(off);

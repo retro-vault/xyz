@@ -932,6 +932,8 @@ __stdio_parse_length:
         jr      z,__stdio_parse_length_z
         cp      #'t'
         jr      z,__stdio_parse_length_t
+        cp      #'w'
+        jr      z,__stdio_parse_length_w
         ret
 __stdio_parse_length_h:
         inc     hl
@@ -964,6 +966,50 @@ __stdio_parse_length_j:
 __stdio_parse_length_z:
 __stdio_parse_length_t:
         inc     hl
+        call    __stdio_store_fmt_hl
+        ret
+__stdio_parse_length_w:
+        inc     hl
+        ld      a,(hl)
+        cp      #'8'
+        jr      z,__stdio_parse_length_w8
+        cp      #'1'
+        jr      z,__stdio_parse_length_w16
+        cp      #'3'
+        jr      z,__stdio_parse_length_w32
+        cp      #'6'
+        jr      z,__stdio_parse_length_w64
+        ret
+__stdio_parse_length_w8:
+        inc     hl
+        call    __stdio_store_fmt_hl
+        ret
+__stdio_parse_length_w16:
+        inc     hl
+        ld      a,(hl)
+        cp      #'6'
+        ret     nz
+        inc     hl
+        call    __stdio_store_fmt_hl
+        ret
+__stdio_parse_length_w32:
+        inc     hl
+        ld      a,(hl)
+        cp      #'2'
+        ret     nz
+        inc     hl
+        ld      a,#LEN_LONG
+        ld      CTX_LENGTH(iy),a
+        call    __stdio_store_fmt_hl
+        ret
+__stdio_parse_length_w64:
+        inc     hl
+        ld      a,(hl)
+        cp      #'4'
+        ret     nz
+        inc     hl
+        ld      a,#LEN_LLONG
+        ld      CTX_LENGTH(iy),a
         call    __stdio_store_fmt_hl
         ret
 
@@ -1349,7 +1395,24 @@ __stdio_vformat_binary:
         ld      CTX_PREFIX_LEN(iy),a
         call    __stdio_load_uval
         call    __stdio_note_zero_state
-        ; no prefix for binary (or optional 0b if #, but basic no)
+        ld      a,CTX_FLAGS(iy)
+        bit     3,a
+        jr      z,__stdio_vformat_binary_build
+        ld      a,CTX_VALUE_ZERO(iy)
+        or      a
+        jr      nz,__stdio_vformat_binary_build
+        ld      a,#2
+        ld      CTX_PREFIX_LEN(iy),a
+        ld      a,#'0'
+        ld      CTX_PREFIX_0(iy),a
+        ld      a,CTX_UPPER(iy)
+        or      a
+        ld      a,#'b'
+        jr      z,__stdio_vformat_binary_prefix_store
+        ld      a,#'B'
+__stdio_vformat_binary_prefix_store:
+        ld      CTX_PREFIX_1(iy),a
+__stdio_vformat_binary_build:
         call    __stdio_build_digits
         call    __stdio_emit_number
         jp      __stdio_vformat_loop
@@ -1422,6 +1485,10 @@ __stdio_vformat_float_store_precision:
         ld      a,CTX_UVAL1(iy)
         ld      h,a
         push    hl
+        ld      a,CTX_FLAGS(iy)
+        ld      l,a
+        ld      h,#0
+        push    hl
         ld      a,CTX_BASE(iy)
         ld      l,a
         ld      h,#0
@@ -1433,7 +1500,7 @@ __stdio_vformat_float_store_precision:
         call    __stdio_load_digits_ptr_hl
         push    hl
         call    _stdio_format_double
-        ld      hl,#16
+        ld      hl,#18
         add     hl,sp
         ld      sp,hl
         pop     iy

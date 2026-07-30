@@ -169,6 +169,13 @@ namespace xas {
 
         void end_module() override
         {
+            for (const auto& sec : obj_->object().sections) {
+                if (sec.size > 0xFFFFu) {
+                    throw std::runtime_error(
+                        "section '" + sec.name
+                        + "' exceeds the 16-bit Z80 address space");
+                }
+            }
             obj_->close();
         }
 

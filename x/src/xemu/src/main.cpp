@@ -73,6 +73,7 @@ struct options {
     std::optional<uint16_t> pc;
     uint16_t sp = 0xFFFF;
     bool emu_stdio = false;
+    bool emu_exit_status = false;
     std::optional<uint16_t> stdin_port;
     std::optional<uint16_t> stdin_status_port;
     std::optional<uint16_t> stdin_data_port;
@@ -113,6 +114,7 @@ void print_help() {
         << "  --sp ADDR            initial stack pointer (default 0xFFFF)\n"
         << "  --emu-stdio          map platform=emu stdio ports to host stdin/stdout\n"
         << "  --no-emu-stdio       disable platform=emu stdio even if enabled in config\n"
+        << "  --emu-exit-status    return the platform=emu mailbox status to the host\n"
         << "  --fs-root DIR        map platform=emu file syscalls to host DIR\n"
         << "  --stdin-port ADDR    map single Z80 input port ADDR to host stdin\n"
         << "  --stdin-status-port ADDR\n"
@@ -576,6 +578,8 @@ options parse_options(int argc, char* argv[]) {
             opts.emu_stdio = true;
         } else if (arg == "--no-emu-stdio") {
             opts.emu_stdio = false;
+        } else if (arg == "--emu-exit-status") {
+            opts.emu_exit_status = true;
         } else if (arg == "--stdin-port") {
             if (++i >= argc) throw std::runtime_error("--stdin-port requires a value");
             opts.stdin_port = static_cast<uint16_t>(parse_u32(argv[i]));
@@ -777,7 +781,31 @@ int run_program(xemu::machine& emu, const options& opts) {
         }
     }
 
-    return stop.reason == xemu::stop_reason::halted ? 0 : 2;
+    if (stop.reason != xemu::stop_reason::halted)
+        return 2;
+
+    if (opts.emu_exit_status) {
+        constexpr uint16_t result_addr = 0xff00;
+        constexpr uint16_t done_addr = 0xff02;
+        constexpr uint8_t done_magic = 0xa5;
+
+        if (emu.read_byte(done_addr) != done_magic) {
+            if (!opts.quiet)
+                std::cerr << "xemu: platform=emu exit mailbox was not completed\n";
+            return 2;
+        }
+
+        const uint16_t raw =
+            static_cast<uint16_t>(emu.read_byte(result_addr))
+            | static_cast<uint16_t>(
+                static_cast<uint16_t>(emu.read_byte(result_addr + 1)) << 8);
+        const int status = static_cast<int16_t>(raw);
+        if (status == 0)
+            return 0;
+        return status > 0 && status <= 255 ? status : 1;
+    }
+
+    return 0;
 }
 
 int serve_debugger(xemu::machine& emu, const options& opts) {

@@ -274,6 +274,31 @@ bool abi_callee_cleans_stack(call_abi abi,
     }
 }
 
+bool abi_returns_aggregate_via_hidden_pointer(call_abi abi,
+                                              type_ptr ret_type) {
+    if (!ret_type)
+        return false;
+    type_ptr unqualified = ret_type->unqual();
+    if (!unqualified ||
+        (unqualified->kind != type_kind::STRUCT &&
+         unqualified->kind != type_kind::UNION)) {
+        return false;
+    }
+    // SDCC ABI 0 and ABI 1 return every non-empty structure and union through
+    // caller-owned storage. Scalar values of the same size still use the
+    // normal return registers; the distinction is based on type, not width.
+    if (unqualified->size() <= 0)
+        return false;
+
+    switch (effective_call_abi(abi)) {
+    case call_abi::SDCCCALL0:
+    case call_abi::SDCCCALL1:
+        return true;
+    default:
+        return false;
+    }
+}
+
 // ─── abi_convention: shared protected helpers ────────────────────────────────
 
 void abi_convention::exact_stack_drop(z80_gen &g, int bytes)

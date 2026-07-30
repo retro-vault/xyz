@@ -293,9 +293,6 @@ private:
                opt_settings_.level == opt_level::Of ||
                opt_settings_.level == opt_level::O3;
     }
-    bool sdcc_style_specialization_enabled() const {
-        return false;
-    }
     bool shared_ix_helpers_enabled() const {
         return !debug_ &&
                (opt_settings_.level == opt_level::O2 ||
@@ -338,7 +335,6 @@ private:
     void maybe_materialize_incoming_arg_temp(const operand &op);
     void maybe_materialize_incoming_arg_symbol(const operand &op);
     bool get_sign_extended_i8_source(const operand &op, operand &src) const;
-    bool try_emit_sdcc_style_helper(const ir_function &fn);
     bool try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx);
     bool try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx);
     bool try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
@@ -352,6 +348,8 @@ private:
     bool try_emit_postinc_indexed_store(const ir_function &fn, size_t &idx);
     bool try_emit_postdec_truth(const ir_function &fn, size_t &idx);
     bool try_emit_shift_xor_self(const ir_function &fn, size_t &idx);
+    bool try_emit_msb_byte_shift_xor_diamonds(const ir_function &fn,
+                                               size_t &idx);
     bool try_emit_shift_add_byte_accumulate(const ir_function &fn, size_t &idx);
     bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
     bool try_emit_lsb32_shift_xor_diamond(const ir_function &fn, size_t &idx);
@@ -386,9 +384,9 @@ private:
 
     //
     // Emit the data body for one global variable (initializers or .ds reserve).
-    // tls_template: if true, emit zeros regardless of initializer (TLS template).
+    // zero_fill: if true, emit zeros regardless of the declared initializer.
     //
-    void emit_global_body(const ir_module::global_var &g, bool tls_template);
+    void emit_global_body(const ir_module::global_var &g, bool zero_fill);
 
     //
     // Emit the complete assembly for one function.

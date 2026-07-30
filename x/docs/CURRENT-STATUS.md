@@ -2,9 +2,53 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: during the C23 completion, repo structure discussion, xtools prefix-layout work, and native YOS build migration.
+Last updated: 2026-07-29, after the XCC optimization overfitting audit.
 
 ## Major Recent Work
+
+### 0. XCC Optimization Overfitting Audit
+
+The exact whole-function `try_emit_sdcc_style_helper` selector was removed.
+Its structural recipes were derived while repeatedly measuring the z88dk
+corpus; matching a complete function by IR shape is benchmark recognition
+even without filename checks. The pending fixed-global interprocedural
+specialization was also removed. Twenty-seven stale exact-assembly assertions
+tied to the removed recipes were retired, but their manifests and executable
+correctness coverage remain.
+
+Scalar-local promotion, physical register allocation, and promoted-byte
+operations are excluded from every public preset after frozen holdouts exposed
+miscompilations. `-O3` is now an exact compatibility spelling of `-Of`.
+An additional ABI1 defect found by the full matrix was fixed: compact-frame
+comparison lowering could treat a reserved spill slot for an incoming register
+parameter as initialized stack storage and leave a frameless function's SP
+unbalanced.
+
+The final frozen compiler executes 8301 compiler variants with zero failures:
+ABI0 has 2684 compile and 1477 execution passes; ABI1 has 2688 compile and
+1452 execution passes. The four matrices also contain 73 manifest-declared
+opposite-ABI skips. The expanded default E2E entrypoint now runs the runtime,
+libc, ABI-split compiler matrices, C23 execution, external corpora, z88dk
+compatibility suite, remaining host tools, CP/M and YOS applications, and
+all MDR modes instead of silently omitting those phases.
+
+All compiler lanes in the 23-program comparison now use the same `z80_exec`
+timing model. Every XCC lane passes 23/23. The strong result is linked-image
+size: `-Os` is strictly smaller than the best successful competitor on 22/23.
+The honest speed result is not leading: `-Of` wins the best-competitor
+envelope on only 1/23, and its geometric-mean cycles are 46.40% above that
+envelope under ABI1 and 46.18% above it under ABI0. Detailed measurements are
+in `x/tests/benchmarks/z88dk24/RESULTS.md`.
+
+Every lane in the frozen 40-program portable corpus passes, but XCC wins
+neither size nor speed there. Every XCC profile passes the more varied
+20-program bare-metal holdout, and the numeric holdout passes 50/50.
+Accordingly, no general speed-lead claim is made.
+
+Only Pareto-safe size transforms were promoted to speed mode: redundant
+pair-immediate reload removal, two-/four-byte `push af` stack allocation, and
+unused temporary-frame compaction through four bytes. Slower outlining,
+tail-merging, and larger push-sequence transforms remain size-only.
 
 ### 1. C23 Standard Library Completion (Libc in Assembler)
 The primary focus for a long period was bringing the hand-written Z80 assembler libc up to a full (or very close to full) C23 surface, strictly following the project's rules:

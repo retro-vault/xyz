@@ -13,6 +13,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
@@ -100,6 +101,138 @@ static std::string canonical_include_key(const std::string &path) {
 static bool is_pp_space(char c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n' ||
            c == '\f' || c == '\v';
+}
+
+// C23 6.10.5.2: when a macro parameter is stringified, leading/trailing
+// whitespace is discarded and each intervening whitespace sequence becomes a
+// single space.  Whitespace inside a string or character literal is part of
+// that preprocessing token and must remain intact.
+static std::string stringify_macro_argument(const std::string &raw) {
+    std::string normalized;
+    bool pending_space = false;
+    char quote = '\0';
+
+    for (size_t i = 0; i < raw.size(); ++i) {
+        const char c = raw[i];
+        if (quote != '\0') {
+            normalized += c;
+            if (c == '\\' && i + 1 < raw.size()) {
+                normalized += raw[++i];
+            } else if (c == quote) {
+                quote = '\0';
+            }
+            continue;
+        }
+
+        if (is_pp_space(c)) {
+            pending_space = !normalized.empty();
+            continue;
+        }
+
+        if (pending_space) {
+            normalized += ' ';
+            pending_space = false;
+        }
+        normalized += c;
+        if (c == '"' || c == '\'')
+            quote = c;
+    }
+
+    std::string result;
+    result.reserve(normalized.size() + 2);
+    result += '"';
+    for (char c : normalized) {
+        if (c == '"' || c == '\\')
+            result += '\\';
+        result += c;
+    }
+    result += '"';
+    return result;
+}
+
+static std::string strip_comments_preserving_newlines(
+        const std::string &input) {
+    enum class state {
+        NORMAL,
+        STRING_LITERAL,
+        CHAR_LITERAL,
+        LINE_COMMENT,
+        BLOCK_COMMENT,
+    };
+
+    std::string result;
+    result.reserve(input.size());
+    state current = state::NORMAL;
+
+    for (size_t i = 0; i < input.size(); ++i) {
+        const char c = input[i];
+        const char next = i + 1 < input.size() ? input[i + 1] : '\0';
+
+        if (current == state::LINE_COMMENT) {
+            // Translation phase 2 removes backslash-newline before phase 3
+            // recognizes comments. Keep the pair in the stripped stream so
+            // process_text can account for the physical line, but do not end
+            // the // comment here: the following physical line is part of
+            // the same logical comment.
+            if (c == '\\' && next == '\n') {
+                result += "\\\n";
+                ++i;
+            } else if (c == '\\' && next == '\r' &&
+                       i + 2 < input.size() && input[i + 2] == '\n') {
+                result += "\\\n";
+                i += 2;
+            } else if (c == '\n') {
+                result += '\n';
+                current = state::NORMAL;
+            } else {
+                result += ' ';
+            }
+            continue;
+        }
+
+        if (current == state::BLOCK_COMMENT) {
+            if (c == '*' && next == '/') {
+                result += "  ";
+                ++i;
+                current = state::NORMAL;
+            } else {
+                result += c == '\n' ? '\n' : ' ';
+            }
+            continue;
+        }
+
+        if (current == state::STRING_LITERAL ||
+            current == state::CHAR_LITERAL) {
+            result += c;
+            if (c == '\\' && i + 1 < input.size()) {
+                result += input[++i];
+            } else if ((current == state::STRING_LITERAL && c == '"') ||
+                       (current == state::CHAR_LITERAL && c == '\'')) {
+                current = state::NORMAL;
+            }
+            continue;
+        }
+
+        if (c == '"') {
+            result += c;
+            current = state::STRING_LITERAL;
+        } else if (c == '\'') {
+            result += c;
+            current = state::CHAR_LITERAL;
+        } else if (c == '/' && next == '/') {
+            result += "  ";
+            ++i;
+            current = state::LINE_COMMENT;
+        } else if (c == '/' && next == '*') {
+            result += "  ";
+            ++i;
+            current = state::BLOCK_COMMENT;
+        } else {
+            result += c;
+        }
+    }
+
+    return result;
 }
 
 static bool has_unclosed_paren(const std::string &text) {
@@ -211,6 +344,9 @@ preprocessor::preprocessor(diag_engine                   &diag,
     // basic block-scope VLAs and VLA parameters.
     predef("__STDC_UTF_16__",          "1");
     predef("__STDC_UTF_32__",          "1");
+    predef("__STDC_EMBED_NOT_FOUND__", "0");
+    predef("__STDC_EMBED_FOUND__",     "1");
+    predef("__STDC_EMBED_EMPTY__",     "2");
 
     for (auto &def : cmdline_defines) {
         size_t eq = def.find('=');
@@ -516,13 +652,7 @@ std::string preprocessor::expand(const std::string &text,
                 std::string tok = read_ident(body, token_pos);
                 auto ai = named_args.find(tok);
                 if (ai != named_args.end()) {
-                    sub += '"';
-                    for (char c : ai->second.raw) {
-                        if (c == '"' || c == '\\')
-                            sub += '\\';
-                        sub += c;
-                    }
-                    sub += '"';
+                    sub += stringify_macro_argument(ai->second.raw);
                     p = token_pos + tok.size();
                 } else {
                     sub += body[hash_pos];
@@ -695,6 +825,50 @@ struct eval_ctx {
             skip_ws();
             if (pos < expr.size() && expr[pos] == ')') ++pos;
             return has_include_file(name, system_include) ? 1 : 0;
+        }
+
+        // C23: __has_embed("file") / __has_embed(<file>).  The standard
+        // result distinguishes a non-empty resource from an empty one.
+        if (expr.substr(pos, 11) == "__has_embed") {
+            pos += 11;
+            skip_ws();
+            if (pos < expr.size() && expr[pos] == '(') ++pos;
+            skip_ws();
+            bool system_include = false;
+            std::string name;
+            if (pos < expr.size() && expr[pos] == '"') {
+                ++pos;
+                while (pos < expr.size() && expr[pos] != '"') name += expr[pos++];
+                if (pos < expr.size() && expr[pos] == '"') ++pos;
+            } else if (pos < expr.size() && expr[pos] == '<') {
+                system_include = true;
+                ++pos;
+                while (pos < expr.size() && expr[pos] != '>') name += expr[pos++];
+                if (pos < expr.size() && expr[pos] == '>') ++pos;
+            }
+            skip_ws();
+            if (pos < expr.size() && expr[pos] == ')') ++pos;
+
+            auto file_size = [&](const std::string &path) -> long long {
+                std::ifstream f(path, std::ios::binary | std::ios::ate);
+                if (!f) return -1;
+                return static_cast<long long>(f.tellg());
+            };
+            long long size = -1;
+            if (!name.empty() && name[0] == '/')
+                size = file_size(name);
+            if (size < 0 && !system_include && current_dir) {
+                const std::string path = current_dir->empty()
+                    ? name : (*current_dir + "/" + name);
+                size = file_size(path);
+            }
+            if (size < 0 && include_paths) {
+                for (const auto &dir : *include_paths) {
+                    size = file_size(dir + "/" + name);
+                    if (size >= 0) break;
+                }
+            }
+            return size < 0 ? 0 : (size == 0 ? 2 : 1);
         }
 
         // C23: __has_c_attribute([[ns::name]]) — 0 for unknown, 1 for known C23 attrs
@@ -1007,30 +1181,10 @@ void preprocessor::process_text(const std::string &source,
         input.erase(0, 3);
     }
 
-    // Strip multi-line block comments before line-by-line processing.
-    // Replaces comment content with spaces, preserving newlines for line numbers.
-    std::string stripped;
-    stripped.reserve(input.size());
-    {
-        size_t n = input.size();
-        size_t i = 0;
-        while (i < n) {
-            if (i + 1 < n && input[i] == '/' && input[i+1] == '*') {
-                i += 2;
-                while (i < n) {
-                    if (i + 1 < n && input[i] == '*' && input[i+1] == '/') {
-                        i += 2;
-                        break;
-                    }
-                    stripped += (input[i] == '\n') ? '\n' : ' ';
-                    ++i;
-                }
-                stripped += ' ';
-            } else {
-                stripped += input[i++];
-            }
-        }
-    }
+    // Comment replacement is translation phase 3.  It must honor quote and
+    // comment precedence (`//*...*/` is a line comment) while preserving
+    // newlines so diagnostics and __LINE__ remain stable.
+    std::string stripped = strip_comments_preserving_newlines(input);
 
     std::istringstream ss(stripped);
     std::string line;
@@ -1279,6 +1433,44 @@ void preprocessor::process_text(const std::string &source,
                 std::string inc_src = read_file(path);
                 process_text(inc_src, path, out, depth + 1);
                 // Resume marker after return
+                emit_line_marker(lineno + 1, filename);
+                continue;
+            }
+
+            if (dir == "embed") {
+                bool sys = false;
+                std::string resource_name;
+                if (!rest.empty() && rest[0] == '<') {
+                    sys = true;
+                    const size_t end = rest.find('>');
+                    resource_name = rest.substr(
+                        1, end == std::string::npos ? rest.size() - 1 : end - 1);
+                } else if (!rest.empty() && rest[0] == '"') {
+                    const size_t end = rest.find('"', 1);
+                    resource_name = rest.substr(
+                        1, end == std::string::npos ? rest.size() - 1 : end - 1);
+                }
+
+                const std::string path =
+                    find_include(resource_name, sys, cur_dir);
+                if (path.empty())
+                    diag_.fatal(filename.c_str(), lineno,
+                                "cannot find embed resource '%s'",
+                                resource_name.c_str());
+
+                std::ifstream resource(path, std::ios::binary);
+                if (!resource)
+                    diag_.fatal(filename.c_str(), lineno,
+                                "cannot read embed resource '%s'",
+                                resource_name.c_str());
+                std::string bytes((std::istreambuf_iterator<char>(resource)),
+                                  std::istreambuf_iterator<char>());
+                for (size_t i = 0; i < bytes.size(); ++i) {
+                    if (i != 0) out += ", ";
+                    out += std::to_string(
+                        static_cast<unsigned char>(bytes[i]));
+                }
+                out += "\n";
                 emit_line_marker(lineno + 1, filename);
                 continue;
             }

@@ -21,6 +21,12 @@
 #include <stdint.h>
 #include <uchar.h>
 
+#if defined(__XCC__)
+#define __XCC_ATOMIC_ABI1 [[sdcc::sdccall(1)]]
+#else
+#define __XCC_ATOMIC_ABI1
+#endif
+
 /* Memory-order enumeration. */
 typedef enum {
     memory_order_relaxed = 0,
@@ -58,27 +64,41 @@ typedef uintmax_t      atomic_uintmax_t;
 
 /* Runtime entry points for the currently supported widths. */
 
-extern unsigned char  _atomic_load_1(unsigned char *ptr);
-extern unsigned short _atomic_load_2(unsigned short *ptr);
-extern void _atomic_store_1(unsigned char  *ptr, unsigned char  val);
-extern void _atomic_store_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  _atomic_exchange_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short _atomic_exchange_2(unsigned short *ptr, unsigned short val);
-extern int _atomic_compare_exchange_1(unsigned char  *ptr, unsigned char  expected, unsigned char  desired);
-extern int _atomic_compare_exchange_2(unsigned short *ptr, unsigned short expected, unsigned short desired);
-extern unsigned char  _atomic_fetch_add_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short _atomic_fetch_add_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  _atomic_fetch_sub_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short _atomic_fetch_sub_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  _atomic_fetch_and_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short _atomic_fetch_and_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  _atomic_fetch_or_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short _atomic_fetch_or_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  _atomic_fetch_xor_1(unsigned char  *ptr, unsigned char  val);
-extern unsigned short _atomic_fetch_xor_2(unsigned short *ptr, unsigned short val);
-extern unsigned char  _atomic_flag_test_set(unsigned char *flag);
-extern void           _atomic_flag_clear(unsigned char *flag);
-extern void           _atomic_width_not_supported(void);
+__XCC_ATOMIC_ABI1 unsigned char  _atomic_load_1(unsigned char *ptr);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_load_2(unsigned short *ptr);
+__XCC_ATOMIC_ABI1 void _atomic_store_1(unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 void _atomic_store_2(unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_exchange_1(
+    unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_exchange_2(
+    unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 int _atomic_compare_exchange_1(
+    unsigned char *ptr, unsigned char expected, unsigned char desired);
+__XCC_ATOMIC_ABI1 int _atomic_compare_exchange_2(
+    unsigned short *ptr, unsigned short expected, unsigned short desired);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_fetch_add_1(
+    unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_fetch_add_2(
+    unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_fetch_sub_1(
+    unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_fetch_sub_2(
+    unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_fetch_and_1(
+    unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_fetch_and_2(
+    unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_fetch_or_1(
+    unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_fetch_or_2(
+    unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_fetch_xor_1(
+    unsigned char *ptr, unsigned char val);
+__XCC_ATOMIC_ABI1 unsigned short _atomic_fetch_xor_2(
+    unsigned short *ptr, unsigned short val);
+__XCC_ATOMIC_ABI1 unsigned char _atomic_flag_test_set(unsigned char *flag);
+__XCC_ATOMIC_ABI1 void _atomic_flag_clear(unsigned char *flag);
+__XCC_ATOMIC_ABI1 void _atomic_width_not_supported(void);
 
 /* Initialization helpers. */
 #define ATOMIC_VAR_INIT(val)    (val)
@@ -226,5 +246,7 @@ extern void           _atomic_width_not_supported(void);
 #define ATOMIC_CHAR32_T_LOCK_FREE  0
 
 typedef _Atomic unsigned char atomic_char8_t;
+
+#undef __XCC_ATOMIC_ABI1
 
 #endif /* _STDATOMIC_H */

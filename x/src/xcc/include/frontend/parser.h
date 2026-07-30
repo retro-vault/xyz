@@ -242,7 +242,7 @@ private:
 
     // Parse the body of an enum definition { IDENT [= expr] , ... }.
     // Inserts enumerator symbols into the current scope.
-    void parse_enum_body();
+    type_ptr parse_enum_body();
 
     // ----- helpers ---------------------------------------------------
 

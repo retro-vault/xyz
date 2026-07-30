@@ -41,8 +41,8 @@ grep -q $'\t.type _add_one, @function' "$tmpdir/symbols.s"
 grep -q $'\t.size _add_one, . - _add_one' "$tmpdir/symbols.s"
 grep -q $'\t.type _global_counter, @object' "$tmpdir/symbols.s"
 grep -q $'\t.size _global_buf, 3' "$tmpdir/symbols.s"
-grep -q $'\t.type __str_0, @object' "$tmpdir/symbols.s"
-grep -q $'\t.size __str_0, 3' "$tmpdir/symbols.s"
+grep -q $'\t.type __xcc_str_0, @object' "$tmpdir/symbols.s"
+grep -q $'\t.size __xcc_str_0, 3' "$tmpdir/symbols.s"
 
 "$XAS" --mode=gnu "$tmpdir/symbols.s" -o "$tmpdir/symbols.o"
 readelf -s "$tmpdir/symbols.o" > "$tmpdir/symbols.sym"
@@ -77,7 +77,7 @@ check_func() {
 check_sym _global_counter 2 OBJECT GLOBAL
 check_sym _global_buf 3 OBJECT GLOBAL
 check_sym _hidden_word 2 OBJECT LOCAL
-check_sym __str_0 3 OBJECT LOCAL
+check_sym __xcc_str_0 3 OBJECT LOCAL
 check_sym __tls_template 1 OBJECT GLOBAL
 check_func _add_one
 check_func _message

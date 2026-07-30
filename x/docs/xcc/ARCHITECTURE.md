@@ -41,6 +41,15 @@ Z80Gen         — walks IR; emits Z80 assembly via asm_emitter abstraction;
 The driver in `src/driver/main.cpp` chains these passes. Each pass is
 independent and communicates only through its output data structure.
 
+### Optimization profile contract
+
+`-Os` is the linked-size profile and may trade cycles for fewer bytes. `-Of`
+is the validated measured-cycle profile and may spend bytes for speed. `-O3`
+is an exact command-line compatibility alias for `-Of`, not a separate
+experimental pipeline. New experimental transformations remain behind
+explicit pass flags until they are stable under both `sdcccall(1)` and
+`sdcccall(0)`.
+
 ---
 
 ## Directory layout

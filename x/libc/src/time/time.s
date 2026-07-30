@@ -21,6 +21,7 @@
         ; clobbers: AF, BC, DE, HL
 _time::
         push    ix
+        push    hl                      ; save timer across local allocation
         ld      hl,#0
         push    hl
         push    hl
@@ -28,6 +29,8 @@ _time::
         push    hl
         ld      ix,#0
         add     ix,sp
+        ld      l,8(ix)
+        ld      h,9(ix)                 ; HL = timer
         ld      a,h
         or      l
         push    af                      ; remember whether timer == NULL (Z)
@@ -55,5 +58,12 @@ time_no_store:
         ld      l,2(ix)
         ld      h,3(ix)
         ld      sp,ix
+        ; IX addresses the temporary timeval object, not the saved caller IX.
+        ; Discard that object before restoring the frame pointer.
+        pop     bc
+        pop     bc
+        pop     bc
+        pop     bc
+        pop     bc                      ; discard saved timer
         pop     ix
         ret

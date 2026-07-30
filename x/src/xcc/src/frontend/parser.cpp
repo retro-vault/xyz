@@ -286,9 +286,6 @@ void parser::complete_unsized_char_array_from_string(type_ptr t,
     if (!t || t->kind != type_kind::ARRAY || t->array_size != 0 || !t->base || !init)
         return;
     type_kind elem = t->base->unqual()->kind;
-    if (elem != type_kind::CHAR && elem != type_kind::SCHAR &&
-        elem != type_kind::UCHAR && elem != type_kind::CHAR8T)
-        return;
     auto *str = dynamic_cast<string_literal_expr*>(init.get());
     if (!str) {
         if (auto *il = dynamic_cast<init_list_expr*>(init.get());
@@ -296,7 +293,16 @@ void parser::complete_unsized_char_array_from_string(type_ptr t,
             str = dynamic_cast<string_literal_expr*>(il->elements[0].value.get());
         }
     }
-    if (!str || str->char_width != 1)
+    if (!str)
+        return;
+
+    const bool compatible =
+        ((elem == type_kind::CHAR || elem == type_kind::SCHAR ||
+          elem == type_kind::UCHAR) && str->char_width == 1) ||
+        (elem == type_kind::CHAR8T && str->char_width == 8) ||
+        (elem == type_kind::USHORT && str->char_width == 2) ||
+        (elem == type_kind::ULONG && str->char_width == 4);
+    if (!compatible)
         return;
     t->array_size = static_cast<int>(str->value.size()) + 1;
 }

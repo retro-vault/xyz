@@ -1,0 +1,439 @@
+{
+  "cases": [
+    {
+      "case_id": "special_float_celsius_to_fahrenheit",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "special_float_celsius_to_fahrenheit",
+      "source": "conversions/celsius_to_fahrenheit.c"
+    },
+    {
+      "case_id": "special_float_lerp",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "special_float_lerp",
+      "source": "math/lerp.c"
+    },
+    {
+      "case_id": "special_float_cartesian_to_polar",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "special_float_cartesian_to_polar",
+      "source": "math/cartesian_to_polar.c"
+    },
+    {
+      "case_id": "special_float_secant_method",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "special_float_secant_method",
+      "source": "numerical_methods/secant_method.c"
+    },
+    {
+      "case_id": "special_float_prime_sqrt",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "special_float_prime_sqrt",
+      "source": "math/prime.c"
+    },
+    {
+      "case_id": "generic_geometry_quaternions_c",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "geometry/quaternions.c"
+    },
+    {
+      "case_id": "generic_geometry_vectors_3d_c",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "geometry/vectors_3d.c"
+    },
+    {
+      "case_id": "generic_math_fibonacci_formula_c",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "source-expects-exact-truncation-of-approximate-floating-formula",
+      "source": "math/fibonacci_formula.c"
+    },
+    {
+      "case_id": "generic_numerical_methods_bisection_method_c",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "numerical_methods/bisection_method.c"
+    },
+    {
+      "case_id": "generic_numerical_methods_qr_eigen_values_c",
+      "cycle_budget": 250000000,
+      "float_rich": true,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "numerical_methods/qr_eigen_values.c"
+    },
+    {
+      "case_id": "generic_process_scheduling_algorithms_non_preemptive_priority_scheduling_c",
+      "float_rich": true,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "process_scheduling_algorithms/non_preemptive_priority_scheduling.c"
+    },
+    {
+      "case_id": "generic_audio_alaw_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "audio/alaw.c"
+    },
+    {
+      "case_id": "generic_cipher_affine_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "cipher/affine.c"
+    },
+    {
+      "case_id": "generic_cipher_rot13_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "cipher/rot13.c"
+    },
+    {
+      "case_id": "generic_conversions_binary_to_decimal_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "conversions/binary_to_decimal.c"
+    },
+    {
+      "argv": [
+        "123"
+      ],
+      "case_id": "generic_conversions_c_atoi_str_to_integer_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "conversions/c_atoi_str_to_integer.c"
+    },
+    {
+      "case_id": "generic_conversions_decimal_to_any_base_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "conversions/decimal_to_any_base.c"
+    },
+    {
+      "case_id": "generic_conversions_decimal_to_binary_recursion_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "conversions/decimal_to_binary_recursion.c"
+    },
+    {
+      "case_id": "generic_conversions_int_to_string_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "conversions/int_to_string.c"
+    },
+    {
+      "case_id": "generic_conversions_roman_numerals_to_decimal_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "conversions/roman_numerals_to_decimal.c"
+    },
+    {
+      "case_id": "generic_data_structures_binary_trees_segment_tree_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "source-assumes-int32_t-and-int-have-identical-width",
+      "source": "data_structures/binary_trees/segment_tree.c"
+    },
+    {
+      "case_id": "generic_data_structures_linked_list_circular_doubly_linked_list_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "data_structures/linked_list/circular_doubly_linked_list.c"
+    },
+    {
+      "case_id": "generic_data_structures_stack_dynamic_stack_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "data_structures/stack/dynamic_stack.c"
+    },
+    {
+      "case_id": "generic_data_structures_vector_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "data_structures/vector.c"
+    },
+    {
+      "case_id": "generic_dynamic_programming_lcs_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "dynamic_programming/lcs.c"
+    },
+    {
+      "case_id": "generic_dynamic_programming_matrix_chain_order_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "source-requires-32-bit-int-cost-arithmetic",
+      "source": "dynamic_programming/matrix_chain_order.c"
+    },
+    {
+      "case_id": "generic_hash_hash_adler32_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "hash/hash_adler32.c"
+    },
+    {
+      "case_id": "generic_hash_hash_blake2b_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "target-code-section-exceeds-16-bit-address-space",
+      "source": "hash/hash_blake2b.c"
+    },
+    {
+      "case_id": "generic_hash_hash_crc32_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "hash/hash_crc32.c"
+    },
+    {
+      "case_id": "generic_hash_hash_djb2_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "hash/hash_djb2.c"
+    },
+    {
+      "case_id": "generic_hash_hash_sdbm_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "hash/hash_sdbm.c"
+    },
+    {
+      "case_id": "generic_hash_hash_xor8_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "hash/hash_xor8.c"
+    },
+    {
+      "case_id": "generic_leetcode_src_6_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "leetcode/src/6.c"
+    },
+    {
+      "case_id": "generic_math_euclidean_algorithm_extended_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "math/euclidean_algorithm_extended.c"
+    },
+    {
+      "case_id": "generic_math_palindrome_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "math/palindrome.c"
+    },
+    {
+      "case_id": "generic_math_prime_sieve_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "target-memory-requirement-exceeds-64k-address-space",
+      "source": "math/prime_sieve.c"
+    },
+    {
+      "case_id": "generic_math_strong_number_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "math/strong_number.c"
+    },
+    {
+      "case_id": "generic_misc_hamming_distance_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "misc/hamming_distance.c"
+    },
+    {
+      "case_id": "generic_misc_mcnaughton_yamada_thompson_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "misc/mcnaughton_yamada_thompson.c"
+    },
+    {
+      "case_id": "generic_misc_postfix_evaluation_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "misc/postfix_evaluation.c"
+    },
+    {
+      "case_id": "generic_misc_run_length_encoding_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "upstream-self-test-has-heap-buffer-overflow",
+      "source": "misc/run_length_encoding.c"
+    },
+    {
+      "case_id": "generic_misc_shunting_yard_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "misc/shunting_yard.c"
+    },
+    {
+      "case_id": "generic_searching_binary_search_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "searching/binary_search.c"
+    },
+    {
+      "case_id": "generic_searching_exponential_search_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "searching/exponential_search.c"
+    },
+    {
+      "case_id": "generic_searching_floyd_cycle_detection_algorithm_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "searching/floyd_cycle_detection_algorithm.c"
+    },
+    {
+      "case_id": "generic_searching_jump_search_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "searching/jump_search.c"
+    },
+    {
+      "case_id": "generic_searching_sentinel_linear_search_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "searching/sentinel_linear_search.c"
+    },
+    {
+      "case_id": "generic_sorting_bubble_sort_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/bubble_sort.c"
+    },
+    {
+      "case_id": "generic_sorting_bubble_sort_2_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/bubble_sort_2.c"
+    },
+    {
+      "case_id": "generic_sorting_bubble_sort_recursion_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/bubble_sort_recursion.c"
+    },
+    {
+      "case_id": "generic_sorting_bucket_sort_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/bucket_sort.c"
+    },
+    {
+      "case_id": "generic_sorting_heap_sort_2_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/heap_sort_2.c"
+    },
+    {
+      "case_id": "generic_sorting_insertion_sort_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/insertion_sort.c"
+    },
+    {
+      "case_id": "generic_sorting_insertion_sort_recursive_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "upstream-self-test-reads-one-past-array-end",
+      "source": "sorting/insertion_sort_recursive.c"
+    },
+    {
+      "case_id": "generic_sorting_odd_even_sort_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "skip_reason": "source-passes-int32_t-arrays-to-int-pointer-api",
+      "source": "sorting/odd_even_sort.c"
+    },
+    {
+      "case_id": "generic_sorting_patience_sort_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/patience_sort.c"
+    },
+    {
+      "case_id": "generic_sorting_selection_sort_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/selection_sort.c"
+    },
+    {
+      "case_id": "generic_sorting_selection_sort_recursive_c",
+      "float_rich": false,
+      "input_text": "",
+      "mode": "generic_main",
+      "source": "sorting/selection_sort_recursive.c"
+    },
+    {
+      "case_id": "generic_machine_learning_adaline_learning_c",
+      "float_rich": true,
+      "input_text": "10\n5\n3\n2\n1\n0\n-1\n42\n7\n11\n13\n17\n19\nend\n",
+      "mode": "generic_main",
+      "skip_reason": "source-relies-on-overlapping-sprintf-and-host-width-prng",
+      "source": "machine_learning/adaline_learning.c"
+    },
+    {
+      "case_id": "generic_math_fibonacci_c",
+      "float_rich": true,
+      "input_text": "10\n5\n3\n2\n1\n0\n-1\n42\n7\n11\n13\n17\n19\nend\n",
+      "mode": "generic_main",
+      "source": "math/fibonacci.c"
+    }
+  ],
+  "source_commit": "snapshot-sha256:d6b0b5ef5ace1bd3b48bc705cdb1fdfaeeb323cff3fa54b2ac1ce252ce7e46f5",
+  "source_repo": "https://github.com/TheAlgorithms/C.git"
+}

@@ -106,10 +106,6 @@ def normalize_compiler_args(kind: str, tokens: list[str]) -> list[str]:
     return keep
 
 
-def has_unsupported_support_inputs(tokens: list[str]) -> bool:
-    return any(token.endswith((".rel", ".o", ".a", ".lib")) for token in tokens)
-
-
 def case_id(parts: list[str], stem: str) -> str:
     clean_parts = [part.lower().replace("-", "_") for part in parts]
     return "_".join(["xcc"] + clean_parts + [stem.lower()])
@@ -146,6 +142,7 @@ def add_common_manifest_lines(
     compiler_args: list[str],
     float_present: bool,
     float_modes: list[str],
+    matrix_opts: list[str] | None = None,
 ) -> None:
     lines.extend(
         [
@@ -157,7 +154,7 @@ def add_common_manifest_lines(
             f"source = {source_rel}\n",
         ]
     )
-    for opt in DEFAULT_MATRIX_OPTS:
+    for opt in matrix_opts or DEFAULT_MATRIX_OPTS:
         lines.append(f"matrix_opt = {opt}\n")
     for arg in compiler_args:
         lines.append(f"compiler_arg = {arg}\n")
@@ -171,8 +168,11 @@ def generate_compile_case(source: Path, suite_parts: list[str]) -> bool:
     stem = source.stem
     opts_path = source.with_suffix(".opts")
     tokens = split_opts(opts_path)
-    if has_unsupported_support_inputs(tokens):
-        return False
+    support_inputs = [
+        X_ROOT / token
+        for token in tokens
+        if token.endswith((".rel", ".o", ".a", ".lib"))
+    ]
 
     text = load_text(source)
     if is_preprocess_output_test(text):
@@ -201,7 +201,20 @@ def generate_compile_case(source: Path, suite_parts: list[str]) -> bool:
         compiler_args,
         float_present,
         float_modes,
+        ["O0"] if support_inputs else None,
     )
+    for support_input in support_inputs:
+        lines.append(f"source = {rel_to_case(support_input, case_dir)}\n")
+    if support_inputs:
+        # These probes exist specifically to exercise ABI metadata import from
+        # each supported object/library container.  A compile-only success is
+        # insufficient: a missing input used to degrade to a warning and the
+        # source would still compile using the default convention.
+        lines.append("stderr_not_contains = failed to import ABI metadata\n")
+        if source.with_suffix(".warning").exists():
+            lines.append("asm_not_contains = pop\tbc\n")
+        else:
+            lines.append("asm_contains = pop\tbc\n")
 
     error_path = source.with_suffix(".error")
     warning_path = source.with_suffix(".warning")

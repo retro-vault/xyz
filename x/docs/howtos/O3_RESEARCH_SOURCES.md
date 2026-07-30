@@ -1,8 +1,9 @@
-# O3 Research Sources
+# Optimization Research Sources
 
 This note keeps the external optimization references we are mining for the
-`-O3` "here be dragons" lane.  Treat this as a research queue, not as a
-promise that every idea is safe or directly portable to `xcc`.
+research queue. `-O3` is now an exact alias of `-Of`, so unfinished ideas
+remain manual or out of tree until stabilized; this list is not a promise
+that every idea is safe or directly portable to `xcc`.
 
 ## Z80 Optimizer Projects
 
@@ -31,11 +32,16 @@ promise that every idea is safe or directly portable to `xcc`.
 
 ## Local Rules For Using These Sources
 
-- Any imported idea must start in `-O3` or `-Of`, not `-Os`.
+- Imported ideas remain manual experiments until they are proven safe enough
+  to enter `-Of`; `-O3` does not provide a separate staging lane.
 - `-Os` remains the protected size-record lane.
 - Every rewrite needs a focused compiler fixture and the executable
-  benchmark suite before it is considered trustworthy.
+  correctness suite before it is considered trustworthy.
 - Prefer tiny exact rules first: register value, flags, memory, stack depth,
   and control-flow behavior must all be accounted for.
-- Benchmark every round against both `xcc` and `sdcc`, and record the round
-  gain from the previous benchmark checkpoint.
+- Use an explicitly designated development corpus for cost tuning. A frozen
+  holdout may validate generalization once; do not derive a new selector from
+  its functions or repeatedly tune against its score.
+- Compare both `xcc` and competitors in one runner and record correctness,
+  size, and cycles. A speed change is not releasable merely because it wins
+  the development benchmark.

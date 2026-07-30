@@ -21,7 +21,7 @@
 #define __STDC_ENDIAN_BIG__    4321
 #define __STDC_ENDIAN_NATIVE__ __STDC_ENDIAN_LITTLE__
 
-static inline unsigned int __stdbit_count_ones_ull(unsigned long long value) {
+static inline unsigned int __stdbit_count_ones_core(unsigned long long value) {
     unsigned int count = 0;
     while (value != 0ULL) {
         count += (unsigned int)(value & 1ULL);
@@ -30,7 +30,7 @@ static inline unsigned int __stdbit_count_ones_ull(unsigned long long value) {
     return count;
 }
 
-static inline unsigned int __stdbit_leading_zeros_ull(unsigned long long value, unsigned int bits) {
+static inline unsigned int __stdbit_leading_zeros_core(unsigned long long value, unsigned int bits) {
     unsigned int count = 0;
     unsigned long long mask;
     if (bits == 0U) {
@@ -44,7 +44,7 @@ static inline unsigned int __stdbit_leading_zeros_ull(unsigned long long value, 
     return count;
 }
 
-static inline unsigned int __stdbit_leading_ones_ull(unsigned long long value, unsigned int bits) {
+static inline unsigned int __stdbit_leading_ones_core(unsigned long long value, unsigned int bits) {
     unsigned int count = 0;
     unsigned long long mask;
     if (bits == 0U) {
@@ -58,7 +58,7 @@ static inline unsigned int __stdbit_leading_ones_ull(unsigned long long value, u
     return count;
 }
 
-static inline unsigned int __stdbit_trailing_zeros_ull(unsigned long long value, unsigned int bits) {
+static inline unsigned int __stdbit_trailing_zeros_core(unsigned long long value, unsigned int bits) {
     unsigned int count = 0;
     unsigned long long mask = 1ULL;
     while ((count < bits) && ((value & mask) == 0ULL)) {
@@ -68,7 +68,7 @@ static inline unsigned int __stdbit_trailing_zeros_ull(unsigned long long value,
     return count;
 }
 
-static inline unsigned int __stdbit_trailing_ones_ull(unsigned long long value, unsigned int bits) {
+static inline unsigned int __stdbit_trailing_ones_core(unsigned long long value, unsigned int bits) {
     unsigned int count = 0;
     unsigned long long mask = 1ULL;
     while ((count < bits) && ((value & mask) != 0ULL)) {
@@ -78,7 +78,7 @@ static inline unsigned int __stdbit_trailing_ones_ull(unsigned long long value, 
     return count;
 }
 
-static inline unsigned int __stdbit_bit_width_ull(unsigned long long value) {
+static inline unsigned int __stdbit_bit_width_core(unsigned long long value) {
     unsigned int width = 0;
     while (value != 0ULL) {
         ++width;
@@ -87,7 +87,7 @@ static inline unsigned int __stdbit_bit_width_ull(unsigned long long value) {
     return width;
 }
 
-static inline unsigned long long __stdbit_bit_floor_ull(unsigned long long value) {
+static inline unsigned long long __stdbit_bit_floor_core(unsigned long long value) {
     unsigned long long floor = 0ULL;
     while (value != 0ULL) {
         floor = value;
@@ -96,12 +96,12 @@ static inline unsigned long long __stdbit_bit_floor_ull(unsigned long long value
     return floor;
 }
 
-static inline unsigned long long __stdbit_bit_ceil_ull(unsigned long long value, unsigned int bits) {
+static inline unsigned long long __stdbit_bit_ceil_core(unsigned long long value, unsigned int bits) {
     unsigned int width;
     if (value <= 1ULL) {
         return 1ULL;
     }
-    width = __stdbit_bit_width_ull((unsigned long long)(value - 1ULL));
+    width = __stdbit_bit_width_core((unsigned long long)(value - 1ULL));
     if (width >= bits) {
         return 0ULL;
     }
@@ -110,16 +110,16 @@ static inline unsigned long long __stdbit_bit_ceil_ull(unsigned long long value,
 
 #define __STDBIT_DECLARE(width_name, type_name, type_bits) \
 static inline unsigned int __stdbit_leading_zeros_##width_name(type_name value) { \
-    return __stdbit_leading_zeros_ull((unsigned long long)value, (type_bits)); \
+    return __stdbit_leading_zeros_core((unsigned long long)value, (type_bits)); \
 } \
 static inline unsigned int __stdbit_leading_ones_##width_name(type_name value) { \
-    return __stdbit_leading_ones_ull((unsigned long long)value, (type_bits)); \
+    return __stdbit_leading_ones_core((unsigned long long)value, (type_bits)); \
 } \
 static inline unsigned int __stdbit_trailing_zeros_##width_name(type_name value) { \
-    return __stdbit_trailing_zeros_ull((unsigned long long)value, (type_bits)); \
+    return __stdbit_trailing_zeros_core((unsigned long long)value, (type_bits)); \
 } \
 static inline unsigned int __stdbit_trailing_ones_##width_name(type_name value) { \
-    return __stdbit_trailing_ones_ull((unsigned long long)value, (type_bits)); \
+    return __stdbit_trailing_ones_core((unsigned long long)value, (type_bits)); \
 } \
 static inline unsigned int __stdbit_first_leading_zero_##width_name(type_name value) { \
     return (value == (type_name)~(type_name)0) ? 0U : (1U + __stdbit_leading_ones_##width_name(value)); \
@@ -134,22 +134,22 @@ static inline unsigned int __stdbit_first_trailing_one_##width_name(type_name va
     return (value == (type_name)0) ? 0U : (1U + __stdbit_trailing_zeros_##width_name(value)); \
 } \
 static inline unsigned int __stdbit_count_zeros_##width_name(type_name value) { \
-    return (type_bits) - __stdbit_count_ones_ull((unsigned long long)value); \
+    return (type_bits) - __stdbit_count_ones_core((unsigned long long)value); \
 } \
 static inline unsigned int __stdbit_count_ones_##width_name(type_name value) { \
-    return __stdbit_count_ones_ull((unsigned long long)value); \
+    return __stdbit_count_ones_core((unsigned long long)value); \
 } \
 static inline int __stdbit_has_single_bit_##width_name(type_name value) { \
     return (value != (type_name)0) && ((value & (type_name)(value - 1)) == (type_name)0); \
 } \
 static inline unsigned int __stdbit_bit_width_##width_name(type_name value) { \
-    return __stdbit_bit_width_ull((unsigned long long)value); \
+    return __stdbit_bit_width_core((unsigned long long)value); \
 } \
 static inline type_name __stdbit_bit_floor_##width_name(type_name value) { \
-    return (type_name)__stdbit_bit_floor_ull((unsigned long long)value); \
+    return (type_name)__stdbit_bit_floor_core((unsigned long long)value); \
 } \
 static inline type_name __stdbit_bit_ceil_##width_name(type_name value) { \
-    return (type_name)__stdbit_bit_ceil_ull((unsigned long long)value, (type_bits)); \
+    return (type_name)__stdbit_bit_ceil_core((unsigned long long)value, (type_bits)); \
 } \
 static inline type_name __stdbit_rotate_left_##width_name(type_name value, unsigned int count) { \
     count %= (type_bits); \

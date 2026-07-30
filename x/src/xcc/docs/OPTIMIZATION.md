@@ -6,7 +6,7 @@ Improve generated code for an 8-bit Z80 target without forcing size and
 speed through the same compromise policy. The compiler should prefer:
 
 - linked bytes under `-Os`, even when sharing adds call overhead
-- measured Z80 cycles under `-Of` and experimental `-O3`, even when a
+- measured Z80 cycles under `-Of` (also selected by `-O3`), even when a
   faster sequence costs more bytes
 - fixed, repeatable local rewrites over expensive global analysis
 - small shared runtime helpers when they remove repeated inline
@@ -33,6 +33,31 @@ These passes match IR and control-flow properties only. They do not inspect
 source paths, function names, benchmark constants, or expected outputs. Expert
 controls include `-fcountdown-dead-loops`, `-fblock-fill-loops`, and
 `-fnarrow-counted-byte-loops`, together with their `-fno-*` forms.
+
+## Overfitting quarantine (2026-07-29)
+
+The exact whole-function `try_emit_sdcc_style_helper` selector was removed.
+Even without source-name checks, its large structural recipes were developed
+against the measured benchmark corpus and can recognize those programs by
+shape. Such recipes must be
+replaced by bounded local transformations with explicit legality and target
+cost models before they can return.
+
+The pending fixed-global-address argument specialization was removed rather
+than retained behind a release-profile switch. It can be reconsidered only
+after a frozen, previously unseen corpus shows a repeatable benefit without
+regressions. Correct nonzero-offset `ADDRESS_OF` emission and rematerialization
+remain enabled because they are semantic fixes, not benchmark profitability
+decisions.
+
+An independent bare-metal holdout then exposed scalar-local promotion assigning
+an invalid live range when followed by register allocation across complex CFG
+joins. The pass remains available only through its explicit experimental flag;
+no public `-O` preset enables it.
+
+`-O3` is now an exact compatibility spelling of the validated `-Of` preset.
+The experimental wider inliner and cross-block value propagation are not part
+of a public optimization level.
 
 ## Current Baseline
 
@@ -74,7 +99,7 @@ bloat remain:
 
 On Z80, every spill, `push`/`pop`, label, and helper setup is visible in
 both bytes and cycles. Under `-Os`, the first question is whether a rewrite
-reduces linked bytes. Under `-Of` and `-O3`, the first question is whether it
+reduces linked bytes. Under `-Of` / `-O3`, the first question is whether it
 reduces executed cycles on general code. A transformation belongs in both
 profiles only when it is Pareto-neutral or better for both objectives.
 

@@ -14,7 +14,10 @@ enum {
     STDIO_FMT_CLASS_FINITE = 0,
     STDIO_FMT_CLASS_INF    = 1,
     STDIO_FMT_CLASS_NAN    = 2,
-    STDIO_FMT_MAX_PREC     = 16
+    STDIO_FMT_MAX_PREC     = 16,
+    STDIO_FMT_FLAG_PLUS    = 0x02,
+    STDIO_FMT_FLAG_SPACE   = 0x04,
+    STDIO_FMT_FLAG_ALT     = 0x08
 };
 
 typedef union stdio_ieee_double {
@@ -319,11 +322,84 @@ static int stdio_format_fixed(stdio_writer *writer,
     return writer->count;
 }
 
+static void stdio_trim_general(char *text) {
+    char *exponent = text;
+    char *end;
+    char *cursor;
+
+    while (*exponent != '\0' && *exponent != 'e' && *exponent != 'E') {
+        ++exponent;
+    }
+    end = exponent;
+    while (end > text && end[-1] == '0') {
+        --end;
+    }
+    if (end > text && end[-1] == '.') {
+        --end;
+    }
+    if (end == exponent) {
+        return;
+    }
+
+    cursor = exponent;
+    while (1) {
+        *end = *cursor;
+        if (*cursor == '\0') {
+            break;
+        }
+        ++end;
+        ++cursor;
+    }
+}
+
+static int stdio_format_general(stdio_writer *writer,
+                                unsigned precision,
+                                unsigned conv,
+                                unsigned flags,
+                                double value) {
+    char buffer[48];
+    stdio_writer temporary;
+    double normalized = value;
+    int exponent10;
+    unsigned fractional_precision;
+
+    if (precision == 0u) {
+        precision = 1u;
+    }
+    exponent10 =
+        value == 0.0 ? 0 : stdio_normalize_decimal(&normalized);
+
+    stdio_writer_init(&temporary, buffer, sizeof(buffer));
+    if (exponent10 < -4 || exponent10 >= (int)precision) {
+        stdio_format_scientific(
+            &temporary, precision - 1u, conv, value, 0);
+    } else {
+        if (exponent10 >= 0) {
+            fractional_precision = precision - (unsigned)(exponent10 + 1);
+        } else {
+            fractional_precision =
+                precision + (unsigned)(-exponent10 - 1);
+        }
+        if (fractional_precision > STDIO_FMT_MAX_PREC) {
+            fractional_precision = STDIO_FMT_MAX_PREC;
+        }
+        stdio_format_fixed(&temporary, fractional_precision, value, 0);
+    }
+    stdio_writer_finish(&temporary);
+
+    if ((flags & STDIO_FMT_FLAG_ALT) == 0u) {
+        stdio_trim_general(buffer);
+    }
+    stdio_writer_puts(writer, buffer);
+    return writer->count;
+}
+
 [[sdcc::sdccall(0)]]
 int stdio_format_double(char *s,
                         size_t n,
                         unsigned precision,
                         unsigned conv,
+                        unsigned flags,
                         double value) {
     stdio_writer writer;
     int negative = 0;
@@ -336,28 +412,39 @@ int stdio_format_double(char *s,
 
     stdio_writer_init(&writer, s, n);
     cls = stdio_classify_double(value, &negative);
+    if (negative) {
+        stdio_writer_putc(&writer, '-');
+        value = -value;
+    } else if ((flags & STDIO_FMT_FLAG_PLUS) != 0u) {
+        stdio_writer_putc(&writer, '+');
+    } else if ((flags & STDIO_FMT_FLAG_SPACE) != 0u) {
+        stdio_writer_putc(&writer, ' ');
+    }
     if (cls != STDIO_FMT_CLASS_FINITE) {
-        stdio_format_special(&writer, conv, negative, cls);
+        stdio_format_special(&writer, conv, 0, cls);
         stdio_writer_finish(&writer);
         return writer.count;
     }
 
-    /* Keep the non-fixed formats on the lean scientific path so printf users
-       that never print floats do not pay for extra trimming machinery. */
-    if (conv == 'e' || conv == 'E' || conv == 'g' || conv == 'G' ||
-        conv == 'a' || conv == 'A') {
-        stdio_format_scientific(&writer, work_precision, conv, value, negative);
+    if (conv == 'g' || conv == 'G') {
+        stdio_format_general(&writer, work_precision, conv, flags, value);
+        stdio_writer_finish(&writer);
+        return writer.count;
+    }
+
+    if (conv == 'e' || conv == 'E' || conv == 'a' || conv == 'A') {
+        stdio_format_scientific(&writer, work_precision, conv, value, 0);
         stdio_writer_finish(&writer);
         return writer.count;
     }
 
     if (conv == 'f' || conv == 'F') {
-        stdio_format_fixed(&writer, work_precision, value, negative);
+        stdio_format_fixed(&writer, work_precision, value, 0);
         stdio_writer_finish(&writer);
         return writer.count;
     }
 
-    stdio_format_scientific(&writer, work_precision, 'e', value, negative);
+    stdio_format_scientific(&writer, work_precision, 'e', value, 0);
     stdio_writer_finish(&writer);
     return writer.count;
 }

@@ -347,7 +347,7 @@ private:
     // ld rr,#N; ld (absolute),rr; ...; ld rr,#N
     //   → remove the repeated load while intervening instructions are only
     //     absolute stores from the unchanged pair.
-    bool rule_size_redundant_pair_immediate_across_stores(size_t i);
+    bool rule_redundant_pair_immediate_across_stores(size_t i);
 
     // push ix; pop hl; ld bc,#N; add hl,bc; [inc/dec hl]*
     //   → ld hl,#(N-current_sp_ix_delta); add hl,sp

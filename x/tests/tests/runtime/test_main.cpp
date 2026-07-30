@@ -90,6 +90,7 @@ static void require(bool cond, const char* expr, const char* file, int line)
 #define PENDING_TEST TEST
 #include "test_ll.cpp"
 #include "test_double.cpp"
+#include "test_sys.cpp"
 
 // ---------------------------------------------------------------------------
 // main

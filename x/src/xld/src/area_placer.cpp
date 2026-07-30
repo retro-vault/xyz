@@ -67,8 +67,8 @@ namespace xld {
         return std::nullopt;
     }
 
-    static bool ranges_overlap(uint16_t start_a, uint16_t end_a,
-                               uint16_t start_b, uint16_t end_b)
+    static bool ranges_overlap(uint32_t start_a, uint32_t end_a,
+                               uint32_t start_b, uint32_t end_b)
     {
         return start_a <= end_b && end_a >= start_b;
     }
@@ -115,20 +115,30 @@ namespace xld {
         return holes;
     }
 
-    uint16_t area_placer::next_free_address(
-        uint16_t cursor, uint16_t size,
+    uint32_t area_placer::next_free_address(
+        uint32_t cursor, uint32_t size,
         const std::vector<address_range>& holes)
     {
-        if (size == 0) return cursor;
+        constexpr uint32_t address_space_size = 0x10000u;
+        if (size == 0) {
+            if (cursor >= address_space_size)
+                throw placement_error("area placement exceeds 64 KiB address space");
+            return cursor;
+        }
 
         bool changed = true;
         while (changed) {
             changed = false;
-            uint16_t end = cursor + size - 1;
+            if (cursor >= address_space_size
+                || size > address_space_size - cursor) {
+                throw placement_error(
+                    "area placement exceeds 64 KiB address space");
+            }
+            const uint32_t end = cursor + size - 1u;
             for (auto& hole : holes) {
                 // Check if [cursor, end] overlaps [hole.start, hole.end].
                 if (cursor <= hole.end && end >= hole.start) {
-                    cursor = hole.end + 1;
+                    cursor = static_cast<uint32_t>(hole.end) + 1u;
                     changed = true;
                     break;
                 }
@@ -202,7 +212,7 @@ namespace xld {
         }
 
         // Place areas group by group.
-        uint16_t cursor = 0;
+        uint32_t cursor = 0;
 
         for (auto& group : groups) {
             if (group.members.empty()) continue;
@@ -214,7 +224,7 @@ namespace xld {
                         "area base for '" + group.name
                         + "' overlaps previous placement");
                 }
-                cursor = base_it->second;
+                cursor = static_cast<uint32_t>(base_it->second);
             }
 
             // Check the first member to determine area type.
@@ -245,7 +255,7 @@ namespace xld {
 
                 for (auto& [mod, idx] : group.members) {
                     auto& a = mod->area_by_index(idx);
-                    a.set_placed_addr(cursor);
+                    a.set_placed_addr(static_cast<uint16_t>(cursor));
                 }
 
                 cursor += max_size;
@@ -254,12 +264,17 @@ namespace xld {
                 for (auto& [mod, idx] : group.members) {
                     auto& a = mod->area_by_index(idx);
                     if (a.size() == 0) {
-                        a.set_placed_addr(cursor);
+                        if (cursor >= 0x10000u) {
+                            throw placement_error(
+                                "area '" + a.name()
+                                + "' begins outside 64 KiB address space");
+                        }
+                        a.set_placed_addr(static_cast<uint16_t>(cursor));
                         continue;
                     }
 
                     cursor = next_free_address(cursor, a.size(), placement_holes);
-                    a.set_placed_addr(cursor);
+                    a.set_placed_addr(static_cast<uint16_t>(cursor));
                     cursor += a.size();
                 }
             }
@@ -279,8 +294,13 @@ namespace xld {
                 if (!a.placed_addr().has_value() || a.size() == 0)
                     continue;
 
-                const uint16_t start = a.placed_addr().value();
-                const uint16_t end = static_cast<uint16_t>(start + a.size() - 1);
+                const uint32_t start = a.placed_addr().value();
+                const uint32_t end = start + a.size() - 1u;
+                if (end >= 0x10000u) {
+                    throw placement_error(
+                        "area '" + a.name()
+                        + "' exceeds 64 KiB address space");
+                }
 
                 for (const auto& hole : placement_holes) {
                     if (ranges_overlap(start, end, hole.start, hole.end)) {
@@ -292,9 +312,9 @@ namespace xld {
 
                 for (const auto& placed : placed_areas) {
                     const auto& other = *placed.area_ptr;
-                    const uint16_t other_start = other.placed_addr().value();
-                    const uint16_t other_end = static_cast<uint16_t>(
-                        other_start + other.size() - 1);
+                    const uint32_t other_start = other.placed_addr().value();
+                    const uint32_t other_end =
+                        other_start + other.size() - 1u;
 
                     const bool same_overlay_group =
                         a.is_ovr() && other.is_ovr() && a.name() == other.name();
