@@ -649,6 +649,259 @@ std::string compact_unused_temp_frames(const std::string &asm_text,
     return result;
 }
 
+// Late optimization can leave a canonical temporary allocation entirely dead
+// after backend frame-omission has already made its decision.  Remove the
+// allocation and IX save/setup/restore only when the emitted body proves it
+// independent of IX, SP, and the allocation's HL result: no indexed
+// references, explicit stack traffic, alternate return, or second epilogue is
+// accepted.  The allocation must exactly agree with compiler frame metadata.
+std::string remove_unused_ix_frames(const std::string &asm_text) {
+    std::vector<asm_line> lines;
+    std::istringstream input(asm_text);
+    std::string raw;
+    while (std::getline(input, raw))
+        lines.push_back(asm_line::parse(raw));
+
+    auto normalized_operands = [](std::string text) {
+        text = lowercase_ascii(std::move(text));
+        text.erase(std::remove_if(text.begin(), text.end(),
+                                  [](unsigned char c) {
+                                      return std::isspace(c) != 0;
+                                  }),
+                   text.end());
+        return text;
+    };
+
+    auto parse_nonnegative_field = [](const std::string &comment,
+                                      const char *key,
+                                      int &value) {
+        const std::string lower = lowercase_ascii(comment);
+        size_t pos = lower.find(key);
+        if (pos == std::string::npos)
+            return false;
+        pos += std::strlen(key);
+        if (pos >= lower.size() ||
+            !std::isdigit(static_cast<unsigned char>(lower[pos]))) {
+            return false;
+        }
+        size_t end = pos;
+        while (end < lower.size() &&
+               std::isdigit(static_cast<unsigned char>(lower[end]))) {
+            ++end;
+        }
+        try {
+            value = std::stoi(lower.substr(pos, end - pos));
+        } catch (...) {
+            return false;
+        }
+        return true;
+    };
+
+    auto matches = [&](size_t index, const char *mnemonic,
+                       const char *operands) {
+        return index < lines.size() &&
+               lines[index].label.empty() &&
+               lowercase_ascii(lines[index].mnemonic) == mnemonic &&
+               normalized_operands(lines[index].operands) == operands;
+    };
+
+    auto matches_frame_allocation = [&](size_t index, int frame_bytes) {
+        if (index >= lines.size() || !lines[index].label.empty() ||
+            lowercase_ascii(lines[index].mnemonic) != "ld") {
+            return false;
+        }
+        const std::string operands =
+            normalized_operands(lines[index].operands);
+        constexpr const char *prefix = "hl,";
+        if (operands.rfind(prefix, 0) != 0)
+            return false;
+        std::string immediate = operands.substr(std::strlen(prefix));
+        if (!immediate.empty() && immediate.front() == '#')
+            immediate.erase(immediate.begin());
+        if (immediate.empty())
+            return false;
+        char *end = nullptr;
+        const long value = std::strtol(immediate.c_str(), &end, 0);
+        return end != immediate.c_str() && *end == '\0' &&
+               value == -frame_bytes;
+    };
+
+    auto allocation_flags_dead_before_observation =
+        [&](size_t start, size_t end) {
+            for (size_t i = start; i < end; ++i) {
+                const std::string mnemonic =
+                    lowercase_ascii(lines[i].mnemonic);
+                if (mnemonic.empty())
+                    continue;
+
+                // The canonical `add hl,sp` allocation changes C/H/N only.
+                // These instructions overwrite that complete affected set
+                // without consuming it.
+                if (mnemonic == "sub" || mnemonic == "and" ||
+                    mnemonic == "or" || mnemonic == "xor" ||
+                    mnemonic == "cp" || mnemonic == "scf" ||
+                    mnemonic == "sla" || mnemonic == "sra" ||
+                    mnemonic == "srl" || mnemonic == "sll" ||
+                    mnemonic == "rlc" || mnemonic == "rrc" ||
+                    mnemonic == "rlca" || mnemonic == "rrca") {
+                    return true;
+                }
+                if (mnemonic == "add") {
+                    const std::string operands =
+                        normalized_operands(lines[i].operands);
+                    if (operands == "a" ||
+                        operands.rfind("a,", 0) == 0) {
+                        return true;
+                    }
+                }
+
+                // Stack-allocation flags are ABI-dead at an ordinary return,
+                // but may not cross arbitrary control flow, calls, DAA, or an
+                // instruction that consumes carry.
+                if (mnemonic == "ret")
+                    return true;
+                if (mnemonic == "call" || mnemonic == "rst" ||
+                    mnemonic == "jp" || mnemonic == "jr" ||
+                    mnemonic == "djnz" || mnemonic == "reti" ||
+                    mnemonic == "retn" || mnemonic == "daa" ||
+                    mnemonic == "adc" || mnemonic == "sbc" ||
+                    mnemonic == "rl" || mnemonic == "rr" ||
+                    mnemonic == "rla" || mnemonic == "rra" ||
+                    mnemonic == "ccf") {
+                    return false;
+                }
+            }
+            return false;
+        };
+
+    std::vector<bool> erase(lines.size(), false);
+    bool changed = false;
+    for (size_t comment = 0; comment < lines.size(); ++comment) {
+        const std::string lower_comment =
+            lowercase_ascii(lines[comment].comment);
+        int locals = -1;
+        int temp_frame = -1;
+        if (lower_comment.find("prologue:") == std::string::npos ||
+            !parse_nonnegative_field(lines[comment].comment, "locals=",
+                                     locals) ||
+            !parse_nonnegative_field(lines[comment].comment, "temp_frame=",
+                                     temp_frame) ||
+            locals != 0) {
+            continue;
+        }
+
+        const size_t push_ix = comment + 1;
+        const size_t load_ix = comment + 2;
+        const size_t add_sp = comment + 3;
+        if (!matches(push_ix, "push", "ix") ||
+            !(matches(load_ix, "ld", "ix,#0") ||
+              matches(load_ix, "ld", "ix,0")) ||
+            !matches(add_sp, "add", "ix,sp")) {
+            continue;
+        }
+
+        size_t body_start = add_sp + 1;
+        size_t alloc_load = lines.size();
+        size_t alloc_add = lines.size();
+        size_t alloc_store = lines.size();
+        if (temp_frame > 0) {
+            alloc_load = body_start;
+            alloc_add = body_start + 1;
+            alloc_store = body_start + 2;
+            if (!matches_frame_allocation(alloc_load, temp_frame) ||
+                !matches(alloc_add, "add", "hl,sp") ||
+                !matches(alloc_store, "ld", "sp,hl")) {
+                continue;
+            }
+            body_start += 3;
+        }
+
+        size_t fn_end = lines.size();
+        for (size_t i = body_start; i < lines.size(); ++i) {
+            if (any_section_directive(lines[i])) {
+                fn_end = i;
+                break;
+            }
+        }
+
+        size_t restore_sp = lines.size();
+        size_t pop_ix = lines.size();
+        size_t return_index = lines.size();
+        bool safe = true;
+        if (temp_frame > 0 &&
+            !allocation_flags_dead_before_observation(body_start, fn_end)) {
+            safe = false;
+        }
+        for (size_t i = body_start; i < fn_end; ++i) {
+            if (i + 2 < fn_end && matches(i, "ld", "sp,ix") &&
+                matches(i + 1, "pop", "ix") &&
+                matches(i + 2, "ret", "")) {
+                if (restore_sp != lines.size()) {
+                    safe = false;
+                    break;
+                }
+                restore_sp = i;
+                pop_ix = i + 1;
+                return_index = i + 2;
+                i += 2;
+                continue;
+            }
+
+            const std::string mnemonic = lowercase_ascii(lines[i].mnemonic);
+            if (operand_has_token(lines[i].operands, "ix") ||
+                operand_has_token(lines[i].operands, "sp") ||
+                (temp_frame > 0 &&
+                 (operand_has_token(lines[i].operands, "hl") ||
+                  operand_has_token(lines[i].operands, "h") ||
+                  operand_has_token(lines[i].operands, "l"))) ||
+                mnemonic == "push" || mnemonic == "pop" ||
+                mnemonic == "ret" || mnemonic == "reti" ||
+                mnemonic == "retn") {
+                safe = false;
+                break;
+            }
+        }
+        if (!safe || restore_sp == lines.size() ||
+            return_index == lines.size()) {
+            continue;
+        }
+
+        erase[push_ix] = true;
+        erase[load_ix] = true;
+        erase[add_sp] = true;
+        if (temp_frame > 0) {
+            erase[alloc_load] = true;
+            erase[alloc_add] = true;
+            erase[alloc_store] = true;
+        }
+        erase[restore_sp] = true;
+        erase[pop_ix] = true;
+        if (temp_frame > 0) {
+            std::string lower = lowercase_ascii(lines[comment].comment);
+            size_t value_begin = lower.find("temp_frame=") +
+                                 std::strlen("temp_frame=");
+            size_t value_end = value_begin;
+            while (value_end < lines[comment].comment.size() &&
+                   std::isdigit(static_cast<unsigned char>(
+                       lines[comment].comment[value_end]))) {
+                ++value_end;
+            }
+            lines[comment].comment.replace(value_begin,
+                                           value_end - value_begin, "0");
+        }
+        changed = true;
+    }
+
+    if (!changed)
+        return asm_text;
+
+    std::string result;
+    for (size_t i = 0; i < lines.size(); ++i)
+        if (!erase[i])
+            result += lines[i].to_string();
+    return result;
+}
+
 bool unconditional_tail_instruction(const asm_line &line) {
     if (!line.label.empty() || line.is_comment || line.mnemonic.empty() ||
         !line.comment.empty()) {
@@ -1146,6 +1399,8 @@ std::string optimize_z80_assembly(const std::string &asm_text,
               asm_text, uses_speed_biased_rules(level), pass_budget, size_bias);
     if (size_bias || uses_speed_biased_rules(level))
         optimized = compact_unused_temp_frames(optimized, size_bias);
+    if (uses_speed_biased_rules(level))
+        optimized = remove_unused_ix_frames(optimized);
     if (level == optimization_level::os) {
         for (int round = 0; round < 2; ++round) {
             const std::string before = optimized;

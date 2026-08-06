@@ -3943,7 +3943,7 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
     struct byte_step {
         operand value;
         operand target;
-        uint8_t polynomial = 0;
+        operand polynomial;
         size_t last_index = 0;
         std::string true_label;
         std::string false_label;
@@ -3964,10 +3964,13 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
                 }
             }
             return false;
-        };
+    };
 
     auto match_step = [&](size_t start, byte_step &step) {
-        if (start + 10 >= fn.icodes.size())
+        // The join may feed a byte store/copy, or copy propagation may feed
+        // the selected temporary straight into RETURN.  The latter compact
+        // form has ten icodes including the return.
+        if (start + 9 >= fn.icodes.size())
             return false;
 
         const icode &band = fn.icodes[start];
@@ -4050,18 +4053,22 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
         const operand *polynomial = nullptr;
         if (true_xor.left.is_temp() &&
             true_arm.value.is_temp() &&
-            true_xor.left.temp_id == true_arm.value.temp_id &&
-            true_xor.right.kind == operand_kind::INT_CONST) {
+            true_xor.left.temp_id == true_arm.value.temp_id) {
             polynomial = &true_xor.right;
         } else if (true_xor.right.is_temp() &&
                    true_arm.value.is_temp() &&
-                   true_xor.right.temp_id == true_arm.value.temp_id &&
-                   true_xor.left.kind == operand_kind::INT_CONST) {
+                   true_xor.right.temp_id == true_arm.value.temp_id) {
             polynomial = &true_xor.left;
         }
-        if (!polynomial || polynomial->ival < 0 ||
-            polynomial->ival > 0xff || pos >= fn.icodes.size())
+        const bool byte_polynomial = polynomial &&
+            ((polynomial->kind == operand_kind::INT_CONST &&
+              polynomial->ival >= 0 && polynomial->ival <= 0xff) ||
+             (polynomial->type && polynomial->type->is_integer() &&
+              op_size(*polynomial) == 1 &&
+              !polynomial->type->is_volatile));
+        if (!byte_polynomial || pos >= fn.icodes.size()) {
             return false;
+        }
 
         const icode &true_goto = fn.icodes[pos++];
         if (true_goto.op != icode_op::GOTO || pos >= fn.icodes.size())
@@ -4074,14 +4081,20 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
         arm_result false_arm;
         if (!parse_shift_arm(pos, false_arm) || pos >= fn.icodes.size())
             return false;
-        const icode &false_assign = fn.icodes[pos++];
-        if (false_assign.op != icode_op::ASSIGN ||
-            !false_assign.result.is_temp() ||
-            false_assign.result.temp_id != true_xor.result.temp_id ||
-            !false_assign.left.is_temp() ||
-            !false_arm.value.is_temp() ||
-            false_assign.left.temp_id != false_arm.value.temp_id ||
-            !false_assign.right.is_none() || pos >= fn.icodes.size()) {
+        if (fn.icodes[pos].op == icode_op::ASSIGN) {
+            const icode &false_assign = fn.icodes[pos++];
+            if (!false_assign.result.is_temp() ||
+                false_assign.result.temp_id != true_xor.result.temp_id ||
+                !false_assign.left.is_temp() ||
+                !false_arm.value.is_temp() ||
+                false_assign.left.temp_id != false_arm.value.temp_id ||
+                !false_assign.right.is_none() || pos >= fn.icodes.size()) {
+                return false;
+            }
+        } else if (!false_arm.value.is_temp() ||
+                   false_arm.value.temp_id != true_xor.result.temp_id) {
+            // Copy propagation may assign the false shift directly to the
+            // join value, eliminating the otherwise canonical phi copy.
             return false;
         }
 
@@ -4090,28 +4103,55 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
             join_label.label_name != true_goto.label_name ||
             pos >= fn.icodes.size())
             return false;
-        const icode &store = fn.icodes[pos++];
-        if ((store.op != icode_op::ASSIGN &&
-             store.op != icode_op::CAST) ||
-            !store.left.is_temp() ||
-            store.left.temp_id != true_xor.result.temp_id ||
-            !store.right.is_none() ||
-            !operands_equivalent(store.result, value))
-            return false;
+        operand target;
+        bool terminal_return = false;
+        const icode &consumer = fn.icodes[pos];
+        if (consumer.op == icode_op::RETURN) {
+            if (!consumer.left.is_temp() ||
+                consumer.left.temp_id != true_xor.result.temp_id ||
+                !consumer.left.type || op_size(consumer.left) != 1 ||
+                consumer.left.type->is_volatile) {
+                return false;
+            }
+            // Do not consume RETURN.  Materialize its already allocated
+            // input home, then let ordinary return emission handle the ABI
+            // move and epilogue on the next iteration.
+            target = consumer.left;
+            terminal_return = true;
+        } else {
+            const icode &store = fn.icodes[pos++];
+            if ((store.op != icode_op::ASSIGN &&
+                 store.op != icode_op::CAST) ||
+                !store.left.is_temp() ||
+                store.left.temp_id != true_xor.result.temp_id ||
+                !store.right.is_none() ||
+                !store.result.type || op_size(store.result) != 1 ||
+                store.result.type->is_volatile) {
+                return false;
+            }
+            target = store.result;
+        }
 
         const size_t last = pos - 1;
         if ((value.type && value.type->is_volatile) ||
-            (store.result.type && store.result.type->is_volatile) ||
+            (target.type && target.type->is_volatile) ||
             temp_value_used_after(fn, last + 1, band.result.temp_id) ||
-            temp_value_used_after(fn, last + 1,
+            temp_value_used_after(fn,
+                                  last + (terminal_return ? 2 : 1),
                                   true_xor.result.temp_id))
             return false;
         for (int temp : true_arm.temps) {
-            if (temp_value_used_after(fn, last + 1, temp))
+            const size_t after = last +
+                ((terminal_return &&
+                  temp == true_xor.result.temp_id) ? 2 : 1);
+            if (temp_value_used_after(fn, after, temp))
                 return false;
         }
         for (int temp : false_arm.temps) {
-            if (temp_value_used_after(fn, last + 1, temp))
+            const size_t after = last +
+                ((terminal_return &&
+                  temp == true_xor.result.temp_id) ? 2 : 1);
+            if (temp_value_used_after(fn, after, temp))
                 return false;
         }
 
@@ -4121,9 +4161,8 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
             return false;
 
         step.value = value;
-        step.target = store.result;
-        step.polynomial =
-            static_cast<uint8_t>(polynomial->ival & 0xff);
+        step.target = target;
+        step.polynomial = *polynomial;
         step.last_index = last;
         step.true_label = branch.true_lbl;
         step.false_label = branch.false_lbl;
@@ -4149,24 +4188,147 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
         next = candidate.last_index + 1;
     }
 
+    struct xor_source {
+        enum class kind { immediate, reg, ix } source_kind;
+        int value = 0;
+        char reg = 0;
+    };
+    auto register_for_home = [](temp_home home, int byte_offset) -> char {
+        switch (home) {
+        case temp_home::main_b:
+            return byte_offset == 0 ? 'b' : 0;
+        case temp_home::main_c:
+            return byte_offset == 0 ? 'c' : 0;
+        case temp_home::main_d:
+            return byte_offset == 0 ? 'd' : 0;
+        case temp_home::main_e:
+            return byte_offset == 0 ? 'e' : 0;
+        case temp_home::main_bc:
+            return byte_offset == 0 ? 'c' :
+                   byte_offset == 1 ? 'b' : 0;
+        case temp_home::main_de:
+            return byte_offset == 0 ? 'e' :
+                   byte_offset == 1 ? 'd' : 0;
+        case temp_home::main_hl:
+        case temp_home::arg_hl:
+            return byte_offset == 0 ? 'l' :
+                   byte_offset == 1 ? 'h' : 0;
+        case temp_home::arg_l:
+            return byte_offset == 0 ? 'l' : 0;
+        case temp_home::arg_de:
+            return byte_offset == 0 ? 'e' :
+                   byte_offset == 1 ? 'd' : 0;
+        default:
+            return 0;
+        }
+    };
+    auto classify_xor_source = [&](const operand &op,
+                                   xor_source &source) -> bool {
+        if (op.kind == operand_kind::INT_CONST) {
+            source.source_kind = xor_source::kind::immediate;
+            source.value = static_cast<int>(op.ival & 0xff);
+            return true;
+        }
+
+        temp_home home = temp_home::stack;
+        bool have_home = false;
+        if (op.is_temp()) {
+            auto it = temp_regs_.find(op.temp_id);
+            if (it != temp_regs_.end()) {
+                home = it->second;
+                have_home = true;
+            }
+        } else if (op.is_symbol() && !op.is_global) {
+            auto reg = symbol_regs_.find(symbol_reg_key(op));
+            if (reg != symbol_regs_.end()) {
+                home = reg->second;
+                have_home = true;
+            } else {
+                auto incoming = incoming_symbol_homes_.find(op.stack_offset);
+                if (incoming != incoming_symbol_homes_.end()) {
+                    home = incoming->second;
+                    have_home = true;
+                }
+            }
+        }
+
+        if (have_home) {
+            const char reg = register_for_home(home, op.byte_offset);
+            if (reg != 0) {
+                source.source_kind = xor_source::kind::reg;
+                source.reg = reg;
+                return true;
+            }
+            if (home != temp_home::stack)
+                return false;
+        }
+
+        if ((op.is_temp() || (op.is_symbol() && !op.is_global)) &&
+            fits_ix_disp(ix_offset_of(op))) {
+            source.source_kind = xor_source::kind::ix;
+            source.value = ix_offset_of(op);
+            return true;
+        }
+        return false;
+    };
+
+    std::vector<xor_source> xor_sources(steps.size());
+    for (size_t step_index = 0; step_index < steps.size(); ++step_index) {
+        if (!classify_xor_source(steps[step_index].polynomial,
+                                 xor_sources[step_index])) {
+            return false;
+        }
+    }
+
+    // A rematerialized HL value or TLS lookup may overwrite a polynomial
+    // register before the first XOR.  Ordinary byte/register/frame loads do
+    // not, and subsequent steps already keep their value in A.
+    if (!xor_sources.empty() &&
+        xor_sources.front().source_kind == xor_source::kind::reg) {
+        const char poly_reg = xor_sources.front().reg;
+        if (first.value.kind == operand_kind::SYMBOL &&
+            first.value.is_global && first.value.is_tls) {
+            return false;
+        }
+        if ((poly_reg == 'h' || poly_reg == 'l') &&
+            first.value.is_temp()) {
+            auto value_home = temp_regs_.find(first.value.temp_id);
+            if (value_home != temp_regs_.end() &&
+                value_home->second == temp_home::remat_hl) {
+                return false;
+            }
+        }
+    }
+
     cur_ic_index_ = idx;
     if (debug_)
         debug_->emit_location(fn.icodes[idx].line);
     invalidate_pair_cache();
     invalidate_a_cache();
     load_a(first.value);
-    for (const byte_step &step : steps) {
+    for (size_t step_index = 0; step_index < steps.size(); ++step_index) {
+        const xor_source &source = xor_sources[step_index];
         const std::string no_xor =
             fresh_local_label("__shiftxor8_done");
         emit_line("add\ta, a");
         emit_line("jr\tnc, %s", no_xor.c_str());
-        if (step.polynomial != 0)
-            emit_line("xor\t%s", asm_.imm(step.polynomial).c_str());
+        if (source.source_kind == xor_source::kind::immediate) {
+            if (source.value != 0)
+                emit_line("xor\t%s", asm_.imm(source.value).c_str());
+        } else if (source.source_kind == xor_source::kind::reg) {
+            emit_line("xor\ta, %c", source.reg);
+        } else {
+            emit_line("xor\ta, %s", asm_.ix_rel(source.value).c_str());
+        }
         emit_label(no_xor, false);
     }
+    // This is a synthetic definition at the matched diamond's join, not the
+    // BAND at which the matcher started.  Dead-store analysis must therefore
+    // scan from the join; scanning from idx sees the original arm definitions
+    // as later overwrites and can incorrectly discard this materialization.
+    cur_ic_index_ = steps.back().last_index;
     store_a(first.target);
     invalidate_pair_cache();
-    invalidate_a_cache();
     idx = steps.back().last_index;
     cur_ic_index_ = idx;
     return true;

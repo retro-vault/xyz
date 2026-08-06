@@ -184,6 +184,187 @@ if ! grep -Eq 'ld[[:space:]]+b, ?h' "$TMPDIR/bc_live_loop.out.s" ||
     exit 1
 fi
 
+cat >"$TMPDIR/unused_ix_frame.s" <<'ASM'
+	.area	_CODE
+_frameless_leaf:
+	; sdcccall(1) prologue: frameless_leaf (locals=0, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	inc	a
+__frameless_leaf_end:
+	; epilogue: frameless_leaf
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_frame_still_used:
+	; sdcccall(1) prologue: frame_still_used (locals=0, temp_frame=0, stack_params=1)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	a, 4(ix)
+__frame_still_used_end:
+	; epilogue: frame_still_used
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_dead_allocated_frame:
+	; sdcccall(1) prologue: dead_allocated_frame (locals=0, temp_frame=25, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-25
+	add	hl, sp
+	ld	sp, hl
+	add	a, a
+__dead_allocated_frame_end:
+	; epilogue: dead_allocated_frame
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_mismatched_allocated_frame:
+	; sdcccall(1) prologue: mismatched_allocated_frame (locals=0, temp_frame=8, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-7
+	add	hl, sp
+	ld	sp, hl
+	add	a, a
+__mismatched_allocated_frame_end:
+	; epilogue: mismatched_allocated_frame
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_allocated_frame_hl_live:
+	; sdcccall(1) prologue: allocated_frame_hl_live (locals=0, temp_frame=8, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	ld	a, l
+__allocated_frame_hl_live_end:
+	; epilogue: allocated_frame_hl_live
+	ld	sp, ix
+	pop	ix
+	ret
+	.area	_CODE
+_allocated_frame_carry_live:
+	; sdcccall(1) prologue: allocated_frame_carry_live (locals=0, temp_frame=8, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-8
+	add	hl, sp
+	ld	sp, hl
+	jr	c, __allocated_frame_carry_seen
+	xor	a
+__allocated_frame_carry_seen:
+__allocated_frame_carry_live_end:
+	; epilogue: allocated_frame_carry_live
+	ld	sp, ix
+	pop	ix
+	ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/unused_ix_frame.s" \
+    -o "$TMPDIR/unused_ix_frame.out.s"
+if awk '
+    /^_frameless_leaf:/ { in_fn=1; next }
+    /^_frame_still_used:/ { in_fn=0 }
+    in_fn && /(push[[:space:]]+ix|pop[[:space:]]+ix|ld[[:space:]]+ix|ld[[:space:]]+sp,[[:space:]]*ix|add[[:space:]]+ix,[[:space:]]*sp)/ { bad=1 }
+    END { exit bad ? 0 : 1 }
+' "$TMPDIR/unused_ix_frame.out.s"; then
+    echo "xopt smoke: unused canonical IX frame was not removed" >&2
+    exit 1
+fi
+if ! awk '
+    /^_frame_still_used:/ { in_fn=1; next }
+    in_fn && /push[[:space:]]+ix/ { push_ix=1 }
+    in_fn && /ld[[:space:]]+a, ?4\(ix\)/ { load_ix=1 }
+    END { exit push_ix && load_ix ? 0 : 1 }
+' "$TMPDIR/unused_ix_frame.out.s"; then
+    echo "xopt smoke: live IX parameter frame was removed" >&2
+    exit 1
+fi
+if awk '
+    /^_dead_allocated_frame:/ { in_fn=1; next }
+    /^_mismatched_allocated_frame:/ { in_fn=0 }
+    in_fn && /(push[[:space:]]+ix|pop[[:space:]]+ix|ld[[:space:]]+(ix|sp)|add[[:space:]]+(ix|hl),[[:space:]]*sp)/ { bad=1 }
+    END { exit bad ? 0 : 1 }
+' "$TMPDIR/unused_ix_frame.out.s"; then
+    echo "xopt smoke: exact dead temporary allocation was not removed" >&2
+    exit 1
+fi
+for fn in mismatched_allocated_frame allocated_frame_hl_live allocated_frame_carry_live; do
+    if ! awk -v fn="_$fn:" '
+        $0 == fn { in_fn=1; next }
+        in_fn && /^_[A-Za-z0-9_]+:/ { in_fn=0 }
+        in_fn && /push[[:space:]]+ix/ { kept=1 }
+        END { exit kept ? 0 : 1 }
+    ' "$TMPDIR/unused_ix_frame.out.s"; then
+        echo "xopt smoke: unsafe allocated frame $fn was removed" >&2
+        exit 1
+    fi
+done
+
+cat >"$TMPDIR/add_one_return_flags.s" <<'ASM'
+	.area	_CODE
+_add_one_flags_dead:
+	; sdcccall(1) prologue: add_one_flags_dead (locals=0, temp_frame=0, stack_params=0)
+	add	a, #1
+	ld	(_sink), a
+	; epilogue: add_one_flags_dead
+	ret
+	.area	_CODE
+_add_one_carry_live:
+	; sdcccall(1) prologue: add_one_carry_live (locals=0, temp_frame=0, stack_params=0)
+	add	a, #1
+	jr	c, _carry_seen
+	ret
+_carry_seen:
+	ret
+	.area	_CODE
+_add_one_asm_carry_result:
+	add	a, #1
+	ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/add_one_return_flags.s" \
+    -o "$TMPDIR/add_one_return_flags.out.s"
+if ! awk '
+    /^_add_one_flags_dead:/ { in_fn=1; next }
+    /^_add_one_carry_live:/ { in_fn=0 }
+    in_fn && /inc[[:space:]]+a/ { found=1 }
+    END { exit found ? 0 : 1 }
+' "$TMPDIR/add_one_return_flags.out.s"; then
+    echo "xopt smoke: add-one with return-dead flags did not use INC A" >&2
+    exit 1
+fi
+if ! awk '
+    /^_add_one_carry_live:/ { in_fn=1; next }
+    /^_add_one_asm_carry_result:/ { in_fn=0 }
+    in_fn && /add[[:space:]]+a, ?#1/ { found=1 }
+    END { exit found ? 0 : 1 }
+' "$TMPDIR/add_one_return_flags.out.s"; then
+    echo "xopt smoke: add-one lost carry consumed by a branch" >&2
+    exit 1
+fi
+if ! awk '
+    /^_add_one_asm_carry_result:/ { in_fn=1; next }
+    in_fn && /add[[:space:]]+a, ?#1/ { found=1 }
+    END { exit found ? 0 : 1 }
+' "$TMPDIR/add_one_return_flags.out.s"; then
+    echo "xopt smoke: add-one changed an assembly carry result" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/equ_case.s" <<'ASM'
 XLO     .equ    -6
 THI     .equ    -1
@@ -759,6 +940,54 @@ ASM
 grep -q 'xor	a, -13(ix)' "$TMPDIR/truncated_byte_xor.out.s"
 if grep -Eq 'ld[[:space:]]+b,[[:space:]]*h|xor[[:space:]]+a,[[:space:]]*b|xor[[:space:]]+a,[[:space:]]*c' "$TMPDIR/truncated_byte_xor.out.s"; then
     echo "xopt smoke: truncated promoted byte xor was not collapsed" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/srl_a_const_shift_flags.s" <<'ASM'
+	.area	_CODE
+_srl_flags_dead_after_spill:
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	srl	a
+	ld	-1(ix), a
+	xor	a
+	ret
+	.area	_CODE
+_srl_carry_live_after_spill:
+	srl	a
+	srl	a
+	srl	a
+	ld	(_sink), a
+	jr	c, _srl_carry_seen
+	ret
+_srl_carry_seen:
+	ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/srl_a_const_shift_flags.s" \
+    -o "$TMPDIR/srl_a_const_shift_flags.out.s"
+if ! awk '
+    /^_srl_flags_dead_after_spill:/ { in_fn=1; next }
+    /^_srl_carry_live_after_spill:/ { in_fn=0 }
+    in_fn && /rlca/ { rotate=1 }
+    in_fn && /and[[:space:]]+#1/ { mask=1 }
+    in_fn && /srl[[:space:]]+a/ { stale=1 }
+    END { exit rotate && mask && !stale ? 0 : 1 }
+' "$TMPDIR/srl_a_const_shift_flags.out.s"; then
+    echo "xopt smoke: constant SRL chain did not cross a flag-transparent spill" >&2
+    exit 1
+fi
+if [[ "$(awk '
+    /^_srl_carry_live_after_spill:/ { in_fn=1; next }
+    in_fn && /^_srl_carry_seen:/ { in_fn=0 }
+    in_fn && /srl[[:space:]]+a/ { ++count }
+    END { print count + 0 }
+' "$TMPDIR/srl_a_const_shift_flags.out.s")" != "3" ]]; then
+    echo "xopt smoke: carry-live constant SRL chain was rewritten" >&2
     exit 1
 fi
 

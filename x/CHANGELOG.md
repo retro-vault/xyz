@@ -6,6 +6,44 @@ Release status:
 
 ## Unreleased
 
+- Added source-independent, proof-bounded Z80 improvements to the validated
+  `-Of`/`-O3` pipeline without reintroducing whole-function benchmark
+  selectors. Immediately truncated add/sub/bitwise/negate/complement/shift
+  expressions now stay byte-wide when their low-byte inputs and adjacent
+  cast chain prove that equivalent; adjacent volatile reads remain in place.
+  Distinct one-use widening copies are bypassed for shifts so carry-based
+  accumulator fusions remain visible, while other byte copies are retained
+  when they shorten allocation live ranges. Unsigned-byte right shifts now
+  take the same path only when the pre-promotion source proves zero extension;
+  signed bytes retain arithmetic word shifting. The branchless byte identity
+  `(x << 1) ^ ((0 - (x >> 7)) & p)` is canonicalized by typed dataflow into a
+  carry-controlled shift/XOR diamond, with one-definition/use, volatility,
+  address-escape, and input-liveness guards. Constant `SRL A` chains may pass
+  flag-transparent spills before rotate/mask extraction only when complete
+  flag deadness is proven.
+  Late assembly cleanup removes canonical IX frames after either frame
+  compaction proves zero storage or an exact compiler-described temporary
+  allocation is dead. Nonzero allocation removal additionally proves the
+  emitted body has no IX, SP, stack, allocation-result HL, or allocation-flag
+  dependency. In compiler-identified C functions,
+  return-dead `add a,#1` uses `inc a`, while carry-consuming paths and
+  unannotated assembly retain `add`. The existing constant block-fill
+  recognizer now accepts non-escaping word counters that remain in stack
+  slots, removes uniquely dead address setup, recompacts the local frame, and
+  emits a frameless `LDIR` fill. Selection uses operation width, adjacency,
+  definition/use counts, qualifiers, natural-loop structure, lifetime, and
+  actual register/stack references--never benchmark identity, source paths,
+  or symbol names. Across the frozen 116-source non-benchmark integer
+  development set, every changed translation unit improves: ABI0 saves 414
+  bytes and 2,261 static cycles, while ABI1 saves 421 bytes and 2,305 static
+  cycles.
+  On the untouched 20-program bare-metal holdout, all XCC lanes still pass
+  with correct checksums; `-Of`/`-O3` totals improve from 18,963 to 17,391
+  payload bytes and from 7,237,623 to 6,578,283 measured cycles. The untouched
+  40-program portable holdout remains 40/40 and improves from 28,794 to
+  26,834 payload bytes and from 2,974,856 to 2,827,190 cycles; all 50 numeric
+  lanes pass. All four XCC lanes also remain 23/23 on the full-program suite;
+  the default-ABI `-Of` aggregate saves 362 linked bytes and 7,977,133 cycles.
 - Completed the final XCC optimization audit and retracted the earlier
   tuned-corpus leaderboard. The exact whole-function
   `try_emit_sdcc_style_helper` selector and pending fixed-global

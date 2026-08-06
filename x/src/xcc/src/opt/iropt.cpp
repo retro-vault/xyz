@@ -3850,8 +3850,15 @@ public:
 
             const icode &cmp = fn.icodes[header_first];
             const icode &ifx = fn.icodes[header_first + 1];
+            const bool temp_counter = cmp.left.is_temp();
+            const bool stack_counter =
+                cmp.left.is_symbol() && !cmp.left.is_global &&
+                !cmp.left.is_param && cmp.left.type &&
+                cmp.left.type->is_integer() &&
+                cmp.left.type->size() == 2 &&
+                !cmp.left.type->is_volatile;
             if (cmp.op != icode_op::LT || !cmp.result.is_temp() ||
-                !cmp.left.is_temp() ||
+                (!temp_counter && !stack_counter) ||
                 cmp.right.kind != operand_kind::INT_CONST ||
                 cmp.right.ival < 2 || cmp.right.ival > 65535 ||
                 ifx.op != icode_op::IFX || !ifx.left.is_temp() ||
@@ -3904,9 +3911,9 @@ public:
                 continue;
             }
 
-            const int counter_temp = cmp.left.temp_id;
-            const int pointer_temp = store.result.temp_id;
-            if (counter_temp == pointer_temp)
+            const operand counter = cmp.left;
+            const operand pointer = store.result;
+            if (same_value_operand(counter, pointer))
                 continue;
 
             struct update_shape {
@@ -3914,13 +3921,13 @@ public:
                 size_t commit = static_cast<size_t>(-1);
                 int next_temp = -1;
             };
-            auto find_unit_update = [&](int temp_id)
+            auto find_unit_update = [&](const operand &state)
                 -> std::optional<update_shape> {
                 update_shape shape;
                 for (size_t i = latch.begin; i < latch.end; ++i) {
                     const icode &ic = fn.icodes[i];
-                    if (ic.op != icode_op::ADD || !ic.result.is_temp() ||
-                        !ic.left.is_temp() || ic.left.temp_id != temp_id ||
+                    if (ic.op != icode_op::ADD ||
+                        !same_value_operand(ic.left, state) ||
                         ic.right.kind != operand_kind::INT_CONST ||
                         ic.right.ival != 1) {
                         continue;
@@ -3928,21 +3935,22 @@ public:
                     if (shape.add != static_cast<size_t>(-1))
                         return std::nullopt;
                     shape.add = i;
-                    if (ic.result.temp_id == temp_id) {
+                    if (same_value_operand(ic.result, state)) {
                         shape.commit = i;
-                    } else {
+                    } else if (state.is_temp() && ic.result.is_temp()) {
                         shape.next_temp = ic.result.temp_id;
                         for (size_t j = i + 1; j < latch.end; ++j) {
                             const icode &commit = fn.icodes[j];
                             if (commit.op == icode_op::ASSIGN &&
-                                commit.result.is_temp() &&
-                                commit.result.temp_id == temp_id &&
+                                same_value_operand(commit.result, state) &&
                                 commit.left.is_temp() &&
                                 commit.left.temp_id == shape.next_temp) {
                                 shape.commit = j;
                                 break;
                             }
                         }
+                    } else {
+                        continue;
                     }
                 }
                 if (shape.add == static_cast<size_t>(-1) ||
@@ -3952,8 +3960,8 @@ public:
                 return shape;
             };
 
-            auto counter_update = find_unit_update(counter_temp);
-            auto pointer_update = find_unit_update(pointer_temp);
+            auto counter_update = find_unit_update(counter);
+            auto pointer_update = find_unit_update(pointer);
             if (!counter_update || !pointer_update)
                 continue;
 
@@ -3986,8 +3994,8 @@ public:
             size_t pointer_init = fn.icodes.size();
             for (size_t i = preheader.begin; i < preheader.end; ++i) {
                 const icode &ic = fn.icodes[i];
-                if (ic.op == icode_op::ASSIGN && ic.result.is_temp() &&
-                    ic.result.temp_id == counter_temp &&
+                if (ic.op == icode_op::ASSIGN &&
+                    same_value_operand(ic.result, counter) &&
                     ic.left.kind == operand_kind::INT_CONST &&
                     ic.left.ival == 0) {
                     if (counter_init != fn.icodes.size()) {
@@ -3999,7 +4007,7 @@ public:
                 if ((ic.op == icode_op::ASSIGN ||
                      ic.op == icode_op::ADDRESS_OF) &&
                     ic.result.is_temp() &&
-                    ic.result.temp_id == pointer_temp) {
+                    ic.result.temp_id == pointer.temp_id) {
                     if (pointer_init != fn.icodes.size()) {
                         pointer_init = fn.icodes.size();
                         break;
@@ -4012,6 +4020,7 @@ public:
                 continue;
             }
             operand destination = fn.icodes[pointer_init].left;
+            size_t destination_source_def = fn.icodes.size();
             if (destination.is_temp()) {
                 const int source_temp = destination.temp_id;
                 size_t source_def = fn.icodes.size();
@@ -4028,8 +4037,18 @@ public:
                         source_def = i;
                     }
                 }
-                if (source_def != fn.icodes.size())
+                if (source_def != fn.icodes.size()) {
                     destination = fn.icodes[source_def].left;
+                    int uses = 0;
+                    for (const icode &candidate : fn.icodes) {
+                        for_each_use_operand(candidate, [&](const operand &op) {
+                            if (op.is_temp() && op.temp_id == source_temp)
+                                ++uses;
+                        });
+                    }
+                    if (uses == 1)
+                        destination_source_def = source_def;
+                }
             }
             const bool direct_object =
                 destination.kind == operand_kind::LABEL_REF ||
@@ -4106,14 +4125,36 @@ public:
                 }
                 return true;
             };
-            if (!lifetime_confined(counter_temp, counter_update->next_temp,
-                                   counter_init) ||
-                !lifetime_confined(pointer_temp, pointer_update->next_temp,
-                                   pointer_init)) {
+            bool counter_confined = true;
+            if (temp_counter) {
+                counter_confined = lifetime_confined(
+                    counter.temp_id, counter_update->next_temp, counter_init);
+            } else {
+                // A stack counter is removable only when its complete
+                // lifetime belongs to this loop.  This excludes counters
+                // whose final value is observed, reused, or address-taken;
+                // those require an explicit assignment of the trip count.
+                for (size_t i = 0; i < fn.icodes.size(); ++i) {
+                    if (i == counter_init || in_loop[i])
+                        continue;
+                    const icode &ic = fn.icodes[i];
+                    if (same_symbol_slot(ic.result, counter) ||
+                        same_symbol_slot(ic.left, counter) ||
+                        same_symbol_slot(ic.right, counter)) {
+                        counter_confined = false;
+                        break;
+                    }
+                }
+            }
+            if (!counter_confined ||
+                !lifetime_confined(pointer.temp_id,
+                                   pointer_update->next_temp, pointer_init)) {
                 continue;
             }
 
             std::unordered_set<size_t> erase{counter_init, pointer_init};
+            if (destination_source_def != fn.icodes.size())
+                erase.insert(destination_source_def);
             for (size_t block_id : loop.blocks) {
                 const auto &block = cfg.block(block_id);
                 for (size_t i = block.begin; i < block.end; ++i)
@@ -10637,6 +10678,519 @@ public:
     }
 };
 
+// Keep an explicitly truncated byte expression byte-wide from the start.
+//
+// Integer promotions make even a simple
+//
+//     (unsigned char)(left + right)
+//
+// arrive here as a 16-bit ADD followed by a one-byte CAST.  On Z80 that can
+// turn one accumulator instruction into a pair of zero extensions, a
+// push/pop shuffle, and a discarded high-byte operation.  The low byte of
+// ADD, SUB, bitwise operations, unary negation/complement, and a bounded left
+// shift depends only on the low byte of their operands, so it is equivalent
+// to perform the operation at the destination width.  A bounded right shift
+// has the same property when the original byte source is unsigned: integer
+// promotion zero-extends it, so a logical byte shift produces the same low
+// byte as the promoted word shift.
+//
+// This deliberately handles only one adjacent producer/cast pair whose
+// temporary has one definition and one use, plus the equally local forms in
+// which an immediately preceding cast widens the producer's byte input (with
+// either a distinct or in-place temporary).  In particular, it does not
+// propagate a byte type through a CFG or into an induction variable; the
+// older broad promoted-byte pass remains opt-in because doing that without
+// complete phi/liveness modelling can narrow loop-carried full-width state.
+class direct_truncated_byte_ops_pass final : public ir_pass {
+public:
+    const char *name() const override { return "direct_truncated_byte_ops"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.size() < 2)
+            return false;
+
+        std::unordered_map<int, int> temp_def_count;
+        std::unordered_map<int, int> temp_use_count;
+        std::unordered_map<int, const icode *> temp_defs;
+        std::unordered_set<std::string> volatile_symbols;
+        for (const auto &candidate : fn.icodes) {
+            if (defines_result(candidate) && candidate.result.is_temp()) {
+                ++temp_def_count[candidate.result.temp_id];
+                temp_defs[candidate.result.temp_id] = &candidate;
+            }
+            auto remember_volatile_symbol = [&](const operand &op) {
+                if (op.is_symbol() && op.type && op.type->is_volatile)
+                    volatile_symbols.insert(base_symbol_key(op));
+            };
+            remember_volatile_symbol(candidate.result);
+            remember_volatile_symbol(candidate.left);
+            remember_volatile_symbol(candidate.right);
+            for_each_use_operand(candidate, [&](const operand &op) {
+                if (op.is_temp())
+                    ++temp_use_count[op.temp_id];
+            });
+        }
+
+        auto is_plain_integer_value = [&](const operand &op) {
+            if (op.kind == operand_kind::INT_CONST)
+                return true;
+            if (!op.type || !op.type->is_integer() || op.type->is_volatile)
+                return false;
+            if (op.is_symbol() &&
+                volatile_symbols.count(base_symbol_key(op)) != 0)
+                return false;
+            return true;
+        };
+
+        std::function<std::optional<operand>(const operand &, int)>
+            resolve_low_byte_source;
+        resolve_low_byte_source = [&](const operand &op, int depth)
+            -> std::optional<operand> {
+            if (depth <= 4 && op.is_temp() &&
+                temp_def_count[op.temp_id] == 1) {
+                auto found = temp_defs.find(op.temp_id);
+                if (found != temp_defs.end() && found->second &&
+                    found->second->op == icode_op::CAST &&
+                    found->second->result.type &&
+                    found->second->result.type->is_integer()) {
+                    auto source = resolve_low_byte_source(
+                        found->second->left, depth + 1);
+                    if (source)
+                        return source;
+                }
+            }
+            if (is_plain_integer_value(op))
+                return op;
+            return std::nullopt;
+        };
+
+        auto narrow_operand = [](operand &op, const type_ptr &byte_type) {
+            if (op.kind == operand_kind::INT_CONST) {
+                op = operand::make_int(
+                    static_cast<int64_t>(
+                        static_cast<uint64_t>(op.ival) & 0xffu),
+                    byte_type);
+            } else if (!op.type || op.type->size() != 1) {
+                op.type = byte_type;
+            }
+        };
+
+        auto is_byte_ready = [](const operand &op) {
+            return op.kind == operand_kind::INT_CONST ||
+                   (op.type && op.type->is_integer() &&
+                    op.type->size() == 1);
+        };
+
+        auto is_unsigned_byte_ready = [](const operand &op) {
+            if (op.kind == operand_kind::INT_CONST)
+                return op.ival >= 0 && op.ival <= 255;
+            return op.type && op.type->is_integer() &&
+                   op.type->size() == 1 && op.type->is_unsigned();
+        };
+
+        bool changed = false;
+        for (size_t i = 0; i + 1 < fn.icodes.size(); ++i) {
+            icode &producer = fn.icodes[i];
+            icode &truncate = fn.icodes[i + 1];
+
+            if (!producer.result.is_temp() || !producer.result.type ||
+                !producer.result.type->is_integer() ||
+                producer.result.type->size() <= 1 ||
+                producer.result.type->is_volatile) {
+                continue;
+            }
+
+            const int temp_id = producer.result.temp_id;
+            icode *adjacent_widen = nullptr;
+            if (temp_def_count[temp_id] != 1 ||
+                temp_use_count[temp_id] != 1) {
+                if (i == 0 || temp_def_count[temp_id] != 2 ||
+                    temp_use_count[temp_id] != 2 ||
+                    !producer.left.is_temp() ||
+                    producer.left.temp_id != temp_id) {
+                    continue;
+                }
+                icode &candidate = fn.icodes[i - 1];
+                if (candidate.op != icode_op::CAST ||
+                    !candidate.result.is_temp() ||
+                    candidate.result.temp_id != temp_id ||
+                    !candidate.result.type ||
+                    !candidate.result.type->is_integer() ||
+                    candidate.result.type->size() <= 1 ||
+                    candidate.result.type->is_volatile ||
+                    !is_byte_ready(candidate.left) ||
+                    (candidate.left.is_temp() &&
+                     candidate.left.temp_id == temp_id)) {
+                    continue;
+                }
+                adjacent_widen = &candidate;
+            }
+            if (truncate.op != icode_op::CAST ||
+                !truncate.left.is_temp() ||
+                truncate.left.temp_id != temp_id ||
+                !truncate.result.type ||
+                !truncate.result.type->is_integer() ||
+                truncate.result.type->size() != 1) {
+                continue;
+            }
+
+            bool supported = false;
+            bool binary = false;
+            bool logical_right_shift = false;
+            switch (producer.op) {
+            case icode_op::ADD:
+            case icode_op::SUB:
+            case icode_op::BAND:
+            case icode_op::BOR:
+            case icode_op::BXOR:
+                supported = true;
+                binary = true;
+                break;
+            case icode_op::SHL:
+                supported = producer.right.kind == operand_kind::INT_CONST &&
+                            producer.right.ival >= 0 &&
+                            producer.right.ival <= 7;
+                binary = false;
+                break;
+            case icode_op::SHR:
+                supported = producer.right.kind == operand_kind::INT_CONST &&
+                            producer.right.ival >= 0 &&
+                            producer.right.ival <= 7;
+                binary = false;
+                logical_right_shift = true;
+                break;
+            case icode_op::NEG:
+            case icode_op::BNOT:
+                supported = true;
+                binary = false;
+                break;
+            default:
+                break;
+            }
+            if (!supported)
+                continue;
+            if (!adjacent_widen && i > 0 && producer.left.is_temp()) {
+                icode &candidate = fn.icodes[i - 1];
+                const int source_temp = producer.left.temp_id;
+                if (candidate.op == icode_op::CAST &&
+                    candidate.result.is_temp() &&
+                    candidate.result.temp_id == source_temp &&
+                    candidate.result.type &&
+                    candidate.result.type->is_integer() &&
+                    candidate.result.type->size() > 1 &&
+                    !candidate.result.type->is_volatile &&
+                    temp_def_count[source_temp] == 1 &&
+                    temp_use_count[source_temp] == 1 &&
+                    is_byte_ready(candidate.left) &&
+                    (!candidate.left.is_temp() ||
+                     candidate.left.temp_id != source_temp)) {
+                    adjacent_widen = &candidate;
+                }
+            }
+            auto left = adjacent_widen
+                ? std::optional<operand>(adjacent_widen->left)
+                : resolve_low_byte_source(producer.left, 0);
+            if (!left || !is_byte_ready(*left) ||
+                (logical_right_shift &&
+                 !is_unsigned_byte_ready(*left))) {
+                continue;
+            }
+            std::optional<operand> right;
+            if (binary) {
+                right = resolve_low_byte_source(producer.right, 0);
+                if (!right || !is_byte_ready(*right))
+                    continue;
+            }
+
+            const type_ptr byte_type = logical_right_shift
+                                           ? type::make_uchar()
+                                           : truncate.result.type->unqual();
+            if (adjacent_widen &&
+                (producer.op == icode_op::SHL ||
+                 producer.op == icode_op::SHR) &&
+                adjacent_widen->result.temp_id != producer.result.temp_id) {
+                // A distinct, one-use widening temporary is pure scaffolding
+                // around a byte shift.  Bypass it instead of merely retyping
+                // it: leaving the copy in place can hide carry-based
+                // accumulator idioms such as an immediately shifted/XORed
+                // byte from the backend peephole pass.  Other operations keep
+                // their byte copy because it can shorten allocation live
+                // ranges.  The ordinary DCE pass consumes the now-dead CAST
+                // on the next fixed-point round.
+                producer.left = adjacent_widen->left;
+                narrow_operand(producer.left, byte_type);
+            } else if (adjacent_widen) {
+                // The in-place form defines the same virtual state consumed
+                // and redefined by the producer, so its initial load cannot
+                // be bypassed.  Retype that state without duplicating it.
+                adjacent_widen->result.type = byte_type;
+                producer.left.type = byte_type;
+            } else {
+                producer.left = *left;
+                narrow_operand(producer.left, byte_type);
+            }
+            if (binary)
+                producer.right = *right;
+            if (binary)
+                narrow_operand(producer.right, byte_type);
+            producer.result.type = byte_type;
+            truncate.left.type = byte_type;
+            changed = true;
+        }
+        return changed;
+    }
+};
+
+// Canonicalize a branchless unsigned-byte MSB mask into the equivalent
+// conditional shift/XOR diamond:
+//
+//   (value << 1) ^ ((0 - (value >> 7)) & polynomial)
+//
+// For an unsigned byte, value>>7 is exactly zero or one and its negation is
+// therefore 0x00 or 0xff after byte truncation.  The diamond is a better Z80
+// canonical form because ADD A,A computes the shifted byte and exposes the
+// original MSB in carry; the backend can then use one carry branch and XOR.
+// Keep the recognition strictly local and require every mask scaffold value
+// to have one definition/use.  Stack locals are accepted only when their
+// address is never taken, allowing ordinary DCE/frame compaction to remove
+// them after the rewrite.
+class msb_masked_shift_xor_pass final : public ir_pass {
+public:
+    const char *name() const override { return "msb_masked_shift_xor"; }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.size() < 5)
+            return false;
+
+        std::unordered_map<std::string, int> defs;
+        std::unordered_map<std::string, int> uses;
+        std::unordered_set<std::string> address_taken;
+        auto key = [](const operand &op) {
+            if (op.is_temp())
+                return std::string("t:") + std::to_string(op.temp_id);
+            if (op.is_symbol() && !op.is_global)
+                return std::string("s:") + base_symbol_key(op);
+            return std::string();
+        };
+        for (const icode &ic : fn.icodes) {
+            const std::string result_key = key(ic.result);
+            if (!result_key.empty() && ic.op != icode_op::SET_VALUE_AT)
+                ++defs[result_key];
+            for_each_use_operand(ic, [&](const operand &op) {
+                const std::string use_key = key(op);
+                if (!use_key.empty())
+                    ++uses[use_key];
+            });
+            if (ic.op == icode_op::ADDRESS_OF) {
+                const std::string address_key = key(ic.left);
+                if (!address_key.empty())
+                    address_taken.insert(address_key);
+            }
+        }
+
+        auto private_single_use_value = [&](const operand &op) {
+            const std::string value_key = key(op);
+            if (value_key.empty() || defs[value_key] != 1 ||
+                uses[value_key] != 1) {
+                return false;
+            }
+            if (op.is_symbol() &&
+                (op.is_global || op.is_param ||
+                 address_taken.count(value_key) != 0)) {
+                return false;
+            }
+            return !op.type || !op.type->is_volatile;
+        };
+
+        int next_temp = next_temp_id(fn);
+        for (size_t i = 0; i + 4 < fn.icodes.size(); ++i) {
+            const icode &shr = fn.icodes[i];
+            const icode &negate = fn.icodes[i + 1];
+            const icode &shl = fn.icodes[i + 2];
+            const icode &band = fn.icodes[i + 3];
+            const icode &bxor = fn.icodes[i + 4];
+
+            if (shr.op != icode_op::SHR ||
+                shr.right.kind != operand_kind::INT_CONST ||
+                shr.right.ival != 7 ||
+                !shr.left.type || !shr.left.type->is_integer() ||
+                !shr.left.type->is_unsigned() || shr.left.type->size() != 1 ||
+                !shr.result.type || shr.result.type->size() != 1 ||
+                negate.op != icode_op::SUB ||
+                negate.left.kind != operand_kind::INT_CONST ||
+                (negate.left.ival & 0xff) != 0 ||
+                !same_value_operand(negate.right, shr.result) ||
+                !negate.result.type || negate.result.type->size() != 1 ||
+                shl.op != icode_op::SHL ||
+                shl.right.kind != operand_kind::INT_CONST ||
+                shl.right.ival != 1 ||
+                !same_value_operand(shl.left, shr.left) ||
+                !shl.result.type || shl.result.type->size() != 1 ||
+                band.op != icode_op::BAND ||
+                !band.result.type || band.result.type->size() != 1 ||
+                bxor.op != icode_op::BXOR ||
+                !bxor.result.type || bxor.result.type->size() != 1) {
+                continue;
+            }
+
+            const operand *polynomial = nullptr;
+            if (same_value_operand(band.left, negate.result))
+                polynomial = &band.right;
+            else if (same_value_operand(band.right, negate.result))
+                polynomial = &band.left;
+            if (!polynomial || !polynomial->type ||
+                !polynomial->type->is_integer() ||
+                polynomial->type->size() != 1 ||
+                polynomial->type->is_volatile) {
+                continue;
+            }
+            const bool xor_matches =
+                (same_value_operand(bxor.left, shl.result) &&
+                 same_value_operand(bxor.right, band.result)) ||
+                (same_value_operand(bxor.right, shl.result) &&
+                 same_value_operand(bxor.left, band.result));
+            const std::string input_key = key(shr.left);
+            const bool safe_symbol_input =
+                shr.left.is_symbol() && !shr.left.is_global &&
+                (!shr.left.type || !shr.left.type->is_volatile) &&
+                !input_key.empty() &&
+                address_taken.count(input_key) == 0;
+            if (!xor_matches ||
+                (!shr.left.is_temp() && !safe_symbol_input) ||
+                !bxor.result.is_temp() ||
+                !private_single_use_value(shr.result) ||
+                !private_single_use_value(negate.result) ||
+                !private_single_use_value(shl.result) ||
+                !private_single_use_value(band.result)) {
+                continue;
+            }
+
+            bool input_used_after = false;
+            for (size_t after = i + 5; after < fn.icodes.size(); ++after) {
+                for_each_use_operand(fn.icodes[after],
+                                     [&](const operand &op) {
+                    if (same_value_operand(op, shr.left)) {
+                        input_used_after = true;
+                    }
+                });
+            }
+            if (input_used_after)
+                continue;
+
+            const type_ptr byte_type = type::make_uchar();
+            const operand condition = make_fresh_temp(next_temp, byte_type);
+            const operand true_shift = make_fresh_temp(next_temp, byte_type);
+            const operand phi = make_fresh_temp(next_temp, byte_type);
+            const operand false_shift = make_fresh_temp(next_temp, byte_type);
+            const std::string true_label =
+                make_unique_label(fn, "__xcc_msb_mask_true_");
+            const std::string false_label =
+                make_unique_label(fn, "__xcc_msb_mask_false_");
+            const std::string join_label =
+                make_unique_label(fn, "__xcc_msb_mask_join_");
+
+            std::vector<icode> replacement;
+            replacement.reserve(11);
+
+            icode condition_ic;
+            condition_ic.op = icode_op::BAND;
+            condition_ic.result = condition;
+            condition_ic.left = shr.left;
+            condition_ic.right = operand::make_int(0x80, byte_type);
+            condition_ic.line = shr.line;
+            replacement.push_back(condition_ic);
+
+            icode branch;
+            branch.op = icode_op::IFX;
+            branch.left = condition;
+            branch.true_lbl = true_label;
+            branch.false_lbl = false_label;
+            branch.line = shr.line;
+            replacement.push_back(branch);
+
+            icode label;
+            label.op = icode_op::LABEL;
+            label.label_name = true_label;
+            replacement.push_back(label);
+
+            icode true_shift_ic;
+            true_shift_ic.op = icode_op::SHL;
+            true_shift_ic.result = true_shift;
+            true_shift_ic.left = shr.left;
+            true_shift_ic.right = operand::make_int(1, type::make_int());
+            true_shift_ic.line = shl.line;
+            replacement.push_back(true_shift_ic);
+
+            icode true_xor;
+            true_xor.op = icode_op::BXOR;
+            true_xor.result = phi;
+            true_xor.left = true_shift;
+            true_xor.right = *polynomial;
+            true_xor.line = bxor.line;
+            replacement.push_back(true_xor);
+
+            icode jump;
+            jump.op = icode_op::GOTO;
+            jump.label_name = join_label;
+            replacement.push_back(jump);
+
+            label.label_name = false_label;
+            replacement.push_back(label);
+
+            icode false_shift_ic = true_shift_ic;
+            false_shift_ic.result = false_shift;
+            replacement.push_back(false_shift_ic);
+
+            icode false_assign;
+            false_assign.op = icode_op::ASSIGN;
+            false_assign.result = phi;
+            false_assign.left = false_shift;
+            false_assign.line = bxor.line;
+            replacement.push_back(false_assign);
+
+            label.label_name = join_label;
+            replacement.push_back(label);
+
+            icode store;
+            store.op = icode_op::ASSIGN;
+            // A dead temporary input can carry the selected result in place,
+            // which also permits consecutive steps to remain in A.  ABI-0
+            // stack parameters are symbols rather than temporaries; keep
+            // their C value unmodified and define the original expression
+            // result instead.  The backend diamond fuser accepts either byte
+            // target and can therefore return the result directly in L.
+            const operand replacement_value =
+                shr.left.is_temp() ? shr.left : bxor.result;
+            store.result = replacement_value;
+            store.left = phi;
+            store.line = bxor.line;
+            replacement.push_back(store);
+
+            const int old_result_temp = bxor.result.temp_id;
+
+            fn.icodes.erase(fn.icodes.begin() +
+                                static_cast<std::ptrdiff_t>(i),
+                            fn.icodes.begin() +
+                                static_cast<std::ptrdiff_t>(i + 5));
+            fn.icodes.insert(fn.icodes.begin() +
+                                 static_cast<std::ptrdiff_t>(i),
+                             replacement.begin(), replacement.end());
+
+            for (size_t after = i + replacement.size();
+                 after < fn.icodes.size(); ++after) {
+                for_each_use_operand(fn.icodes[after], [&](operand &op) {
+                    if (op.is_temp() &&
+                        op.temp_id == old_result_temp) {
+                        op = replacement_value;
+                    }
+                });
+            }
+            return true;
+        }
+        return false;
+    }
+};
+
 class promoted_byte_ops_pass final : public ir_pass {
 public:
     explicit promoted_byte_ops_pass(bool allow_low_byte_mul)
@@ -13214,6 +13768,10 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<constant_fold_pass>());
     if (settings.algebraic_simplify)
         passes.push_back(std::make_unique<bitwise_select_simplify_pass>());
+    if (settings.level == opt_level::Of || settings.level == opt_level::O3)
+        passes.push_back(std::make_unique<direct_truncated_byte_ops_pass>());
+    if (settings.level == opt_level::Of || settings.level == opt_level::O3)
+        passes.push_back(std::make_unique<msb_masked_shift_xor_pass>());
     if (settings.algebraic_simplify)
         passes.push_back(std::make_unique<algebraic_simplify_pass>());
     if (settings.algebraic_simplify)
@@ -13341,7 +13899,10 @@ void ir_optimizer::optimize(ir_function &fn,
     // shape; neither lowering may be fed back through rematerialization/DCE.
     if (eff.block_fill_loops) {
         block_fill_loop_pass final_block_fill;
-        final_block_fill.run(fn);
+        if (final_block_fill.run(fn)) {
+            local_frame_compaction_pass post_fill_frame_compaction;
+            post_fill_frame_compaction.run(fn);
+        }
     }
     // These two target forms deliberately use narrower source operands with
     // a wider result.  That is useful to Z80 code generation, but it is not a

@@ -97,8 +97,15 @@ $(BUILD_DIR):
 $(BIN_DIR):
 	mkdir -p $@
 
+ifeq ($(YOS_DEBUG),1)
+# The debug link produces the ROM and CDB together.  Treat them as grouped
+# outputs so a missing or stale sidecar cannot be paired with a newer ROM.
+$(YOS_OUTPUTS) &: $(OBJS) $(XLD) $(XLIBC) $(XRUNTIME) | $(BIN_DIR)
+	$(XLD) $(XLDFLAGS) -o $(BIN_DIR)/$(TARGET).rom $(OBJS) $(XLIBC) $(XRUNTIME)
+else
 $(YOS_OUTPUTS): $(OBJS) $(XLD) $(XLIBC) $(XRUNTIME) | $(BIN_DIR)
 	$(XLD) $(XLDFLAGS) -o $(BIN_DIR)/$(TARGET).rom $(OBJS) $(XLIBC) $(XRUNTIME)
+endif
 
 $(BUILD_DIR)/$(CRT0).rel: startup/$(CRT0).s $(XAS) | $(BUILD_DIR)
 	$(XAS) $(XASFLAGS) $< -o $@

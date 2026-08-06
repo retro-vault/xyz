@@ -2332,7 +2332,7 @@ static bool flags_overwritten_or_de_return_before_read(
     return finish(false);
 }
 
-[[maybe_unused]] static bool flags_overwritten_or_de_return_before_read(
+static bool flags_overwritten_or_de_return_before_read(
         const std::vector<asm_line> &lines,
         size_t start) {
     std::unordered_set<size_t> active;
@@ -13637,7 +13637,10 @@ bool z80_peep::rule_add_a_one_to_inc(size_t i) {
     int value = 0;
     if (!parse_accumulator_immediate_alu(lines_[i], "add", value) ||
         u8_value(value) != 1 ||
-        !flags_overwritten_before_read_or_escape(lines_, i + 1)) {
+        (!flags_overwritten_before_read_or_escape(lines_, i + 1) &&
+         (!(is_inside_sdcccall1_function(lines_, i) ||
+            is_inside_legacy_hl_return_function(lines_, i)) ||
+          !flags_overwritten_or_de_return_before_read(lines_, i + 1)))) {
         return false;
     }
 
@@ -14067,7 +14070,11 @@ bool z80_peep::rule_superopt_srl_a_const_shift(size_t i) {
     } else {
         if (next_idx >= lines_.size() || !lines_[next_idx].label.empty())
             return false;
-        if (!line_overwrites_flags_without_reading_carry(lines_[next_idx]))
+        // The rotate/mask form computes the same byte but not every status
+        // bit produced by the final SRL.  Permit intervening flag-transparent
+        // instructions (typically a spill) when the complete flag value is
+        // proven overwritten before any read or control-flow escape.
+        if (!flags_overwritten_before_read_or_escape(lines_, next_idx))
             return false;
     }
 
