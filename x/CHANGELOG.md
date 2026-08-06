@@ -12,9 +12,9 @@ Release status:
   rewrite also belongs to `-Os` because it is strictly smaller as well as
   faster. `-O3` once again has no exclusive transformation and is an exact
   experimental alias of `-Of`, ready for the next speed investigation. The
-  benchmark harness continues to execute both lanes so future divergence is
-  visible immediately, and every historical O3-only compiler manifest now
-  also executes its graduated `-Of` lane. On the full-program matrix the
+  23-program report omits the duplicate `-O3` rows while the profiles are
+  identical, and every historical O3-only compiler manifest now also executes
+  its graduated `-Of` lane. On the full-program matrix the
   recurrence graduation gives `-Os` a third speed win against SDCC and its
   first strict speed win against the complete competitor envelope without
   weakening its 23/23 size wins.

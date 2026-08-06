@@ -11,8 +11,6 @@ modes = [
     "xcc_Os_sdcc0",
     "xcc_Of",
     "xcc_Of_sdcc0",
-    "xcc_O3",
-    "xcc_O3_sdcc0",
     "sccz80",
     "sdcc",
     "80cc_fp",
@@ -23,16 +21,14 @@ labels = [
     "xcc -Os (M, sdcc0)",
     "xcc -Of (M, sdcc1)",
     "xcc -Of (M, sdcc0)",
-    "xcc -O3 (M, sdcc1)",
-    "xcc -O3 (M, sdcc0)",
     "sccz80",
     "sdcc",
     "80cc-fp",
     "80cc-sp",
 ]
-xcc_modes = modes[:6]
-xcc_labels = labels[:6]
-competitor_modes = modes[6:]
+xcc_modes = modes[:4]
+xcc_labels = labels[:4]
+competitor_modes = modes[4:]
 
 def cell(row, mode):
     status = row[f"{mode}_status"]

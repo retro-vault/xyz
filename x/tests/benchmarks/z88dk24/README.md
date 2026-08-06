@@ -19,10 +19,9 @@ XCC is benchmarked with the M distribution (`bin/x-m`): `long` remains
 available, while `double`, `long long`, and stdio floating conversions are
 excluded. This matches the intended integer-only comparison.
 
-The harness records six XCC lanes: `-Os`, `-Of`, and `-O3` with the default
-`sdcccall(1)` ABI, plus matching `--sdcccall 0` runs. Keeping `-O3` explicit
-ensures that new profile-specific optimization work is measured directly,
-even when a particular release makes it equivalent to `-Of`.
+The harness records four XCC lanes: `-Os` and `-Of` with the default
+`sdcccall(1)` ABI, plus matching `--sdcccall 0` runs. The empty `-O3` alias is
+omitted so the report does not duplicate the `-Of` rows.
 All XCC and z88dk-family images now execute in the same `z80_exec` Z80 model.
 The runner implements z88dk's test-CRT trap protocol for console and file I/O,
 so cycle comparisons no longer mix emulator models.

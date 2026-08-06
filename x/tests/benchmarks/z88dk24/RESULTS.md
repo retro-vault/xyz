@@ -26,12 +26,11 @@ The overfitting-audited baseline had:
 Guarded scalar promotion, physical register homes, the dense-dispatch
 profitability guard, and local adjacent-recurrence spill sinking have
 graduated to `-Of`. The recurrence rewrite also belongs to `-Os` because it is
-strictly smaller as well as faster. `-O3` is now an empty experimental alias
-of `-Of`; keeping it as a separately measured lane makes future divergence
-visible immediately. These transformations match IR shape, types, liveness,
-aliases, and control flow only; they do not inspect source paths, function
-names, benchmark constants, or expected outputs. All 23 programs pass in both
-ABIs.
+strictly smaller as well as faster. `-O3` is an empty experimental alias of
+`-Of` and is omitted from this report to avoid duplicate rows. These
+transformations match IR shape, types, liveness, aliases, and control flow
+only; they do not inspect source paths, function names, benchmark constants,
+or expected outputs. All 23 programs pass in both ABIs.
 
 | XCC lane | Correct | Size wins vs SDCC | Speed wins vs SDCC | Size strict best | Speed strict best |
 |---|---:|---:|---:|---:|---:|
@@ -39,20 +38,18 @@ ABIs.
 | `-Os`, ABI 0 | 23/23 | 23/23 | 3/23 | 22/23 | 1/23 |
 | `-Of`, ABI 1 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
 | `-Of`, ABI 0 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
-| `-O3`, ABI 1 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
-| `-O3`, ABI 0 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
 
 The Pareto-safe recurrence graduation gives `-Os` a third speed win against
 SDCC and its first strict speed win against the full competitor envelope,
 without weakening its 23/23 size wins against SDCC.
 
-By geometric mean, ABI1 `-Of` and `-O3` are 0.65% faster than SDCC across all
-23 programs. They are still 9.89% slower than the per-program best successful
+By geometric mean, ABI1 `-Of` is 0.65% faster than SDCC across all 23
+programs. It is still 9.89% slower than the per-program best successful
 competitor envelope (ABI0: 9.72%), so the result is a large improvement rather
 than a claim that every remaining code-generation gap is closed.
 
 The current raw CSV, binaries, maps, outputs, and run logs are generated under
-`build/x/benchmarks/profiles-promoted-final/z88dk24/`. The historical audited
+`build/x/benchmarks/benchmark23-current/z88dk24/`. The historical audited
 measurement below is retained to show the earlier baseline and the reason for
 the guardrails. The compiler used for this promotion has SHA-256
 `ee69e040f25df2068ca0a9a27c1be839ab4c04edca0780a2e0a3c282c5a000cd`.

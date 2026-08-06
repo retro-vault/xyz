@@ -45,8 +45,8 @@ emitters that feed from those shapes all run under `-O2` / `-Of` / `-Os`.
 
 At this graduation point `-O3` intentionally contains no exclusive
 transformation and produces the same output as `-Of`; subsequent speed
-experiments may make it differ. Benchmark reports must therefore continue to
-execute both profiles.
+experiments may make it differ. Benchmark 23 omits the duplicate `-O3` rows
+until an experiment makes that profile distinct again.
 
 ## Fine-Grained Flags
 
