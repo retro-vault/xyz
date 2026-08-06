@@ -45,10 +45,10 @@ independent and communicates only through its output data structure.
 
 `-Os` is the linked-size profile and may trade cycles for fewer bytes. `-Of`
 is the validated measured-cycle profile and may spend bytes for speed. `-O3`
-is an exact command-line compatibility alias for `-Of`, not a separate
-experimental pipeline. New experimental transformations remain behind
-explicit pass flags until they are stable under both `sdcccall(1)` and
-`sdcccall(0)`.
+is the distinct experimental measured-cycle profile derived from `-Of`.
+Byte-count-only policy remains exclusive to `-Os`; speed transformations are
+developed in `-O3` and promoted to `-Of` only after validation under both
+`sdcccall(1)` and `sdcccall(0)`.
 
 ---
 

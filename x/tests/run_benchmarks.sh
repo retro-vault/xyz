@@ -1641,7 +1641,7 @@ write_top_summary() {
             printf '| `%s` | %s | `%s` | `%s` | `%s` |\n' \
                 "z88dk-full-program" \
                 "$Z88DK24_BENCHMARKS_RUN" \
-                "xcc M Os/Of + z88dk sccz80/sdcc/80cc frame/stack" \
+                "xcc M Os/Of/O3 + z88dk sccz80/sdcc/80cc frame/stack" \
                 "$OUTDIR/z88dk24/summary.md" \
                 "$OUTDIR/z88dk24/results.csv"
         fi

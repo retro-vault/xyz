@@ -22,26 +22,31 @@ The current public optimization model is:
 - default / `-O0`: no optimization
 - `-O1`: peephole optimization
 - `-O2`: general optimization
-- `-Of`: speed optimization
-- `-O3`: compatibility alias for `-Of`
+- `-Of`: validated speed optimization
+- `-O3`: intentionally empty experimental alias of `-Of`
 - `-Os`: size optimization
 
 These are presets, not additive flags. You normally pick one of them.
 
-`-O3` and `-Of` select the same settings and pipeline. `-Os` shares many
-of their validated transformations but applies size policy where the
-backend has a choice.
+`-O3` currently has exactly the `-Of` settings but retains a distinct profile
+identity for the next speed experiment. `-Os` shares many validated
+transformations but is the only profile that applies byte-count-only policy
+where the backend has a choice.
 
-`-Os` is deliberately conservative. New speed work is stabilized in
-`-Of`; `-O3` does not expose a separate experimental lane.
+`-Os` is deliberately conservative. New speed work is developed in the empty
+`-O3` lane and promoted to `-Of` only after it is stable in both ABIs and on
+independent corpora. A transformation also enters `-Os` only when its target
+cost is Pareto-safe or it is selected by the size policy.
 
 The newer generic structured-loop pipeline is now in the stable presets
 too: direct control-condition lowering, counted-byte-loop narrowing,
 pointer-walk canonicalization, and the generic walked-loop backend
 emitters that feed from those shapes all run under `-O2` / `-Of` / `-Os`.
 
-On every input and under both supported SDCC ABIs, `-O3` and `-Of` are
-intended to be interchangeable.
+At this graduation point `-O3` intentionally contains no exclusive
+transformation and produces the same output as `-Of`; subsequent speed
+experiments may make it differ. Benchmark reports must therefore continue to
+execute both profiles.
 
 ## Fine-Grained Flags
 
@@ -382,6 +387,13 @@ that proved stable enough to graduate out of the experimental lane.
 
 The main extra behavior today is:
 
+- guarded scalar-local promotion followed by physical Z80 register homes for
+  eligible pointer, counter, and value live ranges; a structural dense-switch
+  guard keeps selectors stack-homed when promotion would lengthen their live
+  range
+- adjacent, fully validated 32-bit conditional-shift/XOR recurrences keep the
+  updated value in `DEHL` and commit it only after the final adjacent step;
+  calls, aliases, volatility, escaping labels, and intervening IR are barriers
 - the wider static-helper inline budget that used to live only in `-O3`
 - dense switch jump-table lowering for integer switches when the backend
   can prove the span is profitable
@@ -481,11 +493,13 @@ Performance numbers are kept out of this implementation guide. The audited
 z88dk report records the current same-runner measurements, the overfitting
 audit, independent holdouts, and validation totals.
 
-## `-O3`: Stable Speed Alias
+## `-O3`: Experimental Speed Lane
 
-`xcc -O3` is an exact compatibility spelling of `xcc -Of`. It does not add a
-wider inliner, cross-block value propagation, an experimental assembly
-lane, or ABI-specific exceptions.
+`xcc -O3` currently is the validated `xcc -Of` pipeline with a distinct
+profile identity and no exclusive transformation. It is empty so the next
+experimental speed change has a clean measurement lane. Byte-count-only helper
+sharing, tail merging, repeated-sequence outlining, and other
+size-at-a-cycle-cost choices remain exclusive to `-Os`.
 
 The former O3 whole-function selector was removed after the overfitting
 audit. It contained large exact IR recipes developed against measured
@@ -493,10 +507,20 @@ programs, including benchmark-shaped loops and application-specific call
 sequences. Matching a complete function by shape is benchmark recognition
 even when the source filename is not inspected.
 
-Future speed work must first be expressed as a bounded transformation with
-an explicit legality proof and target cost model, then validated on a
-frozen corpus that was not used to design it. Only stabilized work belongs
-in `-Of`; `xcc -O3` remains identical to that public profile.
+New speed work must first be expressed as a bounded transformation with an
+explicit legality proof and target cost model, then validated on a frozen
+corpus that was not used to design it. Only stabilized work is promoted from
+`-O3` into `-Of`.
+
+The speed pipeline's graduated legality guards include natural-loop
+reaching-definition checks for pointer induction: a copied index is not
+equivalent to the selected loop index when a competing inner-loop definition
+can reach it through a backedge.
+Late xopt rules likewise preserve register live-outs. For a
+compiler-described temporary-frame slot, an IX-relative load followed by a
+self-store may lose the store, but may lose the load only when every following
+path overwrites `A` before reading it. Source-local slots are not rewritten
+without volatility metadata.
 
 
 ### Example: Address + Dereference Folding
@@ -833,6 +857,9 @@ code generation choices.
 
 Currently that means:
 
+- proof-bounded direct truncated-byte and masked-MSB shift/XOR lowering, plus
+  the adjacent 32-bit recurrence spill sink shared with `-Of`; each of these
+  is enabled here because it reduces bytes as well as cycles
 - tiny direct-only static helpers can be inlined at IR level when a
   simple size-minded profitability rule says the removed `SEND` / `CALL`
   overhead beats the replicated helper body
@@ -1098,8 +1125,9 @@ the lazy spill path.
   remains as a backstop for legacy shapes
 - `-Of` is the public speed-oriented lane; it starts from the proven
   aggressive baseline and may spend a little code size for fewer cycles.
-- `-O3` is an exact compatibility spelling of `-Of`; it has no additional
-  experimental passes.
+- `-O3` is the empty experimental alias of `-Of`; future experiments may spend
+  code size for fewer cycles but must not inherit byte-count-only `-Os`
+  choices.
 - `-Os` is the dedicated size-oriented public preset and is treated as
   the protected record-setting baseline.
 - The runtime helper library is also split more finely now for signed

@@ -756,6 +756,16 @@ void abi_convention::materialize_modern_receive(z80_gen &g, const icode &ic)
         g.store_a(ic.result);
         break;
     case abi_arg_loc::REG_L:
+        // L is independently addressable on the Z80.  A retained first byte
+        // argument may still be live in A while this second byte argument is
+        // materialized; routing L through A would silently destroy it.  A
+        // direct frame spill is both faster and preserves the other incoming
+        // ABI register.
+        if (temp_home_it == g.temp_regs_.end() ||
+            temp_home_it->second == temp_home::stack) {
+            g.store_frame_byte(g.ix_offset_of(ic.result), 'l');
+            break;
+        }
         g.emit_line("ld\ta, l");
         g.store_a(ic.result);
         break;

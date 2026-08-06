@@ -299,6 +299,13 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
         gv.has_init   = true;
         mod.string_literals.push_back(std::move(gv));
         out.push_back(init_elem(0, target->size(), lbl));
+    } else if (target->is_ptr()) {
+        if (auto address = const_expr_evaluator::evaluate_address(init)) {
+            out.push_back(init_elem(address->byte_offset, target->size(),
+                                    address->symbol));
+        } else {
+            out.push_back(init_elem(0, target->size()));
+        }
     } else {
         out.push_back(init_elem(0, target->size()));
     }

@@ -31,8 +31,8 @@
 | `-O0`       | No optimisation (default). |
 | `-O1`       | Enable peephole optimiser. Removes redundant loads, dead jumps, temp store/reload pairs. The simplest fixed-window peepholes are now table-driven; the more context-sensitive ones still use custom matchers. |
 | `-O2`       | Enable general optimisation: module-level dead static-function elimination, constant actual-argument propagation, translation-unit constant-call evaluation for eligible private integer helpers including nested private-helper chains, helper calls fed from constant-valued locals or temps, and a small whitelist of pure runtime helpers, whole-function constant evaluation for eligible zero-argument integer functions over that same safe subset, including straightforward 32-bit integer code, dead-parameter elimination, identical-helper merging for eligible internal callees, CFG jump threading through label-only and `goto`-only blocks, IR constant-fold/DCE, strength reduction (multiply/divide/mod by power-of-two → shift), conservative `sdcccall(1)` register-parameter promotion for simple helper-free straight-line callees, dead-local frame compaction, the bounded stable temp register allocator for short straight-line 16-bit temp windows, automatic TEMP preallocation inside functions that already need an IX frame, smaller nearby `&local` / `&temp` address materialization, frameless zero-frame functions when safe, plus all `-O1` peephole rules. |
-| `-Of`       | Enable the `-O2`-based speed profile: broader safe helper inlining, byte-width preservation, register allocation, and cycle-biased late Z80 rules. |
-| `-O3`       | Compatibility spelling of the fully validated `-Of` speed profile. |
+| `-Of`       | Enable the validated `-O2`-based speed profile: broader safe helper inlining, guarded scalar promotion, physical register homes, byte-width preservation, and cycle-biased late Z80 rules. |
+| `-O3`       | Intentionally empty experimental alias of `-Of`, reserved for the next speed experiment. Pure size policy remains in `-Os`. |
 | `-Os`       | Enable the distinct size profile. It may trade cycles for shared IX-frame helpers, common tails, exact repeated-sequence outlining, and byte-count-biased Z80 rules. |
 
 `xcc` also supports fine-grained overrides with `-f<name>` and
@@ -47,13 +47,13 @@
 - `dead-code-elim`, `scalar-local-promotion`
 - `reg-param-promotion`, `duplicate-block-merge`, `merge-tails`
 - `local-frame-compaction`, `regalloc`
-  `regalloc` is now part of the stable `-O2` / `-Os` presets, and the
-  explicit flag remains useful for bisects and lower-level experiments.
+  `regalloc` is part of validated `-Of`; the explicit flag remains useful for
+  bisects and lower-level experiments with other profiles.
 - `compare-ifx-fusion`, `frame-omit`, `prealloc-temp-frame`
 
-`scalar-local-promotion` remains available for isolated experiments, but is
-deliberately absent from every public `-O` preset until its CFG live-range
-interaction with register allocation is proven correct.
+`scalar-local-promotion` is enabled with the physical-home allocator in
+validated `-Of`, including a dense-dispatch profitability guard. `-O3`
+currently inherits that exact setting without adding another transformation.
 
 ### Assembler dialect
 

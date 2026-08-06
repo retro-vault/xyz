@@ -3936,13 +3936,16 @@ bool z80_peep::rule_push_hl_de_load(size_t i) {
     return true;
 }
 
-// ld a,(ix+N); ld (ix+N),a  →  nothing  (load then store same byte)
+// ld a,(ix+N); ld (ix+N),a  →  ld a,(ix+N)
+// The store is a no-op, but the load still defines A.  Remove the load too
+// only when every following path overwrites A before observing it.
 bool z80_peep::rule_self_store(size_t i) {
     if (i + 1 >= lines_.size()) return false;
     auto &a = lines_[i];
     auto &b = lines_[i + 1];
 
-    if (a.mnemonic != "ld" || b.mnemonic != "ld") return false;
+    if (a.mnemonic != "ld" || b.mnemonic != "ld" || !b.label.empty())
+        return false;
     std::string a_dst, a_src, b_dst, b_src;
     if (!split_ld(a.operands, a_dst, a_src)) return false;
     if (!split_ld(b.operands, b_dst, b_src)) return false;
@@ -3953,7 +3956,24 @@ bool z80_peep::rule_self_store(size_t i) {
     if (!parse_ix_ref(b_dst, off_b)) return false;
     if (off_a != off_b) return false;
 
-    lines_.erase(lines_.begin() + i, lines_.begin() + i + 2);
+    // An arbitrary IX-relative object may be a volatile source local, and the
+    // assembly no longer carries enough type information to discard its
+    // store.  Compiler temporary-frame slots are non-observable spill storage
+    // described explicitly by the canonical prologue metadata.
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    if (!current_function_frame(lines_, i, locals, temp_frame,
+                                prologue_index) ||
+        !ix_offset_in_temp_frame(off_a, locals, temp_frame)) {
+        return false;
+    }
+
+    if (a.label.empty() && a_overwritten_before_read(lines_, i + 2)) {
+        lines_.erase(lines_.begin() + i, lines_.begin() + i + 2);
+    } else {
+        lines_.erase(lines_.begin() + i + 1);
+    }
     return true;
 }
 

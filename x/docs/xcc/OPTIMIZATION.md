@@ -6,8 +6,8 @@ Improve generated code for an 8-bit Z80 target without forcing size and
 speed through the same compromise policy. The compiler should prefer:
 
 - linked bytes under `-Os`, even when sharing adds call overhead
-- measured Z80 cycles under `-Of` (also selected by `-O3`), even when a
-  faster sequence costs more bytes
+- measured Z80 cycles under `-Of` and experimental `-O3`, even when a faster
+  sequence costs more bytes
 - fixed, repeatable local rewrites over expensive global analysis
 - small shared runtime helpers when they remove repeated inline
   sequences
@@ -68,14 +68,27 @@ regressions. Correct nonzero-offset `ADDRESS_OF` emission and rematerialization
 remain enabled because they are semantic fixes, not benchmark profitability
 decisions.
 
-An independent bare-metal holdout then exposed scalar-local promotion assigning
-an invalid live range when followed by register allocation across complex CFG
-joins. The pass remains available only through its explicit experimental flag;
-no public `-O` preset enables it.
+An independent bare-metal holdout exposed scalar-local promotion assigning an
+invalid live range when followed by register allocation across complex CFG
+joins. The repaired transformation and physical-home allocator were first
+validated in `-O3`, with source-independent per-function profitability guards
+and broad execution coverage, and have now graduated to `-Of`.
 
-`-O3` is now an exact compatibility spelling of the validated `-Of` preset.
-The experimental wider inliner and cross-block value propagation are not part
-of a public optimization level.
+The O3 holdout audit also strengthened two transformation preconditions.
+Lockstep pointer walking follows a copied induction value only when no
+competing definition in the natural loop can reach the use through a
+backedge. At the assembly level, self-store cleanup applies only to
+compiler-described temporary-frame slots. Removing `ld N(ix),a` from the pair
+`ld a,N(ix); ld N(ix),a` must preserve the load while `A` is live; both
+instructions may disappear only after an all-path overwrite-before-read
+proof. Source-local slots are retained when the assembly stream carries no
+volatility proof.
+
+`-O3` retains a distinct profile identity but is currently an empty alias of
+the validated `-Of` baseline. Pure byte-count transformations remain in
+`-Os`; the next speed experiment can mature in `-O3` before promotion to
+`-Of`. Unsafe wider inlining and cross-block value propagation remain disabled
+by default.
 
 ## Current Baseline
 
@@ -91,8 +104,10 @@ still intentionally small.
 - Temporary storage is still stack-heavy. Temps are lazily assigned
   IX-relative spill slots, and stack space for them is grown at first
   use by emitting `dec sp` or `ld hl,#-N / add hl,sp / ld sp,hl`.
-- Register allocation is a lightweight pre-pass that can pin a 16-bit
-  temp in `BC` inside narrow straight-line windows.
+- Register allocation is a lightweight Z80 pre-pass that can pin proven byte,
+  word, cursor, and induction live ranges in physical homes. It is enabled by
+  `-Of` (and therefore its empty `-O3` alias) and remains explicit opt-in
+  elsewhere.
 - The peephole pass is purely syntactic and already removes several
   common push/pop, self-load, and jump-to-next-label patterns.
 

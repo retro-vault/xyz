@@ -48,7 +48,7 @@ mkdir -p "$OUT/work"
 mkdir -p "$OUT/artifacts"
 ARTIFACTS="$OUT/artifacts"
 RESULTS="$OUT/results.csv"
-printf 'benchmark,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Os_sdcc0_status,xcc_Os_sdcc0_bytes,xcc_Os_sdcc0_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,xcc_Of_sdcc0_status,xcc_Of_sdcc0_bytes,xcc_Of_sdcc0_cycles,sccz80_status,sccz80_bytes,sccz80_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles\n' > "$RESULTS"
+printf 'benchmark,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Os_sdcc0_status,xcc_Os_sdcc0_bytes,xcc_Os_sdcc0_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,xcc_Of_sdcc0_status,xcc_Of_sdcc0_bytes,xcc_Of_sdcc0_cycles,xcc_O3_status,xcc_O3_bytes,xcc_O3_cycles,xcc_O3_sdcc0_status,xcc_O3_sdcc0_bytes,xcc_O3_sdcc0_cycles,sccz80_status,sccz80_bytes,sccz80_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles\n' > "$RESULTS"
 
 decode_fixture() {
     local src="$1" dst="$2"
@@ -171,12 +171,15 @@ while IFS=$'\t' read -r name rel; do
     xos0="$(run_xcc_mode "$name" "$rel" Os_sdcc0 "$work")"
     xof="$(run_xcc_mode "$name" "$rel" Of "$work")"
     xof0="$(run_xcc_mode "$name" "$rel" Of_sdcc0 "$work")"
+    xo3="$(run_xcc_mode "$name" "$rel" O3 "$work")"
+    xo30="$(run_xcc_mode "$name" "$rel" O3_sdcc0 "$work")"
     scc="$(run_z88dk_mode "$name" "$rel" sccz80 '-compiler=sccz80' "$work")"
     sdc="$(run_z88dk_mode "$name" "$rel" sdcc '-compiler=sdcc' "$work")"
     ofp="$(run_z88dk_mode "$name" "$rel" 80cc_fp '-compiler=80cc -Cc-frameix' "$work")"
     osp="$(run_z88dk_mode "$name" "$rel" 80cc_sp '-compiler=80cc' "$work")"
-    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
-        "$name" "$xos" "$xos0" "$xof" "$xof0" "$scc" "$sdc" "$ofp" "$osp" \
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        "$name" "$xos" "$xos0" "$xof" "$xof0" "$xo3" "$xo30" \
+        "$scc" "$sdc" "$ofp" "$osp" \
         >> "$RESULTS"
 done < "$MANIFEST"
 

@@ -1,4 +1,4 @@
-# Audited Final XCC Optimization Run (2026-07-29)
+# Audited XCC Baseline And Graduated Speed Profiles
 
 This report supersedes and retracts the earlier tuned-corpus leaderboard.
 That result was not evidence of general compiler performance: an audit found
@@ -11,15 +11,51 @@ The corpus is pinned at
 `orig/z88dk` is pinned at
 `94bc327720721402eee7ffc1c4794245fe65ebb1`.
 
-The final compiler has:
+The overfitting-audited baseline had:
 
 - no whole-function `try_emit_sdcc_style_helper` selector
 - no fixed-global interprocedural benchmark specialization
-- no public-preset use of the unsafe scalar-local promotion, physical
+- no public-preset use of the then-unsafe scalar-local promotion, physical
   register allocator, or promoted-byte-operations experiments
-- identical `-O3` and `-Of` optimization settings
+- identical `-O3` and `-Of` optimization settings at that audit point
 - the same supported public ABI behavior under `sdcccall(0)` and
   `sdcccall(1)`
+
+## Current Graduated Result (2026-08-06)
+
+Guarded scalar promotion, physical register homes, the dense-dispatch
+profitability guard, and local adjacent-recurrence spill sinking have
+graduated to `-Of`. The recurrence rewrite also belongs to `-Os` because it is
+strictly smaller as well as faster. `-O3` is now an empty experimental alias
+of `-Of`; keeping it as a separately measured lane makes future divergence
+visible immediately. These transformations match IR shape, types, liveness,
+aliases, and control flow only; they do not inspect source paths, function
+names, benchmark constants, or expected outputs. All 23 programs pass in both
+ABIs.
+
+| XCC lane | Correct | Size wins vs SDCC | Speed wins vs SDCC | Size strict best | Speed strict best |
+|---|---:|---:|---:|---:|---:|
+| `-Os`, ABI 1 | 23/23 | 23/23 | 3/23 | 22/23 | 1/23 |
+| `-Os`, ABI 0 | 23/23 | 23/23 | 3/23 | 22/23 | 1/23 |
+| `-Of`, ABI 1 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
+| `-Of`, ABI 0 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
+| `-O3`, ABI 1 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
+| `-O3`, ABI 0 | 23/23 | 22/23 | 14/23 | 22/23 | 13/23 |
+
+The Pareto-safe recurrence graduation gives `-Os` a third speed win against
+SDCC and its first strict speed win against the full competitor envelope,
+without weakening its 23/23 size wins against SDCC.
+
+By geometric mean, ABI1 `-Of` and `-O3` are 0.65% faster than SDCC across all
+23 programs. They are still 9.89% slower than the per-program best successful
+competitor envelope (ABI0: 9.72%), so the result is a large improvement rather
+than a claim that every remaining code-generation gap is closed.
+
+The current raw CSV, binaries, maps, outputs, and run logs are generated under
+`build/x/benchmarks/profiles-promoted-final/z88dk24/`. The historical audited
+measurement below is retained to show the earlier baseline and the reason for
+the guardrails. The compiler used for this promotion has SHA-256
+`ee69e040f25df2068ca0a9a27c1be839ab4c04edca0780a2e0a3c282c5a000cd`.
 
 ## Measurement
 
@@ -96,14 +132,17 @@ The generated portable corpus runs every compiler through the same runner.
 All eight compiler/profile lanes return the expected result on 40/40
 programs.  On this frozen RLE-family corpus:
 
-- XCC `-Os` is 24.51% larger and uses 81.97% more cycles than the best
+- XCC `-Os` is 15.75% larger and uses 73.48% more cycles than the best
   competing size lane in aggregate, with 0/40 size wins
-- XCC `-O3` is 27.67% larger and uses 88.08% more cycles than the fastest
+- XCC `-Of` and its empty `-O3` alias are 20.57% larger and use 69.22% more cycles than the fastest
   competing lane in aggregate, with 0/40 speed wins
-- XCC `-O3` and `-Of` are byte- and cycle-identical
+- XCC `-Of` and `-O3` are identical at 27,194 payload bytes and 2,676,535
+  cycles; all 40 outputs are correct
 
 The separate, more varied 20-program bare-metal corpus returns the expected
 result in 20/20 programs for each of XCC `-O2`, `-Of`, `-O3`, and `-Os`.
+There `-Of` and `-O3` are identical at 13,813 payload bytes and 4,617,452
+cycles across the complete corpus.
 Most SDCC images in that harness time out or return a different checksum, so
 that corpus is used as an XCC generalization/correctness holdout, not as a
 cross-compiler leaderboard.
@@ -113,7 +152,7 @@ fixed8.8, fixed16.16, fixed24.8, float, and double.
 
 ## Validation
 
-The final frozen compiler hash was
+The preceding full-project frozen validation used compiler hash
 `4a6024d831357b05b238a0920f0cf8c49bf114016b5a76d6c650843025fc8c77`
 for both the normal and M-model staged compiler.  It completed:
 

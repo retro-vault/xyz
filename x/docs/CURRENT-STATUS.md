@@ -2,11 +2,11 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-07-29, after the XCC optimization overfitting audit.
+Last updated: 2026-08-06, after graduating the guarded XCC speed pass.
 
 ## Major Recent Work
 
-### 0. XCC Optimization Overfitting Audit
+### 0. XCC Optimization Guardrails And Empty Experimental Speed Lane
 
 The exact whole-function `try_emit_sdcc_style_helper` selector was removed.
 Its structural recipes were derived while repeatedly measuring the z88dk
@@ -16,34 +16,65 @@ specialization was also removed. Twenty-seven stale exact-assembly assertions
 tied to the removed recipes were retired, but their manifests and executable
 correctness coverage remain.
 
-Scalar-local promotion, physical register allocation, and promoted-byte
-operations are excluded from every public preset after frozen holdouts exposed
-miscompilations. `-O3` is now an exact compatibility spelling of `-Of`.
+The repaired scalar-local promotion and physical-home allocator have now
+graduated into the validated `-Of` speed profile.  The source-independent
+dense-dispatch profitability guard follows scalar promotion there.  The
+adjacent 32-bit conditional-shift recurrence rewrite graduated into both
+`-Of` and `-Os`, because avoiding intermediate spills is strictly faster and
+smaller.  `-O3` is intentionally empty again: it is an exact alias of `-Of`
+with a distinct profile identity reserved for the next experiment.  Four
+unrelated assembly probes and every completed aggregate benchmark report
+byte/cycle-identical `-Of` and `-O3` output.  Pure size policy remains
+exclusive to `-Os`.
+The subsequent holdout audit repaired two general proof gaps: lockstep pointer
+walking rejects copied indices with competing natural-loop definitions, and
+xopt limits IX self-store cleanup to compiler-described temporary-frame slots
+and preserves the accumulator-defining half unless all paths overwrite `A`
+before reading it. Source-local slots remain untouched when volatility
+metadata is unavailable. Focused executable and assembly regressions cover
+both cases.
 An additional ABI1 defect found by the full matrix was fixed: compact-frame
 comparison lowering could treat a reserved spill slot for an incoming register
 parameter as initialized stack storage and leave a frameless function's SP
 unbalanced.
+Static pointer initializers were also repaired: object, array-element,
+member, and function addresses now emit relocatable symbol expressions with
+addends, and external symbols referenced only by initializer data are declared
+to the assembler.  Compile and execution regressions cover both internal and
+external addresses, including the pattern that broke Lunatik's glyph table.
 
-The final frozen compiler executes 8301 compiler variants with zero failures:
+The 2026-07-29 frozen baseline executed 8301 compiler variants with zero failures:
 ABI0 has 2684 compile and 1477 execution passes; ABI1 has 2688 compile and
 1452 execution passes. The four matrices also contain 73 manifest-declared
 opposite-ABI skips. The expanded default E2E entrypoint now runs the runtime,
 libc, ABI-split compiler matrices, C23 execution, external corpora, z88dk
 compatibility suite, remaining host tools, CP/M and YOS applications, and
 all MDR modes instead of silently omitting those phases.
+The current unified XCC-filtered manifest run passes 4,229/4,229 variants.
 
 All compiler lanes in the 23-program comparison now use the same `z80_exec`
 timing model. Every XCC lane passes 23/23. The strong result is linked-image
 size: `-Os` is strictly smaller than the best successful competitor on 22/23.
-The honest speed result is not leading: `-Of` wins the best-competitor
-envelope on only 1/23, and its geometric-mean cycles are 46.40% above that
-envelope under ABI1 and 46.18% above it under ABI0. Detailed measurements are
-in `x/tests/benchmarks/z88dk24/RESULTS.md`.
+The Pareto-safe recurrence graduation also raises `-Os` to 3/23 speed wins
+against SDCC and 1/23 strict speed wins against the competitor envelope.
+The graduated `-Of` result, and therefore the empty `-O3` alias, remains
+correct on 23/23 in both ABIs and is strict-fastest against the successful
+competitor envelope on 13/23 programs; it wins 14/23 against SDCC.  Its ABI1
+geometric-mean cycle count is 0.65% below SDCC but 9.89% above the per-program
+best successful competitor envelope (ABI0: 9.72% above).  Detailed
+measurements are in `x/tests/benchmarks/z88dk24/RESULTS.md`.
 
-Every lane in the frozen 40-program portable corpus passes, but XCC wins
-neither size nor speed there. Every XCC profile passes the more varied
-20-program bare-metal holdout, and the numeric holdout passes 50/50.
-Accordingly, no general speed-lead claim is made.
+Every lane in the frozen 40-program portable corpus passes.  `-Of` and `-O3`
+are identical at 27,194 payload bytes and 2,676,535 cycles, but remain 69.22%
+slower than the fastest competitor and win no individual program.  Every XCC
+profile passes the more varied 20-program bare-metal holdout; `-Of` and `-O3`
+are identical there too at 13,813 bytes and 4,617,452 cycles.  The numeric
+holdout passes 50/50.  Accordingly, no general speed-lead claim is made.
+
+The current active manifest expands to 4,262 compiler variants.  The complete
+set passed in bounded category/range shards after the graduation, as did the
+standalone xopt smoke suite and `make -C x`.  The four benchmark suites are
+consolidated under `build/x/benchmarks/profiles-promoted-final/`.
 
 Only Pareto-safe size transforms were promoted to speed mode: redundant
 pair-immediate reload removal, two-/four-byte `push af` stack allocation, and
@@ -98,8 +129,8 @@ A full restructuring proposal was developed (see `docs/ARCHITECTURE.md` for the 
 The xtools staging layout has now started moving toward a real standalone
 compiler-suite install tree:
 
-- Root `Makefile` has a dedicated `make xtools` path that builds the core
-  compiler suite without requiring the whole OS build.
+- `make -C x` builds the standalone compiler suite without requiring the
+  whole OS build; the root Makefile no longer exposes the old `xtools` alias.
 - Output is now split into `bin/x/`, `bin/y/`, and `bin/z/`.
 - `bin/x/` is the xtools install prefix:
   - `bin/x/bin/` for host executables
@@ -156,7 +187,8 @@ The default top-level build flow now leans fully on the staged X toolchain:
 
 ## Open / Next Steps (from the Structure Discussion)
 
-- Decide on exact migration order and start the incremental refactoring (introduce `make xtools`, move `src/xc` → `toolchain/`, move tests into component directories, etc.).
+- Continue the incremental product-root migration and add a root `xtools`
+  convenience alias only if it remains useful; `make -C x` is canonical now.
 - Create dedicated packaging for the standalone xtools product.
 - Flesh out the `toolchain/tests/`, `libc/tests/`, etc. ownership once directories move.
 - Decide on sysroot / target layout for the distributable xtools.
@@ -177,7 +209,7 @@ The default top-level build flow now leans fully on the staged X toolchain:
 2. The session system will also feed a compacted history when you return to this directory. The documents above are the durable, human-readable memory.
 
 3. Common entry points:
-   - `make xtools` (once the target exists) or the current `make -C src/xc ...`
+   - `make -C x`
    - `make -C x/tests/libc core-test` (the main libc + C23 dispatch runner)
    - `cd x/tests/c23 && make matrix PROFILE=...` for the full external suite against the current xcc profile
 

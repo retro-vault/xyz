@@ -24,7 +24,7 @@
 //   push hl; ld hl,#n; pop de                   — replaced with ex de,hl; ld hl,#n
 //   push hl; ld de,#n; pop hl                   — push/pop around neutral DE load removed
 //   push hl; pop bc                             — replaced with ld b,h; ld c,l
-//   ld a,(ix+N); ld (ix+N),a                   — self-store removed
+//   ld a,(ix+N); ld (ix+N),a                   — temp self-store removed, A preserved
 //   ld hl,#n; ld hl,X                           — dead first load removed
 //   ld hl,#n; ld l,X; ld h,Y                    — dead first load removed
 //   push hl;ld hl,#0;pop de;or a,a;sbc hl,de   — zero-compare → ld a,h; or a,l
@@ -128,7 +128,7 @@ private:
     // push hl; ld de,#imm; pop hl  →  ld de,#imm
     bool rule_push_hl_de_load(size_t i);
 
-    // ld a,(ix+N); ld (ix+N),a  →  nothing (self-store no-op)
+    // Compiler-temp self-store: keep load unless A is proven dead.
     bool rule_self_store(size_t i);
 
     // ld hl,#imm; ld hl,X  →  ld hl,X  (dead first immediate load)

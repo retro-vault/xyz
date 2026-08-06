@@ -280,6 +280,14 @@ static void collect_global_init(expr *init, type_ptr target,
         return;
     }
 
+    if (target->is_ptr()) {
+        if (auto address = const_expr_evaluator::evaluate_address(init)) {
+            out.push_back(make_init_elem(address->byte_offset, target->size(),
+                                         address->symbol));
+            return;
+        }
+    }
+
     append_zero_object(target, out);
 }
 
@@ -473,6 +481,12 @@ void ir_gen::visit(var_decl &vd) {
                        str && is_char_pointer_type(vd.type)) {
                 gv.init_vals.push_back({0, vd.type ? vd.type->size() : 2,
                                          add_global_string_literal(*mod_, next_lbl_, *str)});
+            } else if (vd.type && vd.type->is_ptr()) {
+                if (auto address =
+                        const_expr_evaluator::evaluate_address(vd.init.get())) {
+                    gv.init_vals.push_back({address->byte_offset, vd.type->size(),
+                                            address->symbol});
+                }
             }
         }
         mod_->globals.push_back(std::move(gv));

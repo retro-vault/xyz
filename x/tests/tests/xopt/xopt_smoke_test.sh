@@ -27,6 +27,66 @@ if grep -q 'push	hl' "$TMPDIR/out.s"; then
     exit 1
 fi
 
+# -O3 is deliberately an empty profile alias. Keep a direct equivalence
+# check here so a future xopt rule cannot accidentally enter only one lane.
+"$XOPT" -Of "$TMPDIR/in.s" -o "$TMPDIR/profile_of.s"
+"$XOPT" -O3 "$TMPDIR/in.s" -o "$TMPDIR/profile_o3.s"
+if ! cmp -s "$TMPDIR/profile_of.s" "$TMPDIR/profile_o3.s"; then
+    echo "xopt smoke: -O3 diverged from its empty -Of alias" >&2
+    exit 1
+fi
+
+cat >"$TMPDIR/self_store_a_liveness.s" <<'ASM'
+	.area	_CODE
+_self_store_a_live:
+	; sdcccall(1) prologue: self_store_a_live (locals=0, temp_frame=4, stack_params=0)
+	ld	a, -3(ix)
+	ld	-3(ix), a
+	add	a, #1
+	ld	-3(ix), a
+	ret
+_self_store_a_dead:
+	; sdcccall(1) prologue: self_store_a_dead (locals=0, temp_frame=4, stack_params=0)
+	ld	a, -4(ix)
+	ld	-4(ix), a
+	ld	a, #7
+	ret
+_source_local_self_store:
+	; sdcccall(1) prologue: source_local_self_store (locals=1, temp_frame=0, stack_params=0)
+	ld	a, -1(ix)
+	ld	-1(ix), a
+	ret
+ASM
+
+"$XOPT" -O3 "$TMPDIR/self_store_a_liveness.s" \
+    -o "$TMPDIR/self_store_a_liveness.out.s"
+if ! awk '
+    /^_self_store_a_live:/ { in_fn=1; next }
+    /^_self_store_a_dead:/ { in_fn=0 }
+    in_fn && /ld[[:space:]]+a, ?-3\(ix\)/ { load=1 }
+    in_fn && /(add[[:space:]]+a, ?#1|inc[[:space:]]+a)/ { use=1 }
+    END { exit load && use ? 0 : 1 }
+' "$TMPDIR/self_store_a_liveness.out.s"; then
+    echo "xopt smoke: self-store removal discarded a live A definition" >&2
+    exit 1
+fi
+if awk '
+    /^_self_store_a_dead:/ { in_fn=1; next }
+    in_fn && /ld[[:space:]]+a, ?-4\(ix\)/ { stale_load=1 }
+    END { exit stale_load ? 0 : 1 }
+' "$TMPDIR/self_store_a_liveness.out.s"; then
+    echo "xopt smoke: dead self-load was not removed after proving A dead" >&2
+    exit 1
+fi
+if ! awk '
+    /^_source_local_self_store:/ { in_fn=1; next }
+    in_fn && /ld[[:space:]]+-1\(ix\), ?a/ { store=1 }
+    END { exit store ? 0 : 1 }
+' "$TMPDIR/self_store_a_liveness.out.s"; then
+    echo "xopt smoke: source-local self-store was removed without volatility metadata" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/exx_island.s" <<'ASM'
 	.area	_CODE
 _exx_island:
@@ -462,6 +522,12 @@ grep -Eq '^__xopt_outline_[0-9]+:' "$TMPDIR/size_outline.os.s"
 "$XOPT" -Of "$TMPDIR/size_outline.s" -o "$TMPDIR/size_outline.of.s"
 if grep -q '__xopt_outline_' "$TMPDIR/size_outline.of.s"; then
     echo "xopt smoke: speed mode unexpectedly enabled size outlining" >&2
+    exit 1
+fi
+
+"$XOPT" -O3 "$TMPDIR/size_outline.s" -o "$TMPDIR/size_outline.o3.s"
+if grep -q '__xopt_outline_' "$TMPDIR/size_outline.o3.s"; then
+    echo "xopt smoke: -O3 unexpectedly enabled size outlining" >&2
     exit 1
 fi
 
@@ -4546,6 +4612,28 @@ if ! awk '
     END { exit load && add && store ? 0 : 1 }
 ' "$TMPDIR/speed_stack_alloc_push_af.out.s"; then
     echo "xopt smoke: -Of selected slower PUSH/DEC allocation for five bytes" >&2
+    exit 1
+fi
+
+"$XOPT" -O3 "$TMPDIR/speed_stack_alloc_push_af.s" \
+    -o "$TMPDIR/speed_stack_alloc_push_af.o3.s"
+if [[ "$(awk '
+    /^_speed_stack_alloc_push_af:/ { in_fn=1; next }
+    /^_speed_stack_alloc_five_bytes:/ { in_fn=0 }
+    in_fn && /^[[:space:]]+push[[:space:]]+af/ { count++ }
+    END { print count+0 }
+' "$TMPDIR/speed_stack_alloc_push_af.o3.s")" != "2" ]]; then
+    echo "xopt smoke: -O3 did not retain the faster four-byte allocation" >&2
+    exit 1
+fi
+if ! awk '
+    /^_speed_stack_alloc_five_bytes:/ { in_fn=1; next }
+    in_fn && /ld[[:space:]]+hl,[[:space:]]*#-5/ { load=1 }
+    in_fn && /add[[:space:]]+hl,[[:space:]]*sp/ { add=1 }
+    in_fn && /ld[[:space:]]+sp,[[:space:]]*hl/ { store=1 }
+    END { exit load && add && store ? 0 : 1 }
+' "$TMPDIR/speed_stack_alloc_push_af.o3.s"; then
+    echo "xopt smoke: -O3 selected the smaller but slower five-byte allocation" >&2
     exit 1
 fi
 

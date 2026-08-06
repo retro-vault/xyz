@@ -221,7 +221,8 @@ void z80_gen::gen_ifx(const icode &ic) {
     } else if (operand_home_in_bc(ic.left)) {
         emit_line("ld\ta, b");
         emit_line("or\ta, c");
-    } else if (opt_settings_.level == opt_level::Of &&
+    } else if ((opt_settings_.level == opt_level::Of ||
+                opt_settings_.level == opt_level::O3) &&
                ic.left.is_temp()) {
         auto home = temp_regs_.find(ic.left.temp_id);
         if (home != temp_regs_.end() &&

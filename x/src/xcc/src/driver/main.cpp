@@ -406,7 +406,7 @@ static int compile_source_to_text(const std::string &input_path,
     ir_gen irgen;
     auto  mod = irgen.lower(*tu);
 
-    // ----- 3.5 IR optimization (-O2 / -O3 / -Os) ----------------------
+    // ----- 3.5 IR optimization (-O2 / -Of / -O3 / -Os) ----------------
     if (effective_opt_settings.has_module_passes()) {
         ir_module_optimizer::optimize(*mod, effective_opt_settings);
     }

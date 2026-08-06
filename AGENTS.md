@@ -44,7 +44,7 @@ Canonical release notes now live with each product root:
 ```bash
 make                    # full build (current root flow)
 make packages           # optional packaging pass
-make xtools             # build the standalone xtools prefix
+make -C x               # build the standalone xtools prefix
 make clean
 
 make -C x               # build the migrated X product tree
@@ -84,7 +84,7 @@ When adding a new test:
 
 The "x tools" (xcc, xas, xld, ...) should be buildable and distributable without the full OS.
 
-1. `make xtools` (or `make -C x all` for the migrated X product build)
+1. `make -C x all`
 2. The resulting artifacts in `bin/x/` (plus staged includes and runtime libs) form the distributable "xtools" package.
 3. Packaging lives in `x/pkg/` and `y/pkg/`. Look there for xtools- or YOS-specific packaging targets.
 
@@ -105,7 +105,7 @@ When publishing the toolchain:
 
 **Build just the compiler and run its tests**
 ```bash
-make xtools
+make -C x
 make -C x/src/xcc test
 ```
 
@@ -117,7 +117,7 @@ bash x/tests/run_tests.sh --filter xcc
 
 **Run the runtime test suite**
 ```bash
-make xtools
+make -C x
 bash x/tests/run_tests.sh --filter xcc_exec_
 ```
 
@@ -133,7 +133,7 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
 - The external-style suite under `x/tests/tests/c23/tests/cases/` is the source of truth for the full matrix.
 
 **Distribute the x tools**
-- Build with `make xtools`
+- Build with `make -C x`
 - Use / extend packaging under `x/pkg/`
 - The result should be installable independently (binaries + headers + runtime libs).
 
@@ -149,9 +149,11 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
 - Large dual-style test base (direct emulator calls + xcc-compiled C cases) for both libc and runtime.
 - Integration of an external C23 compatibility suite (`x/tests/tests/c23/`) for compiler testing.
 - Discussion and planning of repo restructuring for independent toolchain distribution (see `x/docs/ARCHITECTURE.md`).
-- XCC optimization profiles now treat `-O3` as an exact compatibility alias
-  of the validated `-Of` speed pipeline. Keep experimental transformations
-  behind explicit flags until they are stable in both ABI modes.
+- XCC optimization profiles use `-Of` as the validated speed baseline and
+  keep `-O3` as an intentionally empty alias of it, ready for the next speed
+  experiment. Pure size policy belongs only in `-Os`; validate new `-O3` work
+  in both ABI modes before promoting speed wins to `-Of` and Pareto-safe size
+  wins to `-Os`.
 
 Update this file and the architecture documents when major structural or philosophical changes are made.
 

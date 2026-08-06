@@ -2,8 +2,8 @@
 // z80reg.cpp -- register coverage analysis for Z80 assembly.
 //
 // This is intentionally a coverage/pressure estimator, not a full liveness
-// engine.  It answers "which register families are busy here?" so O3 can use
-// the result as a guide for later, more exact transformations.
+// engine.  It answers "which register families are busy here?" so optimization
+// passes can use the result as a guide for later, more exact transformations.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih

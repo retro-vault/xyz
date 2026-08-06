@@ -6,6 +6,7 @@
 //
 #include "frontend/const_eval.h"
 #include "frontend/ast.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -90,6 +91,146 @@ static const struct_field *find_named_field(const type *agg,
             return &field;
     }
     return nullptr;
+}
+
+static std::optional<address_constant> evaluate_address_impl(const expr *e);
+
+static std::optional<address_constant> address_of_symbol(
+    const ident_expr *id) {
+    if (!id || !id->sym ||
+        (id->sym->kind != sym_kind::VAR &&
+         id->sym->kind != sym_kind::FUNC) ||
+        (!id->sym->is_global && id->sym->kind != sym_kind::FUNC)) {
+        return std::nullopt;
+    }
+
+    address_constant result;
+    result.symbol = id->sym->asm_name.empty()
+        ? id->sym->name
+        : id->sym->asm_name;
+    return result;
+}
+
+static int pointer_element_size(const type_ptr &ty) {
+    type_ptr unqualified = ty ? ty->unqual() : nullptr;
+    if (!unqualified)
+        return 1;
+    if ((unqualified->is_ptr() || unqualified->is_array()) &&
+        unqualified->base) {
+        const int size = unqualified->base->size();
+        return size > 0 ? size : 1;
+    }
+    return 1;
+}
+
+static std::optional<address_constant> evaluate_lvalue_address(
+    const expr *e) {
+    if (!e)
+        return std::nullopt;
+
+    if (auto *id = dynamic_cast<const ident_expr *>(e))
+        return address_of_symbol(id);
+
+    if (auto *u = dynamic_cast<const unary_expr *>(e)) {
+        if (u->op == unary_op::DEREF)
+            return evaluate_address_impl(u->operand.get());
+        return std::nullopt;
+    }
+
+    if (auto *idx = dynamic_cast<const index_expr *>(e)) {
+        auto base = evaluate_address_impl(idx->base.get());
+        auto index = const_expr_evaluator::evaluate(idx->index.get());
+        if (!base || !index)
+            return std::nullopt;
+        const int element_size = idx->type
+            ? std::max(idx->type->size(), 1)
+            : 1;
+        base->byte_offset = wrap_add(
+            base->byte_offset, wrap_mul(*index, element_size));
+        return base;
+    }
+
+    if (auto *member = dynamic_cast<const member_expr *>(e)) {
+        std::optional<address_constant> base = member->is_arrow
+            ? evaluate_address_impl(member->object.get())
+            : evaluate_lvalue_address(member->object.get());
+        type_ptr owner = member->owner_type;
+        if (!owner && member->object)
+            owner = member->object->type;
+        if (member->is_arrow && owner && owner->is_ptr())
+            owner = owner->base;
+        const struct_field *field = find_named_field(owner.get(), member->member);
+        if (!base || !field)
+            return std::nullopt;
+        base->byte_offset = wrap_add(base->byte_offset, field->offset);
+        return base;
+    }
+
+    return std::nullopt;
+}
+
+static std::optional<address_constant> evaluate_address_impl(const expr *e) {
+    if (!e)
+        return std::nullopt;
+
+    if (auto *cast = dynamic_cast<const cast_expr *>(e))
+        return evaluate_address_impl(cast->operand.get());
+
+    if (auto *id = dynamic_cast<const ident_expr *>(e)) {
+        type_ptr ty = id->type ? id->type->unqual() : nullptr;
+        if (id->sym && (id->sym->kind == sym_kind::FUNC ||
+                        (ty && ty->is_array()))) {
+            return address_of_symbol(id);
+        }
+        return std::nullopt;
+    }
+
+    if (auto *u = dynamic_cast<const unary_expr *>(e)) {
+        if (u->op == unary_op::ADDR)
+            return evaluate_lvalue_address(u->operand.get());
+        return std::nullopt;
+    }
+
+    if (auto *bin = dynamic_cast<const binary_expr *>(e)) {
+        if (bin->op == bin_op::ADD || bin->op == bin_op::SUB) {
+            if (auto base = evaluate_address_impl(bin->left.get())) {
+                if (auto offset = const_expr_evaluator::evaluate(
+                        bin->right.get())) {
+                    const int64_t scaled = wrap_mul(
+                        *offset, pointer_element_size(bin->left->type));
+                    base->byte_offset = bin->op == bin_op::ADD
+                        ? wrap_add(base->byte_offset, scaled)
+                        : wrap_sub(base->byte_offset, scaled);
+                    return base;
+                }
+            }
+            if (bin->op == bin_op::ADD) {
+                if (auto base = evaluate_address_impl(bin->right.get())) {
+                    if (auto offset = const_expr_evaluator::evaluate(
+                            bin->left.get())) {
+                        base->byte_offset = wrap_add(
+                            base->byte_offset,
+                            wrap_mul(*offset,
+                                     pointer_element_size(bin->right->type)));
+                        return base;
+                    }
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    if (auto *conditional = dynamic_cast<const conditional_expr *>(e)) {
+        auto condition = const_expr_evaluator::evaluate(
+            conditional->cond.get());
+        if (!condition)
+            return std::nullopt;
+        return evaluate_address_impl(
+            *condition ? conditional->then_expr.get()
+                       : conditional->else_expr.get());
+    }
+
+    return std::nullopt;
 }
 
 static int slot_index_for_offset(const type *agg, int offset) {
@@ -509,6 +650,11 @@ std::optional<int64_t> const_expr_evaluator::evaluate_integer_conversion(
     if (truncated < minimum || truncated > maximum)
         return std::nullopt;
     return apply_integer_cast(static_cast<int64_t>(truncated), target.get());
+}
+
+std::optional<address_constant> const_expr_evaluator::evaluate_address(
+    const expr *e) {
+    return evaluate_address_impl(e);
 }
 
 } // namespace xcc

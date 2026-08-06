@@ -18,7 +18,7 @@ enum class opt_level {
     O0 = 0, // no optimization
     O1 = 1, // late target cleanup only (peephole + tiny backend fusions)
     O2 = 2, // smart optimizer baseline (IR + backend + O1 cleanup)
-    O3 = 3, // command-line compatibility alias for the stable speed profile
+    O3 = 3, // empty experimental alias of -Of; reserved for the next speed pass
     Of = 4, // O2-based speed profile with validated speed hooks
     Os = 5, // size-biased smart optimization
 };
@@ -154,9 +154,6 @@ struct optimization_settings {
             // full-width induction state when a byte array sink appears in a
             // large frame, so it is not release-grade for the speed profile.
             s.promoted_byte_ops = false;
-            // Physical register allocation remains an explicit experimental
-            // flag until its CFG liveness and helper clobber model pass the
-            // independent corpus.
             // Prefer branch-form updates such as `count -= !predicate` when
             // the Boolean is consumed only by adjacent arithmetic.  Besides
             // avoiding a materialized 0/1 value, this shortens the taken hot
@@ -167,15 +164,20 @@ struct optimization_settings {
             // saves a full-width compare on the Z80 hot path.
             s.countdown_dead_loops = true;
             s.value_propagation = false;
+            // Graduated from the 2026-08 O3 experiment after the complete
+            // compiler matrix and the independent bare, numeric, portable,
+            // and full-program benchmark corpora remained correct.  Dense
+            // dispatch retains its source-independent profitability guard in
+            // the IR driver.
+            s.regalloc = true;
+            s.scalar_local_promotion = true;
             break;
 
         case opt_level::O3:
             s = for_level(opt_level::Of);
-            // Keep -O3 as a compatibility spelling of the fully validated
-            // speed pipeline.  Experimental cross-block value propagation
-            // and the wider inliner previously made this preset differ by
-            // ABI and retained transformations that were not release-grade.
-            // New speed work is stabilized in -Of before it reaches -O3.
+            // Deliberately empty. Retain a distinct level identity so the next
+            // speed experiment can be staged here without changing -Of.
+            s.level = level;
             break;
 
         case opt_level::Os:

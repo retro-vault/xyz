@@ -1811,6 +1811,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // complete window must be free of calls or opaque code.
     for (const auto &[tid, iv] : ivs) {
         if (opt_settings_.level != opt_level::Of &&
+            opt_settings_.level != opt_level::O3 &&
             opt_settings_.level != opt_level::Os)
             break;
         if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0 ||
@@ -6756,6 +6757,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // indexed-IY load on every loop iteration.
     for (const auto &[cursor_tid, cursor_home] : temp_regs_) {
         if (opt_settings_.level != opt_level::Of &&
+            opt_settings_.level != opt_level::O3 &&
             opt_settings_.level != opt_level::Os)
             break;
         if (cursor_home != temp_home::main_iy)

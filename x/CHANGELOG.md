@@ -6,6 +6,53 @@ Release status:
 
 ## Unreleased
 
+- Graduated the guarded 2026-08 `-O3` speed experiment. Physical register
+  homes, scalar-local promotion, the dense-dispatch profitability guard, and
+  adjacent 32-bit recurrence spill sinking now belong to `-Of`; the recurrence
+  rewrite also belongs to `-Os` because it is strictly smaller as well as
+  faster. `-O3` once again has no exclusive transformation and is an exact
+  experimental alias of `-Of`, ready for the next speed investigation. The
+  benchmark harness continues to execute both lanes so future divergence is
+  visible immediately, and every historical O3-only compiler manifest now
+  also executes its graduated `-Of` lane. On the full-program matrix the
+  recurrence graduation gives `-Os` a third speed win against SDCC and its
+  first strict speed win against the complete competitor envelope without
+  weakening its 23/23 size wins.
+- Made `-O3` a materially faster experimental profile by enabling the
+  source-independent physical-home allocator together with unaliased scalar
+  promotion. A structural dense `EQ`/`IFX` dispatch guard retains the stable
+  scalar form when promotion lengthens a switch selector's live range. The Z80
+  backend now sinks stores across adjacent, fully proven 32-bit conditional
+  right-shift/XOR diamonds, keeping recurrence state in `DEHL` and committing
+  it once at the final join. Intervening IR, different objects, volatility,
+  escaping labels, and live branch temporaries remain barriers. Also fixed
+  modern-ABI materialization of a byte argument received in `L`: a direct
+  `L`-to-frame store no longer destroys an independently live first argument
+  in `A`. Independent recurrence and register-home execution tests cover the
+  new paths. Broad holdout validation also tightened two general legality
+  proofs: loop pointer walking no longer follows a copied induction value when
+  another definition can reach it through a nested-loop backedge, and xopt's
+  IX self-store cleanup is restricted to compiler-described temporary-frame
+  slots and preserves the preceding load whenever `A` remains live. The
+  latter now requires an all-path overwrite proof before deleting both
+  instructions; source-local stores remain intact when volatility metadata is
+  unavailable. Independent nested-subscript and accumulator-liveness
+  regressions cover both failures. The 23-program full-image comparison remains correct in both ABI
+  modes; `-O3` now has 14/23 speed wins against SDCC and 13/23 strict speed
+  wins against the complete non-XCC competitor envelope, versus 5/23 and 1/23
+  respectively for the unchanged `-Of` lane. Its geometric-mean cycles are
+  0.65% below SDCC and 9.89% above the best-successful-competitor envelope.
+- Split `-O3` from the validated `-Of` baseline so it can serve as the
+  experimental speed lane while byte-count-only policy remains exclusive to
+  `-Os`. Proof-bounded direct truncated-byte lowering and masked-MSB
+  shift/XOR lowering now also run under `-Os`, capturing their size wins
+  without enabling speed-for-size tradeoffs. Benchmark 23 now executes and
+  reports explicit `-O3` lanes under both ABIs, retaining independent
+  binaries, maps, correctness, size, and cycles for all six XCC lanes.
+- Fixed XCC static pointer initializers so object, array-element, structure-member,
+  and function addresses are emitted as relocatable symbols (including byte
+  addends) instead of zero-filled data. External symbols referenced only by
+  static initializer data are now declared to the assembler as well.
 - Added source-independent, proof-bounded Z80 improvements to the validated
   `-Of`/`-O3` pipeline without reintroducing whole-function benchmark
   selectors. Immediately truncated add/sub/bitwise/negate/complement/shift
@@ -50,8 +97,10 @@ Release status:
   interprocedural specialization were removed because complete-function IR
   recognition is benchmark overfitting even without filename checks.
   Scalar-local promotion, physical register allocation, and promoted-byte
-  operations remain outside every public preset after frozen holdouts exposed
-  miscompilations; `-O3` is an exact alias of the stable `-Of` pipeline.
+  operations were moved outside every public preset after frozen holdouts
+  exposed miscompilations; at that audit point `-O3` became an exact alias of
+  the stable `-Of` pipeline. The newer guarded `-O3` experiment is recorded
+  above.
   Twenty-seven stale exact-assembly assertions tied to the removed recipes
   were retired while their manifests and executable coverage were retained.
   The frozen ABI matrices execute 8301 variants with zero failures

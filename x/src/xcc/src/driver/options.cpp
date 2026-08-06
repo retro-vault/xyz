@@ -443,7 +443,7 @@ void options::usage(const char *argv0) {
         "  -O1               Late target cleanup only (peephole + tiny backend fusions)\n"
         "  -O2               Smart optimizer baseline (IR + backend + O1 cleanup)\n"
         "  -Of               O2-based speed profile with validated speed hooks\n"
-        "  -O3               Compatibility alias for stable -Of speed profile\n"
+        "  -O3               Empty experimental alias of -Of\n"
         "  -Os               Size-biased smart optimization\n"
         "  --opt-code-size   Alias for -Os (SDCC compatibility)\n"
         "  --opt-code-speed  Alias for -Of (SDCC compatibility)\n"

@@ -815,7 +815,8 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 break;
             }
             if (symbol_home_in_iy(op) && op.byte_offset == 0) {
-                if (opt_settings_.level == opt_level::Of && r.lo != 'l') {
+                if ((opt_settings_.level == opt_level::Of ||
+                     opt_settings_.level == opt_level::O3) && r.lo != 'l') {
                     emit_line("ld\td, iyh");
                     emit_line("ld\te, iyl");
                 } else {
@@ -877,7 +878,8 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 if (r.lo == 'l') { emit_line("ld\th, d"); emit_line("ld\tl, e"); }
                 break;
             case temp_home::main_iy:
-                if (opt_settings_.level == opt_level::Of && r.lo != 'l') {
+                if ((opt_settings_.level == opt_level::Of ||
+                     opt_settings_.level == opt_level::O3) && r.lo != 'l') {
                     emit_line("ld\td, iyh");
                     emit_line("ld\te, iyl");
                 } else {
@@ -990,7 +992,8 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
                 if (r.lo == 'l') { emit_line("ld\td, h"); emit_line("ld\te, l"); }
                 break;
             case temp_home::main_iy:
-                if (opt_settings_.level == opt_level::Of && r.lo != 'l') {
+                if ((opt_settings_.level == opt_level::Of ||
+                     opt_settings_.level == opt_level::O3) && r.lo != 'l') {
                     emit_line("ld\tiyh, d");
                     emit_line("ld\tiyl, e");
                 } else {
@@ -1473,7 +1476,8 @@ void z80_gen::load_de_word(const operand &op, int word_index) {
                 return;
             }
             if (ri->second == temp_home::main_iy) {
-                if (opt_settings_.level == opt_level::Of) {
+                if (opt_settings_.level == opt_level::Of ||
+                    opt_settings_.level == opt_level::O3) {
                     emit_line("ld\td, iyh");
                     emit_line("ld\te, iyl");
                 } else {
@@ -1572,7 +1576,8 @@ void z80_gen::store_de_word(const operand &op, int word_index) {
         }
         if (ri != temp_regs_.end() && word_index == 0 &&
             ri->second == temp_home::main_iy) {
-            if (opt_settings_.level == opt_level::Of) {
+            if (opt_settings_.level == opt_level::Of ||
+                opt_settings_.level == opt_level::O3) {
                 emit_line("ld\tiyh, d");
                 emit_line("ld\tiyl, e");
             } else {

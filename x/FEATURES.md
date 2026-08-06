@@ -48,7 +48,7 @@ daily-sized feature entries with generated-assembly examples.
 | Section | What it covers |
 |---|---|
 | [§11. Standalone Z80 Optimizer](#11-standalone-z80-optimizer) | Run `xopt` independently on one or many assembly files. |
-| [§12. Stable Speed And Manual Whole-Module Optimization](#12-stable-speed-and-manual-whole-module-optimization) | `xcc -Of` / `-O3` are stable aliases; aggressive `xopt --cross-file` use stays explicit. |
+| [§12. Stable Speed And Manual Whole-Module Optimization](#12-stable-speed-and-manual-whole-module-optimization) | `xcc -Of` is stable and `-O3` is its empty experimental alias; aggressive `xopt --cross-file` use stays explicit. |
 | [§13. Selectable Float Representation](#13-selectable-float-representation) | Choose IEEE `float` or fixed 8.8, 16.16, and 24.8 formats. |
 | [§14. 64-Bit Integer And Double Runtime Support](#14-64-bit-integer-and-double-runtime-support) | `long long`, software `double`, and S/M/L libc feature switches. |
 | [§15. Retargetable Platform Model](#15-retargetable-platform-model) | Add new boards, ROMs, CP/M-like targets, or bare-metal platforms. |
@@ -644,15 +644,17 @@ xas main.opt.s -o main.rel
 
 ---
 
-## 12. Stable Speed And Manual Whole-Module Optimization
+## 12. Stable And Experimental Speed Optimization
 
-**What:** In `xcc`, `-O3` is an exact compatibility spelling of the stable
-`-Of` speed profile. In standalone `xopt`, aggressive assembly optimization
-and `--cross-file` operation remain explicit tools.
+**What:** In `xcc`, `-Of` is the stable speed profile and `-O3` is currently a
+distinct but empty alias reserved for the next experiment. In standalone
+`xopt`, aggressive assembly optimization and `--cross-file` operation remain
+explicit tools.
 
-**When:** Use `-Of` or `-O3` for the validated compiler speed pipeline. Use
-`xopt --cross-file` only when you are willing to inspect and test the combined
-assembly.
+**When:** Use `-Of` for the validated compiler speed pipeline. Use `-O3` when
+testing a newly staged speed experiment; until one is added it deliberately
+produces the `-Of` result. Use `xopt --cross-file` only when you are willing to
+inspect and test the combined assembly.
 
 **How it works:** The compiler applies only stabilized IR, backend, and
 assembly transformations. The former whole-function structural selector was
@@ -669,8 +671,12 @@ xopt -O3 --cross-file main.s util.s -o combined.s
 xas combined.s -o app.rel
 ```
 
-**Rule:** `xcc -O3` and `xcc -Of` must remain identical. Pair explicit
-standalone `xopt` experiments with tests or `--stats` before shipping.
+**Rule:** Pure size policy belongs in `-Os`. New work starts in the empty
+`-O3` lane and needs generic legality guards, tests, and independent-corpus
+measurements before promotion to `-Of`; Pareto-safe size wins may also graduate
+to `-Os`. Pointer induction must have a natural-loop reaching-definition proof,
+and assembly peepholes must preserve register live-outs on every path. Pair
+standalone `xopt` experiments with tests or `--stats`.
 
 ---
 
@@ -879,7 +885,7 @@ cp -R x/platforms/none x/platforms/myboard
 
 ```
 PLATFORM=myboard make stage-xcc-support   # stage into the install prefix
-# or: PLATFORM=myboard make xtools        # full toolchain rebuild
+# or: PLATFORM=myboard make -C x          # full toolchain rebuild
 ```
 
 5. **Use it:**
@@ -1503,8 +1509,9 @@ runtime cost on Z80.
 **How it works:** With `-O2` and above, `xcc` constant-folds arithmetic,
 pointer differences, calls to `constexpr`-like pure helpers, and wide integer
 operations when all inputs are known. The optimizer test suite (`t026`–`t045`,
-`t028`–`t033`) locks this behaviour. `-Of` and its `-O3` alias add the same
-validated speed-biased pipeline on top.
+`t028`–`t033`) locks this behaviour. `-Of` adds the validated speed-biased
+pipeline on top; `-O3` currently aliases it and is ready for the next guarded
+speed experiment.
 
 ```
 /* With -O2, the loop folds to return 10; no runtime addition loop remains. */
@@ -1522,8 +1529,8 @@ xcc -S -O2 sum.c -o sum.s    # inspect: often just ld hl, #10 / ret
 xcc -O3 hotpath.c -o hotpath.xl
 ```
 
-**Rule:** `-O2` is the general default; use `-Of` or its identical `-O3`
-spelling for the stable speed profile.
+**Rule:** `-O2` is the general default; use `-Of` for stable speed. `-O3` is
+the empty experimental lane until new work is explicitly staged there.
 
 ---
 

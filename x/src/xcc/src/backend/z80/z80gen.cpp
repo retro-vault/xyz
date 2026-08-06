@@ -1437,7 +1437,7 @@ bool z80_gen::try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx) {
 
     const std::string buf_sym = asm_symbol_ref_name(ptr_init.left);
     const int mask = static_cast<int>(mask_ic.right.ival & 0xFF);
-    emit_comment("O3 byte mask walk loop (count=%d)", count);
+    emit_comment("optimized byte mask walk loop (count=%d)", count);
     emit_line("ld\thl, %s", asm_.imm_sym(buf_sym).c_str());
     emit_line("ld\tb, %s", asm_.imm(count).c_str());
     emit_label(cond_lbl.label_name, false);
@@ -1545,7 +1545,7 @@ bool z80_gen::try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx) {
 
     const std::string src_sym = asm_symbol_ref_name(load_ic.left);
     const std::string dst_sym = asm_symbol_ref_name(dst_ptr_init.left);
-    emit_comment("O3 byte copy walk loop (count=%d)", count);
+    emit_comment("optimized byte copy walk loop (count=%d)", count);
     emit_line("ld\thl, %s", asm_.imm_sym(src_sym).c_str());
     emit_line("ld\tde, %s", asm_.imm_sym(dst_sym).c_str());
     emit_line("ld\tb, %s", asm_.imm(count).c_str());
@@ -1647,7 +1647,7 @@ bool z80_gen::try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx) {
         debug_->emit_location(idx_init.line);
 
     const std::string buf_sym = asm_symbol_ref_name(ptr_init.left);
-    emit_comment("O3 byte zero loop (count=%d)", count);
+    emit_comment("optimized byte zero loop (count=%d)", count);
     emit_line("ld\thl, %s", asm_.imm_sym(buf_sym).c_str());
     emit_line("ld\tb, %s", asm_.imm(count).c_str());
     emit_line("xor\ta");
@@ -2569,6 +2569,7 @@ bool z80_gen::try_emit_postinc_indexed_store(const ir_function &fn,
 bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
                                                   size_t &idx) {
     if (opt_settings_.level != opt_level::Of &&
+        opt_settings_.level != opt_level::O3 &&
         opt_settings_.level != opt_level::Os)
         return false;
     if (idx + 4 >= fn.icodes.size())
@@ -3609,6 +3610,48 @@ bool z80_gen::try_emit_lsb32_shift_xor_diamond(const ir_function &fn,
     invalidate_a_cache();
 
     emit_label(done, false);
+
+    // Adjacent bit-at-a-time recurrences often lower to a chain of these
+    // diamonds.  In speed mode, and in size mode where the same rewrite is
+    // also strictly smaller, keep the updated
+    // word in DEHL while the next *fully validated* diamond consumes the same
+    // object.  The recursive matcher performs all of the normal temporary and
+    // label-liveness checks before emitting anything; this small precheck only
+    // ensures that a different object's update cannot observe stale memory.
+    // The last diamond still commits the value once, so calls, aliases, and
+    // ordinary intervening IR remain hard barriers.
+    if ((opt_settings_.level == opt_level::Of ||
+         opt_settings_.level == opt_level::O3 ||
+         opt_settings_.level == opt_level::Os) &&
+        after_window < fn.icodes.size()) {
+        const auto &next_band = fn.icodes[after_window];
+        const operand *next_value = nullptr;
+        const operand *next_mask = nullptr;
+        if (next_band.op == icode_op::BAND) {
+            if (next_band.left.kind == operand_kind::INT_CONST) {
+                next_mask = &next_band.left;
+                next_value = &next_band.right;
+            } else {
+                next_value = &next_band.left;
+                next_mask = &next_band.right;
+            }
+        }
+        if (next_value && next_mask &&
+            next_mask->kind == operand_kind::INT_CONST &&
+            next_mask->ival == 1 &&
+            operands_equivalent(*next_value, value)) {
+            set_pair_cache(reg_pair{"hl", 'l', 'h', false},
+                           pair_word_cache_key(value, 0));
+            set_pair_cache(reg_pair{"de", 'e', 'd', true},
+                           pair_word_cache_key(value, 1));
+            size_t next_idx = after_window;
+            if (try_emit_lsb32_shift_xor_diamond(fn, next_idx)) {
+                idx = next_idx;
+                return true;
+            }
+        }
+    }
+
     store_hl_word(value, 0);
     store_de_word(value, 1);
 
@@ -4422,7 +4465,7 @@ bool z80_gen::try_emit_switch_jump_table(const ir_function &fn, size_t &idx) {
     if (debug_)
         debug_->emit_location(fn.icodes[idx].line);
 
-    emit_comment("O3 jump-table switch (%zu cases, span=%zu)",
+    emit_comment("optimized jump-table switch (%zu cases, span=%zu)",
                  cases.size(), span);
 
     if (cond_is_zero_extended_byte) {

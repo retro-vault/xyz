@@ -130,7 +130,14 @@ void z80_gen::emit_module(const ir_module &mod) {
 void z80_gen::emit_global_body(const ir_module::global_var &g, bool zero_fill) {
     if (!g.init_vals.empty() && !zero_fill) {
         for (auto &e : g.init_vals) {
-            if (!e.label.empty()) asm_.dw_sym(mangle(e.label));
+            if (!e.label.empty()) {
+                std::string address = mangle(e.label);
+                if (e.value > 0)
+                    address += " + " + std::to_string(e.value);
+                else if (e.value < 0)
+                    address += " - " + std::to_string(e.value).substr(1);
+                asm_.dw_sym(address);
+            }
             else if (e.size == 1) asm_.db((int)e.value);
             else if (e.size == 2) asm_.dw((int)(e.value & 0xFFFF));
             else if (e.size == 4) {
@@ -255,6 +262,8 @@ void z80_gen::emit_external_data_refs(const ir_module &mod) {
         defined.insert(mangle(g.name));
     for (const auto &s : mod.string_literals)
         defined.insert(mangle(s.name));
+    for (const auto &fn : mod.functions)
+        defined.insert(mangle(fn.name));
 
     std::unordered_set<std::string> emitted;
     auto maybe_emit = [&](const operand &op) {
@@ -277,6 +286,18 @@ void z80_gen::emit_external_data_refs(const ir_module &mod) {
             maybe_emit(ic.result);
             maybe_emit(ic.left);
             maybe_emit(ic.right);
+        }
+    }
+
+    for (const auto &g : mod.globals) {
+        for (const auto &elem : g.init_vals) {
+            if (elem.label.empty())
+                continue;
+            const std::string sym = mangle(elem.label);
+            if (defined.count(sym) != 0 || emitted.count(sym) != 0)
+                continue;
+            asm_.global_decl(sym);
+            emitted.insert(sym);
         }
     }
 

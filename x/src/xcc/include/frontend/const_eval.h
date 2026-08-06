@@ -23,6 +23,11 @@
 
 namespace xcc {
 
+struct address_constant {
+    std::string symbol;
+    int64_t     byte_offset = 0;
+};
+
 class const_expr_evaluator {
 public:
     //
@@ -42,6 +47,10 @@ public:
     // floating constants used by static integer initializers.
     static std::optional<int64_t> evaluate_integer_conversion(
         const expr *e, type_ptr target);
+
+    // Evaluate a C address constant used by an object with static storage.
+    // The result remains symbolic so the backend can emit a relocation.
+    static std::optional<address_constant> evaluate_address(const expr *e);
 };
 
 } // namespace xcc

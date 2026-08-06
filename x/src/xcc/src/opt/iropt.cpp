@@ -12595,6 +12595,28 @@ public:
                                                           snapshot_idx);
                     if (!def_idx)
                         break;
+
+                    // A textual "latest definition" is not a reaching-
+                    // definition proof around a backedge.  In a nested loop,
+                    // an alias such as `inner = outer` may be redefined later
+                    // in the listing (`--inner`) and that later definition can
+                    // reach an earlier-looking use on the next iteration.
+                    // Follow an alias only when its selected definition is the
+                    // sole definition that can execute in this natural loop.
+                    // The actual loop index is handled by same_slot() above.
+                    auto all_defs = temp_defs.find(cur.temp_id);
+                    if (all_defs != temp_defs.end()) {
+                        bool competing_loop_def = false;
+                        for (size_t candidate : all_defs->second) {
+                            if (candidate != *def_idx &&
+                                in_loop_inst[candidate]) {
+                                competing_loop_def = true;
+                                break;
+                            }
+                        }
+                        if (competing_loop_def)
+                            break;
+                    }
                     const icode &def = fn.icodes[*def_idx];
                     if ((def.op != icode_op::ASSIGN &&
                          def.op != icode_op::CAST) || def.left.is_none()) {
@@ -13681,7 +13703,9 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
             std::make_unique<immutable_stack_pointer_param_promotion_pass>());
     if (settings.tail_recursion_elim)
         passes.push_back(std::make_unique<tail_recursion_elim_pass>());
-    if (settings.value_propagation || settings.level == opt_level::Of)
+    if (settings.value_propagation ||
+        settings.level == opt_level::Of ||
+        settings.level == opt_level::O3)
         passes.push_back(std::make_unique<compare_bool_normalize_pass>());
     if (settings.short_circuit_bool_ifx)
         passes.push_back(std::make_unique<short_circuit_bool_ifx_pass>());
@@ -13691,7 +13715,9 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<boolean_phi_ifx_fold_pass>());
     if (settings.branch_bool_arithmetic)
         passes.push_back(std::make_unique<branch_bool_arithmetic_pass>());
-    if (settings.value_propagation || settings.level == opt_level::Of)
+    if (settings.value_propagation ||
+        settings.level == opt_level::Of ||
+        settings.level == opt_level::O3)
         passes.push_back(std::make_unique<compare_bool_normalize_pass>());
     if (settings.narrow_counted_byte_loops)
         passes.push_back(std::make_unique<bounded_word_counter_narrow_pass>());
@@ -13702,6 +13728,7 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
     if (settings.narrow_counted_byte_loops)
         passes.push_back(std::make_unique<narrow_counted_byte_loops_pass>(
             settings.level == opt_level::Of ||
+            settings.level == opt_level::O3 ||
             settings.level == opt_level::Os));
     if (settings.countdown_dead_loops)
         passes.push_back(std::make_unique<countdown_dead_loops_pass>());
@@ -13739,7 +13766,9 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
             settings.level != opt_level::Os));
     if (settings.value_propagation)
         passes.push_back(std::make_unique<local_word_store_forward_pass>());
-    if (settings.value_propagation || settings.level == opt_level::Of)
+    if (settings.value_propagation ||
+        settings.level == opt_level::Of ||
+        settings.level == opt_level::O3)
         passes.push_back(std::make_unique<available_word_load_pass>(
             settings.level != opt_level::Os));
     if (settings.rotate_combine)
@@ -13768,9 +13797,13 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<constant_fold_pass>());
     if (settings.algebraic_simplify)
         passes.push_back(std::make_unique<bitwise_select_simplify_pass>());
-    if (settings.level == opt_level::Of || settings.level == opt_level::O3)
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
         passes.push_back(std::make_unique<direct_truncated_byte_ops_pass>());
-    if (settings.level == opt_level::Of || settings.level == opt_level::O3)
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
         passes.push_back(std::make_unique<msb_masked_shift_xor_pass>());
     if (settings.algebraic_simplify)
         passes.push_back(std::make_unique<algebraic_simplify_pass>());
@@ -13826,6 +13859,42 @@ void ir_optimizer::optimize(ir_function &fn,
         eff.merge_identical_functions = false;
     }
 
+    // Scalar promotion is profitable for pointer/counter kernels but can
+    // lengthen the selector live range across dense switch dispatch. Detect
+    // the same source-independent EQ/IFX chain shape used by jump-table
+    // selection and keep those functions on the stack-homed scalar path.
+    bool dense_switch_chain = false;
+    if (eff.scalar_local_promotion) {
+        for (size_t start = 0; start + 1 < fn.icodes.size() &&
+                               !dense_switch_chain; ++start) {
+            int selector_tid = -1;
+            int cases = 0;
+            size_t pos = start;
+            while (pos + 1 < fn.icodes.size()) {
+                const auto &cmp = fn.icodes[pos];
+                const auto &branch = fn.icodes[pos + 1];
+                if (cmp.op != icode_op::EQ || branch.op != icode_op::IFX ||
+                    !cmp.result.is_temp() || !branch.left.is_temp() ||
+                    cmp.result.temp_id != branch.left.temp_id)
+                    break;
+                const operand *selector = &cmp.left;
+                const operand *constant = &cmp.right;
+                if (selector->kind == operand_kind::INT_CONST)
+                    std::swap(selector, constant);
+                if (!selector->is_temp() ||
+                    constant->kind != operand_kind::INT_CONST ||
+                    (selector_tid >= 0 && selector_tid != selector->temp_id))
+                    break;
+                selector_tid = selector->temp_id;
+                ++cases;
+                pos += 2;
+            }
+            dense_switch_chain = cases >= 4;
+        }
+        if (dense_switch_chain)
+            eff.scalar_local_promotion = false;
+    }
+
     auto passes = build_pipeline(eff);
     for (int iter = 0; iter < 16; ++iter) {
         bool changed = false;
@@ -13873,7 +13942,7 @@ void ir_optimizer::optimize(ir_function &fn,
         // Terminal promotion exposes mutable loop state as a virtual temp.
         // Reuse branch-common scaled indices and addresses without feeding
         // those multi-definition temps back through SSA-like propagation.
-        if (eff.level == opt_level::Os || eff.level == opt_level::O3) {
+        if (eff.level == opt_level::Of || eff.level == opt_level::O3) {
             for (int round = 0; round < 4; ++round) {
                 branch_common_expr_hoist_pass branch_pre;
                 if (!branch_pre.run(fn))

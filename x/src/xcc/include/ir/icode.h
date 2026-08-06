@@ -320,8 +320,8 @@ struct ir_module {
         int     sfr_port   = -1;   // [[sdcc::sfr(N)]]: no data emitted, reads/writes use IN/OUT
         int     bank       = -1;   // [[xcc::bank(N)]]: place object in banked data section
 
-        // Each entry is (value, byte_size), or label if non-empty for pointer
-        // initializers such as static char *v[] = {"x"}.
+        // Each entry is (value, byte_size), or label + value byte addend when
+        // label is non-empty for relocatable pointer initializers.
         struct init_elem { int64_t value = 0; int size = 2; std::string label; };
         std::vector<init_elem> init_vals;
     };
