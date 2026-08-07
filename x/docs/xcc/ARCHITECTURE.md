@@ -476,7 +476,7 @@ SDAS Z80 assembler source.  Link with every xcc-compiled program.
 | Return ≤ 2 bytes | HL |
 | Return ≤ 4 bytes | DE:HL (high in DE, low in HL) |
 | Frame pointer | IX |
-| Stack cleanup | ABI-sensitive: `sdcccall(0)` stays caller-clean; `sdcccall(1)` also leaves stack-spilled arguments caller-clean |
+| Stack cleanup | ABI-sensitive: `sdcccall(0)` is caller-clean; non-variadic `sdcccall(1)` follows SDCC's return-sensitive callee-clean rule |
 | First param | `IX+4` |
 | First local | `IX-2` |
 | Callee-save | IX only (via `push ix` / `pop ix` in prologue/epilogue) |

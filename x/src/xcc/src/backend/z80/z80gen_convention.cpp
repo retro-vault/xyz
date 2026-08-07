@@ -219,15 +219,28 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
     return false;
 }
 
-bool sdcccall1_callee_cleans_stack(type_ptr,
-                                   const std::vector<type_ptr> &,
-                                   bool) {
-    // xcc follows the modern SDCC register ABI for argument placement, but
-    // stack-spilled arguments remain caller-clean throughout the toolchain.
-    // That matches the documented ABI, the hand-written runtime/platform
-    // helpers, and imported library symbols whose metadata records only the
-    // calling convention family, not a separate callee-pop variant.
-    return false;
+bool is_float_type(const type_ptr &type) {
+    return type && type->kind == type_kind::FLOAT;
+}
+
+bool sdcccall1_callee_cleans_stack(type_ptr ret_type,
+                                   const std::vector<type_ptr> &arg_types,
+                                   bool variadic) {
+    // Match SDCC's return-sensitive sdcccall(1) cleanup rule. In particular,
+    // assembly SDK functions returning void or a word pop their spilled
+    // arguments before returning, so callers must not repair SP a second time.
+    if (variadic)
+        return false;
+
+    type_ptr effective_ret = ret_type ? ret_type : type::make_int();
+    if (effective_ret->kind == type_kind::VOID)
+        return true;
+    if (effective_ret->size() <= 2)
+        return true;
+
+    return is_float_type(effective_ret) &&
+           !arg_types.empty() &&
+           is_float_type(arg_types.front());
 }
 
 } // namespace

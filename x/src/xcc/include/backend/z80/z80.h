@@ -18,8 +18,8 @@
 //     4-byte result  -> DE:HL  (DE = high word)
 //
 //   Callee saves:  IX only (push ix / pop ix in prologue/epilogue).
-//   Stack cleanup: ABI-sensitive. sdcccall(0) is caller-clean; sdcccall(1)
-//   also keeps stack-spilled arguments caller-clean.
+//   Stack cleanup: ABI-sensitive. sdcccall(0) is caller-clean; non-variadic
+//   sdcccall(1) uses SDCC's return-sensitive callee-clean rule.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih

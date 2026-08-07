@@ -86,7 +86,7 @@ or a known limitation is fixed.
 | Floating-point codegen | Complete | Delegates to runtime soft-float helpers |
 | Register allocation (-O2) | Partial | Bounded stable allocator for one 16-bit temp in BC; wider/local-byte allocation still pending |
 | Alternate register set (EXX regions) | Reserved | `temp_home` enum extended; no EXX regions yet |
-| Calling convention | Complete | Right-to-left push; IX frame; `sdcccall(1)` keeps stack-spilled arguments caller-clean |
+| Calling convention | Complete | Right-to-left push; IX frame; `sdcccall(1)` uses SDCC-compatible return-sensitive stack cleanup |
 | Indirect calls | Complete | Via `__call_hl` trampoline |
 | Inline assembly passthrough | Complete | |
 | DWARF 2 debug info | Complete | When `-g` is passed |

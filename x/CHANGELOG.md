@@ -6,6 +6,13 @@ Release status:
 
 ## Unreleased
 
+- Restored SDCC-compatible `sdcccall(1)` stack cleanup for non-variadic void
+  and up-to-16-bit-return functions. XCC had incorrectly made every spilled
+  argument caller-clean, so calls into callee-clean assembly SDK routines such
+  as Lunatik's `gputglyph` and `gputtext` advanced `SP` twice, corrupting the
+  intro screen and eventually crashing. Added caller, callee, size-mode, and
+  external-void-call regressions while retaining caller cleanup for wide
+  returns as required by SDCC's return-sensitive ABI.
 - Graduated the guarded 2026-08 `-O3` speed experiment. Physical register
   homes, scalar-local promotion, the dense-dispatch profitability guard, and
   adjacent 32-bit recurrence spill sinking now belong to `-Of`; the recurrence
