@@ -330,10 +330,10 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
         switch (effective_call_abi(abi)) {
         case call_abi::SDCCCALL0:
         case call_abi::Z88DK_CALLEE:
-            return 1; // Legacy word results use HL.
-        case call_abi::SDCCCALL1:
         case call_abi::Z88DK_SMALLC:
         case call_abi::Z88DK_FASTCALL:
+            return 1; // Legacy word results use HL.
+        case call_abi::SDCCCALL1:
             return 2; // Modern word results use DE.
         default:
             return 0;
@@ -1064,10 +1064,22 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
         // Dedicated slots become actively harmful in ordinary large
         // functions: frame offsets grow beyond the compact IX range and every
         // short-lived expression gets a distinct home.  The CFG allocator
-        // already computes exact temp liveness and interference, so use it for
-        // substantial frames in every profile, not only -Os.  Keep tiny frames
-        // on the simpler path to avoid needless analysis and slot churn.
-        if (size_opt_enabled() || dedicated_bytes >= 32 ||
+        // already computes exact temp liveness and interference, so use it
+        // for substantial frames in every profile, not only -Os.  Keep tiny
+        // frames on the simpler path to avoid needless analysis and slot
+        // churn.
+        //
+        // -Os previously forced every frame through the CFG allocator
+        // unconditionally (via `size_opt_enabled() ||` here), regardless of
+        // dedicated_bytes.  That let a placement bug in the CFG allocator's
+        // interference-graph coloring corrupt an unrelated local array in
+        // small-to-medium -Os frames that O2/O3/Of never routed here at all
+        // (see t127_sha256_stress_regression's -Os-only "Long message" case,
+        // where a spilled temp aliased a named local's storage). Until that
+        // placement bug is root-caused, apply the same size threshold to
+        // every optimization level so -Os only takes the CFG allocator where
+        // O2/O3/Of already exercise it.
+        if (dedicated_bytes >= 32 ||
             (dedicated_bytes >= 200 && has_large_eq_ifx_dispatch())) {
             int high_water = assign_cfg_liveness_slots(ordered);
             next_temp_slot_ = -high_water;

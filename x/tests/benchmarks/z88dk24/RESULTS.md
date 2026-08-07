@@ -66,6 +66,213 @@ Sizes are complete linked-image byte counts.  They are useful product
 measurements, but include each compiler's CRT and formatting support and
 therefore do not isolate C code generation.
 
+**XCC's size in this report is not on the same baseline as SCCZ80/SDCC/80CC
+here, nor as any of the four in upstream z88dk's own published benchmark
+table.** SCCZ80/SDCC/80CC link against z88dk's own CRT and C library in both
+places (the shared baseline that makes their sizes comparable to each
+other). XCC in *this* report links against its own minimal `--platform=emu`
+runtime instead, which is far leaner and not size-comparable to the other
+three columns.
+
+Upstream z88dk's `zcc` has a `-compiler=xcc` integration (`-S --sdcccall 0
+--c1mode`, linking XCC's assembly output against z88dk's own CRT/library —
+the same baseline as the other three) that puts XCC's size on equal footing.
+**As of 2026-08-07 this now works end to end** and reproduces upstream's
+published XCC numbers almost exactly (23-benchmark cross-check: all 46
+`-Os`/`-Of` lanes built, ran correctly, and matched upstream within ~1% size
+/ a few % cycles — see below). It needs six things, none of which live in
+this repository (all are local-only patches to a separate z88dk checkout,
+since they change *z88dk's* source, not XCC's):
+
+1. z88dk's `src/zcc/zcc.c` only defines `-D__XCC` for the xcc compiler
+   branch, not `-D__SDCC`. z88dk's own headers (`include/sys/proto.h`'s
+   `__ZPROTO*` macros and others) branch on `__SCCZ80` / `__SDCC` / a
+   generic fallback that assumes GNU `__attribute__((overloadable))`
+   support and declares library calls under a *different*, double-underscore,
+   reversed-argument name (`__fread`, matching a newlib/ez80-clang-style
+   ABI) that the classic `test_clib` library used by `+test` does not
+   provide. XCC does not take that fallback path correctly and needs the
+   `__SDCC`-branch declarations instead (single-underscore, normal argument
+   order) — which is also the *correct* choice, since XCC already implements
+   SDCC's own calling conventions (`--sdcccall 0`/`1`). Fix: also pass
+   `-D__SDCC` alongside `-D__XCC` in that one `zcc.c` branch.
+2. Two of XCC's own runtime helpers are referenced by its generated code but
+   only exist in XCC's own runtime archive, never in z88dk's library, because
+   this path never links that archive: `___printf_sd` (XCC's constant-format
+   compact-printf codegen shortcut for `printf` calls using only `%s`/`%d`/
+   `%i`/`%%`) and `__sdcc_call_hl`/`__sdcc_call_bc`/`__sdcc_call_iy` (indirect
+   call trampolines for calls through a register-held function pointer).
+   Fix: link one extra tiny shim object providing these — `___printf_sd` as
+   a tail-jump to z88dk's own `_printf` (identical sdcccall(0) stack-argument
+   layout, so this is a faithful bridge, not a behavior change), and the
+   three call-trampolines as their literal XCC-runtime bodies (`jp (hl)`,
+   `push bc \ ret`, `push iy \ pop hl \ jp (hl)` — see
+   `x/src/xcc/lib/runtime/jumps/*.s`, all self-contained, no further
+   dependencies).
+3. z88dk's headers use a `__preserves_regs(regs...)` variadic
+   function-attribute macro (`include/sys/compiler.h`) that's defined as a
+   no-op only in the CLion/IntelliSense IDE-tooling branch, not in the real
+   compile path — real compilers are expected to understand it as a native
+   attribute keyword. XCC's parser doesn't. Fix: pass
+   `-D'__preserves_regs(...)='` on the command line to blank it out (only
+   needed by benchmarks whose headers transitively pull in the declarations
+   using it, e.g. `sieve`, `rle`, `sortbench`, `md5`).
+4. z88dk's own sdcc-dialect translator (`lib/sdcc/sdcc_opt.1`) maps a raw
+   `.area _DATA` — the area XCC emits for every initialized global, labels
+   *and* initializer bytes together — to `SECTION bss_compiler`, a group
+   z88dk-z80asm treats as compiler-generated BSS: it reserves the address
+   range but discards the bytes, because real SDCC pairs `.area _DATA` with
+   a separate `_INITIALIZER`/`_GSINIT` copy-up sequence that actually
+   supplies the values at startup. XCC never emits that GSINIT sequence (its
+   own linker places `_DATA` pre-populated in the flat image, no copy-up
+   needed), so under z88dk's CRT every nonzero-initialized global — and even
+   `static const` data, since XCC also routes that through `_DATA` — silently
+   reads back as zero. Fix: append one more rule to the local `xcc_rules.1`
+   copt-rules file (`z88dk-native-xcc-bench` reference memory has the exact
+   text) that runs *after* z88dk's own sdcc-dialect pass and rewrites
+   `SECTION bss_compiler` to `SECTION code_compiler` — the group `_CODE`
+   already maps to, whose content z88dk-z80asm does preserve verbatim.
+5. z88dk's `include/sys/proto.h` prototype macros (`__ZPROTO3` etc.) append
+   a bare `__smallc` keyword to classic-library declarations like
+   `open()`/`read()` to mark their true Small-C left-to-right argument order
+   (confirmed by reading `open.asm`/`read.asm` and the `z88dk-ticks` host
+   trap handler directly: `open`'s registers are `HL`=filename, `DE`=flags,
+   `BC`=mode — the reverse of what a right-to-left push would produce).
+   XCC's parser already understands this natively as `[[z88dk::smallc]]` —
+   but only if it reaches the token. z88dk's own `compiler.h` blanks
+   `__smallc`/`__z88dk_callee`/`__z88dk_fastcall` to nothing whenever `__XCC`
+   is defined (a leftover "make IntelliSense easier" branch, originally
+   meant only for `__clang__`/tooling passes), and the `-D__XCC` this path
+   already defines (for the fix above `-D__SDCC` needed) trips that branch,
+   so z88dk's own external preprocessor (`z88dk-ucpp`, run *before* XCC ever
+   sees the source) erases the keyword before XCC's parser — which does
+   recognize it — gets a chance to. Fix: in the local z88dk checkout's
+   `include/sys/compiler.h`, split that block so `__XCC` gets its own arm
+   mapping the three keywords to XCC's modern attribute spelling
+   (`[[z88dk::smallc]]` etc.) instead of blanking them.
+
+6. XCC's own runtime helper for a 16×16→32 unsigned multiply-widen,
+   `___muluint2ulong` (`x/src/xcc/lib/runtime/int32/muluint2slong.s`), takes
+   its two arguments in `HL`/`DE` (registers) — matching XCC's own internal
+   convention for this helper. z88dk's SDCC-compatible library ships a
+   *same-named* symbol (`libsrc/l/sdcc/___muluint2ulong.asm`) that instead
+   expects both arguments pushed on the stack, matching genuine SDCC's ABI
+   for it. Under XCC's own linker this is fine (caller and XCC's own
+   implementation agree); under z88dk's linker the caller still emits the
+   register-based call sequence, but resolves against z88dk's stack-based
+   implementation, so the multiply runs on stack garbage instead of the real
+   operands. Symptom: `fixedbench` (a pure-integer Q8.8 fixed-point DSP
+   benchmark — it does not use `double`, unlike an earlier draft of this
+   section claimed) computed a wrong checksum at every optimization level.
+   Fix: add `___muluint2ulong`'s body (self-contained: `IY`, a 16-iteration
+   shift-add loop, no further dependencies) to the shim object from patch 2,
+   so it resolves before z88dk's conflicting archive member is ever pulled
+   in — same pattern as `___printf_sd`/`__sdcc_call_*`.
+
+With all six applied, `zcc +test -compiler=xcc -Cx-Os` (or `-Cx-Of`) plus
+the shim object builds and correctly runs all 23 upstream programs (see table
+below) — including `fixedbench`, previously and incorrectly documented here
+as needing `double` support the M-model doesn't provide; it needs neither
+`double` nor the L-model, just patch 6 above. Sizes/cycles match upstream's
+own published table almost exactly — typically ±0.5% size and low
+single-digit % cycles, well within normal measurement/version noise.
+
+Patches 4–6 above fixed the three programs that originally surfaced genuine
+open problems in this exact configuration. `switchbench` (wrong
+VM/switch-dispatch result) and `interpbench` (hangs, runs out its cycle
+budget) were both symptoms of patch 4's DATA-init bug: `switchbench`'s
+bytecode program table and `interpbench`'s equivalent were silently reading
+back as zero, so both were dispatching on garbage/zero opcodes. `md5`
+computed the wrong hash for a different reason at each optimization level:
+at `-Os` its file-read path (`open()`/`read()`) was fetching a return value
+from the wrong register, fixed by the real in-repo XCC bugfix described
+below; at `-Of`/`-O2`/`-O3` it was a *second*, unrelated bug (see the copt
+paragraph a few lines down) that happened to reproduce only at those levels.
+`fixedbench` failed identically at every level (patch 6, above).
+
+A **genuine, in-repo XCC compiler bug** was found and fixed while chasing
+`md5`'s `-Os` failure, independent of the z88dk-side patches above. XCC's
+`Z88DK_SMALLC`/`Z88DK_FASTCALL` calling conventions only redefine argument
+order (that's their whole purpose — matching Small-C/fastcall's non-standard
+push order for real z88dk library interop), but XCC's backend was also
+routing their *return value* through the "modern" (`sdcccall(1)`-style) `DE`
+register family instead of the plain `HL` every hand-written z88dk
+classic-library function actually returns through (confirmed directly via
+`z88dk-ticks -trace`: `read()`'s result sits in `HL` right after its `ret`,
+matching `cc_z88dk_fastcall`'s own already-correct callee-side codegen,
+which contradicted the caller-side assumption). A caller compiled with one of
+these ABIs would fetch a stale leftover register instead of the real return
+value. Fixed by moving `Z88DK_SMALLC`/`Z88DK_FASTCALL` from the `DE` family
+to the `HL` family in `word_return_family()` (and its duplicate in
+`z80gen_regalloc.cpp`), `cc_z88dk_smallc`'s `emit_return_value`/
+`emit_store_call_result` (`z80gen_convention.cpp`), and the two direct-return
+`ex de,hl` fast paths in `z80gen_ctrl.cpp`/`z80gen_arith.cpp`. There was no
+prior exec-level test coverage of `[[z88dk::smallc]]`/`[[z88dk::fastcall]]`
+return values (existing `core` tests only check that they compile), so this
+had never surfaced; a new one should be added. Full re-validation after the
+fix: runtime tests 442/442, the complete `xemutest` suite 4291/4291, and this
+report's own `--platform=emu` corpus 23/23 — no regressions.
+
+`md5`'s separate `-Of`/`-O2`/`-O3` failure (a genuinely wrong hash, not the
+empty-input hash the `-Os` bug produced) turned out **not** to be an XCC
+bug at all, and not the optimizer-masking pattern first suspected either.
+Isolated to a single-block repro (`MD5("abc")`, reproducible standalone with
+no file I/O), the actual computation was correct — what was wrong was patch
+4's own copt rule silently failing to fire for `PADDING[]`, a second
+`static`-initialized array in the same file, at these optimization levels
+specifically. Root cause: `copt`'s lexer breaks on literal double-quote
+characters inside a `%title` comment line (they collide with its own
+`%"..."N`-quoted-class pattern syntax), which the rule's original verbose
+title had; separately, `copt` also silently failed to match that rule when
+it was positioned *after* both the `enter_ix` and `leave_ix` rules in the
+same file, regardless of title content — an ordering sensitivity, not
+understood beyond "it reproduces and reordering fixes it." Neither of these
+is whitespace-related; an earlier hypothesis (XCC emits `.area _DATA` with a
+literal space instead of a tab at `-Of`, so the rule's literal-tab pattern
+silently missed it) looked promising and even *matched the observed symptom*
+one investigation-turn earlier, but turned out to be a wrong diagnosis discovered
+only by testing the "fix" and watching it still fail — the real cause was
+found by isolating the rule into `z88dk-copt` directly and bisecting title
+text and rule order by hand. Fixed by shortening the rule's title (detail
+moved here instead) and moving it earlier in `xcc_rules.1`, before
+`enter_ix`/`leave_ix`.
+
+None of the six z88dk-side patches above are committed anywhere in this
+repository: they are patches to a *separate*, external z88dk checkout used
+only to validate against upstream's own benchmark methodology, not something
+this project's build depends on or ships. The `Z88DK_SMALLC`/
+`Z88DK_FASTCALL` return-register fix, by contrast, *is* a real in-repo XCC
+change (see the file list above), since it's a genuine compiler
+correctness bug independent of any z88dk-side quirk. This project's own
+harness (`x/tests/benchmarks/z88dk24/run.sh`) still uses XCC's
+`--platform=emu` runtime, by design, since it doesn't require patching a
+third-party toolchain and its cycle counts remain fully valid (see below) —
+only its XCC size numbers are on a different baseline than the other three
+columns. The z88dk-native harness now builds XCC's L-model (`bin/x/bin/xcc`)
+rather than the M-model used earlier in this investigation; this ended up
+being unrelated to the actual `fixedbench` bug (patch 6) but there is no
+reason to prefer the narrower M-model here, so the switch is kept.
+
+**`sccz80` is no longer included in the competitor comparison below** — its
+results (see the historical CSVs still under `bench_reconcile/` if needed)
+were consistently far enough behind SDCC and 80CC on this corpus that they
+added noise without adding a meaningful comparison point.
+
+Cycle counts do not have the baseline problem at all: CRT/library choice
+only affects one-time startup overhead, negligible against the measured
+workload, so XCC's cycle counts in *this* report (via `--platform=emu`) are
+directly comparable to SCCZ80/SDCC/80CC's and to upstream z88dk's own
+`z88dk-ticks -w 30 -b msx` measurements, with or without the size-baseline
+fix above. Confirmed 2026-08-07 by rebuilding upstream z88dk from source and
+cross-checking: with a fresh `z80_exec` build, SCCZ80 matched upstream's
+`z88dk-ticks` byte-for-byte and cycle-for-cycle on all 23 programs, and
+XCC's `-Os`/`-Of` cycle counts (`--platform=emu`, i.e. this report's own
+methodology) were within a few percent of upstream's published table
+(typically under 2%, matching normal measurement noise) — i.e. no
+methodology drift in the speed numbers, only in the size baseline described
+above (and now separately confirmed via the native `-compiler=xcc` path
+too).
+
 Run the final matrix with:
 
 ```sh

@@ -284,9 +284,14 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
     } else if (auto *lit = dynamic_cast<char_literal_expr*>(init)) {
         out.push_back(init_elem(narrow_static_int(lit->value, target),
                                 target->size()));
-    } else if (auto *flit = dynamic_cast<float_literal_expr*>(init)) {
-        out.push_back(init_elem(encode_float_constant(flit->value, target),
-                                target->size()));
+    } else if (target->kind == type_kind::FLOAT ||
+               target->kind == type_kind::DOUBLE) {
+        if (auto cv = const_expr_evaluator::evaluate_float(init)) {
+            out.push_back(init_elem(encode_float_constant(*cv, target),
+                                    target->size()));
+        } else {
+            out.push_back(init_elem(0, target->size()));
+        }
     } else if (const auto *str = unwrap_string_literal(init);
                str && is_char_pointer_type(target)) {
         std::string lbl = "__xcc_str_" + std::to_string(next_lbl++);

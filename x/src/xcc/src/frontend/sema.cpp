@@ -406,6 +406,27 @@ void sema::visit(binary_expr &e) {
 
 void sema::visit(unary_expr &e) {
     if (e.operand) e.operand->accept(*this);
+
+    // The parser may not yet know the type of an operand whose type is
+    // resolved by semantic analysis (notably a function call).  Refresh the
+    // derived unary type after visiting the operand so expressions such as
+    // `-returns_float()` retain floating-point arithmetic in their parent.
+    if (!e.operand || !e.operand->type)
+        return;
+    switch (e.op) {
+    case unary_op::NEG: {
+        type_ptr operand_type = e.operand->type->unqual();
+        e.type = operand_type->is_integer()
+            ? integer_promote(operand_type)
+            : operand_type;
+        break;
+    }
+    case unary_op::BNOT:
+        e.type = integer_promote(e.operand->type->unqual());
+        break;
+    default:
+        break;
+    }
 }
 
 void sema::visit(cast_expr &e) {

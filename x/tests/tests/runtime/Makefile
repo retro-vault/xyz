@@ -32,6 +32,8 @@ RUNTIME_SRCS := $(shell find $(RUNTIME_DIR) -type f -name '*.s' ! -path '*/ieee1
 RUNTIME_RELS := $(patsubst $(RUNTIME_DIR)/%.s,$(BUILD)/objs/%.rel,$(RUNTIME_SRCS))
 SUPPORT_SRCS := $(wildcard support/*.s)
 SUPPORT_RELS := $(patsubst support/%.s,$(BUILD)/support/%.rel,$(SUPPORT_SRCS))
+PLATFORM_SRCS := $(X_ROOT)/platforms/cpm3/gettimeofday.s
+PLATFORM_RELS := $(BUILD)/platform/cpm3/gettimeofday.rel
 
 RUNTIME_IHX  := $(BUILD)/runtime.ihx
 RUNTIME_MAP  := $(BUILD)/runtime.map
@@ -71,7 +73,7 @@ $(RUNTIME_BIN): $(RUNTIME_IHX)
 	python3 tools/ihx2bin.py $< $@
 
 # Link all assembled .rel files into one image
-$(RUNTIME_IHX): $(RUNTIME_RELS) $(SUPPORT_RELS)
+$(RUNTIME_IHX): $(RUNTIME_RELS) $(SUPPORT_RELS) $(PLATFORM_RELS)
 	$(LINK) $(LINKFLAGS) -Map=$(RUNTIME_MAP) -o $@ $^
 
 # Assemble each .s file
@@ -80,6 +82,10 @@ $(BUILD)/objs/%.rel: $(RUNTIME_DIR)/%.s | $(BUILD)/objs
 	$(ASM) $(ASMFLAGS) -o $@ $<
 
 $(BUILD)/support/%.rel: support/%.s
+	mkdir -p $(dir $@)
+	$(ASM) $(ASMFLAGS) -o $@ $<
+
+$(BUILD)/platform/cpm3/gettimeofday.rel: $(PLATFORM_SRCS)
 	mkdir -p $(dir $@)
 	$(ASM) $(ASMFLAGS) -o $@ $<
 

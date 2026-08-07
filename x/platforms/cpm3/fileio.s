@@ -29,7 +29,6 @@
         .globl  __cpm3_get_current_drive
         .globl  __cpm3_set_user_a
         .globl  __cpm3_cmp_fpos_size_iy
-        .globl  __cpm3_inc_fpos_iy
         .globl  __cpm3_copy_size_to_fpos_iy
         .globl  __cpm3_shift7_from_ptr
         .globl  __cpm3_zero_tmprec
@@ -168,6 +167,28 @@ __cpm3_tmp_saved_user::
 __cpm3_tmp_user::
         .ds     1
 
+        ;; Scratch state for the record-chunked read/write copy loops:
+        ;; tmp_remaining = bytes of the request not yet transferred,
+        ;; tmp_n1 = bytes left in the current 128-byte DMA record,
+        ;; tmp_n = bytes actually moved this chunk (min of n1, remaining,
+        ;; and, for reads, bytes left before EOF), tmp_diff = size - fpos.
+
+        .area   _BSS
+__cpm3_tmp_remaining:
+        .ds     2
+
+        .area   _BSS
+__cpm3_tmp_n1:
+        .ds     1
+
+        .area   _BSS
+__cpm3_tmp_n:
+        .ds     1
+
+        .area   _BSS
+__cpm3_tmp_diff:
+        .ds     4
+
         .area   _CODE
 __cpm3_clear_entry_iy::
         push    iy
@@ -274,14 +295,15 @@ __cpm3_cmp_fpos_size_iy::
 __cpm3_cmp_ret:
         ret
 
-        ;; IY = current entry. fpos = 0.
+        ;; IY = current entry. fpos += A (0..128), propagating carry into the
+        ;; upper 25 bits. Only used with A capped at the DMA record size, so
+        ;; the low byte add can carry at most once.
 
         .area   _CODE
-__cpm3_inc_fpos_iy::
-        ld      a,FD_OFF_FPOS0(iy)
-        inc     a
+__cpm3_add_a_to_fpos_iy:
+        add     a,FD_OFF_FPOS0(iy)
         ld      FD_OFF_FPOS0(iy),a
-        ret     nz
+        ret     nc
         ld      a,FD_OFF_FPOS0 + 1(iy)
         inc     a
         ld      FD_OFF_FPOS0 + 1(iy),a
@@ -293,6 +315,26 @@ __cpm3_inc_fpos_iy::
         ld      a,FD_OFF_FPOS0 + 3(iy)
         inc     a
         ld      FD_OFF_FPOS0 + 3(iy),a
+        ret
+
+        ;; IY = current entry. __cpm3_tmp_diff = size - fpos. Caller must
+        ;; ensure fpos < size (e.g. via __cpm3_cmp_fpos_size_iy) so the
+        ;; subtraction never borrows out.
+
+        .area   _CODE
+__cpm3_sub_size_fpos_iy:
+        ld      a,FD_OFF_FSIZE0(iy)
+        sub     FD_OFF_FPOS0(iy)
+        ld      (__cpm3_tmp_diff),a
+        ld      a,FD_OFF_FSIZE0 + 1(iy)
+        sbc     a,FD_OFF_FPOS0 + 1(iy)
+        ld      (__cpm3_tmp_diff + 1),a
+        ld      a,FD_OFF_FSIZE0 + 2(iy)
+        sbc     a,FD_OFF_FPOS0 + 2(iy)
+        ld      (__cpm3_tmp_diff + 2),a
+        ld      a,FD_OFF_FSIZE0 + 3(iy)
+        sbc     a,FD_OFF_FPOS0 + 3(iy)
+        ld      (__cpm3_tmp_diff + 3),a
         ret
 
         ;; HL = pointer to a 32-bit little-endian value. Return A = low 7-bit
@@ -806,39 +848,90 @@ __cpm3_read_file::
         ld      c,4(ix)
         ld      b,5(ix)
         ld      (__cpm3_tmp_len),bc
+        ld      (__cpm3_tmp_remaining),bc
 __cpm3_read_file_loop:
-        ld      a,b
-        or      c
-        jr      z,__cpm3_read_file_done
+        ld      hl,(__cpm3_tmp_remaining)
+        ld      a,h
+        or      l
+        jp      z,__cpm3_read_file_done
         call    __cpm3_cmp_fpos_size_iy
-        jr      nc,__cpm3_read_file_done
+        jp      nc,__cpm3_read_file_done
         ld      a,FD_OFF_BUFVALID(iy)
         or      a
         jr      nz,__cpm3_read_have_buf
         call    __cpm3_loadbuf_read_iy
         jp      nz,__cpm3_rf_fail
 __cpm3_read_have_buf:
+        ;; n1 = bytes left in the current 128-byte record.
         ld      a,FD_OFF_FPOS0(iy)
         and     #0x7f
-        ld      e,a
-        ld      d,#0x00
-        call    __cpm3_entry_dma_ptr_iy
-        add     hl,de
-        ld      a,(hl)
-        ld      hl,(__cpm3_tmp_ptr)
+        ld      c,a
+        ld      a,#DMA_SIZE
+        sub     c
+        ld      (__cpm3_tmp_n1),a
+        ;; n = min(n1, remaining).
+        ld      hl,(__cpm3_tmp_remaining)
+        ld      a,h
+        or      a
+        jr      nz,__cpm3_read_n_use_n1
+        ld      a,(__cpm3_tmp_n1)
+        cp      l
+        jr      c,__cpm3_read_n_use_n1
+        ld      a,l
+        jr      __cpm3_read_n_store
+__cpm3_read_n_use_n1:
+        ld      a,(__cpm3_tmp_n1)
+__cpm3_read_n_store:
+        ld      (__cpm3_tmp_n),a
+        ;; Cap n further so the copy never runs past EOF.
+        call    __cpm3_sub_size_fpos_iy
+        ld      a,(__cpm3_tmp_diff + 3)
+        or      a
+        jr      nz,__cpm3_read_no_cap
+        ld      a,(__cpm3_tmp_diff + 2)
+        or      a
+        jr      nz,__cpm3_read_no_cap
+        ld      a,(__cpm3_tmp_diff + 1)
+        or      a
+        jr      nz,__cpm3_read_no_cap
+        ld      a,(__cpm3_tmp_diff)
+        ld      hl,#__cpm3_tmp_n
+        cp      (hl)
+        jr      nc,__cpm3_read_no_cap
         ld      (hl),a
-        inc     hl
-        ld      (__cpm3_tmp_ptr),hl
-        call    __cpm3_inc_fpos_iy
-        dec     bc
+__cpm3_read_no_cap:
+        ;; Block-copy n bytes: DMA+offset -> user buffer.
+        call    __cpm3_entry_dma_ptr_iy
         ld      a,FD_OFF_FPOS0(iy)
         and     #0x7f
-        jr      nz,__cpm3_read_file_loop
+        ld      c,a
+        ld      b,#0x00
+        add     hl,bc
+        ld      de,(__cpm3_tmp_ptr)
+        ld      a,(__cpm3_tmp_n)
+        ld      c,a
+        ld      b,#0x00
+        ldir
+        ld      (__cpm3_tmp_ptr),de
+        ld      a,(__cpm3_tmp_n)
+        call    __cpm3_add_a_to_fpos_iy
+        ld      hl,(__cpm3_tmp_remaining)
+        ld      a,(__cpm3_tmp_n)
+        ld      c,a
+        ld      b,#0x00
+        or      a
+        sbc     hl,bc
+        ld      (__cpm3_tmp_remaining),hl
+        ld      a,(__cpm3_tmp_n)
+        ld      hl,#__cpm3_tmp_n1
+        cp      (hl)
+        jp      nz,__cpm3_read_file_loop
         xor     a
         ld      FD_OFF_BUFVALID(iy),a
-        jr      __cpm3_read_file_loop
+        jp      __cpm3_read_file_loop
 __cpm3_read_file_done:
         ld      hl,(__cpm3_tmp_len)
+        ld      bc,(__cpm3_tmp_remaining)
         or      a
         sbc     hl,bc
         ex      de,hl
@@ -915,9 +1008,11 @@ __cpm3_write_file::
         ld      c,4(ix)
         ld      b,5(ix)
         ld      (__cpm3_tmp_len),bc
+        ld      (__cpm3_tmp_remaining),bc
 __cpm3_write_file_loop:
-        ld      a,b
-        or      c
+        ld      hl,(__cpm3_tmp_remaining)
+        ld      a,h
+        or      l
         jr      z,__cpm3_write_file_done
         ld      a,FD_OFF_BUFVALID(iy)
         or      a
@@ -925,34 +1020,64 @@ __cpm3_write_file_loop:
         call    __cpm3_loadbuf_write_iy
         jp      nz,__cpm3_wf_fail
 __cpm3_write_have_buf:
-        ld      hl,(__cpm3_tmp_ptr)
-        ld      a,(hl)
-        inc     hl
-        ld      (__cpm3_tmp_ptr),hl
-        push    af
+        ;; n1 = bytes left in the current 128-byte record; n = min(n1, remaining).
         ld      a,FD_OFF_FPOS0(iy)
         and     #0x7f
-        ld      e,a
-        ld      d,#0x00
+        ld      c,a
+        ld      a,#DMA_SIZE
+        sub     c
+        ld      (__cpm3_tmp_n1),a
+        ld      hl,(__cpm3_tmp_remaining)
+        ld      a,h
+        or      a
+        jr      nz,__cpm3_write_n_use_n1
+        ld      a,(__cpm3_tmp_n1)
+        cp      l
+        jr      c,__cpm3_write_n_use_n1
+        ld      a,l
+        jr      __cpm3_write_n_store
+__cpm3_write_n_use_n1:
+        ld      a,(__cpm3_tmp_n1)
+__cpm3_write_n_store:
+        ld      (__cpm3_tmp_n),a
+        ;; Block-copy n bytes: user buffer -> DMA+offset.
         call    __cpm3_entry_dma_ptr_iy
-        add     hl,de
-        pop     af
-        ld      (hl),a
+        ld      a,FD_OFF_FPOS0(iy)
+        and     #0x7f
+        ld      c,a
+        ld      b,#0x00
+        add     hl,bc
+        ex      de,hl
+        ld      hl,(__cpm3_tmp_ptr)
+        ld      a,(__cpm3_tmp_n)
+        ld      c,a
+        ld      b,#0x00
+        ldir
+        ld      (__cpm3_tmp_ptr),hl
         ld      a,#1
         ld      FD_OFF_DIRTY(iy),a
-        call    __cpm3_inc_fpos_iy
+        ld      a,(__cpm3_tmp_n)
+        call    __cpm3_add_a_to_fpos_iy
         call    __cpm3_update_size_if_needed_iy
-        dec     bc
-        ld      a,FD_OFF_FPOS0(iy)
-        and     #0x7f
-        jr      nz,__cpm3_write_file_loop
+        ld      hl,(__cpm3_tmp_remaining)
+        ld      a,(__cpm3_tmp_n)
+        ld      c,a
+        ld      b,#0x00
+        or      a
+        sbc     hl,bc
+        ld      (__cpm3_tmp_remaining),hl
+        ld      a,(__cpm3_tmp_n)
+        ld      hl,#__cpm3_tmp_n1
+        cp      (hl)
+        jp      nz,__cpm3_write_file_loop
         call    __cpm3_flush_iy
         jp      nz,__cpm3_wf_fail
         xor     a
         ld      FD_OFF_BUFVALID(iy),a
-        jr      __cpm3_write_file_loop
+        jp      __cpm3_write_file_loop
 __cpm3_write_file_done:
         ld      hl,(__cpm3_tmp_len)
+        ld      bc,(__cpm3_tmp_remaining)
         or      a
         sbc     hl,bc
         ex      de,hl

@@ -267,10 +267,13 @@ static void collect_global_init(expr *init, type_ptr target,
         }
     }
 
-    if (auto *flit = dynamic_cast<float_literal_expr*>(init)) {
-        out.push_back(make_init_elem(encode_float_constant(flit->value, target),
-                                     target->size()));
-        return;
+    if (target->kind == type_kind::FLOAT ||
+        target->kind == type_kind::DOUBLE) {
+        if (auto cv = const_expr_evaluator::evaluate_float(init)) {
+            out.push_back(make_init_elem(encode_float_constant(*cv, target),
+                                         target->size()));
+            return;
+        }
     }
 
     if (const auto *str = unwrap_string_literal(init);
@@ -475,8 +478,12 @@ void ir_gen::visit(var_decl &vd) {
                 if (auto cv = const_expr_evaluator::evaluate_integer_conversion(
                         vd.init.get(), vd.type))
                     gv.init_val = narrow_static_int(*cv, vd.type);
-            } else if (auto *flit = dynamic_cast<float_literal_expr*>(vd.init.get())) {
-                gv.init_val = encode_float_constant(flit->value, vd.type);
+            } else if (vd.type &&
+                       (vd.type->kind == type_kind::FLOAT ||
+                        vd.type->kind == type_kind::DOUBLE)) {
+                if (auto cv =
+                        const_expr_evaluator::evaluate_float(vd.init.get()))
+                    gv.init_val = encode_float_constant(*cv, vd.type);
             } else if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
                        str && is_char_pointer_type(vd.type)) {
                 gv.init_vals.push_back({0, vd.type ? vd.type->size() : 2,

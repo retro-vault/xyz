@@ -6,6 +6,16 @@ Release status:
 
 ## Unreleased
 
+- Fixed three XCC floating-point lowering defects exposed by an analog-clock
+  application: calls now materialize all required argument conversions
+  (including `float`/`double` to `int`), unary expressions refresh their type
+  after a call's return type is resolved, and negative/arithmetic floating
+  constant expressions are emitted correctly in static initializers. Matching
+  execution regressions cover both `float` and `double`. Also fixed the
+  CP/M 3 `gettimeofday` backend to preserve its destination pointer across
+  BDOS and 32-bit conversion helper calls instead of writing the result to
+  page zero, and to forward the actual 32-bit multiplier past its wrapper
+  frame rather than multiplying by bytes from the return address.
 - Restored SDCC-compatible `sdcccall(1)` stack cleanup for non-variadic void
   and up-to-16-bit-return functions. XCC had incorrectly made every spilled
   argument caller-clean, so calls into callee-clean assembly SDK routines such

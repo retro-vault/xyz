@@ -37,10 +37,16 @@ int word_return_family(call_abi abi) {
     switch (effective_call_abi(abi)) {
     case call_abi::SDCCCALL0:
     case call_abi::Z88DK_CALLEE:
-        return 1; // Legacy word results use HL.
-    case call_abi::SDCCCALL1:
     case call_abi::Z88DK_SMALLC:
     case call_abi::Z88DK_FASTCALL:
+        // z88dk's smallc/fastcall/callee families only redefine argument
+        // passing (see cc_z88dk_fastcall, which already returns via HL);
+        // hand-written z88dk classic-library asm (open.asm, read.asm, ...)
+        // always returns a word result in HL, never DE. Grouping smallc
+        // with sdcccall(1) here silently swapped in the wrong register
+        // whenever an XCC caller called into that real library code.
+        return 1; // Legacy word results use HL.
+    case call_abi::SDCCCALL1:
         return 2; // Modern word results use DE.
     default:
         return 0;
@@ -85,12 +91,12 @@ bool z80_gen::try_finish_direct_hl_return(const operand &result) {
 
     switch (effective_call_abi(cur_fn_->abi)) {
     case call_abi::SDCCCALL1:
-    case call_abi::Z88DK_SMALLC:
-    case call_abi::Z88DK_FASTCALL:
         emit_line("ex\tde, hl");
         break;
     case call_abi::SDCCCALL0:
     case call_abi::Z88DK_CALLEE:
+    case call_abi::Z88DK_SMALLC:
+    case call_abi::Z88DK_FASTCALL:
     case call_abi::NAKED:
     case call_abi::INTERRUPT:
     case call_abi::CRITICAL:

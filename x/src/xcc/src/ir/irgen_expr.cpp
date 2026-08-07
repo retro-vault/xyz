@@ -726,20 +726,40 @@ void ir_gen::visit(call_expr &e) {
         } else if (fn_type && i < fn_type->params.size() && fn_type->params[i]) {
             abi_type = fn_type->params[i];
         }
-        arg_ops[i] = coerce_const_operand(arg_ops[i], abi_type);
-        arg_types.push_back(abi_type);
-        if (arg_ops[i].type != abi_type) {
-            bool needs_materialized_cast =
-                arg_ops[i].type &&
-                arg_ops[i].type->size() < abi_type->size() &&
-                arg_ops[i].kind != operand_kind::INT_CONST &&
-                arg_ops[i].kind != operand_kind::FLOAT_CONST;
-            if (needs_materialized_cast) {
-                arg_ops[i] = emit_unop(icode_op::CAST, arg_ops[i], abi_type);
-            } else {
+        if (!arg_ops[i].type) {
+            arg_ops[i].type = abi_type;
+        } else {
+            // Function designators (and, defensively, arrays) decay to a
+            // pointer with an identical bit representation -- the function's
+            // entry address literally is the pointer value. Treat these as
+            // interchangeable with POINTER here so that decay alone doesn't
+            // trigger a materialized CAST below: a spurious CAST severs the
+            // direct-symbol operand that later passes (e.g. recursive
+            // function-pointer devirtualization) rely on seeing.
+            auto is_ptr_like = [](type_kind k) {
+                return k == type_kind::POINTER || k == type_kind::FUNCTION ||
+                       k == type_kind::ARRAY;
+            };
+            const bool kinds_compatible =
+                arg_ops[i].type->kind == abi_type->kind ||
+                (is_ptr_like(arg_ops[i].type->kind) &&
+                 is_ptr_like(abi_type->kind));
+            const bool same_type =
+                kinds_compatible &&
+                arg_ops[i].type->size() == abi_type->size() &&
+                arg_ops[i].type->is_unsigned() == abi_type->is_unsigned();
+            if (same_type) {
                 arg_ops[i].type = abi_type;
+            } else {
+                arg_ops[i] = coerce_const_operand(arg_ops[i], abi_type);
+                if (arg_ops[i].kind != operand_kind::INT_CONST &&
+                    arg_ops[i].kind != operand_kind::FLOAT_CONST) {
+                    arg_ops[i] = emit_unop(
+                        icode_op::CAST, arg_ops[i], abi_type);
+                }
             }
         }
+        arg_types.push_back(abi_type);
     }
     const auto &conv = get_abi_convention(c_abi);
     auto arg_locs = conv.classify_args(arg_types);

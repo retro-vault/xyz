@@ -200,6 +200,15 @@ struct optimization_settings {
             s.branch_bool_arithmetic = true;
             s.countdown_dead_loops = true;
             s.block_fill_loops = true;
+            // A register-resident temp is usually smaller as well as faster
+            // on the Z80 (it skips a load/store pair entirely), so the -Of
+            // physical-register allocator and scalar-local promotion belong
+            // in the size profile too rather than leaving every temp in a
+            // stack slot. 2026-08-07: enabling both here pending full
+            // validation (matrix + benchmark corpora), mirroring the same
+            // graduation bar -Of's `regalloc = true` was held to.
+            s.regalloc = true;
+            s.scalar_local_promotion = true;
             break;
 
         }

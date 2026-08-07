@@ -47,12 +47,22 @@ __cpm3_bcd2bin_a:
         ;; and accumulate the 32-bit result into __cpm3_gtod_acc.
         ;; Entry: BC = multiplicand, stack = return, low-word, high-word.
 __cpm3_muladd_bc:
-        push    bc
         ld      e,c
         ld      d,b
         ld      hl,#0x0000
+        push    ix
+        ld      ix,#0
+        add     ix,sp
+        ld      b,7(ix)
+        ld      c,6(ix)
+        push    bc
+        ld      b,5(ix)
+        ld      c,4(ix)
+        push    bc
         call    __mullong
         pop     bc
+        pop     bc
+        pop     ix
         ld      a,(__cpm3_gtod_acc)
         ld      b,a
         ld      a,e
@@ -76,7 +86,6 @@ __cpm3_muladd_bc:
         ret
 
 _gettimeofday::
-        ld      (__cpm3_gtod_acc),hl
         push    hl
         push    ix
         push    iy
@@ -86,7 +95,6 @@ _gettimeofday::
         pop     iy
         pop     ix
         ld      (__cpm3_gtod_sec),a
-        pop     hl
         xor     a
         ld      (__cpm3_gtod_acc),a
         ld      (__cpm3_gtod_acc + 1),a
@@ -142,6 +150,7 @@ _gettimeofday::
         ld      a,(__cpm3_gtod_acc + 3)
         adc     a,#0x00
         ld      (__cpm3_gtod_acc + 3),a
+        pop     hl
         ld      a,(__cpm3_gtod_acc)
         ld      (hl),a
         inc     hl

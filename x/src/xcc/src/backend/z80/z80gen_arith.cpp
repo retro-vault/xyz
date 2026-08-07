@@ -5165,12 +5165,15 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         const int sz = op_size(target);
         switch (effective_call_abi(cur_fn_ ? cur_fn_->abi : call_abi::DEFAULT)) {
         case call_abi::SDCCCALL1:
-        case call_abi::Z88DK_SMALLC:
-        case call_abi::Z88DK_FASTCALL:
             if (sz == 1)
                 emit_line("ld\ta, l");
             else
                 emit_line("ex\tde, hl");
+            break;
+        case call_abi::Z88DK_SMALLC:
+        case call_abi::Z88DK_FASTCALL:
+            if (sz == 1)
+                emit_line("ld\ta, l");
             break;
         default:
             break;

@@ -1027,11 +1027,14 @@ struct cc_z88dk_smallc final : stack_linkage_convention {
     }
 
     void emit_return_value(z80_gen &g, const operand &value) const override {
-        emit_modern_return_value(g, value);
+        // Hand-written z88dk classic-library asm (open.asm, read.asm, ...)
+        // always returns a word result in HL, never DE; smallc/fastcall only
+        // redefine argument order, not the return register.
+        emit_legacy_return_value(g, value);
     }
 
     void emit_store_call_result(z80_gen &g, const icode &ic) const override {
-        emit_store_modern_result(g, ic);
+        emit_store_legacy_result(g, ic);
     }
 };
 
