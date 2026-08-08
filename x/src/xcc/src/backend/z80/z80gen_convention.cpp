@@ -189,6 +189,22 @@ bool should_keep_modern_receive_in_register(const ir_function &fn,
     if (incoming_arg_home(ic.arg_loc) == temp_home::stack)
         return false;
 
+    // Keeping a multi-use incoming value in its ABI register relies on lazy
+    // materialization at the first consumer.  That consumer may need the same
+    // register pair as an address scratch before it asks for the operand.  In
+    // that case the lazy spill saves the scratch value instead of the incoming
+    // argument (for example, table[index] with index arriving in HL), and all
+    // later uses observe the corrupted value.  Spill multi-use receives in the
+    // prologue, before instruction selection can clobber their ABI registers.
+    if (ic.result.is_temp() &&
+        count_temp_uses_after(fn, receive_idx, ic.result.temp_id) > 1) {
+        return false;
+    }
+    if (ic.result.is_symbol() &&
+        count_symbol_uses_after(fn, receive_idx, ic.result) > 1) {
+        return false;
+    }
+
     for (size_t i = receive_idx + 1; i < fn.icodes.size(); ++i) {
         const auto &scan = fn.icodes[i];
         if (is_passive_leading_op(scan))

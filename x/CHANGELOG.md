@@ -6,6 +6,15 @@ Release status:
 
 ## Unreleased
 
+- Fixed three XCC miscompilations exposed by Sah Partner. Compound `+=` and
+  `-=` on pointers now scale integer operands by the pointed-to type, explicit
+  function-designator dereferences such as `(*compar)(a, b)` call the pointer
+  instead of loading a word from the function's code, and reused incoming
+  register arguments are spilled before address selection can overwrite their
+  ABI register. The last defect made the chess attack generator mistake the
+  `king_dirs` table address for a square number and increment bytes in its own
+  `generate_moves` machine code. Executable regressions cover all optimization
+  profiles.
 - Fixed five correctness holes in the optimized Z80 register-home pipeline.
   Lazy incoming-argument spills now use the base word slot even when the first
   consumer is a high-byte view, and conditional first uses conservatively

@@ -476,6 +476,28 @@ void ir_gen::gen_compound_assign(binary_expr &e) {
     operand rhs_for_op = rhs;
     type_ptr op_type = lhs_src.type ? lhs_src.type : type::make_int();
 
+    // Compound pointer addition/subtraction has the same element-based
+    // semantics as ordinary pointer arithmetic.  The generic arithmetic
+    // lowering below deliberately leaves pointer operands out of the usual
+    // arithmetic conversions, so scale the integer operand explicitly
+    // before emitting the byte-address ADD/SUB used by the backend.
+    if ((e.op == bin_op::ADD_ASSIGN || e.op == bin_op::SUB_ASSIGN) &&
+        lhs_src.type && lhs_src.type->is_ptr() &&
+        rhs.type && rhs.type->is_integer()) {
+        const int scale = pointer_step(lhs_src.type);
+        if (scale > 1) {
+            if (rhs.kind == operand_kind::INT_CONST) {
+                rhs_for_op = rhs;
+                rhs_for_op.ival *= scale;
+            } else {
+                type_ptr index_type = rhs.type ? rhs.type : type::make_int();
+                rhs_for_op = emit_binop(
+                    icode_op::MUL, rhs,
+                    operand::make_int(scale, index_type), index_type);
+            }
+        }
+    }
+
     auto coerce_operand = [&](operand op, const type_ptr &target) -> operand {
         if (!target)
             return op;
@@ -679,7 +701,20 @@ void ir_gen::visit(call_expr &e) {
         // Evaluate an indirect callee before SENDs.  On register ABIs the SEND
         // sequence materializes arguments in HL/DE/A, and evaluating a member
         // function pointer afterwards would clobber those registers.
-        indirect_callee = gen_expr(*e.callee);
+        //
+        // C permits an explicit function-designator dereference in a call:
+        //     (*function_pointer)(arguments)
+        // The dereference yields a function designator, not an object value
+        // loaded from the first bytes of the function's machine code.  Lower
+        // the pointer operand directly in this context.  Ordinary object
+        // dereferences still go through unary_expr's GET_VALUE_AT lowering.
+        if (auto *deref = dynamic_cast<unary_expr *>(e.callee.get());
+            deref && deref->op == unary_op::DEREF && deref->operand &&
+            e.callee->type && e.callee->type->is_func()) {
+            indirect_callee = gen_expr(*deref->operand);
+        } else {
+            indirect_callee = gen_expr(*e.callee);
+        }
     }
 
     std::vector<operand> arg_ops;
