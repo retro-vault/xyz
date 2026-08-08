@@ -6,6 +6,10 @@ Release status:
 
 ## Unreleased
 
+- Fixed optimized XCC bit-test fusion for `[[sdcc::sfr(port)]]` operands.
+  Masked port polling now emits an `in` before testing the selected bit instead
+  of treating the numeric port as a page-zero RAM address. Added assembly
+  regressions across all optimization profiles.
 - Fixed three XCC miscompilations exposed by Sah Partner. Compound `+=` and
   `-=` on pointers now scale integer operands by the pointed-to type, explicit
   function-designator dereferences such as `(*compar)(a, b)` call the pointer

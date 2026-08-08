@@ -3798,6 +3798,17 @@ bool z80_gen::try_emit_band_ifx(const ir_function &fn, size_t &idx) {
             emit_line("bit\t%d, %c", bit, reg);
         };
 
+        // SFR operands are I/O ports, not ordinary absolute data symbols.
+        // Keep the BAND/IFX fusion, but materialize the volatile port read in
+        // A before testing its bit.  Falling through to the global-symbol
+        // case below would incorrectly emit `bit n, (hl)` against page-zero
+        // RAM at the numeric port address.
+        if (op.is_sfr && op.sfr_port >= 0) {
+            load_a(op);
+            emit_reg_bit('a');
+            return true;
+        }
+
         if (a_cache_matches(a_load_cache_key(op))) {
             emit_reg_bit('a');
             return true;
@@ -3965,7 +3976,8 @@ bool z80_gen::try_emit_band_ifx(const ir_function &fn, size_t &idx) {
             }
         }
 
-        if (op.kind == operand_kind::SYMBOL && op.is_global && !op.is_tls) {
+        if (op.kind == operand_kind::SYMBOL && op.is_global && !op.is_tls &&
+            !op.is_sfr) {
             std::string sym = mangle(op.name);
             if (op.byte_offset != 0)
                 sym += " + " + std::to_string(op.byte_offset);
