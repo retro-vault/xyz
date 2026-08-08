@@ -83,4 +83,8 @@ strlcat_sldone:
         ex      de,hl                   ; DE = result
         ld      sp,ix                   ; discard the three locals
         pop     ix
-        ret
+        ; sdcccall(1) returns of at most 16 bits are callee-clean.  Preserve
+        ; the size_t result in DE while removing the spilled size word.
+        pop     hl                      ; return address
+        pop     bc                      ; destination size
+        jp      (hl)

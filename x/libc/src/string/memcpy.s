@@ -38,4 +38,8 @@ _memcpy::
 memcpy_done:
         pop     de
         pop     ix
-        ret
+        ; sdcccall(1) returns of at most 16 bits are callee-clean.  Preserve
+        ; the pointer result in DE while removing the spilled byte-count word.
+        pop     hl                      ; return address
+        pop     bc                      ; byte count
+        jp      (hl)

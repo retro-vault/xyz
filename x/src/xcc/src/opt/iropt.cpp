@@ -2142,13 +2142,17 @@ public:
             std::string key = base_symbol_key(op);
             const bool dense_dispatch_terminal =
                 terminal_backend_form_ && function_has_dense_dispatch;
+            const bool multiple_definitions = definition_count[key] != 1;
+            const bool safe_multiple_definitions =
+                op.type->is_ptr() ||
+                (op.type->is_integer() &&
+                 op.type->kind != type_kind::BOOL &&
+                 (op.type->is_unsigned() ||
+                  is_control_only_counted_local(key) ||
+                  dense_dispatch_terminal));
             if (key.empty() || blocked.count(key) ||
-                (op.type->size() == 4 && definition_count[key] != 1) ||
-                (definition_count[key] != 1 && !op.type->is_ptr() &&
-                 (!op.type->is_integer() ||
-                  (!op.type->is_unsigned() &&
-                   !is_control_only_counted_local(key) &&
-                   !dense_dispatch_terminal))))
+                (op.type->size() == 4 && multiple_definitions) ||
+                (multiple_definitions && !safe_multiple_definitions))
                 return;
 
             promoted.try_emplace(key, candidate{operand::make_temp(next_temp++, op.type)});

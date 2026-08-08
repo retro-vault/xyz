@@ -966,11 +966,38 @@ struct stack_linkage_convention : abi_convention {
             g.symbol_home_in_iy(ic.result)) {
             g.emit_comment("keep stack parameter %s live in IY",
                            ic.result.name.c_str());
+            bool preserve_hl = false;
+            for (const auto &[temp_id, home] : g.temp_regs_) {
+                (void)temp_id;
+                if (home == temp_home::arg_l ||
+                    home == temp_home::arg_hl) {
+                    preserve_hl = true;
+                    break;
+                }
+            }
+            if (!preserve_hl) {
+                for (const auto &[stack_offset, home] :
+                     g.incoming_symbol_homes_) {
+                    (void)stack_offset;
+                    if (home == temp_home::arg_l ||
+                        home == temp_home::arg_hl) {
+                        preserve_hl = true;
+                        break;
+                    }
+                }
+            }
+            // Loading the stack slot uses HL.  A preceding register RECEIVE
+            // may deliberately remain there until its first real consumer,
+            // so protect that incoming value while initializing IY.
+            if (preserve_hl)
+                g.emit_line("push\thl");
             g.load_frame_word(
                 z80_gen::reg_pair{"hl", 'l', 'h', false},
                 g.ix_offset_of(ic.result));
             g.emit_line("push\thl");
             g.emit_line("pop\tiy");
+            if (preserve_hl)
+                g.emit_line("pop\thl");
             return;
         }
         g.emit_comment("receive (%s) param %s at %s",
@@ -1381,6 +1408,42 @@ struct cc_sdcccall1 final : abi_convention {
     }
 
     void emit_receive(z80_gen &g, const icode &ic) override {
+        if (ic.arg_loc == abi_arg_loc::STACK &&
+            ic.result.is_symbol() && ic.result.byte_offset == 0 &&
+            g.symbol_home_in_iy(ic.result)) {
+            g.emit_comment("keep stack parameter %s live in IY",
+                           ic.result.name.c_str());
+            bool preserve_hl = false;
+            for (const auto &[temp_id, home] : g.temp_regs_) {
+                (void)temp_id;
+                if (home == temp_home::arg_l ||
+                    home == temp_home::arg_hl) {
+                    preserve_hl = true;
+                    break;
+                }
+            }
+            if (!preserve_hl) {
+                for (const auto &[stack_offset, home] :
+                     g.incoming_symbol_homes_) {
+                    (void)stack_offset;
+                    if (home == temp_home::arg_l ||
+                        home == temp_home::arg_hl) {
+                        preserve_hl = true;
+                        break;
+                    }
+                }
+            }
+            if (preserve_hl)
+                g.emit_line("push\thl");
+            g.load_frame_word(
+                z80_gen::reg_pair{"hl", 'l', 'h', false},
+                g.ix_offset_of(ic.result));
+            g.emit_line("push\thl");
+            g.emit_line("pop\tiy");
+            if (preserve_hl)
+                g.emit_line("pop\thl");
+            return;
+        }
         if (ic.arg_loc != abi_arg_loc::STACK && ic.result.is_temp()) {
             if (g.cur_fn_ && !g.can_omit_frame_pointer(*g.cur_fn_)) {
                 g.emit_comment("receive (sdcccall1) register param handled by prologue");

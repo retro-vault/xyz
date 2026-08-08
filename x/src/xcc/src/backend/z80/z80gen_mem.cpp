@@ -1110,23 +1110,53 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         };
 
         if (op_size(ic.left) == 1) {
-            emit_direct_copy_src_hl();
-            emit_line("ld\ta, (hl)");
-            if (!emit_global_plus_u8_index_hl(ic.result))
-                load_hl(ic.result);
-            emit_line("ld\t(hl), a");
+            int64_t src_disp = 0;
+            if (direct_mem_copy_idx.is_none() &&
+                iy_pointer_displacement(direct_mem_copy_src, 1, src_disp)) {
+                emit_line("ld\ta, %lld(iy)",
+                          static_cast<long long>(src_disp));
+            } else {
+                emit_direct_copy_src_hl();
+                emit_line("ld\ta, (hl)");
+            }
+            int64_t dst_disp = 0;
+            if (iy_pointer_displacement(ic.result, 1, dst_disp)) {
+                emit_line("ld\t%lld(iy), a",
+                          static_cast<long long>(dst_disp));
+            } else {
+                if (!emit_global_plus_u8_index_hl(ic.result))
+                    load_hl(ic.result);
+                emit_line("ld\t(hl), a");
+            }
             return;
         }
         if (op_size(ic.left) == 2) {
-            emit_direct_copy_src_hl();
-            emit_line("ld\te, (hl)");
-            emit_line("inc\thl");
-            emit_line("ld\td, (hl)");
-            if (!emit_global_plus_u8_index_hl(ic.result))
-                load_hl(ic.result);
-            emit_line("ld\t(hl), e");
-            emit_line("inc\thl");
-            emit_line("ld\t(hl), d");
+            int64_t src_disp = 0;
+            if (direct_mem_copy_idx.is_none() &&
+                iy_pointer_displacement(direct_mem_copy_src, 2, src_disp)) {
+                emit_line("ld\te, %lld(iy)",
+                          static_cast<long long>(src_disp));
+                emit_line("ld\td, %lld(iy)",
+                          static_cast<long long>(src_disp + 1));
+            } else {
+                emit_direct_copy_src_hl();
+                emit_line("ld\te, (hl)");
+                emit_line("inc\thl");
+                emit_line("ld\td, (hl)");
+            }
+            int64_t dst_disp = 0;
+            if (iy_pointer_displacement(ic.result, 2, dst_disp)) {
+                emit_line("ld\t%lld(iy), e",
+                          static_cast<long long>(dst_disp));
+                emit_line("ld\t%lld(iy), d",
+                          static_cast<long long>(dst_disp + 1));
+            } else {
+                if (!emit_global_plus_u8_index_hl(ic.result))
+                    load_hl(ic.result);
+                emit_line("ld\t(hl), e");
+                emit_line("inc\thl");
+                emit_line("ld\t(hl), d");
+            }
             return;
         }
     }

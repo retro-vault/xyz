@@ -1114,7 +1114,14 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         return op.type && op.type->size() > 4;
     };
     for (const auto &ic : fn.icodes) {
-        if (is_wide(ic.result) || is_wide(ic.left) || is_wide(ic.right))
+        // ADDRESS_OF consumes an object but produces only a target pointer.
+        // The operand retains the object's declared type, so an array or
+        // structure can be much larger than the machine value manipulated by
+        // this instruction.  Do not mistake that object size for a live wide
+        // scalar and disable allocation for the whole function.
+        const bool wide_left_value =
+            ic.op != icode_op::ADDRESS_OF && is_wide(ic.left);
+        if (is_wide(ic.result) || wide_left_value || is_wide(ic.right))
             return;
     }
 
@@ -3058,6 +3065,19 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             effective_call_abi(fn.abi) == call_abi::SDCCCALL0) {
             init_ok = true;
         }
+        if (!init_ok && def_ic.op == icode_op::ASSIGN &&
+            def_ic.left.is_temp()) {
+            auto incoming = ivs.find(def_ic.left.temp_id);
+            if (incoming != ivs.end() && incoming->second.first_def >= 0) {
+                const icode &receive =
+                    fn.icodes[incoming->second.first_def];
+                init_ok = receive.op == icode_op::RECEIVE &&
+                          receive.result.is_temp() &&
+                          receive.result.temp_id == def_ic.left.temp_id &&
+                          (receive.arg_loc == abi_arg_loc::REG_HL ||
+                           receive.arg_loc == abi_arg_loc::REG_DE);
+            }
+        }
         if (!init_ok &&
             (def_ic.op == icode_op::ASSIGN ||
              def_ic.op == icode_op::CAST ||
@@ -3148,7 +3168,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             }
 
             if (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO ||
-                ic.op == icode_op::IFX) {
+                ic.op == icode_op::IFX || ic.op == icode_op::RETURN) {
                 continue;
             }
             if ((opt_settings_.level == opt_level::Of ||
@@ -3198,6 +3218,19 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             if (mentions_temp(ic, temp_id) ||
                 (old_temp >= 0 && mentions_temp(ic, old_temp)))
                 return false;
+            // Byte comparisons and immediate byte/word comparisons lower
+            // through A/HL/DE and an optional direct IX result slot; they do
+            // not consume BC.  Do not accept a general word/word comparison:
+            // a rematerialized address on either side could need BC itself.
+            const bool bc_preserving_compare =
+                is_compare_op(ic.op) &&
+                ((op_size(ic.left) <= 1 && op_size(ic.right) <= 1) ||
+                 (ic.left.kind == operand_kind::INT_CONST &&
+                  op_size(ic.right) <= 2) ||
+                 (ic.right.kind == operand_kind::INT_CONST &&
+                  op_size(ic.left) <= 2));
+            if (bc_preserving_compare)
+                continue;
             const bool byte_immediate_compare =
                 is_compare_op(ic.op) && ic.result.is_temp() &&
                 ((ic.left.kind == operand_kind::INT_CONST &&
@@ -5722,6 +5755,17 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // DE as the right operand without modifying it; the final use may consume
     // the pair normally.
     std::vector<std::pair<int, int>> de_windows;
+    // DE homes selected by the paired table-probe pass above participate in
+    // the same interference space as the later independent DE candidates.
+    // Seed the window set so a second pass cannot silently overlap them.
+    for (const auto &[tid, home] : temp_regs_) {
+        if (home != temp_home::main_de)
+            continue;
+        auto it = ivs.find(tid);
+        if (it != ivs.end() && it->second.first_def >= 0)
+            de_windows.push_back(
+                {it->second.first_def, it->second.last_use});
+    }
     if (size_opt_enabled() || tuned_profile_enabled()) {
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];
@@ -5991,6 +6035,184 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                direct_word_operand_preserves_de(ic.result) &&
                direct_word_operand_preserves_de(ic.left);
     };
+
+    // When BC and IY already carry a loop counter and cursor, keep one
+    // independent word recurrence in DE.  This is the common remaining
+    // register-pressure pattern in checksums, hashes, parsers and byte-stream
+    // transforms.  Admit only a constant-initialized, no-call live range and
+    // instruction forms whose current lowering is known to preserve DE.
+    // Unlike a source-pattern rewrite, this is an ordinary live-range home:
+    // it is selected from type, def/use, CFG and physical interference only.
+    struct word_de_candidate {
+        int tid = -1;
+        int start = -1;
+        int end = -1;
+        int score = 0;
+    };
+    std::vector<word_de_candidate> word_de_candidates;
+    if (size_opt_enabled() || tuned_profile_enabled()) {
+        auto home_is = [&](const operand &op, temp_home home) {
+            if (!op.is_temp())
+                return false;
+            auto it = temp_regs_.find(op.temp_id);
+            return it != temp_regs_.end() && it->second == home;
+        };
+        auto compact_word_source_preserves_de = [&](const operand &op) {
+            if (op.kind == operand_kind::INT_CONST ||
+                op.kind == operand_kind::LABEL_REF)
+                return true;
+            if (op.kind == operand_kind::SYMBOL)
+                return !op.is_tls && !op.is_sfr;
+            if (!op.is_temp())
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            if (home == temp_regs_.end() || home->second == temp_home::stack ||
+                home->second == temp_home::arg_hl ||
+                home->second == temp_home::main_hl ||
+                home->second == temp_home::main_bc ||
+                home->second == temp_home::main_iy ||
+                home->second == temp_home::remat_hl)
+                return true;
+            return false;
+        };
+        auto word_alu = [](icode_op op) {
+            return op == icode_op::ADD || op == icode_op::SUB ||
+                   op == icode_op::BAND || op == icode_op::BOR ||
+                   op == icode_op::BXOR;
+        };
+
+        for (auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions < 2 ||
+                iv.first_def < 0 || iv.last_use <= iv.first_def ||
+                iv.mentions < 3 || temp_regs_.find(tid) != temp_regs_.end())
+                continue;
+            const icode &initial = fn.icodes[iv.first_def];
+            if (initial.op != icode_op::ASSIGN ||
+                !initial.result.is_temp() || initial.result.temp_id != tid ||
+                initial.left.kind != operand_kind::INT_CONST)
+                continue;
+
+            bool crosses_backedge = false;
+            bool saw_update = false;
+            bool safe = true;
+            for (int k = iv.first_def; k <= iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                const bool use_left =
+                    ic.left.is_temp() && ic.left.temp_id == tid;
+                const bool use_right =
+                    ic.right.is_temp() && ic.right.temp_id == tid;
+                const bool use_result =
+                    ic.result.is_temp() && ic.result.temp_id == tid;
+
+                if (ic.op == icode_op::GOTO) {
+                    auto target = label_indices.find(ic.label_name);
+                    if (target != label_indices.end() && target->second <= k)
+                        crosses_backedge = true;
+                } else if (ic.op == icode_op::IFX) {
+                    for (const std::string *label :
+                         {&ic.true_lbl, &ic.false_lbl}) {
+                        auto target = label_indices.find(*label);
+                        if (target != label_indices.end() &&
+                            target->second <= k)
+                            crosses_backedge = true;
+                    }
+                }
+
+                if (use_left || use_right || use_result) {
+                    if (use_result) {
+                        if (k == iv.first_def)
+                            continue;
+                        const bool update = word_alu(ic.op) &&
+                            ic.result.type && ic.result.type->size() == 2;
+                        if (!update) {
+                            safe = false;
+                            break;
+                        }
+                        saw_update = true;
+                        continue;
+                    }
+                    if (ic.op == icode_op::RETURN && use_left && !use_right)
+                        continue;
+                    const bool constant_unary = use_left && !use_right &&
+                        (ic.op == icode_op::SHL ||
+                         ic.op == icode_op::SHR ||
+                         ic.op == icode_op::ROL ||
+                         ic.op == icode_op::ROR) &&
+                        ic.right.kind == operand_kind::INT_CONST;
+                    const bool safe_binary = word_alu(ic.op) &&
+                        use_left != use_right &&
+                        (use_right ||
+                         (ic.right.kind == operand_kind::INT_CONST));
+                    if (constant_unary || safe_binary)
+                        continue;
+                    safe = false;
+                    break;
+                }
+
+                if (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO ||
+                    ic.op == icode_op::IFX)
+                    continue;
+                if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
+                    ic.op == icode_op::INLINE_ASM ||
+                    ic.op == icode_op::BLOCK_FILL ||
+                    ic.op == icode_op::RETURN) {
+                    safe = false;
+                    break;
+                }
+                if (is_compare_op(ic.op)) {
+                    const operand *value = nullptr;
+                    if (ic.left.kind == operand_kind::INT_CONST)
+                        value = &ic.right;
+                    else if (ic.right.kind == operand_kind::INT_CONST)
+                        value = &ic.left;
+                    if (value &&
+                        (op_size(*value) == 1 ||
+                         home_is(*value, temp_home::main_bc)))
+                        continue;
+                    safe = false;
+                    break;
+                }
+                if (ic.op == icode_op::GET_VALUE_AT &&
+                    ic.result.type && ic.result.type->size() == 1 &&
+                    (home_is(ic.left, temp_home::main_iy) ||
+                     home_is(ic.left, temp_home::main_bc)))
+                    continue;
+                if (ic.op == icode_op::ASSIGN &&
+                    (home_is(ic.result, temp_home::main_iy) ||
+                     home_is(ic.result, temp_home::main_bc)) &&
+                    compact_word_source_preserves_de(ic.left))
+                    continue;
+                if (ic.op == icode_op::ADDRESS_OF &&
+                    (home_is(ic.result, temp_home::main_iy) ||
+                     home_is(ic.result, temp_home::main_bc)))
+                    continue;
+                if (direct_small_word_step_preserves_de(ic))
+                    continue;
+                safe = false;
+                break;
+            }
+            if (!safe || !crosses_backedge || !saw_update)
+                continue;
+            word_de_candidates.push_back(
+                {tid, iv.first_def, iv.last_use,
+                 1400 + hot_mentions(iv) * 16 -
+                     (iv.last_use - iv.first_def)});
+        }
+    }
+    std::sort(word_de_candidates.begin(), word_de_candidates.end(),
+              [](const word_de_candidate &a,
+                 const word_de_candidate &b) {
+                  if (a.score != b.score) return a.score > b.score;
+                  if (a.start != b.start) return a.start < b.start;
+                  return a.tid < b.tid;
+              });
+    for (const auto &cand : word_de_candidates) {
+        if (overlaps_windows(de_windows, cand.start, cand.end))
+            continue;
+        temp_regs_[cand.tid] = temp_home::main_de;
+        de_windows.push_back({cand.start, cand.end});
+    }
 
     struct d_candidate {
         int tid = -1;

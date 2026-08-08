@@ -7,6 +7,13 @@ Release status:
 - `v1.0.0` through `v1.7.0` are Alpha releases.
 - `v1.7.1` is the first Beta release for the repository as a whole.
 
+## Unreleased
+
+- Made the YOS microdrive test images depend explicitly on the staged
+  `bin/y/bin/microdrive` host tool. The application and emulator test
+  Makefiles now build that tool with explicit Y product paths, so an inherited
+  X staging prefix cannot redirect or omit it during the unified test run.
+
 ## v1.7.1 - Beta - 2026-06-20
 
 - No `y` code or build changes were identified relative to `v1.7.0`.

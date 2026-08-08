@@ -13,7 +13,7 @@ CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra -pedantic
 CFLAGS   ?= -O2 -Wall -Wextra -pedantic
 
 Z80_DIR := $(THIS_DIR)/vendor/superzazu-z80
-MDR_LIB := $(PUBLIC_LIB_DIR)/libmicrodrive.a
+MDR_LIB := $(TOOL_DIST_DIR)/lib/libmicrodrive.a
 YOS_ROM := $(REPO_ROOT)/bin/y/z80/spectrum/bin/yos.rom
 YOS_CDB := $(REPO_ROOT)/bin/y/z80/spectrum/bin/yos.cdb
 MDRSTEP_IMAGE := $(REPO_ROOT)/bin/z/z80/spectrum/bin/mdr/mdrstep.mdr
@@ -28,7 +28,10 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 $(MDR_LIB):
-	$(MAKE) -C $(Y_ROOT)/pkg/microdrive all ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT)
+	$(MAKE) -C $(Y_ROOT)/pkg/microdrive all \
+		ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(REPO_ROOT)/build \
+		DIST_DIR=$(TOOL_DIST_DIR) HOST_BIN_DIR=$(TOOL_DIST_DIR)/bin \
+		PUBLIC_LIB_DIR=$(TOOL_DIST_DIR)/lib PUBLIC_INCLUDE_DIR=$(TOOL_DIST_DIR)/include
 
 $(YOS_ROM) $(YOS_CDB):
 	$(MAKE) -C $(Y_ROOT)/src ROOT=$(REPO_ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(REPO_ROOT)/x BUILD_DIR=$(REPO_ROOT)/build/yos DIST_DIR=$(REPO_ROOT)/bin/y ZX_ROMS_DIR=$(REPO_ROOT)/bin/y/z80/spectrum/bin YOS_DEBUG=1

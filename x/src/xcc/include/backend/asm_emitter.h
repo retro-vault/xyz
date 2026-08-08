@@ -60,7 +60,7 @@ public:
     // -- Data directives --------------------------------------------------
 
     virtual void db(int val) = 0;
-    virtual void db_list(const std::vector<int> &vals) = 0; // all on one line
+    virtual void db_list(const std::vector<int> &vals) = 0;
     virtual void dw(int val) = 0;                           // 2-byte word
     virtual void dw_sym(const std::string &name) = 0;       // 2-byte symbol address
     virtual void dl(int val) = 0;                           // 4-byte long

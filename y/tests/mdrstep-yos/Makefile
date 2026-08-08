@@ -49,7 +49,7 @@ $(BIN_DIR)/%.app: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/%.rel $(XLD) | $(BIN_DIR)
 	    $(BUILD_DIR)/$*.rel
 
 .PHONY: image
-image: all
+image: all $(MDR_TOOL)
 	@mkdir -p $(ZX_MDR_DIR)
 	$(MDR_TOOL) create $(IMAGE) MDRSTEP
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/s123.app
@@ -59,6 +59,12 @@ image: all
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/l512.app
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/l777.app
 	$(MDR_TOOL) dir $(IMAGE)
+
+$(MDR_TOOL):
+	$(MAKE) -C $(Y_ROOT)/pkg/microdrive all \
+		ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(REPO_ROOT)/build \
+		DIST_DIR=$(Y_DIST_DIR) HOST_BIN_DIR=$(Y_HOST_BIN_DIR) \
+		PUBLIC_LIB_DIR=$(Y_DIST_DIR)/lib PUBLIC_INCLUDE_DIR=$(Y_DIST_DIR)/include
 
 $(BUILD_DIR)/crt0.rel: crt0tiny.s $(XAS) | $(BUILD_DIR)
 	$(XAS) $(XASFLAGS) $< -o $@

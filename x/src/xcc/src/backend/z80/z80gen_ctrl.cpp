@@ -205,6 +205,14 @@ void z80_gen::gen_ifx(const icode &ic) {
     direct_call_ifx_reg_size_ = 0;
     direct_call_ifx_keep_word_pending_ = false;
 
+    // A retained incoming register argument is materialized lazily at its
+    // first consumer when later uses still exist.  Most consumers reach the
+    // normal operand loaders, which perform that spill themselves, but the
+    // direct word truth test below reads HL/DE without going through a loader.
+    // Spill first so a later call cannot destroy the only copy.
+    if (ic.left.is_temp())
+        maybe_materialize_incoming_arg_temp(ic.left, true);
+
     if (direct_byte_load_ifx) {
         // Producer already loaded the byte and prepared flags.
     } else if (direct_word_load_ifx) {

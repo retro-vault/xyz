@@ -51,4 +51,8 @@ strncat_term:
         ld      (de),a                  ; append the required trailing NUL
         pop     de
         pop     ix
-        ret
+        ; sdcccall(1) returns of at most 16 bits are callee-clean.  Preserve
+        ; the destination result in DE while removing the spilled count word.
+        pop     hl                      ; return address
+        pop     bc                      ; maximum byte count
+        jp      (hl)

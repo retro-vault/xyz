@@ -1267,7 +1267,8 @@ bool z80_gen::operand_home_in_bc(const operand &op) const {
     return it != temp_regs_.end() && it->second == temp_home::main_bc;
 }
 
-void z80_gen::maybe_materialize_incoming_arg_temp(const operand &op) {
+void z80_gen::maybe_materialize_incoming_arg_temp(
+    const operand &op, bool scan_across_branches) {
     if (!cur_fn_ || !op.is_temp())
         return;
 
@@ -1285,22 +1286,49 @@ void z80_gen::maybe_materialize_incoming_arg_temp(const operand &op) {
         return;
     }
 
-    if (!temp_value_used_after(*cur_fn_, cur_ic_index_ + 1, op.temp_id))
+    bool used_later = false;
+    if (scan_across_branches) {
+        // A conditional first use can be followed textually by a definition
+        // on one arm before another arm uses the incoming value.  The normal
+        // linear helper stops at that first definition, even though it does
+        // not dominate the other arm.  Conservatively scan all following
+        // operand uses for this control-flow consumer.
+        for (size_t i = cur_ic_index_ + 1;
+             i < cur_fn_->icodes.size() && !used_later; ++i) {
+            const icode &ic = cur_fn_->icodes[i];
+            used_later = operand_uses_temp(ic.left, op.temp_id) ||
+                         operand_uses_temp(ic.right, op.temp_id) ||
+                         (ic.op == icode_op::SET_VALUE_AT &&
+                          operand_uses_temp(ic.result, op.temp_id));
+        }
+    } else {
+        used_later = temp_value_used_after(
+            *cur_fn_, cur_ic_index_ + 1, op.temp_id);
+    }
+    if (!used_later)
         return;
+
+    // A first consumer may use a byte view of a word argument (for example,
+    // the high byte in `value < 0`).  The incoming ABI register still holds
+    // the complete value, so materialize it at the base spill slot rather
+    // than shifting the word by that consumer's byte offset.
+    operand base = op;
+    base.byte_offset = 0;
+    const int spill_offset = ix_offset_of(base);
 
     emit_comment("materialize incoming arg temp t%d for later reuse", op.temp_id);
     switch (it->second) {
     case temp_home::arg_a:
-        store_frame_byte(ix_offset_of(op), 'a');
+        store_frame_byte(spill_offset, 'a');
         break;
     case temp_home::arg_l:
-        store_frame_byte(ix_offset_of(op), 'l');
+        store_frame_byte(spill_offset, 'l');
         break;
     case temp_home::arg_hl:
-        store_frame_word(reg_pair{"hl", 'l', 'h', false}, ix_offset_of(op));
+        store_frame_word(reg_pair{"hl", 'l', 'h', false}, spill_offset);
         break;
     case temp_home::arg_de:
-        store_frame_word(reg_pair{"de", 'e', 'd', true}, ix_offset_of(op));
+        store_frame_word(reg_pair{"de", 'e', 'd', true}, spill_offset);
         break;
     default:
         break;
@@ -2572,14 +2600,14 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
         opt_settings_.level != opt_level::O3 &&
         opt_settings_.level != opt_level::Os)
         return false;
-    if (idx + 4 >= fn.icodes.size())
+    if (idx + 3 >= fn.icodes.size())
         return false;
 
     const icode &shift = fn.icodes[idx];
     const icode &sum = fn.icodes[idx + 1];
     const icode &load = fn.icodes[idx + 2];
-    const icode &widen = fn.icodes[idx + 3];
-    const icode &accumulate = fn.icodes[idx + 4];
+    const icode *widen = nullptr;
+    const icode *accumulate = &fn.icodes[idx + 3];
     if (shift.op != icode_op::SHL || !shift.result.is_temp() ||
         shift.right.kind != operand_kind::INT_CONST ||
         op_size(shift.left) != 2 || op_size(shift.result) != 2 ||
@@ -2588,16 +2616,33 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
         op_size(load.result) != 1 || !load.right.is_none() ||
         !load.left.type || !load.left.type->is_ptr() ||
         load.left.type->is_far_ptr() ||
+        !load.result.type || !load.result.type->is_unsigned() ||
         (load.result.type && load.result.type->is_volatile) ||
         (load.left.type->base && load.left.type->base->is_volatile) ||
-        widen.op != icode_op::CAST || !widen.result.is_temp() ||
-        !temp_eq(widen.left, load.result.temp_id) ||
-        op_size(widen.result) != 2 ||
-        !widen.left.type || widen.left.type->size() != 1 ||
-        !widen.left.type->is_unsigned() ||
-        accumulate.op != icode_op::ADD ||
-        op_size(accumulate.result) != 2) {
+        accumulate->op != icode_op::ADD ||
+        op_size(accumulate->result) != 2) {
         return false;
+    }
+
+    // Value propagation may leave the unsigned-byte operand directly on the
+    // word ADD instead of retaining an explicit byte-to-word CAST.  Accept
+    // both equivalent IR forms so this target fusion is not coupled to the
+    // exact cleanup order of an earlier pass.
+    if (idx + 4 < fn.icodes.size()) {
+        const icode &possible_widen = fn.icodes[idx + 3];
+        if (possible_widen.op == icode_op::CAST &&
+            possible_widen.result.is_temp() &&
+            temp_eq(possible_widen.left, load.result.temp_id) &&
+            op_size(possible_widen.result) == 2 &&
+            possible_widen.left.type &&
+            possible_widen.left.type->size() == 1 &&
+            possible_widen.left.type->is_unsigned()) {
+            widen = &possible_widen;
+            accumulate = &fn.icodes[idx + 4];
+            if (accumulate->op != icode_op::ADD ||
+                op_size(accumulate->result) != 2)
+                return false;
+        }
     }
 
     const int count = static_cast<int>(shift.right.ival);
@@ -2609,23 +2654,29 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
     const bool sum_shift_right =
         temp_eq(sum.right, shift.result.temp_id) &&
         operands_equivalent(sum.left, shift.left);
+    const int byte_value_tid =
+        widen ? widen->result.temp_id : load.result.temp_id;
     const bool final_sum_left =
-        temp_eq(accumulate.left, sum.result.temp_id) &&
-        temp_eq(accumulate.right, widen.result.temp_id);
+        temp_eq(accumulate->left, sum.result.temp_id) &&
+        temp_eq(accumulate->right, byte_value_tid);
     const bool final_sum_right =
-        temp_eq(accumulate.right, sum.result.temp_id) &&
-        temp_eq(accumulate.left, widen.result.temp_id);
+        temp_eq(accumulate->right, sum.result.temp_id) &&
+        temp_eq(accumulate->left, byte_value_tid);
     if ((!sum_shift_left && !sum_shift_right) ||
         (!final_sum_left && !final_sum_right) ||
         temp_value_used_after(fn, idx + 2, shift.result.temp_id) ||
-        temp_value_used_after(fn, idx + 5, sum.result.temp_id) ||
-        temp_value_used_after(fn, idx + 4, load.result.temp_id) ||
-        temp_value_used_after(fn, idx + 5, widen.result.temp_id)) {
+        temp_value_used_after(fn, idx + (widen ? 5 : 4),
+                              sum.result.temp_id) ||
+        temp_value_used_after(fn, idx + 4,
+                              load.result.temp_id) ||
+        (widen && temp_value_used_after(fn, idx + 5,
+                                       widen->result.temp_id))) {
         return false;
     }
 
     if (debug_)
-        debug_->emit_location(accumulate.line ? accumulate.line : shift.line);
+        debug_->emit_location(accumulate->line ? accumulate->line :
+                                                  shift.line);
     invalidate_pair_cache();
     invalidate_a_cache();
     load_hl(shift.left);
@@ -2653,10 +2704,10 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
     }
     emit_line("ld\td, %s", asm_.imm(0).c_str());
     emit_line("add\thl, de");
-    store_hl(accumulate.result);
+    store_hl(accumulate->result);
     invalidate_pair_cache();
     invalidate_a_cache();
-    idx += 4;
+    idx += widen ? 4 : 3;
     return true;
 }
 

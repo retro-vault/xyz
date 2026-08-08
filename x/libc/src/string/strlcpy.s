@@ -62,4 +62,8 @@ strlcpy_measure:
         ld      d,a
         dec     de                      ; exclude the NUL
         pop     ix
-        ret
+        ; sdcccall(1) returns of at most 16 bits are callee-clean.  Preserve
+        ; the size_t result in DE while removing the spilled size word.
+        pop     hl                      ; return address
+        pop     bc                      ; destination size
+        jp      (hl)

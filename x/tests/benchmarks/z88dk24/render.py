@@ -8,27 +8,21 @@ with open(src, newline="", encoding="utf-8") as f:
 
 modes = [
     "xcc_Os",
-    "xcc_Os_sdcc0",
     "xcc_Of",
-    "xcc_Of_sdcc0",
-    "sccz80",
     "sdcc",
     "80cc_fp",
     "80cc_sp",
 ]
 labels = [
-    "xcc -Os (M, sdcc1)",
-    "xcc -Os (M, sdcc0)",
-    "xcc -Of (M, sdcc1)",
-    "xcc -Of (M, sdcc0)",
-    "sccz80",
+    "xcc -Os",
+    "xcc -Of",
     "sdcc",
     "80cc-fp",
     "80cc-sp",
 ]
-xcc_modes = modes[:4]
-xcc_labels = labels[:4]
-competitor_modes = modes[4:]
+xcc_modes = modes[:2]
+xcc_labels = labels[:2]
+competitor_modes = modes[2:]
 
 def cell(row, mode):
     status = row[f"{mode}_status"]
@@ -78,10 +72,9 @@ def competitive_counts(mode, metric):
 lines = [
     "# z88dk Full-Program Integer Benchmarks",
     "",
-    "XCC uses the M model. The `sdcc1` rows keep the current default ABI and",
-    "the `sdcc0` rows force `--sdcccall 0`. Every size is the complete linked",
-    "binary measured with `wc -c` from the benchmark work dir, matching the",
-    "upstream z88dk `benchcmp.sh` size comparison. Every image executes in",
+    "Every compiler uses z88dk's `+test` CRT and classic library, so complete",
+    "linked-image sizes are directly comparable. Every size is measured with",
+    "`wc -c` from the benchmark work dir. Every image executes in",
     "the same `z80_exec` Z80 model; its z88dk test-CRT trap support handles",
     "competitor console and file I/O without changing target instruction",
     "counts. Each table cell is `sizeB / cycles`.",

@@ -6343,39 +6343,10 @@ void z80_gen::gen_cast(const icode &ic) {
             }
 
             if (dst_is_float32) {
-                if (src_is_llong) {
-                    asm_.global_decl(ic.left.type && ic.left.type->is_unsigned()
-                                         ? "___ull2db"
-                                         : "___sll2db");
-                    load_reg64(ic.left);
-                    emit_line("call\t%s",
-                              ic.left.type && ic.left.type->is_unsigned()
-                                  ? "___ull2db"
-                                  : "___sll2db");
-                    asm_.global_decl("___db2fs");
-                    emit_line("call\t___db2fs");
-                } else if (src_sz <= 2) {
-                    const char *helper =
-                        ic.left.type && ic.left.type->is_unsigned()
-                            ? "___uint2db"
-                            : "___sint2db";
-                    asm_.global_decl(helper);
-                    load_hl(ic.left);
-                    emit_line("call\t%s", helper);
-                    asm_.global_decl("___db2fs");
-                    emit_line("call\t___db2fs");
-                } else {
-                    const char *helper =
-                        ic.left.type && ic.left.type->is_unsigned()
-                            ? "___ulong2fs"
-                            : "___slong2fs";
-                    asm_.global_decl(helper);
-                    load_hl_lo32(ic.left);
-                    emit_line("push\thl");
-                    load_hl_hi32(ic.left);
-                    emit_line("pop\tde");
-                    emit_line("call\t%s", helper);
-                }
+                // Keep float-only profiles independent of the double runtime.
+                // In particular, 8/16-bit integers have direct *int2fs
+                // helpers and must not be routed through *int2db + db2fs.
+                emit_integer_to_float32(ic.left);
                 store_dehl32();
                 return;
             }

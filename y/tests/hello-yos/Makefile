@@ -63,12 +63,18 @@ $(BIN_DIR)/hello-yos.xl: $(BUILD_DIR)/crt0.rel $(BUILD_DIR)/hello-yos.rel $(XLD)
 	    $(XRUNTIME)
 
 .PHONY: image
-image: all
+image: all $(MDR_TOOL)
 	@mkdir -p $(ZX_MDR_DIR)
 	cp $(BIN_DIR)/hello-yos.xl $(BIN_DIR)/hello.app
 	$(MDR_TOOL) create $(IMAGE) HELLO
 	$(MDR_TOOL) put $(IMAGE) $(BIN_DIR)/hello.app
 	$(MDR_TOOL) dir $(IMAGE)
+
+$(MDR_TOOL):
+	$(MAKE) -C $(Y_ROOT)/pkg/microdrive all \
+		ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(REPO_ROOT)/build \
+		DIST_DIR=$(Y_DIST_DIR) HOST_BIN_DIR=$(Y_HOST_BIN_DIR) \
+		PUBLIC_LIB_DIR=$(Y_DIST_DIR)/lib PUBLIC_INCLUDE_DIR=$(Y_DIST_DIR)/include
 
 $(BUILD_DIR)/crt0.rel: $(X_ROOT)/tests/tests/hello/crt0.s $(XAS) | $(BUILD_DIR)
 	$(XAS) $(XASFLAGS) $< -o $@

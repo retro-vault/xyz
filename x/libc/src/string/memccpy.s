@@ -56,7 +56,15 @@ memccpy_found_restore:
         inc     de
 memccpy_found:
         pop     ix
-        ret
+        jr      memccpy_return
 memccpy_not_found:
         pop     ix
-        jp      __string_return_zero
+        ld      de,#0x0000
+memccpy_return:
+        ; Both trailing arguments are spilled as words.  sdcccall(1) returns
+        ; of at most 16 bits are callee-clean, so discard them while keeping
+        ; the pointer result in DE intact.
+        pop     hl                      ; return address
+        pop     bc                      ; delimiter byte (word slot)
+        pop     bc                      ; byte count
+        jp      (hl)

@@ -6,6 +6,7 @@
 //
 #include "backend/sdasz80_emitter.h"
 #include "frontend/types.h"
+#include <algorithm>
 
 namespace xcc {
 
@@ -84,12 +85,16 @@ void sdasz80_emitter::db(int val) {
 }
 
 void sdasz80_emitter::db_list(const std::vector<int> &vals) {
-    out_ << "\t.db ";
-    for (size_t i = 0; i < vals.size(); ++i) {
-        if (i) out_ << ", ";
-        out_ << vals[i];
+    constexpr size_t values_per_line = 16;
+    for (size_t first = 0; first < vals.size(); first += values_per_line) {
+        const size_t last = std::min(first + values_per_line, vals.size());
+        out_ << "\t.db ";
+        for (size_t i = first; i < last; ++i) {
+            if (i != first) out_ << ", ";
+            out_ << vals[i];
+        }
+        out_ << "\n";
     }
-    out_ << "\n";
 }
 
 void sdasz80_emitter::dw(int val) {

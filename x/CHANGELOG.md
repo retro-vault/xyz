@@ -6,12 +6,34 @@ Release status:
 
 ## Unreleased
 
-- Fixed three XCC floating-point lowering defects exposed by an analog-clock
+- Fixed five correctness holes in the optimized Z80 register-home pipeline.
+  Lazy incoming-argument spills now use the base word slot even when the first
+  consumer is a high-byte view, and conditional first uses conservatively
+  preserve values needed on another control-flow arm. Modern-ABI stack
+  parameters selected for IY are initialized from their IX slot without
+  destroying an earlier HL argument; direct memory copies recognize both
+  base and constant-displaced IY pointers for loads and stores. Finally,
+  scalar-local promotion no longer maps multiply-defined `_Bool` loop latches
+  to a non-SSA temporary. Execution regressions cover every case at `-O0`,
+  `-Os`, and `-Of`.
+- Corrected Z80 physical register allocation to classify `ADDRESS_OF` by its
+  pointer value width rather than the size of the referenced aggregate, so
+  taking the address of a large array no longer disables allocation for an
+  entire function. Added conservative DE homes for independent word loop
+  recurrences, BC/IY homes for dual byte cursors with early exits, and
+  shift-add-byte fusion for both explicit-cast and value-propagated IR forms.
+  These source-independent changes reduce shared-z88dk benchmark geometric
+  mean cycles by 10.1% at `-Os` and 10.7% at `-Of`; all 23 programs pass in
+  both profiles. Long byte data directives are also split into 16-value lines
+  so downstream copt/z80asm processing cannot reject a generated source line.
+- Fixed four XCC floating-point lowering defects exposed by an analog-clock
   application: calls now materialize all required argument conversions
   (including `float`/`double` to `int`), unary expressions refresh their type
   after a call's return type is resolved, and negative/arithmetic floating
-  constant expressions are emitted correctly in static initializers. Matching
-  execution regressions cover both `float` and `double`. Also fixed the
+  constant expressions are emitted correctly in static initializers. The
+  unoptimized integer-to-`float` cast path now uses the direct `*int2fs`
+  helpers instead of requiring an unavailable double runtime in the M model.
+  Matching execution regressions cover both `float` and `double`. Also fixed the
   CP/M 3 `gettimeofday` backend to preserve its destination pointer across
   BDOS and 32-bit conversion helper calls instead of writing the result to
   page zero, and to forward the actual 32-bit multiplier past its wrapper
@@ -22,7 +44,11 @@ Release status:
   as Lunatik's `gputglyph` and `gputtext` advanced `SP` twice, corrupting the
   intro screen and eventually crashing. Added caller, callee, size-mode, and
   external-void-call regressions while retaining caller cleanup for wide
-  returns as required by SDCC's return-sensitive ABI.
+  returns as required by SDCC's return-sensitive ABI. Updated the hand-written
+  `memcpy`, `memset`, `memccpy`, `strlcat`, `strlcpy`, and `strncat` entry
+  points to remove their spilled delimiter/count/size words as that ABI
+  requires; this also keeps optimized SP-relative local addresses correct
+  after any of these calls.
 - Graduated the guarded 2026-08 `-O3` speed experiment. Physical register
   homes, scalar-local promotion, the dense-dispatch profitability guard, and
   adjacent 32-bit recurrence spill sinking now belong to `-Of`; the recurrence
