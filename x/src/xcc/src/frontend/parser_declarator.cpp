@@ -110,7 +110,32 @@ type_ptr parser::parse_direct_declarator_suffix(type_ptr base, std::string &/*na
             // array[4] of array[3] of int, not the reverse.
             for (auto it = arrays.rbegin(); it != arrays.rend(); ++it) {
                 bool has_vla = it->is_vla || (base && base->is_vla);
-                base = type::make_array(base, it->size);
+                // Qualifying an incomplete tagged record makes a shallow
+                // type copy.  Keep an array's element tied to the canonical
+                // tag object so a later `struct T { ... };` completes earlier
+                // declarations such as `extern const struct T rows[]`.
+                // Store the element qualifiers on the array; subscript type
+                // construction already reapplies them to the element lvalue.
+                type_ptr element = base;
+                bool move_record_qualifiers = false;
+                if (element && !element->complete && !element->tag.empty() &&
+                    (element->kind == type_kind::STRUCT ||
+                     element->kind == type_kind::UNION)) {
+                    if (type_ptr canonical = syms_.lookup_tag(element->tag);
+                        canonical && canonical->kind == element->kind &&
+                        canonical.get() != element.get()) {
+                        move_record_qualifiers = true;
+                        element = canonical;
+                    }
+                }
+
+                type_ptr array = type::make_array(element, it->size);
+                if (move_record_qualifiers) {
+                    array->is_const = base->is_const;
+                    array->is_volatile = base->is_volatile;
+                    array->is_restrict = base->is_restrict;
+                }
+                base = std::move(array);
                 base->is_vla = has_vla;
             }
         } else if (check(tk::LPAREN)) {

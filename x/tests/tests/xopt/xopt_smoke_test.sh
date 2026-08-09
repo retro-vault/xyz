@@ -637,11 +637,41 @@ _outline_jump_next:
 	jr	_outline_next
 _outline_next:
 	ret
+_outline_fresh_diamond:
+	jr	z, _outline_true
+	jr	_outline_false
+_outline_true:
+	ld	a,#1
+	jr	_outline_done
+_outline_false:
+	ld	a,#0
+_outline_done:
+	ret
 ASM
 
 "$XOPT" -Os "$TMPDIR/outline_final_layout.s" -o "$TMPDIR/outline_final_layout.out.s"
 if grep -Eq '^[[:space:]]+call[[:space:]]+__xopt_outline_900|^[[:space:]]+jr[[:space:]]+_outline_next' "$TMPDIR/outline_final_layout.out.s"; then
     echo "xopt smoke: outlined final layout was not compacted" >&2
+    exit 1
+fi
+if grep -Eq '^[[:space:]]+j[pr][[:space:]]+z,[[:space:]]*_outline_true|^[[:space:]]+ld[[:space:]]+a,?#[0]?0' "$TMPDIR/outline_final_layout.out.s"; then
+    echo "xopt smoke: fresh post-outline branch/zero cleanup was not applied" >&2
+    exit 1
+fi
+cat >"$TMPDIR/outline_flag_input.s" <<'ASM'
+	.area	_CODE
+_outline_flag_input:
+	ld	a,#0
+	call	__xopt_outline_flags	; xopt-ix:none
+	ret
+__xopt_outline_flags:
+	adc	a,#1
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/outline_flag_input.s" -o "$TMPDIR/outline_flag_input.out.s"
+if ! grep -Eq '^[[:space:]]+ld[[:space:]]+a,?#[0]?0' "$TMPDIR/outline_flag_input.out.s"; then
+    echo "xopt smoke: outlined helper flag input was not preserved" >&2
     exit 1
 fi
 

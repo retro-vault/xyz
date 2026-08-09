@@ -28,7 +28,8 @@ namespace xld {
         none    = 0x00,
         ovr     = 0x01,     // overlay mode (vs concatenate)
         abs_legacy = 0x04,  // absolute area (legacy bit)
-        abs     = 0x08      // absolute area (SDCC 4.x bit)
+        abs     = 0x08,     // absolute area (SDCC 4.x bit)
+        never_load = 0x80   // occupies memory, but has no file image
     };
 
     inline area_flags operator|(area_flags a, area_flags b) {

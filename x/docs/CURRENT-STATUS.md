@@ -2,9 +2,33 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-06, after graduating the guarded XCC speed pass.
+Last updated: 2026-08-09, after the large-program XCC size pass.
 
 ## Major Recent Work
+
+### Large-program `-Os` and non-loadable data
+
+Large generated assemblies no longer lose the ordinary bounded peephole pass
+at the old 8,000-line cliff: the scalable guard is now 16,000 lines.  Size
+mode also gets four bounded tail-merge/outline fixed-point rounds and a small,
+outline-safe final layout cleanup.  The backend keeps cheap adjacent
+compare/branch and switch lowering active when it disables expensive
+whole-function matching, and size-profitable dense byte jump tables are no
+longer limited to an arbitrary 16-entry span.  Selection uses local byte-cost,
+type, span, and control-flow proofs only.
+
+`xld` now preserves the object format's `never_load`/NOBITS property.  BSS
+continues to occupy runtime memory and define its address/length symbols, while
+BIN and IHX occupancy excludes it.  This removes trailing startup-cleared BSS
+from CP/M COM files without changing the linked address map; explicit binary
+ranges and holes between loadable areas keep their zero fill.
+
+Static numeric pointer initializers now preserve their absolute values, with
+typed pointer arithmetic applied before integer fallback.  Qualified arrays of
+forward-declared records also remain bound to the canonical tag definition.
+This fixes the large-program case where `extern const struct T table[]` was
+declared before `struct T` was completed and dynamic indexing advanced by one
+byte instead of `sizeof(struct T)`.
 
 ### 0. XCC Optimization Guardrails And Empty Experimental Speed Lane
 

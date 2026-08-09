@@ -43,6 +43,9 @@ namespace xld {
         }
         bool is_ovr() const { return has_flag(flags_, area_flags::ovr); }
         bool is_con() const { return !is_ovr(); }
+        bool is_never_load() const {
+            return has_flag(flags_, area_flags::never_load);
+        }
 
     private:
         std::string name_;

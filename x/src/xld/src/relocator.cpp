@@ -33,6 +33,15 @@ namespace xld {
                     throw reloc_error("area '" + area.name()
                         + "' not placed in module " + mod->name());
 
+                // A NOBITS/BSS record reserves addresses and contributes to
+                // linker symbols, but its zero bytes are initialized by crt0
+                // and must not extend a flat load image.  Keeping the area in
+                // placement preserves every address while leaving occupancy
+                // clear, so a trailing BSS naturally disappears and an
+                // interior BSS remains a correctly sized file hole.
+                if (area.is_never_load())
+                    continue;
+
                 const uint32_t record_end =
                     static_cast<uint32_t>(tr.offset) + tr.data.size();
                 if (record_end > area.size()) {

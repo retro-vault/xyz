@@ -6,6 +6,29 @@ Release status:
 
 ## Unreleased
 
+- Made `-Os` effective on large translation units instead of silently falling
+  back to a restricted cleanup pipeline.  The bounded Z80 peephole pass now
+  covers generated assemblies through 16,000 lines, size-mode tail merging and
+  repeated-sequence outlining get up to four fixed-point rounds, and safe
+  branch/zero cleanup runs on the resulting layout.  Cheap adjacent
+  compare/branch and switch-table lowering also remain enabled after the
+  backend disables its expensive whole-function matchers.  Dense byte
+  switches beyond the former 16-entry ceiling use a conservative emitted-byte
+  profitability test.  These are source-independent rules; a new deliberately
+  large 31-case switch has compile and execution coverage.
+- Propagated the object format's `never_load`/NOBITS property through `xld`.
+  BSS still reserves addresses, contributes `s__BSS`/`l__BSS`, and determines
+  the runtime memory map, but no longer contributes occupied bytes to flat BIN
+  or Intel HEX output.  Explicit BIN ranges and interior gaps retain their
+  documented zero fill.  Linker regressions verify both the retained memory
+  size and the shortened trailing file image.
+- Fixed static initialization of numeric pointer constants, including typed
+  arithmetic such as `(int *)0x1200 + 3` and the traditional implicit integer
+  form used by established CP/M sources.  Also keep arrays of qualified,
+  forward-declared structs and unions attached to their canonical tag so a
+  later definition supplies the correct element size.  Previously dynamic
+  indexing of declarations such as `extern const struct T rows[]` could use a
+  one-byte stride.  Execution coverage includes both regressions.
 - Fixed optimized XCC bit-test fusion for `[[sdcc::sfr(port)]]` operands.
   Masked port polling now emits an `in` before testing the selected bit instead
   of treating the numeric port as a page-zero RAM address. Added assembly

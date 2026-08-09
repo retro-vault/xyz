@@ -605,7 +605,7 @@ void z80_gen::emit_function(const ir_function &fn) {
     // a common byte-load selector.  Discover those exact loads up front so
     // store_a can leave the selector in A instead of writing a register home
     // that the jump-table dispatch immediately supersedes.
-    if (structured_match && switch_jump_tables_enabled()) {
+    if (switch_jump_tables_enabled()) {
         for (size_t start = 1; start + 1 < fn.icodes.size(); ++start) {
             std::vector<int64_t> values;
             int selector_tid = -1;
@@ -642,9 +642,31 @@ void z80_gen::emit_function(const ir_function &fn) {
                     values.end())
                 continue;
             const int64_t span = values.back() - values.front() + 1;
-            if (span <= 0 || span > 16 ||
-                span > static_cast<int64_t>(values.size() * 2))
+            if (span <= 0)
                 continue;
+            if (opt_settings_.level == opt_level::Os) {
+                const bool legacy_candidate =
+                    span <= 16 &&
+                    span <= static_cast<int64_t>(values.size() * 2);
+                // The byte-selector dispatch costs 18 bytes, plus two when
+                // its range does not start at zero, and two bytes per table
+                // entry.  A compare chain needs at least CP+JP (five bytes)
+                // per case plus its default jump.  Preserve candidates handled
+                // by the established span-16 policy; the outliner can make
+                // those tables profitable even when this local estimate is
+                // pessimistic.  Keep selector-load suppression in lockstep
+                // with the real matcher below.
+                const int64_t table_bytes =
+                    18 + (values.front() != 0 ? 2 : 0) + 2 * span;
+                const int64_t chain_bytes =
+                    5 * static_cast<int64_t>(values.size()) + 3;
+                if (!legacy_candidate &&
+                    (span > 255 || table_bytes >= chain_bytes))
+                    continue;
+            } else if (span > 16 ||
+                       span > static_cast<int64_t>(values.size() * 2)) {
+                continue;
+            }
             const icode &load = fn.icodes[start - 1];
             if (load.op == icode_op::GET_VALUE_AT &&
                 load.result.is_temp() &&
@@ -665,6 +687,17 @@ void z80_gen::emit_function(const ir_function &fn) {
           gen_icode(fn.icodes[i]);
           continue;
       }
+      if (!structured_match && switch_jump_tables_enabled() &&
+          try_emit_switch_jump_table(fn, i))
+          continue;
+      // Compare/IFX fusion is an adjacent, proof-bounded match.  It is not
+      // one of the whole-function quadratic scans guarded by
+      // `structured_match`, and disabling it in a large function forces
+      // every predicate through a materialized 0/1 temporary before the
+      // branch.  Keep this cheap fundamental lowering available at every
+      // function size.
+      if (!structured_match && try_emit_compare_ifx(fn, i))
+          continue;
       if (structured_match) {
         if (try_emit_byte_mask_walk_loop(fn, i))
             continue;
@@ -4507,11 +4540,9 @@ bool z80_gen::try_emit_switch_jump_table(const ir_function &fn, size_t &idx) {
     if (max_value < min_value)
         return false;
     const int64_t span64 = max_value - min_value + 1;
-    if (span64 <= 0 || span64 > 16)
+    if (span64 <= 0)
         return false;
     const size_t span = static_cast<size_t>(span64);
-    if (span > cases.size() * 2)
-        return false;
 
     operand byte_cond = cond;
     const bool cond_is_byte = op_size(cond) == 1;
@@ -4520,6 +4551,31 @@ bool z80_gen::try_emit_switch_jump_table(const ir_function &fn, size_t &idx) {
 
     if (cond_is_zero_extended_byte && (min_value < 0 || max_value > 0xFF))
         return false;
+
+    if (opt_settings_.level == opt_level::Os) {
+        const bool legacy_candidate =
+            span <= 16 && span <= cases.size() * 2;
+        // The emitted range check uses an 8-bit CP.  Within that range,
+        // select a table only when its dispatch and entries are strictly
+        // smaller than a conservative lower bound for the equivalent chain.
+        // This replaces the old arbitrary span-16 ceiling and lets large,
+        // dense state-machine switches optimize without recognizing any
+        // source, symbol, or complete-function shape.  Preserve every table
+        // admitted by the prior policy because later outlining can make its
+        // compare-chain alternative smaller than a purely local estimate.
+        const int64_t dispatch_bytes = cond_is_zero_extended_byte
+            ? 18 + (min_value != 0 ? 2 : 0)
+            : 24 + (min_value != 0 ? 6 : 0);
+        const int64_t table_bytes = dispatch_bytes + 2 * span64;
+        const int64_t chain_bytes =
+            (cond_is_zero_extended_byte ? 5 : 6) *
+                static_cast<int64_t>(cases.size()) + 3;
+        if (!legacy_candidate &&
+            (span > 255 || table_bytes >= chain_bytes))
+            return false;
+    } else if (span > 16 || span > cases.size() * 2) {
+        return false;
+    }
 
     std::vector<std::string> table_labels(span, tail.label_name);
     for (const auto &entry : cases)

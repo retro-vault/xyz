@@ -230,6 +230,19 @@ static std::optional<address_constant> evaluate_address_impl(const expr *e) {
                        : conditional->else_expr.get());
     }
 
+    // C permits an integer constant expression converted to a pointer in a
+    // static initializer.  Some established CP/M sources also rely on the
+    // traditional implicit form for tables of file offsets represented as
+    // pointers.  This fallback comes after typed pointer arithmetic so an
+    // expression such as `(int *)0x1200 + 3` scales by sizeof(int).  Keep the
+    // symbol empty so data emission writes the absolute pointer value instead
+    // of requesting a relocation.
+    if (auto value = const_expr_evaluator::evaluate(e)) {
+        address_constant result;
+        result.byte_offset = *value;
+        return result;
+    }
+
     return std::nullopt;
 }
 

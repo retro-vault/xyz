@@ -128,6 +128,9 @@ namespace xld {
                     raw_flags |= 0x01;
                 if (bfd::has_flag(sec.flags, bfd::section_flags::abs))
                     raw_flags |= 0x08;
+                if (bfd::has_flag(sec.flags,
+                                  bfd::section_flags::never_load))
+                    raw_flags |= 0x80;
 
                 auto af = static_cast<area_flags>(raw_flags);
                 std::optional<uint16_t> org;

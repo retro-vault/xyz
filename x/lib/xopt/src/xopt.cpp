@@ -1390,7 +1390,13 @@ std::string optimize_z80_assembly(const std::string &asm_text,
     const bool size_bias = level == optimization_level::os;
     const size_t asm_line_count =
         static_cast<size_t>(std::count(asm_text.begin(), asm_text.end(), '\n'));
-    constexpr size_t kMaxIterativePeepholeLines = 8000;
+    // The old 8K-line cutoff skipped every ordinary peephole rule for large
+    // generated functions, even though the bounded pass budget above already
+    // keeps their compile time under control.  This left substantial generic
+    // cleanup on the table in modules just beyond that threshold.  Retain a
+    // guard for pathological translation-limit inputs, but cover normal large
+    // applications before outlining changes their shape.
+    constexpr size_t kMaxIterativePeepholeLines = 16000;
     const bool scalable_size_only =
         size_bias && asm_line_count > kMaxIterativePeepholeLines;
     std::string optimized = scalable_size_only
@@ -1402,7 +1408,11 @@ std::string optimize_z80_assembly(const std::string &asm_text,
     if (uses_speed_biased_rules(level))
         optimized = remove_unused_ix_frames(optimized);
     if (level == optimization_level::os) {
-        for (int round = 0; round < 2; ++round) {
+        // Tail merging can expose an outline, and that outline can in turn
+        // expose another common tail.  Four bounded rounds reach a fixed
+        // point for large generated modules that still changed after the old
+        // two-round cap, without making this an unbounded compile-time loop.
+        for (int round = 0; round < 4; ++round) {
             const std::string before = optimized;
             optimized = remove_unreferenced_internal_labels(optimized);
             optimized = merge_repeated_tails(optimized);
@@ -1413,6 +1423,10 @@ std::string optimize_z80_assembly(const std::string &asm_text,
             if (optimized == before)
                 break;
         }
+        // The last outlining round can make local labels unreferenced.  Drop
+        // them before the restricted final peephole so they do not conceal
+        // newly adjacent control-flow and addressing patterns.
+        optimized = remove_unreferenced_internal_labels(optimized);
         optimized = z80_peep::optimize_outlined_layout(optimized);
     }
     return optimized;

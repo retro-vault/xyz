@@ -24,6 +24,8 @@
 namespace xcc {
 
 struct address_constant {
+    // Empty for an absolute numeric address; otherwise names the symbol that
+    // the linker must relocate before applying byte_offset.
     std::string symbol;
     int64_t     byte_offset = 0;
 };
@@ -49,7 +51,9 @@ public:
         const expr *e, type_ptr target);
 
     // Evaluate a C address constant used by an object with static storage.
-    // The result remains symbolic so the backend can emit a relocation.
+    // Symbolic addresses retain their name for relocation; integer-derived
+    // addresses use an empty symbol and carry the absolute value as the
+    // byte offset.
     static std::optional<address_constant> evaluate_address(const expr *e);
 };
 

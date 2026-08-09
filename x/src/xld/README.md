@@ -154,6 +154,12 @@ including harmless linker-driver commands such as `-p`, `-m`, `-z`, `-k`,
 - In `--mode=sdcc`, `-g` derives a linked `.cdb`.
 - In `--mode=gnu`, `-g` derives an ELF sidecar with DWARF2 sections.
 
+Areas marked `never_load`/NOBITS (normally `_BSS`) still reserve their full
+runtime address range and define the usual linker symbols.  They do not create
+occupied bytes in BIN or IHX output.  Thus trailing BSS does not enlarge a flat
+program file, while BSS between two loadable areas remains a zero-filled gap in
+a BIN.  A caller-provided BIN range with `-x` is always emitted in full.
+
 ---
 
 ## Quick Start
@@ -957,11 +963,12 @@ the reserved bytes themselves.
 
 If `-x` is omitted:
 
-- BIN starts at `0x0000`
-- BIN ends at the highest linked byte
+- BIN starts at the lowest occupied load byte
+- BIN ends at the highest occupied load byte
 
-That means non-zero origins can create leading zero-fill unless you crop
-the file with `-x`.
+Unoccupied `never_load` areas outside that window do not enlarge the file.
+Non-zero origins therefore do not create leading zero-fill unless an explicit
+`-x` range asks for it; gaps inside the occupied window remain zero-filled.
 
 ---
 

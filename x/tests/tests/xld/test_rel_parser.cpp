@@ -46,6 +46,7 @@ TEST(rel_parser_multi_area) {
     ASSERT_EQ(mod->areas()[1].size(), 2);
     ASSERT_EQ(mod->areas()[2].name(), "_BSS");
     ASSERT_EQ(mod->areas()[2].size(), 16);
+    ASSERT(mod->areas()[2].is_never_load());
 }
 
 TEST(rel_parser_text_records) {

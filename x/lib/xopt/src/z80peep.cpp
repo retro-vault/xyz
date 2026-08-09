@@ -878,6 +878,11 @@ static bool path_overwrites_pair_before_read(
         if (call_clobbers_pair &&
             pair == "bc" &&
             line.mnemonic == "call") {
+            // Outlining replaces an in-line sequence with a synthetic call.
+            // Unlike an ABI call, that helper may consume the incoming BC,
+            // so its boundary is not proof that BC is dead.
+            if (trim(line.operands).rfind("__xopt_outline_", 0) == 0)
+                return finish(false);
             return finish(true);
         }
 
@@ -3623,6 +3628,19 @@ std::string z80_peep::optimize_outlined_layout(const std::string &asm_text) {
                 continue;
             }
 
+            // Tail merging and outlining can expose fresh branch diamonds
+            // and constant-zero materializations.  These local rules do not
+            // perform call-clobber liveness and are safe in this restricted
+            // final pass (the zero rule explicitly treats outlined helpers
+            // as possible flag consumers).
+            if (p.rule_invert_branch_skip(i)) {
+                changed = true;
+                continue;
+            }
+            if (p.rule_ld_a_zero(i)) {
+                changed = true;
+                continue;
+            }
             if (p.rule_jp_to_jr(i))
                 changed = true;
             ++i;
@@ -7568,6 +7586,13 @@ bool z80_peep::rule_ld_a_zero(size_t i) {
     for (size_t j = i + 1; j < lines_.size(); ++j) {
         if (lines_[j].mnemonic.empty()) continue;
         if (is_conditional_branch(lines_[j])) return false;
+        // An outlined helper is semantically an in-line instruction
+        // sequence, not an ABI call: its first instruction may consume the
+        // incoming flags.  Do not hide that use behind the synthetic call or
+        // a tail-call jump produced by the final layout pass.
+        if ((lines_[j].mnemonic == "call" || lines_[j].mnemonic == "jp") &&
+            trim(lines_[j].operands).rfind("__xopt_outline_", 0) == 0)
+            return false;
         if (lines_[j].mnemonic == "adc" || lines_[j].mnemonic == "sbc")
             return false;
         break;

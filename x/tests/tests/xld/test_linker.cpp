@@ -403,6 +403,37 @@ TEST(linker_binary_output) {
     std::filesystem::remove(out);
 }
 
+TEST(linker_binary_omits_trailing_never_load_area) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+    ctx.format = xld::output_format::bin;
+
+    auto mod = std::make_shared<xld::module>("nobits", "nobits.rel");
+    mod->areas().emplace_back("_CODE", 3, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_BSS", 16,
+                              xld::area_flags::never_load, 1);
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+    mod->texts().push_back({0, 0, {0x00, 0x00, 0xC9}, {}});
+    // SDCC-style .rel files can contain a zero-filled T record for .ds.
+    // Its declared memory is real, but it is not part of the load image.
+    mod->texts().push_back({1, 0, std::vector<uint8_t>(16, 0x00), {}});
+    ctx.modules.push_back(mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    ASSERT_EQ(ctx.linker_symbols["l__BSS"], 16);
+    ASSERT_EQ(ctx.code_size, 19u);
+
+    const auto out = std::filesystem::temp_directory_path()
+                   / "xld-never-load.bin";
+    xld::binary_emitter::emit(out, ctx);
+    const std::string bytes = read_file_bytes(out);
+    ASSERT_EQ(bytes.size(), 3u);
+    ASSERT_EQ(static_cast<unsigned char>(bytes[2]), 0xC9);
+    std::filesystem::remove(out);
+}
+
 TEST(linker_binary_output_preserves_byte_reloc_flags) {
     xld::link_context ctx;
     ctx.code_size = 1;
