@@ -142,3 +142,40 @@ broader XCC run completed the core, integer, and long execution partitions
 and reached runtime `t114` without an observed failure before that
 deliberately non-required exhaustive run was stopped. The definitive
 acceptance test is the complete shared-z88dk matrix above.
+
+## Parser-Oriented Pass (2026-08-10)
+
+The parser-oriented optimizer work was measured against a preserved
+pre-change XCC executable, then rerun with the exact post-test staged
+executable. The inputs, z88dk checkout, support shims, and runner were held
+constant.
+
+| compiler | SHA-256 | result directory |
+|---|---|---|
+| pre-change | `7e660e1e8d6abe6460c21160ea5396238b26fc32d938dfe042e513cca3f498c2` | `build/x/benchmarks/z88dk24-parser-baseline/` |
+| parser pass | `fd3300b144751354a01b06beff40278d7e68eb785621240865a8d24eba9e22fa` | `build/x/benchmarks/z88dk24-parser-final/` |
+
+Across the 22 valid pre/post `-Os` pairs, linked bytes and executed cycles
+are byte-for-byte/cycle-for-cycle unchanged. All 23 `-Of` pairs are likewise
+unchanged. This is useful negative evidence: the new calling, ctype,
+zero-test, and pointer-walk rules do not recognize or perturb unrelated
+programs in the frozen z88dk corpus.
+
+The one status change is `hashbench -Os`:
+
+| measurement | pre-change | parser pass |
+|---|---:|---:|
+| correctness | FAIL | OK |
+| linked bytes | 8865 | 8864 |
+| executed cycles | 94,113,792 | 42,607,880 |
+
+The failed execution is not a valid speed baseline, so the apparent 54.7%
+cycle reduction is reported only as a correctness-path change. The bug was a
+generic register-window issue: a live byte in A could be overwritten while a
+destination address rematerialized a byte-derived word operand. The fix
+conservatively rejects that A window and is covered by parser-shaped token
+byte/word copy regressions.
+
+The final matrix passes XCC 23/23 at both `-Os` and `-Of` (SDCC 23/23; both
+80CC lanes 22/23 because their existing `lexbench` executions fail). The
+machine-readable comparison is in each result directory's `results.csv`.

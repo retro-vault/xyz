@@ -1253,11 +1253,13 @@ static std::string icode_signature(
            std::to_string(ic.local_bytes) + "|" +
            std::to_string(ic.argreg) + "|" +
            std::to_string(static_cast<int>(ic.arg_loc)) + "|" +
+           std::to_string(ic.send_bytes) + "|" +
            std::to_string(ic.arg_bytes) + "|" +
            std::to_string(static_cast<int>(ic.callee_abi)) + "|" +
            std::to_string(ic.callee_cleans_stack ? 1 : 0) + "|" +
            std::to_string(ic.callee_noreturn ? 1 : 0) + "|" +
-           std::to_string(ic.result_via_sret ? 1 : 0);
+           std::to_string(ic.result_via_sret ? 1 : 0) + "|" +
+           std::to_string(ic.internal_packed_arg ? 1 : 0);
 }
 
 static std::string block_body_signature(const ir_function &fn,
@@ -1340,11 +1342,13 @@ static bool icodes_equivalent_for_tail_merge(
         lhs.local_bytes != rhs.local_bytes ||
         lhs.argreg != rhs.argreg ||
         lhs.arg_loc != rhs.arg_loc ||
+        lhs.send_bytes != rhs.send_bytes ||
         lhs.arg_bytes != rhs.arg_bytes ||
         lhs.callee_abi != rhs.callee_abi ||
         lhs.callee_cleans_stack != rhs.callee_cleans_stack ||
         lhs.callee_noreturn != rhs.callee_noreturn ||
-        lhs.result_via_sret != rhs.result_via_sret) {
+        lhs.result_via_sret != rhs.result_via_sret ||
+        lhs.internal_packed_arg != rhs.internal_packed_arg) {
         return false;
     }
 
@@ -2064,13 +2068,15 @@ public:
                 blocked.insert(base_symbol_key(ic.result));
             }
 
-            // A plain TEMP is not an SSA value in the current backend. Signed
-            // locals with multiple static definitions are particularly unsafe
-            // to promote: data-dependent decrement loops (insertion sort's j)
-            // can be conflated with values from an outer backedge. Unsigned
-            // counters and pointers deliberately remain eligible; the
-            // bounded/countdown/pointer passes consume precisely those
-            // canonical loop forms.
+            // A plain TEMP is not an SSA value in the current backend. Locals
+            // with multiple static definitions are particularly unsafe to
+            // promote before the fixed-point pipeline: a later SSA-like pass
+            // can conflate definitions from different branches or backedges.
+            // Only proven control-only counted locals remain eligible: the
+            // bounded/countdown passes consume precisely those canonical loop
+            // forms. Other mutable integers and pointers must stay stack-
+            // homed because the virtual-temp form has no phi nodes with which
+            // to distinguish branch-specific or loop-carried definitions.
             if (defines_result(ic) && ic.result.is_symbol() &&
                 !ic.result.is_global && !ic.result.is_param &&
                 !ic.result.is_tls && !ic.result.is_sfr &&
@@ -2138,18 +2144,24 @@ public:
                 return;
             if (base_symbol_address_taken(alias, op))
                 return;
+            // Promoted pointers commonly remain live across helper calls, and
+            // byte locals defined in loop bodies can cross the call-bearing
+            // backedge. Until temp-frame call liveness can prove stable homes
+            // for those shapes, keep them in explicit stack slots in calling
+            // functions. Call-free kernels still get the compact temp form.
+            if (function_has_call &&
+                (op.type->is_ptr() || op.type->size() == 1))
+                return;
 
             std::string key = base_symbol_key(op);
             const bool dense_dispatch_terminal =
                 terminal_backend_form_ && function_has_dense_dispatch;
             const bool multiple_definitions = definition_count[key] != 1;
             const bool safe_multiple_definitions =
-                op.type->is_ptr() ||
-                (op.type->is_integer() &&
+                op.type->is_integer() &&
                  op.type->kind != type_kind::BOOL &&
-                 (op.type->is_unsigned() ||
-                  is_control_only_counted_local(key) ||
-                  dense_dispatch_terminal));
+                 (is_control_only_counted_local(key) ||
+                  dense_dispatch_terminal);
             if (key.empty() || blocked.count(key) ||
                 (op.type->size() == 4 && multiple_definitions) ||
                 (multiple_definitions && !safe_multiple_definitions))
@@ -12450,9 +12462,26 @@ public:
             const auto &header = cfg.block(loop.header);
             const auto &preheader = cfg.block(loop.outside_preds.front());
 
+            std::vector<bool> in_loop_inst(fn.icodes.size(), false);
+            bool has_codegen_barrier = false;
+            bool has_call = false;
+            for (size_t block_id : loop.blocks) {
+                const auto &block = cfg.block(block_id);
+                for (size_t i = block.begin; i < block.end; ++i) {
+                    in_loop_inst[i] = true;
+                    const icode_op op = fn.icodes[i].op;
+                    has_call = has_call || op == icode_op::CALL;
+                    if (op == icode_op::ALLOCA || op == icode_op::INLINE_ASM)
+                        has_codegen_barrier = true;
+                }
+            }
+            if (has_codegen_barrier)
+                continue;
+
             operand index;
             int64_t loop_bound = 0;
             bool loop_bound_known = false;
+            bool index_from_increment = false;
             for (size_t i = header.begin; i < header.end; ++i) {
                 const icode &cmp = fn.icodes[i];
                 if (cmp.op != icode_op::LT || !cmp.result.is_temp() ||
@@ -12486,6 +12515,85 @@ public:
                 }
                 break;
             }
+
+            if (index.is_none()) {
+                // Sentinel-terminated parser loops commonly have no numeric
+                // `index < bound` guard: their header loads base[index] and
+                // exits on a zero byte.  Recover the canonical induction from
+                // its +1 recurrence, then let the ordinary address analysis
+                // below prove which base+index expressions are replaceable.
+                // Restrict this fallback to a word counter initialized to
+                // zero; byte counters still need an explicit upper bound to
+                // prove wraparound behavior.
+                std::vector<operand> candidates;
+                auto add_candidate = [&](const operand &cand) {
+                    if ((!cand.is_temp() && !cand.is_symbol()) || !cand.type ||
+                        !cand.type->is_integer() || cand.type->size() != 2)
+                        return;
+                    if (std::none_of(candidates.begin(), candidates.end(),
+                                     [&](const operand &old) {
+                                         return same_slot(old, cand);
+                                     })) {
+                        candidates.push_back(cand);
+                    }
+                };
+                for (size_t block_id : loop.blocks) {
+                    const auto &block = cfg.block(block_id);
+                    for (size_t i = block.begin; i < block.end; ++i) {
+                        const icode &step = fn.icodes[i];
+                        if (step.op != icode_op::ADD)
+                            continue;
+                        if (step.right.kind == operand_kind::INT_CONST &&
+                            step.right.ival == 1)
+                            add_candidate(step.left);
+                        if (step.left.kind == operand_kind::INT_CONST &&
+                            step.left.ival == 1)
+                            add_candidate(step.right);
+                    }
+                }
+
+                int best_score = -1;
+                for (const operand &cand : candidates) {
+                    bool starts_zero = false;
+                    for (size_t i = preheader.begin; i < preheader.end; ++i) {
+                        const icode &init = fn.icodes[i];
+                        if (init.op == icode_op::ASSIGN &&
+                            same_slot(init.result, cand) &&
+                            init.left.kind == operand_kind::INT_CONST &&
+                            init.left.ival == 0) {
+                            starts_zero = true;
+                        }
+                    }
+                    if (!starts_zero)
+                        continue;
+
+                    int score = 0;
+                    for (size_t block_id : loop.blocks) {
+                        const auto &block = cfg.block(block_id);
+                        for (size_t i = block.begin; i < block.end; ++i) {
+                            const icode &use = fn.icodes[i];
+                            const bool left = same_slot(use.left, cand);
+                            const bool right = same_slot(use.right, cand);
+                            if (!left && !right)
+                                continue;
+                            ++score;
+                            if (use.op == icode_op::ADD) {
+                                const operand &other = left ? use.right
+                                                            : use.left;
+                                if (other.kind == operand_kind::LABEL_REF ||
+                                    (other.type && (other.type->is_ptr() ||
+                                                    other.type->is_array())))
+                                    score += 20;
+                            }
+                        }
+                    }
+                    if (score > best_score) {
+                        best_score = score;
+                        index = cand;
+                    }
+                }
+                index_from_increment = !index.is_none();
+            }
             if (index.is_none())
                 continue;
 
@@ -12500,22 +12608,7 @@ public:
             if (init_idx == fn.icodes.size())
                 continue;
 
-            std::vector<bool> in_loop_inst(fn.icodes.size(), false);
-            bool has_codegen_barrier = false;
-            bool has_call = false;
-            for (size_t block_id : loop.blocks) {
-                const auto &block = cfg.block(block_id);
-                for (size_t i = block.begin; i < block.end; ++i) {
-                    in_loop_inst[i] = true;
-                    const icode_op op = fn.icodes[i].op;
-                    has_call = has_call || op == icode_op::CALL;
-                    if (op == icode_op::ALLOCA || op == icode_op::INLINE_ASM) {
-                        has_codegen_barrier = true;
-                    }
-                }
-            }
-            if (has_codegen_barrier ||
-                (has_call && index.type->size() == 1))
+            if (has_call && index.type->size() == 1)
                 continue;
 
             std::vector<size_t> commits;
@@ -13156,7 +13249,8 @@ public:
                 initial_index.ival == 0;
             const bool proven_stride_one =
                 group.stride == 1 && invariant_pointer_base(group.base) &&
-                starts_at_zero && loop_bound_known && !has_call;
+                starts_at_zero &&
+                ((loop_bound_known && !has_call) || index_from_increment);
             if (group.stride == 1 && !proven_stride_one &&
                 group.affine_offset.is_none())
                 continue;

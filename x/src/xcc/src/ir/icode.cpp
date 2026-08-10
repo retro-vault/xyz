@@ -102,7 +102,8 @@ void icode::dump() const {
             printf("  ret %s\n", left.to_string().c_str());
         break;
     case icode_op::SEND:
-        printf("  send(%d,%s) %s\n", argreg, abi_arg_loc_name(arg_loc),
+        printf("  send(%d,%s%s) %s\n", argreg, abi_arg_loc_name(arg_loc),
+               internal_packed_arg ? ", private-pack" : "",
                left.to_string().c_str());
         break;
     case icode_op::RECEIVE:
@@ -110,12 +111,13 @@ void icode::dump() const {
                abi_arg_loc_name(arg_loc));
         break;
     case icode_op::CALL:
-        printf("  %s = call %s (%d%s%s%s)\n",
+        printf("  %s = call %s (%d%s%s%s%s)\n",
                result.is_none() ? "_" : result.to_string().c_str(),
                func_name.c_str(), num_params,
                callee_cleans_stack ? ", callee-cleans" : "",
                callee_noreturn ? ", noreturn" : "",
-               result_via_sret ? ", sret" : "");
+               result_via_sret ? ", sret" : "",
+               internal_packed_arg ? ", private-pack" : "");
         break;
     case icode_op::ASSIGN:
         printf("  %s = %s\n",

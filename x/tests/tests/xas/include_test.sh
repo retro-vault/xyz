@@ -54,6 +54,30 @@ EOF
 grep -qi "3e12115634c9" "$tmpdir/main.ihx" \
     || fail "included instructions were not assembled in order"
 
+cat > "$tmpdir/z80.inc" <<'EOF'
+            ld bc,#0x789a
+EOF
+
+cat > "$tmpdir/sub/parent.s" <<'EOF'
+            .globl _parent
+            .area _CODE
+_parent:
+            .include "../z80.inc"
+            ret
+EOF
+
+# Exercise the bare-input-name case: parent.s has no parent_path() here, but
+# its include must still be based on the directory containing parent.s.
+(
+    cd "$tmpdir/sub"
+    "$XAS" --mode=sdcc -o parent.rel parent.s
+) || fail 'assembly with relative parent include "../z80.inc" failed'
+"$XLD" -nostdlib -e _parent --oformat=ihx \
+       --section-start=_CODE=0x9000 \
+       "$tmpdir/sub/parent.rel" -o "$tmpdir/sub/parent.ihx"
+grep -qi "019a78c9" "$tmpdir/sub/parent.ihx" \
+    || fail "relative parent include was not assembled"
+
 cat > "$tmpdir/missing.s" <<'EOF'
             .area _CODE
             .include "does-not-exist.inc"

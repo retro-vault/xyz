@@ -1933,7 +1933,7 @@ static bool remap_param_symbol(
 static bool analyze_dead_param_candidate(
     const ir_function &fn, dead_param_candidate &out)
 {
-    if (fn.is_global || fn.num_params == 0)
+    if (fn.is_global || fn.num_params == 0 || fn.internal_packed_abi)
         return false;
     if (!collect_param_operands(fn, out.old_params))
         return false;
@@ -2144,7 +2144,7 @@ struct internal_abi_call_site {
 
 static bool collect_internal_abi_call_sites(
     const ir_module &mod, const ir_function &callee,
-    std::vector<internal_abi_call_site> &sites)
+    call_abi expected_abi, std::vector<internal_abi_call_site> &sites)
 {
     for (size_t caller_idx = 0; caller_idx < mod.functions.size();
          ++caller_idx) {
@@ -2157,7 +2157,7 @@ static bool collect_internal_abi_call_sites(
                 continue;
             }
             if (effective_call_abi(call.callee_abi) !=
-                call_abi::SDCCCALL0) {
+                effective_call_abi(expected_abi)) {
                 return false;
             }
 
@@ -2190,14 +2190,33 @@ static std::vector<int> abi_send_order(const abi_convention &conv,
     return order;
 }
 
+static std::vector<int> internal_send_order(
+    const abi_convention &conv, const std::vector<abi_arg_loc> &param_locs,
+    bool packed)
+{
+    auto order = abi_send_order(conv, static_cast<int>(param_locs.size()));
+    if (!packed)
+        return order;
+
+    // The private packing extension uses A only when the public sdcccall(1)
+    // layout left it idle.  Emit that byte last so loading earlier HL/DE
+    // arguments cannot overwrite it.
+    std::stable_partition(order.begin(), order.end(),
+                          [&](int arg_i) {
+                              return param_locs[static_cast<size_t>(arg_i)] !=
+                                     abi_arg_loc::REG_A;
+                          });
+    return order;
+}
+
 static bool promote_internal_calls_to_sdcccall1(
     ir_module &mod, const ir_function &callee,
     const std::vector<type_ptr> &param_types,
     const std::vector<abi_arg_loc> &param_locs,
-    std::vector<internal_abi_call_site> sites)
+    bool packed, std::vector<internal_abi_call_site> sites)
 {
     auto &conv = get_abi_convention(call_abi::SDCCCALL1);
-    const auto order = abi_send_order(conv, callee.num_params);
+    const auto order = internal_send_order(conv, param_locs, packed);
 
     std::sort(sites.begin(), sites.end(),
               [](const internal_abi_call_site &lhs,
@@ -2227,6 +2246,7 @@ static bool promote_internal_calls_to_sdcccall1(
             send.arg_loc = param_locs[static_cast<size_t>(arg_i)];
             send.send_bytes = stack_bytes;
             send.callee_abi = call_abi::SDCCCALL1;
+            send.internal_packed_arg = packed;
             send.line = old_call.line;
             replacement.push_back(std::move(send));
         }
@@ -2234,6 +2254,7 @@ static bool promote_internal_calls_to_sdcccall1(
         icode new_call = old_call;
         new_call.arg_bytes = total_arg_bytes;
         new_call.callee_abi = call_abi::SDCCCALL1;
+        new_call.internal_packed_arg = packed;
         new_call.callee_cleans_stack =
             abi_callee_cleans_stack(call_abi::SDCCCALL1, callee.ret_type,
                                     param_types, false);
@@ -2257,7 +2278,7 @@ static bool promote_internal_calls_to_sdcccall1(
 static bool promote_internal_function_to_sdcccall1(
     ir_function &fn, const std::vector<operand> &old_params,
     const std::vector<type_ptr> &param_types,
-    const std::vector<abi_arg_loc> &param_locs)
+    const std::vector<abi_arg_loc> &param_locs, bool packed)
 {
     auto &conv = get_abi_convention(call_abi::SDCCCALL1);
     std::vector<operand> new_params = old_params;
@@ -2317,7 +2338,28 @@ static bool promote_internal_function_to_sdcccall1(
     fn.callee_cleans_stack =
         abi_callee_cleans_stack(fn.abi, fn.ret_type, param_types, false);
     fn.can_internalize_abi = false;
+    fn.internal_packed_abi = packed;
     return true;
+}
+
+static bool pack_internal_byte_argument(
+    const std::vector<type_ptr> &param_types,
+    std::vector<abi_arg_loc> &param_locs)
+{
+    if (std::find(param_locs.begin(), param_locs.end(),
+                  abi_arg_loc::REG_A) != param_locs.end()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < param_types.size(); ++i) {
+        if (param_locs[i] != abi_arg_loc::STACK || !param_types[i] ||
+            !param_types[i]->is_integer() || param_types[i]->size() != 1) {
+            continue;
+        }
+        param_locs[i] = abi_arg_loc::REG_A;
+        return true;
+    }
+    return false;
 }
 
 static bool analyze_constant_arg_candidate(
@@ -3723,6 +3765,11 @@ static bool pointer_parameter_is_dereference_only(const ir_function &callee,
 
 class internal_call_abi_promotion_pass final : public ir_module_pass {
 public:
+    internal_call_abi_promotion_pass(bool promote_stack_abi,
+                                     bool pack_unused_register)
+        : promote_stack_abi_(promote_stack_abi),
+          pack_unused_register_(pack_unused_register) {}
+
     const char *name() const override {
         return "internal_call_abi_promotion";
     }
@@ -3735,7 +3782,12 @@ public:
             auto &fn = mod.functions[fn_idx];
             if (fn.is_global || !fn.can_internalize_abi ||
                 fn.is_variadic ||
-                effective_call_abi(fn.abi) != call_abi::SDCCCALL0 ||
+                (effective_call_abi(fn.abi) == call_abi::SDCCCALL0 &&
+                 !promote_stack_abi_) ||
+                (effective_call_abi(fn.abi) == call_abi::SDCCCALL1 &&
+                 !pack_unused_register_) ||
+                (effective_call_abi(fn.abi) != call_abi::SDCCCALL0 &&
+                 effective_call_abi(fn.abi) != call_abi::SDCCCALL1) ||
                 info.address_taken_funcs.find(fn.name) !=
                     info.address_taken_funcs.end()) {
                 continue;
@@ -3773,7 +3825,14 @@ public:
                 continue;
 
             auto &conv = get_abi_convention(call_abi::SDCCCALL1);
-            const auto param_locs = conv.classify_args(param_types);
+            auto param_locs = conv.classify_args(param_types);
+            const bool packed = pack_unused_register_ &&
+                pack_internal_byte_argument(param_types, param_locs);
+            const call_abi old_abi = fn.abi;
+            if (effective_call_abi(old_abi) == call_abi::SDCCCALL1 &&
+                !packed) {
+                continue;
+            }
             const bool has_register_arg =
                 std::any_of(param_locs.begin(), param_locs.end(),
                             [](abi_arg_loc loc) {
@@ -3786,13 +3845,13 @@ public:
             }
 
             std::vector<internal_abi_call_site> sites;
-            if (!collect_internal_abi_call_sites(mod, fn, sites) ||
+            if (!collect_internal_abi_call_sites(mod, fn, old_abi, sites) ||
                 static_cast<int>(sites.size()) != count_it->second) {
                 continue;
             }
 
             if (!promote_internal_function_to_sdcccall1(
-                    fn, params, param_types, param_locs)) {
+                    fn, params, param_types, param_locs, packed)) {
                 continue;
             }
 
@@ -3800,18 +3859,24 @@ public:
             // SENDs.  Recollect every call site so a self-call cannot retain
             // the old ABI0 stack locations captured during validation.
             sites.clear();
-            if (!collect_internal_abi_call_sites(mod, fn, sites) ||
+            if (!collect_internal_abi_call_sites(
+                    mod, fn, old_abi, sites) ||
                 static_cast<int>(sites.size()) != count_it->second) {
                 return changed;
             }
             if (!promote_internal_calls_to_sdcccall1(
-                    mod, fn, param_types, param_locs, std::move(sites))) {
+                    mod, fn, param_types, param_locs, packed,
+                    std::move(sites))) {
                 return changed;
             }
             changed = true;
         }
         return changed;
     }
+
+private:
+    bool promote_stack_abi_ = false;
+    bool pack_unused_register_ = false;
 };
 
 class tail_address_noescape_pass final : public ir_module_pass {
@@ -4326,9 +4391,11 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<function_const_eval_pass>());
     if (settings.dead_params)
         passes.push_back(std::make_unique<dead_param_elimination_pass>());
-    if (settings.internal_call_abi_promotion)
+    if (settings.internal_call_abi_promotion || settings.internal_arg_packing)
         passes.push_back(
-            std::make_unique<internal_call_abi_promotion_pass>());
+            std::make_unique<internal_call_abi_promotion_pass>(
+                settings.internal_call_abi_promotion,
+                settings.internal_arg_packing));
     if (settings.tail_recursion_elim)
         passes.push_back(std::make_unique<tail_address_noescape_pass>());
     if (settings.inline_trivial_internal_functions)

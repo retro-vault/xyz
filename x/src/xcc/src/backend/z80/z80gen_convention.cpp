@@ -1528,7 +1528,7 @@ struct cc_sdcccall1 final : abi_convention {
             // argument will already be live in L when we materialize arg0
             // into A. Deep stack/temp byte loads use HL as an address scratch,
             // so preserve HL here to avoid clobbering that earlier byte arg.
-            if (ic.argreg == 0) {
+            if (ic.argreg == 0 || ic.internal_packed_arg) {
                 g.emit_line("push\thl");
                 g.load_a(ic.left);
                 g.emit_line("pop\thl");

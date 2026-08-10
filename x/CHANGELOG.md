@@ -6,6 +6,29 @@ Release status:
 
 ## Unreleased
 
+- Added source-independent parser-oriented optimization coverage. `-Of` now
+  tears down eligible framed register-only sibling calls, packs a private byte
+  argument into otherwise idle A, and inlines the bundled C-locale ctype
+  predicates/conversions (with `-fno-ctype-builtins` and local-definition
+  escape hatches). Optimized profiles also fuse direct call/zero-test returns
+  and recognize word-index sentinel loops for lockstep pointer walking. The
+  size-increasing ABI and ctype choices remain speed-only; `-Os` receives only
+  the smaller generic fusions. Register-resident byte/word cursor copies now
+  retain their loaded value while rematerializing a narrow-index destination,
+  fixing the `-Os` open-addressing hash workload. Parser-shaped compile and
+  execution regressions cover every mechanism.
+- Tightened optimized scalar-local promotion after the pinned Algorithms-C
+  corpus exposed a call/loop liveness miscompile in its Thompson NFA builder.
+  Multiply-defined locals are now promoted only for proven control-only loop
+  counters, while pointer and byte locals in calling functions retain stable
+  stack homes. Call-free kernels keep the compact promoted form. A reduced
+  executable regression covers `-O0`, `-Os`, and `-Of`.
+- Repaired the S-model libc dependency boundary. Core file positioning,
+  `rand`/`srand`, checked integer multiplication, and the integer-only portion
+  of `<time.h>` remain available even though long text formatting/conversion is
+  disabled. The staged runtime now retains lazy 32-bit integer helpers, which
+  do not enlarge programs unless referenced. `atoi` has a compact standalone
+  16-bit parser instead of depending on the omitted `strtol` family.
 - Made `-Os` effective on large translation units instead of silently falling
   back to a restricted cleanup pipeline.  The bounded Z80 peephole pass now
   covers generated assemblies through 16,000 lines, size-mode tail merging and

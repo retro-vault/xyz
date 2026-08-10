@@ -6731,9 +6731,37 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     }
 
     // Keep a freshly loaded byte in A across a short, pair-only address
-    // calculation until it is stored.  Word ASSIGN/ADD lowering does not use
-    // A, so this safely removes the otherwise pointless spill/reload around
-    // post-incremented indexed stores and similar pointer arithmetic.
+    // calculation until it is stored.  Ordinary word ASSIGN/ADD lowering does
+    // not use A, but a word operand rematerialized from an unsigned byte does.
+    // Reject those promoted-byte address components so the destination cannot
+    // overwrite the source byte before the final SET_VALUE_AT.
+    std::function<bool(const operand &, int, int)> pair_load_may_use_a;
+    pair_load_may_use_a = [&](const operand &op, int before, int depth) {
+        if (depth > 6 || op.kind == operand_kind::INT_CONST)
+            return false;
+        if (op.type && op.type->size() == 1)
+            return true;
+        if (op.is_symbol())
+            return op.is_global && op.is_tls;
+        if (!op.is_temp())
+            return false;
+
+        auto home = temp_regs_.find(op.temp_id);
+        if (home != temp_regs_.end() &&
+            (home->second == temp_home::main_a ||
+             home->second == temp_home::alt_a ||
+             home->second == temp_home::arg_a)) {
+            return true;
+        }
+
+        const icode *def = find_temp_def_before(op.temp_id, before);
+        if (!def)
+            return false;
+        if (def->op == icode_op::ASSIGN || def->op == icode_op::CAST)
+            return pair_load_may_use_a(def->left, before, depth + 1);
+        return false;
+    };
+
     std::vector<std::pair<int, int>> main_a_windows;
     for (const auto &[tid, iv] : ivs) {
         if (iv.size != 1 || iv.has_addr_of || iv.definitions != 1 ||
@@ -6767,10 +6795,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             }
             const bool pair_assign =
                 ic.op == icode_op::ASSIGN && op_size(ic.result) == 2 &&
-                op_size(ic.left) == 2;
+                op_size(ic.left) == 2 &&
+                !pair_load_may_use_a(ic.left, k, 0);
             const bool pair_add =
                 ic.op == icode_op::ADD && op_size(ic.result) == 2 &&
-                op_size(ic.left) <= 2 && op_size(ic.right) <= 2;
+                op_size(ic.left) <= 2 && op_size(ic.right) <= 2 &&
+                !pair_load_may_use_a(ic.left, k, 0) &&
+                !pair_load_may_use_a(ic.right, k, 0);
             if (!pair_assign && !pair_add) {
                 safe = false;
                 break;

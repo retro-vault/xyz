@@ -102,6 +102,13 @@ void z80_gen::emit_module(const ir_module &mod) {
     asm_.module_header();
     asm_.default_calling_convention(get_default_call_abi());
     iy_preserving_local_callees_.clear();
+    internal_function_names_.clear();
+    defined_function_names_.clear();
+    for (const auto &fn : mod.functions) {
+        defined_function_names_.insert(fn.name);
+        if (!fn.is_global)
+            internal_function_names_.insert(fn.name);
+    }
 
     if (debug_) debug_->begin_module();
 

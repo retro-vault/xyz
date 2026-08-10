@@ -4710,7 +4710,8 @@ void z80_gen::gen_icode(const icode &ic) {
         direct_postinc_load_step_ = 0;
         direct_postinc_load_get_index_ = 0;
     }
-    if (ic.op != icode_op::CAST && ic.op != icode_op::RETURN) {
+    if (ic.op != icode_op::CAST && ic.op != icode_op::RETURN &&
+        skipped_icodes_.count(cur_ic_index_) == 0) {
         direct_compare_return_pending_ = false;
         direct_compare_return_value_ = operand{};
     }

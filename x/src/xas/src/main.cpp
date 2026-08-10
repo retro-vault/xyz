@@ -147,8 +147,16 @@ namespace {
                 return candidate.lexically_normal();
         } else {
             std::vector<fs::path> roots;
-            if (!including_file.empty() && including_file.has_parent_path())
-                roots.push_back(including_file.parent_path());
+            if (!including_file.empty()) {
+                // A bare input name (for example, "main.s") has an empty
+                // parent_path(), but its quoted includes are still relative
+                // to the current source directory.  Keep that directory in
+                // the search list so paths such as "../z80.inc" work when
+                // xas is invoked from beside the input file.
+                roots.push_back(including_file.has_parent_path()
+                                    ? including_file.parent_path()
+                                    : fs::path("."));
+            }
             for (const std::string& dir : include_dirs)
                 roots.emplace_back(dir);
             for (const fs::path& root : roots) {

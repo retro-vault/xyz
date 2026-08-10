@@ -770,12 +770,12 @@ heavy code paths.
 
 | Build switch | Effect |
 |---|---|
-| `X_MODEL=S` | No `float`, `double`, `long`, `long long`, or stdio float conversions |
+| `X_MODEL=S` | Keep core integer ABI/runtime, file positioning, time, and rand; omit wide numeric formatting/conversion, floating math, and `long long` support |
 | `X_MODEL=M` | Keep `float` and `long`, drop `double`, `long long`, and stdio float conversions |
 | `X_MODEL=L` | Full model: keep `float`, `double`, `long`, `long long`, and stdio float conversions |
 | `LIBC_FLOAT=0` | Omit libc `float` formatting/conversion paths |
 | `LIBC_DOUBLE=0` | Omit libc `double` formatting/conversion paths |
-| `LIBC_LONG=0` | Omit libc `long` formatting/conversion paths |
+| `LIBC_LONG=0` | Omit libc `long` text/formatting APIs while retaining core 32-bit ABI/runtime services |
 | `LIBC_LONGLONG=0` | Omit libc `long long` formatting/conversion paths |
 | `LIBC_STDIO_FLOAT=0` | Keep `printf`/`scanf` integer-only even when `float` stays enabled elsewhere |
 
@@ -2107,9 +2107,9 @@ profile without treating `-O3` as a black box.
 | Area | Example switches |
 |---|---|
 | Late assembly | `peephole` |
-| Module-level IR | `const-arg-prop`, `const-call-eval`, `function-const-eval`, `merge-identical-functions`, `inline-static-functions` |
+| Module-level IR | `const-arg-prop`, `const-call-eval`, `function-const-eval`, `merge-identical-functions`, `inline-static-functions`, `internal-call-abi-promotion`, `internal-arg-packing` |
 | Function IR | `scalar-local-promotion`, `reg-param-promotion`, `narrow-counted-byte-loops`, `loop-pointer-walk`, `duplicate-block-merge`, `merge-tails`, `local-frame-compaction` |
-| Backend | `regalloc`, `compare-ifx-fusion`, `frame-omit`, `prealloc-temp-frame`, `switch-jump-tables` |
+| Backend | `regalloc`, `compare-ifx-fusion`, `frame-omit`, `prealloc-temp-frame`, `switch-jump-tables`, `ctype-builtins` |
 
 ```bash
 # Keep -O2, but turn off two backend choices
@@ -2121,6 +2121,13 @@ xcc -Os -fconst-call-eval -fno-inline-static-functions app.c -o app.xl
 # Probe named shape-changing passes individually
 xcc -Of -fno-duplicate-block-merge -fmerge-tails hot.c -o hot.xl
 ```
+
+`-Of` enables `ctype-builtins` for the ASCII C locale supplied by X libc.
+Calls are retained when the translation unit defines the named function, when
+the declaration does not have the standard word argument/result shape, or
+when `-fno-ctype-builtins` is specified. `internal-arg-packing` applies only to
+private direct-call functions whose addresses do not escape; the callee and
+every call site are rewritten as one module-level operation.
 
 This is especially useful when a benchmark win is clear but you want to prove
 which pass earned it, or when one transformation is good for a hot loop but

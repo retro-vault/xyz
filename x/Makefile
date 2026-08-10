@@ -145,6 +145,9 @@ stage-target-assets:
 	mkdir -p $(PKG_DIR)/deb $(PKG_DIR)/vsix
 	cp $(Y_ROOT)/tests/microdrives/hello.mdr $(ZX_MDR_DIR)/
 
+# Keep the 32-bit integer helpers in every model. X_MODEL controls the staged
+# library feature set, not the C language's 32-bit long ABI, and archive
+# members do not add bytes unless a program references them.
 stage-xcc-support:
 	rm -rf $(TOOLCHAIN_RUNTIME_BUILD_DIR) $(TOOLCHAIN_FIXED_BUILD_DIR) $(BUILD_DIR)/toolchain-platform
 	rm -f $(TARGET_LIB_DIR)/crt0.rel $(TARGET_LIB_DIR)/crt0.s \
@@ -175,10 +178,6 @@ stage-xcc-support:
 	    case "$$base" in \
 	        db*|*2db|db2*) \
 	            if [ "$(LIBC_DOUBLE)" = "0" ]; then skip=1; fi ;; \
-	    esac; \
-	    case "$$base" in \
-	        *long*) \
-	            if [ "$(LIBC_LONG)" = "0" ]; then skip=1; fi ;; \
 	    esac; \
 	    case "$$base" in \
 	        db2ll|divll|divsll|divull|ll2*|modll|modsll|modull|mulll|shl64|shr64s|shr64u|sint2ll|slong2ll|uint2ll|ull2db|ulong2ll) \

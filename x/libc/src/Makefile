@@ -80,22 +80,16 @@ S_SRCS := $(filter-out \
 	wchar/wcstold.s,$(S_SRCS))
 endif
 ifeq ($(LIBC_LONG),0)
+# These are optional long-specific text/convenience APIs.  Do not remove core
+# services merely because their standard ABI contains a 32-bit long (notably
+# file positioning, time, rand, and checked int arithmetic).
 S_SRCS := $(filter-out \
-	stdio/fgetpos.s \
-	stdio/fseek.s \
-	stdio/fsetpos.s \
-	stdio/ftell.s \
 	stdlib/atol.s \
-	stdlib/ckd_mul_sint.s \
 	stdlib/labs.s \
 	stdlib/ldiv.s \
-	stdlib/rand.s \
-	stdlib/rand_state.s \
-	stdlib/srand.s \
 	stdlib/strtol.s \
 	stdlib/strtoul.s \
 	string/ffsl.s \
-	time/% \
 	wchar/wcstol.s \
 	wchar/wcstoul.s,$(S_SRCS))
 endif

@@ -2,9 +2,48 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-09, after the large-program XCC size pass.
+Last updated: 2026-08-10, after the parser-oriented optimizer work.
 
 ## Major Recent Work
+
+### Parser-oriented optimizer work
+
+The generic optimizer now covers several recurring parser shapes without
+recognizing individual sources: word-index sentinel loops can become lockstep
+pointer walks, direct call/zero-test/return chains stay in return registers,
+and framed ABI1 wrappers with register-only terminal calls can become sibling
+jumps. The speed profile additionally packs one private byte argument into an
+otherwise idle A register and lowers the bundled C-locale ctype family inline.
+Both speed-only choices remain outside `-Os`; ctype lowering is interposition-
+aware within the translation unit and has an explicit `-fno-ctype-builtins`
+escape hatch. Focused parser-shaped execution coverage runs at O0, Os, and Of.
+
+Against the same current SQL sources compiled before and after the pass, final
+`-Os` `_CODE` sizes changed by +56 bytes for `program.c`, -10 bytes for
+`sql.c`, and -17 bytes for `optimize.c` (+29 bytes over the three units). The
+conservative A-register correctness fix accounts for the small net increase.
+`-Of` changed by +200, +211, and +34 bytes respectively; these are deliberate
+speed-profile code-size trades, but no SQL runtime-cycle claim is made without
+a target workload. On the unrelated frozen z88dk corpus, all 22 valid `-Os`
+pre/post pairs and all 23 `-Of` pairs are exactly unchanged in bytes and
+cycles. The remaining `hashbench -Os` row changes from an incorrect execution
+to correct, giving final XCC correctness of 23/23 in both profiles. The full
+post-fix XCC suite passes 4,368/4,368.
+
+### S-model core integer closure
+
+The S distribution retains the compiler's complete 32-bit integer runtime
+(multiply, divide, modulo, widening, and shifts) even though its optional
+`long` text/formatting surface remains disabled.  Core libc services whose
+standard ABI happens to contain `long` are likewise present: file positioning,
+the integer-only time/calendar family, `rand`/`srand`, and checked integer
+multiplication.  All remain one-routine archive members, so unused services do
+not increase linked program size.  `atoi` is now a standalone 16-bit parser
+and no longer pulls in or depends on `strtol`.
+
+The model-S suite directly executes these services under every optimization
+profile and once again includes the existing 32-bit recurrence, deep-call,
+clock/time ABI, and micro-Max integer workload regressions.
 
 ### Large-program `-Os` and non-loadable data
 

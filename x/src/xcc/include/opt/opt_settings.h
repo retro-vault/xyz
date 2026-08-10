@@ -40,6 +40,7 @@ struct optimization_settings {
     bool inline_trivial_internal_functions = false;
     bool inline_static_functions = false;
     bool internal_call_abi_promotion = false;
+    bool internal_arg_packing = false;
 
     // Per-function IR passes.
     bool cfg_cleanup = false;
@@ -75,6 +76,7 @@ struct optimization_settings {
     bool frame_omit = false;
     bool prealloc_temp_frame = false;
     bool switch_jump_tables = false;
+    bool ctype_builtins = false;
 
     static optimization_settings for_level(opt_level level) {
         optimization_settings s;
@@ -148,6 +150,7 @@ struct optimization_settings {
             // safely handle those larger regions.
             s.inline_static_functions = true;
             s.internal_call_abi_promotion = true;
+            s.internal_arg_packing = true;
             s.address_deref_fold = true;
             s.block_fill_loops = true;
             // Keep promoted-byte rewriting opt-in.  It still narrows
@@ -171,6 +174,10 @@ struct optimization_settings {
             // the IR driver.
             s.regalloc = true;
             s.scalar_local_promotion = true;
+            // The bundled libc exposes only the built-in C locale. Inline
+            // its ASCII ctype operations at hot parser sites; users can
+            // retain interposable calls with -fno-ctype-builtins.
+            s.ctype_builtins = true;
             break;
 
         case opt_level::O3:
@@ -226,6 +233,7 @@ struct optimization_settings {
                inline_trivial_internal_functions ||
                inline_static_functions ||
                internal_call_abi_promotion ||
+               internal_arg_packing ||
                tail_recursion_elim;
     }
 

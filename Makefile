@@ -323,7 +323,7 @@ help:
 		'  LIBC_PROFILE=name               Libc build flavor label (default: full).' \
 		'  LIBC_FLOAT=0|1                  Enable float libc/runtime support.' \
 		'  LIBC_DOUBLE=0|1                 Enable double libc/runtime support.' \
-		'  LIBC_LONG=0|1                   Enable long libc/runtime support.' \
+		'  LIBC_LONG=0|1                   Enable optional long text/format support.' \
 		'  LIBC_LONGLONG=0|1               Enable long long libc/runtime support.' \
 		'  LIBC_STDIO_FLOAT=0|1            Enable float scanf/printf conversions.' \
 		'  PACKAGE_NAME=name               Package name (default: x).' \

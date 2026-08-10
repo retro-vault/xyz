@@ -6,6 +6,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/z80/z80gen.h"
+#include <utility>
 
 namespace xcc {
 
@@ -75,6 +76,114 @@ bool is_truth_test_preserving_integer_cast(const icode &ic) {
 }
 
 } // namespace
+
+void z80_gen::emit_direct_callee_decl(const std::string &name) {
+    if (internal_function_names_.count(name) == 0)
+        asm_.global_decl(mangle(name));
+}
+
+bool z80_gen::is_inline_ctype_call(const icode &ic) const {
+    if (!opt_settings_.ctype_builtins || ic.func_name.empty() ||
+        defined_function_names_.count(ic.func_name) != 0 ||
+        effective_call_abi(ic.callee_abi) != call_abi::SDCCCALL1 ||
+        ic.num_params != 1 || ic.arg_bytes != 0 || ic.result_via_sret ||
+        cur_ic_index_ == 0 || !cur_fn_) {
+        return false;
+    }
+    if (!ic.result.is_none() &&
+        (!ic.result.type || ic.result.type->size() != 2))
+        return false;
+
+    static const std::unordered_set<std::string> names = {
+        "isalnum", "isalpha", "isblank", "iscntrl", "isdigit",
+        "isgraph", "islower", "isprint", "ispunct", "isspace",
+        "isupper", "isxdigit", "tolower", "toupper",
+    };
+    if (names.count(ic.func_name) == 0)
+        return false;
+
+    const auto &send = cur_fn_->icodes[cur_ic_index_ - 1];
+    return send.op == icode_op::SEND && send.argreg == 0 &&
+           send.arg_loc == abi_arg_loc::REG_HL &&
+           effective_call_abi(send.callee_abi) == call_abi::SDCCCALL1 &&
+           send.left.type && send.left.type->size() == 2;
+}
+
+void z80_gen::emit_inline_ctype_call(const icode &ic) {
+    invalidate_pair_cache();
+    invalidate_a_cache();
+
+    const std::string stem =
+        "__xcc_ctype_" + std::to_string(local_label_counter_++);
+    const std::string true_lbl = stem + "_true";
+    const std::string done_lbl = stem + "_done";
+
+    if (ic.func_name == "tolower" || ic.func_name == "toupper") {
+        // Preserve the complete promoted int, including EOF and values
+        // outside the unsigned-char domain, in the modern return pair.
+        emit_line("ex\tde, hl");
+        emit_line("ld\ta, d");
+        emit_line("or\ta, a");
+        emit_line("jr\tnz, %s", done_lbl.c_str());
+        emit_line("ld\ta, e");
+        const int low = ic.func_name == "tolower" ? 'A' : 'a';
+        const int high = ic.func_name == "tolower" ? 'Z' : 'z';
+        emit_line("cp\t%s", asm_.imm(low).c_str());
+        emit_line("jr\tc, %s", done_lbl.c_str());
+        emit_line("cp\t%s", asm_.imm(high + 1).c_str());
+        emit_line("jr\tnc, %s", done_lbl.c_str());
+        emit_line(ic.func_name == "tolower" ? "add\ta, %s" : "sub\t%s",
+                  asm_.imm(0x20).c_str());
+        emit_line("ld\te, a");
+        asm_.label(done_lbl, false);
+        return;
+    }
+
+    std::vector<std::pair<int, int>> ranges;
+    if (ic.func_name == "isdigit") ranges = {{'0', '9'}};
+    else if (ic.func_name == "islower") ranges = {{'a', 'z'}};
+    else if (ic.func_name == "isupper") ranges = {{'A', 'Z'}};
+    else if (ic.func_name == "isalpha") ranges = {{'A', 'Z'}, {'a', 'z'}};
+    else if (ic.func_name == "isalnum") ranges = {
+        {'0', '9'}, {'A', 'Z'}, {'a', 'z'}};
+    else if (ic.func_name == "isxdigit") ranges = {
+        {'0', '9'}, {'A', 'F'}, {'a', 'f'}};
+    else if (ic.func_name == "isspace") ranges = {{0x09, 0x0d}, {0x20, 0x20}};
+    else if (ic.func_name == "isblank") ranges = {{0x09, 0x09}, {0x20, 0x20}};
+    else if (ic.func_name == "iscntrl") ranges = {{0x00, 0x1f}, {0x7f, 0x7f}};
+    else if (ic.func_name == "isprint") ranges = {{0x20, 0x7e}};
+    else if (ic.func_name == "isgraph") ranges = {{0x21, 0x7e}};
+    else if (ic.func_name == "ispunct") ranges = {
+        {0x21, 0x2f}, {0x3a, 0x40}, {0x5b, 0x60}, {0x7b, 0x7e}};
+
+    emit_line("ld\tde, %s", asm_.imm(0).c_str());
+    emit_line("ld\ta, h");
+    emit_line("or\ta, a");
+    emit_line("jr\tnz, %s", done_lbl.c_str());
+    emit_line("ld\ta, l");
+
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        const int low = ranges[i].first;
+        const int high = ranges[i].second;
+        if (low == high) {
+            emit_line("cp\t%s", asm_.imm(low).c_str());
+            emit_line("jr\tz, %s", true_lbl.c_str());
+            continue;
+        }
+        const std::string next_lbl = stem + "_next_" + std::to_string(i);
+        if (low != 0) {
+            emit_line("cp\t%s", asm_.imm(low).c_str());
+            emit_line("jr\tc, %s", next_lbl.c_str());
+        }
+        emit_line("cp\t%s", asm_.imm(high + 1).c_str());
+        emit_line("jr\tc, %s", true_lbl.c_str());
+        asm_.label(next_lbl, false);
+    }
+    emit_line("jr\t%s", done_lbl.c_str());
+    asm_.label(true_lbl, false);
+    emit_line("inc\te");
+    asm_.label(done_lbl, false);
+}
 
 bool z80_gen::try_finish_direct_hl_return(const operand &result) {
     if (!cur_fn_ || !result.is_temp() || !op_is_16bit(result))
@@ -296,7 +405,11 @@ void z80_gen::gen_return(const icode &ic) {
          same_call_result_operand(ic.left, sibling_tail_call_value_))) {
         sibling_tail_call_pending_ = false;
         sibling_tail_call_value_ = operand{};
-        last_frameless_return_terminated_ = true;
+        // Earlier returns from a framed function still target its shared
+        // epilogue. Emit that label even though this final sibling path has
+        // already dismantled the frame before jumping away.
+        last_frameless_return_terminated_ =
+            cur_fn_ && can_omit_frame_pointer(*cur_fn_);
         return;
     }
 
@@ -411,6 +524,7 @@ void z80_gen::gen_call(const icode &ic) {
     auto &conv = get_abi_convention(ic.callee_abi);
     const bool large_indirect_result =
         !ic.result.is_none() && op_size(ic.result) > 8;
+    const bool inline_ctype_call = is_inline_ctype_call(ic);
 
     bool sibling_tail_call = false;
     // A terminal direct call to a noreturn function needs neither a return
@@ -435,10 +549,11 @@ void z80_gen::gen_call(const icode &ic) {
         (noreturn_before_end || noreturn_before_return);
     if (terminal_noreturn_jump) {
         std::string callee = mangle(ic.func_name);
-        asm_.global_decl(callee);
+        emit_direct_callee_decl(ic.func_name);
         emit_line("jp\t%s", callee.c_str());
         if (noreturn_before_end) {
-            last_frameless_return_terminated_ = true;
+            last_frameless_return_terminated_ =
+                can_omit_frame_pointer(*cur_fn_);
         } else {
             sibling_tail_call_pending_ = true;
             sibling_tail_call_value_ = ic.result;
@@ -446,9 +561,17 @@ void z80_gen::gen_call(const icode &ic) {
         return;
     }
 
-    if (cur_fn_ && !debug_ && !ic.func_name.empty() &&
+    const bool frameless_sibling =
+        cur_fn_ && can_omit_frame_pointer(*cur_fn_);
+    const bool framed_register_sibling =
+        cur_fn_ &&
+        (opt_settings_.level == opt_level::Of ||
+         opt_settings_.level == opt_level::O3) &&
+        effective_call_abi(cur_fn_->abi) == call_abi::SDCCCALL1 &&
+        cur_fn_->stack_param_bytes == 0;
+    if (cur_fn_ && !debug_ && !inline_ctype_call && !ic.func_name.empty() &&
         ic.arg_bytes == 0 && !large_indirect_result &&
-        can_omit_frame_pointer(*cur_fn_) &&
+        (frameless_sibling || framed_register_sibling) &&
         effective_call_abi(cur_fn_->abi) ==
             effective_call_abi(ic.callee_abi) &&
         cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
@@ -464,7 +587,16 @@ void z80_gen::gen_call(const icode &ic) {
 
     if (sibling_tail_call) {
         std::string callee = mangle(ic.func_name);
-        asm_.global_decl(callee);
+        emit_direct_callee_decl(ic.func_name);
+        if (!frameless_sibling) {
+            // Register-only terminal calls can discard an ordinary
+            // sdcccall(1) frame before jumping to the callee.  Restrict this
+            // to callers with no incoming stack parameters: otherwise the
+            // callee would return directly to our caller without repairing
+            // the stack arguments that belonged to this function.
+            emit_line("ld\tsp, ix");
+            emit_line("pop\tix");
+        }
         emit_line("jp\t%s", callee.c_str());
         sibling_tail_call_pending_ = true;
         sibling_tail_call_value_ = ic.result;
@@ -478,10 +610,12 @@ void z80_gen::gen_call(const icode &ic) {
     // value.  Stack-argument and indirect calls are intentionally ineligible,
     // because inserting a word here would change their stack layout.
     const bool preserve_iy =
+        !inline_ctype_call &&
         iy_preserved_call_indices_.count(cur_ic_index_) != 0 &&
         (ic.func_name.empty() ||
          iy_preserving_local_callees_.count(ic.func_name) == 0);
     const bool preserve_bc =
+        !inline_ctype_call &&
         bc_preserved_call_indices_.count(cur_ic_index_) != 0;
     if (preserve_iy)
         emit_line("push\tiy");
@@ -490,9 +624,13 @@ void z80_gen::gen_call(const icode &ic) {
 
     // Emit the CALL instruction.
     if (!ic.func_name.empty()) {
-        std::string callee = mangle(ic.func_name);
-        asm_.global_decl(callee);
-        emit_line("call\t%s", callee.c_str());
+        if (inline_ctype_call) {
+            emit_inline_ctype_call(ic);
+        } else {
+            std::string callee = mangle(ic.func_name);
+            emit_direct_callee_decl(ic.func_name);
+            emit_line("call\t%s", callee.c_str());
+        }
     } else {
         conv.emit_indirect_call(*this, ic);
     }
@@ -520,6 +658,9 @@ void z80_gen::gen_call(const icode &ic) {
     bool direct_return = false;
     bool direct_ifx = false;
     bool direct_word_send = false;
+    bool direct_zero_compare_return = false;
+    icode_op direct_zero_compare_op = icode_op::EQ;
+    operand direct_zero_compare_value;
     abi_arg_loc direct_word_send_loc = abi_arg_loc::STACK;
     int direct_ifx_reg_size = 0;
     bool keep_direct_ifx_word_pending = false;
@@ -624,6 +765,36 @@ void z80_gen::gen_call(const icode &ic) {
             if (direct_ifx)
                 direct_ifx_reg_size = op_size(ic.result);
         }
+
+        if (opt_settings_.compare_ifx_fusion &&
+            effective_call_abi(ic.callee_abi) == call_abi::SDCCCALL1 &&
+            (op_size(ic.result) == 1 || op_size(ic.result) == 2) &&
+            op_size(next.result) == 2 && next.result.is_temp() &&
+            (next.op == icode_op::EQ || next.op == icode_op::NE) &&
+            cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+            const bool left_is_result =
+                same_call_result_operand(next.left, ic.result);
+            const bool right_is_result =
+                same_call_result_operand(next.right, ic.result);
+            const bool compares_zero =
+                (left_is_result && next.right.kind == operand_kind::INT_CONST &&
+                 next.right.ival == 0) ||
+                (right_is_result && next.left.kind == operand_kind::INT_CONST &&
+                 next.left.ival == 0);
+            const auto &ret = cur_fn_->icodes[cur_ic_index_ + 2];
+            const int caller_return_family = word_return_family(cur_fn_->abi);
+            if (compares_zero && ret.op == icode_op::RETURN &&
+                same_call_result_operand(ret.left, next.result) &&
+                caller_return_family != 0 &&
+                !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                       ic.result.temp_id) &&
+                !temp_value_used_after(*cur_fn_, cur_ic_index_ + 3,
+                                       next.result.temp_id)) {
+                direct_zero_compare_return = true;
+                direct_zero_compare_op = next.op;
+                direct_zero_compare_value = next.result;
+            }
+        }
     }
     if (large_indirect_result)
         direct_return = false;
@@ -643,7 +814,37 @@ void z80_gen::gen_call(const icode &ic) {
         // Stack cleanup via the callee's convention (only pops stack-passed
         // args).
         conv.emit_call_cleanup(*this, ic);
-        if (direct_return) {
+        if (direct_zero_compare_return) {
+            // The modern ABI result is already in A (byte) or DE (word).
+            // Test it in place, then build the final C int directly in the
+            // caller's return register pair.  This removes both the result
+            // spill/reload and the generic word comparison.
+            if (op_size(ic.result) == 1) {
+                emit_line("or\ta, a");
+            } else {
+                emit_line("ld\ta, d");
+                emit_line("or\ta, e");
+            }
+
+            const int caller_return_family = word_return_family(cur_fn_->abi);
+            const char result_low = caller_return_family == 2 ? 'e' : 'l';
+            if (caller_return_family == 2)
+                emit_line("ld\tde, %s", asm_.imm(0).c_str());
+            else
+                emit_line("ld\thl, %s", asm_.imm(0).c_str());
+
+            const std::string done =
+                "__xcc_call_bool_" + std::to_string(local_label_counter_++);
+            emit_line(direct_zero_compare_op == icode_op::EQ
+                          ? "jr\tnz, %s"
+                          : "jr\tz, %s",
+                      done.c_str());
+            emit_line("inc\t%c", result_low);
+            asm_.label(done, false);
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            direct_compare_return_pending_ = true;
+            direct_compare_return_value_ = direct_zero_compare_value;
+        } else if (direct_return) {
             direct_call_return_pending_ = true;
             direct_call_return_value_ = ic.result;
         } else if (direct_word_send) {

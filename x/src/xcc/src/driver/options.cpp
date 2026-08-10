@@ -48,6 +48,7 @@ static constexpr opt_flag_binding k_opt_flag_bindings[] = {
     {"inline-trivial-internal-functions", &optimization_settings::inline_trivial_internal_functions},
     {"inline-static-functions", &optimization_settings::inline_static_functions},
     {"internal-call-abi-promotion", &optimization_settings::internal_call_abi_promotion},
+    {"internal-arg-packing", &optimization_settings::internal_arg_packing},
     {"cfg-cleanup", &optimization_settings::cfg_cleanup},
     {"jump-threading", &optimization_settings::jump_threading},
     {"address-deref-fold", &optimization_settings::address_deref_fold},
@@ -79,6 +80,7 @@ static constexpr opt_flag_binding k_opt_flag_bindings[] = {
     {"frame-omit", &optimization_settings::frame_omit},
     {"prealloc-temp-frame", &optimization_settings::prealloc_temp_frame},
     {"switch-jump-tables", &optimization_settings::switch_jump_tables},
+    {"ctype-builtins", &optimization_settings::ctype_builtins},
 };
 
 static bool apply_opt_flag(options &opts, const char *name, bool enabled) {

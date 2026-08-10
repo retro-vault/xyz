@@ -266,6 +266,7 @@ struct icode {
     bool     callee_cleans_stack = false;   // CALL: callee drops stack-passed args before returning
     bool     callee_noreturn = false;        // CALL: direct callee cannot return
     bool     result_via_sret = false;         // CALL: hidden stack pointer owns aggregate result
+    bool     internal_packed_arg = false;    // SEND/CALL: private ABI fills an otherwise unused register
 
     //
     // Print a human-readable dump of this instruction to stdout.
@@ -293,6 +294,7 @@ struct ir_function {
     bool                callee_cleans_stack = false; // epilogue drops stack params before returning
     bool                is_noreturn      = false; // [[noreturn]]: epilogue unreachable
     bool                can_internalize_abi = false;
+    bool                internal_packed_abi = false;
     bool                tail_local_addresses_noescape = false;
 
     //

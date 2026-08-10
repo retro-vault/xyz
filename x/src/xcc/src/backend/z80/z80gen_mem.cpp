@@ -1108,32 +1108,72 @@ void z80_gen::gen_set_value_at(const icode &ic) {
             if (!emit_global_plus_u8_index_hl(direct_mem_copy_src))
                 load_hl(direct_mem_copy_src);
         };
+        auto emit_direct_copy_dst_hl = [&]() {
+            if (!emit_global_plus_u8_index_hl(ic.result))
+                load_hl(ic.result);
+        };
 
         if (op_size(ic.left) == 1) {
             int64_t src_disp = 0;
-            if (direct_mem_copy_idx.is_none() &&
-                iy_pointer_displacement(direct_mem_copy_src, 1, src_disp)) {
+            const bool src_in_iy =
+                direct_mem_copy_idx.is_none() &&
+                iy_pointer_displacement(direct_mem_copy_src, 1, src_disp);
+            int64_t dst_disp = 0;
+            const bool dst_in_iy =
+                iy_pointer_displacement(ic.result, 1, dst_disp);
+
+            // Form an unrelated destination before reading an IY cursor.
+            // Rematerializing base[byte_index] commonly uses A as scratch,
+            // so loading the source first would silently replace it with the
+            // index before the store.
+            if (src_in_iy && !dst_in_iy) {
+                emit_direct_copy_dst_hl();
+                emit_line("ld\ta, %lld(iy)",
+                          static_cast<long long>(src_disp));
+                emit_line("ld\t(hl), a");
+                return;
+            }
+
+            if (src_in_iy) {
                 emit_line("ld\ta, %lld(iy)",
                           static_cast<long long>(src_disp));
             } else {
                 emit_direct_copy_src_hl();
                 emit_line("ld\ta, (hl)");
             }
-            int64_t dst_disp = 0;
-            if (iy_pointer_displacement(ic.result, 1, dst_disp)) {
+            if (dst_in_iy) {
                 emit_line("ld\t%lld(iy), a",
                           static_cast<long long>(dst_disp));
             } else {
-                if (!emit_global_plus_u8_index_hl(ic.result))
-                    load_hl(ic.result);
+                emit_line("push\taf");
+                emit_direct_copy_dst_hl();
+                emit_line("pop\taf");
                 emit_line("ld\t(hl), a");
             }
             return;
         }
         if (op_size(ic.left) == 2) {
             int64_t src_disp = 0;
-            if (direct_mem_copy_idx.is_none() &&
-                iy_pointer_displacement(direct_mem_copy_src, 2, src_disp)) {
+            const bool src_in_iy =
+                direct_mem_copy_idx.is_none() &&
+                iy_pointer_displacement(direct_mem_copy_src, 2, src_disp);
+            int64_t dst_disp = 0;
+            const bool dst_in_iy =
+                iy_pointer_displacement(ic.result, 2, dst_disp);
+
+            if (src_in_iy && !dst_in_iy) {
+                emit_direct_copy_dst_hl();
+                emit_line("ld\te, %lld(iy)",
+                          static_cast<long long>(src_disp));
+                emit_line("ld\td, %lld(iy)",
+                          static_cast<long long>(src_disp + 1));
+                emit_line("ld\t(hl), e");
+                emit_line("inc\thl");
+                emit_line("ld\t(hl), d");
+                return;
+            }
+
+            if (src_in_iy) {
                 emit_line("ld\te, %lld(iy)",
                           static_cast<long long>(src_disp));
                 emit_line("ld\td, %lld(iy)",
@@ -1144,15 +1184,15 @@ void z80_gen::gen_set_value_at(const icode &ic) {
                 emit_line("inc\thl");
                 emit_line("ld\td, (hl)");
             }
-            int64_t dst_disp = 0;
-            if (iy_pointer_displacement(ic.result, 2, dst_disp)) {
+            if (dst_in_iy) {
                 emit_line("ld\t%lld(iy), e",
                           static_cast<long long>(dst_disp));
                 emit_line("ld\t%lld(iy), d",
                           static_cast<long long>(dst_disp + 1));
             } else {
-                if (!emit_global_plus_u8_index_hl(ic.result))
-                    load_hl(ic.result);
+                emit_line("push\tde");
+                emit_direct_copy_dst_hl();
+                emit_line("pop\tde");
                 emit_line("ld\t(hl), e");
                 emit_line("inc\thl");
                 emit_line("ld\t(hl), d");

@@ -165,6 +165,12 @@ private:
     // touch IY.  This is populated as those helpers are emitted and lets a
     // later caller avoid a redundant caller-save pair.
     std::unordered_set<std::string> iy_preserving_local_callees_;
+    // File-scope static functions defined in the current translation unit.
+    // Direct references to these symbols must not emit .globl/.global.
+    std::unordered_set<std::string> internal_function_names_;
+    // Any definition in this translation unit suppresses standard-library
+    // builtin substitution, including a public definition.
+    std::unordered_set<std::string> defined_function_names_;
     // Likewise, a profitable loop counter may occupy BC across a direct
     // register-only call.  These are the exact sites where it is saved.
     std::unordered_set<size_t> bc_preserved_call_indices_;
@@ -251,6 +257,11 @@ private:
     // Emit a formatted assembly line to out_.
     //
     void emit_line(const char *fmt, ...);
+
+    // Declare a direct callee only when it has external linkage.
+    void emit_direct_callee_decl(const std::string &name);
+    bool is_inline_ctype_call(const icode &ic) const;
+    void emit_inline_ctype_call(const icode &ic);
 
     //
     // Emit a label definition.  If global is true, precede it with
