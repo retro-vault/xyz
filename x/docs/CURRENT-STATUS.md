@@ -2,9 +2,25 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-10, after the parser-oriented optimizer work.
+Last updated: 2026-08-10, after the CP/M command-line startup fix.
 
 ## Major Recent Work
+
+### CP/M command-line startup
+
+The CP/M 3 `crt0` now copies the bounded 127-byte command tail out of the
+default DMA area and constructs a C-conforming `argc`/`argv` on the descending
+stack. `argv[0]` is empty because CP/M supplies no program name,
+`argv[argc]` is null, ASCII whitespace is collapsed, and double-quoted spans
+form one argument with the quotes removed. Storage is sized to the actual tail
+and argument count and remains valid when file I/O overwrites address `0x0080`.
+The real CP/M emulator regression covers no arguments, ordinary and repeated
+whitespace, quoted and empty-quoted words, DMA overwrite, the exact 127-byte
+tail, and 62 total `argv` entries. Startup also transfers the `main` return
+value from DE to the HL argument expected by `exit`. It supplies `argc` and
+`argv` simultaneously through the `sdcccall(1)` HL/DE registers and the
+right-to-left `sdcccall(0)` stack layout; the emulator suite exercises both
+entry conventions.
 
 ### Parser-oriented optimizer work
 

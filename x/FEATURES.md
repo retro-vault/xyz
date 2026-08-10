@@ -848,6 +848,16 @@ It probes `<prefix>/targets/z80-<name>/lib` first, then falls back to
 `x/platforms/include/sys.h`. Shipped examples: `none`, `cpm3`, `zx-rom`,
 `zx-ram`.
 
+The CP/M 3 startup converts the length-prefixed tail at `0x0080` into normal C
+arguments. Since CP/M does not provide the transient program name,
+`argv[0]` is an empty string; subsequent words begin at `argv[1]` and
+`argv[argc]` is null. ASCII whitespace separates words and double quotes group
+spaces without becoming part of the argument. Strings and the pointer table
+are copied to an exact-sized stack allocation because CP/M file operations can
+reuse `0x0080` as the default DMA buffer. Startup supplies the two arguments in
+both conventions: HL/DE for `sdcccall(1)`, and right-to-left stack words for
+`sdcccall(0)`.
+
 **Starting point — copy `none`:** `x/platforms/none/` is an empty-shell
 template:
 every required symbol exists but does the minimum (output discarded, files fail,

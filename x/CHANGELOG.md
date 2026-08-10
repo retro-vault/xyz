@@ -6,6 +6,15 @@ Release status:
 
 ## Unreleased
 
+- Fixed CP/M 3 process startup to construct valid `argc`/`argv` values from
+  the length-prefixed command tail. The startup now supplies an empty
+  `argv[0]`, splits ASCII whitespace, groups and removes double quotes,
+  guarantees `argv[argc] == NULL`, and preserves argument storage when later
+  file I/O reuses address `0x0080` as the default DMA buffer. Its stack
+  allocation is sized to the actual tail and argument count, and the full
+  127-byte CP/M limit is bounded. `argc` and `argv` are supplied both in the
+  `sdcccall(1)` registers and on the right-to-left `sdcccall(0)` stack. The
+  return from `main` is also transferred to the register expected by `exit`.
 - Added source-independent parser-oriented optimization coverage. `-Of` now
   tears down eligible framed register-only sibling calls, packs a private byte
   argument into otherwise idle A, and inlines the bundled C-locale ctype
