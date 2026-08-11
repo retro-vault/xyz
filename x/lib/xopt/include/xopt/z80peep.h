@@ -79,9 +79,9 @@ public:
                                 int normal_passes = 10,
                                 bool size_bias = false);
 
-    // Perform only control-flow-size cleanup that is safe after outlining.
-    // This deliberately excludes register and flag liveness rewrites because
-    // an outlined helper's live-ins and live-outs are not ordinary call ABI.
+    // Perform only control-flow-size cleanup and conservative local dataflow
+    // rules that treat calls and control-flow escapes as live boundaries.
+    // An outlined helper's live-ins and live-outs are not ordinary call ABI.
     static std::string optimize_outlined_layout(const std::string &asm_text);
 
 private:
@@ -456,6 +456,16 @@ private:
     // push hl; pop bc  →  ld b,h; ld c,l  (same size, faster)
     bool rule_push_hl_pop_bc(size_t i);
 
+    // ld hl,#imm; push hl; pop iy  →  ld iy,#imm when HL is dead.
+    bool rule_dead_hl_immediate_to_iy(size_t i);
+
+    // ld hl,#imm; ld b,h; ld c,l  →  ld bc,#imm when HL is dead.
+    bool rule_dead_hl_immediate_to_bc(size_t i);
+
+    // ld hl,#1; branch L; dec hl; L: ld b,h; ld c,l
+    //   → ld bc,#1; branch L; dec bc; L: when HL is dead.
+    bool rule_bool_hl_to_bc_direct(size_t i);
+
     // push de; pop hl  →  ex de,hl
     // when the old DE value is overwritten before any later read.
     bool rule_push_de_pop_hl_to_ex(size_t i);
@@ -703,6 +713,12 @@ private:
     //   xor a; ld dst,a; xor a  ->  xor a; ld dst,a
     // because the store preserves both A and the flags produced by xor a.
     bool rule_superopt_redundant_zero_store_chain(size_t i);
+
+    // Size-only post-outline zero-store aggregation:
+    //   ld N(ix),#0; ld M(ix),#0; ...
+    // uses one proven-dead zero register for the run.  Applying this after
+    // outlining preserves larger whole-module sharing opportunities.
+    bool rule_size_zero_indexed_store_run(size_t i);
 
     // Experimental zero-extend pair test shortcut:
     //   ld l,X; ld h,#0; ld b,h; ld c,l; ld h,b; ld l,c; ld a,h; or a,l

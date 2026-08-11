@@ -1045,6 +1045,17 @@ struct stack_linkage_convention : abi_convention {
 struct cc_sdcccall0 final : stack_linkage_convention {
     call_abi abi_tag() const override { return call_abi::SDCCCALL0; }
     const char *name() const override { return "sdcccall(0)"; }
+
+    void emit_indirect_call(z80_gen &g, const icode &ic) const override {
+        // Every sdcccall(0) argument is already on the hardware stack, so HL
+        // and DE carry no live argument state at the call boundary.  Load the
+        // target in HL directly instead of preserving both pairs merely to
+        // shuttle it through BC.  The call helper jumps through HL and the
+        // callee returns to this call's original return address as usual.
+        g.asm_.global_decl("__sdcc_call_hl");
+        g.load_hl(ic.left);
+        g.emit_line("call\t__sdcc_call_hl");
+    }
 };
 
 struct cc_z88dk_callee final : stack_linkage_convention {

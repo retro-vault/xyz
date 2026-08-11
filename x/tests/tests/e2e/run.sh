@@ -10,7 +10,7 @@
 #   --no-build   skip the build step (assume binaries are current)
 #   --phase      run only the named phase
 #                (build|xz80|runtime|libc|xcc|xcc-exec|xcc-metadata|c23|
-#                 c23-corpus|z88dk|xld|xobjcopy|xopt|xas|xar|xgdb|xemu|
+#                 c23-corpus|z88dk|xld|xobjcopy|xprog|xopt|xas|xar|xgdb|xemu|
 #                 cpm|y-apps|mdr|chain)
 #
 # Exit: 0 if all selected phases pass, 1 otherwise.
@@ -106,6 +106,7 @@ phase_build() {
         "$X_ROOT/src/xas"
         "$X_ROOT/src/xar"
         "$X_ROOT/src/xld"
+        "$X_ROOT/src/xprog"
         "$X_ROOT/src/xemu"
     )
     local ok=true
@@ -209,6 +210,12 @@ phase_xobjcopy() {
     make -C "$X_ROOT/src/xobjcopy" \
         ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" \
         HOST_BIN_DIR="$ROOT/bin/x/bin" PUBLIC_LIB_DIR="$ROOT/bin/x/lib" test
+}
+
+phase_xprog() {
+    make -C "$X_ROOT/src/xprog" \
+        ROOT="$X_ROOT" BUILD_DIR="$ROOT/build" DIST_DIR="$ROOT/bin/x" \
+        HOST_BIN_DIR="$ROOT/bin/x/bin" test
 }
 
 phase_xopt() {
@@ -459,6 +466,7 @@ run_phase "c23-corpus"  "fixed external C project corpora"     phase_c23_corpus
 run_phase "z88dk"       "imported z88dk compatibility suite"   phase_z88dk
 run_phase "xld"         "xld unit tests"                      phase_xld
 run_phase "xobjcopy"    "xobjcopy unit tests"                 phase_xobjcopy
+run_phase "xprog"       "xprog unit tests"                    phase_xprog
 run_phase "xopt"        "xopt smoke tests"                    phase_xopt
 run_phase "xas"         "xas tests and sdasz80 parity"        phase_xas
 run_phase "xar"         "xar smoke tests"                     phase_xar

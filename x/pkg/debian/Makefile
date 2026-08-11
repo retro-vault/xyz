@@ -65,6 +65,7 @@ HOST_TOOLS := \
 	$(DIST_DIR)/bin/xas \
 	$(DIST_DIR)/bin/xar \
 	$(DIST_DIR)/bin/xobjcopy \
+	$(DIST_DIR)/bin/xprog \
 	$(DIST_DIR)/bin/xopt
 DEBUG_LIBS := \
 	$(DIST_DIR)/lib/libxgdb.a \
@@ -94,6 +95,9 @@ $(DIST_DIR)/bin/xar:
 
 $(DIST_DIR)/bin/xobjcopy:
 	$(MAKE) -C $(X_ROOT)/src/xobjcopy ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(DIST_DIR)/bin
+
+$(DIST_DIR)/bin/xprog:
+	$(MAKE) -C $(X_ROOT)/src/xprog ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(DIST_DIR)/bin
 
 $(DIST_DIR)/bin/xopt $(XOPT_LIB):
 	$(MAKE) -C $(X_ROOT)/src/xopt ROOT=$(X_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) HOST_BIN_DIR=$(DIST_DIR)/bin PUBLIC_LIB_DIR=$(DIST_DIR)/lib

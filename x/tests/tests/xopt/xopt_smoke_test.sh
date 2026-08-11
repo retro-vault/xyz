@@ -675,6 +675,85 @@ if ! grep -Eq '^[[:space:]]+ld[[:space:]]+a,?#[0]?0' "$TMPDIR/outline_flag_input
     exit 1
 fi
 
+cat >"$TMPDIR/post_outline_zero_stores.s" <<'ASM'
+	.area	_CODE
+_zero_stores_dead_a:
+	ld	-2(ix),#0
+	ld	-1(ix),#0
+	ld	a,#17
+	or	a,a
+	ret
+_zero_stores_dead_hl:
+	ld	-4(ix),#0
+	ld	-3(ix),#0
+	ld	-2(ix),#0
+	ld	-1(ix),#0
+	ld	hl,#_sink
+	ret
+_zero_stores_dead_a_live_flags:
+	ld	-3(ix),#0
+	ld	-2(ix),#0
+	ld	-1(ix),#0
+	ld	a,#17
+	jr	z,_zero_stores_preserved_flag_seen
+	ret
+_zero_stores_preserved_flag_seen:
+	ret
+_zero_stores_live_flags:
+	ld	-2(ix),#0
+	ld	-1(ix),#0
+	jr	z,_zero_stores_flag_seen
+	ret
+_zero_stores_flag_seen:
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/post_outline_zero_stores.s" \
+    -o "$TMPDIR/post_outline_zero_stores.out.s"
+if ! awk '
+    /^_zero_stores_dead_a:/ { in_fn=1; next }
+    /^_zero_stores_dead_hl:/ { in_fn=0 }
+    in_fn && /xor[[:space:]]+a/ { zero=1 }
+    in_fn && /ld[[:space:]]+-2\(ix\), ?a/ { low=1 }
+    in_fn && /ld[[:space:]]+-1\(ix\), ?a/ { high=1 }
+    END { exit zero && low && high ? 0 : 1 }
+' "$TMPDIR/post_outline_zero_stores.out.s"; then
+    echo "xopt smoke: dead A/flags zero-store run was not aggregated" >&2
+    exit 1
+fi
+if ! awk '
+    /^_zero_stores_dead_hl:/ { in_fn=1; next }
+    /^_zero_stores_dead_a_live_flags:/ { in_fn=0 }
+    in_fn && /ld[[:space:]]+hl, ?#0/ { zero=1 }
+    in_fn && /ld[[:space:]]+-4\(ix\), ?l/ { first=1 }
+    in_fn && /ld[[:space:]]+-1\(ix\), ?l/ { last=1 }
+    END { exit zero && first && last ? 0 : 1 }
+' "$TMPDIR/post_outline_zero_stores.out.s"; then
+    echo "xopt smoke: dead HL zero-store run was not aggregated" >&2
+    exit 1
+fi
+if ! awk '
+    /^_zero_stores_dead_a_live_flags:/ { in_fn=1; next }
+    /^_zero_stores_live_flags:/ { in_fn=0 }
+    in_fn && /ld[[:space:]]+a, ?#0/ { zero=1 }
+    in_fn && /ld[[:space:]]+-3\(ix\), ?a/ { first=1 }
+    in_fn && /ld[[:space:]]+-1\(ix\), ?a/ { last=1 }
+    in_fn && /xor[[:space:]]+a/ { bad=1 }
+    END { exit zero && first && last && !bad ? 0 : 1 }
+' "$TMPDIR/post_outline_zero_stores.out.s"; then
+    echo "xopt smoke: flag-preserving zero-store run was not aggregated" >&2
+    exit 1
+fi
+if ! awk '
+    /^_zero_stores_live_flags:/ { in_fn=1; next }
+    in_fn && /ld[[:space:]]+-2\(ix\), ?#0/ { low=1 }
+    in_fn && /ld[[:space:]]+-1\(ix\), ?#0/ { high=1 }
+    END { exit low && high ? 0 : 1 }
+' "$TMPDIR/post_outline_zero_stores.out.s"; then
+    echo "xopt smoke: zero-store aggregation clobbered live flags" >&2
+    exit 1
+fi
+
 cat >"$TMPDIR/size_tail_merge.s" <<'ASM'
 	.area	_CODE
 _tail_a:
@@ -5078,6 +5157,134 @@ if awk '
 fi
 grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*l' \
     "$TMPDIR/outline_unallocated_ix.out.s"
+
+cat >"$TMPDIR/dead_hl_immediate_to_iy.s" <<'ASM'
+	.area	_CODE
+_dead_hl_immediate_to_iy:
+	ld	hl, #_buffer
+	push	hl
+	pop	iy
+	ld	hl, #0
+	ret
+_live_hl_immediate_to_iy:
+	ld	hl, #_buffer
+	push	hl
+	pop	iy
+	ld	a, h
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/dead_hl_immediate_to_iy.s" \
+    -o "$TMPDIR/dead_hl_immediate_to_iy.out.s"
+awk '
+    /^_dead_hl_immediate_to_iy:/ { in_dead=1; next }
+    /^_live_hl_immediate_to_iy:/ { in_dead=0 }
+    in_dead && /ld[[:space:]]+iy,[[:space:]]*#_buffer/ { found=1 }
+    END { exit found ? 0 : 1 }
+' "$TMPDIR/dead_hl_immediate_to_iy.out.s"
+awk '
+    /^_live_hl_immediate_to_iy:/ { in_live=1; next }
+    in_live && /push[[:space:]]+hl/ { found_push=1 }
+    in_live && /pop[[:space:]]+iy/ { found_pop=1 }
+    END { exit found_push && found_pop ? 0 : 1 }
+' "$TMPDIR/dead_hl_immediate_to_iy.out.s"
+
+cat >"$TMPDIR/dead_hl_immediate_to_bc.s" <<'ASM'
+	.area	_CODE
+_dead_hl_immediate_to_bc:
+	ld	hl, #_table
+	ld	b, h
+	ld	c, l
+	ld	hl, #0
+	ret
+_live_hl_immediate_to_bc:
+	ld	hl, #_table
+	ld	b, h
+	ld	c, l
+	ld	a, h
+	add	a, c
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/dead_hl_immediate_to_bc.s" \
+    -o "$TMPDIR/dead_hl_immediate_to_bc.out.s"
+awk '
+    /^_dead_hl_immediate_to_bc:/ { in_dead=1; next }
+    /^_live_hl_immediate_to_bc:/ { in_dead=0 }
+    in_dead && /ld[[:space:]]+bc,[[:space:]]*#_table/ { found=1 }
+    END { exit found ? 0 : 1 }
+' "$TMPDIR/dead_hl_immediate_to_bc.out.s"
+awk '
+    /^_live_hl_immediate_to_bc:/ { in_live=1; next }
+    in_live && /ld[[:space:]]+hl,[[:space:]]*#_table/ { found_hl=1 }
+    in_live && /ld[[:space:]]+b,[[:space:]]*h/ { found_b=1 }
+    in_live && /ld[[:space:]]+c,[[:space:]]*l/ { found_c=1 }
+    END { exit found_hl && found_b && found_c ? 0 : 1 }
+' "$TMPDIR/dead_hl_immediate_to_bc.out.s"
+
+cat >"$TMPDIR/bool_hl_to_bc.s" <<'ASM'
+	.area	_CODE
+_bool_hl_to_bc:
+	cp	#7
+	ld	hl, #1
+	jr	z, __bool_done
+	dec	hl
+__bool_done:
+	ld	b, h
+	ld	c, l
+	ld	hl, #_message
+	ret
+_bool_hl_live:
+	; sdcccall(0) prologue: bool_hl_live (locals=0, temp_frame=0, stack_params=0)
+	cp	#9
+	ld	hl, #1
+	jr	nz, __live_bool_done
+	dec	hl
+__live_bool_done:
+	ld	b, h
+	ld	c, l
+	ld	a, h
+	add	a, c
+	ret
+_bool_hl_other_entry:
+	ld	hl, #5
+	jr	__shared_bool_done
+_bool_hl_shared_join:
+	cp	#11
+	ld	hl, #1
+	jr	z, __shared_bool_done
+	dec	hl
+__shared_bool_done:
+	ld	b, h
+	ld	c, l
+	ld	a, h
+	add	a, c
+	ret
+ASM
+
+"$XOPT" -Of "$TMPDIR/bool_hl_to_bc.s" -o "$TMPDIR/bool_hl_to_bc.out.s"
+awk '
+    /^_bool_hl_to_bc:/ { in_direct=1; next }
+    /^_bool_hl_live:/ { in_direct=0 }
+    in_direct && /ld[[:space:]]+bc,[[:space:]]*#1/ { found_load=1 }
+    in_direct && /dec[[:space:]]+bc/ { found_dec=1 }
+    in_direct && /ld[[:space:]]+[bc],[[:space:]]*[hl]/ { bad_copy=1 }
+    END { exit found_load && found_dec && !bad_copy ? 0 : 1 }
+' "$TMPDIR/bool_hl_to_bc.out.s"
+awk '
+    /^_bool_hl_live:/ { in_live=1; next }
+    in_live && /ld[[:space:]]+hl,[[:space:]]*#1/ { found_hl=1 }
+    in_live && /ld[[:space:]]+b,[[:space:]]*h/ { found_b=1 }
+    in_live && /ld[[:space:]]+c,[[:space:]]*l/ { found_c=1 }
+    END { exit found_hl && found_b && found_c ? 0 : 1 }
+' "$TMPDIR/bool_hl_to_bc.out.s"
+awk '
+    /^_bool_hl_shared_join:/ { in_shared=1; next }
+    in_shared && /ld[[:space:]]+hl,[[:space:]]*#1/ { found_hl=1 }
+    in_shared && /ld[[:space:]]+b,[[:space:]]*h/ { found_b=1 }
+    in_shared && /ld[[:space:]]+c,[[:space:]]*l/ { found_c=1 }
+    END { exit found_hl && found_b && found_c ? 0 : 1 }
+' "$TMPDIR/bool_hl_to_bc.out.s"
 
 "$XOPT" -O3 --cross-file "$TMPDIR/in.s" "$TMPDIR/in.s" --stdout >/dev/null
 

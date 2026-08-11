@@ -6,6 +6,25 @@ Release status:
 
 ## Unreleased
 
+- Added `xprog`, the XL image packager. It prefixes validated relocatable XL
+  payloads with a versioned process/service descriptor, producing `.prc`
+  process images with entry and stack requirements or `.svc` service images
+  with an ordered Z80 `JP` table. The tool also validates and inspects its
+  output; dynamic service resolution is deliberately outside this first
+  container-format change.
+- Added a source-independent Z80 optimization pass informed by SDCC and
+  superoptimizer-style liveness proofs. `-Os` now folds small nonzero word
+  equality through Z and aggregates consecutive indexed zero stores only when
+  the chosen register and flags are dead. All optimized profiles test signed
+  stack words directly with indexed `BIT`; the speed profiles avoid a wasted
+  pair load before a call, and profitable loop induction values can remain in
+  BC across register-only calls and proven BC-preserving constant multiplies.
+  Dead HL shuttles now materialize immediates directly in BC or IY, and
+  comparison Booleans requested in BC keep the decision in flags instead of
+  copying a materialized HL result afterward.
+  Stack-only `sdcccall(0)` function-pointer calls now use the smaller direct-HL
+  trampoline. Each rule is structural and dataflow-guarded rather than tied to
+  a benchmark or source name, with compiler, ABI, and xopt regressions.
 - Fixed CP/M 3 process startup to construct valid `argc`/`argv` values from
   the length-prefixed command tail. The startup now supplies an empty
   `argv[0]`, splits ASCII whitespace, groups and removes double quotes,

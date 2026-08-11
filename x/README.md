@@ -4,7 +4,7 @@ First-pass product copy for the X tools.
 
 ## Layout
 
-- `src/` — tool executables (`xcc`, `xas`, `xld`, `xgdb`, `xemu`, `xar`, `xobjcopy`, `xopt`)
+- `src/` — tool executables (`xcc`, `xas`, `xld`, `xgdb`, `xemu`, `xar`, `xobjcopy`, `xprog`, `xopt`)
 - `lib/` — host-side implementation libraries (`xbfd`, `rsp`, `xgdb`, `xemu`, `xopt`, `xz80`)
 - `runtime/` — target runtime helper routines copied from the compiler tree
 - `libc/` — target C library

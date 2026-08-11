@@ -8,6 +8,7 @@ Today it builds these host-side tools into `bin/x/bin/`:
 - `xas` — assembler plus assembly pretty-printer / dialect converter
 - `xar` — archive tool for `.rel` libraries
 - `xobjcopy` — object/archive conversion and debug-stripping tool
+- `xprog` — packages relocatable XL payloads as `.prc` process or `.svc` service images
 - `xld` — linker for `XL`, `BIN`, `CDB`, and related outputs
 - `xgdb` — debugger frontend
 - `xemu` — standalone Z80 emulator and remote debug target
@@ -18,6 +19,7 @@ Today it builds these host-side tools into `bin/x/bin/`:
 - `xas/` — assembler sources and tests
 - `xcc/` — compiler sources, optimizer, runtime helpers, and compiler docs
 - `xobjcopy/` — object/archive conversion tool sources and tests
+- `xprog/` — XL process/service image packager and format tests
 - `xgdb/` — debugger frontend
 - `xemu/` — emulator tool and smoke tests
 - `xld/` — linker sources, README, and tests
@@ -43,6 +45,7 @@ The wider repository build stages the results under:
 
 - [How to test the repo](../docs/howtos/HOW-TO-TEST.md)
 - [xobjcopy README](xobjcopy/README.md)
+- [xprog README](xprog/README.md)
 - [xld README](xld/README.md)
 - [xgdb README](xgdb/README.md)
 - [xemu README](xemu/README.md)

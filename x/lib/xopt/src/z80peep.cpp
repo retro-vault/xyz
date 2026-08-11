@@ -3245,6 +3245,8 @@ bool z80_peep::apply_once() {
         if (rule_const_add_bc_de_fold(i)) { changed = true; continue; }
         if (rule_push_hl_ix_pop_de(i))   { changed = true; continue; }
         if (rule_push_hl_load_pop_de(i)) { changed = true; continue; }
+        if (rule_dead_hl_immediate_to_iy(i)) { changed = true; continue; }
+        if (rule_bool_hl_to_bc_direct(i)) { changed = true; continue; }
         if (rule_push_hl_pop_bc(i))      { changed = true; continue; }
         if (rule_dead_hl_de_stack_copy_to_bc(i)) { changed = true; continue; }
         if (rule_de_result_hl_forward(i)) { changed = true; continue; }
@@ -3254,6 +3256,7 @@ bool z80_peep::apply_once() {
         if (rule_bc_indirect_through_hl(i)) { changed = true; continue; }
         if (rule_dead_bc_copy_from_hl(i)) { changed = true; continue; }
         if (rule_dead_bc_hl_roundtrip(i)) { changed = true; continue; }
+        if (rule_dead_hl_immediate_to_bc(i)) { changed = true; continue; }
         if (rule_bc_base_add_direct(i)) { changed = true; continue; }
         if (rule_bc_offset_base_add_de_direct(i)) { changed = true; continue; }
         if (rule_bc_index_add_hl_word_load_direct(i)) { changed = true; continue; }
@@ -3628,16 +3631,20 @@ std::string z80_peep::optimize_outlined_layout(const std::string &asm_text) {
                 continue;
             }
 
-            // Tail merging and outlining can expose fresh branch diamonds
-            // and constant-zero materializations.  These local rules do not
-            // perform call-clobber liveness and are safe in this restricted
-            // final pass (the zero rule explicitly treats outlined helpers
-            // as possible flag consumers).
+            // Tail merging and outlining can expose fresh branch diamonds,
+            // constant-zero materializations, and zero-store runs. These
+            // local rules either avoid liveness or conservatively treat
+            // calls and control-flow escapes as live boundaries, so a
+            // synthetic helper cannot be mistaken for an ordinary ABI call.
             if (p.rule_invert_branch_skip(i)) {
                 changed = true;
                 continue;
             }
             if (p.rule_ld_a_zero(i)) {
+                changed = true;
+                continue;
+            }
+            if (p.rule_size_zero_indexed_store_run(i)) {
                 changed = true;
                 continue;
             }
@@ -7575,6 +7582,8 @@ bool z80_peep::rule_dead_hl_zero_extend_before_pair_load(size_t i) {
 bool z80_peep::rule_ld_a_zero(size_t i) {
     auto &a = lines_[i];
     if (a.mnemonic != "ld") return false;
+    if (a.comment.find("xopt-preserve-flags") != std::string::npos)
+        return false;
     std::string dst, src;
     if (!split_ld(a.operands, dst, src)) return false;
     if (dst != "a") return false;
@@ -12709,6 +12718,180 @@ bool z80_peep::rule_push_hl_pop_bc(size_t i) {
     return true;
 }
 
+// ld hl,#imm; push hl; pop iy  →  ld iy,#imm
+//
+// The stack shuttle is the generic pair-copy fallback, but the Z80 can load
+// IY directly.  Dropping the HL load is safe only when every following path
+// overwrites or clobbers HL before reading it.
+bool z80_peep::rule_dead_hl_immediate_to_iy(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 2; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "hl") {
+        return false;
+    }
+    src = trim(src);
+    if (src.empty() || src.front() != '#')
+        return false;
+    if (lines_[i + 1].mnemonic != "push" ||
+        trim(lines_[i + 1].operands) != "hl" ||
+        lines_[i + 2].mnemonic != "pop" ||
+        trim(lines_[i + 2].operands) != "iy") {
+        return false;
+    }
+    if (!hl_dead_before_read_or_modern_return(lines_, i + 3))
+        return false;
+
+    lines_[i].operands = "iy, " + src;
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 3));
+    return true;
+}
+
+// ld hl,#imm; ld b,h; ld c,l  →  ld bc,#imm
+//
+// Direct pair materialization is two bytes shorter than routing an immediate
+// through HL.  Retain the old form whenever a later path still reads HL.
+bool z80_peep::rule_dead_hl_immediate_to_bc(size_t i) {
+    if (i + 2 >= lines_.size())
+        return false;
+    for (size_t j = i; j <= i + 2; ++j) {
+        if (!lines_[j].label.empty())
+            return false;
+    }
+
+    std::string dst;
+    std::string src;
+    if (lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "hl") {
+        return false;
+    }
+    src = trim(src);
+    if (src.empty() || src.front() != '#')
+        return false;
+
+    std::string d0;
+    std::string s0;
+    std::string d1;
+    std::string s1;
+    if (lines_[i + 1].mnemonic != "ld" ||
+        lines_[i + 2].mnemonic != "ld" ||
+        !split_ld(lines_[i + 1].operands, d0, s0) ||
+        !split_ld(lines_[i + 2].operands, d1, s1) ||
+        trim(d0) != "b" || trim(s0) != "h" ||
+        trim(d1) != "c" || trim(s1) != "l") {
+        return false;
+    }
+    if (i + 4 < lines_.size() &&
+        lines_[i + 3].label.empty() &&
+        lines_[i + 4].label.empty() &&
+        lines_[i + 3].mnemonic == "ld" &&
+        lines_[i + 4].mnemonic == "ld" &&
+        split_ld(lines_[i + 3].operands, d0, s0) &&
+        split_ld(lines_[i + 4].operands, d1, s1) &&
+        trim(s0) == "b" && trim(s1) == "c") {
+        const std::string copy_hi = trim(d0);
+        const std::string copy_lo = trim(d1);
+        if ((copy_hi == "h" && copy_lo == "l") ||
+            (copy_hi == "d" && copy_lo == "e")) {
+            return false;
+        }
+    }
+    if (i + 5 < lines_.size()) {
+        std::string lo_dst;
+        std::string lo_src;
+        std::string hi_dst;
+        std::string hi_src;
+        std::string add_dst;
+        std::string add_src;
+        if (lines_[i + 3].mnemonic == "ld" &&
+            lines_[i + 4].mnemonic == "ld" &&
+            lines_[i + 5].mnemonic == "add" &&
+            split_ld(lines_[i + 3].operands, lo_dst, lo_src) &&
+            split_ld(lines_[i + 4].operands, hi_dst, hi_src) &&
+            split_ld(lines_[i + 5].operands, add_dst, add_src) &&
+            trim(lo_dst) == "l" && trim(hi_dst) == "h" &&
+            trim(add_dst) == "hl" && trim(add_src) == "bc") {
+            return false;
+        }
+    }
+    if (!hl_dead_before_read_or_modern_return(lines_, i + 3))
+        return false;
+
+    lines_[i].operands = "bc, " + src;
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 3));
+    return true;
+}
+
+// ld hl,#1; jr/jp cc,L; dec hl; L: ld b,h; ld c,l
+//   → ld bc,#1; jr/jp cc,L; dec bc; L:
+//
+// Comparison lowering materializes a Boolean in HL.  When its immediate
+// consumer wants BC and HL then dies, materialize in the consumer pair from
+// the outset.  DEC rr preserves flags for both pairs, so the incoming
+// comparison flags and the branch behavior are unchanged.
+bool z80_peep::rule_bool_hl_to_bc_direct(size_t i) {
+    if (i + 5 >= lines_.size())
+        return false;
+
+    std::string dst;
+    std::string src;
+    if (!lines_[i].label.empty() ||
+        lines_[i].mnemonic != "ld" ||
+        !split_ld(lines_[i].operands, dst, src) ||
+        trim(dst) != "hl" ||
+        !immediate_is(trim(src), 1)) {
+        return false;
+    }
+
+    std::string cc;
+    std::string target;
+    if (!lines_[i + 1].label.empty() ||
+        !split_conditional_branch_target(lines_[i + 1], cc, target) ||
+        lines_[i + 2].label.size() != 0 ||
+        lines_[i + 2].mnemonic != "dec" ||
+        trim(lines_[i + 2].operands) != "hl" ||
+        lines_[i + 3].label != target ||
+        !lines_[i + 3].mnemonic.empty() ||
+        lines_[i + 3].is_global_label ||
+        label_has_other_control_references(lines_, target, i + 1)) {
+        return false;
+    }
+
+    std::string d0;
+    std::string s0;
+    std::string d1;
+    std::string s1;
+    if (!lines_[i + 4].label.empty() ||
+        !lines_[i + 5].label.empty() ||
+        lines_[i + 4].mnemonic != "ld" ||
+        lines_[i + 5].mnemonic != "ld" ||
+        !split_ld(lines_[i + 4].operands, d0, s0) ||
+        !split_ld(lines_[i + 5].operands, d1, s1) ||
+        trim(d0) != "b" || trim(s0) != "h" ||
+        trim(d1) != "c" || trim(s1) != "l") {
+        return false;
+    }
+    if (!hl_dead_before_read_or_modern_return(lines_, i + 6))
+        return false;
+
+    lines_[i].operands = "bc, #1";
+    lines_[i + 2].operands = "bc";
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 4),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(i + 6));
+    return true;
+}
+
 bool z80_peep::rule_push_de_pop_hl_to_ex(size_t i) {
     if (i + 1 >= lines_.size())
         return false;
@@ -16372,6 +16555,57 @@ bool z80_peep::rule_superopt_redundant_zero_store_chain(size_t i) {
         return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    return true;
+}
+
+bool z80_peep::rule_size_zero_indexed_store_run(size_t i) {
+    std::vector<int> offsets;
+    size_t end = i;
+    for (; end < lines_.size(); ++end) {
+        const auto &line = lines_[end];
+        if (!line.label.empty() || line.mnemonic != "ld")
+            break;
+
+        std::string dst;
+        std::string src;
+        int offset = 0;
+        if (!split_ld(line.operands, dst, src) ||
+            !parse_ix_ref(trim(dst), offset) || !immediate_is(src, 0)) {
+            break;
+        }
+        offsets.push_back(offset);
+    }
+    if (offsets.size() < 2)
+        return false;
+
+    std::string zero_register;
+    std::vector<asm_line> replacement;
+    if (a_overwritten_before_read(lines_, end) &&
+        flags_overwritten_before_read_or_escape(lines_, end)) {
+        replacement.push_back(asm_line::parse("\txor\ta"));
+        zero_register = "a";
+    } else if (offsets.size() >= 3 &&
+               a_overwritten_before_read(lines_, end)) {
+        asm_line zero = asm_line::parse("\tld\ta, #0");
+        zero.comment = "xopt-preserve-flags";
+        replacement.push_back(std::move(zero));
+        zero_register = "a";
+    } else if (offsets.size() >= 4 &&
+               path_overwrites_hl_before_read(lines_, end)) {
+        replacement.push_back(asm_line::parse("\tld\thl, #0"));
+        zero_register = "l";
+    } else {
+        return false;
+    }
+
+    for (int offset : offsets) {
+        replacement.push_back(asm_line::parse(
+            "\tld\t" + std::to_string(offset) + "(ix), " + zero_register));
+    }
+    lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                 lines_.begin() + static_cast<std::ptrdiff_t>(end));
+    lines_.insert(lines_.begin() + static_cast<std::ptrdiff_t>(i),
+                  replacement.begin(), replacement.end());
     return true;
 }
 

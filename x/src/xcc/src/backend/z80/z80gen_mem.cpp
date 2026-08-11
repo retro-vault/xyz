@@ -78,6 +78,46 @@ void z80_gen::gen_assign(const icode &ic) {
         direct_word_value_ = operand{};
         return;
     }
+
+    // A pair load followed by two indexed stores costs one byte and ten
+    // cycles more than storing the constant bytes directly.  Only use this
+    // when the following call kills the scratch-pair value: otherwise the
+    // ordinary store deliberately leaves the value cached in HL for a later
+    // reload.  Keep the size profile's longer form until after sequence
+    // outlining, where its common shape may enable a larger module saving.
+    bool frame_backed_result = false;
+    if (ic.result.kind == operand_kind::SYMBOL &&
+        !ic.result.is_global && !ic.result.is_tls &&
+        !ic.result.is_sfr && !ic.result.is_func &&
+        !ic.result.is_param && !symbol_home_in_bc(ic.result) &&
+        symbol_regs_.find(symbol_reg_key(ic.result)) == symbol_regs_.end()) {
+        frame_backed_result = true;
+    } else if (ic.result.kind == operand_kind::TEMP) {
+        const auto home = temp_regs_.find(ic.result.temp_id);
+        frame_backed_result = home == temp_regs_.end() ||
+                              home->second == temp_home::stack;
+    }
+    const bool speed_profile = opt_settings_.level == opt_level::Of ||
+                               opt_settings_.level == opt_level::O3;
+    const bool next_call_clobbers_pair =
+        cur_fn_ && cur_ic_index_ + 1 < cur_fn_->icodes.size() &&
+        cur_fn_->icodes[cur_ic_index_ + 1].op == icode_op::CALL;
+    if (speed_profile && sz == 2 && frame_backed_result &&
+        next_call_clobbers_pair &&
+        ic.left.kind == operand_kind::INT_CONST) {
+        const int off = ix_offset_of(ic.result);
+        if (fits_ix_disp(off) && fits_ix_disp(off + 1)) {
+            const uint16_t value = static_cast<uint16_t>(ic.left.ival);
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            emit_line("ld\t%s, %s", asm_.ix_rel(off).c_str(),
+                      asm_.imm(value & 0xffu).c_str());
+            emit_line("ld\t%s, %s", asm_.ix_rel(off + 1).c_str(),
+                      asm_.imm(value >> 8).c_str());
+            return;
+        }
+    }
+
     if (sz == 1) {
         load_a(ic.left);
         store_a(ic.result);

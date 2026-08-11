@@ -6,7 +6,7 @@ This document describes the current state of the repository and the target struc
 
 The project is a single monorepo containing several related but conceptually distinct products:
 
-- **Toolchain ("X Tools")**: xcc (C compiler), xas (assembler), xld (linker), xopt (standalone Z80 assembly optimizer), xar, xobjcopy, xgdb, xemu, plus supporting bits (some runtime code, bfd, etc.). Located primarily under `src/xc/`.
+- **Toolchain ("X Tools")**: xcc (C compiler), xas (assembler), xld (linker), xopt (standalone Z80 assembly optimizer), xar, xobjcopy, xprog, xgdb, xemu, plus supporting bits (some runtime code, bfd, etc.). Located primarily under `x/src/`.
 - **C Library**: Hand-written Z80 assembler implementation of (mostly) C23 libc. Located in `lib/libc/`. Must be usable both by the toolchain (for testing) and by the OS.
 - **Low-level Runtime**: SDCC-compatible helpers for 64-bit integers, double, float, etc. (`src/xc/xcc/lib/runtime/` + `tests/tests/runtime/`).
 - **Operating System**: YOS kernel, drivers, basic applications (`src/yos/` and related directories).
@@ -44,6 +44,7 @@ xyz/
 │   ├── xopt/
 │   ├── xar/
 │   ├── xobjcopy/
+│   ├── xprog/
 │   ├── xgdb/
 │   ├── xemu/
 │   ├── common/               # shared code needed by the tools

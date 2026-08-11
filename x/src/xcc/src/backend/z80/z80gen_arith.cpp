@@ -4010,8 +4010,28 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         operand high = ic.left;
         high.byte_offset += 1;
         high.type = type::make_uchar();
-        load_a(high);
-        emit_line("bit\t7, a");
+        bool direct_frame_bit = false;
+        if (high.kind == operand_kind::TEMP) {
+            auto home = temp_regs_.find(high.temp_id);
+            direct_frame_bit = home == temp_regs_.end() ||
+                               home->second == temp_home::stack;
+        } else if (high.kind == operand_kind::SYMBOL) {
+            direct_frame_bit =
+                !high.is_global && !high.is_tls && !high.is_sfr &&
+                !high.is_func &&
+                !symbol_regs_.count(symbol_reg_key(high)) &&
+                !incoming_symbol_homes_.count(high.stack_offset);
+        }
+        if (direct_frame_bit && fits_ix_disp(ix_offset_of(high))) {
+            // BIT exposes the sign directly in Z.  Its indexed form is one
+            // byte smaller and seven cycles faster than loading A first,
+            // while also preserving the accumulator's live value.
+            emit_line("bit\t7, %s",
+                      asm_.ix_rel(ix_offset_of(high)).c_str());
+        } else {
+            load_a(high);
+            emit_line("bit\t7, a");
+        }
         if (!true_lbl.empty()) {
             emit_line("jp\t%s, %s",
                       cmp == icode_op::LT ? "nz" : "z",
@@ -4494,6 +4514,29 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             static_cast<uint16_t>(constant->ival) != 0 &&
             op_size(*value) == 2 && compact_frame_word(*value)) {
             const uint16_t raw = static_cast<uint16_t>(constant->ival);
+            if (opt_settings_.level == opt_level::Os && (raw >> 8) == 0) {
+                // Preserve the low-byte difference in A and fold the zero
+                // high-byte test into it.  This leaves Z set exactly when
+                // the complete word equals the small constant, avoiding a
+                // mismatch branch and a second accumulator load.  It is a
+                // size-only choice: the split form can exit earlier when the
+                // low byte differs, which is preferable in the speed lane.
+                load_a(*value);
+                if ((raw & 0xff) == 1) {
+                    emit_line("dec\ta");
+                } else {
+                    emit_line("sub\t%s",
+                              asm_.imm(raw & 0xff).c_str());
+                }
+                emit_line("or\ta, %s",
+                          asm_.ix_rel(ix_offset_of(*value) + 1).c_str());
+                emit_line("jp\t%s, %s",
+                          cmp == icode_op::EQ ? "z" : "nz",
+                          true_lbl.c_str());
+                if (!false_lbl.empty())
+                    emit_line("jp\t%s", false_lbl.c_str());
+                return;
+            }
             const std::string skip_lbl =
                 false_lbl.empty() && cmp == icode_op::EQ
                     ? fresh_local_label("__wcmp_mismatch")

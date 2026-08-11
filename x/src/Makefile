@@ -6,7 +6,7 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 DEFAULT_PLATFORM ?= none
 
-SUBDIRS := xld xgdb xemu xopt xcc xas xar xobjcopy
+SUBDIRS := xld xgdb xemu xopt xcc xas xar xobjcopy xprog
 
 .PHONY: all clean host-libs $(SUBDIRS)
 

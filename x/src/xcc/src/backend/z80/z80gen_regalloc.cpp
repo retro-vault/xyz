@@ -4455,6 +4455,20 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         int end = -1;
         int score = 0;
     };
+    auto may_inline_ctype_call = [&](const icode &ic) {
+        if (!opt_settings_.ctype_builtins || ic.func_name.empty() ||
+            defined_function_names_.count(ic.func_name) != 0 ||
+            effective_call_abi(ic.callee_abi) != call_abi::SDCCCALL1 ||
+            ic.num_params != 1 || ic.arg_bytes != 0) {
+            return false;
+        }
+        static const std::unordered_set<std::string> names = {
+            "isalnum", "isalpha", "isblank", "iscntrl", "isdigit",
+            "isgraph", "islower", "isprint", "ispunct", "isspace",
+            "isupper", "isxdigit", "tolower", "toupper",
+        };
+        return names.count(ic.func_name) != 0;
+    };
     std::vector<loop_induction_candidate> loop_induction_candidates;
     for (const auto &[tid, iv] : ivs) {
         if (iv.size != 2 || iv.has_addr_of || iv.first_def < 0)
@@ -4500,8 +4514,17 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         std::unordered_set<int> step_temps;
         for (int k = iv.first_def + 1; k <= allocation_end; ++k) {
             const icode &ic = fn.icodes[k];
-            if (ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA ||
-                ic.op == icode_op::INLINE_ASM || clobbers_bc(ic) ||
+            const bool preservable_direct_call =
+                ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0 && !ic.result_via_sret &&
+                !may_inline_ctype_call(ic);
+            const bool preserves_bc_despite_metadata =
+                preservable_direct_call ||
+                inline_word_const_mul_preserves_bc(ic);
+            if ((!preserves_bc_despite_metadata &&
+                 (ic.op == icode_op::CALL || clobbers_bc(ic))) ||
+                ic.op == icode_op::ALLOCA ||
+                ic.op == icode_op::INLINE_ASM ||
                 uses_tls_global(ic.result) || uses_tls_global(ic.left) ||
                 uses_tls_global(ic.right) ||
                 symbol_word_access_may_need_bc_scratch(ic.result) ||
@@ -4566,10 +4589,14 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 break;
             }
 
+            if (preserves_bc_despite_metadata)
+                continue;
+
             switch (ic.op) {
             case icode_op::LABEL:
             case icode_op::GOTO:
             case icode_op::IFX:
+            case icode_op::ADDRESS_OF:
             case icode_op::EQ:
             case icode_op::NE:
             case icode_op::LT:
@@ -4634,6 +4661,14 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             continue;
         temp_regs_[cand.tid] = temp_home::main_bc;
         pair_windows.push_back({cand.start, cand.end});
+        for (int k = cand.start + 1; k < cand.end; ++k) {
+            const icode &ic = fn.icodes[k];
+            if (ic.op == icode_op::CALL && !ic.func_name.empty() &&
+                ic.arg_bytes == 0 && !ic.result_via_sret &&
+                !may_inline_ctype_call(ic)) {
+                bc_preserved_call_indices_.insert(static_cast<size_t>(k));
+            }
+        }
     }
 
     // Step 4a: gather BC candidates from both word temps and simple
