@@ -2,9 +2,67 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-18, after Fuse validation of the ZX Spectrum ROM console.
+Last updated: 2026-08-18, after completing the locked 24-program correctness
+and structural optimizer campaign.
 
 ## Major Recent Work
+
+### Medium default model and the 24-program compiler comparison
+
+Ordinary root, standalone-X, libc, and packaging builds now default to the
+medium `X_MODEL=M` feature set: `float` and `long` remain available, while
+`double`, `long long`, and stdio floating conversions are omitted. Explicit
+`X_MODEL=S|L` builds and the side-by-side `x-s`, `x-m`, and `x-l` targets are
+unchanged.
+
+The feature-filtered model matrices are run with `make test-x-models`. The
+unfiltered E2E suite intentionally uses the staged `bin/x-l` compiler and
+sysroot, so its double and long-long coverage remains exhaustive even though
+the ordinary `bin/x` prefix is M. The C23 profile accepts that compiler path
+as an override. YOS's shared minimal test CRT exports both the XCC and SDCC
+names for its local HL/IY indirect-call trampolines, preventing the runtime
+archive from being selected solely for an alias and then defining the same
+routine twice.
+
+The locked shared-z88dk suite now has 24 programs. Its added
+`bitfieldbench` performs repeated packed-field extraction, insertion, and
+read-modify-write operations against a host-verified checksum of 60004. XCC's
+optimized failures were fixed by making spill-slot liveness follow the actual
+CFG and by routing `IY`-derived pointer fusions through guarded pointer
+lowering. The separate `fixedbench` failure was z88dk's stack-ABI
+`___muluint2ulong` being selected for an XCC register-ABI call; the pinned
+integration now selects a distinct 23-byte XCC archive member only when used.
+XCC `-Os` and `-Of`, sccz80, and both 80cc configurations pass 24/24. Current
+zsdcc returns 34924 for `bitfieldbench` and passes 23/24; the failure remains
+visible in the saved matrix instead of being excluded.
+
+The structural optimizer campaign added generic shift/mask fusion, proven
+loop-reduction and dense-dispatch register residence, immutable byte-argument
+residence in `E`, pair-pressure scheduling for simple pointer walks, direct
+word-producer/store forwarding, and consecutive word-load/add scheduling.
+The compiler does not inspect benchmark names, source text, constants, or
+whole-program fingerprints. Against the best valid result from current
+zsdcc, 80cc-fp, and 80cc-sp on each row, XCC `-Of` is strictly fastest on
+13/24 programs and `-Os` on 7/24; both profiles remain correct on all 24.
+
+The reported unsigned-byte conditional-assignment reduction is not broken in
+the current XCC. A permanent executable case tests changed, unchanged, and
+255-to-zero wraparound paths and passes `-O0`, `-O1`, `-O2`, `-O3`, `-Of`,
+and `-Os`.
+
+Final validation after the optimizer campaign is clean. The feature-filtered
+model matrices pass S 3,672/3,672, M 3,932/3,932, and L 4,377/4,377. The
+exhaustive L-model compiler lanes pass 2,736 variants under ABI0 and 2,760
+under ABI1, with 45 and 21 manifest-declared skips respectively; the execution
+lanes pass 1,602 ABI0 variants and 1,577 ABI1 variants, with 10 and 35 skips.
+The C23 matrix passes 59 claimed features, the fixed project corpus passes
+22/22, the applicable algorithm corpus passes 51/51 plus 11 float-rich cases,
+and z88dk compatibility passes 280/280. Runtime, libc, xz80, every host-tool
+phase, CP/M, YOS application images, MDR modes, the full-chain integration,
+the ZX Spectrum MCP RAM/ROM/TAP/TZX check, and platform-layout validation also
+pass. The only failures in the superseded broad run were two ABI1 assembly
+shape probes being executed once under ABI0; their manifests now declare ABI1
+explicitly, and the complete compile phase passes after rerun.
 
 ### ZX Spectrum 48K RAM and ROM platforms
 
@@ -150,6 +208,11 @@ and preserves the accumulator-defining half unless all paths overwrite `A`
 before reading it. Source-local slots remain untouched when volatility
 metadata is unavailable. Focused executable and assembly regressions cover
 both cases.
+Byte-sized views of an `IY`-resident source local or temporary now use
+`IYL`/`IYH` as well. Previously a byte compare could read the abandoned `IX`
+spill slot even though the corresponding word update lived in `IY`; the
+static-address-initializer holdout now passes under both ABIs and all five
+active optimization profiles.
 An additional ABI1 defect found by the full matrix was fixed: compact-frame
 comparison lowering could treat a reserved spill slot for an incoming register
 parameter as initialized stack storage and leave a frameless function's SP
@@ -169,17 +232,25 @@ compatibility suite, remaining host tools, CP/M and YOS applications, and
 all MDR modes instead of silently omitting those phases.
 The current unified XCC-filtered manifest run passes 4,229/4,229 variants.
 
-All compiler lanes in the 23-program comparison now use the same `z80_exec`
-timing model. Every XCC lane passes 23/23. The strong result is linked-image
-size: `-Os` is strictly smaller than the best successful competitor on 22/23.
-The Pareto-safe recurrence graduation also raises `-Os` to 3/23 speed wins
-against SDCC and 1/23 strict speed wins against the competitor envelope.
-The graduated `-Of` result, and therefore the empty `-O3` alias, remains
-correct on 23/23 in both ABIs and is strict-fastest against the successful
-competitor envelope on 13/23 programs; it wins 14/23 against SDCC.  Its ABI1
-geometric-mean cycle count is 0.65% below SDCC but 9.89% above the per-program
-best successful competitor envelope (ABI0: 9.72% above).  Detailed
-measurements are in `x/tests/benchmarks/z88dk24/RESULTS.md`.
+The 24-program full-z88dk comparison is now a separately reproducible,
+seven-lane matrix. It pins an old z88dk target sysroot (the only baseline that
+reproduces the supplied sccz80 table), current nightly zsdcc and host tools,
+the latest active 80cc development head, XCC's M distribution, compiler rule
+files, corpus content hash, and upstream `z88dk-ticks -b msx`. It measures
+complete linked images and retains binaries, maps, logs, versions, and
+executable hashes.
+
+The final locked run has XCC `-Os` and `-Of` correct on 24/24. Current zsdcc
+passes 23/24, its six expensive-allocation rows pass 6/6, and both latest 80cc
+modes pass 24/24 after a rule-only missing-`EXTERN` fix. Against zsdcc alone,
+XCC `-Of` wins 18/23 valid speed comparisons; against the stronger per-row
+zsdcc/80cc envelope it is strictly fastest on 13/24. The previous runner's
+raw XCC compatibility object contributed 38 bytes to every linked image; it
+has been replaced by zero-byte aliases plus a separate lazy 23-byte multiply
+ABI adapter. The report identifies the old object's five bodies, explains the
+ABI fix, lists each structural optimization, and preserves the exact binaries,
+maps, hashes, and full comparison matrix in
+`x/tests/benchmarks/z88dk24/RESULTS.md`.
 
 Every lane in the frozen 40-program portable corpus passes.  `-Of` and `-O3`
 are identical at 27,194 payload bytes and 2,676,535 cycles, but remain 69.22%

@@ -78,7 +78,16 @@ Current examples and current locations:
 - `x/tests/tests/runtime/` holds the runtime helper matrices for ll/double and related coverage.
 - `x/tests/tests/c23/` holds the manifest-driven C23 compatibility suite — used for both compiler acceptance and libc surface verification.
 - `x/tests/tests/zx48/` owns the optional real-ROM/MCP cross-stack regression.
-- Benchmarks remain outside that canonical tree for now.
+- `make test-x-models` validates the S, M, and L feature surfaces separately.
+  The unfiltered `x/tests/tests/e2e/run.sh` suite uses `bin/x-l` for compiler
+  and library coverage, because the ordinary `bin/x` prefix is intentionally
+  the M distribution and cannot link L-only double/long-long cases.
+- Benchmarks remain outside that canonical tree for now. The locked
+  `x/tests/benchmarks/z88dk24/` matrix is the external optimizer audit: it pins
+  corpus, target sysroot, compiler revisions, executable hashes, and the cycle
+  model independently. Compiler improvements measured there must be generic
+  IR/CFG/data-flow transformations; workload names, source fragments, magic
+  constants, and whole-program fingerprints are forbidden selection inputs.
 
 When adding tests for new C23 features (or anything else):
 - Add semantic/functional verification in `x/tests/tests/libc/c23_cases.c` or

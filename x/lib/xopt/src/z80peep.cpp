@@ -10535,42 +10535,74 @@ static bool ix_slot_read_in_function(const std::vector<asm_line> &lines,
     return false;
 }
 
-static bool line_branches_to_before(const std::vector<asm_line> &lines,
-                                    size_t line_index,
-                                    size_t before_index) {
-    if (line_index >= lines.size())
-        return false;
-
-    const asm_line &line = lines[line_index];
-    std::string target;
-    std::string cc;
-    bool has_target = split_conditional_branch_target(line, cc, target) ||
-                      parse_unconditional_jump(line, target);
-    if (!has_target && line.mnemonic == "djnz") {
-        target = trim(line.operands);
-        has_target = !target.empty();
-    }
-    if (!has_target)
-        return false;
-
-    const size_t target_index = find_label_index(lines, target);
-    return target_index != lines.size() &&
-           target_index < before_index &&
-           target_index < line_index;
-
-}
-
 static bool ix_slot_not_read_before_rewrite(const std::vector<asm_line> &lines,
                                             size_t begin,
                                             size_t end,
                                             int offset) {
-    for (size_t k = begin; k < end; ++k) {
-        if (line_branches_to_before(lines, k, begin))
+    if (begin >= end || begin >= lines.size())
+        return true;
+
+    end = std::min(end, lines.size());
+    std::vector<unsigned char> visited(end - begin, 0);
+    std::vector<size_t> pending{begin};
+
+    auto enqueue_target = [&](const std::string &target) {
+        const size_t target_index = find_label_index(lines, target);
+        if (target_index < begin || target_index >= end)
             return false;
-        if (line_reads_ix_offset(lines[k], offset))
+        pending.push_back(target_index);
+        return true;
+    };
+
+    while (!pending.empty()) {
+        const size_t k = pending.back();
+        pending.pop_back();
+        if (k >= end)
+            continue;
+        if (visited[k - begin])
+            continue;
+        visited[k - begin] = 1;
+
+        const asm_line &line = lines[k];
+        if (line_reads_ix_offset(line, offset))
             return false;
-        if (line_writes_ix_offset(lines[k], offset))
-            return true;
+        if (line_writes_ix_offset(line, offset))
+            continue;
+
+        std::string cc;
+        std::string target;
+        if (split_conditional_branch_target(line, cc, target)) {
+            if (!enqueue_target(target))
+                return false;
+            if (k + 1 < end)
+                pending.push_back(k + 1);
+            continue;
+        }
+        if (line.mnemonic == "djnz") {
+            target = trim(line.operands);
+            if (target.empty() || !enqueue_target(target))
+                return false;
+            if (k + 1 < end)
+                pending.push_back(k + 1);
+            continue;
+        }
+        if (parse_unconditional_jump(line, target)) {
+            if (target.empty() || target.front() == '(' ||
+                !enqueue_target(target)) {
+                return false;
+            }
+            continue;
+        }
+        if (line.mnemonic == "ret" || line.mnemonic == "reti" ||
+            line.mnemonic == "retn" || line.mnemonic == "rst") {
+            if (line.mnemonic == "ret" && !trim(line.operands).empty() &&
+                k + 1 < end) {
+                pending.push_back(k + 1);
+            }
+            continue;
+        }
+        if (k + 1 < end)
+            pending.push_back(k + 1);
     }
     return true;
 }

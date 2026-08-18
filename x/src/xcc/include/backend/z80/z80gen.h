@@ -190,6 +190,10 @@ private:
     // avoids a four-byte spill/reload while preserving the source load's
     // exact address and ordering.
     std::unordered_map<int, int64_t> iy_u32_remat_offsets_;
+    // Word loads selected as addends for a DE-resident loop reduction are
+    // emitted directly into HL.  A general main_hl home is not sufficient:
+    // ordinary one-step forwarding may deliberately keep the value in DE.
+    std::unordered_set<int> iy_de_reduction_hl_loads_;
     int next_temp_slot_ = 0;
     int temp_stack_bytes_ = 0;
     int temp_frame_bytes_ = 0;
@@ -466,6 +470,12 @@ private:
     void gen_alloca      (const icode &ic);
     void gen_inline_asm  (const icode &ic);
     void gen_make_complex(const icode &ic);
+
+    // Consume an immediately following `*iy_derived = result` while the
+    // 16-bit result is still in HL.  Returns true when the store was emitted
+    // and its IR instruction marked as consumed.
+    bool try_finish_direct_hl_iy_store(const operand &result);
+    bool try_emit_word_load_add_chain();
 
     // ----- operand loading -------------------------------------------
 

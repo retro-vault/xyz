@@ -724,12 +724,6 @@ void abi_convention::materialize_modern_receive(z80_gen &g, const icode &ic)
     if (!ic.result.is_temp())
         return;
 
-    if (ic.arg_loc == abi_arg_loc::REG_A) {
-        g.temp_regs_[ic.result.temp_id] = temp_home::stack;
-        g.store_frame_byte(g.ix_offset_of(ic.result), 'a');
-        return;
-    }
-
     auto temp_home_it = g.temp_regs_.find(ic.result.temp_id);
     if (temp_home_it != g.temp_regs_.end() &&
         ic.result.byte_offset == 0) {
@@ -756,6 +750,30 @@ void abi_convention::materialize_modern_receive(z80_gen &g, const icode &ic)
                 return;
             case abi_arg_loc::REG_L:
                 g.emit_line("ld\tc, l");
+                return;
+            default:
+                break;
+            }
+            break;
+        case temp_home::main_d:
+            switch (ic.arg_loc) {
+            case abi_arg_loc::REG_A:
+                g.emit_line("ld\td, a");
+                return;
+            case abi_arg_loc::REG_L:
+                g.emit_line("ld\td, l");
+                return;
+            default:
+                break;
+            }
+            break;
+        case temp_home::main_e:
+            switch (ic.arg_loc) {
+            case abi_arg_loc::REG_A:
+                g.emit_line("ld\te, a");
+                return;
+            case abi_arg_loc::REG_L:
+                g.emit_line("ld\te, l");
                 return;
             default:
                 break;

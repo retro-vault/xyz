@@ -319,7 +319,7 @@ help:
 		'Common variables:' \
 		'  PLATFORM=none|cpm3|emu          Default target platform (default: none).' \
 		'  ZX_RAM_STORAGE=plus3|ide        ZX RAM storage backend (default: plus3).' \
-		'  X_MODEL=S|M|L                   Release model defaults (default: L).' \
+		'  X_MODEL=S|M|L                   Release model defaults (default: M).' \
 		'  LIBC_PROFILE=name               Libc build flavor label (default: full).' \
 		'  LIBC_FLOAT=0|1                  Enable float libc/runtime support.' \
 		'  LIBC_DOUBLE=0|1                 Enable double libc/runtime support.' \

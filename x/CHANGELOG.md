@@ -6,6 +6,57 @@ Release status:
 
 ## Unreleased
 
+- Made the medium `X_MODEL=M` distribution the default for ordinary root,
+  standalone-X, libc, and packaging builds. The explicit `x-s`, `x-m`, and
+  `x-l` targets remain unchanged. The unfiltered E2E suite now deliberately
+  uses the staged L-model compiler, while `test-x-models` checks each model's
+  supported surface independently; this prevents L-only double/long-long
+  cases from being linked against the default M sysroot. The shared YOS test
+  CRT also exports both XCC and SDCC spellings of its HL/IY indirect-call
+  trampolines, avoiding duplicate runtime archive definitions.
+- Completed the post-optimization validation sweep: model S/M/L pass
+  3,672/3,932/4,377 variants respectively; exhaustive L-model compile lanes
+  pass 2,736 ABI0 and 2,760 ABI1 variants; execution lanes pass 1,602 ABI0 and
+  1,577 ABI1 variants. The C23, fixed-project, algorithm, z88dk compatibility,
+  host-tool, CP/M, YOS, MDR, full-chain, ZX Spectrum MCP, and platform-layout
+  checks pass. Two indirect-call assembly probes now explicitly declare ABI1,
+  where their BC callee-address assertion is valid because HL carries an
+  argument; ABI0 correctly uses its direct-HL stack-call trampoline instead.
+- Expanded the locked full-program compiler comparison to 24 programs with a
+  host-verified packed-bitfield extract/insert workload. Repaired the two XCC
+  optimized failures: spill-slot liveness now follows the real CFG, and word
+  load/mask and read-modify-write fusions preserve guarded lowering for
+  `IY`-derived pointers. Both XCC profiles now pass 24/24; current zsdcc still
+  fails the bitfield checksum. Added executable regressions for those defects
+  and for the reported unsigned-byte conditional assignment, including its
+  255-to-zero wrap case, across all six XCC optimization profiles.
+- Replaced the ad-hoc z88dk compiler comparison with a reproducible, pinned
+  seven-lane full-program matrix for XCC M `-Os`/`-Of`, sccz80, current zsdcc,
+  limited `sdcc-max`, and the latest active 80cc branch. The setup records the
+  exact corpus/sysroot/compiler commits, executable hashes, flags, complete
+  linked bytes, upstream `z88dk-ticks` cycles, binaries, maps, and logs. The
+  saved target table and report document why the historical figures require
+  an old z88dk target sysroot with newer compiler executables, remove a raw
+  38-byte XCC shim that polluted every image, fix the `fixedbench`
+  stack/register multiply-ABI mismatch with a separately selected 23-byte XCC
+  archive member, and supply a small 80cc rewrite-rule patch for its missing
+  multiply-helper `EXTERN` declaration.
+- Added benchmark-independent Z80 scheduling and allocation improvements:
+  unsigned word shift/mask fusion; proven loop-reduction and dense-dispatch
+  register residence; immutable incoming byte arguments in `E`; pair-pressure
+  scheduling for simple pointer walks; direct word-producer/store forwarding;
+  and consecutive word-load/add chains kept in `HL`/`DE`. Every rule is
+  guarded by data flow, lifetimes, CFG shape, and register clobbers. In the
+  final locked matrix XCC `-Os` and `-Of` both pass 24/24, and `-Of` is
+  strictly fastest on 13/24 programs against the best valid result from
+  current zsdcc and both latest 80cc modes.
+- Fixed byte views of locals and temporaries assigned to `IY`: loads and
+  stores now use `IYL`/`IYH` instead of a stale frame slot. A static-address
+  initializer holdout exposed the mismatch when a promoted loop counter was
+  updated in `IY` but compared through its abandoned `IX` home. The holdout
+  now passes under both ABIs and all optimization profiles. Five compile-only
+  ABI-shape probes also declare their intended `sdccall(1)` ABI explicitly,
+  so ABI0 runs skip them rather than testing the wrong contract.
 - Added complete minimal ZX Spectrum 48K RAM and replacement-ROM platforms.
   Both use assembly CRT/system backends, initialize BSS and static data, expose
   the usable RAM as the libc heap, provide the familiar non-blocking

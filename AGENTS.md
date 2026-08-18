@@ -32,6 +32,9 @@ Canonical release notes now live with each product root:
 - Most components use recursive Make. Some sub-areas may use CMake (check `archive/` and vendored dirs).
 - The current staged xtools sysroot lives under `bin/x/z80/`, with related YOS
   outputs under `bin/y/` and staged target assets under `bin/z/`.
+- The ordinary root and `make -C x` builds default to the medium `X_MODEL=M`
+  distribution. Use `X_MODEL=S|L` explicitly or the root `x-s`, `x-m`, and
+  `x-l` targets when another model is required.
 - The YOS ROM and the active `y/tests/*-yos` app builds now use the staged
   `bin/x/bin/{xcc,xas,xld}` toolchain directly with `-Os`; the old Docker /
   SDCC-only path is no longer the default build route.
@@ -52,7 +55,11 @@ make -C y               # build the migrated Y product tree
 make -C x/libc          # build only the C library
 make -C y/src           # build only the OS
 bash x/tests/run_tests.sh --filter xcc
+make test-x-models      # verify the S, M, and L feature-filtered matrices
+bash x/tests/tests/e2e/run.sh --no-build # exhaustive suite; uses bin/x-l
 python3 x/tests/tests/zx48/run_mcp.py --mcp /path/to/zx-spectrum-mcp --rom /path/to/48.rom
+x/tests/benchmarks/z88dk24/prepare.sh
+x/tests/benchmarks/z88dk24/run.sh
 ```
 
 The complete target memory maps, Fuse commands, Tamsyn console contract, and
@@ -77,6 +84,9 @@ make stage-includes stage-xcc-support
   - `y/tests/` — YOS-side apps, media, and emulator harnesses
   - `x/tests/tests/zx48/` — optional real-ROM/MCP coverage for the staged
     `zx-ram` and `zx-rom` platforms plus TAP/TZX playback
+  - `x/tests/benchmarks/z88dk24/` — locked seven-lane full-program comparison;
+    use its `prepare.sh` before `run.sh`, and preserve the independent corpus,
+    target-sysroot, nightly-zsdcc, and 80cc commit pins
 
 - The long-term direction is still component-owned tests plus a smaller E2E
   bucket, but the repository has not fully moved there yet.
@@ -173,6 +183,11 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
   experiment. Pure size policy belongs only in `-Os`; validate new `-O3` work
   in both ABI modes before promoting speed wins to `-Of` and Pareto-safe size
   wins to `-Os`.
+- The locked z88dk24 audit currently has both XCC M profiles correct on 24/24;
+  `-Of` is strictly fastest on 13/24 rows against the best valid current
+  zsdcc/80cc result. Preserve that result structurally: compiler rules must be
+  selected from IR, CFG, liveness, aliases, and clobbers, never benchmark
+  names, source fragments, magic workload constants, or program fingerprints.
 
 Update this file and the architecture documents when major structural or philosophical changes are made.
 

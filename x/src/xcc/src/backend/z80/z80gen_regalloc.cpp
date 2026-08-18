@@ -1102,6 +1102,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     incoming_symbol_homes_.clear();
     iy_preserved_call_indices_.clear();
     bc_preserved_call_indices_.clear();
+    iy_de_reduction_hl_loads_.clear();
 
     // The physical-home allocator currently reasons about byte, word, and
     // 32-bit values.  A function containing a wider value can call helpers
@@ -1564,6 +1565,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         int start = -1;
         int end = -1;
         int score = 0;
+        bool is_symbol = false;
     };
     std::vector<iy_candidate> iy_candidates;
     std::vector<iy_candidate> spare_iy_cursor_candidates;
@@ -2236,6 +2238,199 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
              2500 + hot_mentions(iv) * 20 - (loop_end - iv.first_def)});
     }
 
+    // IY is also the one truly callee-saved general word register available
+    // to a call-free Z80 loop.  Keep one promoted scalar recurrence there
+    // when it is defined repeatedly across a backedge.  Unlike the offset
+    // candidate above, the value need not be a pointer or feed only address
+    // arithmetic: load_hl/load_de and store_hl already support an IY home for
+    // every ordinary 16-bit operation.  Calls and opaque operations remain
+    // hard barriers, and the shared IY interval coloring below prevents this
+    // recurrence from overlapping a pointer cursor.
+    int direct_dispatch_branches = 0;
+    for (int k = 0; k + 1 < n; ++k) {
+        const icode &cmp = fn.icodes[k];
+        const icode &branch = fn.icodes[k + 1];
+        if ((cmp.op == icode_op::EQ || cmp.op == icode_op::NE) &&
+            cmp.result.is_temp() && branch.op == icode_op::IFX &&
+            branch.left.is_temp() &&
+            branch.left.temp_id == cmp.result.temp_id) {
+            ++direct_dispatch_branches;
+        }
+    }
+    const bool has_dense_dispatch = direct_dispatch_branches >= 4;
+    if (tuned_profile_enabled()) {
+        for (const auto &[tid, iv] : ivs) {
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions < 2 ||
+                iv.first_def < 0 || iv.last_use <= iv.first_def ||
+                iv.mentions < 4 || !fn.icodes[iv.first_def].result.type ||
+                !fn.icodes[iv.first_def].result.type->is_integer() ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+
+            const icode &initial = fn.icodes[iv.first_def];
+            if (initial.op != icode_op::ASSIGN ||
+                !initial.result.is_temp() || initial.result.temp_id != tid ||
+                initial.left.kind != operand_kind::INT_CONST) {
+                continue;
+            }
+
+            bool crosses_backedge = false;
+            bool saw_update = false;
+            bool safe = true;
+            for (int k = iv.first_def; k <= iv.last_use; ++k) {
+                const icode &inside = fn.icodes[k];
+                if (inside.op == icode_op::CALL ||
+                    inside.op == icode_op::ALLOCA ||
+                    inside.op == icode_op::INLINE_ASM ||
+                    inside.op == icode_op::BLOCK_FILL) {
+                    safe = false;
+                    break;
+                }
+
+                auto note_backedge = [&](const std::string &label) {
+                    auto target = label_indices.find(label);
+                    if (target != label_indices.end() &&
+                        target->second <= k &&
+                        target->second >= iv.first_def) {
+                        crosses_backedge = true;
+                    }
+                };
+                if (inside.op == icode_op::GOTO)
+                    note_backedge(inside.label_name);
+                else if (inside.op == icode_op::IFX) {
+                    note_backedge(inside.true_lbl);
+                    note_backedge(inside.false_lbl);
+                }
+
+                const bool defines = inside.result.is_temp() &&
+                                     inside.result.temp_id == tid &&
+                                     inside.op != icode_op::SET_VALUE_AT;
+                if (!defines || k == iv.first_def)
+                    continue;
+                const bool ordinary_word_definition =
+                    inside.result.type && inside.result.type->size() == 2 &&
+                    (inside.op == icode_op::ASSIGN ||
+                     inside.op == icode_op::CAST ||
+                     inside.op == icode_op::ADD ||
+                     inside.op == icode_op::SUB ||
+                     inside.op == icode_op::BAND ||
+                     inside.op == icode_op::BOR ||
+                     inside.op == icode_op::BXOR ||
+                     inside.op == icode_op::NEG ||
+                     inside.op == icode_op::BNOT ||
+                     inside.op == icode_op::SHL ||
+                     inside.op == icode_op::SHR ||
+                     inside.op == icode_op::ROL ||
+                     inside.op == icode_op::ROR ||
+                     inside.op == icode_op::GET_VALUE_AT);
+                if (!ordinary_word_definition) {
+                    safe = false;
+                    break;
+                }
+                saw_update = true;
+            }
+            if (!safe || !crosses_backedge || !saw_update)
+                continue;
+
+            iy_candidates.push_back(
+                {tid, iv.first_def, iv.last_use,
+                 2450 + hot_mentions(iv) * 24 -
+                     (iv.last_use - iv.first_def)});
+        }
+    }
+
+    // Scalar promotion is intentionally conservative around large control
+    // flow graphs, so retain the equivalent source-local recurrence path as
+    // well.  It uses the same IY interference space and accepts only a
+    // call-free, address-untaken 16-bit local with ordinary word definitions
+    // spanning a real backedge.
+    if (tuned_profile_enabled() && has_dense_dispatch) {
+        for (const auto &[key, iv] : syms) {
+            if (!iv.base.type || iv.base.type->size() != 2 ||
+                !iv.base.type->is_integer() || iv.base.is_param ||
+                iv.has_addr_of || iv.unsupported || iv.mentions < 4 ||
+                iv.first_idx < 0 || iv.last_idx <= iv.first_idx ||
+                symbol_regs_.find(key) != symbol_regs_.end()) {
+                continue;
+            }
+
+            const icode &initial = fn.icodes[iv.first_idx];
+            const bool initial_definition =
+                initial.op == icode_op::ASSIGN &&
+                initial.result.is_symbol() && !initial.result.is_global &&
+                symbol_reg_key(initial.result) == key &&
+                initial.result.byte_offset == 0 &&
+                initial.left.kind == operand_kind::INT_CONST;
+            if (!initial_definition)
+                continue;
+
+            bool crosses_backedge = false;
+            bool saw_update = false;
+            bool safe = true;
+            for (int k = iv.first_idx; k <= iv.last_idx; ++k) {
+                const icode &inside = fn.icodes[k];
+                if (inside.op == icode_op::CALL ||
+                    inside.op == icode_op::ALLOCA ||
+                    inside.op == icode_op::INLINE_ASM ||
+                    inside.op == icode_op::BLOCK_FILL) {
+                    safe = false;
+                    break;
+                }
+                auto note_backedge = [&](const std::string &label) {
+                    auto target = label_indices.find(label);
+                    if (target != label_indices.end() &&
+                        target->second <= k &&
+                        target->second >= iv.first_idx) {
+                        crosses_backedge = true;
+                    }
+                };
+                if (inside.op == icode_op::GOTO)
+                    note_backedge(inside.label_name);
+                else if (inside.op == icode_op::IFX) {
+                    note_backedge(inside.true_lbl);
+                    note_backedge(inside.false_lbl);
+                }
+
+                const bool defines = inside.result.is_symbol() &&
+                    !inside.result.is_global &&
+                    symbol_reg_key(inside.result) == key &&
+                    inside.result.byte_offset == 0 &&
+                    inside.op != icode_op::SET_VALUE_AT;
+                if (!defines || k == iv.first_idx)
+                    continue;
+                const bool ordinary_word_definition =
+                    inside.result.type && inside.result.type->size() == 2 &&
+                    (inside.op == icode_op::ASSIGN ||
+                     inside.op == icode_op::CAST ||
+                     inside.op == icode_op::ADD ||
+                     inside.op == icode_op::SUB ||
+                     inside.op == icode_op::BAND ||
+                     inside.op == icode_op::BOR ||
+                     inside.op == icode_op::BXOR ||
+                     inside.op == icode_op::NEG ||
+                     inside.op == icode_op::BNOT ||
+                     inside.op == icode_op::SHL ||
+                     inside.op == icode_op::SHR ||
+                     inside.op == icode_op::ROL ||
+                     inside.op == icode_op::ROR ||
+                     inside.op == icode_op::GET_VALUE_AT);
+                if (!ordinary_word_definition) {
+                    safe = false;
+                    break;
+                }
+                saw_update = true;
+            }
+            if (!safe || !crosses_backedge || !saw_update)
+                continue;
+
+            iy_candidates.push_back(
+                {key, iv.first_idx, iv.last_idx,
+                 2425 + iv.mentions * 24 -
+                     (iv.last_idx - iv.first_idx), true});
+        }
+    }
+
     std::sort(iy_candidates.begin(), iy_candidates.end(),
               [](const iy_candidate &lhs, const iy_candidate &rhs) {
                   if (lhs.score != rhs.score)
@@ -2255,11 +2450,15 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         if (overlaps)
             continue;
-        temp_regs_[cand.tid] = temp_home::main_iy;
+        if (cand.is_symbol)
+            symbol_regs_[cand.tid] = temp_home::main_iy;
+        else
+            temp_regs_[cand.tid] = temp_home::main_iy;
         iy_windows.push_back({cand.start, cand.end});
     }
     for (const auto &cand : iy_candidates) {
-        if (temp_regs_.find(cand.tid) == temp_regs_.end())
+        if (!cand.is_symbol &&
+            temp_regs_.find(cand.tid) == temp_regs_.end())
             spare_iy_cursor_candidates.push_back(cand);
     }
 
@@ -3987,6 +4186,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         int end = -1;
         int score = 0;
         std::vector<int> aliases;
+        bool prefer_de = false;
+        std::vector<int> iy_loads;
     };
     std::vector<loop_accumulator_candidate> loop_accumulator_candidates;
     for (const auto &[tid, iv] : ivs) {
@@ -4009,6 +4210,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         int update_count = 0;
         int current_accumulator = tid;
         std::vector<int> accumulator_aliases;
+        std::vector<int> iy_word_loads;
+        bool every_update_is_iy_word_load = true;
         for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
             const icode &ic = fn.icodes[k];
 
@@ -4044,6 +4247,32 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 !uses_tls_global(ic.right) &&
                 !symbol_word_access_may_need_bc_scratch(ic.right);
             if (reduction_update) {
+                bool direct_iy_word_load = false;
+                if (ic.right.is_temp()) {
+                    auto rhs_iv = ivs.find(ic.right.temp_id);
+                    if (rhs_iv != ivs.end() &&
+                        rhs_iv->second.first_def >= 0 &&
+                        rhs_iv->second.last_use == k) {
+                        const icode &rhs_def =
+                            fn.icodes[rhs_iv->second.first_def];
+                        if (rhs_def.op == icode_op::GET_VALUE_AT &&
+                            rhs_def.result.is_temp() &&
+                            rhs_def.result.temp_id == ic.right.temp_id &&
+                            rhs_def.left.is_temp() &&
+                            rhs_def.right.is_none() &&
+                            op_size(rhs_def.result) == 2) {
+                            auto pointer_home =
+                                temp_regs_.find(rhs_def.left.temp_id);
+                            direct_iy_word_load =
+                                pointer_home != temp_regs_.end() &&
+                                pointer_home->second == temp_home::main_iy;
+                        }
+                    }
+                }
+                if (direct_iy_word_load)
+                    iy_word_loads.push_back(ic.right.temp_id);
+                else
+                    every_update_is_iy_word_load = false;
                 if (current_accumulator != tid) {
                     auto current_iv = ivs.find(current_accumulator);
                     if (current_iv == ivs.end() ||
@@ -4191,11 +4420,92 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         if (!safe || !saw_update || !saw_backedge)
             continue;
+        bool de_reduction_shape_safe =
+            every_update_is_iy_word_load && !iy_word_loads.empty();
+        if (de_reduction_shape_safe) {
+            std::unordered_set<int> load_ids(iy_word_loads.begin(),
+                                             iy_word_loads.end());
+            std::unordered_set<int> accumulator_ids(
+                accumulator_aliases.begin(), accumulator_aliases.end());
+            accumulator_ids.insert(tid);
+            for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+                const icode &inside = fn.icodes[k];
+                if (inside.op == icode_op::LABEL ||
+                    inside.op == icode_op::GOTO ||
+                    inside.op == icode_op::IFX ||
+                    inside.op == icode_op::RETURN) {
+                    continue;
+                }
+                const bool selected_load =
+                    inside.op == icode_op::GET_VALUE_AT &&
+                    inside.result.is_temp() &&
+                    load_ids.count(inside.result.temp_id) != 0;
+                if (selected_load)
+                    continue;
+
+                const bool touches_accumulator =
+                    (inside.result.is_temp() &&
+                     accumulator_ids.count(inside.result.temp_id) != 0) ||
+                    (inside.left.is_temp() &&
+                     accumulator_ids.count(inside.left.temp_id) != 0) ||
+                    (inside.right.is_temp() &&
+                     accumulator_ids.count(inside.right.temp_id) != 0);
+                if (touches_accumulator) {
+                    // The reduction itself and its one final read were
+                    // validated by the accumulator recognizer above.
+                    if (inside.op == icode_op::ADD ||
+                        inside.op == icode_op::SUB ||
+                        inside.op == icode_op::ASSIGN ||
+                        inside.op == icode_op::CAST)
+                        continue;
+                    de_reduction_shape_safe = false;
+                    break;
+                }
+
+                if (is_compare_op(inside.op))
+                    continue;
+                if ((inside.op == icode_op::ADD ||
+                     inside.op == icode_op::SUB) &&
+                    inside.right.kind == operand_kind::INT_CONST) {
+                    continue;
+                }
+                if ((inside.op == icode_op::ASSIGN ||
+                     inside.op == icode_op::CAST) &&
+                    (inside.left.kind == operand_kind::INT_CONST ||
+                     (inside.result.is_temp() &&
+                      temp_regs_.find(inside.result.temp_id) !=
+                          temp_regs_.end() &&
+                      temp_regs_.at(inside.result.temp_id) ==
+                          temp_home::main_iy))) {
+                    continue;
+                }
+                // A row-base expression immediately committed to the IY
+                // cursor is setup for the following inner walk, not general
+                // payload arithmetic.
+                if (inside.op == icode_op::ADD &&
+                    inside.result.is_temp() && k + 1 <= iv.last_use) {
+                    const icode &commit = fn.icodes[k + 1];
+                    if (commit.op == icode_op::ASSIGN &&
+                        commit.left.is_temp() &&
+                        commit.left.temp_id == inside.result.temp_id &&
+                        commit.result.is_temp()) {
+                        auto home = temp_regs_.find(commit.result.temp_id);
+                        if (home != temp_regs_.end() &&
+                            home->second == temp_home::main_iy)
+                            continue;
+                    }
+                }
+                de_reduction_shape_safe = false;
+                break;
+            }
+        }
         loop_accumulator_candidates.push_back(
             {tid, iv.first_def, iv.last_use,
              3000 + update_count * 200 + hot_mentions(iv) * 16 -
                  (iv.last_use - iv.first_def),
-             std::move(accumulator_aliases)});
+             std::move(accumulator_aliases),
+             de_reduction_shape_safe,
+             std::move(iy_word_loads)});
     }
     std::sort(loop_accumulator_candidates.begin(),
               loop_accumulator_candidates.end(),
@@ -4208,6 +4518,16 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                   return lhs.tid < rhs.tid;
               });
     for (const auto &cand : loop_accumulator_candidates) {
+        if (cand.prefer_de) {
+            temp_regs_[cand.tid] = temp_home::main_de;
+            for (int alias_tid : cand.aliases)
+                temp_regs_[alias_tid] = temp_home::main_de;
+            for (int load_tid : cand.iy_loads)
+                temp_regs_[load_tid] = temp_home::main_hl;
+            iy_de_reduction_hl_loads_.insert(cand.iy_loads.begin(),
+                                             cand.iy_loads.end());
+            continue;
+        }
         bool overlaps = false;
         for (const auto &[start, end] : pair_windows) {
             if (!(cand.end < start || cand.start > end)) {
@@ -6689,6 +7009,56 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             return result_iv != ivs.end() &&
                    result_iv->second.last_use == k + 1;
         };
+
+        // An immutable byte parameter received in a register is often used
+        // as a discriminator through a chain of comparisons.  Keeping it in
+        // E avoids creating an IX frame solely because control-flow joins
+        // invalidate the accumulator cache.  This is a normal live-range
+        // decision: accept only a single RECEIVE definition and operations
+        // whose current lowering either reads E directly or cannot clobber
+        // it.  RETURN is safe even though materialising its value may use DE,
+        // because it terminates that CFG path.
+        for (auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 1 || iv.has_addr_of || iv.definitions != 1 ||
+                iv.first_def < 0 || iv.last_use <= iv.first_def ||
+                iv.mentions < 2 ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+            const icode &def_ic = fn.icodes[iv.first_def];
+            if (def_ic.op != icode_op::RECEIVE ||
+                !def_ic.result.is_temp() ||
+                def_ic.result.temp_id != tid ||
+                (iv.receive_loc != abi_arg_loc::REG_A &&
+                 iv.receive_loc != abi_arg_loc::REG_L)) {
+                continue;
+            }
+
+            bool safe = true;
+            for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (mentions_temp(ic, tid)) {
+                    if (!candidate_byte_use_safe(ic, tid)) {
+                        safe = false;
+                        break;
+                    }
+                    continue;
+                }
+                if (ic.op == icode_op::RETURN)
+                    continue;
+                if (!byte_op_preserves_e(ic)) {
+                    safe = false;
+                    break;
+                }
+            }
+            if (!safe)
+                continue;
+            e_candidates.push_back(
+                {tid, iv.first_def, iv.last_use,
+                 1400 + hot_mentions(iv) * 16 -
+                     (iv.last_use - iv.first_def)});
+        }
 
         for (auto &[fd, tid] : order) {
             const interval &iv = ivs[tid];

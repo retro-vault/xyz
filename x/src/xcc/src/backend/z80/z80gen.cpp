@@ -1821,8 +1821,11 @@ bool z80_gen::try_emit_inplace_pointer_update(const ir_function &fn,
     const int64_t delta = step_ic.op == icode_op::ADD
                               ? step_ic.right.ival
                               : -step_ic.right.ival;
-    if (delta == 1 || delta == -1) {
-        emit_line(delta > 0 ? "inc\t%s" : "dec\t%s", reg);
+    if (delta == 1 || delta == -1 ||
+        (home_it->second == temp_home::main_iy &&
+         (delta == 2 || delta == -2))) {
+        for (int64_t step = 0; step < (delta < 0 ? -delta : delta); ++step)
+            emit_line(delta > 0 ? "inc\t%s" : "dec\t%s", reg);
     } else if (home_it->second == temp_home::main_iy) {
         emit_line("ld\tde, %s", asm_.imm(delta).c_str());
         emit_line("add\tiy, de");

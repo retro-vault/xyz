@@ -662,6 +662,16 @@ assembly transformations. The former whole-function structural selector was
 removed after the overfitting audit. `xopt --cross-file` can still optimize
 separately compiled `.s` files as an explicit post-link-style experiment.
 
+The stable backend includes data-flow-guarded register residence for loop
+reductions, dispatch values, and immutable byte arguments; pair-pressure
+scheduling for simple pointer walks; unsigned shift/mask folding; direct word
+producer/store forwarding; and `HL`/`DE` scheduling of consecutive word-load
+and add chains. These transformations are selected from IR shape, liveness,
+CFG edges, and clobber information—not source names or whole-program
+fingerprints. The locked z88dk comparison provides the current external audit:
+both XCC profiles pass 24/24, and `-Of` is strictly fastest on 13/24 programs
+against the best valid current zsdcc/80cc result.
+
 ```
 xcc -O3 main.c util.c -o app.xl
 ```
@@ -769,6 +779,11 @@ feature macros (`__XCC_LIBC_NO_FLOAT`, `__XCC_LIBC_NO_DOUBLE`,
 `__XCC_LIBC_NO_STDIO_FLOAT`) so C and assembly sources can compile out the
 heavy code paths.
 
+An ordinary `make` or `make -C x` build defaults to the middle `M` model.
+Select `X_MODEL=S` for the smallest library or `X_MODEL=L` for the complete
+wide-numeric library; the explicit root targets `x-s`, `x-m`, and `x-l`
+continue to stage all three distributions separately.
+
 | Build switch | Effect |
 |---|---|
 | `X_MODEL=S` | Keep core integer ABI/runtime, file positioning, time, and rand; omit wide numeric formatting/conversion, floating math, and `long long` support |
@@ -781,6 +796,9 @@ heavy code paths.
 | `LIBC_STDIO_FLOAT=0` | Keep `printf`/`scanf` integer-only even when `float` stays enabled elsewhere |
 
 ```
+# Default distribution: the M model
+make
+
 # Smallest libc: the S model
 make clean
 X_MODEL=S make libc stage-xcc-support

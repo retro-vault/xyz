@@ -1,13 +1,56 @@
 # Benchmarks
 
-This project now has two different benchmark flows:
+This project has three benchmark flows:
 
 - a **codegen-only** benchmark that measures translation-unit `_CODE` bytes
   before linking
 - a **bare-metal executable** benchmark that links a tiny `crt0`, runs under
   the Z80 emulator, and records both payload size and cycle count
+- a **shared-z88dk full-program** comparison that links seven compiler lanes
+  against one pinned `+test` CRT and classic library
 
-They answer different questions, so both are worth keeping.
+They answer different questions, so all three are worth keeping.
+
+## Shared-z88dk Full-Program Comparison
+
+Use this flow for the XCC M `-Os`/`-Of` comparison against zsdcc and 80cc.
+It contains 24 self-checking integer programs: the 23 captured z88dk programs
+plus the host-verified packed-bitfield extract/insert workload. It records
+complete linked BIN bytes and upstream `z88dk-ticks` cycles; unlike the
+bare-metal suite, it does not subtract an empty-program baseline.
+
+Prepare and run the fully pinned setup with:
+
+```sh
+x/tests/benchmarks/z88dk24/prepare.sh
+x/tests/benchmarks/z88dk24/run.sh
+```
+
+The supplied reference table is `x/tests/benchmarks/z88dk24/target.csv`.
+`toolchains.lock` independently pins the corpus, old target sysroot, current
+z88dk host tools/zsdcc, active 80cc branch, XCC source commit, M model, and
+ticks machine. The split is intentional: the published sccz80 baseline comes
+from an older z88dk target library, while the compiler comparison uses newer
+compiler executables and their matching rewrite rules.
+
+The lanes are:
+
+- sccz80 historical control
+- XCC M `-Os` and `-Of`
+- current zsdcc, plus `-SO3 --max-allocs-per-node200000` on the six published
+  `sdcc-max` rows
+- current 80cc with `-fframe-pointer` and with its normal stack-pointer frame
+
+The runner validates commits before doing any work and saves compiler hashes,
+versions, raw CSV, maps, logs, and every measured binary. See the suite's
+`README.md` and `RESULTS.md` for compatibility details and current results.
+The bitfield row is deliberately retained as a correctness result. XCC now
+passes it in every profile after repairing CFG spill-slot liveness and guarded
+lowering for `IY`-derived pointer fusions. Current zsdcc still fails it;
+sccz80 and both 80cc modes pass. In the final locked run both XCC lanes pass
+24/24, and `-Of` is strictly fastest on 13/24 rows against the best valid
+zsdcc/80cc result. See `RESULTS.md` for the exact matrix and the structural,
+benchmark-independent optimization rules responsible for the gains.
 
 ## Codegen-Only Benchmark
 

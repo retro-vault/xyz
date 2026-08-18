@@ -1,0 +1,133 @@
+diff --git a/include/sys/compiler.h b/include/sys/compiler.h
+--- a/include/sys/compiler.h
++++ b/include/sys/compiler.h
+@@ -49,11 +49,16 @@
+ #endif
+ 
+ // Make intellisense run easier..
+-#if __clang__ | __CLANG | __XCC
++#if __clang__ | __CLANG
+ #define __STDC_ABI_ONLY
+ #define __smallc
+ #define __z88dk_callee
+ #define __z88dk_fastcall
++#elif __XCC
++#define __STDC_ABI_ONLY
++#define __smallc [[z88dk::smallc]]
++#define __z88dk_callee [[z88dk::callee]]
++#define __z88dk_fastcall [[z88dk::fastcall]]
+ #endif
+ 
+ #else
+diff --git a/lib/xcc_rules.1 b/lib/xcc_rules.1
+--- a/lib/xcc_rules.1
++++ b/lib/xcc_rules.1
+@@ -1,3 +1,27 @@
++%title Preserve XCC data
++%"[ \t]*"0SECTION%"[ \t]+"1bss_compiler
++=
++%0SECTION%1code_compiler
++
++%title XCC enter ix
++	call	__sdcc_enter_ix
++=
++	EXTERN	___sdcc_enter_ix
++	call	___sdcc_enter_ix
++
++%title XCC leave ix
++	jp	__sdcc_leave_ix
++=
++	ld	sp,ix
++	pop	ix
++	ret
++
++%title Rename xcc ___muluint2ulong call to xcc-specific register-ABI helper
++	call	___muluint2ulong
++=
++	EXTERN	___xcc_muluint2ulong
++	call	___xcc_muluint2ulong
++
+ %title Rename xcc __divsint call to xcc-specific alias (avoid stack-based sdcc symbol clash)
+ 	call	__divsint
+ =
+diff --git a/libsrc/l/xcc.lst b/libsrc/l/xcc.lst
+--- a/libsrc/l/xcc.lst
++++ b/libsrc/l/xcc.lst
+@@ -8,3 +8,4 @@ ${NEWLIB_ROOT}l/xcc/__divulong
+ ${NEWLIB_ROOT}l/xcc/__divslong
+ ${NEWLIB_ROOT}l/xcc/__modulong
+ ${NEWLIB_ROOT}l/xcc/__smod32
++${NEWLIB_ROOT}l/xcc/___muluint2ulong
+diff --git a/libsrc/l/xcc/___muluint2ulong.asm b/libsrc/l/xcc/___muluint2ulong.asm
+new file mode 100644
+--- /dev/null
++++ b/libsrc/l/xcc/___muluint2ulong.asm
+@@ -0,0 +1,26 @@
++SECTION code_clib
++SECTION code_l_xcc
++
++PUBLIC ___xcc_muluint2ulong
++
++; XCC sdcccall(1) unsigned 16x16 -> 32 multiply.
++;
++; enter : hl = multiplier, de = multiplicand
++; exit  : de = low word, hl = high word
++; uses  : f, b, de, hl, iy
++
++___xcc_muluint2ulong:
++   ld iy,0
++   ld b,16
++muluint2ulong_loop:
++   add iy,iy
++   adc hl,hl
++   jr nc,muluint2ulong_skip
++   add iy,de
++   jr nc,muluint2ulong_skip
++   inc hl
++muluint2ulong_skip:
++   djnz muluint2ulong_loop
++   push iy
++   pop de
++   ret
+diff --git a/src/zcc/zcc.c b/src/zcc/zcc.c
+--- a/src/zcc/zcc.c
++++ b/src/zcc/zcc.c
+@@ -281,6 +281,7 @@
+ static char           *appmakeargs;
+ static char           *sccz80arg = NULL;
+ static char           *sdccarg = NULL;
++static char           *xccarg = NULL;
+ static char           *m4arg = NULL;
+ static char           *coptarg = NULL;
+ static char           *pragincname = NULL;  /* File containing pragmas to append to zcc_opt.def */
+@@ -570,6 +571,9 @@
+     { 0, "SO", OPT_INT,  "Set the peephole optimiser setting for sdcc-peephole" , &sdccpeepopt, NULL, 0},
+     { 0, "fsigned-char", OPT_BOOL|OPT_DOUBLE_DASH,  "Use signed chars by default" , &sdcc_signed_char, NULL, 0},
+ 
++    { 0, "", OPT_HEADER, "Compiler (xcc) options:", NULL, NULL, 0 },
++    { 0, "Cx", OPT_FUNCTION,  "Add an option to xcc" , &xccarg, AddToArgs, 0},
++
+     { 0, "", OPT_HEADER, "Compiler (ez80-clang) options:", NULL, NULL, 0 },
+     { 0, "Cg", OPT_FUNCTION,  "Add an option to ez80-clang" , &clangarg, AddToArgs, 0},
+ 
+@@ -3130,14 +3134,17 @@ static void configure_compiler(void)
+         BuildOptions(&linkargs, "-D__SDCC");
+     } else if (strcmp(c_compiler_type,"xcc") == 0 ) {
+         compiler_type = CC_XCC;
+-        preprocarg = " -D__XCC";
++        preprocarg = " -D__XCC -D__SDCC";
+         BuildOptions(&cpparg, preprocarg);
+         c_compiler = "xcc";
+         add_option_to_compiler("-S -O2 --sdcccall 0 --c1mode");
++        if (xccarg) {
++            add_option_to_compiler(xccarg);
++        }
+         c_cpp_exe = c_sdcc_preproc_exe;
+         compiler_style = filter_outspecified_flag;
+-        BuildOptions(&asmargs, "-D__XCC");
+-        BuildOptions(&linkargs, "-D__XCC");
++        BuildOptions(&asmargs, "-D__XCC -D__SDCC");
++        BuildOptions(&linkargs, "-D__XCC -D__SDCC");
+     } else if (strcmp(c_compiler_type,"sccz80") == 0 ) {
+         preprocarg = " -DSCCZ80 -DSMALL_C -D__SCCZ80";
+         BuildOptions(&cpparg, preprocarg);

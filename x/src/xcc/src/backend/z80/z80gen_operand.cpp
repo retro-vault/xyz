@@ -627,6 +627,11 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                         emit_line("ld\t%c, c", r.lo);
                         extend_loaded_byte(r.lo, r.hi);
                         return;
+                    case temp_home::main_iy:
+                        emit_line("ld\t%c, %s", r.lo,
+                                  op.byte_offset == 0 ? "iyl" : "iyh");
+                        extend_loaded_byte(r.lo, r.hi);
+                        return;
                     default:
                         break;
                     }
@@ -696,6 +701,11 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
                 case temp_home::main_de:
                     emit_line("ld\t%c, %c", r.lo,
                               op.byte_offset == 0 ? 'e' : 'd');
+                    extend_loaded_byte(r.lo, r.hi);
+                    return;
+                case temp_home::main_iy:
+                    emit_line("ld\t%c, %s", r.lo,
+                              op.byte_offset == 0 ? "iyl" : "iyh");
                     extend_loaded_byte(r.lo, r.hi);
                     return;
                 case temp_home::alt_a:
@@ -964,6 +974,18 @@ void z80_gen::emit_store_rr(const reg_pair &r, const operand &op) {
                 }
                 break;
             }
+            if (symbol_home_in_iy(op) && op.byte_offset == 0) {
+                incoming_symbol_homes_.erase(op.stack_offset);
+                if ((opt_settings_.level == opt_level::Of ||
+                     opt_settings_.level == opt_level::O3) && r.lo != 'l') {
+                    emit_line("ld\tiyh, d");
+                    emit_line("ld\tiyl, e");
+                } else {
+                    emit_line(r.lo == 'l' ? "push\thl" : "push\tde");
+                    emit_line("pop\tiy");
+                }
+                break;
+            }
             incoming_symbol_homes_.erase(op.stack_offset);
             int off = ix_offset_of(op);
             preserves_pair =
@@ -1148,6 +1170,11 @@ void z80_gen::load_a(const operand &op) {
                 emit_line("ld\ta, c");
                 set_a_cache(cache_key);
                 return;
+            case temp_home::main_iy:
+                emit_line("ld\ta, %s",
+                          op.byte_offset == 0 ? "iyl" : "iyh");
+                set_a_cache(cache_key);
+                return;
             default:
                 break;
             }
@@ -1220,6 +1247,11 @@ void z80_gen::load_a(const operand &op) {
                 return;
             case temp_home::main_de:
                 emit_line("ld\ta, %c", op.byte_offset == 0 ? 'e' : 'd');
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_iy:
+                emit_line("ld\ta, %s",
+                          op.byte_offset == 0 ? "iyl" : "iyh");
                 set_a_cache(cache_key);
                 return;
             case temp_home::alt_a:
@@ -1317,6 +1349,11 @@ void z80_gen::store_a(const operand &op) {
                 emit_line("ld\tc, a");
                 set_a_cache(cache_key);
                 return;
+            case temp_home::main_iy:
+                emit_line("ld\t%s, a",
+                          op.byte_offset == 0 ? "iyl" : "iyh");
+                set_a_cache(cache_key);
+                return;
             default:
                 break;
             }
@@ -1349,6 +1386,11 @@ void z80_gen::store_a(const operand &op) {
                 return;
             case temp_home::main_e:
                 emit_line("ld\te, a");
+                set_a_cache(cache_key);
+                return;
+            case temp_home::main_iy:
+                emit_line("ld\t%s, a",
+                          op.byte_offset == 0 ? "iyl" : "iyh");
                 set_a_cache(cache_key);
                 return;
             case temp_home::alt_a:

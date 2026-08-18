@@ -1,4 +1,4 @@
-X_MODEL ?= L
+X_MODEL ?= M
 
 ifneq ($(filter S s,$(X_MODEL)),)
 X_MODEL_NAME := S

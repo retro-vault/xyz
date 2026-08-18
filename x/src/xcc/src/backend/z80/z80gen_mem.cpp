@@ -275,6 +275,8 @@ bool z80_gen::gen_far_set_value_at(const icode &ic) {
 void z80_gen::gen_get_value_at(const icode &ic) {
     if (gen_far_get_value_at(ic))
         return;
+    if (try_emit_word_load_add_chain())
+        return;
     if (ic.result.is_temp()) {
         auto ri = temp_regs_.find(ic.result.temp_id);
         if (ri != temp_regs_.end() &&
@@ -301,6 +303,34 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         ic.left.is_temp() &&
         direct_word_value_.is_temp() &&
         ic.left.temp_id == direct_word_value_.temp_id;
+    auto is_iy_pointer_home = [&](const operand &op) {
+        if (!op.is_temp())
+            return false;
+        auto it = temp_regs_.find(op.temp_id);
+        return it != temp_regs_.end() && it->second == temp_home::main_iy;
+    };
+    auto iy_pointer_displacement = [&](const operand &op, int size,
+                                       int64_t &disp) {
+        if (is_iy_pointer_home(op)) {
+            disp = 0;
+            return true;
+        }
+        if (!op.is_temp())
+            return false;
+        const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
+        if (!def || def->op != icode_op::ADD)
+            return false;
+        const operand *base = &def->left;
+        const operand *offset = &def->right;
+        if (base->kind == operand_kind::INT_CONST)
+            std::swap(base, offset);
+        if (!is_iy_pointer_home(*base) ||
+            offset->kind != operand_kind::INT_CONST ||
+            offset->ival < -128 || offset->ival + size - 1 > 127)
+            return false;
+        disp = offset->ival;
+        return true;
+    };
     operand direct_word_load_ifx_value;
     int direct_word_result_size = op_size(ic.result);
     if (direct_word_result_size <= 0 &&
@@ -348,10 +378,18 @@ void z80_gen::gen_get_value_at(const icode &ic) {
 
             invalidate_pair_cache();
             invalidate_a_cache();
-            load_hl(ic.left);
-            emit_line("ld\te, (hl)");
-            emit_line("inc\thl");
-            emit_line("ld\td, (hl)");
+            int64_t iy_disp = 0;
+            if (iy_pointer_displacement(ic.left, 2, iy_disp)) {
+                emit_line("ld\te, %lld(iy)",
+                          static_cast<long long>(iy_disp));
+                emit_line("ld\td, %lld(iy)",
+                          static_cast<long long>(iy_disp + 1));
+            } else {
+                load_hl(ic.left);
+                emit_line("ld\te, (hl)");
+                emit_line("inc\thl");
+                emit_line("ld\td, (hl)");
+            }
 
             auto mask_byte = [&](const char *reg, unsigned byte_mask) {
                 if (byte_mask == 0xffu)
@@ -420,11 +458,33 @@ void z80_gen::gen_get_value_at(const icode &ic) {
                                    update.result.temp_id)) {
             invalidate_pair_cache();
             invalidate_a_cache();
-            load_hl(ic.left);
-            if (direct_word_result_size == 1) {
+            int64_t iy_disp = 0;
+            const bool iy_indexed = iy_pointer_displacement(
+                ic.left, direct_word_result_size, iy_disp);
+            if (!iy_indexed)
+                load_hl(ic.left);
+            if (direct_word_result_size == 1 && iy_indexed) {
+                for (int64_t step = 0; step < delta; ++step)
+                    emit_line(update.op == icode_op::ADD
+                                  ? "inc\t%lld(iy)"
+                                  : "dec\t%lld(iy)",
+                              static_cast<long long>(iy_disp));
+            } else if (direct_word_result_size == 1) {
                 for (int64_t step = 0; step < delta; ++step)
                     emit_line(update.op == icode_op::ADD ? "inc\t(hl)"
                                                          : "dec\t(hl)");
+            } else if (iy_indexed) {
+                emit_line("ld\te, %lld(iy)",
+                          static_cast<long long>(iy_disp));
+                emit_line("ld\td, %lld(iy)",
+                          static_cast<long long>(iy_disp + 1));
+                for (int64_t step = 0; step < delta; ++step)
+                    emit_line(update.op == icode_op::ADD ? "inc\tde"
+                                                         : "dec\tde");
+                emit_line("ld\t%lld(iy), e",
+                          static_cast<long long>(iy_disp));
+                emit_line("ld\t%lld(iy), d",
+                          static_cast<long long>(iy_disp + 1));
             } else {
                 emit_line("ld\te, (hl)");
                 emit_line("inc\thl");
@@ -655,34 +715,6 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         }
         return false;
     };
-    auto is_iy_pointer_home = [&](const operand &op) {
-        if (!op.is_temp())
-            return false;
-        auto it = temp_regs_.find(op.temp_id);
-        return it != temp_regs_.end() && it->second == temp_home::main_iy;
-    };
-    auto iy_pointer_displacement = [&](const operand &op, int size,
-                                       int64_t &disp) {
-        if (is_iy_pointer_home(op)) {
-            disp = 0;
-            return true;
-        }
-        if (!op.is_temp())
-            return false;
-        const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
-        if (!def || def->op != icode_op::ADD)
-            return false;
-        const operand *base = &def->left;
-        const operand *offset = &def->right;
-        if (base->kind == operand_kind::INT_CONST)
-            std::swap(base, offset);
-        if (!is_iy_pointer_home(*base) ||
-            offset->kind != operand_kind::INT_CONST ||
-            offset->ival < -128 || offset->ival + size - 1 > 127)
-            return false;
-        disp = offset->ival;
-        return true;
-    };
     if (ic.left.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         (op_size(ic.result) == 1 || op_size(ic.result) == 2)) {
@@ -809,6 +841,12 @@ void z80_gen::gen_get_value_at(const icode &ic) {
             result_home != temp_regs_.end() &&
             result_home->second == temp_home::main_bc &&
             !direct_word_load_ifx && !direct_word_forward;
+        const bool direct_to_hl =
+            result_home != temp_regs_.end() &&
+            result_home->second == temp_home::main_hl &&
+            ic.result.is_temp() &&
+            iy_de_reduction_hl_loads_.count(ic.result.temp_id) != 0 &&
+            !direct_word_load_ifx && !direct_word_forward;
         if (direct_to_bc) {
             // Honour the allocator's destination pair instead of loading
             // through DE and copying the value afterwards.  Besides saving
@@ -816,6 +854,9 @@ void z80_gen::gen_get_value_at(const icode &ic) {
             // word live range in pointer-walking loops.
             emit_line("ld\tc, %lld(iy)", static_cast<long long>(iy_disp));
             emit_line("ld\tb, %lld(iy)", static_cast<long long>(iy_disp + 1));
+        } else if (direct_to_hl) {
+            emit_line("ld\tl, %lld(iy)", static_cast<long long>(iy_disp));
+            emit_line("ld\th, %lld(iy)", static_cast<long long>(iy_disp + 1));
         } else {
             emit_line("ld\te, %lld(iy)", static_cast<long long>(iy_disp));
             emit_line("ld\td, %lld(iy)", static_cast<long long>(iy_disp + 1));
@@ -830,7 +871,7 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         } else if (direct_word_forward) {
             direct_word_value_pending_ = true;
             direct_word_value_ = ic.result;
-        } else if (!direct_to_bc) {
+        } else if (!direct_to_bc && !direct_to_hl) {
             store_de(ic.result);
         }
         return;
@@ -913,6 +954,209 @@ void z80_gen::gen_get_value_at(const icode &ic) {
             store_de(ic.result);
         }
     }
+}
+
+bool z80_gen::try_finish_direct_hl_iy_store(const operand &value)
+{
+    if (!cur_fn_ || !value.is_temp() || op_size(value) != 2 ||
+        cur_ic_index_ + 1 >= cur_fn_->icodes.size()) {
+        return false;
+    }
+
+    const icode &store = cur_fn_->icodes[cur_ic_index_ + 1];
+    if (store.op != icode_op::SET_VALUE_AT ||
+        !store.left.is_temp() ||
+        store.left.temp_id != value.temp_id ||
+        !store.result.is_temp() || !store.right.is_none() ||
+        temp_value_used_after(*cur_fn_, cur_ic_index_ + 2, value.temp_id)) {
+        return false;
+    }
+
+    auto is_iy_home = [&](const operand &op) {
+        if (!op.is_temp() || op.byte_offset != 0)
+            return false;
+        auto home = temp_regs_.find(op.temp_id);
+        return home != temp_regs_.end() &&
+               home->second == temp_home::main_iy;
+    };
+
+    int64_t displacement = 0;
+    bool direct_iy = is_iy_home(store.result);
+    if (!direct_iy) {
+        const icode *def =
+            find_temp_def_before(store.result.temp_id, cur_ic_index_ + 1);
+        if (def && (def->op == icode_op::ADD ||
+                    def->op == icode_op::SUB)) {
+            const operand *base = &def->left;
+            const operand *offset = &def->right;
+            if (def->op == icode_op::ADD &&
+                base->kind == operand_kind::INT_CONST)
+                std::swap(base, offset);
+            if (is_iy_home(*base) &&
+                offset->kind == operand_kind::INT_CONST) {
+                displacement = def->op == icode_op::SUB
+                                   ? -offset->ival
+                                   : offset->ival;
+                direct_iy = true;
+            }
+        }
+    }
+    displacement += store.result.byte_offset;
+    if (direct_iy && displacement >= -128 && displacement + 1 <= 127) {
+        emit_line("ld\t%lld(iy), l",
+                  static_cast<long long>(displacement));
+        emit_line("ld\t%lld(iy), h",
+                  static_cast<long long>(displacement + 1));
+    } else {
+        // Preserve the computed value while materialising an arbitrary near
+        // destination pointer.  This still avoids the producer's frame store
+        // and the consumer's frame reload.
+        emit_line("push\thl");
+        load_hl(store.result);
+        emit_line("pop\tde");
+        emit_line("ld\t(hl), e");
+        emit_line("inc\thl");
+        emit_line("ld\t(hl), d");
+    }
+    skipped_icodes_.insert(cur_ic_index_ + 1);
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    return true;
+}
+
+bool z80_gen::try_emit_word_load_add_chain()
+{
+    if (!cur_fn_ || cur_ic_index_ >= cur_fn_->icodes.size())
+        return false;
+
+    const icode &first = cur_fn_->icodes[cur_ic_index_];
+    if (first.op != icode_op::GET_VALUE_AT || !first.result.is_temp() ||
+        op_size(first.result) != 2 || !first.right.is_none() ||
+        !first.left.type || !first.left.type->is_ptr() ||
+        first.left.type->is_far_ptr()) {
+        return false;
+    }
+
+    struct chain_load {
+        size_t index;
+        const icode *load;
+        const icode *add;
+    };
+    std::vector<chain_load> tail;
+    operand chain = first.result;
+    size_t scan = cur_ic_index_ + 1;
+    while (scan + 1 < cur_fn_->icodes.size()) {
+        const icode &load = cur_fn_->icodes[scan];
+        const icode &add = cur_fn_->icodes[scan + 1];
+        if (load.op != icode_op::GET_VALUE_AT ||
+            !load.result.is_temp() || op_size(load.result) != 2 ||
+            !load.right.is_none() || !load.left.type ||
+            !load.left.type->is_ptr() || load.left.type->is_far_ptr() ||
+            add.op != icode_op::ADD || !add.result.is_temp() ||
+            op_size(add.result) != 2) {
+            break;
+        }
+        const bool chain_left = add.left.is_temp() && chain.is_temp() &&
+                                add.left.temp_id == chain.temp_id;
+        const bool chain_right = add.right.is_temp() && chain.is_temp() &&
+                                 add.right.temp_id == chain.temp_id;
+        const bool load_left = add.left.is_temp() &&
+                               add.left.temp_id == load.result.temp_id;
+        const bool load_right = add.right.is_temp() &&
+                                add.right.temp_id == load.result.temp_id;
+        if (chain_left == chain_right || load_left == load_right ||
+            chain_left == load_left ||
+            temp_value_used_after(*cur_fn_, scan + 2, chain.temp_id) ||
+            temp_value_used_after(*cur_fn_, scan + 2,
+                                  load.result.temp_id)) {
+            break;
+        }
+        tail.push_back({scan, &load, &add});
+        chain = add.result;
+        scan += 2;
+    }
+    if (tail.size() < 2)
+        return false;
+
+    auto iy_displacement = [&](const operand &pointer, size_t before,
+                               int64_t &disp) {
+        auto is_iy = [&](const operand &op) {
+            if (!op.is_temp() || op.byte_offset != 0)
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            return home != temp_regs_.end() &&
+                   home->second == temp_home::main_iy;
+        };
+        if (is_iy(pointer)) {
+            disp = pointer.byte_offset;
+            return true;
+        }
+        if (!pointer.is_temp())
+            return false;
+        const icode *def = find_temp_def_before(pointer.temp_id, before);
+        if (!def || (def->op != icode_op::ADD &&
+                     def->op != icode_op::SUB))
+            return false;
+        const operand *base = &def->left;
+        const operand *offset = &def->right;
+        if (def->op == icode_op::ADD &&
+            base->kind == operand_kind::INT_CONST)
+            std::swap(base, offset);
+        if (!is_iy(*base) || offset->kind != operand_kind::INT_CONST)
+            return false;
+        disp = (def->op == icode_op::SUB ? -offset->ival : offset->ival) +
+               pointer.byte_offset;
+        return disp >= -128 && disp + 1 <= 127;
+    };
+
+    auto emit_first_load = [&](const icode &load, size_t index) {
+        int64_t disp = 0;
+        if (iy_displacement(load.left, index, disp)) {
+            emit_line("ld\tl, %lld(iy)", static_cast<long long>(disp));
+            emit_line("ld\th, %lld(iy)", static_cast<long long>(disp + 1));
+            return;
+        }
+        load_hl(load.left);
+        emit_line("ld\te, (hl)");
+        emit_line("inc\thl");
+        emit_line("ld\td, (hl)");
+        emit_line("ex\tde, hl");
+    };
+    auto emit_add_load = [&](const icode &load, size_t index) {
+        int64_t disp = 0;
+        if (iy_displacement(load.left, index, disp)) {
+            emit_line("ld\te, %lld(iy)", static_cast<long long>(disp));
+            emit_line("ld\td, %lld(iy)", static_cast<long long>(disp + 1));
+        } else {
+            emit_line("push\thl");
+            load_hl(load.left);
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            emit_line("pop\thl");
+        }
+        emit_line("add\thl, de");
+    };
+
+    const size_t original_index = cur_ic_index_;
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    emit_first_load(first, original_index);
+    for (const chain_load &item : tail) {
+        cur_ic_index_ = item.index;
+        emit_add_load(*item.load, item.index);
+    }
+    cur_ic_index_ = original_index + tail.size() * 2;
+    if (!try_finish_direct_hl_iy_store(chain))
+        store_hl(chain);
+    for (size_t skipped = original_index + 1;
+         skipped <= original_index + tail.size() * 2; ++skipped) {
+        skipped_icodes_.insert(skipped);
+    }
+    cur_ic_index_ = original_index;
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    return true;
 }
 
 void z80_gen::gen_block_fill(const icode &ic) {

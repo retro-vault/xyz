@@ -20,7 +20,9 @@
         .globl    _query_service
         .globl    _query_interface
         .globl    ___sdcc_call_hl
+        .globl    __sdcc_call_hl
         .globl    ___sdcc_call_iy
+        .globl    __sdcc_call_iy
 
         ;; _CODE must be the first area so _entry lands at offset 0.
         ;; The OS loader uses the XL header entry_point to jump here.
@@ -61,9 +63,11 @@ _query_interface::
         ;; Returns:
         ;;   returns as if target was called directly
 ___sdcc_call_hl::
+__sdcc_call_hl::
         jp        (hl)
 
 ___sdcc_call_iy::
+__sdcc_call_iy::
         push      iy
         ret
 

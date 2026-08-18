@@ -21,7 +21,12 @@ ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
 X_ROOT="$ROOT/x"
 Y_ROOT="$ROOT/y"
 BIN="$ROOT/bin/x/bin"
-XCC="$BIN/xcc"
+# The ordinary install prefix is the medium model.  This runner deliberately
+# exercises the unfiltered language/library surface, including double and
+# long long, so compile those phases with the separately staged L model.
+# Model-specific coverage remains in `make test-x-models`.
+FULL_BIN="${E2E_FULL_BIN:-$ROOT/bin/x-l/bin}"
+XCC="${E2E_XCC:-$FULL_BIN/xcc}"
 XAS="$BIN/xas"
 XAR="$BIN/xar"
 XLD="$BIN/xld"
@@ -128,6 +133,10 @@ phase_build() {
             ok=false
         fi
     done
+    if ! make -C "$ROOT" x-l -j"$(nproc)"; then
+        echo "${RED}FAILED${RESET}: large-model distribution"
+        ok=false
+    fi
     $ok
 }
 
@@ -179,6 +188,7 @@ phase_xcc_metadata() {
 phase_c23() {
     make -C "$X_ROOT/tests/tests/c23" matrix \
         PROFILE=setups/xcc-z80/profile-xcc-z80.json \
+        XCC="$XCC" \
         RUN_MODE=auto
 }
 

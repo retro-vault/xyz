@@ -6,62 +6,225 @@ CORPUS="$ROOT/x/tests/benchmarks/z88dk24"
 UPSTREAM="$CORPUS/upstream"
 FRAMEWORK="$CORPUS/framework"
 MANIFEST="$CORPUS/manifest.tsv"
-XCC="${XCC:-$ROOT/bin/x/bin/xcc}"
-Z88DK="${Z88DK:-$ROOT/orig/z88dk}"
-ZCC="$Z88DK/bin/zcc"
-XCC_SHIM="${XCC_SHIM:-}"
-RUNNER="$ROOT/build/bin/z80_exec"
-OUT="${OUT:-$ROOT/build/x/benchmarks/z88dk24}"
-CYCLES="${CYCLES:-800000000}"
+LOCK="$CORPUS/toolchains.lock"
+
+# shellcheck disable=SC1090
+source "$LOCK"
+
+Z88DK_BASE="${Z88DK_BASE:-$ROOT/build/toolchains/z88dk-benchmark-base}"
+Z88DK_NIGHTLY="${Z88DK_NIGHTLY:-$ROOT/build/toolchains/z88dk-nightly}"
+Z88DK_80CC="${Z88DK_80CC:-$ROOT/build/toolchains/z88dk-80cc-latest}"
+XCC="${XCC:-$ROOT/bin/x-m/bin/xcc}"
+OUT="${OUT:-$ROOT/build/x/benchmarks/z88dk24-nightly-m}"
 FILTER="${FILTER:-}"
-ARTIFACTS=""
+LANES="${LANES:-sccz80,xcc_Os,xcc_Of,sdcc,sdcc_max,80cc_fp,80cc_sp}"
+ALLOW_UNLOCKED="${ALLOW_UNLOCKED:-0}"
+REPORT_ONLY=0
+MACHINE="${MACHINE:-$TICKS_MACHINE}"
+BUDGET="${BUDGET:-$TICKS_BUDGET}"
 
 usage() {
-    echo "usage: $0 [--filter REGEX] [--cycles N] [--outdir DIR] [--xcc PATH] [--z88dk DIR]"
+    cat <<EOF
+usage: $0 [options]
+  --filter REGEX       run matching benchmarks only
+  --lanes LIST         comma-separated lane names
+  --outdir DIR         result directory
+  --xcc PATH           M-model xcc executable
+  --base DIR           pinned z88dk CRT/library checkout
+  --nightly DIR        pinned nightly z88dk checkout
+  --80cc DIR           pinned latest-80cc checkout
+  --machine NAME       z88dk-ticks machine (default: $TICKS_MACHINE)
+  --budget N           z88dk-ticks -w value (default: $TICKS_BUDGET)
+  --report-only        regenerate versions.txt and summary.md from results.csv
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
     --filter) FILTER="$2"; shift 2 ;;
-    --cycles) CYCLES="$2"; shift 2 ;;
+    --lanes) LANES="$2"; shift 2 ;;
     --outdir) OUT="$2"; shift 2 ;;
     --xcc) XCC="$2"; shift 2 ;;
-    --z88dk) Z88DK="$2"; ZCC="$2/bin/zcc"; shift 2 ;;
+    --base) Z88DK_BASE="$2"; shift 2 ;;
+    --nightly) Z88DK_NIGHTLY="$2"; shift 2 ;;
+    --80cc) Z88DK_80CC="$2"; shift 2 ;;
+    --machine) MACHINE="$2"; shift 2 ;;
+    --budget) BUDGET="$2"; shift 2 ;;
+    --report-only) REPORT_ONLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
 done
 
-# Each program is executed from its work directory so fixtures remain local.
-# Normalize a caller-provided relative output path before that directory
-# change; otherwise the runner looks for work/work/.../program.bin and every
-# compiler is incorrectly reported as hanging.
-if [[ "$OUT" != /* ]]; then
-    OUT="$ROOT/$OUT"
-fi
-[[ "$OUT" != / && "$OUT" != "$ROOT" ]] || {
-    echo "refusing unsafe output directory: $OUT" >&2
+abspath() {
+    local path="$1"
+    if [[ "$path" = /* ]]; then
+        printf '%s\n' "$path"
+    else
+        printf '%s/%s\n' "$ROOT" "$path"
+    fi
+}
+
+XCC="$(abspath "$XCC")"
+Z88DK_BASE="$(abspath "$Z88DK_BASE")"
+Z88DK_NIGHTLY="$(abspath "$Z88DK_NIGHTLY")"
+Z88DK_80CC="$(abspath "$Z88DK_80CC")"
+OUT="$(abspath "$OUT")"
+
+[[ "$X_MODEL" == M ]] || {
+    echo "locked comparison requires X_MODEL=M, got $X_MODEL" >&2
     exit 2
 }
-if [[ -z "$XCC_SHIM" ]]; then
-    XCC_SHIM="$Z88DK/lib/xcc_benchmark_shim.o"
-fi
-
-[[ -x "$XCC" ]] || { echo "missing xcc: $XCC (run: make -C x)" >&2; exit 2; }
-XCC="$(cd -- "$(dirname -- "$XCC")" && pwd -P)/$(basename -- "$XCC")"
-[[ -x "$ZCC" ]] || { echo "missing z88dk zcc: $ZCC" >&2; exit 2; }
-[[ -f "$XCC_SHIM" ]] || {
-    echo "missing patched-z88dk XCC shim: $XCC_SHIM" >&2
+[[ -x "$XCC" ]] || {
+    echo "missing M-model xcc: $XCC (run: make x-m)" >&2
     exit 2
 }
-[[ -x "$RUNNER" ]] || { echo "missing runner: $RUNNER" >&2; exit 2; }
+[[ -x "$Z88DK_BASE/bin/zcc" ]] || {
+    echo "missing base z88dk: $Z88DK_BASE" >&2
+    exit 2
+}
+[[ -x "$Z88DK_NIGHTLY/bin/zcc" ]] || {
+    echo "missing nightly z88dk: $Z88DK_NIGHTLY" >&2
+    exit 2
+}
+[[ -x "$Z88DK_NIGHTLY/bin/z88dk-zsdcc" ]] || {
+    echo "missing nightly zsdcc; run prepare.sh or build bin/z88dk-zsdcc" >&2
+    exit 2
+}
+[[ -x "$Z88DK_NIGHTLY/bin/z88dk-ticks" ]] || {
+    echo "missing nightly z88dk-ticks: $Z88DK_NIGHTLY/bin/z88dk-ticks" >&2
+    exit 2
+}
 
+CC80="$Z88DK_80CC/bin/z88dk-80cc"
+[[ -x "$CC80" ]] || CC80="$Z88DK_80CC/src/80cc/z88dk-80cc"
+[[ -x "$CC80" ]] || {
+    echo "missing latest 80cc in $Z88DK_80CC" >&2
+    exit 2
+}
+
+check_commit() {
+    local dir="$1" expected="$2" label="$3" actual
+    actual="$(git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "$actual" != "$expected" ]]; then
+        if [[ "$ALLOW_UNLOCKED" == 1 ]]; then
+            echo "warning: $label is $actual, lock requires $expected" >&2
+        else
+            echo "$label commit mismatch: $actual (required $expected)" >&2
+            echo "set ALLOW_UNLOCKED=1 only for an intentionally unpinned run" >&2
+            exit 2
+        fi
+    fi
+}
+
+check_commit "$Z88DK_BASE" "$Z88DK_BASE_COMMIT" "z88dk base"
+check_commit "$Z88DK_NIGHTLY" "$Z88DK_NIGHTLY_COMMIT" "z88dk nightly"
+check_commit "$Z88DK_80CC" "$Z88DK_80CC_COMMIT" "80cc"
+check_commit "$ROOT" "$XCC_COMMIT" "XCC source tree"
+
+corpus_hash="$({
+    cd "$CORPUS"
+    sha256sum manifest.tsv framework/test.c framework/test.h \
+        upstream/md5/md5test.bin.b64
+    while IFS=$'\t' read -r _ rel; do
+        sha256sum "upstream/$rel"
+    done < manifest.tsv
+} | LC_ALL=C sort | sha256sum | awk '{print $1}')"
+[[ "$corpus_hash" == "$CORPUS_SHA256" ]] || {
+    echo "benchmark corpus hash mismatch: $corpus_hash" >&2
+    echo "required: $CORPUS_SHA256" >&2
+    exit 2
+}
+
+write_report() {
+    local results="$OUT/results.csv"
+    [[ -f "$results" ]] || {
+        echo "missing result file for --report-only: $results" >&2
+        return 2
+    }
+    {
+        printf 'corpus_commit=%s\n' "$CORPUS_COMMIT"
+        printf 'corpus_sha256=%s\n' "$CORPUS_SHA256"
+        printf 'z88dk_base_commit=%s\n' "$Z88DK_BASE_COMMIT"
+        printf 'z88dk_nightly_commit=%s\n' "$Z88DK_NIGHTLY_COMMIT"
+        printf 'z88dk_80cc_commit=%s\n' "$Z88DK_80CC_COMMIT"
+        printf 'zsdcc_revision=%s\n' "$ZSDCC_REVISION"
+        printf 'xcc_commit=%s\n' "$XCC_COMMIT"
+        printf 'x_model=%s\n' "$X_MODEL"
+        printf 'machine=%s\n' "$MACHINE"
+        printf 'budget=%s\n' "$BUDGET"
+        printf 'lanes=%s\n' "$LANES"
+        sha256sum "$XCC" "$Z88DK_BASE/bin/zcc" "$Z88DK_NIGHTLY/bin/zcc" \
+            "$Z88DK_NIGHTLY/bin/z88dk-zsdcc" "$CC80" \
+            "$Z88DK_NIGHTLY/bin/z88dk-ticks"
+        "$XCC" --version 2>&1 || true
+        "$Z88DK_NIGHTLY/bin/z88dk-zsdcc" --version 2>&1 | head -5 || true
+        "$CC80" --version 2>&1 | head -5 || true
+    } > "$OUT/versions.txt"
+    python3 "$CORPUS/render.py" "$results" "$OUT/summary.md" "$CORPUS/target.csv"
+}
+
+if [[ "$REPORT_ONLY" == 1 ]]; then
+    write_report
+    cat "$OUT/summary.md"
+    exit 0
+fi
+
+case "$OUT" in
+    /|"$ROOT") echo "refusing unsafe output directory: $OUT" >&2; exit 2 ;;
+esac
 rm -rf "$OUT"
-mkdir -p "$OUT/work"
-mkdir -p "$OUT/artifacts"
-ARTIFACTS="$OUT/artifacts"
+mkdir -p "$OUT/work" "$OUT/artifacts" "$OUT/toolchain/bin" \
+    "$OUT/base-bin"
+
+# The older zcc also resolves its selected compiler next to argv[0].  Give it
+# a private facade containing the frozen host tools plus the explicitly
+# selected M-model XCC; do not modify the clean base checkout.
+for tool in "$Z88DK_BASE"/bin/*; do
+    [[ -f "$tool" && -x "$tool" ]] || continue
+    ln -s "$tool" "$OUT/base-bin/$(basename "$tool")"
+done
+ln -sfn "$XCC" "$OUT/base-bin/xcc"
+XCC_ZCC="$OUT/base-bin/zcc"
+
+# Build an overlay sysroot: target headers, CRT and libraries stay on the
+# frozen base, while compiler-specific rewrite rules follow the compiler that
+# emits the assembly.  New zsdcc output is not valid with the old sdcc rules.
+mkdir -p "$OUT/toolchain/lib"
+for item in "$Z88DK_BASE"/lib/*; do
+    ln -s "$item" "$OUT/toolchain/lib/$(basename "$item")"
+done
+rm "$OUT/toolchain/lib/config"
+cp -R "$Z88DK_BASE/lib/config" "$OUT/toolchain/lib/config"
+ln -s "$Z88DK_BASE/include" "$OUT/toolchain/include"
+ln -sfn "$Z88DK_NIGHTLY/lib/sdcc" "$OUT/toolchain/lib/sdcc"
+ln -sfn "$Z88DK_NIGHTLY/lib/z80rules.9" "$OUT/toolchain/lib/z80rules.9"
+ln -sfn "$Z88DK_80CC/lib/80cc_rules.1" "$OUT/toolchain/lib/80cc_rules.1"
+HYBRID_ZCCCFG="$OUT/toolchain/lib/config"
+
+# zcc resolves its compiler and helper programs next to argv[0].  This small
+# facade keeps the nightly tools intact and substitutes only the separately
+# pinned latest 80cc executable.
+for tool in "$Z88DK_NIGHTLY"/bin/*; do
+    [[ -f "$tool" && -x "$tool" ]] || continue
+    ln -s "$tool" "$OUT/toolchain/bin/$(basename "$tool")"
+done
+ln -sfn "$CC80" "$OUT/toolchain/bin/z88dk-80cc"
+NIGHTLY_ZCC="$OUT/toolchain/bin/zcc"
+TICKS="$Z88DK_NIGHTLY/bin/z88dk-ticks"
+
+cp "$CORPUS/compat/xcc_benchmark_shim.asm" "$OUT/toolchain/xcc_benchmark_shim.asm"
+"$Z88DK_BASE/bin/z88dk-z80asm" -s -mz80 \
+    -o="$OUT/toolchain/xcc_benchmark_shim.o" \
+    "$OUT/toolchain/xcc_benchmark_shim.asm"
+XCC_SHIM="$OUT/toolchain/xcc_benchmark_shim.o"
+
 RESULTS="$OUT/results.csv"
-printf 'benchmark,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles\n' > "$RESULTS"
+printf '%s\n' 'benchmark,sccz80_status,sccz80_bytes,sccz80_cycles,xcc_Os_status,xcc_Os_bytes,xcc_Os_cycles,xcc_Of_status,xcc_Of_bytes,xcc_Of_cycles,sdcc_status,sdcc_bytes,sdcc_cycles,sdcc_max_status,sdcc_max_bytes,sdcc_max_cycles,80cc_fp_status,80cc_fp_bytes,80cc_fp_cycles,80cc_sp_status,80cc_sp_bytes,80cc_sp_cycles' > "$RESULTS"
+
+lane_enabled() {
+    [[ ",$LANES," == *",$1,"* ]]
+}
 
 decode_fixture() {
     local src="$1" dst="$2"
@@ -71,61 +234,69 @@ decode_fixture() {
 
 stage_sources() {
     local src="$1" work="$2"
-    local local_src
     cp "$FRAMEWORK/test.c" "$work/test.c"
     cp "$FRAMEWORK/test.h" "$work/test.h"
-    local_src="$(basename "$src")"
-    cp "$src" "$work/$local_src"
-    if [[ "$src" == "$CORPUS/compat/md5.c" ]]; then
-        cp "$UPSTREAM/md5/md5sum.c" "$work/md5sum.c"
-    fi
-    printf '%s\n' "$local_src"
+    cp "$src" "$work/$(basename "$src")"
+    printf '%s\n' "$(basename "$src")"
 }
 
-run_z88dk_mode() {
-    local name="$1" rel="$2" label="$3" flags="$4" work="$5"
-    local src="$UPSTREAM/$rel" bin="$work/$label.bin"
-    local log="$work/$label.build.log" run_log="$work/$label.run.log"
-    local output="$work/$label.output" summary status bytes cycles ret done
-    local artifact_dir local_src
-    local -a args
-    local -a extra_sources=()
+run_mode() {
+    local name="$1" rel="$2" lane="$3" zcc="$4" flags="$5" work="$6"
+    local src="$UPSTREAM/$rel" bin="$work/$lane.bin"
+    local build_log="$work/$lane.build.log" run_log="$work/$lane.run.log"
+    local local_src result ticks failed status bytes artifact_dir
+    local -a args extra_sources=()
+
+    if ! lane_enabled "$lane"; then
+        printf 'SKIP,0,0\n'
+        return
+    fi
+    if [[ "$lane" == sdcc_max ]] &&
+       [[ ! "$name" =~ ^(charbench|crcbench|intbench|ptrbench|md5|sieve)$ ]]; then
+        printf 'SKIP,0,0\n'
+        return
+    fi
+
     read -r -a args <<< "$flags"
     local_src="$(stage_sources "$src" "$work")"
-    if [[ "$label" == xcc_* ]]; then
+    if [[ "$lane" == xcc_* ]]; then
         args+=('-D__preserves_regs\(...\)=')
         extra_sources+=("$XCC_SHIM")
     fi
-    if ! (cd "$work" && env ZCCCFG="$Z88DK/lib/config" \
-        PATH="$(dirname "$XCC"):$Z88DK/bin:$PATH" zcc +test -vn "${args[@]}" \
+
+    local zcccfg="$Z88DK_BASE/lib/config"
+    [[ "$zcc" == "$NIGHTLY_ZCC" ]] && zcccfg="$HYBRID_ZCCCFG"
+    if ! (cd "$work" && env \
+        ZCCCFG="$zcccfg" \
+        PATH="$(dirname "$XCC"):$(dirname "$zcc"):$PATH" \
+        "$zcc" +test -vn "${args[@]}" \
         -I. -DNO_LOG_RUNNING -DNO_LOG_PASSED \
-        test.c "$local_src" "${extra_sources[@]}" -o "$bin" -m) >"$log" 2>&1; then
-        printf 'BUILD,0,0\n'; return
+        test.c "$local_src" "${extra_sources[@]}" -o "$bin" -m) \
+        >"$build_log" 2>&1; then
+        printf 'BUILD,0,0\n'
+        return
     fi
-    artifact_dir="$ARTIFACTS/$name/$label"
+
+    bytes="$(wc -c < "$bin" | tr -d ' ')"
+    artifact_dir="$OUT/artifacts/$name/$lane"
     mkdir -p "$artifact_dir"
     cp "$bin" "$artifact_dir/program.bin"
-    bytes="$(wc -c < "$bin" | tr -d ' ')"
+
     set +e
-    summary="$(cd "$work" && "$RUNNER" --bin --z88dk-trap \
-        --cycles "$CYCLES" --fs-root "$work" --stdout "$output" "$bin" 2>&1)"
+    result="$(cd "$work" && "$TICKS" -w "$BUDGET" -b "$MACHINE" "$bin" 2>&1)"
     set -e
-    printf '%s\n' "$summary" > "$run_log"
-    done="$(sed -n 's/.*done=\([0-9][0-9]*\).*/\1/p' <<< "$summary" | tail -1)"
-    ret="$(sed -n 's/.*return=\([0-9][0-9]*\).*/\1/p' <<< "$summary" | tail -1)"
-    cycles="$(sed -n 's/.*cycles=\([0-9][0-9]*\).*/\1/p' <<< "$summary" | tail -1)"
-    if [[ "$done" == 1 && "$ret" == 0 ]] &&
-        grep -qE '[0-9]+ run, [0-9]+ passed, 0 failed' "$output"; then
+    printf '%s\n' "$result" > "$run_log"
+    ticks="$(sed -n 's/^Ticks: \([0-9][0-9]*\)$/\1/p' <<< "$result" | tail -1)"
+    failed="$(sed -n 's/.*passed, \([0-9][0-9]*\) failed.*/\1/p' <<< "$result" | tail -1)"
+
+    if [[ -n "$ticks" && "${failed:-}" == 0 ]]; then
         status=OK
-    elif [[ "$done" == 1 ]] &&
-        grep -qE '[1-9][0-9]* failed' "$output"; then
+    elif [[ -n "$ticks" && -n "${failed:-}" && "$failed" != 0 ]]; then
         status=FAIL
-    elif [[ "$done" != 1 || -z "$cycles" ]]; then
-        status=HANG
     else
         status=ERROR
     fi
-    printf '%s,%s,%s\n' "$status" "$bytes" "${cycles:-0}"
+    printf '%s,%s,%s\n' "$status" "$bytes" "${ticks:-0}"
 }
 
 while IFS=$'\t' read -r name rel; do
@@ -137,15 +308,17 @@ while IFS=$'\t' read -r name rel; do
         decode_fixture "$UPSTREAM/md5/md5test.bin.b64" "$work/md5test.bin"
     fi
     echo "z88dk24: $name"
-    xos="$(run_z88dk_mode "$name" "$rel" xcc_Os '-compiler=xcc -Cx-Os' "$work")"
-    xof="$(run_z88dk_mode "$name" "$rel" xcc_Of '-compiler=xcc -Cx-Of' "$work")"
-    sdc="$(run_z88dk_mode "$name" "$rel" sdcc '-compiler=sdcc' "$work")"
-    ofp="$(run_z88dk_mode "$name" "$rel" 80cc_fp '-compiler=80cc -Cc-frameix' "$work")"
-    osp="$(run_z88dk_mode "$name" "$rel" 80cc_sp '-compiler=80cc' "$work")"
-    printf '%s,%s,%s,%s,%s,%s\n' \
-        "$name" "$xos" "$xof" "$sdc" "$ofp" "$osp" \
+    scc="$(run_mode "$name" "$rel" sccz80 "$Z88DK_BASE/bin/zcc" '-compiler=sccz80' "$work")"
+    xos="$(run_mode "$name" "$rel" xcc_Os "$XCC_ZCC" '-compiler=xcc -Cx-Os' "$work")"
+    xof="$(run_mode "$name" "$rel" xcc_Of "$XCC_ZCC" '-compiler=xcc -Cx-Of' "$work")"
+    sdc="$(run_mode "$name" "$rel" sdcc "$NIGHTLY_ZCC" '-compiler=sdcc' "$work")"
+    sdm="$(run_mode "$name" "$rel" sdcc_max "$NIGHTLY_ZCC" '-compiler=sdcc -SO3 --max-allocs-per-node200000' "$work")"
+    ofp="$(run_mode "$name" "$rel" 80cc_fp "$NIGHTLY_ZCC" '-compiler=80cc -Cc-fframe-pointer' "$work")"
+    osp="$(run_mode "$name" "$rel" 80cc_sp "$NIGHTLY_ZCC" '-compiler=80cc' "$work")"
+    printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        "$name" "$scc" "$xos" "$xof" "$sdc" "$sdm" "$ofp" "$osp" \
         >> "$RESULTS"
 done < "$MANIFEST"
 
-python3 "$CORPUS/render.py" "$RESULTS" "$OUT/summary.md"
+write_report
 cat "$OUT/summary.md"

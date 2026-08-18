@@ -2,6 +2,7 @@ CC ?= gcc
 PROFILE ?=
 PYTHON ?= python3
 RUN_MODE ?= auto
+XCC ?=
 
 .PHONY: generate matrix matrix-sdcc-z80 corpus test clean
 
@@ -11,6 +12,7 @@ generate:
 matrix: generate
 	$(PYTHON) tests/scripts/run_matrix.py \
 		$(if $(PROFILE),--profile $(PROFILE),--compiler $(CC)) \
+		$(if $(XCC),--compiler $(XCC)) \
 		--run-mode $(RUN_MODE)
 
 matrix-sdcc-z80: generate
@@ -19,7 +21,7 @@ matrix-sdcc-z80: generate
 		--run-mode $(RUN_MODE)
 
 corpus:
-	XCC=$(abspath ../../../../bin/x/bin/xcc) bash corpus/run_all.sh
+	XCC=$(if $(XCC),$(XCC),$(abspath ../../../../bin/x/bin/xcc)) bash corpus/run_all.sh
 
 test:
 	$(MAKE) matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json RUN_MODE=auto

@@ -1,0 +1,17 @@
+# Reproducible shared-z88dk benchmark inputs.
+#
+# The comparison intentionally uses the older BASE tree for headers, CRT and
+# libraries, while the nightly tree supplies current zsdcc, ticks and host
+# tools.  This is the only arrangement that reproduces the published sccz80
+# baseline while allowing current compiler executables to be compared on the
+# same linked-image baseline.
+CORPUS_COMMIT=460ec34769f01324ca49b66145f09babdbe507fc
+CORPUS_SHA256=f74f02cd8852d5b0c9bb7241d0a9b0f384ccfe887105b0412a5064b4d3bdd2b4
+Z88DK_BASE_COMMIT=94bc327720721402eee7ffc1c4794245fe65ebb1
+Z88DK_NIGHTLY_COMMIT=89f94c99865eeaa3f69b860b93d8c95b028f4c23
+Z88DK_80CC_COMMIT=dd1093e6149f1de0051dc5662ffeaab8b7cbeb4a
+ZSDCC_REVISION=16639
+XCC_COMMIT=b3c1eefd26d23ee4b73dbf9c58013418302261ba
+X_MODEL=M
+TICKS_MACHINE=msx
+TICKS_BUDGET=60

@@ -1323,6 +1323,38 @@ if grep -Eq -- '-[78]\(ix\)' "$TMPDIR/de_temp_to_hl_stack.out.s"; then
     exit 1
 fi
 
+# A spill is live if any successor reads it before rewriting it.  In this
+# diamond the fallthrough kills the spill, but the taken edge still consumes
+# it, so the stack-preserve rewrite must not remove the original definition.
+cat >"$TMPDIR/de_temp_to_hl_branch_live.s" <<'ASM'
+_demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=16, stack_params=0)
+	ld	-8(ix), e
+	ld	-7(ix), d
+	ld	l, -4(ix)
+	ld	h, -3(ix)
+	add	hl, hl
+	ld	bc, #_items
+	add	hl, bc
+	ld	l, -8(ix)
+	ld	h, -7(ix)
+	jp	nz, _use_saved
+	ld	-8(ix), c
+	ld	-7(ix), b
+	ret
+_use_saved:
+	ld	e, -8(ix)
+	ld	d, -7(ix)
+	ret
+ASM
+
+"$XOPT" -Os "$TMPDIR/de_temp_to_hl_branch_live.s" \
+    -o "$TMPDIR/de_temp_to_hl_branch_live.out.s"
+grep -Eq 'ld[[:space:]]+-8\(ix\),[[:space:]]*e' \
+    "$TMPDIR/de_temp_to_hl_branch_live.out.s"
+grep -Eq 'ld[[:space:]]+l,[[:space:]]*-8\(ix\)' \
+    "$TMPDIR/de_temp_to_hl_branch_live.out.s"
+
 cat >"$TMPDIR/signed_zero_branch_m.s" <<'ASM'
 _demo:
 	ld	de,#0

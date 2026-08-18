@@ -19,6 +19,10 @@ LIBC_DOUBLE ?= 1
 LIBC_LONG ?= 1
 LIBC_LONGLONG ?= 1
 LIBC_STDIO_FLOAT ?= 1
+# This is a direct exhaustive test harness, not a distribution build. Keep
+# its default at L so an unqualified libc test still covers every wide API;
+# ordinary root, x/, libc, and packaging builds inherit the M default from
+# x/mk/model.mk.
 X_MODEL ?= L
 LIBC_BUILD_FLAVOR := $(LIBC_PROFILE)-$(X_MODEL)-f$(LIBC_FLOAT)-d$(LIBC_DOUBLE)-l$(LIBC_LONG)-ll$(LIBC_LONGLONG)-sf$(LIBC_STDIO_FLOAT)
 LIBC_ARCHIVE := $(BUILD)/sys-none/lib/libc/$(LIBC_BUILD_FLAVOR)/libc.a

@@ -375,11 +375,14 @@ void z80_gen::gen_add(const icode &ic) {
     if (gen_far_ptr_arith(ic, /*is_add=*/true))
         return;
     const auto operand_in_iy = [&](const operand &op) {
-        if (!op.is_temp() || op.byte_offset != 0)
+        if (op.byte_offset != 0)
             return false;
-        auto home = temp_regs_.find(op.temp_id);
-        return home != temp_regs_.end() &&
-               home->second == temp_home::main_iy;
+        if (op.is_temp()) {
+            auto home = temp_regs_.find(op.temp_id);
+            return home != temp_regs_.end() &&
+                   home->second == temp_home::main_iy;
+        }
+        return op.is_symbol() && !op.is_global && symbol_home_in_iy(op);
     };
     if (op_size(ic.result) == 2 && operand_in_iy(ic.result) &&
         operand_in_iy(ic.left) &&
@@ -387,6 +390,17 @@ void z80_gen::gen_add(const icode &ic) {
         ic.right.ival >= 1 && ic.right.ival <= 4) {
         for (int64_t step = 0; step < ic.right.ival; ++step)
             emit_line("inc\tiy");
+        invalidate_a_cache();
+        invalidate_pair_cache();
+        return;
+    }
+    if (op_size(ic.result) == 2 &&
+        operand_home_in_bc(ic.result) &&
+        operand_home_in_bc(ic.left) &&
+        equivalent_operands(ic.result, ic.left) &&
+        ic.right.kind == operand_kind::INT_CONST &&
+        ic.right.ival == 1) {
+        emit_line("inc\tbc");
         invalidate_a_cache();
         invalidate_pair_cache();
         return;
@@ -562,7 +576,9 @@ void z80_gen::gen_add(const icode &ic) {
         [this](const operand &op) {
             if (op.kind == operand_kind::TEMP) {
                 auto it = temp_regs_.find(op.temp_id);
-                return it != temp_regs_.end() && it->second == temp_home::arg_de;
+                return it != temp_regs_.end() &&
+                       (it->second == temp_home::arg_de ||
+                        it->second == temp_home::main_de);
             }
             if (op.kind != operand_kind::SYMBOL || op.is_global)
                 return false;
@@ -737,6 +753,29 @@ void z80_gen::gen_add(const icode &ic) {
         emit_line("adc\thl, de");
         store_hl_hi32(ic.result);
     } else {
+        auto operand_in_main_de = [this](const operand &op) {
+            if (!op.is_temp() || op.byte_offset != 0)
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            return home != temp_regs_.end() &&
+                   home->second == temp_home::main_de;
+        };
+        if (op_size(ic.result) == 2 &&
+            operand_in_main_de(ic.result) &&
+            operand_in_main_de(ic.left) &&
+            equivalent_operands(ic.result, ic.left) &&
+            !operand_in_main_de(ic.right)) {
+            // A loop reduction in DE can consume an independently allocated
+            // HL value without a spill or pair copy.  The allocator admits
+            // this home only when the addend is a short-lived word loaded
+            // through an IY cursor.
+            load_hl(ic.right);
+            emit_line("add\thl, de");
+            emit_line("ex\tde, hl");
+            invalidate_a_cache();
+            invalidate_pair_cache();
+            return;
+        }
         auto match_zero_extended_u8_plus_const =
             [this](const operand &op, operand &byte_src,
                    uint16_t &imm16) {
@@ -909,6 +948,27 @@ void z80_gen::gen_add(const icode &ic) {
 void z80_gen::gen_sub(const icode &ic) {
     if (gen_far_ptr_arith(ic, /*is_add=*/false))
         return;
+
+    const auto operand_in_iy = [&](const operand &op) {
+        if (op.byte_offset != 0)
+            return false;
+        if (op.is_temp()) {
+            auto home = temp_regs_.find(op.temp_id);
+            return home != temp_regs_.end() &&
+                   home->second == temp_home::main_iy;
+        }
+        return op.is_symbol() && !op.is_global && symbol_home_in_iy(op);
+    };
+    if (op_size(ic.result) == 2 && operand_in_iy(ic.result) &&
+        operand_in_iy(ic.left) &&
+        ic.right.kind == operand_kind::INT_CONST &&
+        ic.right.ival >= 1 && ic.right.ival <= 4) {
+        for (int64_t step = 0; step < ic.right.ival; ++step)
+            emit_line("dec\tiy");
+        invalidate_a_cache();
+        invalidate_pair_cache();
+        return;
+    }
 
     // Canonical countdown loops use the same loop-carried value as both the
     // input and result.  When allocation keeps it in BC, update the pair in
@@ -2643,6 +2703,8 @@ void z80_gen::gen_band(const icode &ic) {
         }
         if (try_finish_direct_hl_return(ic.result))
             return;
+        if (try_finish_direct_hl_iy_store(ic.result))
+            return;
         store_hl(ic.result);
         return;
     }
@@ -2678,6 +2740,8 @@ void z80_gen::gen_band(const icode &ic) {
         emit_line("ld\th, %s", asm_.imm(0).c_str());
         if (try_finish_direct_hl_return(ic.result))
             return;
+        if (try_finish_direct_hl_iy_store(ic.result))
+            return;
         store_hl(ic.result);
         return;
     }
@@ -2701,6 +2765,8 @@ void z80_gen::gen_band(const icode &ic) {
         emit_line("ld\ta, h"); emit_line("and\ta, d"); emit_line("ld\th, a");
     }
     if (try_finish_direct_hl_return(ic.result))
+        return;
+    if (try_finish_direct_hl_iy_store(ic.result))
         return;
     store_hl(ic.result);
 }
@@ -3387,6 +3453,48 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         emit_label(done_lbl, false);
         store_a(ic.result);
         return;
+    }
+
+    // A logical word shift whose only consumer masks the low byte does not
+    // need to rotate through L.  A is the Z80's cheap rotate destination
+    // (RRA is 4T versus 8T for RR L), while H still supplies each incoming
+    // carry bit.  Coalescing the adjacent mask also avoids materializing the
+    // otherwise dead full-width shift result.
+    if (right && !arithmetic &&
+        ic.right.kind == operand_kind::INT_CONST &&
+        cur_fn_ && cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+        const int count = static_cast<int>(ic.right.ival & 0xff);
+        const icode &mask_ic = cur_fn_->icodes[cur_ic_index_ + 1];
+        const operand *mask = nullptr;
+        if (mask_ic.op == icode_op::BAND &&
+            mask_ic.result.type && mask_ic.result.type->size() == 2) {
+            if (equivalent_operands(mask_ic.left, ic.result) &&
+                mask_ic.right.kind == operand_kind::INT_CONST) {
+                mask = &mask_ic.right;
+            } else if (equivalent_operands(mask_ic.right, ic.result) &&
+                       mask_ic.left.kind == operand_kind::INT_CONST) {
+                mask = &mask_ic.left;
+            }
+        }
+        if (count >= 1 && count <= 7 && mask &&
+            mask->ival >= 0 && mask->ival <= 0xff &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id)) {
+            load_hl(ic.left);
+            emit_line("ld\ta, l");
+            for (int k = 0; k < count; ++k) {
+                emit_line("srl\th");
+                emit_line("rra");
+            }
+            const int mask_value = static_cast<int>(mask->ival & 0xff);
+            if (mask_value != 0xff)
+                emit_line("and\t%s", asm_.imm(mask_value).c_str());
+            emit_line("ld\tl, a");
+            emit_line("ld\th, %s", asm_.imm(0).c_str());
+            store_hl(mask_ic.result);
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            return;
+        }
     }
 
     load_hl(ic.left);

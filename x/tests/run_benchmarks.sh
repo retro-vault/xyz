@@ -1598,7 +1598,11 @@ run_numeric_suite() {
 
 run_z88dk24_suite() {
     local suite_outdir="$OUTDIR/z88dk24"
-    XCC="$XCC" OUT="$suite_outdir" FILTER="$Z88DK24_FILTER" CYCLES="$Z88DK_CYCLES" \
+    local ticks_budget=$(( (Z88DK_CYCLES + 399999999) / 400000000 ))
+    # z88dk24 is intentionally locked to the M distribution.  The optional
+    # positional XCC used by the other suites must not silently substitute a
+    # different model here.  z88dk-ticks -w is measured in 400M-cycle units.
+    OUT="$suite_outdir" FILTER="$Z88DK24_FILTER" BUDGET="$ticks_budget" \
         bash "$Z88DK24_ROOT/run.sh"
     Z88DK24_BENCHMARKS_RUN="$(awk 'END { print (NR > 0 ? NR - 1 : 0) }' \
         "$suite_outdir/results.csv")"

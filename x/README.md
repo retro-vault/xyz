@@ -24,7 +24,13 @@ make -C x
 ```
 
 The relocatable toolchain prefix is staged under `bin/x/`; target headers and
-libraries are under `bin/x/z80/`.
+libraries are under `bin/x/z80/`. The ordinary build defaults to the medium
+`M` library model; use `X_MODEL=S` or `X_MODEL=L` to select another model, or
+the root `x-s`, `x-m`, and `x-l` targets to stage all three side by side.
+`make test-x-models` validates each model against its declared surface. The
+unfiltered end-to-end runner uses the side-by-side `bin/x-l` compiler so that
+double and long-long tests remain part of exhaustive validation without
+changing the ordinary medium-model default.
 
 ## ZX Spectrum 48K quick start
 
@@ -51,6 +57,10 @@ the separate [`zx-ram`](examples/zx-ram/README.md) and
 
 - `tests/tests/` is now the canonical home for non-benchmark test suites.
 - Benchmarks now live under the unified `tests/benchmarks/` root.
+- The pinned seven-lane z88dk comparison is correct on 24/24 for XCC M `-Os`
+  and `-Of`; `-Of` is strictly fastest on 13/24 programs against the best
+  valid current zsdcc/80cc result. See
+  [`tests/benchmarks/z88dk24/RESULTS.md`](tests/benchmarks/z88dk24/RESULTS.md).
 - `tests/tests/corpus/upstream/` holds the upstream corpora that previously lived under the repo-level `orig/`.
 - For a Docker-based MinGW host-tools preflight, run `make -C x windows-host-preflight`.
 - The optional ZX Spectrum MCP regression executes raw RAM, replacement ROM,
