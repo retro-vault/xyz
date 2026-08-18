@@ -17,12 +17,12 @@ linker layout, or startup code are mixed in.
 Run it with:
 
 ```sh
-bash src/xc/xcc/tests/run_codegen_bench.sh ./bin/x/bin/xcc
+bash archive/x/tests/tests/xcc-legacy/run_codegen_bench.sh ./bin/x/bin/xcc
 ```
 
 Important properties:
 
-- input suite: `src/xc/xcc/tests/data/exec/<suite>`
+- input suite: `x/tests/tests/c23/xcc/data/exec/<suite>`
 - metrics: object `_CODE` bytes only
 - xcc modes: `-O0`, `-O1`, `-O2`, `-Of`, `-O3`, `-Os`
 - SDCC modes: `--opt-code-size`, `--opt-code-speed`
@@ -52,21 +52,21 @@ Use this when you want something closer to a real tiny-Z80 program:
 Run it with:
 
 ```sh
-bash tests/run_benchmarks.sh ./bin/x/bin/xcc
+bash x/tests/run_benchmarks.sh ./bin/x/bin/xcc
 ```
 
 Useful options:
 
 ```sh
-bash tests/run_benchmarks.sh ./bin/x/bin/xcc --filter 'crc16|vm_dispatch'
-bash tests/run_benchmarks.sh ./bin/x/bin/xcc --cycles 10000000
-bash tests/run_benchmarks.sh ./bin/x/bin/xcc --outdir /tmp/xyz-bench
+bash x/tests/run_benchmarks.sh ./bin/x/bin/xcc --filter 'crc16|vm_dispatch'
+bash x/tests/run_benchmarks.sh ./bin/x/bin/xcc --cycles 10000000
+bash x/tests/run_benchmarks.sh ./bin/x/bin/xcc --outdir /tmp/xyz-bench
 ```
 
 Default output:
 
 ```sh
-build/benchmarks/
+build/x/benchmarks/
 ```
 
 Important files:
@@ -78,7 +78,7 @@ Important files:
   Human-readable totals and comparisons.
 - `versions.txt`
   Exact tool versions plus the active cycle budget.
-- `tests/benchmarks/expected.csv`
+- `x/tests/benchmarks/bare/expected.csv`
   Source-semantics oracle values for every benchmark.
 - `work/`
   Intermediate `.s`, `.rel`, `.ihx`, and `.bin` files for inspection.
@@ -102,7 +102,7 @@ The runner records:
   the 16-bit checksum returned by `main()`
 - `match`
   whether the returned checksum matches the oracle in
-  `tests/benchmarks/expected.csv`
+  `x/tests/benchmarks/bare/expected.csv`
 - `payload bytes`
   flat linked binary size minus the shared `crt0` bytes
 - `cycles`
@@ -118,7 +118,7 @@ This is still a deliberately small-system benchmark:
 
 ### Benchmark Set
 
-Each benchmark lives in its own subdirectory under `tests/benchmarks/`.
+Each benchmark lives in its own subdirectory under `x/tests/benchmarks/`.
 
 Current workload set:
 

@@ -103,6 +103,22 @@ TEST(cli_gnu_realistic_rom_script_extracts_order_and_regions) {
     ASSERT_EQ(opts.area_order[2], std::string(".vectors"));
     ASSERT_EQ(opts.area_order[3], std::string(".data"));
     ASSERT_EQ(opts.area_order[4], std::string(".bss"));
+    ASSERT_EQ(static_cast<int>(opts.load_copy_areas.size()), 1);
+    ASSERT_EQ(opts.load_copy_areas[0], std::string(".data"));
+}
+
+TEST(cli_sdcc_copy_directive_marks_a_load_copy_area) {
+    const auto script = std::filesystem::temp_directory_path()
+                      / "xld-cli-copy-script.lk";
+    {
+        std::ofstream out(script);
+        out << "ENTRY _entry\nFORMAT bin\nRANGE 0000-3FFF\n"
+               "AREA _DATA = 5B00\nCOPY _DATA\n";
+    }
+    auto parsed = xbfd::lscript::open(script, xbfd::lscript_mode::sdcc);
+    ASSERT_EQ(static_cast<int>(parsed->load_copy_areas().size()), 1);
+    ASSERT_EQ(parsed->load_copy_areas()[0], std::string("_DATA"));
+    std::filesystem::remove(script);
 }
 
 TEST(cli_sdcc_linker_script_applies_defaults) {

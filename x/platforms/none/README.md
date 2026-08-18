@@ -6,15 +6,16 @@ is discarded, there is no filesystem, the clock reads as the Unix epoch. A
 program links and runs against it, but does nothing observable until you fill in
 the hooks.
 
-Use it as a starting point: **copy `lib/sys/none/` to `lib/sys/<your-target>/`,
-implement the functions, and build with `PLATFORM=<your-target>`.**
+Use it as a starting point: **copy `x/platforms/none/` to
+`x/platforms/<your-target>/`, implement the functions, and build with
+`PLATFORM=<your-target>`.**
 
-The contract is declared in [`lib/sys/include/sys.h`](../include/sys.h) and the
+The contract is declared in [`x/libc/include/sys.h`](../../libc/include/sys.h) and the
 clock half in `<time.h>`. All functions use SDCC's `sdcccall(1)` convention: the
 first word-sized arguments arrive in **HL, DE, BC**, and results come back in
-**DE** (or **DEHL** for a `long`). Backends may be written in C or assembly — the
-symbols are identical. (The one exception is `heap_region`, which returns
-two values in registers and must be assembly; see below.)
+**DE** (or **DEHL** for a `long`). Backends expose the same symbols from either
+language, but shipped platform libraries conventionally use hand-written
+assembly. `heap_region` returns two values in registers and must be assembly.
 
 ## The contract
 
@@ -44,16 +45,16 @@ two values in registers and must be assembly; see below.)
   filesystem leaves these as the failing shells and still has full console I/O.
 - **Heap.** `malloc`/`free`/`calloc`/`realloc` need only `heap_region`,
   which hands the allocator one memory region to manage (there is no `sbrk`). See
-  [RETARGET-LIBC.md](../../../docs/howtos/RETARGET-LIBC.md) §2.
+  [RETARGET-LIBC.md](../../docs/howtos/RETARGET-LIBC.md).
 - **Clock.** `time`, `clock`, `timespec_get` call `gettimeofday`.
 - **Startup/exit.** `crt0.s` is the entry point; set `STACK_TOP` for your RAM.
   `_exit` ends the program (halt, or return to a monitor).
 
 ## Reference: empty C implementations
 
-Equivalent C for every hook (what the assembly shells in this directory do).
-Drop this into one `.c` file in your target directory, delete the shells you
-replace with assembly, and fill in the `TODO`s.
+Equivalent C for every hook is shown only as readable contract documentation.
+The assembly shells in this directory are the implementation templates to copy
+and fill in.
 
 ```c
 #include <sys.h>
@@ -110,7 +111,9 @@ stack.
 The toolchain selects the backend with `PLATFORM`. Once your directory exists:
 
 ```sh
-make PLATFORM=<your-target> ...
+make -C x PLATFORM=<your-target> stage-xcc-support
+# or rebuild the complete staged prefix:
+make -C x PLATFORM=<your-target>
 ```
 
 `crt0.s` is assembled as the entry object and every other `*.s`/`*.c` in the

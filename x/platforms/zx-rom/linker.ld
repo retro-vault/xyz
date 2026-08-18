@@ -1,45 +1,26 @@
-/* ZX Spectrum ROM image layout.
- *
- * ROM occupies 0x0000-0x3FFF. Writable runtime state lives in RAM.
- * CLI options still override anything set here.
- *
- * Important current limitation:
- * xcc still emits ordinary writable globals directly into .data instead of a
- * full ROM-source / RAM-destination split. So this script describes the right
- * model, but fully correct initialized-data support still depends on future
- * compiler-side section splitting.
- */
-
+/* ZX Spectrum 48K replacement ROM. */
 ENTRY(_entry)
 OUTPUT_FORMAT(binary)
 BINARY_RANGE(0x0000-0x3FFF)
+RESERVE(0xF000-0xFFFF)
 
 MEMORY {
   rom (rx)  : ORIGIN = 0x0000, LENGTH = 0x4000
-  ram (rwx) : ORIGIN = 0x8000, LENGTH = 0x8000
+  ram (rwx) : ORIGIN = 0x5B00, LENGTH = 0x9500
 }
 
 SECTIONS {
+  .vectors 0x0000 : { *(.vectors) *(_HEADER) } >rom
   .text : {
     *(.text .text.*)
     *(.rodata .rodata.*)
-    *(.vectors)
-    . = ALIGN(2);
+    *(_CODE _CONST _INITIALIZER _GSINIT _GSFINAL)
   } >rom
-
-  _rom_end = .;
-  ASSERT(_rom_end <= 0x4000, "ROM overflow!");
-
   .data : {
     *(.data .data.*)
-    *(.initialized .initialized.*)
+    *(_DATA)
   } >ram AT>rom
-  _data_load = LOADADDR(.data);
-
-  .bss : {
-    *(.bss .bss.*)
-    *(COMMON)
-  } >ram
-
+  .initialized : { *(_INITIALIZED) } >ram
+  .bss : { *(.bss .bss.*) *(_BSS _HEAP) } >ram
   /DISCARD/ : { *(.comment) *(.note*) }
 }

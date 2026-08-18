@@ -182,7 +182,8 @@ static bool attr_to_call_abi(const attr &a, call_abi &abi) {
             abi = call_abi::CRITICAL;
             return true;
         }
-        if (a.name == "sdccall" && !a.args.empty()) {
+        if ((a.name == "sdccall" || a.name == "sdcccall")
+            && !a.args.empty()) {
             try {
                 int n = std::stoi(a.args[0], nullptr, 0);
                 if (n == 0) {

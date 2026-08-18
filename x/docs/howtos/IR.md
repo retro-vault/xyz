@@ -5,8 +5,8 @@ between the C frontend and the Z80 backend.
 
 The real source of truth is:
 
-- [src/xc/xcc/include/ir/icode.h](/home/tstih/data/retro-vault/xyz/src/xc/xcc/include/ir/icode.h)
-- [src/xc/xcc/src/ir/icode.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/ir/icode.cpp)
+- [`x/src/xcc/include/ir/icode.h`](../../src/xcc/include/ir/icode.h)
+- [`x/src/xcc/src/ir/icode.cpp`](../../src/xcc/src/ir/icode.cpp)
 
 If this guide and the code ever disagree, the code wins.
 
@@ -516,25 +516,25 @@ That is a strength here. It is small enough to read and debug.
 
 Best files to read next:
 
-- [src/xc/xcc/include/ir/icode.h](/home/tstih/data/retro-vault/xyz/src/xc/xcc/include/ir/icode.h)
+- [`x/src/xcc/include/ir/icode.h`](../../src/xcc/include/ir/icode.h)
   Full IR data model.
 
-- [src/xc/xcc/src/ir/icode.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/ir/icode.cpp)
+- [`x/src/xcc/src/ir/icode.cpp`](../../src/xcc/src/ir/icode.cpp)
   Dump format and human-readable view.
 
-- [src/xc/xcc/src/ir/irgen_expr.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/ir/irgen_expr.cpp)
+- [`x/src/xcc/src/ir/irgen_expr.cpp`](../../src/xcc/src/ir/irgen_expr.cpp)
   Expression lowering.
 
-- [src/xc/xcc/src/ir/irgen_stmt.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/ir/irgen_stmt.cpp)
+- [`x/src/xcc/src/ir/irgen_stmt.cpp`](../../src/xcc/src/ir/irgen_stmt.cpp)
   Statements, labels, loops, and branches.
 
-- [src/xc/xcc/src/ir/irgen_lvalue.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/ir/irgen_lvalue.cpp)
+- [`x/src/xcc/src/ir/irgen_lvalue.cpp`](../../src/xcc/src/ir/irgen_lvalue.cpp)
   Lvalue reads, writes, address-taking, and pointer-style access.
 
-- [src/xc/xcc/src/opt/iropt.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/opt/iropt.cpp)
+- [`x/src/xcc/src/opt/iropt.cpp`](../../src/xcc/src/opt/iropt.cpp)
   Per-function IR optimizer pipeline.
 
-- [src/xc/xcc/src/opt/iromod.cpp](/home/tstih/data/retro-vault/xyz/src/xc/xcc/src/opt/iromod.cpp)
+- [`x/src/xcc/src/opt/iromod.cpp`](../../src/xcc/src/opt/iromod.cpp)
   Module-level helper, const-eval, and inlining passes.
 
 ## Practical Reading Advice

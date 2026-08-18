@@ -1,6 +1,6 @@
         ; sys_settimeofday.s  (sys backend: zx-rom)
         ;
-        ; Minimal clock-set hook stub. Ignores the request and succeeds.
+        ; The 48K target has no wall clock.
 
         .module settimeofday
         .optsdcc -mz80 sdcccall(1)
@@ -10,5 +10,5 @@
         .area   _CODE
 
 _settimeofday::
-        ld      de,#0x0000
+        ld      de,#0xffff
         ret

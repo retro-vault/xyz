@@ -33,6 +33,9 @@ Current test count: 92 (87 core + 5 sema — all passing)
 | `[[sdcc::sdccall(0)]]` | **Done** | Explicit stack-passing ABI (default) |
 | `[[sdcc::sdccall(1)]]` | **Done** | Register-passing ABI: HL/DE/BC for args 0-2 |
 
+`sdccall` is the canonical XCC spelling; the historical extra-`c` spelling
+`sdcccall` is accepted as a source-compatibility alias.
+
 ### New Keywords
 
 | Keyword | Status | Notes |

@@ -8,6 +8,7 @@
 
 #include <xprog/errors.h>
 #include <xprog/package.h>
+#include <xprog/tape.h>
 
 namespace xprog {
 namespace {
@@ -345,6 +346,17 @@ void run(const cli_options& options, std::ostream& out)
 {
     if (options.command == command_kind::inspect) {
         inspect_image(parse_image(read_file(options.input_file)), out);
+        return;
+    }
+    if (options.command == command_kind::tap
+        || options.command == command_kind::tzx) {
+        auto tape = build_tap(read_file(options.input_file),
+                              options.load_address,
+                              options.entry_point.value_or(options.load_address),
+                              options.name);
+        if (options.command == command_kind::tzx)
+            tape = tap_to_tzx(tape);
+        write_file(options.output_file, tape);
         return;
     }
     const auto image = build_image(options, read_file(options.input_file));

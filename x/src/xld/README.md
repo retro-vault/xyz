@@ -90,7 +90,9 @@ Z80 ROM/RAM scripts:
 - `SECTIONS { .text : { *(.text .text.*) *(.rodata .rodata.*) } > ROM }`
 - output-section ordering derived from wildcard patterns inside `SECTIONS`
 - `/DISCARD/ : { ... }`
-- section attributes such as `AT(0x1234)` and `AT>ROM`
+- section attributes such as `AT(0x1234)` and `AT>ROM`; an `AT>REGION` section is
+  relocated at its run address, packed after the resident bytes in the fixed
+  output range, and receives `s__NAME_LOAD` / `l__NAME_LOAD` symbols for crt0
 - simple assignments and assertions such as:
   - `_rom_end = .;`
   - `ASSERT(_rom_end <= 0x4000, "ROM overflow!")`
@@ -114,7 +116,17 @@ AREA _DATA = 4000
 AREA _BSS  = 4100
 RANGE 0000-7FFF
 RESERVE 0100-017F
+COPY _DATA
 ```
+
+`COPY AREA` is the compact-script equivalent of GNU `AT>ROM`. It requires a
+fixed `RANGE`, keeps the area's normal symbols at its RAM run address, packs a
+copy of the fully relocated bytes into the output range, and defines
+`s__AREA_LOAD` plus `l__AREA_LOAD` for startup code.
+
+The production `x/platforms/zx-rom/linker.ld` and `linker.lk` files exercise
+both spellings for the same 16 KiB replacement-ROM layout. See
+[`x/docs/howtos/ZX-SPECTRUM-48K.md`](../../docs/howtos/ZX-SPECTRUM-48K.md).
 
 or the equivalent command-file style:
 
@@ -974,12 +986,12 @@ Non-zero origins therefore do not create leading zero-fill unless an explicit
 
 ## Build and Test
 
-From `src/xc/xld`:
+From the repository root:
 
 ```bash
-make
-make test
-make clean
+make -C x/src/xld
+make -C x/src/xld test
+make -C x/src/xld clean
 ```
 
 This builds:

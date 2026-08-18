@@ -81,7 +81,7 @@ daily-sized feature entries with generated-assembly examples.
 | [§32. `_Complex` Numbers And Inline Assembly](#32-_complex-numbers-and-inline-assembly) | Complex arithmetic plus inline Z80 assembly. |
 | [§33. Aggressive Compile-Time Evaluation](#33-aggressive-compile-time-evaluation--o2-and-up) | Constant folding and function evaluation at `-O2` and above. |
 | [§34. `[[attributes]]` Overview And Standard C23 Attributes](#34-attributes-overview-and-standard-c23-attributes) | Syntax, unknown-attribute behavior, and standard C23 attributes such as `[[noreturn]]`. |
-| [§35. `[[sdcc::sdcccall(n)]]` ABI Selection](#35-sdccsdcccalln-abi-selection) | Pick stack or register ABI explicitly for one function. |
+| [§35. `[[sdcc::sdccall(n)]]` ABI Selection](#35-sdccsdcccalln-abi-selection) | Pick stack or register ABI explicitly for one function. |
 | [§36. `[[sdcc::naked]]`, `[[sdcc::interrupt]]`, And `[[sdcc::critical]]`](#36-sdccnaked-sdccinterrupt-and-sdcccritical) | Raw entry stubs, full ISRs, and interrupt-masked functions. |
 | [§37. `[[sdcc::at(addr)]]` Absolute Variables](#37-sdccataddr-absolute-variables) | Bind a C object name to a fixed memory address. |
 | [§38. `[[sdcc::sfr(port)]]` Port-Mapped Variables](#38-sdccsfrport-port-mapped-variables) | Map C reads and writes onto Z80 `in` / `out`. |
@@ -134,9 +134,10 @@ xcc -S util.c -o util.s    # → assembly only
 xcc -Os main.c util.c -o app.xl
 ```
 
-**You get:** Headers from `<prefix>/z80/include`, libraries from
-`<prefix>/z80/lib`. The driver finds these relative to the install prefix —
-no wrapper scripts required.
+**You get:** Common headers from `<prefix>/z80/include`, selected-platform
+headers from `<prefix>/z80/include/<platform>`, and libraries from
+`<prefix>/z80/lib`. The driver finds these relative to the install prefix — no
+wrapper scripts required.
 
 **Skip the runtime** when you are writing a freestanding loader or test harness:
 
@@ -845,8 +846,12 @@ It probes `<prefix>/targets/z80-<name>/lib` first, then falls back to
 **Source layout:** Every platform is a directory `x/platforms/<name>/` with
 `crt0.s`, `linker.lk`, `linker.ld`, and one file per hook (`write.s`,
 `read.s`, `_exit.s`, …). The hook contract is declared in
-`x/platforms/include/sys.h`. Shipped examples: `none`, `cpm3`, `zx-rom`,
-`zx-ram`.
+`x/libc/include/sys.h`. Shipped examples: `none`, `cpm3`, `zx-rom`,
+`zx-ram`. Target-only public headers remain inside that target directory; for
+example, CP/M's `sys/bdos.h` and `conio.h` live below
+`x/platforms/cpm3/include/` and are visible only with `--platform=cpm3`. The ZX
+targets likewise own `include/conio.h` declarations inside `zx-ram` and
+`zx-rom`; none is a shared pseudo-platform.
 
 The CP/M 3 startup converts the length-prefixed tail at `0x0080` into normal C
 arguments. Since CP/M does not provide the transient program name,
@@ -856,7 +861,24 @@ spaces without becoming part of the argument. Strings and the pointer table
 are copied to an exact-sized stack allocation because CP/M file operations can
 reuse `0x0080` as the default DMA buffer. Startup supplies the two arguments in
 both conventions: HL/DE for `sdcccall(1)`, and right-to-left stack words for
-`sdcccall(0)`.
+`sdcccall(0)`. Its `<conio.h>` `kbhit()` uses BDOS function 11 and returns
+immediately with zero or the console-ready status.
+
+**ZX Spectrum 48K:** `zx-ram` emits fixed-address code beginning at `0x5CCB`,
+the first byte after the Sinclair system variables. `xprog --tap` and
+`--tzx` wrap that binary in a checksummed auto-start loader that can overwrite
+its own BASIC program. `zx-rom` emits an exact 16 KiB replacement ROM and uses
+the linker's `AT>rom` / `COPY _DATA` support to initialize writable state at
+`0x5B00`.
+
+Both ZX forms use hand-written assembly for startup and every platform hook.
+Each self-contained target carries the YOS-derived bitmap console, proportional
+6x12 Tamsyn font exported by snatch, and physical keyboard-matrix scanner.
+The scanner is exported as level-triggered, non-blocking `<conio.h>` `kbhit()`;
+blocking libc input loops around that same primitive. Console descriptors
+work; filesystem and wall-clock hooks return their documented failure values.
+See `x/docs/howtos/ZX-SPECTRUM-48K.md` for memory maps, Fuse commands, and the
+four-mode MCP regression.
 
 **Starting point — copy `none`:** `x/platforms/none/` is an empty-shell
 template:
@@ -875,7 +897,7 @@ cp -R x/platforms/none x/platforms/myboard
    call `main`, call `exit` / `_exit`.
 2. **`linker.lk` / `linker.ld`** — where `_CODE` / `.text` starts, entry symbol,
    reserved regions (see §21).
-3. **Platform hooks** — implement the contract in `x/platforms/include/sys.h`:
+3. **Platform hooks** — implement the contract in `x/libc/include/sys.h`:
 
    | Symbol | Job |
    |---|---|
@@ -915,9 +937,10 @@ libraries.
 `/opt/xtools` style deployment. Different meaning from XL relocatable (§8) —
 this is about the *toolchain tree*, not your program binary.
 
-**How it works:** Each tool discovers `<prefix>` from its own path. Headers sit
-in `<prefix>/z80/include`, target libs in `<prefix>/z80/lib`. No `XTOP` env var
-required.
+**How it works:** Each tool discovers `<prefix>` from its own path. Common
+headers sit in `<prefix>/z80/include`, target-private headers in
+`<prefix>/z80/include/<platform>`, and target libs in `<prefix>/z80/lib`. No
+`XTOP` env var required.
 
 ```
 cp -R xtools /opt/xtools
@@ -928,7 +951,7 @@ cp -R xtools /opt/xtools
 
 ```
 bin/           xcc, xas, xld, xopt, xar, xobjcopy, xprog, xgdb, …
-z80/include/   C library headers
+z80/include/   common C headers plus target-private subdirectories
 z80/lib/       crt0, libc, runtime, libnone.a, libcpm3.a, …
 share/doc/     tool manuals
 ```
@@ -1188,7 +1211,7 @@ binary literals, and the rest of the features below.
 **How it works:** The frontend, preprocessor, and codegen understand C23
 constructs. The in-tree test suite under `x/src/xcc/tests/data/core/` has
 dedicated cases for each feature below. A separate conformance matrix lives in
-`x/tests/c23/` (~63 feature tests) for broader regression coverage.
+`x/tests/tests/c23/` for broader manifest-driven regression coverage.
 
 **Language features implemented (representative):**
 
@@ -1436,7 +1459,7 @@ void report(float x) {
 ## 31. Register Calling Conventions
 
 **What:** Multiple Z80 calling conventions in one compiler, selectable per
-function via `[[sdcc::sdcccall(N)]]` or `[[z88dk::…]]` (see §35–§41 for
+function via `[[sdcc::sdccall(N)]]` or `[[z88dk::…]]` (see §35–§41 for
 prologue and epilogue codegen).
 
 **When:** You want register-based argument passing for speed, or you are
@@ -1447,8 +1470,8 @@ attributes to opt into register calling:
 
 | Attribute | Arguments | Returns |
 |---|---|---|
-| `[[sdcc::sdcccall(1)]]` | First 8-bit args in **L, B, C** (and wider rules for 16-bit) | 16-bit in **DE**, 32-bit in **DEHL** |
-| `[[sdcc::sdcccall(0)]]` | Stack only (used by variadic `printf`) | As above |
+| `[[sdcc::sdccall(1)]]` | First 8-bit args in **L, B, C** (and wider rules for 16-bit) | 16-bit in **DE**, 32-bit in **DEHL** |
+| `[[sdcc::sdccall(0)]]` | Stack only (used by variadic `printf`) | As above |
 | `[[z88dk::fastcall]]` | First arg in **D** (8-bit) or **DE** (16-bit) | In first arg register |
 | `[[z88dk::callee]]` | Callee pops stack arguments | Stack-based |
 
@@ -1457,12 +1480,12 @@ and `read` do not shuffle every byte through the stack. `xcc -O2` can keep
 incoming register arguments in registers across the function prologue when safe.
 
 ```
-[[sdcc::sdcccall(1)]]
+[[sdcc::sdccall(1)]]
 int fast_add(int a, int b) {
     return a + b;
 }
 
-extern [[sdcc::sdcccall(1)]] int foreign_mul(int a, int b);
+extern [[sdcc::sdccall(1)]] int foreign_mul(int a, int b);
 
 int use_foreign(int x) {
     return foreign_mul(x, 3);   /* links against imported .rel / .o */
@@ -1597,7 +1620,7 @@ __halt_forever_end:
 
 ---
 
-## 35. `[[sdcc::sdcccall(n)]]` ABI Selection
+## 35. `[[sdcc::sdccall(n)]]` ABI Selection
 
 **What:** These attributes choose the function ABI explicitly. Use them when
 one declaration must opt into stack ABI or the fast SDCC-style register ABI.
@@ -1605,16 +1628,19 @@ one declaration must opt into stack ABI or the fast SDCC-style register ABI.
 **Rules:** Only one ABI attribute per function. Variadic functions must use
 `[[sdcc::sdccall(0)]]`.
 
+`sdccall` is the canonical attribute name. XCC also accepts the historical
+extra-`c` spelling `sdcccall` so existing sources continue to compile.
+
 | Attribute | Argument passing | Return / epilogue | Use for |
 |---|---|---|---|
 | `[[sdcc::sdccall(0)]]` | Stack ABI with normal IX frame | `ret` | Variadic functions (`printf`), explicit stack interop |
-| `[[sdcc::sdcccall(1)]]` | First args in **L / BC / DE**, then stack | `ret`; 16-bit result in **DE** | Fast libc / platform hooks |
+| `[[sdcc::sdccall(1)]]` | First args in **L / BC / DE**, then stack | `ret`; 16-bit result in **DE** | Fast libc / platform hooks |
 
 Example:
 
 ```
 [[sdcc::sdccall(0)]] int stack_add(int a, int b);
-[[sdcc::sdcccall(1)]] int fast_add(int a, int b);
+[[sdcc::sdccall(1)]] int fast_add(int a, int b);
 ```
 
 Generated assembly shows the chosen calling convention in the prologue comments:
@@ -1943,7 +1969,7 @@ Caller of `z88_fast_inc` places the first `int` in **DE** before `call`.
 
 | Rule | Detail |
 |---|---|
-| Variadic functions | **Must** use `[[sdcc::sdcccall(0)]]` — `printf` in `<stdio.h>` is annotated this way |
+| Variadic functions | **Must** use `[[sdcc::sdccall(0)]]` — `printf` in `<stdio.h>` is annotated this way |
 | `sdcccall(1)` + function pointers | Indirect calls fall back to stack ABI |
 | `sdcccall(1)` + 4+ args | First three in registers; rest on stack |
 | Imported libraries | `xld` can record ABI in `.rel`; mismatch with your declaration warns |

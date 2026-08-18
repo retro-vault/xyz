@@ -30,17 +30,17 @@ has been copied into this directory (`x/tests/tests/c23/`).
      - link attempt (best-effort using prebuilt objs from build/tests/libc if present)
    - The run script (`run_xcc_z80.sh`) converts .ihx -> .bin and is a placeholder.
      Extend it to drive the xz80 emulator (or reuse the project's
-     `x/tests/libc/` harness + "none" sys hooks for putchar capture).
+     `x/tests/tests/libc/` harness + `none` platform hooks for putchar capture).
 
 3. Recommended practical path for this project (already partially wired):
-   - The in-tree `x/tests/libc/c23_cases.c` was enriched directly from this suite's
+   - The in-tree `x/tests/tests/libc/c23_cases.c` was enriched directly from this suite's
      cases (all categories + all major structs: div_t family, tm, timespec,
      lconv, fenv_t, mbstate_t, etc. + every C23 libc addition: strfrom*,
      fromfp* family, fmaximum*/fminimum* variants, roundeven, payloads,
      totalorder, free_sized/aligned, ckd_*, stdbit, char8_t + mbrtoc8, etc.).
    - Build & run:
      ```sh
-     make -C x/tests/libc core-test
+     make -C x/tests/tests/libc core-test
      ```
    - This exercises the compiler (xcc) + your asm libc + runtime in the
      emulator via the existing C-driven mechanism (return code in DE + hooked
@@ -50,15 +50,15 @@ has been copied into this directory (`x/tests/tests/c23/`).
 - The profile and drivers under `setups/xcc-z80/` are starting points.
 - For per-case .ihx execution you will likely want a crt0 + selective libc
   rels or to feed cases into a big dispatch image (the pattern used by
-  `x/tests/libc/stdio_cases*.c` and `c23_cases.c`).
+  `x/tests/tests/libc/stdio_cases*.c` and `c23_cases.c`).
 - See the original suite's `docs/howtos/TEST.md` (copied here) for the profile
   schema and how the Python matrix runner works.
-- Your existing `x/tests/runtime/tools/ihx2bin.py` and the xz80 C++ bits are
+- The existing `x/tests/tests/runtime/tools/ihx2bin.py` and xz80 C++ bits are
   the natural execution engine.
 
 ## Structures / completeness
 All categories and the key C structures from the input suite are represented
-in the copied cases/ and were used to enrich `x/tests/libc/c23_cases.c`.
+in the copied cases/ and were used to enrich `x/tests/tests/libc/c23_cases.c`.
 
 The external suite remains useful for golden results (gcc, sdcc, etc.) under
 `build/results/`.

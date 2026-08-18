@@ -214,7 +214,7 @@ Remaining implementation gap in `<math.h>`:
 
 The single-precision soft-float runtime (`__fsadd`, `__fsmul`, `__fsdiv`,
 `__fscmp`, …) and the new 64-bit `double` runtime (`__dbadd`, `__dbmul`,
-`__dbdiv`, `__dbcmp`, conversions) already exist in `src/xc/xcc/lib/runtime/`,
+`__dbdiv`, `__dbcmp`, conversions) already exist in `x/runtime/`,
 so the rounding / decompose / min-max families are now achievable. `truncf`
 is the proven template. The transcendental family needs polynomial kernels
 and is a larger effort.
@@ -223,12 +223,12 @@ and is a larger effort.
 
 ## `<time.h>`
 
-Implemented **entirely in assembly** (`lib/libc/src/time/`), built on two
-platform clock hooks supplied by the selected sys backend (`lib/sys/<sys>/`):
+Implemented **entirely in assembly** (`x/libc/src/time/`), built on two
+platform clock hooks supplied by the selected backend (`x/platforms/<name>/`):
 
 ```
-int __sys_gettimeofday(struct timespec *tv);        // read wall clock
-int __sys_settimeofday(const struct timespec *tv);  // set  wall clock
+int gettimeofday(struct timespec *tv);        // read wall clock
+int settimeofday(const struct timespec *tv);  // set  wall clock
 ```
 
 The `none` backend ships empty shells (epoch 0); an OS replaces them and the
@@ -255,8 +255,8 @@ calendar/formatting code it actually calls:
 
 `gmtime_r` exports the shared leap test / month table that `mktime` reuses.
 
-Selectable backend: `make SYS=<os>` in `lib/libc/src` swaps `lib/sys/none` for
-an OS backend.
+Selectable backend: `--platform=<name>` selects the staged CRT, linker script,
+and `lib<name>.a` hook archive.
 
 ---
 
@@ -361,7 +361,7 @@ The C11 generic atomics dispatch (via the header) to the compiler-emitted
 `__atomic_fetch_{add,sub,and,or,xor}_1/2`, `__atomic_flag_*`).
 
 These are **language-support code and live in the runtime**
-(`src/xc/xcc/lib/runtime/atomic/`), not in `libc.a`. Only 1- and 2-byte
+(`x/runtime/atomic/`), not in `libc.a`. Only 1- and 2-byte
 widths are provided; 4- and 8-byte atomic object operations fail at link
 time rather than miscompiling.
 

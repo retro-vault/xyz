@@ -15,7 +15,7 @@ Full C23 upgrade is done alongside because many features share infrastructure.
 xcc is a hand-written recursive-descent C compiler targeting Z80 via SDCC assembler syntax.
 
 ```
-src/xc/xcc/
+x/src/xcc/
 ├── include/frontend/   token.h  lexer.h  parser.h  ast.h  types.h  symtab.h  sema.h
 ├── include/ir/         icode.h  irgen.h
 ├── include/opt/        iropt.h
@@ -397,7 +397,7 @@ is `SDCCCALL0` or `DEFAULT`, the current code path is taken unchanged.
 
 ### 8b — SDCCCALL(1): register-based ABI
 
-SDCC's `__sdcccall(1)` passes arguments in registers (IY, HL, DE, BC in order) and returns
+XCC's `[[sdcc::sdccall(1)]]` attribute passes arguments in registers (IY, HL, DE, BC in order) and returns
 in HL/DE:HL.  Implement a matching variant.
 
 `include/backend/z80/z80gen.h`:
@@ -560,7 +560,7 @@ chunks 3–4 if desired.
 
 To implement a chunk, start a new session and give the AI agent this prompt prefix:
 
-> "Read `docs/PLAN23.md` in the xcc repo at `/home/tstih/data/retro-vault/xyz/src/xc/xcc/`.
+> "Read `x/src/xcc/docs/PLAN23.md` in the repository.
 > Read the 'Quick orientation' section and then implement **Chunk N — [name]** exactly as
 > described.  After implementation run `make` and `make test`; fix any failures before reporting
 > done.  Do not implement any other chunk."

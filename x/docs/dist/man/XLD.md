@@ -68,3 +68,26 @@ xld -T layout.ld main.rel -o app.xl
 - **ihx** — Intel HEX.
 - **gnu debug sidecar** — in `--mode=gnu`, `-g` derives an ELF + DWARF
   debug sidecar next to the primary output.
+
+## ROM load addresses
+
+A section can run from RAM while its initial bytes live in a flat ROM image.
+In a GNU linker script, place it in RAM with `>ram AT>rom`. In an SDCC-style
+script, assign the runtime address with `AREA _DATA = 5B00` and mark it with
+`COPY _DATA`. `xld` packs the area's relocated bytes into the output, defines
+`s__DATA_LOAD` and `l__DATA_LOAD`, and retains `s__DATA`/`l__DATA` for the
+runtime address. Startup code copies the load range to the runtime range.
+
+When any copied area is present, xld also rejects resident loadable bytes that
+fall outside the requested binary window; an oversized ROM cannot silently
+truncate or alias copied data.
+
+The staged `zx-rom` platform uses this mechanism to emit `0x0000`–`0x3FFF`
+while running writable state from `0x5B00`. A normal driver invocation is:
+
+```sh
+xcc -Os --platform=zx-rom --oformat=binary main.c -o app.rom
+```
+
+The platform linker script supplies the range and copy directives; callers do
+not need to pass them again. See `ZX48.md` for the complete target contract.

@@ -1,6 +1,6 @@
 # xcc — C compiler
 
-C11 compiler driver for the Z80. Works like the GNU C driver: it
+C23-oriented compiler driver for the Z80. Works like the GNU C driver: it
 compiles C, calls `xas` to assemble, and calls `xld` to link.
 
 ## Synopsis
@@ -32,6 +32,10 @@ xcc -Os main.c util.c -o app.xl
 
 # Produce a flat binary at a fixed address
 xcc main.c --oformat=binary -Ttext=0x8000 -o app.bin
+
+# ZX Spectrum RAM program and replacement ROM
+xcc -Os --platform=zx-ram --oformat=binary main.c -o app.bin
+xcc -Os --platform=zx-rom --oformat=binary main.c -o app.rom
 
 # Build with debug info for xgdb
 xcc -g main.c -o app.xl
@@ -71,9 +75,16 @@ xcc -g main.c -o app.xl
 ## Defaults
 
 The compiler finds its headers and runtime relative to its own install
-location: headers in `<prefix>/z80/include`, runtime and libraries in
-`<prefix>/z80/lib`. No environment variables or wrapper scripts are
-needed; the prefix can be copied anywhere.
+location: common headers in `<prefix>/z80/include`, selected-platform headers
+in `<prefix>/z80/include/<platform>`, and runtime and libraries in
+`<prefix>/z80/lib`. Platform headers are searched before common headers. No
+environment variables or wrapper scripts are needed; the prefix can be copied
+anywhere.
+
+The staged platform names are `none`, `cpm3`, `emu`, `zx-ram`, and `zx-rom`.
+The ZX RAM platform links at `0x5CCB`; the ZX ROM platform emits a fixed
+16 KiB replacement ROM. See `ZX48.md` and package RAM binaries with
+`xprog --tap` or `xprog --tzx`.
 
 ## Float formats
 

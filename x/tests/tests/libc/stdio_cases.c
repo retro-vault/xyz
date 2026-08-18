@@ -61,7 +61,7 @@ static int wrap_vsnprintf(char *buf, unsigned int n, const char *fmt, ...) {
     return rc;
 }
 
-static int stdio_format_cases(FILE *out, FILE *err) {
+int stdio_format_cases(FILE *out, FILE *err) {
     int count_mark;
     int rc;
 
@@ -121,7 +121,7 @@ static int stdio_format_cases(FILE *out, FILE *err) {
     return 0;
 }
 
-static int stdio_console_input_cases(FILE *in) {
+int stdio_console_input_cases(FILE *in) {
     __sys_getchar_reset();
     __sys_getchar_setbuf("abc\n");
     if (getchar() != 'a') return 21;
@@ -155,7 +155,7 @@ static int stdio_console_input_cases(FILE *in) {
     return 0;
 }
 
-static int stdio_file_cases(void) {
+int stdio_file_cases(void) {
     FILE *f;
 
     __sys_file_reset();
@@ -234,7 +234,7 @@ static int stdio_file_cases(void) {
     return 0;
 }
 
-static int stdio_misc_cases(FILE *out) {
+int stdio_misc_cases(FILE *out) {
     char name1[L_tmpnam];
     char name2[L_tmpnam];
 

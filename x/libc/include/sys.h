@@ -3,13 +3,13 @@
  *
  * This is the complete set of hooks the target-independent C library needs from
  * a platform ("sys backend").  Port libc to a new machine by copying the `none`
- * backend (lib/sys/none/) and implementing each function below; see
- * lib/sys/none/README.md and docs/howtos/RETARGET-LIBC.md for the details and
+ * backend (x/platforms/none/) and implementing each function below; see
+ * x/platforms/none/README.md and x/docs/howtos/RETARGET-LIBC.md for the details and
  * reference (empty) implementations.
  *
- * All functions use SDCC's sdcccall(1) convention (the first word-sized
- * arguments arrive in HL, DE, BC).  A backend may be written in C or assembly;
- * the symbols are the same either way.
+ * All functions use XCC's [[sdcc::sdccall(1)]] convention (the first
+ * word-sized arguments arrive in HL, DE, BC). A backend may be written in C
+ * or assembly; the symbols are the same either way.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih
@@ -19,15 +19,6 @@
 
 #include <stddef.h>
 
-#if defined(__SDCC_VERSION_MAJOR) && defined(__SDCC_VERSION_MINOR) && \
-    (__SDCC_VERSION_MAJOR == 4 && __SDCC_VERSION_MINOR == 0)
-#define __sdcccall(a)
-#endif
-
-#ifndef __sdcccall
-#define __sdcccall(a)
-#endif
-
 struct timespec;   /* <time.h> */
 
 /* ------------------------------------------------------------------------- *
@@ -35,7 +26,7 @@ struct timespec;   /* <time.h> */
  * ------------------------------------------------------------------------- */
 
 /* Terminate the program with `status`.  Does not return. */
-void _exit(int status) __sdcccall(1);
+[[sdcc::sdccall(1)]] void _exit(int status);
 
 /* ------------------------------------------------------------------------- *
  * Heap
@@ -47,7 +38,7 @@ void _exit(int status) __sdcccall(1);
  *     returns  HL = base   (first usable byte)
  *              DE = limit  (one past the last usable byte)
  * ------------------------------------------------------------------------- */
-void heap_region(void) __sdcccall(1);
+[[sdcc::sdccall(1)]] void heap_region(void);
 
 /* ------------------------------------------------------------------------- *
  * Wall clock  (see <time.h>)
@@ -55,8 +46,8 @@ void heap_region(void) __sdcccall(1);
  * Fill *tv with the current time (seconds + nanoseconds since the Unix epoch)
  * and return 0, or return -1 if no clock is available.  set is optional.
  * ------------------------------------------------------------------------- */
-int gettimeofday(struct timespec *tv) __sdcccall(1);
-int settimeofday(const struct timespec *tv) __sdcccall(1);   /* optional */
+[[sdcc::sdccall(1)]] int gettimeofday(struct timespec *tv);
+[[sdcc::sdccall(1)]] int settimeofday(const struct timespec *tv); /* optional */
 
 /* ------------------------------------------------------------------------- *
  * Byte I/O  (POSIX-style, on integer file descriptors)
@@ -66,14 +57,14 @@ int settimeofday(const struct timespec *tv) __sdcccall(1);   /* optional */
  * filesystem implements only console write()/read() and returns errors for the
  * file operations.
  * ------------------------------------------------------------------------- */
-int  open(const char *path, int flags, int mode) __sdcccall(1);   /* fd >= 3, or -1        */
-int  close(int fd) __sdcccall(1);                                  /* 0, or -1             */
-int  read(int fd, void *buf, unsigned len) __sdcccall(1);          /* bytes, 0 = EOF, -1   */
-int  write(int fd, const void *buf, unsigned len) __sdcccall(1);   /* bytes written, or -1 */
-long lseek(int fd, long offset, int whence) __sdcccall(1);         /* new offset, or -1    */
+[[sdcc::sdccall(1)]] int open(const char *path, int flags, int mode); /* fd >= 3, or -1 */
+[[sdcc::sdccall(1)]] int close(int fd); /* 0, or -1 */
+[[sdcc::sdccall(1)]] int read(int fd, void *buf, unsigned len); /* bytes, 0 = EOF, -1 */
+[[sdcc::sdccall(1)]] int write(int fd, const void *buf, unsigned len); /* bytes, or -1 */
+[[sdcc::sdccall(1)]] long lseek(int fd, long offset, int whence); /* new offset, or -1 */
 
 /* Remove / rename a file.  Return 0 on success, -1 on failure. */
-int  unlink(const char *path) __sdcccall(1);
-int  rename(const char *oldpath, const char *newpath) __sdcccall(1);
+[[sdcc::sdccall(1)]] int unlink(const char *path);
+[[sdcc::sdccall(1)]] int rename(const char *oldpath, const char *newpath);
 
 #endif /* XYZ_SYS_H */

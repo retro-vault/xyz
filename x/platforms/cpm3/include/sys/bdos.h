@@ -1,7 +1,7 @@
 /*
  * sys/bdos.h
  *
- * CP/M BDOS call declarations for target programs.
+ * CP/M 3 BDOS call declarations for target programs.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih
@@ -18,6 +18,7 @@
 #define C_READ        1
 #define C_WRITE       2
 #define C_RAWIO       6
+#define C_STAT        11
 #define C_DELIMIT     110
 #define C_WRITEBLK    111
 
@@ -52,16 +53,10 @@ typedef struct bdos_ret_s {
     unsigned short rethl;
 } bdos_ret_t;
 
-#if defined(__SDCC_VERSION_MAJOR) && defined(__SDCC_VERSION_MINOR) && \
-    (__SDCC_VERSION_MAJOR == 4 && __SDCC_VERSION_MINOR == 0)
-#define __sdcccall(a)
-#endif
-
-#ifndef __sdcccall
-#define __sdcccall(a)
-#endif
-
-extern unsigned char bdos(unsigned char fn, unsigned short param) __sdcccall(1);
-extern void bdosret(unsigned char fn, unsigned short param, bdos_ret_t *p) __sdcccall(1);
+[[sdcc::sdccall(1)]] extern unsigned char bdos(unsigned char fn,
+                                                unsigned short param);
+[[sdcc::sdccall(1)]] extern void bdosret(unsigned char fn,
+                                          unsigned short param,
+                                          bdos_ret_t *p);
 
 #endif /* XCC_SYS_BDOS_H */

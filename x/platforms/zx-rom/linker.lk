@@ -1,14 +1,10 @@
-; ZX Spectrum ROM image layout.
-; Written in SDCC command-file style so it can be consumed by both
-; sdldz80 and xld. Use the command line to choose output format and
-; explicit entry symbol if needed.
-;
-; Important current limitation:
-; xcc still emits ordinary writable globals directly into _DATA instead of a
-; full _INITIALIZER -> _INITIALIZED split. So this script keeps the ROM/RAM
-; intent visible, but full initialized-data correctness still needs compiler
-; support.
-
--b _CODE  = 0x0000
--b _DATA  = 0x8000
--e
+; ZX Spectrum 48K replacement ROM.
+; The ROM image is fixed at 16 KiB. Runtime state starts immediately after
+; the 6912-byte display, and xld packs the relocated _DATA bytes into ROM.
+ENTRY _entry
+FORMAT bin
+RANGE 0000-3FFF
+AREA _HEADER = 0000
+AREA _DATA = 5B00
+COPY _DATA
+RESERVE F000-FFFF

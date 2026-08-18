@@ -7,7 +7,7 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 C8C ?= $(HOST_BIN_DIR)/xcc
 AS8 ?= $(HOST_BIN_DIR)/xas
 AR8 ?= $(HOST_BIN_DIR)/xar
-C8FLAGS ?= -I$(ROOT)/libc/include -I$(ROOT)/platforms/include
+C8FLAGS ?= -I$(ROOT)/libc/include
 LIBC_COPTFLAGS ?= -Os
 AS8FLAGS ?= --mode=sdcc
 AR8FLAGS ?= rcs

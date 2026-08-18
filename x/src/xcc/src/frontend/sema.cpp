@@ -73,7 +73,8 @@ static bool attrs_specify_call_abi(const attr_list &attrs) {
     for (const auto &a : attrs) {
         if (a.ns == "sdcc" &&
             (a.name == "naked" || a.name == "interrupt"
-             || a.name == "critical" || a.name == "sdccall")) {
+             || a.name == "critical" || a.name == "sdccall"
+             || a.name == "sdcccall")) {
             return true;
         }
         if (a.ns == "z88dk" &&
@@ -171,7 +172,7 @@ void sema::apply_attrs(symbol &sym, const attr_list &attrs, source_loc loc) {
                 sym.abi = call_abi::INTERRUPT;
             } else if (a.name == "critical") {
                 sym.abi = call_abi::CRITICAL;
-            } else if (a.name == "sdccall") {
+            } else if (a.name == "sdccall" || a.name == "sdcccall") {
                 if (a.args.empty()) {
                     diag_.error(a.loc, "[[sdcc::sdccall]] requires an integer argument (0 or 1)");
                 } else {

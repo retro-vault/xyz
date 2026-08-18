@@ -26,6 +26,7 @@ to the specific documentation you need.
 - [X feature guide](x/FEATURES.md)
 - [Distribution layout](x/docs/dist/README.md)
 - [How to test](x/docs/howtos/HOW-TO-TEST.md)
+- [ZX Spectrum 48K RAM/ROM target guide](x/docs/howtos/ZX-SPECTRUM-48K.md)
 - [Debugger integration](x/docs/howtos/DEBUGGER_INTEGRATION.md)
 - [Current libc gaps](x/docs/todo/LIBC-GAPS.md)
 
@@ -56,7 +57,11 @@ to the specific documentation you need.
 
 ## Tests And Samples
 
-- [Debug sample](x/tests/debug/README.md)
+- [CP/M 3 example](x/examples/cpm3/README.md)
+- [ZX Spectrum RAM example](x/examples/zx-ram/README.md)
+- [ZX Spectrum ROM example](x/examples/zx-rom/README.md)
+- [ZX Spectrum MCP smoke test](x/tests/tests/zx48/README.md)
+- [Debug sample](x/tests/tests/debug/README.md)
 - [Microdrive emulator harness](y/tests/mdr-emu/README.md)
 
 ## Staged Output

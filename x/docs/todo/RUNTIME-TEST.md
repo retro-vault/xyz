@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The runtime library (`src/xc/xcc/lib/runtime/`) contains hand-optimised Z80
+The runtime library (`x/runtime/`) contains hand-optimised Z80
 assembly routines that the SDCC compiler emits calls to for operations that
 have no single Z80 instruction: integer arithmetic grouped under `int8/`,
 `int16/`, `int32/`, and `int64/`, floating-point helpers under `float/`,
@@ -10,7 +10,7 @@ atomic helpers under `atomic/`, jump shims under `jumps/`, and shared/system
 support under `common/` and `sys/`.
 
 Before optimising any of these routines we need a reliable test harness.
-The suite in `tests/runtime/` assembles the real runtime .s files, links
+The suite in `x/tests/tests/runtime/` assembles the real runtime `.s` files, links
 them at address 0x0000, and exercises each entry point through the xz80
 Z80 CPU emulator.  No CP/M faking, no patching — the actual machine code
 runs and register state is inspected.
@@ -20,7 +20,7 @@ runs and register state is inspected.
 ## How it works
 
 ```
-tests/runtime/
+x/tests/tests/runtime/
 ├── Makefile              — orchestrates the full build+test flow
 ├── tools/
 │   ├── ihx2bin.py        — Intel HEX → flat binary
@@ -37,10 +37,10 @@ tests/runtime/
 
 ### Build flow
 
-1. `sdasz80` assembles every `.s` under `src/xc/xcc/lib/runtime/`
+1. `xas` assembles every `.s` under `x/runtime/`
    recursively to a `.rel`.
 2. `sdldz80` links all `.rel` files at `_CODE=0x0000`, producing
-   `build/tests/runtime/runtime.ihx` and `runtime.noi`.
+   the direct runtime image and its symbol map under `build/tests/runtime/`.
 3. `tools/ihx2bin.py` converts the IHX to a flat `runtime.bin`.
 4. `tools/gen_symbols.py` parses the `.noi` file (which contains full
    symbol names, unlike the truncated `.map`) and writes
@@ -152,9 +152,8 @@ because -128 happens to fit in one byte.
 ## Running the tests
 
 ```bash
-cd tests/runtime
-make          # assemble, link, build, run
-make clean    # wipe build artifacts
+make -C x/tests/tests/runtime test
+make -C x/tests/tests/runtime clean
 ```
 
 The binary path can be overridden: `./build/tests/runtime/runtime_tests path/to/runtime.bin`.
@@ -165,7 +164,7 @@ The binary path can be overridden: `./build/tests/runtime/runtime_tests path/to/
 
 **`__moduint` returned quotient in HL, not remainder.**
 
-`src/xc/xcc/lib/runtime/int16/modunsigned.s` had a spurious `ex de,hl` after
+`x/runtime/int16/modunsigned.s` had a spurious `ex de,hl` after
 `call __divuint`.  `__divuint` already returns the remainder in HL and
 quotient in DE; the swap reversed them.  All other unsigned-modulo callers
 (`__smod16`, `__modsint` via `__get_remainder`) expect and receive HL =

@@ -170,7 +170,13 @@ static void add_default_include_paths(options &opts, const char *argv0) {
     const auto prefix = executable.parent_path().parent_path();
 
     // GNU cross-toolchain prefix layout: target headers live under
-    // <prefix>/z80/include; <prefix>/include holds host SDK headers only.
+    // <prefix>/z80/include.  A selected platform's private headers precede
+    // the common libc headers; <prefix>/include holds host SDK headers only.
+    std::string platform = opts.platform_name;
+    if (platform.rfind("z80-", 0) == 0)
+        platform.erase(0, 4);
+    if (!platform.empty())
+        add_default_include_path(opts, prefix / "z80" / "include" / platform);
     add_default_include_path(opts, prefix / "z80" / "include");
 }
 

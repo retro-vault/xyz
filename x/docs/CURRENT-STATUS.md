@@ -2,9 +2,44 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-10, after the CP/M command-line startup fix.
+Last updated: 2026-08-18, after Fuse validation of the ZX Spectrum ROM console.
 
 ## Major Recent Work
+
+### ZX Spectrum 48K RAM and ROM platforms
+
+The staged X sysroot now contains `zx-ram` and `zx-rom` platform archives,
+CRTs, and linker scripts. The RAM target begins at `0x5CCB`, initializes BSS
+and static storage, supplies a heap up to `0xF000`, and uses the top 4 KiB for
+stack growth. The replacement target produces a fixed 16 KiB ROM, places
+writable state at `0x5B00`, and copies initialized `_DATA` from its packed ROM
+load image before entering C. `xld` gained the underlying VMA/LMA support via
+GNU `AT>region` and the SDCC-style `COPY area` directive, including generated
+`s__AREA_LOAD`/`l__AREA_LOAD` symbols and ROM overflow diagnostics.
+
+Both targets use assembly-only platform code. The target-private
+`<conio.h>` exports non-blocking `kbhit()`; blocking standard input
+is derived from the same matrix poller. Standard output/error render the
+proportional 6x12 Tamsyn font exported by snatch. The screen addressing and
+12-pixel scroll structure
+are adapted from YOS. File and wall-clock hooks fail deliberately, and the
+libc `time`, `clock`, and `timespec_get` wrappers now propagate those failures.
+The long-text Fuse demo also exposed and fixed an exact-right-edge cursor
+case: Z80 `INC` does not update carry, so an advance from pixel 255 to zero
+must test the zero result explicitly to avoid overprinting the current row.
+
+`xprog --tap` and `--tzx` produce checksummed, auto-running Spectrum images.
+Their BASIC bootstrap invokes a small ROM loader placed after a `REM` token;
+the final ROM load returns directly to the requested entry, so the CODE block
+can overwrite the BASIC program and genuinely use the low `0x5CCB` address.
+The optional `x/tests/tests/zx48/run_mcp.py` test builds and executes raw RAM,
+replacement ROM, TAP, and TZX under zx-spectrum-mcp with a real 48K ROM. It
+checks static initialization, BSS, heap/libc operations, unsupported hooks,
+console scrolling, non-blocking polling and blocking keyboard input, exit, and
+a final marker in every form.
+The target-specific `x/examples/zx-ram/lorem.c` and
+`x/examples/zx-rom/lorem.c` programs are built and visually verified in Fuse
+as tape-loadable RAM code and a replacement ROM, respectively.
 
 ### CP/M command-line startup
 
@@ -16,8 +51,11 @@ form one argument with the quotes removed. Storage is sized to the actual tail
 and argument count and remains valid when file I/O overwrites address `0x0080`.
 The real CP/M emulator regression covers no arguments, ordinary and repeated
 whitespace, quoted and empty-quoted words, DMA overwrite, the exact 127-byte
-tail, and 62 total `argv` entries. Startup also transfers the `main` return
-value from DE to the HL argument expected by `exit`. It supplies `argc` and
+tail, and 62 total `argv` entries. It also checks target-private `<conio.h>`
+`kbhit()` against both idle and ready console input; the assembly backend uses
+BDOS function 11 without consuming the waiting character. Startup also
+transfers the `main` return value from DE to the HL argument expected by
+`exit`. It supplies `argc` and
 `argv` simultaneously through the `sdcccall(1)` HL/DE registers and the
 right-to-left `sdcccall(0)` stack layout; the emulator suite exercises both
 entry conventions.
@@ -44,7 +82,7 @@ a target workload. On the unrelated frozen z88dk corpus, all 22 valid `-Os`
 pre/post pairs and all 23 `-Of` pairs are exactly unchanged in bytes and
 cycles. The remaining `hashbench -Os` row changes from an incorrect execution
 to correct, giving final XCC correctness of 23/23 in both profiles. The full
-post-fix XCC suite passes 4,368/4,368.
+post-fix XCC suite passes 4,375/4,375.
 
 ### S-model core integer closure
 
@@ -185,16 +223,17 @@ A very large dual-style test base was built:
 
 - **Direct tests** (library + runtime isolation): heavy use of `runtime_machine.hpp` calling symbols directly from the assembled image (`rt_sym::...`). Large data-driven arrays, edge cases (0/-0/±Inf/NaN, overflow, INT_MIN, etc.), bit-exact or tolerance comparisons against host gcc.
 - **C-driven tests** (compiler + library together): `.c` files compiled with the project's `xcc`, assembled, linked into the test image (alongside the full libc + runtime + "none" sys hooks), then executed in the emulator. The harness inspects return codes in registers and/or captured output via the `__sys_putchar_*` hooks.
-- Runtime-specific matrices (`x/tests/runtime/`) for long long and double (activated the `PENDING_TEST` suites and added mega cross-product tests).
-- The external C23 compatibility suite was copied into `x/tests/c23/` and a representative/enriched version was integrated into the in-tree dispatch (`x/tests/libc/c23_cases.c`).
+- Runtime-specific matrices (`x/tests/tests/runtime/`) for long long and double (activated the `PENDING_TEST` suites and added mega cross-product tests).
+- The external C23 compatibility suite was copied into `x/tests/tests/c23/` and a representative/enriched version was integrated into the in-tree dispatch (`x/tests/tests/libc/c23_cases.c`).
 
 This dual approach was explicitly requested so that later runs can help distinguish "problem in the library" vs. "problem in the compiler".
 
 ### 3. C23 Compatibility Suite Integration
-The comprehensive external C23 test suite (originally at `/home/tstih/data/tstih/c23`) was copied into `x/tests/c23/`. 
+The comprehensive external C23 test suite is maintained under
+`x/tests/tests/c23/`.
 - It provides ~63 feature tests across all categories (core-language, library, time, iec-60559/fromfp+minmax, unicode/char8_t, initialization/structs, stdckdint, stdbit, free_sized, etc.).
 - An `xcc-z80` profile + driver/run scripts were added so the suite's matrix runner can be used against this project's toolchain.
-- The in-tree `c23_cases.c` was enriched with logic transcribed from the suite, ensuring "all structures" (both C structs like `div_t`/`timespec`/etc. and the full set of test categories) are exercised when running the normal `make -C x/tests/libc core-test`.
+- The in-tree `c23_cases.c` was enriched with logic transcribed from the suite, ensuring "all structures" (both C structs like `div_t`/`timespec`/etc. and the full set of test categories) are exercised when running the normal `make -C x/tests/tests/libc core-test`.
 
 ### 4. Repo Structure & Distribution Discussion
 The project was recognized as becoming complex (toolchain + libc + runtime + full OS + future GUI + tests + packaging all in one tree). The user explicitly wants:
@@ -202,7 +241,7 @@ The project was recognized as becoming complex (toolchain + libc + runtime + ful
 - Tests that are primarily local to the component that owns the code.
 - Still support genuine end-to-end tests that cross components.
 
-A full restructuring proposal was developed (see `docs/ARCHITECTURE.md` for the detailed target layout, migration steps, and rationale).
+A full restructuring proposal was developed (see `x/docs/ARCHITECTURE.md` for the detailed target layout, migration steps, and rationale).
 
 ### 5. Prefix-Rooted XtTools Staging
 The xtools staging layout has now started moving toward a real standalone
@@ -255,7 +294,7 @@ The default top-level build flow now leans fully on the staged X toolchain:
 
 ## Current High-Level Layout (Pre-Restructuring)
 
-- `src/xc/` — the x tools (xcc, xas, xld, xopt, ...)
+- `x/src/` — the X tools (xcc, xas, xld, xopt, ...)
 - `lib/libc/` — the assembler C library
 - `x/runtime/` + related — low-level runtime
 - `src/yos/` — the OS
@@ -275,7 +314,7 @@ The default top-level build flow now leans fully on the staged X toolchain:
   environment; the current build is native across GNU Make + POSIX-like shells,
   but Windows still expects something like MSYS2 rather than pure cmd.exe.
 - Keep evolving the dual-style test base as new C23 or OS features are added.
-- The copied `x/tests/c23/` suite should remain the authoritative source for the broad C23 matrix; the in-tree dispatch is for fast local verification + libc surface testing.
+- The `x/tests/tests/c23/` suite should remain the authoritative source for the broad C23 matrix; the in-tree dispatch is for fast local verification + libc surface testing.
 
 ## How to Resume Work Here
 
@@ -289,16 +328,16 @@ The default top-level build flow now leans fully on the staged X toolchain:
 
 3. Common entry points:
    - `make -C x`
-   - `make -C x/tests/libc core-test` (the main libc + C23 dispatch runner)
-   - `cd x/tests/c23 && make matrix PROFILE=...` for the full external suite against the current xcc profile
+   - `make -C x/tests/tests/libc core-test` (the direct libc + C23 dispatch runner)
+   - `bash x/tests/run_tests.sh --filter xcc` for the unified compiler suite
 
 Feel free to ask the AI (or a future human) to re-read these three documents + the relevant source trees at the start of any new session on this project.
 
 ## Recent Artifacts Worth Knowing About
 
-- `x/tests/libc/c23_cases.c` — enriched in-tree C23 test (covers all major categories + structs from the external suite + our specific libc additions).
-- `x/tests/c23/` — the full copied C23 compatibility suite + xcc-z80 integration.
-- Large test data in `x/tests/libc/test_main.cpp`, `stdio_cases.c`, `x/tests/runtime/test_*.cpp`.
+- `x/tests/tests/libc/c23_cases.c` — enriched in-tree C23 test (covers all major categories + structs from the external suite + our specific libc additions).
+- `x/tests/tests/c23/` — the full C23 compatibility suite + xcc-z80 integration.
+- Large test data in `x/tests/tests/libc/test_main.cpp`, `stdio_cases.c`, and `x/tests/tests/runtime/test_*.cpp`.
 - All the new C23 assembler implementations live in the existing files under `lib/libc/src/` (math/moremath*.s, stdlib/strtod*.s + heap_core, stdio/printf.s, etc.).
 
 Update this file (and the architecture doc) when significant new work is completed or when the restructuring actually begins.

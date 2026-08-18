@@ -57,6 +57,7 @@ int main(int argc, char* argv[]) {
         ctx.holes = opts.reserved_ranges;
         ctx.area_bases = opts.area_bases;
         ctx.area_order = opts.area_order;
+        ctx.load_copy_areas = opts.load_copy_areas;
         ctx.output_range = opts.output_range;
         ctx.format = opts.format;
         ctx.verbose = opts.verbose;

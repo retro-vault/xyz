@@ -7,6 +7,7 @@
 //   AREA _CODE = 0100
 //   RANGE 0000-7FFF
 //   RESERVE 0100-017F
+//   COPY _DATA
 //   SDCC command files with one option per line:
 //     -b _CODE = 0100
 //     -i / -m / -p / -z
@@ -194,6 +195,13 @@ std::unique_ptr<sdcc_lscript> sdcc_lscript::read(
         if (head == "RESERVE") {
             auto rest = trim(cleaned.substr(std::string("RESERVE").size()));
             script->add_reserved_range(parse_range_sdcc(rest, path, line_no));
+            continue;
+        }
+        if (head == "COPY") {
+            if (parts.size() != 2)
+                throw lscript_error(path.string() + ":" + std::to_string(line_no)
+                                    + ": COPY requires one area name");
+            script->add_load_copy_area(parts[1]);
             continue;
         }
 

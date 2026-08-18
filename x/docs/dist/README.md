@@ -36,6 +36,11 @@ xcc -Os main.c util.c -o app.xl
 # Flat binary at a fixed address
 xcc main.c --oformat=binary -Ttext=0x8000 -o app.bin
 
+# ZX Spectrum tape and replacement ROM
+xcc -Os --platform=zx-ram --oformat=binary main.c -o app.bin
+xprog --tap app.bin -o app.tap --name APP
+xcc -Os --platform=zx-rom --oformat=binary main.c -o app.rom
+
 # Debug a program
 xcc -g main.c -o app.xl
 xemu --listen 127.0.0.1:9000 &
@@ -52,8 +57,13 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 | `xopt` | Standalone Z80 assembly optimizer | `share/doc/XOPT.md` |
 | `xar` | Static library archiver | `share/doc/XAR.md` |
 | `xobjcopy` | Object/archive format conversion | `share/doc/XOBJCOPY.md` |
+| `xprog` | XPRG and ZX Spectrum TAP/TZX packager | `share/doc/XPROG.md` |
 | `xgdb` | Source-level debugger | `share/doc/XGDB.md` |
 | `xemu` | Standalone Z80 emulator and remote debug target | `share/doc/XEMU.md` |
+
+Target guide: `share/doc/ZX48.md` documents the installed ZX Spectrum RAM,
+tape, and replacement-ROM workflows and the intentionally unsupported
+filesystem/clock services.
 
 ## Prefix layout
 
@@ -61,11 +71,13 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 bin/          the tools
 lib/          host SDK libraries (libxbfd, libxopt, librsp, libxgdb, libxemu, libxz80)
 include/      host SDK headers (xbfd/, xopt/, rsp/, xgdb/, xemu/, xz80/)
-z80/include/  C library headers for the target
+z80/include/  common C headers and selected-platform header subdirectories
 z80/lib/      crt0, linker scripts, libc, runtime, platform libraries
 share/doc/    tool manuals
 pkg/          installable packages (.deb, .vsix)
 ```
 
-The default target platform is bare-metal `none` (`libnone.a`). CP/M 3
-support is staged as `libcpm3.a`; select it with `--platform=cpm3`.
+The default target platform is bare-metal `none` (`libnone.a`). CP/M 3,
+ZX Spectrum 48K RAM, and ZX Spectrum replacement-ROM support are staged as
+`libcpm3.a`, `libzx-ram.a`, and `libzx-rom.a`; select them with
+`--platform=cpm3`, `--platform=zx-ram`, or `--platform=zx-rom`.

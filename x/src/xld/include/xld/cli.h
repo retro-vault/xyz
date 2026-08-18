@@ -41,6 +41,7 @@ namespace xld {
         std::vector<address_range> reserved_ranges;
         std::map<std::string, uint16_t> area_bases;
         std::vector<std::string> area_order;
+        std::vector<std::string> load_copy_areas;
         std::optional<address_range> output_range;
         output_format format = output_format::xl;
         std::set<std::string> explicit_area_bases;

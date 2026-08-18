@@ -1,7 +1,6 @@
-; ZX Spectrum RAM-loaded memory map.
-; Written in SDCC command-file style so it can be consumed by both
-; sdldz80 and xld. Use the command line to choose output format and
-; explicit entry symbol if needed.
-
--b _CODE = 0x8000
--e
+; ZX Spectrum 48K RAM program.
+; 0x5CCB is the first address after the Sinclair ROM system variables.
+ENTRY _entry
+FORMAT bin
+AREA _CODE = 5CCB
+RESERVE F000-FFFF

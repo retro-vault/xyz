@@ -320,21 +320,21 @@ Start with the pieces that have no dependencies on other new code.
 ## Adding a new function to the build
 
 1. **Write the assembly** in the matching grouped runtime folder such as
-   `src/xc/xcc/lib/runtime/int64/<name>.s` or
-   `src/xc/xcc/lib/runtime/double/<name>.s`. Follow the
+   `x/runtime/int64/<name>.s` or
+   `x/runtime/double/<name>.s`. Follow the
    existing file style: `.module`, `.optsdcc -mz80 sdcccall(1)`, `.area _CODE`,
    `.globl` declarations, function body.
 
-2. **Rebuild the runtime binary** — the `tests/runtime/Makefile` picks up all
+2. **Rebuild the runtime binary** — `x/tests/tests/runtime/Makefile` picks up all
    `*.s` files under the runtime tree recursively:
 
    ```bash
-   cd tests/runtime && make clean && make
+   make -C x/tests/tests/runtime clean test
    ```
 
 3. **Update the symbol address** — after `make`, look up the new symbol in the
    regenerated `build/tests/runtime/runtime_symbols.hpp` (or the `.noi` file)
-   and copy it into `tests/runtime/runtime_symbols_future.hpp`:
+   and copy it into `x/tests/tests/runtime/runtime_symbols_future.hpp`:
 
    ```cpp
    // Before:
@@ -360,8 +360,8 @@ Start with the pieces that have no dependencies on other new code.
    #define PENDING_TEST TEST   // activates the whole file
    ```
 
-5. **Run** — `make` in `tests/runtime/` rebuilds and runs.  All 319 currently
-   passing tests must stay green; the newly activated tests must also pass.
+5. **Run** — `make -C x/tests/tests/runtime test` rebuilds and runs. All
+   existing tests and the newly activated tests must pass.
 
 ---
 
@@ -369,9 +369,9 @@ Start with the pieces that have no dependencies on other new code.
 
 | File | Contents | Status |
 |------|----------|--------|
-| `tests/runtime/test_ll.cpp`     | 50 long long tests  | all `PENDING_TEST` |
-| `tests/runtime/test_double.cpp` | 68 double tests     | all `PENDING_TEST` |
-| `tests/runtime/runtime_symbols_future.hpp` | placeholder addresses | update per function |
+| `x/tests/tests/runtime/test_ll.cpp`     | 50 long long tests  | direct runtime coverage |
+| `x/tests/tests/runtime/test_double.cpp` | 68 double tests     | direct runtime coverage |
+| `x/tests/tests/runtime/runtime_symbols_future.hpp` | placeholder addresses | update per function |
 
 ---
 

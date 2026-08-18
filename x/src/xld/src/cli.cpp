@@ -136,6 +136,8 @@ namespace xld {
             opts.area_bases[area_name] = base;
         for (const auto& area_name : script.area_order())
             opts.area_order.push_back(area_name);
+        for (const auto& area_name : script.load_copy_areas())
+            opts.load_copy_areas.push_back(area_name);
         for (const auto& range : script.reserved_ranges()) {
             opts.reserved_ranges.push_back(xld::address_range{
                 range.start,

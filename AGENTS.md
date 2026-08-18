@@ -52,7 +52,11 @@ make -C y               # build the migrated Y product tree
 make -C x/libc          # build only the C library
 make -C y/src           # build only the OS
 bash x/tests/run_tests.sh --filter xcc
+python3 x/tests/tests/zx48/run_mcp.py --mcp /path/to/zx-spectrum-mcp --rom /path/to/48.rom
 ```
+
+The complete target memory maps, Fuse commands, Tamsyn console contract, and
+unsupported-service rules are in `x/docs/howtos/ZX-SPECTRUM-48K.md`.
 
 See `x/docs/ARCHITECTURE.md` for the planned future layout and wrapper targets.
 
@@ -71,6 +75,8 @@ make stage-includes stage-xcc-support
 - **Benchmarks remain separate for now**:
   - `x/tests/benchmarks/`, `x/tests/grouped_benchmarks/`, `x/tests/numeric_benchmarks/`
   - `y/tests/` — YOS-side apps, media, and emulator harnesses
+  - `x/tests/tests/zx48/` — optional real-ROM/MCP coverage for the staged
+    `zx-ram` and `zx-rom` platforms plus TAP/TZX playback
 
 - The long-term direction is still component-owned tests plus a smaller E2E
   bucket, but the repository has not fully moved there yet.
@@ -100,6 +106,19 @@ When publishing the toolchain:
 - Keep the libc **thread-safe** — no new writable statics / `_DATA` section variables for new code. Use stack, registers, or explicit library state only.
 - New C23 functionality is implemented in assembler (in existing `.s` files) unless writing headers.
 - Tests: both "direct" (emulator symbol calls via `runtime_machine`) and "C-driven" (compile `.c` with `xcc`, run in emulator, compare behavior or output to host gcc).
+- Every immediate child of `x/platforms/` is one selectable target. Do not add
+  shared, `common`, or `include` pseudo-target directories there. Put the
+  common hook contract in `x/libc/include/sys.h`; put target-only public
+  headers below that target's own `include/` directory. A target must not
+  include sources from a sibling target. `make -C x check-platform-layout`
+  enforces these structural rules.
+- ZX target code follows the same assembly-only tradition. Each target is
+  self-contained under `x/platforms/zx-ram/` or `x/platforms/zx-rom/`; keep
+  their mirrored console, keyboard, and font sources synchronized and rerun
+  all four MCP modes.
+- Platform examples follow the same one-directory-per-target rule under
+  `x/examples/` (`cpm3`, `zx-ram`, `zx-rom`, and so on). Do not combine
+  targets in one example directory or import example source from a sibling.
 
 ## Common Tasks
 

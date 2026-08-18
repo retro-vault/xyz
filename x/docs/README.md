@@ -26,8 +26,8 @@ The subfolders are organized by purpose:
   aspirational future state.
 
 Component-specific README files still live with their owning tool or library.
-When the distribution tree is staged, only the compiler tool manuals are
-collected, under `bin/x/share/doc/`.
+When the distribution tree is staged, user-facing tool manuals and target
+guides are collected under `bin/x/share/doc/`.
 
 ## Current Key Documents
 
@@ -38,6 +38,10 @@ collected, under `bin/x/share/doc/`.
 
 - [howtos/HOW-TO-TEST.md](howtos/HOW-TO-TEST.md)
   End-to-end and focused regression test workflows.
+
+- [howtos/ZX-SPECTRUM-48K.md](howtos/ZX-SPECTRUM-48K.md)
+  Build, package, run, and test the ZX Spectrum RAM and replacement-ROM
+  platforms, including memory maps, Tamsyn console behavior, Fuse, and MCP.
 
 - [howtos/BENCHMARKS.md](howtos/BENCHMARKS.md)
   Repeatable codegen and bare-metal benchmark workflows against SDCC.

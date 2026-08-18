@@ -16,16 +16,13 @@
 
 #define __STDC_VERSION_SETJMP_H__ 202311L
 
-#ifndef __sdcccall
-#define __sdcccall(a)
-#endif
-
 /* Opaque execution-context buffer for the current Z80 implementation. */
 typedef unsigned short jmp_buf[3];
 
 /* Internal helpers targeted by the public macros below. */
-extern int __setjmp(unsigned short *env) __sdcccall(1);
-_Noreturn extern void __longjmp(unsigned short *env, int val) __sdcccall(1);
+[[sdcc::sdccall(1)]] extern int __setjmp(unsigned short *env);
+[[sdcc::sdccall(1)]] _Noreturn extern void __longjmp(unsigned short *env,
+                                                       int val);
 
 /* Save the current execution context. Returns 0 initially, nonzero after longjmp. */
 #define setjmp(env) __setjmp((env))

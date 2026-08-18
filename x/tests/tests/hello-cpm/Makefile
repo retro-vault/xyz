@@ -17,13 +17,17 @@ TNYLPO    ?= tnylpo
 
 .PHONY: all test clean
 
-all: $(BUILD_DIR)/hello.com $(BUILD_DIR)/argv.com \
+all: $(BUILD_DIR)/hello.com $(BUILD_DIR)/conio.com $(BUILD_DIR)/argv.com \
 	$(BUILD_DIR)/argv-os.com $(BUILD_DIR)/argv-of.com \
 	$(BUILD_DIR)/argv-stk.com
 
 $(BUILD_DIR)/hello.com: hello.c
 	@mkdir -p $(BUILD_DIR)
 	$(XCC) hello.c --platform=cpm3 --oformat=binary -o $@
+
+$(BUILD_DIR)/conio.com: conio.c
+	@mkdir -p $(BUILD_DIR)
+	$(XCC) conio.c --platform=cpm3 --oformat=binary -o $@
 
 $(BUILD_DIR)/argv.com: argv.c
 	@mkdir -p $(BUILD_DIR)
@@ -52,6 +56,18 @@ test: all
 	  echo "PASS: hello-cpm"; \
 	else \
 	  echo "FAIL: hello-cpm (got: $$out)"; exit 1; \
+	fi; \
+	out="$$(tail -f /dev/null | (cd $(BUILD_DIR) && $(TNYLPO) conio))"; \
+	if [ "$$out" = "IDLE" ]; then \
+	  echo "PASS: hello-cpm conio idle"; \
+	else \
+	  echo "FAIL: hello-cpm conio idle (got: $$out)"; exit 1; \
+	fi; \
+	out="$$(printf x | (cd $(BUILD_DIR) && $(TNYLPO) conio))"; \
+	if [ "$$out" = "xREADY" ]; then \
+	  echo "PASS: hello-cpm conio ready"; \
+	else \
+	  echo "FAIL: hello-cpm conio ready (got: $$out)"; exit 1; \
 	fi; \
 	for prog in argv argv-os argv-of argv-stk; do for args in \
 	  "" \

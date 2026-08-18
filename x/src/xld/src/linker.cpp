@@ -7,6 +7,7 @@
 //
 // 2021-07-28   tstih
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <set>
@@ -67,7 +68,9 @@ namespace xld {
         relax_branches(ctx);
         place_areas(ctx);
         define_linker_symbols(ctx);
+        define_load_copies(ctx);
         relocate(ctx);
+        materialize_load_copies(ctx);
         find_entry_point(ctx);
     }
 
@@ -286,6 +289,107 @@ namespace xld {
         if (ctx.verbose) {
             std::cout << "Generated " << ctx.reloc_table.size()
                       << " relocation entries\n";
+        }
+    }
+
+    void linker::define_load_copies(link_context& ctx) {
+        if (ctx.load_copy_areas.empty())
+            return;
+        if (!ctx.output_range.has_value()) {
+            throw placement_error(
+                "load-copy areas require an explicit binary output range");
+        }
+
+        uint32_t load_cursor = ctx.output_range->start;
+        for (const auto& mod : ctx.modules) {
+            for (const auto& area : mod->areas()) {
+                if (!area.placed_addr().has_value() || area.size() == 0
+                    || area.is_never_load())
+                    continue;
+                const uint32_t start = area.placed_addr().value();
+                const uint32_t end = start + area.size() - 1u;
+                const bool copied = std::find(
+                    ctx.load_copy_areas.begin(), ctx.load_copy_areas.end(),
+                    area.name()) != ctx.load_copy_areas.end();
+                const bool has_payload = std::any_of(
+                    mod->texts().begin(), mod->texts().end(),
+                    [&](const text_record& record) {
+                        return record.area_index == area.index()
+                            && !record.data.empty();
+                    });
+                if (!copied && has_payload
+                    && (start < ctx.output_range->start
+                        || end > ctx.output_range->end)) {
+                    throw placement_error(
+                        "resident area '" + area.name()
+                        + "' does not fit in the output range");
+                }
+                if (start >= ctx.output_range->start
+                    && end <= ctx.output_range->end) {
+                    load_cursor = std::max(load_cursor, end + 1u);
+                }
+            }
+        }
+
+        for (const auto& area_name : ctx.load_copy_areas) {
+            std::string suffix = area_name;
+            if (!suffix.empty() && suffix[0] == '_')
+                suffix.erase(0, 1);
+            const auto start_it = ctx.linker_symbols.find("s__" + suffix);
+            const auto size_it = ctx.linker_symbols.find("l__" + suffix);
+            if (start_it == ctx.linker_symbols.end()
+                || size_it == ctx.linker_symbols.end()) {
+                throw placement_error(
+                    "load-copy area '" + area_name + "' was not placed");
+            }
+
+            const uint32_t size = size_it->second;
+            load_cursor = area_placer::next_free_address(
+                load_cursor, size, ctx.holes);
+            if (size > 0
+                && (load_cursor > ctx.output_range->end
+                    || size - 1u > ctx.output_range->end - load_cursor)) {
+                throw placement_error(
+                    "load image for area '" + area_name
+                    + "' does not fit in the output range");
+            }
+
+            ctx.linker_symbols["s__" + suffix + "_LOAD"] =
+                static_cast<uint16_t>(load_cursor);
+            ctx.linker_symbols["l__" + suffix + "_LOAD"] =
+                static_cast<uint16_t>(size);
+            ctx.load_copies.push_back(load_copy{
+                area_name,
+                start_it->second,
+                static_cast<uint16_t>(load_cursor),
+                static_cast<uint16_t>(size)
+            });
+            load_cursor += size;
+        }
+    }
+
+    void linker::materialize_load_copies(link_context& ctx) {
+        for (const auto& copy : ctx.load_copies) {
+            if (copy.size == 0)
+                continue;
+            const uint32_t source_end =
+                static_cast<uint32_t>(copy.run_address) + copy.size;
+            const uint32_t load_end =
+                static_cast<uint32_t>(copy.load_address) + copy.size;
+            if (source_end > ctx.code_buffer.size() || load_end > 0x10000u) {
+                throw reloc_error(
+                    "load-copy area '" + copy.area_name
+                    + "' is outside the linked image");
+            }
+            if (load_end > ctx.code_buffer.size()) {
+                ctx.code_buffer.resize(load_end, 0x00);
+                ctx.code_occupancy.resize(load_end, 0x00);
+                ctx.code_size = static_cast<uint32_t>(ctx.code_buffer.size());
+            }
+            std::memmove(&ctx.code_buffer[copy.load_address],
+                         &ctx.code_buffer[copy.run_address], copy.size);
+            std::fill(ctx.code_occupancy.begin() + copy.load_address,
+                      ctx.code_occupancy.begin() + load_end, 0x01);
         }
     }
 

@@ -98,11 +98,11 @@ or a known limitation is fixed.
 ## Peephole Optimizer
 
 Activated at `-O1` and above.  19 hand-written rules run to fixed-point (up to 10 passes).
-See `docs/ARCHITECTURE.md` for the complete rule table.
+See `x/src/xcc/docs/ARCHITECTURE.md` for the complete rule table.
 
 ---
 
-## Runtime Library (`lib/runtime.s`)
+## Runtime library (`x/runtime/`)
 
 | Symbol | Status |
 |--------|--------|

@@ -69,18 +69,18 @@ LIBC_FEATURE_DEFINES += -D__XCC_LIBC_NO_STDIO_FLOAT=1
 endif
 
 TARGET_FEATURE_DEFINES := $(LIBC_FEATURE_DEFINES) $(ZX_RAM_STORAGE_DEFINES)
-TARGET_C8FLAGS := -I$(X_ROOT)/libc/include -I$(X_ROOT)/platforms/include $(TARGET_FEATURE_DEFINES)
+TARGET_C8FLAGS := -I$(X_ROOT)/libc/include $(TARGET_FEATURE_DEFINES)
 TARGET_AS8FLAGS := --mode=sdcc $(TARGET_FEATURE_DEFINES)
 
 RUNTIME_ARCHIVE_NAME := libruntime.a
 FIXED_ARCHIVE_NAME := libfixed.a
-STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3 emu)
+STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3 emu zx-ram zx-rom)
 TOOLCHAIN_RUNTIME_BUILD_DIR := $(BUILD_DIR)/toolchain-runtime
 TOOLCHAIN_FIXED_BUILD_DIR := $(BUILD_DIR)/toolchain-fixed
 WINDOWS_MINGW_DOCKER_SCRIPT := $(X_ROOT)/tests/tools/windows_host_preflight_docker.sh
 
 .PHONY: all x clean
-.PHONY: stage-includes stage-target-assets stage-xcc-support
+.PHONY: check-platform-layout stage-includes stage-target-assets stage-xcc-support
 .PHONY: stage-layout-cleanup stage-dist-docs
 .PHONY: windows-host-preflight
 
@@ -124,7 +124,23 @@ x:
 	@$(MAKE) stage-xcc-support
 	@$(MAKE) stage-dist-docs
 
-stage-includes:
+check-platform-layout:
+	@for platform_dir in $(X_ROOT)/platforms/*; do \
+	    test -d "$$platform_dir" || continue; \
+	    for required in crt0.s linker.lk linker.ld; do \
+	        if [ ! -f "$$platform_dir/$$required" ]; then \
+	            echo "invalid platform directory $$platform_dir: missing $$required" >&2; \
+	            exit 1; \
+	        fi; \
+	    done; \
+	    if find "$$platform_dir" -maxdepth 1 -name '*.s' -exec \
+	        grep -EH '[.]include[[:space:]]+"[.][.]/' {} + | grep -q .; then \
+	        echo "invalid cross-target source include in $$platform_dir" >&2; \
+	        exit 1; \
+	    fi; \
+	done
+
+stage-includes: check-platform-layout
 	rm -rf $(PUBLIC_INCLUDE_DIR) $(TARGET_INCLUDE_DIR)
 	mkdir -p $(PUBLIC_INCLUDE_DIR) $(TARGET_INCLUDE_DIR)
 	cp -R $(X_ROOT)/lib/xbfd/include/. $(PUBLIC_INCLUDE_DIR)/
@@ -134,7 +150,13 @@ stage-includes:
 	cp -R $(X_ROOT)/lib/xgdb/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/lib/xemu/include/. $(PUBLIC_INCLUDE_DIR)/
 	cp -R $(X_ROOT)/libc/include/. $(TARGET_INCLUDE_DIR)/
-	cp -R $(X_ROOT)/platforms/include/. $(TARGET_INCLUDE_DIR)/
+	@for platform in $(STAGED_PLATFORMS); do \
+	    platform_inc="$(X_ROOT)/platforms/$$platform/include"; \
+	    if [ -d "$$platform_inc" ]; then \
+	        mkdir -p "$(TARGET_INCLUDE_DIR)/$$platform"; \
+	        cp -R "$$platform_inc/." "$(TARGET_INCLUDE_DIR)/$$platform/"; \
+	    fi; \
+	done
 	cp $(Y_ROOT)/include/yos.h $(TARGET_INCLUDE_DIR)/yos.h
 
 stage-target-assets:
@@ -148,7 +170,7 @@ stage-target-assets:
 # Keep the 32-bit integer helpers in every model. X_MODEL controls the staged
 # library feature set, not the C language's 32-bit long ABI, and archive
 # members do not add bytes unless a program references them.
-stage-xcc-support:
+stage-xcc-support: check-platform-layout
 	rm -rf $(TOOLCHAIN_RUNTIME_BUILD_DIR) $(TOOLCHAIN_FIXED_BUILD_DIR) $(BUILD_DIR)/toolchain-platform
 	rm -f $(TARGET_LIB_DIR)/crt0.rel $(TARGET_LIB_DIR)/crt0.s \
 	      $(TARGET_LIB_DIR)/linker.lk $(TARGET_LIB_DIR)/linker.ld \

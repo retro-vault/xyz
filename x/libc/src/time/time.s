@@ -38,6 +38,11 @@ _time::
         push    ix
         pop     hl
         call    _gettimeofday           ; __time_ts.tv_sec = current seconds
+        inc     de
+        ld      a,d
+        or      e
+        dec     de
+        jr      z,time_failed
         pop     hl                      ; HL = timer
         pop     af                      ; Z set if timer was NULL
         jr      z,time_no_store
@@ -57,6 +62,13 @@ time_no_store:
         ld      d,1(ix)
         ld      l,2(ix)
         ld      h,3(ix)
+        jr      time_cleanup
+time_failed:
+        pop     hl                      ; discard saved timer
+        pop     af                      ; discard saved NULL flag
+        ld      de,#0xffff
+        ld      hl,#0xffff
+time_cleanup:
         ld      sp,ix
         ; IX addresses the temporary timeval object, not the saved caller IX.
         ; Discard that object before restoring the frame pointer.

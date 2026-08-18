@@ -12,10 +12,6 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#ifndef __sdcccall
-#define __sdcccall(a)
-#endif
-
 #ifndef SEEK_SET
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -26,11 +22,11 @@
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
-int close(int fd) __sdcccall(1);
-off_t lseek(int fd, off_t offset, int whence) __sdcccall(1);
-ssize_t read(int fd, void *buf, size_t count) __sdcccall(1);
-ssize_t write(int fd, const void *buf, size_t count) __sdcccall(1);
-int unlink(const char *path) __sdcccall(1);
+[[sdcc::sdccall(1)]] int close(int fd);
+[[sdcc::sdccall(1)]] off_t lseek(int fd, off_t offset, int whence);
+[[sdcc::sdccall(1)]] ssize_t read(int fd, void *buf, size_t count);
+[[sdcc::sdccall(1)]] ssize_t write(int fd, const void *buf, size_t count);
+[[sdcc::sdccall(1)]] int unlink(const char *path);
 void *sbrk(ptrdiff_t increment);
 
 #endif /* _UNISTD_H */

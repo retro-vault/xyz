@@ -16,7 +16,7 @@ XOPT_DIR := $(ROOT)/lib/xopt
 XOPT_INC := $(XOPT_DIR)/include
 XOPT_LIB := $(BUILD_DIR)/lib/libxopt.a
 XOPT_SRCS := $(wildcard $(XOPT_DIR)/src/*.cpp $(XOPT_DIR)/include/xopt/*.h)
-CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src  -I$(ROOT)/platforms/include -I$(ROOT)/lib/xbfd/include -I$(XOPT_INC)
+CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src -I$(ROOT)/lib/xbfd/include -I$(XOPT_INC)
 DBGFLAGS ?= -g3 -O0 -DDEBUG
 SANITIZE_FLAGS ?= -fsanitize=address,undefined
 RELFLAGS ?= -O2 -DNDEBUG
@@ -175,6 +175,12 @@ dist: $(TARGET)
 	  $(XAS) $(XASFLAGS) "$$src" -o "$$rel"; \
 	done
 	@cp -R $(ROOT)/libc/include/. $(DIST_INCDIR)/
+	@for platform_inc in $(ROOT)/platforms/*/include; do \
+	    test -d "$$platform_inc" || continue; \
+	    platform="$$(basename "$$(dirname "$$platform_inc")")"; \
+	    mkdir -p "$(DIST_INCDIR)/$$platform"; \
+	    cp -R "$$platform_inc/." "$(DIST_INCDIR)/$$platform/"; \
+	done
 	@echo "Staged:"
 	@echo "  $(DIST_BINDIR)/xcc         -> /usr/local/bin/xcc"
 	@echo "  $(DIST_LIBDIR)/*.rel -> /usr/local/lib/xcc/runtime/"

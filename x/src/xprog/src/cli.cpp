@@ -71,6 +71,10 @@ cli_options cli::parse(int argc, char* argv[])
             select_command(command_kind::service, arg);
         } else if (arg == "-i" || arg == "--inspect") {
             select_command(command_kind::inspect, arg);
+        } else if (arg == "--tap") {
+            select_command(command_kind::tap, arg);
+        } else if (arg == "--tzx") {
+            select_command(command_kind::tzx, arg);
         } else if (arg == "-o") {
             options.output_file = take_value(i, argc, argv, "-o");
         } else if (arg.rfind("-o", 0) == 0 && arg.size() > 2) {
@@ -114,7 +118,7 @@ cli_options cli::parse(int argc, char* argv[])
     if (options.input_file.empty())
         throw usage_error("input file is required");
     if (options.command == command_kind::none)
-        throw usage_error("select --process, --service, or --inspect");
+        throw usage_error("select --process, --service, --inspect, --tap, or --tzx");
     if (options.command == command_kind::inspect) {
         if (!options.output_file.empty())
             throw usage_error("inspect does not accept -o");
@@ -122,13 +126,31 @@ cli_options cli::parse(int argc, char* argv[])
     }
     if (options.output_file.empty()) {
         options.output_file = options.input_file;
-        options.output_file.replace_extension(
-            options.command == command_kind::process ? ".prc" : ".svc");
+        const char* extension = options.command == command_kind::process
+            ? ".prc" : options.command == command_kind::service
+            ? ".svc" : options.command == command_kind::tap ? ".tap" : ".tzx";
+        options.output_file.replace_extension(extension);
     }
     if (options.name.empty())
         options.name = options.input_file.stem().string();
-    if (options.name.empty() || options.name.size() > 15)
-        throw usage_error("image name must contain 1 to 15 bytes");
+    const bool tape = options.command == command_kind::tap
+                   || options.command == command_kind::tzx;
+    const std::size_t max_name = tape ? 10 : 15;
+    if (options.name.empty() || options.name.size() > max_name)
+        throw usage_error("image name must contain 1 to "
+                          + std::to_string(max_name) + " bytes");
+    if (tape) {
+        if (options.load_address == 0)
+            options.load_address = 0x5ccb;
+        if (!options.entry_point.has_value())
+            options.entry_point = options.load_address;
+        if (options.stack_size.has_value() || !options.exports.empty()
+            || options.require_fixed_load || options.image_id.has_value()
+            || options.abi_version != 1 || options.minimum_os_version != 0) {
+            throw usage_error("process/service options are not valid for tape output");
+        }
+        return options;
+    }
     if (options.command == command_kind::process) {
         if (!options.stack_size.has_value() || options.stack_size.value() == 0)
             throw usage_error("process requires --stack-size with a nonzero value");
@@ -147,20 +169,22 @@ void cli::print_usage(const char* argv0)
 {
     std::cerr
         << "Usage: " << argv0 << " [options] <input>\n\n"
-        << "X Tools Program Packager (xprog) — process and service images\n\n"
+        << "X Tools Program Packager (xprog) — XPRG and Spectrum tape images\n\n"
         << "mode (one required):\n"
         << "  -p, --process             Create a .prc process image\n"
         << "  -s, --service             Create a .svc service image\n"
         << "  -i, --inspect             Validate and describe an existing image\n\n"
+        << "  --tap                     Wrap a flat binary in an auto-running .tap\n"
+        << "  --tzx                     Wrap a flat binary in an auto-running .tzx\n\n"
         << "options:\n"
         << "  -o <file>                 Output image (default: .prc or .svc)\n"
-        << "  -n, --name <name>         Image name, at most 15 bytes\n"
+        << "  -n, --name <name>         Image name (10 bytes for tape, 15 for XPRG)\n"
         << "  --id <n>                  Stable 32-bit image/service identifier\n"
         << "  --abi <n>                 Provided ABI version (default: 1)\n"
         << "  --min-os <n>              Minimum OS ABI version (default: 0)\n"
-        << "  --load-address <n>        Preferred load or service JP-table address\n"
+        << "  --load-address <n>        Load address (tape default: 0x5CCB)\n"
         << "  --fixed-load              Require the preferred address\n"
-        << "  --entry <n>               Override XL entry / service initializer\n"
+        << "  --entry <n>               XL entry override or absolute tape entry\n"
         << "  --version                 Show version\n"
         << "  -h, --help                Show this help\n\n"
         << "process options:\n"

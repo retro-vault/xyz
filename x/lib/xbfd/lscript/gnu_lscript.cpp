@@ -447,6 +447,7 @@ private:
             const std::string output_name = parse_output_section_name();
             std::optional<uint16_t> explicit_base;
             std::optional<std::string> region_name;
+            bool has_load_address = false;
 
             if (!is_symbol(':'))
                 explicit_base = parse_scalar_expr();
@@ -459,8 +460,10 @@ private:
             if (match_ident("AT")) {
                 if (match_symbol('('))
                     skip_parenthesized_content();
-                else if (match_symbol('>'))
+                else if (match_symbol('>')) {
+                    has_load_address = true;
                     (void)expect_ident("AT load region");
+                }
             }
 
             if (match_symbol('('))
@@ -478,9 +481,10 @@ private:
                 if (match_symbol('>')) {
                     region_name = expect_ident("memory region");
                 } else if (match_ident("AT")) {
-                    if (match_symbol('>'))
+                    if (match_symbol('>')) {
+                        has_load_address = true;
                         (void)expect_ident("AT load region");
-                    else if (match_symbol('('))
+                    } else if (match_symbol('('))
                         skip_parenthesized_content();
                 } else if (match_symbol(':')) {
                     if (is_ident_token())
@@ -496,6 +500,10 @@ private:
 
                 for (const auto& area_name : input_areas)
                     out_.add_area_order(area_name);
+                if (has_load_address) {
+                    for (const auto& area_name : input_areas)
+                        out_.add_load_copy_area(area_name);
+                }
 
                 if (!input_areas.empty()) {
                     const auto& anchor_area = input_areas.front();

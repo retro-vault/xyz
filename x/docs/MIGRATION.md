@@ -1,6 +1,8 @@
-# x Migration Map
+# X migration record
 
-This directory is the first copied product view for the X tools.
+`x/` is now the active, independently buildable product root. This file keeps
+the old-to-current path mapping for archaeology; new documentation and commands
+must use the current paths on the right.
 
 ## Current Mapping
 
@@ -26,6 +28,15 @@ This directory is the first copied product view for the X tools.
 
 ## Still Pending
 
-- build-root rewiring so the copied tree becomes the primary build layout
 - extraction of clean CPU and ABI data into `targets/`
 - further pruning and reorganization of the mixed copied test suites
+
+## Completed product-boundary work
+
+- `make -C x` builds and stages the standalone prefix under `bin/x/`.
+- The root build delegates to X before building YOS with the staged tools.
+- Host SDK, target headers, libc, runtime, CRTs, linker scripts, and named
+  platform archives have prefix-rooted locations.
+- CP/M 3, ZX Spectrum RAM, and ZX Spectrum replacement-ROM targets are staged
+  platform selections rather than private OS build fragments.
+- X and Y own their release notes, documentation, tests, and packaging roots.

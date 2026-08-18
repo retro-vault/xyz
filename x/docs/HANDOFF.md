@@ -1,36 +1,58 @@
 # Quick Handoff for Returning Sessions
 
-This is a short, high-signal summary intended to be the first thing an AI (or human) reads when coming back to this project after working elsewhere.
+This is the short, high-signal state of the X toolchain product. Repository
+working conventions and canonical commands remain in the root `AGENTS.md`.
 
-**Project**: Z80 retro stack (toolchain + libc + OS + supporting pieces) in `/home/tstih/data/retro-vault/xyz`.
+## Latest completed milestone
 
-**Most recent major threads**:
-- Completed a large amount of the C23 libc surface in pure assembler (only editing existing `.s` files, stack/register-only for new state, full dual direct + C-driven test coverage).
-- Integrated an external C23 compatibility test suite (copied into `x/tests/c23/`) and enriched the in-tree dispatch.
-- Discussed and planned a repo restructuring so the "x tools" (xcc/xas/xld/...) can be built and published independently while still supporting the OS and good local + E2E testing.
+X now ships complete minimal ZX Spectrum 48K RAM and replacement-ROM
+platforms. `zx-ram` begins at `0x5CCB`; `zx-rom` emits an exact 16 KiB image.
+Both use assembly-only CRT and platform hooks, the ordinary staged libc and
+runtime, a YOS-derived proportional Tamsyn bitmap console, a public
+non-blocking `<conio.h>` `kbhit()` API, and blocking libc input derived from
+that poller. Files and wall-clock services deliberately fail.
 
-**Key durable documents** (read these first on return):
-1. `AGENTS.md` (root) — working conventions, build targets, test philosophy, common tasks.
-2. `docs/ARCHITECTURE.md` — current problems + target modular structure (toolchain/ as the independent product, component-owned tests, etc.).
-3. `docs/CURRENT-STATUS.md` — detailed summary of the C23 work, the test base, and open items.
-4. This `docs/HANDOFF.md` — the ultra-short version.
+`xprog` creates auto-running TAP and standard-speed TZX 1.20 images. `xld`
+supports ROM load/run splits through GNU `AT>region` and SDCC `COPY area`, with
+generated `s__AREA_LOAD`/`l__AREA_LOAD` symbols and overflow rejection.
 
-**How to get back into the code quickly**:
-- Build the current toolchain/lib: normal `make` or the relevant sub-makes.
-- Run the main libc + C23 tests: `make -C x/tests/libc core-test`
-- Explore the external-style C23 matrix: `cd x/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json` (or with `RUN_MODE=never` for compile-only).
-- The libc C23 implementation lives in existing assembler files under `lib/libc/src/` (look for recent additions around strfrom, fromfp, fmaximum, stdckdint, free_*, timespec_getres, char8_t, etc.).
-- Test harnesses: `x/tests/libc/test_main.cpp` (direct + C-driven) and `x/tests/runtime/`.
+The optional `x/tests/tests/zx48/run_mcp.py` regression passes raw RAM,
+replacement ROM, TAP, and TZX against a real 48K ROM through
+zx-spectrum-mcp. The target-owned `x/examples/zx-ram/lorem.c` and
+`x/examples/zx-rom/lorem.c` Fuse demos visually validate the completed
+proportional framebuffer. The demo found and closed the exact-pixel-256
+cursor-wrap edge case.
 
-**If you need deeper history**:
-- The environment will supply a compacted session summary when you start in this directory.
-- Previous session artifacts live under `~/.grok/sessions/<path-to-this-dir>/`.
+## Read first
 
-**Current priority / open work** (from the last session):
-- The restructuring proposal in `docs/ARCHITECTURE.md` (make `xtools` a first-class independent build + distribution target, move tests to be component-local, keep a small E2E bucket).
-- Keep the dual "both" testing approach as new features are added.
-- The copied `x/tests/c23/` suite + the enriched in-tree `c23_cases.c` should be maintained together.
+1. `AGENTS.md` — repository conventions and current build/test commands.
+2. `x/docs/howtos/ZX-SPECTRUM-48K.md` — complete ZX build, memory, I/O,
+   console, Fuse, and MCP contract.
+3. `x/docs/CURRENT-STATUS.md` — detailed recent toolchain and libc state.
+4. `x/docs/ARCHITECTURE.md` — product layout and staged-platform decisions.
+5. `x/CHANGELOG.md` — canonical X release notes.
 
-When starting a new session here, the AI should read the three docs listed above and then ask the user what they want to tackle next (restructuring steps, more C23 work, OS features, distribution/packaging, etc.).
+## Fast verification
 
-Update the status and handoff documents when major milestones are reached.
+```sh
+make -C x
+bash x/tests/run_tests.sh --filter xcc
+python3 x/tests/tests/zx48/run_mcp.py \
+  --mcp /path/to/zx-spectrum-mcp \
+  --rom /path/to/48.rom
+```
+
+The unified XCC suite last passed 4,375/4,375. The ZX MCP run last passed all
+four delivery modes and marker checks.
+
+## Durable implementation locations
+
+- `x/platforms/zx-ram/` and `x/platforms/zx-rom/` — self-contained target CRT,
+  linker scripts, syscall hooks, console, keyboard, and font assembly.
+- `x/src/xprog/` — XPRG plus TAP/TZX packaging.
+- `x/src/xld/` and `x/lib/xbfd/` — placement and ROM load-image support.
+- `x/libc/src/` — hand-written assembly libc.
+- `x/tests/tests/c23/` — canonical manifest-driven compiler suite.
+
+Update this handoff, `CURRENT-STATUS.md`, architecture notes, and the product
+changelog whenever another platform or major linker/runtime contract lands.

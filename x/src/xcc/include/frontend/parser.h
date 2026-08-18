@@ -268,7 +268,8 @@ private:
     bool reject_legacy_callconv_keyword();
 
     //
-    // Apply ABI-bearing attributes such as [[sdcc::sdccall(N)]] to the
+    // Apply ABI-bearing attributes such as [[sdcc::sdccall(N)]] (including
+    // the historical extra-c alias) to the
     // nearest function type in a declarator.  This is what preserves the
     // calling convention for function pointer typedefs and prototypes.
     //

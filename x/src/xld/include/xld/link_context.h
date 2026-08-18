@@ -28,6 +28,13 @@ namespace xld {
         uint8_t pad;        // bit0: byte relocation patches MSB
     };
 
+    struct load_copy {
+        std::string area_name;
+        uint16_t run_address = 0;
+        uint16_t load_address = 0;
+        uint16_t size = 0;
+    };
+
     class link_context {
     public:
         // Loaded modules.
@@ -37,6 +44,7 @@ namespace xld {
         std::vector<address_range> holes;
         std::map<std::string, uint16_t> area_bases;
         std::vector<std::string> area_order;
+        std::vector<std::string> load_copy_areas;
         std::optional<address_range> output_range;
         output_format format = output_format::xl;
 
@@ -53,6 +61,7 @@ namespace xld {
         // uses this to avoid padding the whole declared address window.
         std::vector<uint8_t> code_occupancy;
         std::vector<output_reloc> reloc_table;
+        std::vector<load_copy> load_copies;
         uint16_t entry_point = 0;
         uint32_t code_size = 0;
         // Lowest placed address of any non-empty area; binary/ihx output

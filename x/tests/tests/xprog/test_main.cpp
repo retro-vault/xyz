@@ -10,6 +10,7 @@
 #include <xprog/cli.h>
 #include <xprog/errors.h>
 #include <xprog/package.h>
+#include <xprog/tape.h>
 
 namespace {
 
@@ -72,6 +73,65 @@ void cli_tests()
                "--stack-size", "256"});
     }));
     CHECK(throws([&] { parse({"xprog", "a.xl"}); }));
+
+    auto tap = parse({"xprog", "--tap", "hello.bin"});
+    CHECK(tap.command == xprog::command_kind::tap);
+    CHECK(tap.load_address == 0x5ccb);
+    CHECK(tap.entry_point == 0x5ccb);
+    CHECK(tap.output_file == "hello.tap");
+
+    auto tzx = parse({"xprog", "--tzx", "hello.bin", "--load-address",
+                      "0x8000", "--entry", "0x8001", "--name", "HELLO"});
+    CHECK(tzx.command == xprog::command_kind::tzx);
+    CHECK(tzx.load_address == 0x8000);
+    CHECK(tzx.entry_point == 0x8001);
+    CHECK(tzx.output_file == "hello.tzx");
+}
+
+void tape_tests()
+{
+    const std::vector<std::uint8_t> program = {0x3e, 0x2a, 0xc9};
+    const auto tap = xprog::build_tap(program, 0x5ccb, 0x5ccb, "HELLO");
+    std::size_t cursor = 0;
+    unsigned blocks = 0;
+    while (cursor < tap.size()) {
+        CHECK(cursor + 2 <= tap.size());
+        const auto size = static_cast<std::uint16_t>(tap[cursor])
+            | static_cast<std::uint16_t>(tap[cursor + 1] << 8);
+        cursor += 2;
+        CHECK(size >= 2);
+        CHECK(cursor + size <= tap.size());
+        std::uint8_t checksum = 0;
+        for (std::size_t i = 0; i < static_cast<std::size_t>(size); ++i)
+            checksum ^= tap[cursor + i];
+        CHECK(checksum == 0);
+        cursor += size;
+        ++blocks;
+    }
+    CHECK(blocks == 4);
+
+    // The first data block is an auto-start BASIC program. Its line 1 REM
+    // contains a machine-code loader at 0x5CD0, so loading code at 0x5CCB
+    // may safely overwrite the BASIC program that launched it.
+    CHECK(tap.size() > 32);
+    CHECK(tap[24] == 0x00 && tap[25] == 0x01);
+    CHECK(tap[28] == 0xea);
+    CHECK(tap[29] == 0xdd && tap[30] == 0x21);
+
+    const auto tzx = xprog::tap_to_tzx(tap);
+    CHECK(tzx.size() > tap.size());
+    CHECK(std::string(tzx.begin(), tzx.begin() + 7) == "ZXTape!");
+    CHECK(tzx[7] == 0x1a);
+    CHECK(tzx[8] == 1);
+    CHECK(tzx[9] == 20);
+    CHECK(tzx[10] == 0x10);
+
+    CHECK(throws([&] {
+        xprog::build_tap(program, 0x5ccb, 0x8000, "HELLO");
+    }));
+    CHECK(throws([&] {
+        xprog::build_tap({}, 0x5ccb, 0x5ccb, "HELLO");
+    }));
 }
 
 void package_tests()
@@ -135,6 +195,7 @@ int main()
     cli_tests();
     package_tests();
     process_tests();
+    tape_tests();
     if (failures) {
         std::cerr << failures << " xprog test(s) failed\n";
         return 1;

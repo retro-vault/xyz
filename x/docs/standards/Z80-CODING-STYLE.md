@@ -1,11 +1,11 @@
 # Z80-CODING-STYLE.md - Z80 Assembly Coding Standards
 
 This document defines the Z80 assembly style for code in
-`src/xc/xcc/lib/runtime/`, `lib/libc/src/`, `tests/`, and other
+`x/runtime/`, `x/libc/src/`, `x/platforms/`, `x/tests/`, and other
 hand-written Z80 modules.
 
 The baseline style comes from the imported and adapted runtime modules now
-living under `src/xc/xcc/lib/runtime/`, grouped into folders such as
+living under `x/runtime/`, grouped into folders such as
 `int8/`, `int16/`, `int32/`, `int64/`, `float/`, `double/`, `common/`,
 `atomic/`, `jumps/`, and `sys/`.
 
@@ -27,7 +27,8 @@ Use this style for:
 
 - Imported SDCC runtime code after cleanup.
 - xcc ABI bridge modules.
-- libc assembly under `lib/libc/src/`.
+- libc assembly under `x/libc/src/`.
+- platform CRT and hook assembly under `x/platforms/`.
 - Startup code, trampolines, and test support assembly.
 - Any new hand-written Z80 source file.
 

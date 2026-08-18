@@ -52,6 +52,7 @@ build/dist/
     *.rel                <- per-helper Z80 runtime objects
   z80/include/
     *.h                  <- canonical target-side libc headers
+    cpm3/                <- headers private to --platform=cpm3
 ```
 
 To install system-wide on Linux:

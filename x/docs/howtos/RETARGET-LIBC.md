@@ -1,349 +1,206 @@
-# Retargeting the xcc Z80 libc
+# Retargeting the X Z80 libc
 
-The libc in `lib/libc/` is **target-independent**. Every routine — the calendar
-math, the string and wide-string families, the soft-float math, the formatted
-I/O that *will* sit in `<stdio.h>` — is written so that the only target-specific
-code is a small **platform layer**. Porting the library to a new board or
-operating system means implementing that layer; nothing in `lib/libc/src/`
-changes.
+The target-independent library lives under `x/libc/src/`. A machine or
+operating-system port supplies a small platform directory under
+`x/platforms/<name>/`; libc itself does not change.
 
-This document lists the hooks the platform layer must provide, grouped by the
-standard-library feature they unlock:
+The platform contract is declared in
+[`x/libc/include/sys.h`](../../libc/include/sys.h). The
+[`none`](../../platforms/none/) backend is the starting template. CP/M 3 is a
+hosted example, while [`zx-ram` and `zx-rom`](ZX-SPECTRUM-48K.md) demonstrate
+bare hardware, a fixed RAM image, and a replacement ROM.
 
-1. **Clock** — two hooks, and the whole of `<time.h>` works. *(Implemented.)*
-2. **Heap** — one hook reports the default heap's region, and
-   `malloc`/`calloc`/`realloc`/`free` (plus multi-heap `allocate`/`deallocate`)
-   work.
-3. **Console character I/O** — output and input of one byte, and
-   `putchar`/`getchar`/`puts`/`printf`/`scanf` work.
-4. **File / disk I/O** — a handful of stream calls, and the rest of `<stdio.h>`
-   (`fopen`/`fread`/`fwrite`/`fseek`/…) works.
-5. **Startup** — `crt0` and process exit.
+## Platform directory
 
-> **Quick start.** The complete contract is declared in
-> [`lib/sys/include/sys.h`](../../lib/sys/include/sys.h). The
-> [`none`](../../lib/sys/none/) backend is an empty-shell **template**: copy it to
-> `lib/sys/<your-target>/`, implement the hooks, and build with
-> `PLATFORM=<your-target>`. Its [README](../../lib/sys/none/README.md) lists every
-> function with **reference empty C implementations**. The sections below explain
-> the design behind each group; `cpm3` is the worked, fully-implemented example.
+A staged platform contains:
 
----
+| File | Purpose |
+|---|---|
+| `crt0.s` | Entry point, stack setup, static initialization, `main`, and exit |
+| `linker.lk` | SDCC-style memory map for xld |
+| `linker.ld` | GNU-style memory map for xld |
+| `_exit.s` | Non-returning process/firmware termination |
+| `heap_region.s` | Default allocator arena, returned in HL/DE |
+| `gettimeofday.s`, `settimeofday.s` | Optional wall-clock hooks |
+| `open.s`, `close.s`, `read.s`, `write.s`, `lseek.s` | Descriptor I/O |
+| `unlink.s`, `rename.s` | File removal and rename hooks |
+| Other `*.s`/`*.c` | Target-private helpers pulled into the platform archive |
 
-## The platform-backend mechanism
+`crt0.s` remains a standalone startup object. Every other source in the
+directory is archived as `lib<name>.a`. The two linker scripts are staged next
+to it, allowing `--platform=<name>` to select the complete target contract.
 
-Platform hooks live in **`lib/sys/<backend>/`**, one assembly file per hook
-(same one-function-per-file rule as the rest of the library). The same backend
-directory is also the right home for platform startup and memory-map files such
-as `crt0.s`, `linker.ld`, and `linker.lk`. The backend is selected at build
-time:
+This project conventionally implements shipped target support in Z80 assembly.
+C prototypes below explain the ABI; they are not a requirement to implement
+the backend in C.
+
+## Create and stage a backend
 
 ```sh
-make -C lib/libc/src SYS=none     # bare-metal default (stubs)
-make -C lib/libc/src SYS=myos     # pull in lib/sys/myos/ instead
+cp -R x/platforms/none x/platforms/myboard
 ```
 
-The libc `Makefile` globs `lib/sys/$(SYS)/*.s` (and `*.c`) and archives those
-objects into `libc.a` alongside the target-independent code. It deliberately
-excludes `crt0.s`, which remains a standalone startup object. The shipped
-**`none`** backend provides empty/identity stubs so the library links and runs
-(clock reads as the epoch, etc.) on bare metal with no OS.
+Edit the startup, memory map, and hooks, then stage it:
 
-To create a backend, copy `lib/sys/none/` to `lib/sys/<youros>/` and fill in the
-bodies. Add `crt0.s` and optional linker scripts there too if the target needs
-its own startup or memory map. You only need the hooks for the features you
-want; an unused hook can be left as the `none` stub.
+```sh
+make -C x PLATFORM=myboard stage-xcc-support
+```
 
-### Calling convention
+Or rebuild the complete X prefix:
 
-All hooks use the compiler's `sdcccall(1)` convention, the same as the rest of
-libc:
+```sh
+make -C x PLATFORM=myboard
+```
 
-| Argument / result | Register(s) |
-|-------------------|-------------|
-| 1st arg, 16-bit (e.g. a pointer) | `HL` |
-| 1st arg, 32-bit (`long`) | `DE:HL` (`DE`=low, `HL`=high) |
-| 2nd arg, 16-bit | `DE` |
-| further args | on the stack, at `4(ix)`, `6(ix)`, … after `push ix` |
-| `int` / pointer return | `DE` |
-| `long` return | `DE:HL` (`DE`=low, `HL`=high) |
+The resulting files are:
 
-Public C symbol `foo` is the assembly label `_foo::`.
+```text
+bin/x/z80/lib/crt0-myboard.rel
+bin/x/z80/lib/crt0-myboard.s
+bin/x/z80/lib/libmyboard.a
+bin/x/z80/lib/linker-myboard.lk
+bin/x/z80/lib/linker-myboard.ld
+```
 
----
+Use the backend through the driver:
 
-## 1. Clock — `<time.h>` *(implemented)*
+```sh
+bin/x/bin/xcc -Os --platform=myboard main.c -o app.xl
+```
 
-The entire `<time.h>` — `time`, `clock`, `difftime`, `mktime`,
-`gmtime[_r]`, `localtime[_r]`, `asctime[_r]`, `ctime[_r]`, `strftime`,
-`timespec_get` — is built **in assembly** on top of exactly two hooks:
+For fixed memory, select `--oformat=binary` and encode the address/range in the
+platform linker scripts.
+
+## Calling convention
+
+Public XCC declarations use the native `[[sdcc::sdccall(1)]]` attribute
+directly. Platform hooks use that calling convention:
+
+XCC also accepts the historical extra-`c` attribute spelling for source
+compatibility, but new headers and examples use the canonical spelling above.
+
+| Value | Location |
+|---|---|
+| First 16-bit argument | HL |
+| Second 16-bit argument | DE |
+| Third 16-bit argument | BC |
+| Further arguments | Stack (`4(ix)`, `6(ix)`, … after `push ix`) |
+| `int` or pointer return | DE |
+| `long` return | DE:HL, in the compiler's established word order |
+
+A public C symbol `foo` is normally exported as `_foo::` in SDCC assembly.
+`heap_region` is a deliberate special convention: return base in HL and the
+one-past-end limit in DE.
+
+## Startup contract
+
+`crt0.s` must provide `_entry` and normally performs this sequence:
+
+1. Establish a valid stack pointer.
+2. Copy initialized storage to its run address.
+3. Clear BSS.
+4. Initialize target services needed before C runs.
+5. Call `_main` using the selected ABI's argument contract.
+6. Transfer `main`'s result to `_exit`/`exit` correctly.
+
+A RAM target usually links code and writable storage together. A ROM target
+needs distinct load and run addresses for writable initialized data. Xld's GNU
+scripts express that as `>ram AT>rom`; SDCC scripts use `COPY _DATA`. Startup
+then copies `s__DATA_LOAD`/`l__DATA_LOAD` to `s__DATA`. See the
+[xld manual](../dist/man/XLD.md#rom-load-addresses).
+
+## Heap
+
+The allocator needs only this target decision:
 
 ```c
-int gettimeofday(struct timespec *tv);        /* read the wall clock */
-int settimeofday(const struct timespec *tv);  /* set  the wall clock */
+[[sdcc::sdccall(1)]] void heap_region(void);
+/* returns HL=base, DE=one-past-end limit */
 ```
 
-(Platform hooks use plain POSIX-style names — no special prefix — so the
-assembly labels are simply `_gettimeofday::` / `_settimeofday::`.)
+`malloc` lazily initializes the default heap over that range. The allocator,
+block metadata, splitting/coalescing, `calloc`, `realloc`, aligned allocation,
+and the C23 sized-free forms remain target-independent assembly.
 
-`struct timespec { time_t tv_sec; long tv_nsec; }` (8 bytes: seconds at offset
-0, nanoseconds at offset 4; both 32-bit). The hook writes/reads the whole
-struct; on a seconds-only clock just set `tv_nsec = 0`.
+A fixed-RAM board can reserve an `_HEAP` arena. A hosted or linked-image target
+can place a zero-sized `_HEAP` marker after BSS and return the gap from that
+symbol to a stack reserve. The ZX backends use the latter pattern and stop at
+`0xF000`.
 
-See `lib/sys/none/gettimeofday.s` / `settimeofday.s` for the stub shape. An OS
-replaces them to read its RTC, and every calendar/formatting function comes to
-life with no other change. This two-hook design is the template the rest of
-this document follows.
-
-> Note: there is no timezone/DST model — local time equals UTC. `time_t` is a
-> signed 32-bit count of seconds (valid roughly 1902–2038).
-
----
-
-## 2. Heap — `malloc`, `calloc`, `realloc`, `free`
-
-Dynamic allocation needs one target-specific decision: **where the heap lives
-and how big it is**. The allocator itself — the free-list bookkeeping, block
-splitting and coalescing — is target-independent and stays in libc. Memory
-management is expressed in terms of a **heap descriptor** (the "heap handle"):
+## Clock
 
 ```c
-typedef struct { unsigned char _opaque[8]; } heap_t;  /* { head, base, limit, bank, flags } */
-
-void *allocate(heap_t *heap, size_t size);            /* generic primitive   */
-void  deallocate(heap_t *heap, void *ptr);
-void  heap_init_arena(heap_t *heap, void *base, void *limit);
-
-void *malloc(size_t size);   /* == allocate(&__libc_default_heap, size) */
-void  free(void *ptr);       /* owning heap recovered from the block    */
+[[sdcc::sdccall(1)]] int gettimeofday(struct timespec *tv);
+[[sdcc::sdccall(1)]] int settimeofday(const struct timespec *tv);
 ```
 
-`allocate`/`deallocate` work on a caller-supplied descriptor, so a program may
-keep several heaps — banked-memory blocks, or a separate OS heap and per-process
-heaps. Each block stores a back-pointer to its owning heap, so plain `free(ptr)`
-(and `realloc`) works regardless of which heap the pointer came from. There is no
-`sbrk`: a heap is built directly over a memory region with `heap_init_arena`.
+Return `0` after reading/writing the clock or `-1` when the service is absent.
+The target-independent `time`, `clock`, and `timespec_get` functions propagate
+that result. A no-clock target should fail explicitly, as the ZX backends do;
+it should not invent the Unix epoch.
 
-The only target-specific hook is **where the default heap's region is**:
+X uses a 32-bit `time_t`. There is currently no timezone/DST platform hook;
+local time follows the library's documented UTC behavior.
+
+## Console and files
+
+Descriptors follow the usual convention: 0 is stdin, 1 is stdout, 2 is
+stderr, and opened files begin at 3.
 
 ```c
-void heap_region(void);   /* returns HL = base, DE = limit (one past end) */
+[[sdcc::sdccall(1)]] int open(const char *path, int flags, int mode);
+[[sdcc::sdccall(1)]] int close(int fd);
+[[sdcc::sdccall(1)]] int read(int fd, void *buffer, unsigned length);
+[[sdcc::sdccall(1)]] int write(int fd, const void *buffer, unsigned length);
+[[sdcc::sdccall(1)]] long lseek(int fd, long offset, int whence);
+[[sdcc::sdccall(1)]] int unlink(const char *path);
+[[sdcc::sdccall(1)]] int rename(const char *old_path, const char *new_path);
 ```
 
-`malloc` lazily creates `__libc_default_heap` over that region on first use.
+The target-independent stdio layer reduces console and file work to these
+hooks:
 
-```
-malloc / calloc / realloc / aligned_alloc ─► allocate(&__libc_default_heap, n)
-free / free_sized / free_aligned          ─► deallocate(block->heap, p)
-__libc_default_heap created once from ───► heap_region()
-```
+- `puts`, `printf`, `putchar`, `fwrite`, and formatter output use `write`;
+- `getchar`, `scanf`, `fgets`, and stream input use `read`;
+- `fopen`/`freopen` use `open` and `close`;
+- `fseek`, `ftell`, and `rewind` use `lseek`;
+- `remove` uses `unlink` and `rename` uses the matching platform hook.
 
-### `none` backend: a fixed static arena
+A console-only backend implements `read(0, ...)`, `write(1, ...)`, and
+`write(2, ...)`, closes descriptors 0–2 successfully, and returns `-1` for file
+descriptors and file operations. That still enables formatted stdin/stdout and
+the rest of non-file libc.
 
-With no OS there is no transient program area to size against, so the bare-metal
-region is a statically reserved block:
-
-```asm
-;; lib/sys/none/heap_region.s
-SYS_HEAP_SIZE   .equ 8192
-        .area   _HEAP
-__sys_heap:     .ds  SYS_HEAP_SIZE
-__sys_heap_end:
-        .area   _CODE
-_heap_region::                 ; -> HL = base, DE = limit
-        ld      hl,#__sys_heap
-        ld      de,#__sys_heap_end
-        ret
-```
-
-Change `SYS_HEAP_SIZE` to size the arena for the board, or create extra heaps
-explicitly with `heap_init_arena` over known regions.
-
-### `cpm3` backend: the whole transient program area
-
-A hosted target reports a dynamic region instead of a static reservation. The
-CP/M 3 backend grows the heap from the end of the program image (`__sys_heap`,
-the base of the last `_HEAP` link area) up to the BDOS base (the word at
-`0x0006`), less a fixed reserve for the descending stack:
-
-```asm
-;; lib/sys/cpm3/heap_region.s
-SYS_STACK_RESERVE .equ 0x0200
-        .area   _HEAP
-__sys_heap:                          ; heap base = top of program image
-        .area   _CODE
-_heap_region::
-        ld      hl,(0x0006)          ; BDOS base (top of TPA)
-        ld      de,#SYS_STACK_RESERVE
-        or      a
-        sbc     hl,de                ; HL = limit
-        ex      de,hl                ; DE = limit
-        ld      hl,#__sys_heap       ; HL = base
-        ret
-```
-
-Nothing is statically reserved, so the heap scales to the whole TPA.
-
----
-
-## 3. Console character I/O — `putchar`, `getchar`, `printf`, `scanf`
-
-`<stdio.h>` is **not implemented yet**; this section specifies the platform
-layer it will be built on, so a backend can be written ahead of time. The
-design mirrors the clock layer: the standard, target-independent code (FILE
-buffering, the `printf`/`scanf` conversion engine) lives in libc; the platform
-provides only the raw byte transfer.
-
-The recommended layer is the classic POSIX trio, on pre-opened descriptors
-`0`=stdin, `1`=stdout, `2`=stderr:
+## Exit
 
 ```c
-int __sys_write(int fd, const void *buf, unsigned len); /* bytes written, or -1 */
-int __sys_read (int fd, void *buf, unsigned len);       /* bytes read, 0 = EOF, -1 = err */
+void _exit(int status); /* never returns */
 ```
 
-Everything character-oriented reduces to these two:
+On an OS, return the status to the supervisor. On firmware, record it if useful
+and stop or reset the machine. The ZX platforms expose `zx_exit_status`, then
+disable interrupts and HALT permanently.
 
-```
-putchar / putc / puts / fputs ─┐
-printf / fprintf / vprintf  ───┼─►  (FILE buffer)  ──► __sys_write(1, buf, n)
-perror                       ──┘                        __sys_write(2, buf, n)
+## Complete checklist
 
-getchar / getc / fgets / gets ─┐
-scanf / fscanf / vscanf     ───┴─►  (FILE buffer)  ◄── __sys_read(0, buf, n)
-```
+- [ ] Copy `x/platforms/none/` and rename the directory.
+- [ ] Define the memory regions and entry point in both linker-script dialects.
+- [ ] Set the stack and implement initialized-data/BSS startup.
+- [ ] Return a valid non-overlapping heap range.
+- [ ] Implement descriptor 0/1/2 behavior required by the target.
+- [ ] Return explicit failures for unavailable file and clock services.
+- [ ] Implement non-returning `_exit`.
+- [ ] Stage with `make -C x PLATFORM=<name> stage-xcc-support`.
+- [ ] Compile a small C program with `--platform=<name>`.
+- [ ] Test initialized storage, BSS, heap, stdio, errors, and exit in a real
+      emulator or on hardware.
 
-**Minimum to get program output and input working:** implement `__sys_write`
-for `fd == 1`/`2` (route to the console/UART) and `__sys_read` for `fd == 0`
-(route to the keyboard/UART). A board with only a single-byte console can
-implement them as thin loops over a one-byte primitive:
+## Shipped reference backends
 
-```c
-/* board UART/console primitives (whatever the hardware needs) */
-extern void __board_putc(char c);
-extern int  __board_getc(void);   /* blocking; -1 on EOF */
-
-int __sys_write(int fd, const void *buf, unsigned len) {
-    const unsigned char *p = buf;
-    (void)fd;                       /* 1 and 2 both go to the console */
-    for (unsigned i = 0; i < len; ++i) __board_putc((char)p[i]);
-    return (int)len;
-}
-
-int __sys_read(int fd, void *buf, unsigned len) {
-    unsigned char *p = buf;
-    unsigned i;
-    (void)fd;
-    for (i = 0; i < len; ++i) { int c = __board_getc(); if (c < 0) break; p[i] = (unsigned char)c; }
-    return (int)i;
-}
-```
-
-(Write these in assembly under `lib/sys/<youros>/` for the shipped library;
-the C above is just the contract.) With those two hooks, all of
-`putchar`/`getchar`/`puts`/`printf`/`scanf` will work — exactly as the clock
-hooks light up all of `<time.h>`.
-
----
-
-## 4. File / disk I/O — the rest of `<stdio.h>`
-
-To support real files (`fopen`, `fread`, `fwrite`, `fseek`, `fclose`, …) the
-platform layer grows three more calls. The FILE layer, buffering, and the
-`f*` wrappers stay target-independent; the backend just maps a path to a
-descriptor and moves blocks:
-
-```c
-int  __sys_open (const char *path, int flags, int mode); /* fd >= 0, or -1 */
-int  __sys_close(int fd);                                /* 0, or -1 */
-long __sys_lseek(int fd, long offset, int whence);       /* new offset, or -1 */
-```
-
-with `__sys_read` / `__sys_write` (section 3) doing the transfers. `flags` and
-`whence` follow the usual POSIX values (`O_RDONLY`/`O_WRONLY`/`O_RDWR`/`O_CREAT`
-/`O_TRUNC`/`O_APPEND`; `SEEK_SET`/`SEEK_CUR`/`SEEK_END`).
-
-```
-fopen   ──► __sys_open            fread/fgetc ──► __sys_read
-fclose  ──► __sys_close           fwrite/fputc ─► __sys_write
-fseek/ftell/rewind ─► __sys_lseek
-```
-
-**"Basic disk reading"** is precisely `__sys_open` + `__sys_read` (+ `__sys_lseek`
-for random access). A read-only data backend can implement just those three and
-stub `__sys_write`/`__sys_close` (or have `__sys_open` reject write modes). How
-those map onto hardware — a FAT driver, a raw sector device, a ROM filesystem —
-is entirely the backend's business; libc never sees it.
-
-### Suggested descriptor map
-
-| fd | stream | backed by |
-|----|--------|-----------|
-| 0 | `stdin`  | console input  (`__sys_read`) |
-| 1 | `stdout` | console output (`__sys_write`) |
-| 2 | `stderr` | console output (`__sys_write`) |
-| ≥3 | `fopen`ed files | `__sys_open` |
-
-`stdin`/`stdout`/`stderr` are pre-opened by `crt0`/libc startup, so a program
-gets working I/O before its first `fopen`.
-
----
-
-## 5. Startup — `crt0` and exit
-
-A complete target also needs startup/teardown code (conventionally `crt0.s`,
-provided per-target — see `tests/hello/crt0.s` for a worked example). Its
-responsibilities:
-
-1. Set the stack pointer.
-2. Zero `.bss` (the `_DATA`/`_INITIALIZED` area) and copy any initialized data.
-3. (Optional) pre-open `stdin`/`stdout`/`stderr` and initialize the clock.
-4. Call `main(argc, argv)`.
-5. On return (or `exit`), run `atexit` handlers and halt / return to the OS.
-
-The process-exit path also expects a way to stop. `exit`/`_Exit`/`abort` (in
-`<stdlib.h>`) ultimately need a platform "halt or return to monitor" action; on
-`none` this is a `HALT`. If you want a distinct hook, expose:
-
-```c
-void _exit(int status);   /* never returns */
-```
-
-and have `crt0`/`_Exit` tail-call it.
-
----
-
-## Checklist for a new backend
-
-Create `lib/sys/<youros>/` and provide, as needed:
-
-| Feature you want | Hooks to implement |
-|------------------|--------------------|
-| `<time.h>` | `gettimeofday`, `settimeofday` |
-| `malloc`/`calloc`/`realloc`/`free` | `__sys_sbrk` (or `__heap_start`/`__heap_top`) |
-| program output (`printf`, `putchar`, `puts`) | `__sys_write` (fd 1/2) |
-| program input (`scanf`, `getchar`) | `__sys_read` (fd 0) |
-| file reading | `__sys_open`, `__sys_read`, `__sys_lseek`, `__sys_close` |
-| file writing | the above + `__sys_write` (fd ≥ 3) |
-| clean exit | `_exit` (or rely on the `crt0` `HALT`) |
-
-Then build with `make -C lib/libc/src SYS=<youros>`. Anything you omit can stay
-as the `none` stub, so a board can start with just `__sys_write` and grow from
-there.
-
----
-
-## Status summary
-
-| Layer | Hooks | State |
-|-------|-------|-------|
-| Clock (`<time.h>`) | `gettimeofday`, `settimeofday` | **implemented** (`lib/sys/none/`) |
-| Heap (`malloc`/…) | `__sys_sbrk` | **proposed** — `malloc` still uses a fixed static arena |
-| Console (`printf`/`scanf`) | `__sys_write`, `__sys_read` | **proposed** — `<stdio.h>` not yet built |
-| Files (`fopen`/`fread`/…) | `__sys_open`/`close`/`lseek` | **proposed** — `<stdio.h>` not yet built |
-| Startup / exit | `crt0`, `_exit` | per-target `crt0` exists; exit hook proposed |
-
-The clock layer is the reference implementation: study `lib/sys/none/` and the
-`lib/libc/src/time/` modules to see how a tiny platform surface supports an
-entire standard header, then apply the same pattern to console and file I/O as
-`<stdio.h>` lands.
+| Backend | Character I/O | Files | Clock | Memory/startup |
+|---|---|---|---|---|
+| `none` | Discard/EOF shells | No | No useful clock | Template fixed arena |
+| `emu` | Host-mapped emulator ports | Host test mapping | Platform test behavior | Emulator image |
+| `cpm3` | BDOS console and `kbhit()` | CP/M descriptors | Platform behavior | Transient program area |
+| `zx-ram` | Matrix `kbhit()`, blocking stdio/Tamsyn bitmap | No | No | `0x5CCB`, heap below `0xF000` |
+| `zx-rom` | Matrix `kbhit()`, blocking stdio/Tamsyn bitmap | No | No | 16 KiB ROM, writable RAM at `0x5B00` |

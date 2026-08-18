@@ -188,6 +188,54 @@ TEST(linker_allows_duplicate_local_elf_symbols) {
     ASSERT(ctx.global_symbols.find("__str_0") == ctx.global_symbols.end());
 }
 
+TEST(linker_materializes_relocated_ram_data_inside_rom_output) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+    ctx.area_bases["_CODE"] = 0x0000;
+    ctx.area_bases["_DATA"] = 0x8000;
+    ctx.output_range = xld::address_range{0x0000, 0x3fff};
+    ctx.load_copy_areas.push_back("_DATA");
+
+    auto mod = std::make_shared<xld::module>("rom", "rom.rel");
+    mod->areas().emplace_back("_CODE", 2, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_DATA", 3, xld::area_flags::none, 1);
+    mod->texts().push_back({0, 0, {0x00, 0xc9}, {}});
+    mod->texts().push_back({1, 0, {0x12, 0x34, 0x56}, {}});
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+    ctx.modules.push_back(mod);
+
+    xld::cli_options opts;
+    xld::linker::link(ctx, opts);
+
+    ASSERT_EQ(ctx.linker_symbols.at("s__DATA"), 0x8000);
+    ASSERT_EQ(ctx.linker_symbols.at("s__DATA_LOAD"), 0x0002);
+    ASSERT_EQ(ctx.linker_symbols.at("l__DATA_LOAD"), 3);
+    ASSERT_EQ(ctx.code_buffer[2], 0x12);
+    ASSERT_EQ(ctx.code_buffer[3], 0x34);
+    ASSERT_EQ(ctx.code_buffer[4], 0x56);
+    ASSERT_EQ(ctx.code_occupancy[2], 1);
+}
+
+TEST(linker_rejects_resident_rom_area_overflow_with_load_copies) {
+    xld::link_context ctx;
+    ctx.entry_name = "_main";
+    ctx.area_bases["_CODE"] = 0x3fff;
+    ctx.area_bases["_DATA"] = 0x8000;
+    ctx.output_range = xld::address_range{0x0000, 0x3fff};
+    ctx.load_copy_areas.push_back("_DATA");
+
+    auto mod = std::make_shared<xld::module>("overflow", "overflow.rel");
+    mod->areas().emplace_back("_CODE", 2, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_DATA", 1, xld::area_flags::none, 1);
+    mod->texts().push_back({0, 0, {0x00, 0xc9}, {}});
+    mod->texts().push_back({1, 0, {0x42}, {}});
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+    ctx.modules.push_back(mod);
+
+    xld::cli_options opts;
+    ASSERT_THROWS(xld::linker::link(ctx, opts), xld::placement_error);
+}
+
 TEST(linker_allows_weak_definition_to_be_overridden_by_strong_definition) {
     xld::link_context ctx;
     ctx.entry_name = "_main";

@@ -147,6 +147,11 @@ xcc [options] <input>... [-o output]
   -h, --help                    Help
 ```
 
+Unless `--nostdinc` is used, the driver searches the selected target's private
+headers in `<prefix>/z80/include/<platform>` before the common libc headers in
+`<prefix>/z80/include`. For example, `<sys/bdos.h>` is supplied only by
+`--platform=cpm3`.
+
 ---
 
 ## IR opcodes (src/ir/icode.h)

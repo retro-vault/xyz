@@ -1138,12 +1138,12 @@ the lazy spill path.
 ## Where To Look In The Code
 
 - IR optimizer:
-  `src/xc/xcc/src/opt/iropt.cpp`
+  `x/src/xcc/src/opt/iropt.cpp`
 - module optimizer:
-  `src/xc/xcc/src/opt/iromod.cpp`
+  `x/src/xcc/src/opt/iromod.cpp`
 - Z80 backend:
-  `src/xc/xcc/src/backend/z80/`
+  `x/src/xcc/src/backend/z80/`
 - shared assembly-level optimizer:
-  `lib/xopt/src/z80peep.cpp`
+  `x/lib/xopt/src/z80peep.cpp`
 - driver option parsing:
-  `src/xc/xcc/src/driver/options.cpp`
+  `x/src/xcc/src/driver/options.cpp`

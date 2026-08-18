@@ -11,7 +11,7 @@
 
 namespace xprog {
 
-enum class command_kind { none, process, service, inspect };
+enum class command_kind { none, process, service, inspect, tap, tzx };
 
 struct cli_options {
     command_kind command = command_kind::none;

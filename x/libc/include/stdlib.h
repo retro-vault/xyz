@@ -18,10 +18,6 @@
 
 #include <stddef.h>
 
-#ifndef __sdcccall
-#define __sdcccall(a)
-#endif
-
 typedef struct div_t {
     int quot;
     int rem;
@@ -89,9 +85,9 @@ int abs(int value);
 long labs(long value);
 long long llabs(long long value);
 
-div_t div(int numer, int denom) __sdcccall(1);
-ldiv_t ldiv(long numer, long denom) __sdcccall(1);
-lldiv_t lldiv(long long numer, long long denom) __sdcccall(1);
+[[sdcc::sdccall(1)]] div_t div(int numer, int denom);
+[[sdcc::sdccall(1)]] ldiv_t ldiv(long numer, long denom);
+[[sdcc::sdccall(1)]] lldiv_t lldiv(long long numer, long long denom);
 
 int atoi(const char *nptr);
 double atof(const char *nptr);
@@ -114,15 +110,15 @@ int rand(void);
 void srand(unsigned int seed);
 
 #if defined(__XCC__) && __SDCCCALL == 0
-void *__bsearch_sdcc0(const void *key,
-                      const void *base,
-                      size_t      count,
-                      size_t      size,
-                      __libc_compare_fn compar) __sdcccall(1);
-void __qsort_sdcc0(void *base,
-                   size_t count,
-                   size_t size,
-                   __libc_compare_fn compar) __sdcccall(1);
+[[sdcc::sdccall(1)]] void *__bsearch_sdcc0(const void *key,
+                                             const void *base,
+                                             size_t count,
+                                             size_t size,
+                                             __libc_compare_fn compar);
+[[sdcc::sdccall(1)]] void __qsort_sdcc0(void *base,
+                                         size_t count,
+                                         size_t size,
+                                         __libc_compare_fn compar);
 #define bsearch __bsearch_sdcc0
 #define qsort   __qsort_sdcc0
 #else

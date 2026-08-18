@@ -6,7 +6,7 @@ HOST_BIN_DIR ?= $(DIST_DIR)/bin
 TARGET_DIR ?= $(DIST_DIR)/z80
 TARGET_LIB_DIR ?= $(TARGET_DIR)/lib
 TARGET_INCLUDE_DIR ?= $(TARGET_DIR)/include
-C8FLAGS ?= -I$(ROOT)/libc/include -I$(ROOT)/platforms/include
+C8FLAGS ?= -I$(ROOT)/libc/include
 AS8FLAGS ?= --mode=sdcc
 LIBC_PROFILE ?= full
 include $(ROOT)/mk/model.mk

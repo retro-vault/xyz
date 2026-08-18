@@ -54,6 +54,9 @@ public:
     const std::vector<std::string>& area_order() const {
         return area_order_;
     }
+    const std::vector<std::string>& load_copy_areas() const {
+        return load_copy_areas_;
+    }
     const std::vector<lscript_address_range>& reserved_ranges() const {
         return reserved_ranges_;
     }
@@ -79,6 +82,13 @@ public:
         }
         area_order_.push_back(std::move(area_name));
     }
+    void add_load_copy_area(std::string area_name) {
+        for (const auto& existing : load_copy_areas_) {
+            if (existing == area_name)
+                return;
+        }
+        load_copy_areas_.push_back(std::move(area_name));
+    }
     void add_reserved_range(lscript_address_range range) {
         reserved_ranges_.push_back(range);
     }
@@ -93,6 +103,7 @@ private:
     std::optional<std::string> entry_symbol_;
     std::map<std::string, uint16_t> area_bases_;
     std::vector<std::string> area_order_;
+    std::vector<std::string> load_copy_areas_;
     std::vector<lscript_address_range> reserved_ranges_;
     std::optional<lscript_address_range> output_range_;
     std::optional<lscript_output_format> output_format_;

@@ -31,10 +31,20 @@ _clock::
         push    ix
         pop     hl
         call    _gettimeofday
+        inc     de
+        ld      a,d
+        or      e
+        dec     de
+        jr      z,clock_failed
         ld      e,0(ix)
         ld      d,1(ix)
         ld      l,2(ix)
         ld      h,3(ix)
+        jr      clock_cleanup
+clock_failed:
+        ld      de,#0xffff
+        ld      hl,#0xffff
+clock_cleanup:
         ld      sp,ix
         ; Discard the eight-byte timeval object before restoring the caller's
         ; frame pointer.  Popping IX directly here used to load tv_sec's low

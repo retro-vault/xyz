@@ -1,9 +1,14 @@
-# xprog
+# xprog — XPRG and ZX Spectrum tape packager
 
 `xprog` validates an XL image and prefixes it with the XPRG version 1
 descriptor. It creates either a `.prc` process image or a `.svc` resident
 service image. It does not link programs, resolve symbols, or install either
 kind of image.
+
+It also wraps a flat ZX Spectrum binary as an auto-running TAP or TZX image.
+Those modes emit a tokenized BASIC loader followed by a CODE block; they do
+not require an external tape-image library. For a complete target build and
+Fuse workflow, see the [ZX Spectrum 48K guide](../../docs/howtos/ZX-SPECTRUM-48K.md).
 
 ## Usage
 
@@ -12,11 +17,29 @@ xprog --process app.xl --stack-size 1024
 xprog --service runtime.xl --load-address 0xfd00 --fixed-load \
     --export 0x0010 --export 0x0038
 xprog --inspect app.prc
+xprog --tap hello.bin --load-address 0x5ccb
+xprog --tzx hello.bin --load-address 0x5ccb --entry 0x5ccb
 ```
 
 The default output name replaces `.xl` with `.prc` or `.svc`. Use `-o` to
 choose another path. Numbers accept decimal or a `0x` hexadecimal prefix.
 Running `xprog` without arguments prints the complete usage text.
+
+For `--tap` and `--tzx`, the default load address and entry point are both
+`0x5CCB`, the first address after the 48K ROM system variables. Tape names are
+limited to the Spectrum header's ten bytes. An auto-start BASIC line calls a
+30-byte loader stored after `REM`; it reads the following CODE header and data
+with the 48K ROM routine, leaves the final entry address on the stack, and
+lets the ROM return directly into the program. The CODE block can therefore
+overwrite the BASIC program and still start at `0x5CCB`. Every TAP block
+carries the standard XOR checksum. TZX output uses version 1.20
+standard-speed data blocks, so it is accepted by ROM loaders and timing-aware
+emulators.
+
+Tape mode rejects empty input, binaries that cross `0xFFFF`, entry points
+outside the binary, zero load addresses, and names outside the Spectrum
+header's 1–10 byte limit. Process/service-only metadata switches are also
+rejected in tape mode.
 
 The process entry defaults to the entry offset recorded by XL. A service has
 no initializer unless `--entry` is supplied. Each `--export` appends one JP

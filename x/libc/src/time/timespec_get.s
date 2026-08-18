@@ -24,6 +24,10 @@ _timespec_get::
         or      d                       ; base == 1 (TIME_UTC) ?
         jr      nz,timespec_bad
         call    _gettimeofday           ; *ts = { now, 0 }
+        inc     de
+        ld      a,d
+        or      e
+        jr      z,timespec_bad
         ld      de,#1                   ; TIME_UTC
         ret
 timespec_bad:
