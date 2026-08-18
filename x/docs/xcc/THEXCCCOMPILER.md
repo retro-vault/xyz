@@ -134,6 +134,8 @@ Important options today:
 - `-f<name>` / `-fno-<name>`: per-pass overrides on top of any `-O` preset, including names such as `const-call-eval`, `function-const-eval`, `address-deref-fold`, `scalar-local-promotion`, and `compare-ifx-fusion`
 - `-g`: emit DWARF debug info
 - `-masm=sdasz80` or `-masm=gnuas`: choose assembly dialect
+- `--runtime=x|z88dk-classic`: select native X or classic z88dk runtime
+  integration; zcc supplies `-zcc-opt=<file>` in the latter mode
 
 The driver is refreshingly direct. It does not hide the pipeline.
 

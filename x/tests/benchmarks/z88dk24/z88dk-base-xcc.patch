@@ -110,7 +110,7 @@ diff --git a/src/zcc/zcc.c b/src/zcc/zcc.c
      { 0, "", OPT_HEADER, "Compiler (ez80-clang) options:", NULL, NULL, 0 },
      { 0, "Cg", OPT_FUNCTION,  "Add an option to ez80-clang" , &clangarg, AddToArgs, 0},
  
-@@ -3130,14 +3134,17 @@ static void configure_compiler(void)
+@@ -3130,14 +3134,19 @@ static void configure_compiler(void)
          BuildOptions(&linkargs, "-D__SDCC");
      } else if (strcmp(c_compiler_type,"xcc") == 0 ) {
          compiler_type = CC_XCC;
@@ -118,7 +118,10 @@ diff --git a/src/zcc/zcc.c b/src/zcc/zcc.c
 +        preprocarg = " -D__XCC -D__SDCC";
          BuildOptions(&cpparg, preprocarg);
          c_compiler = "xcc";
-         add_option_to_compiler("-S -O2 --sdcccall 0 --c1mode");
+-        add_option_to_compiler("-S -O2 --sdcccall 0 --c1mode");
++        add_option_to_compiler("-S -O2 --sdcccall 0 --runtime=z88dk-classic --c1mode");
++        snprintf(buf, sizeof(buf), "-zcc-opt=\"%s\"", zcc_opt_def);
++        add_option_to_compiler(buf);
 +        if (xccarg) {
 +            add_option_to_compiler(xccarg);
 +        }

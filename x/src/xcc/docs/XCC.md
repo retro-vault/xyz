@@ -120,6 +120,8 @@ xcc [options] <input>... [-o output]
   -Wpedantic, -Werror[=name],
   -Wno-error[=name]             Driver warning controls
   -mz80                         Accepted for SDCC/z88dk compatibility
+  --runtime=<name>              Runtime: x (default) or z88dk-classic
+  -zcc-opt=<file>               Append inferred z88dk capabilities (zcc internal)
   -I<dir>                       Add include directory
   -D<macro>[=val]               Define macro
   --nostdinc                    Do not add default target include path

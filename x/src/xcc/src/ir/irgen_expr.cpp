@@ -9,6 +9,7 @@
 //
 #include "ir/irgen.h"
 #include "backend/z80/convention.h"
+#include <cstdint>
 
 namespace xcc {
 
@@ -654,11 +655,242 @@ void ir_gen::visit(cast_expr &e) {
     expr_result_ = emit_unop(icode_op::CAST, gen_expr(*e.operand), e.target_type);
 }
 
-static bool uses_small_printf_format(const call_expr &e) {
+namespace {
+
+enum class format_family {
+    NONE,
+    PRINTF,
+    SCANF,
+};
+
+struct format_call_desc {
+    const char *name;
+    format_family family;
+    size_t format_arg;
+    bool variadic;
+};
+
+constexpr format_call_desc format_calls[] = {
+    {"printf",    format_family::PRINTF, 0, true},
+    {"printk",    format_family::PRINTF, 0, true},
+    {"fprintf",   format_family::PRINTF, 1, true},
+    {"sprintf",   format_family::PRINTF, 1, true},
+    {"snprintf",  format_family::PRINTF, 2, true},
+    {"vprintf",   format_family::PRINTF, 0, false},
+    {"vfprintf",  format_family::PRINTF, 1, false},
+    {"vsprintf",  format_family::PRINTF, 1, false},
+    {"vsnprintf", format_family::PRINTF, 2, false},
+    {"scanf",     format_family::SCANF,  0, true},
+    {"fscanf",    format_family::SCANF,  1, true},
+    {"sscanf",    format_family::SCANF,  1, true},
+    {"vscanf",    format_family::SCANF,  0, false},
+    {"vfscanf",   format_family::SCANF,  1, false},
+    {"vsscanf",   format_family::SCANF,  1, false},
+};
+
+const format_call_desc *find_format_call(const std::string &name) {
+    for (const auto &desc : format_calls) {
+        if (name == desc.name)
+            return &desc;
+    }
+    return nullptr;
+}
+
+const string_literal_expr *unwrap_format_literal(const expr *value) {
+    while (const auto *cast = dynamic_cast<const cast_expr *>(value))
+        value = cast->operand.get();
+    return dynamic_cast<const string_literal_expr *>(value);
+}
+
+struct format_conversion {
+    char conversion;
+    uint32_t ordinary;
+    uint32_t long_value;
+    uint32_t long_long_value;
+    bool scanf_only;
+};
+
+constexpr format_conversion format_conversions[] = {
+    {'d', 0x00000001u, 0x00001000u, 0x00000001u, false},
+    {'u', 0x00000002u, 0x00002000u, 0x00000002u, false},
+    {'x', 0x00000004u, 0x00004000u, 0x00000004u, false},
+    {'X', 0x00000008u, 0x00008000u, 0x00000008u, false},
+    {'o', 0x00000010u, 0x00010000u, 0x00000010u, false},
+    {'n', 0x00000020u, 0x00020000u, 0x00000000u, false},
+    {'i', 0x00000040u, 0x00040000u, 0x00000040u, false},
+    {'p', 0x00000080u, 0x00080000u, 0x00000000u, false},
+    {'B', 0x00000100u, 0x00100000u, 0x00000000u, false},
+    {'s', 0x00000200u, 0x00000000u, 0x00000000u, false},
+    {'S', 0x02000200u, 0x00000000u, 0x00000000u, false},
+    {'c', 0x00000400u, 0x00000000u, 0x00000000u, false},
+    {'I', 0x00000800u, 0x00000000u, 0x00000000u, false},
+    {'[', 0x00200000u, 0x00200000u, 0x00000000u, true},
+    {'a', 0x00400000u, 0x00400000u, 0x00000000u, false},
+    {'A', 0x00800000u, 0x00800000u, 0x00000000u, false},
+    {'e', 0x01000000u, 0x01000000u, 0x00000000u, false},
+    {'E', 0x02000000u, 0x02000000u, 0x00000000u, false},
+    {'f', 0x04000000u, 0x04000000u, 0x00000000u, false},
+    {'F', 0x08000000u, 0x08000000u, 0x00000000u, false},
+    {'g', 0x10000000u, 0x10000000u, 0x00000000u, false},
+    {'G', 0x20000000u, 0x20000000u, 0x00000000u, false},
+};
+
+bool ascii_digit(char ch) {
+    return ch >= '0' && ch <= '9';
+}
+
+const format_conversion *find_format_conversion(char conversion,
+                                                 bool scanf_family) {
+    for (const auto &entry : format_conversions) {
+        if (entry.conversion == conversion &&
+            (!entry.scanf_only || scanf_family)) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+// Parse a constant format into z88dk classic's converter capability mask.
+// Returning false means that narrowing would be unsafe, so the caller must
+// request the complete formatter.  This is deliberately more conservative
+// than z88dk's current watcher for dynamic and unsupported formats.
+bool parse_format_capabilities(const string_literal_expr &literal,
+                               bool scanf_family,
+                               uint32_t &mask, uint32_t &mask2) {
+    if (literal.char_width != 1)
+        return false;
+
+    const std::string &format = literal.value;
+    for (size_t i = 0; i < format.size(); ++i) {
+        if (format[i] == '\0')
+            break;
+        if (format[i] != '%')
+            continue;
+        if (++i >= format.size())
+            return false;
+        if (format[i] == '%')
+            continue;
+
+        bool needs_flag_parser = false;
+        if (scanf_family) {
+            if (format[i] == '*') {
+                needs_flag_parser = true;
+                ++i;
+            }
+            while (i < format.size() && ascii_digit(format[i])) {
+                needs_flag_parser = true;
+                ++i;
+            }
+        } else {
+            while (i < format.size() &&
+                   (format[i] == '-' || format[i] == '+' ||
+                    format[i] == ' ' || format[i] == '#' ||
+                    format[i] == '0' || format[i] == '\'')) {
+                needs_flag_parser = true;
+                ++i;
+            }
+            if (i < format.size() && format[i] == '*') {
+                needs_flag_parser = true;
+                ++i;
+                // Positional arguments are not supported by the classic
+                // capability protocol.
+                if (i < format.size() && ascii_digit(format[i]))
+                    return false;
+            } else {
+                bool had_width = false;
+                while (i < format.size() && ascii_digit(format[i])) {
+                    had_width = true;
+                    ++i;
+                }
+                if (i < format.size() && format[i] == '$')
+                    return false;
+                needs_flag_parser = needs_flag_parser || had_width;
+            }
+            if (i < format.size() && format[i] == '.') {
+                needs_flag_parser = true;
+                ++i;
+                if (i < format.size() && format[i] == '*') {
+                    ++i;
+                    if (i < format.size() && ascii_digit(format[i]))
+                        return false;
+                } else {
+                    while (i < format.size() && ascii_digit(format[i]))
+                        ++i;
+                }
+            }
+        }
+
+        if (i >= format.size())
+            return false;
+
+        enum class length_kind { ORDINARY, LONG, LONG_LONG, UNSUPPORTED };
+        length_kind length = length_kind::ORDINARY;
+        if (format[i] == 'h') {
+            ++i;
+            if (i < format.size() && format[i] == 'h')
+                ++i;
+        } else if (format[i] == 'l') {
+            ++i;
+            if (i < format.size() && format[i] == 'l') {
+                ++i;
+                length = length_kind::LONG_LONG;
+            } else {
+                length = length_kind::LONG;
+            }
+        } else if (format[i] == 'j') {
+            ++i;
+            length = length_kind::UNSUPPORTED;
+        } else if (format[i] == 'z' || format[i] == 't') {
+            ++i;
+        } else if (format[i] == 'L') {
+            ++i;
+        }
+        if (i >= format.size() || length == length_kind::UNSUPPORTED ||
+            (scanf_family && length == length_kind::LONG_LONG))
+            return false;
+
+        const char conversion = format[i];
+        const auto *entry = find_format_conversion(conversion, scanf_family);
+        if (!entry)
+            return false;
+
+        const uint32_t bit = length == length_kind::LONG
+                                 ? entry->long_value
+                             : length == length_kind::LONG_LONG
+                                 ? entry->long_long_value
+                                 : entry->ordinary;
+        // A zero long mapping means the runtime does not implement this
+        // length/conversion pair through its selectable table.
+        if (bit == 0)
+            return false;
+        if (length == length_kind::LONG_LONG)
+            mask2 |= bit;
+        else
+            mask |= bit;
+        if (needs_flag_parser)
+            mask |= 0x40000000u;
+
+        if (scanf_family && conversion == '[') {
+            size_t scan = i + 1;
+            if (scan < format.size() && format[scan] == '^')
+                ++scan;
+            if (scan < format.size() && format[scan] == ']')
+                ++scan;
+            while (scan < format.size() && format[scan] != ']')
+                ++scan;
+            if (scan >= format.size())
+                return false;
+            i = scan;
+        }
+    }
+    return true;
+}
+
+bool uses_small_printf_format(const call_expr &e) {
     if (e.args.empty())
         return false;
 
-    const auto *format = dynamic_cast<const string_literal_expr*>(e.args[0].get());
+    const auto *format = unwrap_format_literal(e.args[0].get());
     if (!format || format->char_width != 1)
         return false;
 
@@ -681,6 +913,8 @@ static bool uses_small_printf_format(const call_expr &e) {
     return true;
 }
 
+} // namespace
+
 void ir_gen::visit(call_expr &e) {
     std::string direct_func_name;
     bool direct_callee_noreturn = false;
@@ -688,7 +922,37 @@ void ir_gen::visit(call_expr &e) {
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
         if (id->sym && id->sym->kind == sym_kind::FUNC) {
             direct_func_name = alternate_float_call_name(id->name);
+            const format_call_desc *format_desc = find_format_call(id->name);
+            const bool is_external_format_function =
+                format_desc && id->sym->type && id->sym->type->is_func() &&
+                id->sym->type->variadic == format_desc->variadic &&
+                !defined_function_names_.count(id->name);
+            if (is_external_format_function) {
+                auto &usage = format_desc->family == format_family::PRINTF
+                                  ? mod_->printf_formats
+                                  : mod_->scanf_formats;
+                usage.used = true;
+                if (format_desc->format_arg >= e.args.size()) {
+                    usage.requires_full = true;
+                } else {
+                    const auto *literal = unwrap_format_literal(
+                        e.args[format_desc->format_arg].get());
+                    uint32_t call_mask = 0;
+                    uint32_t call_mask2 = 0;
+                    if (!literal || !parse_format_capabilities(
+                                        *literal,
+                                        format_desc->family == format_family::SCANF,
+                                        call_mask, call_mask2)) {
+                        usage.requires_full = true;
+                    } else {
+                        usage.mask |= call_mask;
+                        usage.mask2 |= call_mask2;
+                    }
+                }
+            }
             if (direct_func_name == "printf" &&
+                native_printf_specialization_ &&
+                !defined_function_names_.count(id->name) &&
                 id->sym->type && id->sym->type->is_func() &&
                 id->sym->type->variadic &&
                 uses_small_printf_format(e)) {

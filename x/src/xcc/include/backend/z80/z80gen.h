@@ -114,6 +114,12 @@ public:
         standalone_asm_output_ = enabled;
     }
 
+    // Emit z88dk classic's link-time printf/scanf capability definitions.
+    // These are assembler metadata and contribute no target bytes.
+    void set_z88dk_classic_runtime(bool enabled) {
+        z88dk_classic_runtime_ = enabled;
+    }
+
     //
     // Attach a debug info emitter (DWARF or SDCC-style).
     // Must be called before emit_module().  When not called, no debug
@@ -150,6 +156,7 @@ private:
     optimization_settings opt_settings_ =
         optimization_settings::for_level(opt_level::O0);
     bool standalone_asm_output_ = false;
+    bool z88dk_classic_runtime_ = false;
     bool size_shared_ix_helpers_ = false;
     bool compact_codegen_ = false;
 

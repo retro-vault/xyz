@@ -53,8 +53,8 @@ The seven lanes and their material flags are:
 | lane | compiler flags |
 |---|---|
 | sccz80 | `-compiler=sccz80` |
-| xcc -Os | M-model XCC, `-compiler=xcc -Cx-Os` |
-| xcc -Of | M-model XCC, `-compiler=xcc -Cx-Of` |
+| xcc -Os | M-model XCC, `-compiler=xcc -Cx-Os -Cx--runtime=z88dk-classic` |
+| xcc -Of | M-model XCC, `-compiler=xcc -Cx-Of -Cx--runtime=z88dk-classic` |
 | sdcc | nightly `z88dk-zsdcc`, `-compiler=sdcc` |
 | sdcc-max | `-compiler=sdcc -SO3 --max-allocs-per-node200000` |
 | 80cc-fp | latest 80cc, `-compiler=80cc -Cc-fframe-pointer` |
@@ -69,6 +69,23 @@ Each cell is the complete linked BIN byte count and executed Z80 cycles. No
 empty-image baseline is subtracted. All source files are built in their own
 working directory so the MD5 fixture is visible. Only self-checking `OK`
 executions participate in compiler comparisons.
+
+## Automatic z88dk format selection
+
+The XCC z88dk runtime profile performs the same kind of link-capability
+inference expected by the classic CRT. It parses literal formats throughout
+the complete `printf`/`scanf` family, including flags, widths, precision,
+length modifiers, scansets, and the classic long-long mask. Each compilation
+appends an OR-able block to zcc's per-link `zcc_opt.def`; the CRT therefore
+builds only the handlers used anywhere in the program. Non-literal formats
+and escaped formatter addresses select a conservative classic fallback, while
+program-defined functions named `printf` or `scanf` are left alone.
+
+This is enabled by the public `--runtime=z88dk-classic` compiler profile and
+the `-zcc-opt=<file>` path supplied by the patched zcc driver. No benchmark
+flags contain a precomputed mask, and the compiler does not inspect benchmark
+names, paths, source fragments, or checksums. The ordinary X runtime remains
+the default and retains its native small-`printf` call specialization.
 
 ## XCC compatibility aliases and fixedbench
 
@@ -95,9 +112,11 @@ indirect-call trampoline. This explains the exact 38-byte inflation in the
 old XCC `charbench` measurements; it does not mean that the `.o` file itself
 was only 38 bytes long.
 
-The canonical runner now links a zero-byte alias object instead:
+The canonical runner retains a zero-byte alias object for compatibility:
 `___printf_sd` aliases `_printf`, while XCC's double-underscore HL/IY call
-names alias the corresponding z88dk triple-underscore helpers. z88dk already
+names alias the corresponding z88dk triple-underscore helpers. The runtime
+profile now leaves `printf` calls intact, so its printf alias is normally
+unused; indirect-call aliases remain available when generated. z88dk already
 exports the BC spelling directly. The helper routines selected from the
 classic library still contribute their real bytes, so `results.csv` remains
 an honest complete-image measurement.
@@ -123,10 +142,13 @@ final matrix.
 ## Current comparison
 
 Both XCC M lanes pass 24/24. Against the best valid result from current zsdcc,
-80cc-fp, and 80cc-sp on each program, `-Of` is strictly fastest on 13/24 and
-`-Os` is strictly fastest on 7/24. These gains come from generic data-flow,
-register-allocation, pointer-walk, producer/store, and word-load/add scheduling
-rules; the compiler contains no benchmark-name or source-pattern recognition.
+80cc-fp, and 80cc-sp on each program, `-Os` is strictly smallest on 24/24
+and `-Of` on 22/24. `-Of` remains strictly fastest on 13/24 and `-Os` on
+7/24. The size result combines generic compiler output with literal-driven
+z88dk runtime pruning; the speed gains come from generic data-flow,
+register-allocation, pointer-walk, producer/store, and word-load/add
+scheduling rules. The compiler contains no benchmark-name or source-pattern
+recognition.
 
 ## Outputs
 

@@ -183,6 +183,12 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
   experiment. Pure size policy belongs only in `-Os`; validate new `-O3` work
   in both ABI modes before promoting speed wins to `-Of` and Pareto-safe size
   wins to `-Os`.
+- XCC's `--runtime=z88dk-classic` profile reports inferred printf/scanf
+  capabilities through zcc's per-link `-zcc-opt` file. Keep this analysis
+  source-independent and conservative for dynamic or escaped formatters; do
+  not replace it with benchmark-specific pragma masks. The locked 24-program
+  matrix records `-Os` as strict smallest on 24/24 valid competitor envelopes
+  and `-Of` on 22/24.
 - The locked z88dk24 audit currently has both XCC M profiles correct on 24/24;
   `-Of` is strictly fastest on 13/24 rows against the best valid current
   zsdcc/80cc result. Preserve that result structurally: compiler rules must be

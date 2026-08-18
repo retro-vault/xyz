@@ -6,6 +6,19 @@ Release status:
 
 ## Unreleased
 
+- Added a first-class `--runtime=z88dk-classic` integration profile. XCC now
+  parses literal formats across the printf/scanf families, including flags,
+  widths, precision, length modifiers, scansets, and classic long-long
+  handlers, and ORs the inferred capabilities into zcc's per-link option
+  file. Dynamic formats and escaped formatter addresses select a conservative
+  classic fallback; user-defined functions with the same names are excluded.
+  The z88dk runner supplies the profile through ordinary compiler options,
+  with no precomputed benchmark mask. Both XCC lanes remain correct on 24/24:
+  `-Os` is now strictly smallest against the valid zsdcc/80cc envelope on
+  24/24 programs and `-Of` on 22/24, while the previous 7/24 and 13/24 strict
+  speed wins are unchanged. Added focused regressions for exact literal
+  masks, scanf widths, long long, dynamic fallback, escaped addresses,
+  program-defined printf, and conversion-free formats.
 - Made the medium `X_MODEL=M` distribution the default for ordinary root,
   standalone-X, libc, and packaging builds. The explicit `x-s`, `x-m`, and
   `x-l` targets remain unchanged. The unfiltered E2E suite now deliberately
@@ -15,8 +28,8 @@ Release status:
   CRT also exports both XCC and SDCC spellings of its HL/IY indirect-call
   trampolines, avoiding duplicate runtime archive definitions.
 - Completed the post-optimization validation sweep: model S/M/L pass
-  3,672/3,932/4,377 variants respectively; exhaustive L-model compile lanes
-  pass 2,736 ABI0 and 2,760 ABI1 variants; execution lanes pass 1,602 ABI0 and
+  3,677/3,937/4,382 variants respectively; exhaustive L-model compile lanes
+  pass 2,741 ABI0 and 2,765 ABI1 variants; execution lanes pass 1,602 ABI0 and
   1,577 ABI1 variants. The C23, fixed-project, algorithm, z88dk compatibility,
   host-tool, CP/M, YOS, MDR, full-chain, ZX Spectrum MCP, and platform-layout
   checks pass. Two indirect-call assembly probes now explicitly declare ABI1,

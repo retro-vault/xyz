@@ -475,6 +475,9 @@ void options::usage(const char *argv0) {
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  --platform <name> Select target platform include defaults\n"
         "  --platform=<name> Select target platform include defaults\n"
+        "  --runtime <name>  C runtime integration: x (default) or z88dk-classic\n"
+        "  --runtime=<name>  C runtime integration: x (default) or z88dk-classic\n"
+        "  -zcc-opt=<file>   Append inferred z88dk link capabilities to file\n"
         "  --float-format <fmt>\n"
         "                    Float ABI: ieee32, ieee16, fixed8_8, fixed16_16, fixed24_8\n"
         "  --float-format=<fmt>\n"
@@ -634,6 +637,34 @@ options options::parse(int argc, char **argv) {
             opts.platform_name = normalize_target_name(argv[++i]);
         } else if (strncmp(a, "--platform=", 11) == 0) {
             opts.platform_name = normalize_target_name(a + 11);
+        } else if (strcmp(a, "--runtime") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "xcc: error: --runtime requires a value\n");
+                exit(1);
+            }
+            const char *profile = argv[++i];
+            if (strcmp(profile, "x") == 0 || strcmp(profile, "native") == 0) {
+                opts.runtime = runtime_profile::X;
+            } else if (strcmp(profile, "z88dk-classic") == 0) {
+                opts.runtime = runtime_profile::Z88DK_CLASSIC;
+            } else {
+                fprintf(stderr, "xcc: error: unknown runtime profile '%s'\n", profile);
+                exit(1);
+            }
+        } else if (strncmp(a, "--runtime=", 10) == 0) {
+            const char *profile = a + 10;
+            if (strcmp(profile, "x") == 0 || strcmp(profile, "native") == 0) {
+                opts.runtime = runtime_profile::X;
+            } else if (strcmp(profile, "z88dk-classic") == 0) {
+                opts.runtime = runtime_profile::Z88DK_CLASSIC;
+            } else {
+                fprintf(stderr, "xcc: error: unknown runtime profile '%s'\n", profile);
+                exit(1);
+            }
+        } else if (strncmp(a, "-zcc-opt=", 9) == 0) {
+            opts.zcc_opt_file = a + 9;
+        } else if (strncmp(a, "--zcc-opt=", 10) == 0) {
+            opts.zcc_opt_file = a + 10;
         } else if (strcmp(a, "--float-format") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "xcc: error: --float-format requires a value\n");

@@ -29,6 +29,7 @@
 #include "frontend/ast.h"
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace xcc {
@@ -42,6 +43,12 @@ public:
     //
     ir_gen();
 
+    // z88dk supplies its own link-time-pruned printf implementation.  Native
+    // X builds retain the direct __printf_sd specialization.
+    void set_native_printf_specialization(bool enabled) {
+        native_printf_specialization_ = enabled;
+    }
+
     //
     // Lower the entire translation unit to an IR module.
     // The returned module is owned by the caller.
@@ -53,6 +60,8 @@ private:
     ir_function               *cur_fn_    = nullptr;
     int                        next_temp_ = 0;
     int                        next_lbl_  = 0;
+    bool                       native_printf_specialization_ = true;
+    std::unordered_set<std::string> defined_function_names_;
 
     // Target labels for break and continue inside loops/switch.
     std::string break_lbl_;

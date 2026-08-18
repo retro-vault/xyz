@@ -5,6 +5,14 @@ working conventions and canonical commands remain in the root `AGENTS.md`.
 
 ## Latest completed milestone
 
+XCC now integrates directly with z88dk's classic runtime through
+`--runtime=z88dk-classic`. It derives printf/scanf handler capabilities from
+literal formats, merges them across translation units through zcc's per-link
+option file, and uses a conservative fallback for dynamic or escaped
+formatters. The locked 24-program suite remains correct on 24/24 for both M
+profiles; `-Os` is strictly smallest against the valid SDCC/80cc envelope on
+24/24 programs, `-Of` on 22/24, and `-Of` remains fastest on 13/24.
+
 X now ships complete minimal ZX Spectrum 48K RAM and replacement-ROM
 platforms. `zx-ram` begins at `0x5CCB`; `zx-rom` emits an exact 16 KiB image.
 Both use assembly-only CRT and platform hooks, the ordinary staged libc and
@@ -42,7 +50,7 @@ python3 x/tests/tests/zx48/run_mcp.py \
   --rom /path/to/48.rom
 ```
 
-The unified XCC suite last passed 4,375/4,375. The ZX MCP run last passed all
+The unified XCC suite last passed 4,382/4,382. The ZX MCP run last passed all
 four delivery modes and marker checks.
 
 ## Durable implementation locations

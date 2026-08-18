@@ -58,8 +58,9 @@ the separate [`zx-ram`](examples/zx-ram/README.md) and
 - `tests/tests/` is now the canonical home for non-benchmark test suites.
 - Benchmarks now live under the unified `tests/benchmarks/` root.
 - The pinned seven-lane z88dk comparison is correct on 24/24 for XCC M `-Os`
-  and `-Of`; `-Of` is strictly fastest on 13/24 programs against the best
-  valid current zsdcc/80cc result. See
+  and `-Of`; `-Os` is strictly smallest on 24/24 programs, `-Of` is
+  smallest on 22/24 and fastest on 13/24 against the best valid current
+  zsdcc/80cc result. See
   [`tests/benchmarks/z88dk24/RESULTS.md`](tests/benchmarks/z88dk24/RESULTS.md).
 - `tests/tests/corpus/upstream/` holds the upstream corpora that previously lived under the repo-level `orig/`.
 - For a Docker-based MinGW host-tools preflight, run `make -C x windows-host-preflight`.

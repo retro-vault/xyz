@@ -5,6 +5,8 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/z80/z80gen.h"
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <unordered_set>
 
@@ -34,6 +36,64 @@ bool has_all_zero_initializer(const ir_module::global_var &g) {
         return true;
     }
     return !g.has_init || g.init_val == 0;
+}
+
+std::string z88dk_hex_mask(uint32_t mask) {
+    std::ostringstream out;
+    out << '$' << std::uppercase << std::hex << std::setw(8)
+        << std::setfill('0') << mask;
+    return out.str();
+}
+
+void emit_z88dk_format_definition(asm_emitter &out, const char *stem,
+                                  const ir_module::format_usage &usage,
+                                  uint32_t full_mask) {
+    if (!usage.used)
+        return;
+
+    const uint32_t mask = usage.requires_full ? full_mask : usage.mask;
+    const std::string symbol = std::string("CRT_") + stem + "_format";
+    const std::string guard = std::string("DEFINED_") + symbol;
+    const std::string temporary = std::string("temp_") + stem + "_format";
+    const std::string value = z88dk_hex_mask(mask);
+
+    std::ostringstream text;
+    if (mask != 0) {
+        text << "\nIF !" << guard << "\n"
+             << "\tdefc " << guard << " = 1\n"
+             << "\tdefc " << symbol << " = " << value << "\n"
+             << "ELSE\n"
+             << "\tUNDEFINE " << temporary << "\n"
+             << "\tdefc " << temporary << " = " << symbol << "\n"
+             << "\tUNDEFINE " << symbol << "\n"
+             << "\tdefc " << symbol << " = " << temporary
+             << " | " << value << "\n"
+             << "ENDIF\n\n";
+    }
+    text << "IF !NEED_" << stem << "\n"
+         << "\tDEFINE NEED_" << stem << "\n"
+         << "ENDIF\n\n";
+    out.raw(text.str());
+}
+
+void emit_z88dk_printf_long_long_definition(
+    asm_emitter &out, const ir_module::format_usage &usage) {
+    const uint32_t mask = usage.requires_full ? 0x0000005Fu : usage.mask2;
+    if (!usage.used || mask == 0)
+        return;
+    const std::string value = z88dk_hex_mask(mask);
+    std::ostringstream text;
+    text << "\nIF !DEFINED_CLIB_OPT_PRINTF_2\n"
+         << "\tdefc DEFINED_CLIB_OPT_PRINTF_2 = 1\n"
+         << "\tdefc CLIB_OPT_PRINTF_2 = " << value << "\n"
+         << "ELSE\n"
+         << "\tUNDEFINE temp_CLIB_OPT_PRINTF_2\n"
+         << "\tdefc temp_CLIB_OPT_PRINTF_2 = CLIB_OPT_PRINTF_2\n"
+         << "\tUNDEFINE CLIB_OPT_PRINTF_2\n"
+         << "\tdefc CLIB_OPT_PRINTF_2 = temp_CLIB_OPT_PRINTF_2 | "
+         << value << "\n"
+         << "ENDIF\n\n";
+    out.raw(text.str());
 }
 
 } // namespace
@@ -101,6 +161,13 @@ void z80_gen::plan_size_shared_ix_helpers(const ir_module &mod) {
 void z80_gen::emit_module(const ir_module &mod) {
     asm_.module_header();
     asm_.default_calling_convention(get_default_call_abi());
+    if (z88dk_classic_runtime_) {
+        emit_z88dk_format_definition(asm_, "printf", mod.printf_formats,
+                                     0xC01BF7BFu);
+        emit_z88dk_printf_long_long_definition(asm_, mod.printf_formats);
+        emit_z88dk_format_definition(asm_, "scanf", mod.scanf_formats,
+                                     0x403FFFFFu);
+    }
     iy_preserving_local_callees_.clear();
     internal_function_names_.clear();
     defined_function_names_.clear();

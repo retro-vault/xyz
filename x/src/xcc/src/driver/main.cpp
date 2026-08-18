@@ -36,6 +36,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -349,6 +350,94 @@ static std::string derive_output(const std::string &input, output_mode mode) {
          + (mode == output_mode::OBJECT ? ".rel" : ".s");
 }
 
+static uint32_t effective_z88dk_format_mask(
+    const ir_module::format_usage &usage, uint32_t full_mask) {
+    return usage.requires_full ? full_mask : usage.mask;
+}
+
+static void append_z88dk_format_option(std::ostream &out, const char *stem,
+                                       uint32_t mask) {
+    const std::string symbol = std::string("CRT_") + stem + "_format";
+    const std::string guard = std::string("DEFINED_") + symbol;
+    const std::string temporary = std::string("temp_") + stem + "_format";
+    const std::string need = std::string("NEED_") + stem;
+
+    std::ostringstream value;
+    value << "0x" << std::uppercase << std::hex << std::setw(8)
+          << std::setfill('0') << mask;
+
+    if (mask != 0) {
+        out << "\nIF !" << guard << "\n"
+            << "\tdefc\t" << guard << " = 1\n"
+            << "\tdefc " << symbol << " = " << value.str() << "\n"
+            << "ELSE\n"
+            << "\tUNDEFINE " << temporary << "\n"
+            << "\tdefc " << temporary << " = " << symbol << "\n"
+            << "\tUNDEFINE " << symbol << "\n"
+            << "\tdefc " << symbol << " = " << temporary
+            << " | " << value.str() << "\n"
+            << "ENDIF\n\n";
+    }
+    out << "IF !" << need << "\n"
+        << "\tDEFINE\t" << need << "\n"
+        << "ENDIF\n\n";
+}
+
+static void append_z88dk_printf_long_long_option(std::ostream &out,
+                                                  uint32_t mask) {
+    if (mask == 0)
+        return;
+    std::ostringstream value;
+    value << "0x" << std::uppercase << std::hex << std::setw(8)
+          << std::setfill('0') << mask;
+    out << "\nIF !DEFINED_CLIB_OPT_PRINTF_2\n"
+        << "\tdefc\tDEFINED_CLIB_OPT_PRINTF_2 = 1\n"
+        << "\tdefc CLIB_OPT_PRINTF_2 = " << value.str() << "\n"
+        << "ELSE\n"
+        << "\tUNDEFINE temp_CLIB_OPT_PRINTF_2\n"
+        << "\tdefc temp_CLIB_OPT_PRINTF_2 = CLIB_OPT_PRINTF_2\n"
+        << "\tUNDEFINE CLIB_OPT_PRINTF_2\n"
+        << "\tdefc CLIB_OPT_PRINTF_2 = temp_CLIB_OPT_PRINTF_2 | "
+        << value.str() << "\n"
+        << "ENDIF\n\n"
+        << "IF !NEED_printf\n"
+        << "\tDEFINE\tNEED_printf\n"
+        << "ENDIF\n\n";
+}
+
+static bool append_z88dk_format_options(const options &opts,
+                                        const ir_module &mod) {
+    if (opts.runtime != runtime_profile::Z88DK_CLASSIC ||
+        opts.zcc_opt_file.empty()) {
+        return true;
+    }
+
+    // z88dk classic's supported default formatter surface plus its independent
+    // flags parser.  Enabling every low-word bit also selects optional float
+    // converters whose dependencies are absent from integer-only targets.
+    const uint32_t printf_mask = effective_z88dk_format_mask(
+        mod.printf_formats, 0xC01BF7BFu);
+    const uint32_t printf_mask2 = mod.printf_formats.requires_full
+                                      ? 0x0000005Fu
+                                      : mod.printf_formats.mask2;
+    const uint32_t scanf_mask = effective_z88dk_format_mask(
+        mod.scanf_formats, 0x403FFFFFu);
+    if (!mod.printf_formats.used && !mod.scanf_formats.used) {
+        return true;
+    }
+
+    std::ofstream out(opts.zcc_opt_file, std::ios::app);
+    if (!out)
+        return false;
+    if (mod.printf_formats.used)
+        append_z88dk_format_option(out, "printf", printf_mask);
+    if (mod.printf_formats.used)
+        append_z88dk_printf_long_long_option(out, printf_mask2);
+    if (mod.scanf_formats.used)
+        append_z88dk_format_option(out, "scanf", scanf_mask);
+    return out.good();
+}
+
 // ----- Compile one file ----------------------------------------------
 static int compile_source_to_text(const std::string &input_path,
                                   const std::string &raw,
@@ -404,7 +493,15 @@ static int compile_source_to_text(const std::string &input_path,
 
     // ----- 3. Lower AST -> IR ----------------------------------------
     ir_gen irgen;
+    irgen.set_native_printf_specialization(
+        opts.runtime != runtime_profile::Z88DK_CLASSIC);
     auto  mod = irgen.lower(*tu);
+
+    if (!append_z88dk_format_options(opts, *mod)) {
+        fprintf(stderr, "xcc: error: cannot append z88dk options to '%s'\n",
+                opts.zcc_opt_file.c_str());
+        return 1;
+    }
 
     // ----- 3.5 IR optimization (-O2 / -Of / -O3 / -Os) ----------------
     if (effective_opt_settings.has_module_passes()) {
@@ -432,6 +529,9 @@ static int compile_source_to_text(const std::string &input_path,
         z80_gen codegen(*emitter);
         codegen.set_opt_settings(effective_opt_settings);
         codegen.set_standalone_assembly_output(opts.mode == output_mode::ASSEMBLY);
+        codegen.set_z88dk_classic_runtime(
+            opts.runtime == runtime_profile::Z88DK_CLASSIC &&
+            opts.zcc_opt_file.empty());
         if (opts.debug) {
             std::string base = out_path;
             auto dot = base.rfind('.');

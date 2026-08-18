@@ -309,8 +309,8 @@ while IFS=$'\t' read -r name rel; do
     fi
     echo "z88dk24: $name"
     scc="$(run_mode "$name" "$rel" sccz80 "$Z88DK_BASE/bin/zcc" '-compiler=sccz80' "$work")"
-    xos="$(run_mode "$name" "$rel" xcc_Os "$XCC_ZCC" '-compiler=xcc -Cx-Os' "$work")"
-    xof="$(run_mode "$name" "$rel" xcc_Of "$XCC_ZCC" '-compiler=xcc -Cx-Of' "$work")"
+    xos="$(run_mode "$name" "$rel" xcc_Os "$XCC_ZCC" '-compiler=xcc -Cx-Os -Cx--runtime=z88dk-classic' "$work")"
+    xof="$(run_mode "$name" "$rel" xcc_Of "$XCC_ZCC" '-compiler=xcc -Cx-Of -Cx--runtime=z88dk-classic' "$work")"
     sdc="$(run_mode "$name" "$rel" sdcc "$NIGHTLY_ZCC" '-compiler=sdcc' "$work")"
     sdm="$(run_mode "$name" "$rel" sdcc_max "$NIGHTLY_ZCC" '-compiler=sdcc -SO3 --max-allocs-per-node200000' "$work")"
     ofp="$(run_mode "$name" "$rel" 80cc_fp "$NIGHTLY_ZCC" '-compiler=80cc -Cc-fframe-pointer' "$work")"

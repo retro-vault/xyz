@@ -112,6 +112,8 @@ xcc [options] <input.c> [-o output]
   --opt-code-size    Alias for -Os
   --opt-code-speed   Alias for -Of
   -mz80              Accepted for SDCC/z88dk compatibility
+  --runtime=<name>   Runtime integration: x (default) or z88dk-classic
+  -zcc-opt=<file>    Append inferred z88dk link capabilities (zcc internal)
   -I<dir>            Add include directory
   -D<macro>[=val]    Define macro
   --nostdinc         Do not add default target include path

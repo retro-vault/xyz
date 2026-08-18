@@ -85,6 +85,65 @@ void merge_duplicate_string_literals(ir_module &mod) {
     mod.string_literals = std::move(pooled);
 }
 
+enum class escaped_format_family { NONE, PRINTF, SCANF };
+
+escaped_format_family format_family_for_symbol(const std::string &name) {
+    static const char *const printf_names[] = {
+        "printf", "printk", "fprintf", "sprintf", "snprintf",
+        "vprintf", "vfprintf", "vsprintf", "vsnprintf",
+    };
+    static const char *const scanf_names[] = {
+        "scanf", "fscanf", "sscanf", "vscanf", "vfscanf", "vsscanf",
+    };
+    for (const char *candidate : printf_names) {
+        if (name == candidate)
+            return escaped_format_family::PRINTF;
+    }
+    for (const char *candidate : scanf_names) {
+        if (name == candidate)
+            return escaped_format_family::SCANF;
+    }
+    return escaped_format_family::NONE;
+}
+
+void mark_escaped_format_symbol(ir_module &mod, const std::string &name,
+                                const std::unordered_set<std::string> &definitions) {
+    if (definitions.count(name))
+        return;
+    switch (format_family_for_symbol(name)) {
+    case escaped_format_family::PRINTF:
+        mod.printf_formats.used = true;
+        mod.printf_formats.requires_full = true;
+        break;
+    case escaped_format_family::SCANF:
+        mod.scanf_formats.used = true;
+        mod.scanf_formats.requires_full = true;
+        break;
+    case escaped_format_family::NONE:
+        break;
+    }
+}
+
+void mark_escaped_format_functions(
+    ir_module &mod,
+    const std::unordered_set<std::string> &definitions) {
+    for (const auto &gv : mod.globals) {
+        for (const auto &elem : gv.init_vals) {
+            if (!elem.label.empty())
+                mark_escaped_format_symbol(mod, elem.label, definitions);
+        }
+    }
+    for (const auto &fn : mod.functions) {
+        for (const auto &ic : fn.icodes) {
+            const operand *ops[] = {&ic.result, &ic.left, &ic.right};
+            for (const operand *op : ops) {
+                if (op->is_symbol() && op->is_func)
+                    mark_escaped_format_symbol(mod, op->name, definitions);
+            }
+        }
+    }
+}
+
 } // namespace
 
 // ----- Helpers -------------------------------------------------------
@@ -235,9 +294,16 @@ operand ir_gen::emit_unop(icode_op op, operand left, type_ptr t) {
 
 std::unique_ptr<ir_module> ir_gen::lower(translation_unit &tu) {
     mod_ = std::make_unique<ir_module>();
+    defined_function_names_.clear();
+    for (const auto &d : tu.decls) {
+        const auto *fn = dynamic_cast<const func_decl *>(d.get());
+        if (fn && fn->body)
+            defined_function_names_.insert(fn->name);
+    }
     for (auto &d : tu.decls)
         if (d) gen_decl(*d);
     merge_duplicate_string_literals(*mod_);
+    mark_escaped_format_functions(*mod_, defined_function_names_);
     return std::move(mod_);
 }
 

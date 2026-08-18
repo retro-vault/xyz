@@ -43,6 +43,14 @@ enum class output_mode {
     LINK,        // default: compile, assemble, and link (via xld)
 };
 
+// Target C runtime integration selected by the driver.  The default X
+// runtime consumes ordinary SDAS/GNU assembly.  z88dk-classic additionally
+// consumes link-time format capability definitions emitted by the compiler.
+enum class runtime_profile {
+    X,
+    Z88DK_CLASSIC,
+};
+
 struct options {
     // Input / output
     std::vector<std::string> input_files;
@@ -66,6 +74,10 @@ struct options {
     float_format             float_fmt = float_format::IEEE32;
     call_abi                 default_call_abi = call_abi::SDCCCALL1;
     bool                     plain_char_unsigned = true;
+    runtime_profile          runtime = runtime_profile::X;
+    // z88dk's per-link assembler option file.  Set by zcc with -zcc-opt=;
+    // empty for native and standalone compiler invocations.
+    std::string              zcc_opt_file;
 
     // Include paths and defines forwarded to the external preprocessor
     std::vector<std::string> include_paths;

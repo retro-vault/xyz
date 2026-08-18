@@ -88,6 +88,10 @@ Current examples and current locations:
   model independently. Compiler improvements measured there must be generic
   IR/CFG/data-flow transformations; workload names, source fragments, magic
   constants, and whole-program fingerprints are forbidden selection inputs.
+  XCC's `z88dk-classic` runtime profile also reports literal-derived
+  `printf`/`scanf` capabilities through zcc's per-link option file, so
+  classic-library handler pruning is measured without benchmark-specific
+  flags.
 
 When adding tests for new C23 features (or anything else):
 - Add semantic/functional verification in `x/tests/tests/libc/c23_cases.c` or

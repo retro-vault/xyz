@@ -669,8 +669,11 @@ producer/store forwarding; and `HL`/`DE` scheduling of consecutive word-load
 and add chains. These transformations are selected from IR shape, liveness,
 CFG edges, and clobber information—not source names or whole-program
 fingerprints. The locked z88dk comparison provides the current external audit:
-both XCC profiles pass 24/24, and `-Of` is strictly fastest on 13/24 programs
-against the best valid current zsdcc/80cc result.
+both XCC profiles pass 24/24; `-Os` is strictly smallest on 24/24 programs,
+`-Of` is smallest on 22/24 and fastest on 13/24 against the best valid current
+zsdcc/80cc result. The linked-size comparison uses the generic
+`z88dk-classic` runtime profile's literal-derived printf/scanf capabilities,
+not precomputed benchmark masks.
 
 ```
 xcc -O3 main.c util.c -o app.xl

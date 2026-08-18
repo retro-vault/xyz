@@ -308,6 +308,19 @@ struct ir_function {
 struct ir_module {
     std::vector<ir_function> functions;
 
+    // Literal format strings are summarized while lowering calls.  The bit
+    // layout is the z88dk classic printf/scanf capability protocol, but the
+    // information remains inert unless that runtime profile is selected.
+    struct format_usage {
+        uint32_t mask = 0;
+        uint32_t mask2 = 0; // z88dk classic long-long printf converters
+        bool used = false;
+        bool requires_full = false;
+    };
+
+    format_usage printf_formats;
+    format_usage scanf_formats;
+
     struct global_var {
         std::string name;
         type_ptr    type;

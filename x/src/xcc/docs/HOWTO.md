@@ -267,6 +267,31 @@ xcc has a built-in preprocessor.  Source files are preprocessed automatically be
 
 ---
 
+## External C runtime integration
+
+`--runtime=x` (also spelled `--runtime=native`) is the default and retains
+the normal X libc behavior.  `--runtime=z88dk-classic` selects the classic
+z88dk integration contract.  When invoked by z88dk's `zcc` driver, XCC also
+receives `-zcc-opt=<file>` and appends the link capabilities inferred for
+that translation unit.
+
+The z88dk profile analyzes the ordinary `printf`, `fprintf`, `sprintf`,
+`snprintf`, `vprintf` and corresponding `scanf` families.  Literal
+formats contribute only the conversion, length, width, precision, and flag
+handlers they use; masks from separate translation units are ORed in z88dk's
+per-link option file.  A non-literal format or an escaped library formatter
+selects the supported classic fallback surface.  A function defined by the
+program itself is never treated as the libc formatter merely because it is
+named `printf` or `scanf`.
+
+This is a runtime-level size optimization, not a source or benchmark
+recognizer.  The profile also leaves calls named `printf` intact so z88dk's
+link-time-selected implementation is used instead of X libc's native
+`___printf_sd` specialization.  `-zcc-opt` is an integration option supplied
+by `zcc`; standalone users normally need only `--runtime=z88dk-classic`.
+
+---
+
 ## ABI and calling convention
 
 `xcc` uses the modern SDCC-style `sdcccall(1)` register-based calling

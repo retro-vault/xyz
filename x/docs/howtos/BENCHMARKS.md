@@ -48,9 +48,13 @@ The bitfield row is deliberately retained as a correctness result. XCC now
 passes it in every profile after repairing CFG spill-slot liveness and guarded
 lowering for `IY`-derived pointer fusions. Current zsdcc still fails it;
 sccz80 and both 80cc modes pass. In the final locked run both XCC lanes pass
-24/24, and `-Of` is strictly fastest on 13/24 rows against the best valid
-zsdcc/80cc result. See `RESULTS.md` for the exact matrix and the structural,
-benchmark-independent optimization rules responsible for the gains.
+24/24; `-Os` is strictly smallest on 24/24 rows, while `-Of` is smallest on
+22/24 and fastest on 13/24 against the best valid zsdcc/80cc result. XCC's
+public `--runtime=z88dk-classic` profile derives printf/scanf capability masks
+from literal formats and merges them through zcc's per-link option file. The
+runner contains no precomputed format mask. See `RESULTS.md` for the exact
+matrix and the structural, benchmark-independent rules responsible for the
+gains.
 
 ## Codegen-Only Benchmark
 
