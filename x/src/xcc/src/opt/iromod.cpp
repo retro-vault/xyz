@@ -139,6 +139,25 @@ static void note_function_operand(const operand &op, module_use_info &info) {
 
 static module_use_info build_module_use_info(const ir_module &mod) {
     module_use_info info;
+    std::unordered_set<std::string> defined_functions;
+    for (const auto &fn : mod.functions)
+        defined_functions.insert(fn.name);
+
+    // Static initializer relocations are uses too.  In particular, a private
+    // callback may be reachable only through a file-scope dispatch table and
+    // therefore have no operand in any function's instruction stream.  Keep
+    // such functions live and treat their address as escaped so later module
+    // passes cannot inline them or change their private calling convention.
+    for (const auto &global : mod.globals) {
+        for (const auto &init : global.init_vals) {
+            if (!init.label.empty() &&
+                defined_functions.count(init.label) != 0) {
+                info.referenced_funcs.insert(init.label);
+                info.address_taken_funcs.insert(init.label);
+            }
+        }
+    }
+
     for (auto &fn : mod.functions) {
         for (auto &ic : fn.icodes) {
             if (ic.op == icode_op::CALL && !ic.func_name.empty()) {

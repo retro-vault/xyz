@@ -6,6 +6,10 @@ Release status:
 
 ## Unreleased
 
+- Fixed optimized static function-pointer initializers. Module-level liveness
+  now treats function relocations in static data as address-taking uses, so
+  dispatch-table callbacks retain their private definitions without disabling
+  dead-function elimination for genuinely unused helpers.
 - Fixed the M-model numeric contract: source-level `double`, `long double`,
   and unsuffixed floating literals now use the configured `float` ABI, so
   expressions such as `value - 1.1` no longer emit unavailable `__db*`

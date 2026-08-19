@@ -8,9 +8,11 @@ struct record {
 };
 
 static struct record item;
+static int callback_count;
 
 static void callback(void)
 {
+    ++callback_count;
 }
 
 static void *object_ptrs[] = {
@@ -80,9 +82,11 @@ int main(void)
         return 3;
     if (object_ptrs[3] != &item.value)
         return 4;
-    if (function_ptrs[0] != &callback)
+    function_ptrs[0]();
+    if (callback_count != 1)
         return 5;
-    if (function_ptrs[1] != callback)
+    function_ptrs[1]();
+    if (callback_count != 2)
         return 6;
     if (scalar_ptr != &object)
         return 7;
