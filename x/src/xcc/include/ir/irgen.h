@@ -34,6 +34,14 @@
 
 namespace xcc {
 
+// Apply model-specific library aliases to a function address used in a
+// static initializer.  Static initializers bypass sym_to_operand(), so they
+// need the same external-function canonicalization explicitly.
+std::string model_static_address_alias(
+    const expr *source,
+    const std::string &label,
+    const std::unordered_set<std::string> &defined_functions);
+
 class ir_gen : public expr_visitor,
                public stmt_visitor,
                public decl_visitor {

@@ -103,7 +103,8 @@ x:
 		DIST_DIR=$(DIST_DIR) \
 		HOST_BIN_DIR=$(HOST_BIN_DIR) \
 		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
-		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM)
+		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) \
+		X_MODEL=$(X_MODEL_NAME)
 	@$(MAKE) -C libc \
 		ROOT=$(X_ROOT) \
 		BUILD_DIR=$(BUILD_DIR) \
@@ -198,11 +199,15 @@ stage-xcc-support: check-platform-layout
 	            if [ "$(LIBC_FLOAT)" = "0" ]; then skip=1; fi ;; \
 	    esac; \
 	    case "$$base" in \
+	        db2fs|db_zero|dbadd|dbdiv|dbmul|dbneg|fs2db|ull2db) \
+	            if [ "$(LIBC_DOUBLE)" = "0" ] && [ "$(LIBC_FLOAT)" = "0" ]; then skip=1; fi ;; \
 	        db*|*2db|db2*) \
 	            if [ "$(LIBC_DOUBLE)" = "0" ]; then skip=1; fi ;; \
 	    esac; \
 	    case "$$base" in \
-	        db2ll|divll|divsll|divull|ll2*|modll|modsll|modull|mulll|shl64|shr64s|shr64u|sint2ll|slong2ll|uint2ll|ull2db|ulong2ll) \
+	        ull2db) \
+	            if [ "$(LIBC_LONGLONG)" = "0" ] && [ "$(LIBC_FLOAT)" = "0" ]; then skip=1; fi ;; \
+	        db2ll|divll|divsll|divull|ll2*|modll|modsll|modull|mulll|shl64|shr64s|shr64u|sint2ll|slong2ll|uint2ll|ulong2ll) \
 	            if [ "$(LIBC_LONGLONG)" = "0" ]; then skip=1; fi ;; \
 	    esac; \
 	    if [ "$$skip" = "1" ]; then continue; fi; \

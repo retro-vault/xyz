@@ -11,9 +11,13 @@ with the public `<stdio.h>` `trygetchar()` polling extension.
 
 Ordinary root, standalone-X, libc, and packaging builds now default to the
 medium `X_MODEL=M` feature set: `float` and `long` remain available, while
-`double`, `long long`, and stdio floating conversions are omitted. Explicit
-`X_MODEL=S|L` builds and the side-by-side `x-s`, `x-m`, and `x-l` targets are
-unchanged.
+source-level `double` and `long double` alias the configured `float` ABI.
+Genuine 64-bit double, `long long`, and stdio floating conversions are
+omitted. Unsuffixed floating literals therefore use float arithmetic in M;
+double-spelled libc calls are redirected to the matching float entry points.
+The small binary64 conversion subset retained internally by the float parser
+is not exposed as the M source ABI. Explicit `X_MODEL=S|L` builds and the
+side-by-side `x-s`, `x-m`, and `x-l` targets are unchanged.
 
 The feature-filtered model matrices are run with `make test-x-models`. The
 unfiltered E2E suite intentionally uses the staged `bin/x-l` compiler and

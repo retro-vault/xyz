@@ -38,9 +38,9 @@ namespace xcc {
 struct type;
 using type_ptr = std::shared_ptr<type>;
 
-// The storage and arithmetic ABI used for the C `float` type.  `double`
-// remains the existing 64-bit software double; this setting only changes
-// scalar float.
+// The storage and arithmetic ABI used for the C `float` type.  In the M
+// distribution, `double` and `long double` alias this ABI; L retains the
+// existing 64-bit software-double ABI.
 enum class float_format : uint8_t {
     IEEE32,
     IEEE16,
@@ -57,6 +57,11 @@ int float_format_fraction_bits(float_format format);
 int64_t encode_float_constant(double value, type_ptr target_type);
 void set_plain_char_unsigned(bool is_unsigned);
 bool plain_char_is_unsigned();
+
+// Return the library symbol selected by the active distribution model.
+// The M model keeps double spellings source-compatible while implementing
+// them through the configured float ABI.
+std::string model_library_alias(const std::string &name);
 
 // ----- call_abi ------------------------------------------------------
 //
@@ -227,9 +232,16 @@ struct type {
     static type_ptr make_float()  { return std::make_shared<type>(type_kind::FLOAT);  }
 
     //
-    // Return a new double type (8 bytes on Z80).
+    // Return the active model's double type.  M intentionally aliases double
+    // and long double to the configured float ABI; L retains binary64.
     //
-    static type_ptr make_double() { return std::make_shared<type>(type_kind::DOUBLE); }
+    static type_ptr make_double() {
+#if defined(XCC_MODEL_M)
+        return make_float();
+#else
+        return std::make_shared<type>(type_kind::DOUBLE);
+#endif
+    }
 
     //
     // Return a pointer type whose pointee is base.

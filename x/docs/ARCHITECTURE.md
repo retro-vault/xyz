@@ -79,6 +79,10 @@ Current examples and current locations:
 - `x/tests/tests/c23/` holds the manifest-driven C23 compatibility suite — used for both compiler acceptance and libc surface verification.
 - `x/tests/tests/zx48/` owns the optional real-ROM/MCP cross-stack regression.
 - `make test-x-models` validates the S, M, and L feature surfaces separately.
+  The M compiler is built as a distinct frontend configuration: `double` and
+  `long double` alias its selected `float` ABI, whereas L preserves binary64.
+  Model-specific compiler objects live in separate build directories so one
+  staged prefix cannot silently reuse another model's frontend.
   The unfiltered `x/tests/tests/e2e/run.sh` suite uses `bin/x-l` for compiler
   and library coverage, because the ordinary `bin/x` prefix is intentionally
   the M distribution and cannot link L-only double/long-long cases.

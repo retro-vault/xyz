@@ -106,7 +106,8 @@ The feature tables below use the following labels:
 | `int`, `char`, `short`, `long` | `tested` |
 | `unsigned` variants | `tested` |
 | `long long` (add/sub inline; mul/div/mod via stubs) | `runtime-stub` |
-| `float`, `double` (stored as 4-byte IEEE 754; arithmetic via stubs) | `runtime-stub` |
+| `float`; M-model `double` alias | `runtime-stub` |
+| L-model 8-byte `double` | `runtime-stub` |
 | `void`, `_Bool` | `tested` |
 | `_Complex` / `_Imaginary` (8-byte soft-float pair; arithmetic via stubs) | `runtime-stub` |
 

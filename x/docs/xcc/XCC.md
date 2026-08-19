@@ -89,10 +89,12 @@ Source (.c)
 | `short`, `int`     | 2     |
 | `long`             | 4     |
 | `long long`        | 8     |
-| `float`, `double`  | 4     |
+| `float`            | selected by `--float-format` (4 by default) |
+| `double`           | same as `float` in M; 8 in L |
 | pointer            | 2     |
 
-`double` is IEEE 754 single precision (same as `float`) — no FPU on Z80.
+The M distribution aliases `double` and `long double` to `float`. The L
+distribution provides a distinct 8-byte software IEEE-754 double type.
 
 ---
 

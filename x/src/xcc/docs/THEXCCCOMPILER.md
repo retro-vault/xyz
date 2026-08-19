@@ -236,7 +236,7 @@ Important target sizes in this compiler:
 - `long long`: 8 bytes
 - pointer: 2 bytes
 - `float`: 4 bytes
-- `double`: 8 bytes
+- `double`: the selected float size in M; 8 bytes in L
 
 So the frontend already knows the target machine well before codegen starts.
 

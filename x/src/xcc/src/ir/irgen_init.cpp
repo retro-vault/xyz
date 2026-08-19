@@ -168,6 +168,7 @@ bool is_flat_aggregate_initializer(const init_list_expr &list) {
 
 void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                          int &next_lbl,
+                         const std::unordered_set<std::string> &definitions,
                          std::vector<ir_module::global_var::init_elem> &out) {
     if (!init || !target)
         return;
@@ -197,7 +198,8 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                     out.push_back(init_elem(0, elem_t->size()));
                     ++emitted;
                 }
-                collect_static_init(e.value.get(), elem_t, mod, next_lbl, out);
+                collect_static_init(e.value.get(), elem_t, mod, next_lbl,
+                                    definitions, out);
                 ++emitted;
                 next_idx = idx + 1;
             }
@@ -231,7 +233,7 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                         std::vector<ir_module::global_var::init_elem> value;
                         collect_static_init(
                             il->elements[i].value.get(), slot.type,
-                            mod, next_lbl, value);
+                            mod, next_lbl, definitions, value);
                         for (auto &elem : value)
                             out.push_back(std::move(elem));
                         cursor = slot.offset + (slot.type ? slot.type->size() : 0);
@@ -259,13 +261,15 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                 if (!fld && seq_idx < target->fields.size())
                     fld = &target->fields[seq_idx++];
                 if (fld)
-                    collect_static_init(e.value.get(), fld->type, mod, next_lbl, out);
+                    collect_static_init(e.value.get(), fld->type, mod, next_lbl,
+                                        definitions, out);
             }
             return;
         }
 
         if (!il->elements.empty())
-            collect_static_init(il->elements[0].value.get(), target, mod, next_lbl, out);
+            collect_static_init(il->elements[0].value.get(), target, mod, next_lbl,
+                                definitions, out);
         return;
     }
 
@@ -306,8 +310,9 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
         out.push_back(init_elem(0, target->size(), lbl));
     } else if (target->is_ptr()) {
         if (auto address = const_expr_evaluator::evaluate_address(init)) {
-            out.push_back(init_elem(address->byte_offset, target->size(),
-                                    address->symbol));
+            out.push_back(init_elem(
+                address->byte_offset, target->size(),
+                model_static_address_alias(init, address->symbol, definitions)));
         } else {
             out.push_back(init_elem(0, target->size()));
         }
@@ -326,7 +331,8 @@ void ir_gen::visit(compound_literal_expr &e) {
             gv.type = e.type;
             gv.has_init = true;
             gv.is_static = true;
-            collect_static_init(e.init.get(), e.type, *mod_, next_lbl_, gv.init_vals);
+            collect_static_init(e.init.get(), e.type, *mod_, next_lbl_,
+                                defined_function_names_, gv.init_vals);
             mod_->globals.push_back(std::move(gv));
         } else if (auto *il = dynamic_cast<init_list_expr*>(e.init.get())) {
             gen_init_list(*e.sym, e.type, *il);

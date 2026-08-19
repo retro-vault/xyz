@@ -34,7 +34,9 @@ Canonical release notes now live with each product root:
   outputs under `bin/y/` and staged target assets under `bin/z/`.
 - The ordinary root and `make -C x` builds default to the medium `X_MODEL=M`
   distribution. Use `X_MODEL=S|L` explicitly or the root `x-s`, `x-m`, and
-  `x-l` targets when another model is required.
+  `x-l` targets when another model is required. In M, source-level `double`
+  and `long double` alias the selected `float` ABI; L retains the genuine
+  64-bit software-double ABI.
 - The YOS ROM and the active `y/tests/*-yos` app builds now use the staged
   `bin/x/bin/{xcc,xas,xld}` toolchain directly with `-Os`; the old Docker /
   SDCC-only path is no longer the default build route.

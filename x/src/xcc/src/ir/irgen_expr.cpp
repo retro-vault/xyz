@@ -921,7 +921,8 @@ void ir_gen::visit(call_expr &e) {
     operand indirect_callee;
     if (auto *id = dynamic_cast<ident_expr*>(e.callee.get())) {
         if (id->sym && id->sym->kind == sym_kind::FUNC) {
-            direct_func_name = alternate_float_call_name(id->name);
+            direct_func_name = alternate_float_call_name(
+                sym_to_operand(*id->sym, id->type).name);
             const format_call_desc *format_desc = find_format_call(id->name);
             const bool is_external_format_function =
                 format_desc && id->sym->type && id->sym->type->is_func() &&

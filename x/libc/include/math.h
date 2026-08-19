@@ -6,10 +6,10 @@
  * By default float is IEEE-754 single precision. xcc can also select IEEE
  * binary16 or the fixed-point float ABIs 8.8, 16.16, and 24.8 with
  * --float-format=. The compiler owns that ABI choice and lowers float-suffixed
- * math calls to the matching runtime implementation. double and long double
- * use the 64-bit software runtime ABI on this target. Many entry points share
- * common kernels internally, but the unsuffixed and l-suffixed forms are no
- * longer simple aliases of the float bodies.
+ * math calls to the matching runtime implementation. In model M, double and
+ * long double are source-compatible aliases of float and their library calls
+ * are redirected to the matching float entry points. Model L uses the 64-bit
+ * software runtime ABI. Many entry points share common kernels internally.
  *
  * This header declares the full standard interface.  The classification,
  * sign/abs, square root, atan2, nearest-integer, decomposition, scaling and

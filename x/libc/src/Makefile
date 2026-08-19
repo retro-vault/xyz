@@ -69,14 +69,34 @@ S_SRCS := $(filter-out \
 	wchar/wcstof.s,$(S_SRCS))
 endif
 ifeq ($(LIBC_DOUBLE),0)
+C_SRCS := $(filter-out math/double_transcendental.c,$(C_SRCS))
 S_SRCS := $(filter-out \
-	stdlib/atof.s \
+	math/acos.s math/acosh.s math/acoshl.s \
+	math/asin.s math/asinh.s math/asinhl.s \
+	math/atan.s math/atan2.s math/atanh.s math/atanhl.s \
+	math/cbrt.s math/ceil.s math/copysign.s math/cos.s math/cosh.s \
+	math/db1argf_common.s math/db_load_arg0_fs.s math/db_load_arg1_fs.s \
+	math/erf.s math/erfc.s math/erfcl.s math/erfl.s \
+	math/exp.s math/exp2.s math/expm1.s math/fdim.s math/floor.s \
+	math/fma.s math/fmax.s math/fmaximum.s math/fmaximum_mag.s \
+	math/fmin.s math/fminimum.s math/fminimum_mag.s math/fmod.s \
+	math/frexp.s math/getpayload.s math/hypot.s math/ilogb.s \
+	math/ldexp.s math/legacymathd.s math/lgamma.s math/lgammal.s \
+	math/lgd_load_arg0_fs.s math/lgd_load_arg0_raw.s math/lgd_load_arg1_raw.s \
+	math/llrint.s math/llround.s math/log.s math/log10.s math/log1p.s \
+	math/log2.s math/logb.s math/lrint.s math/lround.s math/modf.s \
+	math/moremathd.s math/nan.s math/nearbyint.s math/nextafter.s \
+	math/nextdown.s math/nextup.s math/pow.s math/remainder.s \
+	math/remquo.s math/round.s math/roundeven.s math/scalbln.s \
+	math/scalbn.s math/setpayload.s math/setpayloadsig.s \
+	math/significand.s math/sin.s math/sinh.s math/sqrt.s math/tan.s \
+	math/tanh.s math/tgamma.s math/tgammal.s math/totalorder.s \
+	math/totalordermag.s math/trunc.s math/ufromfp.s,$(S_SRCS))
+S_SRCS := $(filter-out \
 	stdlib/strfroml.s \
 	stdlib/strtod.s \
 	stdlib/strtold.s \
 	wchar/wcstod.s \
-	wchar/wcstod_core.s \
-	wchar/wcstof.s \
 	wchar/wcstold.s,$(S_SRCS))
 endif
 ifeq ($(LIBC_LONG),0)

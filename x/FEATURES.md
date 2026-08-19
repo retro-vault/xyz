@@ -719,7 +719,9 @@ folding and `-O3` can specialize further (divide by 2 → shift; multiply by
 Fixed formats are a **complete `float` replacement** for typical embedded code.
 The fixed runtime and `*f` math library (`sqrtf`, `fabsf`, `floorf`, `roundf`,
 `fminf`/`fmaxf`, classification, `copysignf`, …) are in-tree and linked
-automatically. `double` / `long double` stay on the 64-bit software runtime.
+automatically. In the default M distribution, `double` and `long double`
+alias the selected `float` format; use L when a distinct binary64 type is
+required.
 
 ```
 #include <math.h>
@@ -748,10 +750,12 @@ must agree on the `float` ABI.
 **When:** Your program uses 64-bit counters, timestamps, or double-precision
 math beyond 16-bit `int`/`long`.
 
-**How it works:** Wide integer ops (`__mullong`, shifts, compares) and the
-software double runtime live in `<prefix>/z80/lib` and link automatically when
-the compiler emits references. `float` ABI is independent (see §13) — you can
-use fixed `float` with software `double` in the same program.
+**How it works:** In model L, wide integer ops (`__mullong`, shifts, compares)
+and the software double runtime live in `<prefix>/z80/lib` and link
+automatically when the compiler emits references. `float` ABI is independent
+(see §13), so L can use fixed `float` with software binary64 `double`. In M,
+`double` and `long double` are source-compatible aliases of the selected
+`float` ABI instead.
 
 ```
 long long ticks_since_boot(void);
@@ -790,7 +794,7 @@ continue to stage all three distributions separately.
 | Build switch | Effect |
 |---|---|
 | `X_MODEL=S` | Keep core integer ABI/runtime, file positioning, time, and rand; omit wide numeric formatting/conversion, floating math, and `long long` support |
-| `X_MODEL=M` | Keep `float` and `long`, drop `double`, `long long`, and stdio float conversions |
+| `X_MODEL=M` | Keep `float` and `long`; alias `double`/`long double` to `float`; omit binary64, `long long`, and stdio float conversions |
 | `X_MODEL=L` | Full model: keep `float`, `double`, `long`, `long long`, and stdio float conversions |
 | `LIBC_FLOAT=0` | Omit libc `float` formatting/conversion paths |
 | `LIBC_DOUBLE=0` | Omit libc `double` formatting/conversion paths |
@@ -1457,8 +1461,8 @@ without a home-grown `%f` implementation.
 | Allocator | `free_sized`, `free_aligned` | C23 sized deallocation |
 
 With `--float-format=fixed16_16` (§13), many `*f` forms redirect to
-fixed-point helpers automatically; `double` paths use the 64-bit software
-runtime.
+fixed-point helpers automatically. M's double spellings follow those same
+helpers; L's double paths use the 64-bit software runtime.
 
 ```
 #include <math.h>

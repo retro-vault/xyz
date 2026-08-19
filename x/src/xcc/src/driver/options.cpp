@@ -256,6 +256,31 @@ static void add_float_format_defines(options &opts) {
                            std::to_string(float_format_size(opts.float_fmt)));
     opts.defines.push_back(std::string("__XCC_FLOAT_FRACTION_BITS__=") +
                            std::to_string(float_format_fraction_bits(opts.float_fmt)));
+    opts.defines.push_back(std::string("__SIZEOF_FLOAT__=") +
+                           std::to_string(float_format_size(opts.float_fmt)));
+#if defined(XCC_MODEL_M)
+    opts.defines.push_back(std::string("__SIZEOF_DOUBLE__=") +
+                           std::to_string(float_format_size(opts.float_fmt)));
+    opts.defines.push_back(std::string("__SIZEOF_LONG_DOUBLE__=") +
+                           std::to_string(float_format_size(opts.float_fmt)));
+#else
+    opts.defines.push_back("__SIZEOF_DOUBLE__=8");
+    opts.defines.push_back("__SIZEOF_LONG_DOUBLE__=8");
+#endif
+}
+
+static void add_model_defines(options &opts) {
+#if defined(XCC_MODEL_S)
+    opts.defines.push_back("__XCC_MODEL_S__=1");
+    opts.defines.push_back("__XCC_MODEL__=1");
+#elif defined(XCC_MODEL_M)
+    opts.defines.push_back("__XCC_MODEL_M__=1");
+    opts.defines.push_back("__XCC_MODEL__=2");
+    opts.defines.push_back("__XCC_DOUBLE_IS_FLOAT__=1");
+#else
+    opts.defines.push_back("__XCC_MODEL_L__=1");
+    opts.defines.push_back("__XCC_MODEL__=3");
+#endif
 }
 
 static void add_default_call_mode_defines(options &opts) {
@@ -755,6 +780,7 @@ options options::parse(int argc, char **argv) {
 
     if (opts.use_default_include_paths)
         add_default_include_paths(opts, argv[0]);
+    add_model_defines(opts);
     add_float_format_defines(opts);
     add_default_call_mode_defines(opts);
     add_plain_char_defines(opts);

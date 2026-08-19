@@ -4,9 +4,9 @@
  * Standard C23 floating-point characteristics for the xcc Z80 target.
  *
  * The C `float` model is selected by `--float-format=` and can be IEEE binary32,
- * IEEE binary16, or one of the fixed-point compatibility formats. `double`
- * remains the 64-bit software IEEE-754 runtime type, and `long double`
- * currently aliases `double`.
+ * IEEE binary16, or one of the fixed-point compatibility formats. In the M
+ * distribution, `double` and `long double` alias that selected float format.
+ * The L distribution retains the 64-bit software IEEE-754 double runtime.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih
@@ -106,8 +106,26 @@
 #endif
 
 /* ------------------------------------------------------------------------- */
-/* double characteristics (64-bit software IEEE-754 binary64)               */
+/* double characteristics                                                    */
 /* ------------------------------------------------------------------------- */
+
+#if defined(__XCC_DOUBLE_IS_FLOAT__)
+
+#define DBL_MANT_DIG       FLT_MANT_DIG
+#define DBL_DIG            FLT_DIG
+#define DBL_MIN_EXP        FLT_MIN_EXP
+#define DBL_MAX_EXP        FLT_MAX_EXP
+#define DBL_MIN_10_EXP     FLT_MIN_10_EXP
+#define DBL_MAX_10_EXP     FLT_MAX_10_EXP
+#define DBL_DECIMAL_DIG    FLT_DECIMAL_DIG
+#define DBL_MAX            FLT_MAX
+#define DBL_MIN            FLT_MIN
+#define DBL_TRUE_MIN       FLT_TRUE_MIN
+#define DBL_EPSILON        FLT_EPSILON
+#define DBL_HAS_SUBNORM    FLT_HAS_SUBNORM
+#define DBL_IS_IEC_60559   FLT_IS_IEC_60559
+
+#else
 
 #define DBL_MANT_DIG       53
 #define DBL_DIG            15
@@ -122,6 +140,8 @@
 #define DBL_EPSILON        2.2204460492503131e-16
 #define DBL_HAS_SUBNORM    1
 #define DBL_IS_IEC_60559   1
+
+#endif
 
 /* long double currently aliases the double runtime. */
 #define LDBL_MANT_DIG      DBL_MANT_DIG
@@ -142,7 +162,11 @@
 #define FLT_EVAL_METHOD 0
 
 /* Decimal digits required to round-trip the widest floating type. */
+#if defined(__XCC_DOUBLE_IS_FLOAT__)
+#define DECIMAL_DIG FLT_DECIMAL_DIG
+#else
 #define DECIMAL_DIG 17
+#endif
 
 /* C23 signaling NaN convenience macros. */
 #define FLT_SNAN __builtin_nansf("")

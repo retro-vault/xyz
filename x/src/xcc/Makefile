@@ -6,6 +6,7 @@ ROOT      ?= $(abspath $(_THIS_DIR)/../..)
 BUILD_DIR ?= $(ROOT)/build
 DIST_DIR  ?= $(ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
+include $(ROOT)/mk/model.mk
 
 CXX ?= g++
 XAS ?= $(HOST_BIN_DIR)/xas
@@ -27,6 +28,7 @@ ENABLE_SANITIZERS ?= auto
 GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
 XCC_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
 CXXFLAGS += -DXCC_VERSION=\"$(XCC_VERSION)\"
+CXXFLAGS += -DXCC_MODEL_$(X_MODEL_NAME)=1
 
 ifeq ($(ENABLE_SANITIZERS),auto)
   ENABLE_SANITIZERS := 1
@@ -53,7 +55,7 @@ else
 endif
 
 SRCDIR   := src
-PROJECT_BUILD_DIR := $(BUILD_DIR)/xc/xcc
+PROJECT_BUILD_DIR := $(BUILD_DIR)/xc/xcc/$(X_MODEL_NAME)
 OBJDIR   := $(PROJECT_BUILD_DIR)/obj
 TARGET   := $(HOST_BIN_DIR)/xcc
 RUNTIME_DIR := lib/runtime

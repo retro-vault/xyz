@@ -184,7 +184,7 @@ xld module_a.rel module_b.rel -o program.xl
 | `long long` / `signed long long`  | 8           | lowered through 64-bit runtime helpers |
 | `unsigned long long`              | 8           | lowered through 64-bit runtime helpers |
 | `float`                           | 4           | IEEE 754 single (32-bit) |
-| `double`                          | 8           | IEEE 754 double (64-bit soft-float) |
+| `double`                          | float-sized in M; 8 in L | M aliases float; L uses IEEE 754 binary64 soft-float |
 | `_Bool`                           | 1           | |
 | `void`                            | —           | |
 | Pointer (any)                     | 2           | 16-bit flat address space |

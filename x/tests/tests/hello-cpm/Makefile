@@ -17,7 +17,7 @@ TNYLPO    ?= tnylpo
 
 .PHONY: all test clean
 
-all: $(BUILD_DIR)/hello.com $(BUILD_DIR)/trygetchar.com $(BUILD_DIR)/argv.com \
+all: $(BUILD_DIR)/hello.com $(BUILD_DIR)/trygetc.com $(BUILD_DIR)/argv.com \
 	$(BUILD_DIR)/argv-os.com $(BUILD_DIR)/argv-of.com \
 	$(BUILD_DIR)/argv-stk.com
 
@@ -25,7 +25,7 @@ $(BUILD_DIR)/hello.com: hello.c
 	@mkdir -p $(BUILD_DIR)
 	$(XCC) hello.c --platform=cpm3 --oformat=binary -o $@
 
-$(BUILD_DIR)/trygetchar.com: trygetchar.c
+$(BUILD_DIR)/trygetc.com: trygetchar.c
 	@mkdir -p $(BUILD_DIR)
 	$(XCC) trygetchar.c --platform=cpm3 --oformat=binary -o $@
 
@@ -57,13 +57,13 @@ test: all
 	else \
 	  echo "FAIL: hello-cpm (got: $$out)"; exit 1; \
 	fi; \
-	out="$$(tail -f /dev/null | (cd $(BUILD_DIR) && $(TNYLPO) trygetchar))"; \
+	out="$$(tail -f /dev/null | (cd $(BUILD_DIR) && $(TNYLPO) trygetc))"; \
 	if [ "$$out" = "IDLE" ]; then \
 	  echo "PASS: hello-cpm trygetchar idle"; \
 	else \
 	  echo "FAIL: hello-cpm trygetchar idle (got: $$out)"; exit 1; \
 	fi; \
-	out="$$(printf x | (cd $(BUILD_DIR) && $(TNYLPO) trygetchar))"; \
+	out="$$(printf x | (cd $(BUILD_DIR) && $(TNYLPO) trygetc))"; \
 	if [ "$$out" = "xREADY" ]; then \
 	  echo "PASS: hello-cpm trygetchar ready"; \
 	else \

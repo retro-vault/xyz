@@ -170,6 +170,110 @@ bool plain_char_is_unsigned() {
     return g_plain_char_unsigned;
 }
 
+std::string model_library_alias(const std::string &name) {
+#if defined(XCC_MODEL_M)
+    struct alias_entry {
+        const char *source;
+        const char *target;
+    };
+    static constexpr alias_entry aliases[] = {
+        {"acos", "acosf"}, {"acosl", "acosf"},
+        {"acosh", "acoshf"}, {"acoshl", "acoshf"},
+        {"asin", "asinf"}, {"asinl", "asinf"},
+        {"asinh", "asinhf"}, {"asinhl", "asinhf"},
+        {"atan", "atanf"}, {"atanl", "atanf"},
+        {"atan2", "atan2f"}, {"atan2l", "atan2f"},
+        {"atanh", "atanhf"}, {"atanhl", "atanhf"},
+        {"cbrt", "cbrtf"}, {"cbrtl", "cbrtf"},
+        {"ceil", "ceilf"}, {"ceill", "ceilf"},
+        {"copysign", "copysignf"}, {"copysignl", "copysignf"},
+        {"cos", "cosf"}, {"cosl", "cosf"},
+        {"cosh", "coshf"}, {"coshl", "coshf"},
+        {"erf", "erff"}, {"erfl", "erff"},
+        {"erfc", "erfcf"}, {"erfcl", "erfcf"},
+        {"exp", "expf"}, {"expl", "expf"},
+        {"exp2", "exp2f"}, {"exp2l", "exp2f"},
+        {"expm1", "expm1f"}, {"expm1l", "expm1f"},
+        {"fabs", "fabsf"}, {"fabsl", "fabsf"},
+        {"fdim", "fdimf"}, {"fdiml", "fdimf"},
+        {"floor", "floorf"}, {"floorl", "floorf"},
+        {"fma", "fmaf"}, {"fmal", "fmaf"},
+        {"fmax", "fmaxf"}, {"fmaxl", "fmaxf"},
+        {"fmaximum", "fmaximumf"}, {"fmaximuml", "fmaximumf"},
+        {"fmaximum_mag", "fmaximum_magf"},
+        {"fmaximum_magl", "fmaximum_magf"},
+        {"fmaximum_mag_num", "fmaximum_mag_numf"},
+        {"fmaximum_mag_numl", "fmaximum_mag_numf"},
+        {"fmaximum_num", "fmaximum_numf"},
+        {"fmaximum_numl", "fmaximum_numf"},
+        {"fmin", "fminf"}, {"fminl", "fminf"},
+        {"fminimum", "fminimumf"}, {"fminimuml", "fminimumf"},
+        {"fminimum_mag", "fminimum_magf"},
+        {"fminimum_magl", "fminimum_magf"},
+        {"fminimum_mag_num", "fminimum_mag_numf"},
+        {"fminimum_mag_numl", "fminimum_mag_numf"},
+        {"fminimum_num", "fminimum_numf"},
+        {"fminimum_numl", "fminimum_numf"},
+        {"fmod", "fmodf"}, {"fmodl", "fmodf"},
+        {"frexp", "frexpf"}, {"frexpl", "frexpf"},
+        {"fromfp", "fromfpf"}, {"fromfpl", "fromfpf"},
+        {"fromfpx", "fromfpxf"}, {"fromfpxl", "fromfpxf"},
+        {"getpayload", "getpayloadf"}, {"getpayloadl", "getpayloadf"},
+        {"hypot", "hypotf"}, {"hypotl", "hypotf"},
+        {"ilogb", "ilogbf"}, {"ilogbl", "ilogbf"},
+        {"ldexp", "ldexpf"}, {"ldexpl", "ldexpf"},
+        {"lgamma", "lgammaf"}, {"lgammal", "lgammaf"},
+        {"llrint", "llrintf"}, {"llrintl", "llrintf"},
+        {"llround", "llroundf"}, {"llroundl", "llroundf"},
+        {"log", "logf"}, {"logl", "logf"},
+        {"log10", "log10f"}, {"log10l", "log10f"},
+        {"log1p", "log1pf"}, {"log1pl", "log1pf"},
+        {"log2", "log2f"}, {"log2l", "log2f"},
+        {"logb", "logbf"}, {"logbl", "logbf"},
+        {"lrint", "lrintf"}, {"lrintl", "lrintf"},
+        {"lround", "lroundf"}, {"lroundl", "lroundf"},
+        {"modf", "modff"}, {"modfl", "modff"},
+        {"nan", "nanf"}, {"nanl", "nanf"},
+        {"nearbyint", "nearbyintf"}, {"nearbyintl", "nearbyintf"},
+        {"nextafter", "nextafterf"}, {"nextafterl", "nextafterf"},
+        {"nextdown", "nextdownf"}, {"nextdownl", "nextdownf"},
+        {"nextup", "nextupf"}, {"nextupl", "nextupf"},
+        {"pow", "powf"}, {"powl", "powf"},
+        {"remainder", "remainderf"}, {"remainderl", "remainderf"},
+        {"remquo", "remquof"}, {"remquol", "remquof"},
+        {"rint", "rintf"}, {"rintl", "rintf"},
+        {"round", "roundf"}, {"roundl", "roundf"},
+        {"roundeven", "roundevenf"}, {"roundevenl", "roundevenf"},
+        {"scalbln", "scalblnf"}, {"scalblnl", "scalblnf"},
+        {"scalbn", "scalbnf"}, {"scalbnl", "scalbnf"},
+        {"setpayload", "setpayloadf"}, {"setpayloadl", "setpayloadf"},
+        {"setpayloadsig", "setpayloadsigf"},
+        {"setpayloadsigl", "setpayloadsigf"},
+        {"significand", "significandf"},
+        {"sin", "sinf"}, {"sinl", "sinf"},
+        {"sinh", "sinhf"}, {"sinhl", "sinhf"},
+        {"sqrt", "sqrtf"}, {"sqrtl", "sqrtf"},
+        {"tan", "tanf"}, {"tanl", "tanf"},
+        {"tanh", "tanhf"}, {"tanhl", "tanhf"},
+        {"tgamma", "tgammaf"}, {"tgammal", "tgammaf"},
+        {"totalorder", "totalorderf"}, {"totalorderl", "totalorderf"},
+        {"totalordermag", "totalordermagf"},
+        {"totalordermagl", "totalordermagf"},
+        {"trunc", "truncf"}, {"truncl", "truncf"},
+        {"ufromfp", "ufromfpf"}, {"ufromfpl", "ufromfpf"},
+        {"ufromfpx", "ufromfpxf"}, {"ufromfpxl", "ufromfpxf"},
+        {"strtod", "strtof"}, {"strtold", "strtof"},
+        {"strfromd", "strfromf"}, {"strfroml", "strfromf"},
+        {"wcstod", "wcstof"}, {"wcstold", "wcstof"},
+    };
+    for (const auto &entry : aliases) {
+        if (name == entry.source)
+            return entry.target;
+    }
+#endif
+    return name;
+}
+
 const char *float_format_name(float_format format) {
     switch (format) {
     case float_format::IEEE32:     return "ieee32";

@@ -5,6 +5,7 @@ DIST_DIR ?= $(REPO_ROOT)/bin/x
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 DEFAULT_PLATFORM ?= none
+X_MODEL ?= M
 
 SUBDIRS := xld xgdb xemu xopt xcc xas xar xobjcopy xprog
 
@@ -30,7 +31,8 @@ $(SUBDIRS): host-libs
 		DIST_DIR=$(DIST_DIR) \
 		HOST_BIN_DIR=$(HOST_BIN_DIR) \
 		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
-		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM)
+		DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) \
+		X_MODEL=$(X_MODEL)
 
 # xcc links libxopt, so even parallel product builds must finish xopt first.
 xcc: xopt

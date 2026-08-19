@@ -10,9 +10,15 @@
 
         .globl  _atof
         .globl  __strtod_core
+        .globl  _strtof
 
         .area   _CODE
 
 _atof::
+        .if     __XCC_LIBC_DOUBLE
         ld      de,#0
         jp      __strtod_core
+        .else
+        ld      de,#0
+        jp      _strtof
+        .endif

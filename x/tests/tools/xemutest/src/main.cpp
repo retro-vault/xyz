@@ -764,6 +764,11 @@ test_case load_test_case(const fs::path& manifest_path) {
             test.platform = value;
         } else if (key == "floatpresent") {
             test.float_present = parse_bool(value, "float_present");
+        } else if (key == "modeldoublealias") {
+            // Metadata consumed by refresh_model_tags.py.  The runner only
+            // needs to validate it so focused M-model alias tests can retain
+            // their generated model-m tag.
+            (void)parse_bool(value, "model_double_alias");
         } else if (key == "debugsymbols") {
             test.debug_symbols = parse_bool(value, "debug_symbols");
         } else if (key == "matrixopt") {

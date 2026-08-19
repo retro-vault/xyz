@@ -6,6 +6,13 @@ Release status:
 
 ## Unreleased
 
+- Fixed the M-model numeric contract: source-level `double`, `long double`,
+  and unsuffixed floating literals now use the configured `float` ABI, so
+  expressions such as `value - 1.1` no longer emit unavailable `__db*`
+  helpers. Double-spelled math and parsing calls are redirected to their
+  float entry points, M's `<float.h>` characteristics match the active float
+  format, genuine 64-bit math members are excluded, and only the small hidden
+  binary64 subset required by the shared float parser remains in the runtime.
 - Removed the target-private console headers and exposed the non-blocking
   `trygetchar()` extension through `<stdio.h>`. CP/M 3, ZX RAM, and ZX ROM keep
   their existing polling behavior under the conflict-free public name.

@@ -132,6 +132,7 @@ static void append_zero_object(type_ptr ty,
 
 static void collect_global_init(expr *init, type_ptr target,
                                 ir_module &mod, int &next_lbl,
+                                const std::unordered_set<std::string> &definitions,
                                 std::vector<ir_module::global_var::init_elem> &out)
 {
     if (!target) {
@@ -177,7 +178,8 @@ static void collect_global_init(expr *init, type_ptr target,
 
             for (expr *slot_init : slot_inits) {
                 if (slot_init)
-                    collect_global_init(slot_init, elem_t, mod, next_lbl, out);
+                    collect_global_init(slot_init, elem_t, mod, next_lbl,
+                                        definitions, out);
                 else
                     append_zero_object(elem_t, out);
             }
@@ -220,7 +222,7 @@ static void collect_global_init(expr *init, type_ptr target,
                 }
                 if (chosen < target->fields.size())
                     collect_global_init(field_inits[chosen], target->fields[chosen].type,
-                                        mod, next_lbl, out);
+                                        mod, next_lbl, definitions, out);
                 else
                     append_zero_object(target->fields[0].type, out);
 
@@ -239,7 +241,8 @@ static void collect_global_init(expr *init, type_ptr target,
                     append_zero_bytes(fld.offset - emitted, out);
 
                 if (field_inits[fi])
-                    collect_global_init(field_inits[fi], fld.type, mod, next_lbl, out);
+                    collect_global_init(field_inits[fi], fld.type, mod, next_lbl,
+                                        definitions, out);
                 else
                     append_zero_object(fld.type, out);
 
@@ -251,7 +254,8 @@ static void collect_global_init(expr *init, type_ptr target,
         }
 
         if (!il->elements.empty()) {
-            collect_global_init(il->elements[0].value.get(), target, mod, next_lbl, out);
+            collect_global_init(il->elements[0].value.get(), target, mod, next_lbl,
+                                definitions, out);
         } else {
             append_zero_object(target, out);
         }
@@ -285,8 +289,9 @@ static void collect_global_init(expr *init, type_ptr target,
 
     if (target->is_ptr()) {
         if (auto address = const_expr_evaluator::evaluate_address(init)) {
-            out.push_back(make_init_elem(address->byte_offset, target->size(),
-                                         address->symbol));
+            out.push_back(make_init_elem(
+                address->byte_offset, target->size(),
+                model_static_address_alias(init, address->symbol, definitions)));
             return;
         }
     }
@@ -473,7 +478,8 @@ void ir_gen::visit(var_decl &vd) {
                 for (int i = init_bytes; i < n; ++i)
                     gv.init_vals.push_back(make_init_elem(0, 1));
             } else if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
-                collect_global_init(il, vd.type, *mod_, next_lbl_, gv.init_vals);
+                collect_global_init(il, vd.type, *mod_, next_lbl_,
+                                    defined_function_names_, gv.init_vals);
             } else if (vd.type && vd.type->is_integer()) {
                 if (auto cv = const_expr_evaluator::evaluate_integer_conversion(
                         vd.init.get(), vd.type))
@@ -491,8 +497,11 @@ void ir_gen::visit(var_decl &vd) {
             } else if (vd.type && vd.type->is_ptr()) {
                 if (auto address =
                         const_expr_evaluator::evaluate_address(vd.init.get())) {
-                    gv.init_vals.push_back({address->byte_offset, vd.type->size(),
-                                            address->symbol});
+                    gv.init_vals.push_back({
+                        address->byte_offset, vd.type->size(),
+                        model_static_address_alias(
+                            vd.init.get(), address->symbol,
+                            defined_function_names_)});
                 }
             }
         }

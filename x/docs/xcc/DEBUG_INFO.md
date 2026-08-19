@@ -161,7 +161,7 @@ Type codes appear after `%` in `DEFT`, `FUNC`, and `DEFS` directives.
 | `%U32` | `unsigned long` | 4 bytes |
 | `%S64` | `long long` | 8 bytes |
 | `%U64` | `unsigned long long` | 8 bytes |
-| `%SF` | `float`, `double` (both 4-byte soft-float on Z80) | 4 bytes |
+| `%SF` | `float`, plus M-model `double` | selected float size |
 | `%V` | `void` or unknown | — |
 | `%ASCII` | `char *` or `unsigned char *` (C string) | 2 bytes (pointer) |
 | `%*T` | pointer to type `T` (e.g., `%*%S16` = `int *`) | 2 bytes |
@@ -169,8 +169,9 @@ Type codes appear after `%` in `DEFT`, `FUNC`, and `DEFS` directives.
 | `%struct:Tag` | struct with tag `Tag` | varies |
 | `%union:Tag` | union with tag `Tag` | varies |
 
-`%SF` is used for both `float` and `double` because xcc maps both to the same
-4-byte IEEE 754 single representation on Z80.
+`%SF` is used for M-model `float` and `double` because that distribution maps
+both spellings to the selected float representation. L-model double debug
+entries retain their 8-byte type.
 
 ---
 

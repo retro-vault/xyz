@@ -142,7 +142,20 @@ def determine_model_tags(manifest_path: Path, manifest: dict[str, list[str]]) ->
     tags = set(manifest.get("tag", []))
     features = source_features(resolve_sources(manifest_path, manifest))
 
-    if "double" in tags or "double-regression" in tags:
+    # A focused model-policy regression may intentionally use double syntax
+    # while asserting that M aliases it to float.  Keep ordinary double tests
+    # L-only; only an explicit manifest opt-in changes that classification.
+    tests_medium_double_alias = manifest.get(
+        "modeldoublealias", ["false"]
+    )[0].lower() in {"1", "true", "yes"}
+    if tests_medium_double_alias:
+        features.discard("double")
+        features.discard("double-parse")
+        features.discard("longdouble")
+        features.add("float")
+        features.add("float-parse")
+
+    if ("double" in tags or "double-regression" in tags) and not tests_medium_double_alias:
         features.add("double")
     if "long" in tags or "int32" in tags:
         features.add("long")

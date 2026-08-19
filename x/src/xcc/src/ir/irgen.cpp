@@ -146,6 +146,37 @@ void mark_escaped_format_functions(
 
 } // namespace
 
+namespace {
+
+const symbol *static_function_symbol(const expr *source) {
+    if (!source)
+        return nullptr;
+    if (const auto *id = dynamic_cast<const ident_expr *>(source))
+        return id->sym && id->sym->kind == sym_kind::FUNC
+            ? id->sym.get() : nullptr;
+    if (const auto *cast = dynamic_cast<const cast_expr *>(source))
+        return static_function_symbol(cast->operand.get());
+    if (const auto *unary = dynamic_cast<const unary_expr *>(source)) {
+        if (unary->op == unary_op::ADDR || unary->op == unary_op::DEREF)
+            return static_function_symbol(unary->operand.get());
+    }
+    return nullptr;
+}
+
+} // namespace
+
+std::string model_static_address_alias(
+    const expr *source,
+    const std::string &label,
+    const std::unordered_set<std::string> &defined_functions) {
+    const symbol *sym = static_function_symbol(source);
+    if (!sym || !sym->asm_name.empty() ||
+        defined_functions.count(sym->name)) {
+        return label;
+    }
+    return model_library_alias(label);
+}
+
 // ----- Helpers -------------------------------------------------------
 
 ir_gen::ir_gen() {}
@@ -212,7 +243,11 @@ void ir_gen::gen_stmt(stmt &s) {
 void ir_gen::gen_decl(decl &d) { d.accept(*this); }
 
 operand ir_gen::sym_to_operand(const symbol &sym, type_ptr ty) {
-    const std::string &name = !sym.asm_name.empty() ? sym.asm_name : sym.name;
+    std::string name = !sym.asm_name.empty() ? sym.asm_name : sym.name;
+    if (sym.kind == sym_kind::FUNC && sym.asm_name.empty() &&
+        !defined_function_names_.count(sym.name)) {
+        name = model_library_alias(name);
+    }
     bool is_sfr = (sym.sfr_port >= 0);
     return operand::make_symbol(name, ty ? ty : sym.type,
                                 sym.is_global, sym.is_param,

@@ -163,9 +163,11 @@ phase_libc() {
 # ---------------------------------------------------------------------------
 phase_xcc() {
     bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
-        --kind compile --abi 0 --work "$ROOT/build/tests/e2e/xcc-compile-abi0"
+        --kind compile --abi 0 --filter model-l \
+        --work "$ROOT/build/tests/e2e/xcc-compile-abi0"
     bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
-        --kind compile --abi 1 --work "$ROOT/build/tests/e2e/xcc-compile-abi1"
+        --kind compile --abi 1 --filter model-l \
+        --work "$ROOT/build/tests/e2e/xcc-compile-abi1"
 }
 
 # ---------------------------------------------------------------------------
@@ -173,9 +175,11 @@ phase_xcc() {
 # ---------------------------------------------------------------------------
 phase_xcc_exec() {
     bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
-        --kind run --abi 0 --work "$ROOT/build/tests/e2e/xcc-run-abi0"
+        --kind run --abi 0 --filter model-l \
+        --work "$ROOT/build/tests/e2e/xcc-run-abi0"
     bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
-        --kind run --abi 1 --work "$ROOT/build/tests/e2e/xcc-run-abi1"
+        --kind run --abi 1 --filter model-l \
+        --work "$ROOT/build/tests/e2e/xcc-run-abi1"
 }
 
 phase_xcc_metadata() {

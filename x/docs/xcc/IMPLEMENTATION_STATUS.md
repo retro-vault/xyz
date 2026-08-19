@@ -14,7 +14,7 @@ or a known limitation is fixed.
 |---------|--------|-------|
 | Integer arithmetic (8/16/32 bit) | Complete | All ops through runtime helpers |
 | 64-bit integers (`long long`) | Complete | Lowered through 64-bit runtime helpers |
-| Floating-point (`float`, `double`) | Complete | `float` uses 32-bit soft-float helpers; `double` uses 64-bit soft-float helpers |
+| Floating-point (`float`, `double`) | Complete | M aliases `double` to the selected float ABI; L uses 64-bit soft-double helpers |
 | `_Complex` / `_Imaginary` | Partial | Type exists; component access works; arithmetic is stub-backed |
 | `_Bool` | Complete | |
 | Pointers | Complete | Including pointer arithmetic, function pointers |

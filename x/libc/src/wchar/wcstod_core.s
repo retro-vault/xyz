@@ -19,7 +19,7 @@
         .globl  __wcstod_core
         .globl  _malloc
         .globl  _free
-        .globl  _strtod
+        .globl  __strtod_core
         .globl  __db_zero
 
         .area   _CODE
@@ -126,7 +126,7 @@ wcstod_term:
         pop     de
         ld      bc,#12
         add     ix,bc
-        call    _strtod
+        call    __strtod_core
         ld      -8(ix),e
         ld      -7(ix),d
         ld      -6(ix),l
