@@ -201,6 +201,6 @@ disable interrupts and HALT permanently.
 |---|---|---|---|---|
 | `none` | Discard/EOF shells | No | No useful clock | Template fixed arena |
 | `emu` | Host-mapped emulator ports | Host test mapping | Platform test behavior | Emulator image |
-| `cpm3` | BDOS console and `kbhit()` | CP/M descriptors | Platform behavior | Transient program area |
-| `zx-ram` | Matrix `kbhit()`, blocking stdio/Tamsyn bitmap | No | No | `0x5CCB`, heap below `0xF000` |
-| `zx-rom` | Matrix `kbhit()`, blocking stdio/Tamsyn bitmap | No | No | 16 KiB ROM, writable RAM at `0x5B00` |
+| `cpm3` | BDOS console and `trygetchar()` | CP/M descriptors | Platform behavior | Transient program area |
+| `zx-ram` | Matrix `trygetchar()`, blocking stdio/Tamsyn bitmap | No | No | `0x5CCB`, heap below `0xF000` |
+| `zx-rom` | Matrix `trygetchar()`, blocking stdio/Tamsyn bitmap | No | No | 16 KiB ROM, writable RAM at `0x5B00` |

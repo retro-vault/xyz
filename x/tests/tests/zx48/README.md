@@ -2,7 +2,7 @@
 
 `smoke.c` exercises initialized and zero-filled storage, relocated pointers,
 heap allocation, strings, sorting/searching, conversion, console output and
-scrolling, non-blocking `<conio.h>` `kbhit()`, blocking input derived from it,
+scrolling, non-blocking `<stdio.h>` `trygetchar()`, blocking input derived from it,
 and the deliberately unsupported clock/filesystem hooks.
 
 Build both target forms with the staged toolchain:

@@ -7,18 +7,18 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _getchar
-        .globl  _kbhit
+        .globl  _trygetchar
 
         .area   _CODE
 
 _getchar::
 .zx_key_wait_press:
-        call    _kbhit
+        call    _trygetchar
         or      a
         jr      z,.zx_key_wait_press
         ld      (_zx_key_ascii),a
 .zx_key_wait_release:
-        call    _kbhit
+        call    _trygetchar
         or      a
         jr      nz,.zx_key_wait_release
         ld      a,(_zx_key_ascii)
@@ -28,7 +28,7 @@ _getchar::
 
 ;; Poll the matrix once without blocking.
 ;; Return the current ASCII key in DE, or zero when no key is down.
-_kbhit::
+_trygetchar::
         call    .zx_key_scan
         ld      e,a
         ld      d,#0

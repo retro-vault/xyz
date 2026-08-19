@@ -1,4 +1,3 @@
-#include <conio.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -68,18 +67,18 @@ int main(void)
         return fail(10);
     if (close(1) != 0)
         return fail(11);
-    if (kbhit() != 0)
+    if (trygetchar() != 0)
         return fail(12);
 
     for (unsigned line = 0; line != 18; ++line)
         puts("TAMSYN CONSOLE");
     puts("POLL q");
     do {
-        polled_key = kbhit();
+        polled_key = trygetchar();
     } while (polled_key == 0);
     if (polled_key != 'q')
         return fail(13);
-    while (kbhit() != 0)
+    while (trygetchar() != 0)
         ;
     puts("TYPE aA! ENTER");
     if (read(0, (void *)zx_smoke_input, sizeof(zx_smoke_input))

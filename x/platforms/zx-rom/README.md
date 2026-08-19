@@ -13,7 +13,7 @@ initializer area, clears BSS, initializes the console, and calls `main`.
 Every backend routine is hand-written Z80 assembly. This directory carries its
 own YOS-derived bitmap renderer, proportional Tamsyn stream, and keyboard
 scanner; it has no Sinclair-service or non-target platform dependency.
-The target-private `<conio.h>` header exposes non-blocking `kbhit()`; blocking
+The public `<stdio.h>` header exposes non-blocking `trygetchar()`; blocking
 `getchar` and standard input are loops around the same assembly poller.
 
 Build and run in Fuse:

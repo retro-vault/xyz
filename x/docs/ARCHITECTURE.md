@@ -139,7 +139,7 @@ When adding tests for new C23 features (or anything else):
   - `zx-ram` owns `0x5CCB` upward beneath a heap ceiling of `0xF000`;
     `zx-rom` owns the fixed `0x0000`–`0x3FFF` image and places writable state
     at `0x5B00`. Each platform directory is self-contained and carries its own
-    assembly console, non-blocking `<conio.h>` `kbhit()` scanner, blocking libc input
+    assembly console, non-blocking `<stdio.h>` `trygetchar()` scanner, blocking libc input
     derived from that scanner, and snatch-exported Tamsyn font; there is no
     non-target pseudo-platform directory.
   - Every immediate directory below `x/platforms/` names one selectable

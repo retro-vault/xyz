@@ -17,7 +17,7 @@ TNYLPO    ?= tnylpo
 
 .PHONY: all test clean
 
-all: $(BUILD_DIR)/hello.com $(BUILD_DIR)/conio.com $(BUILD_DIR)/argv.com \
+all: $(BUILD_DIR)/hello.com $(BUILD_DIR)/trygetchar.com $(BUILD_DIR)/argv.com \
 	$(BUILD_DIR)/argv-os.com $(BUILD_DIR)/argv-of.com \
 	$(BUILD_DIR)/argv-stk.com
 
@@ -25,9 +25,9 @@ $(BUILD_DIR)/hello.com: hello.c
 	@mkdir -p $(BUILD_DIR)
 	$(XCC) hello.c --platform=cpm3 --oformat=binary -o $@
 
-$(BUILD_DIR)/conio.com: conio.c
+$(BUILD_DIR)/trygetchar.com: trygetchar.c
 	@mkdir -p $(BUILD_DIR)
-	$(XCC) conio.c --platform=cpm3 --oformat=binary -o $@
+	$(XCC) trygetchar.c --platform=cpm3 --oformat=binary -o $@
 
 $(BUILD_DIR)/argv.com: argv.c
 	@mkdir -p $(BUILD_DIR)
@@ -57,17 +57,17 @@ test: all
 	else \
 	  echo "FAIL: hello-cpm (got: $$out)"; exit 1; \
 	fi; \
-	out="$$(tail -f /dev/null | (cd $(BUILD_DIR) && $(TNYLPO) conio))"; \
+	out="$$(tail -f /dev/null | (cd $(BUILD_DIR) && $(TNYLPO) trygetchar))"; \
 	if [ "$$out" = "IDLE" ]; then \
-	  echo "PASS: hello-cpm conio idle"; \
+	  echo "PASS: hello-cpm trygetchar idle"; \
 	else \
-	  echo "FAIL: hello-cpm conio idle (got: $$out)"; exit 1; \
+	  echo "FAIL: hello-cpm trygetchar idle (got: $$out)"; exit 1; \
 	fi; \
-	out="$$(printf x | (cd $(BUILD_DIR) && $(TNYLPO) conio))"; \
+	out="$$(printf x | (cd $(BUILD_DIR) && $(TNYLPO) trygetchar))"; \
 	if [ "$$out" = "xREADY" ]; then \
-	  echo "PASS: hello-cpm conio ready"; \
+	  echo "PASS: hello-cpm trygetchar ready"; \
 	else \
-	  echo "FAIL: hello-cpm conio ready (got: $$out)"; exit 1; \
+	  echo "FAIL: hello-cpm trygetchar ready (got: $$out)"; exit 1; \
 	fi; \
 	for prog in argv argv-os argv-of argv-stk; do for args in \
 	  "" \

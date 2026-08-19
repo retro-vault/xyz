@@ -869,10 +869,9 @@ It probes `<prefix>/targets/z80-<name>/lib` first, then falls back to
 `read.s`, `_exit.s`, …). The hook contract is declared in
 `x/libc/include/sys.h`. Shipped examples: `none`, `cpm3`, `zx-rom`,
 `zx-ram`. Target-only public headers remain inside that target directory; for
-example, CP/M's `sys/bdos.h` and `conio.h` live below
-`x/platforms/cpm3/include/` and are visible only with `--platform=cpm3`. The ZX
-targets likewise own `include/conio.h` declarations inside `zx-ram` and
-`zx-rom`; none is a shared pseudo-platform.
+for example, CP/M's `sys/bdos.h` lives below `x/platforms/cpm3/include/` and is
+visible only with `--platform=cpm3`. The ZX targets do not need private public
+headers; none is a shared pseudo-platform.
 
 The CP/M 3 startup converts the length-prefixed tail at `0x0080` into normal C
 arguments. Since CP/M does not provide the transient program name,
@@ -882,7 +881,7 @@ spaces without becoming part of the argument. Strings and the pointer table
 are copied to an exact-sized stack allocation because CP/M file operations can
 reuse `0x0080` as the default DMA buffer. Startup supplies the two arguments in
 both conventions: HL/DE for `sdcccall(1)`, and right-to-left stack words for
-`sdcccall(0)`. Its `<conio.h>` `kbhit()` uses BDOS function 11 and returns
+`sdcccall(0)`. Its `<stdio.h>` `trygetchar()` uses BDOS function 11 and returns
 immediately with zero or the console-ready status.
 
 **ZX Spectrum 48K:** `zx-ram` emits fixed-address code beginning at `0x5CCB`,
@@ -895,7 +894,7 @@ the linker's `AT>rom` / `COPY _DATA` support to initialize writable state at
 Both ZX forms use hand-written assembly for startup and every platform hook.
 Each self-contained target carries the YOS-derived bitmap console, proportional
 6x12 Tamsyn font exported by snatch, and physical keyboard-matrix scanner.
-The scanner is exported as level-triggered, non-blocking `<conio.h>` `kbhit()`;
+The scanner is exported as level-triggered, non-blocking `<stdio.h>` `trygetchar()`;
 blocking libc input loops around that same primitive. Console descriptors
 work; filesystem and wall-clock hooks return their documented failure values.
 See `x/docs/howtos/ZX-SPECTRUM-48K.md` for memory maps, Fuse commands, and the

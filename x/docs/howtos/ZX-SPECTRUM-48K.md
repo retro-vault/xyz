@@ -175,7 +175,7 @@ case that originally exposed this Z80 `INC`/carry edge condition.
 
 ## Keyboard and terminal I/O
 
-Include `<conio.h>` and call `kbhit()` for the hardware-facing
+Include `<stdio.h>` and call `trygetchar()` for the hardware-facing
 non-blocking API. Each call scans the eight-row Spectrum keyboard matrix once
 and returns the current ASCII key as a positive `int`, or zero when no
 non-shift key is down. It is level-triggered: a held key is returned on each
@@ -191,7 +191,7 @@ The descriptor behavior is intentionally small:
 
 | Operation | ZX behavior |
 |---|---|
-| `kbhit()` | Non-blocking current ASCII key, or `0` |
+| `trygetchar()` | Non-blocking current ASCII key, or `0` |
 | `read(0, ...)`, `getchar`, console `stdio` input | Blocking keyboard input |
 | `write(1, ...)`, `write(2, ...)`, `putchar`, console `stdio` output | Tamsyn bitmap console |
 | `close(0)`, `close(1)`, `close(2)` | Success |
@@ -231,7 +231,7 @@ The script builds and executes all four delivery forms:
 
 Every case validates initialized and zero-filled storage, relocated pointers,
 heap allocation, core libc string/search/sort/conversion functions, deliberate
-file/time failures, console scrolling, idle and held-key `kbhit()` calls,
+file/time failures, console scrolling, idle and held-key `trygetchar()` calls,
 normal/CAPS/SYMBOL blocking keyboard input, exit, and a final `0xA5` memory
 marker. A successful run ends with:
 
@@ -257,7 +257,7 @@ PASS TZX (...=0xA5)
 
 - This is a 48K target; there is no 128K paging or bank-aware CRT.
 - The console is monochrome and keeps one uniform attribute map.
-- `kbhit()` is level-triggered and single-key oriented; it is not an
+- `trygetchar()` is level-triggered and single-key oriented; it is not an
   event queue.
 - There is no generic filesystem, tape API, wall clock, or return-to-BASIC
   protocol in the minimal backend.

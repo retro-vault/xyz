@@ -98,7 +98,7 @@ make -C x/tests/tests/hello-cpm test TNYLPO=/path/to/tnylpo
 ```
 
 Besides startup, console output, and the complete command-tail matrix, it
-checks `<conio.h>` `kbhit()` with an open idle console and with a waiting
+checks `<stdio.h>` `trygetchar()` with an open idle console and with a waiting
 character. The ready test then calls `getchar()` to prove that the status call
 did not consume the character.
 

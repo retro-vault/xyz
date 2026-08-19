@@ -48,7 +48,7 @@ bin/x/bin/xcc -Os --platform=zx-rom --oformat=binary \
 
 `zx-ram` starts at `0x5CCB`, and `zx-rom` produces an exact 16 KiB replacement
 ROM. Both use an assembly keyboard/console backend, expose non-blocking
-`kbhit()` through `<conio.h>`, and render the proportional Tamsyn
+`trygetchar()` through `<stdio.h>`, and render the proportional Tamsyn
 font. See the [complete ZX Spectrum guide](docs/howtos/ZX-SPECTRUM-48K.md) and
 the separate [`zx-ram`](examples/zx-ram/README.md) and
 [`zx-rom`](examples/zx-rom/README.md) examples.

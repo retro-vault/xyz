@@ -87,6 +87,15 @@ flags contain a precomputed mask, and the compiler does not inspect benchmark
 names, paths, source fragments, or checksums. The ordinary X runtime remains
 the default and retains its native small-`printf` call specialization.
 
+[z88dk-xcc-points-2-3.patch](z88dk-xcc-points-2-3.patch) is the minimal
+z88dk-side patch corresponding to the documented `fixedbench` repair and
+automatic formatter selection. It adds only the XCC multiply archive member,
+its XCC-only rewrite, and zcc's internal runtime/option-file arguments. It is
+based on clean z88dk master `0a73a0209ee78b0b57e231a6819b2123133994fa`.
+The larger [z88dk-base-xcc.patch](z88dk-base-xcc.patch) remains the
+reproducibility patch for the frozen benchmark revision and also contains
+older XCC header, section, IX-helper, macro, and `-Cx` compatibility changes.
+
 ## XCC compatibility aliases and fixedbench
 
 The earlier local runner explicitly passed

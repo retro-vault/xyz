@@ -17,7 +17,7 @@ X now ships complete minimal ZX Spectrum 48K RAM and replacement-ROM
 platforms. `zx-ram` begins at `0x5CCB`; `zx-rom` emits an exact 16 KiB image.
 Both use assembly-only CRT and platform hooks, the ordinary staged libc and
 runtime, a YOS-derived proportional Tamsyn bitmap console, a public
-non-blocking `<conio.h>` `kbhit()` API, and blocking libc input derived from
+non-blocking `<stdio.h>` `trygetchar()` API, and blocking libc input derived from
 that poller. Files and wall-clock services deliberately fail.
 
 `xprog` creates auto-running TAP and standard-speed TZX 1.20 images. `xld`

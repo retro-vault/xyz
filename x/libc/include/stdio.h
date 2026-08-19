@@ -63,6 +63,8 @@ int putc(int c, FILE *stream);
 int puts(const char *s);
 int fputs(const char *s, FILE *stream);
 int getchar(void);
+/* Poll console input without blocking; return zero when no key is ready. */
+int trygetchar(void);
 int fgetc(FILE *stream);
 int getc(FILE *stream);
 int ungetc(int c, FILE *stream);

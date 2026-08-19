@@ -1,9 +1,9 @@
-        ;; kbhit.s -- non-blocking CP/M 3 console status
+        ;; trygetchar.s -- non-blocking CP/M 3 console status
 
-        .module kbhit
+        .module trygetchar
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  _kbhit
+        .globl  _trygetchar
 
         .equ    BDOS,5
         .equ    C_STAT,11
@@ -11,7 +11,7 @@
         .area   _CODE
 
 ;; Return zero when no console character is ready, nonzero otherwise.
-_kbhit::
+_trygetchar::
         push    ix
         push    iy
         ld      c,#C_STAT

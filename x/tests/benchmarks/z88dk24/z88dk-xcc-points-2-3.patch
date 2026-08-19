@@ -1,0 +1,69 @@
+diff --git a/lib/xcc_rules.1 b/lib/xcc_rules.1
+--- a/lib/xcc_rules.1
++++ b/lib/xcc_rules.1
+@@ -369,3 +369,9 @@
++%title Rename xcc ___muluint2ulong call to xcc-specific register-ABI helper
++	call	___muluint2ulong
++=
++	EXTERN	___xcc_muluint2ulong
++	call	___xcc_muluint2ulong
++
+ %title Rename xcc __divsint call to xcc-specific alias (avoid stack-based sdcc symbol clash)
+ 	call	__divsint
+ =
+diff --git a/libsrc/l/xcc.lst b/libsrc/l/xcc.lst
+--- a/libsrc/l/xcc.lst
++++ b/libsrc/l/xcc.lst
+@@ -8,3 +8,4 @@ ${NEWLIB_ROOT}l/xcc/__divulong
+ ${NEWLIB_ROOT}l/xcc/__divslong
+ ${NEWLIB_ROOT}l/xcc/__modulong
+ ${NEWLIB_ROOT}l/xcc/__smod32
++${NEWLIB_ROOT}l/xcc/___muluint2ulong
+diff --git a/libsrc/l/xcc/___muluint2ulong.asm b/libsrc/l/xcc/___muluint2ulong.asm
+new file mode 100644
+--- /dev/null
++++ b/libsrc/l/xcc/___muluint2ulong.asm
+@@ -0,0 +1,26 @@
++SECTION code_clib
++SECTION code_l_xcc
++
++PUBLIC ___xcc_muluint2ulong
++
++; XCC sdcccall(1) unsigned 16x16 -> 32 multiply.
++;
++; enter : hl = multiplier, de = multiplicand
++; exit  : de = low word, hl = high word
++; uses  : f, b, de, hl, iy
++
++___xcc_muluint2ulong:
++   ld iy,0
++   ld b,16
++muluint2ulong_loop:
++   add iy,iy
++   adc hl,hl
++   jr nc,muluint2ulong_skip
++   add iy,de
++   jr nc,muluint2ulong_skip
++   inc hl
++muluint2ulong_skip:
++   djnz muluint2ulong_loop
++   push iy
++   pop de
++   ret
+diff --git a/src/zcc/zcc.c b/src/zcc/zcc.c
+--- a/src/zcc/zcc.c
++++ b/src/zcc/zcc.c
+@@ -3152,10 +3152,12 @@ static void configure_compiler(void)
+         BuildOptions(&linkargs, "-D__SDCC");
+     } else if (strcmp(c_compiler_type,"xcc") == 0 ) {
+         compiler_type = CC_XCC;
+         preprocarg = " -D__XCC";
+         BuildOptions(&cpparg, preprocarg);
+         c_compiler = "xcc";
+-        add_option_to_compiler("-S -Of --sdcccall 0 --c1mode");
++        add_option_to_compiler("-S -O2 --sdcccall 0 --runtime=z88dk-classic --c1mode");
++        snprintf(buf, sizeof(buf), "-zcc-opt=\"%s\"", zcc_opt_def);
++        add_option_to_compiler(buf);
+         c_cpp_exe = c_sdcc_preproc_exe;
+         compiler_style = filter_outspecified_flag;
+         BuildOptions(&asmargs, "-D__XCC");

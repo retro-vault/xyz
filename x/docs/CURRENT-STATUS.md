@@ -2,8 +2,8 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-18, after completing automatic z88dk classic runtime
-selection and the locked 24-program correctness/optimization campaign.
+Last updated: 2026-08-19, after replacing the target-private console headers
+with the public `<stdio.h>` `trygetchar()` polling extension.
 
 ## Major Recent Work
 
@@ -87,8 +87,8 @@ load image before entering C. `xld` gained the underlying VMA/LMA support via
 GNU `AT>region` and the SDCC-style `COPY area` directive, including generated
 `s__AREA_LOAD`/`l__AREA_LOAD` symbols and ROM overflow diagnostics.
 
-Both targets use assembly-only platform code. The target-private
-`<conio.h>` exports non-blocking `kbhit()`; blocking standard input
+Both targets use assembly-only platform code. The public `<stdio.h>`
+exports non-blocking `trygetchar()`; blocking standard input
 is derived from the same matrix poller. Standard output/error render the
 proportional 6x12 Tamsyn font exported by snatch. The screen addressing and
 12-pixel scroll structure
@@ -121,8 +121,8 @@ form one argument with the quotes removed. Storage is sized to the actual tail
 and argument count and remains valid when file I/O overwrites address `0x0080`.
 The real CP/M emulator regression covers no arguments, ordinary and repeated
 whitespace, quoted and empty-quoted words, DMA overwrite, the exact 127-byte
-tail, and 62 total `argv` entries. It also checks target-private `<conio.h>`
-`kbhit()` against both idle and ready console input; the assembly backend uses
+tail, and 62 total `argv` entries. It also checks `<stdio.h>`
+`trygetchar()` against both idle and ready console input; the assembly backend uses
 BDOS function 11 without consuming the waiting character. Startup also
 transfers the `main` return value from DE to the HL argument expected by
 `exit`. It supplies `argc` and

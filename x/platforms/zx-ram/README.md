@@ -11,7 +11,7 @@ image end to `0xF000`.
 
 Every platform implementation file is Z80 assembly. This directory contains
 its own `console.s`, `keyboard.s`, and `tamsyn.s`; it has no dependency on a
-non-target platform directory. `<conio.h>` exposes the assembly `kbhit()`
+non-target platform directory. `<stdio.h>` exposes the assembly `trygetchar()`
 primitive, which returns the current ASCII key or zero without waiting.
 Blocking `getchar`/standard input are derived from that poller.
 Descriptors 1–2 provide Tamsyn screen output; files and the wall clock are
