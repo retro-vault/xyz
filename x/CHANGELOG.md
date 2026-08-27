@@ -6,6 +6,15 @@ Release status:
 
 ## Unreleased
 
+- Added self-contained Amstrad CPC 464, 664, and 6128 targets. All three use
+  the firmware Text VDU, keyboard, 300 Hz clock, heap, private stack, and
+  BASIC-returning CRT at `0x4000`; the cassette-only 464 omits AMSDOS state,
+  while the 664/6128 provide ROM-backed raw and stdio disk I/O, input seeking
+  (including headerless files), rename, and remove. `xprog` now creates CPC
+  firmware CDT images and standard 40-track AMSDOS CPCEMU DSK images. Added
+  per-target examples and a real-ROM MCP regression that boots generated
+  media and passes the libc/console/clock suite on all three models plus
+  writable disk and error-path coverage on the 664 and 6128.
 - Fixed optimized static function-pointer initializers. Module-level liveness
   now treats function relocations in static data as address-taking uses, so
   dispatch-table callbacks retain their private definitions without disabling

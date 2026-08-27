@@ -14,8 +14,8 @@ OBJDIR := $(BUILD_DIR)/xc/xprog/obj
 TEST_BIN := $(BUILD_DIR)/xc/xprog/xprog_tests
 TEST_DIR := $(ROOT)/tests/tests/xprog
 
-SRCS := src/main.cpp src/cli.cpp src/package.cpp src/tape.cpp
-TEST_SRCS := $(TEST_DIR)/test_main.cpp src/cli.cpp src/package.cpp src/tape.cpp
+SRCS := src/main.cpp src/cli.cpp src/package.cpp src/tape.cpp src/cpc.cpp
+TEST_SRCS := $(TEST_DIR)/test_main.cpp src/cli.cpp src/package.cpp src/tape.cpp src/cpc.cpp
 OBJS := $(patsubst src/%.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 

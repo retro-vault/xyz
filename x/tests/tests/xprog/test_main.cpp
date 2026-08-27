@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <xprog/cli.h>
+#include <xprog/cpc.h>
 #include <xprog/errors.h>
 #include <xprog/package.h>
 #include <xprog/tape.h>
@@ -86,6 +87,85 @@ void cli_tests()
     CHECK(tzx.load_address == 0x8000);
     CHECK(tzx.entry_point == 0x8001);
     CHECK(tzx.output_file == "hello.tzx");
+
+    auto cdt = parse({"xprog", "--cdt", "hello.bin"});
+    CHECK(cdt.command == xprog::command_kind::cdt);
+    CHECK(cdt.load_address == 0x4000);
+    CHECK(cdt.entry_point == 0x4000);
+    CHECK(cdt.output_file == "hello.cdt");
+
+    auto dsk = parse({"xprog", "--dsk", "hello.bin", "--name",
+                      "HELLO.BIN"});
+    CHECK(dsk.command == xprog::command_kind::dsk);
+    CHECK(dsk.load_address == 0x4000);
+    CHECK(dsk.entry_point == 0x4000);
+    CHECK(dsk.output_file == "hello.dsk");
+}
+
+std::size_t dsk_sector(const std::vector<std::uint8_t>& dsk,
+                       std::size_t logical_sector)
+{
+    constexpr std::size_t track_size = 0x1300;
+    const auto track = logical_sector / 9;
+    const auto wanted = static_cast<std::uint8_t>(0xc1 + logical_sector % 9);
+    const auto start = 256 + track * track_size;
+    for (std::size_t physical = 0; physical < 9; ++physical) {
+        if (dsk[start + 0x18 + physical * 8 + 2] == wanted)
+            return start + 256 + physical * 512;
+    }
+    throw std::runtime_error("logical DSK sector is absent");
+}
+
+void cpc_tests()
+{
+    const std::vector<std::uint8_t> program = {0x3e, 0x2a, 0xc9};
+    const auto cdt = xprog::build_cdt(program, 0x4000, 0x4000, "hello");
+    CHECK(cdt.size() > 300);
+    CHECK(std::string(cdt.begin(), cdt.begin() + 7) == "ZXTape!");
+    CHECK(cdt[7] == 0x1a && cdt[8] == 1 && cdt[9] == 20);
+    CHECK(cdt[10] == 0x20); // initial pause
+    CHECK(cdt[13] == 0x12); // header leader
+    CHECK(cdt[24] == 0x14); // header pure-data block
+    CHECK(cdt[35] == 0x2c); // firmware header sync byte
+    CHECK(cdt[36] == 'H' && cdt[37] == 'E');
+    CHECK(cdt[36 + 16] == 1);
+    CHECK(cdt[36 + 17] == 0xff);
+    CHECK(cdt[36 + 18] == 2);
+    CHECK(cdt[36 + 19] == program.size());
+    CHECK(cdt[36 + 21] == 0x00 && cdt[36 + 22] == 0x40);
+
+    const auto dsk = xprog::build_dsk(program, 0x4000, 0x4000,
+                                      "hello.bin");
+    CHECK(dsk.size() == 256 + 40 * 0x1300);
+    CHECK(std::string(dsk.begin(), dsk.begin() + 8) == "MV - CPC");
+    CHECK(dsk[0x30] == 40 && dsk[0x31] == 1);
+    CHECK(dsk[256 + 0x15] == 9);
+    const auto directory = dsk_sector(dsk, 0);
+    CHECK(dsk[directory] == 0);
+    CHECK(std::string(dsk.begin() + directory + 1,
+                      dsk.begin() + directory + 9) == "HELLO   ");
+    CHECK(std::string(dsk.begin() + directory + 9,
+                      dsk.begin() + directory + 12) == "BIN");
+    CHECK(dsk[directory + 16] == 2);
+    const auto file = dsk_sector(dsk, 4);
+    CHECK(dsk[file] == 0);
+    CHECK(dsk[file + 18] == 2);
+    CHECK(dsk[file + 21] == 0 && dsk[file + 22] == 0x40);
+    CHECK(dsk[file + 26] == 0 && dsk[file + 27] == 0x40);
+    CHECK(dsk[file + 128] == 0x3e);
+    std::uint16_t checksum = 0;
+    for (std::size_t i = 0; i <= 66; ++i)
+        checksum = static_cast<std::uint16_t>(checksum + dsk[file + i]);
+    CHECK(dsk[file + 67] == static_cast<std::uint8_t>(checksum));
+    CHECK(dsk[file + 68] == static_cast<std::uint8_t>(checksum >> 8));
+
+    CHECK(throws([&] { xprog::build_cdt({}, 0x4000, 0x4000, "X"); }));
+    CHECK(throws([&] {
+        xprog::build_dsk(program, 0x4000, 0x4000, "TOO-LONG-NAME.BIN");
+    }));
+    CHECK(throws([&] {
+        xprog::build_dsk(program, 0x4000, 0x5000, "BAD.BIN");
+    }));
 }
 
 void tape_tests()
@@ -196,6 +276,7 @@ int main()
     package_tests();
     process_tests();
     tape_tests();
+    cpc_tests();
     if (failures) {
         std::cerr << failures << " xprog test(s) failed\n";
         return 1;

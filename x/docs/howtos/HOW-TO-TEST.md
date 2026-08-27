@@ -130,6 +130,25 @@ PASS TZX (...=0xA5)
 See the [ZX Spectrum target guide](ZX-SPECTRUM-48K.md) for the visual Fuse
 example and platform contract.
 
+## Amstrad CPC hardware-level test
+
+The optional CPC test uses `amstrad-cpc-mcp` plus legal 464, 664, 6128, and
+AMSDOS ROM images:
+
+```sh
+python3 x/tests/tests/cpc/run_mcp.py \
+  --mcp /path/to/amstrad-cpc-mcp \
+  --roms /path/to/rom-directory
+```
+
+It compiles the shared smoke program for all three CPC targets, creates a CDT
+for the 464 and writable DSK images for the 664 and 6128, boots them through
+the real firmware, and checks libc, console input, the firmware clock, and
+clean startup/exit. The disk models additionally exercise raw and stdio file
+I/O, seeks in headerless files, rename/remove, and missing-file errors. See
+the [Amstrad CPC target guide](AMSTRAD-CPC.md) for the platform and media
+contracts.
+
 ## Codegen Benchmarks
 
 For a repeatable compiler-size benchmark against SDCC that measures only

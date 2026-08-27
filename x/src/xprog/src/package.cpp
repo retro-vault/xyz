@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include <xprog/errors.h>
+#include <xprog/cpc.h>
 #include <xprog/package.h>
 #include <xprog/tape.h>
 
@@ -357,6 +358,24 @@ void run(const cli_options& options, std::ostream& out)
         if (options.command == command_kind::tzx)
             tape = tap_to_tzx(tape);
         write_file(options.output_file, tape);
+        return;
+    }
+    if (options.command == command_kind::cdt) {
+        write_file(options.output_file,
+                   build_cdt(read_file(options.input_file),
+                             options.load_address,
+                             options.entry_point.value_or(
+                                 options.load_address),
+                             options.name));
+        return;
+    }
+    if (options.command == command_kind::dsk) {
+        write_file(options.output_file,
+                   build_dsk(read_file(options.input_file),
+                             options.load_address,
+                             options.entry_point.value_or(
+                                 options.load_address),
+                             options.name));
         return;
     }
     const auto image = build_image(options, read_file(options.input_file));

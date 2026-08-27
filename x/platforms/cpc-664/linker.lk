@@ -1,0 +1,5 @@
+; Firmware-hosted Amstrad CPC 664 RAM program.
+ENTRY _entry
+FORMAT bin
+AREA _CODE = 4000
+RESERVE 9F00-FFFF

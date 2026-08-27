@@ -115,6 +115,40 @@ The target-specific `x/examples/zx-ram/lorem.c` and
 `x/examples/zx-rom/lorem.c` programs are built and visually verified in Fuse
 as tape-loadable RAM code and a replacement ROM, respectively.
 
+### Amstrad CPC 464, 664, and 6128 platforms
+
+The staged sysroot now also contains self-contained `cpc-464`, `cpc-664`, and
+`cpc-6128` platform archives, CRTs, and linker scripts. Each target loads at
+`0x4000`, initializes C storage, exposes the linked-image-to-`0x9F00` heap,
+uses a private stack below the firmware/AMSDOS reservation, retains firmware
+interrupts, and returns from `main()` to BASIC. Console output uses the Text
+VDU, blocking and non-blocking input use the Keyboard Manager, and the time
+hooks convert the firmware's 300 Hz 32-bit ticker to the libc `timespec` ABI.
+
+The cassette-only 464 supplies failing filesystem hooks without pulling any
+AMSDOS workspace or buffers into the linked image. The 664 and 6128 use the
+stock AMSDOS ROM in slot 7. Their CRT selects disk input/output and closes the
+loader channel left open by BASIC `RUN`; direct ROM trampolines install the
+foreground-ROM `IY` workspace before entering the AMSDOS CAS routines. The
+backend exposes the firmware's one input and one output channel as descriptors
+3 and 4 and supports raw and stdio read/write/close, input seeking,
+rename/remove, and verified failure returns. Headerless ASCII files report no
+length at open, so EOF establishes their length and `SEEK_END` measures them
+through the ROM when necessary. Update/append output and output seeking fail
+explicitly because AMSDOS output streams are sequential.
+
+`xprog --cdt` writes CPC firmware header/data records in a CDT 1.20 container.
+`xprog --dsk` writes a standard 40-track, single-sided CPCEMU DSK with an
+AMSDOS data filesystem and one checksummed 8.3 binary. The optional
+`x/tests/tests/cpc/run_mcp.py` regression boots the actual CDT on a CPC 464 and
+independent writable DSK images on CPC 664 and CPC 6128 ROM sets. All three
+models pass static/BSS/heap and common-libc checks, console polling/blocking
+input, clock setting/reading, clean BASIC return behavior, and—on disk
+models—raw descriptors plus `fopen`/`fread`/`fwrite`/`fseek`/`ftell`,
+rename/remove, headerless seeking, and missing-file errors. Separate examples
+under `x/examples/cpc-464`, `cpc-664`, and `cpc-6128` reproduce the supported
+media workflows.
+
 ### CP/M command-line startup
 
 The CP/M 3 `crt0` now copies the bounded 127-byte command tail out of the
@@ -347,7 +381,7 @@ compiler-suite install tree:
   - `bin/x/z80/include/` for staged target libc headers
   - `bin/x/z80/lib/` for `crt0`, linker scripts, `libruntime.a`, `libc.a`,
     the default platform archive (`libnone.a`), and named payloads such as
-    `libcpm3.a`
+    `libcpm3.a`, `libcpc-464.a`, `libcpc-664.a`, and `libcpc-6128.a`
 - `bin/y/` carries YOS outputs plus YOS-adjacent host tools such as
   `appmake`, `microdrive`, `serial`, and `libmicrodrive.a`.
 - `bin/z/` carries staged target assets such as Spectrum app payloads and

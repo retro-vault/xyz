@@ -156,6 +156,10 @@ headers in `<prefix>/z80/include/<platform>` before the common libc headers in
 `<prefix>/z80/include`. For example, `<sys/bdos.h>` is supplied only by
 `--platform=cpm3`.
 
+The staged target set also includes `cpc-464`, `cpc-664`, and `cpc-6128`.
+They link firmware-hosted programs at `0x4000`; use `xprog --cdt` for the 464
+or `xprog --dsk` for the disk-equipped models.
+
 ---
 
 ## IR opcodes (src/ir/icode.h)

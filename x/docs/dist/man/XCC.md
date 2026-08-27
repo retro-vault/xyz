@@ -37,6 +37,10 @@ xcc main.c --oformat=binary -Ttext=0x8000 -o app.bin
 xcc -Os --platform=zx-ram --oformat=binary main.c -o app.bin
 xcc -Os --platform=zx-rom --oformat=binary main.c -o app.rom
 
+# Amstrad CPC firmware program
+xcc -Os --platform=cpc-464 --oformat=binary main.c -o app.bin
+xcc -Os --platform=cpc-6128 --oformat=binary main.c -o app.bin
+
 # Build with debug info for xgdb
 xcc -g main.c -o app.xl
 ```
@@ -81,10 +85,14 @@ in `<prefix>/z80/include/<platform>`, and runtime and libraries in
 environment variables or wrapper scripts are needed; the prefix can be copied
 anywhere.
 
-The staged platform names are `none`, `cpm3`, `emu`, `zx-ram`, and `zx-rom`.
+The staged platform names are `none`, `cpc-464`, `cpc-664`, `cpc-6128`,
+`cpm3`, `emu`, `zx-ram`, and `zx-rom`.
 The ZX RAM platform links at `0x5CCB`; the ZX ROM platform emits a fixed
 16 KiB replacement ROM. See `ZX48.md` and package RAM binaries with
 `xprog --tap` or `xprog --tzx`.
+
+The CPC targets link at `0x4000`. See `CPC.md`; package 464 binaries with
+`xprog --cdt` and 664/6128 binaries with `xprog --dsk`.
 
 ## Float formats
 

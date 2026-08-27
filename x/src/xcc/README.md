@@ -53,6 +53,10 @@ build/dist/
   z80/include/
     *.h                  <- canonical target-side libc headers
     cpm3/                <- headers private to --platform=cpm3
+  z80/lib/
+    libcpc-464.a         <- cassette-only CPC firmware hooks
+    libcpc-664.a         <- CPC firmware and AMSDOS disk hooks
+    libcpc-6128.a        <- CPC firmware and AMSDOS disk hooks
 ```
 
 To install system-wide on Linux:

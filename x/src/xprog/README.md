@@ -1,4 +1,4 @@
-# xprog — XPRG and ZX Spectrum tape packager
+# xprog — XPRG and retro media packager
 
 `xprog` validates an XL image and prefixes it with the XPRG version 1
 descriptor. It creates either a `.prc` process image or a `.svc` resident
@@ -10,6 +10,10 @@ Those modes emit a tokenized BASIC loader followed by a CODE block; they do
 not require an external tape-image library. For a complete target build and
 Fuse workflow, see the [ZX Spectrum 48K guide](../../docs/howtos/ZX-SPECTRUM-48K.md).
 
+For Amstrad CPC programs it creates firmware-loadable CDT cassette images or
+standard CPCEMU/AMSDOS DSK data disks. See the
+[Amstrad CPC guide](../../docs/howtos/AMSTRAD-CPC.md).
+
 ## Usage
 
 ```sh
@@ -19,6 +23,8 @@ xprog --service runtime.xl --load-address 0xfd00 --fixed-load \
 xprog --inspect app.prc
 xprog --tap hello.bin --load-address 0x5ccb
 xprog --tzx hello.bin --load-address 0x5ccb --entry 0x5ccb
+xprog --cdt hello.bin --name HELLO
+xprog --dsk hello.bin --name HELLO.BIN
 ```
 
 The default output name replaces `.xl` with `.prc` or `.svc`. Use `-o` to
@@ -40,6 +46,18 @@ Tape mode rejects empty input, binaries that cross `0xFFFF`, entry points
 outside the binary, zero load addresses, and names outside the Spectrum
 header's 1–10 byte limit. Process/service-only metadata switches are also
 rejected in tape mode.
+
+For `--cdt` and `--dsk`, the load and entry addresses default to `0x4000`.
+CDT output uses CPC firmware binary headers and 2 KiB records inside a
+TZX-compatible CDT 1.20 container; names allow 16 printable bytes. DSK output
+uses the standard 40-track, single-sided CPCEMU format with the conventional
+AMSDOS data-disk sector layout. It creates one 8.3 binary file with a valid
+AMSDOS header, logical length, load/entry addresses, and checksum.
+
+CPC media modes reject empty input, binaries that cross `0xFFFF`, entries
+outside the loaded range, malformed names, and process/service-only metadata.
+The resulting CDT and DSK images are directly boot-tested by the 464, 664,
+and 6128 MCP regression.
 
 The process entry defaults to the entry offset recorded by XL. A service has
 no initializer unless `--entry` is supplied. Each `--export` appends one JP

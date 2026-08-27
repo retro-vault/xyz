@@ -53,6 +53,25 @@ font. See the [complete ZX Spectrum guide](docs/howtos/ZX-SPECTRUM-48K.md) and
 the separate [`zx-ram`](examples/zx-ram/README.md) and
 [`zx-rom`](examples/zx-rom/README.md) examples.
 
+## Amstrad CPC quick start
+
+```sh
+bin/x/bin/xcc -Os --platform=cpc-464 --oformat=binary \
+  x/examples/cpc-464/hello.c -o build/examples/cpc-464/hello.bin
+bin/x/bin/xprog --cdt build/examples/cpc-464/hello.bin \
+  --name HELLO -o build/examples/cpc-464/hello.cdt
+
+bin/x/bin/xcc -Os --platform=cpc-6128 --oformat=binary \
+  x/examples/cpc-6128/files.c -o build/examples/cpc-6128/files.bin
+bin/x/bin/xprog --dsk build/examples/cpc-6128/files.bin \
+  --name FILES.BIN -o build/examples/cpc-6128/files.dsk
+```
+
+The CPC 464 target is cassette-only and omits AMSDOS state. The CPC 664 and
+6128 targets provide ROM-backed raw and stdio file operations through their
+single input/output disk channels. See the
+[complete Amstrad CPC guide](docs/howtos/AMSTRAD-CPC.md).
+
 ## Notes
 
 - `tests/tests/` is now the canonical home for non-benchmark test suites.
@@ -66,3 +85,6 @@ the separate [`zx-ram`](examples/zx-ram/README.md) and
 - For a Docker-based MinGW host-tools preflight, run `make -C x windows-host-preflight`.
 - The optional ZX Spectrum MCP regression executes raw RAM, replacement ROM,
   TAP, and TZX forms; see `tests/tests/zx48/README.md`.
+- The optional Amstrad CPC MCP regression boots a generated CDT on a 464 and
+  generated DSK images on a 664 and 6128; run
+  `python3 x/tests/tests/cpc/run_mcp.py`.

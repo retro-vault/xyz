@@ -60,6 +60,7 @@ bash x/tests/run_tests.sh --filter xcc
 make test-x-models      # verify the S, M, and L feature-filtered matrices
 bash x/tests/tests/e2e/run.sh --no-build # exhaustive suite; uses bin/x-l
 python3 x/tests/tests/zx48/run_mcp.py --mcp /path/to/zx-spectrum-mcp --rom /path/to/48.rom
+python3 x/tests/tests/cpc/run_mcp.py --mcp /path/to/amstrad-cpc-mcp --roms /path/to/roms
 x/tests/benchmarks/z88dk24/prepare.sh
 x/tests/benchmarks/z88dk24/run.sh
 ```
@@ -86,6 +87,8 @@ make stage-includes stage-xcc-support
   - `y/tests/` — YOS-side apps, media, and emulator harnesses
   - `x/tests/tests/zx48/` — optional real-ROM/MCP coverage for the staged
     `zx-ram` and `zx-rom` platforms plus TAP/TZX playback
+  - `x/tests/tests/cpc/` — optional real-ROM/MCP coverage for CPC 464 CDT and
+    writable CPC 664/6128 AMSDOS DSK workflows
   - `x/tests/benchmarks/z88dk24/` — locked seven-lane full-program comparison;
     use its `prepare.sh` before `run.sh`, and preserve the independent corpus,
     target-sysroot, nightly-zsdcc, and 80cc commit pins
@@ -128,8 +131,13 @@ When publishing the toolchain:
   self-contained under `x/platforms/zx-ram/` or `x/platforms/zx-rom/`; keep
   their mirrored console, keyboard, and font sources synchronized and rerun
   all four MCP modes.
+- CPC target code is self-contained under `x/platforms/cpc-464/`,
+  `cpc-664/`, or `cpc-6128/`. The 464 must not acquire AMSDOS buffers; keep
+  the mirrored disk-target sources synchronized and rerun all three MCP
+  models after firmware, file, linker, or media changes.
 - Platform examples follow the same one-directory-per-target rule under
-  `x/examples/` (`cpm3`, `zx-ram`, `zx-rom`, and so on). Do not combine
+  `x/examples/` (`cpm3`, `cpc-464`, `cpc-664`, `cpc-6128`, `zx-ram`,
+  `zx-rom`, and so on). Do not combine
   targets in one example directory or import example source from a sibling.
 
 ## Common Tasks

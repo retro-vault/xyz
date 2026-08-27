@@ -1,4 +1,4 @@
-# xprog — XPRG and ZX Spectrum tape packager
+# xprog — XPRG and retro media packager
 
 ## Synopsis
 
@@ -8,6 +8,8 @@ xprog --service [options] input.xl [-o output.svc]
 xprog --inspect input
 xprog --tap [options] input.bin [-o output.tap]
 xprog --tzx [options] input.bin [-o output.tzx]
+xprog --cdt [options] input.bin [-o output.cdt]
+xprog --dsk [options] input.bin [-o output.dsk]
 ```
 
 `xprog` validates an XL version 1 input and prefixes it with an XPRG version 1
@@ -17,6 +19,10 @@ of Z80 `JP` entries. The XL payload remains relocatable.
 
 The tape modes wrap a flat binary in an auto-running ZX Spectrum 48K image.
 The default load and entry address is `0x5CCB`.
+
+The CPC modes wrap a flat binary in firmware-loadable CDT cassette records or
+place it on a standard CPCEMU/AMSDOS DSK. Their load and entry addresses
+default to `0x4000`.
 
 ## Options
 
@@ -35,12 +41,19 @@ The default load and entry address is `0x5CCB`.
 `--tzx`
 : Create a TZX 1.20 image containing the same four standard-speed blocks.
 
+`--cdt`
+: Create a CDT 1.20 image containing CPC firmware binary records.
+
+`--dsk`
+: Create a 40-track, single-sided AMSDOS data disk containing one binary.
+
 `-o file`
 : Select the output. Otherwise the extension follows the selected mode.
 
 `-n name`, `--name name`
-: Set the image name. XPRG names allow 15 bytes and tape headers allow 10.
-  The input stem is the default.
+: Set the image name. XPRG allows 15 bytes, Spectrum tape headers allow 10,
+  CPC cassette headers allow 16, and CPC disks require an 8.3 name. The input
+  stem is the default.
 
 `--id number`
 : Set the 32-bit image ID. The default is FNV-1a of the image name.
@@ -52,8 +65,9 @@ The default load and entry address is `0x5CCB`.
 : Set the minimum required OS ABI version.
 
 `--load-address number`
-: Set the preferred process code address, service JP-table address, or tape
-  CODE load address. Tape output defaults to `0x5CCB`.
+: Set the preferred process code address, service JP-table address, or media
+  load address. Spectrum output defaults to `0x5CCB`; CPC output defaults to
+  `0x4000`.
 
 `--fixed-load`
 : Mark the preferred address as required rather than advisory.
@@ -86,6 +100,8 @@ xprog --service runtime.xl --load-address 0xfd00 --fixed-load \
 xprog --inspect runtime.svc
 xprog --tap hello.bin --name HELLO
 xprog --tzx hello.bin --load-address 0x8000 --entry 0x8010
+xprog --cdt hello.bin --name HELLO
+xprog --dsk hello.bin --name HELLO.BIN
 ```
 
 Tape output contains a program header/data pair followed by a CODE header/data
@@ -100,6 +116,12 @@ Every block carries the standard Spectrum XOR checksum. TZX output is version
 one-second pause after each block. Tape mode rejects an empty binary, a binary
 that crosses `0xFFFF`, an entry outside the loaded range, a zero load address,
 or a name outside the 1–10 byte Spectrum header limit.
+
+CDT output divides the binary into CPC firmware header/data pairs with 2 KiB
+payload blocks and the firmware CRC framing. DSK output creates a standard
+CPCEMU image using the AMSDOS data format and stores the program as one binary
+file with a valid AMSDOS header and checksum. CPC modes reject a malformed
+name, an empty or overflowing binary, or an entry outside the loaded range.
 
 At service address `0xfd00`, ordered three-byte entries occupy `0xfd00`,
 `0xfd03`, and so on. The service XL implementation can still be relocated by

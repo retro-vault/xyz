@@ -74,7 +74,7 @@ TARGET_AS8FLAGS := --mode=sdcc $(TARGET_FEATURE_DEFINES)
 
 RUNTIME_ARCHIVE_NAME := libruntime.a
 FIXED_ARCHIVE_NAME := libfixed.a
-STAGED_PLATFORMS := $(sort $(PLATFORM) cpm3 emu zx-ram zx-rom)
+STAGED_PLATFORMS := $(sort $(PLATFORM) cpc-464 cpc-664 cpc-6128 cpm3 emu zx-ram zx-rom)
 TOOLCHAIN_RUNTIME_BUILD_DIR := $(BUILD_DIR)/toolchain-runtime
 TOOLCHAIN_FIXED_BUILD_DIR := $(BUILD_DIR)/toolchain-fixed
 WINDOWS_MINGW_DOCKER_SCRIPT := $(X_ROOT)/tests/tools/windows_host_preflight_docker.sh

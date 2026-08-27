@@ -42,8 +42,8 @@ xyz/
 │   ├── lib/                  # host SDK libraries
 │   ├── libc/                 # target assembly libc and headers
 │   ├── runtime/              # target compiler/runtime helpers
-│   ├── platforms/            # none, emu, cpm3, zx-ram, zx-rom
-│   ├── examples/             # target examples, including ZX/Fuse
+│   ├── platforms/            # none, emu, CP/M, CPC, and ZX targets
+│   ├── examples/             # target examples, including CPC and ZX
 │   ├── tests/                # canonical tests and benchmarks
 │   ├── docs/                 # architecture, manuals, how-tos, standards
 │   └── pkg/                  # X packages
@@ -78,6 +78,8 @@ Current examples and current locations:
 - `x/tests/tests/runtime/` holds the runtime helper matrices for ll/double and related coverage.
 - `x/tests/tests/c23/` holds the manifest-driven C23 compatibility suite — used for both compiler acceptance and libc surface verification.
 - `x/tests/tests/zx48/` owns the optional real-ROM/MCP cross-stack regression.
+- `x/tests/tests/cpc/` owns the optional real-ROM CPC 464/664/6128 CDT/DSK
+  and libc/AMSDOS cross-stack regression.
 - `make test-x-models` validates the S, M, and L feature surfaces separately.
   The M compiler is built as a distinct frontend configuration: `double` and
   `long double` alias its selected `float` ABI, whereas L preserves binary64.
@@ -125,7 +127,8 @@ When adding tests for new C23 features (or anything else):
     `xcc --platform`.
   - `bin/x/z80/lib/` stages `crt0`, linker scripts, `libruntime.a`, `libc.a`,
     the default `libnone.a`, and named platform payloads such as `libcpm3.a`,
-    `libzx-ram.a`, and `libzx-rom.a`.
+    `libcpc-464.a`, `libcpc-664.a`, `libcpc-6128.a`, `libzx-ram.a`, and
+    `libzx-rom.a`.
   - `bin/y/` holds YOS build outputs plus YOS-adjacent host tools and support
     libraries.
   - `bin/z/` holds staged target assets, apps, and media.
@@ -134,9 +137,9 @@ When adding tests for new C23 features (or anything else):
   - `xld` probes relative to its prefix for runtime/startup libraries.
   - The common standard library and runtime stay shared under
     `bin/x/z80/lib/`.
-  - The current default staged platform payload is bare-metal `none`; CP/M 3
-    and the two ZX Spectrum 48K forms are selected explicitly with
-    `--platform=cpm3`, `--platform=zx-ram`, or `--platform=zx-rom`.
+  - The current default staged platform payload is bare-metal `none`; CP/M 3,
+    CPC 464/664/6128, and the two ZX Spectrum 48K forms are selected explicitly
+    with `--platform=<name>`.
   - Flat ROM links support distinct virtual and load addresses. GNU scripts
     use `AT>region`; SDCC-style scripts use `COPY area`. The generated
     `s__AREA_LOAD`/`l__AREA_LOAD` symbols form the CRT copy contract.
@@ -146,6 +149,12 @@ When adding tests for new C23 features (or anything else):
     assembly console, non-blocking `<stdio.h>` `trygetchar()` scanner, blocking libc input
     derived from that scanner, and snatch-exported Tamsyn font; there is no
     non-target pseudo-platform directory.
+  - `cpc-464`, `cpc-664`, and `cpc-6128` own firmware-hosted RAM from
+    `0x4000` to the `0x9F00` heap ceiling and keep their C stack immediately
+    below the AMSDOS workspace. The 464 archive contains only console, clock,
+    heap, and failing filesystem hooks. The disk targets add self-contained
+    ROM-backed AMSDOS input/output state; no CPC target imports a sibling's
+    sources.
   - Every immediate directory below `x/platforms/` names one selectable
     target. The shared hook declaration lives in `x/libc/include/sys.h`, while
     target-only headers live below `x/platforms/<target>/include/` and are
@@ -161,8 +170,8 @@ When adding tests for new C23 features (or anything else):
 
 1. Continue moving broad tests toward their owning components while keeping
    shared emulator infrastructure centralized.
-2. Keep genuinely cross-stack tests, such as the ZX ROM/tape MCP flow,
-   explicit and optional when they require external assets.
+2. Keep genuinely cross-stack tests, such as the ZX and CPC real-ROM/media MCP
+   flows, explicit and optional when they require external assets.
 3. Extract more CPU/model/ABI definitions into `x/targets/` where that removes
    duplication without hiding platform memory contracts.
 4. Reduce recursive staging work where dependency-aware rules can safely

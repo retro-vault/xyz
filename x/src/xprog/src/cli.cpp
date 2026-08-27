@@ -75,6 +75,10 @@ cli_options cli::parse(int argc, char* argv[])
             select_command(command_kind::tap, arg);
         } else if (arg == "--tzx") {
             select_command(command_kind::tzx, arg);
+        } else if (arg == "--cdt") {
+            select_command(command_kind::cdt, arg);
+        } else if (arg == "--dsk") {
+            select_command(command_kind::dsk, arg);
         } else if (arg == "-o") {
             options.output_file = take_value(i, argc, argv, "-o");
         } else if (arg.rfind("-o", 0) == 0 && arg.size() > 2) {
@@ -118,7 +122,8 @@ cli_options cli::parse(int argc, char* argv[])
     if (options.input_file.empty())
         throw usage_error("input file is required");
     if (options.command == command_kind::none)
-        throw usage_error("select --process, --service, --inspect, --tap, or --tzx");
+        throw usage_error(
+            "select --process, --service, --inspect, --tap, --tzx, --cdt, or --dsk");
     if (options.command == command_kind::inspect) {
         if (!options.output_file.empty())
             throw usage_error("inspect does not accept -o");
@@ -126,28 +131,41 @@ cli_options cli::parse(int argc, char* argv[])
     }
     if (options.output_file.empty()) {
         options.output_file = options.input_file;
-        const char* extension = options.command == command_kind::process
-            ? ".prc" : options.command == command_kind::service
-            ? ".svc" : options.command == command_kind::tap ? ".tap" : ".tzx";
+        const char* extension = nullptr;
+        switch (options.command) {
+        case command_kind::process: extension = ".prc"; break;
+        case command_kind::service: extension = ".svc"; break;
+        case command_kind::tap: extension = ".tap"; break;
+        case command_kind::tzx: extension = ".tzx"; break;
+        case command_kind::cdt: extension = ".cdt"; break;
+        case command_kind::dsk: extension = ".dsk"; break;
+        default: break;
+        }
         options.output_file.replace_extension(extension);
     }
     if (options.name.empty())
         options.name = options.input_file.stem().string();
-    const bool tape = options.command == command_kind::tap
-                   || options.command == command_kind::tzx;
-    const std::size_t max_name = tape ? 10 : 15;
+    const bool spectrum_tape = options.command == command_kind::tap
+                            || options.command == command_kind::tzx;
+    const bool cpc_media = options.command == command_kind::cdt
+                        || options.command == command_kind::dsk;
+    const bool media = spectrum_tape || cpc_media;
+    const std::size_t max_name = spectrum_tape ? 10
+        : options.command == command_kind::cdt ? 16
+        : options.command == command_kind::dsk ? 12 : 15;
     if (options.name.empty() || options.name.size() > max_name)
         throw usage_error("image name must contain 1 to "
                           + std::to_string(max_name) + " bytes");
-    if (tape) {
+    if (media) {
         if (options.load_address == 0)
-            options.load_address = 0x5ccb;
+            options.load_address = spectrum_tape ? 0x5ccb : 0x4000;
         if (!options.entry_point.has_value())
             options.entry_point = options.load_address;
         if (options.stack_size.has_value() || !options.exports.empty()
             || options.require_fixed_load || options.image_id.has_value()
             || options.abi_version != 1 || options.minimum_os_version != 0) {
-            throw usage_error("process/service options are not valid for tape output");
+            throw usage_error(
+                "process/service options are not valid for media output");
         }
         return options;
     }
@@ -169,22 +187,24 @@ void cli::print_usage(const char* argv0)
 {
     std::cerr
         << "Usage: " << argv0 << " [options] <input>\n\n"
-        << "X Tools Program Packager (xprog) — XPRG and Spectrum tape images\n\n"
+        << "X Tools Program Packager (xprog) — XPRG, tape, and disk images\n\n"
         << "mode (one required):\n"
         << "  -p, --process             Create a .prc process image\n"
         << "  -s, --service             Create a .svc service image\n"
         << "  -i, --inspect             Validate and describe an existing image\n\n"
         << "  --tap                     Wrap a flat binary in an auto-running .tap\n"
-        << "  --tzx                     Wrap a flat binary in an auto-running .tzx\n\n"
+        << "  --tzx                     Wrap a flat binary in an auto-running .tzx\n"
+        << "  --cdt                     Wrap a CPC binary in firmware .cdt records\n"
+        << "  --dsk                     Put a CPC binary on an AMSDOS .dsk\n\n"
         << "options:\n"
-        << "  -o <file>                 Output image (default: .prc or .svc)\n"
-        << "  -n, --name <name>         Image name (10 bytes for tape, 15 for XPRG)\n"
+        << "  -o <file>                 Output image (default: mode extension)\n"
+        << "  -n, --name <name>         Image name (Spectrum 10, CDT 16, DSK 8.3)\n"
         << "  --id <n>                  Stable 32-bit image/service identifier\n"
         << "  --abi <n>                 Provided ABI version (default: 1)\n"
         << "  --min-os <n>              Minimum OS ABI version (default: 0)\n"
-        << "  --load-address <n>        Load address (tape default: 0x5CCB)\n"
+        << "  --load-address <n>        Load address (Spectrum 0x5CCB, CPC 0x4000)\n"
         << "  --fixed-load              Require the preferred address\n"
-        << "  --entry <n>               XL entry override or absolute tape entry\n"
+        << "  --entry <n>               XL entry override or absolute media entry\n"
         << "  --version                 Show version\n"
         << "  -h, --help                Show this help\n\n"
         << "process options:\n"

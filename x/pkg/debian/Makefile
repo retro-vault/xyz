@@ -52,10 +52,16 @@ DIST_PREFIX_FILES := \
 	$(DIST_DIR)/bin/xcc \
 	$(DIST_DIR)/z80/include/stdio.h \
 	$(DIST_DIR)/z80/lib/crt0-none.rel \
+	$(DIST_DIR)/z80/lib/crt0-cpc-464.rel \
+	$(DIST_DIR)/z80/lib/crt0-cpc-664.rel \
+	$(DIST_DIR)/z80/lib/crt0-cpc-6128.rel \
 	$(DIST_DIR)/z80/lib/crt0-cpm3.rel \
 	$(DIST_DIR)/z80/lib/libc.a \
 	$(DIST_DIR)/z80/lib/libfixed.a \
 	$(DIST_DIR)/z80/lib/libnone.a \
+	$(DIST_DIR)/z80/lib/libcpc-464.a \
+	$(DIST_DIR)/z80/lib/libcpc-664.a \
+	$(DIST_DIR)/z80/lib/libcpc-6128.a \
 	$(DIST_DIR)/z80/lib/libcpm3.a \
 	$(DIST_DIR)/z80/lib/libruntime.a
 HOST_TOOLS := \
