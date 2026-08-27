@@ -3456,10 +3456,11 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
     }
 
     // A logical word shift whose only consumer masks the low byte does not
-    // need to rotate through L.  A is the Z80's cheap rotate destination
-    // (RRA is 4T versus 8T for RR L), while H still supplies each incoming
-    // carry bit.  Coalescing the adjacent mask also avoids materializing the
-    // otherwise dead full-width shift result.
+    // need to materialize the otherwise dead full-width shift result.  For
+    // counts below eight, A is the Z80's cheap rotate destination (RRA is 4T
+    // versus 8T for RR L), while H supplies each incoming carry bit.  At
+    // eight and above, every surviving low-byte bit comes from the original
+    // H, so shift that byte directly and zero-extend it.
     if (right && !arithmetic &&
         ic.right.kind == operand_kind::INT_CONST &&
         cur_fn_ && cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
@@ -3476,15 +3477,21 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
                 mask = &mask_ic.left;
             }
         }
-        if (count >= 1 && count <= 7 && mask &&
+        if (count >= 1 && count <= 15 && mask &&
             mask->ival >= 0 && mask->ival <= 0xff &&
             !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
                                    ic.result.temp_id)) {
             load_hl(ic.left);
-            emit_line("ld\ta, l");
-            for (int k = 0; k < count; ++k) {
-                emit_line("srl\th");
-                emit_line("rra");
+            if (count < 8) {
+                emit_line("ld\ta, l");
+                for (int k = 0; k < count; ++k) {
+                    emit_line("srl\th");
+                    emit_line("rra");
+                }
+            } else {
+                emit_line("ld\ta, h");
+                for (int k = 8; k < count; ++k)
+                    emit_line("srl\ta");
             }
             const int mask_value = static_cast<int>(mask->ival & 0xff);
             if (mask_value != 0xff)
@@ -5091,6 +5098,32 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             return;
         default:
             break;
+        }
+    }
+
+    if (op_size(ic.left) == 2 && op_size(ic.right) == 2 &&
+        (cmp == icode_op::EQ || cmp == icode_op::NE) &&
+        !true_lbl.empty() && !false_lbl.empty()) {
+        const bool left_zero =
+            ic.left.kind == operand_kind::INT_CONST &&
+            (ic.left.ival & 0xffff) == 0;
+        const bool right_zero =
+            ic.right.kind == operand_kind::INT_CONST &&
+            (ic.right.ival & 0xffff) == 0;
+        const bool compares_iy_to_zero =
+            (left_zero && operand_in_main_iy(ic.right)) ||
+            (right_zero && operand_in_main_iy(ic.left));
+        if (compares_iy_to_zero) {
+            // Test an IY-resident pointer directly.  Moving it through DE for
+            // the generic word subtraction destroys an unrelated DE live
+            // range (commonly a loop reduction) and is also larger/slower.
+            emit_line("ld\ta, iyh");
+            emit_line("or\tiyl");
+            emit_line("jp\t%s, %s",
+                      cmp == icode_op::EQ ? "z" : "nz",
+                      true_lbl.c_str());
+            emit_line("jp\t%s", false_lbl.c_str());
+            return;
         }
     }
 

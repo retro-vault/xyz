@@ -75,6 +75,26 @@ bool is_truth_test_preserving_integer_cast(const icode &ic) {
     return src_ok && dst_ok;
 }
 
+bool materializes_automatic_address(const ir_function &fn) {
+    for (const auto &ic : fn.icodes) {
+        if (ic.op == icode_op::ALLOCA)
+            return true;
+        if (ic.op != icode_op::ADDRESS_OF)
+            continue;
+
+        // Static-storage objects, functions, and literal labels outlive the
+        // caller. Every other ADDRESS_OF result may point into this
+        // activation record, including parameter objects and aggregate
+        // temporaries. Keep this deliberately function-wide: the address can
+        // be copied through a non-SSA pointer local or an integer cast before
+        // it reaches a terminal SEND.
+        if (ic.left.is_global || ic.left.is_func || ic.left.is_label())
+            continue;
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 void z80_gen::emit_direct_callee_decl(const std::string &name) {
@@ -376,6 +396,8 @@ void z80_gen::gen_function(const icode &) {
     direct_call_return_value_ = operand{};
     sibling_tail_call_pending_ = false;
     sibling_tail_call_value_ = operand{};
+    automatic_address_materialized_ =
+        cur_fn_ && materializes_automatic_address(*cur_fn_);
     last_frameless_return_terminated_ = false;
     direct_compare_return_pending_ = false;
     direct_compare_return_value_ = operand{};
@@ -568,7 +590,8 @@ void z80_gen::gen_call(const icode &ic) {
         (opt_settings_.level == opt_level::Of ||
          opt_settings_.level == opt_level::O3) &&
         effective_call_abi(cur_fn_->abi) == call_abi::SDCCCALL1 &&
-        cur_fn_->stack_param_bytes == 0;
+        cur_fn_->stack_param_bytes == 0 &&
+        !automatic_address_materialized_;
     if (cur_fn_ && !debug_ && !inline_ctype_call && !ic.func_name.empty() &&
         ic.arg_bytes == 0 && !large_indirect_result &&
         (frameless_sibling || framed_register_sibling) &&

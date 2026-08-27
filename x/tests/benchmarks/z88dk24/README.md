@@ -40,22 +40,66 @@ x/tests/benchmarks/z88dk24/prepare.sh
 x/tests/benchmarks/z88dk24/run.sh
 ```
 
+### Current-upstream snapshot
+
+The locked hybrid run above remains the reproducible historical comparison.
+For a same-date comparison on the newest upstream target environment, use:
+
+```sh
+x/tests/benchmarks/z88dk24/prepare-current.sh
+x/tests/benchmarks/z88dk24/run-current.sh
+```
+
+[`current.lock`](current.lock) records the snapshot captured on 2026-08-27:
+z88dk master `fce9a75f105337c5bcd4e054838a3636d2e1a851`, the active
+`80cc-multi-fixes` head `e3aeca0dc09b7b9bbf968b70fc8c29c1f1da208a`, and
+official SDCC trunk `8650e2b21cdbe555c9f1119c498ff59f21693b25`. The 80cc
+revision is already merged into that z88dk master, but remains independently
+checked out and hashed. Official SDCC trunk is built from source after applying
+[`sdcc-z88dk-current.patch`](sdcc-z88dk-current.patch), which changes only the
+symbol syntax, ABI revision, classic-library helper knowledge, and other
+z88dk compatibility required to link it fairly against the shared `+test`
+sysroot.
+
+The current run uses the same corpus, lane flags, complete-image byte count,
+self-checking execution, and `z88dk-ticks -w 60 -b msx` cycle method. It uses
+the current z88dk headers, CRT, libraries, rewrite rules, and host tools for
+every lane, so its values form a new comparison snapshot and must not be mixed
+with the historical `target.csv` table. Its default output is
+`build/x/benchmarks/z88dk24-current-m/`.
+
+The first complete snapshot is recorded in
+[`CURRENT-RESULTS.md`](CURRENT-RESULTS.md), with the raw matrix in
+[`current-results.csv`](current-results.csv) and exact executable hashes in
+[`current-versions.txt`](current-versions.txt). Both XCC and both 80cc lanes
+pass 24/24. Official SDCC trunk passes 23/24; its retained failure is the same
+packed-bitfield checksum exposed by the historical suite.
+
 Useful focused forms are:
 
 ```sh
 FILTER='^(charbench|crcbench)$' x/tests/benchmarks/z88dk24/run.sh
 LANES=xcc_Os,xcc_Of,sdcc,80cc_fp,80cc_sp \
   x/tests/benchmarks/z88dk24/run.sh
+
+FILTER='^(charbench|crcbench)$' \
+  x/tests/benchmarks/z88dk24/run-current.sh
 ```
 
-The seven lanes and their material flags are:
+The seven lane names and material flags are shared by both workflows. The
+locked run's `sdcc` executable is its pinned nightly zsdcc; the current run's
+is the pinned official trunk build:
+
+For future reports, 80cc is the primary competitor: headline win counts use
+the better valid 80cc frame-pointer or stack-pointer result for each program.
+SDCC remains in the full table and broader valid-competitor envelope.
 
 | lane | compiler flags |
 |---|---|
 | sccz80 | `-compiler=sccz80` |
 | xcc -Os | M-model XCC, `-compiler=xcc -Cx-Os -Cx--runtime=z88dk-classic` |
 | xcc -Of | M-model XCC, `-compiler=xcc -Cx-Of -Cx--runtime=z88dk-classic` |
-| sdcc | nightly `z88dk-zsdcc`, `-compiler=sdcc` |
+| sdcc | `-compiler=sdcc` |
 | sdcc-max | `-compiler=sdcc -SO3 --max-allocs-per-node200000` |
 | 80cc-fp | latest 80cc, `-compiler=80cc -Cc-fframe-pointer` |
 | 80cc-sp | latest 80cc, `-compiler=80cc` |
@@ -150,14 +194,14 @@ final matrix.
 
 ## Current comparison
 
-Both XCC M lanes pass 24/24. Against the best valid result from current zsdcc,
-80cc-fp, and 80cc-sp on each program, `-Os` is strictly smallest on 24/24
-and `-Of` on 22/24. `-Of` remains strictly fastest on 13/24 and `-Os` on
-7/24. The size result combines generic compiler output with literal-driven
+Both XCC M lanes pass 24/24. Against the better valid 80cc frame-pointer or
+stack-pointer result on each program, `-Os` is strictly smallest on 24/24
+and fastest on 8/24; `-Of` is smallest on 23/24 and fastest on 17/24. The
+size result combines generic compiler output with literal-driven
 z88dk runtime pruning; the speed gains come from generic data-flow,
-register-allocation, pointer-walk, producer/store, and word-load/add
-scheduling rules. The compiler contains no benchmark-name or source-pattern
-recognition.
+register-allocation, bit-width, bitfield, pointer-walk, producer/store, and
+word-recurrence scheduling rules. The compiler contains no benchmark-name,
+source-fragment, magic-constant, or program-fingerprint recognition.
 
 ## Outputs
 

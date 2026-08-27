@@ -33,6 +33,22 @@ ticks machine. The split is intentional: the published sccz80 baseline comes
 from an older z88dk target library, while the compiler comparison uses newer
 compiler executables and their matching rewrite rules.
 
+To compare the newest upstream toolchains on one current z88dk target sysroot
+without disturbing that historical baseline, run:
+
+```sh
+x/tests/benchmarks/z88dk24/prepare-current.sh
+x/tests/benchmarks/z88dk24/run-current.sh
+```
+
+`current.lock` pins the fetched z88dk master, active 80cc branch, official
+SDCC trunk, XCC commit, corpus, and ticks model. SDCC trunk is patched only for
+the z88dk ABI and assembler/link conventions, then injected beside the current
+zcc driver just like the independently built 80cc executable. All lanes share
+the current headers, `+test` CRT, classic libraries, and rewrite rules. Current
+results are intentionally reported as a new snapshot rather than compared to
+the old `target.csv` values.
+
 The lanes are:
 
 - sccz80 historical control
@@ -41,20 +57,27 @@ The lanes are:
   `sdcc-max` rows
 - current 80cc with `-fframe-pointer` and with its normal stack-pointer frame
 
+80cc is the primary competitor for new reports. Headline size and speed wins
+compare XCC with the better valid result from the two 80cc modes on each row.
+SDCC remains visible as a correctness and secondary-envelope lane, but no
+longer determines the primary win counts.
+
 The runner validates commits before doing any work and saves compiler hashes,
 versions, raw CSV, maps, logs, and every measured binary. See the suite's
 `README.md` and `RESULTS.md` for compatibility details and current results.
 The bitfield row is deliberately retained as a correctness result. XCC now
 passes it in every profile after repairing CFG spill-slot liveness and guarded
 lowering for `IY`-derived pointer fusions. Current zsdcc still fails it;
-sccz80 and both 80cc modes pass. In the final locked run both XCC lanes pass
-24/24; `-Os` is strictly smallest on 24/24 rows, while `-Of` is smallest on
-22/24 and fastest on 13/24 against the best valid zsdcc/80cc result. XCC's
+sccz80 and both 80cc modes pass. In the final current-upstream run both XCC
+lanes pass 24/24. Against the better valid 80cc mode for each row, `-Os` is
+strictly smallest on 24/24 and fastest on 8/24; `-Of` is smallest on 23/24
+and fastest on 17/24. XCC's
 public `--runtime=z88dk-classic` profile derives printf/scanf capability masks
 from literal formats and merges them through zcc's per-link option file. The
 runner contains no precomputed format mask. See `RESULTS.md` for the exact
-matrix and the structural, benchmark-independent rules responsible for the
-gains.
+historical locked matrix and `CURRENT-RESULTS.md` for the separately pinned
+current-upstream snapshot and the structural, benchmark-independent rules
+responsible for the gains.
 
 ## Codegen-Only Benchmark
 

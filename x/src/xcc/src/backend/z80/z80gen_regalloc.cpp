@@ -4200,7 +4200,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         const icode &init = fn.icodes[iv.first_def];
         if (init.op != icode_op::ASSIGN || !init.result.is_temp() ||
             init.result.temp_id != tid ||
-            init.left.kind != operand_kind::INT_CONST) {
+            !init.right.is_none() || op_size(init.left) != 2 ||
+            uses_tls_global(init.left) ||
+            symbol_word_access_may_need_bc_scratch(init.left)) {
             continue;
         }
 
@@ -4261,11 +4263,47 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                             rhs_def.left.is_temp() &&
                             rhs_def.right.is_none() &&
                             op_size(rhs_def.result) == 2) {
-                            auto pointer_home =
-                                temp_regs_.find(rhs_def.left.temp_id);
+                            auto iy_pointer_or_offset =
+                                [&](const operand &pointer) {
+                                if (!pointer.is_temp())
+                                    return false;
+                                auto pointer_home =
+                                    temp_regs_.find(pointer.temp_id);
+                                if (pointer_home != temp_regs_.end() &&
+                                    pointer_home->second ==
+                                        temp_home::main_iy) {
+                                    return true;
+                                }
+
+                                auto pointer_iv = ivs.find(pointer.temp_id);
+                                if (pointer_iv == ivs.end() ||
+                                    pointer_iv->second.first_def < 0 ||
+                                    pointer_iv->second.first_def >=
+                                        rhs_iv->second.first_def) {
+                                    return false;
+                                }
+                                const icode &pointer_def =
+                                    fn.icodes[pointer_iv->second.first_def];
+                                if (pointer_def.op != icode_op::ADD)
+                                    return false;
+                                const operand *base = &pointer_def.left;
+                                const operand *offset = &pointer_def.right;
+                                if (base->kind == operand_kind::INT_CONST)
+                                    std::swap(base, offset);
+                                if (!base->is_temp() ||
+                                    offset->kind != operand_kind::INT_CONST ||
+                                    offset->ival < -4 ||
+                                    offset->ival > 4) {
+                                    return false;
+                                }
+                                auto base_home =
+                                    temp_regs_.find(base->temp_id);
+                                return base_home != temp_regs_.end() &&
+                                       base_home->second ==
+                                           temp_home::main_iy;
+                            };
                             direct_iy_word_load =
-                                pointer_home != temp_regs_.end() &&
-                                pointer_home->second == temp_home::main_iy;
+                                iy_pointer_or_offset(rhs_def.left);
                         }
                     }
                 }
@@ -4441,6 +4479,29 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                     inside.result.is_temp() &&
                     load_ids.count(inside.result.temp_id) != 0;
                 if (selected_load)
+                    continue;
+
+                const bool cursor_reload =
+                    inside.op == icode_op::GET_VALUE_AT &&
+                    inside.result.is_temp() && inside.left.is_temp() &&
+                    inside.right.is_none() && op_size(inside.result) == 2 &&
+                    k + 1 <= iv.last_use &&
+                    [&]() {
+                        auto pointer_home =
+                            temp_regs_.find(inside.left.temp_id);
+                        if (pointer_home == temp_regs_.end() ||
+                            pointer_home->second != temp_home::main_iy)
+                            return false;
+                        const icode &assign = fn.icodes[k + 1];
+                        return assign.op == icode_op::ASSIGN &&
+                               assign.left.is_temp() &&
+                               assign.left.temp_id ==
+                                   inside.result.temp_id &&
+                               assign.result.is_temp() &&
+                               assign.result.temp_id ==
+                                   inside.left.temp_id;
+                    }();
+                if (cursor_reload)
                     continue;
 
                 const bool touches_accumulator =
@@ -7425,6 +7486,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // IY cursors are selected before the general BC candidates.  Re-homing
     // the proven pair here changes no live ranges and avoids the much slower
     // indexed-IY load on every loop iteration.
+    const auto occupies_main_bc = [](temp_home home) {
+        return home == temp_home::main_bc ||
+               home == temp_home::main_b ||
+               home == temp_home::main_c;
+    };
     for (const auto &[cursor_tid, cursor_home] : temp_regs_) {
         if (opt_settings_.level != opt_level::Of &&
             opt_settings_.level != opt_level::O3 &&
@@ -7436,17 +7502,17 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         if (cursor_iv == ivs.end() || cursor_iv->second.first_def < 0)
             continue;
 
-        bool byte_walk = false;
+        bool memory_walk = false;
         bool cursor_safe = true;
         for (int k = cursor_iv->second.first_def + 1;
              k <= cursor_iv->second.last_use; ++k) {
             const icode &ic = fn.icodes[k];
             if (!mentions_temp(ic, cursor_tid))
                 continue;
-            const bool byte_load =
+            const bool indirect_load =
                 ic.op == icode_op::GET_VALUE_AT && ic.left.is_temp() &&
                 ic.left.temp_id == cursor_tid && ic.right.is_none() &&
-                op_size(ic.result) == 1;
+                (op_size(ic.result) == 1 || op_size(ic.result) == 2);
             const bool constant_step =
                 (ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
                 ic.left.is_temp() && ic.left.temp_id == cursor_tid &&
@@ -7458,16 +7524,20 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 (ic.op == icode_op::ADD || ic.op == icode_op::SUB ||
                  is_compare_op(ic.op) || ic.op == icode_op::RETURN) &&
                 !(ic.result.is_temp() && ic.result.temp_id == cursor_tid);
-            if (byte_load) {
-                byte_walk = true;
+            const bool truth_read =
+                ic.op == icode_op::IFX && ic.left.is_temp() &&
+                ic.left.temp_id == cursor_tid;
+            if (indirect_load) {
+                memory_walk = true;
                 continue;
             }
-            if (constant_step || update_commit || arithmetic_read)
+            if (constant_step || update_commit || arithmetic_read ||
+                truth_read)
                 continue;
             cursor_safe = false;
             break;
         }
-        if (!cursor_safe || !byte_walk)
+        if (!cursor_safe || !memory_walk)
             continue;
 
         // Symbol homes participate in the same physical BC pair but are kept
@@ -7476,7 +7546,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         // promoted loop counter and the cursor silently alias one another.
         bool bc_symbol_conflict = false;
         for (const auto &[key, home] : symbol_regs_) {
-            if (home != temp_home::main_bc)
+            if (!occupies_main_bc(home))
                 continue;
             auto sym = syms.find(key);
             if (sym == syms.end())
@@ -7498,7 +7568,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         // the cursor's IY home would silently make the two values alias.
         bool bc_value_conflict = false;
         for (const auto &[other_tid, other_home] : temp_regs_) {
-            if (other_home != temp_home::main_bc ||
+            if (!occupies_main_bc(other_home) ||
                 other_tid == cursor_tid)
                 continue;
             auto other_iv = ivs.find(other_tid);
@@ -7508,6 +7578,39 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             const icode &other_def =
                 fn.icodes[other_iv->second.first_def];
+            bool fused_rmw_value = false;
+            if (other_def.op == icode_op::GET_VALUE_AT &&
+                other_def.result.is_temp() &&
+                other_def.result.temp_id == other_tid &&
+                other_def.left.is_temp() && other_def.right.is_none() &&
+                other_iv->second.last_use ==
+                    other_iv->second.first_def + 1 &&
+                other_iv->second.last_use + 1 <
+                    static_cast<int>(fn.icodes.size())) {
+                const icode &update =
+                    fn.icodes[other_iv->second.last_use];
+                const icode &store =
+                    fn.icodes[other_iv->second.last_use + 1];
+                const bool small_update =
+                    (update.op == icode_op::ADD ||
+                     update.op == icode_op::SUB) &&
+                    update.left.is_temp() &&
+                    update.left.temp_id == other_tid &&
+                    update.right.kind == operand_kind::INT_CONST &&
+                    update.right.ival >= 1 && update.right.ival <= 3;
+                fused_rmw_value =
+                    small_update && update.result.is_temp() &&
+                    store.op == icode_op::SET_VALUE_AT &&
+                    store.left.is_temp() &&
+                    store.left.temp_id == update.result.temp_id &&
+                    store.result.is_temp() &&
+                    store.result.temp_id == other_def.left.temp_id &&
+                    store.right.is_none();
+            }
+            if (fused_rmw_value) {
+                temp_regs_[other_tid] = temp_home::stack;
+                continue;
+            }
             if (!other_def.result.type ||
                 !other_def.result.type->is_ptr()) {
                 bc_value_conflict = true;
@@ -7561,6 +7664,48 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         }
         if (placed_in_bc)
             continue;
+
+        bool any_bc_temp_conflict = false;
+        for (const auto &[other_tid, other_home] : temp_regs_) {
+            if (!occupies_main_bc(other_home) ||
+                other_tid == cursor_tid)
+                continue;
+            auto other_iv = ivs.find(other_tid);
+            if (other_iv != ivs.end() &&
+                !(other_iv->second.last_use < cursor_iv->second.first_def ||
+                  other_iv->second.first_def > cursor_iv->second.last_use)) {
+                any_bc_temp_conflict = true;
+                break;
+            }
+        }
+        if (any_bc_temp_conflict)
+            continue;
+
+        bool interval_preserves_bc = true;
+        for (int k = cursor_iv->second.first_def + 1;
+             k <= cursor_iv->second.last_use; ++k) {
+            const icode &inside = fn.icodes[k];
+            if (inside.op == icode_op::LABEL ||
+                inside.op == icode_op::GOTO ||
+                inside.op == icode_op::IFX ||
+                inside.op == icode_op::RETURN) {
+                continue;
+            }
+            if (clobbers_bc(inside) ||
+                uses_tls_global(inside.result) ||
+                uses_tls_global(inside.left) ||
+                uses_tls_global(inside.right) ||
+                symbol_word_access_may_need_bc_scratch(inside.result) ||
+                symbol_word_access_may_need_bc_scratch(inside.left) ||
+                symbol_word_access_may_need_bc_scratch(inside.right) ||
+                (inside.op == icode_op::ADDRESS_OF &&
+                 address_of_may_need_bc_scratch(inside.left))) {
+                interval_preserves_bc = false;
+                break;
+            }
+        }
+        if (interval_preserves_bc)
+            temp_regs_[cursor_tid] = temp_home::main_bc;
     }
 
     // Record the precise direct calls at which a selected IY live range must

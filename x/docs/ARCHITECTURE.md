@@ -100,7 +100,9 @@ Current examples and current locations:
   XCC's `z88dk-classic` runtime profile also reports literal-derived
   `printf`/`scanf` capabilities through zcc's per-link option file, so
   classic-library handler pruning is measured without benchmark-specific
-  flags.
+  flags. A separate `current.lock` workflow refreshes z88dk, the active 80cc
+  branch, and official SDCC trunk as one independently reproducible snapshot;
+  it must not replace or silently move the historical hybrid baseline.
 
 When adding tests for new C23 features (or anything else):
 - Add semantic/functional verification in `x/tests/tests/libc/c23_cases.c` or

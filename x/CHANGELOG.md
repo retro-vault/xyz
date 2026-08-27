@@ -6,6 +6,48 @@ Release status:
 
 ## Unreleased
 
+- Made 80cc the primary competitor in new z88dk24 reports. Headline XCC size
+  and speed wins now compare against the better valid 80cc frame-pointer or
+  stack-pointer result per program; SDCC remains a visible correctness lane
+  and member of the broader competitor envelope.
+
+- Added a separately reproducible current-upstream form of the 24-program
+  z88dk benchmark. It pins and builds current z88dk master, the active 80cc
+  branch, and official SDCC trunk; refreshes the SDCC-to-z88dk ABI patch;
+  injects all compiler executables through one current zcc/`+test` sysroot;
+  and preserves the existing complete-image byte, self-checking execution,
+  and `z88dk-ticks -b msx` cycle methodology. The historical locked hybrid
+  and its published results remain unchanged.
+
+- Advanced the benchmark-independent `-Of` optimizer after auditing current
+  80cc. New typed-IR and CFG rules narrow explicitly truncated private byte
+  chains, combine nested bitwise masks and select forms, split proven
+  pointer-chase reduction regions, and retain safe reductions/cursors in
+  disjoint register homes. Z80 lowering now uses byte-contained bitfield
+  accesses, fuses masked word shifts, preserves reductions during IY null
+  tests and linked-pointer reloads, and recognizes structurally proven 16-bit
+  MSB shift/XOR diamonds. The current-upstream matrix remains correct on
+  24/24 in both XCC modes; against the better valid 80cc mode per row, `-Of`
+  is smaller on 23/24 and faster on 17/24, while `-Os` is smaller on 24/24
+  and faster on 8/24. Relative to the first current-upstream snapshot before
+  this campaign, aggregate `-Of` output fell by 528 bytes and 9.25% cycles;
+  `-Os` fell by 303 bytes and 7.83% cycles.
+
+- Added all-profile executable regressions for framed sibling access to local
+  structures, truncated byte chains, contained/crossing/volatile bitfields,
+  private and shared bitwise selects, pointer-chase reductions, and 16-bit
+  polynomial chains. The exhaustive bare benchmark then exposed a physical
+  register-interference bug between a byte in B/C and an overlapping BC
+  cursor; the allocator now treats all three homes as one resource, and the
+  exact FIR shift/add holdout is a permanent regression.
+
+- Fixed `-O3`/`-Of` framed sibling calls that passed the address of an
+  automatic object. The backend no longer dismantles the caller's frame
+  before a terminal observer can read a local structure, array, parameter,
+  aggregate temporary, or `alloca` result; safe scalar-only framed sibling
+  jumps remain enabled. Added direct and pointer-alias structure regressions
+  across both ABIs and all six optimization levels.
+
 - Completed CPC release packaging: the root `make packages` pass now builds
   the native Debian toolchain package as well as the XGDB VSIX, all CPC CRT
   sources/objects, linker scripts, and platform archives are explicit package
@@ -57,13 +99,14 @@ Release status:
   CRT also exports both XCC and SDCC spellings of its HL/IY indirect-call
   trampolines, avoiding duplicate runtime archive definitions.
 - Completed the post-optimization validation sweep: model S/M/L pass
-  3,677/3,937/4,382 variants respectively; exhaustive L-model compile lanes
-  pass 2,741 ABI0 and 2,765 ABI1 variants; execution lanes pass 1,602 ABI0 and
-  1,577 ABI1 variants. The C23, fixed-project, algorithm, z88dk compatibility,
+  3,723/3,988/4,428 variants respectively; exhaustive L-model compile lanes
+  pass 2,745 ABI0 and 2,769 ABI1 variants; execution lanes pass 1,628 ABI0 and
+  1,603 ABI1 variants. The C23, fixed-project, algorithm, z88dk compatibility,
   host-tool, CP/M, YOS, MDR, full-chain, ZX Spectrum MCP, and platform-layout
-  checks pass. Two indirect-call assembly probes now explicitly declare ABI1,
-  where their BC callee-address assertion is valid because HL carries an
-  argument; ABI0 correctly uses its direct-HL stack-call trampoline instead.
+  checks pass, as do the CPC 464 CDT and CPC 664/6128 DSK MCP delivery runs.
+  Two indirect-call assembly probes now explicitly declare ABI1, where their
+  BC callee-address assertion is valid because HL carries an argument; ABI0
+  correctly uses its direct-HL stack-call trampoline instead.
 - Expanded the locked full-program compiler comparison to 24 programs with a
   host-verified packed-bitfield extract/insert workload. Repaired the two XCC
   optimized failures: spill-slot liveness now follows the real CFG, and word

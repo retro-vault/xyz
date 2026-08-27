@@ -2,8 +2,8 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-27, after completing and verifying the installable CPC
-toolchain package surface.
+Last updated: 2026-08-27, after the current-upstream 80cc optimization and
+full regression campaign.
 
 ## Major Recent Work
 
@@ -43,11 +43,26 @@ visible in the saved matrix instead of being excluded.
 The structural optimizer campaign added generic shift/mask fusion, proven
 loop-reduction and dense-dispatch register residence, immutable byte-argument
 residence in `E`, pair-pressure scheduling for simple pointer walks, direct
-word-producer/store forwarding, and consecutive word-load/add scheduling.
-The compiler does not inspect benchmark names, source text, constants, or
-whole-program fingerprints. Against the best valid result from current
-zsdcc, 80cc-fp, and 80cc-sp on each row, XCC `-Of` is strictly fastest on
-13/24 programs and `-Os` on 7/24; both profiles remain correct on all 24.
+word-producer/store forwarding, consecutive word-load/add scheduling,
+explicitly truncated private byte-chain narrowing, nested-mask/select folds,
+pointer-chase reduction-region splitting, byte-contained bitfield lowering,
+and 16-bit MSB shift/XOR diamonds. The compiler does not inspect benchmark
+names, source text, magic workload constants, or whole-program fingerprints.
+Against the better valid 80cc frame-pointer or stack-pointer result on each
+row, XCC `-Of` is strictly fastest on 17/24 programs and smaller on 23/24;
+`-Os` is fastest on 8/24 and smaller on 24/24. Both profiles remain correct
+on all 24.
+
+The reported `somestruct.arg = arg` failure was real, but the member store was
+not being deleted. A framed speed-profile sibling call dismantled the caller's
+frame before the terminal callee dereferenced an automatic aggregate. Framed
+sibling lowering is now disabled whenever the function materializes an
+automatic-object address or uses `alloca`; scalar-only framed sibling calls
+remain eligible. Direct and pointer-alias structure cases now run under both
+ABIs and every optimization level. The same campaign also added permanent
+regressions for byte-chain narrowing, contained and crossing bitfields,
+bitwise selects, pointer-chase reductions, word polynomial chains, and B/C
+subregister interference with a BC pointer home.
 
 XCC now has a first-class `--runtime=z88dk-classic` profile. Literal formats
 across the printf/scanf families are summarized into z88dk's classic handler
@@ -57,9 +72,8 @@ long-long printf conversions. zcc passes its per-link option file through
 translation unit before the CRT is assembled. Dynamic formats and escaped
 formatter addresses retain the supported classic fallback surface;
 program-defined functions named printf or scanf are excluded. The benchmark
-uses this public runtime integration rather than hard-coded masks. XCC `-Os`
-is consequently the strict smallest valid image on 24/24 rows and `-Of` on
-22/24, while the speed results above remain unchanged.
+uses this public runtime integration rather than hard-coded masks. The size
+and speed results above include that source-independent runtime pruning.
 
 The reported unsigned-byte conditional-assignment reduction is not broken in
 the current XCC. A permanent executable case tests changed, unchanged, and
@@ -67,18 +81,19 @@ the current XCC. A permanent executable case tests changed, unchanged, and
 and `-Os`.
 
 Final validation after the optimizer campaign is clean. The feature-filtered
-model matrices pass S 3,677/3,677, M 3,937/3,937, and L 4,382/4,382. The
-exhaustive L-model compiler lanes pass 2,741 variants under ABI0 and 2,765
+model matrices pass S 3,723/3,723, M 3,988/3,988, and L 4,428/4,428. The
+exhaustive L-model compiler lanes pass 2,745 variants under ABI0 and 2,769
 under ABI1, with 45 and 21 manifest-declared skips respectively; the execution
-lanes pass 1,602 ABI0 variants and 1,577 ABI1 variants, with 10 and 35 skips.
+lanes pass 1,628 ABI0 variants and 1,603 ABI1 variants, with 10 and 35 skips.
 The C23 matrix passes 59 claimed features, the fixed project corpus passes
 22/22, the applicable algorithm corpus passes 51/51 plus 11 float-rich cases,
 and z88dk compatibility passes 280/280. Runtime, libc, xz80, every host-tool
 phase, CP/M, YOS application images, MDR modes, the full-chain integration,
-the ZX Spectrum MCP RAM/ROM/TAP/TZX check, and platform-layout validation also
-pass. The only failures in the superseded broad run were two ABI1 assembly
-shape probes being executed once under ABI0; their manifests now declare ABI1
-explicitly, and the complete compile phase passes after rerun.
+the ZX Spectrum MCP RAM/ROM/TAP/TZX check, the CPC 464 CDT and CPC 664/6128
+DSK MCP checks, and platform-layout validation also pass. The only failures in
+the superseded broad run were two ABI1 assembly shape probes being executed
+once under ABI0; their manifests now declare ABI1 explicitly, and the complete
+compile phase passes after rerun.
 
 ### ZX Spectrum 48K RAM and ROM platforms
 
@@ -198,7 +213,7 @@ a target workload. On the unrelated frozen z88dk corpus, all 22 valid `-Os`
 pre/post pairs and all 23 `-Of` pairs are exactly unchanged in bytes and
 cycles. The remaining `hashbench -Os` row changes from an incorrect execution
 to correct, giving final XCC correctness of 23/23 in both profiles. The full
-post-fix XCC suite passes 4,382/4,382.
+post-fix XCC suite passes 4,428/4,428.
 
 ### S-model core integer closure
 
@@ -312,17 +327,28 @@ lists each structural optimization, and preserves the exact binaries, maps,
 hashes, and full comparison matrix in
 `x/tests/benchmarks/z88dk24/RESULTS.md`.
 
-Every lane in the frozen 40-program portable corpus passes.  `-Of` and `-O3`
-are identical at 27,194 payload bytes and 2,676,535 cycles, but remain 69.22%
-slower than the fastest competitor and win no individual program.  Every XCC
-profile passes the more varied 20-program bare-metal holdout; `-Of` and `-O3`
-are identical there too at 13,813 bytes and 4,617,452 cycles.  The numeric
-holdout passes 50/50.  Accordingly, no general speed-lead claim is made.
+A separate current-upstream snapshot now keeps that historical run intact
+while rebuilding the same matrix on current z88dk master, the independently
+pinned active 80cc branch, and official SDCC trunk patched for the z88dk ABI.
+The 2026-08-27 snapshot passes 24/24 in sccz80, both XCC modes, and both 80cc
+modes; SDCC trunk passes 23/24 and retains the packed-bitfield checksum failure,
+while its six expensive-allocation probes pass 6/6. The raw matrix, executable
+hashes, and rendered report live beside `current.lock` under
+`x/tests/benchmarks/z88dk24/`.
 
-The current active manifest expands to 4,262 compiler variants.  The complete
-set passed in bounded category/range shards after the graduation, as did the
-standalone xopt smoke suite and `make -C x`.  The four benchmark suites are
-consolidated under `build/x/benchmarks/profiles-promoted-final/`.
+Every lane in the frozen 40-program portable corpus passes. `-Of` and `-O3`
+are identical at 19,876 payload bytes and 2,218,116 cycles; `-Os` is smaller
+than the best competing size lane on 40/40, while no general portable-corpus
+speed-lead claim is made. Every XCC profile passes the more varied 20-program
+bare-metal holdout; `-Of` and `-O3` are identical there too at 11,901 bytes
+and 4,731,300 cycles, with `-Os` at 11,536 bytes and 5,139,297 cycles. The
+numeric holdout passes 50/50.
+
+The current feature-filtered manifests pass 3,723 S, 3,988 M, and 4,428 L
+variants. The standalone xopt smoke suite and the complete X build also pass.
+The final bare, numeric, portable, and historical z88dk24 artifacts are under
+`build/x/benchmarks/all-final-corrected/`; the separate current-upstream
+snapshot is under `build/x/benchmarks/z88dk24-final-corrected/`.
 
 Only Pareto-safe size transforms were promoted to speed mode: redundant
 pair-immediate reload removal, two-/four-byte `push af` stack allocation, and

@@ -1,0 +1,14 @@
+# Current-upstream comparison snapshot, captured 2026-08-27.
+#
+# The revisions are deliberately exact even though this suite tracks upstream
+# heads.  Update them together after fetching, then record a new result set;
+# never silently move a published comparison.
+CORPUS_COMMIT=460ec34769f01324ca49b66145f09babdbe507fc
+CORPUS_SHA256=f74f02cd8852d5b0c9bb7241d0a9b0f384ccfe887105b0412a5064b4d3bdd2b4
+Z88DK_CURRENT_COMMIT=fce9a75f105337c5bcd4e054838a3636d2e1a851
+Z88DK_80CC_COMMIT=e3aeca0dc09b7b9bbf968b70fc8c29c1f1da208a
+SDCC_CURRENT_COMMIT=8650e2b21cdbe555c9f1119c498ff59f21693b25
+XCC_COMMIT=c83b896146cf77cdf241221fcdae99f7278bfade
+X_MODEL=M
+TICKS_MACHINE=msx
+TICKS_BUDGET=60

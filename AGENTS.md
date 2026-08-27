@@ -63,6 +63,8 @@ python3 x/tests/tests/zx48/run_mcp.py --mcp /path/to/zx-spectrum-mcp --rom /path
 python3 x/tests/tests/cpc/run_mcp.py --mcp /path/to/amstrad-cpc-mcp --roms /path/to/roms
 x/tests/benchmarks/z88dk24/prepare.sh
 x/tests/benchmarks/z88dk24/run.sh
+x/tests/benchmarks/z88dk24/prepare-current.sh
+x/tests/benchmarks/z88dk24/run-current.sh
 ```
 
 The complete target memory maps, Fuse commands, Tamsyn console contract, and
@@ -91,7 +93,9 @@ make stage-includes stage-xcc-support
     writable CPC 664/6128 AMSDOS DSK workflows
   - `x/tests/benchmarks/z88dk24/` — locked seven-lane full-program comparison;
     use its `prepare.sh` before `run.sh`, and preserve the independent corpus,
-    target-sysroot, nightly-zsdcc, and 80cc commit pins
+    target-sysroot, nightly-zsdcc, and 80cc commit pins. Its separate
+    `prepare-current.sh` / `run-current.sh` path pins current z88dk, the active
+    80cc branch, and official SDCC trunk without changing the historical run.
 
 - The long-term direction is still component-owned tests plus a smaller E2E
   bucket, but the repository has not fully moved there yet.
@@ -202,11 +206,15 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
   not replace it with benchmark-specific pragma masks. The locked 24-program
   matrix records `-Os` as strict smallest on 24/24 valid competitor envelopes
   and `-Of` on 22/24.
-- The locked z88dk24 audit currently has both XCC M profiles correct on 24/24;
-  `-Of` is strictly fastest on 13/24 rows against the best valid current
-  zsdcc/80cc result. Preserve that result structurally: compiler rules must be
-  selected from IR, CFG, liveness, aliases, and clobbers, never benchmark
+- The current-upstream z88dk24 audit has both XCC M profiles correct on 24/24.
+  With 80cc as the primary competitor, `-Of` is strictly fastest on 17/24
+  rows and smaller on 23/24; `-Os` is smaller on 24/24. Preserve that result
+  structurally: compiler rules must be selected from IR, CFG, liveness,
+  aliases, and clobbers, never benchmark
   names, source fragments, magic workload constants, or program fingerprints.
+  For new reports, 80cc is the primary competitor: use the better valid
+  frame-pointer or stack-pointer result per row for headline win counts. Keep
+  SDCC visible as a correctness lane and in the broader competitor envelope.
 
 Update this file and the architecture documents when major structural or philosophical changes are made.
 

@@ -21,6 +21,20 @@ uint64_t bitfield_mask_bits(int width) {
     return (uint64_t{1} << width) - 1;
 }
 
+// A bit-field wholly contained in one byte can be read or updated through
+// that byte without touching the rest of its declared allocation unit.  This
+// is both a smaller transaction and the natural Z80 lowering.  Volatile
+// fields retain their declared access width, and crossing fields retain the
+// complete unit because either case can make the access width observable.
+static bool byte_contained_bitfield(const struct_field &field) {
+    if (field.bit_width <= 0 || !field.type || field.type->is_volatile)
+        return false;
+    const int first_byte = field.bit_offset / 8;
+    const int last_byte =
+        (field.bit_offset + field.bit_width - 1) / 8;
+    return first_byte == last_byte;
+}
+
 // Build a pointer-to-elem type that inherits far-ness from the base
 // pointer/array, so far pointer arithmetic (p+i, p[i], p->f) keeps the
 // result far and routes its dereference through the far trampoline.
@@ -98,16 +112,31 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
         operand ptr = gen_member_ptr(*mem);
         if (fld && fld->bit_width >= 0) {
             type_ptr unit_type = fld->type ? fld->type : type::make_int();
+            int bit_offset = fld->bit_offset;
+            if (byte_contained_bitfield(*fld)) {
+                const int byte_offset = bit_offset / 8;
+                unit_type = type::make_uchar();
+                type_ptr byte_ptr_type = elem_ptr_like(ptr.type, unit_type);
+                if (byte_offset != 0) {
+                    ptr = emit_binop(
+                        icode_op::ADD, ptr,
+                        operand::make_int(byte_offset, type::make_int()),
+                        byte_ptr_type);
+                } else {
+                    ptr.type = byte_ptr_type;
+                }
+                bit_offset %= 8;
+            }
             int64_t  mask      =
                 static_cast<int64_t>(bitfield_mask_bits(fld->bit_width));
             operand m_src = emit_binop(icode_op::BAND, src,
                                        operand::make_int(mask, type::make_int()), unit_type);
             operand s_src = m_src;
-            if (fld->bit_offset > 0)
+            if (bit_offset > 0)
                 s_src = emit_binop(icode_op::SHL, m_src,
-                                   operand::make_int(fld->bit_offset, type::make_int()), unit_type);
+                                   operand::make_int(bit_offset, type::make_int()), unit_type);
             operand cur     = emit_unop(icode_op::GET_VALUE_AT, ptr, unit_type);
-            int64_t clr_mask = ~(mask << fld->bit_offset);
+            int64_t clr_mask = ~(mask << bit_offset);
             operand cleared  = emit_binop(icode_op::BAND, cur,
                                           operand::make_int(clr_mask, type::make_int()), unit_type);
             operand combined = emit_binop(icode_op::BOR, cleared, s_src, unit_type);
@@ -289,17 +318,36 @@ void ir_gen::visit(member_expr &e) {
         return;
     }
 
-    operand loaded   = emit_unop(icode_op::GET_VALUE_AT, ptr, fld_type);
+    type_ptr access_type = fld_type;
+    int bit_offset = fld ? fld->bit_offset : 0;
+    if (fld && fld->bit_width >= 0 && byte_contained_bitfield(*fld)) {
+        const int byte_offset = bit_offset / 8;
+        access_type = type::make_uchar();
+        type_ptr byte_ptr_type = elem_ptr_like(ptr.type, access_type);
+        if (byte_offset != 0) {
+            ptr = emit_binop(
+                icode_op::ADD, ptr,
+                operand::make_int(byte_offset, type::make_int()),
+                byte_ptr_type);
+        } else {
+            ptr.type = byte_ptr_type;
+        }
+        bit_offset %= 8;
+    }
+
+    operand loaded = emit_unop(icode_op::GET_VALUE_AT, ptr, access_type);
 
     if (fld && fld->bit_width >= 0) {
-        if (fld->bit_offset > 0) {
-            operand off_op = operand::make_int(fld->bit_offset, type::make_int());
-            loaded = emit_binop(icode_op::SHR, loaded, off_op, fld_type);
+        if (bit_offset > 0) {
+            operand off_op = operand::make_int(bit_offset, type::make_int());
+            loaded = emit_binop(icode_op::SHR, loaded, off_op, access_type);
         }
         int64_t mask =
             static_cast<int64_t>(bitfield_mask_bits(fld->bit_width));
         operand mask_op = operand::make_int(mask, type::make_int());
-        loaded = emit_binop(icode_op::BAND, loaded, mask_op, fld_type);
+        loaded = emit_binop(icode_op::BAND, loaded, mask_op, access_type);
+        if (access_type != fld_type)
+            loaded = emit_unop(icode_op::CAST, loaded, fld_type);
         if (fld_type && fld_type->is_integer() &&
             !fld_type->is_unsigned() &&
             fld->bit_width > 0 &&

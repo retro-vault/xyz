@@ -831,6 +831,37 @@ void z80_gen::gen_get_value_at(const icode &ic) {
         return;
     }
 
+    // Reload an IY-resident link directly back into the cursor while keeping
+    // an independent DE live range intact.  The dead temporary and adjacent
+    // self-cursor assignment provide the same proof as the BC form below.
+    if (!use_pending_word_ptr && cur_fn_ && ic.result.is_temp() &&
+        op_size(ic.result) == 2 && ic.right.is_none() &&
+        is_iy_pointer_home(ic.left) &&
+        !(ic.result.type && ic.result.type->is_volatile) &&
+        !(ic.left.type && ic.left.type->base &&
+          ic.left.type->base->is_volatile) &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+        const icode &assign = cur_fn_->icodes[cur_ic_index_ + 1];
+        const bool updates_same_cursor =
+            assign.op == icode_op::ASSIGN && assign.left.is_temp() &&
+            assign.left.temp_id == ic.result.temp_id &&
+            assign.result.is_temp() &&
+            assign.result.temp_id == ic.left.temp_id &&
+            is_iy_pointer_home(assign.result);
+        if (updates_same_cursor &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id)) {
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            emit_line("ld\tl, 0(iy)");
+            emit_line("ld\th, 1(iy)");
+            emit_line("push\thl");
+            emit_line("pop\tiy");
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            return;
+        }
+    }
+
     if (!use_pending_word_ptr &&
         op_size(ic.result) == 2 &&
         iy_pointer_displacement(ic.left, 2, iy_disp)) {
@@ -899,6 +930,42 @@ void z80_gen::gen_get_value_at(const icode &ic) {
             store_a(ic.result);
         }
         return;
+    }
+
+    // Follow a BC-resident pointer link without borrowing DE.  This is the
+    // natural lowering for a cursor recurrence such as `p = p->next` when an
+    // independent loop reduction is live in DE.  The adjacent assignment and
+    // dead load temporary prove that the loaded word becomes the cursor's new
+    // value immediately; volatile links retain the ordinary explicit load.
+    if (!use_pending_word_ptr && cur_fn_ && ic.result.is_temp() &&
+        op_size(ic.result) == 2 && ic.right.is_none() &&
+        is_bc_pointer_home(ic.left) &&
+        !(ic.result.type && ic.result.type->is_volatile) &&
+        !(ic.left.type && ic.left.type->base &&
+          ic.left.type->base->is_volatile) &&
+        cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+        const icode &assign = cur_fn_->icodes[cur_ic_index_ + 1];
+        const bool consumes_load =
+            assign.op == icode_op::ASSIGN && assign.left.is_temp() &&
+            assign.left.temp_id == ic.result.temp_id;
+        const bool updates_same_cursor =
+            consumes_load && assign.result.is_temp() && ic.left.is_temp() &&
+            assign.result.temp_id == ic.left.temp_id &&
+            is_bc_pointer_home(assign.result);
+        if (updates_same_cursor &&
+            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
+                                   ic.result.temp_id)) {
+            invalidate_pair_cache();
+            invalidate_a_cache();
+            emit_line("ld\th, b");
+            emit_line("ld\tl, c");
+            emit_line("ld\ta, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\tb, (hl)");
+            emit_line("ld\tc, a");
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            return;
+        }
     }
 
     if (use_pending_word_ptr) {

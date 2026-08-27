@@ -725,6 +725,8 @@ void z80_gen::emit_function(const ir_function &fn) {
             continue;
         if (try_emit_shift_xor_self(fn, i))
             continue;
+        if (try_emit_msb_word_shift_xor_diamonds(fn, i))
+            continue;
         if (try_emit_msb_byte_shift_xor_diamonds(fn, i))
             continue;
         if (try_emit_shift_add_byte_accumulate(fn, i))
@@ -1910,8 +1912,11 @@ bool z80_gen::try_emit_iy_indexed_load(const ir_function &fn, size_t &idx) {
     if (!cursor->is_temp() || offset->kind != operand_kind::INT_CONST)
         return false;
     auto home = temp_regs_.find(cursor->temp_id);
-    if (home == temp_regs_.end() || home->second != temp_home::main_iy)
+    if (home == temp_regs_.end() ||
+        (home->second != temp_home::main_iy &&
+         home->second != temp_home::main_bc))
         return false;
+    const bool cursor_in_bc = home->second == temp_home::main_bc;
 
     const int64_t disp = offset->ival;
     const int size = op_size(load_ic.result);
@@ -1922,6 +1927,31 @@ bool z80_gen::try_emit_iy_indexed_load(const ir_function &fn, size_t &idx) {
         debug_->emit_location(load_ic.line ? load_ic.line : add_ic.line);
     invalidate_pair_cache();
     invalidate_a_cache();
+    if (cursor_in_bc) {
+        const auto result_home = load_ic.result.is_temp()
+                                     ? temp_regs_.find(load_ic.result.temp_id)
+                                     : temp_regs_.end();
+        const bool direct_to_hl =
+            size == 2 && result_home != temp_regs_.end() &&
+            result_home->second == temp_home::main_hl &&
+            iy_de_reduction_hl_loads_.count(load_ic.result.temp_id) != 0;
+        if (!direct_to_hl || disp < -4 || disp > 4)
+            return false;
+
+        emit_line("ld\th, b");
+        emit_line("ld\tl, c");
+        for (int64_t step = 0; step < disp; ++step)
+            emit_line("inc\thl");
+        for (int64_t step = 0; step > disp; --step)
+            emit_line("dec\thl");
+        emit_line("ld\ta, (hl)");
+        emit_line("inc\thl");
+        emit_line("ld\th, (hl)");
+        emit_line("ld\tl, a");
+        store_hl(load_ic.result);
+        idx += 1;
+        return true;
+    }
     if (size == 4 && idx + 2 < fn.icodes.size()) {
         const icode &consumer = fn.icodes[idx + 2];
         const bool used_by_consumer =
@@ -4074,6 +4104,274 @@ bool z80_gen::try_emit_band_ifx(const ir_function &fn, size_t &idx) {
     }
     emit_truth_branch(true);
     idx += consume_count;
+    return true;
+}
+
+bool z80_gen::try_emit_msb_word_shift_xor_diamonds(
+    const ir_function &fn, size_t &idx) {
+    if (!tuned_profile_enabled())
+        return false;
+
+    struct word_step {
+        operand value;
+        operand target;
+        uint16_t polynomial = 0;
+        size_t last_index = 0;
+        std::string true_label;
+        std::string false_label;
+        std::string join_label;
+    };
+
+    auto label_referenced_outside =
+        [&](const std::string &label, size_t first, size_t last) {
+            for (size_t pos = 0; pos < fn.icodes.size(); ++pos) {
+                if (pos >= first && pos <= last)
+                    continue;
+                const icode &ic = fn.icodes[pos];
+                if (ic.op == icode_op::GOTO && ic.label_name == label)
+                    return true;
+                if (ic.op == icode_op::IFX &&
+                    (ic.true_lbl == label || ic.false_lbl == label))
+                    return true;
+            }
+            return false;
+        };
+
+    auto match_step = [&](size_t start, word_step &step) {
+        if (start + 9 >= fn.icodes.size())
+            return false;
+
+        const icode &band = fn.icodes[start];
+        const icode &branch = fn.icodes[start + 1];
+        const icode &true_label = fn.icodes[start + 2];
+        const icode &true_shift = fn.icodes[start + 3];
+        const icode &true_xor = fn.icodes[start + 4];
+        const icode &true_goto = fn.icodes[start + 5];
+        const icode &false_label = fn.icodes[start + 6];
+        const icode &false_shift = fn.icodes[start + 7];
+        const icode &join_label = fn.icodes[start + 8];
+        const icode &commit = fn.icodes[start + 9];
+
+        if (band.op != icode_op::BAND || !band.result.is_temp() ||
+            branch.op != icode_op::IFX || !branch.left.is_temp() ||
+            branch.left.temp_id != band.result.temp_id ||
+            branch.true_lbl.empty() || branch.false_lbl.empty() ||
+            true_label.op != icode_op::LABEL ||
+            true_label.label_name != branch.true_lbl ||
+            true_shift.op != icode_op::SHL ||
+            !true_shift.result.is_temp() ||
+            true_shift.right.kind != operand_kind::INT_CONST ||
+            true_shift.right.ival != 1 ||
+            true_xor.op != icode_op::BXOR ||
+            !true_xor.result.is_temp() ||
+            true_goto.op != icode_op::GOTO ||
+            false_label.op != icode_op::LABEL ||
+            false_label.label_name != branch.false_lbl ||
+            false_shift.op != icode_op::SHL ||
+            !false_shift.result.is_temp() ||
+            false_shift.right.kind != operand_kind::INT_CONST ||
+            false_shift.right.ival != 1 ||
+            join_label.op != icode_op::LABEL ||
+            join_label.label_name != true_goto.label_name ||
+            commit.op != icode_op::ASSIGN ||
+            !commit.left.is_temp() || !commit.right.is_none() ||
+            !commit.result.type || op_size(commit.result) != 2) {
+            return false;
+        }
+
+        operand value = band.left;
+        const operand *mask = &band.right;
+        if (value.kind == operand_kind::INT_CONST &&
+            mask->kind != operand_kind::INT_CONST) {
+            value = band.right;
+            mask = &band.left;
+        }
+        if (mask->kind != operand_kind::INT_CONST ||
+            mask->ival != 0x8000 || !value.type ||
+            !value.type->is_integer() || !value.type->is_unsigned() ||
+            op_size(value) != 2 ||
+            !operands_equivalent(true_shift.left, value) ||
+            !operands_equivalent(false_shift.left, value)) {
+            return false;
+        }
+
+        const operand *polynomial = nullptr;
+        if (true_xor.left.is_temp() &&
+            true_xor.left.temp_id == true_shift.result.temp_id)
+            polynomial = &true_xor.right;
+        else if (true_xor.right.is_temp() &&
+                 true_xor.right.temp_id == true_shift.result.temp_id)
+            polynomial = &true_xor.left;
+        if (!polynomial || polynomial->kind != operand_kind::INT_CONST ||
+            polynomial->ival < 0 || polynomial->ival > 0xffff ||
+            commit.left.temp_id != true_xor.result.temp_id ||
+            false_shift.result.temp_id != true_xor.result.temp_id ||
+            (value.type && value.type->is_volatile) ||
+            (commit.result.type && commit.result.type->is_volatile)) {
+            return false;
+        }
+
+        const size_t last = start + 9;
+        if (temp_value_used_after(fn, start + 2, band.result.temp_id) ||
+            temp_value_used_after(fn, start + 5,
+                                  true_shift.result.temp_id) ||
+            temp_value_used_after(fn, last + 1,
+                                  true_xor.result.temp_id) ||
+            label_referenced_outside(branch.true_lbl, start, last) ||
+            label_referenced_outside(branch.false_lbl, start, last) ||
+            label_referenced_outside(join_label.label_name, start, last)) {
+            return false;
+        }
+
+        step.value = value;
+        step.target = commit.result;
+        step.polynomial =
+            static_cast<uint16_t>(polynomial->ival & 0xffff);
+        step.last_index = last;
+        step.true_label = branch.true_lbl;
+        step.false_label = branch.false_lbl;
+        step.join_label = join_label.label_name;
+        return true;
+    };
+
+    struct byte_prefix {
+        bool matched = false;
+        operand accumulator;
+        operand cursor;
+        temp_home cursor_home = temp_home::stack;
+        size_t diamond_start = 0;
+    } prefix;
+
+    if (idx + 6 < fn.icodes.size()) {
+        const icode &load = fn.icodes[idx];
+        const icode &cast = fn.icodes[idx + 1];
+        const icode &shift = fn.icodes[idx + 2];
+        const icode &mix = fn.icodes[idx + 3];
+        const icode &step = fn.icodes[idx + 4];
+        const icode &commit = fn.icodes[idx + 5];
+        const bool load_cast_shift =
+            load.op == icode_op::GET_VALUE_AT && load.result.is_temp() &&
+            load.left.is_temp() && load.right.is_none() &&
+            op_size(load.result) == 1 &&
+            !(load.result.type && load.result.type->is_volatile) &&
+            !(load.left.type && load.left.type->base &&
+              load.left.type->base->is_volatile) &&
+            cast.op == icode_op::CAST && cast.result.is_temp() &&
+            cast.left.is_temp() &&
+            cast.left.temp_id == load.result.temp_id &&
+            cast.result.type && cast.result.type->is_unsigned() &&
+            op_size(cast.result) == 2 &&
+            shift.op == icode_op::SHL && shift.result.is_temp() &&
+            shift.left.is_temp() &&
+            shift.left.temp_id == cast.result.temp_id &&
+            shift.right.kind == operand_kind::INT_CONST &&
+            shift.right.ival == 8;
+        const operand *accumulator = nullptr;
+        if (mix.op == icode_op::BXOR &&
+            mix.result.type && op_size(mix.result) == 2) {
+            if (mix.left.is_temp() &&
+                mix.left.temp_id == shift.result.temp_id)
+                accumulator = &mix.right;
+            else if (mix.right.is_temp() &&
+                     mix.right.temp_id == shift.result.temp_id)
+                accumulator = &mix.left;
+        }
+        const bool cursor_step =
+            step.op == icode_op::ADD && step.result.is_temp() &&
+            step.left.is_temp() &&
+            step.left.temp_id == load.left.temp_id &&
+            step.right.kind == operand_kind::INT_CONST &&
+            step.right.ival == 1 &&
+            commit.op == icode_op::ASSIGN && commit.result.is_temp() &&
+            commit.result.temp_id == load.left.temp_id &&
+            commit.left.is_temp() &&
+            commit.left.temp_id == step.result.temp_id;
+
+        temp_home cursor_home = temp_home::stack;
+        auto home = temp_regs_.find(load.left.temp_id);
+        if (home != temp_regs_.end())
+            cursor_home = home->second;
+        if (load_cast_shift && accumulator && cursor_step &&
+            operands_equivalent(mix.result, *accumulator) &&
+            (cursor_home == temp_home::main_bc ||
+             cursor_home == temp_home::main_iy) &&
+            !temp_value_used_after(fn, idx + 2, load.result.temp_id) &&
+            !temp_value_used_after(fn, idx + 3, cast.result.temp_id) &&
+            !temp_value_used_after(fn, idx + 4, shift.result.temp_id) &&
+            !temp_value_used_after(fn, idx + 6, step.result.temp_id)) {
+            prefix.matched = true;
+            prefix.accumulator = *accumulator;
+            prefix.cursor = load.left;
+            prefix.cursor_home = cursor_home;
+            prefix.diamond_start = idx + 6;
+        }
+    }
+
+    const size_t first_step_index =
+        prefix.matched ? prefix.diamond_start : idx;
+    word_step first;
+    if (!match_step(first_step_index, first))
+        return false;
+    if (prefix.matched &&
+        !operands_equivalent(first.value,
+                             fn.icodes[idx + 3].result))
+        return false;
+
+    std::vector<word_step> steps{first};
+    size_t next = first.last_index + 1;
+    while (next < fn.icodes.size()) {
+        word_step candidate;
+        if (!match_step(next, candidate) ||
+            !operands_equivalent(candidate.value, first.target) ||
+            !operands_equivalent(candidate.target, first.target)) {
+            break;
+        }
+        steps.push_back(candidate);
+        next = candidate.last_index + 1;
+    }
+
+    cur_ic_index_ = idx;
+    if (debug_)
+        debug_->emit_location(fn.icodes[idx].line);
+    invalidate_pair_cache();
+    invalidate_a_cache();
+    if (prefix.matched) {
+        load_hl(prefix.accumulator);
+        if (prefix.cursor_home == temp_home::main_bc) {
+            emit_line("ld\ta, (bc)");
+            emit_line("xor\ta, h");
+            emit_line("ld\th, a");
+            emit_line("inc\tbc");
+        } else {
+            emit_line("ld\ta, 0(iy)");
+            emit_line("xor\ta, h");
+            emit_line("ld\th, a");
+            emit_line("inc\tiy");
+        }
+    } else {
+        load_hl(first.value);
+    }
+    for (const word_step &step : steps) {
+        const std::string no_xor =
+            fresh_local_label("__shiftxor16_done");
+        emit_line("add\thl, hl");
+        emit_line("jr\tnc, %s", no_xor.c_str());
+        const unsigned low = step.polynomial & 0xffu;
+        const unsigned high = step.polynomial >> 8;
+        if (low != 0) {
+            emit_line("ld\ta, l");
+            emit_line("xor\t%s", asm_.imm(low).c_str());
+            emit_line("ld\tl, a");
+        }
+        if (high != 0) {
+            emit_line("ld\ta, h");
+            emit_line("xor\t%s", asm_.imm(high).c_str());
+            emit_line("ld\th, a");
+        }
+        emit_label(no_xor, false);
+    }
+    store_hl(steps.back().target);
+    idx = steps.back().last_index;
     return true;
 }
 

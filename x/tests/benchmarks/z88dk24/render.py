@@ -3,7 +3,8 @@ import csv
 import sys
 
 
-src, dst, target_path = sys.argv[1:]
+src, dst, target_path = sys.argv[1:4]
+report_mode = sys.argv[4] if len(sys.argv) > 4 else "locked"
 with open(src, newline="", encoding="utf-8") as f:
     rows = list(csv.DictReader(f))
 with open(target_path, newline="", encoding="utf-8") as f:
@@ -29,7 +30,8 @@ labels = [
 ]
 xcc_modes = ["xcc_Os", "xcc_Of"]
 xcc_labels = ["xcc -Os", "xcc -Of"]
-primary_competitors = ["sdcc", "80cc_fp", "80cc_sp"]
+primary_competitors = ["80cc_fp", "80cc_sp"]
+broader_competitors = ["sdcc", "80cc_fp", "80cc_sp"]
 
 
 def cell(row, mode):
@@ -49,26 +51,31 @@ def cell(row, mode):
     return value
 
 
-def strict_wins(mode, metric):
-    comparable = [
-        row for row in rows
-        if row[f"{mode}_status"] == "OK" and row["sdcc_status"] == "OK"
-    ]
-    wins = sum(
-        int(row[f"{mode}_{metric}"]) < int(row[f"sdcc_{metric}"])
-        for row in comparable
-    )
-    return wins, len(comparable)
-
-
-def competitive_counts(mode, metric):
+def strict_wins(mode, competitors, metric):
     comparable = []
     for row in rows:
         if row[f"{mode}_status"] != "OK":
             continue
         values = [
             int(row[f"{competitor}_{metric}"])
-            for competitor in primary_competitors
+            for competitor in competitors
+            if row[f"{competitor}_status"] == "OK"
+            and int(row[f"{competitor}_{metric}"]) > 0
+        ]
+        if values:
+            comparable.append((int(row[f"{mode}_{metric}"]), min(values)))
+    wins = sum(value < best for value, best in comparable)
+    return wins, len(comparable)
+
+
+def competitive_counts(mode, competitors, metric):
+    comparable = []
+    for row in rows:
+        if row[f"{mode}_status"] != "OK":
+            continue
+        values = [
+            int(row[f"{competitor}_{metric}"])
+            for competitor in competitors
             if row[f"{competitor}_status"] == "OK"
             and int(row[f"{competitor}_{metric}"]) > 0
         ]
@@ -98,24 +105,42 @@ def target_matches(mode):
     return size_exact, size_total, cycle_exact, cycle_total
 
 
-lines = [
-    "# Locked z88dk Full-Program Integer Benchmarks",
-    "",
-    "Every lane uses the pinned z88dk headers, `+test` CRT and classic library.",
-    "XCC is the M distribution. Current zsdcc and 80cc executables are injected",
-    "without changing that target-library baseline. Images execute with upstream",
-    "`z88dk-ticks -b msx`; each cell is complete linked bytes / cycles.",
-    "",
+if report_mode == "current":
+    report_intro = [
+        "# Current-Upstream z88dk Full-Program Integer Benchmarks",
+        "",
+        "Every lane uses the pinned current z88dk headers, `+test` CRT and classic",
+        "library. Official SDCC trunk is patched only for z88dk ABI compatibility;",
+        "80cc comes from its independently pinned active branch. XCC is the M",
+        "distribution. Images execute with the same upstream `z88dk-ticks -b msx`",
+        "method as the locked suite; each cell is complete linked bytes / cycles.",
+        "",
+    ]
+else:
+    report_intro = [
+        "# Locked z88dk Full-Program Integer Benchmarks",
+        "",
+        "Every lane uses the pinned z88dk headers, `+test` CRT and classic library.",
+        "XCC is the M distribution. Current zsdcc and 80cc executables are injected",
+        "without changing that target-library baseline. Images execute with upstream",
+        "`z88dk-ticks -b msx`; each cell is complete linked bytes / cycles.",
+        "",
+    ]
+
+lines = report_intro + [
     "## Summary",
     "",
-    "| XCC lane | Correct | Size wins vs SDCC | Speed wins vs SDCC |",
+    "The primary competitor is 80cc. Each comparison uses the better valid",
+    "result of its frame-pointer and stack-pointer modes for that row.",
+    "",
+    "| XCC lane | Correct | Size wins vs 80cc | Speed wins vs 80cc |",
     "|---|---:|---:|---:|",
 ]
 for mode, label in zip(xcc_modes, xcc_labels):
     passed = sum(row[f"{mode}_status"] == "OK" for row in rows)
     attempted = sum(row[f"{mode}_status"] != "SKIP" for row in rows)
-    size_wins, size_total = strict_wins(mode, "bytes")
-    speed_wins, speed_total = strict_wins(mode, "cycles")
+    size_wins, size_total = strict_wins(mode, primary_competitors, "bytes")
+    speed_wins, speed_total = strict_wins(mode, primary_competitors, "cycles")
     lines.append(
         f"| {label} | {passed}/{attempted} | "
         f"{size_wins}/{size_total} | {speed_wins}/{speed_total} |"
@@ -123,37 +148,43 @@ for mode, label in zip(xcc_modes, xcc_labels):
 
 lines += [
     "",
-    "### Best primary-competitor envelope",
+    "### Broader valid-competitor envelope",
     "",
-    "The envelope contains SDCC, 80cc-fp and 80cc-sp. sccz80 is retained as",
-    "a historical control and sdcc-max is a limited expensive-allocation probe.",
+    "This secondary envelope contains SDCC, 80cc-fp and 80cc-sp. sccz80 is",
+    "retained as a historical control and sdcc-max is a limited expensive-allocation",
+    "probe.",
     "",
     "| XCC lane | Size strict best | Size within 5% | Speed strict best | Speed within 5% |",
     "|---|---:|---:|---:|---:|",
 ]
 for mode, label in zip(xcc_modes, xcc_labels):
-    size_best, size_five, size_total = competitive_counts(mode, "bytes")
-    speed_best, speed_five, speed_total = competitive_counts(mode, "cycles")
+    size_best, size_five, size_total = competitive_counts(
+        mode, broader_competitors, "bytes"
+    )
+    speed_best, speed_five, speed_total = competitive_counts(
+        mode, broader_competitors, "cycles"
+    )
     lines.append(
         f"| {label} | {size_best}/{size_total} | {size_five}/{size_total} | "
         f"{speed_best}/{speed_total} | {speed_five}/{speed_total} |"
     )
 
-lines += [
-    "",
-    "### Match to supplied target table",
-    "",
-    "Cycle matching uses the published one-decimal-million rounding. Blank target",
-    "cells are not counted; a failed execution cannot count as an exact match.",
-    "",
-    "| lane | Exact bytes | Exact rounded cycles |",
-    "|---|---:|---:|",
-]
-for mode, label in zip(modes, labels):
-    size_exact, size_total, cycle_exact, cycle_total = target_matches(mode)
-    lines.append(
-        f"| {label} | {size_exact}/{size_total} | {cycle_exact}/{cycle_total} |"
-    )
+if report_mode != "current":
+    lines += [
+        "",
+        "### Match to supplied target table",
+        "",
+        "Cycle matching uses the published one-decimal-million rounding. Blank target",
+        "cells are not counted; a failed execution cannot count as an exact match.",
+        "",
+        "| lane | Exact bytes | Exact rounded cycles |",
+        "|---|---:|---:|",
+    ]
+    for mode, label in zip(modes, labels):
+        size_exact, size_total, cycle_exact, cycle_total = target_matches(mode)
+        lines.append(
+            f"| {label} | {size_exact}/{size_total} | {cycle_exact}/{cycle_total} |"
+        )
 
 lines += [
     "",

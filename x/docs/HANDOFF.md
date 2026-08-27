@@ -5,6 +5,21 @@ working conventions and canonical commands remain in the root `AGENTS.md`.
 
 ## Latest completed milestone
 
+XCC's current `-Of` campaign was driven by a source audit of the latest 80cc,
+then implemented as generic typed-IR, CFG, liveness, alias, and register-
+clobber rules. Both XCC M profiles pass the current-upstream 24-program suite.
+Against the better valid 80cc frame-pointer or stack-pointer result per row,
+`-Of` is smaller on 23/24 and faster on 17/24; `-Os` is smaller on 24/24 and
+faster on 8/24. The compiler contains no benchmark-name, source-fragment,
+magic-constant, or program-fingerprint recognition.
+
+The reported automatic-structure member-store failure is fixed. The store was
+correct; an unsafe framed sibling call released the frame before a terminal
+observer dereferenced the local. Automatic-address materialization now blocks
+that transform, and the exact direct/alias forms are permanent all-profile
+regressions alongside the new optimizer and physical-register interference
+cases.
+
 X now ships `cpc-464`, `cpc-664`, and `cpc-6128` firmware targets at `0x4000`.
 The 464 is cassette-only and does not link AMSDOS state; the 664/6128 provide
 ROM-backed raw and stdio disk operations, input seeking, rename, and remove.
@@ -19,13 +34,13 @@ packaged platform's CRT source/object, both linker formats, platform archive,
 manuals, normalized ownership/modes, and CPC CDT/DSK switches. The extracted
 package itself passes all three CPC MCP runs.
 
-XCC now integrates directly with z88dk's classic runtime through
+XCC integrates directly with z88dk's classic runtime through
 `--runtime=z88dk-classic`. It derives printf/scanf handler capabilities from
 literal formats, merges them across translation units through zcc's per-link
 option file, and uses a conservative fallback for dynamic or escaped
-formatters. The locked 24-program suite remains correct on 24/24 for both M
-profiles; `-Os` is strictly smallest against the valid SDCC/80cc envelope on
-24/24 programs, `-Of` on 22/24, and `-Of` remains fastest on 13/24.
+formatters. The historical locked suite remains available unchanged; new
+headline reports use 80cc as the primary competitor and keep SDCC visible as
+a correctness lane and in the broader valid-competitor envelope.
 
 X now ships complete minimal ZX Spectrum 48K RAM and replacement-ROM
 platforms. `zx-ram` begins at `0x5CCB`; `zx-rom` emits an exact 16 KiB image.
@@ -71,7 +86,7 @@ python3 x/tests/tests/cpc/run_mcp.py \
   --roms /path/to/roms
 ```
 
-The unified XCC suite last passed 4,382/4,382. The ZX MCP run last passed all
+The unified XCC L-model suite last passed 4,428/4,428. The ZX MCP run last passed all
 four delivery modes and marker checks.
 
 ## Durable implementation locations

@@ -212,6 +212,7 @@ private:
     operand direct_call_return_value_;
     bool sibling_tail_call_pending_ = false;
     operand sibling_tail_call_value_;
+    bool automatic_address_materialized_ = false;
     bool last_frameless_return_terminated_ = false;
     bool direct_compare_return_pending_ = false;
     operand direct_compare_return_value_;
@@ -371,6 +372,8 @@ private:
     bool try_emit_postinc_indexed_store(const ir_function &fn, size_t &idx);
     bool try_emit_postdec_truth(const ir_function &fn, size_t &idx);
     bool try_emit_shift_xor_self(const ir_function &fn, size_t &idx);
+    bool try_emit_msb_word_shift_xor_diamonds(const ir_function &fn,
+                                               size_t &idx);
     bool try_emit_msb_byte_shift_xor_diamonds(const ir_function &fn,
                                                size_t &idx);
     bool try_emit_shift_add_byte_accumulate(const ir_function &fn, size_t &idx);

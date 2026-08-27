@@ -96,6 +96,7 @@ NUMERIC_BENCHMARKS_RUN="n/a"
 NUMERIC_KINDS_RUN="n/a"
 PORTABLE_BENCHMARKS_RUN="n/a"
 Z88DK24_BENCHMARKS_RUN="n/a"
+Z88DK24_CURRENT_BENCHMARKS_RUN="n/a"
 
 declare -A EXPECTED_RETURNS
 
@@ -113,6 +114,7 @@ Options:
   --suite <name>         Select suite: all, bare, numeric, portable, or
                          z88dk (complete upstream full programs).
                          z88dk24 is a backward-compatible alias.
+                         z88dk-current selects the current-upstream snapshot.
                          Default: $SUITE
   --outdir <dir>         Output root for generated reports.
                          Default: $OUTDIR
@@ -1608,6 +1610,15 @@ run_z88dk24_suite() {
         "$suite_outdir/results.csv")"
 }
 
+run_z88dk24_current_suite() {
+    local suite_outdir="$OUTDIR/z88dk24-current"
+    local ticks_budget=$(( (Z88DK_CYCLES + 399999999) / 400000000 ))
+    OUT="$suite_outdir" FILTER="$Z88DK24_FILTER" BUDGET="$ticks_budget" \
+        bash "$Z88DK24_ROOT/run-current.sh"
+    Z88DK24_CURRENT_BENCHMARKS_RUN="$(awk 'END { print (NR > 0 ? NR - 1 : 0) }' \
+        "$suite_outdir/results.csv")"
+}
+
 write_top_summary() {
     local summary_md="$OUTDIR/summary.md"
 
@@ -1649,6 +1660,14 @@ write_top_summary() {
                 "$OUTDIR/z88dk24/summary.md" \
                 "$OUTDIR/z88dk24/results.csv"
         fi
+        if [[ "$SUITE" == "z88dk-current" ]]; then
+            printf '| `%s` | %s | `%s` | `%s` | `%s` |\n' \
+                "z88dk-current-upstream" \
+                "$Z88DK24_CURRENT_BENCHMARKS_RUN" \
+                "xcc M Os/Of + current z88dk/sdcc/80cc frame/stack" \
+                "$OUTDIR/z88dk24-current/summary.md" \
+                "$OUTDIR/z88dk24-current/results.csv"
+        fi
     } > "$summary_md"
 
     cat "$summary_md"
@@ -1660,8 +1679,8 @@ main() {
     parse_args "$@"
 
     case "$SUITE" in
-    all|bare|numeric|portable|z88dk|z88dk24) ;;
-    *) die "unknown suite '$SUITE' (expected: all, bare, numeric, portable, z88dk)" ;;
+    all|bare|numeric|portable|z88dk|z88dk24|z88dk-current) ;;
+    *) die "unknown suite '$SUITE' (expected: all, bare, numeric, portable, z88dk, z88dk-current)" ;;
     esac
 
     [[ -x "$XCC" ]] || die "xcc not found at '$XCC'"
@@ -1717,6 +1736,13 @@ main() {
         echo "Running complete z88dk full-program benchmarks..."
         echo ""
         run_z88dk24_suite
+        echo ""
+    fi
+
+    if [[ "$SUITE" == "z88dk-current" ]]; then
+        echo "Running current-upstream z88dk full-program benchmarks..."
+        echo ""
+        run_z88dk24_current_suite
         echo ""
     fi
 
