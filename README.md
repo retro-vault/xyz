@@ -1,6 +1,6 @@
 # xyz
 
-`xyz` is a ZX Spectrum systems project with three main product roots:
+`xyz` is a Z80 retro-computing project with three main product roots:
 
 - `x`: a Z80-oriented compiler, assembler, linker, debugger, and support
   tooling stack
@@ -27,6 +27,8 @@ to the specific documentation you need.
 - [Distribution layout](x/docs/dist/README.md)
 - [How to test](x/docs/howtos/HOW-TO-TEST.md)
 - [ZX Spectrum 48K RAM/ROM target guide](x/docs/howtos/ZX-SPECTRUM-48K.md)
+- [Amstrad CPC 464/664/6128 target guide](x/docs/howtos/AMSTRAD-CPC.md)
+- [X package build and verification](x/pkg/README.md)
 - [Debugger integration](x/docs/howtos/DEBUGGER_INTEGRATION.md)
 - [Current libc gaps](x/docs/todo/LIBC-GAPS.md)
 
@@ -61,6 +63,10 @@ to the specific documentation you need.
 - [ZX Spectrum RAM example](x/examples/zx-ram/README.md)
 - [ZX Spectrum ROM example](x/examples/zx-rom/README.md)
 - [ZX Spectrum MCP smoke test](x/tests/tests/zx48/README.md)
+- [CPC 464 cassette example](x/examples/cpc-464/README.md)
+- [CPC 664 disk example](x/examples/cpc-664/README.md)
+- [CPC 6128 disk example](x/examples/cpc-6128/README.md)
+- [Amstrad CPC MCP smoke test](x/tests/tests/cpc/README.md)
 - [Debug sample](x/tests/tests/debug/README.md)
 - [Microdrive emulator harness](y/tests/mdr-emu/README.md)
 

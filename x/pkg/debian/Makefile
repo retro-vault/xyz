@@ -35,8 +35,17 @@ PKG_STAGING_DIR := $(PKG_BUILD_ROOT)/$(PACKAGE_NAME)_$(PACKAGE_VERSION)-$(PACKAG
 PKG_OUTPUT_DIR := $(DIST_DIR)/pkg/deb
 PKG_OUTPUT := $(PKG_OUTPUT_DIR)/$(PACKAGE_NAME)_$(PACKAGE_VERSION)-$(PACKAGE_RELEASE)_$(DEB_ARCH).deb
 CONTROL_TEMPLATE := $(THIS_DIR)/control.in
+PACKAGE_MAKEFILE := $(THIS_DIR)/Makefile
 DIST_DOC_SOURCES := $(X_ROOT)/docs/dist/README.md $(wildcard $(X_ROOT)/docs/dist/man/*.md)
 DIST_DOC_STAMP := $(DIST_DIR)/.stage-dist-docs.stamp
+PACKAGED_PLATFORMS := none cpc-464 cpc-664 cpc-6128 cpm3 zx-ram zx-rom
+PACKAGED_PLATFORM_FILES := \
+	$(foreach platform,$(PACKAGED_PLATFORMS), \
+		$(DIST_DIR)/z80/lib/crt0-$(platform).rel \
+		$(DIST_DIR)/z80/lib/crt0-$(platform).s \
+		$(DIST_DIR)/z80/lib/linker-$(platform).ld \
+		$(DIST_DIR)/z80/lib/linker-$(platform).lk \
+		$(DIST_DIR)/z80/lib/lib$(platform).a)
 XBFD_LIB := $(BUILD_DIR)/lib/libxbfd.a
 XOPT_LIB := $(DIST_DIR)/lib/libxopt.a
 XCC_PACKAGE_BUILD_DIR := $(PKG_BUILD_ROOT)/xcc-build
@@ -51,19 +60,10 @@ XCC_RUNTIME_MANIFEST := $(XCC_RUNTIME_BUILD_DIR)/z80-lib.members
 DIST_PREFIX_FILES := \
 	$(DIST_DIR)/bin/xcc \
 	$(DIST_DIR)/z80/include/stdio.h \
-	$(DIST_DIR)/z80/lib/crt0-none.rel \
-	$(DIST_DIR)/z80/lib/crt0-cpc-464.rel \
-	$(DIST_DIR)/z80/lib/crt0-cpc-664.rel \
-	$(DIST_DIR)/z80/lib/crt0-cpc-6128.rel \
-	$(DIST_DIR)/z80/lib/crt0-cpm3.rel \
 	$(DIST_DIR)/z80/lib/libc.a \
 	$(DIST_DIR)/z80/lib/libfixed.a \
-	$(DIST_DIR)/z80/lib/libnone.a \
-	$(DIST_DIR)/z80/lib/libcpc-464.a \
-	$(DIST_DIR)/z80/lib/libcpc-664.a \
-	$(DIST_DIR)/z80/lib/libcpc-6128.a \
-	$(DIST_DIR)/z80/lib/libcpm3.a \
-	$(DIST_DIR)/z80/lib/libruntime.a
+	$(DIST_DIR)/z80/lib/libruntime.a \
+	$(PACKAGED_PLATFORM_FILES)
 HOST_TOOLS := \
 	$(DIST_DIR)/bin/xld \
 	$(DIST_DIR)/bin/xgdb \
@@ -81,10 +81,45 @@ DEBUG_LIBS := \
 EMU_LIBS := \
 	$(DIST_DIR)/lib/libxemu.a \
 	$(DIST_DIR)/lib/libxz80.a
+PACKAGE_REQUIRED_RELATIVE_FILES := \
+	bin/xcc \
+	bin/xprog \
+	share/doc/CPC.md \
+	z80/include/stdio.h \
+	z80/lib/libc.a \
+	z80/lib/libfixed.a \
+	z80/lib/libruntime.a \
+	$(patsubst $(DIST_DIR)/%,%,$(PACKAGED_PLATFORM_FILES))
 
-.PHONY: all clean
+.PHONY: all check clean
 
-all: $(PKG_OUTPUT)
+all: check
+
+check: $(PKG_OUTPUT)
+	@package_check_dir=$$(mktemp -d); \
+	trap 'test -z "$$package_check_dir" || rm -rf "$$package_check_dir"' 0 1 2 3 15; \
+	dpkg-deb -c "$(PKG_OUTPUT)" | awk \
+	    '$$2 != "root/root" { print "invalid package ownership: " $$0 > "/dev/stderr"; bad=1 } END { exit bad }'; \
+	dpkg-deb -x "$(PKG_OUTPUT)" "$$package_check_dir"; \
+	prefix="$$package_check_dir$(INSTALL_PREFIX)"; \
+	for path in $(PACKAGE_REQUIRED_RELATIVE_FILES); do \
+	    test -f "$$prefix/$$path" || { \
+	        echo "package is missing required file: $$path" >&2; \
+	        exit 1; \
+	    }; \
+	done; \
+	"$$prefix/bin/xprog" --help 2>&1 | grep -q -- '--cdt' || { \
+	    echo "packaged xprog is missing --cdt" >&2; \
+	    exit 1; \
+	}; \
+	"$$prefix/bin/xprog" --help 2>&1 | grep -q -- '--dsk' || { \
+	    echo "packaged xprog is missing --dsk" >&2; \
+	    exit 1; \
+	}; \
+	test -x "$$prefix/bin/xcc"; \
+	test -x "$$prefix/bin/xprog"; \
+	test ! -x "$$prefix/z80/lib/linker-cpc-6128.ld"; \
+	echo "verified $(PKG_OUTPUT) ($(words $(PACKAGE_REQUIRED_RELATIVE_FILES)) required files)"
 
 $(DIST_DOC_STAMP): $(DIST_DOC_SOURCES)
 	$(MAKE) -C $(X_ROOT) stage-dist-docs REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) OUT_DIR=$(BUILD_DIR)/out Z_DIST_DIR=$(BUILD_DIR)/z
@@ -142,7 +177,7 @@ $(XCC_RUNTIME_COMPAT_ARCHIVE): $(XCC_RUNTIME_ARCHIVE)
 $(DIST_PREFIX_FILES):
 	$(MAKE) -C $(X_ROOT) x REPO_ROOT=$(ROOT) Y_ROOT=$(Y_ROOT) BUILD_DIR=$(BUILD_DIR) DIST_DIR=$(DIST_DIR) OUT_DIR=$(BUILD_DIR)/out Z_DIST_DIR=$(BUILD_DIR)/z PLATFORM=$(DEFAULT_PLATFORM) DEFAULT_PLATFORM=$(DEFAULT_PLATFORM) LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG) LIBC_STDIO_FLOAT=$(LIBC_STDIO_FLOAT) X_MODEL=$(X_MODEL_NAME)
 
-$(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(EMU_LIBS) $(XBFD_LIB) $(XOPT_LIB) $(XCC_PACKAGE_BIN) $(DIST_PREFIX_FILES) $(CONTROL_TEMPLATE)
+$(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(EMU_LIBS) $(XBFD_LIB) $(XOPT_LIB) $(XCC_PACKAGE_BIN) $(DIST_PREFIX_FILES) $(CONTROL_TEMPLATE) $(PACKAGE_MAKEFILE)
 	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb not found. Please install dpkg-dev or dpkg."; exit 1; }
 	rm -rf $(PKG_STAGING_DIR)
 	mkdir -p $(PKG_STAGING_DIR)/DEBIAN
@@ -173,8 +208,9 @@ $(PKG_OUTPUT): $(DIST_DOC_STAMP) $(HOST_TOOLS) $(DEBUG_LIBS) $(EMU_LIBS) $(XBFD_
 		'esac' \
 		> $(PKG_STAGING_DIR)$(PROFILE_D_DIR)/$(PROFILE_SCRIPT_NAME)
 	chmod 0644 $(PKG_STAGING_DIR)$(PROFILE_D_DIR)/$(PROFILE_SCRIPT_NAME)
+	chmod -R a+rX,go-w $(PKG_STAGING_DIR)$(INSTALL_PREFIX)
 	mkdir -p $(PKG_OUTPUT_DIR)
-	dpkg-deb --build $(PKG_STAGING_DIR) $(PKG_OUTPUT)
+	dpkg-deb --root-owner-group --build $(PKG_STAGING_DIR) $(PKG_OUTPUT)
 
 clean:
 	rm -rf $(PKG_BUILD_ROOT) $(PKG_OUTPUT_DIR)

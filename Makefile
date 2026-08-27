@@ -297,7 +297,7 @@ help:
 		'' \
 		'Targets:' \
 		'  all                  Build x tools and y outputs (default).' \
-		'  packages             Build the optional x packaging artifacts.' \
+		'  packages             Build and verify the X Debian package and XGDB VSIX.' \
 		'  x                    Build only the x compiler suite distribution.' \
 		'  x-models             Build the S, M, and L x distributions.' \
 		'  x-s                  Build the S model into bin/x-s.' \
@@ -317,7 +317,8 @@ help:
 		'  help                 Show this help.' \
 		'' \
 		'Common variables:' \
-		'  PLATFORM=none|cpm3|emu          Default target platform (default: none).' \
+		'  PLATFORM=none|emu|cpm3|cpc-464|cpc-664|cpc-6128|zx-ram|zx-rom' \
+		'                        Default target platform (default: none).' \
 		'  ZX_RAM_STORAGE=plus3|ide        ZX RAM storage backend (default: plus3).' \
 		'  X_MODEL=S|M|L                   Release model defaults (default: M).' \
 		'  LIBC_PROFILE=name               Libc build flavor label (default: full).' \

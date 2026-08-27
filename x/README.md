@@ -12,7 +12,7 @@ assembly libc/runtime, and selectable target platforms.
 - `libc/` — target C library
 - `targets/` — new home for extracted CPU and ABI definitions
 - `platforms/` — target platform backends and platform contract headers
-- `pkg/` — copied distribution-side packaging pieces such as `xgdb-vsix`
+- `pkg/` — Debian toolchain and XGDB VSIX packaging, with archive verification
 - `tests/` — shared test tools plus canonical suite roots under `tests/tests/`
 - `examples/` — small programs demonstrating staged target platforms
 - `docs/` — copied repository docs plus the `xcc` internals docs
@@ -31,6 +31,21 @@ the root `x-s`, `x-m`, and `x-l` targets to stage all three side by side.
 unfiltered end-to-end runner uses the side-by-side `bin/x-l` compiler so that
 double and long-long tests remain part of exhaustive validation without
 changing the ordinary medium-model default.
+
+## Packages
+
+Build the optional installable artifacts from the repository root:
+
+```sh
+make packages
+```
+
+This stages the XGDB VSIX under `bin/x/pkg/vsix/` and builds the native X
+toolchain package under `bin/x/pkg/deb/`. The Debian build extracts its finished
+archive and verifies the host tools, documentation, common target libraries,
+and every packaged platform's CRT source/object, GNU/SDCC linker scripts, and
+platform archive. Run `make -C x/pkg/debian check` to repeat that archive check.
+See [`pkg/README.md`](pkg/README.md) for the complete contract.
 
 ## ZX Spectrum 48K quick start
 

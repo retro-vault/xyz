@@ -89,6 +89,28 @@ make -C x/lib/xz80 test
 other component tests cover their parsers, emitters, CLI behavior, and focused
 integration paths.
 
+## Package verification
+
+Build both optional X package artifacts through the public entry point:
+
+```sh
+make packages
+```
+
+This builds the Debian toolchain package and XGDB VSIX. The Debian target then
+extracts the finished `.deb` and verifies required tools, manuals, target
+headers/libraries, each installed platform's CRT source/object and linker
+scripts, normalized ownership/modes, and the CPC `xprog --cdt`/`--dsk` modes.
+Repeat the archive check without rebuilding the wider toolchain with:
+
+```sh
+make -C x/pkg/debian check
+```
+
+For CPC release acceptance, extract the `.deb` and invoke the CPC MCP runner
+with the package's `/opt/x/bin/xcc` and `/opt/x/bin/xprog`; this proves the
+installed sysroot rather than the checkout prefix.
+
 ## CP/M integration test
 
 The CP/M COM regression uses `tnylpo` to execute the staged `cpm3` backend:
@@ -190,7 +212,10 @@ bash archive/x/tests/tests/xcc-legacy/run_codegen_bench.sh ./bin/x/bin/xcc --sui
 4. Run the affected host-tool component test for tool changes.
 5. Run the four-mode ZX MCP test for Spectrum CRT, linker, console, keyboard,
    or tape changes.
-6. If build wiring or staged outputs changed, rerun `make -C x` first.
+6. Run the three-model CPC MCP test for CPC CRT, firmware, AMSDOS, CDT, or DSK
+   changes.
+7. If packaging inputs or staged outputs changed, run `make packages` and its
+   finished-archive check.
 
 ## Prerequisites and Skip Behavior
 

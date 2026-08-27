@@ -13,6 +13,12 @@ standard CPCEMU/AMSDOS data disks. The three-model real-ROM MCP regression
 passes generated-media boot, libc, console, clock, writable file, and
 error-path coverage.
 
+Root `make packages` now builds and verifies both `bin/x/pkg/deb/x_*.deb` and
+the XGDB VSIX. The Debian audit extracts the finished archive and checks every
+packaged platform's CRT source/object, both linker formats, platform archive,
+manuals, normalized ownership/modes, and CPC CDT/DSK switches. The extracted
+package itself passes all three CPC MCP runs.
+
 XCC now integrates directly with z88dk's classic runtime through
 `--runtime=z88dk-classic`. It derives printf/scanf handler capabilities from
 literal formats, merges them across translation units through zcc's per-link
@@ -54,6 +60,8 @@ cursor-wrap edge case.
 
 ```sh
 make -C x
+make packages
+make -C x/pkg/debian check
 bash x/tests/run_tests.sh --filter xcc
 python3 x/tests/tests/zx48/run_mcp.py \
   --mcp /path/to/zx-spectrum-mcp \
@@ -73,6 +81,7 @@ four delivery modes and marker checks.
 - `x/platforms/cpc-464/`, `cpc-664/`, and `cpc-6128/` — self-contained CPC
   CRT, linker, firmware, and optional AMSDOS hooks.
 - `x/src/xprog/` — XPRG plus TAP/TZX/CDT/DSK packaging.
+- `x/pkg/` — Debian/VSIX orchestration and finished-archive verification.
 - `x/src/xld/` and `x/lib/xbfd/` — placement and ROM load-image support.
 - `x/libc/src/` — hand-written assembly libc.
 - `x/tests/tests/c23/` — canonical manifest-driven compiler suite.

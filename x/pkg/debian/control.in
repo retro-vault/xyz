@@ -6,7 +6,9 @@ Architecture: @DEB_ARCH@
 Maintainer: xyz project <tomaz.stih@wischner.co.uk>
 Depends: libc6, libgcc-s1, libstdc++6
 Description: x compiler suite for z80
- xcc, xas, xopt, xar, xld, xobjcopy, xgdb, xemu, compiler runtime
- libraries, staged headers, static helper libraries, and documentation.
+ xcc, xas, xopt, xar, xld, xobjcopy, xprog, xgdb, xemu, compiler runtime
+ libraries, staged headers, static helper libraries, target CRTs/linker
+ scripts, and documentation. Includes CP/M 3, Amstrad CPC 464/664/6128,
+ and ZX Spectrum 48K platform payloads plus TAP/TZX/CDT/DSK media creation.
  The package installs the suite under @INSTALL_PREFIX@ and exposes
  @INSTALL_PREFIX@/bin through @PROFILE_SCRIPT@ for new login shells.

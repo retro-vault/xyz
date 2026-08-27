@@ -48,7 +48,7 @@ Canonical release notes now live with each product root:
 
 ```bash
 make                    # full build (current root flow)
-make packages           # optional packaging pass
+make packages           # build and verify the X .deb and XGDB VSIX
 make -C x               # build the standalone xtools prefix
 make clean
 
@@ -107,7 +107,8 @@ The "x tools" (xcc, xas, xld, ...) should be buildable and distributable without
 
 1. `make -C x all`
 2. The resulting artifacts in `bin/x/` (plus staged includes and runtime libs) form the distributable "xtools" package.
-3. Packaging lives in `x/pkg/` and `y/pkg/`. Look there for xtools- or YOS-specific packaging targets.
+3. `make packages` produces and verifies the X Debian package and XGDB VSIX;
+   the package contract is documented in `x/pkg/README.md`.
 
 When publishing the toolchain:
 - It should include the compiler suite + libc headers + minimal runtime + documentation.
@@ -173,8 +174,10 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
 
 **Distribute the x tools**
 - Build with `make -C x`
-- Use / extend packaging under `x/pkg/`
-- The result should be installable independently (binaries + headers + runtime libs).
+- Build installable artifacts with `make packages`.
+- Repeat the finished Debian archive audit with `make -C x/pkg/debian check`.
+- Keep every packaged platform's CRT object/source, both linker scripts,
+  archive, and user guide represented in the package verification manifest.
 
 ## Session / AI Context
 

@@ -6,6 +6,12 @@ Release status:
 
 ## Unreleased
 
+- Completed CPC release packaging: the root `make packages` pass now builds
+  the native Debian toolchain package as well as the XGDB VSIX, all CPC CRT
+  sources/objects, linker scripts, and platform archives are explicit package
+  inputs, and the Debian build verifies the installed CPC guide and CDT/DSK
+  modes from the finished archive.
+
 - Added self-contained Amstrad CPC 464, 664, and 6128 targets. All three use
   the firmware Text VDU, keyboard, 300 Hz clock, heap, private stack, and
   BASIC-returning CRT at `0x4000`; the cassette-only 464 omits AMSDOS state,

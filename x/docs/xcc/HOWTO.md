@@ -113,18 +113,16 @@ cpp -Iinclude -DVALUE=1 hello.c | xcc --c1mode -mz80 --opt-code-size -o hello.s
 ### Full build pipeline (compile → assemble → link)
 
 ```bash
-# 1. Compile C to assembly (preprocessor is built-in)
-xcc -O1 hello.c -o hello.s
+# The driver performs the full compile, assemble, and link pipeline.
+bin/x/bin/xcc -O1 hello.c -o hello.xl
 
-# 2. Assemble with the Z80 assembler
-sdasz80 -o hello.rel hello.s
+# Or stop and inspect each X Tools stage.
+bin/x/bin/xcc -O1 -S hello.c -o hello.s
+bin/x/bin/xas hello.s -o hello.rel
+bin/x/bin/xld --platform=none hello.rel -o hello.xl
 
-# 3. Link: runtime modules are staged by make dist
-sdldz80 -i hello.ihx /usr/local/lib/xcc/crt0.rel hello.rel \
-        /usr/local/lib/xcc/runtime/*.rel
-
-# 4. Convert to binary if needed
-hex2bin hello.ihx
+# Request a flat binary directly when the target needs one.
+bin/x/bin/xcc -O1 --oformat=binary -Ttext=0x8000 hello.c -o hello.bin
 ```
 
 ### Multi-file project

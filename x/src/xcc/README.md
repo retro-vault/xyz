@@ -1,6 +1,6 @@
 # xcc — X C Compiler for Z80
 
-A clean, modern C11 compiler for the Z80 processor.  Built from scratch in
+A clean, modern C23-oriented compiler for the Z80 processor. Built from scratch in
 C++17 with a hand-written parser, typed IR, and GCC-compatible command line.
 
 ---
@@ -41,34 +41,36 @@ xcc hello.c -nostdlib -Wl,-Map=hello.map -o bare.xl
 
 ## Installation
 
-After `make dist`, the staging directories under `build/dist/` mirror
-`/usr/local/`:
+Build the X product from the repository root to create a relocatable prefix:
+
+```bash
+make -C x
+```
 
 ```
-build/dist/
+bin/x/
   bin/
-    xcc                  <- the compiler binary
-  lib/xcc/runtime/
-    *.rel                <- per-helper Z80 runtime objects
+    xcc, xas, xld, xprog, ...
   z80/include/
-    *.h                  <- canonical target-side libc headers
+    *.h                  <- common target-side libc headers
     cpm3/                <- headers private to --platform=cpm3
   z80/lib/
+    crt0-cpc-*.rel        <- CPC startup objects
+    linker-cpc-*.*        <- CPC GNU/SDCC linker scripts
     libcpc-464.a         <- cassette-only CPC firmware hooks
     libcpc-664.a         <- CPC firmware and AMSDOS disk hooks
     libcpc-6128.a        <- CPC firmware and AMSDOS disk hooks
 ```
 
-To install system-wide on Linux:
+Copy that prefix anywhere, or build the verified Debian package:
 
 ```bash
-make dist
-sudo cp build/dist/bin/xcc                /usr/local/bin/
-sudo mkdir -p /usr/local/lib/xcc/runtime
-sudo cp build/dist/lib/xcc/runtime/*.rel  /usr/local/lib/xcc/runtime/
-sudo mkdir -p /usr/local/z80/include
-sudo cp -r build/dist/z80/include/.       /usr/local/z80/include/
+make packages
+sudo dpkg -i bin/x/pkg/deb/x_*.deb
 ```
+
+See `x/pkg/README.md` for the installed-platform and archive-verification
+contract.
 
 ---
 
@@ -78,11 +80,10 @@ Requirements: `g++` ≥ 7 with C++17, GNU Make.
 Optional (for runtime and linking): `sdasz80` (Z80 assembler) and `sdldz80` (Z80 linker).
 
 ```bash
-make                   # debug build  (build/bin/xcc)
-make BUILD=release     # release build
-make dist              # stage under build/dist/
-make test              # run regression suite (47 tests)
-make clean             # remove build artefacts
+make -C x/src/xcc               # build and stage bin/x/bin/xcc
+make -C x/src/xcc BUILD=release # optimized host compiler
+make -C x/src/xcc test          # focused compiler tests
+make -C x/src/xcc clean         # remove component build artifacts
 ```
 
 ---

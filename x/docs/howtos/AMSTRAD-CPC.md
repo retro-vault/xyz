@@ -77,6 +77,32 @@ Only one C input and one C output file can be open at a time, matching the
 firmware channel model. File names are limited to the AMSDOS 16-byte firmware
 input, including any drive or user prefix.
 
+## Installable package
+
+The repository package pass includes all three CPC definitions in the native
+X toolchain package:
+
+```sh
+make packages
+sudo dpkg -i bin/x/pkg/deb/x_*.deb
+```
+
+For each model the archive contains the assembled CRT, CRT source, GNU and
+SDCC linker scripts, and platform library below `/opt/x/z80/lib/`. It also
+contains this guide and the CDT/DSK-capable `xprog`. The package build extracts
+the finished `.deb` and verifies those files, their ownership/modes, and both
+CPC media switches. Run `make -C x/pkg/debian check` to repeat that audit.
+
+## Emulator scope
+
+These targets call the real CPC firmware and, on disk models, the AMSDOS ROM.
+The repository's generic `xemu` currently does not implement a complete CPC
+machine, Gate Array/ROM paging, or AMSDOS environment. Its Partner-style and
+ZX-128-style banking examples demonstrate the generic memory mapper; they are
+not CPC machine profiles. The CPC linker scripts keep the program in the
+primary visible RAM below `0x9F00` and do not depend on the 6128's extra bank.
+Use the real-ROM MCP regression below for machine-level acceptance.
+
 ## MCP regression
 
 The real-ROM regression uses an `amstrad-cpc-mcp` checkout beside this

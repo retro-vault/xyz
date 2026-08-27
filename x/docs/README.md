@@ -43,6 +43,13 @@ guides are collected under `bin/x/share/doc/`.
   Build, package, run, and test the ZX Spectrum RAM and replacement-ROM
   platforms, including memory maps, Tamsyn console behavior, Fuse, and MCP.
 
+- [howtos/AMSTRAD-CPC.md](howtos/AMSTRAD-CPC.md)
+  Build, package, run, and test CPC 464 cassette and CPC 664/6128 AMSDOS disk
+  programs, including the firmware file contract and real-ROM MCP coverage.
+
+- [../pkg/README.md](../pkg/README.md)
+  Build and verify the Debian toolchain package and XGDB VSIX.
+
 - [howtos/BENCHMARKS.md](howtos/BENCHMARKS.md)
   Repeatable codegen and bare-metal benchmark workflows against SDCC.
 

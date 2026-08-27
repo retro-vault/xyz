@@ -18,7 +18,9 @@ The project is a single monorepo containing several related but conceptually dis
 - **Tests**: Canonical X non-benchmark suites live under `x/tests/tests/`, while
   X benchmarks remain under `x/tests/benchmarks/` and Y tests under `y/tests/`.
 - **Packaging & Distribution**: X and Y own `x/pkg/` and `y/pkg/`; staged
-  products land under `bin/x/`, `bin/y/`, and `bin/z/`.
+  products land under `bin/x/`, `bin/y/`, and `bin/z/`. Root `make packages`
+  builds the X Debian package and XGDB VSIX and verifies the finished Debian
+  archive rather than treating prefix staging alone as package acceptance.
 
 The root `Makefile` is now a thin orchestrator. `make -C x` builds and stages a
 self-contained toolchain prefix without requiring YOS; `make -C y` builds the
@@ -59,7 +61,8 @@ xyz/
 - **X Tools** (distributable independently):
   - `x/` contains the host tools, target headers, runtime, libc, and platforms.
   - Build it with `make -C x`; the relocatable prefix lands in `bin/x/`.
-  - `make packages` at the root runs the optional product packaging pass.
+  - `make packages` at the root produces `bin/x/pkg/deb/x_*.deb` and the XGDB
+    VSIX under `bin/x/pkg/vsix/`.
 
 - **YOS / Full System**:
   - `y/` consumes the staged X tools, libc, runtime, and platform scripts.
@@ -115,6 +118,10 @@ When adding tests for new C23 features (or anything else):
   - Build the toolchain product with `make -C x`.
   - Stage the necessary headers and runtime libraries.
   - Package via `x/pkg/` or the root `make packages` pass.
+  - The Debian package explicitly requires every shipped target's CRT object
+    and source, GNU/SDCC linker scripts, and platform archive. Its `check`
+    target extracts the finished archive, validates ownership/modes and the
+    installed documentation/tool surface, and probes CPC CDT/DSK support.
 - YOS consumes the staged X toolchain directly (`xcc`, `xas`, `xld`, staged
   libc/runtime, and platform scripts).
 - The current staged xtools layout is now prefix-rooted and relocatable:
@@ -164,7 +171,9 @@ When adding tests for new C23 features (or anything else):
   - Platform examples mirror target names as immediate directories below
     `x/examples/`. A platform-specific example belongs to one target directory
     and does not share source through a cross-target common directory.
-- The resulting xtools package should be usable with different sysroots (bare metal, YOS, future GUI system, third-party OS, etc.).
+- The resulting xtools package is independently usable with the installed
+  bare-metal, CP/M 3, CPC, and ZX sysroot payloads. Future GUI and third-party
+  targets can extend the same explicit platform manifest.
 
 ## Remaining evolution
 
@@ -176,8 +185,8 @@ When adding tests for new C23 features (or anything else):
    duplication without hiding platform memory contracts.
 4. Reduce recursive staging work where dependency-aware rules can safely
    replace full archive rebuilds.
-5. Keep the X package independently installable and ensure every staged
-   platform ships its CRT, scripts, archive, and user documentation together.
+5. Keep the package archive audit synchronized whenever another installed
+   platform, host tool, or target guide is added.
 
 ## Open Questions / Future Work
 

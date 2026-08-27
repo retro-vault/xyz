@@ -18,11 +18,15 @@ No environment variables or configuration files are needed — the tools
 find their headers, runtime, and libraries relative to their own
 location.
 
-Alternatively, install the Debian package from `pkg/deb/`:
+When building from the source checkout, install the generated Debian package:
 
 ```bash
-sudo dpkg -i pkg/deb/xtools_*.deb
+make packages
+sudo dpkg -i bin/x/pkg/deb/x_*.deb
 ```
+
+The package installs under `/opt/x` by default. Nested `.deb` and `.vsix`
+artifacts are deliberately not copied into the installed prefix.
 
 ## Quick start
 
@@ -57,7 +61,7 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 
 | Tool | Purpose | Manual |
 |---|---|---|
-| `xcc` | C11 compiler driver (GNU-style: drives xas and xld) | `share/doc/XCC.md` |
+| `xcc` | C23-oriented compiler driver (GNU-style: drives xas and xld) | `share/doc/XCC.md` |
 | `xas` | Assembler (SDCC and GNU dialects) | `share/doc/XAS.md` |
 | `xld` | Linker (XL, flat binary, Intel HEX, ELF output) | `share/doc/XLD.md` |
 | `xopt` | Standalone Z80 assembly optimizer | `share/doc/XOPT.md` |

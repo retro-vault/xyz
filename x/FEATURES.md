@@ -871,9 +871,10 @@ It probes `<prefix>/targets/z80-<name>/lib` first, then falls back to
 **Source layout:** Every platform is a directory `x/platforms/<name>/` with
 `crt0.s`, `linker.lk`, `linker.ld`, and one file per hook (`write.s`,
 `read.s`, `_exit.s`, …). The hook contract is declared in
-`x/libc/include/sys.h`. Shipped examples: `none`, `cpm3`, `zx-rom`,
-`zx-ram`. Target-only public headers remain inside that target directory; for
-for example, CP/M's `sys/bdos.h` lives below `x/platforms/cpm3/include/` and is
+`x/libc/include/sys.h`. Shipped platforms are `none`, `emu`, `cpm3`,
+`cpc-464`, `cpc-664`, `cpc-6128`, `zx-rom`, and `zx-ram`. Target-only public
+headers remain inside that target directory; for example, CP/M's `sys/bdos.h`
+lives below `x/platforms/cpm3/include/` and is
 visible only with `--platform=cpm3`. The ZX targets do not need private public
 headers; none is a shared pseudo-platform.
 
@@ -903,6 +904,13 @@ blocking libc input loops around that same primitive. Console descriptors
 work; filesystem and wall-clock hooks return their documented failure values.
 See `x/docs/howtos/ZX-SPECTRUM-48K.md` for memory maps, Fuse commands, and the
 four-mode MCP regression.
+
+**Amstrad CPC:** `cpc-464`, `cpc-664`, and `cpc-6128` emit firmware-hosted
+binaries at `0x4000`. The 464 backend stays cassette-only; `xprog --cdt`
+creates its delivery image. The 664 and 6128 backends add AMSDOS ROM streams
+for raw and stdio files, and `xprog --dsk` creates a standard writable CPCEMU
+data disk. See `x/docs/howtos/AMSTRAD-CPC.md` for memory, file, package, and
+real-ROM MCP contracts.
 
 **Starting point — copy `none`:** `x/platforms/none/` is an empty-shell
 template:
@@ -971,12 +979,24 @@ cp -R xtools /opt/xtools
 /opt/xtools/bin/xcc main.c --platform=cpm3 -o app.xl
 ```
 
+The source tree can build an installable Debian archive and the XGDB VSIX in
+one pass:
+
+```sh
+make packages
+sudo dpkg -i bin/x/pkg/deb/x_*.deb
+```
+
+The Debian target validates the finished archive, including all shipped
+platform CRTs, linker scripts, archives, target documentation, and CPC media
+modes. See `x/pkg/README.md`.
+
 **Layout:**
 
 ```
 bin/           xcc, xas, xld, xopt, xar, xobjcopy, xprog, xgdb, …
 z80/include/   common C headers plus target-private subdirectories
-z80/lib/       crt0, libc, runtime, libnone.a, libcpm3.a, …
+z80/lib/       crt0, libc, runtime, and none/CP/M/CPC/ZX platform payloads
 share/doc/     tool manuals
 ```
 

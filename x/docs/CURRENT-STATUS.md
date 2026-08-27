@@ -2,8 +2,8 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-19, after replacing the target-private console headers
-with the public `<stdio.h>` `trygetchar()` polling extension.
+Last updated: 2026-08-27, after completing and verifying the installable CPC
+toolchain package surface.
 
 ## Major Recent Work
 
@@ -148,6 +148,14 @@ models—raw descriptors plus `fopen`/`fread`/`fwrite`/`fseek`/`ftell`,
 rename/remove, headerless seeking, and missing-file errors. Separate examples
 under `x/examples/cpc-464`, `cpc-664`, and `cpc-6128` reproduce the supported
 media workflows.
+
+The optional root `make packages` pass now builds both the native Debian X
+toolchain package and the XGDB VSIX. All CPC CRT objects and sources, GNU/SDCC
+linker scripts, platform archives, the installed CPC guide, and `xprog` media
+modes are explicit archive checks. Debian payload ownership is normalized to
+`root:root`, executable/data modes are verified, and the finished `.deb` is
+extracted before acceptance. The extracted package's own `xcc`, sysroot, and
+`xprog` pass the three CPC MCP delivery runs (464 CDT and 664/6128 DSK).
 
 ### CP/M command-line startup
 

@@ -8,7 +8,8 @@ Today it builds these host-side tools into `bin/x/bin/`:
 - `xas` — assembler plus assembly pretty-printer / dialect converter
 - `xar` — archive tool for `.rel` libraries
 - `xobjcopy` — object/archive conversion and debug-stripping tool
-- `xprog` — packages XL process/service images and ZX Spectrum TAP/TZX tapes
+- `xprog` — packages XL process/service images, ZX TAP/TZX tapes, and CPC
+  CDT/DSK media
 - `xld` — linker for `XL`, `BIN`, `CDB`, and related outputs
 - `xgdb` — debugger frontend
 - `xemu` — standalone Z80 emulator and remote debug target
@@ -19,7 +20,8 @@ Today it builds these host-side tools into `bin/x/bin/`:
 - `xas/` — assembler sources and tests
 - `xcc/` — compiler sources, optimizer, runtime helpers, and compiler docs
 - `xobjcopy/` — object/archive conversion tool sources and tests
-- `xprog/` — XL process/service and ZX Spectrum tape packager with format tests
+- `xprog/` — XL process/service, ZX tape, and CPC cassette/disk packager with
+  format tests
 - `xgdb/` — debugger frontend
 - `xemu/` — emulator tool and smoke tests
 - `xld/` — linker sources, README, and tests
@@ -45,6 +47,7 @@ The wider repository build stages the results under:
 
 - [How to test the repo](../docs/howtos/HOW-TO-TEST.md)
 - [ZX Spectrum 48K targets](../docs/howtos/ZX-SPECTRUM-48K.md)
+- [Amstrad CPC targets](../docs/howtos/AMSTRAD-CPC.md)
 - [xobjcopy README](xobjcopy/README.md)
 - [xprog README](xprog/README.md)
 - [xld README](xld/README.md)

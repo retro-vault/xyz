@@ -69,7 +69,9 @@ npm run check
 
 ## Packaging
 
-Package the extension from this directory with the local packager:
+The repository-level `make packages` command builds this VSIX together with
+the verified Debian X toolchain package. To build only the extension from this
+directory, use the local packager:
 
 ```sh
 npm run package
