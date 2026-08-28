@@ -1,15 +1,19 @@
 # Benchmarks
 
-This project has three benchmark flows:
+This project has five benchmark flows:
 
 - a **codegen-only** benchmark that measures translation-unit `_CODE` bytes
   before linking
 - a **bare-metal executable** benchmark that links a tiny `crt0`, runs under
   the Z80 emulator, and records both payload size and cycle count
+- a **numeric** benchmark that runs the same ten kernels across fixed8.8,
+  fixed16.16, fixed24.8, float, and double representations
+- a generated **portable cross-compiler** matrix of 40 libc-free,
+  self-checking RLE programs
 - a **shared-z88dk full-program** comparison that links seven compiler lanes
   against one pinned `+test` CRT and classic library
 
-They answer different questions, so all three are worth keeping.
+They answer different questions, so all five are worth keeping.
 
 ## Shared-z88dk Full-Program Comparison
 
@@ -70,14 +74,20 @@ passes it in every profile after repairing CFG spill-slot liveness and guarded
 lowering for `IY`-derived pointer fusions. Current zsdcc still fails it;
 sccz80 and both 80cc modes pass. In the final current-upstream run both XCC
 lanes pass 24/24. Against the better valid 80cc mode for each row, `-Os` is
-strictly smallest on 24/24 and fastest on 8/24; `-Of` is smallest on 23/24
-and fastest on 17/24. XCC's
+strictly smallest on 24/24 and fastest on 11/24; `-Of` is smallest on 23/24
+and fastest on 24/24. The broader valid SDCC/80cc envelope has the same 24/24
+strict size win for `-Os` and 24/24 strict speed win for `-Of`. XCC's
 public `--runtime=z88dk-classic` profile derives printf/scanf capability masks
 from literal formats and merges them through zcc's per-link option file. The
 runner contains no precomputed format mask. See `RESULTS.md` for the exact
 historical locked matrix and `CURRENT-RESULTS.md` for the separately pinned
 current-upstream snapshot and the structural, benchmark-independent rules
 responsible for the gains.
+
+The final current-upstream report supersedes an intermediate snapshot that
+showed 8/24 `-Os` and 17/24 `-Of` speed wins. Use the checked-in
+`CURRENT-RESULTS.md`, `current-results.csv`, and `current-versions.txt`
+together; do not mix them with older ignored reports under `build/`.
 
 ## Codegen-Only Benchmark
 
@@ -188,7 +198,8 @@ This is still a deliberately small-system benchmark:
 
 ### Benchmark Set
 
-Each benchmark lives in its own subdirectory under `x/tests/benchmarks/`.
+Each benchmark lives in its own subdirectory under
+`x/tests/benchmarks/bare/`.
 
 Current workload set:
 
@@ -236,8 +247,8 @@ At the time this guide was last updated, the default full run showed:
 - `xcc -Of`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `xcc -O3`: `20 / 20` successful runs, `20 / 20` correct checksums
 - `xcc -Os`: `20 / 20` successful runs, `20 / 20` correct checksums
-- `sdcc --opt-code-size`: `19 / 20` successful runs, `19 / 20` correct checksums
-- `sdcc --opt-code-speed`: `20 / 20` successful runs, `20 / 20` correct checksums
+- `sdcc --opt-code-size`: `5 / 20` successful runs, `1 / 20` correct checksums
+- `sdcc --opt-code-speed`: `5 / 20` successful runs, `0 / 20` correct checksums
 
 So the benchmark story has changed a lot:
 
@@ -269,6 +280,35 @@ than a correctness triage harness.
 The summary compares sizes and cycles only on benchmark rows where both sides
 completed successfully **and** matched the oracle checksum. This avoids fake
 “wins” caused by timeouts or wrong answers.
+
+## Numeric Benchmark
+
+Run the numeric representation matrix independently with:
+
+```sh
+bash x/tests/run_benchmarks.sh ./bin/x-l/bin/xcc --suite numeric
+```
+
+It compiles ten kernels at `-Of` for fixed8.8, fixed16.16, fixed24.8, float,
+and the L-model software double ABI. Every cell is self-checking; the report
+keeps bytes and cycles separate for each representation instead of treating
+different numeric contracts as competing compiler results. The 2026-08-27
+release run passes all ten kernels in all five representations.
+
+## Portable Cross-Compiler Benchmark
+
+Run the generated portable matrix independently with:
+
+```sh
+bash x/tests/run_benchmarks.sh ./bin/x-l/bin/xcc --suite portable
+```
+
+The generator creates 40 libc-free RLE programs with different data/run
+distributions. Every compiler lane builds the same self-checking source and
+must return zero. The matrix includes XCC `-Of`/`-O3`/`-Os`, SDCC size/speed,
+and z88dk's sdcc, 80cc, and sccz80 configurations. In the final run all XCC
+lanes pass 40/40; `-Os` is the smallest valid result on 40/40. This suite is a
+portable holdout, not the source of the 24-program full-image headline.
 
 ## Design Notes
 

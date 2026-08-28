@@ -127,20 +127,46 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
                 }
                 bit_offset %= 8;
             }
-            int64_t  mask      =
-                static_cast<int64_t>(bitfield_mask_bits(fld->bit_width));
-            operand m_src = emit_binop(icode_op::BAND, src,
-                                       operand::make_int(mask, type::make_int()), unit_type);
-            operand s_src = m_src;
-            if (bit_offset > 0)
-                s_src = emit_binop(icode_op::SHL, m_src,
-                                   operand::make_int(bit_offset, type::make_int()), unit_type);
-            operand cur     = emit_unop(icode_op::GET_VALUE_AT, ptr, unit_type);
-            int64_t clr_mask = ~(mask << bit_offset);
-            operand cleared  = emit_binop(icode_op::BAND, cur,
-                                          operand::make_int(clr_mask, type::make_int()), unit_type);
-            operand combined = emit_binop(icode_op::BOR, cleared, s_src, unit_type);
-            icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = combined; emit(ic);
+            const bool retain_insert =
+                !(unit_type && unit_type->is_volatile) &&
+                !(ptr.type && ptr.type->is_far_ptr());
+            if (retain_insert) {
+                icode ic;
+                ic.op = icode_op::SET_VALUE_AT;
+                ic.result = ptr;
+                ic.left = src;
+                ic.bit_width = fld->bit_width;
+                ic.bit_offset = bit_offset;
+                ic.bit_storage_bytes = unit_type->size();
+                emit(ic);
+            } else {
+                // Volatile fields retain the declared load/store width and
+                // far fields continue through the banked memory helpers.
+                int64_t mask = static_cast<int64_t>(
+                    bitfield_mask_bits(fld->bit_width));
+                operand m_src = emit_binop(
+                    icode_op::BAND, src,
+                    operand::make_int(mask, type::make_int()), unit_type);
+                operand s_src = m_src;
+                if (bit_offset > 0)
+                    s_src = emit_binop(
+                        icode_op::SHL, m_src,
+                        operand::make_int(bit_offset, type::make_int()),
+                        unit_type);
+                operand cur = emit_unop(
+                    icode_op::GET_VALUE_AT, ptr, unit_type);
+                int64_t clr_mask = ~(mask << bit_offset);
+                operand cleared = emit_binop(
+                    icode_op::BAND, cur,
+                    operand::make_int(clr_mask, type::make_int()), unit_type);
+                operand combined = emit_binop(
+                    icode_op::BOR, cleared, s_src, unit_type);
+                icode ic;
+                ic.op = icode_op::SET_VALUE_AT;
+                ic.result = ptr;
+                ic.left = combined;
+                emit(ic);
+            }
         } else {
             src = coerce_for_store(src, fld ? fld->type : (mem->type ? mem->type : lhs.type));
             icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);

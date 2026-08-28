@@ -196,12 +196,25 @@ final matrix.
 
 Both XCC M lanes pass 24/24. Against the better valid 80cc frame-pointer or
 stack-pointer result on each program, `-Os` is strictly smallest on 24/24
-and fastest on 8/24; `-Of` is smallest on 23/24 and fastest on 17/24. The
+and fastest on 11/24; `-Of` is smallest on 23/24 and fastest on 24/24. Against
+the broader valid SDCC/80cc envelope, the specialized `-Os` and `-Of` lanes
+are respectively strict size and speed winners on 24/24. The
 size result combines generic compiler output with literal-driven
 z88dk runtime pruning; the speed gains come from generic data-flow,
-register-allocation, bit-width, bitfield, pointer-walk, producer/store, and
-word-recurrence scheduling rules. The compiler contains no benchmark-name,
-source-fragment, magic-constant, or program-fingerprint recognition.
+register-allocation, bit-width, bitfield, affine-address, loop-induction,
+fixed-trip, pointer-walk, producer/store, and wide-carry scheduling rules. The
+compiler contains no benchmark-name, source-fragment, magic-constant, or
+program-fingerprint recognition.
+
+| XCC lane | Correct | Size wins vs 80cc | Speed wins vs 80cc |
+|---|---:|---:|---:|
+| `xcc -Os` | 24/24 | 24/24 | 11/24 |
+| `xcc -Of` | 24/24 | 23/24 | 24/24 |
+
+This table is the final post-optimization rerun and supersedes the earlier
+intermediate 8/24 and 17/24 speed counts. The authoritative per-row values are
+in [`CURRENT-RESULTS.md`](CURRENT-RESULTS.md) and
+[`current-results.csv`](current-results.csv).
 
 ## Outputs
 

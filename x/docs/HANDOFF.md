@@ -9,24 +9,42 @@ XCC's current `-Of` campaign was driven by a source audit of the latest 80cc,
 then implemented as generic typed-IR, CFG, liveness, alias, and register-
 clobber rules. Both XCC M profiles pass the current-upstream 24-program suite.
 Against the better valid 80cc frame-pointer or stack-pointer result per row,
-`-Of` is smaller on 23/24 and faster on 17/24; `-Os` is smaller on 24/24 and
-faster on 8/24. The compiler contains no benchmark-name, source-fragment,
+`-Of` is smaller on 23/24 and faster on 24/24; `-Os` is smaller on 24/24 and
+faster on 11/24. The same specialized profiles are respectively strict speed
+and size winners on 24/24 against the broader valid SDCC/80cc envelope. The
+compiler contains no benchmark-name, source-fragment,
 magic-constant, or program-fingerprint recognition.
 
 The reported automatic-structure member-store failure is fixed. The store was
 correct; an unsafe framed sibling call released the frame before a terminal
 observer dereferenced the local. Automatic-address materialization now blocks
 that transform, and the exact direct/alias forms are permanent all-profile
-regressions alongside the new optimizer and physical-register interference
-cases.
+regressions. Crossing bitfields exposed separate metadata bugs in address
+folding and store availability; partial stores are no longer rewritten or
+forwarded as complete words. The exact `item->arg = arg` spelling now runs at
+all six optimization levels alongside the new optimizer and physical-register
+interference cases.
+
+The final bare sweep also caught byte-wrap-unsound affine pointer walking for
+`(unsigned char)(i - 1)`. Pointer strength reduction now needs checked range
+proofs for every byte intermediate, using only scoped canonical-loop guard,
+preheader, and latch facts. The RLE reproducer passes every profile in S/M/L,
+while proven non-wrapping nested row/column walks keep their fast form.
+
+The fixed-project tiny-regex holdout found a second, independent pointer-walk
+guard: a committed secondary cursor must use the secondary induction's own
+unique initialization and update, not the sentinel induction's conditional
+updates. That parser-shaped case now passes all six profiles in S/M/L and is a
+permanent regression.
 
 X now ships `cpc-464`, `cpc-664`, and `cpc-6128` firmware targets at `0x4000`.
 The 464 is cassette-only and does not link AMSDOS state; the 664/6128 provide
 ROM-backed raw and stdio disk operations, input seeking, rename, and remove.
 `xprog --cdt` creates CPC firmware cassette records and `xprog --dsk` creates
-standard CPCEMU/AMSDOS data disks. The three-model real-ROM MCP regression
+standard CPCEMU/AMSDOS data disks. The three-model real-ROM MCP release validation
 passes generated-media boot, libc, console, clock, writable file, and
-error-path coverage.
+error-path coverage. It is invoked explicitly and is not in the manifest-driven
+regression pack.
 
 Root `make packages` now builds and verifies both `bin/x/pkg/deb/x_*.deb` and
 the XGDB VSIX. The Debian audit extracts the finished archive and checks every
@@ -86,7 +104,7 @@ python3 x/tests/tests/cpc/run_mcp.py \
   --roms /path/to/roms
 ```
 
-The unified XCC L-model suite last passed 4,428/4,428. The ZX MCP run last passed all
+The unified XCC L-model suite last passed 4,466/4,466. The ZX MCP run last passed all
 four delivery modes and marker checks.
 
 ## Durable implementation locations

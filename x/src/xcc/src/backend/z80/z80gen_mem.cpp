@@ -56,7 +56,30 @@ static bool load_byte_preserves_hl(const operand &op,
     return false;
 }
 
+static bool same_storage_operand(const operand &a, const operand &b) {
+    if (a.kind != b.kind || a.byte_offset != b.byte_offset)
+        return false;
+    if (a.kind == operand_kind::TEMP)
+        return a.temp_id == b.temp_id;
+    if (a.kind != operand_kind::SYMBOL)
+        return false;
+    return a.name == b.name && a.stack_offset == b.stack_offset &&
+           a.is_global == b.is_global && a.is_param == b.is_param &&
+           a.is_tls == b.is_tls && a.is_sfr == b.is_sfr &&
+           a.sfr_port == b.sfr_port;
+}
+
 void z80_gen::gen_assign(const icode &ic) {
+    // Copies occasionally survive phi/alias cleanup after a local has been
+    // coalesced back to its own storage.  A non-volatile x=x has no observable
+    // action, and suppressing it here also avoids disturbing the pair/value
+    // caches.  Volatile objects deliberately retain both their read and write.
+    if (ic.right.is_none() && same_storage_operand(ic.result, ic.left) &&
+        !(ic.result.type && ic.result.type->is_volatile) &&
+        !(ic.left.type && ic.left.type->is_volatile)) {
+        return;
+    }
+
     if (ic.result.is_temp()) {
         auto home = temp_regs_.find(ic.result.temp_id);
         if (home != temp_regs_.end() &&
@@ -687,7 +710,8 @@ void z80_gen::gen_get_value_at(const icode &ic) {
     const bool direct_mem_copy_shape =
         cur_fn_ &&
         ic.result.is_temp() &&
-        (op_size(ic.result) == 1 || op_size(ic.result) == 2) &&
+        (op_size(ic.result) == 1 || op_size(ic.result) == 2 ||
+         op_size(ic.result) == 4) &&
         cur_ic_index_ + 1 < cur_fn_->icodes.size() &&
         cur_fn_->icodes[cur_ic_index_ + 1].op == icode_op::SET_VALUE_AT &&
         cur_fn_->icodes[cur_ic_index_ + 1].left.is_temp() &&
@@ -1031,7 +1055,7 @@ bool z80_gen::try_finish_direct_hl_iy_store(const operand &value)
     }
 
     const icode &store = cur_fn_->icodes[cur_ic_index_ + 1];
-    if (store.op != icode_op::SET_VALUE_AT ||
+    if (store.op != icode_op::SET_VALUE_AT || store.bit_width >= 0 ||
         !store.left.is_temp() ||
         store.left.temp_id != value.temp_id ||
         !store.result.is_temp() || !store.right.is_none() ||
@@ -1365,6 +1389,346 @@ void z80_gen::gen_set_value_at(const icode &ic) {
         }
         return false;
     };
+
+    if (ic.bit_width >= 0) {
+        // Lower a retained source-language bit-field insertion directly.
+        // Expanding this in the front end makes the allocator materialise
+        // every mask/shift/RMW intermediate in the frame.  Here the source is
+        // kept in A or DE and only bytes actually covered by the field are
+        // read and written.  Volatile and far fields deliberately never reach
+        // this path (see irgen_lvalue.cpp).
+        const int storage_bytes = ic.bit_storage_bytes;
+        const int width = ic.bit_width;
+        const int offset = ic.bit_offset;
+        const int source_offset = ic.bit_source_offset;
+        if ((storage_bytes == 1 || storage_bytes == 2) && width > 0 &&
+            offset >= 0 && offset + width <= storage_bytes * 8 &&
+            source_offset >= 0) {
+            invalidate_a_cache();
+            invalidate_pair_cache();
+
+            const uint32_t source_mask =
+                width >= 16 ? 0xffffu : ((uint32_t{1} << width) - 1u);
+            const uint32_t field_mask = source_mask << offset;
+            int64_t direct_disp = 0;
+            const bool direct_iy = iy_pointer_displacement(
+                ic.result, storage_bytes, direct_disp);
+
+            if (ic.bit_rmw) {
+                if (storage_bytes == 1) {
+                    if (direct_iy) {
+                        emit_line("ld\ta, %lld(iy)",
+                                  static_cast<long long>(direct_disp));
+                    } else {
+                        load_hl(ic.result);
+                        emit_line("ld\ta, (hl)");
+                    }
+                    if (field_mask != 0xffu) {
+                        emit_line("ld\te, a");
+                        emit_line("and\t%s",
+                                  asm_.imm(field_mask & 0xffu).c_str());
+                        for (int bit = 0; bit < offset; ++bit)
+                            emit_line("srl\ta");
+                    }
+                    if (ic.bit_rmw_delta == 1)
+                        emit_line("inc\ta");
+                    else
+                        emit_line("add\ta, %s",
+                                  asm_.imm(ic.bit_rmw_delta).c_str());
+                    if (source_mask != 0xffu)
+                        emit_line("and\t%s",
+                                  asm_.imm(source_mask & 0xffu).c_str());
+                    for (int bit = 0; bit < offset; ++bit)
+                        emit_line("add\ta, a");
+                    if (field_mask != 0xffu) {
+                        emit_line("ld\td, a");
+                        emit_line("ld\ta, e");
+                        emit_line("and\t%s",
+                                  asm_.imm((~field_mask) & 0xffu).c_str());
+                        emit_line("or\ta, d");
+                    }
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), a",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\t(hl), a");
+                    invalidate_a_cache();
+                    invalidate_pair_cache();
+                    return;
+                }
+
+                if (direct_iy) {
+                    emit_line("ld\te, %lld(iy)",
+                              static_cast<long long>(direct_disp));
+                    emit_line("ld\td, %lld(iy)",
+                              static_cast<long long>(direct_disp + 1));
+                } else {
+                    load_hl(ic.result);
+                    emit_line("ld\te, (hl)");
+                    emit_line("inc\thl");
+                    emit_line("ld\td, (hl)");
+                }
+                emit_line("inc\tde");
+                const uint8_t field_lo = field_mask & 0xffu;
+                const uint8_t field_hi = (field_mask >> 8) & 0xffu;
+                if (field_lo != 0xffu) {
+                    emit_line("ld\ta, e");
+                    emit_line("and\t%s", asm_.imm(field_lo).c_str());
+                    emit_line("ld\te, a");
+                }
+                if (field_hi != 0xffu) {
+                    emit_line("ld\ta, d");
+                    emit_line("and\t%s", asm_.imm(field_hi).c_str());
+                    emit_line("ld\td, a");
+                }
+                if (!direct_iy)
+                    emit_line("dec\thl");
+                if (field_lo == 0xffu) {
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), e",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\t(hl), e");
+                } else if (field_lo != 0) {
+                    if (direct_iy)
+                        emit_line("ld\ta, %lld(iy)",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\ta, (hl)");
+                    emit_line("and\t%s",
+                              asm_.imm((~field_lo) & 0xffu).c_str());
+                    emit_line("or\ta, e");
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), a",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\t(hl), a");
+                }
+                if (!direct_iy && field_hi != 0)
+                    emit_line("inc\thl");
+                if (field_hi == 0xffu) {
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), d",
+                                  static_cast<long long>(direct_disp + 1));
+                    else
+                        emit_line("ld\t(hl), d");
+                } else if (field_hi != 0) {
+                    if (direct_iy)
+                        emit_line("ld\ta, %lld(iy)",
+                                  static_cast<long long>(direct_disp + 1));
+                    else
+                        emit_line("ld\ta, (hl)");
+                    emit_line("and\t%s",
+                              asm_.imm((~field_hi) & 0xffu).c_str());
+                    emit_line("or\ta, d");
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), a",
+                                  static_cast<long long>(direct_disp + 1));
+                    else
+                        emit_line("ld\t(hl), a");
+                }
+                invalidate_a_cache();
+                invalidate_pair_cache();
+                return;
+            }
+
+            if (storage_bytes == 1 && width == 1 &&
+                ic.left.kind == operand_kind::INT_CONST &&
+                source_offset < 64) {
+                const bool set =
+                    ((static_cast<uint64_t>(ic.left.ival) >> source_offset) &
+                     1u) != 0;
+                if (direct_iy) {
+                    emit_line("%s\t%d, %lld(iy)", set ? "set" : "res",
+                              offset,
+                              static_cast<long long>(direct_disp));
+                } else {
+                    load_hl(ic.result);
+                    emit_line("%s\t%d, (hl)", set ? "set" : "res",
+                              offset);
+                }
+                invalidate_a_cache();
+                invalidate_pair_cache();
+                return;
+            }
+
+            if (storage_bytes == 1) {
+                const bool single_source_byte =
+                    source_offset / 8 ==
+                    (source_offset + width - 1) / 8;
+                operand source_byte = ic.left;
+                if (single_source_byte) {
+                    source_byte.byte_offset += source_offset / 8;
+                    source_byte.type = type::make_uchar();
+                }
+                if (!direct_iy) {
+                    load_hl(ic.result);
+                    const bool preserves_hl =
+                        single_source_byte
+                            ? byte_load_preserves_hl_here(source_byte)
+                            : word_load_preserves_hl_here(ic.left);
+                    if (!preserves_hl)
+                        emit_line("push\thl");
+                }
+                if (single_source_byte) {
+                    const int local_source_offset = source_offset & 7;
+                    const uint32_t positioned_source_mask =
+                        (source_mask << local_source_offset) & 0xffu;
+                    load_a(source_byte);
+                    if (positioned_source_mask != 0xffu)
+                        emit_line("and\t%s",
+                                  asm_.imm(positioned_source_mask).c_str());
+                    if (offset >= local_source_offset) {
+                        for (int bit = local_source_offset; bit < offset; ++bit)
+                            emit_line("add\ta, a");
+                    } else {
+                        for (int bit = offset; bit < local_source_offset; ++bit)
+                            emit_line("srl\ta");
+                    }
+                } else {
+                    load_de(ic.left);
+                    int shift = source_offset;
+                    if (shift >= 8) {
+                        emit_line("ld\te, d");
+                        emit_line("ld\td, %s", asm_.imm(0).c_str());
+                        shift -= 8;
+                    }
+                    for (int bit = 0; bit < shift; ++bit) {
+                        emit_line("srl\td");
+                        emit_line("rr\te");
+                    }
+                    emit_line("ld\ta, e");
+                    if (source_mask != 0xffu)
+                        emit_line("and\t%s",
+                                  asm_.imm(source_mask & 0xffu).c_str());
+                    for (int bit = 0; bit < offset; ++bit)
+                        emit_line("add\ta, a");
+                }
+
+                if (field_mask == 0xffu) {
+                    const bool preserves_hl =
+                        single_source_byte
+                            ? byte_load_preserves_hl_here(source_byte)
+                            : word_load_preserves_hl_here(ic.left);
+                    if (!direct_iy && !preserves_hl)
+                        emit_line("pop\thl");
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), a",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\t(hl), a");
+                } else {
+                    emit_line("ld\te, a");
+                    const bool preserves_hl =
+                        single_source_byte
+                            ? byte_load_preserves_hl_here(source_byte)
+                            : word_load_preserves_hl_here(ic.left);
+                    if (!direct_iy && !preserves_hl)
+                        emit_line("pop\thl");
+                    if (direct_iy)
+                        emit_line("ld\ta, %lld(iy)",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\ta, (hl)");
+                    emit_line("and\t%s",
+                              asm_.imm((~field_mask) & 0xffu).c_str());
+                    emit_line("or\ta, e");
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), a",
+                                  static_cast<long long>(direct_disp));
+                    else
+                        emit_line("ld\t(hl), a");
+                }
+                invalidate_a_cache();
+                invalidate_pair_cache();
+                return;
+            }
+
+            load_de(ic.left);
+            int right_shift = source_offset;
+            if (right_shift >= 8) {
+                emit_line("ld\te, d");
+                emit_line("ld\td, %s", asm_.imm(0).c_str());
+                right_shift -= 8;
+            }
+            for (int bit = 0; bit < right_shift; ++bit) {
+                emit_line("srl\td");
+                emit_line("rr\te");
+            }
+            const uint8_t source_lo = source_mask & 0xffu;
+            const uint8_t source_hi = (source_mask >> 8) & 0xffu;
+            if (source_lo != 0xffu) {
+                if (source_lo == 0) {
+                    emit_line("ld\te, %s", asm_.imm(0).c_str());
+                } else {
+                    emit_line("ld\ta, e");
+                    emit_line("and\t%s", asm_.imm(source_lo).c_str());
+                    emit_line("ld\te, a");
+                }
+            }
+            if (source_hi != 0xffu) {
+                if (source_hi == 0) {
+                    emit_line("ld\td, %s", asm_.imm(0).c_str());
+                } else {
+                    emit_line("ld\ta, d");
+                    emit_line("and\t%s", asm_.imm(source_hi).c_str());
+                    emit_line("ld\td, a");
+                }
+            }
+            int remaining_shift = offset;
+            if (remaining_shift >= 8) {
+                emit_line("ld\td, e");
+                emit_line("ld\te, %s", asm_.imm(0).c_str());
+                remaining_shift -= 8;
+            }
+            for (int bit = 0; bit < remaining_shift; ++bit) {
+                emit_line("sla\te");
+                emit_line("rl\td");
+            }
+
+            if (!direct_iy) {
+                emit_line("push\tde");
+                load_hl(ic.result);
+                emit_line("pop\tde");
+            }
+
+            const uint8_t field_lo = field_mask & 0xffu;
+            const uint8_t field_hi = (field_mask >> 8) & 0xffu;
+            auto emit_updated_byte = [&](int byte, uint8_t mask,
+                                         const char *src_reg) {
+                if (mask == 0)
+                    return;
+                if (mask == 0xffu) {
+                    if (direct_iy)
+                        emit_line("ld\t%lld(iy), %s",
+                                  static_cast<long long>(direct_disp + byte),
+                                  src_reg);
+                    else
+                        emit_line("ld\t(hl), %s", src_reg);
+                    return;
+                }
+                if (direct_iy)
+                    emit_line("ld\ta, %lld(iy)",
+                              static_cast<long long>(direct_disp + byte));
+                else
+                    emit_line("ld\ta, (hl)");
+                emit_line("and\t%s", asm_.imm((~mask) & 0xffu).c_str());
+                emit_line("or\ta, %s", src_reg);
+                if (direct_iy)
+                    emit_line("ld\t%lld(iy), a",
+                              static_cast<long long>(direct_disp + byte));
+                else
+                    emit_line("ld\t(hl), a");
+            };
+            emit_updated_byte(0, field_lo, "e");
+            if (!direct_iy && field_hi != 0)
+                emit_line("inc\thl");
+            emit_updated_byte(1, field_hi, "d");
+            invalidate_a_cache();
+            invalidate_pair_cache();
+            return;
+        }
+    }
     if (ic.result.kind == operand_kind::LABEL_REF &&
         !ic.right.is_none() &&
         (op_size(ic.left) == 1 || op_size(ic.left) == 2)) {
@@ -1548,6 +1912,35 @@ void z80_gen::gen_set_value_at(const icode &ic) {
                 emit_line("inc\thl");
                 emit_line("ld\t(hl), d");
             }
+            return;
+        }
+        if (op_size(ic.left) == 4) {
+            // Preserve the complete source value before materialising the
+            // destination.  Loading the two words onto the hardware stack is
+            // overlap-safe (unlike LDIR for `dst == src + 1`) and replaces a
+            // four-byte temporary's frame store/reload with four cheap stack
+            // operations.  Destination formation happens before the POPs so
+            // it may freely borrow BC and DE.
+            emit_direct_copy_src_hl();
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            emit_line("inc\thl");
+            emit_line("push\tde");
+            emit_line("ld\te, (hl)");
+            emit_line("inc\thl");
+            emit_line("ld\td, (hl)");
+            emit_line("push\tde");
+            emit_direct_copy_dst_hl();
+            emit_line("pop\tbc");
+            emit_line("pop\tde");
+            emit_line("ld\t(hl), e");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), d");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), c");
+            emit_line("inc\thl");
+            emit_line("ld\t(hl), b");
             return;
         }
     }

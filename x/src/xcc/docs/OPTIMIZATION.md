@@ -72,6 +72,47 @@ the validated `-Of` baseline. Pure byte-count transformations remain in
 `-Of`. Unsafe wider inlining and cross-block value propagation remain disabled
 by default.
 
+## Validated Speed Cycle (2026-08-27)
+
+The current `-Of` baseline now contains the generic rules promoted during the
+current-upstream 80cc audit. `-O3` remains an exact alias of that validated
+profile. `-Os` was changed only where the same transformation also reduced
+linked bytes; speed-only policy remains outside the size profile.
+
+- Module optimization specializes constant-return branches and inlines only
+  bounded private leaf functions. Eligibility and profitability come from IR
+  instruction cost, CFG shape, call count, live pressure, alias escape, and
+  ABI properties. Source names, text fragments, workload constants, and
+  program fingerprints are not inputs.
+- Value numbering and address reassociation expose affine base/index/constant
+  forms, power-of-two scales, secondary inductions, and lockstep pointer
+  walks. A byte-derived cursor is legal only when checked intervals prove
+  every narrowing cast and byte arithmetic intermediate non-wrapping.
+  Enclosing bounds may be imported only from a natural loop with a constant
+  guard, unique preheader initialization, and one latch update. When the
+  affine index is a secondary induction, cursor commitment separately proves
+  its unique zero initialization and unambiguous update and advances the
+  cursor at that update; it never substitutes the sentinel induction's update.
+- Loop-depth-weighted allocation keeps profitable scalar recurrences and byte
+  or pointer inductions in Z80 homes. Pair-pressure scheduling, call-clobber
+  checks, and a final physical verifier prevent BC/B/C overlap and account for
+  helpers that clobber `IY`.
+- The selector has direct contained and crossing-bitfield inserts/tests,
+  fixed-trip byte equality and Horner kernels, widened Q8 constant
+  multiply/shift lowering, and carry-aware 32-bit add/bitwise/rotate chains.
+  Every selector is bounded by types, liveness, aliases, clobbers, and local
+  control flow.
+- Framed sibling calls are rejected when a terminal observer can still use an
+  automatic-object address or an `alloca` result. Partial bitfield stores are
+  not forwarded as complete word definitions, and address folding preserves
+  their storage-width metadata.
+
+The current 24-program audit has both M-model XCC profiles correct on 24/24.
+Against the better valid 80cc frame-pointer or stack-pointer result per row,
+`-Of` is strictly fastest on 24/24 and smaller on 23/24; `-Os` is smaller on
+24/24 and faster on 11/24. The exhaustive bare suite is correct on 20/20 in
+all four XCC lanes (`-O2`, `-Of`, `-O3`, and `-Os`).
+
 ## Current Baseline
 
 The current pipeline is already headed in the right direction, but it is

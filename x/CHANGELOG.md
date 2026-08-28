@@ -20,18 +20,23 @@ Release status:
   and its published results remain unchanged.
 
 - Advanced the benchmark-independent `-Of` optimizer after auditing current
-  80cc. New typed-IR and CFG rules narrow explicitly truncated private byte
-  chains, combine nested bitwise masks and select forms, split proven
-  pointer-chase reduction regions, and retain safe reductions/cursors in
-  disjoint register homes. Z80 lowering now uses byte-contained bitfield
-  accesses, fuses masked word shifts, preserves reductions during IY null
-  tests and linked-pointer reloads, and recognizes structurally proven 16-bit
-  MSB shift/XOR diamonds. The current-upstream matrix remains correct on
-  24/24 in both XCC modes; against the better valid 80cc mode per row, `-Of`
-  is smaller on 23/24 and faster on 17/24, while `-Os` is smaller on 24/24
-  and faster on 8/24. Relative to the first current-upstream snapshot before
-  this campaign, aggregate `-Of` output fell by 528 bytes and 9.25% cycles;
-  `-Os` fell by 303 bytes and 7.83% cycles.
+  80cc. The completed typed-IR, CFG, liveness, alias, and clobber campaign adds
+  affine scale/address reassociation, loop-depth-weighted induction residence,
+  constant-return branch specialization, bounded leaf inlining, fixed-trip
+  byte equality and Horner lowering, widened Q8 multiply/shift lowering,
+  carry-aware 32-bit chains, direct bitfield inserts/tests, and final BC/B/C
+  physical-interference plus wide-multiply `IY` checks. The earlier byte-chain,
+  mask/select, pointer-chase, word-recurrence, and MSB-diamond rules remain.
+  The current-upstream matrix is correct on 24/24 in both XCC modes; against
+  the better valid 80cc mode per row, `-Of` is smaller on 23/24 and faster on
+  24/24, while `-Os` is smaller on 24/24 and faster on 11/24. Against the
+  broader valid SDCC/80cc envelope, `-Of` is strictly fastest on 24/24 and
+  `-Os` strictly smallest on 24/24. The 17/24 figure recorded during this
+  campaign was a superseded intermediate audit, not the final result. From
+  that intermediate snapshot to the final 24/24 run, aggregate `-Of` output
+  fell another 3,334 bytes and 12.62% cycles; `-Os` fell 2,904 bytes and 4.53%
+  cycles. No rule recognizes a benchmark name, source fragment, workload
+  constant, or program fingerprint.
 
 - Added all-profile executable regressions for framed sibling access to local
   structures, truncated byte chains, contained/crossing/volatile bitfields,
@@ -39,7 +44,25 @@ Release status:
   polynomial chains. The exhaustive bare benchmark then exposed a physical
   register-interference bug between a byte in B/C and an overlapping BC
   cursor; the allocator now treats all three homes as one resource, and the
-  exact FIR shift/add holdout is a permanent regression.
+  exact FIR shift/add holdout is a permanent regression. Added the reported
+  exact `item->arg = arg` spelling, crossing-bitfield stores with the same
+  parameter/member name, widened multiply/Q8, fixed-trip byte kernels, affine
+  base redefinition, and 32-bit carry-chain cases across all profiles. The
+  exhaustive bare sweep additionally found an unsafe affine pointer walk for
+  `(uint8_t)(i - 1)`: its byte offset wraps from 255 to zero while a 16-bit
+  running pointer does not. Pointer-walk strength reduction now propagates
+  checked intervals from canonical enclosing-loop guards and requires every
+  byte intermediate to be proven non-wrapping. The exact case is a permanent
+  all-profile, all-model regression; bounded nested row/column walks retain
+  their original fast lowering. A fixed-project tiny-regex failure then found
+  a distinct secondary-induction bug: a derived address cursor was advanced
+  with the loop sentinel's conditional updates instead of the secondary
+  induction's own update. Cursor commitment now proves the secondary's unique
+  zero initialization and update independently, rejects ambiguous definitions,
+  and uses that update at the actual increment site. The exact parser-shaped
+  case is a permanent six-profile, all-model regression. The final bare sweep is correct on 20/20 in
+  XCC `-O2`, `-Of`, `-O3`, and `-Os`; `-Of` totals 12,154 payload bytes and
+  4,506,945 cycles.
 
 - Fixed `-O3`/`-Of` framed sibling calls that passed the address of an
   automatic object. The backend no longer dismantles the caller's frame
@@ -52,7 +75,12 @@ Release status:
   the native Debian toolchain package as well as the XGDB VSIX, all CPC CRT
   sources/objects, linker scripts, and platform archives are explicit package
   inputs, and the Debian build verifies the installed CPC guide and CDT/DSK
-  modes from the finished archive.
+  modes from the finished archive. The extracted package's own compiler,
+  sysroot, and `xprog` pass the real-ROM 464 CDT and 664/6128 DSK MCP runs.
+  Debian package prerequisite staging is serialized at the outer level, so
+  parallel callers cannot launch competing full-prefix builds that remove or
+  overwrite the shared `bin/x` tree; recursive component builds retain their
+  normal jobserver parallelism.
 
 - Added self-contained Amstrad CPC 464, 664, and 6128 targets. All three use
   the firmware Text VDU, keyboard, 300 Hz clock, heap, private stack, and
@@ -60,9 +88,12 @@ Release status:
   while the 664/6128 provide ROM-backed raw and stdio disk I/O, input seeking
   (including headerless files), rename, and remove. `xprog` now creates CPC
   firmware CDT images and standard 40-track AMSDOS CPCEMU DSK images. Added
-  per-target examples and a real-ROM MCP regression that boots generated
+  per-target examples and an explicit real-ROM MCP release validation that boots generated
   media and passes the libc/console/clock suite on all three models plus
   writable disk and error-path coverage on the 664 and 6128.
+- Removed CPC MCP validation from the manifest-driven regression pack. The
+  strict `run_mcp.py` flow remains available for explicit CPC and release
+  acceptance with the external MCP and ROM inputs.
 - Fixed optimized static function-pointer initializers. Module-level liveness
   now treats function relocations in static data as address-taking uses, so
   dispatch-table callbacks retain their private definitions without disabling
@@ -99,14 +130,19 @@ Release status:
   CRT also exports both XCC and SDCC spellings of its HL/IY indirect-call
   trampolines, avoiding duplicate runtime archive definitions.
 - Completed the post-optimization validation sweep: model S/M/L pass
-  3,723/3,988/4,428 variants respectively; exhaustive L-model compile lanes
-  pass 2,745 ABI0 and 2,769 ABI1 variants; execution lanes pass 1,628 ABI0 and
-  1,603 ABI1 variants. The C23, fixed-project, algorithm, z88dk compatibility,
+  3,761/4,026/4,466 variants respectively; exhaustive L-model compile lanes
+  pass 2,745 ABI0 and 2,771 ABI1 variants; execution lanes pass 1,664 ABI0 and
+  1,639 ABI1 variants. The C23, fixed-project, algorithm, z88dk compatibility,
   host-tool, CP/M, YOS, MDR, full-chain, ZX Spectrum MCP, and platform-layout
   checks pass, as do the CPC 464 CDT and CPC 664/6128 DSK MCP delivery runs.
   Two indirect-call assembly probes now explicitly declare ABI1, where their
   BC callee-address assertion is valid because HL carries an argument; ABI0
   correctly uses its direct-HL stack-call trampoline instead.
+- Made the direct libc E2E harness select the compiler distribution matching
+  `X_MODEL` and force-rebuild its C-generated archive members. This prevents an
+  ordinary M compiler from silently compiling float-aliased `double` wrappers
+  into the L archive; all 106 libc shards and the scan/wide checks pass with
+  the model-matched L compiler.
 - Expanded the locked full-program compiler comparison to 24 programs with a
   host-verified packed-bitfield extract/insert workload. Repaired the two XCC
   optimized failures: spill-slot liveness now follows the real CFG, and word

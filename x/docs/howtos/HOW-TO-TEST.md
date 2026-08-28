@@ -152,9 +152,10 @@ PASS TZX (...=0xA5)
 See the [ZX Spectrum target guide](ZX-SPECTRUM-48K.md) for the visual Fuse
 example and platform contract.
 
-## Amstrad CPC hardware-level test
+## Amstrad CPC hardware-level release validation
 
-The optional CPC test uses `amstrad-cpc-mcp` plus legal 464, 664, 6128, and
+This explicit validation is not part of the regression pack. It uses
+`amstrad-cpc-mcp` plus legal 464, 664, 6128, and
 AMSDOS ROM images:
 
 ```sh
@@ -212,8 +213,8 @@ bash archive/x/tests/tests/xcc-legacy/run_codegen_bench.sh ./bin/x/bin/xcc --sui
 4. Run the affected host-tool component test for tool changes.
 5. Run the four-mode ZX MCP test for Spectrum CRT, linker, console, keyboard,
    or tape changes.
-6. Run the three-model CPC MCP test for CPC CRT, firmware, AMSDOS, CDT, or DSK
-   changes.
+6. Explicitly run the three-model CPC MCP release validation for CPC CRT,
+   firmware, AMSDOS, CDT, or DSK changes; it is not in the regression pack.
 7. If packaging inputs or staged outputs changed, run `make packages` and its
    finished-archive check.
 

@@ -101,11 +101,12 @@ machine, Gate Array/ROM paging, or AMSDOS environment. Its Partner-style and
 ZX-128-style banking examples demonstrate the generic memory mapper; they are
 not CPC machine profiles. The CPC linker scripts keep the program in the
 primary visible RAM below `0x9F00` and do not depend on the 6128's extra bank.
-Use the real-ROM MCP regression below for machine-level acceptance.
+Use the explicit real-ROM MCP validation below for machine-level acceptance.
 
-## MCP regression
+## MCP release validation
 
-The real-ROM regression uses an `amstrad-cpc-mcp` checkout beside this
+This validation is deliberately outside the regression pack. It uses an
+`amstrad-cpc-mcp` checkout beside this
 repository by default, or accepts explicit paths:
 
 ```sh

@@ -36,7 +36,14 @@ LIBC_ARCHIVE_SRCS := $(sort \
 
 CXX         := g++
 CXXFLAGS    := -std=c++20 -Wall -Wextra -g -I$(XZ80_INC) -I$(BUILD) -I$(RT_TESTS) -I.
-C8C         ?= $(REPO_ROOT)/bin/x/bin/xcc
+MODEL_DIST_S := x-s
+MODEL_DIST_M := x-m
+MODEL_DIST_L := x-l
+# The archive feature switches and the compiler's source ABI must agree.
+# In particular, the ordinary bin/x compiler is M and deliberately aliases
+# source-level double to float, so it cannot build this harness's default L
+# double cores correctly.
+C8C         ?= $(REPO_ROOT)/bin/$(MODEL_DIST_$(X_MODEL))/bin/xcc
 C8FLAGS     ?= -I$(X_ROOT)/libc/include
 
 # The real libc/sys/runtime builds already assemble with xas, and the direct
@@ -708,8 +715,8 @@ $(SCAN_BIN): $(SCAN_IHX)
 $(WIDE_BIN): $(WIDE_IHX)
 	python3 $(RT_TESTS)/tools/ihx2bin.py $< $@
 
-$(LIBC_ARCHIVE): $(LIBC_ARCHIVE_SRCS)
-	$(MAKE) -C $(X_ROOT)/libc/src ROOT=$(abspath $(X_ROOT)) BUILD_DIR=$(abspath $(BUILD))/sys-none DIST_DIR=$(REPO_ROOT)/bin/x HOST_BIN_DIR=$(REPO_ROOT)/bin/x/bin WITH_SYS=0 SYS=none LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG) LIBC_STDIO_FLOAT=$(LIBC_STDIO_FLOAT) X_MODEL=$(X_MODEL) AR8FLAGS="--mode=gnu rcs" -j1
+$(LIBC_ARCHIVE): $(LIBC_ARCHIVE_SRCS) Makefile $(C8C)
+	$(MAKE) -B -C $(X_ROOT)/libc/src ROOT=$(abspath $(X_ROOT)) BUILD_DIR=$(abspath $(BUILD))/sys-none DIST_DIR=$(REPO_ROOT)/bin/x HOST_BIN_DIR=$(REPO_ROOT)/bin/x/bin C8C=$(C8C) WITH_SYS=0 SYS=none LIBC_PROFILE=$(LIBC_PROFILE) LIBC_FLOAT=$(LIBC_FLOAT) LIBC_DOUBLE=$(LIBC_DOUBLE) LIBC_LONG=$(LIBC_LONG) LIBC_LONGLONG=$(LIBC_LONGLONG) LIBC_STDIO_FLOAT=$(LIBC_STDIO_FLOAT) X_MODEL=$(X_MODEL) AR8FLAGS="--mode=gnu rcs" -j1
 
 $(SYSMOCK_ARCHIVE): $(SYSMOCK_RELS) | $(BUILD)/objs
 	rm -f $@

@@ -121,8 +121,17 @@ void z80_gen::plan_size_shared_ix_helpers(const ir_module &mod) {
         temp_stack_bytes_ = 0;
         temp_frame_bytes_ = 0;
 
-        if (regalloc_enabled())
+        if (regalloc_enabled()) {
+            // Planning shared IX helpers performs the same prospective-frame
+            // register allocation as real emission.  Suppress any late-slot
+            // stack instructions here: this pass has no function body or
+            // prologue into which such instructions could legally be emitted.
+            reserving_prologue_spills_ = true;
             regalloc_prepass(fn);
+            reserving_prologue_spills_ = false;
+            temp_stack_bytes_ = 0;
+            temp_frame_bytes_ = 0;
+        }
         temp_stack_bytes_ = compute_temp_frame_bytes(fn);
         if (can_omit_frame_pointer(fn))
             continue;

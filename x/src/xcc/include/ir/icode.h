@@ -268,6 +268,18 @@ struct icode {
     bool     result_via_sret = false;         // CALL: hidden stack pointer owns aggregate result
     bool     internal_packed_arg = false;    // SEND/CALL: private ABI fills an otherwise unused register
 
+    // SET_VALUE_AT may retain the source-language bit-field insertion rather
+    // than expanding it into a shift/mask/load/mask/or/store DAG.  A negative
+    // width denotes an ordinary store.  Keeping the storage width explicit is
+    // necessary because byte-contained fields deliberately use byte accesses
+    // even when their declared allocation unit is wider.
+    int      bit_width = -1;
+    int      bit_offset = 0;
+    int      bit_storage_bytes = 0;
+    int      bit_source_offset = 0; // low field bit's position in `left`
+    bool     bit_rmw = false;       // insert is an in-place field increment
+    int64_t  bit_rmw_delta = 0;
+
     //
     // Print a human-readable dump of this instruction to stdout.
     //

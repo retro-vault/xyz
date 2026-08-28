@@ -91,15 +91,19 @@ single input/output disk channels. See the
 
 - `tests/tests/` is now the canonical home for non-benchmark test suites.
 - Benchmarks now live under the unified `tests/benchmarks/` root.
-- The pinned seven-lane z88dk comparison is correct on 24/24 for XCC M `-Os`
-  and `-Of`; `-Os` is strictly smallest on 24/24 programs, `-Of` is
-  smallest on 22/24 and fastest on 13/24 against the best valid current
-  zsdcc/80cc result. See
-  [`tests/benchmarks/z88dk24/RESULTS.md`](tests/benchmarks/z88dk24/RESULTS.md).
+- The pinned current-upstream seven-lane z88dk comparison is correct on 24/24
+  for XCC M `-Os` and `-Of`; with 80cc as the primary competitor, `-Os` is
+  strictly smallest on 24/24 and `-Of` strictly fastest on 24/24. The same
+  specialized profiles win 24/24 against the broader valid SDCC/80cc
+  envelope. See
+  [`tests/benchmarks/z88dk24/CURRENT-RESULTS.md`](tests/benchmarks/z88dk24/CURRENT-RESULTS.md);
+  the separate historical hybrid remains in
+  [`RESULTS.md`](tests/benchmarks/z88dk24/RESULTS.md).
 - `tests/tests/corpus/upstream/` holds the upstream corpora that previously lived under the repo-level `orig/`.
 - For a Docker-based MinGW host-tools preflight, run `make -C x windows-host-preflight`.
 - The optional ZX Spectrum MCP regression executes raw RAM, replacement ROM,
   TAP, and TZX forms; see `tests/tests/zx48/README.md`.
-- The optional Amstrad CPC MCP regression boots a generated CDT on a 464 and
-  generated DSK images on a 664 and 6128; run
+- The explicit Amstrad CPC MCP release validation boots a generated CDT on a
+  464 and generated DSK images on a 664 and 6128. It is outside the regression
+  pack; run
   `python3 x/tests/tests/cpc/run_mcp.py`.

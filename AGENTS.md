@@ -89,8 +89,9 @@ make stage-includes stage-xcc-support
   - `y/tests/` — YOS-side apps, media, and emulator harnesses
   - `x/tests/tests/zx48/` — optional real-ROM/MCP coverage for the staged
     `zx-ram` and `zx-rom` platforms plus TAP/TZX playback
-  - `x/tests/tests/cpc/` — optional real-ROM/MCP coverage for CPC 464 CDT and
-    writable CPC 664/6128 AMSDOS DSK workflows
+  - `x/tests/tests/cpc/` — explicit real-ROM/MCP release validation for CPC
+    464 CDT and writable CPC 664/6128 AMSDOS DSK workflows; it is deliberately
+    outside the manifest-driven regression pack
   - `x/tests/benchmarks/z88dk24/` — locked seven-lane full-program comparison;
     use its `prepare.sh` before `run.sh`, and preserve the independent corpus,
     target-sysroot, nightly-zsdcc, and 80cc commit pins. Its separate
@@ -207,14 +208,21 @@ cd x/tests/tests/c23 && make matrix PROFILE=setups/xcc-z80/profile-xcc-z80.json
   matrix records `-Os` as strict smallest on 24/24 valid competitor envelopes
   and `-Of` on 22/24.
 - The current-upstream z88dk24 audit has both XCC M profiles correct on 24/24.
-  With 80cc as the primary competitor, `-Of` is strictly fastest on 17/24
-  rows and smaller on 23/24; `-Os` is smaller on 24/24. Preserve that result
+  With 80cc as the primary competitor, `-Of` is strictly fastest on 24/24
+  rows and smaller on 23/24; `-Os` is smaller on 24/24 and faster on 11/24.
+  Against the broader valid SDCC/80cc envelope, `-Of` is also strictly fastest
+  on 24/24 and `-Os` strictly smallest on 24/24. Preserve that result
   structurally: compiler rules must be selected from IR, CFG, liveness,
   aliases, and clobbers, never benchmark
   names, source fragments, magic workload constants, or program fingerprints.
   For new reports, 80cc is the primary competitor: use the better valid
   frame-pointer or stack-pointer result per row for headline win counts. Keep
   SDCC visible as a correctness lane and in the broader competitor envelope.
+- Affine pointer-walk lowering must preserve the modular semantics of byte
+  offsets. Import only scoped canonical-loop bounds and prove every byte
+  intermediate non-wrapping; keep the
+  `t226_byte_affine_wrap_pointer_walk` all-profile regression when extending
+  address strength reduction.
 
 Update this file and the architecture documents when major structural or philosophical changes are made.
 

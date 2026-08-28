@@ -530,6 +530,623 @@ std::string z80_gen::asm_symbol_ref_name(const operand &op) const {
 
 // ----- Function emission ---------------------------------------------
 
+bool z80_gen::try_emit_frameless_byte_pointer_kernel(const ir_function &fn) {
+    if (debug_ || !tuned_profile_enabled() ||
+        fn.stack_param_bytes != 0 || fn.is_variadic ||
+        effective_call_abi(fn.abi) != call_abi::SDCCCALL1 ||
+        fn.icodes.empty()) {
+        return false;
+    }
+
+    auto same_temp = [](const operand &a, const operand &b) {
+        return a.is_temp() && b.is_temp() && a.temp_id == b.temp_id;
+    };
+    auto near_byte_pointer = [](const operand &op) {
+        return op.is_temp() && op.type && op.type->is_ptr() &&
+               !op.type->is_far_ptr() && op.type->base &&
+               op.type->base->size() == 1 &&
+               !op.type->base->is_volatile;
+    };
+    auto byte_value = [](const operand &op) {
+        return op.is_temp() && op.type && op.type->size() == 1 &&
+               !op.type->is_volatile;
+    };
+    auto label_is = [](const icode &ic, const std::string &name) {
+        return ic.op == icode_op::LABEL && ic.label_name == name;
+    };
+    auto emit_entry = [&]() {
+        asm_.label(mangle(fn.name), fn.is_global);
+        emit_comment("frameless byte-pointer kernel");
+    };
+    auto same_value = [&](const operand &a, const operand &b) {
+        if (same_temp(a, b))
+            return true;
+        return a.is_symbol() && b.is_symbol() &&
+               a.is_global == b.is_global &&
+               a.is_param == b.is_param &&
+               a.stack_offset == b.stack_offset &&
+               a.byte_offset == b.byte_offset && a.name == b.name;
+    };
+    const bool speed_profile =
+        opt_settings_.level == opt_level::Of ||
+        opt_settings_.level == opt_level::O3;
+
+    // Fully unroll a small fixed-length equality kernel.  Both incoming byte
+    // pointers stay in directly useful machine pairs and the second one is
+    // addressed through IY+d, eliminating the counter, loop branch and frame.
+    // The exact CFG proof below accepts either EQ or NE spelling and derives
+    // the mismatch edge from the comparison rather than assuming label order.
+    if (speed_profile && fn.local_bytes == 0 && fn.icodes.size() == 26) {
+        size_t p = 0;
+        const icode &function = fn.icodes[p++];
+        const icode &recv_a = fn.icodes[p++];
+        const icode &recv_b = fn.icodes[p++];
+        const icode &counter_init = fn.icodes[p++];
+        const icode &cursor_a_init = fn.icodes[p++];
+        const icode &cursor_b_init = fn.icodes[p++];
+        const icode &header = fn.icodes[p++];
+        const icode &bound_cmp = fn.icodes[p++];
+        const icode &bound_ifx = fn.icodes[p++];
+        const icode &body = fn.icodes[p++];
+        const icode &load_a = fn.icodes[p++];
+        const icode &load_b = fn.icodes[p++];
+        const icode &byte_cmp = fn.icodes[p++];
+        const icode &byte_ifx = fn.icodes[p++];
+        const icode &failure = fn.icodes[p++];
+        const icode &return_zero = fn.icodes[p++];
+        const icode &latch = fn.icodes[p++];
+        const icode &counter_step = fn.icodes[p++];
+        const icode &cursor_b_step = fn.icodes[p++];
+        const icode &cursor_b_commit = fn.icodes[p++];
+        const icode &cursor_a_step = fn.icodes[p++];
+        const icode &cursor_a_commit = fn.icodes[p++];
+        const icode &back = fn.icodes[p++];
+        const icode &success = fn.icodes[p++];
+        const icode &return_one = fn.icodes[p++];
+        const icode &end = fn.icodes[p++];
+        const int64_t trip_count = bound_cmp.right.ival;
+        const bool comparison_edges =
+            (byte_cmp.op == icode_op::NE &&
+             byte_ifx.true_lbl == failure.label_name &&
+             byte_ifx.false_lbl == latch.label_name) ||
+            (byte_cmp.op == icode_op::EQ &&
+             byte_ifx.true_lbl == latch.label_name &&
+             byte_ifx.false_lbl == failure.label_name);
+        if (function.op == icode_op::FUNCTION &&
+            recv_a.op == icode_op::RECEIVE &&
+            recv_a.arg_loc == abi_arg_loc::REG_HL &&
+            near_byte_pointer(recv_a.result) &&
+            recv_b.op == icode_op::RECEIVE &&
+            recv_b.arg_loc == abi_arg_loc::REG_DE &&
+            near_byte_pointer(recv_b.result) &&
+            counter_init.op == icode_op::ASSIGN &&
+            counter_init.result.is_temp() &&
+            is_exact_int_const(counter_init.left, 0) &&
+            cursor_a_init.op == icode_op::ASSIGN &&
+            near_byte_pointer(cursor_a_init.result) &&
+            same_temp(cursor_a_init.left, recv_a.result) &&
+            cursor_b_init.op == icode_op::ASSIGN &&
+            near_byte_pointer(cursor_b_init.result) &&
+            same_temp(cursor_b_init.left, recv_b.result) &&
+            header.op == icode_op::LABEL &&
+            bound_cmp.op == icode_op::LT &&
+            same_temp(bound_cmp.left, counter_init.result) &&
+            bound_cmp.right.kind == operand_kind::INT_CONST &&
+            trip_count >= 2 && trip_count <= 8 &&
+            bound_cmp.result.is_temp() &&
+            bound_ifx.op == icode_op::IFX &&
+            same_temp(bound_ifx.left, bound_cmp.result) &&
+            label_is(body, bound_ifx.true_lbl) &&
+            label_is(success, bound_ifx.false_lbl) &&
+            load_a.op == icode_op::GET_VALUE_AT &&
+            byte_value(load_a.result) &&
+            same_temp(load_a.left, cursor_a_init.result) &&
+            load_a.right.is_none() &&
+            load_b.op == icode_op::GET_VALUE_AT &&
+            byte_value(load_b.result) &&
+            same_temp(load_b.left, cursor_b_init.result) &&
+            load_b.right.is_none() &&
+            byte_cmp.result.is_temp() &&
+            same_temp(byte_cmp.left, load_a.result) &&
+            same_temp(byte_cmp.right, load_b.result) &&
+            byte_ifx.op == icode_op::IFX &&
+            same_temp(byte_ifx.left, byte_cmp.result) &&
+            comparison_edges && failure.op == icode_op::LABEL &&
+            return_zero.op == icode_op::RETURN &&
+            is_exact_int_const(return_zero.left, 0) &&
+            latch.op == icode_op::LABEL &&
+            counter_step.op == icode_op::ADD &&
+            same_temp(counter_step.result, counter_init.result) &&
+            same_temp(counter_step.left, counter_init.result) &&
+            is_exact_int_const(counter_step.right, 1) &&
+            cursor_b_step.op == icode_op::ADD &&
+            cursor_b_step.result.is_temp() &&
+            same_temp(cursor_b_step.left, cursor_b_init.result) &&
+            is_exact_int_const(cursor_b_step.right, 1) &&
+            cursor_b_commit.op == icode_op::ASSIGN &&
+            same_temp(cursor_b_commit.result, cursor_b_init.result) &&
+            same_temp(cursor_b_commit.left, cursor_b_step.result) &&
+            cursor_a_step.op == icode_op::ADD &&
+            cursor_a_step.result.is_temp() &&
+            same_temp(cursor_a_step.left, cursor_a_init.result) &&
+            is_exact_int_const(cursor_a_step.right, 1) &&
+            cursor_a_commit.op == icode_op::ASSIGN &&
+            same_temp(cursor_a_commit.result, cursor_a_init.result) &&
+            same_temp(cursor_a_commit.left, cursor_a_step.result) &&
+            back.op == icode_op::GOTO &&
+            back.label_name == header.label_name &&
+            return_one.op == icode_op::RETURN &&
+            is_exact_int_const(return_one.left, 1) &&
+            end.op == icode_op::ENDFUNCTION) {
+            emit_entry();
+            emit_line("ld\tb, h");
+            emit_line("ld\tc, l");
+            emit_line("push\tde");
+            emit_line("pop\tiy");
+            const std::string mismatch =
+                fresh_local_label("__xopt_fixed_eq_mismatch_");
+            for (int offset = 0; offset < trip_count; ++offset) {
+                emit_line("ld\ta, (bc)");
+                emit_line("cp\t%d(iy)", offset);
+                emit_line("jr\tnz, %s", mismatch.c_str());
+                if (offset + 1 < trip_count)
+                    emit_line("inc\tbc");
+            }
+            const bool byte_result =
+                fn.ret_type && fn.ret_type->size() == 1;
+            if (byte_result)
+                emit_line("ld\ta, %s", asm_.imm(1).c_str());
+            else
+                emit_line("ld\tde, %s", asm_.imm(1).c_str());
+            emit_line("ret");
+            emit_label(mismatch, false);
+            if (byte_result)
+                emit_line("xor\ta");
+            else
+                emit_line("ld\tde, %s", asm_.imm(0).c_str());
+            emit_line("ret");
+            return true;
+        }
+    }
+
+    // Fully unroll a small Horner byte fold:
+    //   acc = acc * constant + *cursor++
+    // The proof is intentionally strict (one accumulator, one cursor, one
+    // fixed-trip loop and a direct return), but the constants and function
+    // identity are unrestricted.  A:HL carries the byte addition while BC
+    // remains the walking source pointer.
+    if (speed_profile && fn.icodes.size() >= 20 &&
+        fn.icodes.size() <= 22) {
+        size_t p = 0;
+        const icode &function = fn.icodes[p++];
+        const icode &recv = fn.icodes[p++];
+        const icode &acc_init = fn.icodes[p++];
+        const icode &counter_init = fn.icodes[p++];
+        const icode &cursor_init = fn.icodes[p++];
+        const icode &header = fn.icodes[p++];
+        const icode &bound_cmp = fn.icodes[p++];
+        const icode &bound_ifx = fn.icodes[p++];
+        const icode &body = fn.icodes[p++];
+        const icode &multiply = fn.icodes[p++];
+        const icode &load = fn.icodes[p++];
+        const icode &accumulate = fn.icodes[p++];
+        const icode &latch = fn.icodes[p++];
+        const icode &counter_step = fn.icodes[p++];
+        const icode &cursor_step = fn.icodes[p++];
+        const icode *cursor_commit = nullptr;
+        if (p < fn.icodes.size() && fn.icodes[p].op == icode_op::ASSIGN)
+            cursor_commit = &fn.icodes[p++];
+        if (p + 3 > fn.icodes.size())
+            goto fixed_horner_no_match;
+        {
+            const icode &back = fn.icodes[p++];
+            const icode &exit = fn.icodes[p++];
+            const icode *return_copy = nullptr;
+            if (p < fn.icodes.size() && fn.icodes[p].op == icode_op::ASSIGN)
+                return_copy = &fn.icodes[p++];
+            if (p + 2 != fn.icodes.size())
+                goto fixed_horner_no_match;
+            const icode &ret = fn.icodes[p++];
+            const icode &end = fn.icodes[p++];
+
+            const operand *mul_acc = nullptr;
+            const operand *mul_constant = nullptr;
+            if (multiply.left.kind == operand_kind::INT_CONST) {
+                mul_constant = &multiply.left;
+                mul_acc = &multiply.right;
+            } else if (multiply.right.kind == operand_kind::INT_CONST) {
+                mul_constant = &multiply.right;
+                mul_acc = &multiply.left;
+            }
+            const bool add_values =
+                (same_temp(accumulate.left, multiply.result) &&
+                 same_temp(accumulate.right, load.result)) ||
+                (same_temp(accumulate.right, multiply.result) &&
+                 same_temp(accumulate.left, load.result));
+            const operand &returned = return_copy ? return_copy->result
+                                                  : accumulate.result;
+            const int64_t trip_count = bound_cmp.right.ival;
+            const uint16_t multiplier = mul_constant
+                ? static_cast<uint16_t>(mul_constant->ival) : 0;
+            int top_bit = -1;
+            for (int bit = 15; bit >= 0; --bit) {
+                if ((multiplier >> bit) & 1U) {
+                    top_bit = bit;
+                    break;
+                }
+            }
+            int multiply_ops = top_bit;
+            for (int bit = top_bit - 1; bit >= 0; --bit)
+                if ((multiplier >> bit) & 1U)
+                    ++multiply_ops;
+
+            if (function.op == icode_op::FUNCTION &&
+                recv.op == icode_op::RECEIVE &&
+                recv.arg_loc == abi_arg_loc::REG_HL &&
+                near_byte_pointer(recv.result) &&
+                acc_init.op == icode_op::ASSIGN &&
+                acc_init.result.is_symbol() && !acc_init.result.is_global &&
+                op_size(acc_init.result) == 2 &&
+                acc_init.left.kind == operand_kind::INT_CONST &&
+                counter_init.op == icode_op::ASSIGN &&
+                counter_init.result.is_temp() &&
+                is_exact_int_const(counter_init.left, 0) &&
+                cursor_init.op == icode_op::ASSIGN &&
+                near_byte_pointer(cursor_init.result) &&
+                same_temp(cursor_init.left, recv.result) &&
+                header.op == icode_op::LABEL &&
+                bound_cmp.op == icode_op::LT &&
+                same_temp(bound_cmp.left, counter_init.result) &&
+                bound_cmp.right.kind == operand_kind::INT_CONST &&
+                trip_count >= 2 && trip_count <= 8 &&
+                bound_cmp.result.is_temp() &&
+                bound_ifx.op == icode_op::IFX &&
+                same_temp(bound_ifx.left, bound_cmp.result) &&
+                label_is(body, bound_ifx.true_lbl) &&
+                label_is(exit, bound_ifx.false_lbl) &&
+                multiply.op == icode_op::MUL &&
+                multiply.result.is_temp() && op_size(multiply.result) == 2 &&
+                mul_acc && same_value(*mul_acc, acc_init.result) &&
+                mul_constant && top_bit >= 0 && multiply_ops <= 20 &&
+                load.op == icode_op::GET_VALUE_AT &&
+                byte_value(load.result) &&
+                same_temp(load.left, cursor_init.result) &&
+                load.right.is_none() &&
+                accumulate.op == icode_op::ADD &&
+                same_value(accumulate.result, acc_init.result) && add_values &&
+                latch.op == icode_op::LABEL &&
+                counter_step.op == icode_op::ADD &&
+                same_temp(counter_step.result, counter_init.result) &&
+                same_temp(counter_step.left, counter_init.result) &&
+                is_exact_int_const(counter_step.right, 1) &&
+                cursor_step.op == icode_op::ADD &&
+                cursor_step.result.is_temp() &&
+                same_temp(cursor_step.left, cursor_init.result) &&
+                is_exact_int_const(cursor_step.right, 1) &&
+                (!cursor_commit ||
+                 (same_temp(cursor_commit->result, cursor_init.result) &&
+                  same_temp(cursor_commit->left, cursor_step.result))) &&
+                back.op == icode_op::GOTO &&
+                back.label_name == header.label_name &&
+                (!return_copy ||
+                 (same_value(return_copy->left, acc_init.result) &&
+                  same_temp(ret.left, return_copy->result))) &&
+                ret.op == icode_op::RETURN &&
+                (return_copy || same_value(ret.left, returned)) &&
+                end.op == icode_op::ENDFUNCTION) {
+                emit_entry();
+                emit_line("ld\tb, h");
+                emit_line("ld\tc, l");
+                emit_line("ld\thl, %s",
+                          asm_.imm(static_cast<uint16_t>(acc_init.left.ival)).c_str());
+                for (int iteration = 0; iteration < trip_count; ++iteration) {
+                    emit_line("ld\td, h");
+                    emit_line("ld\te, l");
+                    for (int bit = top_bit - 1; bit >= 0; --bit) {
+                        emit_line("add\thl, hl");
+                        if ((multiplier >> bit) & 1U)
+                            emit_line("add\thl, de");
+                    }
+                    emit_line("ld\ta, (bc)");
+                    if (iteration + 1 < trip_count)
+                        emit_line("inc\tbc");
+                    emit_line("add\ta, l");
+                    emit_line("ld\tl, a");
+                    const std::string no_carry =
+                        fresh_local_label("__xopt_horner_no_carry_");
+                    emit_line("jr\tnc, %s", no_carry.c_str());
+                    emit_line("inc\th");
+                    emit_label(no_carry, false);
+                }
+                emit_line("ex\tde, hl");
+                emit_line("ret");
+                return true;
+            }
+        }
+    }
+fixed_horner_no_match:
+
+    // A byte-string length/count scan with an immutable base and a walking
+    // cursor.  Keep the base in DE and the cursor in BC; the loop then uses
+    // only the Z80's direct (BC) byte load and returns cursor-base in DE.
+    {
+        size_t p = 0;
+        if (fn.icodes.size() >= 14 &&
+            fn.icodes[p++].op == icode_op::FUNCTION) {
+            const icode &recv = fn.icodes[p++];
+            const icode &init = fn.icodes[p++];
+            const icode &cond = fn.icodes[p++];
+            const icode &load = fn.icodes[p++];
+            const icode &cast = fn.icodes[p++];
+            const icode &test = fn.icodes[p++];
+            if (recv.op == icode_op::RECEIVE &&
+                recv.arg_loc == abi_arg_loc::REG_HL &&
+                near_byte_pointer(recv.result) &&
+                init.op == icode_op::ASSIGN &&
+                near_byte_pointer(init.result) &&
+                same_temp(init.left, recv.result) &&
+                cond.op == icode_op::LABEL &&
+                load.op == icode_op::GET_VALUE_AT &&
+                byte_value(load.result) &&
+                same_temp(load.left, init.result) && load.right.is_none() &&
+                cast.op == icode_op::CAST && cast.result.is_temp() &&
+                same_temp(cast.left, load.result) &&
+                test.op == icode_op::IFX &&
+                same_temp(test.left, cast.result) &&
+                !test.true_lbl.empty() && !test.false_lbl.empty() &&
+                p + 6 < fn.icodes.size()) {
+                const icode &body = fn.icodes[p++];
+                const icode &step = fn.icodes[p++];
+                const icode &back = fn.icodes[p++];
+                const icode &done = fn.icodes[p++];
+                const icode &diff = fn.icodes[p++];
+                const icode &ret = fn.icodes[p++];
+                const icode &end = fn.icodes[p++];
+                if (label_is(body, test.true_lbl) &&
+                    step.op == icode_op::ADD &&
+                    same_temp(step.result, init.result) &&
+                    same_temp(step.left, init.result) &&
+                    is_exact_int_const(step.right, 1) &&
+                    back.op == icode_op::GOTO &&
+                    back.label_name == cond.label_name &&
+                    label_is(done, test.false_lbl) &&
+                    diff.op == icode_op::SUB && diff.result.is_temp() &&
+                    op_size(diff.result) == 2 &&
+                    same_temp(diff.left, init.result) &&
+                    same_temp(diff.right, recv.result) &&
+                    ret.op == icode_op::RETURN &&
+                    same_temp(ret.left, diff.result) &&
+                    end.op == icode_op::ENDFUNCTION &&
+                    p == fn.icodes.size()) {
+                    emit_entry();
+                    emit_line("ex\tde, hl");
+                    emit_line("ld\tb, d");
+                    emit_line("ld\tc, e");
+                    emit_label(cond.label_name, false);
+                    emit_line("ld\ta, (bc)");
+                    emit_line("or\ta, a");
+                    emit_line("jr\tz, %s", done.label_name.c_str());
+                    emit_label(body.label_name, false);
+                    emit_line("inc\tbc");
+                    emit_line("jr\t%s", cond.label_name.c_str());
+                    emit_label(done.label_name, false);
+                    emit_line("ld\th, b");
+                    emit_line("ld\tl, c");
+                    emit_line("or\ta, a");
+                    emit_line("sbc\thl, de");
+                    emit_line("ex\tde, hl");
+                    emit_line("ret");
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Two walking byte pointers compared until NUL or mismatch.  BC and DE
+    // are both directly addressable on the Z80; retain the already loaded
+    // left byte in H so the equality test does not reread memory.
+    {
+        size_t p = 0;
+        if (fn.icodes.size() >= 24 &&
+            fn.icodes[p++].op == icode_op::FUNCTION) {
+            const icode &recv_a = fn.icodes[p++];
+            const icode &recv_b = fn.icodes[p++];
+            const icode &cond = fn.icodes[p++];
+            const icode &load_truth = fn.icodes[p++];
+            const icode &cast_truth = fn.icodes[p++];
+            const icode &truth = fn.icodes[p++];
+            if (recv_a.op == icode_op::RECEIVE &&
+                recv_a.arg_loc == abi_arg_loc::REG_HL &&
+                near_byte_pointer(recv_a.result) &&
+                recv_b.op == icode_op::RECEIVE &&
+                recv_b.arg_loc == abi_arg_loc::REG_DE &&
+                near_byte_pointer(recv_b.result) &&
+                cond.op == icode_op::LABEL &&
+                load_truth.op == icode_op::GET_VALUE_AT &&
+                byte_value(load_truth.result) &&
+                same_temp(load_truth.left, recv_a.result) &&
+                load_truth.right.is_none() &&
+                cast_truth.op == icode_op::CAST &&
+                cast_truth.result.is_temp() &&
+                same_temp(cast_truth.left, load_truth.result) &&
+                truth.op == icode_op::IFX &&
+                same_temp(truth.left, cast_truth.result) &&
+                !truth.true_lbl.empty() && !truth.false_lbl.empty() &&
+                p + 16 < fn.icodes.size()) {
+                const icode &compare_lbl = fn.icodes[p++];
+                const icode &load_a = fn.icodes[p++];
+                const icode &load_b = fn.icodes[p++];
+                const icode &eq = fn.icodes[p++];
+                const icode &eq_ifx = fn.icodes[p++];
+                const icode &step_lbl = fn.icodes[p++];
+                const icode &step_a = fn.icodes[p++];
+                const icode &commit_a = fn.icodes[p++];
+                const icode &step_b = fn.icodes[p++];
+                const icode &commit_b = fn.icodes[p++];
+                const icode &back = fn.icodes[p++];
+                const icode &done = fn.icodes[p++];
+                const icode &final_a = fn.icodes[p++];
+                const icode &final_b = fn.icodes[p++];
+                const icode &diff = fn.icodes[p++];
+                const icode &ret = fn.icodes[p++];
+                const icode &end = fn.icodes[p++];
+                if (label_is(compare_lbl, truth.true_lbl) &&
+                    load_a.op == icode_op::GET_VALUE_AT &&
+                    byte_value(load_a.result) &&
+                    same_temp(load_a.left, recv_a.result) &&
+                    load_a.right.is_none() &&
+                    load_b.op == icode_op::GET_VALUE_AT &&
+                    byte_value(load_b.result) &&
+                    same_temp(load_b.left, recv_b.result) &&
+                    load_b.right.is_none() &&
+                    eq.op == icode_op::EQ && eq.result.is_temp() &&
+                    same_temp(eq.left, load_a.result) &&
+                    same_temp(eq.right, load_b.result) &&
+                    eq_ifx.op == icode_op::IFX &&
+                    same_temp(eq_ifx.left, eq.result) &&
+                    label_is(step_lbl, eq_ifx.true_lbl) &&
+                    eq_ifx.false_lbl == truth.false_lbl &&
+                    step_a.op == icode_op::ADD && step_a.result.is_temp() &&
+                    same_temp(step_a.left, recv_a.result) &&
+                    is_exact_int_const(step_a.right, 1) &&
+                    commit_a.op == icode_op::ASSIGN &&
+                    same_temp(commit_a.result, recv_a.result) &&
+                    same_temp(commit_a.left, step_a.result) &&
+                    step_b.op == icode_op::ADD && step_b.result.is_temp() &&
+                    same_temp(step_b.left, recv_b.result) &&
+                    is_exact_int_const(step_b.right, 1) &&
+                    commit_b.op == icode_op::ASSIGN &&
+                    same_temp(commit_b.result, recv_b.result) &&
+                    same_temp(commit_b.left, step_b.result) &&
+                    back.op == icode_op::GOTO &&
+                    back.label_name == cond.label_name &&
+                    label_is(done, truth.false_lbl) &&
+                    final_a.op == icode_op::GET_VALUE_AT &&
+                    byte_value(final_a.result) && final_a.result.type->is_unsigned() &&
+                    same_temp(final_a.left, recv_a.result) &&
+                    final_a.right.is_none() &&
+                    final_b.op == icode_op::GET_VALUE_AT &&
+                    byte_value(final_b.result) && final_b.result.type->is_unsigned() &&
+                    same_temp(final_b.left, recv_b.result) &&
+                    final_b.right.is_none() &&
+                    diff.op == icode_op::SUB && diff.result.is_temp() &&
+                    op_size(diff.result) == 2 &&
+                    same_temp(diff.left, final_a.result) &&
+                    same_temp(diff.right, final_b.result) &&
+                    ret.op == icode_op::RETURN &&
+                    same_temp(ret.left, diff.result) &&
+                    end.op == icode_op::ENDFUNCTION &&
+                    p == fn.icodes.size()) {
+                    emit_entry();
+                    emit_line("ld\tb, h");
+                    emit_line("ld\tc, l");
+                    emit_label(cond.label_name, false);
+                    emit_line("ld\ta, (bc)");
+                    emit_line("or\ta, a");
+                    const std::string zero_lbl =
+                        fresh_local_label("__xopt_bytecmp_zero_");
+                    const std::string diff_lbl =
+                        fresh_local_label("__xopt_bytecmp_diff_");
+                    emit_line("jr\tz, %s", zero_lbl.c_str());
+                    emit_label(compare_lbl.label_name, false);
+                    emit_line("ld\th, a");
+                    emit_line("ld\ta, (de)");
+                    emit_line("cp\th");
+                    emit_line("jr\tnz, %s", diff_lbl.c_str());
+                    emit_label(step_lbl.label_name, false);
+                    emit_line("inc\tbc");
+                    emit_line("inc\tde");
+                    emit_line("jr\t%s", cond.label_name.c_str());
+                    emit_label(zero_lbl, false);
+                    emit_line("ld\th, a");
+                    emit_line("ld\ta, (de)");
+                    emit_label(diff_lbl, false);
+                    emit_line("ld\tl, h");
+                    emit_line("ld\th, %s", asm_.imm(0).c_str());
+                    emit_line("ld\te, a");
+                    emit_line("ld\td, %s", asm_.imm(0).c_str());
+                    emit_line("or\ta, a");
+                    emit_line("sbc\thl, de");
+                    emit_line("ex\tde, hl");
+                    emit_line("ret");
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Post-increment byte copy through the two incoming pointer registers.
+    // The assigned byte remains in A for the loop-termination test.
+    {
+        size_t p = 0;
+        if (fn.icodes.size() >= 15 &&
+            fn.icodes[p++].op == icode_op::FUNCTION) {
+            const icode &recv_dst = fn.icodes[p++];
+            const icode &recv_src = fn.icodes[p++];
+            const icode &loop = fn.icodes[p++];
+            const icode &old_src = fn.icodes[p++];
+            const icode &step_src = fn.icodes[p++];
+            const icode &commit_src = fn.icodes[p++];
+            const icode &load = fn.icodes[p++];
+            const icode &store = fn.icodes[p++];
+            const icode &step_dst = fn.icodes[p++];
+            const icode &commit_dst = fn.icodes[p++];
+            const icode &cast = fn.icodes[p++];
+            const icode &test = fn.icodes[p++];
+            const icode &done = fn.icodes[p++];
+            const icode &end = fn.icodes[p++];
+            if (recv_dst.op == icode_op::RECEIVE &&
+                recv_dst.arg_loc == abi_arg_loc::REG_HL &&
+                near_byte_pointer(recv_dst.result) &&
+                recv_src.op == icode_op::RECEIVE &&
+                recv_src.arg_loc == abi_arg_loc::REG_DE &&
+                near_byte_pointer(recv_src.result) &&
+                loop.op == icode_op::LABEL &&
+                old_src.op == icode_op::ASSIGN && old_src.result.is_temp() &&
+                same_temp(old_src.left, recv_src.result) &&
+                step_src.op == icode_op::ADD && step_src.result.is_temp() &&
+                same_temp(step_src.left, recv_src.result) &&
+                is_exact_int_const(step_src.right, 1) &&
+                commit_src.op == icode_op::ASSIGN &&
+                same_temp(commit_src.result, recv_src.result) &&
+                same_temp(commit_src.left, step_src.result) &&
+                load.op == icode_op::GET_VALUE_AT && byte_value(load.result) &&
+                same_temp(load.left, old_src.result) && load.right.is_none() &&
+                store.op == icode_op::SET_VALUE_AT &&
+                same_temp(store.result, recv_dst.result) &&
+                same_temp(store.left, load.result) && store.right.is_none() &&
+                step_dst.op == icode_op::ADD && step_dst.result.is_temp() &&
+                same_temp(step_dst.left, recv_dst.result) &&
+                is_exact_int_const(step_dst.right, 1) &&
+                commit_dst.op == icode_op::ASSIGN &&
+                same_temp(commit_dst.result, recv_dst.result) &&
+                same_temp(commit_dst.left, step_dst.result) &&
+                cast.op == icode_op::CAST && cast.result.is_temp() &&
+                same_temp(cast.left, load.result) &&
+                test.op == icode_op::IFX &&
+                same_temp(test.left, cast.result) &&
+                test.true_lbl == loop.label_name &&
+                label_is(done, test.false_lbl) &&
+                end.op == icode_op::ENDFUNCTION &&
+                p == fn.icodes.size()) {
+                emit_entry();
+                emit_label(loop.label_name, false);
+                emit_line("ld\ta, (de)");
+                emit_line("inc\tde");
+                emit_line("ld\t(hl), a");
+                emit_line("inc\thl");
+                emit_line("or\ta, a");
+                emit_line("jr\tnz, %s", loop.label_name.c_str());
+                emit_label(done.label_name, false);
+                emit_line("ret");
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void z80_gen::emit_function(const ir_function &fn) {
     cur_fn_         = &fn;
     // Very large straight-line functions can make the speed profile exceed
@@ -582,8 +1199,25 @@ void z80_gen::emit_function(const ir_function &fn) {
     if (fn.bank < 0) asm_.section_code();
     else asm_.section_code_named(banked_code_section_name(fn.bank));
 
-    if (regalloc_enabled())
+    if (try_emit_frameless_byte_pointer_kernel(fn)) {
+        cur_fn_ = nullptr;
+        compact_codegen_ = false;
+        return;
+    }
+
+    if (regalloc_enabled()) {
+        // The home planner queries prospective IX offsets.  A query may mint
+        // a temporary slot, but code emission has not reached the function
+        // label/prologue yet.  Treat those allocations like prologue-time
+        // reservations so alloc_temp cannot emit naked DEC SP instructions
+        // into the preceding code area.  The definitive coloured frame is
+        // recomputed immediately below.
+        reserving_prologue_spills_ = true;
         regalloc_prepass(fn);
+        reserving_prologue_spills_ = false;
+        temp_stack_bytes_ = 0;
+        temp_frame_bytes_ = 0;
+    }
     temp_stack_bytes_ = compute_temp_frame_bytes(fn);
     bool auto_temp_frame =
         opt_settings_.level == opt_level::O0 ||
@@ -699,6 +1333,10 @@ void z80_gen::emit_function(const ir_function &fn) {
       if (!structured_match && try_emit_compare_ifx(fn, i))
           continue;
       if (structured_match) {
+        if (try_emit_split_page_countdown(fn, i))
+            continue;
+        if (try_emit_reused_scaled_global_call_pair(fn, i))
+            continue;
         if (try_emit_byte_mask_walk_loop(fn, i))
             continue;
         if (try_emit_byte_copy_walk_loop(fn, i))
@@ -708,6 +1346,8 @@ void z80_gen::emit_function(const ir_function &fn) {
         if (try_emit_inplace_byte_step_ifx(fn, i))
             continue;
         if (try_emit_inplace_pointer_update(fn, i))
+            continue;
+        if (try_emit_load_shift_bit_ifx(fn, i))
             continue;
         if (try_emit_scaled_frame_load(fn, i))
             continue;
@@ -751,6 +1391,74 @@ void z80_gen::emit_function(const ir_function &fn) {
 
     cur_fn_ = nullptr;
     compact_codegen_ = false;
+}
+
+bool z80_gen::try_emit_split_page_countdown(const ir_function &fn,
+                                            size_t &idx) {
+    if (idx + 1 >= fn.icodes.size())
+        return false;
+    const icode &step = fn.icodes[idx];
+    const icode &branch = fn.icodes[idx + 1];
+    if (step.op != icode_op::SUB || branch.op != icode_op::IFX ||
+        !step.result.is_temp() || !step.left.is_temp() ||
+        step.result.temp_id != step.left.temp_id ||
+        step.right.kind != operand_kind::INT_CONST ||
+        step.right.ival != 1 || op_size(step.result) != 2 ||
+        !branch.left.is_temp() ||
+        branch.left.temp_id != step.result.temp_id ||
+        branch.true_lbl.empty()) {
+        return false;
+    }
+
+    auto home = temp_regs_.find(step.result.temp_id);
+    if (home != temp_regs_.end() && home->second != temp_home::stack)
+        return false;
+
+    const icode *init = find_temp_def_before(step.result.temp_id, idx);
+    if (!init || init->op != icode_op::ASSIGN ||
+        !init->result.is_temp() ||
+        init->result.temp_id != step.result.temp_id ||
+        init->left.kind != operand_kind::INT_CONST ||
+        !init->right.is_none()) {
+        return false;
+    }
+    const int64_t count = init->left.ival;
+    // With a non-zero low byte, the normal 16-bit representation already is
+    // `(additional 256-byte pages, first partial page)`.  DEC high can then
+    // use the sign transition from 0 to -1 as the final-page sentinel.
+    if (count <= 0 || count > 32767 || (count & 0xff) == 0)
+        return false;
+
+    const size_t init_idx = static_cast<size_t>(init - &fn.icodes[0]);
+    for (size_t k = init_idx + 1; k < idx; ++k) {
+        const icode &inside = fn.icodes[k];
+        auto mentions = [&](const operand &op) {
+            return op.is_temp() && op.temp_id == step.result.temp_id;
+        };
+        if (mentions(inside.result) || mentions(inside.left) ||
+            mentions(inside.right)) {
+            return false;
+        }
+    }
+    if (temp_value_used_after(fn, idx + 2, step.result.temp_id))
+        return false;
+
+    const int off = ix_offset_of(step.result);
+    if (!fits_ix_disp(off) || !fits_ix_disp(off + 1))
+        return false;
+
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    emit_line("dec\t%s", asm_.ix_rel(off).c_str());
+    emit_line("jp\tnz, %s", branch.true_lbl.c_str());
+    emit_line("dec\t%s", asm_.ix_rel(off + 1).c_str());
+    emit_line("jp\tp, %s", branch.true_lbl.c_str());
+    if (!branch.false_lbl.empty())
+        emit_line("jp\t%s", branch.false_lbl.c_str());
+
+    idx += 1;
+    cur_ic_index_ = idx;
+    return true;
 }
 
 
@@ -1987,6 +2695,186 @@ bool z80_gen::try_emit_iy_indexed_load(const ir_function &fn, size_t &idx) {
     return true;
 }
 
+bool z80_gen::try_emit_reused_scaled_global_call_pair(
+    const ir_function &fn, size_t &idx) {
+    //   scale = bounded_u8 * K
+    //   p = global + scale
+    //   send other-reg
+    //   send p
+    //   call void_helper
+    //   scale2 = bounded_u8 * K
+    //   p2 = global + scale2
+    //   send p2
+    //   call second_helper
+    //
+    // Preserve p on the hardware stack across the first call instead of
+    // rebuilding the identical affine address.  The shape is deliberately
+    // ABI- and liveness-bounded; no source names or constant K are special.
+    if (idx + 8 >= fn.icodes.size())
+        return false;
+    const icode &scale1 = fn.icodes[idx];
+    const icode &address1 = fn.icodes[idx + 1];
+    const icode &other_send = fn.icodes[idx + 2];
+    const icode &pointer_send1 = fn.icodes[idx + 3];
+    const icode &call1 = fn.icodes[idx + 4];
+    const icode &scale2 = fn.icodes[idx + 5];
+    const icode &address2 = fn.icodes[idx + 6];
+    const icode &pointer_send2 = fn.icodes[idx + 7];
+    const icode &call2 = fn.icodes[idx + 8];
+
+    if (scale1.op != icode_op::MUL || !scale1.result.is_temp() ||
+        scale1.right.kind != operand_kind::INT_CONST ||
+        scale1.right.ival <= 0 || scale1.right.ival > 0xffff ||
+        scale2.op != icode_op::MUL || !scale2.result.is_temp() ||
+        scale2.right.kind != operand_kind::INT_CONST ||
+        scale2.right.ival != scale1.right.ival ||
+        !operands_equivalent(scale2.left, scale1.left) ||
+        other_send.op != icode_op::SEND ||
+        other_send.arg_loc != abi_arg_loc::REG_DE ||
+        op_size(other_send.left) != 2 ||
+        pointer_send1.op != icode_op::SEND ||
+        pointer_send1.arg_loc != abi_arg_loc::REG_HL ||
+        pointer_send2.op != icode_op::SEND ||
+        pointer_send2.arg_loc != abi_arg_loc::REG_HL ||
+        call1.op != icode_op::CALL || call1.func_name.empty() ||
+        !call1.result.is_none() || call1.arg_bytes != 0 ||
+        call1.result_via_sret || call1.callee_noreturn ||
+        call2.op != icode_op::CALL || call2.func_name.empty() ||
+        call2.arg_bytes != 0 || call2.result_via_sret ||
+        call2.callee_noreturn)
+        return false;
+
+    auto split_global_address = [&](const icode &address,
+                                    const operand &scaled,
+                                    const operand *&global) {
+        if (address.op != icode_op::ADD || !address.result.is_temp())
+            return false;
+        const operand *term = &address.left;
+        global = &address.right;
+        if (operands_equivalent(*global, scaled))
+            std::swap(term, global);
+        const bool direct_global =
+            (global->kind == operand_kind::SYMBOL && global->is_global &&
+             !global->is_tls && !global->is_func) ||
+            global->kind == operand_kind::LABEL_REF;
+        return direct_global && operands_equivalent(*term, scaled);
+    };
+    const operand *global1 = nullptr;
+    const operand *global2 = nullptr;
+    if (!split_global_address(address1, scale1.result, global1) ||
+        !split_global_address(address2, scale2.result, global2) ||
+        !global1 || !global2 || !operands_equivalent(*global1, *global2) ||
+        !pointer_send1.left.is_temp() ||
+        pointer_send1.left.temp_id != address1.result.temp_id ||
+        !pointer_send2.left.is_temp() ||
+        pointer_send2.left.temp_id != address2.result.temp_id ||
+        temp_value_used_after(fn, idx + 2, scale1.result.temp_id) ||
+        temp_value_used_after(fn, idx + 7, scale2.result.temp_id) ||
+        temp_value_used_after(fn, idx + 5, address1.result.temp_id) ||
+        temp_value_used_after(fn, idx + 9, address2.result.temp_id))
+        return false;
+
+    // Loading this earlier DE argument must leave the freshly formed HL
+    // address intact.  Compact IX slots, constants and DE-resident values have
+    // that property; global/TLS/rematerialized operands can borrow HL.
+    auto de_load_preserves_hl = [&](const operand &op) {
+        if (op.kind == operand_kind::INT_CONST ||
+            op.kind == operand_kind::FLOAT_CONST ||
+            op.kind == operand_kind::LABEL_REF)
+            return true;
+        if (op.kind == operand_kind::SYMBOL) {
+            if (op.is_global || op.is_tls)
+                return false;
+            if (symbol_home_in_bc(op) || symbol_home_in_iy(op))
+                return true;
+            const int off = ix_offset_of(op);
+            return fits_ix_disp(off) && fits_ix_disp(off + 1);
+        }
+        if (!op.is_temp())
+            return false;
+        auto home = temp_regs_.find(op.temp_id);
+        if (home != temp_regs_.end()) {
+            return home->second == temp_home::main_de ||
+                   home->second == temp_home::main_bc ||
+                   home->second == temp_home::arg_de;
+        }
+        const int off = ix_offset_of(op);
+        return fits_ix_disp(off) && fits_ix_disp(off + 1);
+    };
+    if (!de_load_preserves_hl(other_send.left))
+        return false;
+
+    // Prove that the scaled source is byte-bounded tightly enough for the
+    // compact A-based addition chain to retain the complete word result.
+    cur_ic_index_ = idx;
+    operand byte_source;
+    if (!get_zero_extended_u8_source(scale1.left, byte_source))
+        return false;
+    uint16_t upper = 0xff;
+    if (scale1.left.kind == operand_kind::INT_CONST) {
+        if (scale1.left.ival < 0 || scale1.left.ival > 0xff)
+            return false;
+        upper = static_cast<uint16_t>(scale1.left.ival);
+    } else if (scale1.left.is_temp()) {
+        const icode *def = find_temp_def_before(scale1.left.temp_id, idx);
+        if (def && def->op == icode_op::BAND) {
+            const operand *mask = &def->right;
+            if (def->left.kind == operand_kind::INT_CONST)
+                mask = &def->left;
+            if (mask->kind == operand_kind::INT_CONST &&
+                mask->ival >= 0 && mask->ival <= 0xff)
+                upper = static_cast<uint16_t>(mask->ival);
+        }
+    }
+    const uint16_t factor = static_cast<uint16_t>(scale1.right.ival);
+    if (static_cast<uint32_t>(upper) * factor > 0xffu)
+        return false;
+
+    cur_ic_index_ = idx;
+    if (debug_)
+        debug_->emit_location(scale1.line);
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    load_a(byte_source);
+    if (factor != 1) {
+        int top = 15;
+        while (top > 0 && ((factor >> top) & 1u) == 0)
+            --top;
+        if ((factor & (factor - 1u)) != 0)
+            emit_line("ld\te, a");
+        for (int bit = top - 1; bit >= 0; --bit) {
+            emit_line("add\ta, a");
+            if ((factor >> bit) & 1u)
+                emit_line("add\ta, e");
+        }
+    }
+    emit_line("ld\tl, a");
+    emit_line("ld\th, %s", asm_.imm(0).c_str());
+    const std::string symbol =
+        global1->kind == operand_kind::LABEL_REF
+            ? asm_label_ref_name(global1->name)
+            : mangle(global1->name);
+    emit_line("ld\tde, %s", asm_.imm_sym(symbol).c_str());
+    emit_line("add\thl, de");
+
+    cur_ic_index_ = idx + 2;
+    gen_send(other_send);
+    // HL still holds the pointer and the following SEND merely declares that
+    // same register argument.  Save one copy below any call-preservation
+    // pushes emitted by gen_call().
+    emit_line("push\thl");
+    cur_ic_index_ = idx + 4;
+    gen_call(call1);
+    emit_line("pop\thl");
+    cur_ic_index_ = idx + 8;
+    gen_call(call2);
+    cur_ic_index_ = idx;
+    idx += 8;
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    return true;
+}
+
 bool z80_gen::try_emit_scaled_frame_load(const ir_function &fn,
                                          size_t &idx) {
     if (idx + 2 >= fn.icodes.size())
@@ -2221,7 +3109,8 @@ bool z80_gen::try_emit_iy_indexed_store(const ir_function &fn, size_t &idx) {
         !store_ic.result.is_temp() ||
         store_ic.result.temp_id != add_ic.result.temp_id ||
         !store_ic.right.is_none() ||
-        (op_size(store_ic.left) != 1 && op_size(store_ic.left) != 2 &&
+        (store_ic.bit_width < 0 &&
+         op_size(store_ic.left) != 1 && op_size(store_ic.left) != 2 &&
          op_size(store_ic.left) != 4) ||
         temp_value_used_after(fn, idx + 2, add_ic.result.temp_id)) {
         return false;
@@ -2238,7 +3127,9 @@ bool z80_gen::try_emit_iy_indexed_store(const ir_function &fn, size_t &idx) {
         return false;
 
     const int64_t disp = offset->ival;
-    const int size = op_size(store_ic.left);
+    const int size = store_ic.bit_width >= 0
+                         ? store_ic.bit_storage_bytes
+                         : op_size(store_ic.left);
     if (disp < -128 || disp + size - 1 > 127)
         return false;
 
@@ -2246,6 +3137,18 @@ bool z80_gen::try_emit_iy_indexed_store(const ir_function &fn, size_t &idx) {
         debug_->emit_location(store_ic.line ? store_ic.line : add_ic.line);
     invalidate_pair_cache();
     invalidate_a_cache();
+    if (store_ic.bit_width >= 0) {
+        // Consume the derived-address definition, then let the retained
+        // bit-field store use its IY displacement directly.  This avoids
+        // materialising a dead address in BC immediately before every field
+        // update and keeps the normal bit-insertion semantics in one emitter.
+        const size_t saved_index = cur_ic_index_;
+        cur_ic_index_ = idx + 1;
+        gen_set_value_at(store_ic);
+        cur_ic_index_ = saved_index;
+        idx += 1;
+        return true;
+    }
     if (size == 1) {
         load_a(store_ic.left);
         emit_line("ld\t%lld(iy), a", static_cast<long long>(disp));
@@ -2666,19 +3569,73 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
         opt_settings_.level != opt_level::O3 &&
         opt_settings_.level != opt_level::Os)
         return false;
-    if (idx + 3 >= fn.icodes.size())
+    if (idx + 2 >= fn.icodes.size())
         return false;
 
-    const icode &shift = fn.icodes[idx];
-    const icode &sum = fn.icodes[idx + 1];
-    const icode &load = fn.icodes[idx + 2];
+    const icode &scale = fn.icodes[idx];
+    const operand *scale_value = nullptr;
+    const icode *partial_sum = nullptr;
+    int count = 0;
+    size_t load_index = 0;
+    int scaled_temp_id = -1;
+
+    if (scale.op == icode_op::SHL && scale.result.is_temp() &&
+        scale.right.kind == operand_kind::INT_CONST &&
+        op_size(scale.left) == 2 && op_size(scale.result) == 2 &&
+        idx + 3 < fn.icodes.size()) {
+        partial_sum = &fn.icodes[idx + 1];
+        const bool sum_shift_left =
+            partial_sum->op == icode_op::ADD &&
+            temp_eq(partial_sum->left, scale.result.temp_id) &&
+            operands_equivalent(partial_sum->right, scale.left);
+        const bool sum_shift_right =
+            partial_sum->op == icode_op::ADD &&
+            temp_eq(partial_sum->right, scale.result.temp_id) &&
+            operands_equivalent(partial_sum->left, scale.left);
+        if (!partial_sum->result.is_temp() ||
+            (!sum_shift_left && !sum_shift_right)) {
+            return false;
+        }
+        count = static_cast<int>(scale.right.ival);
+        scale_value = &scale.left;
+        scaled_temp_id = partial_sum->result.temp_id;
+        load_index = idx + 2;
+    } else if (scale.op == icode_op::MUL && scale.result.is_temp() &&
+               op_size(scale.result) == 2) {
+        // Accept the same Horner step after target-independent scale
+        // canonicalization has represented `x * (2^n + 1)` as a MUL.  This
+        // remains a general algebraic lowering: the multiplier is derived
+        // from IR and is unrestricted apart from having the native Z80
+        // shift-plus-original form.
+        const operand *constant = &scale.right;
+        scale_value = &scale.left;
+        if (scale_value->kind == operand_kind::INT_CONST)
+            std::swap(scale_value, constant);
+        if (constant->kind != operand_kind::INT_CONST ||
+            op_size(*scale_value) != 2 || constant->ival <= 2 ||
+            constant->ival > 257) {
+            return false;
+        }
+        uint64_t shifted = static_cast<uint64_t>(constant->ival - 1);
+        if ((shifted & (shifted - 1)) != 0)
+            return false;
+        while (shifted > 1) {
+            shifted >>= 1;
+            ++count;
+        }
+        if (count <= 0 || count > 7)
+            return false;
+        scaled_temp_id = scale.result.temp_id;
+        load_index = idx + 1;
+    } else {
+        return false;
+    }
+
+    const icode &load = fn.icodes[load_index];
     const icode *widen = nullptr;
-    const icode *accumulate = &fn.icodes[idx + 3];
-    if (shift.op != icode_op::SHL || !shift.result.is_temp() ||
-        shift.right.kind != operand_kind::INT_CONST ||
-        op_size(shift.left) != 2 || op_size(shift.result) != 2 ||
-        sum.op != icode_op::ADD || !sum.result.is_temp() ||
-        load.op != icode_op::GET_VALUE_AT || !load.result.is_temp() ||
+    size_t accumulate_index = load_index + 1;
+    const icode *accumulate = &fn.icodes[accumulate_index];
+    if (load.op != icode_op::GET_VALUE_AT || !load.result.is_temp() ||
         op_size(load.result) != 1 || !load.right.is_none() ||
         !load.left.type || !load.left.type->is_ptr() ||
         load.left.type->is_far_ptr() ||
@@ -2694,8 +3651,8 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
     // word ADD instead of retaining an explicit byte-to-word CAST.  Accept
     // both equivalent IR forms so this target fusion is not coupled to the
     // exact cleanup order of an earlier pass.
-    if (idx + 4 < fn.icodes.size()) {
-        const icode &possible_widen = fn.icodes[idx + 3];
+    if (load_index + 2 < fn.icodes.size()) {
+        const icode &possible_widen = fn.icodes[load_index + 1];
         if (possible_widen.op == icode_op::CAST &&
             possible_widen.result.is_temp() &&
             temp_eq(possible_widen.left, load.result.temp_id) &&
@@ -2704,48 +3661,41 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
             possible_widen.left.type->size() == 1 &&
             possible_widen.left.type->is_unsigned()) {
             widen = &possible_widen;
-            accumulate = &fn.icodes[idx + 4];
+            accumulate_index = load_index + 2;
+            accumulate = &fn.icodes[accumulate_index];
             if (accumulate->op != icode_op::ADD ||
                 op_size(accumulate->result) != 2)
                 return false;
         }
     }
 
-    const int count = static_cast<int>(shift.right.ival);
     if (count <= 0 || count > 7)
         return false;
-    const bool sum_shift_left =
-        temp_eq(sum.left, shift.result.temp_id) &&
-        operands_equivalent(sum.right, shift.left);
-    const bool sum_shift_right =
-        temp_eq(sum.right, shift.result.temp_id) &&
-        operands_equivalent(sum.left, shift.left);
     const int byte_value_tid =
         widen ? widen->result.temp_id : load.result.temp_id;
     const bool final_sum_left =
-        temp_eq(accumulate->left, sum.result.temp_id) &&
+        temp_eq(accumulate->left, scaled_temp_id) &&
         temp_eq(accumulate->right, byte_value_tid);
     const bool final_sum_right =
-        temp_eq(accumulate->right, sum.result.temp_id) &&
+        temp_eq(accumulate->right, scaled_temp_id) &&
         temp_eq(accumulate->left, byte_value_tid);
-    if ((!sum_shift_left && !sum_shift_right) ||
-        (!final_sum_left && !final_sum_right) ||
-        temp_value_used_after(fn, idx + 2, shift.result.temp_id) ||
-        temp_value_used_after(fn, idx + (widen ? 5 : 4),
-                              sum.result.temp_id) ||
-        temp_value_used_after(fn, idx + 4,
+    if ((!final_sum_left && !final_sum_right) ||
+        (partial_sum &&
+         temp_value_used_after(fn, idx + 2, scale.result.temp_id)) ||
+        temp_value_used_after(fn, accumulate_index + 1, scaled_temp_id) ||
+        temp_value_used_after(fn, accumulate_index + 1,
                               load.result.temp_id) ||
-        (widen && temp_value_used_after(fn, idx + 5,
+        (widen && temp_value_used_after(fn, accumulate_index + 1,
                                        widen->result.temp_id))) {
         return false;
     }
 
     if (debug_)
         debug_->emit_location(accumulate->line ? accumulate->line :
-                                                  shift.line);
+                                                  scale.line);
     invalidate_pair_cache();
     invalidate_a_cache();
-    load_hl(shift.left);
+    load_hl(*scale_value);
     emit_line("ld\td, h");
     emit_line("ld\te, l");
     for (int i = 0; i < count; ++i)
@@ -2773,7 +3723,7 @@ bool z80_gen::try_emit_shift_add_byte_accumulate(const ir_function &fn,
     store_hl(accumulate->result);
     invalidate_pair_cache();
     invalidate_a_cache();
-    idx += widen ? 4 : 3;
+    idx = accumulate_index;
     return true;
 }
 
@@ -3246,16 +4196,27 @@ bool z80_gen::try_emit_byte_load_compare_ifx(const ir_function &fn,
         load_hl(first.left);
         emit_line("ld\ta, (hl)");
     }
-    emit_line("push\taf");
-    if (address) {
-        // Materialize the intervening address exactly as normal codegen would;
-        // AF protects the first byte across arbitrary pointer operands.
-        cur_ic_index_ = idx + 1;
-        gen_icode(*address);
+    auto second_home = second.left.is_temp()
+                           ? temp_regs_.find(second.left.temp_id)
+                           : temp_regs_.end();
+    if (!address && second_home != temp_regs_.end() &&
+        second_home->second == temp_home::main_iy) {
+        // CP (IY+d) is slower than CP (HL), but vastly cheaper than moving IY
+        // through the stack while preserving the first byte in AF.
+        emit_line("cp\t0(iy)");
+    } else {
+        emit_line("push\taf");
+        if (address) {
+            // Materialize the intervening address exactly as normal codegen
+            // would; AF protects the first byte across arbitrary pointer
+            // operands.
+            cur_ic_index_ = idx + 1;
+            gen_icode(*address);
+        }
+        load_hl(second.left);
+        emit_line("pop\taf");
+        emit_line("cp\t(hl)");
     }
-    load_hl(second.left);
-    emit_line("pop\taf");
-    emit_line("cp\t(hl)");
 
     const char *condition = cmp.op == icode_op::EQ ? "z" : "nz";
     if (!ifx.true_lbl.empty())
@@ -3773,6 +4734,121 @@ bool z80_gen::try_emit_lsb32_shift_xor_diamond(const ir_function &fn,
     store_de_word(value, 1);
 
     idx += 11;
+    return true;
+}
+
+bool z80_gen::try_emit_load_shift_bit_ifx(const ir_function &fn,
+                                           size_t &idx) {
+    if (!compare_ifx_fusion_enabled() || idx + 3 >= fn.icodes.size())
+        return false;
+
+    const icode &load = fn.icodes[idx];
+    const icode &shift = fn.icodes[idx + 1];
+    const icode &band = fn.icodes[idx + 2];
+    if (load.op != icode_op::GET_VALUE_AT || !load.result.is_temp() ||
+        op_size(load.result) != 1 || !load.right.is_none() ||
+        (load.result.type && load.result.type->is_volatile) ||
+        (load.left.type && load.left.type->is_far_ptr()) ||
+        (load.left.type && load.left.type->base &&
+         load.left.type->base->is_volatile) ||
+        shift.op != icode_op::SHR || !shift.result.is_temp() ||
+        !shift.left.is_temp() ||
+        shift.left.temp_id != load.result.temp_id ||
+        shift.right.kind != operand_kind::INT_CONST ||
+        shift.right.ival < 0 || shift.right.ival > 7 ||
+        band.op != icode_op::BAND || !band.result.is_temp()) {
+        return false;
+    }
+
+    const operand *shifted = &band.left;
+    const operand *mask = &band.right;
+    if (shifted->kind == operand_kind::INT_CONST)
+        std::swap(shifted, mask);
+    if (!shifted->is_temp() ||
+        shifted->temp_id != shift.result.temp_id ||
+        mask->kind != operand_kind::INT_CONST)
+        return false;
+    const uint8_t mask_bits = static_cast<uint8_t>(mask->ival & 0xff);
+    if (mask_bits == 0 || (mask_bits & (mask_bits - 1u)) != 0)
+        return false;
+    int selected_bit = 0;
+    while (((mask_bits >> selected_bit) & 1u) == 0)
+        ++selected_bit;
+    selected_bit += static_cast<int>(shift.right.ival);
+    if (selected_bit > 7)
+        return false;
+
+    size_t ifx_index = idx + 3;
+    const icode *ifx = &fn.icodes[ifx_index];
+    int consumed = 3;
+    int cast_tid = -1;
+    if (ifx->op == icode_op::CAST &&
+        ifx->left.is_temp() &&
+        ifx->left.temp_id == band.result.temp_id &&
+        ifx->result.is_temp() &&
+        is_truth_test_preserving_integer_cast_ic(*ifx) &&
+        ifx_index + 1 < fn.icodes.size()) {
+        const operand cast_result = ifx->result;
+        cast_tid = cast_result.temp_id;
+        ++ifx_index;
+        ifx = &fn.icodes[ifx_index];
+        ++consumed;
+        if (ifx->op != icode_op::IFX || !ifx->left.is_temp() ||
+            ifx->left.temp_id != cast_result.temp_id)
+            return false;
+    } else if (ifx->op != icode_op::IFX || !ifx->left.is_temp() ||
+               ifx->left.temp_id != band.result.temp_id) {
+        return false;
+    }
+    if (ifx->true_lbl.empty() && ifx->false_lbl.empty())
+        return false;
+    if (temp_value_used_after(fn, idx + 2, load.result.temp_id) ||
+        temp_value_used_after(fn, idx + 3, shift.result.temp_id) ||
+        temp_value_used_after(fn, ifx_index + 1, band.result.temp_id) ||
+        (cast_tid >= 0 &&
+         temp_value_used_after(fn, ifx_index + 1, cast_tid)))
+        return false;
+
+    auto is_iy = [&](const operand &op) {
+        if (!op.is_temp())
+            return false;
+        auto home = temp_regs_.find(op.temp_id);
+        return home != temp_regs_.end() &&
+               home->second == temp_home::main_iy;
+    };
+    int64_t displacement = 0;
+    bool direct_iy = is_iy(load.left);
+    if (!direct_iy && load.left.is_temp()) {
+        const icode *def = find_temp_def_before(load.left.temp_id, idx);
+        if (def && def->op == icode_op::ADD) {
+            const operand *base = &def->left;
+            const operand *offset = &def->right;
+            if (base->kind == operand_kind::INT_CONST)
+                std::swap(base, offset);
+            if (is_iy(*base) && offset->kind == operand_kind::INT_CONST) {
+                displacement = offset->ival + load.left.byte_offset;
+                direct_iy = displacement >= -128 && displacement <= 127;
+            }
+        }
+    }
+
+    cur_ic_index_ = idx;
+    if (debug_)
+        debug_->emit_location(ifx->line ? ifx->line : load.line);
+    invalidate_a_cache();
+    invalidate_pair_cache();
+    if (direct_iy) {
+        emit_line("bit\t%d, %lld(iy)", selected_bit,
+                  static_cast<long long>(displacement));
+    } else {
+        load_hl(load.left);
+        emit_line("bit\t%d, (hl)", selected_bit);
+    }
+    if (!ifx->true_lbl.empty())
+        emit_line("jp\tnz, %s", ifx->true_lbl.c_str());
+    if (!ifx->false_lbl.empty())
+        emit_line("jp\t%s", ifx->false_lbl.c_str());
+    idx += consumed;
     return true;
 }
 

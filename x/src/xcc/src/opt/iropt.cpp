@@ -1645,6 +1645,7 @@ public:
             }
 
             if (ic.op == icode_op::SET_VALUE_AT &&
+                ic.bit_width < 0 &&
                 ic.result.is_temp()) {
                 auto it = temp_addr.find(ic.result.temp_id);
                 if (it == temp_addr.end())
@@ -2171,6 +2172,89 @@ public:
             return false;
         };
 
+        // A terminally promoted near pointer may also be a conventional
+        // walking cursor rather than a linked-list chase.  The virtual-temp
+        // backend form deliberately supports a loop-carried definition, but
+        // the SSA-like middle-end passes do not; consequently this proof is
+        // used only by the terminal promotion below.  Admit a cursor only
+        // when every occurrence is one of:
+        //   * one non-self initial assignment,
+        //   * an indirect read/write through the cursor,
+        //   * a constant pointer step whose result is committed back, or
+        //   * a read-only compare/subtract/argument/return use.
+        // Address-taken and aliased locals have already been rejected by the
+        // common candidate checks.  This exposes register-resident string and
+        // byte-buffer walks without assuming a library routine or source
+        // spelling.
+        auto is_pointer_walk_local = [&](const std::string &key) {
+            auto is_key = [&](const operand &op) {
+                return op.is_symbol() && base_symbol_key(op) == key;
+            };
+
+            int initializations = 0;
+            int commits = 0;
+            bool saw_indirect = false;
+            std::unordered_set<int> pending_steps;
+            for (const icode &ic : fn.icodes) {
+                const bool in_result = is_key(ic.result);
+                const bool in_left = is_key(ic.left);
+                const bool in_right = is_key(ic.right);
+                if (!in_result && !in_left && !in_right)
+                    continue;
+
+                if (ic.op == icode_op::ASSIGN && in_result &&
+                    !in_left && !in_right) {
+                    if (ic.left.is_temp() &&
+                        pending_steps.erase(ic.left.temp_id) != 0) {
+                        ++commits;
+                    } else {
+                        ++initializations;
+                    }
+                    continue;
+                }
+
+                if ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                    !in_result && in_left && !in_right &&
+                    ic.right.kind == operand_kind::INT_CONST &&
+                    ic.result.is_temp()) {
+                    pending_steps.insert(ic.result.temp_id);
+                    continue;
+                }
+                if ((ic.op == icode_op::ADD || ic.op == icode_op::SUB) &&
+                    in_result && in_left && !in_right &&
+                    ic.right.kind == operand_kind::INT_CONST) {
+                    ++commits;
+                    continue;
+                }
+
+                if (ic.op == icode_op::GET_VALUE_AT && in_left &&
+                    !in_result && !in_right) {
+                    saw_indirect = true;
+                    continue;
+                }
+                if (ic.op == icode_op::SET_VALUE_AT && in_result &&
+                    !in_left && !in_right) {
+                    saw_indirect = true;
+                    continue;
+                }
+
+                const bool read_only =
+                    !in_result && in_left && !in_right &&
+                    (ic.op == icode_op::EQ || ic.op == icode_op::NE ||
+                     ic.op == icode_op::LT || ic.op == icode_op::LE ||
+                     ic.op == icode_op::GT || ic.op == icode_op::GE ||
+                     ic.op == icode_op::SUB || ic.op == icode_op::IFX ||
+                     ic.op == icode_op::SEND || ic.op == icode_op::RETURN ||
+                     ic.op == icode_op::CAST || ic.op == icode_op::ASSIGN);
+                if (read_only)
+                    continue;
+
+                return false;
+            }
+            return initializations == 1 && commits > 0 && saw_indirect &&
+                   pending_steps.empty();
+        };
+
         bool function_has_pointer_chase = false;
         for (const icode &ic : fn.icodes) {
             if (!ic.result.is_symbol() || !ic.result.type ||
@@ -2214,6 +2298,7 @@ public:
             const bool safe_multiple_definitions =
                 (terminal_backend_form_ && allow_general_mutable_ &&
                  (is_pointer_chase_local(key) ||
+                  is_pointer_walk_local(key) ||
                   (function_has_pointer_chase &&
                    is_data_reduction_local(key)))) ||
                 (op.type->is_integer() &&
@@ -9114,6 +9199,145 @@ public:
     }
 };
 
+// Reuse a dominating base+offset address when a successor needs that address
+// plus a constant field or element displacement:
+//
+//     p = base + offset; ... q = base + (offset + 2)
+//                         -> q = p + 2
+//
+// Dominance and intervening-definition checks make this a value-based address
+// reassociation. Besides deleting arithmetic, it exposes one running pointer
+// to the terminal loop lowering.
+class dominating_address_reassociate_pass final : public ir_pass {
+public:
+    const char *name() const override {
+        return "dominating_address_reassociate";
+    }
+
+    bool run(ir_function &fn) override {
+        if (fn.icodes.empty())
+            return false;
+
+        control_flow_graph cfg(fn);
+        const auto dominators = cfg.dominators();
+        std::vector<size_t> instruction_block(fn.icodes.size(), 0);
+        for (const auto &block : cfg.blocks()) {
+            for (size_t i = block.begin; i < block.end; ++i)
+                instruction_block[i] = block.id;
+        }
+
+        std::unordered_map<int, const icode *> unique_defs;
+        std::unordered_map<int, size_t> def_indices;
+        std::unordered_map<int, int> def_counts;
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            const icode &ic = fn.icodes[i];
+            if (!defines_result(ic) || !ic.result.is_temp())
+                continue;
+            ++def_counts[ic.result.temp_id];
+            unique_defs[ic.result.temp_id] = &ic;
+            def_indices[ic.result.temp_id] = i;
+        }
+        for (const auto &[tid, count] : def_counts) {
+            if (count != 1) {
+                unique_defs.erase(tid);
+                def_indices.erase(tid);
+            }
+        }
+
+        auto pointerish = [](const operand &op) {
+            return op.type && !op.type->is_far_ptr() &&
+                   (op.type->is_ptr() || op.type->is_array());
+        };
+        auto dominates_index = [&](size_t def_index, size_t use_index) {
+            const size_t def_block = instruction_block[def_index];
+            const size_t use_block = instruction_block[use_index];
+            if (def_block == use_block)
+                return def_index < use_index;
+            return use_block < dominators.size() &&
+                   dominators[use_block].count(def_block) != 0;
+        };
+        auto redefined_between = [&](const operand &value, size_t begin,
+                                     size_t end) {
+            for (size_t i = begin; i < end; ++i) {
+                if (defines_result(fn.icodes[i]) &&
+                    same_value_operand(fn.icodes[i].result, value))
+                    return true;
+            }
+            return false;
+        };
+
+        bool changed = false;
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            icode &address = fn.icodes[index];
+            if (address.op != icode_op::ADD || !pointerish(address.result))
+                continue;
+
+            const operand *direct_base = nullptr;
+            const operand *adjusted = nullptr;
+            if (pointerish(address.left)) {
+                direct_base = &address.left;
+                adjusted = &address.right;
+            } else if (pointerish(address.right)) {
+                direct_base = &address.right;
+                adjusted = &address.left;
+            }
+            if (!direct_base || !adjusted || !adjusted->is_temp())
+                continue;
+
+            auto def = unique_defs.find(adjusted->temp_id);
+            auto def_pos = def_indices.find(adjusted->temp_id);
+            if (def == unique_defs.end() || def_pos == def_indices.end() ||
+                !def->second || def_pos->second >= index)
+                continue;
+
+            const icode &adjust = *def->second;
+            const operand *offset = nullptr;
+            int64_t delta = 0;
+            if (adjust.op == icode_op::ADD) {
+                if (adjust.right.kind == operand_kind::INT_CONST) {
+                    offset = &adjust.left;
+                    delta = adjust.right.ival;
+                } else if (adjust.left.kind == operand_kind::INT_CONST) {
+                    offset = &adjust.right;
+                    delta = adjust.left.ival;
+                }
+            } else if (adjust.op == icode_op::SUB &&
+                       adjust.right.kind == operand_kind::INT_CONST) {
+                offset = &adjust.left;
+                delta = -adjust.right.ival;
+            }
+            if (!offset || delta == 0 || delta < -32768 || delta > 32767)
+                continue;
+
+            for (size_t prior_index = index; prior_index-- > 0;) {
+                const icode &prior = fn.icodes[prior_index];
+                if (prior.op != icode_op::ADD || !prior.result.is_temp() ||
+                    !pointerish(prior.result) ||
+                    !dominates_index(prior_index, index))
+                    continue;
+                const bool matches =
+                    (same_value_operand(prior.left, *direct_base) &&
+                     same_value_operand(prior.right, *offset)) ||
+                    (same_value_operand(prior.right, *direct_base) &&
+                     same_value_operand(prior.left, *offset));
+                if (!matches ||
+                    redefined_between(*direct_base, prior_index + 1, index) ||
+                    redefined_between(*offset, prior_index + 1, index))
+                    continue;
+
+                address.op = delta > 0 ? icode_op::ADD : icode_op::SUB;
+                address.left = prior.result;
+                address.right = operand::make_int(
+                    delta > 0 ? delta : -delta,
+                    address.result.type);
+                changed = true;
+                break;
+            }
+        }
+        return changed;
+    }
+};
+
 struct available_byte_load_entry {
     operand value;
     std::vector<std::string> deps;
@@ -9611,6 +9835,7 @@ static bool is_available_word_store_candidate(const icode &ic) {
         store_size = ic.result.type->base->size();
     }
     return ic.op == icode_op::SET_VALUE_AT &&
+           ic.bit_width < 0 &&
            ic.right.is_none() &&
            ic.left.kind != operand_kind::NONE &&
            store_size == 2;
@@ -9694,6 +9919,44 @@ static std::optional<available_word_mem_ref> resolve_available_word_mem_ref(
                     if (ref) {
                         erase_visiting();
                         return ref;
+                    }
+                    // Canonicalize exact dynamic address expressions too.
+                    // Two separately materialized `base + index` temps denote
+                    // the same address while both inputs retain their current
+                    // values.  Recording both dependency keys lets the normal
+                    // invalidation logic kill the fact as soon as either a
+                    // base or an induction value changes.
+                    auto lhs = resolve_available_word_mem_ref(
+                        def.left, temp_defs, depth + 1, visiting);
+                    auto rhs = resolve_available_word_mem_ref(
+                        def.right, temp_defs, depth + 1, visiting);
+                    if (lhs && rhs) {
+                        int64_t off64 = static_cast<int64_t>(lhs->offset) +
+                            (def.op == icode_op::ADD ? rhs->offset
+                                                    : -rhs->offset);
+                        if (off64 >= std::numeric_limits<int>::min() &&
+                            off64 <= std::numeric_limits<int>::max()) {
+                            std::string lhs_key = lhs->base_key;
+                            std::string rhs_key = rhs->base_key;
+                            if (def.op == icode_op::ADD && rhs_key < lhs_key)
+                                std::swap(lhs_key, rhs_key);
+                            available_word_mem_ref combined;
+                            combined.base_key =
+                                (def.op == icode_op::ADD ? "ADD(" : "SUB(") +
+                                lhs_key + "," + rhs_key + ")";
+                            combined.offset = static_cast<int>(off64);
+                            combined.deps = lhs->deps;
+                            combined.deps.insert(combined.deps.end(),
+                                                 rhs->deps.begin(),
+                                                 rhs->deps.end());
+                            std::sort(combined.deps.begin(), combined.deps.end());
+                            combined.deps.erase(
+                                std::unique(combined.deps.begin(),
+                                            combined.deps.end()),
+                                combined.deps.end());
+                            erase_visiting();
+                            return combined;
+                        }
                     }
                     // A dynamic address expression cannot be reduced to a
                     // base+constant key, but the SSA temp itself is still an
@@ -10634,8 +10897,10 @@ public:
 
 class loop_induction_pass final : public ir_pass {
 public:
-    explicit loop_induction_pass(bool avoid_call_spills)
-        : avoid_call_spills_(avoid_call_spills) {}
+    loop_induction_pass(bool avoid_call_spills,
+                        bool aggressive_scaled_recurrences)
+        : avoid_call_spills_(avoid_call_spills),
+          aggressive_scaled_recurrences_(aggressive_scaled_recurrences) {}
 
     const char *name() const override { return "loop_induction"; }
 
@@ -10719,20 +10984,83 @@ public:
                 };
                 std::vector<scaled_value> scaled_values;
 
+                auto scale_factor = [&](const icode &ic) -> int64_t {
+                    if (ic.op == icode_op::MUL) {
+                        const bool left_match =
+                            trackable_key(ic.left, alias) == iv.key &&
+                            ic.right.kind == operand_kind::INT_CONST;
+                        const bool right_match =
+                            trackable_key(ic.right, alias) == iv.key &&
+                            ic.left.kind == operand_kind::INT_CONST;
+                        if (!left_match && !right_match)
+                            return 0;
+                        return left_match ? ic.right.ival : ic.left.ival;
+                    }
+                    if (aggressive_scaled_recurrences_ &&
+                        ic.op == icode_op::SHL &&
+                        trackable_key(ic.left, alias) == iv.key &&
+                        ic.right.kind == operand_kind::INT_CONST &&
+                        ic.right.ival > 0 && ic.right.ival < 15) {
+                        return int64_t{1} << ic.right.ival;
+                    }
+                    return 0;
+                };
+
+                // Reuse a scale recurrence already established in the loop
+                // preheader. Nested-loop lowering commonly creates exactly
+                // this shape for the first indexed access; discovering it
+                // prevents a later affine address from introducing a second
+                // lockstep offset with an identical backedge update.
+                for (size_t i = preheader.begin;
+                     aggressive_scaled_recurrences_ && i < preheader.end;
+                     ++i) {
+                    const icode &init = fn.icodes[i];
+                    const int64_t factor = scale_factor(init);
+                    if (factor == 0 || factor == 1 || factor == -1 ||
+                        init.result.is_none())
+                        continue;
+                    const std::string scaled_key =
+                        trackable_key(init.result, alias);
+                    if (scaled_key.empty() || def_counts[scaled_key] != 1)
+                        continue;
+
+                    const int64_t delta = iv.step * factor;
+                    bool matching_update = false;
+                    for (size_t update_index = latch.begin;
+                         update_index < latch.end; ++update_index) {
+                        const icode &update = fn.icodes[update_index];
+                        if ((update.op != icode_op::ADD &&
+                             update.op != icode_op::SUB) ||
+                            update.right.kind != operand_kind::INT_CONST ||
+                            trackable_key(update.result, alias) != scaled_key ||
+                            trackable_key(update.left, alias) != scaled_key)
+                            continue;
+                        const int64_t actual_delta =
+                            update.op == icode_op::ADD
+                                ? update.right.ival
+                                : -update.right.ival;
+                        if (actual_delta == delta)
+                            matching_update = true;
+                    }
+                    if (matching_update) {
+                        scaled_values.push_back(scaled_value{
+                            factor,
+                            init.result.type ? init.result.type : iv.op.type,
+                            init.result});
+                    }
+                }
+
                 for (size_t block_id : loop.blocks) {
-                    if (block_id == loop.latches.front()) continue;
+                    if (!aggressive_scaled_recurrences_ &&
+                        block_id == loop.latches.front())
+                        continue;
                     const auto &block = cfg.block(block_id);
                     for (size_t i = block.begin; i < block.end; ++i) {
                         icode &ic = fn.icodes[i];
-                        if (ic.op != icode_op::MUL) continue;
-
-                        bool left_match = trackable_key(ic.left, alias) == iv.key &&
-                                          ic.right.kind == operand_kind::INT_CONST;
-                        bool right_match = trackable_key(ic.right, alias) == iv.key &&
-                                           ic.left.kind == operand_kind::INT_CONST;
-                        if (!left_match && !right_match) continue;
-
-                        int64_t factor = left_match ? ic.right.ival : ic.left.ival;
+                        const int64_t factor = scale_factor(ic);
+                        if (factor == 0) {
+                            continue;
+                        }
                         if (factor == 0 || factor == 1 || factor == -1) continue;
                         const uint64_t magnitude = static_cast<uint64_t>(
                             factor < 0 ? -factor : factor);
@@ -10748,7 +11076,14 @@ public:
 
                         scaled_value *found = nullptr;
                         for (auto &entry : scaled_values) {
-                            if (entry.factor == factor && entry.type == ic.result.type) {
+                            const bool same_type =
+                                entry.type == ic.result.type ||
+                                (entry.type && ic.result.type &&
+                                 entry.type->kind == ic.result.type->kind &&
+                                 entry.type->size() == ic.result.type->size() &&
+                                 entry.type->is_unsigned() ==
+                                     ic.result.type->is_unsigned());
+                            if (entry.factor == factor && same_type) {
                                 found = &entry;
                                 break;
                             }
@@ -10818,6 +11153,7 @@ public:
 
 private:
     bool avoid_call_spills_ = false;
+    bool aggressive_scaled_recurrences_ = false;
 };
 
 class strength_reduction_pass final : public ir_pass {
@@ -12633,6 +12969,464 @@ public:
     }
 };
 
+// Retain a bit-field assignment's source slice on the SET_VALUE_AT itself.
+// Front-end expressions such as `(value >> 3) & 31` otherwise materialise a
+// word shift and mask only for the backend to shift the five bits left again.
+// The rewrite is purely algebraic: definitions must be unique and earlier,
+// masks must contain every bit consumed by the field, and right shifts must
+// be unsigned and remain within the source width.
+class bitfield_source_slice_pass final : public ir_pass {
+public:
+    const char *name() const override { return "bitfield_source_slice"; }
+
+    bool run(ir_function &fn) override {
+        std::unordered_map<int, const icode *> unique_defs;
+        std::unordered_map<int, size_t> def_indices;
+        std::unordered_map<int, int> def_counts;
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            const icode &ic = fn.icodes[i];
+            if (!defines_result(ic) || !ic.result.is_temp())
+                continue;
+            ++def_counts[ic.result.temp_id];
+            unique_defs[ic.result.temp_id] = &ic;
+            def_indices[ic.result.temp_id] = i;
+        }
+        for (const auto &[tid, count] : def_counts) {
+            if (count != 1) {
+                unique_defs.erase(tid);
+                def_indices.erase(tid);
+            }
+        }
+
+        bool changed = false;
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            icode &store = fn.icodes[index];
+            if (store.op != icode_op::SET_VALUE_AT ||
+                store.bit_width <= 0 || store.bit_source_offset != 0)
+                continue;
+
+            operand value = store.left;
+            int source_offset = 0;
+            bool local_change = false;
+            for (int depth = 0; depth < 4 && value.is_temp(); ++depth) {
+                auto found = unique_defs.find(value.temp_id);
+                auto pos = def_indices.find(value.temp_id);
+                if (found == unique_defs.end() || pos == def_indices.end() ||
+                    !found->second || pos->second >= index)
+                    break;
+                const icode &def = *found->second;
+
+                if (def.op == icode_op::BAND) {
+                    const operand *input = &def.left;
+                    const operand *mask = &def.right;
+                    if (input->kind == operand_kind::INT_CONST)
+                        std::swap(input, mask);
+                    if (mask->kind != operand_kind::INT_CONST)
+                        break;
+                    const uint64_t needed =
+                        store.bit_width >= 64
+                            ? ~uint64_t{0}
+                            : ((uint64_t{1} << store.bit_width) - 1u);
+                    if ((static_cast<uint64_t>(mask->ival) & needed) != needed)
+                        break;
+                    value = *input;
+                    local_change = true;
+                    continue;
+                }
+
+                if (def.op == icode_op::SHR &&
+                    def.right.kind == operand_kind::INT_CONST &&
+                    def.right.ival >= 0 && def.right.ival < 64 &&
+                    ((def.left.type && def.left.type->is_unsigned()) ||
+                     (def.result.type && def.result.type->is_unsigned()))) {
+                    const int shift = static_cast<int>(def.right.ival);
+                    const int source_bits =
+                        def.left.type ? def.left.type->size() * 8 : 0;
+                    if (source_bits <= 0 ||
+                        source_offset + shift + store.bit_width > source_bits)
+                        break;
+                    source_offset += shift;
+                    value = def.left;
+                    local_change = true;
+                    continue;
+                }
+                break;
+            }
+
+            if (local_change) {
+                store.left = value;
+                store.bit_source_offset = source_offset;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+};
+
+// Collapse an unused-result `field += constant` expansion back into one
+// in-place masked update.  The front end represents this as load, mask, add,
+// bitinsert; requiring every intermediate to have exactly one use preserves
+// prefix/postfix expression values whenever the surrounding program observes
+// them.  Offset-zero fields cover the cheap native Z80 increment shape.
+class bitfield_inplace_update_pass final : public ir_pass {
+public:
+    const char *name() const override { return "bitfield_inplace_update"; }
+
+    bool run(ir_function &fn) override {
+        std::unordered_map<int, const icode *> defs;
+        std::unordered_map<int, size_t> def_indices;
+        std::unordered_map<int, int> def_counts;
+        std::unordered_map<int, int> use_counts;
+        for (size_t i = 0; i < fn.icodes.size(); ++i) {
+            const icode &ic = fn.icodes[i];
+            if (defines_result(ic) && ic.result.is_temp()) {
+                ++def_counts[ic.result.temp_id];
+                defs[ic.result.temp_id] = &ic;
+                def_indices[ic.result.temp_id] = i;
+            }
+            for_each_use_operand(ic, [&](const operand &op) {
+                if (op.is_temp())
+                    ++use_counts[op.temp_id];
+            });
+        }
+        for (const auto &[tid, count] : def_counts) {
+            if (count != 1) {
+                defs.erase(tid);
+                def_indices.erase(tid);
+            }
+        }
+
+        auto same_temp = [](const operand &lhs, const operand &rhs) {
+            return lhs.is_temp() && rhs.is_temp() &&
+                   lhs.temp_id == rhs.temp_id &&
+                   lhs.byte_offset == rhs.byte_offset;
+        };
+        auto find_def = [&](const operand &op, size_t before)
+            -> const icode * {
+            if (!op.is_temp())
+                return nullptr;
+            auto found = defs.find(op.temp_id);
+            auto pos = def_indices.find(op.temp_id);
+            if (found == defs.end() || pos == def_indices.end() ||
+                pos->second >= before)
+                return nullptr;
+            return found->second;
+        };
+
+        bool changed = false;
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            icode &store = fn.icodes[index];
+            if (store.op != icode_op::SET_VALUE_AT ||
+                store.bit_width <= 0 || store.bit_offset != 0 ||
+                store.bit_source_offset != 0 || store.bit_rmw ||
+                !store.left.is_temp() || use_counts[store.left.temp_id] != 1)
+                continue;
+
+            const icode *add = find_def(store.left, index);
+            if (!add || add->op != icode_op::ADD)
+                continue;
+            const operand *masked = &add->left;
+            const operand *delta = &add->right;
+            if (masked->kind == operand_kind::INT_CONST)
+                std::swap(masked, delta);
+            if (!masked->is_temp() || delta->kind != operand_kind::INT_CONST ||
+                delta->ival <= 0 || delta->ival > 255 ||
+                use_counts[masked->temp_id] != 1)
+                continue;
+
+            const operand *band_result = masked;
+            const icode *band = find_def(*band_result, index);
+            if (band && band->op == icode_op::CAST &&
+                band->left.is_temp() &&
+                use_counts[band->left.temp_id] == 1 &&
+                band->left.type && band->left.type->is_integer() &&
+                band->left.type->is_unsigned() &&
+                band->result.type && band->result.type->is_integer() &&
+                band->result.type->is_unsigned() &&
+                band->left.type->size() <= band->result.type->size()) {
+                band_result = &band->left;
+                band = find_def(*band_result, index);
+            }
+            if (!band || band->op != icode_op::BAND)
+                continue;
+            const operand *loaded = &band->left;
+            const operand *mask = &band->right;
+            if (loaded->kind == operand_kind::INT_CONST)
+                std::swap(loaded, mask);
+            const uint64_t field_mask =
+                store.bit_width >= 64
+                    ? ~uint64_t{0}
+                    : ((uint64_t{1} << store.bit_width) - 1u);
+            if (!loaded->is_temp() || mask->kind != operand_kind::INT_CONST ||
+                (static_cast<uint64_t>(mask->ival) & field_mask) != field_mask ||
+                use_counts[loaded->temp_id] != 1)
+                continue;
+
+            const icode *load = find_def(*loaded, index);
+            if (!load || load->op != icode_op::GET_VALUE_AT ||
+                !same_temp(load->left, store.result) ||
+                (load->result.type && load->result.type->is_volatile) ||
+                (load->left.type && load->left.type->base &&
+                 load->left.type->base->is_volatile))
+                continue;
+
+            // The 16-bit lowering uses INC DE; keep wider deltas on the
+            // ordinary expression path until an equally compact native form
+            // exists.  Bytes have a cheap ADD A,n form for every delta.
+            if (store.bit_storage_bytes == 2 && delta->ival != 1)
+                continue;
+
+            store.left = operand::make_none();
+            store.bit_rmw = true;
+            store.bit_rmw_delta = delta->ival;
+            changed = true;
+        }
+        return changed;
+    }
+};
+
+// Canonicalize two scaled copies of the same value into one constant
+// multiply.  Z80 code generation has target-aware addition-chain selection;
+// preserving parallel SHL temporaries hides that opportunity and forces both
+// partial products through spill slots.
+class linear_scale_canonicalize_pass final : public ir_pass {
+public:
+    explicit linear_scale_canonicalize_pass(bool distribute_affine = false)
+        : distribute_affine_(distribute_affine) {}
+
+    const char *name() const override { return "linear_scale_canonicalize"; }
+
+    bool run(ir_function &fn) override {
+        std::unordered_map<int, const icode *> unique_defs;
+        std::unordered_map<int, size_t> def_indices;
+        std::unordered_map<int, int> def_counts;
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            const icode &ic = fn.icodes[index];
+            if (!defines_result(ic) || !ic.result.is_temp())
+                continue;
+            ++def_counts[ic.result.temp_id];
+            unique_defs[ic.result.temp_id] = &ic;
+            def_indices[ic.result.temp_id] = index;
+        }
+        for (const auto &[tid, count] : def_counts) {
+            if (count != 1) {
+                unique_defs.erase(tid);
+                def_indices.erase(tid);
+            }
+        }
+
+        struct term {
+            operand base;
+            uint32_t coefficient = 0;
+        };
+        auto resolve = [&](const operand &value) -> std::optional<term> {
+            if (!value.is_temp())
+                return term{value, 1};
+            auto found = unique_defs.find(value.temp_id);
+            if (found == unique_defs.end() || !found->second)
+                return term{value, 1};
+            const icode &def = *found->second;
+            if (def.op == icode_op::SHL &&
+                def.right.kind == operand_kind::INT_CONST &&
+                def.right.ival >= 0 && def.right.ival < 16) {
+                return term{def.left,
+                            uint32_t{1} << static_cast<unsigned>(
+                                def.right.ival)};
+            }
+            if (def.op == icode_op::MUL) {
+                const operand *base = &def.left;
+                const operand *constant = &def.right;
+                if (base->kind == operand_kind::INT_CONST)
+                    std::swap(base, constant);
+                if (constant->kind == operand_kind::INT_CONST &&
+                    constant->ival > 0 && constant->ival <= 0xffff)
+                    return term{*base,
+                                static_cast<uint32_t>(constant->ival)};
+            }
+            return term{value, 1};
+        };
+
+        bool changed = false;
+        for (icode &ic : fn.icodes) {
+            if (ic.op != icode_op::ADD || !ic.result.type ||
+                !ic.result.type->is_integer() ||
+                ic.result.type->size() != 2)
+                continue;
+            auto left = resolve(ic.left);
+            auto right = resolve(ic.right);
+            if (!left || !right ||
+                left->coefficient + right->coefficient > 0xffff)
+                continue;
+            const std::string left_key = local_cse_operand_key(left->base);
+            const std::string right_key = local_cse_operand_key(right->base);
+            if (left_key.empty() || left_key != right_key ||
+                (left->coefficient == 1 && right->coefficient == 1))
+                continue;
+            ic.op = icode_op::MUL;
+            ic.left = left->base;
+            ic.right = operand::make_int(
+                left->coefficient + right->coefficient,
+                ic.result.type);
+            changed = true;
+        }
+
+        if (!distribute_affine_)
+            return changed;
+
+        // Distribute a constant affine adjustment out of a power-of-two
+        // scale.  This exposes the base scale to loop-induction sharing:
+        // `(index + 1) << 1` becomes `(index << 1) + 2`, so an existing
+        // loop-carried `index << 1` value can satisfy both array addresses.
+        int next_temp = next_temp_id(fn);
+        std::vector<icode> rebuilt;
+        rebuilt.reserve(fn.icodes.size() + 8);
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            const icode &ic = fn.icodes[index];
+            if (ic.op != icode_op::SHL || !ic.left.is_temp() ||
+                ic.right.kind != operand_kind::INT_CONST ||
+                ic.right.ival <= 0 || ic.right.ival >= 15 ||
+                !ic.result.type || !ic.result.type->is_integer() ||
+                ic.result.type->size() != 2) {
+                rebuilt.push_back(ic);
+                continue;
+            }
+
+            auto found = unique_defs.find(ic.left.temp_id);
+            auto position = def_indices.find(ic.left.temp_id);
+            if (found == unique_defs.end() || position == def_indices.end() ||
+                !found->second || position->second >= index) {
+                rebuilt.push_back(ic);
+                continue;
+            }
+
+            const icode &affine = *found->second;
+            const operand *base = nullptr;
+            int64_t constant = 0;
+            if (affine.op == icode_op::ADD) {
+                if (affine.right.kind == operand_kind::INT_CONST) {
+                    base = &affine.left;
+                    constant = affine.right.ival;
+                } else if (affine.left.kind == operand_kind::INT_CONST) {
+                    base = &affine.right;
+                    constant = affine.left.ival;
+                }
+            } else if (affine.op == icode_op::SUB &&
+                       affine.right.kind == operand_kind::INT_CONST) {
+                base = &affine.left;
+                constant = -affine.right.ival;
+            }
+            if (!base || base->kind == operand_kind::INT_CONST) {
+                rebuilt.push_back(ic);
+                continue;
+            }
+            bool base_redefined = false;
+            for (size_t scan = position->second + 1; scan < index; ++scan) {
+                if (defines_result(fn.icodes[scan]) &&
+                    same_value_operand(fn.icodes[scan].result, *base)) {
+                    base_redefined = true;
+                    break;
+                }
+            }
+            if (base_redefined) {
+                rebuilt.push_back(ic);
+                continue;
+            }
+
+            const int64_t factor = int64_t{1} << ic.right.ival;
+            if (constant > std::numeric_limits<int64_t>::max() / factor ||
+                constant < std::numeric_limits<int64_t>::min() / factor) {
+                rebuilt.push_back(ic);
+                continue;
+            }
+            const int64_t delta = constant * factor;
+            if (delta == 0 || delta < -32768 || delta > 32767) {
+                rebuilt.push_back(ic);
+                continue;
+            }
+
+            operand scaled = make_fresh_temp(next_temp, ic.result.type);
+            icode scale = ic;
+            scale.result = scaled;
+            scale.left = *base;
+            rebuilt.push_back(std::move(scale));
+
+            icode adjust;
+            adjust.op = delta > 0 ? icode_op::ADD : icode_op::SUB;
+            adjust.result = ic.result;
+            adjust.left = scaled;
+            adjust.right = operand::make_int(delta > 0 ? delta : -delta,
+                                              ic.result.type);
+            adjust.line = ic.line;
+            rebuilt.push_back(std::move(adjust));
+            changed = true;
+        }
+
+        if (changed)
+            fn.icodes = std::move(rebuilt);
+        return changed;
+    }
+
+private:
+    bool distribute_affine_ = false;
+};
+
+// Forward the last value of an unaliased block-local scalar into a bounded
+// constant scale.  Calls cannot name a local whose address was never taken;
+// extending the source temp's live range lets normal allocation decide
+// whether preserving it or reloading it is cheaper, while exposing masks such
+// as `index & 7` to the byte-scale backend.
+class bounded_scale_source_forward_pass final : public ir_pass {
+public:
+    const char *name() const override {
+        return "bounded_scale_source_forward";
+    }
+
+    bool run(ir_function &fn) override {
+        std::unordered_set<std::string> address_taken;
+        for (const icode &ic : fn.icodes) {
+            if (ic.op == icode_op::ADDRESS_OF && ic.left.is_symbol() &&
+                !ic.left.is_global)
+                address_taken.insert(base_symbol_key(ic.left));
+        }
+
+        bool changed = false;
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            icode &scale = fn.icodes[index];
+            if (scale.op != icode_op::MUL ||
+                scale.right.kind != operand_kind::INT_CONST ||
+                scale.right.ival <= 0 || scale.right.ival > 0xffff ||
+                !scale.left.is_symbol() || scale.left.is_global ||
+                scale.left.is_param || !scale.left.type ||
+                !scale.left.type->is_integer() ||
+                scale.left.type->size() != 2 ||
+                address_taken.count(base_symbol_key(scale.left)))
+                continue;
+
+            const std::string key = base_symbol_key(scale.left);
+            for (size_t scan = index; scan > 0; --scan) {
+                const icode &prior = fn.icodes[scan - 1];
+                if (prior.op == icode_op::LABEL ||
+                    prior.op == icode_op::GOTO ||
+                    prior.op == icode_op::IFX ||
+                    prior.op == icode_op::RETURN)
+                    break;
+                if (!prior.result.is_symbol() || prior.result.is_global ||
+                    base_symbol_key(prior.result) != key)
+                    continue;
+                if (prior.op == icode_op::ASSIGN &&
+                    prior.result.byte_offset == scale.left.byte_offset &&
+                    prior.left.type && prior.left.type->is_integer() &&
+                    prior.left.type->size() <= 2) {
+                    scale.left = prior.left;
+                    changed = true;
+                }
+                break;
+            }
+        }
+        return changed;
+    }
+};
+
 // Fold a little-endian reconstruction from four adjacent unsigned bytes into
 // one 32-bit load.  Besides fixed addresses, accept affine `base + index + K`
 // forms so a parser loop can advance its byte and word cursors independently.
@@ -13078,6 +13872,116 @@ public:
             return *std::prev(pos);
         };
 
+        // Record canonical enclosing-loop ranges as facts that nested affine
+        // address analysis may reuse.  For example, in a row/column nest,
+        // `row < 8` proves that `(uint8_t)(row * 8 + column)` stays below 64.
+        // Each fact is scoped to the natural loop whose init/guard/+1 update
+        // established it; a reused frontend temp elsewhere in the function
+        // therefore cannot inherit the wrong range.
+        struct bounded_loop_value_range {
+            operand value;
+            int64_t lo = 0;
+            int64_t hi = 0;
+            std::unordered_set<size_t> blocks;
+        };
+        std::vector<bounded_loop_value_range> bounded_loop_ranges;
+        for (const auto &candidate_loop : loops) {
+            if (candidate_loop.outside_preds.size() != 1)
+                continue;
+            const auto &candidate_header = cfg.block(candidate_loop.header);
+            const auto &candidate_preheader =
+                cfg.block(candidate_loop.outside_preds.front());
+
+            const icode *guard = nullptr;
+            for (size_t i = candidate_header.begin;
+                 i < candidate_header.end; ++i) {
+                const icode &cmp = fn.icodes[i];
+                if (cmp.op != icode_op::LT || !cmp.result.is_temp() ||
+                    cmp.right.kind != operand_kind::INT_CONST ||
+                    cmp.right.ival <= 0 ||
+                    (!cmp.left.is_temp() && !cmp.left.is_symbol()) ||
+                    !cmp.left.type || !cmp.left.type->is_integer()) {
+                    continue;
+                }
+                bool feeds_branch = false;
+                for (size_t j = i + 1; j < candidate_header.end; ++j) {
+                    const icode &use = fn.icodes[j];
+                    if (use.op == icode_op::IFX && use.left.is_temp() &&
+                        use.left.temp_id == cmp.result.temp_id) {
+                        feeds_branch = true;
+                        break;
+                    }
+                    if (defines_result(use) && use.result.is_temp() &&
+                        use.result.temp_id == cmp.result.temp_id) {
+                        break;
+                    }
+                }
+                if (feeds_branch) {
+                    guard = &cmp;
+                    break;
+                }
+            }
+            if (!guard)
+                continue;
+
+            std::optional<int64_t> initial;
+            for (size_t i = candidate_preheader.begin;
+                 i < candidate_preheader.end; ++i) {
+                const icode &init = fn.icodes[i];
+                if (defines_result(init) &&
+                    same_slot(init.result, guard->left) &&
+                    init.op == icode_op::ASSIGN &&
+                    init.left.kind == operand_kind::INT_CONST) {
+                    initial = init.left.ival;
+                }
+            }
+            if (!initial || *initial < 0 || *initial >= guard->right.ival)
+                continue;
+
+            int updates = 0;
+            bool bad_definition = false;
+            for (size_t block_id : candidate_loop.blocks) {
+                const auto &block = cfg.block(block_id);
+                for (size_t i = block.begin; i < block.end; ++i) {
+                    const icode &def = fn.icodes[i];
+                    if (!defines_result(def) ||
+                        !same_slot(def.result, guard->left)) {
+                        continue;
+                    }
+                    const bool plus_one =
+                        def.op == icode_op::ADD &&
+                        ((same_slot(def.left, guard->left) &&
+                          def.right.kind == operand_kind::INT_CONST &&
+                          def.right.ival == 1) ||
+                         (same_slot(def.right, guard->left) &&
+                          def.left.kind == operand_kind::INT_CONST &&
+                          def.left.ival == 1));
+                    if (!plus_one) {
+                        bad_definition = true;
+                        break;
+                    }
+                    if (std::find(candidate_loop.latches.begin(),
+                                  candidate_loop.latches.end(), block_id) ==
+                        candidate_loop.latches.end()) {
+                        bad_definition = true;
+                        break;
+                    }
+                    ++updates;
+                }
+                if (bad_definition)
+                    break;
+            }
+            if (bad_definition || updates != 1)
+                continue;
+
+            bounded_loop_ranges.push_back(
+                // Include the just-incremented latch value as well as the
+                // guarded body range; a range query in the latch may occur
+                // textually after the +1 update.
+                {guard->left, *initial, guard->right.ival,
+                 candidate_loop.blocks});
+        }
+
         auto pointer_type_for_base = [](const operand &base) -> type_ptr {
             if (base.type) {
                 if (base.type->is_array() && base.type->base)
@@ -13137,12 +14041,21 @@ public:
                 continue;
 
             operand index;
+            int index_step = 1;
             int64_t loop_bound = 0;
             bool loop_bound_known = false;
             bool index_from_increment = false;
             for (size_t i = header.begin; i < header.end; ++i) {
                 const icode &cmp = fn.icodes[i];
-                if (cmp.op != icode_op::LT || !cmp.result.is_temp() ||
+                const bool ascending_guard = cmp.op == icode_op::LT;
+                const bool descending_guard =
+                    !size_bias_ && cmp.op == icode_op::GE &&
+                    cmp.right.kind == operand_kind::INT_CONST &&
+                    cmp.right.ival == 0 && cmp.left.type &&
+                    cmp.left.type->size() == 2 &&
+                    !cmp.left.type->is_unsigned();
+                if ((!ascending_guard && !descending_guard) ||
+                    !cmp.result.is_temp() ||
                     cmp.right.is_none() || !cmp.left.type ||
                     !cmp.left.type->is_integer() ||
                     cmp.left.type->size() < 1 || cmp.left.type->size() > 2) {
@@ -13166,7 +14079,9 @@ public:
                     continue;
 
                 index = cmp.left;
-                if (cmp.right.kind == operand_kind::INT_CONST &&
+                index_step = descending_guard ? -1 : 1;
+                if (ascending_guard &&
+                    cmp.right.kind == operand_kind::INT_CONST &&
                     cmp.right.ival > 0) {
                     loop_bound = cmp.right.ival;
                     loop_bound_known = true;
@@ -13248,6 +14163,7 @@ public:
                     if (score > best_score) {
                         best_score = score;
                         index = cand;
+                        index_step = 1;
                     }
                 }
                 index_from_increment = !index.is_none();
@@ -13258,8 +14174,10 @@ public:
             size_t init_idx = fn.icodes.size();
             for (size_t i = preheader.begin; i < preheader.end; ++i) {
                 const icode &ic = fn.icodes[i];
-                if (ic.op == icode_op::ASSIGN &&
-                    same_slot(ic.result, index) && !ic.left.is_none()) {
+                if (defines_result(ic) && same_slot(ic.result, index) &&
+                    ic.op != icode_op::CALL &&
+                    ic.op != icode_op::GET_VALUE_AT &&
+                    !ic.left.is_none()) {
                     init_idx = i;
                 }
             }
@@ -13280,15 +14198,19 @@ public:
                         !same_slot(commit.result, index)) {
                         continue;
                     }
-                    const bool inplace_add_one =
-                        commit.op == icode_op::ADD &&
-                        ((same_slot(commit.left, index) &&
-                          commit.right.kind == operand_kind::INT_CONST &&
-                          commit.right.ival == 1) ||
-                         (same_slot(commit.right, index) &&
-                          commit.left.kind == operand_kind::INT_CONST &&
-                          commit.left.ival == 1));
-                    if (inplace_add_one) {
+                    const bool inplace_unit_step =
+                        (index_step > 0 && commit.op == icode_op::ADD &&
+                         ((same_slot(commit.left, index) &&
+                           commit.right.kind == operand_kind::INT_CONST &&
+                           commit.right.ival == 1) ||
+                          (same_slot(commit.right, index) &&
+                           commit.left.kind == operand_kind::INT_CONST &&
+                           commit.left.ival == 1))) ||
+                        (index_step < 0 && commit.op == icode_op::SUB &&
+                         same_slot(commit.left, index) &&
+                         commit.right.kind == operand_kind::INT_CONST &&
+                         commit.right.ival == 1);
+                    if (inplace_unit_step) {
                         commits.push_back(i);
                         continue;
                     }
@@ -13304,15 +14226,19 @@ public:
                         break;
                     }
                     const icode &step = fn.icodes[*step_idx];
-                    const bool add_one =
-                        step.op == icode_op::ADD &&
-                        ((same_slot(step.left, index) &&
-                          step.right.kind == operand_kind::INT_CONST &&
-                          step.right.ival == 1) ||
-                         (same_slot(step.right, index) &&
-                          step.left.kind == operand_kind::INT_CONST &&
-                          step.left.ival == 1));
-                    if (!add_one) {
+                    const bool unit_step =
+                        (index_step > 0 && step.op == icode_op::ADD &&
+                         ((same_slot(step.left, index) &&
+                           step.right.kind == operand_kind::INT_CONST &&
+                           step.right.ival == 1) ||
+                          (same_slot(step.right, index) &&
+                           step.left.kind == operand_kind::INT_CONST &&
+                           step.left.ival == 1))) ||
+                        (index_step < 0 && step.op == icode_op::SUB &&
+                         same_slot(step.left, index) &&
+                         step.right.kind == operand_kind::INT_CONST &&
+                         step.right.ival == 1);
+                    if (!unit_step) {
                         bad_index_def = true;
                         break;
                     }
@@ -13574,24 +14500,30 @@ public:
             };
 
             std::unordered_map<int, int> secondary_induction_stride;
+            std::unordered_map<int, size_t> secondary_induction_commit;
             auto index_stride_for_offset = [&](const operand &offset,
                                                size_t use_idx) {
                 if (index_reaches_current_value(offset, use_idx))
-                    return 1;
+                    return index_step;
                 if (!offset.is_temp())
                     return 0;
 
                 // Earlier strength reduction may already have replaced
                 // `index * stride` with its own lockstep byte offset.  Prove
-                // that secondary induction independently: one constant
-                // preheader initialization, one positive constant self-step
-                // in this loop, and no uses except forming addresses from an
-                // invariant base.  It can then be subsumed by the pointer we
-                // are about to introduce instead of making the backend carry
-                // both an offset and a pointer.
+                // that secondary induction independently: one constant or
+                // index-scaled preheader initialization, one signed constant
+                // self-step in this loop, and no uses except forming addresses
+                // from an invariant base. It can then be subsumed by the
+                // pointer instead of carrying both an offset and a pointer.
                 int initial_defs = 0;
+                int expected_secondary_stride = 0;
                 int update_defs = 0;
                 int secondary_stride = 0;
+                size_t secondary_commit = fn.icodes.size();
+                bool zero_initial = false;
+                const bool index_starts_at_zero =
+                    fn.icodes[init_idx].left.kind == operand_kind::INT_CONST &&
+                    fn.icodes[init_idx].left.ival == 0;
                 auto defs_it = temp_defs.find(offset.temp_id);
                 if (defs_it != temp_defs.end()) {
                     bool secondary_ok = true;
@@ -13601,24 +14533,62 @@ public:
                             if (def.op == icode_op::ASSIGN &&
                                 def.left.kind == operand_kind::INT_CONST) {
                                 ++initial_defs;
+                                zero_initial = def.left.ival == 0;
                                 continue;
                             }
-                        } else if (def.op == icode_op::ADD &&
+                            if (def.op == icode_op::SHL &&
+                                def.right.kind == operand_kind::INT_CONST &&
+                                def.right.ival > 0 && def.right.ival < 15 &&
+                                index_reaches_current_value(def.left,
+                                                            def_idx)) {
+                                ++initial_defs;
+                                expected_secondary_stride =
+                                    index_step *
+                                    (1 << static_cast<int>(def.right.ival));
+                                zero_initial = index_starts_at_zero;
+                                continue;
+                            }
+                            if (def.op == icode_op::MUL) {
+                                const operand *scaled = &def.left;
+                                const operand *constant = &def.right;
+                                if (scaled->kind == operand_kind::INT_CONST)
+                                    std::swap(scaled, constant);
+                                if (constant->kind == operand_kind::INT_CONST &&
+                                    constant->ival > 0 &&
+                                    constant->ival <= 32767 &&
+                                    index_reaches_current_value(*scaled,
+                                                                def_idx)) {
+                                    ++initial_defs;
+                                    expected_secondary_stride =
+                                        index_step *
+                                        static_cast<int>(constant->ival);
+                                    zero_initial = index_starts_at_zero;
+                                    continue;
+                                }
+                            }
+                        } else if ((def.op == icode_op::ADD ||
+                                    def.op == icode_op::SUB) &&
                                    def.left.is_temp() &&
                                    def.left.temp_id == offset.temp_id &&
                                    def.right.kind == operand_kind::INT_CONST &&
                                    def.right.ival > 0 &&
                                    def.right.ival <= 32767) {
                             ++update_defs;
-                            secondary_stride =
-                                static_cast<int>(def.right.ival);
+                            secondary_commit = def_idx;
+                            secondary_stride = def.op == icode_op::ADD
+                                ? static_cast<int>(def.right.ival)
+                                : -static_cast<int>(def.right.ival);
                             continue;
                         }
                         secondary_ok = false;
                         break;
                     }
                     if (secondary_ok && initial_defs == 1 &&
-                        update_defs == 1) {
+                        update_defs == 1 &&
+                        zero_initial && index_starts_at_zero &&
+                        secondary_commit != fn.icodes.size() &&
+                        (expected_secondary_stride == 0 ||
+                         expected_secondary_stride == secondary_stride)) {
                         for (size_t i = 0; i < fn.icodes.size(); ++i) {
                             const icode &use = fn.icodes[i];
                             const bool used_left = use.left.is_temp() &&
@@ -13628,7 +14598,8 @@ public:
                             if (!used_left && !used_right)
                                 continue;
                             const bool self_step =
-                                use.op == icode_op::ADD &&
+                                (use.op == icode_op::ADD ||
+                                 use.op == icode_op::SUB) &&
                                 use.result.is_temp() &&
                                 use.result.temp_id == offset.temp_id &&
                                 used_left &&
@@ -13649,6 +14620,8 @@ public:
                     if (secondary_ok) {
                         secondary_induction_stride[offset.temp_id] =
                             secondary_stride;
+                        secondary_induction_commit[offset.temp_id] =
+                            secondary_commit;
                         return secondary_stride;
                     }
                 }
@@ -13661,19 +14634,19 @@ public:
                     scale.right.kind == operand_kind::INT_CONST &&
                     scale.right.ival == 1 &&
                     index_reaches_current_value(scale.left, *def_idx)) {
-                    return 2;
+                    return 2 * index_step;
                 }
                 if (scale.op != icode_op::MUL)
                     return 0;
                 if (scale.right.kind == operand_kind::INT_CONST &&
                     scale.right.ival == 2 &&
                     index_reaches_current_value(scale.left, *def_idx)) {
-                    return 2;
+                    return 2 * index_step;
                 }
                 if (scale.left.kind == operand_kind::INT_CONST &&
                     scale.left.ival == 2 &&
                     index_reaches_current_value(scale.right, *def_idx)) {
-                    return 2;
+                    return 2 * index_step;
                 }
                 return 0;
             };
@@ -13681,22 +14654,229 @@ public:
             struct affine_index_info {
                 int stride = 0;
                 std::string key;
+                bool range_known = false;
+                int64_t range_lo = 0;
+                int64_t range_hi = 0;
+            };
+
+            // Replacing an affine byte offset with a 16-bit running pointer
+            // is valid only while the byte expression itself is linear.  A
+            // narrowing operation such as `(uint8_t)(i - 1)` has a +1 slope
+            // in ordinary algebra, but its values are 255, 0, 1, ... and a
+            // word pointer advanced by one does not reproduce that wrap.
+            // Track a conservative interval through the affine expression so
+            // every one-byte intermediate can be proved not to wrap.
+            auto range_fits_type = [](const affine_index_info &value,
+                                      const type_ptr &target) {
+                if (!target || !target->is_integer() || target->size() != 1)
+                    return true;
+                if (!value.range_known)
+                    return false;
+
+                int bits = 8;
+                if (target->kind == type_kind::BITINT)
+                    bits = target->bitint_width;
+                if (target->kind == type_kind::BOOL)
+                    return value.range_lo >= 0 && value.range_hi <= 1;
+
+                const bool is_unsigned = target->is_unsigned();
+                const int64_t lo = is_unsigned ? 0 : -(int64_t{1} << (bits - 1));
+                const int64_t hi = is_unsigned
+                    ? ((int64_t{1} << bits) - 1)
+                    : ((int64_t{1} << (bits - 1)) - 1);
+                return value.range_lo >= lo && value.range_hi <= hi;
+            };
+            auto checked_range_add = [](int64_t lhs, int64_t rhs,
+                                        int64_t &out) {
+                if ((rhs > 0 &&
+                     lhs > std::numeric_limits<int64_t>::max() - rhs) ||
+                    (rhs < 0 &&
+                     lhs < std::numeric_limits<int64_t>::min() - rhs)) {
+                    return false;
+                }
+                out = lhs + rhs;
+                return true;
+            };
+            auto checked_range_sub = [](int64_t lhs, int64_t rhs,
+                                        int64_t &out) {
+                if ((rhs > 0 &&
+                     lhs < std::numeric_limits<int64_t>::min() + rhs) ||
+                    (rhs < 0 &&
+                     lhs > std::numeric_limits<int64_t>::max() + rhs)) {
+                    return false;
+                }
+                out = lhs - rhs;
+                return true;
+            };
+            auto checked_range_scale = [](int64_t value, int64_t factor,
+                                          int64_t &out) {
+                if (factor <= 0)
+                    return false;
+                if ((value > 0 &&
+                     value > std::numeric_limits<int64_t>::max() / factor) ||
+                    (value < 0 &&
+                     value < std::numeric_limits<int64_t>::min() / factor)) {
+                    return false;
+                }
+                out = value * factor;
+                return true;
             };
             auto affine_index_for_offset = [&](const operand &root,
                                                size_t use_idx)
                 -> std::optional<affine_index_info> {
                 std::unordered_set<int> visiting;
+                std::function<std::optional<std::pair<int64_t, int64_t>>(
+                    const operand &, size_t, int,
+                    std::unordered_set<int> &)> resolve_invariant_range;
+                resolve_invariant_range =
+                    [&](const operand &op, size_t before, int depth,
+                        std::unordered_set<int> &range_visiting)
+                    -> std::optional<std::pair<int64_t, int64_t>> {
+                    if (depth > 10)
+                        return std::nullopt;
+                    if (op.kind == operand_kind::INT_CONST)
+                        return std::make_pair(op.ival, op.ival);
+
+                    const size_t scope_block = inst_block[use_idx];
+                    const bounded_loop_value_range *best_fact = nullptr;
+                    for (const auto &fact : bounded_loop_ranges) {
+                        if (!same_slot(fact.value, op) ||
+                            fact.blocks.count(scope_block) == 0) {
+                            continue;
+                        }
+                        if (!best_fact ||
+                            fact.hi - fact.lo < best_fact->hi - best_fact->lo) {
+                            best_fact = &fact;
+                        }
+                    }
+                    if (best_fact)
+                        return std::make_pair(best_fact->lo, best_fact->hi);
+
+                    if (!op.is_temp() ||
+                        !range_visiting.insert(op.temp_id).second) {
+                        return std::nullopt;
+                    }
+                    auto defs = temp_defs.find(op.temp_id);
+                    auto def_idx = latest_temp_def_before(op.temp_id, before);
+                    if (defs == temp_defs.end() || defs->second.size() != 1 ||
+                        !def_idx || in_loop_inst[*def_idx]) {
+                        range_visiting.erase(op.temp_id);
+                        return std::nullopt;
+                    }
+
+                    const icode &def = fn.icodes[*def_idx];
+                    std::optional<std::pair<int64_t, int64_t>> result;
+                    if ((def.op == icode_op::ASSIGN ||
+                         def.op == icode_op::CAST) && !def.left.is_none()) {
+                        result = resolve_invariant_range(
+                            def.left, *def_idx, depth + 1, range_visiting);
+                    } else if (def.op == icode_op::ADD ||
+                               def.op == icode_op::SUB) {
+                        auto lhs = resolve_invariant_range(
+                            def.left, *def_idx, depth + 1, range_visiting);
+                        auto rhs = resolve_invariant_range(
+                            def.right, *def_idx, depth + 1, range_visiting);
+                        if (lhs && rhs) {
+                            int64_t lo = 0;
+                            int64_t hi = 0;
+                            const bool valid = def.op == icode_op::ADD
+                                ? checked_range_add(lhs->first, rhs->first,
+                                                    lo) &&
+                                  checked_range_add(lhs->second, rhs->second,
+                                                    hi)
+                                : checked_range_sub(lhs->first, rhs->second,
+                                                    lo) &&
+                                  checked_range_sub(lhs->second, rhs->first,
+                                                    hi);
+                            if (valid)
+                                result = std::make_pair(lo, hi);
+                        }
+                    } else if (def.op == icode_op::SHL &&
+                               def.right.kind == operand_kind::INT_CONST &&
+                               def.right.ival >= 0 && def.right.ival <= 8) {
+                        auto value = resolve_invariant_range(
+                            def.left, *def_idx, depth + 1, range_visiting);
+                        if (value) {
+                            const int64_t factor =
+                                int64_t{1} << def.right.ival;
+                            int64_t lo = 0;
+                            int64_t hi = 0;
+                            if (checked_range_scale(value->first, factor, lo) &&
+                                checked_range_scale(value->second, factor,
+                                                    hi)) {
+                                result = std::make_pair(lo, hi);
+                            }
+                        }
+                    } else if (def.op == icode_op::MUL) {
+                        const operand *value = &def.left;
+                        const operand *constant = &def.right;
+                        if (value->kind == operand_kind::INT_CONST)
+                            std::swap(value, constant);
+                        if (constant->kind == operand_kind::INT_CONST &&
+                            constant->ival > 0 && constant->ival <= 256) {
+                            auto source = resolve_invariant_range(
+                                *value, *def_idx, depth + 1,
+                                range_visiting);
+                            if (source) {
+                                int64_t lo = 0;
+                                int64_t hi = 0;
+                                if (checked_range_scale(
+                                        source->first, constant->ival, lo) &&
+                                    checked_range_scale(
+                                        source->second, constant->ival, hi)) {
+                                    result = std::make_pair(lo, hi);
+                                }
+                            }
+                        }
+                    }
+                    range_visiting.erase(op.temp_id);
+                    if (result) {
+                        affine_index_info interval;
+                        interval.range_known = true;
+                        interval.range_lo = result->first;
+                        interval.range_hi = result->second;
+                        if (!range_fits_type(interval, def.result.type))
+                            result = std::nullopt;
+                    }
+                    return result;
+                };
                 std::function<std::optional<affine_index_info>(
                     const operand &, size_t, int)> walk;
                 walk = [&](const operand &op, size_t before, int depth)
                     -> std::optional<affine_index_info> {
                     if (depth > 10)
                         return std::nullopt;
-                    if (index_reaches_current_value(op, before))
-                        return affine_index_info{1, "I"};
-                    if (op.kind == operand_kind::INT_CONST)
-                        return affine_index_info{
+                    if (index_reaches_current_value(op, before)) {
+                        affine_index_info value{index_step, "I"};
+                        const operand &initial = fn.icodes[init_idx].left;
+                        if (initial.kind == operand_kind::INT_CONST) {
+                            if (index_step > 0 && loop_bound_known &&
+                                initial.ival < loop_bound) {
+                                value.range_known = true;
+                                value.range_lo = initial.ival;
+                                value.range_hi = loop_bound - 1;
+                            } else if (index_step < 0 && initial.ival >= 0) {
+                                value.range_known = true;
+                                value.range_lo = 0;
+                                value.range_hi = initial.ival;
+                            }
+                        }
+                        return value;
+                    }
+                    if (op.is_temp()) {
+                        auto secondary =
+                            secondary_induction_stride.find(op.temp_id);
+                        if (secondary != secondary_induction_stride.end())
+                            return affine_index_info{secondary->second, "I"};
+                    }
+                    if (op.kind == operand_kind::INT_CONST) {
+                        affine_index_info value{
                             0, "C" + std::to_string(op.ival)};
+                        value.range_known = true;
+                        value.range_lo = op.ival;
+                        value.range_hi = op.ival;
+                        return value;
+                    }
                     if (!op.is_temp())
                         return std::nullopt;
 
@@ -13718,8 +14898,17 @@ public:
                     if (!def_idx || !in_loop_inst[*def_idx]) {
                         // A value defined outside this loop is an invariant
                         // symbolic part of the affine address.
-                        return affine_index_info{
+                        affine_index_info invariant{
                             0, "T" + std::to_string(op.temp_id)};
+                        std::unordered_set<int> range_visiting;
+                        auto range = resolve_invariant_range(
+                            op, before, 0, range_visiting);
+                        if (range) {
+                            invariant.range_known = true;
+                            invariant.range_lo = range->first;
+                            invariant.range_hi = range->second;
+                        }
+                        return invariant;
                     }
                     if (!visiting.insert(op.temp_id).second)
                         return std::nullopt;
@@ -13728,10 +14917,15 @@ public:
                     if ((def.op == icode_op::ASSIGN ||
                          def.op == icode_op::CAST) && !def.left.is_none()) {
                         result = walk(def.left, *def_idx, depth + 1);
-                        if (result)
+                        if (result) {
+                            if (!range_fits_type(*result, def.result.type))
+                                result = std::nullopt;
+                        }
+                        if (result) {
                             result->key = "U" + std::to_string(
                                 static_cast<int>(def.op)) + "(" +
                                 result->key + ")";
+                        }
                     } else if (def.op == icode_op::ADD ||
                                def.op == icode_op::SUB) {
                         auto lhs = walk(def.left, *def_idx, depth + 1);
@@ -13745,17 +14939,50 @@ public:
                                 "B" + std::to_string(
                                     static_cast<int>(def.op)) + "(" +
                                     lhs->key + "," + rhs->key + ")"};
+                            if (lhs->range_known && rhs->range_known) {
+                                if (def.op == icode_op::ADD) {
+                                    result->range_known =
+                                        checked_range_add(
+                                            lhs->range_lo, rhs->range_lo,
+                                            result->range_lo) &&
+                                        checked_range_add(
+                                            lhs->range_hi, rhs->range_hi,
+                                            result->range_hi);
+                                } else {
+                                    result->range_known =
+                                        checked_range_sub(
+                                            lhs->range_lo, rhs->range_hi,
+                                            result->range_lo) &&
+                                        checked_range_sub(
+                                            lhs->range_hi, rhs->range_lo,
+                                            result->range_hi);
+                                }
+                            }
+                            if (!range_fits_type(*result, def.result.type))
+                                result = std::nullopt;
                         }
                     } else if (def.op == icode_op::SHL &&
                                def.right.kind == operand_kind::INT_CONST &&
                                def.right.ival >= 0 && def.right.ival <= 8) {
                         auto value = walk(def.left, *def_idx, depth + 1);
                         if (value) {
-                            value->stride <<= def.right.ival;
+                            const int64_t factor =
+                                int64_t{1} << def.right.ival;
+                            value->stride *= static_cast<int>(factor);
+                            if (value->range_known) {
+                                value->range_known =
+                                    checked_range_scale(
+                                        value->range_lo, factor,
+                                        value->range_lo) &&
+                                    checked_range_scale(
+                                        value->range_hi, factor,
+                                        value->range_hi);
+                            }
                             value->key = "S" +
                                          std::to_string(def.right.ival) +
                                          "(" + value->key + ")";
-                            result = std::move(value);
+                            if (range_fits_type(*value, def.result.type))
+                                result = std::move(value);
                         }
                     } else if (def.op == icode_op::MUL) {
                         const operand *value = &def.left;
@@ -13767,10 +14994,22 @@ public:
                             auto scaled = walk(*value, *def_idx, depth + 1);
                             if (scaled) {
                                 scaled->stride *= constant->ival;
+                                if (scaled->range_known) {
+                                    scaled->range_known =
+                                        checked_range_scale(
+                                            scaled->range_lo, constant->ival,
+                                            scaled->range_lo) &&
+                                        checked_range_scale(
+                                            scaled->range_hi, constant->ival,
+                                            scaled->range_hi);
+                                }
                                 scaled->key = "M" +
                                               std::to_string(constant->ival) +
                                               "(" + scaled->key + ")";
-                                result = std::move(scaled);
+                                if (range_fits_type(*scaled,
+                                                    def.result.type)) {
+                                    result = std::move(scaled);
+                                }
                             }
                         }
                     }
@@ -13795,7 +15034,7 @@ public:
                 };
 
                 auto result = walk(root, use_idx, 0);
-                if (!result || result->stride <= 0)
+                if (!result || result->stride == 0)
                     return std::nullopt;
                 return result;
             };
@@ -13823,7 +15062,7 @@ public:
                     }
                     if (direct_base &&
                         index_reaches_current_value(*direct_index, i)) {
-                        add_group_access(*direct_base, i, -1, 1);
+                        add_group_access(*direct_base, i, -1, index_step);
                         continue;
                     }
 
@@ -13957,11 +15196,35 @@ public:
                 }
                 return false;
             };
-            if (size_bias_ && group.stride > 1 &&
+            if (size_bias_ && std::abs(group.stride) > 1 &&
                 group.address_temps.size() + group.direct_accesses.size() < 2 &&
                 group.score < 300 &&
                 !(starts_at_zero && group_feeds_reduction())) {
                 continue;
+            }
+
+            // A strength-reduced byte offset is its own induction variable.
+            // It need not advance at every update of the source loop index:
+            // parsers commonly increment the source index conditionally while
+            // committing a record offset only at the outer latch.  Advance a
+            // replacement pointer at the secondary induction's validated
+            // update, and reject a group that accidentally coalesced distinct
+            // secondary cursors with the same base and stride.
+            std::vector<size_t> pointer_commits = commits;
+            if (!group.secondary_inductions.empty()) {
+                std::sort(group.secondary_inductions.begin(),
+                          group.secondary_inductions.end());
+                group.secondary_inductions.erase(
+                    std::unique(group.secondary_inductions.begin(),
+                                group.secondary_inductions.end()),
+                    group.secondary_inductions.end());
+                if (group.secondary_inductions.size() != 1)
+                    continue;
+                auto secondary = secondary_induction_commit.find(
+                    group.secondary_inductions.front());
+                if (secondary == secondary_induction_commit.end())
+                    continue;
+                pointer_commits.assign(1, secondary->second);
             }
 
             operand ptr = make_fresh_temp(next_temp, group.ptr_type);
@@ -14057,7 +15320,7 @@ public:
                     make_base_init(base_ptr));
 
                 operand byte_offset = index;
-                if (group.stride == 2) {
+                if (std::abs(group.stride) == 2) {
                     operand scaled = make_fresh_temp(next_temp, index.type);
                     icode scale;
                     scale.op = icode_op::SHL;
@@ -14076,13 +15339,13 @@ public:
                 insert_before[init_insert].push_back(add);
             }
 
-            for (size_t commit_idx : commits) {
+            for (size_t commit_idx : pointer_commits) {
                 operand advanced = make_fresh_temp(next_temp, group.ptr_type);
                 icode bump;
-                bump.op = icode_op::ADD;
+                bump.op = group.stride > 0 ? icode_op::ADD : icode_op::SUB;
                 bump.result = advanced;
                 bump.left = ptr;
-                bump.right = operand::make_int(group.stride,
+                bump.right = operand::make_int(std::abs(group.stride),
                                                type::make_int());
                 insert_before[commit_idx + 1].push_back(bump);
 
@@ -14114,7 +15377,9 @@ public:
                     if (!used_left && !used_right)
                         continue;
                     const bool self_step =
-                        use.op == icode_op::ADD && use.result.is_temp() &&
+                        (use.op == icode_op::ADD ||
+                         use.op == icode_op::SUB) &&
+                        use.result.is_temp() &&
                         use.result.temp_id == temp_id && used_left;
                     const bool replaced_address =
                         use.op == icode_op::ADD && use.result.is_temp() &&
@@ -14507,8 +15772,34 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<pack_bytes_pass>());
     if (settings.promoted_byte_ops)
         passes.push_back(std::make_unique<adjacent_pack_word_load_pass>());
-    if (settings.promoted_byte_ops)
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<bitfield_source_slice_pass>());
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<bitfield_inplace_update_pass>());
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<linear_scale_canonicalize_pass>(
+            settings.level == opt_level::Of ||
+            settings.level == opt_level::O3));
+    if (settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<bounded_scale_source_forward_pass>());
+    // The four-byte load fold is independent of the broader promoted-byte
+    // family: it preserves the full 32-bit result type and proves adjacent
+    // non-volatile addresses plus a barrier-free memory interval.  Keep it
+    // available in every production optimization profile even while the
+    // unrelated arithmetic-narrowing pass remains opt-in.
+    if (settings.promoted_byte_ops ||
+        settings.level == opt_level::O2 ||
+        settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os) {
         passes.push_back(std::make_unique<adjacent_pack_u32_load_pass>());
+    }
     if (settings.promoted_byte_ops)
         passes.push_back(std::make_unique<label_indexed_byte_access_pass>());
     // loop_lockstep_pointer is deliberately run once after the iterative
@@ -14579,17 +15870,38 @@ ir_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<loop_licm_pass>());
     if (settings.loop_induction)
         passes.push_back(std::make_unique<loop_induction_pass>(
-            settings.level != opt_level::Os));
+            settings.level != opt_level::Os,
+            settings.level == opt_level::Of ||
+                settings.level == opt_level::O3));
     if (settings.loop_induction)
         passes.push_back(std::make_unique<one_trip_counted_loop_fold_pass>());
     if (settings.strength_reduction)
         passes.push_back(std::make_unique<strength_reduction_pass>());
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<linear_scale_canonicalize_pass>(
+            settings.level == opt_level::Of ||
+            settings.level == opt_level::O3));
+    if (settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<bounded_scale_source_forward_pass>());
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3)
+        passes.push_back(
+            std::make_unique<dominating_address_reassociate_pass>());
     if (settings.local_cse)
         passes.push_back(std::make_unique<linear_expr_cse_pass>());
     if (settings.dead_code_elim)
         passes.push_back(std::make_unique<dead_call_result_elide_pass>());
     if (settings.dead_code_elim)
         passes.push_back(std::make_unique<dead_code_elim_pass>());
+    // Source-slice simplification can make a redundant explicit field mask
+    // dead.  Revisit in-place updates after DCE so `((field + k) & mask)` and
+    // the naturally unmasked `field++` converge on the same representation.
+    if (settings.level == opt_level::Of ||
+        settings.level == opt_level::O3 ||
+        settings.level == opt_level::Os)
+        passes.push_back(std::make_unique<bitfield_inplace_update_pass>());
     if (settings.duplicate_block_merge)
         passes.push_back(std::make_unique<duplicate_block_merge_pass>());
     if (settings.merge_tails)

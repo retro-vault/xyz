@@ -1197,6 +1197,143 @@ void z80_gen::gen_mul(const icode &ic) {
 
     if (op_size(ic.result) == 4 && op_size(ic.left) == 4 &&
         op_size(ic.right) == 4) {
+        // A very common fixed-point idiom widens a word, multiplies it by an
+        // 8-bit compile-time scale and immediately selects product bits 8..23.
+        // Keep that operation in the natural 24-bit A:HL domain.  Calling the
+        // general 32x32 helper both loses the known source width and performs
+        // work for product bytes which the narrowing operation discards.
+        const operand *constant_scale = nullptr;
+        const operand *scaled_wide = nullptr;
+        operand scaled_word;
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            unsigned_widened_word_source(ic.right, scaled_word)) {
+            constant_scale = &ic.left;
+            scaled_wide = &ic.right;
+        } else if (ic.right.kind == operand_kind::INT_CONST &&
+                   unsigned_widened_word_source(ic.left, scaled_word)) {
+            constant_scale = &ic.right;
+            scaled_wide = &ic.left;
+        }
+        const bool speed_profile =
+            opt_settings_.level == opt_level::Of ||
+            opt_settings_.level == opt_level::O3;
+        if (speed_profile && constant_scale && constant_scale->ival >= 0 &&
+            constant_scale->ival <= 0xff && cur_fn_) {
+            const icode *fused_narrow = nullptr;
+            size_t fused_instruction_count = 0;
+            auto use_count = [&](const operand &value) {
+                int count = 0;
+                for (const auto &candidate : cur_fn_->icodes) {
+                    auto count_if_same = [&](const operand &use) {
+                        if (!use.is_none() && equivalent_operands(use, value))
+                            ++count;
+                    };
+                    switch (candidate.op) {
+                    case icode_op::LABEL:
+                    case icode_op::GOTO:
+                    case icode_op::FUNCTION:
+                    case icode_op::ENDFUNCTION:
+                    case icode_op::RECEIVE:
+                    case icode_op::ADDRESS_OF:
+                    case icode_op::INLINE_ASM:
+                        break;
+                    case icode_op::IFX:
+                    case icode_op::RETURN:
+                    case icode_op::SEND:
+                    case icode_op::ALLOCA:
+                    case icode_op::CALL:
+                        count_if_same(candidate.left);
+                        break;
+                    case icode_op::SET_VALUE_AT:
+                    case icode_op::BLOCK_FILL:
+                        count_if_same(candidate.result);
+                        count_if_same(candidate.left);
+                        count_if_same(candidate.right);
+                        break;
+                    default:
+                        count_if_same(candidate.left);
+                        count_if_same(candidate.right);
+                        break;
+                    }
+                }
+                return count;
+            };
+            if (cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+                const icode &shift = cur_fn_->icodes[cur_ic_index_ + 1];
+                const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 2];
+                if (shift.op == icode_op::SHR &&
+                    equivalent_operands(shift.left, ic.result) &&
+                    shift.right.kind == operand_kind::INT_CONST &&
+                    shift.right.ival == 8 && shift.left.type &&
+                    shift.left.type->is_unsigned() &&
+                    narrow.op == icode_op::CAST &&
+                    equivalent_operands(narrow.left, shift.result) &&
+                    narrow.result.type && narrow.result.type->size() == 2 &&
+                    use_count(ic.result) == 1 &&
+                    use_count(shift.result) == 1) {
+                    fused_narrow = &narrow;
+                    fused_instruction_count = 2;
+                }
+            }
+            if (!fused_narrow && cur_ic_index_ + 3 < cur_fn_->icodes.size()) {
+                const icode &save = cur_fn_->icodes[cur_ic_index_ + 1];
+                const icode &shift = cur_fn_->icodes[cur_ic_index_ + 2];
+                const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 3];
+                if (save.op == icode_op::ASSIGN &&
+                    equivalent_operands(save.left, ic.result) &&
+                    shift.op == icode_op::SHR &&
+                    equivalent_operands(shift.left, save.result) &&
+                    shift.right.kind == operand_kind::INT_CONST &&
+                    shift.right.ival == 8 && shift.left.type &&
+                    shift.left.type->is_unsigned() &&
+                    narrow.op == icode_op::CAST &&
+                    equivalent_operands(narrow.left, shift.result) &&
+                    narrow.result.type && narrow.result.type->size() == 2 &&
+                    use_count(ic.result) == 1 &&
+                    use_count(save.result) == 1 &&
+                    use_count(shift.result) == 1) {
+                    fused_narrow = &narrow;
+                    fused_instruction_count = 3;
+                }
+            }
+
+            if (fused_narrow) {
+                const unsigned scale =
+                    static_cast<unsigned>(constant_scale->ival);
+                if (scale == 0) {
+                    emit_line("ld\thl, #0");
+                } else {
+                    load_hl_lo32(*scaled_wide);
+                    unsigned highest_bit = 0;
+                    for (unsigned probe = scale; probe > 1; probe >>= 1)
+                        ++highest_bit;
+                    const bool needs_add =
+                        (scale & (scale - 1U)) != 0;
+                    if (needs_add) {
+                        emit_line("ld\td, h");
+                        emit_line("ld\te, l");
+                    }
+                    emit_line("xor\ta");
+                    for (int bit = static_cast<int>(highest_bit) - 1;
+                         bit >= 0; --bit) {
+                        emit_line("add\thl, hl");
+                        emit_line("rla");
+                        if ((scale & (1U << bit)) != 0) {
+                            emit_line("add\thl, de");
+                            emit_line("adc\ta, #0");
+                        }
+                    }
+                    emit_line("ld\tl, h");
+                    emit_line("ld\th, a");
+                }
+                store_hl(fused_narrow->result);
+                for (size_t skipped = 1;
+                     skipped <= fused_instruction_count; ++skipped)
+                    skipped_icodes_.insert(cur_ic_index_ + skipped);
+                return;
+            }
+        }
+
         operand left_word;
         operand right_word;
         if (unsigned_widened_word_source(ic.left, left_word) &&
@@ -1412,6 +1549,125 @@ void z80_gen::gen_mul(const icode &ic) {
 
         if (value && constant) {
             const uint16_t k = static_cast<uint16_t>(constant->ival);
+            std::function<std::optional<uint16_t>(const operand &, int)>
+                u8_upper_bound;
+            u8_upper_bound = [&](const operand &candidate, int depth)
+                -> std::optional<uint16_t> {
+                if (depth > 5)
+                    return std::nullopt;
+                if (candidate.kind == operand_kind::INT_CONST) {
+                    if (candidate.ival < 0 || candidate.ival > 0xff)
+                        return std::nullopt;
+                    return static_cast<uint16_t>(candidate.ival);
+                }
+                if (!candidate.is_temp()) {
+                    if (candidate.type && candidate.type->is_integer() &&
+                        candidate.type->is_unsigned() &&
+                        candidate.type->size() == 1)
+                        return uint16_t{0xff};
+                    return std::nullopt;
+                }
+                int definitions = 0;
+                if (cur_fn_) {
+                    for (const icode &scan : cur_fn_->icodes) {
+                        if (scan.op != icode_op::SET_VALUE_AT &&
+                            scan.result.is_temp() &&
+                            scan.result.temp_id == candidate.temp_id)
+                            ++definitions;
+                    }
+                }
+                if (definitions != 1)
+                    return std::nullopt;
+                const icode *def =
+                    find_temp_def_before(candidate.temp_id, cur_ic_index_);
+                if (!def)
+                    return std::nullopt;
+                if (def->result.type && def->result.type->is_integer() &&
+                    def->result.type->is_unsigned() &&
+                    def->result.type->size() == 1)
+                    return uint16_t{0xff};
+                if (def->op == icode_op::BAND) {
+                    const operand *mask = &def->right;
+                    if (def->left.kind == operand_kind::INT_CONST)
+                        mask = &def->left;
+                    if (mask->kind == operand_kind::INT_CONST &&
+                        mask->ival >= 0 && mask->ival <= 0xff)
+                        return static_cast<uint16_t>(mask->ival);
+                }
+                if (def->op == icode_op::ASSIGN ||
+                    def->op == icode_op::CAST)
+                    return u8_upper_bound(def->left, depth + 1);
+                if ((def->op == icode_op::RECEIVE ||
+                     def->op == icode_op::GET_VALUE_AT) &&
+                    def->result.type && def->result.type->is_integer() &&
+                    def->result.type->is_unsigned() &&
+                    def->result.type->size() == 1)
+                    return uint16_t{0xff};
+                return std::nullopt;
+            };
+
+            operand byte_source;
+            auto upper = u8_upper_bound(*value, 0);
+            if (k != 0 && upper &&
+                static_cast<uint32_t>(*upper) * k <= 0xffu &&
+                get_zero_extended_u8_source(*value, byte_source)) {
+                const icode *fused_address = nullptr;
+                const operand *global_base = nullptr;
+                if (cur_fn_ && cur_ic_index_ + 1 < cur_fn_->icodes.size()) {
+                    const icode &next = cur_fn_->icodes[cur_ic_index_ + 1];
+                    if (next.op == icode_op::ADD &&
+                        next.result.is_temp() &&
+                        next.result.type && next.result.type->is_ptr()) {
+                        const operand *scaled = &next.left;
+                        const operand *base = &next.right;
+                        if (equivalent_operands(*base, ic.result))
+                            std::swap(scaled, base);
+                        const bool direct_global =
+                            (base->kind == operand_kind::SYMBOL &&
+                             base->is_global && !base->is_tls &&
+                             !base->is_func) ||
+                            base->kind == operand_kind::LABEL_REF;
+                        if (equivalent_operands(*scaled, ic.result) &&
+                            direct_global &&
+                            !temp_value_used_after(*cur_fn_,
+                                                   cur_ic_index_ + 2,
+                                                   ic.result.temp_id)) {
+                            fused_address = &next;
+                            global_base = base;
+                        }
+                    }
+                }
+                load_a(byte_source);
+                if (k != 1) {
+                    int top = 15;
+                    while (top > 0 && ((k >> top) & 1u) == 0)
+                        --top;
+                    if ((k & (k - 1u)) != 0)
+                        emit_line("ld\te, a");
+                    for (int bit = top - 1; bit >= 0; --bit) {
+                        emit_line("add\ta, a");
+                        if ((k >> bit) & 1u)
+                            emit_line("add\ta, e");
+                    }
+                }
+                emit_line("ld\tl, a");
+                emit_line("ld\th, %s", asm_.imm(0).c_str());
+                if (fused_address && global_base) {
+                    const std::string symbol =
+                        global_base->kind == operand_kind::LABEL_REF
+                            ? asm_label_ref_name(global_base->name)
+                            : mangle(global_base->name);
+                    emit_line("ld\tde, %s",
+                              asm_.imm_sym(symbol).c_str());
+                    emit_line("add\thl, de");
+                    store_hl(fused_address->result);
+                    skipped_icodes_.insert(cur_ic_index_ + 1);
+                } else {
+                    store_hl(ic.result);
+                }
+                return;
+            }
+
             int msb = -1;
             for (int bit = 15; bit >= 0; --bit) {
                 if ((k >> bit) & 1u) {
@@ -2104,16 +2360,21 @@ bool z80_gen::try_emit_u32_frame_add_chain(const icode &ic) {
         emit_line("add\thl, de");
         emit_line("adc\ta, %s", asm_.imm(0).c_str());
     }
-    emit_line("push\taf");
-    emit_line("push\thl");
+    // All sources admitted above are compact frame values or constants, so
+    // the high-word sum cannot consume BC.  Keep the completed low word there
+    // and park its carry in AF' instead of making a four-operation stack
+    // round trip.  The sequence is the same size (four one-byte opcodes) and
+    // saves 26 cycles on a Z80.
+    emit_line("ld\tb, h");
+    emit_line("ld\tc, l");
+    emit_line("ex\taf, af'");
 
     load_hl_word(*addends[0], 1);
     for (size_t i = 1; i < addends.size(); ++i) {
         load_de_word(*addends[i], 1);
         emit_line("add\thl, de");
     }
-    emit_line("pop\tbc");
-    emit_line("pop\taf");
+    emit_line("ex\taf, af'");
     emit_line("ld\te, a");
     emit_line("ld\td, %s", asm_.imm(0).c_str());
     emit_line("add\thl, de");
@@ -2318,6 +2579,7 @@ bool z80_gen::try_emit_u32_bitwise_add_chain(const icode &ic) {
     // so the motion remains local and mechanically auditable.
     std::vector<size_t> producer_indices;
     bool saw_load = false;
+    size_t producer_load_index = std::numeric_limits<size_t>::max();
     while (scan < cur_fn_->icodes.size() && producer_indices.size() < 3) {
         const icode &producer = cur_fn_->icodes[scan];
         const bool pointer_add =
@@ -2343,6 +2605,8 @@ bool z80_gen::try_emit_u32_bitwise_add_chain(const icode &ic) {
             return false;
         }
         saw_load = saw_load || wide_load;
+        if (wide_load)
+            producer_load_index = scan;
         producer_indices.push_back(scan++);
     }
 
@@ -2415,12 +2679,78 @@ bool z80_gen::try_emit_u32_bitwise_add_chain(const icode &ic) {
         }
     }
 
+    // A single-use wide load from an IY-resident base does not need a frame
+    // home merely because the pure bitwise expression was scheduled before
+    // its ADD consumer.  Recover a direct indexed displacement from either
+    // the base itself or a constant-offset pointer definition.  The loaded
+    // temporary must die with this chain: retaining the direct-memory form
+    // beyond it would require memory SSA to prove that a later store cannot
+    // change the value.
+    int direct_load_tid = -1;
+    int64_t direct_load_disp = 0;
+    if (producer_load_index != std::numeric_limits<size_t>::max()) {
+        const icode &load = cur_fn_->icodes[producer_load_index];
+        auto is_iy_home = [&](const operand &op) {
+            if (!op.is_temp() || op.byte_offset != 0)
+                return false;
+            auto home = temp_regs_.find(op.temp_id);
+            return home != temp_regs_.end() &&
+                   home->second == temp_home::main_iy;
+        };
+        auto indexed_displacement = [&](const operand &pointer,
+                                        int64_t &disp) {
+            if (is_iy_home(pointer)) {
+                disp = 0;
+                return true;
+            }
+            if (!pointer.is_temp())
+                return false;
+            const icode *def = find_temp_def_before(
+                pointer.temp_id, producer_load_index);
+            if (!def || (def->op != icode_op::ADD &&
+                         def->op != icode_op::SUB)) {
+                return false;
+            }
+            const operand *base = &def->left;
+            const operand *offset = &def->right;
+            if (def->op == icode_op::ADD &&
+                base->kind == operand_kind::INT_CONST) {
+                std::swap(base, offset);
+            }
+            if (!is_iy_home(*base) ||
+                offset->kind != operand_kind::INT_CONST) {
+                return false;
+            }
+            disp = def->op == icode_op::SUB ? -offset->ival : offset->ival;
+            return disp >= -128 && disp + 3 <= 127;
+        };
+        bool is_addend = false;
+        for (const operand &addend : addends) {
+            if (equivalent_operands(addend, load.result)) {
+                is_addend = true;
+                break;
+            }
+        }
+        if (load.result.is_temp() && is_addend &&
+            !temp_value_used_after(*cur_fn_, scan,
+                                   load.result.temp_id) &&
+            indexed_displacement(load.left, direct_load_disp)) {
+            direct_load_tid = load.result.temp_id;
+            iy_u32_remat_offsets_[direct_load_tid] = direct_load_disp;
+        }
+    }
+
     const size_t original_index = cur_ic_index_;
     for (size_t producer_index : producer_indices) {
         if (skipped_icodes_.find(producer_index) != skipped_icodes_.end())
             continue;
         cur_ic_index_ = producer_index;
         const icode &producer = cur_fn_->icodes[producer_index];
+        if (producer.op == icode_op::GET_VALUE_AT &&
+            producer.result.is_temp() &&
+            producer.result.temp_id == direct_load_tid) {
+            continue;
+        }
         if (producer.op == icode_op::ADD)
             gen_add(producer);
         else
@@ -2470,39 +2800,10 @@ bool z80_gen::try_emit_u32_bitwise_add_chain(const icode &ic) {
         return true;
     };
 
-    invalidate_pair_cache();
-    invalidate_a_cache();
-    if (!emit_expression_word(0))
-        return false;
-    emit_line("xor\ta");
-    for (const operand &addend : addends) {
-        load_de_word(addend, 0);
-        emit_line("add\thl, de");
-        emit_line("adc\ta, %s", asm_.imm(0).c_str());
-    }
-    emit_line("push\taf");
-    emit_line("push\thl");
-
-    if (!emit_expression_word(1))
-        return false;
-    for (const operand &addend : addends) {
-        load_de_word(addend, 1);
-        emit_line("add\thl, de");
-    }
-    emit_line("pop\tbc");
-    emit_line("pop\taf");
-    emit_line("ld\te, a");
-    emit_line("ld\td, %s", asm_.imm(0).c_str());
-    emit_line("add\thl, de");
-
-    if (fused_rotate && fused_final_add) {
-        // The accumulated high word is in HL and the low word in BC.  Convert
-        // to the backend's DE:HL wide-register form without touching memory.
-        emit_line("ld\td, h");
-        emit_line("ld\te, l");
-        emit_line("ld\th, b");
-        emit_line("ld\tl, c");
-
+    // Finish a fused rotate/add once the accumulated value is in DE:HL.
+    // Keeping this as a shared register-only tail lets the speed scheduler
+    // choose a different carry strategy without duplicating rotate policy.
+    auto emit_rotate_and_final_add = [&]() {
         int count = static_cast<int>(fused_rotate->right.ival & 31);
         if (fused_rotate->op == icode_op::ROR)
             count = (32 - count) & 31;
@@ -2559,6 +2860,48 @@ bool z80_gen::try_emit_u32_bitwise_add_chain(const icode &ic) {
         }
         store_hl_lo32(fused_final_add->result);
         store_de_word(fused_final_add->result, 1);
+        return true;
+    };
+
+    invalidate_pair_cache();
+    invalidate_a_cache();
+
+    if (!emit_expression_word(0))
+        return false;
+    emit_line("xor\ta");
+    for (const operand &addend : addends) {
+        load_de_word(addend, 0);
+        emit_line("add\thl, de");
+        emit_line("adc\ta, %s", asm_.imm(0).c_str());
+    }
+    // The fused expression and every addend have already been restricted to
+    // compact frame/IY sources or constants.  BC is therefore dead while the
+    // high word is evaluated, and AF' can retain the low-word carry.  This is
+    // byte-for-byte the size of PUSH AF/PUSH HL/POP BC/POP AF, but much faster.
+    emit_line("ld\tb, h");
+    emit_line("ld\tc, l");
+    emit_line("ex\taf, af'");
+
+    if (!emit_expression_word(1))
+        return false;
+    for (const operand &addend : addends) {
+        load_de_word(addend, 1);
+        emit_line("add\thl, de");
+    }
+    emit_line("ex\taf, af'");
+    emit_line("ld\te, a");
+    emit_line("ld\td, %s", asm_.imm(0).c_str());
+    emit_line("add\thl, de");
+
+    if (fused_rotate && fused_final_add) {
+        // The accumulated high word is in HL and the low word in BC.  Convert
+        // to the backend's DE:HL wide-register form without touching memory.
+        emit_line("ld\td, h");
+        emit_line("ld\te, l");
+        emit_line("ld\th, b");
+        emit_line("ld\tl, c");
+        if (!emit_rotate_and_final_add())
+            return false;
     } else {
         store_hl_hi32(last_add.result);
         emit_line("ld\th, b");
@@ -4155,6 +4498,69 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         if (!false_lbl.empty())
             emit_line("jp\t%s", false_lbl.c_str());
         return;
+    }
+
+    // Fold the constant's sign-bit bias into its immediate encoding.  The
+    // generic signed-word path materializes both operands, exchanges them,
+    // and flips H and D separately.  For an ordered compare with one constant
+    // operand we need only load the variable into HL, flip H, and subtract a
+    // pre-biased DE immediate.  XOR already clears carry for SBC HL,DE.
+    if (op_size(ic.left) == 2 && op_size(ic.right) == 2 &&
+        cmp != icode_op::EQ && cmp != icode_op::NE) {
+        const operand *value = &ic.left;
+        const operand *constant = &ic.right;
+        icode_op effective_cmp = cmp;
+        if (value->kind == operand_kind::INT_CONST) {
+            std::swap(value, constant);
+            effective_cmp = swapped_compare(cmp);
+        }
+        if (constant->kind == operand_kind::INT_CONST && value->type &&
+            value->type->is_integer() && !value->type->is_unsigned()) {
+            load_hl(*value);
+            emit_line("ld\tde, %s",
+                      asm_.imm(static_cast<uint16_t>(constant->ival) ^
+                               0x8000u).c_str());
+            emit_line("ld\ta, h");
+            emit_line("xor\t%s", asm_.imm(0x80).c_str());
+            emit_line("ld\th, a");
+            emit_line("sbc\thl, de");
+
+            switch (effective_cmp) {
+            case icode_op::LT:
+                if (!true_lbl.empty())
+                    emit_line("jp\tc, %s", true_lbl.c_str());
+                break;
+            case icode_op::LE:
+                if (!true_lbl.empty()) {
+                    emit_line("jp\tz, %s", true_lbl.c_str());
+                    emit_line("jp\tc, %s", true_lbl.c_str());
+                }
+                break;
+            case icode_op::GT:
+                if (!false_lbl.empty()) {
+                    emit_line("jp\tz, %s", false_lbl.c_str());
+                    if (!true_lbl.empty())
+                        emit_line("jp\tnc, %s", true_lbl.c_str());
+                } else {
+                    const std::string skip_lbl =
+                        fresh_local_label("__xopt_sconst_cmp_skip_");
+                    emit_line("jp\tz, %s", skip_lbl.c_str());
+                    if (!true_lbl.empty())
+                        emit_line("jp\tnc, %s", true_lbl.c_str());
+                    asm_.label(skip_lbl, false);
+                }
+                break;
+            case icode_op::GE:
+                if (!true_lbl.empty())
+                    emit_line("jp\tnc, %s", true_lbl.c_str());
+                break;
+            default:
+                break;
+            }
+            if (!false_lbl.empty())
+                emit_line("jp\t%s", false_lbl.c_str());
+            return;
+        }
     }
 
     // For an unsigned word, x < K*256 (or x >= K*256) depends only on

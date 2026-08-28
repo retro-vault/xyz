@@ -50,4 +50,5 @@ generic `xemu` shipped with X is not currently a complete CPC machine profile;
 its documented Partner and ZX banking layouts are memory-mapper examples, not
 CPC firmware emulation. The CPC linker scripts use primary RAM below `0x9F00`
 and do not require 6128 expansion-bank switching. Use a CPC emulator or the
-project's real-ROM `amstrad-cpc-mcp` regression to run the generated media.
+project's explicit real-ROM `amstrad-cpc-mcp` release validation to run the
+generated media; that validation is outside the regression pack.

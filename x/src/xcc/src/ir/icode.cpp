@@ -132,8 +132,22 @@ void icode::dump() const {
                result.to_string().c_str(), left.to_string().c_str());
         break;
     case icode_op::SET_VALUE_AT:
-        printf("  *%s = %s\n",
-               result.to_string().c_str(), left.to_string().c_str());
+        if (bit_width >= 0) {
+            if (bit_rmw) {
+                printf("  bitupdate%d(%s,%d:%d) += %lld\n",
+                       bit_storage_bytes * 8,
+                       result.to_string().c_str(), bit_offset, bit_width,
+                       static_cast<long long>(bit_rmw_delta));
+            } else {
+                printf("  bitinsert%d(%s,%d:%d) = %s>>%d\n",
+                       bit_storage_bytes * 8,
+                       result.to_string().c_str(), bit_offset, bit_width,
+                       left.to_string().c_str(), bit_source_offset);
+            }
+        } else {
+            printf("  *%s = %s\n",
+                   result.to_string().c_str(), left.to_string().c_str());
+        }
         break;
     case icode_op::BLOCK_FILL:
         printf("  block_fill(%s, %s, %s)\n",

@@ -361,6 +361,7 @@ private:
     bool get_sign_extended_i8_source(const operand &op, operand &src) const;
     bool try_emit_byte_mask_walk_loop(const ir_function &fn, size_t &idx);
     bool try_emit_byte_copy_walk_loop(const ir_function &fn, size_t &idx);
+    bool try_emit_frameless_byte_pointer_kernel(const ir_function &fn);
     bool try_emit_zero_byte_walk_loop(const ir_function &fn, size_t &idx);
     bool try_emit_inplace_byte_step_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_inplace_pointer_update(const ir_function &fn, size_t &idx);
@@ -368,6 +369,9 @@ private:
     bool try_emit_iy_indexed_store(const ir_function &fn, size_t &idx);
     bool try_emit_scaled_frame_load(const ir_function &fn, size_t &idx);
     bool try_emit_scaled_global_load(const ir_function &fn, size_t &idx);
+    bool try_emit_reused_scaled_global_call_pair(const ir_function &fn,
+                                                  size_t &idx);
+    bool try_emit_split_page_countdown(const ir_function &fn, size_t &idx);
     bool try_emit_postinc_indexed_load(const ir_function &fn, size_t &idx);
     bool try_emit_postinc_indexed_store(const ir_function &fn, size_t &idx);
     bool try_emit_postdec_truth(const ir_function &fn, size_t &idx);
@@ -380,6 +384,7 @@ private:
     bool try_emit_switch_jump_table(const ir_function &fn, size_t &idx);
     bool try_emit_lsb32_shift_xor_diamond(const ir_function &fn, size_t &idx);
     bool try_emit_band_ifx(const ir_function &fn, size_t &idx);
+    bool try_emit_load_shift_bit_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_byte_load_compare_ifx(const ir_function &fn, size_t &idx);
     bool try_emit_guarded_zero_arg_indirect_call(const ir_function &fn,
                                                  size_t &idx);

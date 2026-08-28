@@ -81,8 +81,9 @@ Current examples and current locations:
 - `x/tests/tests/runtime/` holds the runtime helper matrices for ll/double and related coverage.
 - `x/tests/tests/c23/` holds the manifest-driven C23 compatibility suite — used for both compiler acceptance and libc surface verification.
 - `x/tests/tests/zx48/` owns the optional real-ROM/MCP cross-stack regression.
-- `x/tests/tests/cpc/` owns the optional real-ROM CPC 464/664/6128 CDT/DSK
-  and libc/AMSDOS cross-stack regression.
+- `x/tests/tests/cpc/` owns explicit real-ROM CPC 464/664/6128 CDT/DSK and
+  libc/AMSDOS release validation. It has no `test.cfg` and is deliberately
+  outside the manifest-driven regression pack.
 - `make test-x-models` validates the S, M, and L feature surfaces separately.
   The M compiler is built as a distinct frontend configuration: `double` and
   `long double` alias its selected `float` ABI, whereas L preserves binary64.
@@ -97,6 +98,10 @@ Current examples and current locations:
   model independently. Compiler improvements measured there must be generic
   IR/CFG/data-flow transformations; workload names, source fragments, magic
   constants, and whole-program fingerprints are forbidden selection inputs.
+  `-Os` and `-Of` are independent objective profiles: speed-only expansion
+  belongs in `-Of`, while a speed transform reaches `-Os` only when it is also
+  a size win. Headline 24/24 size and speed results therefore describe the two
+  specialized XCC lanes, not one benchmark-tuned binary.
   XCC's `z88dk-classic` runtime profile also reports literal-derived
   `printf`/`scanf` capabilities through zcc's per-link option file, so
   classic-library handler pruning is measured without benchmark-specific
@@ -181,8 +186,9 @@ When adding tests for new C23 features (or anything else):
 
 1. Continue moving broad tests toward their owning components while keeping
    shared emulator infrastructure centralized.
-2. Keep genuinely cross-stack tests, such as the ZX and CPC real-ROM/media MCP
-   flows, explicit and optional when they require external assets.
+2. Keep genuinely cross-stack tests explicit and optional when they require
+   external assets. The CPC real-ROM/media MCP flow is release validation,
+   deliberately outside the manifest-driven regression pack.
 3. Extract more CPU/model/ABI definitions into `x/targets/` where that removes
    duplication without hiding platform memory contracts.
 4. Reduce recursive staging work where dependency-aware rules can safely

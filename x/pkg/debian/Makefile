@@ -6,6 +6,12 @@ X_ROOT ?= $(ROOT)/x
 Y_ROOT ?= $(ROOT)/y
 PACKAGE_NAME ?= x
 include $(X_ROOT)/mk/model.mk
+
+# Multiple archive prerequisites can populate the same staged X prefix.  Keep
+# those outer recipes serialized even when a caller uses `make -j`; recursive
+# component builds may still use the inherited jobserver internally.
+.NOTPARALLEL:
+
 GIT_VERSION_TAG := $(shell git -C $(ROOT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
 PACKAGE_VERSION ?= $(if $(filter v%,$(GIT_VERSION_TAG)),$(patsubst v%,%,$(GIT_VERSION_TAG)),0.1.0)
 PACKAGE_RELEASE ?= 1

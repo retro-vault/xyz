@@ -476,7 +476,8 @@ static bool analyze_inline_candidate(const ir_function &fn,
     if (!saw_return && !has_implicit_void_fallthrough_return(fn))
         return false;
     for (const auto &branch : branches) {
-        if (label_index.find(branch.target) == label_index.end())
+        auto target = label_index.find(branch.target);
+        if (target == label_index.end())
             return false;
     }
     if (out.pure_leaf_arith) {
@@ -2103,8 +2104,9 @@ static bool rewrite_dead_params_in_calls(
 
             size_t send_begin = i;
             std::vector<operand> args;
-            if (!collect_call_args(caller.icodes, i, ic, send_begin, args))
+            if (!collect_call_args(caller.icodes, i, ic, send_begin, args)) {
                 return false;
+            }
 
             std::vector<operand> kept_args;
             kept_args.reserve(candidate.kept.size());
@@ -2412,8 +2414,9 @@ static bool analyze_constant_arg_candidate(
             ++matched_calls;
             size_t send_begin = i;
             std::vector<operand> args;
-            if (!collect_call_args(caller.icodes, i, ic, send_begin, args))
+            if (!collect_call_args(caller.icodes, i, ic, send_begin, args)) {
                 return false;
+            }
             if (static_cast<int>(args.size()) != fn.num_params)
                 return false;
 
@@ -3282,9 +3285,95 @@ static std::string make_unique_inline_label(const ir_function &fn,
     }
 }
 
+static bool same_inline_value(const operand &lhs, const operand &rhs) {
+    if (lhs.kind != rhs.kind || lhs.byte_offset != rhs.byte_offset)
+        return false;
+    if (lhs.is_temp())
+        return lhs.temp_id == rhs.temp_id;
+    if (lhs.is_symbol())
+        return base_symbol_key(lhs) == base_symbol_key(rhs);
+    return false;
+}
+
+static int inline_value_read_count(const ir_function &fn,
+                                   const operand &value) {
+    int reads = 0;
+    auto note = [&](const operand &op) {
+        if (same_inline_value(op, value))
+            ++reads;
+    };
+    for (const auto &ic : fn.icodes) {
+        note(ic.left);
+        note(ic.right);
+        // SET_VALUE_AT uses its result as the destination address rather than
+        // defining it.  All other ordinary result operands are definitions.
+        if (ic.op == icode_op::SET_VALUE_AT)
+            note(ic.result);
+    }
+    return reads;
+}
+
+struct inline_constant_return_branch {
+    bool active = false;
+    icode compare;
+    std::string true_label;
+    std::string false_label;
+};
+
+static inline_constant_return_branch analyze_inline_return_branch(
+    const ir_function &caller, size_t call_idx,
+    const inline_candidate &candidate)
+{
+    inline_constant_return_branch out;
+    if (call_idx + 2 >= caller.icodes.size())
+        return out;
+
+    const auto &call = caller.icodes[call_idx];
+    const auto &compare = caller.icodes[call_idx + 1];
+    const auto &branch = caller.icodes[call_idx + 2];
+    const bool comparison =
+        compare.op == icode_op::EQ || compare.op == icode_op::NE ||
+        compare.op == icode_op::LT || compare.op == icode_op::LE ||
+        compare.op == icode_op::GT || compare.op == icode_op::GE;
+    if (!comparison || call.result.is_none() || !compare.result.is_temp() ||
+        branch.op != icode_op::IFX ||
+        !same_inline_value(branch.left, compare.result) ||
+        branch.true_lbl.empty() || branch.false_lbl.empty()) {
+        return out;
+    }
+
+    const bool call_on_left = same_inline_value(compare.left, call.result);
+    const bool call_on_right = same_inline_value(compare.right, call.result);
+    if (call_on_left == call_on_right)
+        return out;
+    const operand &other = call_on_left ? compare.right : compare.left;
+    if (other.kind != operand_kind::INT_CONST ||
+        inline_value_read_count(caller, call.result) != 1 ||
+        inline_value_read_count(caller, compare.result) != 1) {
+        return out;
+    }
+
+    // Every return must be an integer constant so each cloned exit can jump
+    // straight to the caller's Boolean successor.  Mixed constant/dynamic
+    // returns retain the normal materialized-result inlining path.
+    for (const auto &body_ic : candidate.body) {
+        if (body_ic.op == icode_op::RETURN &&
+            body_ic.left.kind != operand_kind::INT_CONST)
+            return out;
+    }
+
+    out.active = true;
+    out.compare = compare;
+    out.true_label = branch.true_lbl;
+    out.false_label = branch.false_lbl;
+    return out;
+}
+
 static bool inline_call_site(ir_function &caller, size_t call_idx,
                              const inline_candidate &candidate) {
     const auto &call_ic = caller.icodes[call_idx];
+    const inline_constant_return_branch return_branch =
+        analyze_inline_return_branch(caller, call_idx, candidate);
     size_t send_begin = call_idx;
     std::vector<operand> args;
     if (!collect_call_args(caller.icodes, call_idx, call_ic, send_begin, args))
@@ -3411,6 +3500,27 @@ static bool inline_call_site(ir_function &caller, size_t call_idx,
         }
 
         if (body_ic.op == icode_op::RETURN) {
+            if (return_branch.active) {
+                icode folded_compare = return_branch.compare;
+                if (same_inline_value(folded_compare.left, call_ic.result))
+                    folded_compare.left = body_ic.left;
+                else
+                    folded_compare.right = body_ic.left;
+                int64_t truth = 0;
+                if (!evaluate_const_binary(folded_compare,
+                                           folded_compare.left.ival,
+                                           folded_compare.right.ival,
+                                           truth)) {
+                    return false;
+                }
+                icode goto_ic;
+                goto_ic.op = icode_op::GOTO;
+                goto_ic.label_name = truth ? return_branch.true_label
+                                           : return_branch.false_label;
+                goto_ic.line = call_ic.line;
+                replacement.push_back(std::move(goto_ic));
+                continue;
+            }
             if (!call_ic.result.is_none() && !body_ic.left.is_none()) {
                 operand ret = remap_operand(body_ic.left, temp_map, param_map,
                                             param_temp_map,
@@ -3471,7 +3581,8 @@ static bool inline_call_site(ir_function &caller, size_t call_idx,
     }
 
     auto begin = caller.icodes.begin() + static_cast<std::ptrdiff_t>(send_begin);
-    auto end   = caller.icodes.begin() + static_cast<std::ptrdiff_t>(call_idx + 1);
+    const size_t erased_end = call_idx + (return_branch.active ? 3 : 1);
+    auto end   = caller.icodes.begin() + static_cast<std::ptrdiff_t>(erased_end);
     caller.icodes.erase(begin, end);
     caller.icodes.insert(caller.icodes.begin() + static_cast<std::ptrdiff_t>(send_begin),
                          replacement.begin(), replacement.end());
@@ -4101,8 +4212,9 @@ static bool collect_inline_sites(const ir_module &mod,
 
             size_t send_begin = i;
             std::vector<operand> args;
-            if (!collect_call_args(caller.icodes, i, ic, send_begin, args))
+            if (!collect_call_args(caller.icodes, i, ic, send_begin, args)) {
                 return false;
+            }
 
             total_overhead += static_cast<int>(i - send_begin + 1);
             sites.emplace_back(caller_idx, i);
@@ -4119,6 +4231,27 @@ static bool candidate_has_internal_control_flow(const inline_candidate &candidat
             ic.op == icode_op::IFX) {
             return true;
         }
+    }
+    return false;
+}
+
+static bool candidate_has_backedge(const inline_candidate &candidate) {
+    std::unordered_map<std::string, size_t> labels;
+    for (size_t i = 0; i < candidate.body.size(); ++i) {
+        if (candidate.body[i].op == icode_op::LABEL)
+            labels[candidate.body[i].label_name] = i;
+    }
+    for (size_t i = 0; i < candidate.body.size(); ++i) {
+        const icode &ic = candidate.body[i];
+        auto backward = [&](const std::string &target) {
+            auto found = labels.find(target);
+            return found != labels.end() && found->second <= i;
+        };
+        if (ic.op == icode_op::GOTO && backward(ic.label_name))
+            return true;
+        if (ic.op == icode_op::IFX &&
+            (backward(ic.true_lbl) || backward(ic.false_lbl)))
+            return true;
     }
     return false;
 }
@@ -4252,18 +4385,19 @@ public:
             const int use_count = static_cast<int>(sites.size());
             const bool speed_profile =
                 speed_inline_small_helpers_ || broad_speed_inline_;
-            const bool speed_safe_leaf_helper =
-                !candidate.contains_call &&
-                candidate.local_frame_bytes == 0 &&
-                !candidate_has_internal_control_flow(candidate) &&
-                candidate.op_count <= few_use_max_inline_ops_;
-            if (speed_profile && !speed_safe_leaf_helper) {
-                continue;
-            }
 
             const bool caller_already_has_locals =
                 use_count == 1 &&
                 mod.functions[sites.front().first].local_bytes >= 8;
+            // Flattening a loop helper into an already-large speed-profile
+            // frame often destroys the helper's compact pointer/register
+            // allocation. Keep it out of line; small callers still gain from
+            // eliminating the hot call, and size mode retains its independent
+            // whole-definition profitability policy.
+            if (speed_profile && use_count == 1 &&
+                caller_already_has_locals && candidate_has_backedge(candidate)) {
+                continue;
+            }
             // Promotion can remove the analyzed frame without removing the
             // register pressure that made a stack-local CFG helper costly to
             // inline into an already-large caller.
@@ -4273,7 +4407,13 @@ public:
                 (candidate.local_frame_bytes > 0 || callee_had_stack_locals) &&
                 caller_already_has_locals &&
                 candidate_has_internal_control_flow(candidate);
-            if (stack_local_cfg_candidate) {
+            // In the speed profile the analyzed frame is authoritative: if
+            // scalar promotion removed every callee local, cloning a small
+            // acyclic decision tree does not import stack storage.  Size mode
+            // retains the stricter source-frame guard because code density is
+            // already its stronger result.
+            if (stack_local_cfg_candidate &&
+                !(speed_profile && candidate.local_frame_bytes == 0)) {
                 continue;
             }
 
@@ -4287,8 +4427,9 @@ public:
                 // scaffolding.
                 const bool allow_repeated_pure_leaf_inline =
                     candidate.pure_leaf_arith &&
-                    candidate.op_count <= 4 &&
-                    use_count <= 2;
+                    ((candidate.op_count <= 4 && use_count <= 2) ||
+                     (speed_profile && candidate.op_count <= 6 &&
+                      use_count <= 3));
                 const bool allow_broader_tuned_inline =
                     widen_few_use_analysis_ &&
                     !candidate.pure_leaf_arith &&
@@ -4300,13 +4441,6 @@ public:
                     !candidate.contains_call &&
                     use_count <= 3 &&
                     candidate.op_count <= few_use_max_inline_ops_;
-                const bool allow_speed_profile_inline =
-                    speed_inline_small_helpers_ &&
-                    !candidate.contains_call &&
-                    candidate.local_frame_bytes == 0 &&
-                    !candidate_has_internal_control_flow(candidate) &&
-                    use_count <= 2 &&
-                    candidate.op_count <= 18;
                 const bool allow_broad_speed_inline =
                     broad_speed_inline_ &&
                     !candidate.contains_call &&
@@ -4319,7 +4453,6 @@ public:
                     allow_broader_tuned_inline ||
                     allow_small_repeated_helper_inline;
                 const bool bypass_size_profit_gate =
-                    allow_speed_profile_inline ||
                     allow_broad_speed_inline;
                 if (!allow_few_use_inline && !bypass_size_profit_gate) {
                     continue;
@@ -4421,12 +4554,14 @@ ir_module_optimizer::build_pipeline(const optimization_settings &settings) {
         passes.push_back(std::make_unique<trivial_internal_leaf_inline_pass>(
             settings));
     if (settings.inline_static_functions) {
+        const bool speed_profile =
+            settings.level == opt_level::Of || settings.level == opt_level::O3;
         passes.push_back(std::make_unique<size_profitable_static_inline_pass>(
             12,
             24,
             16,
             false,
-            false,
+            speed_profile,
             false,
             settings));
     }
