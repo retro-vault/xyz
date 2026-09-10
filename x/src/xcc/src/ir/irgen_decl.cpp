@@ -47,8 +47,8 @@ static std::string add_global_string_literal(ir_module &mod, int &next_lbl,
     std::string lbl = "__xcc_str_" + std::to_string(next_lbl++);
     ir_module::global_var gv;
     gv.name       = lbl;
-    gv.type       = type::make_array(type::make_char(),
-                    static_cast<int>(str.value.size()) + 1);
+    gv.type       = str.type && str.type->is_array() ? str.type :
+        type::make_array(type::make_char(), static_cast<int>(str.value.size()) + 1);
     gv.str_init   = str.value;
     gv.char_width = str.char_width;
     gv.has_init   = true;
@@ -56,7 +56,8 @@ static std::string add_global_string_literal(ir_module &mod, int &next_lbl,
     return lbl;
 }
 
-static bool is_string_array_type(type_ptr ty, int char_width = 0)
+static bool is_string_array_type(type_ptr ty, int char_width = 0,
+                                 bool is_wchar = false)
 {
     if (!ty || ty->kind != type_kind::ARRAY || !ty->base)
         return false;
@@ -64,7 +65,7 @@ static bool is_string_array_type(type_ptr ty, int char_width = 0)
     if (char_width == 8)
         return elem == type_kind::CHAR8T;
     if (char_width == 2)
-        return elem == type_kind::USHORT;
+        return elem == (is_wchar ? type_kind::INT : type_kind::USHORT);
     if (char_width == 4)
         return elem == type_kind::ULONG;
     return elem == type_kind::CHAR || elem == type_kind::SCHAR ||
@@ -92,18 +93,16 @@ static void append_zero_bytes(int count,
 static void append_string_bytes(const string_literal_expr &str, type_ptr array_type,
                                 std::vector<ir_module::global_var::init_elem> &out)
 {
-    int n = array_type ? array_type->size() : 0;
-    int init_bytes = static_cast<int>(str.value.size()) + 1;
-    if (n > 0 && init_bytes > n)
-        init_bytes = n;
-    for (int i = 0; i < init_bytes; ++i) {
+    const int width = array_type && array_type->base
+        ? array_type->base->size() : 1;
+    const int n = array_type ? array_type->size() : 0;
+    const int count = n > 0 ? n / width : static_cast<int>(str.value.size()) + 1;
+    for (int i = 0; i < count; ++i) {
         int ch = 0;
         if (i < static_cast<int>(str.value.size()))
             ch = static_cast<unsigned char>(str.value[i]);
-        out.push_back(make_init_elem(ch, 1));
+        out.push_back(make_init_elem(ch, width));
     }
-    for (int i = init_bytes; i < n; ++i)
-        out.push_back(make_init_elem(0, 1));
 }
 
 static int64_t narrow_static_int(int64_t value, type_ptr ty)
@@ -147,15 +146,16 @@ static void collect_global_init(expr *init, type_ptr target,
     }
 
     if (const auto *str = unwrap_string_literal(init);
-        str && is_string_array_type(target, str->char_width)) {
+        str && is_string_array_type(target, str->char_width, str->is_wchar)) {
         append_string_bytes(*str, target, out);
         return;
     }
 
     if (auto *il = dynamic_cast<init_list_expr*>(init)) {
-        if (is_string_array_type(target) && il->elements.size() == 1) {
+        if (il->elements.size() == 1) {
             if (const auto *str =
-                    unwrap_string_literal(il->elements[0].value.get())) {
+                    unwrap_string_literal(il->elements[0].value.get());
+                str && is_string_array_type(target, str->char_width, str->is_wchar)) {
                 append_string_bytes(*str, target, out);
                 return;
             }
@@ -291,7 +291,9 @@ static void collect_global_init(expr *init, type_ptr target,
         if (auto address = const_expr_evaluator::evaluate_address(init)) {
             out.push_back(make_init_elem(
                 address->byte_offset, target->size(),
-                model_static_address_alias(init, address->symbol, definitions)));
+                address->literal
+                    ? add_global_string_literal(mod, next_lbl, *address->literal)
+                    : model_static_address_alias(init, address->symbol, definitions)));
             return;
         }
     }
@@ -318,9 +320,14 @@ void ir_gen::visit(var_decl &vd) {
         bool same_type =
             value.type->kind == target->kind &&
             value.type->size() == target->size() &&
-            value.type->is_unsigned() == target->is_unsigned();
+            value.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             value.type->bitint_width == target->bitint_width);
         if (same_type) {
-            value.type = target;
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!value.is_symbol() || !value.type->is_volatile)
+                value.type = target;
             return value;
         }
         value = coerce_const_operand(value, target);
@@ -358,15 +365,12 @@ void ir_gen::visit(var_decl &vd) {
 
         if (vd.init) {
             if (const auto *str = unwrap_string_literal(vd.init.get());
-                str && is_string_array_type(vd.type, str->char_width)) {
+                str && is_string_array_type(vd.type, str->char_width, str->is_wchar)) {
                 const int elem_size = vd.type->base->size();
                 const int count = vd.type->array_size;
-                int init_units = static_cast<int>(str->value.size()) + 1;
-                if (init_units > count)
-                    init_units = count;
                 for (int i = 0; i < count; ++i) {
                     int ch = 0;
-                    if (i < init_units - 1)
+                    if (i < static_cast<int>(str->value.size()))
                         ch = static_cast<unsigned char>(str->value[i]);
                     operand dst = aligned;
                     const int offset = i * elem_size;
@@ -464,19 +468,8 @@ void ir_gen::visit(var_decl &vd) {
         gv.bank       = vd.sym->bank;
         if (vd.init) {
             if (auto *str = dynamic_cast<string_literal_expr*>(vd.init.get());
-                str && is_string_array_type(vd.type, str->char_width)) {
-                int n = vd.type ? vd.type->size() : 0;
-                int init_bytes = static_cast<int>(str->value.size()) + 1;
-                if (n > 0 && init_bytes > n)
-                    init_bytes = n;
-                for (int i = 0; i < init_bytes; ++i) {
-                    int ch = 0;
-                    if (i < static_cast<int>(str->value.size()))
-                        ch = static_cast<unsigned char>(str->value[i]);
-                    gv.init_vals.push_back(make_init_elem(ch, 1));
-                }
-                for (int i = init_bytes; i < n; ++i)
-                    gv.init_vals.push_back(make_init_elem(0, 1));
+                str && is_string_array_type(vd.type, str->char_width, str->is_wchar)) {
+                append_string_bytes(*str, vd.type, gv.init_vals);
             } else if (auto *il = dynamic_cast<init_list_expr*>(vd.init.get())) {
                 collect_global_init(il, vd.type, *mod_, next_lbl_,
                                     defined_function_names_, gv.init_vals);
@@ -499,9 +492,12 @@ void ir_gen::visit(var_decl &vd) {
                         const_expr_evaluator::evaluate_address(vd.init.get())) {
                     gv.init_vals.push_back({
                         address->byte_offset, vd.type->size(),
-                        model_static_address_alias(
-                            vd.init.get(), address->symbol,
-                            defined_function_names_)});
+                        address->literal
+                            ? add_global_string_literal(*mod_, next_lbl_,
+                                                        *address->literal)
+                            : model_static_address_alias(
+                                vd.init.get(), address->symbol,
+                                defined_function_names_)});
                 }
             }
         }
@@ -511,14 +507,11 @@ void ir_gen::visit(var_decl &vd) {
 
     if (vd.init && cur_fn_) {
         if (const auto *str = unwrap_string_literal(vd.init.get());
-            str && is_string_array_type(vd.type, str->char_width)) {
+            str && is_string_array_type(vd.type, str->char_width, str->is_wchar)) {
             operand base = sym_to_operand(*vd.sym, vd.type->base);
             const int elem_size = vd.type->base->size();
             const int count = vd.type->array_size;
-            int init_units = static_cast<int>(str->value.size()) + 1;
-            if (init_units > count)
-                init_units = count;
-            for (int i = 0; i < init_units; ++i) {
+            for (int i = 0; i < count; ++i) {
                 int ch = 0;
                 if (i < static_cast<int>(str->value.size()))
                     ch = static_cast<unsigned char>(str->value[i]);

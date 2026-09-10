@@ -55,6 +55,59 @@ TEST(mullong_high_word_in_a)
     REQUIRE_EQ(g_rt->result32(), (uint32_t)0x01FE0000);
 }
 
+TEST(mullong_modular_products_and_preserved_state)
+{
+    // Exercise all four partial-product limbs, including carries and both
+    // sign bits. The helper's contract is the low 32 bits even when a signed
+    // source expression would overflow; use unsigned host arithmetic here.
+    const uint32_t edges[] = {
+        0, 1, 0xff, 0x100, 0xffff, 0x10000, 0x10001,
+        0x7fffffff, 0x80000000, 0xffff0000, 0xffffffff,
+        0x13579bdf, 0xeca86420
+    };
+    uint32_t state = 0x62f79a35;
+    for (unsigned i = 0; i < 2048; ++i) {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        uint32_t a = i < 169 ? edges[i / 13] : state;
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        uint32_t b = i < 169 ? edges[i % 13] : state;
+
+        uint16_t sp = g_rt->push32_arg(STACK_BASE, b);
+        sp = g_rt->push16(sp, HALT_ADDR);
+        xz80::cpu_state s{};
+        s.de = static_cast<uint16_t>(a);
+        s.hl = static_cast<uint16_t>(a >> 16);
+        s.ix = 0x69c3;
+        s.iy = 0x96b7;
+        s.af2 = 0x53a9;
+        s.bc2 = 0xc62d;
+        s.de2 = 0xe817;
+        s.hl2 = 0x4bf0;
+        s.sp = sp;
+        s.pc = rt_sym::mul32;
+        g_rt->cpu.restore(s);
+        for (unsigned step = 0; step < MAX_STEPS && !g_rt->cpu.halted(); ++step)
+            g_rt->cpu.step();
+        REQUIRE(g_rt->cpu.halted());
+        REQUIRE_EQ(g_rt->result32(), a * b);
+        const auto after = g_rt->snap();
+        REQUIRE_EQ(after.sp, STACK_BASE - 4);
+        REQUIRE_EQ(after.ix, s.ix);
+        REQUIRE_EQ(after.iy, s.iy);
+        REQUIRE_EQ(after.af2, s.af2);
+        REQUIRE_EQ(after.bc2, s.bc2);
+        REQUIRE_EQ(after.de2, s.de2);
+        REQUIRE_EQ(after.hl2, s.hl2);
+        for (unsigned byte = 0; byte < 4; ++byte)
+            REQUIRE_EQ(g_rt->mem.read(STACK_BASE - 4 + byte),
+                       static_cast<uint8_t>(b >> (byte * 8)));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // __divulong — values with high-word bits
 // ---------------------------------------------------------------------------

@@ -45,6 +45,10 @@ xcc -Os --platform=zx-ram --oformat=binary main.c -o app.bin
 xprog --tap app.bin -o app.tap --name APP
 xcc -Os --platform=zx-rom --oformat=binary main.c -o app.rom
 
+# ZX Spectrum esxDOS disk application, loaded into RAM or booted from ROM
+xcc -Os --platform=zx-esxdos --oformat=binary main.c -o disk.bin
+xcc -Os --platform=zx-esxdos-rom --oformat=binary main.c -o disk.rom
+
 # Amstrad CPC cassette and AMSDOS disk
 xcc -Os --platform=cpc-464 --oformat=binary main.c -o app.bin
 xprog --cdt app.bin -o app.cdt --name APP
@@ -71,9 +75,14 @@ xgdb --exec app.xl --cdb app.cdb --remote 127.0.0.1:9000
 | `xgdb` | Source-level debugger | `share/doc/XGDB.md` |
 | `xemu` | Standalone Z80 emulator and remote debug target | `share/doc/XEMU.md` |
 
-Target guide: `share/doc/ZX48.md` documents the installed ZX Spectrum RAM,
-tape, and replacement-ROM workflows and the intentionally unsupported
-filesystem/clock services.
+`share/doc/ZX48.md` describes the installed Spectrum targets. The plain
+`zx-ram` and `zx-rom` forms provide console services. `share/doc/ZX-ESXDOS.md`
+documents disk calls for a booted esxDOS RAM application, while
+`share/doc/ZX-ESXDOS-ROM.md` describes a disk application that boots and
+executes from its own 16 KiB base ROM without requiring a Sinclair ROM,
+using 48 bytes of RAM gates for firmware calls. Writable storage begins at
+`0x5B00`; esxDOS's internal disk buffers occupy divIDE RAM. Both disk guides
+describe the configurable stack allowance and post-entry low-RAM use.
 
 `share/doc/CPC.md` documents the installed CPC 464/664/6128 targets, CDT/DSK
 creation, and the AMSDOS stream contract.
@@ -91,5 +100,5 @@ pkg/          installable packages (.deb, .vsix)
 ```
 
 The default target platform is bare-metal `none` (`libnone.a`). Named staged
-platforms include CP/M 3, CPC 464/664/6128, ZX Spectrum 48K RAM, and ZX
-Spectrum replacement ROM; select one with `--platform=<name>`.
+platforms include CP/M 3, CPC 464/664/6128, and ZX Spectrum 48K RAM/ROM forms
+with or without esxDOS disk support; select one with `--platform=<name>`.

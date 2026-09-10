@@ -12,38 +12,32 @@
 
 
         .globl  _memrchr
-        .globl  __string_return_zero
-        .globl  __string_return_hl
 
         .area   _CODE
 
         ; _memrchr
-        ; inputs:  HL = start of span, DE = search byte (E), 4(ix)..5(ix) = count
+        ; inputs: HL = span, DE = search byte (E), 2(sp)..3(sp) = count
+        ; stack argument remains for the caller to remove
         ; outputs: DE = pointer to the last matching byte, or 0
-        ; clobbers: AF, BC, HL, IX
+        ; clobbers: AF, BC, HL; preserves IX and IY
 _memrchr::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
-        ld      c,4(ix)
-        ld      b,5(ix)
+        pop     bc                      ; return address
+        pop     af                      ; raw byte count
+        push    af                      ; retain caller's argument
+        push    bc
+        push    af
+        pop     bc
         ld      a,b
         or      c
         jr      z,memrchr_not_found
-        ; advance HL to one past the last byte: HL += count
         add     hl,bc
-memrchr_loop:
         dec     hl
-        ld      a,(hl)
-        cp      e
-        jr      z,memrchr_found
-        dec     bc
-        ld      a,b
-        or      c
-        jr      nz,memrchr_loop
+        ld      a,e
+        cpdr                            ; stop on equality or count exhaustion
+        jr      nz,memrchr_not_found
+        inc     hl                      ; CPDR stepped past the matching byte
+        ex      de,hl
+        ret
 memrchr_not_found:
-        pop     ix
-        jp      __string_return_zero
-memrchr_found:
-        pop     ix
-        jp      __string_return_hl
+        ld      de,#0
+        ret

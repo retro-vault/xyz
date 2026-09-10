@@ -10,12 +10,14 @@
 #include <iostream>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <xld/area_placer.h>
 #include <xld/errors.h>
+#include <xld/holes.h>
 
 namespace xld {
 
@@ -73,10 +75,50 @@ namespace xld {
         return start_a <= end_b && end_a >= start_b;
     }
 
-    static std::vector<address_range> effective_holes_for_placement(
+    // Every s__NAME / l__NAME this link actually consumes.
+    static std::set<std::string> referenced_span_symbols(
         const link_context& ctx)
     {
-        std::vector<address_range> holes = ctx.holes;
+        std::set<std::string> names;
+        for (const auto& mod : ctx.modules) {
+            for (const auto& sym : mod->symbols()) {
+                if (!sym.is_ref())
+                    continue;
+                const auto& name = sym.name();
+                if (name.rfind("s__", 0) == 0 || name.rfind("l__", 0) == 0)
+                    names.insert(name);
+            }
+        }
+        return names;
+    }
+
+    // The s__NAME / l__NAME pair describes one contiguous run, so a group
+    // whose span symbols are consumed must not be split by a reserved range.
+    // crt0 zeroes s__BSS..+l__BSS and copies s__INITIALIZER..+l__INITIALIZER;
+    // a split group would make it walk straight through reserved memory.
+    // Code groups stay splittable -- the emitted jump carries execution
+    // across the range, which is the whole point of reserving one.
+    static bool group_span_is_consumed(const std::set<std::string>& consumed,
+                                       const std::string& group_name)
+    {
+        // SDCC startup always treats these as one byte span, whether or not
+        // this particular link references the symbols.
+        if (group_name == "_INITIALIZER" || group_name == "_INITIALIZED")
+            return true;
+
+        std::string suffix = group_name;
+        if (!suffix.empty() && suffix[0] == '_')
+            suffix.erase(0, 1);
+        return consumed.count("s__" + suffix) != 0
+            || consumed.count("l__" + suffix) != 0;
+    }
+
+    std::vector<address_range> area_placer::effective_holes_for_placement(
+        const link_context& ctx)
+    {
+        // The declared ranges stay unclipped: a range reaching past the
+        // emitted window still blocks placement there.
+        std::vector<address_range> holes = merge_reserved_ranges(ctx.holes);
         if (ctx.format != output_format::bin
             && ctx.format != output_format::ihx)
             return holes;
@@ -88,28 +130,26 @@ namespace xld {
             ? ctx.output_range->end
             : 0xFFFF;
 
-        for (const auto& hole : ctx.holes) {
-            uint16_t hs = std::max<uint16_t>(hole.start, emit_start);
-            uint16_t he = std::min<uint16_t>(hole.end, emit_end);
-            if (hs > he)
-                continue;
+        // Gaps too narrow for a guard were folded into the reserved space,
+        // so keep them free as well.  Ranges the fusing left alone are
+        // already covered by the declared list.
+        for (const auto& range :
+                 clipped_reserved_ranges(ctx.holes, emit_start, emit_end)) {
+            const bool covered = std::any_of(holes.begin(), holes.end(),
+                [&](const address_range& declared) {
+                    return range.start >= declared.start
+                        && range.end <= declared.end;
+                });
+            if (!covered)
+                holes.push_back(range);
+        }
 
-            uint32_t hole_size = static_cast<uint32_t>(he) - hs + 1u;
-            if (static_cast<uint32_t>(hs) >= static_cast<uint32_t>(emit_start) + 2u
-                && hole_size <= 0x7Fu
-                && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
-                holes.push_back({
-                    static_cast<uint16_t>(hs - 2u),
-                    static_cast<uint16_t>(hs - 1u)
-                });
-            } else if (static_cast<uint32_t>(hs)
-                           >= static_cast<uint32_t>(emit_start) + 3u
-                       && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
-                holes.push_back({
-                    static_cast<uint16_t>(hs - 3u),
-                    static_cast<uint16_t>(hs - 1u)
-                });
-            }
+        for (const auto& guard :
+                 reserved_range_guards(ctx.holes, emit_start, emit_end)) {
+            holes.push_back({
+                guard.address,
+                static_cast<uint16_t>(guard.address + guard.bytes.size() - 1u)
+            });
         }
 
         return holes;
@@ -149,6 +189,7 @@ namespace xld {
 
     void area_placer::place(link_context& ctx) {
         const auto placement_holes = effective_holes_for_placement(ctx);
+        const auto consumed_spans = referenced_span_symbols(ctx);
 
         // Group areas by name across all modules.
         // Maintain insertion order by first occurrence.
@@ -261,6 +302,17 @@ namespace xld {
                 cursor += max_size;
             } else {
                 // CON: concatenate sequentially.
+                // A group whose span symbols are consumed must land in one
+                // piece: a reserved range between two members would leave
+                // s__NAME/l__NAME covering the reserved bytes. Reserve the
+                // whole run up front so the members simply follow it.
+                if (group_span_is_consumed(consumed_spans, group.name)) {
+                    uint32_t group_size = 0;
+                    for (const auto& [mod, idx] : group.members)
+                        group_size += mod->area_by_index(idx).size();
+                    cursor = next_free_address(
+                        cursor, group_size, placement_holes);
+                }
                 for (auto& [mod, idx] : group.members) {
                     auto& a = mod->area_by_index(idx);
                     if (a.size() == 0) {

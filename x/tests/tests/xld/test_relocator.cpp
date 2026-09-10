@@ -255,3 +255,108 @@ TEST(relocator_symbol_relocation_to_absolute_def_skips_area_bias) {
                          | (ctx.code_buffer[0xC002] << 8);
     ASSERT_EQ(value, 0x1234);
 }
+
+// ---------------------------------------------------------------------------
+// Relocation addends
+//
+// The addend rides on the relocation, not in the image: ASxxxx keeps it in
+// the data bytes and GNU keeps it in the record, and the object readers
+// normalize both. The two dialects also disagree on where a PC-relative
+// relocation is measured from.
+// ---------------------------------------------------------------------------
+
+namespace reloc_addend_test {
+
+    // One two-byte short branch at 0x0000 targeting a symbol at `target`.
+    static uint8_t short_branch_displacement(int32_t addend,
+                                             bool pc_rel_at_field,
+                                             uint16_t target)
+    {
+        xld::link_context ctx;
+        auto mod = std::make_shared<xld::module>("b", "b.rel");
+        mod->areas().emplace_back("_CODE", 2, xld::area_flags::none, 0);
+        mod->areas()[0].set_placed_addr(0x0000);
+        mod->areas().emplace_back("_FAR", 1, xld::area_flags::none, 1);
+        mod->areas()[1].set_placed_addr(target);
+        mod->symbols().emplace_back("_t", xld::symbol_type::def, 0, 0, 1);
+
+        xld::text_record tr;
+        tr.area_index = 0;
+        tr.offset = 0;
+        tr.data = {0x18, 0x00};
+
+        xld::reloc_entry re;
+        re.mode = xld::reloc_mode::pc_rel | xld::reloc_mode::sym;
+        re.offset_in_t = 1;
+        re.ref_index = 0;
+        re.addend = addend;
+        re.pc_rel_at_field = pc_rel_at_field;
+        tr.relocs.push_back(re);
+        mod->texts().push_back(tr);
+
+        ctx.modules.push_back(mod);
+        ctx.code_size = static_cast<uint32_t>(target) + 1u;
+        xld::relocator::relocate(ctx);
+        return ctx.code_buffer[1];
+    }
+
+} // namespace reloc_addend_test
+
+TEST(relocator_asxxxx_short_branch_measures_after_the_field) {
+    // jr _t with _t at 0x0020: 0x0020 - 0x0002.
+    ASSERT_EQ(reloc_addend_test::short_branch_displacement(0, false, 0x0020),
+              0x1E);
+}
+
+TEST(relocator_gnu_short_branch_measures_at_the_field) {
+    // GNU biases the addend by -1 because it measures from the displacement
+    // byte, so the same branch must land on the same target.
+    ASSERT_EQ(reloc_addend_test::short_branch_displacement(-1, true, 0x0020),
+              0x1E);
+}
+
+TEST(relocator_short_branch_honours_a_negative_addend) {
+    // jr _t-2 with _t at 0x0020 must reach 0x001E, not run off unsigned.
+    ASSERT_EQ(reloc_addend_test::short_branch_displacement(-2, false, 0x0020),
+              0x1C);
+}
+
+TEST(relocator_short_branch_honours_a_positive_addend) {
+    ASSERT_EQ(reloc_addend_test::short_branch_displacement(3, false, 0x0020),
+              0x21);
+}
+
+TEST(relocator_short_branch_backwards_with_negative_addend) {
+    // Target below the branch: 0x0000 is _t, addend -0x10 is unreachable,
+    // but -0x02 from a target at 0x0060 is fine in the other direction.
+    ASSERT_EQ(reloc_addend_test::short_branch_displacement(-2, false, 0x0060),
+              0x5C);
+}
+
+TEST(relocator_word_relocation_uses_the_relocation_addend) {
+    xld::link_context ctx;
+    auto mod = std::make_shared<xld::module>("w", "w.rel");
+    mod->areas().emplace_back("_CODE", 3, xld::area_flags::none, 0);
+    mod->areas()[0].set_placed_addr(0x0100);
+    mod->symbols().emplace_back("_t", xld::symbol_type::def, 0, 0, 0);
+
+    xld::text_record tr;
+    tr.area_index = 0;
+    tr.offset = 0;
+    tr.data = {0xC3, 0x00, 0x00};   // GNU leaves the field empty
+
+    xld::reloc_entry re;
+    re.mode = xld::reloc_mode::word | xld::reloc_mode::sym;
+    re.offset_in_t = 1;
+    re.ref_index = 0;
+    re.addend = 0x0004;
+    tr.relocs.push_back(re);
+    mod->texts().push_back(tr);
+
+    ctx.modules.push_back(mod);
+    ctx.code_size = 0x0103;
+    xld::relocator::relocate(ctx);
+
+    ASSERT_EQ(ctx.code_buffer[0x0101], 0x04); // 0x0100 + 4
+    ASSERT_EQ(ctx.code_buffer[0x0102], 0x01);
+}

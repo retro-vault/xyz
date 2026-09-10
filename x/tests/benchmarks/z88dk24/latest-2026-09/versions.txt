@@ -1,0 +1,39 @@
+xcc_source_manifest_sha256=0fdd8f5e6817e1884ac81cf8213c41eb3e39d4807de3eb11be8ea39b66435753
+corpus_commit=460ec34769f01324ca49b66145f09babdbe507fc
+corpus_sha256=f74f02cd8852d5b0c9bb7241d0a9b0f384ccfe887105b0412a5064b4d3bdd2b4
+z88dk_current_commit=895dc1366573b792d98b0607fb1048d2db248b3d
+z88dk_80cc_commit=895dc1366573b792d98b0607fb1048d2db248b3d
+sdcc_current_commit=a1ab477f6e5117e74964e7088db566521f7aed7a
+xcc_commit=1301bcf7a709dfd3cd88031338b57f9ba696cbf9
+x_model=M
+machine=msx
+budget=60
+lanes=xcc_Os,xcc_Of
+nightly_archive=z88dk-20260909-895dc13665-25851.tgz
+nightly_sha256=7f314bb2fc843c34ccfbe84e82911eb1b9f4a4d5a1e8ed0f3ca69b12abc04455
+
+ZSDCC IS A MODIFICATION OF SDCC FOR Z88DK
+Build: 4.6.0 #16639 (Linux) pr3093 Sep  9 2026
+
+sdcc website:
+https://sourceforge.net/projects/sdcc/
+
+patch details:
+098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a  /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc
+34c8410bb899e0d6b471a63c38305b8850de599a41c01d73c2077db199222128  /home/tstih/data/retro-vault/xyz/build/toolchains/latest-20260909/nightly-source/z88dk/bin/zcc
+9cb7f7a6b6b97352d4a2ad97bcaf46dd38cc54e7987b20736085fe83cb069a60  /home/tstih/data/retro-vault/xyz/build/toolchains/latest-20260909/sdcc-trunk/src/sdcc
+2d1c802e8bbda8274adf1b8d0c9f4305be51afc4096d666a6f1e1f1ce10f62da  /home/tstih/data/retro-vault/xyz/build/toolchains/latest-20260909/nightly-source/z88dk/bin/z88dk-80cc
+7ff22971b0a29acc1f35193c67ca052255eef476c14ba4c59be65a700a04d724  /home/tstih/data/retro-vault/xyz/build/toolchains/latest-20260909/nightly-source/z88dk/bin/z88dk-ticks
+e1fe2ac1b4146156cd97f326aaea80d65a8036c1d3d43bcbbe1611db932c39c4  /home/tstih/data/retro-vault/xyz/build/toolchains/latest-20260909/nightly-source/z88dk/bin/z88dk-zsdcc
+xcc 2.5.0 (X Tools C Compiler for Z80)
+
+ZSDCC IS A MODIFICATION OF SDCC FOR Z88DK
+Build: 4.6.2 #16858 (Linux) Sep  9 2026
+
+sdcc website:
+https://sourceforge.net/projects/sdcc/
+
+patch details:
+80cc - z80 family Crosscompiler   Version: 25851-895dc13665-20260909
+(C) 1980-2026 Cain, Van Zandt, Hendrix, Yorston, z88dk
+Usage: /home/tstih/data/retro-vault/xyz/build/toolchains/latest-20260909/nightly-source/z88dk/bin/z88dk-80cc [flags] [file]

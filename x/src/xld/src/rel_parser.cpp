@@ -116,6 +116,11 @@ namespace xld {
             auto mod = std::make_shared<module>(obj.module_name(),
                                                 std::filesystem::path(path_str));
 
+            // GNU objects measure PC-relative relocations from the relocated
+            // byte; ASxxxx objects measure them from the end of the field.
+            const bool elf_source =
+                obj.get_flavour() == bfd::flavour::elf;
+
             // Build area list from bfd sections.
             for (const auto& sec : obj.sections()) {
                 if (sec.size > 0xFFFFu) {
@@ -217,6 +222,8 @@ namespace xld {
                     reloc_entry re;
                     re.mode        = bfd_to_xlink_reloc_mode(r.type, r.sym_relative);
                     re.offset_in_t = static_cast<uint16_t>(r.offset);
+                    re.addend      = r.addend;
+                    re.pc_rel_at_field = elf_source;
 
                     // Rebuild index.
                     re.ref_index = 0;

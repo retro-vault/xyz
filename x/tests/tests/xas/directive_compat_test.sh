@@ -136,4 +136,82 @@ if command -v readelf >/dev/null 2>&1; then
         || fail ".type/.size did not emit var as a 1-byte OBJECT symbol"
 fi
 
+# Explicit dotted names and shorthand must address the same ELF section.
+# Bare names and differently cased names remain distinct sections.
+cat > "$tmpdir/sections.s" <<'EOF'
+            .text
+            .byte 0x11
+            .section .text
+            .byte 0x22
+            .area .text
+            .byte 0x33
+            .rodata
+            .byte 0x41
+            .section .rodata
+            .byte 0x42
+            .area .rodata
+            .byte 0x43
+            .DATA
+            .byte 0x51
+            .SECTION .data
+            .byte 0x52
+            .AREA .data
+            .byte 0x53
+            .section rodata
+            .byte 0x61
+            .area rodata
+            .byte 0x62
+            .section .MiXeD.Name
+            .byte 0x71
+            .area .MiXeD.Name
+            .byte 0x72
+            .section MiXeD.Name
+            .byte 0x81
+            .area MiXeD.Name
+            .byte 0x82
+            .section .RoData
+            .byte 0x91
+            .area .RoData
+            .byte 0x92
+            .bss
+            .ds 3
+            .section .bss
+            .ds 2
+            .area .bss
+            .ds 1
+EOF
+"$XAS" --mode=gnu -o "$tmpdir/sections.o" "$tmpdir/sections.s" \
+    || fail "explicit ELF section names were rejected"
+python3 - "$tmpdir/sections.o" <<'PY'
+from pathlib import Path
+import struct
+import sys
+
+data = Path(sys.argv[1]).read_bytes()
+assert data[:6] == b"\x7fELF\x01\x01", "expected little-endian ELF32"
+header = struct.unpack_from("<16sHHIIIIIHHHHHH", data)
+offset, entry_size, count, names_index = header[6], *header[11:14]
+headers = [struct.unpack_from("<10I", data, offset + i * entry_size)
+           for i in range(count)]
+names_header = headers[names_index]
+names = data[names_header[4]:names_header[4] + names_header[5]]
+sections = {}
+for section in headers:
+    name = names[section[0]:].split(b"\0", 1)[0].decode("ascii")
+    sections[name] = section
+
+expected = {".text": "112233", ".rodata": "414243", ".data": "515253",
+            "rodata": "6162", ".MiXeD.Name": "7172",
+            "MiXeD.Name": "8182", ".RoData": "9192"}
+for name, content in expected.items():
+    assert name in sections, f"missing ELF section {name!r}: {list(sections)}"
+    section = sections[name]
+    actual = data[section[4]:section[4] + section[5]]
+    assert actual == bytes.fromhex(content), (name, actual.hex(), content)
+assert not {"text", "data", "bss", ".mixed.name"} & sections.keys()
+assert ".bss" in sections, "missing ELF .bss"
+assert sections[".bss"][1] == 8, ".bss must remain SHT_NOBITS"
+assert sections[".bss"][5] == 6, "explicit .bss must extend shorthand .bss"
+PY
+
 echo "${GREEN}PASS${RESET}: xas directive compatibility"

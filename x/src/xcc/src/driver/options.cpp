@@ -81,6 +81,7 @@ static constexpr opt_flag_binding k_opt_flag_bindings[] = {
     {"prealloc-temp-frame", &optimization_settings::prealloc_temp_frame},
     {"switch-jump-tables", &optimization_settings::switch_jump_tables},
     {"ctype-builtins", &optimization_settings::ctype_builtins},
+    {"memory-builtins", &optimization_settings::memory_builtins},
 };
 
 static bool apply_opt_flag(options &opts, const char *name, bool enabled) {
@@ -482,6 +483,8 @@ void options::usage(const char *argv0) {
         "  --opt-code-speed  Alias for -Of (SDCC compatibility)\n"
         "  -f<name>          Enable one optimization family\n"
         "  -fno-<name>       Disable one optimization family\n"
+        "  -fno-memory-builtins\n"
+        "                    Retain interposable standard memory-function calls\n"
         "  -w                Disable all warnings\n"
         "  -W0..-W3          Warning levels (none, default, Wall, Wall+extra)\n"
         "  -Wall, -Wextra    Enable grouped warnings\n"

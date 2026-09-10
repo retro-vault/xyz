@@ -72,7 +72,15 @@ bool is_truth_test_preserving_integer_cast(const icode &ic) {
         return false;
     const bool src_ok = ic.left.type->is_integer() || ic.left.type->is_ptr();
     const bool dst_ok = ic.result.type->is_integer() || ic.result.type->is_ptr();
-    return src_ok && dst_ok;
+    if (!src_ok || !dst_ok)
+        return false;
+    if (ic.result.type->kind == type_kind::BOOL)
+        return true;
+    const int src_bits = ic.left.type->kind == type_kind::BITINT
+        ? ic.left.type->bitint_width : ic.left.type->size() * 8;
+    const int dst_bits = ic.result.type->kind == type_kind::BITINT
+        ? ic.result.type->bitint_width : ic.result.type->size() * 8;
+    return dst_bits >= src_bits;
 }
 
 bool materializes_automatic_address(const ir_function &fn) {
@@ -301,8 +309,11 @@ void z80_gen::gen_ifx(const icode &ic) {
             return std::nullopt;
         }
 
-        operand narrowed = def->left;
-        narrowed.byte_offset += cond.byte_offset;
+        // The cast's source may have died or changed after its evaluation.
+        // Its stored low byte has the same truth value as the widened word.
+        // Adjacent unmaterialized casts use the explicit producer handoff.
+        operand narrowed = cond;
+        narrowed.type = type::make_uchar();
         return narrowed;
     };
 
@@ -358,6 +369,22 @@ void z80_gen::gen_ifx(const icode &ic) {
                 direct_word_value_ = ic.left;
             }
         }
+    } else if (ic.left.type && ic.left.type->is_integer() &&
+               ic.left.type->size() > 2) {
+        // A nonzero high word is sufficient for truth. Still read every
+        // word, including volatile objects, and preserve the accumulated
+        // byte while a deep-frame reload uses AF as address scratch.
+        const int words = ic.left.type->size() / 2;
+        load_hl_word(ic.left, 0);
+        emit_line("ld\ta, h");
+        emit_line("or\ta, l");
+        for (int word = 1; word < words; ++word) {
+            emit_line("push\taf");
+            load_hl_word(ic.left, word);
+            emit_line("pop\taf");
+            emit_line("or\ta, h");
+            emit_line("or\ta, l");
+        }
     } else if (auto byte_src = byte_truth_source(ic.left)) {
         load_a(*byte_src);
         emit_line("or\ta, a");
@@ -409,6 +436,7 @@ void z80_gen::gen_function(const icode &) {
     if (cur_fn_) {
         asm_.symbol_type_function(mangle(cur_fn_->name));
         emit_prologue(*cur_fn_);
+        emit_ordinary_ix_spans(*cur_fn_);
     }
 }
 
@@ -641,9 +669,9 @@ void z80_gen::gen_call(const icode &ic) {
         !inline_ctype_call &&
         bc_preserved_call_indices_.count(cur_ic_index_) != 0;
     if (preserve_iy)
-        emit_line("push\tiy");
+        emit_line("push\tiy ; xcc-caller-save:iy");
     if (preserve_bc)
-        emit_line("push\tbc");
+        emit_line("push\tbc ; xcc-caller-save:bc");
 
     // Emit the CALL instruction.
     if (!ic.func_name.empty()) {
@@ -659,9 +687,9 @@ void z80_gen::gen_call(const icode &ic) {
     }
 
     if (preserve_bc)
-        emit_line("pop\tbc");
+        emit_line("pop\tbc ; xcc-caller-save:bc");
     if (preserve_iy)
-        emit_line("pop\tiy");
+        emit_line("pop\tiy ; xcc-caller-save:iy");
 
     // When the callee pops stack-passed arguments, the machine SP has already
     // advanced on return even though we emit no caller-side cleanup sequence.

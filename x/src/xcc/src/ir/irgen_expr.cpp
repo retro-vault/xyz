@@ -10,6 +10,7 @@
 #include "ir/irgen.h"
 #include "backend/z80/convention.h"
 #include <cstdint>
+#include <unordered_map>
 
 namespace xcc {
 
@@ -45,6 +46,28 @@ static icode_op float_op_to_icode(bin_op op) {
     case bin_op::DIV: case bin_op::DIV_ASSIGN: return icode_op::FDIV;
     default:                                   return icode_op::FADD;
     }
+}
+
+// Partial-width arithmetic must narrow before a surrounding expression can
+// widen the result.  Give the machine operation a distinct full-width type,
+// then emit a real conversion back to the C expression's declared precision.
+static type_ptr arithmetic_carrier(const type_ptr &ty) {
+    if (!ty || ty->kind != type_kind::BITINT ||
+        ty->bitint_width <= 0 || ty->bitint_width >= ty->size() * 8)
+        return ty;
+    if (ty->size() == 1)
+        return ty->is_unsigned() ? type::make_uchar() : type::make_schar();
+    if (ty->size() == 2)
+        return ty->is_unsigned() ? type::make_uint() : type::make_int();
+    return ty->is_unsigned() ? type::make_ulong() : type::make_long();
+}
+
+static type_ptr pointer_index_carrier(const type_ptr &ty) {
+    if (!ty || ty->kind != type_kind::BITINT)
+        return ty;
+    if (ty->size() <= 2)
+        return ty->is_unsigned() ? type::make_uint() : type::make_int();
+    return ty->is_unsigned() ? type::make_ulong() : type::make_long();
 }
 
 static int pointer_step(type_ptr ty) {
@@ -200,24 +223,27 @@ void ir_gen::visit(float_literal_expr &e) {
 }
 
 void ir_gen::visit(char_literal_expr &e) {
-    expr_result_ = operand::make_int(e.value, type::make_int());
+    expr_result_ = operand::make_int(e.value, e.type ? e.type : type::make_int());
 }
 
 void ir_gen::visit(string_literal_expr &e) {
     std::string lbl = "__xcc_str_" + std::to_string(next_lbl_++);
+    type_ptr element = e.type && e.type->base
+        ? e.type->base : type::make_char();
     ir_module::global_var gv;
     gv.name       = lbl;
-    gv.type       = type::make_array(type::make_char(), static_cast<int>(e.value.size()) + 1);
+    gv.type       = e.type && e.type->is_array() ? e.type :
+        type::make_array(element, static_cast<int>(e.value.size()) + 1);
     gv.str_init   = e.value;
     gv.char_width = e.char_width;
     gv.has_init   = true;
     mod_->string_literals.push_back(std::move(gv));
 
-    operand res = new_temp(type::make_pointer(type::make_char()));
+    operand res = new_temp(type::make_pointer(element));
     icode ic;
     ic.op     = icode_op::ADDRESS_OF;
     ic.result = res;
-    ic.left   = operand::make_symbol(lbl, type::make_char(), true, false, 0);
+    ic.left   = operand::make_symbol(lbl, element, true, false, 0);
     emit(ic);
     expr_result_ = res;
 }
@@ -300,6 +326,11 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
     operand rhs = gen_expr(*e.right);
 
     auto scale_index = [&](operand index, int scale) -> operand {
+        // Scaling is pointer-offset arithmetic, not an operation in the
+        // BitInt index's narrower modulo domain.
+        const type_ptr carrier = pointer_index_carrier(index.type);
+        if (carrier != index.type)
+            index = emit_unop(icode_op::CAST, index, carrier);
         if (scale <= 1)
             return index;
         type_ptr idx_type = index.type ? index.type : type::make_int();
@@ -363,9 +394,14 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
         bool same_type =
             op.type->kind == target->kind &&
             op.type->size() == target->size() &&
-            op.type->is_unsigned() == target->is_unsigned();
+            op.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             op.type->bitint_width == target->bitint_width);
         if (same_type) {
-            op.type = target;
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!op.is_symbol() || !op.type->is_volatile)
+                op.type = target;
             return op;
         }
         op = coerce_const_operand(op, target);
@@ -390,10 +426,14 @@ void ir_gen::gen_binary_arith(binary_expr &e) {
                     expr_type->kind == type_kind::DOUBLE;
     if (lhs.type && rhs.type && lhs.type->is_arith() && rhs.type->is_arith()) {
         lhs = coerce_operand(lhs, expr_type);
-        rhs = coerce_operand(rhs, expr_type);
+        const bool shift = e.op == bin_op::SHL || e.op == bin_op::SHR;
+        rhs = coerce_operand(rhs, shift ? integer_promote(rhs.type) : expr_type);
     }
     icode_op op = is_float ? float_op_to_icode(e.op) : bin_op_to_icode(e.op);
-    expr_result_ = emit_binop(op, lhs, rhs, expr_type);
+    const type_ptr carrier = arithmetic_carrier(expr_type);
+    expr_result_ = emit_binop(op, lhs, rhs, carrier);
+    if (carrier != expr_type)
+        expr_result_ = emit_unop(icode_op::CAST, expr_result_, expr_type);
 }
 
 void ir_gen::gen_binary_compare(binary_expr &e) {
@@ -409,9 +449,14 @@ void ir_gen::gen_binary_compare(binary_expr &e) {
         bool same_type =
             op.type->kind == target->kind &&
             op.type->size() == target->size() &&
-            op.type->is_unsigned() == target->is_unsigned();
+            op.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             op.type->bitint_width == target->bitint_width);
         if (same_type) {
-            op.type = target;
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!op.is_symbol() || !op.type->is_volatile)
+                op.type = target;
             return op;
         }
         op = coerce_const_operand(op, target);
@@ -471,7 +516,8 @@ void ir_gen::gen_assign(binary_expr &e) {
 }
 
 void ir_gen::gen_compound_assign(binary_expr &e) {
-    operand lhs_src = gen_expr(*e.left);
+    operand address;
+    operand lhs_src = gen_lvalue_read_once(*e.left, address);
     operand rhs     = gen_expr(*e.right);
     operand lhs_for_op = lhs_src;
     operand rhs_for_op = rhs;
@@ -485,6 +531,9 @@ void ir_gen::gen_compound_assign(binary_expr &e) {
     if ((e.op == bin_op::ADD_ASSIGN || e.op == bin_op::SUB_ASSIGN) &&
         lhs_src.type && lhs_src.type->is_ptr() &&
         rhs.type && rhs.type->is_integer()) {
+        const type_ptr index_carrier = pointer_index_carrier(rhs.type);
+        if (index_carrier != rhs.type)
+            rhs = rhs_for_op = emit_unop(icode_op::CAST, rhs, index_carrier);
         const int scale = pointer_step(lhs_src.type);
         if (scale > 1) {
             if (rhs.kind == operand_kind::INT_CONST) {
@@ -509,9 +558,14 @@ void ir_gen::gen_compound_assign(binary_expr &e) {
         bool same_type =
             op.type->kind == target->kind &&
             op.type->size() == target->size() &&
-            op.type->is_unsigned() == target->is_unsigned();
+            op.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             op.type->bitint_width == target->bitint_width);
         if (same_type) {
-            op.type = target;
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!op.is_symbol() || !op.type->is_volatile)
+                op.type = target;
             return op;
         }
         op = coerce_const_operand(op, target);
@@ -525,18 +579,24 @@ void ir_gen::gen_compound_assign(binary_expr &e) {
 
     if (lhs_src.type && rhs.type &&
         lhs_src.type->is_arith() && rhs.type->is_arith()) {
-        op_type = usual_arith_conv(lhs_src.type, rhs.type);
+        const bool shift = e.op == bin_op::SHL_ASSIGN || e.op == bin_op::RHS_ASSIGN;
+        op_type = shift ? integer_promote(lhs_src.type)
+                        : usual_arith_conv(lhs_src.type, rhs.type);
         lhs_for_op = coerce_operand(lhs_src, op_type);
-        rhs_for_op = coerce_operand(rhs, op_type);
+        rhs_for_op = coerce_operand(rhs, shift ? integer_promote(rhs.type) : op_type);
     }
 
     bool is_float = op_type &&
                     (op_type->kind == type_kind::FLOAT ||
                      op_type->kind == type_kind::DOUBLE);
+    const type_ptr carrier = arithmetic_carrier(op_type);
     operand tmp = emit_binop(is_float ? float_op_to_icode(e.op)
                                       : bin_op_to_icode(e.op),
-                             lhs_for_op, rhs_for_op, op_type);
-    expr_result_ = gen_lvalue_write(*e.left, tmp);
+                             lhs_for_op, rhs_for_op, carrier);
+    if (carrier != op_type)
+        tmp = emit_unop(icode_op::CAST, tmp, op_type);
+    expr_result_ = gen_lvalue_write(*e.left, tmp,
+                                  address.is_none() ? nullptr : &address);
 }
 
 // ----- Expression visitors -------------------------------------------
@@ -560,7 +620,7 @@ void ir_gen::visit(binary_expr &e) {
         gen_binary_logical(e);
         return;
     case bin_op::COMMA:
-        gen_expr(*e.left);
+        gen_discarded_expr(*e.left);
         gen_expr(*e.right);
         return;
     default:
@@ -571,20 +631,21 @@ void ir_gen::visit(binary_expr &e) {
 
 void ir_gen::visit(unary_expr &e) {
     switch (e.op) {
-    case unary_op::NEG:
-        expr_result_ = emit_unop(icode_op::NEG, gen_expr(*e.operand),
-                                 e.type ? e.type : type::make_int());
+    case unary_op::NEG: case unary_op::BNOT: {
+        const type_ptr result_type = e.type ? e.type : type::make_int();
+        const type_ptr carrier = arithmetic_carrier(result_type);
+        expr_result_ = emit_unop(e.op == unary_op::NEG ? icode_op::NEG : icode_op::BNOT,
+                                 gen_expr(*e.operand), carrier);
+        if (carrier != result_type)
+            expr_result_ = emit_unop(icode_op::CAST, expr_result_, result_type);
         break;
+    }
     case unary_op::NOT: {
         operand op = gen_expr(*e.operand);
         expr_result_ = emit_binop(icode_op::EQ, op,
                                   operand::make_int(0, op.type), type::make_int());
         break;
     }
-    case unary_op::BNOT:
-        expr_result_ = emit_unop(icode_op::BNOT, gen_expr(*e.operand),
-                                 e.type ? e.type : type::make_int());
-        break;
     case unary_op::ADDR:
         expr_result_ = gen_lvalue_addr(*e.operand,
                                        e.type ? e.type
@@ -607,7 +668,8 @@ void ir_gen::visit(unary_expr &e) {
     }
     case unary_op::PRE_INC: case unary_op::PRE_DEC: {
         bool inc = (e.op == unary_op::PRE_INC);
-        operand op = gen_expr(*e.operand);
+        operand address;
+        operand op = gen_lvalue_read_once(*e.operand, address);
         type_ptr op_type = op.type ? op.type : type::make_int();
         bool is_float = op_type &&
                         (op_type->kind == type_kind::FLOAT ||
@@ -618,16 +680,21 @@ void ir_gen::visit(unary_expr &e) {
         operand step = is_float
                            ? operand::make_float(static_cast<double>(step_value), op_type)
                            : operand::make_int(step_value, type::make_int());
+        const type_ptr carrier = arithmetic_carrier(op_type);
         operand tmp = emit_binop(is_float
                                      ? (inc ? icode_op::FADD : icode_op::FSUB)
                                      : (inc ? icode_op::ADD : icode_op::SUB),
-                                 op, step, op_type);
-        expr_result_ = gen_lvalue_write(*e.operand, tmp);
+                                 op, step, carrier);
+        if (carrier != op_type)
+            tmp = emit_unop(icode_op::CAST, tmp, op_type);
+        expr_result_ = gen_lvalue_write(*e.operand, tmp,
+                                      address.is_none() ? nullptr : &address);
         break;
     }
     case unary_op::POST_INC: case unary_op::POST_DEC: {
         bool inc = (e.op == unary_op::POST_INC);
-        operand op = gen_expr(*e.operand);
+        operand address;
+        operand op = gen_lvalue_read_once(*e.operand, address);
         type_ptr op_type = op.type ? op.type : type::make_int();
         bool is_float = op_type &&
                         (op_type->kind == type_kind::FLOAT ||
@@ -640,11 +707,20 @@ void ir_gen::visit(unary_expr &e) {
         operand step = is_float
                            ? operand::make_float(static_cast<double>(step_value), op_type)
                            : operand::make_int(step_value, type::make_int());
+        // Observable identifiers must use the saved value for the update.
+        // Ordinary identifiers retain their canonical in-place recurrence;
+        // no evaluation or store intervenes between the two ordinary reads.
+        const bool observable_source = op.is_symbol() &&
+            (op.is_sfr || (op.type && op.type->is_volatile));
+        const type_ptr carrier = arithmetic_carrier(op_type);
         operand tmp = emit_binop(is_float
                                      ? (inc ? icode_op::FADD : icode_op::FSUB)
                                      : (inc ? icode_op::ADD : icode_op::SUB),
-                                 op, step, op_type);
-        gen_lvalue_write(*e.operand, tmp);
+                                 observable_source ? old : op, step, carrier);
+        if (carrier != op_type)
+            tmp = emit_unop(icode_op::CAST, tmp, op_type);
+        gen_lvalue_write(*e.operand, tmp,
+                         address.is_none() ? nullptr : &address);
         expr_result_ = old;
         break;
     }
@@ -915,6 +991,154 @@ bool uses_small_printf_format(const call_expr &e) {
 
 } // namespace
 
+void lower_constant_memory_builtins(ir_module &module, bool optimize_size) {
+    std::unordered_set<std::string> definitions;
+    for (const ir_function &fn : module.functions)
+        definitions.insert(fn.name);
+    for (ir_function &fn : module.functions) {
+        // Inlining may leave harmless argument copies/casts in front of a
+        // standard header bridge. Follow only uniquely defined constants;
+        // mutable locals and multiply defined loop temporaries stay calls.
+        std::unordered_map<int, const icode *> defs;
+        for (const icode &ic : fn.icodes) {
+            if (!ic.result.is_temp())
+                continue;
+            auto inserted = defs.emplace(ic.result.temp_id, &ic);
+            if (!inserted.second)
+                inserted.first->second = nullptr;
+        }
+        auto constant = [&](auto &&self, const operand &op, int depth,
+                            int64_t &value) -> bool {
+            if (op.kind == operand_kind::INT_CONST) {
+                value = op.ival;
+                return true;
+            }
+            if (!op.is_temp() || depth == 0)
+                return false;
+            auto found = defs.find(op.temp_id);
+            if (found == defs.end() || !found->second)
+                return false;
+            const icode &def = *found->second;
+            if ((def.op != icode_op::ASSIGN && def.op != icode_op::CAST) ||
+                !self(self, def.left, depth - 1, value))
+                return false;
+            if (!def.result.type || !def.result.type->is_integer())
+                return false;
+            if (def.result.type->kind == type_kind::BOOL) {
+                value = value != 0;
+                return true;
+            }
+            const int bits = def.result.type->kind == type_kind::BITINT
+                                 ? def.result.type->bitint_width
+                                 : def.result.type->size() * 8;
+            if (bits > 0 && bits < 64) {
+                const uint64_t mask = (uint64_t{1} << bits) - 1;
+                uint64_t narrowed = static_cast<uint64_t>(value) & mask;
+                if (!def.result.type->is_unsigned() &&
+                    (narrowed & (uint64_t{1} << (bits - 1))))
+                    narrowed |= ~mask;
+                value = static_cast<int64_t>(narrowed);
+            }
+            return true;
+        };
+        std::vector<icode> rewritten;
+        rewritten.reserve(fn.icodes.size());
+        for (size_t index = 0; index < fn.icodes.size(); ++index) {
+            const icode &call = fn.icodes[index];
+            const int destination_arg = call.memory_fill_destination_arg;
+            if (call.op != icode_op::CALL || index < 3 ||
+                call.num_params != 3 || call.result_via_sret ||
+                call.callee_noreturn || call.internal_packed_arg ||
+                definitions.count(call.func_name) != 0 ||
+                !((destination_arg == 0 && call.func_name == "memset") ||
+                  (destination_arg == 2 && call.func_name == "__memset"))) {
+                rewritten.push_back(call);
+                continue;
+            }
+            operand args[3];
+            unsigned seen = 0;
+            bool eligible = true;
+            for (size_t offset = 3; offset != 0; --offset) {
+                const icode &send = fn.icodes[index - offset];
+                if (send.op != icode_op::SEND || send.argreg < 0 ||
+                    send.argreg > 2 || (seen & (1u << send.argreg)) ||
+                    send.internal_packed_arg ||
+                    send.callee_abi != call.callee_abi) {
+                    eligible = false;
+                    break;
+                }
+                seen |= 1u << send.argreg;
+                args[send.argreg] = send.left;
+            }
+            int64_t count = 0;
+            const int count_arg = destination_arg == 0 ? 2 : 0;
+            if (!eligible || seen != 7 ||
+                !constant(constant, args[count_arg], 32, count) ||
+                !args[count_arg].type ||
+                args[count_arg].type->kind != type_kind::UINT ||
+                count < 0 || count > 65535) {
+                rewritten.push_back(call);
+                continue;
+            }
+            if (optimize_size && count != 0) {
+                // A returned pointer must survive the fill's register
+                // clobbers, and variable-byte setup can exceed the compact
+                // library call at larger counts. Do not assume this call
+                // alone keeps a runtime helper linked: retain those cases
+                // in size mode, while speed mode can remove call overhead.
+                bool returned_pointer_used = false;
+                if (call.result.is_temp()) {
+                    for (const icode &use : fn.icodes) {
+                        auto same = [&](const operand &op) {
+                            return op.is_temp() &&
+                                   op.temp_id == call.result.temp_id;
+                        };
+                        if (same(use.left) || same(use.right) ||
+                            ((use.op == icode_op::SET_VALUE_AT ||
+                              use.op == icode_op::BLOCK_FILL) &&
+                             same(use.result))) {
+                            returned_pointer_used = true;
+                            break;
+                        }
+                    }
+                } else if (!call.result.is_none()) {
+                    returned_pointer_used = true;
+                }
+                int64_t byte = 0;
+                if (returned_pointer_used ||
+                    (count > 1 && !constant(constant, args[1], 32, byte))) {
+                    rewritten.push_back(call);
+                    continue;
+                }
+            }
+            rewritten.resize(rewritten.size() - 3);
+            operand destination = args[destination_arg];
+            if (!call.result.is_none()) {
+                // This is the call's pointer result before any bytes are
+                // written. It also captures a pointer object that aliases
+                // the destination region and will itself be overwritten.
+                icode capture;
+                capture.op = icode_op::ASSIGN;
+                capture.result = call.result;
+                capture.left = destination;
+                capture.line = call.line;
+                rewritten.push_back(capture);
+                destination = call.result;
+            }
+            if (count != 0) {
+                icode fill;
+                fill.op = icode_op::BLOCK_FILL;
+                fill.result = destination;
+                fill.left = args[1];
+                fill.right = operand::make_int(count, type::make_uint());
+                fill.line = call.line;
+                rewritten.push_back(fill);
+            }
+        }
+        fn.icodes = std::move(rewritten);
+    }
+}
+
 void ir_gen::visit(call_expr &e) {
     std::string direct_func_name;
     bool direct_callee_noreturn = false;
@@ -983,8 +1207,26 @@ void ir_gen::visit(call_expr &e) {
     }
 
     std::vector<operand> arg_ops;
-    for (auto &a : e.args)
-        arg_ops.push_back(gen_expr(*a));
+    for (auto &a : e.args) {
+        operand arg = gen_expr(*a);
+        // An argument is evaluated before entering its callee, even when
+        // the parameter is unqualified, unused, or later inlined away.
+        // Preserve that observable read before parameter conversion can
+        // erase its qualifier, and before evaluating another argument.
+        if (arg.is_symbol() &&
+            (arg.is_sfr || (arg.type &&
+             (arg.type->is_volatile || arg.type->is_atomic)))) {
+            if (arg.type && arg.type->is_atomic) {
+                arg.type = std::make_shared<type>(*arg.type);
+                arg.type->is_volatile = true;
+            }
+            operand value = new_temp(arg.type ? arg.type->unqual()
+                                              : type::make_int());
+            emit_assign(value, arg);
+            arg = value;
+        }
+        arg_ops.push_back(arg);
+    }
 
     // Look up callee ABI so caller can use the right convention.
     // Variadic function types must stay stack-only even when there is
@@ -1014,6 +1256,53 @@ void ir_gen::visit(call_expr &e) {
 
     if (callee_variadic && c_abi == call_abi::DEFAULT)
         c_abi = call_abi::SDCCCALL0;
+
+    // A library builtin is a contract with the external standard function,
+    // not merely a familiar identifier.  In particular, retain calls to
+    // user definitions, indirect callees, incompatible declarations, and
+    // nonstandard address spaces/conventions.  The explicit option lets
+    // freestanding programs keep interposable implementations as well.
+    auto ordinary_void_pointer = [](const type_ptr &t) {
+        return t && t->is_ptr() && !t->is_far_ptr() && t->base &&
+               t->base->kind == type_kind::VOID &&
+               !t->base->is_const && !t->base->is_volatile &&
+               !t->base->is_atomic;
+    };
+    const int fill_destination = direct_func_name == "memset" ? 0 :
+        z88dk_memory_builtins_ && direct_func_name == "__memset" ? 2 : -1;
+    const int fill_count = fill_destination == 0 ? 2 : 0;
+    bool lower_memset = memory_builtins_ && fill_destination >= 0 &&
+        defined_function_names_.count(direct_func_name) == 0 &&
+        !direct_callee_noreturn && fn_type && !callee_variadic &&
+        fn_type->params.size() == 3 && arg_ops.size() == 3 &&
+        ordinary_void_pointer(fn_type->ret) &&
+        ordinary_void_pointer(fn_type->params[fill_destination]) &&
+        fn_type->params[1] &&
+        fn_type->params[1]->kind == type_kind::INT &&
+        fn_type->params[fill_count] &&
+        fn_type->params[fill_count]->kind == type_kind::UINT &&
+        (c_abi == call_abi::DEFAULT || c_abi == call_abi::SDCCCALL0 ||
+         c_abi == call_abi::SDCCCALL1);
+    if (lower_memset) {
+        const auto *id = dynamic_cast<ident_expr *>(e.callee.get());
+        lower_memset = id && id->sym &&
+            id->sym->storage != storage_class::STATIC;
+        // Inspect the unconverted argument, including explicit casts, so a
+        // known volatile/atomic/far destination cannot lose its provenance
+        // when the standard void* parameter erases its element type.
+        const expr *destination = e.args[fill_destination].get();
+        while (destination) {
+            const type_ptr &t = destination->type;
+            if (t && (t->is_ptr() || t->is_array()) &&
+                (t->is_far_ptr() || (t->base &&
+                 (t->base->is_volatile || t->base->is_atomic)))) {
+                lower_memset = false;
+                break;
+            }
+            const auto *cast = dynamic_cast<const cast_expr *>(destination);
+            destination = cast ? cast->operand.get() : nullptr;
+        }
+    }
 
     std::vector<type_ptr> arg_types;
     arg_types.reserve(arg_ops.size());
@@ -1047,7 +1336,9 @@ void ir_gen::visit(call_expr &e) {
             const bool same_type =
                 kinds_compatible &&
                 arg_ops[i].type->size() == abi_type->size() &&
-                arg_ops[i].type->is_unsigned() == abi_type->is_unsigned();
+                arg_ops[i].type->is_unsigned() == abi_type->is_unsigned() &&
+                (abi_type->kind != type_kind::BITINT ||
+                 arg_ops[i].type->bitint_width == abi_type->bitint_width);
             if (same_type) {
                 arg_ops[i].type = abi_type;
             } else {
@@ -1162,6 +1453,7 @@ void ir_gen::visit(call_expr &e) {
         abi_callee_cleans_stack(c_abi, ret_type, arg_types, callee_variadic);
     ic.callee_noreturn = direct_callee_noreturn;
     ic.result_via_sret = result_via_sret;
+    ic.memory_fill_destination_arg = lower_memset ? fill_destination : -1;
 
     if (!direct_func_name.empty())
         ic.func_name = direct_func_name;
@@ -1259,16 +1551,52 @@ void ir_gen::visit(conditional_expr &e) {
     operand cond = gen_expr(*e.cond);
     operand res  = new_temp(e.type ? e.type : type::make_int());
 
+    auto coerce_operand = [&](operand op, const type_ptr &target) -> operand {
+        if (!target)
+            return op;
+        if (!op.type) {
+            op.type = target;
+            return op;
+        }
+        if (target->kind == type_kind::COMPLEX &&
+            op.type->kind != type_kind::COMPLEX) {
+            return emit_unop(icode_op::CAST, op, target);
+        }
+        bool same_type =
+            op.type->kind == target->kind &&
+            op.type->size() == target->size() &&
+            op.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             op.type->bitint_width == target->bitint_width);
+        if (same_type) {
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!op.is_symbol() ||
+                !(op.type->is_volatile || op.type->is_atomic))
+                op.type = target;
+            return op;
+        }
+        op = coerce_const_operand(op, target);
+        if (op.kind == operand_kind::INT_CONST ||
+            op.kind == operand_kind::FLOAT_CONST) {
+            op.type = target;
+            return op;
+        }
+        return emit_unop(icode_op::CAST, op, target);
+    };
+
     { icode ic; ic.op = icode_op::IFX; ic.left = cond;
       ic.true_lbl = then_lbl; ic.false_lbl = else_lbl; emit(ic); }
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = then_lbl; emit(lbl); }
     operand t = gen_expr(*e.then_expr);
+    t = coerce_operand(t, res.type);
     emit_assign(res, t);
     { icode jmp; jmp.op = icode_op::GOTO; jmp.label_name = end_lbl; emit(jmp); }
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = else_lbl; emit(lbl); }
     operand f = gen_expr(*e.else_expr);
+    f = coerce_operand(f, res.type);
     emit_assign(res, f);
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = end_lbl; emit(lbl); }

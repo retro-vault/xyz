@@ -144,6 +144,7 @@ struct token {
     double      fval  = 0.0;
     std::string sval;
     int         char_width = 1; // 1=char, 2=char16_t/wchar_t, 4=char32_t, 8=char8_t
+    bool        is_wchar = false; // L prefix: wchar_t is signed int on this target
 
     //
     // Return true if this token's kind equals k.

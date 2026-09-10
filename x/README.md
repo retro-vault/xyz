@@ -68,6 +68,14 @@ font. See the [complete ZX Spectrum guide](docs/howtos/ZX-SPECTRUM-48K.md) and
 the separate [`zx-ram`](examples/zx-ram/README.md) and
 [`zx-rom`](examples/zx-rom/README.md) examples.
 
+For divIDE with esxDOS firmware, select `--platform=zx-esxdos`. This separate
+48K RAM target starts at `0x8000` and provides disk-backed file descriptors and
+stdio. See the [esxDOS guide](docs/dist/man/ZX-ESXDOS.md) and
+[disk example](examples/zx-esxdos/README.md). For an application that boots
+from a replacement ROM without Sinclair BASIC, use `--platform=zx-esxdos-rom`;
+see the [ROM guide](docs/dist/man/ZX-ESXDOS-ROM.md) and
+[ROM disk example](examples/zx-esxdos-rom/README.md).
+
 ## Amstrad CPC quick start
 
 ```sh

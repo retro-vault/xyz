@@ -4,7 +4,7 @@ DIST_DIR ?= $(ROOT)/bin/x
 PUBLIC_INCLUDE_DIR ?= $(DIST_DIR)/include
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 CXX ?= g++
-CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -g
+CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -O2 -g
 
 INCLUDE := -Iinclude
 OBJDIR := $(BUILD_DIR)/lib/xopt
@@ -13,6 +13,7 @@ DIST_TARGET := $(PUBLIC_LIB_DIR)/libxopt.a
 
 SOURCES := \
     src/xopt.cpp \
+    src/z80calls.cpp \
     src/z80cost.cpp \
     src/z80reg.cpp \
     src/z80peep.cpp
@@ -30,7 +31,7 @@ $(BUILD_TARGET): $(OBJS) | $(BUILD_DIR)/lib
 $(DIST_TARGET): $(BUILD_TARGET) | $(PUBLIC_LIB_DIR)
 	cp $< $@
 
-$(OBJDIR)/%.o: %.cpp | $(OBJDIR)
+$(OBJDIR)/%.o: %.cpp Makefile | $(OBJDIR)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -MMD -MP -c -o $@ $<
 

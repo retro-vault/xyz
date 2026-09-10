@@ -69,6 +69,7 @@ realloc_have_size:
         ld      REALLOC_SIZE_LO(ix),l
         ld      REALLOC_SIZE_HI(ix),h
         pop     hl
+        jp      z,realloc_fail
         call    __libc_ptr_to_block
         ld      e,REALLOC_SIZE_LO(ix)
         ld      d,REALLOC_SIZE_HI(ix)
@@ -145,6 +146,8 @@ realloc_aligned_ptr:
         ld      REALLOC_AUX_HI(ix),d           ; old user-visible size
         jp      realloc_allocate_common
 
+realloc_fail:
+        ld      de,#0
 realloc_return:
         ld      sp,ix
         pop     ix

@@ -13,7 +13,27 @@ It compares the XCC M model at
 `sccz80` remains as a historical control. The requested reference numbers
 are stored verbatim in [target.csv](target.csv).
 
-## Why this is a hybrid toolchain
+## September 9 nightly and latest upstream snapshot
+
+The newest recorded comparison uses the freshly downloaded September 9 nightly,
+its current master 80cc and sccz80 sources, its bundled zsdcc, and a separate
+official SDCC trunk build. All nine lanes share the new nightly target sysroot.
+
+```sh
+x/tests/benchmarks/z88dk24/prepare-latest.sh
+x/tests/benchmarks/z88dk24/run-latest.sh
+```
+
+[`latest.lock`](latest.lock) pins this snapshot; the scripts verify downloads,
+source trees, compiler binaries and target libraries. They also record the
+actual XCC binary and source manifest, including uncommitted source changes.
+See [the workflow details](latest/README.md) and the complete
+[September 9 results](LATEST-RESULTS.md): XCC `-Os` is strictly smallest on
+24/24 programs and `-Of` strictly fastest on 24/24 against every valid measured
+competitor. Both profiles pass all 24 correctness checks. The historical and
+August locks below remain separate reproducible comparisons.
+
+## Why the historical run is a hybrid toolchain
 
 The supplied table cannot come from one current z88dk checkout. Its sccz80
 `charbench` value (`5169B / 171.4M`) is reproduced exactly only by the older
@@ -43,7 +63,7 @@ x/tests/benchmarks/z88dk24/run.sh
 ### Current-upstream snapshot
 
 The locked hybrid run above remains the reproducible historical comparison.
-For a same-date comparison on the newest upstream target environment, use:
+For the preserved August 27 upstream target environment, use:
 
 ```sh
 x/tests/benchmarks/z88dk24/prepare-current.sh
@@ -74,6 +94,13 @@ The first complete snapshot is recorded in
 [`current-versions.txt`](current-versions.txt). Both XCC and both 80cc lanes
 pass 24/24. Official SDCC trunk passes 23/24; its retained failure is the same
 packed-bitfield checksum exposed by the historical suite.
+
+The September 2026 compiler campaign preserves that snapshot as its baseline.
+Its [report](../../../docs/xcc/OPTIMIZATION-CAMPAIGN-2026-09.md),
+[raw results](optimization-2026-09-results.csv), and
+[executable provenance](optimization-2026-09-versions.txt) record the next
+measurement using the same corpus and competitor pins. Both profiles remain
+correct on 24/24; `-Of` also beats all six expensive SDCC allocation probes.
 
 Useful focused forms are:
 

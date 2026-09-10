@@ -236,6 +236,166 @@ TEST(linker_rejects_resident_rom_area_overflow_with_load_copies) {
     ASSERT_THROWS(xld::linker::link(ctx, opts), xld::placement_error);
 }
 
+TEST(linker_load_copies_avoid_emitted_reserved_range_guards) {
+    for (bool long_guard : {false, true}) {
+        xld::link_context ctx;
+        ctx.format = xld::output_format::bin;
+        ctx.entry_name = "_main";
+        ctx.area_bases["_CODE"] = long_guard ? 0x02fb : 0x00fc;
+        ctx.area_bases["_DATA"] = 0x8000;
+        ctx.output_range = xld::address_range{0x0000, 0x0fff};
+        ctx.holes = {long_guard ? xld::address_range{0x0300, 0x03ff}
+                               : xld::address_range{0x0100, 0x0100}};
+        ctx.load_copy_areas = {"_DATA", ".data"};
+
+        auto mod = std::make_shared<xld::module>("guards", "guards.rel");
+        mod->areas().emplace_back("_CODE", 1, xld::area_flags::none, 0);
+        mod->areas().emplace_back("_DATA", 1, xld::area_flags::none, 1);
+        mod->areas().emplace_back(".data", 2, xld::area_flags::none, 2);
+        mod->texts().push_back({0, 0, {0xc9}, {}});
+        mod->texts().push_back({1, 0, {0x42}, {}});
+        mod->texts().push_back({2, 0, {0x63, 0x75}, {}});
+        mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+        ctx.modules.push_back(mod);
+
+        xld::cli_options opts;
+        xld::linker::link(ctx, opts);
+        const uint16_t first_load = long_guard ? 0x02fc : 0x00fd;
+        const uint16_t second_load = long_guard ? 0x0400 : 0x0101;
+        ASSERT_EQ(ctx.linker_symbols.at("s__DATA_LOAD"), first_load);
+        ASSERT_EQ(ctx.linker_symbols.at("s__.data_LOAD"), second_load);
+
+        auto dir = make_linker_temp_dir("/tmp/xld-copy-guards-XXXXXX");
+        auto binary = dir / "image.bin";
+        xld::binary_emitter::emit(binary, ctx);
+        const auto bytes = read_file_bytes(binary);
+        ASSERT_EQ(static_cast<uint8_t>(bytes.at(first_load)), 0x42);
+        ASSERT_EQ(static_cast<uint8_t>(bytes.at(second_load)), 0x63);
+        ASSERT_EQ(static_cast<uint8_t>(bytes.at(second_load + 1)), 0x75);
+        ASSERT_EQ(static_cast<uint8_t>(bytes.at(long_guard ? 0x02fd : 0x00fe)),
+                  long_guard ? 0xc3 : 0x18);
+        std::filesystem::remove_all(dir);
+    }
+}
+
+TEST(linker_rejects_load_copy_that_only_fits_in_reserved_jump_guard) {
+    xld::link_context ctx;
+    ctx.format = xld::output_format::bin;
+    ctx.entry_name = "_main";
+    ctx.area_bases["_CODE"] = 0x02fc;
+    ctx.area_bases["_DATA"] = 0x8000;
+    ctx.output_range = xld::address_range{0x0000, 0x03ff};
+    ctx.holes = {{0x0300, 0x03ff}};
+    ctx.load_copy_areas = {"_DATA"};
+    auto mod = std::make_shared<xld::module>("guardfull", "guardfull.rel");
+    mod->areas().emplace_back("_CODE", 1, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_DATA", 3, xld::area_flags::none, 1);
+    mod->texts().push_back({0, 0, {0xc9}, {}});
+    mod->texts().push_back({1, 0, {0x12, 0x34, 0x56}, {}});
+    mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+    ctx.modules.push_back(mod);
+    xld::cli_options opts;
+    ASSERT_THROWS(xld::linker::link(ctx, opts), xld::placement_error);
+}
+
+TEST(linker_keeps_initialization_spans_contiguous_across_reserved_holes) {
+    for (bool empty_leading_member : {false, true}) {
+        for (bool ram_hole : {false, true}) {
+            xld::link_context ctx;
+            ctx.format = xld::output_format::bin;
+            ctx.entry_name = "_main";
+            ctx.area_bases["_CODE"] = 0;
+            ctx.area_bases["_CONST"] = 0x3cf0;
+            ctx.area_bases["_INITIALIZED"] = 0x8000;
+            ctx.output_range = xld::address_range{0, 0x3fff};
+            ctx.holes = {{0x3d00, 0x3dff}};
+            if (ram_hole)
+                ctx.holes.push_back({0x8001, 0x8001});
+
+            const uint16_t first_size = empty_leading_member ? 0 : 2;
+            auto crt = std::make_shared<xld::module>("crt", "crt.rel");
+            crt->areas().emplace_back("_CODE", 1, xld::area_flags::none, 0);
+            crt->areas().emplace_back("_CONST", empty_leading_member ? 13 : 11,
+                                     xld::area_flags::none, 1);
+            crt->areas().emplace_back("_INITIALIZER", first_size,
+                                     xld::area_flags::none, 2);
+            crt->areas().emplace_back("_INITIALIZED", first_size,
+                                     xld::area_flags::none, 3);
+            crt->texts().push_back({0, 0, {0xc9}, {}});
+            if (first_size)
+                crt->texts().push_back({2, 0, {0x11, 0x22}, {}});
+            crt->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0);
+            ctx.modules.push_back(crt);
+
+            auto tail = std::make_shared<xld::module>("tail", "tail.rel");
+            tail->areas().emplace_back("_INITIALIZER", 2, xld::area_flags::none, 0);
+            tail->areas().emplace_back("_INITIALIZED", 2, xld::area_flags::none, 1);
+            tail->texts().push_back({0, 0, {0x33, 0x44}, {}});
+            ctx.modules.push_back(tail);
+
+            xld::cli_options opts;
+            xld::linker::link(ctx, opts);
+            ASSERT_EQ(ctx.linker_symbols.at("s__INITIALIZER"), 0x3e00);
+            ASSERT_EQ(ctx.linker_symbols.at("l__INITIALIZER"), first_size + 2);
+            ASSERT_EQ(ctx.linker_symbols.at("s__INITIALIZED"),
+                      ram_hole ? 0x8002 : 0x8000);
+            ASSERT_EQ(ctx.linker_symbols.at("l__INITIALIZED"), first_size + 2);
+            ASSERT_EQ(crt->area_by_index(2).placed_addr().value(), 0x3e00);
+            ASSERT_EQ(tail->area_by_index(0).placed_addr().value(), 0x3e00 + first_size);
+            ASSERT_EQ(ctx.code_buffer[0x3e00 + first_size], 0x33);
+            ASSERT_EQ(ctx.code_buffer[0x3e01 + first_size], 0x44);
+            if (first_size) {
+                ASSERT_EQ(ctx.code_buffer[0x3e00], 0x11);
+                ASSERT_EQ(ctx.code_buffer[0x3e01], 0x22);
+            }
+        }
+    }
+}
+
+TEST(linker_copies_elf_code_and_defines_bss_spans) {
+    auto dir = make_linker_temp_dir("/tmp/xld-elf-copy-XXXXXX");
+    auto obj_path = dir / "app.o";
+    write_multi_section_elf_object(obj_path, "app", "_start",
+                                   {0x3e, 0x42, 0xc9}, {0x31, 0x32}, {0x73});
+
+    xld::link_context ctx;
+    ctx.entry_name = "_start";
+    ctx.area_bases["_HEADER"] = 0;
+    ctx.area_bases[".text"] = 0x8000;
+    ctx.area_bases[".rodata"] = 0x8100;
+    ctx.area_bases[".data"] = 0x8200;
+    ctx.area_bases[".bss"] = 0x8300;
+    ctx.output_range = xld::address_range{0, 0x3fff};
+    ctx.load_copy_areas = {".text", ".rodata", ".data"};
+
+    auto crt = std::make_shared<xld::module>("crt", "crt.rel");
+    crt->areas().emplace_back("_HEADER", 2, xld::area_flags::none, 0);
+    crt->areas().emplace_back(".bss", 7, xld::area_flags::none, 1);
+    crt->areas().emplace_back(".ABS.", 0, xld::area_flags::none, 2);
+    crt->texts().push_back({0, 0, {0xf3, 0x76}, {}});
+    ctx.modules.push_back(crt);
+
+    xld::cli_options opts;
+    opts.mode = xld::link_mode::gnu;
+    opts.input_files = {obj_path};
+    xld::linker::link(ctx, opts);
+
+    ASSERT_EQ(ctx.entry_point, 0x8000);
+    ASSERT_EQ(ctx.linker_symbols.at("s__.text"), 0x8000);
+    ASSERT_EQ(ctx.linker_symbols.at("s__.text_LOAD"), 2);
+    ASSERT_EQ(ctx.linker_symbols.at("l__.text_LOAD"), 3);
+    ASSERT_EQ(ctx.linker_symbols.at("s__.rodata_LOAD"), 5);
+    ASSERT_EQ(ctx.linker_symbols.at("s__.data_LOAD"), 7);
+    ASSERT_EQ(ctx.linker_symbols.at("s__.bss"), 0x8300);
+    ASSERT_EQ(ctx.linker_symbols.at("l__.bss"), 7);
+    ASSERT(ctx.linker_symbols.find("s__.ABS.") == ctx.linker_symbols.end());
+    const std::vector<uint8_t> expected = {
+        0xf3, 0x76, 0x3e, 0x42, 0xc9, 0x31, 0x32, 0x73
+    };
+    ASSERT(std::equal(expected.begin(), expected.end(), ctx.code_buffer.begin()));
+    std::filesystem::remove_all(dir);
+}
+
 TEST(linker_allows_weak_definition_to_be_overridden_by_strong_definition) {
     xld::link_context ctx;
     ctx.entry_name = "_main";
@@ -309,6 +469,8 @@ TEST(linker_resolves_unresolved_weak_reference_to_zero) {
     re.mode = xld::reloc_mode::word | xld::reloc_mode::sym;
     re.offset_in_t = 1;
     re.ref_index = 1;
+    // A parsed module carries its addend on the relocation.
+    re.addend = 0x1234;
     mod->texts().push_back({0, 0, {0xC3, 0x34, 0x12}, {re}});
     mod->symbols().emplace_back("_main", xld::symbol_type::def, 0, 0, 0,
                                 false, xld::symbol_kind::function, 3, true);
@@ -719,6 +881,7 @@ TEST(linker_uses_gnu_rom_script_section_order) {
     ctx.holes = opts.reserved_ranges;
     ctx.area_bases = opts.area_bases;
     ctx.area_order = opts.area_order;
+    ctx.load_copy_areas = opts.load_copy_areas;
     ctx.output_range = opts.output_range;
     ctx.format = opts.format;
 
@@ -746,6 +909,9 @@ TEST(linker_uses_gnu_rom_script_section_order) {
     ASSERT_EQ(*text_addr, 0x0000);
     ASSERT_EQ(*rodata_addr, 0x0002);
     ASSERT_EQ(*data_addr, 0x8000);
+    ASSERT_EQ(ctx.linker_symbols.at("s__.data_LOAD"), 0x0004);
+    ASSERT_EQ(ctx.linker_symbols.at("l__.data_LOAD"), 1);
+    ASSERT_EQ(ctx.code_buffer[4], 0x33);
 
     std::filesystem::remove_all(dir);
 }

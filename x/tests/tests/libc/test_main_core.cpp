@@ -169,6 +169,99 @@ static uint16_t call2(uint16_t fn, uint16_t a, uint16_t b)
 static uint16_t call3(uint16_t fn, uint16_t a, uint16_t b, uint16_t n)
 { g_rt->call32(fn, ((uint32_t)a << 16) | b, n); return g_rt->snap().de; }
 
+TEST(memory_callee_clean_stack_and_count_bytes)
+{
+    constexpr uint16_t memory_source = 0xe000;
+    constexpr uint16_t memory_destination = 0xe800;
+    // All flag-byte bit combinations must survive the temporary POP AF used
+    // to fetch the count. Include counts crossing 256 and both empty/one-byte
+    // exits, and verify the caller's frame and stack after both primitives.
+    for (unsigned fill = 0; fill < 2; ++fill) {
+        for (uint16_t n = 0; n <= 300; ++n) {
+            for (uint16_t i = 0; i <= n; ++i) {
+                g_rt->mem.write(memory_source + i, static_cast<uint8_t>(i * 37 + n));
+                g_rt->mem.write(memory_destination + i, 0xa5);
+            }
+            g_rt->mem.write(memory_destination - 1, 0x5a);
+            uint16_t sp = g_rt->push16(STACK_BASE, n);
+            sp = g_rt->push16(sp, HALT_ADDR);
+            xz80::cpu_state s{};
+            s.hl = memory_destination;
+            s.de = fill ? 0xb73c : memory_source;
+            s.ix = 0x6985;
+            s.iy = 0x96da;
+            s.sp = sp;
+            s.pc = fill ? rt_sym::memset : rt_sym::memcpy;
+            g_rt->cpu.restore(s);
+            for (unsigned step = 0; step < MAX_STEPS && !g_rt->cpu.halted(); ++step)
+                g_rt->cpu.step();
+            REQUIRE(g_rt->cpu.halted());
+            const auto after = g_rt->snap();
+            REQUIRE_EQ(after.sp, STACK_BASE);
+            REQUIRE_EQ(after.de, memory_destination);
+            REQUIRE_EQ(after.ix, s.ix);
+            REQUIRE_EQ(after.iy, s.iy);
+            REQUIRE_EQ(g_rt->mem.read(memory_destination - 1), 0x5a);
+            REQUIRE_EQ(g_rt->mem.read(memory_destination + n), 0xa5);
+            for (uint16_t i = 0; i < n; ++i)
+                REQUIRE_EQ(g_rt->mem.read(memory_destination + i),
+                           fill ? 0x3c : static_cast<uint8_t>(i * 37 + n));
+        }
+    }
+}
+
+TEST(memory_bounded_search_and_length_counts)
+{
+    constexpr uint16_t source = 0xe000;
+    const uint16_t lengths[] = {0, 1, 2, 127, 128, 255, 256, 257, 511};
+    for (uint16_t n : lengths) {
+        for (uint16_t i = 0; i <= n; ++i)
+            g_rt->mem.write(source + i, static_cast<uint8_t>(37 * i + 11));
+        for (unsigned reverse = 0; reverse < 2; ++reverse) {
+            for (unsigned needle = 0; needle < 256; ++needle) {
+                uint16_t expected = 0;
+                for (uint16_t i = 0; i < n; ++i) {
+                    if (static_cast<uint8_t>(37 * i + 11) == needle) {
+                        expected = source + i;
+                        if (!reverse) break;
+                    }
+                }
+                uint16_t sp = g_rt->push16(STACK_BASE, n);
+                sp = g_rt->push16(sp, HALT_ADDR);
+                xz80::cpu_state s{};
+                s.hl = source;
+                s.de = static_cast<uint16_t>(0xa500 | needle);
+                s.ix = 0x57a9;
+                s.iy = 0xc638;
+                s.sp = sp;
+                s.pc = reverse ? rt_sym::memrchr : rt_sym::memchr;
+                g_rt->cpu.restore(s);
+                for (unsigned step = 0; step < MAX_STEPS && !g_rt->cpu.halted(); ++step)
+                    g_rt->cpu.step();
+                REQUIRE(g_rt->cpu.halted());
+                const auto after = g_rt->snap();
+                REQUIRE_EQ(after.de, expected);
+                REQUIRE_EQ(after.sp, STACK_BASE - 2);
+                REQUIRE_EQ(after.ix, s.ix);
+                REQUIRE_EQ(after.iy, s.iy);
+                REQUIRE_EQ(g_rt->mem.read(STACK_BASE - 2), static_cast<uint8_t>(n));
+                REQUIRE_EQ(g_rt->mem.read(STACK_BASE - 1), static_cast<uint8_t>(n >> 8));
+            }
+        }
+        for (uint16_t i = 0; i < n; ++i)
+            g_rt->mem.write(source + i, 0xff);
+        g_rt->mem.write(source + n, 0);
+        REQUIRE(g_rt->call16(rt_sym::strlen, source, 0));
+        REQUIRE_EQ(g_rt->snap().de, n);
+        REQUIRE_EQ(g_rt->snap().sp, STACK_BASE);
+        for (uint16_t limit : lengths) {
+            REQUIRE(g_rt->call16(rt_sym::strnlen, source, limit));
+            REQUIRE_EQ(g_rt->snap().de, n < limit ? n : limit);
+            REQUIRE_EQ(g_rt->snap().sp, STACK_BASE);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // stpcpy / mempcpy / stpncpy — copy + end pointer
 // ---------------------------------------------------------------------------

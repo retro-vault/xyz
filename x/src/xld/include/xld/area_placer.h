@@ -22,6 +22,11 @@ namespace xld {
         // Place all areas in all modules, updating placed_addr.
         static void place(link_context& ctx);
 
+        // Include the jump guards that flat output inserts before reserved
+        // ranges. Both resident areas and ROM load copies must avoid them.
+        static std::vector<address_range> effective_holes_for_placement(
+            const link_context& ctx);
+
         // Find next free address >= cursor that can fit `size` bytes
         // without overlapping any hole.
         static uint32_t next_free_address(

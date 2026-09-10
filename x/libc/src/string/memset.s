@@ -20,17 +20,17 @@
         ; inputs:
         ;   HL         = destination
         ;   DE         = fill value (low byte E is used)
-        ;   4(ix)..5(ix) = byte count
+        ;   2(sp)..3(sp) = byte count (callee-clean)
         ; outputs:
         ;   DE = original destination
-        ; clobbers: AF, BC, HL, IX
+        ; clobbers: AF, BC, HL; preserves IX and IY
 _memset::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        pop     bc                      ; return address
+        pop     af                      ; byte count, temporarily as raw AF
+        push    bc                      ; retain the return address
         push    hl                      ; preserve original destination
-        ld      c,4(ix)
-        ld      b,5(ix)
+        push    af
+        pop     bc                      ; BC = count; argument already removed
         ld      a,b
         or      c
         jr      z,memset_done
@@ -45,9 +45,4 @@ _memset::
         ldir                            ; replicate the initialized prefix
 memset_done:
         pop     de
-        pop     ix
-        ; sdcccall(1) returns of at most 16 bits are callee-clean.  Preserve
-        ; the pointer result in DE while removing the spilled byte-count word.
-        pop     hl                      ; return address
-        pop     bc                      ; byte count
-        jp      (hl)
+        ret

@@ -202,7 +202,8 @@ decl_spec parser::parse_declaration_specifiers() {
         if (k == tk::KW__ATOMIC) {
             consume();
             is_atomic = true;
-            // _Atomic(type-name) form — parse and strip the qualifier (Z80 uses DI/EI stubs)
+            // Retain the qualifier for memory-access proofs. Explicit atomic
+            // operations continue to use the existing Z80 DI/EI helpers.
             if (check(tk::LPAREN) && !explicit_type) {
                 expect(tk::LPAREN);
                 if (is_type_start()) {
@@ -413,6 +414,13 @@ decl_spec parser::parse_declaration_specifiers() {
     if (is_deduced) sc = storage_class::NONE;
     if (is_atomic && base && base->kind == type_kind::ARRAY)
         error("_Atomic cannot be applied to array type");
+    // Qualifiers supplied by a typedef or typeof are part of the explicit
+    // type. Newly written declaration qualifiers add to them; only
+    // typeof_unqual, handled above, removes them.
+    is_const = is_const || (base && base->is_const);
+    is_volatile = is_volatile || (base && base->is_volatile);
+    is_restrict = is_restrict || (base && base->is_restrict);
+    is_atomic = is_atomic || (base && base->is_atomic);
 
     if (!is_deduced) {
         bool preserves_tag_identity =
@@ -420,12 +428,13 @@ decl_spec parser::parse_declaration_specifiers() {
             (base->kind == type_kind::STRUCT ||
              base->kind == type_kind::UNION ||
              base->kind == type_kind::ENUM) &&
-            !is_const && !is_volatile && !is_restrict;
+            !is_const && !is_volatile && !is_restrict && !is_atomic;
         if (!preserves_tag_identity) {
             base = base->unqual();
             base->is_const    = is_const;
             base->is_volatile = is_volatile;
             base->is_restrict = is_restrict;
+            base->is_atomic   = is_atomic;
         }
     }
 

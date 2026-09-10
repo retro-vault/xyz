@@ -558,6 +558,62 @@ If the hole is too large for `JR`, xld uses `JP` instead when it can.
 If there is not enough room for either form, xld leaves the entire
 reserved range zero-filled and emits no pre-hole jump.
 
+#### Normalization of multiple holes
+
+Before any of this, xld sorts the reserved ranges and fuses the ones that
+overlap or touch. So
+
+```bash
+-r 0100-010F -r 0110-011F
+```
+
+behaves exactly like
+
+```bash
+-r 0100-011F
+```
+
+and gets a single `JR 0x0120` at `0x00FE`, not one jump per range. Without
+this, the jump for the first range would land inside the second one, and the
+jump for the second range would be written over the first one's reserved
+bytes.
+
+xld also fuses two ranges when the gap between them is too small to hold the
+second one's pre-hole jump. Given
+
+```bash
+-r 0100-0100 -r 0103-0200
+```
+
+the second range needs a three byte `JP`, but only `0x0101..0x0102` is free
+before it. Those two bytes could never be reached anyway, so xld treats
+`0x0100..0x0200` as one reserved range with one `JP 0x0201` at `0x00FD`.
+
+The declared ranges still block placement in full, even the parts that fall
+outside the emitted `-x` window.
+
+#### Areas, groups and data
+
+An area is the unit of placement. One that does not fit in the space before a
+reserved range is moved past it whole -- xld never splits an area and never
+writes a jump into one. That is what makes reserving a range safe for tables
+and other data.
+
+An area *group* (all areas sharing a name, across modules) is different: by
+default its members are placed one after another, so a reserved range can land
+between two of them. For code that is exactly the intent -- the pre-hole jump
+carries execution across the range.
+
+For a group whose `s__NAME` / `l__NAME` symbols are referenced, splitting is
+not safe: that pair describes a single contiguous run, and crt0 uses it to
+zero `_BSS` and copy `_INITIALIZER`. A split group would make it walk straight
+through the reserved bytes. So whenever a link references either span symbol
+of a group, xld places that whole group in one piece, moving all of it past a
+reserved range it cannot fit before.
+
+`_INITIALIZER` and `_INITIALIZED` are always treated this way, referenced or
+not, because SDCC startup copies them as one byte span.
+
 ### `-b <area>=<addr>`
 
 Pins the base address for an area group.
@@ -717,6 +773,38 @@ Relocation modes include:
 
 For non-PC-relative relocations, xld also records the patch in the `XL`
 relocation table.
+
+#### Addends
+
+Every relocation carries the constant added to the resolved address. The two
+input dialects store it differently, and the object readers normalize both, so
+the relocator never re-reads it from the image:
+
+- ASxxxx keeps the addend in the data bytes being patched. A short branch
+  holds it in the signed displacement byte, so `jr sym-2` arrives as `0xFE`.
+- GNU keeps it in the `RELA` record and leaves a placeholder in the data. For
+  `R_Z80_8_PCREL` that placeholder is the usual branch-to-self `0xFE`, which
+  is not an addend at all.
+
+The dialects also disagree on where a PC-relative relocation is measured
+from. GNU applies it at the relocated byte:
+
+```text
+displacement = S + A - P
+```
+
+and biases the addend by -1 to account for the Z80 measuring from the end of
+the instruction. ASxxxx applies it after the field, leaving the bias to the
+linker:
+
+```text
+displacement = S + A - (P + field_size)
+```
+
+xld records which convention an object uses and applies the matching one. A
+short branch that the linker promotes to a long form hands its addend to the
+relocation rather than packing it back into the instruction, so both dialects
+converge on one absolute `JP`.
 
 ### 6. Find the entry point
 

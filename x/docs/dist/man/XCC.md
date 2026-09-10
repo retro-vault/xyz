@@ -33,9 +33,11 @@ xcc -Os main.c util.c -o app.xl
 # Produce a flat binary at a fixed address
 xcc main.c --oformat=binary -Ttext=0x8000 -o app.bin
 
-# ZX Spectrum RAM program and replacement ROM
+# ZX Spectrum RAM program, esxDOS disk program and replacement ROM
 xcc -Os --platform=zx-ram --oformat=binary main.c -o app.bin
+xcc -Os --platform=zx-esxdos --oformat=binary main.c -o disk.bin
 xcc -Os --platform=zx-rom --oformat=binary main.c -o app.rom
+xcc -Os --platform=zx-esxdos-rom --oformat=binary main.c -o disk.rom
 
 # Amstrad CPC firmware program
 xcc -Os --platform=cpc-464 --oformat=binary main.c -o app.bin
@@ -86,10 +88,24 @@ environment variables or wrapper scripts are needed; the prefix can be copied
 anywhere.
 
 The staged platform names are `none`, `cpc-464`, `cpc-664`, `cpc-6128`,
-`cpm3`, `emu`, `zx-ram`, and `zx-rom`.
+`cpm3`, `emu`, `zx-esxdos`, `zx-esxdos-rom`, `zx-ram`, and `zx-rom`.
 The ZX RAM platform links at `0x5CCB`; the ZX ROM platform emits a fixed
 16 KiB replacement ROM. See `ZX48.md` and package RAM binaries with
-`xprog --tap` or `xprog --tzx`.
+`xprog --tap` or `xprog --tzx`. The esxDOS disk platform links at `0x8000`;
+see `ZX-ESXDOS.md` for its disk API and BASIC loading commands. The separate
+`zx-esxdos-rom` platform executes an application from a 16 KiB base ROM and
+boots esxDOS without a Sinclair ROM. Only writable data and 48 bytes of
+disk-call gates are copied to RAM starting at `0x5B00`; see
+`ZX-ESXDOS-ROM.md`. The supported stock esxDOS 0.8.9 file calls use divIDE's
+private buffers rather than a permanent Spectrum workspace reservation.
+Both disk targets use a configurable linker `_STACK` boundary, default
+`0xF000`; the 4 KiB stack allowance is not a disk-API minimum.
+
+Named `const` globals use `_CONST` or GNU `.rodata` in every optimization
+profile, so ROM targets can leave them in ROM. Zero initializers and
+relocated pointer initializers are retained. A mutable pointer to const
+data remains writable; volatile or atomic subobjects, thread-local storage
+and explicit bank/address placement retain their existing storage rules.
 
 The CPC targets link at `0x4000`. See `CPC.md`; package 464 binaries with
 `xprog --cdt` and 664/6128 binaries with `xprog --dsk`.

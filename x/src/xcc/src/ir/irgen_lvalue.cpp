@@ -68,7 +68,17 @@ static const struct_field *find_member(const member_expr &e) {
     return nullptr;
 }
 
-operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
+operand ir_gen::gen_lvalue_write(expr &lhs, operand src,
+                                 const operand *captured_address) {
+    // Reusing an assignment's RHS value must not re-evaluate an observable
+    // source, regardless of whether the destination is a symbol or indirect.
+    if (src.is_symbol() &&
+        (src.is_sfr || (src.type && src.type->is_volatile))) {
+        operand value = new_temp(src.type ? src.type->unqual()
+                                          : type::make_int());
+        emit_assign(value, src);
+        src = value;
+    }
     auto coerce_for_store = [&](operand value, const type_ptr &target) -> operand {
         if (!target)
             return value;
@@ -79,9 +89,14 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
         bool same_type =
             value.type->kind == target->kind &&
             value.type->size() == target->size() &&
-            value.type->is_unsigned() == target->is_unsigned();
+            value.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             value.type->bitint_width == target->bitint_width);
         if (same_type) {
-            value.type = target;
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!value.is_symbol() || !value.type->is_volatile)
+                value.type = target;
             return value;
         }
         value = coerce_const_operand(value, target);
@@ -95,13 +110,30 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
         if (id->sym) {
             operand dst = sym_to_operand(*id->sym, id->type);
             src = coerce_for_store(src, dst.type);
+            if (dst.is_sfr || (dst.type && dst.type->is_volatile)) {
+                // An assignment (including prefix ++/--) yields the value
+                // stored, not another evaluation of the destination object.
+                // Snapshot symbolic sources before writing: the source may
+                // alias the destination, and may itself be volatile or an SFR.
+                if (src.is_symbol()) {
+                    operand value = new_temp(dst.type ? dst.type->unqual()
+                                                      : type::make_int());
+                    emit_assign(value, src);
+                    src = value;
+                } else if (src.type) {
+                    src.type = src.type->unqual();
+                }
+                emit_assign(dst, src);
+                return src;
+            }
             emit_assign(dst, src);
             return dst;
         }
     }
     if (auto *deref = dynamic_cast<unary_expr*>(&lhs)) {
         if (deref->op == unary_op::DEREF) {
-            operand ptr = gen_expr(*deref->operand);
+            operand ptr = captured_address ? *captured_address
+                                           : gen_expr(*deref->operand);
             src = coerce_for_store(src, deref->type ? deref->type : lhs.type);
             icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);
             return src;
@@ -109,8 +141,20 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
     }
     if (auto *mem = dynamic_cast<member_expr*>(&lhs)) {
         const struct_field *fld = find_member(*mem);
-        operand ptr = gen_member_ptr(*mem);
+        operand ptr = captured_address ? *captured_address
+                                       : gen_member_ptr(*mem);
         if (fld && fld->bit_width >= 0) {
+            // Apply the declared integer conversion before inserting the
+            // field's bits.  A wide or floating RHS must not reach the
+            // integer mask/store with its original representation.
+            src = coerce_for_store(src, fld->type ? fld->type->unqual()
+                                                  : type::make_int());
+            if (src.is_symbol()) {
+                operand value = new_temp(src.type ? src.type->unqual()
+                                                  : type::make_int());
+                emit_assign(value, src);
+                src = value;
+            }
             type_ptr unit_type = fld->type ? fld->type : type::make_int();
             int bit_offset = fld->bit_offset;
             if (byte_contained_bitfield(*fld)) {
@@ -171,9 +215,34 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
             src = coerce_for_store(src, fld ? fld->type : (mem->type ? mem->type : lhs.type));
             icode ic; ic.op = icode_op::SET_VALUE_AT; ic.result = ptr; ic.left = src; emit(ic);
         }
+        if (fld && fld->bit_width >= 0) {
+            // The assignment expression has the field's value after its
+            // width conversion.  In particular, ++ on an unsigned bit-field
+            // wraps at the field width even when its declared type is int.
+            type_ptr value_type = fld->type ? fld->type->unqual()
+                                            : type::make_int();
+            const int64_t mask = static_cast<int64_t>(
+                bitfield_mask_bits(fld->bit_width));
+            src = emit_binop(icode_op::BAND, src,
+                              operand::make_int(mask, value_type), value_type);
+            if (!value_type->is_unsigned() && fld->bit_width > 0 &&
+                fld->bit_width < value_type->size() * 8) {
+                operand sign = operand::make_int(
+                    static_cast<int64_t>(uint64_t{1} << (fld->bit_width - 1)),
+                    value_type);
+                src = emit_binop(icode_op::BXOR, src, sign, value_type);
+                src = emit_binop(icode_op::SUB, src, sign, value_type);
+            }
+        }
         return src;
     }
     if (auto *idx = dynamic_cast<index_expr*>(&lhs)) {
+        if (captured_address) {
+            src = coerce_for_store(src, idx->type ? idx->type : type::make_int());
+            icode ic; ic.op = icode_op::SET_VALUE_AT;
+            ic.result = *captured_address; ic.left = src; emit(ic);
+            return src;
+        }
         operand base  = gen_expr(*idx->base);
         operand index = gen_expr(*idx->index);
         if (base.type && base.type->is_array() && base.type->base) {
@@ -186,8 +255,13 @@ operand ir_gen::gen_lvalue_write(expr &lhs, operand src) {
                               type::make_pointer(index.type->base));
         }
         normalize_subscript_operands(base, index);
-        if (index.type && index.type->is_integer() &&
-            index.type->size() < type::make_int()->size()) {
+        if (index.type && index.type->kind == type_kind::BITINT) {
+            type_ptr carrier = index.type->size() <= 2
+                ? (index.type->is_unsigned() ? type::make_uint() : type::make_int())
+                : (index.type->is_unsigned() ? type::make_ulong() : type::make_long());
+            index = emit_unop(icode_op::CAST, index, carrier);
+        } else if (index.type && index.type->is_integer() &&
+                   index.type->size() < type::make_int()->size()) {
             index = emit_unop(icode_op::CAST, index, type::make_int());
         }
         type_ptr elem_type = idx->type ? idx->type : type::make_int();
@@ -217,8 +291,13 @@ void ir_gen::visit(index_expr &e) {
                           type::make_pointer(index.type->base));
     }
     normalize_subscript_operands(base, index);
-    if (index.type && index.type->is_integer() &&
-        index.type->size() < type::make_int()->size()) {
+    if (index.type && index.type->kind == type_kind::BITINT) {
+        type_ptr carrier = index.type->size() <= 2
+            ? (index.type->is_unsigned() ? type::make_uint() : type::make_int())
+            : (index.type->is_unsigned() ? type::make_ulong() : type::make_long());
+        index = emit_unop(icode_op::CAST, index, carrier);
+    } else if (index.type && index.type->is_integer() &&
+               index.type->size() < type::make_int()->size()) {
         index = emit_unop(icode_op::CAST, index, type::make_int());
     }
 
@@ -278,12 +357,22 @@ operand ir_gen::gen_member_ptr(member_expr &e) {
         operand off = operand::make_int(field_offset, type::make_int());
         ptr = emit_binop(icode_op::ADD, ptr, off, field_ptr_type);
     } else {
+        if (ptr.is_symbol() && ptr.type && ptr.type->is_volatile)
+            field_ptr_type->is_volatile = true;
         ptr.type = field_ptr_type;
     }
     return ptr;
 }
 
 operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
+    if (dynamic_cast<string_literal_expr *>(&e)) {
+        // The literal visitor already produces its static storage address.
+        // Address-of changes the pointee from element to complete array;
+        // taking the address of the temporary pointer would name a spill.
+        operand address = gen_expr(e);
+        address.type = ptr_t;
+        return address;
+    }
     if (auto *id = dynamic_cast<ident_expr*>(&e)) {
         if (id->sym) {
             operand obj = sym_to_operand(*id->sym, id->type);
@@ -308,8 +397,13 @@ operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
                               type::make_pointer(index.type->base));
         }
         normalize_subscript_operands(base, index);
-        if (index.type && index.type->is_integer() &&
-            index.type->size() < type::make_int()->size()) {
+        if (index.type && index.type->kind == type_kind::BITINT) {
+            type_ptr carrier = index.type->size() <= 2
+                ? (index.type->is_unsigned() ? type::make_uint() : type::make_int())
+                : (index.type->is_unsigned() ? type::make_ulong() : type::make_long());
+            index = emit_unop(icode_op::CAST, index, carrier);
+        } else if (index.type && index.type->is_integer() &&
+                   index.type->size() < type::make_int()->size()) {
             index = emit_unop(icode_op::CAST, index, type::make_int());
         }
 
@@ -333,15 +427,35 @@ operand ir_gen::gen_lvalue_addr(expr &e, type_ptr ptr_t) {
     return emit_unop(icode_op::ADDRESS_OF, obj, ptr_t);
 }
 
-void ir_gen::visit(member_expr &e) {
+operand ir_gen::gen_lvalue_read_once(expr &lhs, operand &captured_address) {
+    captured_address = operand::make_none();
+    if (dynamic_cast<ident_expr *>(&lhs))
+        return gen_expr(lhs);
+    captured_address = gen_lvalue_addr(
+        lhs, type::make_pointer(lhs.type ? lhs.type : type::make_int()));
+    // A pointer identifier is itself a memory operand.  Capture its current
+    // value before a compound assignment's RHS can change it or a volatile
+    // pointer can yield a different address on its next read.
+    if (captured_address.is_symbol()) {
+        operand pointer = new_temp(captured_address.type
+                                       ? captured_address.type->unqual()
+                                       : type::make_pointer(type::make_int()));
+        emit_assign(pointer, captured_address);
+        captured_address = pointer;
+    }
+    if (auto *member = dynamic_cast<member_expr *>(&lhs))
+        return gen_member_value_at(*member, captured_address);
+    return emit_unop(icode_op::GET_VALUE_AT, captured_address,
+                     lhs.type ? lhs.type : type::make_int());
+}
+
+operand ir_gen::gen_member_value_at(member_expr &e, operand ptr) {
     const struct_field *fld = find_member(e);
-    operand ptr      = gen_member_ptr(e);
     type_ptr fld_type = e.type ? e.type : type::make_int();
 
     if (fld_type && fld_type->is_array() && fld_type->base) {
         ptr.type = type::make_pointer(fld_type->base);
-        expr_result_ = ptr;
-        return;
+        return ptr;
     }
 
     type_ptr access_type = fld_type;
@@ -385,7 +499,11 @@ void ir_gen::visit(member_expr &e) {
             loaded = emit_binop(icode_op::SUB, loaded, sign_op, fld_type);
         }
     }
-    expr_result_ = loaded;
+    return loaded;
+}
+
+void ir_gen::visit(member_expr &e) {
+    expr_result_ = gen_member_value_at(e, gen_member_ptr(e));
 }
 
 } // namespace xcc

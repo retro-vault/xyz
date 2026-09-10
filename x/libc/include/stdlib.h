@@ -71,7 +71,9 @@ void free_aligned_sized(void *ptr, size_t alignment, size_t size);
  * plain free(p).
  *
  * Create a heap over a memory region [base, limit) with heap_init_arena(); the
- * platform builds the default heap the same way on first malloc().
+ * custom heap retains this exact region: callers supply the alignment they
+ * require for its allocations. malloc() rounds the platform region start up
+ * to two-byte alignment when it constructs the default heap.
  */
 typedef struct { unsigned char _opaque[8]; } heap_t;
 

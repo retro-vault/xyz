@@ -131,6 +131,7 @@ struct type {
     bool is_const    = false;
     bool is_volatile = false;
     bool is_restrict = false;
+    bool is_atomic   = false; // Retained for conservative memory-access proofs.
     bool is_vla      = false; // true for VLA array types (int a[n])
     bool is_far      = false; // POINTER: 24-bit banked pointer ([[xcc::far]])
                               // low 16 bits = address, high 8 bits = bank.
@@ -393,7 +394,7 @@ struct type {
     //
     type_ptr unqual() const {
         auto t = std::make_shared<type>(*this);
-        t->is_const = t->is_volatile = t->is_restrict = false;
+        t->is_const = t->is_volatile = t->is_restrict = t->is_atomic = false;
         return t;
     }
 

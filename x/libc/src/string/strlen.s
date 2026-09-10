@@ -1,8 +1,8 @@
         ; strlen.s
         ;
         ; libc strlen implementation for the xcc Z80 libc.
-        ; Delegates the byte scan to __string_scan_nul and then subtracts the
-        ; original base pointer to obtain the character count.
+        ; The shared scanner leaves BC = 65534 - length and carry clear,
+        ; so subtracting that count produces the length without a saved base.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -21,10 +21,8 @@
         ; outputs: DE = string length, excluding the terminating NUL
         ; clobbers: AF, BC, HL
 _strlen::
-        push    hl                      ; preserve base pointer
         call    __string_scan_nul
-        pop     de
-        or      a                       ; clear carry before subtracting
-        sbc     hl,de                   ; HL = end - start
-        ex      de,hl                   ; return the size in DE
+        ld      hl,#0xfffe
+        sbc     hl,bc
+        ex      de,hl
         ret

@@ -141,8 +141,9 @@ When adding tests for new C23 features (or anything else):
     `xcc --platform`.
   - `bin/x/z80/lib/` stages `crt0`, linker scripts, `libruntime.a`, `libc.a`,
     the default `libnone.a`, and named platform payloads such as `libcpm3.a`,
-    `libcpc-464.a`, `libcpc-664.a`, `libcpc-6128.a`, `libzx-ram.a`, and
-    `libzx-rom.a`.
+    `libcpc-464.a`, `libcpc-664.a`, `libcpc-6128.a`, `libzx-esxdos.a`,
+    `libzx-esxdos-rom.a`,
+    `libzx-ram.a`, and `libzx-rom.a`.
   - `bin/y/` holds YOS build outputs plus YOS-adjacent host tools and support
     libraries.
   - `bin/z/` holds staged target assets, apps, and media.
@@ -152,7 +153,7 @@ When adding tests for new C23 features (or anything else):
   - The common standard library and runtime stay shared under
     `bin/x/z80/lib/`.
   - The current default staged platform payload is bare-metal `none`; CP/M 3,
-    CPC 464/664/6128, and the two ZX Spectrum 48K forms are selected explicitly
+    CPC 464/664/6128, and the ZX Spectrum 48K forms are selected explicitly
     with `--platform=<name>`.
   - Flat ROM links support distinct virtual and load addresses. GNU scripts
     use `AT>region`; SDCC-style scripts use `COPY area`. The generated
@@ -163,6 +164,28 @@ When adding tests for new C23 features (or anything else):
     assembly console, non-blocking `<stdio.h>` `trygetchar()` scanner, blocking libc input
     derived from that scanner, and snatch-exported Tamsyn font; there is no
     non-target pseudo-platform directory.
+  - `zx-esxdos` is a separate 48K RAM target for resident esxDOS on divIDE
+    or compatible hardware. It loads at `0x8000`, preserving the active BASIC
+    loader until entry. Its DI/own-stack/halt contract permits application
+    use of low RAM after entry; native file calls keep internal buffers in
+    divIDE RAM. Its heap ends at the linker `_STACK` boundary, default `0xF000`,
+    with a self-contained copy of the console, keyboard and font. Its file
+    hooks translate the common libc descriptor API into esxDOS calls while
+    preserving descriptors 0–2 for the console.
+  - `zx-esxdos-rom` supplies a self-contained 16 KiB base ROM that boots
+    divIDE esxDOS 0.8.9 without Sinclair ROM contents. Its native linker
+    scripts keep code and constants in ROM, reserving divIDE's instruction
+    traps. Startup copies only writable native/ELF data and a 48-byte syscall
+    gate table to RAM at `0x5B00`; both BSS forms are cleared before C entry.
+    This recovers 9,472 bytes formerly reserved as firmware workspace. The
+    supported stock 0.8.9 external file API needs no permanent Spectrum
+    workspace after boot. Both disk targets share a configurable 4 KiB
+    default stack allowance, rather than a firmware-imposed stack minimum.
+    Gates page firmware in for each operation and return to ROM after it
+    pages out. ROM paths and write input use bounded temporary stack copies.
+    It keeps the RAM target's heap/stack and filesystem contract, with
+    separate platform sources. Firmware NMI/BASIC/dot-command support
+    is outside its 48K contract, and esxDOS AutoBoot must be disabled.
   - `cpc-464`, `cpc-664`, and `cpc-6128` own firmware-hosted RAM from
     `0x4000` to the `0x9F00` heap ceiling and keep their C stack immediately
     below the AMSDOS workspace. The 464 archive contains only console, clock,

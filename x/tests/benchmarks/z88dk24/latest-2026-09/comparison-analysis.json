@@ -1,0 +1,1436 @@
+{
+  "rows": 24,
+  "xcc_binary_sha256": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+  "envelopes": {
+    "all_valid": {
+      "xcc_Os": {
+        "bytes": {
+          "wins": 24,
+          "ties": 0,
+          "losses": 0,
+          "geometric_mean_ratio": 0.9623353797592651,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 4644,
+              "competitor": 5082,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9138134592680047
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 4820,
+              "competitor": 5167,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9328430423843623
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 4861,
+              "competitor": 5187,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9371505687295161
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 6764,
+              "competitor": 7241,
+              "competitor_lane": "sccz80",
+              "ratio": 0.934125120839663
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 11550,
+              "competitor": 15013,
+              "competitor_lane": "sccz80",
+              "ratio": 0.7693332445214148
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 11439,
+              "competitor": 11472,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9971234309623431
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 6802,
+              "competitor": 7013,
+              "competitor_lane": "sccz80",
+              "ratio": 0.969913018679595
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 5044,
+              "competitor": 5129,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9834275687268473
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 3612,
+              "competitor": 3670,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9841961852861035
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 4759,
+              "competitor": 4895,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9722165474974463
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 4242,
+              "competitor": 4318,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9823992589161649
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 8032,
+              "competitor": 8091,
+              "competitor_lane": "sccz80",
+              "ratio": 0.992707947101718
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 5882,
+              "competitor": 6024,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9764276228419655
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 3735,
+              "competitor": 3773,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9899284389080307
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 4008,
+              "competitor": 4154,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9648531535869042
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 3984,
+              "competitor": 4115,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9681652490886998
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 4971,
+              "competitor": 5009,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9924136554202435
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 10276,
+              "competitor": 10317,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9960259765435688
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 3809,
+              "competitor": 3867,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9850012929919835
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 4723,
+              "competitor": 4816,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9806893687707641
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 3604,
+              "competitor": 3667,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9828197436596673
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 6762,
+              "competitor": 6836,
+              "competitor_lane": "sccz80",
+              "ratio": 0.989174956114687
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 4449,
+              "competitor": 4641,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9586296056884293
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 4656,
+              "competitor": 4790,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9720250521920668
+            }
+          ]
+        },
+        "cycles": {
+          "wins": 11,
+          "ties": 0,
+          "losses": 13,
+          "geometric_mean_ratio": 1.1187476439644104,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 26485104,
+              "competitor": 26519054,
+              "competitor_lane": "sdcc_max",
+              "ratio": 0.9987197884208087
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 112513604,
+              "competitor": 114635406,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9814908667920624
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 43072474,
+              "competitor": 33594542,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.282127138390516
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 13424564,
+              "competitor": 12027589,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.1161475504359186
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 29678619,
+              "competitor": 22478882,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.320288927180631
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 5262662,
+              "competitor": 4379718,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.2015983677487911
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 12577553,
+              "competitor": 13200276,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9528250015378467
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 41076592,
+              "competitor": 28580132,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.4372429070656496
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 21041821,
+              "competitor": 22770315,
+              "competitor_lane": "sdcc",
+              "ratio": 0.9240900268617277
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 22054149,
+              "competitor": 22062540,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9996196720776483
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 46680092,
+              "competitor": 31344825,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.4892439820608345
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 45145049,
+              "competitor": 35626638,
+              "competitor_lane": "sdcc",
+              "ratio": 1.267171182416932
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 23664363,
+              "competitor": 18386361,
+              "competitor_lane": "sdcc",
+              "ratio": 1.2870607185402267
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 64577891,
+              "competitor": 29265158,
+              "competitor_lane": "sdcc",
+              "ratio": 2.206647611470268
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 31114937,
+              "competitor": 34371657,
+              "competitor_lane": "sdcc",
+              "ratio": 0.9052498400062586
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 31667173,
+              "competitor": 42828210,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.7393998721870468
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 12059144,
+              "competitor": 17587321,
+              "competitor_lane": "sdcc",
+              "ratio": 0.6856725933415329
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 44328525,
+              "competitor": 29861870,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.4844524137302855
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 40965725,
+              "competitor": 31195663,
+              "competitor_lane": "sdcc",
+              "ratio": 1.3131865477582574
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 2965621,
+              "competitor": 3246073,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9136026823796014
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 8696571,
+              "competitor": 7571325,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.1486194292280414
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 38083585,
+              "competitor": 33941702,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.122029325459283
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 39964001,
+              "competitor": 42506136,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9401936934469884
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 24527212,
+              "competitor": 24804236,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9888315850566815
+            }
+          ]
+        }
+      },
+      "xcc_Of": {
+        "bytes": {
+          "wins": 11,
+          "ties": 0,
+          "losses": 13,
+          "geometric_mean_ratio": 1.0080075536714916,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 4722,
+              "competitor": 5082,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9291617473435655
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 5023,
+              "competitor": 5167,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9721308302690149
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 4988,
+              "competitor": 5187,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9616348563716984
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 7042,
+              "competitor": 7241,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9725176080651844
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 18525,
+              "competitor": 15013,
+              "competitor_lane": "sccz80",
+              "ratio": 1.2339305934856457
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 11527,
+              "competitor": 11472,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0047942817294282
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 6906,
+              "competitor": 7013,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9847426208469985
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 5220,
+              "competitor": 5129,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0177422499512576
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 3685,
+              "competitor": 3670,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0040871934604905
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 4837,
+              "competitor": 4895,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9881511746680286
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 4584,
+              "competitor": 4318,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0616025937934228
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 8177,
+              "competitor": 8091,
+              "competitor_lane": "sccz80",
+              "ratio": 1.010629094055123
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 5955,
+              "competitor": 6024,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9885458167330677
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 3817,
+              "competitor": 3773,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0116618075801749
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 4223,
+              "competitor": 4154,
+              "competitor_lane": "sccz80",
+              "ratio": 1.016610495907559
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 4093,
+              "competitor": 4115,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9946537059538274
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 5155,
+              "competitor": 5009,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0291475344380117
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 10546,
+              "competitor": 10317,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0221963749151886
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 3966,
+              "competitor": 3867,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0256012412723041
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 4815,
+              "competitor": 4816,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9997923588039868
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 3672,
+              "competitor": 3667,
+              "competitor_lane": "sccz80",
+              "ratio": 1.001363512407963
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 6876,
+              "competitor": 6836,
+              "competitor_lane": "sccz80",
+              "ratio": 1.0058513750731422
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 4630,
+              "competitor": 4641,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9976298211592329
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 4736,
+              "competitor": 4790,
+              "competitor_lane": "sccz80",
+              "ratio": 0.9887265135699373
+            }
+          ]
+        },
+        "cycles": {
+          "wins": 24,
+          "ties": 0,
+          "losses": 0,
+          "geometric_mean_ratio": 0.8638336660612559,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 26375916,
+              "competitor": 26519054,
+              "competitor_lane": "sdcc_max",
+              "ratio": 0.9946024469801977
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 86035675,
+              "competitor": 114635406,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.750515726354212
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 32960132,
+              "competitor": 33594542,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9811156824224602
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 11267197,
+              "competitor": 12027589,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9367793495437864
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 21689787,
+              "competitor": 22478882,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9648961634301919
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 3757371,
+              "competitor": 4379718,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.8579024950921498
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 12068928,
+              "competitor": 13200276,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9142936102245135
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 28208692,
+              "competitor": 28580132,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9870035589758648
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 18455856,
+              "competitor": 22770315,
+              "competitor_lane": "sdcc",
+              "ratio": 0.8105226475786567
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 21763678,
+              "competitor": 22062540,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9864538715850487
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 31007401,
+              "competitor": 31344825,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9892350970215976
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 24031267,
+              "competitor": 35626638,
+              "competitor_lane": "sdcc",
+              "ratio": 0.674530866482546
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 18012089,
+              "competitor": 18386361,
+              "competitor_lane": "sdcc",
+              "ratio": 0.9796440415806043
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 22777916,
+              "competitor": 29265158,
+              "competitor_lane": "sdcc",
+              "ratio": 0.7783288236475607
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 19564886,
+              "competitor": 34371657,
+              "competitor_lane": "sdcc",
+              "ratio": 0.569215676742032
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 26270970,
+              "competitor": 42828210,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.6134034086411737
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 14142180,
+              "competitor": 17587321,
+              "competitor_lane": "sdcc",
+              "ratio": 0.8041122351721447
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 28260276,
+              "competitor": 29861870,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9463665872231043
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 28134199,
+              "competitor": 31195663,
+              "competitor_lane": "sdcc",
+              "ratio": 0.9018625121062501
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 2961312,
+              "competitor": 3246073,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9122752322575617
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 6934066,
+              "competitor": 7571325,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9158325656341525
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 29269475,
+              "competitor": 33941702,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8623455299913952
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 38399932,
+              "competitor": 42506136,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9033973824390906
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 22737508,
+              "competitor": 24804236,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9166784254108855
+            }
+          ]
+        }
+      }
+    },
+    "80cc": {
+      "xcc_Os": {
+        "bytes": {
+          "wins": 24,
+          "ties": 0,
+          "losses": 0,
+          "geometric_mean_ratio": 0.9066798450382797,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 4644,
+              "competitor": 5082,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9138134592680047
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 4820,
+              "competitor": 5387,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8947466122145907
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 4861,
+              "competitor": 5245,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.926787416587226
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 6764,
+              "competitor": 7679,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8808438598775882
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 11550,
+              "competitor": 17569,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.6574079344299618
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 11439,
+              "competitor": 11742,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9741951967296884
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 6802,
+              "competitor": 7153,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9509296798546064
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 5044,
+              "competitor": 5492,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9184268026219956
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 3612,
+              "competitor": 3975,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9086792452830189
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 4759,
+              "competitor": 5111,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9311289375855997
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 4242,
+              "competitor": 4740,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8949367088607595
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 8032,
+              "competitor": 8421,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.953805961287258
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 5882,
+              "competitor": 6293,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9346893373589703
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 3735,
+              "competitor": 4143,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9015206372194062
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 4008,
+              "competitor": 4406,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9096686336813437
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 3984,
+              "competitor": 4634,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8597324126025032
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 4971,
+              "competitor": 5402,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9202147352832284
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 10276,
+              "competitor": 10727,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9579565582175819
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 3809,
+              "competitor": 4312,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8833487940630798
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 4723,
+              "competitor": 5116,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.923182173573104
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 3604,
+              "competitor": 3954,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9114820435002529
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 6762,
+              "competitor": 7137,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9474569146700295
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 4449,
+              "competitor": 4794,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.928035043804756
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 4656,
+              "competitor": 5004,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9304556354916067
+            }
+          ]
+        },
+        "cycles": {
+          "wins": 11,
+          "ties": 0,
+          "losses": 13,
+          "geometric_mean_ratio": 1.0792400407317282,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 26485104,
+              "competitor": 28187527,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9396036764771879
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 112513604,
+              "competitor": 114635406,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9814908667920624
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 43072474,
+              "competitor": 33594542,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.282127138390516
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 13424564,
+              "competitor": 12027589,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.1161475504359186
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 29678619,
+              "competitor": 22478882,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.320288927180631
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 5262662,
+              "competitor": 4379718,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.2015983677487911
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 12577553,
+              "competitor": 13200276,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9528250015378467
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 41076592,
+              "competitor": 28580132,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.4372429070656496
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 21041821,
+              "competitor": 25222306,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.834254449216499
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 22054149,
+              "competitor": 22062540,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9996196720776483
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 46680092,
+              "competitor": 31344825,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.4892439820608345
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 45145049,
+              "competitor": 38215339,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.1813332075897587
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 23664363,
+              "competitor": 22358179,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.058420857977745
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 64577891,
+              "competitor": 32052250,
+              "competitor_lane": "80cc_fp",
+              "ratio": 2.0147693531655344
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 31114937,
+              "competitor": 36858542,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.8441716712505882
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 31667173,
+              "competitor": 42828210,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.7393998721870468
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 12059144,
+              "competitor": 19111822,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.6309782500067236
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 44328525,
+              "competitor": 29861870,
+              "competitor_lane": "80cc_sp",
+              "ratio": 1.4844524137302855
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 40965725,
+              "competitor": 37719531,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.0860613563832489
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 2965621,
+              "competitor": 3246073,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9136026823796014
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 8696571,
+              "competitor": 7571325,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.1486194292280414
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 38083585,
+              "competitor": 33941702,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.122029325459283
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 39964001,
+              "competitor": 42506136,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9401936934469884
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 24527212,
+              "competitor": 24804236,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9888315850566815
+            }
+          ]
+        }
+      },
+      "xcc_Of": {
+        "bytes": {
+          "wins": 23,
+          "ties": 0,
+          "losses": 1,
+          "geometric_mean_ratio": 0.9497106224951553,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 4722,
+              "competitor": 5082,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9291617473435655
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 5023,
+              "competitor": 5387,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9324299238908483
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 4988,
+              "competitor": 5245,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9510009532888465
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 7042,
+              "competitor": 7679,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9170464904284412
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 18525,
+              "competitor": 17569,
+              "competitor_lane": "80cc_fp",
+              "ratio": 1.0544140247026013
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 11527,
+              "competitor": 11742,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9816896610458185
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 6906,
+              "competitor": 7153,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9654690339717601
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 5220,
+              "competitor": 5492,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9504734158776402
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 3685,
+              "competitor": 3975,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9270440251572327
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 4837,
+              "competitor": 5111,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9463901389160634
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 4584,
+              "competitor": 4740,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9670886075949368
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 8177,
+              "competitor": 8421,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9710248189051182
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 5955,
+              "competitor": 6293,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9462895280470364
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 3817,
+              "competitor": 4143,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9213130581704079
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 4223,
+              "competitor": 4406,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9584657285519745
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 4093,
+              "competitor": 4634,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8832542080276219
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 5155,
+              "competitor": 5402,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9542761940022214
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 10546,
+              "competitor": 10727,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9831266896616015
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 3966,
+              "competitor": 4312,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9197588126159555
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 4815,
+              "competitor": 5116,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.941164972634871
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 3672,
+              "competitor": 3954,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.928679817905918
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 6876,
+              "competitor": 7137,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9634300126103404
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 4630,
+              "competitor": 4794,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.965790571547768
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 4736,
+              "competitor": 5004,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9464428457234213
+            }
+          ]
+        },
+        "cycles": {
+          "wins": 24,
+          "ties": 0,
+          "losses": 0,
+          "geometric_mean_ratio": 0.83332812897977,
+          "rows": [
+            {
+              "benchmark": "charbench",
+              "xcc": 26375916,
+              "competitor": 28187527,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9357300482585791
+            },
+            {
+              "benchmark": "crcbench",
+              "xcc": 86035675,
+              "competitor": 114635406,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.750515726354212
+            },
+            {
+              "benchmark": "intbench",
+              "xcc": 32960132,
+              "competitor": 33594542,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9811156824224602
+            },
+            {
+              "benchmark": "ptrbench",
+              "xcc": 11267197,
+              "competitor": 12027589,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9367793495437864
+            },
+            {
+              "benchmark": "md5",
+              "xcc": 21689787,
+              "competitor": 22478882,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9648961634301919
+            },
+            {
+              "benchmark": "sieve",
+              "xcc": 3757371,
+              "competitor": 4379718,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.8579024950921498
+            },
+            {
+              "benchmark": "rle",
+              "xcc": 12068928,
+              "competitor": 13200276,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9142936102245135
+            },
+            {
+              "benchmark": "sortbench",
+              "xcc": 28208692,
+              "competitor": 28580132,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9870035589758648
+            },
+            {
+              "benchmark": "queenbench",
+              "xcc": 18455856,
+              "competitor": 25222306,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.73172754307239
+            },
+            {
+              "benchmark": "searchbench",
+              "xcc": 21763678,
+              "competitor": 22062540,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9864538715850487
+            },
+            {
+              "benchmark": "switchbench",
+              "xcc": 31007401,
+              "competitor": 31344825,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9892350970215976
+            },
+            {
+              "benchmark": "hashbench",
+              "xcc": 24031267,
+              "competitor": 38215339,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.6288382526189288
+            },
+            {
+              "benchmark": "strbench",
+              "xcc": 18012089,
+              "competitor": 22358179,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8056152068556209
+            },
+            {
+              "benchmark": "histbench",
+              "xcc": 22777916,
+              "competitor": 32052250,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.710649517584569
+            },
+            {
+              "benchmark": "fixedbench",
+              "xcc": 19564886,
+              "competitor": 36858542,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.5308100901006882
+            },
+            {
+              "benchmark": "bitfieldbench",
+              "xcc": 26270970,
+              "competitor": 42828210,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.6134034086411737
+            },
+            {
+              "benchmark": "vecbench",
+              "xcc": 14142180,
+              "competitor": 19111822,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.7399702655246579
+            },
+            {
+              "benchmark": "matrixbench",
+              "xcc": 28260276,
+              "competitor": 29861870,
+              "competitor_lane": "80cc_sp",
+              "ratio": 0.9463665872231043
+            },
+            {
+              "benchmark": "interpbench",
+              "xcc": 28134199,
+              "competitor": 37719531,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.745878812756182
+            },
+            {
+              "benchmark": "structbench",
+              "xcc": 2961312,
+              "competitor": 3246073,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9122752322575617
+            },
+            {
+              "benchmark": "recordbench",
+              "xcc": 6934066,
+              "competitor": 7571325,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9158325656341525
+            },
+            {
+              "benchmark": "listbench",
+              "xcc": 29269475,
+              "competitor": 33941702,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.8623455299913952
+            },
+            {
+              "benchmark": "lexbench",
+              "xcc": 38399932,
+              "competitor": 42506136,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9033973824390906
+            },
+            {
+              "benchmark": "maskbench",
+              "xcc": 22737508,
+              "competitor": 24804236,
+              "competitor_lane": "80cc_fp",
+              "ratio": 0.9166784254108855
+            }
+          ]
+        }
+      }
+    }
+  },
+  "v5_identical_toolchain_deltas": [
+    {
+      "benchmark": "bitfieldbench",
+      "profile": "xcc_Os",
+      "bytes": 24,
+      "cycles": 1989260
+    }
+  ],
+  "v5_results_sha256": "34e5b10ee1c67f773aad374f0e5b742edafe0932e67503e570e45b4de56e4e44",
+  "all_seven_competitor_columns_equal_original_and_v5": true
+}

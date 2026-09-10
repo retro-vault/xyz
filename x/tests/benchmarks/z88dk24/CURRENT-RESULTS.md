@@ -1,5 +1,14 @@
 # Current-Upstream z88dk Full-Program Integer Benchmarks
 
+For the freshly downloaded September 9 nightly and official SDCC trunk, see
+[the latest nine-lane results](LATEST-RESULTS.md). This August table remains a
+preserved baseline.
+
+This August snapshot is retained as the reproduced baseline for the
+[September 2026 campaign](../../../docs/xcc/OPTIMIZATION-CAMPAIGN-2026-09.md).
+The later [raw matrix](optimization-2026-09-results.csv) includes the final
+compiler changes while preserving these competitor pins and measurements.
+
 Every lane uses the pinned current z88dk headers, `+test` CRT and classic
 library. Official SDCC trunk is patched only for z88dk ABI compatibility;
 80cc comes from its independently pinned active branch. XCC is the M

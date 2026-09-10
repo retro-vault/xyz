@@ -255,8 +255,10 @@ namespace xld {
             for (auto& area : mod->areas()) {
                 if (!area.placed_addr().has_value())
                     continue;
-                if (!area.name().empty() && area.name()[0] == '.')
-                    continue; // skip pseudo/internal areas (.ABS.)
+                // ELF's .text/.data/.bss are real areas. Their span
+                // symbols are also needed by ROM load copies and CRTs.
+                if (area.name() == ".ABS.")
+                    continue;
 
                 auto& span = spans[area.name()];
                 uint16_t start = area.placed_addr().value();
@@ -331,6 +333,8 @@ namespace xld {
             }
         }
 
+        const auto placement_holes =
+            area_placer::effective_holes_for_placement(ctx);
         for (const auto& area_name : ctx.load_copy_areas) {
             std::string suffix = area_name;
             if (!suffix.empty() && suffix[0] == '_')
@@ -345,7 +349,7 @@ namespace xld {
 
             const uint32_t size = size_it->second;
             load_cursor = area_placer::next_free_address(
-                load_cursor, size, ctx.holes);
+                load_cursor, size, placement_holes);
             if (size > 0
                 && (load_cursor > ctx.output_range->end
                     || size - 1u > ctx.output_range->end - load_cursor)) {

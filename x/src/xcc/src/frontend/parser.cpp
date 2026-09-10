@@ -301,7 +301,8 @@ void parser::complete_unsized_char_array_from_string(type_ptr t,
         ((elem == type_kind::CHAR || elem == type_kind::SCHAR ||
           elem == type_kind::UCHAR) && str->char_width == 1) ||
         (elem == type_kind::CHAR8T && str->char_width == 8) ||
-        (elem == type_kind::USHORT && str->char_width == 2) ||
+        (elem == type_kind::USHORT && str->char_width == 2 && !str->is_wchar) ||
+        (elem == type_kind::INT && str->is_wchar) ||
         (elem == type_kind::ULONG && str->char_width == 4);
     if (!compatible)
         return;

@@ -35,7 +35,8 @@ static int64_t wrap_shl(int64_t lhs, int64_t rhs) {
 
 static std::optional<int64_t> apply_integer_cast(int64_t v, const type *t) {
     if (!t || !t->is_integer()) return std::nullopt;
-    int bits = t->size() * 8;
+    if (t->kind == type_kind::BOOL) return v != 0;
+    int bits = t->kind == type_kind::BITINT ? t->bitint_width : t->size() * 8;
     if (bits <= 0 || bits > 64) return std::nullopt;
     // Mask to the lower `bits` bits.
     uint64_t mask = (bits == 64) ? ~0ULL : ((1ULL << bits) - 1);
@@ -45,6 +46,64 @@ static std::optional<int64_t> apply_integer_cast(int64_t v, const type *t) {
     uint64_t sign_bit = 1ULL << (bits - 1);
     if (u & sign_bit) return (int64_t)(u | ~mask);
     return (int64_t)u;
+}
+
+static bool is_bitprecise(type_ptr t) {
+    return t && t->kind == type_kind::BITINT;
+}
+
+// Preserve each bit-precise operation's value before its parent converts it.
+// Rounded storage width is insufficient: (u9)511 + (u9)1 is zero even when
+// the parent expression converts that result to a wider standard integer.
+static std::optional<int64_t> evaluate_bitprecise_binary(
+    const binary_expr &e, int64_t left, int64_t right) {
+    const bool shift = e.op == bin_op::SHL || e.op == bin_op::SHR;
+    type_ptr common = shift ? integer_promote(e.left->type->unqual())
+        : usual_arith_conv(e.left->type->unqual(), e.right->type->unqual());
+    auto lhs = apply_integer_cast(left, common.get());
+    auto rhs = apply_integer_cast(right, shift
+        ? integer_promote(e.right->type->unqual()).get() : common.get());
+    if (!lhs || !rhs)
+        return std::nullopt;
+    const uint64_t ul = static_cast<uint64_t>(*lhs);
+    const uint64_t ur = static_cast<uint64_t>(*rhs);
+    auto result = [&](int64_t value) { return apply_integer_cast(value, common.get()); };
+    switch (e.op) {
+    case bin_op::ADD: return result(wrap_add(*lhs, *rhs));
+    case bin_op::SUB: return result(wrap_sub(*lhs, *rhs));
+    case bin_op::MUL: return result(wrap_mul(*lhs, *rhs));
+    case bin_op::DIV:
+    case bin_op::MOD:
+        if (*rhs == 0)
+            return std::nullopt;
+        if (common->is_unsigned())
+            return result(static_cast<int64_t>(e.op == bin_op::DIV ? ul / ur : ul % ur));
+        if (*lhs == std::numeric_limits<int64_t>::min() && *rhs == -1)
+            return std::nullopt;
+        return result(e.op == bin_op::DIV ? *lhs / *rhs : *lhs % *rhs);
+    case bin_op::AND: return result(*lhs & *rhs);
+    case bin_op::OR: return result(*lhs | *rhs);
+    case bin_op::XOR: return result(*lhs ^ *rhs);
+    case bin_op::SHL:
+    case bin_op::SHR: {
+        const int width = is_bitprecise(common) ? common->bitint_width : common->size() * 8;
+        if (*rhs < 0 || *rhs >= width)
+            return std::nullopt;
+        if (e.op == bin_op::SHL)
+            return result(wrap_shl(*lhs, *rhs));
+        return result(common->is_unsigned() ? static_cast<int64_t>(ul >> ur) : *lhs >> *rhs);
+    }
+    case bin_op::EQ: return *lhs == *rhs;
+    case bin_op::NE: return *lhs != *rhs;
+    case bin_op::LT: return common->is_unsigned() ? ul < ur : *lhs < *rhs;
+    case bin_op::LE: return common->is_unsigned() ? ul <= ur : *lhs <= *rhs;
+    case bin_op::GT: return common->is_unsigned() ? ul > ur : *lhs > *rhs;
+    case bin_op::GE: return common->is_unsigned() ? ul >= ur : *lhs >= *rhs;
+    // Logical operands undergo individual truth conversion.
+    case bin_op::LAND: return left && right;
+    case bin_op::LOR: return left || right;
+    default: return std::nullopt;
+    }
 }
 
 // Evaluate a floating-point constant expression.  Returns nullopt if not
@@ -131,6 +190,12 @@ static std::optional<address_constant> evaluate_lvalue_address(
     if (auto *id = dynamic_cast<const ident_expr *>(e))
         return address_of_symbol(id);
 
+    if (auto *literal = dynamic_cast<const string_literal_expr *>(e)) {
+        address_constant result;
+        result.literal = literal;
+        return result;
+    }
+
     if (auto *u = dynamic_cast<const unary_expr *>(e)) {
         if (u->op == unary_op::DEREF)
             return evaluate_address_impl(u->operand.get());
@@ -172,6 +237,12 @@ static std::optional<address_constant> evaluate_lvalue_address(
 static std::optional<address_constant> evaluate_address_impl(const expr *e) {
     if (!e)
         return std::nullopt;
+
+    if (auto *literal = dynamic_cast<const string_literal_expr *>(e)) {
+        address_constant result;
+        result.literal = literal;
+        return result;
+    }
 
     if (auto *cast = dynamic_cast<const cast_expr *>(e))
         return evaluate_address_impl(cast->operand.get());
@@ -388,6 +459,10 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
         auto l = evaluate(bin->left.get());
         auto r = evaluate(bin->right.get());
         if (l && r) {
+            if (bin->left->type && bin->right->type &&
+                bin->left->type->is_integer() && bin->right->type->is_integer() &&
+                (is_bitprecise(bin->left->type) || is_bitprecise(bin->right->type)))
+                return evaluate_bitprecise_binary(*bin, *l, *r);
             switch (bin->op) {
             case bin_op::ADD:  return wrap_add(*l, *r);
             case bin_op::SUB:  return wrap_sub(*l, *r);
@@ -458,6 +533,12 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
     if (auto *u = dynamic_cast<const unary_expr *>(e)) {
         auto v = evaluate(u->operand.get());
         if (!v) return std::nullopt;
+        if (is_bitprecise(u->operand->type)) {
+            if (u->op == unary_op::NEG)
+                return apply_integer_cast(wrap_sub(0, *v), u->operand->type.get());
+            if (u->op == unary_op::BNOT)
+                return apply_integer_cast(~*v, u->operand->type.get());
+        }
         switch (u->op) {
         case unary_op::NEG:  return -*v;
         case unary_op::BNOT: return ~*v;
@@ -613,8 +694,13 @@ std::optional<int64_t> const_expr_evaluator::evaluate(const expr *e) {
     if (auto *tern = dynamic_cast<const conditional_expr *>(e)) {
         auto cond = evaluate(tern->cond.get());
         if (!cond) return std::nullopt;
-        return *cond ? evaluate(tern->then_expr.get())
-                     : evaluate(tern->else_expr.get());
+        auto value = *cond ? evaluate(tern->then_expr.get())
+                           : evaluate(tern->else_expr.get());
+        if (value && tern->type && tern->type->is_integer() &&
+            (is_bitprecise(tern->type) || is_bitprecise(tern->then_expr->type) ||
+             is_bitprecise(tern->else_expr->type)))
+            return apply_integer_cast(*value, tern->type.get());
+        return value;
     }
 
     return std::nullopt;

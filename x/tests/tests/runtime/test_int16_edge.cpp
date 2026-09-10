@@ -145,6 +145,41 @@ TEST(divuint_max_dividend_by_2)
 // smaller value drives the bit-test loop (fewer iterations on average).
 // ---------------------------------------------------------------------------
 
+TEST(mulint_every_word_with_carry_and_preserved_registers)
+{
+    for (uint32_t word = 0; word < 65536; ++word) {
+        // A permutation covers every value of each operand, including all
+        // high-bit patterns. Reverse the operands to exercise both orders.
+        const uint16_t other = static_cast<uint16_t>(word * 40503u + 173u);
+        for (unsigned reverse = 0; reverse < 2; ++reverse) {
+            xz80::cpu_state initial{};
+            initial.pc = rt_sym::mul16;
+            initial.sp = g_rt->push16(STACK_BASE, HALT_ADDR);
+            initial.hl = reverse ? other : word;
+            initial.de = reverse ? word : other;
+            initial.af = static_cast<uint16_t>(word ^ reverse);
+            initial.ix = 0x1357;
+            initial.iy = 0x2468;
+            initial.bc2 = 0x5aa5;
+            initial.de2 = 0xa55a;
+            initial.hl2 = 0x789a;
+            g_rt->cpu.restore(initial);
+            unsigned steps = 0;
+            while (!g_rt->cpu.halted() && ++steps < 500)
+                g_rt->cpu.step();
+            const auto result = g_rt->snap();
+            REQUIRE(g_rt->cpu.halted());
+            REQUIRE_EQ(result.de, static_cast<uint16_t>(word * other));
+            REQUIRE_EQ(result.sp, STACK_BASE);
+            REQUIRE_EQ(result.ix, initial.ix);
+            REQUIRE_EQ(result.iy, initial.iy);
+            REQUIRE_EQ(result.bc2, initial.bc2);
+            REQUIRE_EQ(result.de2, initial.de2);
+            REQUIRE_EQ(result.hl2, initial.hl2);
+        }
+    }
+}
+
 TEST(mulint_noswap_path)
 {
     // multiplicand (HL=3) <= multiplier (DE=9): no swap needed

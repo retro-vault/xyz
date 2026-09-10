@@ -231,7 +231,7 @@ int z80_gen::op_size(const operand &op) const {
         !op.is_global &&
         cur_fn_ &&
         op.type && op.type->size() > 1) {
-        auto same_symbol_slot = [&](const operand &cand) {
+        auto same_symbol_base = [&](const operand &cand) {
             return cand.kind == operand_kind::SYMBOL &&
                    cand.is_global == op.is_global &&
                    cand.is_param == op.is_param &&
@@ -239,23 +239,39 @@ int z80_gen::op_size(const operand &op) const {
                    cand.is_sfr == op.is_sfr &&
                    cand.is_func == op.is_func &&
                    cand.stack_offset == op.stack_offset &&
-                   cand.byte_offset == op.byte_offset &&
                    cand.name == op.name;
         };
 
         int stored_size = 0;
         auto consider_def = [&](const operand &cand) {
-            if (!same_symbol_slot(cand) || !cand.type)
+            if (!same_symbol_base(cand) || cand.byte_offset != op.byte_offset ||
+                !cand.type)
                 return;
             int sz = cand.type->size();
             if (sz <= 0)
                 return;
-            if (stored_size == 0 || sz < stored_size)
+            // A byte store through an alias changes only that byte of a
+            // wider object. Narrow the storage view only when every full
+            // definition is narrow, as after integer-width reduction.
+            if (sz > stored_size)
                 stored_size = sz;
         };
 
-        for (const auto &ic : cur_fn_->icodes)
-            consider_def(ic.result);
+        for (const auto &ic : cur_fn_->icodes) {
+            // Escaped objects can receive full-width writes through a call
+            // or pointer that has no direct SYMBOL result in this IR.
+            if (ic.op == icode_op::ADDRESS_OF && same_symbol_base(ic.left))
+                return op.type->size();
+            for (const operand *view : {&ic.result, &ic.left, &ic.right}) {
+                if (same_symbol_base(*view) &&
+                    (view->is_sfr || (view->type &&
+                     (view->type->is_volatile || view->type->is_atomic))))
+                    return op.type->size();
+            }
+            if (ic.op != icode_op::SET_VALUE_AT &&
+                ic.op != icode_op::BLOCK_FILL)
+                consider_def(ic.result);
+        }
 
         if (stored_size > 0 && stored_size < op.type->size())
             return stored_size;
@@ -597,6 +613,14 @@ void z80_gen::emit_load_rr(const reg_pair &r, const operand &op) {
             extend_loaded_byte(r.lo, r.hi);
             return;
         case operand_kind::SYMBOL:
+            if (op.is_sfr) {
+                // Integer promotion does not change the object's address
+                // space.  Use the same IN path as an ordinary byte read.
+                load_a(op);
+                emit_line("ld\t%c, a", r.lo);
+                extend_loaded_byte(r.lo, r.hi);
+                return;
+            }
             if (op.is_global && op.is_tls) {
                 int off = tls_offsets_.count(mangle(op.name)) ? tls_offsets_.at(mangle(op.name)) : 0;
                 emit_line("call\t__tls_base");

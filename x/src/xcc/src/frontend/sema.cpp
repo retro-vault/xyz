@@ -14,6 +14,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "frontend/sema.h"
+#include "frontend/conditional_type.h"
 #include "frontend/const_eval.h"
 #include <stdexcept>
 #include <string>
@@ -535,6 +536,10 @@ void sema::visit(conditional_expr &e) {
     if (e.cond)      e.cond->accept(*this);
     if (e.then_expr) e.then_expr->accept(*this);
     if (e.else_expr) e.else_expr->accept(*this);
+    // Child visits can resolve a function call or nested expression's type.
+    e.type = conditional_common_type(
+        e.then_expr ? e.then_expr->type : nullptr,
+        e.else_expr ? e.else_expr->type : nullptr);
 }
 
 void sema::visit(init_list_expr &e) {

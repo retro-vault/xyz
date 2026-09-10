@@ -159,6 +159,11 @@ private:
     bool z88dk_classic_runtime_ = false;
     bool size_shared_ix_helpers_ = false;
     bool compact_codegen_ = false;
+    // A bounded dry emission may establish that __mul16 is already required
+    // by this ordinary code section.  The census itself never uses the
+    // resulting constant-multiply substitution.
+    bool size_mul16_census_running_ = false;
+    bool size_mul16_helper_reused_ = false;
 
     std::unordered_map<int, int>       temp_slots_; // temp_id -> IX offset
     std::unordered_map<int, temp_home> temp_regs_;  // temp_id -> register home (if not stack)
@@ -281,8 +286,10 @@ private:
     //
     void emit_label(const std::string &name, bool global = false);
     std::string fresh_local_label(const char *prefix);
+    std::string arithmetic_local_label(const char *prefix);
 
     void emit_comment(const char *fmt, ...);
+    void emit_ordinary_ix_spans(const ir_function &fn);
     void invalidate_pair_cache();
     void invalidate_hl_cache();
     void invalidate_de_cache();
@@ -336,6 +343,18 @@ private:
     bool needs_frame_without_temps(const ir_function &fn) const;
     bool can_omit_frame_pointer(const ir_function &fn) const;
     bool try_finish_direct_hl_return(const operand &result);
+    struct word_product_slice {
+        operand left;
+        operand right;
+        operand result;
+        size_t last_index = 0;
+        unsigned shift = 0;
+        bool direct_return = false;
+        std::vector<int> unmaterialized_temps;
+    };
+    bool match_word_product_slice(const ir_function &fn, size_t start,
+                                  word_product_slice &slice) const;
+    bool try_emit_word_product_slice();
     bool structured_loop_fastpaths_enabled() const {
         return opt_settings_.level == opt_level::O2 ||
                opt_settings_.level == opt_level::Of ||
@@ -347,6 +366,8 @@ private:
                                  const operand &sym) const;
     const icode *find_temp_def_before(int temp_id, size_t before_idx) const;
     bool get_zero_extended_u8_source(const operand &op, operand &src) const;
+    bool can_rematerialize_byte_source(const operand &source,
+                                       const icode &capture) const;
     bool emit_rematerialize_hl(const operand &op);
     bool emit_byte_alu_direct_rhs(const char *mnemonic,
                                   const operand &rhs,
@@ -401,6 +422,7 @@ private:
     // ----- module-level emission -------------------------------------
 
     void plan_size_shared_ix_helpers(const ir_module &mod);
+    void plan_size_mul16_helper_reuse(const ir_module &mod);
 
     //
     // Emit .area _DATA declarations for all global variables.

@@ -76,7 +76,9 @@ extern char *strsep(char **stringp, const char *delim);
 extern char *strcasestr(const char *haystack, const char *needle);
 extern char *strsignal(int sig);
 
-#define memchr(s, c, n) _Generic((s), \
+/* The controlling expression is unevaluated. A nonnull void pointer
+ * combines with every object pointer while retaining its const qualifier. */
+#define memchr(s, c, n) _Generic((1 ? (s) : (void *)1), \
     const void *: (const void *)memchr((const void *)(s), (c), (n)), \
     default:     (void *)memchr((const void *)(s), (c), (n)))
 

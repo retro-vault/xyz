@@ -379,7 +379,29 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
             return false;
         const bool src_ok = ic.left.type->is_integer() || ic.left.type->is_ptr();
         const bool dst_ok = ic.result.type->is_integer() || ic.result.type->is_ptr();
-        return src_ok && dst_ok;
+        if (!src_ok || !dst_ok)
+            return false;
+        if (ic.result.type->kind == type_kind::BOOL)
+            return true;
+        const int src_bits = ic.left.type->kind == type_kind::BITINT
+            ? ic.left.type->bitint_width : ic.left.type->size() * 8;
+        const int dst_bits = ic.result.type->kind == type_kind::BITINT
+            ? ic.result.type->bitint_width : ic.result.type->size() * 8;
+        return dst_bits >= src_bits;
+    };
+
+    auto is_comparison_result_preserving_integer_cast = [](const icode &ic) {
+        // Comparison producers yield exactly 0 or 1. A narrowing cast preserves
+        // that value whenever the destination represents both, independently of
+        // whether the same cast preserves truth for an arbitrary source integer.
+        if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type ||
+            !ic.left.type->is_integer() || !ic.result.type->is_integer())
+            return false;
+        if (ic.result.type->kind == type_kind::BOOL)
+            return true;
+        const int bits = ic.result.type->kind == type_kind::BITINT
+            ? ic.result.type->bitint_width : ic.result.type->size() * 8;
+        return bits >= (ic.result.type->is_unsigned() ? 1 : 2);
     };
 
     auto temp_used_after = [&](size_t start_idx, int temp_id) {
@@ -391,7 +413,8 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
             if (uses(ic.left) || uses(ic.right))
                 return true;
             if (uses(ic.result)) {
-                if (ic.op == icode_op::SET_VALUE_AT)
+                if (ic.op == icode_op::SET_VALUE_AT ||
+                    ic.op == icode_op::BLOCK_FILL)
                     return true;
                 return false;
             }
@@ -455,8 +478,8 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
                        candidate.temp_id == op.temp_id;
             };
             if (uses(earlier.left) || uses(earlier.right) ||
-                (earlier.op == icode_op::SET_VALUE_AT &&
-                 uses(earlier.result))) {
+                ((earlier.op == icode_op::SET_VALUE_AT ||
+                  earlier.op == icode_op::BLOCK_FILL) && uses(earlier.result))) {
                 return;
             }
         }
@@ -497,6 +520,49 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
     for (size_t idx = 0; idx < fn.icodes.size(); ++idx) {
         const auto &ic = fn.icodes[idx];
 
+        // Widened word multiplication followed by a byte-lane extraction
+        // is emitted at the first cast as one region. Account for that same
+        // region before deciding whether the function needs an IX frame.
+        word_product_slice product_slice;
+        if (match_word_product_slice(fn, idx, product_slice)) {
+            for (int tid : product_slice.unmaterialized_temps)
+                no_spill_temps.insert(tid);
+            if (product_slice.direct_return)
+                no_spill_temps.insert(product_slice.result.temp_id);
+            bool incoming_registers_still_live = true;
+            for (size_t before = 0; before < idx; ++before) {
+                if (fn.icodes[before].op != icode_op::FUNCTION &&
+                    fn.icodes[before].op != icode_op::RECEIVE) {
+                    incoming_registers_still_live = false;
+                    break;
+                }
+            }
+            const auto used_once = [&](const operand &value) {
+                // An incoming register cannot remain its only home across
+                // an earlier call, branch or unrelated arithmetic. Those
+                // values still need the allocator's normal preservation.
+                if (!incoming_registers_still_live || !value.is_temp())
+                    return false;
+                int uses = 0;
+                for (const auto &scan : fn.icodes) {
+                    const auto same = [&](const operand &op) {
+                        return op.is_temp() && op.temp_id == value.temp_id;
+                    };
+                    uses += same(scan.left) + same(scan.right);
+                    if (scan.op == icode_op::SET_VALUE_AT ||
+                        scan.op == icode_op::BLOCK_FILL)
+                        uses += same(scan.result);
+                }
+                return uses == 1;
+            };
+            if (used_once(product_slice.left))
+                maybe_mark_dead_incoming_arg_temp(
+                    product_slice.left, idx, product_slice.last_index + 1);
+            if (used_once(product_slice.right))
+                maybe_mark_dead_incoming_arg_temp(
+                    product_slice.right, idx + 1, product_slice.last_index + 1);
+        }
+
         // GET_VALUE_AT(byte) -> truth-preserving CAST -> IFX is emitted as a
         // single load/test/branch sequence by the backend.  Neither virtual
         // result is materialized, so reserving frame homes for them alone can
@@ -529,6 +595,7 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
 
         if (ic.op == icode_op::BAND &&
             ic.result.is_temp() &&
+            op_size(ic.result) == 2 &&
             idx + 1 < fn.icodes.size()) {
             const auto &next = fn.icodes[idx + 1];
             if (next.op == icode_op::RETURN &&
@@ -619,7 +686,7 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
         if (next.op == icode_op::CAST &&
             same_call_result_operand(next.left, ic.result) &&
             next.result.is_temp() &&
-            is_truth_test_preserving_integer_cast(next) &&
+            is_comparison_result_preserving_integer_cast(next) &&
             idx + 2 < fn.icodes.size()) {
             const auto &ret_ic = fn.icodes[idx + 2];
             if (ret_ic.op == icode_op::RETURN &&
@@ -867,7 +934,8 @@ int z80_gen::compute_temp_frame_bytes(const ir_function &fn) {
                                       std::unordered_set<int> &defs) {
                 add_temp(uses, ic.left);
                 add_temp(uses, ic.right);
-                if (ic.op == icode_op::SET_VALUE_AT)
+                if (ic.op == icode_op::SET_VALUE_AT ||
+                    ic.op == icode_op::BLOCK_FILL)
                     add_temp(uses, ic.result);
                 else
                     add_temp(defs, ic.result);
@@ -1185,7 +1253,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // Step 1: compute live intervals.
     for (int idx = 0; idx < (int)fn.icodes.size(); ++idx) {
         const icode &ic = fn.icodes[idx];
-        if (ic.result.is_temp()) {
+        const bool result_is_use = ic.op == icode_op::SET_VALUE_AT ||
+                                   ic.op == icode_op::BLOCK_FILL;
+        if (ic.result.is_temp() && !result_is_use) {
             auto &iv = ivs[ic.result.temp_id];
             if (iv.first_def == -1) iv.first_def = idx;
             ++iv.definitions;
@@ -1216,7 +1286,12 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             ++iv.mentions;
             if (addr_of)
                 iv.has_addr_of = true;
-            if (op.byte_offset < 0 || op.byte_offset > 1)
+            // Every access to a volatile source object must reach memory.
+            // Record this over all mentions, since a converted operand may
+            // omit qualifiers even when another mention retains them. All
+            // symbol-home candidate families reject unsupported intervals.
+            if ((op.type && op.type->is_volatile) ||
+                op.byte_offset < 0 || op.byte_offset > 1)
                 iv.unsupported = true;
             if (ic.op == icode_op::RECEIVE &&
                 ic.result.kind == operand_kind::SYMBOL &&
@@ -1228,7 +1303,7 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         };
         mark_use(ic.left,  ic.op == icode_op::ADDRESS_OF);
         mark_use(ic.right);
-        if (ic.op == icode_op::SET_VALUE_AT)
+        if (result_is_use)
             mark_use(ic.result);
         mark_symbol(ic.result);
         mark_symbol(ic.left, ic.op == icode_op::ADDRESS_OF);
@@ -1295,7 +1370,8 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
         };
         add_use_bonus(fn.icodes[idx].left);
         add_use_bonus(fn.icodes[idx].right);
-        if (fn.icodes[idx].op == icode_op::SET_VALUE_AT)
+        if (fn.icodes[idx].op == icode_op::SET_VALUE_AT ||
+            fn.icodes[idx].op == icode_op::BLOCK_FILL)
             add_use_bonus(fn.icodes[idx].result);
 
         auto add_symbol_bonus = [&](const operand &op) {
@@ -1363,6 +1439,18 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 it->second.last_idx =
                     std::max(it->second.last_idx, backedge_idx);
             }
+
+            // A symbol can be live through a nested loop without being
+            // mentioned in its body. For example, an inner exit branches
+            // to an outer update that consumes the old value. The earlier
+            // exit extended that value through the inner header; carry it
+            // through this backedge too, including the rest of the body.
+            // Backedges are visited in increasing instruction order, so
+            // these interval extensions also cover nested transitive uses.
+            for (auto &[key, iv] : syms) {
+                if (iv.first_idx <= loop_begin && iv.last_idx >= loop_begin)
+                    iv.last_idx = std::max(iv.last_idx, backedge_idx);
+            }
         };
 
         for (int idx = 0; idx < n; ++idx) {
@@ -1390,9 +1478,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             std::unordered_set<int> used_in_loop;
             for (int k = loop_begin; k <= backedge_idx; ++k) {
                 const icode &cur = fn.icodes[k];
-                if (cur.result.is_temp())
+                const bool result_is_use = cur.op == icode_op::SET_VALUE_AT ||
+                                           cur.op == icode_op::BLOCK_FILL;
+                if (cur.result.is_temp() && !result_is_use)
                     defined_in_loop.insert(cur.result.temp_id);
-                if (cur.op == icode_op::SET_VALUE_AT && cur.result.is_temp())
+                if (result_is_use && cur.result.is_temp())
                     used_in_loop.insert(cur.result.temp_id);
                 if (cur.left.is_temp())
                     used_in_loop.insert(cur.left.temp_id);
@@ -2041,7 +2131,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 ic.result.temp_id == tid && ic.right.is_none() &&
                 (op_size(ic.left) == 1 || op_size(ic.left) == 2 ||
                  op_size(ic.left) == 4);
-            if (direct_load || direct_store) {
+            const bool direct_fill =
+                ic.op == icode_op::BLOCK_FILL && ic.result.is_temp() &&
+                ic.result.temp_id == tid && ic.result.byte_offset == 0 &&
+                !(ic.left.is_temp() && ic.left.temp_id == tid) &&
+                ic.right.kind == operand_kind::INT_CONST &&
+                ic.right.ival > 0 && ic.right.ival <= 65535;
+            if (direct_load || direct_store || direct_fill) {
                 ++hot_accesses;
                 continue;
             }
@@ -2327,7 +2423,9 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
     // A loop-carried word offset can use IY just as profitably as a pointer.
     // This covers lockstep byte offsets used to address arrays: the value is
     // initialized before the loop, advances by a small constant, and is only
-    // otherwise consumed to form a near pointer.  IY is not a backend scratch
+    // otherwise consumed to form a near pointer or compared without changing
+    // the offset.  This includes the endpoint guard after a redundant loop
+    // counter has been eliminated.  IY is not a backend scratch
     // register, so ordinary arithmetic is safe; reject real calls and opaque
     // code across the live window.
     for (const auto &[tid, iv] : ivs) {
@@ -2380,6 +2478,11 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 saw_update = true;
                 continue;
             }
+            if (is_compare_op(ic.op) && ic.left.type && ic.right.type &&
+                ic.left.type->is_integer() && ic.right.type->is_integer() &&
+                ic.left.type->size() <= 2 && ic.right.type->size() <= 2 &&
+                !(ic.result.is_temp() && ic.result.temp_id == tid))
+                continue;
             const bool address_use =
                 ic.op == icode_op::ADD && ic.result.is_temp() &&
                 ic.result.temp_id != tid && ic.result.type &&
@@ -6196,6 +6299,72 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
              900 - (iv.last_use - iv.first_def), false, tid});
     }
 
+    // A single-use numeric word still pays for two indexed stores and two
+    // reloads when its consumer follows an address calculation. Retaining
+    // the value in BC saves more than retaining the short-lived address in
+    // that pair. Admit only a straight-line sequence of word address/load
+    // operations whose concrete lowering preserves BC; the existing pair
+    // coloring keeps loop counters and other overlapping homes intact.
+    if (tuned_profile_enabled()) {
+        for (const auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+                iv.mentions != 1 || iv.first_def < 0 ||
+                iv.last_use <= iv.first_def + 1 ||
+                iv.last_use - iv.first_def > 8 ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+            const icode &def = fn.icodes[iv.first_def];
+            if (!def.result.type || !def.result.type->is_integer() ||
+                (def.op != icode_op::GET_VALUE_AT &&
+                 def.op != icode_op::MUL && def.op != icode_op::DIV &&
+                 def.op != icode_op::MOD && def.op != icode_op::CALL)) {
+                continue;
+            }
+            bool safe = true;
+            for (int k = iv.first_def + 1; k < iv.last_use; ++k) {
+                const icode &inside = fn.icodes[k];
+                const bool word_load =
+                    inside.op == icode_op::GET_VALUE_AT &&
+                    inside.result.type && inside.result.type->size() == 2 &&
+                    inside.left.type && !inside.left.type->is_far_ptr() &&
+                    inside.bit_width <= 0;
+                const bool address_value =
+                    inside.result.type && inside.result.type->is_ptr() &&
+                    (inside.op == icode_op::ADDRESS_OF ||
+                     inside.op == icode_op::ADD ||
+                     inside.op == icode_op::ASSIGN ||
+                     inside.op == icode_op::CAST);
+                if ((!word_load && !address_value) ||
+                    op_size(inside.left) > 2 || op_size(inside.right) > 2 ||
+                    clobbers_bc(inside) ||
+                    bc_backend_hazard(inside, direct_ix_frame) ||
+                    hl_load_may_clobber_bc(inside.left, 0) ||
+                    hl_load_may_clobber_bc(inside.right, 0)) {
+                    safe = false;
+                    break;
+                }
+            }
+            const icode &use = fn.icodes[iv.last_use];
+            const bool simple_consumer =
+                (use.op == icode_op::SET_VALUE_AT &&
+                 !hl_load_may_clobber_bc(use.result, 0)) ||
+                use.op == icode_op::ADD || use.op == icode_op::SUB ||
+                use.op == icode_op::MUL || use.op == icode_op::BAND ||
+                use.op == icode_op::BOR || use.op == icode_op::BXOR;
+            if (!safe || !simple_consumer || op_size(use.left) > 2 ||
+                op_size(use.right) > 2 || op_size(use.result) > 2 ||
+                !bc_temp_uses_are_backend_safe(tid, iv.first_def, iv.last_use)) {
+                continue;
+            }
+            bc_candidates.push_back(
+                {iv.first_def, iv.last_use,
+                 80 + hot_mentions(iv) * 3 - (iv.last_use - iv.first_def),
+                 false, tid});
+        }
+    }
+
     // Keep one ordinary loop-carried word local in BC when every operation in
     // its lifetime has a BC-preserving lowering.  The generic symbol windows
     // below reject labels and backedges; that is unnecessarily conservative
@@ -6247,6 +6416,107 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
              1700 + hot_symbol_mentions(iv) * 12 -
                  (iv.last_idx - iv.first_idx),
              true, key});
+    }
+
+    // A captured scalar can feed a chain of comparisons just as a loaded
+    // word can. Keep the capture itself in BC rather than rereading its
+    // source. Require an acyclic region containing only constant word
+    // comparisons, their branches, labels, and constant returns. Checking all
+    // incoming edges proves that no path can enter after the capture and
+    // that no later backedge can reuse a BC value outside its live window.
+    if (tuned_profile_enabled() && compare_ifx_fusion_enabled()) {
+        for (const auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+                iv.mentions < 2 || iv.first_def < 0 ||
+                iv.last_use <= iv.first_def ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+            const icode &def = fn.icodes[iv.first_def];
+            if (def.op != icode_op::ASSIGN || !def.result.type ||
+                !def.result.type->is_integer() || op_size(def.left) != 2) {
+                continue;
+            }
+            bool safe = true;
+            int comparisons = 0;
+            for (int k = iv.first_def + 1; k <= iv.last_use; ++k) {
+                const icode &ic = fn.icodes[k];
+                const bool left = ic.left.is_temp() && ic.left.temp_id == tid;
+                const bool right = ic.right.is_temp() && ic.right.temp_id == tid;
+                if (left || right) {
+                    const operand &other = left ? ic.right : ic.left;
+                    if ((ic.op != icode_op::EQ && ic.op != icode_op::NE) ||
+                        left == right || other.kind != operand_kind::INT_CONST ||
+                        op_size(ic.left) != 2 || op_size(ic.right) != 2 ||
+                        !ic.result.is_temp() || k + 1 >= n) {
+                        safe = false;
+                        break;
+                    }
+                    const auto cmp_iv = ivs.find(ic.result.temp_id);
+                    const icode &branch = fn.icodes[k + 1];
+                    if (cmp_iv == ivs.end() || cmp_iv->second.definitions != 1 ||
+                        cmp_iv->second.mentions != 1 ||
+                        branch.op != icode_op::IFX ||
+                        (branch.true_lbl.empty() && branch.false_lbl.empty()) ||
+                        !branch.left.is_temp() ||
+                        branch.left.temp_id != ic.result.temp_id) {
+                        safe = false;
+                        break;
+                    }
+                    ++comparisons;
+                    continue;
+                }
+                if (ic.op == icode_op::LABEL || ic.op == icode_op::GOTO)
+                    continue;
+                if (ic.op == icode_op::IFX && k > iv.first_def + 1) {
+                    const icode &cmp = fn.icodes[k - 1];
+                    if (is_compare_op(cmp.op) && cmp.result.is_temp() &&
+                        ic.left.is_temp() &&
+                        cmp.result.temp_id == ic.left.temp_id) {
+                        continue;
+                    }
+                }
+                if (ic.op == icode_op::RETURN &&
+                    ic.left.kind == operand_kind::INT_CONST &&
+                    op_size(ic.left) <= 2) {
+                    continue;
+                }
+                safe = false;
+                break;
+            }
+            if (!safe || comparisons < 2)
+                continue;
+            auto check_edge = [&](int from, const std::string &label) {
+                if (label.empty())
+                    return;
+                auto target = label_indices.find(label);
+                if (target == label_indices.end()) {
+                    safe = false;
+                    return;
+                }
+                const int to = target->second;
+                const bool enters = to > iv.first_def && to <= iv.last_use;
+                const bool inside = from > iv.first_def && from <= iv.last_use;
+                if ((enters && !inside) || (inside && to <= from))
+                    safe = false;
+            };
+            for (int k = 0; safe && k < n; ++k) {
+                const icode &ic = fn.icodes[k];
+                if (ic.op == icode_op::GOTO)
+                    check_edge(k, ic.label_name);
+                else if (ic.op == icode_op::IFX) {
+                    check_edge(k, ic.true_lbl);
+                    check_edge(k, ic.false_lbl);
+                }
+            }
+            if (!safe)
+                continue;
+            bc_candidates.push_back(
+                {iv.first_def, iv.last_use,
+                 1200 + hot_mentions(iv) * 12 - (iv.last_use - iv.first_def),
+                 false, tid});
+        }
     }
 
     // A loaded word used by comparisons and simple word ALU consumers can
@@ -7016,6 +7286,69 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
             else
                 temp_regs_[cand.id] = temp_home::main_bc;
             pair_windows.push_back({cand.start, cand.end});
+        }
+    }
+
+    // Word multiplication consumes both inputs before its helper returns the
+    // result. A BC input that dies here can therefore hand the pair to a
+    // single-use result without overlapping dynamically. Keep the handoff
+    // local: only the immediately following word consumer may use it, and
+    // every other physical BC/B/C window must remain disjoint.
+    if (tuned_profile_enabled()) {
+        for (const auto &[fd, tid] : order) {
+            const interval &iv = ivs[tid];
+            if (iv.size != 2 || iv.has_addr_of || iv.definitions != 1 ||
+                iv.mentions != 1 || iv.last_use != iv.first_def + 1 ||
+                temp_regs_.find(tid) != temp_regs_.end()) {
+                continue;
+            }
+            const icode &def = fn.icodes[iv.first_def];
+            if (def.op != icode_op::MUL || op_size(def.left) != 2 ||
+                op_size(def.right) != 2 || !def.result.type ||
+                !def.result.type->is_integer()) {
+                continue;
+            }
+            const interval *consumed = nullptr;
+            for (const operand *input : {&def.left, &def.right}) {
+                if (!input->is_temp())
+                    continue;
+                auto home = temp_regs_.find(input->temp_id);
+                auto input_iv = ivs.find(input->temp_id);
+                if (home != temp_regs_.end() &&
+                    home->second == temp_home::main_bc &&
+                    input_iv != ivs.end() &&
+                    input_iv->second.last_use == iv.first_def) {
+                    consumed = &input_iv->second;
+                    break;
+                }
+            }
+            if (!consumed ||
+                !bc_temp_uses_are_backend_safe(tid, iv.first_def, iv.last_use)) {
+                continue;
+            }
+            const icode &use = fn.icodes[iv.last_use];
+            if ((use.op != icode_op::ADD && use.op != icode_op::SUB &&
+                 use.op != icode_op::BAND && use.op != icode_op::BOR &&
+                 use.op != icode_op::BXOR) ||
+                op_size(use.left) > 2 || op_size(use.right) > 2 ||
+                op_size(use.result) > 2) {
+                continue;
+            }
+            bool overlaps = false;
+            for (const auto &[start, end] : pair_windows) {
+                if (start == consumed->first_def && end == consumed->last_use)
+                    continue;
+                if (!(iv.last_use < start || iv.first_def > end)) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (overlaps || overlaps_windows(b_windows, iv.first_def, iv.last_use) ||
+                overlaps_windows(c_windows, iv.first_def, iv.last_use)) {
+                continue;
+            }
+            temp_regs_[tid] = temp_home::main_bc;
+            pair_windows.push_back({iv.first_def, iv.last_use});
         }
     }
 
@@ -8187,8 +8520,13 @@ void z80_gen::regalloc_prepass(const ir_function &fn) {
                 continue;
             }
 
+            // RETURN consumes A before the ABI epilogue. Although it ends
+            // the CFG block, it does not invalidate an immediately produced
+            // byte. Keep that result in A instead of creating a late spill
+            // after a frameless prologue has already been emitted.
             if (one_step_a_enabled &&
-                !alt_a_use_hazard(use_ic) &&
+                (!alt_a_use_hazard(use_ic) ||
+                 use_ic.op == icode_op::RETURN) &&
                 iv.size == 1 && alt_a_def_safe(def_ic) &&
                 immediate_use_safe_in_a(use_ic, tid) &&
                 !overlaps_windows(main_a_windows, iv.first_def, iv.last_use)) {

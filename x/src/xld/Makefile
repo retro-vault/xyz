@@ -45,10 +45,14 @@ $(OUTPUT_DIR):
 $(BIN_OUTPUT):
 	mkdir -p $(BIN_OUTPUT)
 
-test: xbfd-lib $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
+test: all $(OUTPUT_DIR) $(TEST_MAIN) $(TEST_FILTER) $(HEADERS)
 	$(CXX) -o $(OUTPUT_DIR)/$(TEST_TARGET) $(TEST_MAIN) $(TEST_FILTER) \
 		$(CXXFLAGS) $(INCLUDE) -I$(TEST_DIR) $(XBFD_LIB)
 	$(OUTPUT_DIR)/$(TEST_TARGET)
+	XLD=$(abspath $(BIN_OUTPUT)/$(TARGET)) \
+		bash $(TEST_DIR)/reserved_holes_test.sh
+	XLD=$(abspath $(BIN_OUTPUT)/$(TARGET)) \
+		bash $(TEST_DIR)/branch_addend_test.sh
 
 clean:
 	rm -rf $(OUTPUT_DIR)

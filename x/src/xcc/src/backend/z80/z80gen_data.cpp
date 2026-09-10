@@ -5,7 +5,9 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/z80/z80gen.h"
+#include <algorithm>
 #include <iomanip>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -25,6 +27,38 @@ std::string banked_data_section_name(int bank) {
 int global_object_size(const ir_module::global_var &g) {
     int sz = g.type ? g.type->size() : 2;
     return sz > 0 ? sz : 2;
+}
+
+// Qualification belongs to the stored object, not a pointer's pointee.
+// Arrays inherit their elements' qualification, including nested arrays.
+bool has_volatile_or_atomic_subobject(const type_ptr &ty) {
+    if (!ty)
+        return false;
+    if (ty->is_volatile || ty->is_atomic)
+        return true;
+    if (ty->kind == type_kind::ARRAY)
+        return has_volatile_or_atomic_subobject(ty->base);
+    if (ty->kind == type_kind::STRUCT || ty->kind == type_kind::UNION) {
+        for (const auto &field : ty->fields) {
+            if (has_volatile_or_atomic_subobject(field.type))
+                return true;
+        }
+    }
+    return false;
+}
+
+bool is_readonly_global(const ir_module::global_var &g) {
+    if (g.is_tls || g.bank >= 0 || g.at_address >= 0 || g.sfr_port >= 0 ||
+        has_volatile_or_atomic_subobject(g.type)) {
+        return false;
+    }
+    for (type_ptr ty = g.type; ty; ty = ty->base) {
+        if (ty->is_const)
+            return true;
+        if (ty->kind != type_kind::ARRAY)
+            break;
+    }
+    return false;
 }
 
 bool has_all_zero_initializer(const ir_module::global_var &g) {
@@ -203,6 +237,7 @@ void z80_gen::emit_module(const ir_module &mod) {
     emit_external_data_refs(mod);
 
     plan_size_shared_ix_helpers(mod);
+    plan_size_mul16_helper_reuse(mod);
 
     for (auto &fn : mod.functions)
         emit_function(fn);
@@ -272,10 +307,29 @@ void z80_gen::emit_globals(const ir_module &mod) {
         asm_.symbol_assign(lbl, (long long)g.sfr_port);
     }
 
+    bool emitted_rodata = false;
+    for (const auto &g : mod.globals) {
+        if (!is_readonly_global(g))
+            continue;
+        if (!emitted_rodata)
+            asm_.section_rodata();
+
+        const std::string lbl = mangle(g.name);
+        if (!g.is_static) asm_.global_decl(lbl);
+        if (debug_) debug_->emit_global(g.name, g.type.get(), g.is_static);
+        asm_.symbol_type_object(lbl);
+        asm_.label(lbl, false);
+        emit_global_body(g, false);
+        asm_.symbol_size(lbl, std::to_string(global_object_size(g)));
+        emitted_rodata = true;
+    }
+    if (emitted_rodata)
+        asm_.raw("\n");
+
     int current_data_bank = -2;
     bool emitted_data = false;
     for (auto &g : mod.globals) {
-        if (g.is_tls) continue;
+        if (g.is_tls || is_readonly_global(g)) continue;
         if (g.at_address >= 0 || g.sfr_port >= 0) continue; // handled above
         if (g.bank < 0 && has_all_zero_initializer(g)) continue;
 
@@ -300,7 +354,7 @@ void z80_gen::emit_globals(const ir_module &mod) {
 
     bool emitted_bss = false;
     for (const auto &g : mod.globals) {
-        if (g.is_tls || g.bank >= 0 ||
+        if (g.is_tls || g.bank >= 0 || is_readonly_global(g) ||
             g.at_address >= 0 || g.sfr_port >= 0 ||
             !has_all_zero_initializer(g)) {
             continue;
@@ -394,23 +448,88 @@ void z80_gen::emit_strings(const ir_module &mod) {
         asm_.section_code();
     else
         asm_.section_rodata();
-    for (auto &s : mod.string_literals) {
-        const std::string lbl = mangle(s.name);
-        asm_.symbol_type_object(lbl);
-        asm_.label(lbl, false);
-        if (s.char_width <= 1) {
-            std::vector<int> bytes;
-            for (unsigned char c : s.str_init) bytes.push_back((int)c);
-            bytes.push_back(0);
-            asm_.db_list(bytes);
-        } else if (s.char_width == 2) {
-            for (unsigned char c : s.str_init) asm_.dw((int)c);
-            asm_.dw(0);
-        } else {
-            for (unsigned char c : s.str_init) asm_.dl((int)c);
-            asm_.dl(0);
+
+    const auto &strings = mod.string_literals;
+    std::vector<size_t> order(strings.size());
+    std::iota(order.begin(), order.end(), size_t{0});
+    if (tuned_profile_enabled() && !debug_) {
+        // Reversed lexical order places each suffix after its extensions.
+        // Thus a suffix can join the most recent root without a quadratic
+        // search through all literals. Compare complete strings, including
+        // embedded zeroes; C-string comparisons would merge unequal data.
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            const auto &lhs = strings[a];
+            const auto &rhs = strings[b];
+            if (lhs.char_width != rhs.char_width)
+                return lhs.char_width < rhs.char_width;
+            return std::lexicographical_compare(
+                rhs.str_init.rbegin(), rhs.str_init.rend(),
+                lhs.str_init.rbegin(), lhs.str_init.rend());
+        });
+    }
+
+    std::vector<std::vector<size_t>> pools;
+    for (size_t index : order) {
+        const auto &suffix = strings[index];
+        if (tuned_profile_enabled() && !debug_ && !pools.empty()) {
+            const auto &root = strings[pools.back().front()];
+            if (root.char_width == suffix.char_width &&
+                root.str_init.size() >= suffix.str_init.size() &&
+                root.str_init.compare(
+                    root.str_init.size() - suffix.str_init.size(),
+                    suffix.str_init.size(), suffix.str_init) == 0) {
+                pools.back().push_back(index);
+                continue;
+            }
         }
-        asm_.symbol_size(lbl, std::to_string(global_object_size(s)));
+        pools.push_back({index});
+    }
+    // Keep independent roots in source order. Only immutable anonymous
+    // literals share storage; named arrays remain separately emitted globals.
+    std::sort(pools.begin(), pools.end(), [](const auto &a, const auto &b) {
+        return a.front() < b.front();
+    });
+    for (const auto &pool : pools) {
+        const auto &root = strings[pool.front()];
+        size_t position = 0;
+        auto emit_until = [&](size_t end) {
+            if (position == end)
+                return;
+            // The lexer uses 8 to distinguish the u8 prefix, not to request
+            // eight-byte (or four-byte) code units. Its payload is UTF-8.
+            if (root.char_width <= 1 || root.char_width == 8) {
+                std::vector<int> bytes;
+                bytes.reserve(end - position);
+                for (; position < end; ++position)
+                    bytes.push_back(position == root.str_init.size() ? 0 :
+                        static_cast<unsigned char>(root.str_init[position]));
+                asm_.db_list(bytes);
+            } else {
+                for (; position < end; ++position) {
+                    const int value = position == root.str_init.size() ? 0 :
+                        static_cast<unsigned char>(root.str_init[position]);
+                    if (root.char_width == 2)
+                        asm_.dw(value);
+                    else
+                        asm_.dl(value);
+                }
+            }
+        };
+        for (size_t index : pool) {
+            const auto &suffix = strings[index];
+            emit_until(root.str_init.size() - suffix.str_init.size());
+            const std::string lbl = mangle(suffix.name);
+            asm_.symbol_type_object(lbl);
+            asm_.label(lbl, false);
+        }
+        emit_until(root.str_init.size() + 1);
+        for (size_t index : pool) {
+            const auto &s = strings[index];
+            const int width = s.char_width == 2 ? 2 :
+                              s.char_width == 4 ? 4 : 1;
+            asm_.symbol_size(mangle(s.name),
+                std::to_string((s.str_init.size() + 1) * width));
+        }
     }
     asm_.raw("\n");
 }

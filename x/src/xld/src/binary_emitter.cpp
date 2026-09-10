@@ -13,6 +13,7 @@
 
 #include <xld/binary_emitter.h>
 #include <xld/errors.h>
+#include <xld/holes.h>
 
 namespace xld {
 
@@ -77,34 +78,9 @@ namespace xld {
         uint16_t end,
         Callback&& callback)
     {
-        for (const auto& hole : ctx.holes) {
-            uint16_t hs = std::max<uint16_t>(hole.start, start);
-            uint16_t he = std::min<uint16_t>(hole.end, end);
-            if (hs > he)
-                continue;
-
-            uint32_t hole_size = static_cast<uint32_t>(he) - hs + 1u;
-            if (static_cast<uint32_t>(hs) >= static_cast<uint32_t>(start) + 2u
-                && hole_size <= 0x7Fu
-                && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
-                callback(
-                    static_cast<uint16_t>(hs - 2u),
-                    std::vector<uint8_t>{
-                        0x18,
-                        static_cast<uint8_t>(hole_size)
-                    });
-            } else if (static_cast<uint32_t>(hs)
-                           >= static_cast<uint32_t>(start) + 3u
-                       && static_cast<uint32_t>(he) + 1u <= 0xFFFFu) {
-                const uint16_t target = static_cast<uint16_t>(he + 1u);
-                callback(
-                    static_cast<uint16_t>(hs - 3u),
-                    std::vector<uint8_t>{
-                        0xC3,
-                        static_cast<uint8_t>(target & 0xFF),
-                        static_cast<uint8_t>((target >> 8) & 0xFF)
-                    });
-            }
+        for (const auto& guard :
+                 reserved_range_guards(ctx.holes, start, end)) {
+            callback(guard.address, guard.bytes);
         }
     }
 
@@ -130,14 +106,11 @@ namespace xld {
 
         // For protected ranges, keep the reserved bytes zero-filled and,
         // when it fits, place a JR or JP immediately before the hole.
-        for (const auto& hole : ctx.holes) {
-            uint16_t hs = std::max<uint16_t>(hole.start, start);
-            uint16_t he = std::min<uint16_t>(hole.end, end);
-            if (hs > he)
-                continue;
-
-            // Reserved bytes remain untouched in the final image.
-            for (uint32_t addr = hs; addr <= he; ++addr)
+        // Ranges separated by a gap too small for a guard were fused, so
+        // that gap is reserved as well.
+        for (const auto& range :
+                 clipped_reserved_ranges(ctx.holes, start, end)) {
+            for (uint32_t addr = range.start; addr <= range.end; ++addr)
                 image[addr - start] = 0x00;
         }
 
@@ -169,6 +142,14 @@ namespace xld {
             } else if (addr < ctx.code_buffer.size()) {
                 occupancy[addr - start] = 0x01;
             }
+        }
+
+        // Reserved bytes are not part of the load image.  build_linear_image
+        // zero fills them, so a sparse format must not write them at all.
+        for (const auto& range :
+                 clipped_reserved_ranges(ctx.holes, start, end)) {
+            for (uint32_t addr = range.start; addr <= range.end; ++addr)
+                occupancy[addr - start] = 0x00;
         }
 
         for_each_hole_guard(ctx, start, end,

@@ -131,6 +131,7 @@ struct char_literal_expr : expr {
 struct string_literal_expr : expr {
     std::string value;
     int char_width = 1; // 1=char, 2=char16_t, 4=char32_t, 8=char8_t
+    bool is_wchar = false; // L prefix, distinct from unsigned char16_t
     void accept(expr_visitor &v) override;
 };
 

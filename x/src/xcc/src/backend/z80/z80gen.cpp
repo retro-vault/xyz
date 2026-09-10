@@ -58,6 +58,27 @@ bool is_compare_op(icode_op op) {
     }
 }
 
+// A coalesced temporary can be consumed through a different integer view.
+// Facts about its defining value apply only to the same range/representation;
+// in particular, an unsigned byte load viewed as a signed byte may be negative.
+static bool same_numeric_value_view(const operand &use, const operand &definition) {
+    if (!use.type || !definition.type ||
+        use.byte_offset != definition.byte_offset ||
+        use.type->size() != definition.type->size() ||
+        use.type->is_unsigned() != definition.type->is_unsigned())
+        return false;
+    if (use.type->is_integer() && definition.type->is_integer()) {
+        const auto precision = [](const type_ptr &ty) {
+            if (ty->kind == type_kind::BOOL) return 1;
+            return ty->kind == type_kind::BITINT ? ty->bitint_width
+                                                : ty->size() * 8;
+        };
+        return precision(use.type) == precision(definition.type);
+    }
+    return use.type->is_ptr() && definition.type->is_ptr() &&
+           use.type->is_far_ptr() == definition.type->is_far_ptr();
+}
+
 bool operand_uses_temp(const operand &op, int temp_id) {
     return op.kind == operand_kind::TEMP && op.temp_id == temp_id;
 }
@@ -263,13 +284,13 @@ void z80_gen::set_pair_cache(const reg_pair &r, const std::string &key) {
     if (!pair_cache_enabled())
         return;
     pair_cache_state &cache = (r.lo == 'l') ? hl_cache_ : de_cache_;
-    cache.valid = true;
+    cache.valid = !key.empty();
     cache.key = key;
 }
 
 bool z80_gen::pair_cache_matches(const reg_pair &r,
                                  const std::string &key) const {
-    if (!pair_cache_enabled())
+    if (!pair_cache_enabled() || key.empty())
         return false;
     const pair_cache_state &cache = (r.lo == 'l') ? hl_cache_ : de_cache_;
     return cache.valid && cache.key == key;
@@ -293,6 +314,8 @@ bool z80_gen::a_cache_matches(const std::string &key) const {
 }
 
 std::string z80_gen::pair_load_cache_key(const operand &op) const {
+    if (op.is_sfr || (op.is_symbol() && op.type && op.type->is_volatile))
+        return {};
     std::ostringstream oss;
     oss << "pair:";
     switch (op.kind) {
@@ -323,8 +346,11 @@ std::string z80_gen::pair_load_cache_key(const operand &op) const {
 
 std::string z80_gen::pair_word_cache_key(const operand &op,
                                          int word_index) const {
+    const std::string base = pair_load_cache_key(op);
+    if (base.empty())
+        return {};
     std::ostringstream oss;
-    oss << pair_load_cache_key(op) << ":word=" << word_index;
+    oss << base << ":word=" << word_index;
     return oss.str();
 }
 
@@ -335,7 +361,9 @@ std::string z80_gen::pair_ix_addr_cache_key(int off) const {
 }
 
 std::string z80_gen::a_load_cache_key(const operand &op) const {
-    if (op.is_sfr)
+    // Volatile locals need the same fresh read as globals and SFRs.  A
+    // preceding store or read cannot substitute its retained register value.
+    if (op.is_sfr || (op.is_symbol() && op.type && op.type->is_volatile))
         return {};
 
     std::ostringstream oss;
@@ -1481,7 +1509,8 @@ bool z80_gen::temp_value_used_after(const ir_function &fn, size_t start_idx,
             return true;
         }
         if (operand_uses_temp(ic.result, temp_id)) {
-            if (ic.op == icode_op::SET_VALUE_AT)
+            if (ic.op == icode_op::SET_VALUE_AT ||
+                ic.op == icode_op::BLOCK_FILL)
                 return true;
             return false;
         }
@@ -1498,7 +1527,8 @@ bool z80_gen::symbol_value_used_after(const ir_function &fn, size_t start_idx,
             return true;
         }
         if (operand_matches_symbol_slot(ic.result, sym)) {
-            if (ic.op == icode_op::SET_VALUE_AT)
+            if (ic.op == icode_op::SET_VALUE_AT ||
+                ic.op == icode_op::BLOCK_FILL)
                 return true;
             return false;
         }
@@ -1513,11 +1543,167 @@ const icode *z80_gen::find_temp_def_before(int temp_id, size_t before_idx) const
         before_idx = cur_fn_->icodes.size();
     for (size_t i = before_idx; i > 0; --i) {
         const auto &ic = cur_fn_->icodes[i - 1];
+        // Memory operations consume their result-address operand; neither
+        // changes the pointer value whose reaching definition we need.
         if (ic.op != icode_op::SET_VALUE_AT &&
+            ic.op != icode_op::BLOCK_FILL &&
             ic.result.is_temp() && ic.result.temp_id == temp_id)
             return &ic;
     }
     return nullptr;
+}
+
+bool z80_gen::can_rematerialize_byte_source(const operand &source,
+                                            const icode &capture) const {
+    if (source.kind == operand_kind::INT_CONST)
+        return true;
+    if (!cur_fn_ || (!source.is_temp() && !source.is_symbol()))
+        return false;
+    if (!source.is_temp() &&
+        (source.is_sfr || (source.type &&
+         (source.type->is_volatile || source.type->is_atomic))))
+        return false;
+
+    const auto &code = cur_fn_->icodes;
+    const size_t captured_at = &capture - code.data();
+    if (captured_at >= code.size() || cur_ic_index_ >= code.size() ||
+        captured_at == cur_ic_index_)
+        return false;
+    // Reconstructing through a temporary adds a hidden use. Its original
+    // home must still be reserved by an ordinary IR use at this point.
+    if (source.is_temp()) {
+        if (!find_temp_def_before(source.temp_id, captured_at) ||
+            !temp_value_used_after(*cur_fn_, cur_ic_index_, source.temp_id))
+            return false;
+        const auto home = temp_regs_.find(source.temp_id);
+        if (home != temp_regs_.end() &&
+            (home->second == temp_home::main_a ||
+             home->second == temp_home::alt_a))
+            return false;
+    }
+
+    auto same_symbol_base = [&](const operand &other) {
+        return source.is_symbol() && other.is_symbol() &&
+            source.name == other.name &&
+            source.is_global == other.is_global &&
+            source.is_tls == other.is_tls &&
+            (source.is_global || source.stack_offset == other.stack_offset);
+    };
+    auto defines_value = [](const icode &ic) {
+        switch (ic.op) {
+        case icode_op::LABEL: case icode_op::GOTO: case icode_op::IFX:
+        case icode_op::FUNCTION: case icode_op::ENDFUNCTION:
+        case icode_op::RETURN: case icode_op::SEND:
+        case icode_op::SET_VALUE_AT: case icode_op::BLOCK_FILL:
+        case icode_op::INLINE_ASM:
+            return false;
+        default:
+            return !ic.result.is_none();
+        }
+    };
+    if (source.is_symbol()) {
+        // An unqualified view does not make an observable object ordinary.
+        for (const auto &ic : code) {
+            for (const operand *op : {&ic.left, &ic.right, &ic.result}) {
+                if (same_symbol_base(*op) &&
+                    (op->is_sfr || (op->type &&
+                     (op->type->is_volatile || op->type->is_atomic))))
+                    return false;
+            }
+        }
+    }
+    auto invalidates = [&](const icode &ic) {
+        if (ic.op == icode_op::INLINE_ASM)
+            return true;
+        if (defines_value(ic) &&
+            (same_symbol_base(ic.result) ||
+             (source.is_temp() && ic.result.is_temp() &&
+              source.temp_id == ic.result.temp_id)))
+            return true;
+        return source.is_symbol() &&
+            (ic.op == icode_op::SET_VALUE_AT || ic.op == icode_op::BLOCK_FILL ||
+             ic.op == icode_op::CALL || ic.op == icode_op::ALLOCA);
+    };
+    bool same_block = captured_at < cur_ic_index_;
+    for (size_t i = captured_at + 1; same_block && i <= cur_ic_index_; ++i) {
+        if (code[i].op == icode_op::LABEL || code[i].op == icode_op::GOTO ||
+            code[i].op == icode_op::IFX || code[i].op == icode_op::RETURN)
+            same_block = false;
+    }
+    if (same_block) {
+        for (size_t i = captured_at + 1; i < cur_ic_index_; ++i)
+            if (invalidates(code[i]))
+                return false;
+        return true;
+    }
+
+    // Prove dominance and preserved value on the actual CFG. Instruction
+    // edges keep this optional proof linear and avoid an iterative dominator
+    // matrix. Missing targets conservatively disable reconstruction.
+    std::unordered_map<std::string, size_t> labels;
+    for (size_t i = 0; i < code.size(); ++i)
+        if (code[i].op == icode_op::LABEL)
+            labels[code[i].label_name] = i;
+    std::vector<std::vector<size_t>> successors(code.size()), predecessors(code.size());
+    for (size_t i = 0; i < code.size(); ++i) {
+        auto add_target = [&](const std::string &name) {
+            if (name.empty()) {
+                if (i + 1 < code.size()) successors[i].push_back(i + 1);
+                return true;
+            }
+            auto target = labels.find(name);
+            if (target == labels.end()) return false;
+            successors[i].push_back(target->second);
+            return true;
+        };
+        if (code[i].op == icode_op::GOTO) {
+            if (!add_target(code[i].label_name)) return false;
+        } else if (code[i].op == icode_op::IFX) {
+            if (!add_target(code[i].true_lbl) || !add_target(code[i].false_lbl))
+                return false;
+        } else if (code[i].op != icode_op::RETURN &&
+                   code[i].op != icode_op::ENDFUNCTION && i + 1 < code.size()) {
+            successors[i].push_back(i + 1);
+        }
+        for (size_t next : successors[i]) predecessors[next].push_back(i);
+    }
+    std::vector<bool> visited(code.size(), false);
+    std::vector<size_t> pending{0};
+    bool reached_capture = false;
+    while (!pending.empty()) {
+        const size_t i = pending.back(); pending.pop_back();
+        if (i == cur_ic_index_) return false; // use reachable without capture
+        if (i == captured_at) { reached_capture = true; continue; }
+        if (visited[i]) continue;
+        visited[i] = true;
+        for (size_t next : successors[i]) pending.push_back(next);
+    }
+    if (!reached_capture) return false;
+
+    std::vector<bool> reaches_use(code.size(), false);
+    pending = {cur_ic_index_};
+    while (!pending.empty()) {
+        const size_t i = pending.back(); pending.pop_back();
+        // A repeated capture refreshes the value. Examine only paths since
+        // the latest capture, including backedges which bypass that capture.
+        if (i == captured_at || reaches_use[i]) continue;
+        reaches_use[i] = true;
+        for (size_t previous : predecessors[i]) pending.push_back(previous);
+    }
+    std::fill(visited.begin(), visited.end(), false);
+    pending = successors[captured_at];
+    while (!pending.empty()) {
+        const size_t i = pending.back(); pending.pop_back();
+        if (!reaches_use[i] || visited[i]) continue;
+        if (i == cur_ic_index_ && !std::any_of(
+                successors[i].begin(), successors[i].end(),
+                [&](size_t next) { return reaches_use[next]; }))
+            continue;
+        visited[i] = true;
+        if (invalidates(code[i])) return false;
+        for (size_t next : successors[i]) pending.push_back(next);
+    }
+    return true;
 }
 
 bool z80_gen::get_zero_extended_u8_source(const operand &op, operand &src) const {
@@ -1535,30 +1721,6 @@ bool z80_gen::get_zero_extended_u8_source(const operand &op, operand &src) const
         return defs == 1;
     };
 
-    auto stable_recursive_byte_source =
-        [&](const operand &candidate) {
-            if (!candidate.is_temp())
-                return true;
-            // Recursive widening rematerialization creates a use that is not
-            // visible to frame-slot liveness. Require an ordinary IR use at
-            // or beyond this point so the source's colored slot/register is
-            // still reserved; otherwise load the already-widened value.
-            if (!cur_fn_ ||
-                !temp_value_used_after(*cur_fn_, cur_ic_index_,
-                                       candidate.temp_id)) {
-                return false;
-            }
-            auto home_it = temp_regs_.find(candidate.temp_id);
-            if (home_it == temp_regs_.end())
-                return true;
-            switch (home_it->second) {
-            case temp_home::main_a:
-            case temp_home::alt_a:
-                return false;
-            default:
-                return true;
-            }
-        };
 
     if (op.kind == operand_kind::INT_CONST) {
         if (op.ival < 0 || op.ival > 0xff)
@@ -1578,7 +1740,7 @@ bool z80_gen::get_zero_extended_u8_source(const operand &op, operand &src) const
         return false;
 
     const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
-    if (!def)
+    if (!def || !same_numeric_value_view(op, def->result))
         return false;
 
     if (def->op == icode_op::RECEIVE &&
@@ -1612,13 +1774,13 @@ bool z80_gen::get_zero_extended_u8_source(const operand &op, operand &src) const
         !def->result.type->is_far_ptr() &&
         (def->left.type->is_integer() || def->left.type->is_ptr()) &&
         (def->result.type->is_integer() || def->result.type->is_ptr())) {
-        if (!stable_recursive_byte_source(def->left))
+        if (!can_rematerialize_byte_source(def->left, *def))
             return false;
         return get_zero_extended_u8_source(def->left, src);
     }
 
     if (def->op == icode_op::ASSIGN) {
-        if (!stable_recursive_byte_source(def->left))
+        if (!can_rematerialize_byte_source(def->left, *def))
             return false;
         return get_zero_extended_u8_source(def->left, src);
     }
@@ -1675,26 +1837,6 @@ bool z80_gen::get_sign_extended_i8_source(const operand &op, operand &src) const
                !type->is_unsigned();
     };
 
-    auto stable_recursive_byte_source =
-        [&](const operand &candidate) {
-            if (!candidate.is_temp())
-                return true;
-            if (!cur_fn_ ||
-                !temp_value_used_after(*cur_fn_, cur_ic_index_,
-                                       candidate.temp_id)) {
-                return false;
-            }
-            auto home_it = temp_regs_.find(candidate.temp_id);
-            if (home_it == temp_regs_.end())
-                return true;
-            switch (home_it->second) {
-            case temp_home::main_a:
-            case temp_home::alt_a:
-                return false;
-            default:
-                return true;
-            }
-        };
 
     if (op.kind == operand_kind::INT_CONST) {
         if (op.ival < -128 || op.ival > 127)
@@ -1714,7 +1856,7 @@ bool z80_gen::get_sign_extended_i8_source(const operand &op, operand &src) const
         return false;
 
     const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
-    if (!def)
+    if (!def || !same_numeric_value_view(op, def->result))
         return false;
 
     if ((def->op == icode_op::RECEIVE ||
@@ -1734,13 +1876,17 @@ bool z80_gen::get_sign_extended_i8_source(const operand &op, operand &src) const
         !def->result.type->is_far_ptr() &&
         (def->left.type->is_integer() || def->left.type->is_ptr()) &&
         (def->result.type->is_integer() || def->result.type->is_ptr())) {
-        if (!stable_recursive_byte_source(def->left))
+        if (def->result.type->kind == type_kind::BITINT &&
+            def->result.type->is_unsigned() &&
+            def->result.type->bitint_width < def->result.type->size() * 8)
+            return false;
+        if (!can_rematerialize_byte_source(def->left, *def))
             return false;
         return get_sign_extended_i8_source(def->left, src);
     }
 
     if (def->op == icode_op::ASSIGN) {
-        if (!stable_recursive_byte_source(def->left))
+        if (!can_rematerialize_byte_source(def->left, *def))
             return false;
         return get_sign_extended_i8_source(def->left, src);
     }
@@ -2041,7 +2187,8 @@ void z80_gen::maybe_materialize_incoming_arg_temp(
             const icode &ic = cur_fn_->icodes[i];
             used_later = operand_uses_temp(ic.left, op.temp_id) ||
                          operand_uses_temp(ic.right, op.temp_id) ||
-                         (ic.op == icode_op::SET_VALUE_AT &&
+                         ((ic.op == icode_op::SET_VALUE_AT ||
+                           ic.op == icode_op::BLOCK_FILL) &&
                           operand_uses_temp(ic.result, op.temp_id));
         }
     } else {
@@ -2526,7 +2673,16 @@ bool z80_gen::try_emit_inplace_pointer_update(const ir_function &fn,
     if (debug_)
         debug_->emit_location(step_ic.line);
     invalidate_pair_cache();
-    invalidate_a_cache();
+    // Every register-only update below preserves A.  Its cached value stays
+    // usable unless it denotes a byte of the pointer being redefined.
+    for (const operand *changed : {&step_ic.left, &step_ic.result}) {
+        operand byte = *changed;
+        for (int offset = 0; offset < 2; ++offset) {
+            byte.byte_offset = changed->byte_offset + offset;
+            if (a_cache_matches(a_load_cache_key(byte)))
+                invalidate_a_cache();
+        }
+    }
     const char *reg = home_it->second == temp_home::main_iy ? "iy" : "bc";
     const int64_t delta = step_ic.op == icode_op::ADD
                               ? step_ic.right.ival
@@ -3939,7 +4095,15 @@ bool is_truth_test_preserving_integer_cast_ic(const icode &ic) {
         return false;
     const bool src_ok = ic.left.type->is_integer() || ic.left.type->is_ptr();
     const bool dst_ok = ic.result.type->is_integer() || ic.result.type->is_ptr();
-    return src_ok && dst_ok;
+    if (!src_ok || !dst_ok)
+        return false;
+    if (ic.result.type->kind == type_kind::BOOL)
+        return true;
+    const int src_bits = ic.left.type->kind == type_kind::BITINT
+        ? ic.left.type->bitint_width : ic.left.type->size() * 8;
+    const int dst_bits = ic.result.type->kind == type_kind::BITINT
+        ? ic.result.type->bitint_width : ic.result.type->size() * 8;
+    return dst_bits >= src_bits;
 }
 
 bool mentions_temp_id(const icode &ic, int temp_id) {
@@ -3958,6 +4122,9 @@ bool z80_gen::is_flag_preserving_byte_truth_bridge(const icode &ic) const {
         return false;
     if (op_size(ic.left) != 1 || op_size(ic.result) != 2)
         return false;
+    if (ic.result.type->kind == type_kind::BITINT &&
+        ic.result.type->bitint_width < ic.result.type->size() * 8)
+        return false; // Precision normalization changes flags.
     if (!(ic.result.type->is_integer() || ic.result.type->is_ptr()))
         return false;
     if (ic.left.type->kind == type_kind::BOOL)
@@ -3973,6 +4140,7 @@ bool z80_gen::find_direct_byte_truth_ifx(const operand &value,
 
     operand tracked = value;
     std::vector<int> chain_temp_ids{value.temp_id};
+    bool followed_cast = false;
     for (size_t i = start_idx + 1; i < cur_fn_->icodes.size(); ++i) {
         const auto &next = cur_fn_->icodes[i];
         auto mentions_chain_temp = [&]() {
@@ -4001,6 +4169,12 @@ bool z80_gen::find_direct_byte_truth_ifx(const operand &value,
             next.left.temp_id == tracked.temp_id &&
             next.result.is_temp() &&
             is_truth_test_preserving_integer_cast_ic(next)) {
+            // The pending marker names only the final IFX operand. An
+            // intermediate cast has no matching handoff and must read a
+            // materialized input; keep longer chains on the normal path.
+            if (followed_cast)
+                return false;
+            followed_cast = true;
             tracked = next.result;
             chain_temp_ids.push_back(next.result.temp_id);
             continue;
@@ -5482,6 +5656,11 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
             return false;
     };
 
+    auto preserves_low_byte = [](const type_ptr &type) {
+        return type && type->is_integer() && type->kind != type_kind::BOOL &&
+            (type->kind != type_kind::BITINT || type->bitint_width >= 8);
+    };
+
     auto match_step = [&](size_t start, byte_step &step) {
         // The join may feed a byte store/copy, or copy propagation may feed
         // the selected temporary straight into RETURN.  The latter compact
@@ -5509,7 +5688,7 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
             mask = &band.left;
         }
         if (mask->kind != operand_kind::INT_CONST || mask->ival != 0x80 ||
-            !value.type || !value.type->is_integer() ||
+            !preserves_low_byte(value.type) ||
             !value.type->is_unsigned() || op_size(value) != 1) {
             return false;
         }
@@ -5535,6 +5714,7 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
                 return false;
             const icode &shift = fn.icodes[pos++];
             if (shift.op != icode_op::SHL || !shift.result.is_temp() ||
+                !preserves_low_byte(shift.result.type) ||
                 shift.right.kind != operand_kind::INT_CONST ||
                 shift.right.ival != 1 ||
                 !operands_equivalent(shift.left, shift_input)) {
@@ -5550,6 +5730,7 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
                 fn.icodes[pos].result.type &&
                 fn.icodes[pos].result.type->is_integer() &&
                 fn.icodes[pos].result.type->is_unsigned() &&
+                preserves_low_byte(fn.icodes[pos].result.type) &&
                 op_size(fn.icodes[pos].result) == 1) {
                 arm.value = fn.icodes[pos].result;
                 arm.temps.push_back(arm.value.temp_id);
@@ -5581,7 +5762,8 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
               polynomial->ival >= 0 && polynomial->ival <= 0xff) ||
              (polynomial->type && polynomial->type->is_integer() &&
               op_size(*polynomial) == 1 &&
-              !polynomial->type->is_volatile));
+              !polynomial->type->is_volatile &&
+              !polynomial->type->is_atomic && !polynomial->is_sfr));
         if (!byte_polynomial || pos >= fn.icodes.size()) {
             return false;
         }
@@ -5597,9 +5779,17 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
         arm_result false_arm;
         if (!parse_shift_arm(pos, false_arm) || pos >= fn.icodes.size())
             return false;
-        if (fn.icodes[pos].op == icode_op::ASSIGN) {
+        if (fn.icodes[pos].op == icode_op::ASSIGN ||
+            fn.icodes[pos].op == icode_op::CAST) {
             const icode &false_assign = fn.icodes[pos++];
-            if (!false_assign.result.is_temp() ||
+            // Conditional common-type conversion may widen the byte arm.
+            // The only consumer below projects the selected value to a byte,
+            // so both signed and unsigned integer conversions are equivalent
+            // provided neither conversion canonicalizes or discards low bits.
+            if ((false_assign.op == icode_op::CAST &&
+                 (!preserves_low_byte(false_assign.left.type) ||
+                  !preserves_low_byte(false_assign.result.type))) ||
+                !false_assign.result.is_temp() ||
                 false_assign.result.temp_id != true_xor.result.temp_id ||
                 !false_assign.left.is_temp() ||
                 !false_arm.value.is_temp() ||
@@ -5625,7 +5815,8 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
         if (consumer.op == icode_op::RETURN) {
             if (!consumer.left.is_temp() ||
                 consumer.left.temp_id != true_xor.result.temp_id ||
-                !consumer.left.type || op_size(consumer.left) != 1 ||
+                !preserves_low_byte(consumer.left.type) ||
+                op_size(consumer.left) != 1 ||
                 consumer.left.type->is_volatile) {
                 return false;
             }
@@ -5641,7 +5832,8 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
                 !store.left.is_temp() ||
                 store.left.temp_id != true_xor.result.temp_id ||
                 !store.right.is_none() ||
-                !store.result.type || op_size(store.result) != 1 ||
+                !preserves_low_byte(store.result.type) ||
+                op_size(store.result) != 1 ||
                 store.result.type->is_volatile) {
                 return false;
             }
@@ -5649,8 +5841,9 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
         }
 
         const size_t last = pos - 1;
-        if ((value.type && value.type->is_volatile) ||
-            (target.type && target.type->is_volatile) ||
+        if (value.is_sfr || target.is_sfr ||
+            (value.type && (value.type->is_volatile || value.type->is_atomic)) ||
+            (target.type && (target.type->is_volatile || target.type->is_atomic)) ||
             temp_value_used_after(fn, last + 1, band.result.temp_id) ||
             temp_value_used_after(fn,
                                   last + (terminal_return ? 2 : 1),
@@ -5820,7 +6013,8 @@ bool z80_gen::try_emit_msb_byte_shift_xor_diamonds(
     if (debug_)
         debug_->emit_location(fn.icodes[idx].line);
     invalidate_pair_cache();
-    invalidate_a_cache();
+    // Matching emitted no instructions.  Keep a preceding byte value in A;
+    // load_a already excludes volatile objects and SFRs from its cache.
     load_a(first.value);
     for (size_t step_index = 0; step_index < steps.size(); ++step_index) {
         const xor_source &source = xor_sources[step_index];

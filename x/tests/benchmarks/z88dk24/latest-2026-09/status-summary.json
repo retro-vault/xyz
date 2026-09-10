@@ -1,0 +1,16 @@
+{
+  "xcc_Os": {
+    "OK": 24,
+    "FAIL": 0,
+    "ERROR": 0,
+    "BUILD": 0,
+    "SKIP": 0
+  },
+  "xcc_Of": {
+    "OK": 24,
+    "FAIL": 0,
+    "ERROR": 0,
+    "BUILD": 0,
+    "SKIP": 0
+  }
+}

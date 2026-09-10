@@ -495,6 +495,8 @@ static int compile_source_to_text(const std::string &input_path,
     ir_gen irgen;
     irgen.set_native_printf_specialization(
         opts.runtime != runtime_profile::Z88DK_CLASSIC);
+    irgen.set_memory_builtins(effective_opt_settings.memory_builtins,
+                            opts.runtime == runtime_profile::Z88DK_CLASSIC);
     auto  mod = irgen.lower(*tu);
 
     if (!append_z88dk_format_options(opts, *mod)) {
@@ -507,6 +509,9 @@ static int compile_source_to_text(const std::string &input_path,
     if (effective_opt_settings.has_module_passes()) {
         ir_module_optimizer::optimize(*mod, effective_opt_settings);
     }
+    if (effective_opt_settings.memory_builtins)
+        lower_constant_memory_builtins(
+            *mod, effective_opt_settings.level == opt_level::Os);
     if (effective_opt_settings.has_function_ir_passes()) {
         for (auto &fn : mod->functions)
             ir_optimizer::optimize(fn, effective_opt_settings);

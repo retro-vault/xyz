@@ -1,0 +1,8 @@
+; ZX Spectrum 48K RAM program with resident esxDOS firmware.
+; Load above BASIC so its loader can finish. After entry, this non-returning
+; program may reclaim 5B00-7FFF; native disk calls need no resident workspace.
+ENTRY _entry
+FORMAT bin
+AREA _CODE = 8000
+AREA _STACK = F000
+RESERVE F000-FFFF

@@ -480,6 +480,7 @@ token lexer::lex_string_literal(int char_width) {
     token t = make(tk::STR_LIT, raw, loc);
     t.sval = decoded;
     t.ival = char_width;
+    t.char_width = char_width;
     return t;
 }
 
@@ -612,7 +613,12 @@ token lexer::lex_one() {
     if (c == 'u' && peek_char() == '8' && peek_char(2) == '"') {
         advance(); advance(); return lex_string_literal(8);
     }
-    if ((c == 'L') && peek_char() == '"') { advance(); return lex_string_literal(2); }
+    if ((c == 'L') && peek_char() == '"') {
+        advance();
+        token t = lex_string_literal(2);
+        t.is_wchar = true;
+        return t;
+    }
     if ((c == 'u') && peek_char() == '"') { advance(); return lex_string_literal(2); }
     if ((c == 'U') && peek_char() == '"') { advance(); return lex_string_literal(4); }
     // C23: u8'A' — UTF-8 character literal (char8_t, value is single ASCII code unit)
@@ -621,7 +627,10 @@ token lexer::lex_one() {
     }
     if ((c == 'L' || c == 'u' || c == 'U') && peek_char() == '\'') {
         int char_width = (c == 'U') ? 4 : 2;
-        advance(); return lex_char_literal(char_width);
+        advance();
+        token t = lex_char_literal(char_width);
+        t.is_wchar = c == 'L';
+        return t;
     }
 
     if (std::isalpha((unsigned char)c) || c == '_' || c == '$' ||

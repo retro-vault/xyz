@@ -239,6 +239,28 @@ bool is_float_type(const type_ptr &type) {
     return type && type->kind == type_kind::FLOAT;
 }
 
+// Assembly return liveness contract: A,B,C,D,E,H,L occupy bits 0..6;
+// alternate D,E,H,L occupy bits 7..10. Keep this in sync with the actual
+// return emitters below, including the common 64-bit register convention.
+unsigned return_register_mask(const ir_function &fn) {
+    const auto ret = fn.ret_type;
+    if (!ret)
+        return 2047;
+    if (ret->kind == type_kind::VOID || fn.is_noreturn)
+        return 0;
+    if (ret->kind == type_kind::STRUCT || ret->kind == type_kind::UNION)
+        return 2047; // Hidden-pointer and nonstandard aggregate ABIs vary.
+    const int size = ret->size();
+    const bool modern = effective_call_abi(fn.abi) == call_abi::SDCCCALL1;
+    if (size == 8)
+        return 2040; // DE, HL, DE', HL'.
+    if (size == 4 || (size == 3 && ret->is_far_ptr()))
+        return 120; // DE, HL (far pointers also specify zero in D).
+    if (size == 1)
+        return modern ? 1 : 64; // A or L.
+    return modern ? 24 : 96; // DE or HL.
+}
+
 bool sdcccall1_callee_cleans_stack(type_ptr ret_type,
                                    const std::vector<type_ptr> &arg_types,
                                    bool variadic) {
@@ -962,9 +984,9 @@ struct stack_linkage_convention : abi_convention {
         std::string lbl = g.mangle(fn.name);
         if (g.debug_) g.debug_->begin_function(fn, lbl);
         g.asm_.label(lbl, fn.is_global);
-        g.emit_comment("%s prologue: %s (locals=%d, temp_frame=%d, stack_params=%d)",
+        g.emit_comment("%s prologue: %s (locals=%d, temp_frame=%d, stack_params=%d, return_regs=%u)",
                        name(), fn.name.c_str(), fn.local_bytes, g.temp_frame_bytes_,
-                       fn.stack_param_bytes);
+                       fn.stack_param_bytes, return_register_mask(fn));
         std_prologue_frame(g, fn);
     }
 
@@ -1139,9 +1161,9 @@ struct cc_z88dk_fastcall final : abi_convention {
         std::string lbl = g.mangle(fn.name);
         if (g.debug_) g.debug_->begin_function(fn, lbl);
         g.asm_.label(lbl, fn.is_global);
-        g.emit_comment("z88dk fastcall prologue: %s (locals=%d, temp_frame=%d, stack_params=%d)",
+        g.emit_comment("z88dk fastcall prologue: %s (locals=%d, temp_frame=%d, stack_params=%d, return_regs=%u)",
                        fn.name.c_str(), fn.local_bytes, g.temp_frame_bytes_,
-                       fn.stack_param_bytes);
+                       fn.stack_param_bytes, return_register_mask(fn));
         if (g.can_omit_frame_pointer(fn)) {
             g.emit_comment("frameless function: no IX frame needed");
             g.clear_known_sp_ix_delta();
@@ -1262,9 +1284,9 @@ struct cc_sdcccall1 final : abi_convention {
         std::string lbl = g.mangle(fn.name);
         if (g.debug_) g.debug_->begin_function(fn, lbl);
         g.asm_.label(lbl, fn.is_global);
-        g.emit_comment("sdcccall(1) prologue: %s (locals=%d, temp_frame=%d, stack_params=%d)",
+        g.emit_comment("sdcccall(1) prologue: %s (locals=%d, temp_frame=%d, stack_params=%d, return_regs=%u)",
                        fn.name.c_str(), fn.local_bytes, g.temp_frame_bytes_,
-                       fn.stack_param_bytes);
+                       fn.stack_param_bytes, return_register_mask(fn));
         bool frameless = g.can_omit_frame_pointer(fn);
         if (frameless) {
             g.emit_comment("frameless function: no IX frame needed");
@@ -1750,7 +1772,8 @@ struct cc_critical final : abi_convention {
         std::string lbl = g.mangle(fn.name);
         if (g.debug_) g.debug_->begin_function(fn, lbl);
         g.asm_.label(lbl, fn.is_global);
-        g.emit_comment("critical prologue: %s", fn.name.c_str());
+        g.emit_comment("critical prologue: %s (return_regs=%u)",
+                       fn.name.c_str(), return_register_mask(fn));
         g.emit_line("di");
         std_prologue_frame(g, fn);
     }

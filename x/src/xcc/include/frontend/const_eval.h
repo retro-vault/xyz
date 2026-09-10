@@ -24,10 +24,14 @@
 namespace xcc {
 
 struct address_constant {
-    // Empty for an absolute numeric address; otherwise names the symbol that
-    // the linker must relocate before applying byte_offset.
+    // Names the symbol relocated before applying byte_offset. Empty for an
+    // absolute numeric address or a literal awaiting an IR symbol below.
     std::string symbol;
     int64_t     byte_offset = 0;
+    // The IR lowerer assigns anonymous literals a linkable symbol. Keep the
+    // AST object here so address arithmetic retains the literal and offset
+    // without making constant evaluation mutate the IR string pool.
+    const string_literal_expr *literal = nullptr;
 };
 
 class const_expr_evaluator {

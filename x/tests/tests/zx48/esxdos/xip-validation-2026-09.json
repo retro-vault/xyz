@@ -1,0 +1,1096 @@
+{
+  "recorded_date": "2026-09-10",
+  "scope": "True ROM execution for zx-esxdos-rom using 48 bytes of immutable RAM syscall gates; generic readonly-global section emission; no whole-application RAM copy.",
+  "status": "passed",
+  "hardware_reference": "https://baze.sk/3sc/divide/files/pgm_model.txt",
+  "firmware": {
+    "path": "build/zx-esxdos/research/089/ESXIDE.BIN",
+    "sha256": "771d5f21de48a3e9969adef7708ddb9a2834ba8729c5f702e5c0bb6067ebaa57"
+  },
+  "firmware_download": "https://www.esxdos.org/files/esxdos089.zip",
+  "firmware_version": "0.8.9",
+  "built_example_ROM": {
+    "path": "build/examples/zx-esxdos-rom/DISKIO.ROM",
+    "sha256": "1ebde9b724e4f53cae64aadd0dbd329ccfdcd581166e12985fde058c15be34b2"
+  },
+  "boot_requirements": [
+    "divIDE with matching esxDOS 0.8.9 SYS files",
+    "AutoBoot=0 in SYS/CONFIG/ESXDOS.CFG"
+  ],
+  "limitations": [
+    "Firmware NMI browser unsupported without a Sinclair-compatible ROM",
+    "Linker reserves divIDE automatic entry addresses; placement padding counts against 16 KiB ROM capacity",
+    "ROM paths use 256 bytes of stack scratch per path (up to 512 for rename); ROM writes use 128-byte stack chunks",
+    "Static RAM comparisons exclude stack and dynamically allocated heap"
+  ],
+  "cold_boot_configurations": 43,
+  "execution_contract": "Fresh ZEsarUX48K machines with real ESXIDE firmware and private CF copies; no Sinclair ROM, snapshots, CPU/register rewrites, RAM injection, or host filesystem handlers.",
+  "final_image_provenance": "All 43 successfully executed images rebuilt byte-identically using the final staged compiler, linker, target archive and scripts. Initial eight GNU link failures retained and replaced by explicit successful executions.",
+  "validation_scope": {
+    "canonical_compiler_variants": 18047,
+    "canonical_failures": 0,
+    "xcc_benchmark_executions": 444,
+    "external_passes": 544,
+    "external_existing_skips": 18,
+    "external_not_claimed": 8,
+    "latest_z88dk24": "-Os strictly smallest and -Of strictly fastest on 24/24 valid competitor envelopes; all size/cycle measurements unchanged.",
+    "linker_tests": "103 component tests, normal and ASan/UBSan, plus three executable regressions that fail with the old linker and pass with the final linker.",
+    "tool_provenance": "Canonical and benchmark records prove the final compiler with their recorded tools. The later narrow linker fix is covered separately by the full linker suite, executable boundary regressions, 43-image identity audit and four original ZX MCP modes."
+  },
+  "static_RAM_comparison": {
+    "definition": "Static RAM from 0x8000 to heap start, including all initialized data, BSS, and RAM syscall gates; excludes stack and allocated heap. Same unmodified diskio.c in both builds.",
+    "cases": [
+      {
+        "case": "diskio-O0-abi0",
+        "old_static_ram": 6285,
+        "new_static_ram": 100,
+        "gate_bytes": 48,
+        "old_main": 32789,
+        "new_main": 1379,
+        "old_map": "build/zx-esxdos/rom-native/prior-rom-rebuild/diskio-O0-abi0.map",
+        "new_map": "build/zx-esxdos/xip-production-validation/diskio-O0-abi0/program.map",
+        "saved_ram": 6185
+      },
+      {
+        "case": "diskio-O0-abi1",
+        "old_static_ram": 6285,
+        "new_static_ram": 100,
+        "gate_bytes": 48,
+        "old_main": 32789,
+        "new_main": 1379,
+        "old_map": "build/zx-esxdos/rom-native/prior-rom-rebuild/diskio-O0-abi1.map",
+        "new_map": "build/zx-esxdos/xip-production-validation/diskio-O0-abi1/program.map",
+        "saved_ram": 6185
+      },
+      {
+        "case": "diskio-Os-abi0",
+        "old_static_ram": 5330,
+        "new_static_ram": 100,
+        "gate_bytes": 48,
+        "old_main": 32994,
+        "new_main": 519,
+        "old_map": "build/zx-esxdos/rom-native/prior-rom-rebuild/diskio-Os-abi0.map",
+        "new_map": "build/zx-esxdos/xip-production-validation/diskio-Os-abi0/program.map",
+        "saved_ram": 5230
+      },
+      {
+        "case": "diskio-Os-abi1",
+        "old_static_ram": 5330,
+        "new_static_ram": 100,
+        "gate_bytes": 48,
+        "old_main": 32994,
+        "new_main": 519,
+        "old_map": "build/zx-esxdos/rom-native/prior-rom-rebuild/diskio-Os-abi1.map",
+        "new_map": "build/zx-esxdos/xip-production-validation/diskio-Os-abi1/program.map",
+        "saved_ram": 5230
+      },
+      {
+        "case": "diskio-Of-abi0",
+        "old_static_ram": 5415,
+        "new_static_ram": 100,
+        "gate_bytes": 48,
+        "old_main": 32789,
+        "new_main": 314,
+        "old_map": "build/zx-esxdos/rom-native/prior-rom-rebuild/diskio-Of-abi0.map",
+        "new_map": "build/zx-esxdos/xip-production-validation/diskio-Of-abi0/program.map",
+        "saved_ram": 5315
+      },
+      {
+        "case": "diskio-Of-abi1",
+        "old_static_ram": 5415,
+        "new_static_ram": 100,
+        "gate_bytes": 48,
+        "old_main": 32789,
+        "new_main": 314,
+        "old_map": "build/zx-esxdos/rom-native/prior-rom-rebuild/diskio-Of-abi1.map",
+        "new_map": "build/zx-esxdos/xip-production-validation/diskio-Of-abi1/program.map",
+        "saved_ram": 5315
+      }
+    ]
+  },
+  "cases": [
+    {
+      "model": "M",
+      "label": "smoke-sdcc-Os-abi0",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/smoke-sdcc-Os-abi0/report.json",
+        "sha256": "9df386527cd447bca01f99ede59e178310b4d094ad3137e37f6724f9c2abc143"
+      },
+      "rom_sha256": "b6ec1cd9f3602f1caa59e1a17d6b2ae4d9a990b7ca4a2f9af2fd7c7e83dfdd43",
+      "main_address": 1476,
+      "halt_address": 5927,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "smoke-sdcc-Os-abi1",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/smoke-sdcc-Os-abi1/report.json",
+        "sha256": "e47fce5460e832e2fb13c43306447c96b39d359f363f1fbfb948e922d0019463"
+      },
+      "rom_sha256": "b6ec1cd9f3602f1caa59e1a17d6b2ae4d9a990b7ca4a2f9af2fd7c7e83dfdd43",
+      "main_address": 1476,
+      "halt_address": 5927,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "smoke-sdcc-Of-abi0",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/smoke-sdcc-Of-abi0/report.json",
+        "sha256": "a929df77a7c4485b8962468a03e1bfbd449073457d6303a0a8f21949f52e8cb7"
+      },
+      "rom_sha256": "f81f4608b8e985633350751831c258c583c750819797b9595b93c4aac980f70f",
+      "main_address": 1389,
+      "halt_address": 6807,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "smoke-sdcc-Of-abi1",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/smoke-sdcc-Of-abi1/report.json",
+        "sha256": "332ef6dc68167be94da4be8717c9a1f9efc5e797ac35c5b8abbee3739f92a898"
+      },
+      "rom_sha256": "f81f4608b8e985633350751831c258c583c750819797b9595b93c4aac980f70f",
+      "main_address": 1389,
+      "halt_address": 6807,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "rom_io-sdcc-Os-abi0",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/rom_io-sdcc-Os-abi0/report.json",
+        "sha256": "167c819b05421abd3ee87bebf7b1308e22b27ee666e4f637ad50a11eda65f22e"
+      },
+      "rom_sha256": "7ccde7e8124183eaea21a31a578ae532c84c9f4642a94e89f9b1d7c502105681",
+      "main_address": 1394,
+      "halt_address": 4893,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "rom_io-sdcc-Os-abi1",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/rom_io-sdcc-Os-abi1/report.json",
+        "sha256": "5a0e166662c00aeb4e74b739f3282cbd9c4af9dafc271e30e1e051bf6dd23eaf"
+      },
+      "rom_sha256": "7ccde7e8124183eaea21a31a578ae532c84c9f4642a94e89f9b1d7c502105681",
+      "main_address": 1394,
+      "halt_address": 4893,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "rom_io-sdcc-Of-abi0",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/rom_io-sdcc-Of-abi0/report.json",
+        "sha256": "2c016adc10161007cca76ff1e38c63f70f3c2b294e99db3f93f2eb533fffe526"
+      },
+      "rom_sha256": "006289451a753d0e64102cd9fc72301d2c6dc5d977d86b7ac40b6e4d14d206d7",
+      "main_address": 1379,
+      "halt_address": 5367,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "rom_io-sdcc-Of-abi1",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/rom_io-sdcc-Of-abi1/report.json",
+        "sha256": "23f0b40ab3cb786429dcaca2bdb0b7e2af985723f5481757b2efea2ec0fcc135"
+      },
+      "rom_sha256": "006289451a753d0e64102cd9fc72301d2c6dc5d977d86b7ac40b6e4d14d206d7",
+      "main_address": 1379,
+      "halt_address": 5367,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "diskio-O0-abi0",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/diskio-O0-abi0/report.json",
+        "sha256": "6ba485e777f048352e77eaca2a6192e597e376677b24375f3681a373ad80ddb9"
+      },
+      "rom_sha256": "561bba1f2331f38795dda6b8a0dcddb2510b3db695ccb7eafd9591ffe41d05dd",
+      "main_address": 1379,
+      "halt_address": 2804,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "diskio-O0-abi1",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/diskio-O0-abi1/report.json",
+        "sha256": "30aa5f9c5060d881262f62c2bd7381b463a8033fdf1875e4e2a1282597f95f44"
+      },
+      "rom_sha256": "561bba1f2331f38795dda6b8a0dcddb2510b3db695ccb7eafd9591ffe41d05dd",
+      "main_address": 1379,
+      "halt_address": 2804,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "diskio-Os-abi0",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/diskio-Os-abi0/report.json",
+        "sha256": "b8122fc5ba5b2d3679e3a91af103af48e78a35eeb5f91040a5e3029ab791980b"
+      },
+      "rom_sha256": "1ebde9b724e4f53cae64aadd0dbd329ccfdcd581166e12985fde058c15be34b2",
+      "main_address": 519,
+      "halt_address": 1001,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "diskio-Os-abi1",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/diskio-Os-abi1/report.json",
+        "sha256": "2f18d91f2fb59eb9633a6a1616a0130872a1a8869d28ea8a90c36434787695af"
+      },
+      "rom_sha256": "1ebde9b724e4f53cae64aadd0dbd329ccfdcd581166e12985fde058c15be34b2",
+      "main_address": 519,
+      "halt_address": 1001,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "diskio-Of-abi0",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/diskio-Of-abi0/report.json",
+        "sha256": "f6693b6192ea157a445228fea534ed3919eadaf9aa5f26e8e6049e88cec82583"
+      },
+      "rom_sha256": "06b94f06b5a3dcf64dfcb488e766b034951291d8307906e146182c22aa899c5f",
+      "main_address": 314,
+      "halt_address": 881,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "diskio-Of-abi1",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/diskio-Of-abi1/report.json",
+        "sha256": "b4493f1c8d7dcde1d723f365bea5bd6afa7700e80d0d16cd7fee16202cca98b6"
+      },
+      "rom_sha256": "06b94f06b5a3dcf64dfcb488e766b034951291d8307906e146182c22aa899c5f",
+      "main_address": 314,
+      "halt_address": 881,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "startup-Os-abi1",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-production-validation/startup-Os-abi1/report.json",
+        "sha256": "f1904bcaf6f19fe03e8cab57b0dbe6edd0ffe0fdc68f4e5e2fd3a040ff213138"
+      },
+      "rom_sha256": "b2c3d647c88c9d96ccd82ceb6a07430e5a5caa1634f5675fe89bf4479fa27c4b",
+      "main_address": 314,
+      "halt_address": 704,
+      "gate_ram_address": 32772,
+      "copied_initial_bytes": 54
+    },
+    {
+      "model": "M",
+      "label": "smoke-gnu-Os-abi0",
+      "mode": "gnu",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/smoke-gnu-Os-abi0/report.json",
+        "sha256": "e1389573efd13df5b974c5c039b6111fec4db9ea0ccca03e41670de29128a3f3"
+      },
+      "rom_sha256": "f50c6d623ec331261d65bcb30def7d3b5c8f72cc4201bb9213df494793cdd99c",
+      "main_address": 4761,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "smoke-gnu-Os-abi1",
+      "mode": "gnu",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/smoke-gnu-Os-abi1/report.json",
+        "sha256": "85341238cb00675f1800a7cb9046848827e58899ddd503a819d7a331b5e339da"
+      },
+      "rom_sha256": "f50c6d623ec331261d65bcb30def7d3b5c8f72cc4201bb9213df494793cdd99c",
+      "main_address": 4761,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "smoke-gnu-Of-abi0",
+      "mode": "gnu",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/smoke-gnu-Of-abi0/report.json",
+        "sha256": "ca7dc3a7092070212da14091f1f41604ed7e86884f42af3bfe23fd35978b4290"
+      },
+      "rom_sha256": "59a5d8eff1c62052b31c5290c088742ae74e394161855be951c8c876a6c01041",
+      "main_address": 4674,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "smoke-gnu-Of-abi1",
+      "mode": "gnu",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/smoke-gnu-Of-abi1/report.json",
+        "sha256": "895248c5306788596d28fb6cfe5b65bc9a6ce41a05931000262213a2cc6a1a2a"
+      },
+      "rom_sha256": "59a5d8eff1c62052b31c5290c088742ae74e394161855be951c8c876a6c01041",
+      "main_address": 4674,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "M",
+      "label": "rom_io-gnu-Os-abi0",
+      "mode": "gnu",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/rom_io-gnu-Os-abi0/report.json",
+        "sha256": "647044d1add69b2707e95362ac5ab90429d3fc1d17d49b0349f1d90a821cad99"
+      },
+      "rom_sha256": "e8878d302dbfb567ab35ae60e3e536df7276a31da5ba2e34ff419c552e5999ec",
+      "main_address": 3270,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "rom_io-gnu-Os-abi1",
+      "mode": "gnu",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/rom_io-gnu-Os-abi1/report.json",
+        "sha256": "77b65efd8b912dc41b10e55321bc1fd4d7d65081fa69db5082882852876049f0"
+      },
+      "rom_sha256": "e8878d302dbfb567ab35ae60e3e536df7276a31da5ba2e34ff419c552e5999ec",
+      "main_address": 3270,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "rom_io-gnu-Of-abi0",
+      "mode": "gnu",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/rom_io-gnu-Of-abi0/report.json",
+        "sha256": "b44f086e937ea20d3cfbca372d8ccc030768086097badeb8994792a7b50cd4c4"
+      },
+      "rom_sha256": "023701a1d0282e3e1235258bd0ec6a1f759726bb727b401ad60eb247549278ff",
+      "main_address": 3255,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "M",
+      "label": "rom_io-gnu-Of-abi1",
+      "mode": "gnu",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-gnu-validation/rom_io-gnu-Of-abi1/report.json",
+        "sha256": "3c6af041ee8c3450f285e2a66aed6ef56ac48d16e9451742de0bf86d86131850"
+      },
+      "rom_sha256": "023701a1d0282e3e1235258bd0ec6a1f759726bb727b401ad60eb247549278ff",
+      "main_address": 3255,
+      "halt_address": 332,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "S",
+      "label": "S-Os-abi0-smoke",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Os-abi0-smoke/report.json",
+        "sha256": "41290c1fb4a5797132edf3541369b024514a074665ca981668da8addb21acfa5"
+      },
+      "rom_sha256": "b6ec1cd9f3602f1caa59e1a17d6b2ae4d9a990b7ca4a2f9af2fd7c7e83dfdd43",
+      "main_address": 1476,
+      "halt_address": 5927,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "S",
+      "label": "S-Os-abi1-smoke",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Os-abi1-smoke/report.json",
+        "sha256": "c7f9862790de8352af72745a9a7d583e0deb3c0349d614992aff437349a9b716"
+      },
+      "rom_sha256": "b6ec1cd9f3602f1caa59e1a17d6b2ae4d9a990b7ca4a2f9af2fd7c7e83dfdd43",
+      "main_address": 1476,
+      "halt_address": 5927,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "S",
+      "label": "S-Of-abi0-smoke",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Of-abi0-smoke/report.json",
+        "sha256": "09dcf514fe0a93ea0cf9f94db4b40286e101533ab99cd1a4c3877262174e7fb5"
+      },
+      "rom_sha256": "f81f4608b8e985633350751831c258c583c750819797b9595b93c4aac980f70f",
+      "main_address": 1389,
+      "halt_address": 6807,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "S",
+      "label": "S-Of-abi1-smoke",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Of-abi1-smoke/report.json",
+        "sha256": "0009f6cf245152580b4e598322a552f71c058906cf3250a1083288d4a140c30c"
+      },
+      "rom_sha256": "f81f4608b8e985633350751831c258c583c750819797b9595b93c4aac980f70f",
+      "main_address": 1389,
+      "halt_address": 6807,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "S",
+      "label": "S-Os-abi0-rom_io",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Os-abi0-rom_io/report.json",
+        "sha256": "4db4400958656b2ee3fde4d5ccd3a15690384e00f22f3d581329228e80f40165"
+      },
+      "rom_sha256": "7ccde7e8124183eaea21a31a578ae532c84c9f4642a94e89f9b1d7c502105681",
+      "main_address": 1394,
+      "halt_address": 4893,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "S",
+      "label": "S-Os-abi1-rom_io",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Os-abi1-rom_io/report.json",
+        "sha256": "9a7b66a0e79c9e69a5658f4610febb635291528bf14a61e8044a4fc96f5c2232"
+      },
+      "rom_sha256": "7ccde7e8124183eaea21a31a578ae532c84c9f4642a94e89f9b1d7c502105681",
+      "main_address": 1394,
+      "halt_address": 4893,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "S",
+      "label": "S-Of-abi0-rom_io",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Of-abi0-rom_io/report.json",
+        "sha256": "b6fa415cced89788c5c12a0baccf7f603c925bc03d33f1817f9a9edf54149304"
+      },
+      "rom_sha256": "006289451a753d0e64102cd9fc72301d2c6dc5d977d86b7ac40b6e4d14d206d7",
+      "main_address": 1379,
+      "halt_address": 5367,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "S",
+      "label": "S-Of-abi1-rom_io",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-Of-abi1-rom_io/report.json",
+        "sha256": "182b514cbc24ae76d3afcea64134c52891307be7d5f65230df691cdef4aa74d1"
+      },
+      "rom_sha256": "006289451a753d0e64102cd9fc72301d2c6dc5d977d86b7ac40b6e4d14d206d7",
+      "main_address": 1379,
+      "halt_address": 5367,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "S",
+      "label": "S-O0-abi0-diskio",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-O0-abi0-diskio/report.json",
+        "sha256": "df82229e416975093ff015760e8fa60c52432742157f887b07371d92deeb6fc3"
+      },
+      "rom_sha256": "561bba1f2331f38795dda6b8a0dcddb2510b3db695ccb7eafd9591ffe41d05dd",
+      "main_address": 1379,
+      "halt_address": 2804,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "S",
+      "label": "S-O0-abi1-diskio",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/S-O0-abi1-diskio/report.json",
+        "sha256": "1787f9dce753f2937c27d10bd1fedb58bc01a8debe9fb67d14001a543d350996"
+      },
+      "rom_sha256": "561bba1f2331f38795dda6b8a0dcddb2510b3db695ccb7eafd9591ffe41d05dd",
+      "main_address": 1379,
+      "halt_address": 2804,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "L",
+      "label": "L-Os-abi0-smoke",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Os-abi0-smoke/report.json",
+        "sha256": "cc0eb0e5ce1ba94f2e02b98d16aea6611782c0d4f3482d9d0b5f7fa694cd819e"
+      },
+      "rom_sha256": "b6ec1cd9f3602f1caa59e1a17d6b2ae4d9a990b7ca4a2f9af2fd7c7e83dfdd43",
+      "main_address": 1476,
+      "halt_address": 5927,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "L",
+      "label": "L-Os-abi1-smoke",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Os-abi1-smoke/report.json",
+        "sha256": "0930db0ffed9718190e86327c0f28fe28836b652b0a8810963c47501dcccb3ce"
+      },
+      "rom_sha256": "b6ec1cd9f3602f1caa59e1a17d6b2ae4d9a990b7ca4a2f9af2fd7c7e83dfdd43",
+      "main_address": 1476,
+      "halt_address": 5927,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "L",
+      "label": "L-Of-abi0-smoke",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Of-abi0-smoke/report.json",
+        "sha256": "fc59832e45377f95e25f9a78003b02aa7f7713b25bbde24fe5d785ae1baa7d96"
+      },
+      "rom_sha256": "f81f4608b8e985633350751831c258c583c750819797b9595b93c4aac980f70f",
+      "main_address": 1389,
+      "halt_address": 6807,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "L",
+      "label": "L-Of-abi1-smoke",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Of-abi1-smoke/report.json",
+        "sha256": "b63b25a7209c3fd565b2115446c0b682297de45aab2b496d7bd7835db2243eba"
+      },
+      "rom_sha256": "f81f4608b8e985633350751831c258c583c750819797b9595b93c4aac980f70f",
+      "main_address": 1389,
+      "halt_address": 6807,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 118
+    },
+    {
+      "model": "L",
+      "label": "L-Os-abi0-rom_io",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Os-abi0-rom_io/report.json",
+        "sha256": "6514726391d4d642fb397a82e6421f7d446c7d5372889eb50168f9b74a5df156"
+      },
+      "rom_sha256": "7ccde7e8124183eaea21a31a578ae532c84c9f4642a94e89f9b1d7c502105681",
+      "main_address": 1394,
+      "halt_address": 4893,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "L",
+      "label": "L-Os-abi1-rom_io",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Os-abi1-rom_io/report.json",
+        "sha256": "41f259d78359f73d4e0e50d69b27ecf78e2eba9e21b3b4c40173874867c6ba8b"
+      },
+      "rom_sha256": "7ccde7e8124183eaea21a31a578ae532c84c9f4642a94e89f9b1d7c502105681",
+      "main_address": 1394,
+      "halt_address": 4893,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "L",
+      "label": "L-Of-abi0-rom_io",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Of-abi0-rom_io/report.json",
+        "sha256": "0c994842a7f58b51d52f84cb6d0bf53edd56783cf17071ccc7e69b1f17258114"
+      },
+      "rom_sha256": "006289451a753d0e64102cd9fc72301d2c6dc5d977d86b7ac40b6e4d14d206d7",
+      "main_address": 1379,
+      "halt_address": 5367,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "L",
+      "label": "L-Of-abi1-rom_io",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-Of-abi1-rom_io/report.json",
+        "sha256": "2cd3e1ccd27a3e8e429d321ffeb29d6fae407aebc22ae86e9c65ab63c916040e"
+      },
+      "rom_sha256": "006289451a753d0e64102cd9fc72301d2c6dc5d977d86b7ac40b6e4d14d206d7",
+      "main_address": 1379,
+      "halt_address": 5367,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "L",
+      "label": "L-O0-abi0-diskio",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "abi": 0,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-O0-abi0-diskio/report.json",
+        "sha256": "782dfebc58b83f94a82c7fb4b9be065a929d488648eda496085df5adafed2a66"
+      },
+      "rom_sha256": "561bba1f2331f38795dda6b8a0dcddb2510b3db695ccb7eafd9591ffe41d05dd",
+      "main_address": 1379,
+      "halt_address": 2804,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    },
+    {
+      "model": "L",
+      "label": "L-O0-abi1-diskio",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "abi": 1,
+      "report": {
+        "path": "build/zx-esxdos/xip-model-validation/L-O0-abi1-diskio/report.json",
+        "sha256": "128d1071f7a7f3ee2f14a848d57756ddcbe93e238dfdd4a41cec89566cf27576"
+      },
+      "rom_sha256": "561bba1f2331f38795dda6b8a0dcddb2510b3db695ccb7eafd9591ffe41d05dd",
+      "main_address": 1379,
+      "halt_address": 2804,
+      "gate_ram_address": 32770,
+      "copied_initial_bytes": 50
+    }
+  ],
+  "sources": [
+    {
+      "path": "x/platforms/zx-esxdos-rom/_exit.s",
+      "sha256": "369b58008f2a03d4da246de6316686f6aeb89b6f7c91b62d29f2f74e52317a9c"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/close.s",
+      "sha256": "9bc7ce5c627bce34f3696612cdfab29b0d827403f9eeb88dae05b095dc0d30a0"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/console.s",
+      "sha256": "cc1b040d1e25fea208d480da298a95c34b266566d65580df7164414fad173021"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/crt0.s",
+      "sha256": "f33d6fc1c640df3f2137928016c96619ef575a22d3eb520413d78fd836049c95"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_calls.s",
+      "sha256": "c4c8dfabbf11721f664d888adec428db52eb9c3c8ada753166e612d0a6b2be31"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_core.s",
+      "sha256": "cfe9da0fc204ffa30c9b8a0c8de9b6ce1fff4c4446d2c9ef72539bb315060967"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_gates.s",
+      "sha256": "cf5c7863fec3f1fca9313af0861678bcc1ffc5c685fc091051e8dc56d38e5a31"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_paths.s",
+      "sha256": "649169e95f2938a35b0d82b85b4b8c1b88aae7ce7a49c65eec487ffd47242a84"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/fstat.s",
+      "sha256": "0d04720e9d68498222d1adec621de265106d95b19f840d938551e31b62bd66c7"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/fsync.s",
+      "sha256": "2ae11af0f679cfb2a79dcde44a2e33c6f638e9c2bc1d23c9b9e3dd0eab7cae32"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/gettimeofday.s",
+      "sha256": "2147b2713a7e411e07d2403bf2370fffaa54365643ea6ce93249131f6a6de1a9"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/heap_region.s",
+      "sha256": "5484017bc55e6d9e8167d25fc8d2ca2c459177646dde14282ac6365ba08006de"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/include/sys/esxdos.h",
+      "sha256": "787f89bb8ce43d071f15686b0614a819f29636fb5c7bfb8133dcb91abe969d9e"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/keyboard.s",
+      "sha256": "98649c495ca3d5e1786b41195c061c3c3e7818e3ac54d82b9cca7a6856ce9237"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/linker.ld",
+      "sha256": "e0a30edce586eb1a83077ba9d1ebf2165f2feb0e29e5056e7cd864479e8e7ae9"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/linker.lk",
+      "sha256": "9f4439fd106bb0eb37cb4a493f4a84fccff3f63e0931bc2e7b6e4eca34e8beac"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/lseek.s",
+      "sha256": "0c4490428f80bf2ed7ba8f0633bc1d563378971a1245c714921c908ae201000b"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/open.s",
+      "sha256": "b148ec0cc1edd415ab939ba447f62bbd5c1914d65808cc16b673cb0d872d7cea"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/putchar.s",
+      "sha256": "64056cd11dda1265bc32639bd552fc4231c39eaf9f9298dca36a14e10a497c15"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/read.s",
+      "sha256": "e833e8e3ef7e57e532f89953da1c71cb0139a0256e6e1edf5db0fb185921f1c5"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/settimeofday.s",
+      "sha256": "9b2f4db2872d2bf1039d3baeb0fff20f043f2a5866889e1d33a5dda637d46fc7"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/tamsyn.s",
+      "sha256": "dc088c42dfd42b32e10a24bafaee4298805cf399d9ad05f90a98b541cd8ca6db"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/write.s",
+      "sha256": "af6b60a59b71c6a46e787bd8e4025fc87a14bd48a447e3ac03995620f8f81d15"
+    },
+    {
+      "path": "x/src/xcc/src/backend/z80/z80gen_data.cpp",
+      "sha256": "1890d2fdbd8954cfaf18affe0ba4765e73152ee4ec3070e796518d11d78992f3"
+    },
+    {
+      "path": "x/src/xld/include/xld/area_placer.h",
+      "sha256": "78e65548a46282bc8b16734e948a36dd3fd9aa06abdc333414451944897c7a82"
+    },
+    {
+      "path": "x/src/xld/src/area_placer.cpp",
+      "sha256": "1cd7864e50ae3dfaad4d0a130a660f0f5f634786776c55ecad6cd28e8d3de308"
+    },
+    {
+      "path": "x/src/xld/src/linker.cpp",
+      "sha256": "f96127b22db6f3875eb7a6dca7ea14d7a76697bbc7af806d4fcff00b365370bc"
+    },
+    {
+      "path": "x/tests/tests/xld/test_linker.cpp",
+      "sha256": "b50866c1be36a07b305b8186fe31fafa41441ede4dd6fa15937306088515468b"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/abi_machine.cpp",
+      "sha256": "edea2a932aefeec322889a9391e6eee29a3409952ed0ab32c12a6c11146805c2"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/rom_io.c",
+      "sha256": "9e206cd177c9f363fee962b20e84675c8703e7889c478ff113567afaa3a03403"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/rom_xip_startup.c",
+      "sha256": "0756879203688e8365507002cd3237898317358ca87060b73650ed56011cdfe9"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/rom_xip_startup.s",
+      "sha256": "37c4a7a882fec375c4f409afa2dcfcc627fd0d66161aee31a0003dfb716f291f"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/run_abi.py",
+      "sha256": "c97fd55b2bf0f908d6ca682e4a9a47de51aa3548d8dcfc3dd4c2a85e4e1f624a"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/run_rom_firmware.py",
+      "sha256": "05628405c752bed8799c601ad01a032c8b45896cfabca71841b906a4cab86536"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/smoke.c",
+      "sha256": "7e6437f9d91db0882df1c389d50dbf6d09d41d17cabf80e57c96873133b87e0c"
+    }
+  ],
+  "tools": {
+    "x": {
+      "xcc": {
+        "path": "bin/x/bin/xcc",
+        "sha256": "d0ee4a556818a32791186644b461ad36bb633696d47d450162df2eb255741b49"
+      },
+      "xas": {
+        "path": "bin/x/bin/xas",
+        "sha256": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb"
+      },
+      "xld": {
+        "path": "bin/x/bin/xld",
+        "sha256": "77834e1d2b36c1393393aef93bb6c25b286e8afeeb0cff52847c4cdec4f17635"
+      },
+      "xar": {
+        "path": "bin/x/bin/xar",
+        "sha256": "55f31a50c14277354a5e248ce4f418fa01cefb5f84bdacefcaac0243ac7afbf0"
+      }
+    },
+    "x-s": {
+      "xcc": {
+        "path": "bin/x-s/bin/xcc",
+        "sha256": "87bb0b56ca904789d38874ce1bc44bd395b437271d41ef255133fcef1edc502c"
+      },
+      "xas": {
+        "path": "bin/x-s/bin/xas",
+        "sha256": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb"
+      },
+      "xld": {
+        "path": "bin/x-s/bin/xld",
+        "sha256": "77834e1d2b36c1393393aef93bb6c25b286e8afeeb0cff52847c4cdec4f17635"
+      },
+      "xar": {
+        "path": "bin/x-s/bin/xar",
+        "sha256": "55f31a50c14277354a5e248ce4f418fa01cefb5f84bdacefcaac0243ac7afbf0"
+      }
+    },
+    "x-m": {
+      "xcc": {
+        "path": "bin/x-m/bin/xcc",
+        "sha256": "d0ee4a556818a32791186644b461ad36bb633696d47d450162df2eb255741b49"
+      },
+      "xas": {
+        "path": "bin/x-m/bin/xas",
+        "sha256": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb"
+      },
+      "xld": {
+        "path": "bin/x-m/bin/xld",
+        "sha256": "77834e1d2b36c1393393aef93bb6c25b286e8afeeb0cff52847c4cdec4f17635"
+      },
+      "xar": {
+        "path": "bin/x-m/bin/xar",
+        "sha256": "55f31a50c14277354a5e248ce4f418fa01cefb5f84bdacefcaac0243ac7afbf0"
+      }
+    },
+    "x-l": {
+      "xcc": {
+        "path": "bin/x-l/bin/xcc",
+        "sha256": "d07072afbd2ab4e49f41cdaf761973d6995d80478fb6405af14eb072d0402143"
+      },
+      "xas": {
+        "path": "bin/x-l/bin/xas",
+        "sha256": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb"
+      },
+      "xld": {
+        "path": "bin/x-l/bin/xld",
+        "sha256": "77834e1d2b36c1393393aef93bb6c25b286e8afeeb0cff52847c4cdec4f17635"
+      },
+      "xar": {
+        "path": "bin/x-l/bin/xar",
+        "sha256": "55f31a50c14277354a5e248ce4f418fa01cefb5f84bdacefcaac0243ac7afbf0"
+      }
+    }
+  },
+  "evidence": {
+    "M_initial_execution": {
+      "path": "build/zx-esxdos/xip-production-validation/summary.json",
+      "sha256": "6966c2d6345347b0be58432c52f9dede385153ae8555ffb1f392ef46d547736d"
+    },
+    "S_L_execution": {
+      "path": "build/zx-esxdos/xip-model-validation/summary.json",
+      "sha256": "86c1f0a1a85d336002d80b26ff1e2e370a48ce87c46c33cdd137c16efa889af5"
+    },
+    "GNU_final_execution": {
+      "path": "build/zx-esxdos/xip-gnu-validation/summary.json",
+      "sha256": "a102650ad6c3c6ff225148b22f10bccaffb33031212111c89a35fbd6b51dc9ed"
+    },
+    "final_image_identity": {
+      "path": "build/zx-esxdos/xip-final-image-identity/summary.json",
+      "sha256": "a341f8e44b9d5672a0b5bf3c7ba1860110acd600312f8db8d5f2a40004ced188"
+    },
+    "hostile_ABI": {
+      "path": "build/zx-esxdos/xip-probe/final-abi-summary.json",
+      "sha256": "369b83821212603ef9b651508cf675c51695d540c137a6cc7d0e72c3ccd03a9c"
+    },
+    "readonly_global_tests": {
+      "path": "build/zx-esxdos/xip-backend/readonly-validation.json",
+      "sha256": "8ef32100d2a233402b0a197968a89bcacc95907662a0e14de7813b052c140161"
+    },
+    "compiler_staging": {
+      "path": "build/zx-esxdos/xip-backend/readonly-compiler-stage.json",
+      "sha256": "3ccb6779719b322528db23a0c8e139326235bca2896ad631fe83c4dc3f2a32d2"
+    },
+    "RAM_savings": {
+      "path": "build/zx-esxdos/xip-ram-usage/summary.json",
+      "sha256": "1f17a95ba63107b4b3635ad072d0a7ef303228dfc72a56c654bc89b8e06f7593"
+    },
+    "capacity_rejections": {
+      "path": "build/zx-esxdos/xip-capacity-validation/summary.json",
+      "sha256": "b8fba773a7a50ec4c663ad88d401c90075f2f89d220db90edc5e28a0a5bcf1f8"
+    },
+    "latest_benchmarks": {
+      "path": "build/zx-esxdos/xip-compiler-validation/latest-z88dk24/summary.json",
+      "sha256": "b630163f16b9ddf56c9a3b3c9b6afa76663407d77112356908ca10e498401934"
+    },
+    "canonical_compiler": {
+      "path": "build/zx-esxdos/xip-compiler-validation/summary.json",
+      "sha256": "27ed4074e7575f354f2920def9c5e5f20064ad3fe882326165c9c8a908744d67"
+    },
+    "remaining_benchmarks_and_external": {
+      "path": "build/zx-esxdos/xip-benchmark-validation/summary.json",
+      "sha256": "489fac44758c8e7c2792bb66a21b725d602bf51174409f9605d6508cf7ef4691"
+    },
+    "linker_component_tests": {
+      "path": "build/zx-esxdos/xip-load-guard-fix/build-test-summary.json",
+      "sha256": "8d9827874e5d39ced7891ae8bb32d65ec2577b51fa563880664a618380068ed5"
+    },
+    "linker_executable_regressions": {
+      "path": "build/zx-esxdos/xip-load-guard-fix/executable-regressions.json",
+      "sha256": "3ac552ac2ce2ceb1205a47e1f6573f824b96ba0e6ccf3593c00ba1ddd619febf"
+    },
+    "final_tool_staging": {
+      "path": "build/zx-esxdos/xip-final-validation/staging.json",
+      "sha256": "c9330d31de127b7ac551d5434aa631a7545f8e73170b35a18915747bb27b5907"
+    },
+    "final_original_ZX_modes": {
+      "path": "build/zx-esxdos/xip-plain-zx48-linker-final/summary.json",
+      "sha256": "19a4b19eedc8af8e71df84f39a095603e254c00cba7cfa9893d4a0d5b6233f8d"
+    },
+    "final_target_package_audit": {
+      "path": "build/zx-esxdos/xip-doc-package-audit/summary.json",
+      "sha256": "40b206807e9bfade5dde7898d3a688e8d0274922db69e2d83f98c4c7eff02a45"
+    },
+    "final_capacity_rejections": {
+      "path": "build/zx-esxdos/xip-final-image-identity/capacity-summary.json",
+      "sha256": "15d0e739d7d01740feec9814e6b4d12c69a36ec69b0dce74fc86f534c8f89607"
+    }
+  },
+  "historical_relocation_record": {
+    "path": "x/tests/tests/zx48/esxdos/rom-validation-2026-09.json",
+    "sha256": "3e7b704f31b7703659477ad6f678f821d780a93a7529b79cd4ed762a5c34b181"
+  },
+  "package_archive_rebuilt": false
+}

@@ -72,10 +72,11 @@ convert_case sdas2gnu-macro sdcc gnu gnu o keep \
 "$(printf '        .area _CODE\n        .macro PUSH2 r1, r2\n        push r1\n        push r2\n        .endm\n        PUSH2 bc, de\n        PUSH2 hl, ix\n')" \
 "$(printf '        .text\n        push bc\n        push de\n        push hl\n        push ix\n')"
 
-# gnu -> sdas, plain macro
+# gnu -> sdas, plain macro. Explicit .text has the same canonical _CODE
+# destination as the GNU shorthand directive.
 convert_case gnu2sdas-macro gnu sdcc sdcc rel keep \
 "$(printf '        .section .text\n        .macro PUSH2 r1 r2\n        push \\r1\n        push \\r2\n        .endm\n        PUSH2 bc, de\n        PUSH2 hl, ix\n')" \
-"$(printf '        .area text\n        push bc\n        push de\n        push hl\n        push ix\n')"
+"$(printf '        .area _CODE\n        push bc\n        push de\n        push hl\n        push ix\n')"
 
 # sdas -> gnu, .rept (terminator .endm -> .endr)
 convert_case sdas2gnu-rept sdcc gnu gnu o keep \
@@ -85,12 +86,12 @@ convert_case sdas2gnu-rept sdcc gnu gnu o keep \
 # gnu -> sdas, .irp (terminator .endr -> .endm; \\reg -> reg)
 convert_case gnu2sdas-irp gnu sdcc sdcc rel keep \
 "$(printf '        .section .text\n        .irp reg, bc, de, hl\n        push \\reg\n        .endr\n')" \
-"$(printf '        .area text\n        push bc\n        push de\n        push hl\n')"
+"$(printf '        .area _CODE\n        push bc\n        push de\n        push hl\n')"
 
 # gnu -> sdas, keyword + default args lowered to positional at the call site
 convert_case gnu2sdas-defaults gnu sdcc sdcc rel keep \
 "$(printf '        .section .text\n        .macro mov2 dst=a, src=b\n        ld \\dst, \\src\n        .endm\n        mov2\n        mov2 c\n        mov2 src=e\n')" \
-"$(printf '        .area text\n        ld a, b\n        ld c, b\n        ld a, e\n')"
+"$(printf '        .area _CODE\n        ld a, b\n        ld c, b\n        ld a, e\n')"
 
 # sdas -> gnu, data directive spelling in the body (.dw -> .word)
 convert_case sdas2gnu-data sdcc gnu gnu o keep \
@@ -104,7 +105,7 @@ convert_case sdas2gnu-data sdcc gnu gnu o keep \
 # gnu -> sdas, body uses \\@ (no sdas equivalent) -> expand
 convert_case gnu2sdas-at gnu sdcc sdcc rel expand \
 "$(printf '        .section .text\n        .macro skip\n        jr .L\\@\n        nop\n.L\\@:\n        .endm\n        skip\n        skip\n')" \
-"$(printf '        .area text\n        jr .L1\n        nop\n.L1:\n        jr .L2\n        nop\n.L2:\n')"
+"$(printf '        .area _CODE\n        jr .L1\n        nop\n.L1:\n        jr .L2\n        nop\n.L2:\n')"
 
 # sdas -> gnu, body uses ' concatenation (no gas equivalent) -> expand
 convert_case sdas2gnu-concat sdcc gnu gnu o expand \
@@ -114,7 +115,7 @@ convert_case sdas2gnu-concat sdcc gnu gnu o expand \
 # gnu -> sdas, macro with a nested .rept in its body -> expand (terminator clash)
 convert_case gnu2sdas-nested gnu sdcc sdcc rel expand \
 "$(printf '        .section .text\n        .macro fill n\n        .rept \\n\n        nop\n        .endr\n        .endm\n        fill 3\n')" \
-"$(printf '        .area text\n        nop\n        nop\n        nop\n')"
+"$(printf '        .area _CODE\n        nop\n        nop\n        nop\n')"
 
 echo "------------------------------------------"
 echo "macro conversion tests: $pass passed, $fail failed"

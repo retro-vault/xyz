@@ -23,17 +23,16 @@
         ;   DE = bounded string length
         ; clobbers: AF, BC, HL
 _strnlen::
+        ld      a,d
+        or      e
+        ret     z                       ; zero limit already in DE
         ld      b,d                      ; BC = remaining limit
         ld      c,e
-        ld      de,#0x0000
-strnlen_loop:
-        ld      a,b
-        or      c
-        ret     z
-        ld      a,(hl)
-        or      a
-        ret     z
-        inc     hl
-        dec     bc
-        inc     de
-        jr      strnlen_loop
+        xor     a
+        cpir                            ; consumes at most the specified limit
+        ret     nz                      ; exhausted: return original limit
+        ex      de,hl                   ; HL = original limit
+        sbc     hl,bc                   ; CPIR preserved XOR's clear carry
+        dec     hl                      ; exclude the terminating NUL
+        ex      de,hl
+        ret

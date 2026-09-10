@@ -56,7 +56,7 @@ struct grow_candidate {
     uint16_t delta_bytes = 0;
     uint8_t original_mode = 0;
     uint8_t original_opcode = 0;
-    uint8_t addend = 0;
+    int32_t source_addend = 0;
     uint8_t long_opcode = 0;
 };
 
@@ -202,10 +202,7 @@ static void gather_shrink_candidates(link_context &ctx,
                 if (!is_relaxable_jp(opcode, jr_opcode))
                     continue;
 
-                const uint16_t addend = static_cast<uint16_t>(
-                    tr.data[re.offset_in_t] |
-                    (static_cast<uint16_t>(tr.data[re.offset_in_t + 1]) << 8));
-                if (addend != 0)
+                if (re.addend != 0)
                     continue;
 
                 shrink_candidate cand;
@@ -300,7 +297,12 @@ static void gather_growth_candidates(link_context &ctx,
                 cand.delta_bytes = delta_bytes;
                 cand.original_mode = static_cast<uint8_t>(re.mode);
                 cand.original_opcode = opcode;
-                cand.addend = tr.data[re.offset_in_t];
+                // GNU biases a short-branch addend by -1 because it measures
+                // from the displacement byte. Undo that so the candidate
+                // always carries the addend as written in the source.
+                cand.source_addend = re.pc_rel_at_field
+                    ? re.addend + 1
+                    : re.addend;
                 cand.long_opcode = long_opcode;
                 areas[ait->second].candidates.push_back(
                     static_cast<int>(candidates.size()));
@@ -452,8 +454,8 @@ static bool grow_candidate_fits(const link_context &ctx,
     const uint32_t opcode_addr =
         area.placed_addr().value() + static_cast<uint32_t>(source_offset);
     const uint32_t pc_after = opcode_addr + 2u;
-    const int addend = static_cast<int>(static_cast<int8_t>(cand.addend));
-    const int disp = static_cast<int>(*target) + addend
+    const int disp = static_cast<int>(*target)
+                   + static_cast<int>(cand.source_addend)
                    - static_cast<int>(pc_after);
     return disp >= -128 && disp <= 127;
 }
@@ -492,8 +494,11 @@ static void remap_area_contents_after_shrink(
             const auto &cand = candidates[idx];
             auto &re = tr.relocs[cand.reloc_index];
             tr.data[cand.patch_in_t - 1] = cand.jr_opcode;
+            tr.data[cand.patch_in_t] = 0x00;
             tr.data.erase(tr.data.begin() + cand.patch_in_t + 1);
             re.mode = reloc_mode::pc_rel | reloc_mode::sym;
+            re.addend = 0;
+            re.pc_rel_at_field = false;
 
             for (auto &other : tr.relocs) {
                 if (other.offset_in_t > cand.patch_in_t + 1)
@@ -544,7 +549,7 @@ static void remap_area_contents_after_growth(
                 const std::vector<uint8_t> replacement = {
                     0x10, 0x02,       // djnz +2 -> jp below
                     0x18, 0x03,       // jr +3   -> skip jp when B reached zero
-                    0xC3, cand.addend, 0x00
+                    0xC3, 0x00, 0x00
                 };
                 tr.data.erase(tr.data.begin() + opcode_pos,
                               tr.data.begin() + opcode_pos + 2);
@@ -554,6 +559,7 @@ static void remap_area_contents_after_growth(
                 re.offset_in_t = static_cast<uint16_t>(cand.patch_in_t + 4);
             } else {
                 tr.data[cand.patch_in_t - 1] = cand.long_opcode;
+                tr.data[cand.patch_in_t] = 0x00;
                 tr.data.insert(tr.data.begin() + cand.insert_in_t, 0x00);
                 re.offset_in_t = cand.patch_in_t;
             }
@@ -563,6 +569,9 @@ static void remap_area_contents_after_growth(
                 (cand.sym_relative
                     ? static_cast<uint8_t>(reloc_mode::sym)
                     : static_cast<uint8_t>(reloc_mode::none)));
+            // The long form is absolute, so the PC bias no longer applies.
+            re.addend = cand.source_addend;
+            re.pc_rel_at_field = false;
 
             for (auto &other : tr.relocs) {
                 if (&other == &re)

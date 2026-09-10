@@ -1,0 +1,12 @@
+--- a/src/SDCCpeeph.c
++++ b/src/SDCCpeeph.c
+@@ -2686,6 +2686,9 @@
+     "label5IsUncondJumpTo6", label5IsUncondJumpTo6  // 4
+   },
+   {
++    "labelIsUncondJump", label5IsUncondJumpTo6      // z88dk rule-file compatibility
++  },
++  {
+     "deadMove", deadMove                            // 2
+   },
+   {

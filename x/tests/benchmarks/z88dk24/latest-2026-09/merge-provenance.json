@@ -1,0 +1,22 @@
+{
+  "competitor_csv": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/latest-z88dk24-competitors/results.csv",
+  "competitor_sha256": "de3e1038f37ff96636df867ca54573131c7613353faf93f394f57b23fed5780f",
+  "xcc_executable": "/home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc",
+  "xcc_sha256": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+  "source_manifest_sha256": "655760f4b113a041cc27cfec6c48357d8a2de6773633b1e1b24168b2105c325f",
+  "staged_manifest_sha256": "9e53863f6e24cd0b1541ec39d9d38950ddc9ea4383d6c5422b8ffcf64f711996",
+  "toolchain_receipt_sha256": "8940bee7932c8251476e4a5e9a3814cbf57ef834e53d65c1574f1e525cd4b40e",
+  "xcc_columns_remeasured": [
+    "xcc_Os",
+    "xcc_Of"
+  ],
+  "competitor_columns_reused_without_rerun": [
+    "sccz80",
+    "sdcc",
+    "sdcc_max",
+    "80cc_fp",
+    "80cc_sp",
+    "zsdcc",
+    "zsdcc_max"
+  ]
+}

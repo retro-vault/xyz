@@ -4,7 +4,7 @@
 // Implements type::size() and type::align() using the xcc Z80 target type
 // sizes, the is_integer / is_unsigned / is_arith / is_scalar predicates,
 // the to_string() diagnostic formatter, and the two arithmetic conversion
-// helpers (integer_promote, usual_arith_conv) following C11 §6.3.1.
+// helpers (integer_promote, usual_arith_conv) following C23 §6.3.1.
 //
 // MIT License (see: LICENSE)
 // Copyright (C) 2026 tomaz stih
@@ -463,6 +463,7 @@ std::string type::to_string() const {
     if (is_const)    os << "const ";
     if (is_volatile) os << "volatile ";
     if (is_restrict) os << "restrict ";
+    if (is_atomic)   os << "_Atomic ";
     switch (kind) {
     case type_kind::VOID:    os << "void"; break;
     case type_kind::BOOL:    os << "_Bool"; break;
@@ -500,13 +501,14 @@ std::string type::to_string() const {
     return os.str();
 }
 
-// ----- Integer rank (C11 §6.3.1.1) -----------------------------------
-static int int_rank(type_kind k) {
-    switch (k) {
+// ----- Integer rank and promotions (C23 §6.3.1.1) --------------------
+static int standard_int_rank(type_kind kind) {
+    switch (kind) {
     case type_kind::BOOL:    return 1;
     case type_kind::CHAR:
     case type_kind::SCHAR:
-    case type_kind::UCHAR:   return 2;
+    case type_kind::UCHAR:
+    case type_kind::CHAR8T:  return 2;
     case type_kind::SHORT:
     case type_kind::USHORT:  return 3;
     case type_kind::INT:
@@ -520,56 +522,83 @@ static int int_rank(type_kind k) {
     }
 }
 
-type_ptr integer_promote(type_ptr t) {
-    // If rank < int: promote to int (or uint if int can't hold all values)
-    if (t->is_integer() && int_rank(t->kind) < int_rank(type_kind::INT)) {
-        const int int_size = type::make_int()->size();
-        if ((!t->is_unsigned() && t->size() <= int_size) ||
-            (t->is_unsigned() && t->size() < int_size))
+static int integer_width(type_ptr value) {
+    if (value->kind == type_kind::BITINT)
+        return value->bitint_width;
+    return value->kind == type_kind::BOOL ? 1 : value->size() * 8;
+}
+
+static int integer_precision(type_ptr value) {
+    return integer_width(value) - (value->is_unsigned() ? 0 : 1);
+}
+
+static int compare_integer_rank(type_ptr a, type_ptr b) {
+    const bool a_bitint = a->kind == type_kind::BITINT;
+    const bool b_bitint = b->kind == type_kind::BITINT;
+    if (!a_bitint && !b_bitint)
+        return standard_int_rank(a->kind) - standard_int_rank(b->kind);
+    const int width_difference = integer_width(a) - integer_width(b);
+    if (width_difference != 0)
+        return width_difference;
+    // Standard types outrank bit-precise types of equal width. Signed and
+    // unsigned counterparts have equal rank, including unsigned _BitInt(1).
+    return static_cast<int>(b_bitint) - static_cast<int>(a_bitint);
+}
+
+static type_ptr unsigned_integer_counterpart(type_ptr value) {
+    switch (value->kind) {
+    case type_kind::CHAR:
+    case type_kind::SCHAR:  return type::make_uchar();
+    case type_kind::SHORT:  return type::make_ushort();
+    case type_kind::ENUM:
+    case type_kind::INT:    return type::make_uint();
+    case type_kind::LONG:   return type::make_ulong();
+    case type_kind::LLONG:  return type::make_ullong();
+    case type_kind::BITINT: return type::make_bitint(value->bitint_width, true);
+    default:               return value;
+    }
+}
+
+type_ptr integer_promote(type_ptr value) {
+    // C23 exempts bit-precise integers from integer promotions, including
+    // widths below int and widths occupying the same storage as int.
+    if (!value->is_integer() || value->kind == type_kind::BITINT)
+        return value;
+    // This target represents enumerations using signed int.
+    if (value->kind == type_kind::ENUM)
+        return type::make_int();
+    if (standard_int_rank(value->kind) < standard_int_rank(type_kind::INT)) {
+        if (integer_precision(value) <= integer_precision(type::make_int()))
             return type::make_int();
         return type::make_uint();
     }
-    return t;
+    return value;
 }
 
 type_ptr usual_arith_conv(type_ptr a, type_ptr b) {
-    // Both must be arithmetic
-    a = integer_promote(a);
-    b = integer_promote(b);
-
-    // Same kind -> done
-    if (a->kind == b->kind) return a;
-
-    // complex takes precedence over float/double
+    // Floating domains take precedence before integer promotions (§6.3.1.8).
     if (a->kind == type_kind::COMPLEX || b->kind == type_kind::COMPLEX)
         return type::make_complex();
-    // float/double take precedence
     if (a->kind == type_kind::DOUBLE || b->kind == type_kind::DOUBLE)
         return type::make_double();
-    if (a->kind == type_kind::FLOAT  || b->kind == type_kind::FLOAT)
+    if (a->kind == type_kind::FLOAT || b->kind == type_kind::FLOAT)
         return type::make_float();
 
-    // Both integer: higher rank wins
-    int ra = int_rank(a->kind), rb = int_rank(b->kind);
-    if (ra == rb) {
-        // same rank: unsigned wins
-        return a->is_unsigned() ? a : b;
-    }
-    type_ptr higher = (ra > rb) ? a : b;
-    type_ptr lower  = (ra > rb) ? b : a;
+    a = integer_promote(a);
+    b = integer_promote(b);
+    const int rank = compare_integer_rank(a, b);
+    if (a->is_unsigned() == b->is_unsigned())
+        return rank >= 0 ? a : b;
 
-    if (higher->is_unsigned()) return higher;
-
-    // Signed higher: if it can represent all values of lower, use signed
-    if (higher->size() > lower->size()) return higher;
-
-    // Otherwise unsigned version of higher rank
-    switch (higher->kind) {
-    case type_kind::INT:   return type::make_uint();
-    case type_kind::LONG:  return type::make_ulong();
-    case type_kind::LLONG: return type::make_ullong();
-    default:              return higher;
-    }
+    type_ptr unsigned_type = a->is_unsigned() ? a : b;
+    type_ptr signed_type = a->is_unsigned() ? b : a;
+    if (compare_integer_rank(unsigned_type, signed_type) >= 0)
+        return unsigned_type;
+    // Precision counts value bits, not rounded storage bytes: signed
+    // _BitInt(17) represents every unsigned16 value, unlike signed int16.
+    if (integer_precision(signed_type) >= integer_precision(unsigned_type))
+        return signed_type;
+    return unsigned_integer_counterpart(signed_type);
 }
 
 } // namespace xcc

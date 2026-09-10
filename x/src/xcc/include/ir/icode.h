@@ -267,6 +267,12 @@ struct icode {
     bool     callee_noreturn = false;        // CALL: direct callee cannot return
     bool     result_via_sret = false;         // CALL: hidden stack pointer owns aggregate result
     bool     internal_packed_arg = false;    // SEND/CALL: private ABI fills an otherwise unused register
+    // CALL: an externally declared standard memset contract, verified from
+    // its prototype and runtime. -1 disables substitution; 0 is the normal
+    // destination argument, 2 the z88dk classic __memset bridge's reversed
+    // signature. Retained through inlining so constant counts exposed by
+    // standard header wrappers can use the same generic fill lowering.
+    int      memory_fill_destination_arg = -1;
 
     // SET_VALUE_AT may retain the source-language bit-field insertion rather
     // than expanding it into a shift/mask/load/mask/or/store DAG.  A negative

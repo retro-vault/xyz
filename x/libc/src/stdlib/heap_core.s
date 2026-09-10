@@ -8,7 +8,7 @@
         ;; __libc_default_heap, which is created lazily over the region the
         ;; platform reports through heap_region (no sbrk).
         ;;
-        ;; Block header (8 bytes, 2-byte aligned):
+        ;; Block header (8 bytes; default heap is 2-byte aligned):
         ;;   struct block { size_t size; u16 free; struct block *next; heap *h; }
         ;; The trailing heap back-pointer lets free()/realloc() recover the
         ;; owning heap from a bare payload pointer.
@@ -67,11 +67,13 @@ __alloc_core:
         ld      a,h
         or      l
         jr      nz,alloc_have_size
+alloc_fail:
         ld      de,#0
         jr      alloc_return
 
 alloc_have_size:
         call    __libc_align_size
+        jr      z,alloc_fail
         ld      b,h
         ld      c,l                     ; BC = aligned payload size
         call    __libc_heap_head_get    ; HL = first block
@@ -123,13 +125,16 @@ __libc_heap_setup:
         or      a
         ret     nz
         call    _heap_region      ; HL = base, DE = limit
+        ; malloc promises two-byte alignment even for an odd platform base.
+        ; A wrapped base becomes zero and heap_init_arena rejects it.
+        inc     hl
+        res     0,l
         ld      b,d
         ld      c,e                     ; BC = limit
         ex      de,hl                   ; DE = base
         ld      hl,#__libc_default_heap
         push    bc
         call    _heap_init_arena       ; HL = heap, DE = base, BC = limit
-        pop     bc
         ld      a,#1
         ld      (__libc_heap_ready),a
         ret

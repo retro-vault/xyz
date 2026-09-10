@@ -1,0 +1,35 @@
+corpus_commit=460ec34769f01324ca49b66145f09babdbe507fc
+corpus_sha256=f74f02cd8852d5b0c9bb7241d0a9b0f384ccfe887105b0412a5064b4d3bdd2b4
+z88dk_current_commit=fce9a75f105337c5bcd4e054838a3636d2e1a851
+z88dk_80cc_commit=e3aeca0dc09b7b9bbf968b70fc8c29c1f1da208a
+sdcc_current_commit=8650e2b21cdbe555c9f1119c498ff59f21693b25
+xcc_lock_commit=d37fd6b3782cda9d66cff2cbdb1e21d29b6b05cc
+x_model=M
+machine=msx
+budget=60
+final_rerun_lanes=xcc_Os,xcc_Of
+391387e714d515417a1e2d97fbabde3963f6d9e041b63955add2bfc0236a2de7  /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc
+16adeb0f55b2d20ed775ac5814a2631439d1a1275b9dcc505885a753f5916616  /home/tstih/data/retro-vault/xyz/build/toolchains/z88dk-current/bin/zcc
+f264d684c5c7c957c343f01f1b132ab570d44e907a9485df8d2d6ec46bed0063  /home/tstih/data/retro-vault/xyz/build/toolchains/sdcc-current/src/sdcc
+b09beb9c847a43d97a63bd8ffef4e5646a6c6822749ac9cbba5869af0ef944ad  /home/tstih/data/retro-vault/xyz/build/toolchains/z88dk-80cc-current/bin/z88dk-80cc
+6b4ae08a60fc567493f44a776f3e38419ffd35698ee15bcb3e2dc7c91136a146  /home/tstih/data/retro-vault/xyz/build/toolchains/z88dk-current/bin/z88dk-ticks
+xcc 2.5.0 (X Tools C Compiler for Z80)
+
+ZSDCC IS A MODIFICATION OF SDCC FOR Z88DK
+Build: 4.6.2 #16814 (Linux) Sep  9 2026
+
+sdcc website:
+https://sourceforge.net/projects/sdcc/
+
+patch details:
+80cc - z80 family Crosscompiler   Version: 25652-e3aeca0dc0-20260909
+(C) 1980-2026 Cain, Van Zandt, Hendrix, Yorston, z88dk
+Usage: /home/tstih/data/retro-vault/xyz/build/toolchains/z88dk-80cc-current/bin/z88dk-80cc [flags] [file]
+
+measured_xcc_base_commit=1301bcf7a709dfd3cd88031338b57f9ba696cbf9
+measured_xcc_source_state=working tree containing September 2026 optimization campaign
+baseline_rerun_lanes=sccz80,xcc_Os,xcc_Of,sdcc,sdcc_max,80cc_fp,80cc_sp
+competitor_measurements=rebuilt and rerun in z88dk24-before; exactly reproduce current-results.csv
+xcc_measurements=z88dk24-final-v4; both profiles rebuilt after compiler source freeze
+matrix_merge=final XCC columns plus unchanged, freshly reproduced competitor columns
+compiler_source_manifest_sha256=1f51e70099ccab541fc038fe3783adc9c6086f360a64edbac4cf1c7635b68df0

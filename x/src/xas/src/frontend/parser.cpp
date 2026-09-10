@@ -401,7 +401,12 @@ namespace xas {
         if (name == "area" || name == "section") {
             if (peek().kind == token_kind::ident
                 || peek().kind == token_kind::directive) {
-                const token& a = advance(); s.string_arg = a.raw.empty() ? a.text : a.raw;
+                const token& a = advance();
+                s.string_arg = a.raw.empty() ? a.text : a.raw;
+                // Directive tokens omit the leading dot, but here the
+                // token names a section whose spelling is significant.
+                if (a.kind == token_kind::directive)
+                    s.string_arg.insert(s.string_arg.begin(), '.');
             } else if (peek().kind == token_kind::dot) {
                 advance();
                 if (peek().kind == token_kind::ident) {

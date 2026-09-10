@@ -44,6 +44,20 @@ function names, constants unique to a benchmark, or benchmark output values.
   objects as `BLOCK_FILL`. The Z80 backend lowers this standard loop idiom to a
   seed store plus `LDIR`; the proof requires one store, unit pointer and counter
   strides, a constant trip count, and dead loop-control lifetimes.
+- Those profiles also lower external standard `memset` calls with constant
+  counts to `BLOCK_FILL`, using the same target cost model. The typed proof
+  requires the standard near-pointer prototype and preserves argument
+  evaluation, byte conversion, and the original destination return value,
+  including zero-length fills and arguments that alias the filled region.
+  Known volatile, atomic, far, indirect, incompatible, and same-translation-unit
+  definitions retain calls. Under `--runtime=z88dk-classic`, the documented
+  reversed `__memset` bridge receives the same proof, retained through ordinary
+  header-wrapper inlining. Use `-fno-memory-builtins` to keep interposable
+  memory functions, or `-fmemory-builtins` to enable this family explicitly.
+  For nonempty fills, `-Os` retains calls whose returned pointer is used,
+  and requires a constant byte value for counts greater than one; these
+  guards avoid enlarging a call site when the runtime helper is already
+  required elsewhere. Speed mode can inline those additional cases.
 - `-Os` repeated-sequence outlining tracks allocated IX-frame depth at every
   call site. A helper may access a negative IX slot only after that slot has
   been allocated, so the helper return address cannot overlap an incoming-arg
@@ -131,7 +145,82 @@ Against the better valid 80cc frame-pointer or stack-pointer result per row,
 24/24 and faster on 11/24. The exhaustive bare suite is correct on 20/20 in
 all four XCC lanes (`-O2`, `-Of`, `-O3`, and `-Os`).
 
-## Current Baseline
+## Modular arithmetic and library cycle (2026-09-09)
+
+The [September campaign report](OPTIMIZATION-CAMPAIGN-2026-09.md) records
+the next generic optimization cycle and its before/after measurements.
+
+- Constant byte/word multiplication uses a finite modular coefficient search
+  with measured Z80 instruction costs. Size minimizes bytes then cycles;
+  speed minimizes cycles then bytes. The state includes the cost of retaining
+  the original operand. Size mode keeps a shared helper when an inline chain
+  would exceed its existing call policy.
+- Typed known-zero/known-one bits support carry-aware arithmetic, safe masks,
+  comparisons, and signed power-of-two division with explicit rounding proofs.
+  Private adjacent constant bitwise/shift chains combine at their exact width.
+- Long shifts discard whole byte lanes first; word and byte shifts use costed
+  accumulator/carry shuffles. Captured nonvolatile pointer fills select among
+  direct stores, unrolled `DJNZ`, and `LDIR`, with bounded speed-mode growth.
+- A separate final assembly graph propagates BC/IY effects through local calls
+  and recursive control flow. Only matching, explicitly marked register-only
+  caller saves can disappear. Unknown calls and opaque assembly are barriers.
+- `-Of`/`-O3` retain a 10-cycle unconditional `JP` instead of shortening it to
+  a 12-cycle `JR`. `-Os` still selects the shorter encoding where in range.
+- Observable volatile/SFR reads and writes survive DCE, expression reuse,
+  scalar promotion, rematerialization, and backend register caches. Whole-width
+  boolean normalization and byte/frame correctness fixes accompany the work.
+- Word forwarding tracks captured values as well as addresses. Address
+  expansion requires an earlier definition in the same block with unchanged
+  inputs, preserves narrowing casts and captured pointers, and distinguishes
+  an object's address from its value. Partial redefinitions and potentially
+  aliased memory writes invalidate the corresponding facts.
+
+Shared runtime multiplication uses modular 16-bit partial products. Shared
+libc copy/fill routines avoid IX frames, searches use `CPIR`/`CPDR`, and string
+lengths reuse scan counts. These benefit all native platforms and both profiles;
+the shared-z88dk benchmark intentionally measures with z88dk's own library.
+
+## Size, representation and ABI follow-up (2026-09-09)
+
+The [sccz80 follow-up report](SCCZ80-OPTIMIZATION-CAMPAIGN-2026-09.md)
+records the subsequent campaign and fresh upstream comparison.
+
+- Widened word-product byte windows are fused before frame planning. Ordinary
+  indirect word updates retain address and arithmetic state only when access,
+  alias and result-liveness proofs permit it. BC allocation respects byte
+  subregister overlap, helper clobbers and lifetimes across loop backedges.
+- Private scalar updates can receive distinct one-block value versions.
+  Pressure guards retain profitable register windows. Redundant induction
+  counters require unique initialization/update and non-wrapping endpoint
+  equivalence. Bulk fills consume their destination address in every use/def
+  and spill-slot lifetime calculation.
+- `-Os` can outline short indexed loads with proven frame boundaries, recompute
+  cheap scales across calls and reuse an already-linked multiply helper after
+  charging setup and preservation costs. These deliberate speed tradeoffs
+  are absent from `-Of`.
+- Ordinary aggregate zero initialization uses costed block fill. Recursive
+  volatile/atomic checks preserve observable stores. Complete literal byte
+  coverage can omit redundant zeroing; padding, partial fields and sparse or
+  repeated designators retain conservative handling.
+- Immutable strings share compatible suffixes; writable arrays keep separate
+  storage. Typed constant `memset` lowering preserves argument evaluation and
+  return values, obeys the selected runtime ABI and can be disabled with
+  `-fno-memory-builtins`.
+- Captured-value substitutions require unique definitions, dominance and
+  preservation along all relevant paths. Wide ABI return metadata reaches the
+  final assembly optimizer, including alternate register banks and shared tails.
+- Integer rewrites distinguish declared `_BitInt` precision from carrier size.
+  A partial-byte result retains its narrowing cast. Conditional arm conversion
+  and typed shift/XOR selection preserve the complete low-byte representation;
+  boolean and partial-byte conversions are ineligible for that selection.
+
+The shared native `calloc` uses checked shift/add multiplication and LDIR
+clearing. Allocation size overflow fails without damaging an existing realloc
+block. Default heap setup aligns the platform base; explicit custom arenas
+retain their caller-supplied exact span and alignment. These libc changes and
+the smaller 16-bit multiply helper benefit both optimization profiles.
+
+## Earlier Pipeline Baseline
 
 The current pipeline is already headed in the right direction, but it is
 still intentionally small.
@@ -149,8 +238,9 @@ still intentionally small.
   word, cursor, and induction live ranges in physical homes. It is enabled by
   `-Of` (and therefore its empty `-O3` alias) and remains explicit opt-in
   elsewhere.
-- The peephole pass is purely syntactic and already removes several
-  common push/pop, self-load, and jump-to-next-label patterns.
+- Local peepholes remove common push/pop, self-load, and jump-to-next-label
+  patterns. The separate final caller-save pass proves physical register
+  preservation over the assembly graph.
 
 That gives a good foundation, but several major sources of Z80 code
 bloat remain:

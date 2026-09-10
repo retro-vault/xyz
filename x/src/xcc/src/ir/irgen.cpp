@@ -204,6 +204,13 @@ operand ir_gen::coerce_const_operand(operand op, const type_ptr &target) {
             return value;
         if (ty->kind == type_kind::BOOL)
             return value != 0 ? 1 : 0;
+        if (ty->kind == type_kind::BITINT &&
+            ty->bitint_width > 0 && ty->bitint_width < 64) {
+            const uint64_t sign = uint64_t{1} << (ty->bitint_width - 1);
+            const uint64_t narrowed = static_cast<uint64_t>(value) & (sign * 2 - 1);
+            return ty->is_unsigned() ? static_cast<int64_t>(narrowed)
+                : static_cast<int64_t>(narrowed ^ sign) - static_cast<int64_t>(sign);
+        }
         int bytes = ty->size();
         if (bytes <= 0 || bytes >= 8)
             return value;
@@ -233,6 +240,23 @@ operand ir_gen::coerce_const_operand(operand op, const type_ptr &target) {
 operand ir_gen::gen_expr(expr &e) {
     e.accept(*this);
     return expr_result_;
+}
+
+void ir_gen::gen_discarded_expr(expr &e) {
+    if (auto *bin = dynamic_cast<binary_expr *>(&e);
+        bin && bin->op == bin_op::COMMA) {
+        gen_discarded_expr(*bin->left);
+        gen_discarded_expr(*bin->right);
+        return;
+    }
+    operand value = gen_expr(e);
+    // Ordinary identifier evaluation returns a memory operand without an
+    // instruction.  Materialize the read when its discarded value is still
+    // observable; assignment results must not cause an extra read-back.
+    if (e.is_lvalue && value.is_symbol() &&
+        (value.is_sfr || (value.type && value.type->is_volatile))) {
+        emit_assign(new_temp(value.type), value);
+    }
 }
 
 void ir_gen::gen_stmt(stmt &s) {

@@ -33,6 +33,7 @@ HEAP_LIMIT_HI   .equ 5
         .area   _CODE
         ;; void _heap_init_arena(heap, base, limit)
         ;;   HL = heap descriptor, DE = base, limit on stack at 4(ix),5(ix)
+        ;;   sdcccall(1): the callee removes the limit argument.
 _heap_init_arena::
         push    ix
         ld      ix,#0
@@ -42,21 +43,31 @@ _heap_init_arena::
         pop     iy                      ; IY = heap descriptor
         ld      c,4(ix)
         ld      b,5(ix)                 ; BC = limit
-        ld      HEAP_HEAD_LO(iy),e      ; head  = base
-        ld      HEAP_HEAD_HI(iy),d
+        ld      HEAP_HEAD_LO(iy),#0
+        ld      HEAP_HEAD_HI(iy),#0
         ld      HEAP_BASE_LO(iy),e      ; base  = base
         ld      HEAP_BASE_HI(iy),d
         ld      HEAP_LIMIT_LO(iy),c     ; limit = limit
         ld      HEAP_LIMIT_HI(iy),b
 
-        ;; payload = (limit - base) - BLOCK_HDR_SIZE
+        ; Custom heaps retain the caller's exact region and alignment.
+        ; Zero is the null-list sentinel, so it cannot hold a header.
+        ld      a,d
+        or      e
+        jr      z,heap_init_done
+
+        ; Reject reversed or too-small intervals before writing a header.
         ld      h,b
         ld      l,c                     ; HL = limit
         or      a
-        sbc     hl,de                   ; HL = region size
+        sbc     hl,de                   ; HL = usable region size
+        jr      c,heap_init_done
         ld      bc,#BLOCK_HDR_SIZE
         or      a
         sbc     hl,bc                   ; HL = first block payload size
+        jr      c,heap_init_done
+        ld      HEAP_HEAD_LO(iy),e
+        ld      HEAP_HEAD_HI(iy),d
 
         push    de
         pop     ix                      ; IX = block @ base
@@ -70,6 +81,9 @@ _heap_init_arena::
         pop     hl                      ; HL = heap descriptor
         ld      BLOCK_HEAP_LO(ix),l
         ld      BLOCK_HEAP_HI(ix),h
+heap_init_done:
         pop     iy
         pop     ix
-        ret
+        pop     hl                      ; return address
+        pop     bc                      ; discard the limit argument
+        jp      (hl)

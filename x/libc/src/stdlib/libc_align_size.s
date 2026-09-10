@@ -20,6 +20,9 @@ BLOCK_SIZE_LO   .equ 0
 __libc_align_size::
         inc     hl
         res     0, l
+        ; Z reports a zero request or overflow of 65535 rounded up.
+        ld      a,h
+        or      l
         ret
 
 ;; Convert a user payload pointer back to the preceding block header.

@@ -42,6 +42,10 @@ std::string model_static_address_alias(
     const std::string &label,
     const std::unordered_set<std::string> &defined_functions);
 
+// Lower verified constant library fills after module inlining has exposed
+// their actual arguments and before the normal function optimizer runs.
+void lower_constant_memory_builtins(ir_module &module, bool optimize_size);
+
 class ir_gen : public expr_visitor,
                public stmt_visitor,
                public decl_visitor {
@@ -57,6 +61,11 @@ public:
         native_printf_specialization_ = enabled;
     }
 
+    void set_memory_builtins(bool enabled, bool z88dk_classic) {
+        memory_builtins_ = enabled;
+        z88dk_memory_builtins_ = z88dk_classic;
+    }
+
     //
     // Lower the entire translation unit to an IR module.
     // The returned module is owned by the caller.
@@ -69,6 +78,8 @@ private:
     int                        next_temp_ = 0;
     int                        next_lbl_  = 0;
     bool                       native_printf_specialization_ = true;
+    bool                       memory_builtins_ = false;
+    bool                       z88dk_memory_builtins_ = false;
     std::unordered_set<std::string> defined_function_names_;
 
     // Target labels for break and continue inside loops/switch.
@@ -116,6 +127,9 @@ private:
     // operand.  After this call expr_result_ holds the same value.
     //
     operand gen_expr(expr &e);
+
+    // Evaluate a discarded expression, retaining observable lvalue reads.
+    void gen_discarded_expr(expr &e);
 
     //
     // Visit s through the stmt_visitor interface.
@@ -223,7 +237,10 @@ private:
     // result of the assignment expression (ident → the symbol operand;
     // all other forms → src itself).
     //
-    operand gen_lvalue_write(expr &lhs, operand src);
+    operand gen_lvalue_write(expr &lhs, operand src,
+                             const operand *captured_address = nullptr);
+    operand gen_lvalue_read_once(expr &lhs, operand &captured_address);
+    operand gen_member_value_at(member_expr &e, operand ptr);
 
     //
     // Return a pointer operand addressing the struct/union field named

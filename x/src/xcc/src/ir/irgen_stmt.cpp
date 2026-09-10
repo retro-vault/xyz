@@ -44,7 +44,7 @@ void ir_gen::emit_cond_branch(expr &e,
             return;
         }
         if (bin->op == bin_op::COMMA) {
-            gen_expr(*bin->left);
+            gen_discarded_expr(*bin->left);
             emit_cond_branch(*bin->right, true_lbl, false_lbl);
             return;
         }
@@ -80,7 +80,7 @@ void ir_gen::visit(compound_stmt &s) {
 }
 
 void ir_gen::visit(expr_stmt &s) {
-    if (s.expr) gen_expr(*s.expr);
+    if (s.expr) gen_discarded_expr(*s.expr);
 }
 
 void ir_gen::visit(decl_stmt &s) {
@@ -196,7 +196,7 @@ void ir_gen::visit(for_stmt &s) {
     gen_stmt(*s.body);
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = step_lbl; emit(lbl); }
-    if (s.step) gen_expr(*s.step);
+    if (s.step) gen_discarded_expr(*s.step);
     { icode jmp; jmp.op = icode_op::GOTO; jmp.label_name = cond_lbl; emit(jmp); }
 
     { icode lbl; lbl.op = icode_op::LABEL; lbl.label_name = end_lbl; emit(lbl); }
@@ -267,7 +267,26 @@ void ir_gen::visit(switch_stmt &s) {
         }
     }
 
-    operand cond = gen_expr(*s.cond);
+    // A volatile identifier or SFR must be read once, even when there are no
+    // case labels. Other expression results are already values; ordinary
+    // identifiers can safely be reread between these pure case comparisons.
+    // Avoid imposing another live temporary on that common path.
+    operand source = gen_expr(*s.cond);
+    operand cond = source;
+    if (source.is_symbol() &&
+        (source.is_sfr ||
+         (source.type && (source.type->is_volatile || source.type->is_atomic)))) {
+        if (source.type && source.type->is_atomic) {
+            // Existing scalar memory passes use the volatile access marker
+            // to prohibit duplicating or discarding an observable read.
+            source.type = std::make_shared<type>(*source.type);
+            source.type->is_volatile = true;
+        }
+        cond = new_temp(source.type ? source.type->unqual()
+                                     : type::make_int());
+        emit_assign(cond, source);
+    }
+    cond = promote(cond);
     std::string end_lbl     = new_label();
     std::string default_lbl = end_lbl;
 

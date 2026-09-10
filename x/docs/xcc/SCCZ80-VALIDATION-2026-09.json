@@ -1,0 +1,1126 @@
+{
+  "schema_version": 1,
+  "status": "validated_with_four_manifest_only_reruns",
+  "captured_utc": "2026-09-09T19:27:25.011039+00:00",
+  "scope": "Combined V6 compiler, native library and toolchain validation. Original raw canonical launch failures are preserved; separate corrected-manifest reruns complete coverage. Counts retain their original units.",
+  "identity": {
+    "source_freeze": {
+      "path": "build/sccz80-campaign/integrated-v6/sources.json",
+      "sha256": "655760f4b113a041cc27cfec6c48357d8a2de6773633b1e1b24168b2105c325f"
+    },
+    "source_freeze_files": 35839,
+    "stage_manifest": {
+      "path": "build/sccz80-campaign/final-validation-v6/staged-tools.json",
+      "sha256": "9e53863f6e24cd0b1541ec39d9d38950ddc9ea4383d6c5422b8ffcf64f711996"
+    },
+    "stage_manifest_files": 548,
+    "git_base_commit": "1301bcf7a709dfd3cd88031338b57f9ba696cbf9",
+    "production_files_checked_during_build": 1694,
+    "production_unchanged_during_build": true,
+    "compiler_sha256": {
+      "x-s": "d82ed42997c19d53d6e3d58d90da047ba4ccbcbc87e0ab25ed52ff2a9f3eabe6",
+      "x-m": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+      "x-l": "9143f04a5de0de8b48c8c805ba38d9643026258352713e65280dc686ec10d593",
+      "x": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a"
+    },
+    "runner_sha256": "989dd600ecea1b9dbc8aa0fe2f77a73a0aa2b2c531e3f1ac187baa0e7d2f44da",
+    "compact_compiler_source_manifest": {
+      "path": "build/sccz80-campaign/final-validation-v6/latest-z88dk24/part0/xcc-source-manifest.json",
+      "sha256": "0fdd8f5e6817e1884ac81cf8213c41eb3e39d4807de3eb11be8ea39b66435753"
+    },
+    "all_staged_hashes_reverified_at_publication": true,
+    "original_final_input_audit": {
+      "path": "build/sccz80-campaign/final-validation-v6/final-input-audit.json",
+      "sha256": "3dbcf91095f7afbf8664a1f4de2af3639ff6bdcd69e14f9aaad3cbe0783a1729"
+    },
+    "post_manifest_repair_input_audit": {
+      "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/after-rerun-input-audit.json",
+      "sha256": "69f204279d27198e889becbd8976022c97ed6836c9c91b53adfab4a9a8828690"
+    }
+  },
+  "build": {
+    "status": {
+      "models_exit_code": 0,
+      "default_exit_code": 0,
+      "runner_exit_code": 0,
+      "completed_utc": "2026-09-09T19:00:51.243827+00:00"
+    },
+    "status_record": {
+      "path": "build/sccz80-campaign/final-validation-v6/build-status.json",
+      "sha256": "48f5910ffa12978cf149248db8de1fe5a09c3ab34dbbe7a1363a6909155098ee"
+    },
+    "logs": [
+      "build/sccz80-campaign/final-validation-v6/build-models.log",
+      "build/sccz80-campaign/final-validation-v6/build-default.log",
+      "build/sccz80-campaign/final-validation-v6/build-runner.log"
+    ]
+  },
+  "canonical": {
+    "status": "complete_original_ledger_with_separate_manifest_repair",
+    "expected_variants": 17955,
+    "groups": {
+      "s-default-compile": {
+        "expected": 2799,
+        "executed": 2799,
+        "passed": 2798,
+        "failed": 1,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "s-default-run": {
+        "expected": 1297,
+        "executed": 1297,
+        "passed": 1297,
+        "failed": 0,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "m-default-compile": {
+        "expected": 2799,
+        "executed": 2799,
+        "passed": 2798,
+        "failed": 1,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "m-default-run": {
+        "expected": 1562,
+        "executed": 1562,
+        "passed": 1562,
+        "failed": 0,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "l-abi0-compile": {
+        "expected": 2749,
+        "executed": 2749,
+        "passed": 2748,
+        "failed": 1,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "l-abi1-compile": {
+        "expected": 2778,
+        "executed": 2778,
+        "passed": 2777,
+        "failed": 1,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "l-abi0-run": {
+        "expected": 1998,
+        "executed": 1998,
+        "passed": 1998,
+        "failed": 0,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      },
+      "l-abi1-run": {
+        "expected": 1973,
+        "executed": 1973,
+        "passed": 1973,
+        "failed": 0,
+        "missing": [],
+        "extra": [],
+        "duplicates": 0,
+        "inventory_equal": true
+      }
+    },
+    "inventory": {
+      "path": "build/sccz80-campaign/final-validation-v6/canonical/inventories.json",
+      "sha256": "762931adf2e1283413cdb3c219943301f16c78efe69f8c76e993e0acab10db9b"
+    },
+    "execution_ledger": {
+      "path": "build/sccz80-campaign/final-validation-v6/canonical/execution.jsonl",
+      "sha256": "1e1d7d1c54dd1f2636eca4353879e3f7183fa37ec363050c7660825bc957c7f9"
+    },
+    "controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_canonical_inventory.py",
+      "--workers",
+      "12"
+    ],
+    "raw_failures": [
+      {
+        "group": "l-abi0-compile",
+        "id": "xcc_core_t307_postincrement_cast_precision",
+        "runner_exit_code": 1,
+        "reported_child_exit_code": 127,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/canonical/l-abi0-compile/logs/xcc_core_t307_postincrement_cast_precision.log",
+          "sha256": "42efcdc3eb61f5912108e38d0067faa86bfba9f6c45b49b4ae665539b590b04f"
+        },
+        "command": [
+          "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+          "--xcc",
+          "/home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc",
+          "--suite",
+          "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+          "--kind",
+          "compile",
+          "--abi",
+          "0",
+          "--filter",
+          "xcc_core_t307_postincrement_cast_precision",
+          "--work",
+          "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/canonical/l-abi0-compile/work"
+        ]
+      },
+      {
+        "group": "l-abi1-compile",
+        "id": "xcc_core_t307_postincrement_cast_precision",
+        "runner_exit_code": 1,
+        "reported_child_exit_code": 127,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/canonical/l-abi1-compile/logs/xcc_core_t307_postincrement_cast_precision.log",
+          "sha256": "42efcdc3eb61f5912108e38d0067faa86bfba9f6c45b49b4ae665539b590b04f"
+        },
+        "command": [
+          "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+          "--xcc",
+          "/home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc",
+          "--suite",
+          "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+          "--kind",
+          "compile",
+          "--abi",
+          "1",
+          "--filter",
+          "xcc_core_t307_postincrement_cast_precision",
+          "--work",
+          "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/canonical/l-abi1-compile/work"
+        ]
+      },
+      {
+        "group": "s-default-compile",
+        "id": "xcc_core_t307_postincrement_cast_precision",
+        "runner_exit_code": 1,
+        "reported_child_exit_code": 127,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/canonical/s-default-compile/logs/xcc_core_t307_postincrement_cast_precision.log",
+          "sha256": "42efcdc3eb61f5912108e38d0067faa86bfba9f6c45b49b4ae665539b590b04f"
+        },
+        "command": [
+          "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+          "--xcc",
+          "/home/tstih/data/retro-vault/xyz/bin/x-s/bin/xcc",
+          "--suite",
+          "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+          "--kind",
+          "compile",
+          "--filter",
+          "xcc_core_t307_postincrement_cast_precision",
+          "--work",
+          "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/canonical/s-default-compile/work"
+        ]
+      },
+      {
+        "group": "m-default-compile",
+        "id": "xcc_core_t307_postincrement_cast_precision",
+        "runner_exit_code": 1,
+        "reported_child_exit_code": 127,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/canonical/m-default-compile/logs/xcc_core_t307_postincrement_cast_precision.log",
+          "sha256": "42efcdc3eb61f5912108e38d0067faa86bfba9f6c45b49b4ae665539b590b04f"
+        },
+        "command": [
+          "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+          "--xcc",
+          "/home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc",
+          "--suite",
+          "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+          "--kind",
+          "compile",
+          "--filter",
+          "xcc_core_t307_postincrement_cast_precision",
+          "--work",
+          "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/canonical/m-default-compile/work"
+        ]
+      }
+    ],
+    "original_executed_variants": 17955,
+    "original_passed": 17951,
+    "original_launch_failures": 4,
+    "outstanding_variants": 0,
+    "original_inputs_unchanged": true,
+    "all_original_inventories_exact": true,
+    "summary": {
+      "path": "build/sccz80-campaign/final-validation-v6/canonical/summary.json",
+      "sha256": "f043ba7e53fac34252ebfee0d35e59dba9d43b52a7799529cfd06da99e8ede14"
+    },
+    "covered_by_successful_original_or_rerun": 17955
+  },
+  "untagged": {
+    "passed": 64,
+    "failed": 0,
+    "unit": "additional selected variants; 16 IDs across S/M/L-ABI0/L-ABI1",
+    "results": {
+      "path": "build/sccz80-campaign/final-validation-v6/canonical/untagged-results.json",
+      "sha256": "3add001f65eb4b23c21793cbf8e6311e84c76b8c2cf18c58a24bc6f7d265af74"
+    },
+    "inventory_audit": {
+      "path": "build/sccz80-campaign/final-validation-v6/canonical/independent-inventory-audit.json",
+      "sha256": "c2d9d0c8071b123e2e0f821a8360becddd68b7f49020c425b58eaf4d0ab4501a"
+    },
+    "controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_untagged_inventory.py"
+    ]
+  },
+  "manifest_repair": {
+    "status": "applied_after_freeze_release_and_four_in_tree_reruns_passed",
+    "case_id": "xcc_core_t307_postincrement_cast_precision",
+    "scope": "Only command metadata. Replace one entire shell-like command string and unsupported placeholders with command=python3 plus supported command_arg fields; kind/ID/semantic payloads remain unchanged.",
+    "original_manifest_sha256": "fc22ac0d289627d24465ac60ea314645201e18f127d1325e458dac87f3c03ab8",
+    "corrected_private_manifest_sha256": "9a0077beceec3195c626717b88565c63e9b0b847930a25adf331b607a51e6f9e",
+    "semantic_payloads_equal": true,
+    "private_replay_passed": 4,
+    "private_replay_failed": 0,
+    "private_results": {
+      "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/results.json",
+      "sha256": "b23286dc882958e93c8893cdf9e287f42042431b1f7c9a8e88299b6ff5b1d1d1"
+    },
+    "private_controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/run.py"
+    ],
+    "staged_files_unchanged_in_private_replay": true,
+    "original_raw_failures_remain_failures": true,
+    "reviewed_patch": {
+      "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/manifest.patch",
+      "sha256": "0eb41bbf48799b8cbc6bea66777eff77e09cbe9b04659656fcc62241fbaec7eb"
+    },
+    "in_tree_reruns": {
+      "passed": 4,
+      "failed": 0,
+      "all_passed": true,
+      "results": {
+        "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/results.json",
+        "sha256": "afaec3b6dbe9ef455a39763e62b7f65967050d864c62690671007e3654fba04b"
+      },
+      "identity": {
+        "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/identity.json",
+        "sha256": "d7b29c6b65bbe60101e2007afbb7a89abe9af9303494332782da0f1786199c91"
+      },
+      "controller": [
+        "python3",
+        "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/apply_and_rerun.py",
+        "--freeze-released"
+      ],
+      "rows": [
+        {
+          "group": "s-default-compile",
+          "id": "xcc_core_t307_postincrement_cast_precision",
+          "passed": true,
+          "exit_code": 0,
+          "command": [
+            "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+            "--xcc",
+            "/home/tstih/data/retro-vault/xyz/bin/x-s/bin/xcc",
+            "--suite",
+            "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+            "--kind",
+            "compile",
+            "--filter",
+            "xcc_core_t307_postincrement_cast_precision",
+            "--work",
+            "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/s-default",
+            "--verbose"
+          ],
+          "log": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/s-default.log",
+            "sha256": "e6353665d4965edb8499936b6899a50a8a6a4aa06f07ad569212df1523d6182c"
+          },
+          "command_stdout": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/s-default/xcc_core_t307_postincrement_cast_precision/command.stdout.log",
+            "sha256": "126729bbdc4564beb23349186d7749a08c8f9d69b3ef18330b2e5f43b188f74c"
+          }
+        },
+        {
+          "group": "m-default-compile",
+          "id": "xcc_core_t307_postincrement_cast_precision",
+          "passed": true,
+          "exit_code": 0,
+          "command": [
+            "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+            "--xcc",
+            "/home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc",
+            "--suite",
+            "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+            "--kind",
+            "compile",
+            "--filter",
+            "xcc_core_t307_postincrement_cast_precision",
+            "--work",
+            "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/m-default",
+            "--verbose"
+          ],
+          "log": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/m-default.log",
+            "sha256": "333f2edec82b33137e00104dd52d2fda817ec9e68ab8c58c5afdc73d4634a993"
+          },
+          "command_stdout": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/m-default/xcc_core_t307_postincrement_cast_precision/command.stdout.log",
+            "sha256": "126729bbdc4564beb23349186d7749a08c8f9d69b3ef18330b2e5f43b188f74c"
+          }
+        },
+        {
+          "group": "l-abi0-compile",
+          "id": "xcc_core_t307_postincrement_cast_precision",
+          "passed": true,
+          "exit_code": 0,
+          "command": [
+            "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+            "--xcc",
+            "/home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc",
+            "--suite",
+            "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+            "--kind",
+            "compile",
+            "--filter",
+            "xcc_core_t307_postincrement_cast_precision",
+            "--work",
+            "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/l-abi0",
+            "--verbose",
+            "--abi",
+            "0"
+          ],
+          "log": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/l-abi0.log",
+            "sha256": "9b39cdd8326c56c13924423ad7c3103594a3ece5b8828525ee9026715d5c92dc"
+          },
+          "command_stdout": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/l-abi0/xcc_core_t307_postincrement_cast_precision/command.stdout.log",
+            "sha256": "126729bbdc4564beb23349186d7749a08c8f9d69b3ef18330b2e5f43b188f74c"
+          }
+        },
+        {
+          "group": "l-abi1-compile",
+          "id": "xcc_core_t307_postincrement_cast_precision",
+          "passed": true,
+          "exit_code": 0,
+          "command": [
+            "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+            "--xcc",
+            "/home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc",
+            "--suite",
+            "/home/tstih/data/retro-vault/xyz/x/tests/tests/c23",
+            "--kind",
+            "compile",
+            "--filter",
+            "xcc_core_t307_postincrement_cast_precision",
+            "--work",
+            "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/l-abi1",
+            "--verbose",
+            "--abi",
+            "1"
+          ],
+          "log": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/l-abi1.log",
+            "sha256": "2da25d2166672bfe69efef6fc00c88bd787d29ffcdeb127fd86610926bd188cb"
+          },
+          "command_stdout": {
+            "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/work/l-abi1/xcc_core_t307_postincrement_cast_precision/command.stdout.log",
+            "sha256": "126729bbdc4564beb23349186d7749a08c8f9d69b3ef18330b2e5f43b188f74c"
+          }
+        }
+      ]
+    },
+    "actual_manifest_delta": {
+      "path": "x/tests/tests/c23/cases/xcc/core/xcc_core_t307_postincrement_cast_precision/test.cfg",
+      "expected": "fc22ac0d289627d24465ac60ea314645201e18f127d1325e458dac87f3c03ab8",
+      "actual": "9a0077beceec3195c626717b88565c63e9b0b847930a25adf331b607a51e6f9e"
+    },
+    "original_canonical_evidence_files_verified_unchanged": 17967,
+    "original_canonical_evidence_unchanged": true,
+    "original_final_input_audit_unchanged": true,
+    "production_and_semantic_payloads_unchanged": true,
+    "staged_files_and_runner_unchanged": true,
+    "final_input_audit": {
+      "path": "build/sccz80-campaign/final-validation-v6/core307-manifest-repair/in-tree-rerun/after-rerun-input-audit.json",
+      "sha256": "69f204279d27198e889becbd8976022c97ed6836c9c91b53adfab4a9a8828690"
+    }
+  },
+  "benchmarks": {
+    "latest_z88dk24": {
+      "cases_per_profile": 24,
+      "profiles": {
+        "xcc_Os": {
+          "passed": 24,
+          "cases": 24
+        },
+        "xcc_Of": {
+          "passed": 24,
+          "cases": 24
+        }
+      },
+      "passed_cells": 48,
+      "attempted_cells": 48,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/latest-z88dk24/results.csv",
+        "sha256": "4b2b8f4e536631409f1dd9e2650f92717a760b604c0837f322cde0cc1529d25f"
+      }
+    },
+    "pinned_current_z88dk24": {
+      "cases_per_profile": 24,
+      "profiles": {
+        "xcc_Os": {
+          "passed": 24,
+          "cases": 24
+        },
+        "xcc_Of": {
+          "passed": 24,
+          "cases": 24
+        }
+      },
+      "passed_cells": 48,
+      "attempted_cells": 48,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/z88dk24/results.csv",
+        "sha256": "21b070261ab58f7807a896dfedee6cb3a649fb93eaa983084f8f4cc1380e14ca"
+      }
+    },
+    "historical_locked_z88dk24": {
+      "cases_per_profile": 24,
+      "profiles": {
+        "xcc_Os": {
+          "passed": 24,
+          "cases": 24
+        },
+        "xcc_Of": {
+          "passed": 24,
+          "cases": 24
+        }
+      },
+      "passed_cells": 48,
+      "attempted_cells": 48,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/locked-z88dk24/results.csv",
+        "sha256": "752e107072dd0caf58377f011bf1d8c958db2768d90cd21d4857d0656a77e842"
+      }
+    },
+    "bare": {
+      "cases_per_profile": 20,
+      "profiles": {
+        "xcc_O2": {
+          "passed": 20,
+          "cases": 20
+        },
+        "xcc_Of": {
+          "passed": 20,
+          "cases": 20
+        },
+        "xcc_O3": {
+          "passed": 20,
+          "cases": 20
+        },
+        "xcc_Os": {
+          "passed": 20,
+          "cases": 20
+        }
+      },
+      "passed_cells": 80,
+      "attempted_cells": 80,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/bare/bare/results.csv",
+        "sha256": "4cf3a1c8865b49184720478aaae21f008be97e7216d76e7b06a87c6572315fba"
+      }
+    },
+    "portable": {
+      "cases_per_profile": 40,
+      "profiles": {
+        "xcc_Of": {
+          "passed": 40,
+          "cases": 40
+        },
+        "xcc_O3": {
+          "passed": 40,
+          "cases": 40
+        },
+        "xcc_Os": {
+          "passed": 40,
+          "cases": 40
+        }
+      },
+      "passed_cells": 120,
+      "attempted_cells": 120,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/portable/portable/results.csv",
+        "sha256": "4efb3f8492654327fac0c95035d9c4f205e0376fcf7500c95f2eb1d3ada2d739"
+      }
+    },
+    "numeric_Of": {
+      "cases": 50,
+      "passed_cells": 50,
+      "attempted_cells": 50,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/numeric-Of/numeric/results.csv",
+        "sha256": "5b997fa99a7760ff71604f6eb7eaef172740c1d666ee3f67a87c63e803ec9e57"
+      }
+    },
+    "numeric_Os": {
+      "cases": 50,
+      "passed_cells": 50,
+      "attempted_cells": 50,
+      "csv": {
+        "path": "build/sccz80-campaign/final-validation-v6/numeric-Os/numeric/results.csv",
+        "sha256": "a69d84148e84b79a14d0c3bbd5df76ec7c846a9d8505bace95b6bc9802c65e24"
+      }
+    },
+    "new_xcc_measurements_total": {
+      "passed_cells": 444,
+      "unit": "program/profile executions; repeated workloads on three toolchain snapshots count separately",
+      "attempted_cells": 444
+    },
+    "reused_competitors": {
+      "latest": {
+        "columns": [
+          "sccz80",
+          "sdcc",
+          "sdcc_max",
+          "80cc_fp",
+          "80cc_sp",
+          "zsdcc",
+          "zsdcc_max"
+        ],
+        "raw_status_counts": {
+          "OK": 130,
+          "SKIP": 36,
+          "FAIL": 2
+        },
+        "remeasured_in_v6": false,
+        "merge_provenance": {
+          "path": "build/sccz80-campaign/final-validation-v6/latest-z88dk24/merge-provenance.json",
+          "sha256": "1909b02fc41c2233e6673f460e88327010849630c541ad1ccfe575d26eeb7dc7"
+        }
+      },
+      "pinned_current": {
+        "columns": [
+          "sccz80",
+          "sdcc",
+          "sdcc_max",
+          "80cc_fp",
+          "80cc_sp"
+        ],
+        "raw_status_counts": {
+          "OK": 101,
+          "SKIP": 18,
+          "FAIL": 1
+        },
+        "remeasured_in_v6": false,
+        "merge_provenance": {
+          "path": "build/sccz80-campaign/final-validation-v6/z88dk24/merge-provenance.json",
+          "sha256": "b9dba88aef1de3fbeab0b35c76f54c0231a19a1a02258d49c3272753472f65a4"
+        }
+      }
+    }
+  },
+  "external": {
+    "passed": 544,
+    "failed": 0,
+    "skipped": 18,
+    "not_claimed": 8,
+    "jobs": {
+      "c23-matrix-Of": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 4,
+          "not_run": 0,
+          "passed": 59,
+          "skipped": 0
+        },
+        "exit_code": 0,
+        "command": [
+          "python3",
+          "build/sccz80-campaign/final-validation-v6/run_c23_matrix.py",
+          "Of"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/c23-matrix-Of.log",
+        "log_sha256": "5c9b36efab5e8df0500032fb85869a180cd1bd938efbbef54997e06876facb0f"
+      },
+      "c23-matrix-Os": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 4,
+          "not_run": 0,
+          "passed": 59,
+          "skipped": 0
+        },
+        "exit_code": 0,
+        "command": [
+          "python3",
+          "build/sccz80-campaign/final-validation-v6/run_c23_matrix.py",
+          "Os"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/c23-matrix-Os.log",
+        "log_sha256": "5c9b36efab5e8df0500032fb85869a180cd1bd938efbbef54997e06876facb0f"
+      },
+      "c23-projects-Of": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 0,
+          "not_run": 0,
+          "passed": 22,
+          "skipped": 0
+        },
+        "exit_code": 0,
+        "command": [
+          "bash",
+          "build/sccz80-campaign/final-validation-v6/run_c23_projects_of.sh"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/c23-projects-Of.log",
+        "log_sha256": "3e72845eaa6b8efa3755bc8ab787b986044d0508a4e699fae12bf15962c49b93"
+      },
+      "c23-projects-Os": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 0,
+          "not_run": 0,
+          "passed": 22,
+          "skipped": 0
+        },
+        "exit_code": 0,
+        "command": [
+          "bash",
+          "build/sccz80-campaign/final-validation-v6/run_c23_projects_os.sh"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/c23-projects-Os.log",
+        "log_sha256": "e9de03f4698f92e7c7ca6f7f3fb58fbb7149c94f0e73c4692f23a19b0c85e89d"
+      },
+      "thealgorithms-Of": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 0,
+          "not_run": 0,
+          "passed": 51,
+          "skipped": 9
+        },
+        "exit_code": 0,
+        "command": [
+          "python3",
+          "build/sccz80-campaign/final-validation-v6/run_thealgorithms_of.py"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/thealgorithms-Of.log",
+        "log_sha256": "d18abf6a60cb0bf236ac595917348f2d89b36020780feb9e7a25b146c1557041"
+      },
+      "thealgorithms-Os": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 0,
+          "not_run": 0,
+          "passed": 51,
+          "skipped": 9
+        },
+        "exit_code": 0,
+        "command": [
+          "python3",
+          "build/sccz80-campaign/final-validation-v6/run_thealgorithms_os.py"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/thealgorithms-Os.log",
+        "log_sha256": "d18abf6a60cb0bf236ac595917348f2d89b36020780feb9e7a25b146c1557041"
+      },
+      "z88dk-imported": {
+        "counts": {
+          "failed": 0,
+          "not_claimed": 0,
+          "not_run": 0,
+          "passed": 280,
+          "skipped": 0
+        },
+        "exit_code": 0,
+        "command": [
+          "/home/tstih/data/retro-vault/xyz/build/tests/tools/xemutest/xemutest",
+          "--xcc",
+          "/home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc",
+          "--suite",
+          "/home/tstih/data/retro-vault/xyz/x/tests/tests/z88dk",
+          "--work",
+          "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/z88dk-imported"
+        ],
+        "log": "build/sccz80-campaign/final-validation-v6/z88dk-imported.log",
+        "log_sha256": "6af1f7ee63ae2df701993b486798aa8b6448dbde7f223efa7bcb6b27d1064993"
+      }
+    },
+    "raw_status": {
+      "path": "build/sccz80-campaign/final-validation-v6/external-status.json",
+      "sha256": "00b85dc9274057b3b3f4ad8eb1a738364e824e0daa08fd5c482d466be24860ab"
+    },
+    "summary": {
+      "path": "build/sccz80-campaign/final-validation-v6/external-summary.json",
+      "sha256": "72dea158e0ef77152caa31ff98b4877eafdb40d5e3c05f221bf2e70bea00ddcb"
+    },
+    "input_identities_unchanged": true,
+    "controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_external_validation.py",
+      "--run-staged",
+      "--workers",
+      "3"
+    ]
+  },
+  "direct": {
+    "runtime": {
+      "passed_named_cases": 444,
+      "failed": 0,
+      "command": "make -B -C /home/tstih/data/retro-vault/xyz/x/tests/tests/runtime BUILD=/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/runtime-work",
+      "log": {
+        "path": "build/sccz80-campaign/final-validation-v6/runtime.log",
+        "sha256": "0fc8946d2ec426c1f107d7f5b2e6346358b5b7f5e5a69b2d651f28ddcede943d"
+      }
+    },
+    "libc": {
+      "passed_named_core_groups": 108,
+      "failed_named_core_groups": 0,
+      "whole_make_phase_exit_code": 0,
+      "note": "The full target also ran scan/wide drivers; no invented aggregate count of their silent internal assertions.",
+      "command": "make -C /home/tstih/data/retro-vault/xyz/x/tests/tests/libc -j4 BUILD=/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/libc-work -Wstdio_cases.c -Wc23_cases.c -Wstdio_scan_cases.c -Wstdio_wide_cases.c",
+      "log": {
+        "path": "build/sccz80-campaign/final-validation-v6/libc.log",
+        "sha256": "bc3e5f61ee2c0e39edfe965d1107856846aeb1a9ba4785ac126515283b15b7ff"
+      }
+    },
+    "controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run-direct-tests.py"
+    ],
+    "raw_status": {
+      "path": "build/sccz80-campaign/final-validation-v6/direct-status.tsv",
+      "sha256": "d951957ed26e7e01238bc3cc135df4670bf18e916fc4c69266dbcab4d26f5395"
+    }
+  },
+  "host": {
+    "passed_phases": 10,
+    "failed_phases": 0,
+    "phases": {
+      "xz80": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xz80"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xz80.log",
+          "sha256": "cf08fa535452a7c1e4ae1bfb5b6b8910c395b509009742f7eef863231126f770"
+        }
+      },
+      "xcc-metadata": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xcc-metadata"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xcc-metadata.log",
+          "sha256": "badd85d0adfc1ae635cb4d2a3d8f46a5c899e7d052830c8d6a73e1aa0394daf3"
+        }
+      },
+      "xld": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xld"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xld.log",
+          "sha256": "b52adf5d2fdf9370700fda560fbeaf145692673f3512f1374e5fb63ca04ad540"
+        }
+      },
+      "xobjcopy": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xobjcopy"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xobjcopy.log",
+          "sha256": "07f33e6c5dd16bd15ed2172f3e7f40cdb1f4dd631f5b714e298561a43633f5ac"
+        }
+      },
+      "xprog": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xprog"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xprog.log",
+          "sha256": "123ab3119b40aefc5172968b16cd95f6aac898b46f73b03be7407199e52a4ed0"
+        }
+      },
+      "xopt": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xopt"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xopt.log",
+          "sha256": "a4c61ba5aaab09f23604cf79ba2e5a49887be6c94215e5c10f3b14a25bbdb2df"
+        }
+      },
+      "xas": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xas"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xas.log",
+          "sha256": "ac9b12640eea54789cdded29668c80fe094ded064560db3a3862dce96f8b51bc"
+        }
+      },
+      "xar": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xar"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xar.log",
+          "sha256": "34c2b4bd8669f450a278a0c6b8d6530053e47f37a514dbc12f0a50d659595fa4"
+        }
+      },
+      "xgdb": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xgdb"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xgdb.log",
+          "sha256": "f607d8beb45315e50f6de9df37518e62efda31067d18cb99415f394cb11836a7"
+        }
+      },
+      "xemu": {
+        "command": [
+          "bash",
+          "x/tests/tests/e2e/run.sh",
+          "--no-build",
+          "--phase",
+          "xemu"
+        ],
+        "exit_code": 0,
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/host-xemu.log",
+          "sha256": "01a19a5909915523275adb90988a3f90ac3d42d021bddc4238c06dace769fb38"
+        }
+      }
+    },
+    "xas_parity_skipped_cases": 76,
+    "raw_status": {
+      "path": "build/sccz80-campaign/final-validation-v6/host-status.json",
+      "sha256": "7e669599c43025ed936150404613ed997c21f8e415583f12313ebe2910d8023c"
+    },
+    "note": "Phase count is not a sum of individual host assertions.",
+    "controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_host_tests.py"
+    ]
+  },
+  "platform_and_access": {
+    "passed_phases": 7,
+    "failed_phases": 0,
+    "phases": [
+      {
+        "phase": "chain",
+        "exit_code": 0,
+        "commands": [
+          "bash /home/tstih/data/retro-vault/xyz/x/tests/tests/e2e/run.sh --no-build --phase chain"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/chain.log",
+          "sha256": "eb2e16498fca31bdccf759d4f05a8d72c6638535d69d356b763b256e1218b7c9"
+        },
+        "passed_cases": 8
+      },
+      {
+        "phase": "cpc-mcp",
+        "exit_code": 0,
+        "commands": [
+          "python3 -u /home/tstih/data/retro-vault/xyz/x/tests/tests/cpc/run_mcp.py --mcp /home/tstih/data/retro-vault/amstrad-cpc-mcp/bin/bin/amstrad-cpc-mcp --roms /home/tstih/data/retro-vault/amstrad-cpc-mcp/data/roms --xcc /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc --xprog /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xprog"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/cpc-mcp.log",
+          "sha256": "64d4033086f00c104987028e20df9587007753f8c3e6fed7811e792c1b62de8d"
+        },
+        "passed_modes": 3,
+        "modes": [
+          "CPC464 CDT",
+          "CPC664 DSK",
+          "CPC6128 DSK"
+        ]
+      },
+      {
+        "phase": "cpm",
+        "exit_code": 0,
+        "commands": [
+          "make -B -C /home/tstih/data/retro-vault/xyz/x/tests/tests/hello-cpm HOST_BIN_DIR=/home/tstih/data/retro-vault/xyz/bin/x-m/bin BUILD_DIR=/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/cpm-work TNYLPO=/home/tstih/data/retro-vault/xyz/orig/tnylpo/tnylpo test"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/cpm.log",
+          "sha256": "8bdee23f061539bf8b031303229e4eb72b851228ce3470bc4e357f22eba6a851"
+        },
+        "passed_named_checks": 4
+      },
+      {
+        "phase": "exact-access-l",
+        "exit_code": 0,
+        "commands": [
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t270_dce_volatile_accesses/check.py /home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t234_dce_volatile_accesses.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-l/t270",
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t271_volatile_loop_accesses/check.py /home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t236_volatile_loop_reads.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-l/t271",
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t272_typed_byte_cache/check.py /home/tstih/data/retro-vault/xyz/bin/x-l/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t246_typed_byte_cache.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-l/t272"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/exact-access-l.log",
+          "sha256": "77bd6922785b38faed6c58223fdce3400be92c9cc81b094897e065db468451f9"
+        },
+        "semantic_access_checks": 25068,
+        "codegen_shape_checks": 30,
+        "note": "Internal assertions; do not add them to canonical variant counts."
+      },
+      {
+        "phase": "exact-access-m",
+        "exit_code": 0,
+        "commands": [
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t270_dce_volatile_accesses/check.py /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t234_dce_volatile_accesses.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-m/t270",
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t271_volatile_loop_accesses/check.py /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t236_volatile_loop_reads.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-m/t271",
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t272_typed_byte_cache/check.py /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t246_typed_byte_cache.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-m/t272"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/exact-access-m.log",
+          "sha256": "5e3354293f0d03921c11a4c298017f983d0a6c6817d7181799c07d1629441141"
+        },
+        "semantic_access_checks": 25068,
+        "codegen_shape_checks": 30,
+        "note": "Internal assertions; do not add them to canonical variant counts."
+      },
+      {
+        "phase": "exact-access-s",
+        "exit_code": 0,
+        "commands": [
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t270_dce_volatile_accesses/check.py /home/tstih/data/retro-vault/xyz/bin/x-s/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t234_dce_volatile_accesses.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-s/t270",
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t271_volatile_loop_accesses/check.py /home/tstih/data/retro-vault/xyz/bin/x-s/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t236_volatile_loop_reads.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-s/t271",
+          "python3 /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/cases/xcc/core/xcc_core_t272_typed_byte_cache/check.py /home/tstih/data/retro-vault/xyz/bin/x-s/bin/xcc /home/tstih/data/retro-vault/xyz/x/tests/tests/c23/xcc/data/exec/int/t246_typed_byte_cache.c /home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/exact-access-s/t272"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/exact-access-s.log",
+          "sha256": "a8982a0623a03d6971c4845fde0eb02942d3d9a4d2a67a73ded99dc085ac5907"
+        },
+        "semantic_access_checks": 25068,
+        "codegen_shape_checks": 30,
+        "note": "Internal assertions; do not add them to canonical variant counts."
+      },
+      {
+        "phase": "zx48-mcp",
+        "exit_code": 0,
+        "commands": [
+          "python3 -u /home/tstih/data/retro-vault/xyz/x/tests/tests/zx48/run_mcp.py --mcp /home/tstih/data/retro-vault/zx-spectrum-mcp/bin/bin/zx-spectrum-mcp --rom /home/tstih/data/retro-vault/zx-spectrum-mcp/data/roms/48.rom --xcc /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xcc --xprog /home/tstih/data/retro-vault/xyz/bin/x-m/bin/xprog"
+        ],
+        "log": {
+          "path": "build/sccz80-campaign/final-validation-v6/zx48-mcp.log",
+          "sha256": "f7d515fa974e5320f99c747f9864a42ba00bf6f69408145d5e3cca6ebba88dfb"
+        },
+        "passed_modes": 4,
+        "modes": [
+          "RAM binary",
+          "replacement ROM",
+          "TAP",
+          "TZX"
+        ]
+      }
+    ],
+    "controller_replay": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run-access-platform-checks.py"
+    ],
+    "raw_status": {
+      "path": "build/sccz80-campaign/final-validation-v6/access-platform-status.tsv",
+      "sha256": "9f3d37acf05d1392c1cd7d9d0123d6877292b71181f0d19ddc81da476cf6be8f"
+    },
+    "stage_hash_check": {
+      "path": "build/sccz80-campaign/final-validation-v6/direct-platform-hash-check.json",
+      "sha256": "35a1144152116c4c74af29ba956d684881adc6b51048845059215410d297fc82"
+    }
+  },
+  "benchmark_controller_commands": {
+    "supplemental": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_benchmark_matrix.py"
+    ],
+    "pinned_current": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_z88dk24_current.py",
+      "--run-staged"
+    ],
+    "historical_locked": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_z88dk24_locked.py"
+    ],
+    "latest": [
+      "python3",
+      "build/sccz80-campaign/final-validation-v6/run_z88dk24_latest.py",
+      "--run-staged",
+      "--workers",
+      "4"
+    ]
+  },
+  "counting_rules": [
+    "Do not combine phase counts, named tests, benchmark cells and internal oracle assertions into a single test total.",
+    "Reused competitor cells are not new V6 executions; invalid FAIL/SKIP cells remain visible and excluded from performance envelopes.",
+    "TheAlgorithms skips18 and C23 not-claimed8 remain explicit; neither counts as a pass.",
+    "The four private confirmation runs and four final in-tree reruns are separate evidence; only final in-tree reruns close the original canonical launch failures. Original raw failure records were not rewritten."
+  ],
+  "final_selected_variant_counts": {
+    "original_canonical_expected": 17955,
+    "original_canonical_passed": 17951,
+    "original_canonical_launch_failures_retained": 4,
+    "separate_corrected_in_tree_reruns_passed": 4,
+    "canonical_selected_variants_covered": 17955,
+    "additional_untagged_variants_passed": 64,
+    "combined_selected_variants_covered": 18019,
+    "scoped_launches_including_four_reruns": 18023,
+    "scope": "Canonical and additional untagged inventories plus four final in-tree reruns; excludes exploratory/private confirmation runs.",
+    "wording": "17,955 canonical variants covered after four manifest-only reruns, plus 64 additional untagged variants. The original four launch failures remain recorded."
+  }
+}

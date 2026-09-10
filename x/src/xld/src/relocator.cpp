@@ -171,23 +171,22 @@ namespace xld {
                         (is_word && patch_offset + 1 >= ctx.code_buffer.size()))
                         throw reloc_error("relocation offset out of bounds");
 
-                    // Read existing value from buffer.
-                    uint16_t existing = 0;
-                    if (is_word) {
-                        existing = ctx.code_buffer[patch_offset]
-                                 | (ctx.code_buffer[patch_offset + 1] << 8);
-                    } else {
-                        existing = ctx.code_buffer[patch_offset];
-                    }
-
-                    // Add target to existing value.
-                    uint16_t value = existing + target;
+                    // The addend comes from the relocation itself. The
+                    // object readers already normalize it, so a signed
+                    // displacement such as `jr sym-1` survives, and a GNU
+                    // object whose data holds only a placeholder is honoured.
+                    const int32_t addend = re.addend;
+                    uint16_t value = static_cast<uint16_t>(target + addend);
 
                     if (is_pc_rel) {
-                        // PC-relative: subtract the address after the
-                        // relocated field.
-                        uint16_t pc = patch_offset + (is_word ? 2 : 1);
-                        value = existing + target - pc;
+                        // PC-relative: measure from the relocated byte for
+                        // GNU inputs, from the end of the field otherwise.
+                        const uint32_t pc = re.pc_rel_at_field
+                            ? patch_offset
+                            : patch_offset + (is_word ? 2u : 1u);
+                        value = static_cast<uint16_t>(
+                            static_cast<int32_t>(target) + addend
+                            - static_cast<int32_t>(pc));
 
                         if (!is_word) {
                             // 8-bit PC-relative branches must still fit after

@@ -847,12 +847,129 @@ static size_t find_label_index(const std::vector<asm_line> &lines,
     return lines.size();
 }
 
+// Public declarations do not change during a peephole invocation.  Collect
+// them once rather than reparsing every declaration at each local label in a
+// return-contract walk.  The vector identity deliberately ignores mutable
+// line indices; nested calls restore their parent's independent context.
+struct return_declaration_context;
+static thread_local const return_declaration_context *active_return_declarations = nullptr;
+
+struct return_declaration_context {
+    const std::vector<asm_line> *lines;
+    std::unordered_set<std::string> public_names;
+    const return_declaration_context *previous;
+
+    explicit return_declaration_context(const std::vector<asm_line> &input)
+        : lines(&input), previous(active_return_declarations) {
+        for (const asm_line &line : input) {
+            if (line.mnemonic != ".globl" && line.mnemonic != ".global")
+                continue;
+            std::string names = line.operands;
+            std::replace(names.begin(), names.end(), ',', ' ');
+            std::istringstream symbols(names);
+            std::string name;
+            while (symbols >> name)
+                public_names.insert(name);
+        }
+        active_return_declarations = this;
+    }
+
+    ~return_declaration_context() {
+        active_return_declarations = previous;
+    }
+
+    return_declaration_context(const return_declaration_context &) = delete;
+    return_declaration_context &operator=(const return_declaration_context &) = delete;
+};
+
+// This is the compiler's explicit return-register contract, not an ABI-name
+// inference: a modern byte returns A, a word DE, and a long DE:HL. Missing
+// metadata (including hand-written assembly and generated outline bodies)
+// conservatively leaves every register live at a return.
+static unsigned function_return_register_mask(
+        const std::vector<asm_line> &lines, size_t index) {
+    constexpr unsigned all = 2047;
+    for (size_t scan = std::min(index + 1, lines.size()); scan > 0;) {
+        const asm_line &line = lines[--scan];
+        if (line.comment.find(" prologue:") != std::string::npos) {
+            const std::string key = "return_regs=";
+            const size_t found = line.comment.find(key);
+            if (found == std::string::npos)
+                return all;
+            size_t pos = found + key.size();
+            if (pos >= line.comment.size() ||
+                !std::isdigit(static_cast<unsigned char>(line.comment[pos])))
+                return all;
+            unsigned mask = 0;
+            while (pos < line.comment.size() &&
+                   std::isdigit(static_cast<unsigned char>(line.comment[pos]))) {
+                mask = mask * 10 + (line.comment[pos++] - '0');
+                if (mask > all)
+                    return all;
+            }
+            if (pos < line.comment.size() && line.comment[pos] != ')' &&
+                line.comment[pos] != ',' && line.comment[pos] != ' ')
+                return all;
+            return mask;
+        }
+        if (is_section_directive(line) ||
+            line.comment.find("naked:") != std::string::npos ||
+            line.label.rfind("__xopt_outline_", 0) == 0 ||
+            line.label.rfind("__xopt_spaghetti_", 0) == 0)
+            return all;
+        if (line.is_global_label)
+            return all;
+        if (!line.label.empty()) {
+            if (active_return_declarations &&
+                active_return_declarations->lines == &lines) {
+                if (active_return_declarations->public_names.count(line.label))
+                    return all;
+                continue;
+            }
+            // A public assembler function need not have a compiler prologue.
+            // Do not borrow the preceding function's contract in that case.
+            for (const asm_line &declaration : lines) {
+                if (declaration.mnemonic != ".globl" &&
+                    declaration.mnemonic != ".global")
+                    continue;
+                std::string names = declaration.operands;
+                std::replace(names.begin(), names.end(), ',', ' ');
+                std::istringstream symbols(names);
+                std::string name;
+                while (symbols >> name)
+                    if (name == line.label)
+                        return all;
+            }
+        }
+    }
+    return all;
+}
+
+static unsigned register_mask(const std::string &registers) {
+    unsigned mask = 0;
+    const std::string names = "abcdehl";
+    for (char reg : registers) {
+        const size_t bit = names.find(reg);
+        if (bit != std::string::npos)
+            mask |= 1u << bit;
+    }
+    return mask;
+}
+
+static bool registers_dead_at_return(const std::vector<asm_line> &lines,
+                                     size_t index,
+                                     const std::string &registers) {
+    return (function_return_register_mask(lines, index) &
+            register_mask(registers)) == 0;
+}
+
 static bool path_overwrites_pair_before_read(
         const std::vector<asm_line> &lines,
         size_t start,
         const std::string &pair,
         char lo,
         char hi,
+        size_t return_origin,
         size_t budget,
         std::unordered_set<size_t> &active,
         bool call_clobbers_pair = false) {
@@ -888,7 +1005,7 @@ static bool path_overwrites_pair_before_read(
 
         if (pair == "bc") {
             if (line.mnemonic == "ret" && trim(line.operands).empty())
-                return finish(true);
+                return finish(registers_dead_at_return(lines, return_origin, "bc"));
             if (line.mnemonic == "ex" && trim(line.operands) == "de, hl")
                 continue;
             if (line.mnemonic == "pop" && trim(line.operands) == "ix")
@@ -910,11 +1027,11 @@ static bool path_overwrites_pair_before_read(
                 return finish(false);
             const bool taken =
                 path_overwrites_pair_before_read(lines, target_idx, pair, lo, hi,
-                                                 budget, active,
+                                                 return_origin, budget, active,
                                                  call_clobbers_pair);
             const bool fallthrough =
                 path_overwrites_pair_before_read(lines, k + 1, pair, lo, hi,
-                                                 budget, active,
+                                                 return_origin, budget, active,
                                                  call_clobbers_pair);
             return finish(taken && fallthrough);
         }
@@ -924,7 +1041,7 @@ static bool path_overwrites_pair_before_read(
             if (target_idx == lines.size())
                 return finish(false);
             return finish(path_overwrites_pair_before_read(
-                lines, target_idx, pair, lo, hi, budget, active,
+                lines, target_idx, pair, lo, hi, return_origin, budget, active,
                 call_clobbers_pair));
         }
 
@@ -943,7 +1060,7 @@ static bool path_overwrites_pair_before_read(
         char hi) {
     std::unordered_set<size_t> active;
     return path_overwrites_pair_before_read(
-        lines, start, pair, lo, hi, 64, active);
+        lines, start, pair, lo, hi, start, 64, active);
 }
 
 static bool path_overwrites_bc_before_read_or_call(
@@ -951,7 +1068,7 @@ static bool path_overwrites_bc_before_read_or_call(
         size_t start) {
     std::unordered_set<size_t> active;
     return path_overwrites_pair_before_read(
-        lines, start, "bc", 'c', 'b', 64, active, true);
+        lines, start, "bc", 'c', 'b', start, 64, active, true);
 }
 
 static bool path_overwrites_hl_before_read(
@@ -1067,6 +1184,7 @@ static bool line_is_control_flow_boundary(const asm_line &line) {
 static bool bc_dead_before_read_or_ret(
         const std::vector<asm_line> &lines,
         size_t start,
+        size_t return_origin,
         size_t budget,
         std::unordered_set<size_t> &active) {
     if (start >= lines.size() || budget == 0)
@@ -1085,7 +1203,8 @@ static bool bc_dead_before_read_or_ret(
             continue;
         if (overwrites_pair_without_reading_it(lines, k, "bc", 'c', 'b') ||
             line.mnemonic == "call" ||
-            (line.mnemonic == "ret" && trim(line.operands).empty())) {
+            (line.mnemonic == "ret" && trim(line.operands).empty() &&
+             registers_dead_at_return(lines, return_origin, "bc"))) {
             return finish(true);
         }
         if (line_overwrites_b_without_reading_it(line) ||
@@ -1100,9 +1219,9 @@ static bool bc_dead_before_read_or_ret(
             if (target_idx == lines.size())
                 return finish(false);
             const bool taken = bc_dead_before_read_or_ret(
-                lines, target_idx, budget, active);
+                lines, target_idx, return_origin, budget, active);
             const bool fallthrough = bc_dead_before_read_or_ret(
-                lines, k + 1, budget, active);
+                lines, k + 1, return_origin, budget, active);
             return finish(taken && fallthrough);
         }
 
@@ -1111,7 +1230,7 @@ static bool bc_dead_before_read_or_ret(
             if (target_idx == lines.size())
                 return finish(false);
             return finish(bc_dead_before_read_or_ret(
-                lines, target_idx, budget, active));
+                lines, target_idx, return_origin, budget, active));
         }
 
         if (line_reads_b_or_bc(line) || line_reads_c_or_bc(line) ||
@@ -1129,7 +1248,7 @@ static bool bc_dead_before_read_or_ret(
         const std::vector<asm_line> &lines,
         size_t start) {
     std::unordered_set<size_t> active;
-    return bc_dead_before_read_or_ret(lines, start, 64, active);
+    return bc_dead_before_read_or_ret(lines, start, start, 64, active);
 }
 
 static bool bc_dead_before_read_or_direct_c_call(
@@ -1466,6 +1585,7 @@ static bool is_inside_legacy_hl_return_function(
 static bool hl_dead_before_read_or_modern_return(
         const std::vector<asm_line> &lines,
         size_t start,
+        size_t return_origin,
         size_t budget,
         std::unordered_set<size_t> &active) {
     if (start >= lines.size() || budget == 0)
@@ -1487,8 +1607,8 @@ static bool hl_dead_before_read_or_modern_return(
             continue;
         if (overwrites_hl_without_reading_it(lines, k))
             return finish(true);
-        if (!is_inside_legacy_hl_return_function(lines, k) &&
-            is_modern_return_tail(lines, k))
+        if (is_modern_return_tail(lines, k) &&
+            registers_dead_at_return(lines, return_origin, "hl"))
             return finish(true);
         if (is_ex_de_hl(line) &&
             path_overwrites_pair_before_read(lines, k + 1, "de", 'e', 'd')) {
@@ -1502,9 +1622,9 @@ static bool hl_dead_before_read_or_modern_return(
             if (target_idx == lines.size())
                 return finish(false);
             const bool taken = hl_dead_before_read_or_modern_return(
-                lines, target_idx, budget, active);
+                lines, target_idx, return_origin, budget, active);
             const bool fallthrough = hl_dead_before_read_or_modern_return(
-                lines, k + 1, budget, active);
+                lines, k + 1, return_origin, budget, active);
             return finish(taken && fallthrough);
         }
 
@@ -1513,7 +1633,7 @@ static bool hl_dead_before_read_or_modern_return(
             if (target_idx == lines.size())
                 return finish(false);
             return finish(hl_dead_before_read_or_modern_return(
-                lines, target_idx, budget, active));
+                lines, target_idx, return_origin, budget, active));
         }
 
         if (!line_preserves_pair_value(line, "hl", 'l', 'h'))
@@ -1527,7 +1647,7 @@ static bool hl_dead_before_read_or_modern_return(
         const std::vector<asm_line> &lines,
         size_t start) {
     std::unordered_set<size_t> active;
-    return hl_dead_before_read_or_modern_return(lines, start, 64, active);
+    return hl_dead_before_read_or_modern_return(lines, start, start, 64, active);
 }
 
 static bool pair_value_dead_or_call_or_modern_return_before_read(
@@ -1536,6 +1656,7 @@ static bool pair_value_dead_or_call_or_modern_return_before_read(
         const std::string &pair,
         char lo,
         char hi,
+        size_t return_origin,
         size_t budget,
         std::unordered_set<size_t> &active) {
     if (start >= lines.size() || budget == 0)
@@ -1553,7 +1674,9 @@ static bool pair_value_dead_or_call_or_modern_return_before_read(
         if (line.mnemonic.empty())
             continue;
         if (overwrites_pair_without_reading_it(lines, k, pair, lo, hi) ||
-            line.mnemonic == "call" || is_modern_return_tail(lines, k)) {
+            line.mnemonic == "call" ||
+            (is_modern_return_tail(lines, k) &&
+             registers_dead_at_return(lines, return_origin, pair))) {
             return finish(true);
         }
 
@@ -1565,10 +1688,10 @@ static bool pair_value_dead_or_call_or_modern_return_before_read(
                 return finish(false);
             const bool taken =
                 pair_value_dead_or_call_or_modern_return_before_read(
-                    lines, target_idx, pair, lo, hi, budget, active);
+                    lines, target_idx, pair, lo, hi, return_origin, budget, active);
             const bool fallthrough =
                 pair_value_dead_or_call_or_modern_return_before_read(
-                    lines, k + 1, pair, lo, hi, budget, active);
+                    lines, k + 1, pair, lo, hi, return_origin, budget, active);
             return finish(taken && fallthrough);
         }
 
@@ -1578,7 +1701,7 @@ static bool pair_value_dead_or_call_or_modern_return_before_read(
                 return finish(false);
             return finish(
                 pair_value_dead_or_call_or_modern_return_before_read(
-                    lines, target_idx, pair, lo, hi, budget, active));
+                    lines, target_idx, pair, lo, hi, return_origin, budget, active));
         }
 
         if (!line_preserves_pair_value(line, pair, lo, hi))
@@ -1596,7 +1719,8 @@ static bool pair_value_dead_or_call_or_modern_return_before_read(
         char hi) {
     std::unordered_set<size_t> active;
     return pair_value_dead_or_call_or_modern_return_before_read(
-        lines, start, pair, lo, hi, 64, active);
+        lines, start, pair, lo, hi,
+        start, 64, active);
 }
 
 enum class pair_effect {
@@ -1643,6 +1767,7 @@ static bool pair_dead_before_read_allowing_spaghetti(
         char lo,
         char hi,
         bool allow_modern_return,
+        size_t return_origin,
         size_t budget,
         std::unordered_set<size_t> &active) {
     if (start >= lines.size() || budget == 0)
@@ -1661,7 +1786,9 @@ static bool pair_dead_before_read_allowing_spaghetti(
             continue;
         if (overwrites_pair_without_reading_it(lines, k, pair, lo, hi))
             return finish(true);
-        if (allow_modern_return && is_modern_return_tail(lines, k))
+        if (allow_modern_return &&
+            is_modern_return_tail(lines, k) &&
+            registers_dead_at_return(lines, return_origin, pair))
             return finish(true);
 
         std::string cc;
@@ -1672,10 +1799,10 @@ static bool pair_dead_before_read_allowing_spaghetti(
                 return finish(false);
             const bool taken = pair_dead_before_read_allowing_spaghetti(
                 lines, target_idx, pair, lo, hi, allow_modern_return,
-                budget, active);
+                return_origin, budget, active);
             const bool fallthrough = pair_dead_before_read_allowing_spaghetti(
                 lines, k + 1, pair, lo, hi, allow_modern_return,
-                budget, active);
+                return_origin, budget, active);
             return finish(taken && fallthrough);
         }
 
@@ -1685,7 +1812,7 @@ static bool pair_dead_before_read_allowing_spaghetti(
                 return finish(false);
             return finish(pair_dead_before_read_allowing_spaghetti(
                 lines, target_idx, pair, lo, hi, allow_modern_return,
-                budget, active));
+                return_origin, budget, active));
         }
 
         if (line.mnemonic == "call") {
@@ -1717,7 +1844,8 @@ static bool pair_dead_before_read_allowing_spaghetti(
         bool allow_modern_return) {
     std::unordered_set<size_t> active;
     return pair_dead_before_read_allowing_spaghetti(
-        lines, start, pair, lo, hi, allow_modern_return, 64, active);
+        lines, start, pair, lo, hi, allow_modern_return,
+        start, 64, active);
 }
 
 static bool in_sdcccall1_function(const std::vector<asm_line> &lines,
@@ -1729,6 +1857,8 @@ static bool in_sdcccall1_function(const std::vector<asm_line> &lines,
         if (comment.find("prologue") != std::string::npos) {
             return comment.find("sdcccall(1)") != std::string::npos;
         }
+        if (comment.find("naked:") != std::string::npos)
+            return false;
         if (is_section_directive(line))
             return false;
     }
@@ -1776,6 +1906,10 @@ static bool current_function_frame(const std::vector<asm_line> &lines,
             prologue_index = k;
             return true;
         }
+        const std::string comment = lower_copy(line.comment);
+        if (comment.find("prologue:") != std::string::npos ||
+            comment.find("naked:") != std::string::npos)
+            return false;
         if (is_section_directive(line))
             return false;
     }
@@ -1787,6 +1921,40 @@ static bool ix_offset_in_temp_frame(int offset, int locals, int temp_frame) {
         return false;
     const int depth = -offset;
     return depth > locals && depth <= locals + temp_frame;
+}
+
+static bool ix_span_in_temp_frame(const std::vector<asm_line> &lines,
+                                  size_t index, int offset, int bytes) {
+    int locals = 0;
+    int temp_frame = 0;
+    size_t prologue_index = 0;
+    return bytes > 0 &&
+           current_function_frame(lines, index, locals, temp_frame,
+                                  prologue_index) &&
+           ix_offset_in_temp_frame(offset, locals, temp_frame) &&
+           ix_offset_in_temp_frame(offset + bytes - 1, locals, temp_frame);
+}
+
+static bool ix_span_is_ordinary(const std::vector<asm_line> &lines,
+                               size_t index, int offset, int bytes) {
+    if (ix_span_in_temp_frame(lines, index, offset, bytes))
+        return true;
+    int locals = 0, temp_frame = 0;
+    size_t prologue = 0;
+    if (bytes <= 0 ||
+        !current_function_frame(lines, index, locals, temp_frame, prologue))
+        return false;
+    for (size_t scan = prologue + 1; scan <= index; ++scan) {
+        int start = 0, size = 0;
+        const std::string comment = trim(lines[scan].comment);
+        if (std::sscanf(comment.c_str(),
+                        "xopt ordinary ix span: offset=%d size=%d",
+                        &start, &size) == 2 &&
+            size > 0 && size <= 2 && start >= -128 && start <= 127 &&
+            offset >= start && offset + bytes <= start + size)
+            return true;
+    }
+    return false;
 }
 
 static bool line_writes_ix_offset(const asm_line &line, int offset) {
@@ -2675,6 +2843,7 @@ static bool a_overwritten_before_read(
 static bool a_overwritten_or_de_return_before_read(
         const std::vector<asm_line> &lines,
         size_t start,
+        size_t return_origin,
         size_t budget,
         std::unordered_set<size_t> &active) {
     if (start >= lines.size() || budget == 0)
@@ -2715,7 +2884,8 @@ static bool a_overwritten_or_de_return_before_read(
         if (dst == "de") {
             if (source_reads_a(src))
                 return false;
-            return is_modern_return_tail(lines, pos);
+            return is_modern_return_tail(lines, pos) &&
+                   registers_dead_at_return(lines, return_origin, "a");
         }
 
         if (dst != "e" || source_reads_a(src))
@@ -2731,7 +2901,8 @@ static bool a_overwritten_or_de_return_before_read(
         if (dst != "d" || source_reads_a(src))
             return false;
 
-        return is_modern_return_tail(lines, pos);
+        return is_modern_return_tail(lines, pos) &&
+                   registers_dead_at_return(lines, return_origin, "a");
     };
 
     for (size_t k = start; k < lines.size() && budget > 0; ++k, --budget) {
@@ -2740,7 +2911,8 @@ static bool a_overwritten_or_de_return_before_read(
             continue;
         if (line_overwrites_a_without_reading_it(line))
             return finish(true);
-        if (is_modern_return_tail(lines, k))
+        if (is_modern_return_tail(lines, k) &&
+            registers_dead_at_return(lines, return_origin, "a"))
             return finish(true);
         if (de_return_tail_from(k))
             return finish(true);
@@ -2753,10 +2925,10 @@ static bool a_overwritten_or_de_return_before_read(
                 return finish(false);
             const bool taken =
                 a_overwritten_or_de_return_before_read(lines, target_idx,
-                                                       budget, active);
+                                                       return_origin, budget, active);
             const bool fallthrough =
                 a_overwritten_or_de_return_before_read(lines, k + 1,
-                                                       budget, active);
+                                                       return_origin, budget, active);
             return finish(taken && fallthrough);
         }
 
@@ -2765,7 +2937,7 @@ static bool a_overwritten_or_de_return_before_read(
             if (target_idx == lines.size())
                 return finish(false);
             return finish(a_overwritten_or_de_return_before_read(
-                lines, target_idx, budget, active));
+                lines, target_idx, return_origin, budget, active));
         }
 
         if (line_reads_a_or_af(line))
@@ -2779,7 +2951,7 @@ static bool a_overwritten_or_de_return_before_read(
         const std::vector<asm_line> &lines,
         size_t start) {
     std::unordered_set<size_t> active;
-    return a_overwritten_or_de_return_before_read(lines, start, 64, active);
+    return a_overwritten_or_de_return_before_read(lines, start, start, 64, active);
 }
 
 static bool a_overwritten_or_call_before_read(
@@ -3594,6 +3766,7 @@ std::string z80_peep::optimize(const std::string &asm_text,
     p.speed_bias_ = speed_bias;
     p.size_bias_ = size_bias;
     p.load(asm_text);
+    const return_declaration_context return_declarations(p.lines_);
     if (normal_passes > 0)
         p.apply_passes(normal_passes);
     return p.dump();
@@ -3602,6 +3775,7 @@ std::string z80_peep::optimize(const std::string &asm_text,
 std::string z80_peep::optimize_outlined_layout(const std::string &asm_text) {
     z80_peep p;
     p.load(asm_text);
+    const return_declaration_context return_declarations(p.lines_);
 
     for (int pass = 0; pass < 4; ++pass) {
         bool changed = false;
@@ -4091,10 +4265,12 @@ bool z80_peep::rule_dead_hl_pair_load(size_t i) {
         s0 = lower_copy(trim(s0));
         s1 = lower_copy(trim(s1));
 
-        int ignored = 0;
         auto side_effect_free_byte_source = [&](const std::string &src) {
+            int offset = 0;
             return is_plain_8bit_reg(src) || is_immediate_operand(src) ||
-                   is_numeric_literal(src) || parse_ixiy_ref(src, ignored);
+                   is_numeric_literal(src) ||
+                   (parse_ix_ref(src, offset) &&
+                    ix_span_in_temp_frame(lines_, i, offset, 1));
         };
         if (!side_effect_free_byte_source(s0) ||
             !side_effect_free_byte_source(s1)) {
@@ -7506,13 +7682,14 @@ bool z80_peep::rule_word_reload_low_byte_to_a(size_t i) {
     if (parse_ix_ref(lo_src, lo_off)) {
         if (!parse_ix_ref(hi_src, hi_off))
             return false;
-    } else if (parse_iy_ref(lo_src, lo_off)) {
-        if (!parse_iy_ref(hi_src, hi_off))
-            return false;
     } else {
+        // IY may point at a volatile object; no private spill-slot proof is
+        // available for arbitrary indirect addresses.
         return false;
     }
     if (hi_off != lo_off + 1)
+        return false;
+    if (!ix_span_in_temp_frame(lines_, i, lo_off, 2))
         return false;
     if (!path_overwrites_hl_before_read(lines_, i + 3))
         return false;
@@ -7741,6 +7918,10 @@ bool z80_peep::rule_a_temp_reload_after_preserving_branch(size_t i) {
     size_t prologue_index = 0;
     const bool have_frame =
         current_function_frame(lines_, i, locals, temp_frame, prologue_index);
+    if (!have_frame ||
+        !ix_offset_in_temp_frame(temp_off, locals, temp_frame)) {
+        return false;
+    }
     const size_t function_end = have_frame
         ? function_end_after_prologue(lines_, prologue_index)
         : lines_.size();
@@ -8615,6 +8796,13 @@ bool z80_peep::rule_ix_store_reload(size_t i) {
     s3 = trim(s3);
     int off_hi2; if (!parse_ix_ref(s3, off_hi2) || off_hi2 != off_hi) return false;
 
+    // A source-local reload is observable when its object is volatile.
+    // Only compiler spill slots are proven private by the frame metadata,
+    // just as in rule_self_store above.
+    if (!ix_span_in_temp_frame(lines_, i, off_lo, 2)) {
+        return false;
+    }
+
     lines_.erase(lines_.begin() + i + 2, lines_.begin() + i + 4);
     return true;
 }
@@ -8683,6 +8871,9 @@ bool z80_peep::rule_ix_store32_low_reload(size_t i) {
         reload_hi != hi) {
         return false;
     }
+
+    if (!ix_span_in_temp_frame(lines_, i, lo, 2))
+        return false;
 
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(reload),
                  lines_.begin() + static_cast<std::ptrdiff_t>(reload + 2));
@@ -10201,7 +10392,7 @@ bool z80_peep::rule_adjacent_byte_arg_push_pair(size_t i) {
             if (line.mnemonic == "call")
                 return true;
             if (line.mnemonic == "ret" && trim(line.operands).empty())
-                return true;
+                return registers_dead_at_return(lines_, start, "bc");
             const std::string &m = line.mnemonic;
             if (m == "jp" || m == "jr" || m == "djnz" ||
                 m == "rst" || m == "reti" || m == "retn" ||
@@ -12575,6 +12766,8 @@ bool z80_peep::rule_ix_hl_store_zero_test_reload_elide(size_t i) {
         hi_off != lo_off + 1) {
         return false;
     }
+    if (!ix_span_in_temp_frame(lines_, i, lo_off, 2))
+        return false;
     if (lines_[i + 2].mnemonic != "ld" ||
         !split_ld(lines_[i + 2].operands, dst, src) ||
         trim(dst) != "a" || trim(src) != "h") {
@@ -12708,6 +12901,13 @@ bool z80_peep::rule_jp_to_jr(size_t i) {
     } else if (cc != "z" && cc != "nz" && cc != "c" && cc != "nc") {
         return false;
     }
+
+    // An unconditional JP is always taken: its 10 T states beat JR's 12.
+    // Shortening it is a size-only tradeoff. Keep the existing long form in
+    // speed profiles rather than spending two cycles on every loop backedge
+    // or branch arm. This does not expand any JR or invalidate its range.
+    if (speed_bias_ && !conditional)
+        return false;
 
     const auto layout = compute_code_layout(lines_);
     auto target_it = layout.label_pos.find(target);
@@ -15049,6 +15249,10 @@ bool z80_peep::rule_superopt_ix_word_inc_direct(size_t i) {
         hi_store != hi_load) {
         return false;
     }
+    // The carry-shortcut skips the high-byte read and write.  Require a
+    // compiler proof that the addressed storage is ordinary memory.
+    if (!ix_span_is_ordinary(lines_, i, lo_load, 2))
+        return false;
     if (has_temp_copy) {
         int locals = 0;
         int temp_frame = 0;
@@ -15150,6 +15354,8 @@ bool z80_peep::rule_superopt_ix_word_add1_direct(size_t i) {
         hi_store != hi_load) {
         return false;
     }
+    if (!ix_span_is_ordinary(lines_, i, lo_load, 2))
+        return false;
     if (has_bc_copy && !bc_dead_before_read_or_ret(lines_, end_index))
         return false;
     if (!flags_overwritten_before_read_or_escape(lines_, end_index))
@@ -15304,6 +15510,9 @@ bool z80_peep::rule_ix_byte_inc_test_direct(size_t i) {
         return false;
     }
     if (!is_or_a_self(lines_[i + 3]))
+        return false;
+    // INC followed by LD introduces an extra read of the updated byte.
+    if (!ix_span_is_ordinary(lines_, i, load_off, 1))
         return false;
 
     std::string cc;
@@ -17508,6 +17717,9 @@ bool z80_peep::rule_superopt_dead_bc_return_copy(size_t i) {
     if (!is_epilogue_from(i + 3))
         return false;
 
+    if (!registers_dead_at_return(lines_, i, "bc"))
+        return false;
+
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 2));
     return true;
@@ -17564,6 +17776,9 @@ bool z80_peep::rule_superopt_hl_via_bc_return_de_copy(size_t i) {
     if (!is_modern_return_tail(lines_, i + 4))
         return false;
 
+    if (!registers_dead_at_return(lines_, i, "bc"))
+        return false;
+
     lines_[i] = asm_line::parse("\tld\td, h");
     lines_[i + 1] = asm_line::parse("\tld\te, l");
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
@@ -17604,6 +17819,9 @@ bool z80_peep::rule_superopt_hl_load_return_de_direct(size_t i) {
 
     std::string hl_dst, hl_src;
     split_ld(lines_[i].operands, hl_dst, hl_src);
+    if (!registers_dead_at_return(lines_, i, "hl"))
+        return false;
+
     lines_[i].operands = "de, " + trim(hl_src);
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1),
                  lines_.begin() + static_cast<std::ptrdiff_t>(i + 3));
@@ -17645,6 +17863,9 @@ bool z80_peep::rule_superopt_ix_word_return_de_direct(size_t i) {
     if (!is_modern_return_tail(lines_, i + 4))
         return false;
 
+    if (!registers_dead_at_return(lines_, i, "hl"))
+        return false;
+
     lines_[i] = asm_line::parse("\tld\te, " + std::to_string(l_off) + "(ix)");
     lines_[i + 1] = asm_line::parse("\tld\td, " + std::to_string(h_off) + "(ix)");
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 2),
@@ -17673,6 +17894,9 @@ bool z80_peep::rule_superopt_hl_return_de_exchange(size_t i) {
         !is_modern_return_tail(lines_, i + 2)) {
         return false;
     }
+
+    if (!registers_dead_at_return(lines_, i, "hl"))
+        return false;
 
     lines_[i] = asm_line::parse("\tex\tde, hl");
     lines_.erase(lines_.begin() + static_cast<std::ptrdiff_t>(i + 1));
@@ -17718,6 +17942,9 @@ bool z80_peep::rule_superopt_lowbyte_sum_return_direct(size_t i) {
         return false;
     }
     if (!is_plain_ret(lines_[i + 5]))
+        return false;
+
+    if (!registers_dead_at_return(lines_, i, "bchl"))
         return false;
 
     lines_[i] = asm_line::parse("\tld\ta, e");
@@ -17870,6 +18097,9 @@ bool z80_peep::rule_superopt_modern_const_return_direct(size_t i) {
     if (!is_immediate_operand(src) && !is_numeric_literal(src))
         return false;
     if (!is_modern_return_tail(lines_, i + 2))
+        return false;
+
+    if (!registers_dead_at_return(lines_, i, "hl"))
         return false;
 
     load.operands = "de, " + src;
@@ -18705,6 +18935,8 @@ bool z80_peep::rule_dead_hl_ix_load(size_t i) {
     if (!split_ld(l1.operands, d1, s1) || d1 != "h") return false;
     int off0_hi; if (!parse_ix_ref(s1, off0_hi) || off0_hi != off0_lo + 1) return false;
 
+    if (!ix_span_in_temp_frame(lines_, i, off0_lo, 2)) return false;
+
     if (!split_ld(l2.operands, d2, s2) || d2 != "l") return false;
     int off1_lo; if (!parse_ix_ref(s2, off1_lo) || off1_lo == off0_lo) return false;
 
@@ -18834,11 +19066,12 @@ bool z80_peep::rule_bool_ifx_shortcircuit(size_t i) {
 }
 
 // ld l,A(ix); ld h,A+1(ix); ex de,hl; ld l,B(ix); ld h,B+1(ix); ex de,hl
-// →  ld e,B(ix); ld d,B+1(ix); ld l,A(ix); ld h,A+1(ix)
+// →  ld l,A(ix); ld h,A+1(ix); ld e,B(ix); ld d,B+1(ix)
 //
 // Two consecutive IX-relative 16-bit loads with ex de,hl sandwiched produce
 // HL=A-value, DE=B-value.  Direct loading achieves the same without touching
-// the stack or swapping registers.  Safe because IX frame loads are side-effect-free.
+// the stack or swapping registers. Preserve memory-access order because source
+// objects in the IX frame can be volatile.
 bool z80_peep::rule_ex_de_hl_load_double(size_t i) {
     if (i + 5 >= lines_.size()) return false;
     for (int k = 1; k <= 5; ++k)
@@ -18879,16 +19112,16 @@ bool z80_peep::rule_ex_de_hl_load_double(size_t i) {
     std::string d4, s4; if (!split_ld(l4.operands, d4, s4) || d4 != "h") return false;
     int off_b_hi; if (!parse_ix_ref(s4, off_b_hi) || off_b_hi != off_b_lo + 1) return false;
 
-    // Replace 6 lines with 4: ld e,B(ix); ld d,B+1(ix); ld l,A(ix); ld h,A+1(ix)
+    // Replace 6 lines with 4, keeping all A reads before the B reads.
     std::string blo = std::to_string(off_b_lo) + " (ix)";
     std::string bhi = std::to_string(off_b_hi) + " (ix)";
     std::string alo = std::to_string(off_a_lo) + " (ix)";
     std::string ahi = std::to_string(off_a_hi) + " (ix)";
 
-    lines_[i + 0] = asm_line::parse("\tld\te, " + blo);
-    lines_[i + 1] = asm_line::parse("\tld\td, " + bhi);
-    lines_[i + 2] = asm_line::parse("\tld\tl, " + alo);
-    lines_[i + 3] = asm_line::parse("\tld\th, " + ahi);
+    lines_[i + 0] = asm_line::parse("\tld\tl, " + alo);
+    lines_[i + 1] = asm_line::parse("\tld\th, " + ahi);
+    lines_[i + 2] = asm_line::parse("\tld\te, " + blo);
+    lines_[i + 3] = asm_line::parse("\tld\td, " + bhi);
     lines_.erase(lines_.begin() + i + 4, lines_.begin() + i + 6);
     return true;
 }
@@ -18909,6 +19142,7 @@ bool z80_peep::rule_ix_byte_store_reload(size_t i) {
     if (!parse_ix_ref(a_dst, off_a)) return false;
     if (!parse_ix_ref(b_src, off_b)) return false;
     if (off_a != off_b) return false;
+    if (!ix_span_in_temp_frame(lines_, i, off_a, 1)) return false;
     lines_.erase(lines_.begin() + i + 1);
     return true;
 }
@@ -18931,6 +19165,7 @@ bool z80_peep::rule_ix_byte_store_forward(size_t i) {
     if (!parse_ix_ref(a_dst, off_a)) return false;
     if (!parse_ix_ref(b_src, off_b)) return false;
     if (off_a != off_b) return false;
+    if (!ix_span_in_temp_frame(lines_, i, off_a, 1)) return false;
 
     b.operands = b_dst + ", a";
     return true;

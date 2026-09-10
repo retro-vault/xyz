@@ -1,0 +1,760 @@
+{
+  "schema_version": 1,
+  "period": "2026-09",
+  "platform": "zx-esxdos-rom",
+  "passed": true,
+  "contract": {
+    "rom_bytes": 16384,
+    "application_run_address": 32768,
+    "heap_ceiling": 61440,
+    "boot": "Cold 48K Spectrum with custom base ROM, real esxDOS 0.8.9 and emulated divIDE/IDE. No Sinclair ROM execution, snapshots, host filesystem handler, PC rewriting or RAM injection.",
+    "requirements": [
+      "esxDOS 0.8.9 firmware with matching disk SYS files",
+      "AutoBoot=0",
+      "Application code and initialized storage fit beside bootstrap in 16 KiB ROM"
+    ],
+    "limits": [
+      "Application executes from RAM after boot relocation",
+      "NMI browser, BASIC, dot commands and 128K banking unsupported",
+      "File API retains documented esxDOS filesystem limits"
+    ]
+  },
+  "final_tools": {
+    "x": {
+      "xcc": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+      "xas": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb",
+      "xld": "03d2949caf00107de7467722baffc39a73564203bfdcbb50bce324e163fa0c89"
+    },
+    "x-s": {
+      "xcc": "d82ed42997c19d53d6e3d58d90da047ba4ccbcbc87e0ab25ed52ff2a9f3eabe6",
+      "xas": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb",
+      "xld": "03d2949caf00107de7467722baffc39a73564203bfdcbb50bce324e163fa0c89"
+    },
+    "x-m": {
+      "xcc": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+      "xas": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb",
+      "xld": "03d2949caf00107de7467722baffc39a73564203bfdcbb50bce324e163fa0c89"
+    },
+    "x-l": {
+      "xcc": "9143f04a5de0de8b48c8c805ba38d9643026258352713e65280dc686ec10d593",
+      "xas": "f7b6e165789cabea7885e780e31311aa98c8b20f37b3ff19334f669d63708bbb",
+      "xld": "03d2949caf00107de7467722baffc39a73564203bfdcbb50bce324e163fa0c89"
+    }
+  },
+  "coverage": {
+    "distinct_cold_boot_configurations": 27,
+    "executions_with_final_tools_and_runner": 11,
+    "other_executed_configurations_rebuilt_identically_with_final_tools": 16,
+    "full_disk_probe": "65 phases; native S/M/L x Os/Of x ABI0/1 and GNU M x Os/Of x ABI0/1",
+    "examples": "Native M x O0/Os/Of x ABI0/1, and S/L x O0 x ABI0/1",
+    "startup": "Native M/Os/ABI1: pointer/data initialization, native BSS, INITIALIZER/INITIALIZED, extra GSINIT and large CONST relocation",
+    "duplicate_prototype_and_repeated_runs_not_counted": true
+  },
+  "cases": [
+    {
+      "model": "L",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "caller_abi": 0,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "2e6678c5e9a1c56518a3714f844a80e19c66702579f0d421e49190665806c9f1",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/L-O0-abi0-diskio/report.json",
+        "sha256": "062e185429167ba2a1c74cb08c59016ce6e5d5d834e7208e5b07dd3e4b8a2c11"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "L",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "caller_abi": 1,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "2e6678c5e9a1c56518a3714f844a80e19c66702579f0d421e49190665806c9f1",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/L-O0-abi1-diskio/report.json",
+        "sha256": "e6b052bbb4751bb28ea2b173a7efd66dc50cc255c02135de5c9fce7edd8bdcf9"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "L",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "22b2b66838fa449c219063f823ba3820e1c5c426b3c0aa0c60d108301b922495",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/L-Of-abi0-smoke/report.json",
+        "sha256": "3facd5f33dc69702e15a891fc0e85616c159e0ad00fc62d57352b530e463f83f"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "L",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "22b2b66838fa449c219063f823ba3820e1c5c426b3c0aa0c60d108301b922495",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/L-Of-abi1-smoke/report.json",
+        "sha256": "d6e6c8ee6b4d9a519945ea90318797c72fedb886f3e249ae4aea1849d12d8c87"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "L",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "156b6c4449260099f0c8ee003ce7a85ec12aaafce08330336f3c97186f26b9b7",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/L-Os-abi0-smoke/report.json",
+        "sha256": "4dff809660802e08aae7305561e389f9e4e48b80e3a91ef69b5012d620f673d4"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "L",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "156b6c4449260099f0c8ee003ce7a85ec12aaafce08330336f3c97186f26b9b7",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/L-Os-abi1-smoke/report.json",
+        "sha256": "bd77484368e9d143baea0a9d2c33d5457caf7ecb3a1b77ff24335c7dd3f8d290"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "M",
+      "mode": "gnu",
+      "profile": "-Of",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "5c32fbde50a3d48e1f16495eae0ae26cd02a0528aa2f64e97960d375834ddf37",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-gnu-Of-abi0/report.json",
+        "sha256": "b6ec90aa8e8b4733d4cba2b6424f5f6bea601b8dd7020d3e38eef8855a8f3611"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "gnu",
+      "profile": "-Of",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "5c32fbde50a3d48e1f16495eae0ae26cd02a0528aa2f64e97960d375834ddf37",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-gnu-Of-abi1/report.json",
+        "sha256": "afb6fa0c75194ff52b36403b9e52570ae4d1176252183287f6f3dc5fbeda878d"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "gnu",
+      "profile": "-Os",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "20f6cf3b20dc536a1ab91bcabc89a873d9cb86f48fceab16bdcd9a3c33ddbf51",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-gnu-Os-abi0/report.json",
+        "sha256": "6ca6bcfb4f9ee012f3c957211cdd7f2e598d4551707da8483cb9f70349ea1890"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "gnu",
+      "profile": "-Os",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "20f6cf3b20dc536a1ab91bcabc89a873d9cb86f48fceab16bdcd9a3c33ddbf51",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-gnu-Os-abi1/report.json",
+        "sha256": "ea3f520ea8832668e6f5ee449b17006e1a844c4c4435aa28bc1e4f34c5ad75a6"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "caller_abi": 0,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "2e6678c5e9a1c56518a3714f844a80e19c66702579f0d421e49190665806c9f1",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/diskio-O0-abi0/report.json",
+        "sha256": "2805bcae09a3be9ca441008da07946bd06e9102ed8cdaad39497966a642a713d"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "caller_abi": 1,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "2e6678c5e9a1c56518a3714f844a80e19c66702579f0d421e49190665806c9f1",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/diskio-O0-abi1/report.json",
+        "sha256": "a03a443dcc46210e25b0cedc444597e99d6ad9811c22095530069470273c801b"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 0,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "945374901321de30029356ff958a04205761c357e2abc3fec3ebfb2e43211dbc",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-validation/diskio-Of-abi0/report.json",
+        "sha256": "b64806f9a817f5ec7282a03cafe8895c27908092e097a00bcc9a5e3c8f93c5c9"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-native/prior-rom-rebuild/summary.json",
+          "sha256": "56e1815cf5149726c7f4b55b14b07e4680027e86376cf85da74a17a7cfff85a4"
+        }
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "22b2b66838fa449c219063f823ba3820e1c5c426b3c0aa0c60d108301b922495",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-Of-abi0/report.json",
+        "sha256": "84d30a725967c5979e53ae43630997871d62f00074e7888cc2203d5aa08b1124"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 1,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "945374901321de30029356ff958a04205761c357e2abc3fec3ebfb2e43211dbc",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-validation/diskio-Of-abi1/report.json",
+        "sha256": "c56da97ef662fa53b23dd8bcb53cf6c36a27448a9c6fd9cfe0aa2bfa88ceb9fb"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-native/prior-rom-rebuild/summary.json",
+          "sha256": "56e1815cf5149726c7f4b55b14b07e4680027e86376cf85da74a17a7cfff85a4"
+        }
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "22b2b66838fa449c219063f823ba3820e1c5c426b3c0aa0c60d108301b922495",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-Of-abi1/report.json",
+        "sha256": "692cfeb3d3028ee0b38ec6ad09170b43f36b7239b53992c7c3f43dafd0037679"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 0,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "c09d72b3cbc7281f47e15e6427c516242a04423a7d28b7c8672571190b2a499a",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-validation/diskio-Os-abi0/report.json",
+        "sha256": "28cff84104df26b3ea9c5d3025223f3f308d8143d5315f259e2e59847504f358"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-native/prior-rom-rebuild/summary.json",
+          "sha256": "56e1815cf5149726c7f4b55b14b07e4680027e86376cf85da74a17a7cfff85a4"
+        }
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "156b6c4449260099f0c8ee003ce7a85ec12aaafce08330336f3c97186f26b9b7",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-Os-abi0/report.json",
+        "sha256": "22b59893bde05336d4473a285f060f8656a17c4d0aa7b8abcf0d87100859353e"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 1,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "c09d72b3cbc7281f47e15e6427c516242a04423a7d28b7c8672571190b2a499a",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-validation/diskio-Os-abi1/report.json",
+        "sha256": "1661f57ffb2d0e3f3fa0cb4a673a660b87447593642aa9f83d6980e41dbc8522"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-native/prior-rom-rebuild/summary.json",
+          "sha256": "56e1815cf5149726c7f4b55b14b07e4680027e86376cf85da74a17a7cfff85a4"
+        }
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 1,
+      "probe": "rom_startup",
+      "passed": true,
+      "rom_sha256": "e23e8845e0642c21cbd731c91eb42cf2fb03006459f52dc65f132035bef5e113",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/startup-Os-abi1/report.json",
+        "sha256": "b286f73aab6a90bc2c26ef932c6fc8ea69bfdcd828f03de198b92dc82e719196"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "M",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "156b6c4449260099f0c8ee003ce7a85ec12aaafce08330336f3c97186f26b9b7",
+      "execution": {
+        "path": "build/zx-esxdos/rom-production-final/smoke-Os-abi1/report.json",
+        "sha256": "104264305e879200092f89106b07cacd4f75a92420377825a46b32029f10a393"
+      },
+      "final_tool_evidence": {
+        "method": "Executed with final assembler, linker and runner."
+      }
+    },
+    {
+      "model": "S",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "caller_abi": 0,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "2e6678c5e9a1c56518a3714f844a80e19c66702579f0d421e49190665806c9f1",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/S-O0-abi0-diskio/report.json",
+        "sha256": "f41ad249f27e7819e95176515a820bd3c4b8e237c69643d5b6aff729ebf760cb"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "S",
+      "mode": "sdcc",
+      "profile": "-O0",
+      "caller_abi": 1,
+      "probe": "diskio",
+      "passed": true,
+      "rom_sha256": "2e6678c5e9a1c56518a3714f844a80e19c66702579f0d421e49190665806c9f1",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/S-O0-abi1-diskio/report.json",
+        "sha256": "72bf63928c161cae7b1bd85cb3410ad75d85cc079b1a669976f85e105c4a902e"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "S",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "22b2b66838fa449c219063f823ba3820e1c5c426b3c0aa0c60d108301b922495",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/S-Of-abi0-smoke/report.json",
+        "sha256": "4832820e4a69f831e8df7d374403935339efce11baaf02a4d02b7fbb2c0fd518"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "S",
+      "mode": "sdcc",
+      "profile": "-Of",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "22b2b66838fa449c219063f823ba3820e1c5c426b3c0aa0c60d108301b922495",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/S-Of-abi1-smoke/report.json",
+        "sha256": "ff2135cd30bd94a0086138814c43e76e8ec5c1370003936e9500120f1889e22a"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "S",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 0,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "156b6c4449260099f0c8ee003ce7a85ec12aaafce08330336f3c97186f26b9b7",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/S-Os-abi0-smoke/report.json",
+        "sha256": "ccb3a1d947d8fe8401bbdb0ef0f12052ea9fe04735d53dd6cd921e46b47ddadd"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    },
+    {
+      "model": "S",
+      "mode": "sdcc",
+      "profile": "-Os",
+      "caller_abi": 1,
+      "probe": "smoke",
+      "passed": true,
+      "rom_sha256": "156b6c4449260099f0c8ee003ce7a85ec12aaafce08330336f3c97186f26b9b7",
+      "execution": {
+        "path": "build/zx-esxdos/rom-model-validation/S-Os-abi1-smoke/report.json",
+        "sha256": "210c4ac00fad4877c39738b57c5c927e9a635bfbceb0e6b437bf5d0f9dc22901"
+      },
+      "final_tool_evidence": {
+        "method": "Previously cold-booted ROM rebuilt byte-for-byte with final tools.",
+        "rebuild_receipt": {
+          "path": "build/zx-esxdos/rom-xas-fix/side-rom-identity/summary.json",
+          "sha256": "3c6217c0f2695ce373564384b21a837ab75c59e66a0bca5e42fbd6939e4da673"
+        }
+      }
+    }
+  ],
+  "startup_rom_layout": {
+    "bootstrap_bytes": 398,
+    "last_initialized_byte_exclusive": 15965,
+    "unused_rom_bytes": 419,
+    "immutable_bytes_compared": 15561,
+    "note": "CODE copy reads through 04C6/0562. CONST load range0703..3E12 crosses1FF8 and3D00..3DFF, including font data. The12KiB testpattern itself ends3702."
+  },
+  "host_tests": {
+    "xld": {
+      "passed": 100,
+      "failed": 0,
+      "sanitizers": [
+        "address",
+        "undefined"
+      ],
+      "log": {
+        "path": "build/zx-esxdos/rom-native/xld-tests-sanitized.log",
+        "sha256": "ee34553ee4b7c7416f7dcf6c8553ad8b35db73eead60896e377b706d6ca61ce1"
+      }
+    },
+    "xas": {
+      "component_suites_passed": 6,
+      "both_sanitized_and_normal": true,
+      "receipt": {
+        "path": "build/zx-esxdos/rom-xas-fix/validation-summary.json",
+        "sha256": "16faa38d5339d167991da491435b98011fa43ba557bbceb20be7c2d5f85c494d"
+      },
+      "reference_update": "Five GNU-to-SDCC conversion reference section names were corrected from text to_CODE; instructions and byte-identity checks retained."
+    }
+  },
+  "regression_evidence": {
+    "final_M_cold_boots": {
+      "path": "build/zx-esxdos/rom-production-final/summary.json",
+      "sha256": "50f1756bc7b6c7ced1ffe5db67024ebd259224ff85d39f8510ade3399993e185"
+    },
+    "final_M_immutable_areas": {
+      "path": "build/zx-esxdos/rom-production-final/immutable-areas.json",
+      "sha256": "b5abf0602310cd89d3d3bb76dbfe2af44316dac898aea27c01d67b9344ae80ac"
+    },
+    "earlier_25_immutable_areas": {
+      "path": "build/zx-esxdos/rom-boot-test/immutable-areas-before-gnu-fix.json",
+      "sha256": "081e0966a044b5614b16a2710bfa310b4a2e7c63c2e1cb36326fc8fba1cd9b6e"
+    },
+    "final_original_ZX_MCP_4_modes": {
+      "path": "build/zx-esxdos/rom-xas-fix/plain-zx48-final.json",
+      "sha256": "f289295aacbcabe5979e9752642a8ae51e5c409be1ea61abe12df2d40c7152fb"
+    },
+    "xld_18_existing_images_unchanged": {
+      "path": "build/zx-esxdos/rom-native/existing-links-final/report.json",
+      "sha256": "167a4395a3cffbbc036f3c5c9cc414cf0605d8aeba23ffe24c9aced985d253ed"
+    },
+    "xas_37_objects_and_18_images_unchanged": {
+      "path": "build/zx-esxdos/rom-native/assembler-identity/report.json",
+      "sha256": "cdbf10b9057cc61aefd6dcb52d4a54e686eefbaed351479fde30d0c4af999c91"
+    },
+    "oversized_ROM_rejected_without_output": {
+      "path": "build/zx-esxdos/rom-native/overflow-check/report.json",
+      "sha256": "86d26acdc5351bc41c067bdeebb9646cf8a22691e7725fcbcb2ccf552df8c885"
+    }
+  },
+  "preserved_findings": {
+    "GNU_Of_initial_link_failures": [
+      {
+        "path": "build/zx-esxdos/rom-production-validation/smoke-gnu-Of-abi0/report.json",
+        "sha256": "8198a9359d55e191852eb8e2c238ff7ec3f5941c11bf26f6661dd63590c61735"
+      },
+      {
+        "path": "build/zx-esxdos/rom-production-validation/smoke-gnu-Of-abi1/report.json",
+        "sha256": "bc8e9d663207f6b11c0e353fa5f91743d28a110144d604ad1b70cf6d3ba02886"
+      }
+    ],
+    "assembler_regression_before": {
+      "path": "build/zx-esxdos/rom-xas-fix/regression-before.log",
+      "sha256": "37b67a52a1f41e0043a29a93c6ea1a916a7e9250c80ed0a3eba0eaca2c048a81"
+    },
+    "explanation": "Initial GNU Of links rejected the misspelled rodata area. Preserving explicit section names repaired them; both ABIs pass with final tools. Initial harness/bookkeeping and prototype work remains under build/zx-esxdos and is excluded from final configuration counts."
+  },
+  "semantic_sources": [
+    {
+      "path": "x/examples/zx-esxdos-rom/diskio.c",
+      "sha256": "891f132758ab68a4d673604984846d5406abd2e7cb8bcc542185d62ac7179cb0"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/_exit.s",
+      "sha256": "369b58008f2a03d4da246de6316686f6aeb89b6f7c91b62d29f2f74e52317a9c"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/close.s",
+      "sha256": "9bc7ce5c627bce34f3696612cdfab29b0d827403f9eeb88dae05b095dc0d30a0"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/console.s",
+      "sha256": "cc1b040d1e25fea208d480da298a95c34b266566d65580df7164414fad173021"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/crt0.s",
+      "sha256": "29e66364244051f7cfdf8b2e6767b9e3caa8d93d8d2823f501572c66a39e6378"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_calls.s",
+      "sha256": "a14f940173dcf7c0f55e028424fc7697c949e81e87b381103ef113d6d15a7e69"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_core.s",
+      "sha256": "09379705cc4436508e7e51daa7eeb6600a912f278712c5a742c8641c1de9e713"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/esxdos_paths.s",
+      "sha256": "649169e95f2938a35b0d82b85b4b8c1b88aae7ce7a49c65eec487ffd47242a84"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/fstat.s",
+      "sha256": "0d04720e9d68498222d1adec621de265106d95b19f840d938551e31b62bd66c7"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/fsync.s",
+      "sha256": "2ae11af0f679cfb2a79dcde44a2e33c6f638e9c2bc1d23c9b9e3dd0eab7cae32"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/gettimeofday.s",
+      "sha256": "2147b2713a7e411e07d2403bf2370fffaa54365643ea6ce93249131f6a6de1a9"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/heap_region.s",
+      "sha256": "5484017bc55e6d9e8167d25fc8d2ca2c459177646dde14282ac6365ba08006de"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/include/sys/esxdos.h",
+      "sha256": "787f89bb8ce43d071f15686b0614a819f29636fb5c7bfb8133dcb91abe969d9e"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/keyboard.s",
+      "sha256": "98649c495ca3d5e1786b41195c061c3c3e7818e3ac54d82b9cca7a6856ce9237"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/linker.ld",
+      "sha256": "ee3f1bd0b16347811c857854cec5ae757ff8fac1d87b8e2583a03f4730eb6b0f"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/linker.lk",
+      "sha256": "f0a5a40eaae61e9289c73b80f643491dd42ad21b4683a3bc90a525101bff44bf"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/lseek.s",
+      "sha256": "0c4490428f80bf2ed7ba8f0633bc1d563378971a1245c714921c908ae201000b"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/open.s",
+      "sha256": "b148ec0cc1edd415ab939ba447f62bbd5c1914d65808cc16b673cb0d872d7cea"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/putchar.s",
+      "sha256": "64056cd11dda1265bc32639bd552fc4231c39eaf9f9298dca36a14e10a497c15"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/read.s",
+      "sha256": "e833e8e3ef7e57e532f89953da1c71cb0139a0256e6e1edf5db0fb185921f1c5"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/settimeofday.s",
+      "sha256": "9b2f4db2872d2bf1039d3baeb0fff20f043f2a5866889e1d33a5dda637d46fc7"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/tamsyn.s",
+      "sha256": "dc088c42dfd42b32e10a24bafaee4298805cf399d9ad05f90a98b541cd8ca6db"
+    },
+    {
+      "path": "x/platforms/zx-esxdos-rom/write.s",
+      "sha256": "abd726e30e0c8f8e809a0882e3adfe6e6e5290af628715254d140a52031617ea"
+    },
+    {
+      "path": "x/src/xas/src/frontend/parser.cpp",
+      "sha256": "8a8f966e7a2339d7b60b0fae97d917cc0a88d0954b54f1324feb675d3877b55b"
+    },
+    {
+      "path": "x/src/xld/src/linker.cpp",
+      "sha256": "04de43947498a1a01e0a348e6b3f283fc3497998ea8782b873063aa571ba4f68"
+    },
+    {
+      "path": "x/tests/tests/xas/directive_compat_test.sh",
+      "sha256": "d3609b12e1e65d9b057ece77f2a10366981aa7d4b398fedaa24a2a9bc0a0bf85"
+    },
+    {
+      "path": "x/tests/tests/xas/macro_convert_test.sh",
+      "sha256": "9ae2d91aca776b63fb75246e8e9f41eb78bd89e2cbfbd8691f7cb2f18b70e0c6"
+    },
+    {
+      "path": "x/tests/tests/xld/test_linker.cpp",
+      "sha256": "1839354d021904448635a7b7f81d32207c22fc90caca402cdb10fc0a9b38f3fa"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/rom_startup.c",
+      "sha256": "d37f029df6552175e3a19138f838fae03080d8e9e321f401b21fff7c28c77126"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/rom_startup.s",
+      "sha256": "42107b364aea541961c779f7c07b7d45889765899a0edd813b5e401a39667bb5"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/run_rom_firmware.py",
+      "sha256": "97fc9f7ecd782d178db7778612815d982a840f7af077f02eacaaa79f58ec75c5"
+    },
+    {
+      "path": "x/tests/tests/zx48/esxdos/smoke.c",
+      "sha256": "7e6437f9d91db0882df1c389d50dbf6d09d41d17cabf80e57c96873133b87e0c"
+    }
+  ],
+  "shared_backend": "All19 hook/header files match zx-esxdos exactly; existing RAM backend ABI tests remain separately recorded in validation-2026-09.json.",
+  "packaging": "New target staged in all four prefixes and declared in package verification manifest; no Debian archive rebuild claimed."
+}

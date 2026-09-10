@@ -1018,8 +1018,10 @@ run_z88dk_suite() {
     need_cmd "$XLD"
     need_cmd sdcc
     [[ -x "$ORIG_Z88DK_ZCC" ]] || die "missing local z88dk zcc: $ORIG_Z88DK_ZCC"
-    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib" ]] || die "missing z88dk test library: $ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib"
-    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib" ]] || die "missing z88dk crt library: $ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib"
+    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib" ||
+       -f "$ORIG_Z88DK_ROOT/lib/clibs/test_clib.lib" ]] || die "missing z88dk test library"
+    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib" ||
+       -f "$ORIG_Z88DK_ROOT/lib/clibs/z80_crt0.lib" ]] || die "missing z88dk crt library"
     [[ -f "$RUNTIME_LIB" ]] || die "missing runtime library: $RUNTIME_LIB"
 
     rm -rf "$suite_outdir"
@@ -1281,8 +1283,10 @@ run_portable_suite() {
     need_cmd "$XLD"
     need_cmd sdcc
     [[ -x "$ORIG_Z88DK_ZCC" ]] || die "missing local z88dk zcc: $ORIG_Z88DK_ZCC"
-    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib" ]] || die "missing z88dk test library: $ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib"
-    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib" ]] || die "missing z88dk crt library: $ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib"
+    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/test_clib.lib" ||
+       -f "$ORIG_Z88DK_ROOT/lib/clibs/test_clib.lib" ]] || die "missing z88dk test library"
+    [[ -f "$ORIG_Z88DK_ROOT/lib/clibs/z80/z80_crt0.lib" ||
+       -f "$ORIG_Z88DK_ROOT/lib/clibs/z80_crt0.lib" ]] || die "missing z88dk crt library"
     [[ -f "$RUNTIME_LIB" ]] || die "missing runtime library: $RUNTIME_LIB"
 
     ensure_portable_suite_generated

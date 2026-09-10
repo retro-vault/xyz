@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "validated_utc": "2026-09-09T20:07:29.062681+00:00",
+  "target": "zx-esxdos",
+  "firmware": "esxDOS 0.8.9",
+  "status": "passed",
+  "implementation": "Native assembly POSIX-style adapter using esxDOS external RST 8 ABI; plain zx-ram/zx-rom retained.",
+  "abi_validation": {
+    "M": {
+      "result": {
+        "path": "build/zx-esxdos/final/abi/results.json",
+        "sha256": "8094827203b25bb99431027f65e75c4e26a94c5e11d96a6e745557366ca70a15"
+      },
+      "passed": 6,
+      "checks_per_lane": 523,
+      "firmware_calls_per_lane": 855,
+      "lanes": [
+        {
+          "name": "O0-abi0",
+          "image_sha256": "e618bcf9870c662731b2aa89b775438867827bc1a9006fd17aef5dbb806f0efb",
+          "exit_code": 0
+        },
+        {
+          "name": "O0-abi1",
+          "image_sha256": "87062f02282d2110ca104d34c71d31cd25ba38705a1a1216cfc6dabfcb5960a6",
+          "exit_code": 0
+        },
+        {
+          "name": "Os-abi0",
+          "image_sha256": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84",
+          "exit_code": 0
+        },
+        {
+          "name": "Os-abi1",
+          "image_sha256": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84",
+          "exit_code": 0
+        },
+        {
+          "name": "Of-abi0",
+          "image_sha256": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee",
+          "exit_code": 0
+        },
+        {
+          "name": "Of-abi1",
+          "image_sha256": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee",
+          "exit_code": 0
+        }
+      ]
+    },
+    "S": {
+      "result": {
+        "path": "build/zx-esxdos/model-distribution-validation/S-abi/results.json",
+        "sha256": "c3c4b1b2d3f5f18da0a4920d8d0da1ac26fcddbe3fb330810402c15df2752d93"
+      },
+      "passed": 6,
+      "checks_per_lane": 523,
+      "firmware_calls_per_lane": 855,
+      "lanes": [
+        {
+          "name": "O0-abi0",
+          "image_sha256": "e618bcf9870c662731b2aa89b775438867827bc1a9006fd17aef5dbb806f0efb",
+          "exit_code": 0
+        },
+        {
+          "name": "O0-abi1",
+          "image_sha256": "87062f02282d2110ca104d34c71d31cd25ba38705a1a1216cfc6dabfcb5960a6",
+          "exit_code": 0
+        },
+        {
+          "name": "Os-abi0",
+          "image_sha256": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84",
+          "exit_code": 0
+        },
+        {
+          "name": "Os-abi1",
+          "image_sha256": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84",
+          "exit_code": 0
+        },
+        {
+          "name": "Of-abi0",
+          "image_sha256": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee",
+          "exit_code": 0
+        },
+        {
+          "name": "Of-abi1",
+          "image_sha256": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee",
+          "exit_code": 0
+        }
+      ]
+    },
+    "L": {
+      "result": {
+        "path": "build/zx-esxdos/model-distribution-validation/L-abi/results.json",
+        "sha256": "f6c12dba0209663b005bf2a4aa95030a04de9d50c782162f0417629b479df2b0"
+      },
+      "passed": 6,
+      "checks_per_lane": 523,
+      "firmware_calls_per_lane": 855,
+      "lanes": [
+        {
+          "name": "O0-abi0",
+          "image_sha256": "e618bcf9870c662731b2aa89b775438867827bc1a9006fd17aef5dbb806f0efb",
+          "exit_code": 0
+        },
+        {
+          "name": "O0-abi1",
+          "image_sha256": "87062f02282d2110ca104d34c71d31cd25ba38705a1a1216cfc6dabfcb5960a6",
+          "exit_code": 0
+        },
+        {
+          "name": "Os-abi0",
+          "image_sha256": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84",
+          "exit_code": 0
+        },
+        {
+          "name": "Os-abi1",
+          "image_sha256": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84",
+          "exit_code": 0
+        },
+        {
+          "name": "Of-abi0",
+          "image_sha256": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee",
+          "exit_code": 0
+        },
+        {
+          "name": "Of-abi1",
+          "image_sha256": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee",
+          "exit_code": 0
+        }
+      ]
+    }
+  },
+  "distinct_model_profile_abi_lanes": 18,
+  "firmware_validation": {
+    "Os": {
+      "passed": true,
+      "public_C_probe_phases": 65,
+      "report": {
+        "path": "build/zx-esxdos/final/firmware-Os/report.json",
+        "sha256": "f2c9a556d932d5601520bef11c152a4ef52baaadb2db09cd832d56445dd24a27"
+      },
+      "compiler_command": [
+        "/home/tstih/data/retro-vault/xyz/bin/x/bin/xcc",
+        "-Os",
+        "--platform=zx-esxdos",
+        "--oformat=binary",
+        "-Map=/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Os/smoke.map",
+        "/home/tstih/data/retro-vault/xyz/x/tests/tests/zx48/esxdos/smoke.c",
+        "-o",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Os/smoke.bin"
+      ],
+      "emulator_command": [
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/tools/zesarux/src/zesarux",
+        "--noconfigfile",
+        "--machine",
+        "48k",
+        "--vo",
+        "null",
+        "--ao",
+        "null",
+        "--nowelcomemessage",
+        "--ide-file",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Os/disk.ide",
+        "--enable-ide",
+        "--enable-divide",
+        "--divide-rom",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/research/089/ESXIDE.BIN",
+        "--enable-remoteprotocol",
+        "--remoteprotocol-port",
+        "60895"
+      ],
+      "inputs": {
+        "/home/tstih/data/retro-vault/xyz/bin/x/bin/xcc": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/tools/zesarux/src/zesarux": "fd20c4cfe33bc57285f4bea23a9cdd8f18344ed016697a2237dacdc8e8001840",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/research/089/ESXIDE.BIN": "771d5f21de48a3e9969adef7708ddb9a2834ba8729c5f702e5c0bb6067ebaa57",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/tools/divideesx089.ide": "82a899b3cd7130ac3cdd1404da860b0f13b995a2a930739a7fce21aa8f2aa63e",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Os/smoke.bin": "56602abe8283920aacec16ed176c0aac72d2f4aa275b284cca41f2f2ef7aaf84"
+      }
+    },
+    "Of": {
+      "passed": true,
+      "public_C_probe_phases": 65,
+      "report": {
+        "path": "build/zx-esxdos/final/firmware-Of/report.json",
+        "sha256": "0ad3855b4998132763ae85962dcf516c7b3e81e18508527c79eb2cc1b7d6ede8"
+      },
+      "compiler_command": [
+        "/home/tstih/data/retro-vault/xyz/bin/x/bin/xcc",
+        "-Of",
+        "--platform=zx-esxdos",
+        "--oformat=binary",
+        "-Map=/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Of/smoke.map",
+        "/home/tstih/data/retro-vault/xyz/x/tests/tests/zx48/esxdos/smoke.c",
+        "-o",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Of/smoke.bin"
+      ],
+      "emulator_command": [
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/tools/zesarux/src/zesarux",
+        "--noconfigfile",
+        "--machine",
+        "48k",
+        "--vo",
+        "null",
+        "--ao",
+        "null",
+        "--nowelcomemessage",
+        "--ide-file",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Of/disk.ide",
+        "--enable-ide",
+        "--enable-divide",
+        "--divide-rom",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/research/089/ESXIDE.BIN",
+        "--enable-remoteprotocol",
+        "--remoteprotocol-port",
+        "42169"
+      ],
+      "inputs": {
+        "/home/tstih/data/retro-vault/xyz/bin/x/bin/xcc": "098acc39b843a6a755f6c35dc4fb1ea4384b89ae848c25cc04a336b3d720446a",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/tools/zesarux/src/zesarux": "fd20c4cfe33bc57285f4bea23a9cdd8f18344ed016697a2237dacdc8e8001840",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/research/089/ESXIDE.BIN": "771d5f21de48a3e9969adef7708ddb9a2834ba8729c5f702e5c0bb6067ebaa57",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/tools/divideesx089.ide": "82a899b3cd7130ac3cdd1404da860b0f13b995a2a930739a7fce21aa8f2aa63e",
+        "/home/tstih/data/retro-vault/xyz/build/zx-esxdos/final/firmware-Of/smoke.bin": "6c2500c65e1f0581b10d10bf163663d9ddfb17df6d9080fdd8272289df4b70ee"
+      }
+    }
+  },
+  "platform_and_package": {
+    "plain_zx48_modes": 4,
+    "header_builds": 6,
+    "example_builds": 4,
+    "example_real_firmware_runs": 4,
+    "package_paths_present": 49,
+    "frozen_input_counts": {
+      "source": 32,
+      "staged": 144
+    },
+    "changed_frozen_inputs": [],
+    "shared_ide_image_unchanged": true
+  },
+  "platform_evidence": {
+    "path": "build/zx-esxdos/platform-validation-final/summary.json",
+    "sha256": "83f73da278b1aab03bb9d36929a5d7b4e1f79d0c97a5769bb92f31f4ac7d6808"
+  },
+  "side_by_side_model_audit": {
+    "source_inputs": {
+      "files": 546,
+      "changed": [],
+      "unchanged": true,
+      "inventory_unchanged": true,
+      "added": [],
+      "removed": []
+    },
+    "default_prefix": {
+      "files": 144,
+      "changed": [],
+      "unchanged": true,
+      "inventory_unchanged": true,
+      "added": [],
+      "removed": []
+    },
+    "S_prefix": {
+      "files": 143,
+      "changed": [],
+      "unchanged": true,
+      "inventory_unchanged": true,
+      "added": [],
+      "removed": []
+    },
+    "L_prefix": {
+      "files": 143,
+      "changed": [],
+      "unchanged": true,
+      "inventory_unchanged": true,
+      "added": [],
+      "removed": []
+    },
+    "models": {
+      "S": {
+        "stage_exit_code": 0,
+        "matrix_exit_code": 0,
+        "lanes": 6,
+        "passed": 6,
+        "checks_per_lane": 523,
+        "checks": 3138,
+        "inputs_unchanged": true,
+        "compiler_sha256": "d82ed42997c19d53d6e3d58d90da047ba4ccbcbc87e0ab25ed52ff2a9f3eabe6",
+        "compiler_unchanged": true
+      },
+      "L": {
+        "stage_exit_code": 0,
+        "matrix_exit_code": 0,
+        "lanes": 6,
+        "passed": 6,
+        "checks_per_lane": 523,
+        "checks": 3138,
+        "inputs_unchanged": true,
+        "compiler_sha256": "9143f04a5de0de8b48c8c805ba38d9643026258352713e65280dc686ec10d593",
+        "compiler_unchanged": true
+      }
+    },
+    "side_M": {
+      "stage_exit_code": 0,
+      "compared_files": 67,
+      "target_and_common_headers_identical": true,
+      "different": [],
+      "compiler_unchanged": true,
+      "default_unchanged": true,
+      "S_unchanged": true,
+      "L_unchanged": true
+    }
+  },
+  "model_evidence": {
+    "path": "build/zx-esxdos/model-distribution-validation/summary.json",
+    "sha256": "634ad265b1dd22bc0547cbd2b6075db7948221762ec3840c3cab3b9c2a87e435"
+  },
+  "source_hashes": {
+    "x/libc/include/errno.h": "7b68820040af7bf78f28e9cb85c13e0524316696d45c81192c23da8d9aad6a35",
+    "x/libc/include/fcntl.h": "9dcd1c2ead108c2c36bb112f82973fb19ef5de258bac2995bc54ab9f735da61f",
+    "x/libc/include/sys/stat.h": "6d01e8244f32bc58160920e10290d50071b04980aa3f936de15ebbed4d7ffec9",
+    "x/libc/include/sys/types.h": "29d6dc9d4ec820da4e15fcb4eb55ee5ae25811f8eb8d3c8e7447ec35db287620",
+    "x/libc/include/sys.h": "9df451e11a6f094ec5283cdfa5a00905af1747c0bbe50d79836b17e0a1ee1611",
+    "x/libc/include/unistd.h": "cd2e5534004b9eea51c18e60a6a4b9d7412e7e403ec3312eed978ee21df4314e",
+    "x/platforms/zx-esxdos/_exit.s": "369b58008f2a03d4da246de6316686f6aeb89b6f7c91b62d29f2f74e52317a9c",
+    "x/platforms/zx-esxdos/close.s": "9bc7ce5c627bce34f3696612cdfab29b0d827403f9eeb88dae05b095dc0d30a0",
+    "x/platforms/zx-esxdos/console.s": "cc1b040d1e25fea208d480da298a95c34b266566d65580df7164414fad173021",
+    "x/platforms/zx-esxdos/crt0.s": "94683e84e4f7eabbfe2372405314c3a431ddedd2c3baa7c9f0a6f18848a06efa",
+    "x/platforms/zx-esxdos/esxdos_calls.s": "a14f940173dcf7c0f55e028424fc7697c949e81e87b381103ef113d6d15a7e69",
+    "x/platforms/zx-esxdos/esxdos_core.s": "09379705cc4436508e7e51daa7eeb6600a912f278712c5a742c8641c1de9e713",
+    "x/platforms/zx-esxdos/esxdos_paths.s": "649169e95f2938a35b0d82b85b4b8c1b88aae7ce7a49c65eec487ffd47242a84",
+    "x/platforms/zx-esxdos/fstat.s": "0d04720e9d68498222d1adec621de265106d95b19f840d938551e31b62bd66c7",
+    "x/platforms/zx-esxdos/fsync.s": "2ae11af0f679cfb2a79dcde44a2e33c6f638e9c2bc1d23c9b9e3dd0eab7cae32",
+    "x/platforms/zx-esxdos/gettimeofday.s": "2147b2713a7e411e07d2403bf2370fffaa54365643ea6ce93249131f6a6de1a9",
+    "x/platforms/zx-esxdos/heap_region.s": "5484017bc55e6d9e8167d25fc8d2ca2c459177646dde14282ac6365ba08006de",
+    "x/platforms/zx-esxdos/include/sys/esxdos.h": "787f89bb8ce43d071f15686b0614a819f29636fb5c7bfb8133dcb91abe969d9e",
+    "x/platforms/zx-esxdos/keyboard.s": "98649c495ca3d5e1786b41195c061c3c3e7818e3ac54d82b9cca7a6856ce9237",
+    "x/platforms/zx-esxdos/linker.ld": "b1e43411cd027be0b376bc556d00617bfb27f0ab85ab3ac45d8e209eed57d22f",
+    "x/platforms/zx-esxdos/linker.lk": "3244d5bd5f32f5052decda22f6a66ebd4e827a077a89761266856af0ae060209",
+    "x/platforms/zx-esxdos/lseek.s": "0c4490428f80bf2ed7ba8f0633bc1d563378971a1245c714921c908ae201000b",
+    "x/platforms/zx-esxdos/open.s": "b148ec0cc1edd415ab939ba447f62bbd5c1914d65808cc16b673cb0d872d7cea",
+    "x/platforms/zx-esxdos/putchar.s": "64056cd11dda1265bc32639bd552fc4231c39eaf9f9298dca36a14e10a497c15",
+    "x/platforms/zx-esxdos/read.s": "e833e8e3ef7e57e532f89953da1c71cb0139a0256e6e1edf5db0fb185921f1c5",
+    "x/platforms/zx-esxdos/settimeofday.s": "9b2f4db2872d2bf1039d3baeb0fff20f043f2a5866889e1d33a5dda637d46fc7",
+    "x/platforms/zx-esxdos/tamsyn.s": "dc088c42dfd42b32e10a24bafaee4298805cf399d9ad05f90a98b541cd8ca6db",
+    "x/platforms/zx-esxdos/write.s": "abd726e30e0c8f8e809a0882e3adfe6e6e5290af628715254d140a52031617ea",
+    "x/tests/tests/zx48/esxdos/abi_machine.cpp": "df3b6217337fc3aa27be5dffa7a181a7602473fc008cc05ff8e5fad48e2af3e3",
+    "x/tests/tests/zx48/esxdos/run_abi.py": "1adb02dbcd874b80c10caf5c8875f34f3548fb9a5392b02f97367150372ad5fa",
+    "x/tests/tests/zx48/esxdos/run_firmware.py": "5f7b4e46de584ea4aef954e943c0b5a95ce95de0340a7cbccf729186dcb0158b",
+    "x/tests/tests/zx48/esxdos/smoke.c": "7e6437f9d91db0882df1c389d50dbf6d09d41d17cabf80e57c96873133b87e0c"
+  },
+  "default_staged_manifest": {
+    "path": "build/zx-esxdos/final/inputs-before.json",
+    "sha256": "6d6a03c6a6c5464194086fb20758e12b317f90ed2e697515100ac00702615797"
+  },
+  "source_and_staged_unchanged_at_publication": true,
+  "firmware_archive": {
+    "url": "https://www.esxdos.org/files/esxdos089.zip",
+    "sha256": "d455888361cd13d455e362a4c841452b6f4568d30f9069443044affdd40de9a4"
+  },
+  "limitations": [
+    "Real firmware tested on emulated divIDE/IDE hardware, not a physical interface.",
+    "esxDOS 0.8.9 and Sinclair ROM must be initialized before starting.",
+    "Firmware rename does not atomically replace an existing destination.",
+    "Seek reports actual firmware position; sparse files are not promised.",
+    "Native errors do not reliably report partial transfer counts.",
+    "The package audit checks staged files and identities; no rebuilt Debian archive is claimed."
+  ],
+  "preserved_initial_findings": [
+    {
+      "path": "build/zx-esxdos/firmware-Os-1",
+      "finding": "Directory F_STAT reports size 0xffffffff; fixed adapter normalizes directory st_size to zero."
+    }
+  ]
+}

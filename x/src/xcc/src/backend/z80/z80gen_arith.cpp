@@ -18,8 +18,12 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "backend/z80/z80gen.h"
+#include "backend/sdasz80_emitter.h"
 #include <array>
 #include <functional>
+#include <limits>
+#include <queue>
+#include <sstream>
 
 namespace xcc {
 
@@ -101,6 +105,11 @@ static bool is_divmod_fusion_barrier(const icode &ic) {
     }
 }
 
+static bool has_full_integer_precision(const type_ptr &type, int bits) {
+    return type && type->is_integer() && type->size() * 8 == bits &&
+           (type->kind != type_kind::BITINT || type->bitint_width == bits);
+}
+
 static bool is_truth_test_preserving_integer_cast(const icode &ic) {
     if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type)
         return false;
@@ -108,7 +117,29 @@ static bool is_truth_test_preserving_integer_cast(const icode &ic) {
         return false;
     const bool src_ok = ic.left.type->is_integer() || ic.left.type->is_ptr();
     const bool dst_ok = ic.result.type->is_integer() || ic.result.type->is_ptr();
-    return src_ok && dst_ok;
+    if (!src_ok || !dst_ok)
+        return false;
+    if (ic.result.type->kind == type_kind::BOOL)
+        return true;
+    const int src_bits = ic.left.type->kind == type_kind::BITINT
+        ? ic.left.type->bitint_width : ic.left.type->size() * 8;
+    const int dst_bits = ic.result.type->kind == type_kind::BITINT
+        ? ic.result.type->bitint_width : ic.result.type->size() * 8;
+    return dst_bits >= src_bits;
+}
+
+static bool is_comparison_result_preserving_integer_cast(const icode &ic) {
+    // Comparison producers yield exactly 0 or 1. A narrowing cast preserves
+    // that value whenever the destination represents both, independently of
+    // whether the same cast preserves truth for an arbitrary source integer.
+    if (ic.op != icode_op::CAST || !ic.left.type || !ic.result.type ||
+        !ic.left.type->is_integer() || !ic.result.type->is_integer())
+        return false;
+    if (ic.result.type->kind == type_kind::BOOL)
+        return true;
+    const int bits = ic.result.type->kind == type_kind::BITINT
+        ? ic.result.type->bitint_width : ic.result.type->size() * 8;
+    return bits >= (ic.result.type->is_unsigned() ? 1 : 2);
 }
 
 static bool is_fixed_format(float_format format) {
@@ -530,7 +561,31 @@ void z80_gen::gen_add(const icode &ic) {
             }
         }
 
-        if (cursor &&
+        // Delaying the cursor update until the load changes access order.
+        // Only ordinary near cursors and ordinary source memory may use this
+        // shortcut; a volatile/atomic read must retain its complete width.
+        // The load also cannot alias the cursor's own storage: writing the
+        // cursor after that load would read the old pointer representation.
+        const auto observable_type = [](const type_ptr &ty) {
+            return ty && (ty->is_volatile || ty->is_atomic);
+        };
+        bool private_cursor = cursor && !cursor->is_global;
+        if (private_cursor) {
+            for (const icode &other : cur_fn_->icodes) {
+                if (other.op == icode_op::INLINE_ASM ||
+                    (other.op == icode_op::ADDRESS_OF &&
+                     equivalent_operands(other.left, *cursor))) {
+                    private_cursor = false;
+                    break;
+                }
+            }
+        }
+        if (private_cursor && cursor->type && cursor->type->is_ptr() &&
+            !cursor->type->is_far_ptr() && !cursor->is_sfr &&
+            !observable_type(cursor->type) &&
+            !observable_type(get_ic.result.type) && !get_ic.left.is_sfr &&
+            !(get_ic.left.type &&
+              observable_type(get_ic.left.type->base)) &&
             step >= 1 && step <= 4 &&
             sub_ic.op == icode_op::SUB &&
             sub_ic.result.is_temp() &&
@@ -711,6 +766,46 @@ void z80_gen::gen_add(const icode &ic) {
             emit_line("add\ta, d");
         }
         store_a(ic.result);
+        return;
+    }
+
+    if (op_size(ic.result) == 2 && op_size(ic.left) == 1 &&
+        op_size(ic.right) == 1 && ic.left.type && ic.right.type &&
+        ic.left.type->is_unsigned() && ic.right.type->is_unsigned()) {
+        auto incoming_a = [&](const operand &value) {
+            if (value.is_temp()) {
+                auto home = temp_regs_.find(value.temp_id);
+                return home != temp_regs_.end() &&
+                       home->second == temp_home::arg_a;
+            }
+            if (value.is_symbol() && !value.is_global) {
+                auto home = incoming_symbol_homes_.find(value.stack_offset);
+                return home != incoming_symbol_homes_.end() &&
+                       home->second == temp_home::arg_a;
+            }
+            return false;
+        };
+        const operand *lhs = &ic.left;
+        const operand *rhs = &ic.right;
+        if (incoming_a(*rhs))
+            std::swap(lhs, rhs);
+        // Consume both byte operands before writing either result lane.
+        // In the register ABI, the sources can occupy A and L; widening
+        // one of them first would destroy the other incoming argument.
+        load_a(*lhs);
+        if (rhs->kind == operand_kind::INT_CONST) {
+            emit_line("add\ta, %s", asm_.imm(rhs->ival & 0xff).c_str());
+        } else if (!emit_byte_alu_direct_rhs(
+                       "add", *rhs, lhs_load_preserves_bc(*lhs))) {
+            emit_line("ld\te, a");
+            load_a(*rhs);
+            emit_line("add\ta, e");
+        }
+        emit_line("ld\tl, a");
+        emit_line("ld\ta, %s", asm_.imm(0).c_str());
+        emit_line("adc\ta, a");
+        emit_line("ld\th, a");
+        store_hl(ic.result);
         return;
     }
 
@@ -1019,6 +1114,19 @@ void z80_gen::gen_sub(const icode &ic) {
         };
 
     if (op_size(ic.result) == 1) {
+        if (ic.left.kind == operand_kind::INT_CONST &&
+            ic.right.kind != operand_kind::INT_CONST) {
+            // Read the variable before materializing the constant: it may
+            // be the incoming A argument.  In the byte ring, k-x is -x+k.
+            load_a(ic.right);
+            emit_line("neg");
+            const unsigned constant =
+                static_cast<unsigned>(ic.left.ival) & 0xffu;
+            if (constant != 0)
+                emit_line("add\ta, %s", asm_.imm(constant).c_str());
+            store_a(ic.result);
+            return;
+        }
         load_a(ic.left);
         if (ic.right.kind == operand_kind::INT_CONST) {
             emit_line("sub\t%s",
@@ -1120,14 +1228,247 @@ void z80_gen::gen_sub(const icode &ic) {
     }
 }
 
+// Search a finite ring of coefficients, rather than source expressions.
+// Every edge is a Z80 instruction sequence mapping c*x to c'*x modulo the
+// result width.  The second half of the graph retains the original x in DE
+// (E for bytes), with its entry copy included in both costs.  This makes
+// signed digits, modular negation and byte-lane arithmetic compete against
+// ordinary shift/add using their actual instruction sizes and T states.
+enum class constant_mul_step {
+    twice, negate, shift_byte, add, subtract, add_high, subtract_high,
+    self_add_high, self_subtract_high
+};
+
+struct constant_mul_node {
+    unsigned cost = std::numeric_limits<unsigned>::max();
+    int previous = -1;
+    constant_mul_step step = constant_mul_step::twice;
+};
+
+static std::vector<constant_mul_node>
+build_constant_mul_table(unsigned bits, bool for_size) {
+    const unsigned modulus = 1u << bits;
+    const unsigned mask = modulus - 1;
+    const bool byte = bits == 8;
+    auto cost = [for_size](unsigned bytes, unsigned cycles) {
+        // All coefficients are reachable by a binary chain below 64 bytes
+        // and 1024 T states, so these weights implement lexicographic costs.
+        return for_size ? bytes * 4096u + cycles : cycles * 256u + bytes;
+    };
+    std::vector<constant_mul_node> table(2 * modulus);
+    using entry = std::pair<unsigned, unsigned>;
+    std::priority_queue<entry, std::vector<entry>, std::greater<entry>> pending;
+    table[1].cost = 0;
+    table[modulus + 1].cost = cost(byte ? 1 : 2, byte ? 4 : 8);
+    pending.emplace(table[1].cost, 1);
+    pending.emplace(table[modulus + 1].cost, modulus + 1);
+    while (!pending.empty()) {
+        const auto [distance, state] = pending.top();
+        pending.pop();
+        if (distance != table[state].cost)
+            continue;
+        const unsigned coefficient = state & mask;
+        const unsigned retained = state & modulus;
+        auto relax = [&](unsigned next, constant_mul_step step,
+                         unsigned bytes, unsigned cycles) {
+            next = (next & mask) | retained;
+            const unsigned candidate = distance + cost(bytes, cycles);
+            if (candidate >= table[next].cost)
+                return;
+            table[next] = {candidate, static_cast<int>(state), step};
+            pending.emplace(candidate, next);
+        };
+        relax(coefficient * 2, constant_mul_step::twice,
+              1, byte ? 4 : 11);
+        relax(0u - coefficient, constant_mul_step::negate,
+              byte ? 2 : 6, byte ? 8 : 24);
+        if (!byte) {
+            relax(coefficient << 8, constant_mul_step::shift_byte, 3, 11);
+            relax(coefficient * 257, constant_mul_step::self_add_high,
+                  3, 12);
+            relax(coefficient * 65281, constant_mul_step::self_subtract_high,
+                  3, 12);
+        }
+        if (retained) {
+            relax(coefficient + 1, constant_mul_step::add,
+                  1, byte ? 4 : 11);
+            relax(coefficient - 1, constant_mul_step::subtract,
+                  byte ? 1 : 3, byte ? 4 : 19);
+            if (!byte) {
+                relax(coefficient + 256, constant_mul_step::add_high, 3, 12);
+                relax(coefficient - 256, constant_mul_step::subtract_high,
+                      3, 12);
+            }
+        }
+    }
+    return table;
+}
+
+static const std::vector<constant_mul_node> &
+constant_mul_table(unsigned bits, bool for_size) {
+    if (bits == 8) {
+        if (for_size) {
+            static const auto table = build_constant_mul_table(8, true);
+            return table;
+        }
+        static const auto table = build_constant_mul_table(8, false);
+        return table;
+    }
+    if (for_size) {
+        static const auto table = build_constant_mul_table(16, true);
+        return table;
+    }
+    static const auto table = build_constant_mul_table(16, false);
+    return table;
+}
+
+std::string z80_gen::arithmetic_local_label(const char *prefix) {
+    // Census emission must not consume the real emission's global label
+    // sequence.  Preserve existing labels outside that isolated dry run.
+    if (size_mul16_census_running_)
+        return fresh_local_label(prefix);
+    return std::string(prefix) + "_" + std::to_string(rand() % 100000);
+}
+
+void z80_gen::plan_size_mul16_helper_reuse(const ir_module &mod) {
+    size_mul16_helper_reused_ = false;
+    if (!size_opt_enabled() || debug_ || size_mul16_census_running_)
+        return;
+
+    bool worthwhile_constant = false;
+    size_t instruction_count = 0;
+    // This optional size decision must not double backend work for large
+    // generated units.  Ordinary functions use one shared _CODE section;
+    // banked sections can be retained independently, so do not infer helper
+    // reuse across them.
+    constexpr size_t max_census_instructions = 2000;
+    for (const auto &fn : mod.functions) {
+        instruction_count += fn.icodes.size();
+        if (fn.bank >= 0 || instruction_count > max_census_instructions)
+            return;
+        for (const auto &ic : fn.icodes) {
+            if (ic.op != icode_op::MUL || op_size(ic.result) != 2 ||
+                op_size(ic.left) != 2 || op_size(ic.right) != 2)
+                continue;
+            const operand *constant = nullptr;
+            if (ic.left.kind == operand_kind::INT_CONST &&
+                ic.right.kind != operand_kind::INT_CONST)
+                constant = &ic.left;
+            else if (ic.right.kind == operand_kind::INT_CONST &&
+                     ic.left.kind != operand_kind::INT_CONST)
+                constant = &ic.right;
+            if (!constant)
+                continue;
+            const unsigned k = static_cast<uint16_t>(constant->ival);
+            if (k == 0)
+                continue;
+            const auto &table = constant_mul_table(16, true);
+            const unsigned body_bytes =
+                std::min(table[k].cost, table[k + 65536u].cost) / 4096u;
+            worthwhile_constant |= body_bytes > 11;
+        }
+    }
+    if (!worthwhile_constant)
+        return;
+
+    // Inspect actual lowering, not syntactic MULs: whole-function fusions
+    // and narrow products can avoid __mul16 entirely.  A fresh generator
+    // owns every allocation/cache/planning state, and its explicit census
+    // flag prevents recursive planning.  All unchanged original helper
+    // calls remain in the real emission, so its archive cost is already paid.
+    std::ostringstream text;
+    sdasz80_emitter emitter(text);
+    z80_gen census(emitter);
+    census.opt_settings_ = opt_settings_;
+    census.standalone_asm_output_ = standalone_asm_output_;
+    census.z88dk_classic_runtime_ = z88dk_classic_runtime_;
+    census.size_mul16_census_running_ = true;
+    census.emit_module(mod);
+    size_mul16_helper_reused_ =
+        text.str().find("\n\tcall\t__mul16\n") != std::string::npos;
+}
+
 void z80_gen::gen_mul(const icode &ic) {
+    auto emit_constant_multiply = [&](const operand &value, unsigned k,
+                                      unsigned bits) {
+        const unsigned modulus = 1u << bits;
+        const auto &table = constant_mul_table(bits, size_opt_enabled());
+        unsigned state = table[k].cost <= table[k + modulus].cost
+                             ? k : k + modulus;
+        const bool retained = state >= modulus;
+        std::vector<constant_mul_step> steps;
+        while (table[state].previous >= 0) {
+            steps.push_back(table[state].step);
+            state = static_cast<unsigned>(table[state].previous);
+        }
+        if (bits == 8) {
+            load_a(value);
+            if (retained)
+                emit_line("ld\te, a");
+        } else if (retained) {
+            load_de(value);
+            emit_line("ld\th, d");
+            emit_line("ld\tl, e");
+        } else {
+            load_hl(value);
+        }
+        for (auto step = steps.rbegin(); step != steps.rend(); ++step) {
+            switch (*step) {
+            case constant_mul_step::twice:
+                emit_line(bits == 8 ? "add\ta, a" : "add\thl, hl");
+                break;
+            case constant_mul_step::negate:
+                if (bits == 8) {
+                    emit_line("neg");
+                } else {
+                    emit_line("xor\ta");
+                    emit_line("sub\tl");
+                    emit_line("ld\tl, a");
+                    emit_line("sbc\ta, a");
+                    emit_line("sub\th");
+                    emit_line("ld\th, a");
+                }
+                break;
+            case constant_mul_step::shift_byte:
+                emit_line("ld\th, l");
+                emit_line("ld\tl, %s", asm_.imm(0).c_str());
+                break;
+            case constant_mul_step::add:
+                emit_line(bits == 8 ? "add\ta, e" : "add\thl, de");
+                break;
+            case constant_mul_step::subtract:
+                if (bits == 8) {
+                    emit_line("sub\te");
+                } else {
+                    emit_line("or\ta");
+                    emit_line("sbc\thl, de");
+                }
+                break;
+            case constant_mul_step::add_high:
+            case constant_mul_step::subtract_high:
+            case constant_mul_step::self_add_high:
+            case constant_mul_step::self_subtract_high:
+                emit_line("ld\ta, h");
+                if (*step == constant_mul_step::add_high)
+                    emit_line("add\ta, e");
+                else if (*step == constant_mul_step::subtract_high)
+                    emit_line("sub\te");
+                else if (*step == constant_mul_step::self_add_high)
+                    emit_line("add\ta, l");
+                else
+                    emit_line("sub\tl");
+                emit_line("ld\th, a");
+                break;
+            }
+        }
+    };
     // Preserve the source width of zero-extended 16-bit operands.  Feeding
     // those values to the generic 32x32 helper needlessly computes three
     // cross-products; the runtime already has a direct 16x16->32 primitive.
     auto unsigned_widened_word_source = [&](const operand &op,
                                             operand &source) {
-        if (!cur_fn_ || !op.is_temp() || !op.type ||
-            op.type->size() != 4 || !op.type->is_unsigned())
+        if (!cur_fn_ || !op.is_temp() ||
+            !has_full_integer_precision(op.type, 32) || !op.type->is_unsigned())
             return false;
 
         int definitions = 0;
@@ -1139,30 +1480,32 @@ void z80_gen::gen_mul(const icode &ic) {
         }
         const icode *def = find_temp_def_before(op.temp_id, cur_ic_index_);
         if (definitions != 1 || !def || def->op != icode_op::CAST ||
-            !def->left.type || def->left.type->size() != 2 ||
-            !def->left.type->is_integer() ||
+            !has_full_integer_precision(def->result.type, 32) ||
+            !has_full_integer_precision(def->left.type, 16) ||
             !def->left.type->is_unsigned())
             return false;
         source = def->left;
         return true;
     };
 
-    if (op_size(ic.result) == 4 && op_size(ic.left) == 2 &&
-        op_size(ic.right) == 2 && ic.left.type && ic.right.type &&
-        ic.left.type->is_integer() && ic.right.type->is_integer() &&
+    if (has_full_integer_precision(ic.result.type, 32) &&
+        has_full_integer_precision(ic.left.type, 16) &&
+        has_full_integer_precision(ic.right.type, 16) &&
         ic.left.type->is_unsigned() && ic.right.type->is_unsigned()) {
         const icode *fused_narrow = nullptr;
         if (cur_fn_ && cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
             const icode &shift = cur_fn_->icodes[cur_ic_index_ + 1];
             const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 2];
             if (shift.op == icode_op::SHR &&
+                has_full_integer_precision(shift.left.type, 32) &&
+                has_full_integer_precision(shift.result.type, 32) &&
                 equivalent_operands(shift.left, ic.result) &&
                 shift.right.kind == operand_kind::INT_CONST &&
                 shift.right.ival == 8 && shift.left.type &&
                 shift.left.type->is_unsigned() &&
                 narrow.op == icode_op::CAST &&
                 equivalent_operands(narrow.left, shift.result) &&
-                narrow.result.type && narrow.result.type->size() == 2 &&
+                has_full_integer_precision(narrow.result.type, 16) &&
                 !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
                                        ic.result.temp_id) &&
                 !temp_value_used_after(*cur_fn_, cur_ic_index_ + 3,
@@ -1195,8 +1538,9 @@ void z80_gen::gen_mul(const icode &ic) {
         return;
     }
 
-    if (op_size(ic.result) == 4 && op_size(ic.left) == 4 &&
-        op_size(ic.right) == 4) {
+    if (has_full_integer_precision(ic.result.type, 32) &&
+        has_full_integer_precision(ic.left.type, 32) &&
+        has_full_integer_precision(ic.right.type, 32)) {
         // A very common fixed-point idiom widens a word, multiplies it by an
         // 8-bit compile-time scale and immediately selects product bits 8..23.
         // Keep that operation in the natural 24-bit A:HL domain.  Calling the
@@ -1262,13 +1606,15 @@ void z80_gen::gen_mul(const icode &ic) {
                 const icode &shift = cur_fn_->icodes[cur_ic_index_ + 1];
                 const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 2];
                 if (shift.op == icode_op::SHR &&
+                    has_full_integer_precision(shift.left.type, 32) &&
+                    has_full_integer_precision(shift.result.type, 32) &&
                     equivalent_operands(shift.left, ic.result) &&
                     shift.right.kind == operand_kind::INT_CONST &&
                     shift.right.ival == 8 && shift.left.type &&
                     shift.left.type->is_unsigned() &&
                     narrow.op == icode_op::CAST &&
                     equivalent_operands(narrow.left, shift.result) &&
-                    narrow.result.type && narrow.result.type->size() == 2 &&
+                    has_full_integer_precision(narrow.result.type, 16) &&
                     use_count(ic.result) == 1 &&
                     use_count(shift.result) == 1) {
                     fused_narrow = &narrow;
@@ -1280,15 +1626,18 @@ void z80_gen::gen_mul(const icode &ic) {
                 const icode &shift = cur_fn_->icodes[cur_ic_index_ + 2];
                 const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 3];
                 if (save.op == icode_op::ASSIGN &&
+                    has_full_integer_precision(save.result.type, 32) &&
                     equivalent_operands(save.left, ic.result) &&
                     shift.op == icode_op::SHR &&
+                    has_full_integer_precision(shift.left.type, 32) &&
+                    has_full_integer_precision(shift.result.type, 32) &&
                     equivalent_operands(shift.left, save.result) &&
                     shift.right.kind == operand_kind::INT_CONST &&
                     shift.right.ival == 8 && shift.left.type &&
                     shift.left.type->is_unsigned() &&
                     narrow.op == icode_op::CAST &&
                     equivalent_operands(narrow.left, shift.result) &&
-                    narrow.result.type && narrow.result.type->size() == 2 &&
+                    has_full_integer_precision(narrow.result.type, 16) &&
                     use_count(ic.result) == 1 &&
                     use_count(save.result) == 1 &&
                     use_count(shift.result) == 1) {
@@ -1381,13 +1730,15 @@ void z80_gen::gen_mul(const icode &ic) {
                 const icode &shift = cur_fn_->icodes[cur_ic_index_ + 1];
                 const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 2];
                 if (shift.op == icode_op::SHR &&
+                    has_full_integer_precision(shift.left.type, 32) &&
+                    has_full_integer_precision(shift.result.type, 32) &&
                     equivalent_operands(shift.left, ic.result) &&
                     shift.right.kind == operand_kind::INT_CONST &&
                     shift.right.ival == 8 && shift.left.type &&
                     shift.left.type->is_unsigned() &&
                     narrow.op == icode_op::CAST &&
                     equivalent_operands(narrow.left, shift.result) &&
-                    narrow.result.type && narrow.result.type->size() == 2 &&
+                    has_full_integer_precision(narrow.result.type, 16) &&
                     use_count(ic.result) == 1 &&
                     use_count(shift.result) == 1) {
                     fused_narrow = &narrow;
@@ -1400,15 +1751,18 @@ void z80_gen::gen_mul(const icode &ic) {
                 const icode &shift = cur_fn_->icodes[cur_ic_index_ + 2];
                 const icode &narrow = cur_fn_->icodes[cur_ic_index_ + 3];
                 if (save.op == icode_op::ASSIGN &&
+                    has_full_integer_precision(save.result.type, 32) &&
                     equivalent_operands(save.left, ic.result) &&
                     shift.op == icode_op::SHR &&
+                    has_full_integer_precision(shift.left.type, 32) &&
+                    has_full_integer_precision(shift.result.type, 32) &&
                     equivalent_operands(shift.left, save.result) &&
                     shift.right.kind == operand_kind::INT_CONST &&
                     shift.right.ival == 8 && shift.left.type &&
                     shift.left.type->is_unsigned() &&
                     narrow.op == icode_op::CAST &&
                     equivalent_operands(narrow.left, shift.result) &&
-                    narrow.result.type && narrow.result.type->size() == 2 &&
+                    has_full_integer_precision(narrow.result.type, 16) &&
                     use_count(ic.result) == 1 &&
                     use_count(save.result) == 1 &&
                     use_count(shift.result) == 1) {
@@ -1468,6 +1822,12 @@ void z80_gen::gen_mul(const icode &ic) {
             const uint8_t k = static_cast<uint8_t>(constant->ival & 0xff);
             if (k == 0) {
                 emit_line("xor\ta");
+                store_a(ic.result);
+                return;
+            }
+
+            if (tuned_profile_enabled()) {
+                emit_constant_multiply(*value, k, 8);
                 store_a(ic.result);
                 return;
             }
@@ -1684,6 +2044,39 @@ void z80_gen::gen_mul(const icode &ic) {
             }
 
             const int max_inline_ops = size_opt_enabled() ? 20 : 30;
+            if (tuned_profile_enabled() && k != 0) {
+                const auto &table = constant_mul_table(16, size_opt_enabled());
+                const unsigned cost = std::min(table[k].cost,
+                                               table[k + 65536u].cost);
+                // The previous size policy called the shared runtime for
+                // expensive binary chains.  Its argument setup and call
+                // occupy nine bytes after loading the value.  Allow one
+                // extra byte for a possible LD DE,(global) versus LD HL.
+                if (!size_opt_enabled() || op_count <= max_inline_ops ||
+                    cost / 4096u <= 8) {
+                    if (size_opt_enabled() && size_mul16_helper_reused_ &&
+                        cost / 4096u > 11) {
+                        // Nine bytes after loading the value: preserve BC,
+                        // load the other argument, call, restore the result
+                        // convention, and restore BC.  Reserve two further
+                        // bytes for loading HL instead of a retained DE
+                        // operand.  Short chains remain inline; no new
+                        // runtime member is charged to this substitution.
+                        emit_line("push\tbc");
+                        load_hl(*value);
+                        emit_line("ld\tde, %s", asm_.imm(k).c_str());
+                        asm_.global_decl("__mul16");
+                        emit_line("call\t__mul16");
+                        emit_line("ex\tde, hl");
+                        emit_line("pop\tbc");
+                        store_hl(ic.result);
+                        return;
+                    }
+                    emit_constant_multiply(*value, k, 16);
+                    store_hl(ic.result);
+                    return;
+                }
+            }
             if (msb < 0) {
                 emit_line("ld\thl, %s", asm_.imm(0).c_str());
                 store_hl(ic.result);
@@ -3682,15 +4075,76 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
                 return;
             }
             load_32_to_dehl();
-            if (right && !arithmetic && count == 8) {
-                // DE:HL contains bytes 3:2:1:0.  A logical byte shift is a
-                // four-register shuffle: 00:3:2:1.
+            if (count >= 8 && tuned_profile_enabled()) {
+                // Shift whole byte lanes first.  Every discarded lane is
+                // outside the result, including for arithmetic shifts where
+                // the vacated lanes must receive the original sign bit.
+                static const char *const lanes[] = {"l", "h", "e", "d"};
+                const int bytes = count / 8;
+                if (!right) {
+                    for (int lane = 3; lane >= bytes; --lane)
+                        emit_line("ld\t%s, %s", lanes[lane],
+                                  lanes[lane - bytes]);
+                    if (bytes >= 2)
+                        emit_line("ld\thl, %s", asm_.imm(0).c_str());
+                    else
+                        emit_line("ld\tl, %s", asm_.imm(0).c_str());
+                    if (bytes == 3)
+                        emit_line("ld\te, %s", asm_.imm(0).c_str());
+                } else {
+                    if (arithmetic) {
+                        emit_line("ld\ta, d");
+                        emit_line("rlca");
+                        emit_line("sbc\ta, a");
+                    }
+                    for (int lane = 0; lane < 4 - bytes; ++lane)
+                        emit_line("ld\t%s, %s", lanes[lane],
+                                  lanes[lane + bytes]);
+                    if (arithmetic) {
+                        for (int lane = 4 - bytes; lane < 4; ++lane)
+                            emit_line("ld\t%s, a", lanes[lane]);
+                    } else {
+                        if (bytes >= 2)
+                            emit_line("ld\tde, %s", asm_.imm(0).c_str());
+                        else
+                            emit_line("ld\td, %s", asm_.imm(0).c_str());
+                        if (bytes == 3)
+                            emit_line("ld\th, %s", asm_.imm(0).c_str());
+                    }
+                }
+                count &= 7;
+                if (right) {
+                    // Filled upper lanes are invariant.  Propagate carry
+                    // only through the remaining original bytes.
+                    for (int bit = 0; bit < count; ++bit) {
+                        emit_line(arithmetic ? "sra\t%s" : "srl\t%s",
+                                  lanes[3 - bytes]);
+                        for (int lane = 2 - bytes; lane >= 0; --lane)
+                            emit_line("rr\t%s", lanes[lane]);
+                    }
+                    count = 0;
+                } else if (bytes >= 2) {
+                    // The cleared low lanes cannot supply a carry.
+                    if (bytes == 3 && count >= 2) {
+                        emit_line("ld\ta, d");
+                        for (int bit = 0; bit < count; ++bit)
+                            emit_line("add\ta, a");
+                        emit_line("ld\td, a");
+                    } else {
+                        for (int bit = 0; bit < count; ++bit) {
+                            emit_line("sla\t%s", lanes[bytes]);
+                            if (bytes == 2)
+                                emit_line("rl\td");
+                        }
+                    }
+                    count = 0;
+                }
+            } else if (right && !arithmetic && count == 8) {
                 emit_line("ld\tl, h");
                 emit_line("ld\th, e");
                 emit_line("ld\te, d");
                 emit_line("ld\td, %s", asm_.imm(0).c_str());
-                store_dehl_32();
-                return;
+                count = 0;
             }
             for (int k = 0; k < count; ++k)
                 emit_one();
@@ -3741,6 +4195,29 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
                 return;
             }
 
+            // Accumulator rotates cost half as much as CB-prefixed shifts.
+            // A mask removes the wrapped bits, and choosing the shorter
+            // rotate direction also makes the large shifts much smaller.
+            if (tuned_profile_enabled() &&
+                ((!right && count >= 5) ||
+                 (right && !arithmetic && count >= 2))) {
+                const bool rotate_right = right ? count <= 4 : count > 4;
+                const int rotations = count <= 4 ? count : 8 - count;
+                for (int k = 0; k < rotations; ++k)
+                    emit_line(rotate_right ? "rrca" : "rlca");
+                const unsigned mask = right ? 0xffu >> count
+                                             : (0xffu << count) & 0xffu;
+                emit_line("and\t%s", asm_.imm(mask).c_str());
+                store_a(ic.result);
+                return;
+            }
+            if (tuned_profile_enabled() && right && arithmetic && count == 7) {
+                emit_line("rlca");
+                emit_line("sbc\ta, a");
+                store_a(ic.result);
+                return;
+            }
+
             const int byte_unroll_limit =
                 size_opt_enabled() ? 5 :
                 (tuned_profile_enabled() ? 7 : 5);
@@ -3782,8 +4259,10 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         emit_line("ld\td, a");
         emit_line("ld\ta, b");
         emit_line("or\ta, a");
-        emit_line("jp\tz, %s", done_lbl.c_str());
+        // LD preserves the count test's flags. Restore the input on both
+        // paths so a zero shift count returns the original byte.
         emit_line("ld\ta, d");
+        emit_line("jp\tz, %s", done_lbl.c_str());
 
         emit_label(shift_lbl, false);
         if (!right)
@@ -3853,6 +4332,78 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
         int count = (int)(ic.right.ival & 0xFF);
         if (count == 0) { store_hl(ic.result); return; }
 
+        if (tuned_profile_enabled() && count == 7 &&
+            (!size_opt_enabled() || (right && arithmetic))) {
+            // Seven bits are one bit short of a byte boundary.  Transfer
+            // the boundary bits through carry, then place the two lanes.
+            emit_line(right ? "ld\ta, l" : "ld\ta, h");
+            emit_line(right ? "rlca" : "rrca");
+            emit_line(right ? "ld\ta, h" : "ld\ta, l");
+            emit_line(right ? "rla" : "rra");
+            emit_line(right ? "ld\tl, a" : "ld\th, a");
+            if (right && arithmetic) {
+                emit_line("sbc\ta, a");
+                emit_line("ld\th, a");
+            } else {
+                emit_line(right ? "ld\th, %s" : "ld\tl, %s",
+                          asm_.imm(0).c_str());
+                emit_line(right ? "rl\th" : "rr\tl");
+            }
+            store_hl(ic.result);
+            return;
+        }
+
+        if (tuned_profile_enabled() && count > 8 && count < 16) {
+            const int bits = count - 8;
+            const int rotate_count = std::min(bits, 8 - bits);
+            const int logical_bytes = bits == 1 ? 2 : rotate_count + 2;
+            const bool fits_size = !right ? bits <= 2
+                : arithmetic ? bits == 1 || bits == 7
+                             : logical_bytes + 4 <= 8;
+            if (!size_opt_enabled() || fits_size) {
+                if (!right && size_opt_enabled()) {
+                    emit_line("ld\th, l");
+                    emit_line("ld\tl, %s", asm_.imm(0).c_str());
+                    for (int bit = 0; bit < bits; ++bit)
+                        emit_line("add\thl, hl");
+                } else {
+                    emit_line(right ? "ld\ta, h" : "ld\ta, l");
+                    if (right && arithmetic) {
+                        if (bits == 7) {
+                            emit_line("rlca");
+                            emit_line("sbc\ta, a");
+                            emit_line("ld\tl, a");
+                        } else {
+                            for (int bit = 0; bit < bits; ++bit)
+                                emit_line("sra\ta");
+                            emit_line("ld\tl, a");
+                            emit_line("rlca");
+                            emit_line("sbc\ta, a");
+                        }
+                        emit_line("ld\th, a");
+                    } else {
+                        if ((!right && bits < 5) || (right && bits == 1)) {
+                            for (int bit = 0; bit < bits; ++bit)
+                                emit_line(right ? "srl\ta" : "add\ta, a");
+                        } else {
+                            const bool rotate_right = right ? bits <= 4
+                                                            : bits > 4;
+                            for (int bit = 0; bit < rotate_count; ++bit)
+                                emit_line(rotate_right ? "rrca" : "rlca");
+                            const unsigned mask = right ? 0xffu >> bits
+                                : (0xffu << bits) & 0xffu;
+                            emit_line("and\t%s", asm_.imm(mask).c_str());
+                        }
+                        emit_line(right ? "ld\tl, a" : "ld\th, a");
+                        emit_line(right ? "ld\th, %s" : "ld\tl, %s",
+                                  asm_.imm(0).c_str());
+                    }
+                }
+                store_hl(ic.result);
+                return;
+            }
+        }
+
         // Shift by 8: byte-swap trick.
         if (count == 8) {
             operand byte_src;
@@ -3868,7 +4419,10 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
                 emit_line("ld\tl, %s", asm_.imm(0).c_str());
             } else if (arithmetic) {
                 emit_line("ld\tl, h");
-                for (int k = 0; k < 8; ++k) emit_line("sra\th");
+                emit_line("ld\ta, h");
+                emit_line("rlca");
+                emit_line("sbc\ta, a");
+                emit_line("ld\th, a");
             } else {
                 emit_line("ld\tl, h");
                 emit_line("ld\th, %s", asm_.imm(0).c_str());
@@ -3882,6 +4436,18 @@ void z80_gen::gen_shift(const icode &ic, bool right, bool arithmetic) {
             size_opt_enabled() ? 5 :
             (tuned_profile_enabled() ? 7 : 5);
         if (count <= unroll_limit) {
+            if (tuned_profile_enabled() && right && count >= 3) {
+                // RRA is half the size and time of RR L.  The two lane
+                // moves pay for themselves after the second bit step.
+                emit_line("ld\ta, l");
+                for (int bit = 0; bit < count; ++bit) {
+                    emit_line(arithmetic ? "sra\th" : "srl\th");
+                    emit_line("rra");
+                }
+                emit_line("ld\tl, a");
+                store_hl(ic.result);
+                return;
+            }
             for (int k = 0; k < count; ++k) {
                 if (!right)
                     emit_line("add\thl, hl");
@@ -4162,7 +4728,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 break;
             case icode_op::LT:
                 if (!true_lbl.empty()) {
-                    skip_lbl = "__fcmp_skip_" + std::to_string(rand() % 100000);
+                    skip_lbl = arithmetic_local_label("__fcmp_skip");
                     emit_line("ld\ta, d");
                     emit_line("cp\t%s", asm_.imm(0xff).c_str());
                     emit_line("jp\tnz, %s",
@@ -4177,7 +4743,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             case icode_op::LE:
                 if (!true_lbl.empty()) {
                     std::string le_check_lbl =
-                        "__fcmp_le_check_" + std::to_string(rand() % 100000);
+                        arithmetic_local_label("__fcmp_le_check");
                     emit_line("ld\ta, d");
                     emit_line("or\te");
                     emit_line("jp\tz, %s", true_lbl.c_str());
@@ -4193,7 +4759,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 }
                 break;
             case icode_op::GT:
-                skip_lbl = "__fcmp_skip_" + std::to_string(rand() % 100000);
+                skip_lbl = arithmetic_local_label("__fcmp_skip");
                 emit_line("bit\t7, d");
                 emit_line("jp\tnz, %s",
                           false_lbl.empty() ? skip_lbl.c_str() : false_lbl.c_str());
@@ -4253,10 +4819,10 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
 
     if (op_size(ic.left) == 4 && op_size(ic.right) == 4) {
         const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
-        const std::string less_lbl = "__lcmp_lt_" + std::to_string(rand() % 100000);
-        const std::string greater_lbl = "__lcmp_gt_" + std::to_string(rand() % 100000);
-        const std::string equal_lbl = "__lcmp_eq_" + std::to_string(rand() % 100000);
-        const std::string end_lbl = "__lcmp_end_" + std::to_string(rand() % 100000);
+        const std::string less_lbl = arithmetic_local_label("__lcmp_lt");
+        const std::string greater_lbl = arithmetic_local_label("__lcmp_gt");
+        const std::string equal_lbl = arithmetic_local_label("__lcmp_eq");
+        const std::string end_lbl = arithmetic_local_label("__lcmp_end");
 
         for (int w = 1; w >= 0; --w) {
             load_hl_word(ic.left, w);
@@ -4334,9 +4900,9 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
 
     if (is_llong_op(ic.left)) {
         const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
-        const std::string less_lbl = "__llcmp_lt_" + std::to_string(rand() % 100000);
-        const std::string greater_lbl = "__llcmp_gt_" + std::to_string(rand() % 100000);
-        const std::string end_lbl = "__llcmp_end_" + std::to_string(rand() % 100000);
+        const std::string less_lbl = arithmetic_local_label("__llcmp_lt");
+        const std::string greater_lbl = arithmetic_local_label("__llcmp_gt");
+        const std::string end_lbl = arithmetic_local_label("__llcmp_end");
 
         for (int w = 3; w >= 0; --w) {
             load_hl_word(ic.left, w);
@@ -4752,7 +5318,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 if (!true_lbl.empty())
                     emit_line("jp\tnc, %s", true_lbl.c_str());
             } else {
-                std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
+                std::string skip_lbl = arithmetic_local_label("__cmp_skip");
                 emit_line("jp\tz, %s", skip_lbl.c_str());
                 if (!true_lbl.empty())
                     emit_line("jp\tnc, %s", true_lbl.c_str());
@@ -4945,7 +5511,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 if (!true_lbl.empty())
                     emit_line("jp\tnc, %s", true_lbl.c_str());
             } else {
-                std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
+                std::string skip_lbl = arithmetic_local_label("__cmp_skip");
                 emit_line("jp\tz, %s", skip_lbl.c_str());
                 if (!true_lbl.empty())
                     emit_line("jp\tnc, %s", true_lbl.c_str());
@@ -5282,7 +5848,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             emit_load_byte(*lhs, lhs_pair, 1);
             emit_sub_byte(*rhs, rhs_pair, 1, true);
             const std::string no_overflow =
-                "__scmp_noov_" + std::to_string(rand() % 100000);
+                arithmetic_local_label("__scmp_noov");
             emit_line("jp\tpo, %s", no_overflow.c_str());
             emit_line("xor\t%s", asm_.imm(0x80).c_str());
             asm_.label(no_overflow, false);
@@ -5412,7 +5978,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                       true_lbl.c_str());
         } else {
             const std::string no_overflow =
-                "__scmp_noov_" + std::to_string(rand() % 100000);
+                arithmetic_local_label("__scmp_noov");
             emit_line("jp\tpo, %s", no_overflow.c_str());
             emit_line("xor\t%s", asm_.imm(0x80).c_str());
             asm_.label(no_overflow, false);
@@ -5581,7 +6147,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
                 if (!true_lbl.empty())
                     emit_line("jp\tnc, %s", true_lbl.c_str());
             } else {
-                std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
+                std::string skip_lbl = arithmetic_local_label("__cmp_skip");
                 emit_line("jp\tz, %s", skip_lbl.c_str());
                 if (!true_lbl.empty())
                     emit_line("jp\tnc, %s", true_lbl.c_str());
@@ -5653,7 +6219,7 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
             if (!true_lbl.empty())
                 emit_line("jp\tnc, %s", true_lbl.c_str());
         } else {
-            std::string skip_lbl = "__cmp_skip_" + std::to_string(rand() % 100000);
+            std::string skip_lbl = arithmetic_local_label("__cmp_skip");
             emit_line("jp\tz, %s", skip_lbl.c_str());
             if (!true_lbl.empty())
                 emit_line("jp\tnc, %s", true_lbl.c_str());
@@ -5737,7 +6303,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             if (cast_ic.op == icode_op::CAST &&
                 same_call_result_operand(cast_ic.left, ic.result) &&
                 cast_ic.result.is_temp() &&
-                is_truth_test_preserving_integer_cast(cast_ic) &&
+                is_comparison_result_preserving_integer_cast(cast_ic) &&
                 ret_ic.op == icode_op::RETURN &&
                 same_call_result_operand(ret_ic.left, cast_ic.result) &&
                 !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
@@ -5777,7 +6343,12 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             prepare_direct_compare_return(direct_return_value);
             return;
         }
-        store_hl(ic.result);
+        if (op_size(ic.result) == 1) {
+            emit_line("ld\ta, l");
+            store_a(ic.result);
+        } else {
+            store_hl(ic.result);
+        }
     };
 
     if (is_real_float_op(ic.left) || is_real_float_op(ic.right)) {
@@ -5854,8 +6425,8 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             emit_line("push\tde");
         };
         auto store_bool_from_de_cmp = [&](icode_op op) {
-            std::string true_lbl = "__fcmp_true_" + std::to_string(rand() % 100000);
-            std::string end_lbl = "__fcmp_end_" + std::to_string(rand() % 100000);
+            std::string true_lbl = arithmetic_local_label("__fcmp_true");
+            std::string end_lbl = arithmetic_local_label("__fcmp_end");
 
             emit_line("ld\thl, %s", asm_.imm(0).c_str());
             switch (op) {
@@ -5946,10 +6517,10 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
 
     if (op_size(ic.left) == 4 && op_size(ic.right) == 4) {
         const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
-        const std::string less_lbl = "__lcmp_lt_" + std::to_string(rand() % 100000);
-        const std::string greater_lbl = "__lcmp_gt_" + std::to_string(rand() % 100000);
-        const std::string equal_lbl = "__lcmp_eq_" + std::to_string(rand() % 100000);
-        const std::string done_lbl = "__lcmp_done_" + std::to_string(rand() % 100000);
+        const std::string less_lbl = arithmetic_local_label("__lcmp_lt");
+        const std::string greater_lbl = arithmetic_local_label("__lcmp_gt");
+        const std::string equal_lbl = arithmetic_local_label("__lcmp_eq");
+        const std::string done_lbl = arithmetic_local_label("__lcmp_done");
 
         for (int w = 1; w >= 0; --w) {
             load_hl_word(ic.left, w);
@@ -6017,10 +6588,10 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
 
     if (is_llong_op(ic.left)) {
         const bool is_unsigned = ic.left.type && ic.left.type->is_unsigned();
-        const std::string less_lbl = "__llcmp_lt_" + std::to_string(rand() % 100000);
-        const std::string greater_lbl = "__llcmp_gt_" + std::to_string(rand() % 100000);
-        const std::string equal_lbl = "__llcmp_eq_" + std::to_string(rand() % 100000);
-        const std::string done_lbl = "__llcmp_done_" + std::to_string(rand() % 100000);
+        const std::string less_lbl = arithmetic_local_label("__llcmp_lt");
+        const std::string greater_lbl = arithmetic_local_label("__llcmp_gt");
+        const std::string equal_lbl = arithmetic_local_label("__llcmp_eq");
+        const std::string done_lbl = arithmetic_local_label("__llcmp_done");
 
         for (int w = 3; w >= 0; --w) {
             load_hl_word(ic.left, w);
@@ -6182,7 +6753,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         load_a(*lhs);
         emit_cp_rhs_byte();
 
-        std::string end_lbl = "__cmp_e_" + std::to_string(rand() % 100000);
+        std::string end_lbl = arithmetic_local_label("__cmp_e");
         emit_line("ld\thl, %s", asm_.imm(1).c_str());
         emit_line("jp\t%s, %s",
                   cmp == icode_op::EQ ? "z" : "nz",
@@ -6207,7 +6778,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         emit_line("cp\t%s",
                   asm_.imm(static_cast<int>((constant->ival ^ 0x80) & 0xff)).c_str());
 
-        std::string end_lbl = "__cmp_e_" + std::to_string(rand() % 100000);
+        std::string end_lbl = arithmetic_local_label("__cmp_e");
         emit_line("ld\thl, %s", asm_.imm(1).c_str());
         switch (effective_cmp) {
         case icode_op::EQ:
@@ -6224,7 +6795,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
             emit_line("jp\tc, %s", end_lbl.c_str());
             break;
         case icode_op::GT: {
-            std::string false_lbl = "__cmp_f_" + std::to_string(rand() % 100000);
+            std::string false_lbl = arithmetic_local_label("__cmp_f");
             emit_line("jp\tz, %s", false_lbl.c_str());
             emit_line("jp\tnc, %s", end_lbl.c_str());
             asm_.label(false_lbl, false);
@@ -6338,7 +6909,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
         load_a(ic.left);
         emit_cp_rhs();
 
-        std::string end_lbl  = "__cmp_e_" + std::to_string(rand() % 100000);
+        std::string end_lbl  = arithmetic_local_label("__cmp_e");
         switch (cmp) {
         case icode_op::EQ:
             emit_line("ld\thl, %s", asm_.imm(1).c_str());
@@ -6386,7 +6957,7 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
     load_hl(ic.right);
     emit_line("pop\tde");  // DE = left, HL = right
 
-    std::string end_lbl  = "__cmp_e_" + std::to_string(rand() % 100000);
+    std::string end_lbl  = arithmetic_local_label("__cmp_e");
     const bool is_unsigned =
         ic.left.type &&
         (ic.left.type->is_unsigned() || ic.left.type->is_ptr());
@@ -6456,7 +7027,287 @@ void z80_gen::gen_compare(const icode &ic, icode_op cmp) {
     finish_compare_result();
 }
 
+bool z80_gen::match_word_product_slice(const ir_function &fn, size_t start,
+                                      word_product_slice &slice) const {
+    if ((!size_opt_enabled() && !tuned_profile_enabled()) ||
+        fn.icodes.size() > 1200 || start + 4 >= fn.icodes.size())
+        return false;
+
+    // This fusion replaces all three conversions with whole-register
+    // moves.  Partial-width _BitInt casts also mask or sign-extend their
+    // storage representation, so retain their ordinary lowering.
+    const auto word_source = [](const operand &op) {
+        const bool ordinary_symbol = op.is_symbol() && !op.is_sfr &&
+            !op.is_tls && !op.is_func && op.type && !op.type->is_volatile &&
+            !op.type->is_atomic;
+        return (op.is_temp() || op.kind == operand_kind::INT_CONST ||
+                ordinary_symbol) &&
+               op.byte_offset == 0 && has_full_integer_precision(op.type, 16) &&
+               op.type->is_unsigned();
+    };
+    const auto wide_temp = [](const operand &op) {
+        return op.is_temp() && op.byte_offset == 0 &&
+               has_full_integer_precision(op.type, 32) && op.type->is_unsigned();
+    };
+    const auto same = [](const operand &a, const operand &b) {
+        return a.is_temp() && b.is_temp() && a.temp_id == b.temp_id &&
+               a.byte_offset == b.byte_offset;
+    };
+    const auto single_definition_and_use = [&](const operand &value) {
+        int definitions = 0;
+        int uses = 0;
+        for (const auto &ic : fn.icodes) {
+            const auto same_temp = [&](const operand &op) {
+                return op.is_temp() && op.temp_id == value.temp_id;
+            };
+            const bool result_is_use = ic.op == icode_op::SET_VALUE_AT ||
+                                       ic.op == icode_op::BLOCK_FILL;
+            if (same_temp(ic.result)) {
+                if (result_is_use) ++uses;
+                else ++definitions;
+            }
+            if (same_temp(ic.left)) ++uses;
+            if (same_temp(ic.right)) ++uses;
+        }
+        return definitions == 1 && uses == 1;
+    };
+
+    const icode &a = fn.icodes[start];
+    const icode &b = fn.icodes[start + 1];
+    const icode &mul = fn.icodes[start + 2];
+    if (a.op != icode_op::CAST || b.op != icode_op::CAST ||
+        !word_source(a.left) || !word_source(b.left) ||
+        !wide_temp(a.result) || !wide_temp(b.result) ||
+        mul.op != icode_op::MUL || !wide_temp(mul.result) ||
+        !((same(mul.left, a.result) && same(mul.right, b.result)) ||
+          (same(mul.left, b.result) && same(mul.right, a.result))) ||
+        !single_definition_and_use(a.result) ||
+        !single_definition_and_use(b.result) ||
+        !single_definition_and_use(mul.result))
+        return false;
+
+    slice = word_product_slice{};
+    slice.left = a.left;
+    slice.right = b.left;
+    slice.unmaterialized_temps =
+        {a.result.temp_id, b.result.temp_id, mul.result.temp_id};
+    size_t pos = start + 3;
+    operand product = mul.result;
+    // A named nonvolatile product can have been promoted to a single-use
+    // temporary. Retain exactly that def/use chain, never an object store.
+    if (fn.icodes[pos].op == icode_op::ASSIGN) {
+        const icode &copy = fn.icodes[pos];
+        if (!same(copy.left, product) || !wide_temp(copy.result) ||
+            !single_definition_and_use(copy.result))
+            return false;
+        product = copy.result;
+        slice.unmaterialized_temps.push_back(copy.result.temp_id);
+        ++pos;
+    }
+    if (pos + 1 >= fn.icodes.size())
+        return false;
+    const icode &shift = fn.icodes[pos];
+    const icode &narrow = fn.icodes[pos + 1];
+    if (shift.op != icode_op::SHR || !same(shift.left, product) ||
+        !wide_temp(shift.result) ||
+        shift.right.kind != operand_kind::INT_CONST ||
+        (shift.right.ival != 8 && shift.right.ival != 16 &&
+         shift.right.ival != 24) ||
+        !single_definition_and_use(shift.result) ||
+        narrow.op != icode_op::CAST || !same(narrow.left, shift.result) ||
+        !narrow.result.is_temp() || narrow.result.byte_offset != 0 ||
+        !has_full_integer_precision(narrow.result.type, 16))
+        return false;
+
+    slice.result = narrow.result;
+    slice.shift = static_cast<unsigned>(shift.right.ival);
+    slice.last_index = pos + 1;
+    slice.unmaterialized_temps.push_back(shift.result.temp_id);
+    slice.direct_return =
+        pos + 2 < fn.icodes.size() &&
+        fn.icodes[pos + 2].op == icode_op::RETURN &&
+        same(fn.icodes[pos + 2].left, narrow.result) &&
+        single_definition_and_use(narrow.result);
+    return true;
+}
+
+bool z80_gen::try_emit_word_product_slice() {
+    word_product_slice slice;
+    if (!cur_fn_ || !match_word_product_slice(*cur_fn_, cur_ic_index_, slice))
+        return false;
+
+    // Consume both narrow sources before emitting either widening cast.
+    // Matching and frame accounting use this same region, so no wide spill
+    // homes are needed. In particular, do not reach back to an incoming
+    // argument after a separately emitted cast has reused its register.
+    const auto home_of = [&](const operand &op) {
+        auto it = op.is_temp() ? temp_regs_.find(op.temp_id) : temp_regs_.end();
+        return it == temp_regs_.end() ? temp_home::stack : it->second;
+    };
+    const auto in_hl = [&](const operand &op) {
+        const temp_home home = home_of(op);
+        return home == temp_home::arg_hl || home == temp_home::main_hl;
+    };
+    const auto in_de = [&](const operand &op) {
+        const temp_home home = home_of(op);
+        return home == temp_home::arg_de || home == temp_home::main_de;
+    };
+    operand left = slice.left;
+    operand right = slice.right;
+    if (in_hl(right) || (in_de(left) && !in_de(right)))
+        std::swap(left, right);
+    if (in_de(right)) {
+        // Loading a distant stack operand into HL may use DE as scratch.
+        // Preserve the second operand before doing any such address work.
+        if (!in_hl(left)) {
+            emit_line("push\tde");
+            load_hl(left);
+            emit_line("pop\tde");
+        }
+    } else {
+        load_hl(left);
+        emit_line("push\thl");
+        load_hl(right);
+        emit_line("pop\tde");
+    }
+    asm_.global_decl("___muluint2ulong");
+    emit_line("call\t___muluint2ulong");
+    invalidate_pair_cache();
+    invalidate_a_cache();
+
+    const bool modern_return = slice.direct_return &&
+        effective_call_abi(cur_fn_->abi) == call_abi::SDCCCALL1;
+    if (slice.shift == 8) {
+        if (modern_return) {
+            emit_line("ld\te, d");
+            emit_line("ld\td, l");
+        } else {
+            emit_line("ld\ta, l");
+            emit_line("ld\tl, d");
+            emit_line("ld\th, a");
+        }
+    } else if (slice.shift == 24) {
+        emit_line("ld\tl, h");
+        emit_line("ld\th, %s", asm_.imm(0).c_str());
+    }
+
+    const size_t start = cur_ic_index_;
+    cur_ic_index_ = slice.last_index;
+    if (modern_return && slice.shift == 8) {
+        direct_call_return_pending_ = true;
+        direct_call_return_value_ = slice.result;
+    } else if (!slice.direct_return || !try_finish_direct_hl_return(slice.result)) {
+        store_hl(slice.result);
+    }
+    cur_ic_index_ = start;
+    for (size_t i = start + 1; i <= slice.last_index; ++i)
+        skipped_icodes_.insert(i);
+    return true;
+}
+
 void z80_gen::gen_cast(const icode &ic) {
+    if (direct_compare_return_pending_ &&
+        same_call_result_operand(ic.result, direct_compare_return_value_) &&
+        is_comparison_result_preserving_integer_cast(ic)) {
+        return;
+    }
+
+    if (direct_byte_load_ifx_pending_ &&
+        same_call_result_operand(ic.result, direct_byte_load_ifx_value_) &&
+        is_truth_test_preserving_integer_cast(ic)) {
+        // A load/test producer may already have covered this cast. Its
+        // byte temporary has no materialized home to reload here.
+        return;
+    }
+
+    if (direct_call_ifx_pending_ &&
+        same_call_result_operand(ic.left, direct_call_ifx_value_) &&
+        ic.result.is_temp() &&
+        is_truth_test_preserving_integer_cast(ic)) {
+        direct_call_ifx_value_ = ic.result;
+        return;
+    }
+
+    if (ic.result.type && ic.left.type &&
+        (ic.left.type->is_integer() ||
+         (ic.left.type->is_ptr() && !ic.left.type->is_far_ptr())) &&
+        ic.result.type->kind == type_kind::BITINT &&
+        ic.result.type->bitint_width > 0 &&
+        ic.result.type->bitint_width < ic.result.type->size() * 8) {
+        // _BitInt precision is independent of its byte/word storage size.
+        // Keep a canonical zero/sign-extended representation, including
+        // conversions between types that occupy the same number of bytes.
+        const int bits = ic.result.type->bitint_width;
+        const int size = ic.result.type->size();
+        const bool unsigned_result = ic.result.type->is_unsigned();
+        auto normalize_a = [&](int kept_bits) {
+            const int sign = 1 << (kept_bits - 1);
+            emit_line("and\ta, %s", asm_.imm(sign * 2 - 1).c_str());
+            if (!unsigned_result) {
+                emit_line("xor\ta, %s", asm_.imm(sign).c_str());
+                emit_line("sub\ta, %s", asm_.imm(sign).c_str());
+            }
+        };
+        auto normalize_hl = [&](int kept_bits) {
+            if (kept_bits > 8) {
+                emit_line("ld\ta, h");
+                normalize_a(kept_bits - 8);
+                emit_line("ld\th, a");
+            } else {
+                emit_line("ld\ta, l");
+                normalize_a(kept_bits);
+                emit_line("ld\tl, a");
+                if (unsigned_result) {
+                    emit_line("ld\th, %s", asm_.imm(0).c_str());
+                } else {
+                    emit_line("rlca");
+                    emit_line("sbc\ta, a");
+                    emit_line("ld\th, a");
+                }
+            }
+        };
+        invalidate_a_cache();
+        invalidate_pair_cache();
+        if (size == 1) {
+            load_a(ic.left);
+            normalize_a(bits);
+            store_a(ic.result);
+        } else if (size == 2) {
+            if (ic.left.type->size() >= 4)
+                load_hl_word(ic.left, 0);
+            else
+                load_hl(ic.left);
+            normalize_hl(bits);
+            store_hl(ic.result);
+        } else {
+            if (ic.left.type->size() >= 4) {
+                load_hl_word(ic.left, 0);
+                store_hl_word(ic.result, 0);
+                load_hl_word(ic.left, 1);
+            } else {
+                load_hl(ic.left);
+                const bool unsigned_source = ic.left.type->is_unsigned() ||
+                                             ic.left.type->is_ptr();
+                if (!unsigned_source) {
+                    emit_line("ld\ta, h");
+                    emit_line("rlca");
+                    emit_line("sbc\ta, a");
+                }
+                store_hl_word(ic.result, 0);
+                if (unsigned_source) {
+                    emit_line("ld\thl, %s", asm_.imm(0).c_str());
+                } else {
+                    emit_line("ld\th, a");
+                    emit_line("ld\tl, a");
+                }
+            }
+            normalize_hl(bits - 16);
+            store_hl_word(ic.result, 1);
+        }
+        return;
+    }
+    if (try_emit_word_product_slice())
+        return;
     // A subtraction of two zero-extended bytes has a signed 16-bit result in
     // the range -255..255.  Form that result from the byte subtract's carry
     // instead of materializing both widening casts as separate words:
@@ -6504,6 +7355,9 @@ void z80_gen::gen_cast(const icode &ic) {
     }
 
     auto source_safe_for_delayed_byte_remat = [&](const operand &src) {
+        if (!src.is_temp() &&
+            (src.is_sfr || (src.type && src.type->is_volatile)))
+            return false;
         if (src.kind == operand_kind::SYMBOL && !src.is_global) {
             return incoming_symbol_homes_.find(src.stack_offset) ==
                    incoming_symbol_homes_.end();
@@ -6540,26 +7394,8 @@ void z80_gen::gen_cast(const icode &ic) {
         return cur_fn_->icodes.size();
     };
 
-    if (direct_compare_return_pending_ &&
-        same_call_result_operand(ic.result, direct_compare_return_value_) &&
-        is_truth_test_preserving_integer_cast(ic)) {
-        return;
-    }
-
-    if (direct_call_ifx_pending_ &&
-        same_call_result_operand(ic.left, direct_call_ifx_value_) &&
-        ic.result.is_temp() &&
-        is_truth_test_preserving_integer_cast(ic)) {
-        direct_call_ifx_value_ = ic.result;
-        return;
-    }
-
     if (cur_fn_ && ic.result.is_temp()) {
         const size_t first_use = first_use_index(ic.result.temp_id);
-        const bool delayed_remat_safe =
-            first_use == cur_ic_index_ + 1 ||
-            source_safe_for_delayed_byte_remat(ic.left);
-
         if (ic.left.type &&
             ic.left.type->size() == 1 &&
             is_truth_test_preserving_integer_cast(ic) &&
@@ -6568,9 +7404,19 @@ void z80_gen::gen_cast(const icode &ic) {
             if (use_ic.op == icode_op::IFX &&
                 use_ic.left.is_temp() &&
                 use_ic.left.temp_id == ic.result.temp_id &&
-                delayed_remat_safe &&
+                first_use == cur_ic_index_ + 1 &&
+                ic.result.byte_offset == 0 && use_ic.left.byte_offset == 0 &&
                 !temp_value_used_after(*cur_fn_, first_use + 1,
                                        ic.result.temp_id)) {
+                // A truth-only widening need not materialize a word, but
+                // the branch may carry a byte-sized view of that word's
+                // uninitialized register home. Hand off the actual byte
+                // and flags explicitly. Nonadjacent uses retain the cast's
+                // own value: its source can die or change before the branch.
+                load_a(ic.left);
+                emit_line("or\ta, a");
+                direct_byte_load_ifx_pending_ = true;
+                direct_byte_load_ifx_value_ = ic.result;
                 return;
             }
         }
@@ -6607,6 +7453,19 @@ void z80_gen::gen_cast(const icode &ic) {
     if (!ic.result.type) {
         load_hl(ic.left);
         store_hl(ic.result);
+        return;
+    }
+
+    // _Bool conversion tests the complete value before narrowing.  The
+    // ordinary byte cast would lose high nonzero bits (and keep arbitrary
+    // low-byte values instead of normalizing to zero or one).
+    if (ic.result.type->kind == type_kind::BOOL && ic.left.type &&
+        (ic.left.type->is_integer() ||
+         (ic.left.type->is_ptr() && !ic.left.type->is_far_ptr()))) {
+        icode comparison = ic;
+        comparison.op = icode_op::NE;
+        comparison.right = operand::make_int(0, ic.left.type);
+        gen_compare(comparison, icode_op::NE);
         return;
     }
 
@@ -7469,6 +8328,7 @@ void z80_gen::gen_alloca(const icode &ic) {
 
 void z80_gen::gen_inline_asm(const icode &ic) {
     invalidate_pair_cache();
+    asm_.comment("xcc-opaque-asm");
     asm_.raw(ic.asm_text + "\n");
     invalidate_pair_cache();
 }

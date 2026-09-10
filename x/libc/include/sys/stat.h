@@ -3,9 +3,8 @@
  *
  * Minimal POSIX-style file metadata types and mode bits.
  *
- * The current CP/M 3 backend does not yet expose full stat/fstat entry
- * points, but these definitions let portable code use the standard types
- * and creation-mode macros alongside open()/creat().
+ * The zx-esxdos backend supplies stat/fstat and mkdir. Other backends may
+ * provide only the shared types and mode macros alongside open()/creat().
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih
@@ -37,5 +36,14 @@ struct stat {
     nlink_t st_nlink;
     off_t   st_size;
 };
+
+#define S_ISREG(mode) (((mode) & S_IFMT) == S_IFREG)
+#define S_ISDIR(mode) (((mode) & S_IFMT) == S_IFDIR)
+#define S_ISCHR(mode) (((mode) & S_IFMT) == S_IFCHR)
+
+/* Optional filesystem-backend operations (provided by zx-esxdos). */
+[[sdcc::sdccall(1)]] int stat(const char *path, struct stat *buf);
+[[sdcc::sdccall(1)]] int fstat(int fd, struct stat *buf);
+[[sdcc::sdccall(1)]] int mkdir(const char *path, mode_t mode);
 
 #endif /* _SYS_STAT_H */

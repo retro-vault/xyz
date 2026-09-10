@@ -1,0 +1,15 @@
+; Execute the application from ROM. Copy only writable data/RST gates.
+; Leave divIDE automatic paging entry addresses out of executable code.
+; Boot scratch below 8000 is reusable once firmware returns to the CRT.
+ENTRY __zx_rom_reset
+FORMAT bin
+RANGE 0000-3FFF
+AREA _HEADER = 0000
+AREA _DATA = 5B00
+AREA _STACK = F000
+COPY _DATA
+COPY .data
+RESERVE 04C6-04C6
+RESERVE 0562-0562
+RESERVE 3D00-3DFF
+RESERVE F000-FFFF

@@ -6,6 +6,7 @@
 //
 
 #include "xopt/xopt.h"
+#include "xopt/z80calls.h"
 #include "xopt/z80peep.h"
 
 #include <algorithm>
@@ -242,6 +243,7 @@ std::vector<int> ix_frame_depth_before(const std::vector<asm_line> &lines) {
     int hl_immediate = 0;
     bool hl_sp_relative_known = false;
     int hl_sp_relative = 0;
+    int inline_prologue_stage = 0;
 
     auto compact = [](std::string text) {
         text = lowercase_ascii(std::move(text));
@@ -271,6 +273,45 @@ std::vector<int> ix_frame_depth_before(const std::vector<asm_line> &lines) {
         const asm_line &line = lines[i];
         const std::string mnemonic = lowercase_ascii(line.mnemonic);
         const std::string operands = compact(line.operands);
+
+        const std::string comment = lowercase_ascii(line.comment);
+        if (comment.find("prologue:") != std::string::npos &&
+            comment.find("locals=") != std::string::npos &&
+            comment.find("temp_frame=") != std::string::npos) {
+            // A fresh function must not inherit the preceding function's
+            // allocation depth, including after a non-returning call.
+            depth = kUnknownDepth;
+            hl_immediate_known = false;
+            hl_sp_relative_known = false;
+            inline_prologue_stage = 1;
+        }
+        if (any_section_directive(line)) {
+            depth = kUnknownDepth;
+            hl_immediate_known = false;
+            hl_sp_relative_known = false;
+            inline_prologue_stage = 0;
+        }
+        if (inline_prologue_stage != 0 &&
+            (!line.mnemonic.empty() || !line.label.empty())) {
+            const bool next = line.label.empty() &&
+                ((inline_prologue_stage == 1 && mnemonic == "push" &&
+                  operands == "ix") ||
+                 (inline_prologue_stage == 2 && mnemonic == "ld" &&
+                  (operands == "ix,#0" || operands == "ix,0")) ||
+                 (inline_prologue_stage == 3 && mnemonic == "add" &&
+                  operands == "ix,sp"));
+            if (!next) {
+                inline_prologue_stage = 0;
+            } else if (++inline_prologue_stage == 4) {
+                // PUSH IX; LD IX,0; ADD IX,SP establishes exactly the same
+                // unallocated boundary as __sdcc_enter_ix. In particular,
+                // register spills emitted before allocating locals still
+                // have depth zero and cannot become call-based outlines.
+                depth = 0;
+                inline_prologue_stage = 0;
+                continue;
+            }
+        }
 
         if (mnemonic == "call" && operands == "__sdcc_enter_ix") {
             // The helper establishes IX at the unallocated frame boundary.
@@ -1160,7 +1201,11 @@ std::string outline_repeated_sequences(const std::string &asm_text) {
     while (std::getline(input, raw))
         lines.push_back(asm_line::parse(raw));
 
-    constexpr size_t kMinInstructions = 3;
+    // Two indexed byte loads occupy six bytes. Three occurrences already
+    // amortize a shared body, RET, and all CALLs; excluding two-instruction
+    // sequences missed these useful word accesses. The byte-cost test below
+    // still rejects pairs whose complete outlined form is not smaller.
+    constexpr size_t kMinInstructions = 2;
     constexpr size_t kMaxInstructions = 32;
     if (lines.size() < kMinInstructions * 2)
         return asm_text;
@@ -1429,6 +1474,11 @@ std::string optimize_z80_assembly(const std::string &asm_text,
         optimized = remove_unreferenced_internal_labels(optimized);
         optimized = z80_peep::optimize_outlined_layout(optimized);
     }
+    // Callee preservation must be measured after the final machine rewrites:
+    // a peephole or outlined helper may introduce a register clobber that was
+    // absent from the original IR/backend instruction stream.
+    if (size_bias || uses_speed_biased_rules(level))
+        optimized = remove_preserved_z80_caller_saves(optimized);
     return optimized;
 }
 

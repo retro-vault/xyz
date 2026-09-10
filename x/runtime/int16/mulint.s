@@ -26,7 +26,7 @@ mul16_core:
 
         ld      a, d
         or      a, e
-        jr      z, .ret_zero
+        ret     z                       ; de already contains the zero result
 
         ld      a, c
         sub     a, e
@@ -47,14 +47,15 @@ mul16_core:
         ld      l, a
 
 .mul_loop:
-        bit     0, c
-        jr      z, .skip_add
+        ; Shifting the multiplier exposes the same low bit in carry.
+        ; Consume it directly, avoiding a separate BIT instruction.
+        srl     b
+        rr      c
+        jr      nc, .skip_add
         add     hl, de
 .skip_add:
         sla     e
         rl      d
-        srl     b
-        rr      c
         ld      a, b
         or      a, c
         jr      nz, .mul_loop

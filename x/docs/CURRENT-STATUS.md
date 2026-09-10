@@ -2,10 +2,240 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-08-27, after the current-upstream 80cc optimization and
-full regression campaign.
+Last updated: 2026-09-10, during Spectrum esxDOS low-RAM reclamation work
+and after the compiler/runtime optimization campaign.
 
 ## Major Recent Work
+
+### ZX Spectrum disk applications booting from ROM
+
+The `--platform=zx-esxdos-rom` target executes code and
+constants directly from its 16 KiB replacement ROM, while booting divIDE
+esxDOS 0.8.9 without a Sinclair ROM. Startup copies only native `_DATA` and
+ELF `.data`, including 48 bytes of fixed disk-call gates, into RAM starting
+at `0x5B00`. Both BSS forms are cleared before C startup. The gates map in
+firmware for each operation and return to ROM after firmware maps itself
+out. ROM paths use bounded temporary stack copies; file writes from ROM use
+a 128-byte stack buffer. The target remains self-contained and its heap
+ceiling is the linker `_STACK` boundary, `0xF000` by default.
+
+The new layout reclaims all 9,472 bytes between `0x5B00` and `0x7FFF`.
+Actual stock esxDOS 0.8.9 traces and overwritten-memory probes confirm that
+the supported external file API needs no permanent Spectrum workspace:
+its internal buffers occupy divIDE RAM. Firmware boot scratch is reused
+only after boot finishes. ROM paths now copy only their actual length plus
+NUL; `XCCDISK.TXT` needs 12 bytes instead of a fixed 256. Ordinary calls and
+bounded ROM-input copies use the application's stack. Both disk targets
+share a configurable 4 KiB default stack allowance; it is not a disk-API
+minimum. Custom scripts move
+`_STACK`, its reservation and the GNU RAM region end together.
+
+The RAM disk target still loads at `0x8000` to protect its active BASIC
+loader. After entry, its own stack, disabled interrupts and halt-on-exit
+contract permit explicit low-RAM use. The new
+[example](../examples/zx-esxdos/lowram.c) creates a private arena below
+`0x8000` and uses a 9,216-byte allocation for a disk round trip. Returning
+to BASIC or invoking its ROM/interrupt services after reclamation is outside
+this contract. The final tools pass 67 stock-firmware ROM cold boots with
+FAT16/FAT32 and 18 deterministic disk ABI lanes. All four final low-arena
+RAM example images match successful actual BASIC-loader boots. The linker
+passes 156 tests in normal and sanitized builds plus executable
+reserved-hole and REL/ELF addend checks. All four original Spectrum MCP
+modes pass with the final staged tools. Results and final input identities
+are recorded in the
+[compact-RAM record](../tests/tests/zx48/esxdos/compact-ram-validation-2026-09.json).
+
+The low-arena example exposed a generic `heap_init_arena` ABI error for
+stack-local heap descriptors. The repair retains the existing allocator;
+36 C cases using local heaps and 5,688,465 direct checks pass.
+
+The ROM input probe exposed named `const` globals being emitted as writable
+data. The generic Z80 backend now places eligible objects in `_CONST` or
+GNU `.rodata` in all profiles, preserving zero values and pointer
+relocations. It distinguishes const objects from mutable pointers to const
+data and conservatively retains writable/explicit placement for volatile
+or atomic subobjects, TLS, banked objects, fixed addresses and SFRs.
+The latest pinned z88dk24 rerun passes all 24 programs in each profile,
+with all 48 size/cycle measurements unchanged and competitor measurements
+and pins preserved. All 18,047 canonical compiler variants pass: 17,983
+model-tagged variants plus 64 independently discovered untagged variants,
+with all 5,800 frozen inputs unchanged. These compiler runs retain their
+recorded linker identity. The linker guard-placement correction recorded
+in the preceding XIP validation passed all 103 linker tests in normal and
+ASan/UBSan builds, plus a four-mode Spectrum MCP run with that recorded
+linker.
+
+Both scripts reserve the hardware's `0x04C6`, `0x0562` and
+`0x3D00`–`0x3DFF` instruction-fetch traps, including preceding jump guards.
+Matching firmware/SYS files and `AutoBoot=0` are required. BASIC, the NMI
+browser, dot commands and 128K banking remain outside the target contract.
+
+The preceding direct-ROM layout passed 43 configurations: 15 native M, 20 native S/L
+and eight GNU M. These cover both ABIs, filesystem and ROM-input probes,
+examples and 10 KiB of ROM constants with writable initialization checks.
+All 43 images rebuilt with the then-recorded tools were byte-identical to
+their successful firmware executions; both capacity-rejection checks passed.
+Twelve deterministic ROM ABI lanes passed 553 checks and 891 hostile calls
+each; six unchanged M RAM lanes and all four original ZX MCP modes also
+passed. The example now uses 100 static RAM bytes including its gates, versus
+5,330/5,415/6,285 bytes in the earlier Os/Of/O0 RAM-copy builds; stack and
+heap are additional.
+
+The consolidated
+[direct ROM execution record](../tests/tests/zx48/esxdos/xip-validation-2026-09.json)
+retains that layout's separate compiler, linker and platform evidence. The
+[earlier ROM record](../tests/tests/zx48/esxdos/rom-validation-2026-09.json)
+retains 27 historical RAM-copy configurations. Package verification declares
+the target's CRT, archive, scripts, header and installed guide; no Debian
+archive rebuild is claimed. See the
+[ROM guide](dist/man/ZX-ESXDOS-ROM.md),
+[example](../examples/zx-esxdos-rom/diskio.c), and
+[cold-boot commands](../tests/tests/zx48/esxdos/README.md).
+
+Genuine GNU-mode coverage exposed and fixed xas dropping the leading dot
+from explicit `.section`/`.area` names. All six assembler component suites
+pass in normal and ASan/UBSan builds. Existing native object/image identity
+checks preserve the prior non-ROM behavior. The earlier rejected GNU speed
+links remain in the evidence beside their successful final replacements.
+
+### ZX Spectrum disk I/O through esxDOS
+
+The new `--platform=zx-esxdos` is a self-contained 48K RAM target for a machine
+booted with esxDOS 0.8.9 on divIDE-compatible hardware. It loads at `0x8000`,
+keeping clear of BASIC until entry, uses the existing bitmap console and
+keyboard, and closes active disk descriptors before halting on exit. The
+plain `zx-ram` and `zx-rom` targets keep their previous contracts; they do
+not supply the esxDOS initialization and base-ROM entry points.
+
+Assembly hooks provide open/close/read/write/lseek/fsync, unlink/rename,
+mkdir/rmdir/chdir/getcwd and stat/fstat. Standard file-backed stdio uses
+the same hooks. The implementation translates XCC's descriptor and calling
+conventions, implements append before every write, validates signed 32-bit
+seek arithmetic, obtains the actual firmware file position, and bounds RAM
+buffers and path strings. esxDOS directory size `0xffffffff` is normalized
+to zero. Firmware-specific limits remain documented, including non-replacing
+rename, EOF seek clamping and partial-count uncertainty on native errors.
+
+Validation passes all 18 S/M/L × O0/Os/Of × caller-ABI lanes, each with 523
+checks and 855 hostile firmware calls. Actual esxDOS 0.8.9 ROM execution with
+emulated divIDE/IDE passes the 65-phase C probe in both Os and Of, including
+files larger than 64 KiB, stdio and directories. The four existing Spectrum
+MCP delivery forms also pass. All side-by-side model prefixes now stage the
+target. See the [installed guide](dist/man/ZX-ESXDOS.md),
+[example](../examples/zx-esxdos/diskio.c), and
+[test instructions](../tests/tests/zx48/esxdos/README.md).
+
+The ROM-load linker path now generates start/length symbols for genuine
+GNU/ELF dot sections, including `.text`, `.data` and `.bss`; only the internal
+`.ABS.` pseudo-area is excluded. This enables the new ROM target's mixed
+native/ELF copy loops and BSS initialization. COPY load placement also
+avoids the jump guards emitted before reserved holes, and contiguous
+initializer groups stay together when displaced by a hole. All 103 linker
+tests pass in normal and ASan/UBSan builds, including three executable
+regressions that fail with the preceding linker.
+
+### September sccz80 follow-up and fresh nightly comparison
+
+The eight size losses identified in the sccz80 audit are closed by generic
+code-generation improvements. Against the freshly downloaded September 9
+z88dk nightly, including current 80cc and sccz80, bundled zsdcc r16639 and a
+separate official SDCC trunk r16858 build, XCC `-Os` is strictly smallest on
+24/24 valid competitor envelopes and `-Of` strictly fastest on 24/24. Both
+XCC profiles pass every program. Competitor correctness failures remain in
+the table; the maximum-allocation SDCC probes retain their original six-case
+scope. Source, binary, nightly archive and shared sysroot hashes accompany
+the [fresh matrix](../tests/benchmarks/z88dk24/LATEST-RESULTS.md).
+
+With the preceding September competitor/sysroot pins held constant, the
+follow-up saves 1,669 total Os bytes and 945 Of bytes. Of cycles fall 0.78%;
+Os cycles rise 7.10%, chiefly from deliberate hot-loop helper reuse and
+outlining. The final precision correctness guards are included in these
+figures. Size-only tradeoffs remain in Os, shared wins apply to both profiles,
+and O3 remains an alias of Of. No rule identifies a benchmark or workload.
+
+The changes include early widened-product selection, bounded scalar
+versioning, proven induction removal, BC word residence, cheaper indirect
+updates, suffix string pooling, typed memset lowering and aggregate zeroing.
+The QR eigenvalue program now fits and passes in both profiles: final images
+are 44,434 bytes at Os and 52,410 at Of, roughly 12 KB smaller than before.
+Native SDCC still leads aggregate portable-benchmark speed, so the z88dk24
+result is not a claim of universal performance superiority.
+
+The supplied Alto heap motivated checked shift/add calloc multiplication and
+LDIR clearing. XCC's calloc falls from 120 to 67 bytes and takes 21,736 rather
+than 45,623 T-states for calloc(1,1024) with an identical malloc stub. Overflow
+and invalid-arena guards are included. Default allocation bases are aligned;
+explicit custom arenas retain their exact-span, caller-aligned contract.
+Alto's complete allocator remains smaller and wins the recorded trace, with
+fewer ownership and alignment features. See the
+[heap comparison](xcc/HEAP-COMPARISON-2026-09.md).
+
+Independent oracles also repaired captured-value lifetime proofs, wide ABI
+return liveness, conditional conversion, inherited qualifiers, single
+evaluation of observable expressions, and partial-precision arithmetic and
+cast selection. Known preexisting limits remain explicit: global object
+alignment is not fully enforced by emitted/linker layout, non-ASCII wide
+literal payloads are incomplete, and the advertised BitInt range above 32
+exceeds the backend's storage support. See the
+[follow-up report](xcc/SCCZ80-OPTIMIZATION-CAMPAIGN-2026-09.md) for implementation,
+complete validation evidence and limitations.
+
+Final validation covers all 18,019 selected compiler variants, 444 XCC
+benchmark cells, 544 applicable external corpus checks, runtime 444, libc 108
+groups plus scanning/wide, ten host-tool phases and the platform checks.
+Four initial invocations of one new test had malformed launch metadata; after
+that manifest-only repair, all four passed with unchanged compilers and test
+assertions. Original failures and separate reruns are retained. All production
+and staged files stayed unchanged through validation; the report records the
+exact inventory and hash audits.
+
+The sections below preserve the preceding September and August results;
+their sccz80 size losses and QR capacity failure describe those earlier builds.
+
+### Earlier September arithmetic, dataflow, and runtime optimization
+
+XCC now searches a finite modular instruction grammar for byte/word constant
+multiplication, tracks typed known integer bits, combines private constant
+expression chains, and selects byte-oriented constant shifts. Captured-pointer
+fills choose among direct stores, unrolled loops, and LDIR using actual costs.
+A final local-call graph removes marked BC/IY saves only after proving physical
+register preservation. Typed byte caching preserves unrelated A values across
+register-only pointer updates. `-Os` minimizes bytes and `-Of` minimizes cycles;
+speed profiles retain faster unconditional JP instructions during final cleanup.
+All rules use semantic properties, with no benchmark identification.
+
+The shared 32-bit multiply shrinks from 235 to 133 linked bytes and takes
+54.55% fewer mean cycles over the measured random corpus. Shared libc copy/fill
+entry sequences avoid an IX frame, bounded searches use CPIR/CPDR, and string
+lengths reuse remaining counts. A generic 1,024-byte fill shrinks from 63 to
+12 bytes in `-Os` and executes 7.47 times faster in `-Of`.
+
+The untouched compiler and every pinned competitor were rebuilt first; all
+z88dk24 baseline results reproduced exactly. Final XCC profiles pass 24/24.
+`-Of` wins speed on all 24 against every valid recorded competitor, including
+the six expensive SDCC maximum-allocation probes. `-Os` wins size on 24/24
+against the better 80cc/SDCC envelope; including sccz80, it wins 16/24.
+Relative to the original compiler, total bytes fall by 54 in `-Os` and 515 in
+`-Of`, while total cycles fall by 0.67% and 1.34%. Histbench takes 15.15%
+fewer `-Of` cycles and MD5 loses 1,083 `-Of` bytes. Correctness repairs for
+volatile/SFR accesses, source-memory read order, boolean conversion, and
+fill placement are included in these net results, including their costs.
+The supplemental corpus additionally exposed stale stored-value forwarding
+and unsafe address equivalences involving subtraction, narrowing casts,
+and captured pointers. Those proofs are repaired and covered by generic
+all-profile regressions; the valid linked-list program now passes in `-Of`.
+
+Final validation covers 17,094 distinct compiler cases across S/M and both
+L ABIs, all XCC z88dk24/bare/portable/numeric benchmark cases, runtime 443,
+libc 108 shards plus scanning/wide, host-tool suites, and ZX/CPC/CP/M
+platform checks. Initial host-contention timeouts pass unchanged-limit
+retries. The additional `-Of` QR eigenvalue corpus case retains its proven
+pre-existing emu memory-capacity failure; the canonical `-Os` corpus passes.
+
+See the [September campaign report](xcc/OPTIMIZATION-CAMPAIGN-2026-09.md)
+for the complete implementation, measurements, validation, remaining
+competitor wins, and reproducible raw matrix. The older report and baseline
+CSV remain intact; the sections below describe the preceding August state.
 
 ### Medium default model and the 24-program compiler comparison
 

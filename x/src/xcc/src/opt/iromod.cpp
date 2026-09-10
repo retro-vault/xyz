@@ -902,11 +902,12 @@ static int64_t normalize_integer_value(int64_t value, const type_ptr &type) {
     if (type->kind == type_kind::BOOL)
         return value != 0 ? 1 : 0;
 
-    const int bits = type->size() * 8;
+    const int bits = type->kind == type_kind::BITINT
+        ? type->bitint_width : type->size() * 8;
     if (bits <= 0 || bits >= 64)
         return value;
 
-    const uint64_t mask = integer_mask_for_type(type);
+    const uint64_t mask = (uint64_t{1} << bits) - 1;
     uint64_t raw = static_cast<uint64_t>(value) & mask;
     if (type->is_unsigned())
         return static_cast<int64_t>(raw);
@@ -1702,7 +1703,8 @@ static bool same_const_eval_object_type(const type_ptr &lhs,
         return false;
     if (a->kind == type_kind::POINTER)
         return same_const_eval_object_type(a->base, b->base);
-    return a->size() == b->size() && a->is_unsigned() == b->is_unsigned();
+    return a->size() == b->size() && a->is_unsigned() == b->is_unsigned() &&
+           (a->kind != type_kind::BITINT || a->bitint_width == b->bitint_width);
 }
 
 static bool is_safe_const_eval_pointer_cast(const icode &ic) {

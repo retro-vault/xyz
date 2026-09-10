@@ -7,9 +7,10 @@
  * x/platforms/none/README.md and x/docs/howtos/RETARGET-LIBC.md for the details and
  * reference (empty) implementations.
  *
- * All functions use XCC's [[sdcc::sdccall(1)]] convention (the first
- * word-sized arguments arrive in HL, DE, BC). A backend may be written in C
- * or assembly; the symbols are the same either way.
+ * All functions use XCC's [[sdcc::sdccall(1)]] convention. For read/write,
+ * the descriptor arrives in HL, the buffer in DE, and the count on the stack.
+ * Wide arguments have their own register/stack placement. A backend may be
+ * written in C or assembly; the symbols are the same either way.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih
@@ -57,7 +58,7 @@ struct timespec;   /* <time.h> */
  * filesystem implements only console write()/read() and returns errors for the
  * file operations.
  * ------------------------------------------------------------------------- */
-[[sdcc::sdccall(1)]] int open(const char *path, int flags, int mode); /* fd >= 3, or -1 */
+[[sdcc::sdccall(1)]] int open(const char *path, int flags); /* fd >= 3, or -1 */
 [[sdcc::sdccall(1)]] int close(int fd); /* 0, or -1 */
 [[sdcc::sdccall(1)]] int read(int fd, void *buf, unsigned len); /* bytes, 0 = EOF, -1 */
 [[sdcc::sdccall(1)]] int write(int fd, const void *buf, unsigned len); /* bytes, or -1 */

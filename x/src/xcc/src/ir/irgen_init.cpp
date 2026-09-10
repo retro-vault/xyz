@@ -25,10 +25,14 @@ ir_module::global_var::init_elem init_elem(int64_t value, int size,
     return elem;
 }
 
-bool is_char_array_type(type_ptr ty) {
+bool is_string_array_type(type_ptr ty, const string_literal_expr &str) {
     if (!ty || ty->kind != type_kind::ARRAY || !ty->base)
         return false;
     type_kind elem = ty->base->unqual()->kind;
+    if (str.char_width == 2)
+        return elem == (str.is_wchar ? type_kind::INT : type_kind::USHORT);
+    if (str.char_width == 4)
+        return elem == type_kind::ULONG;
     return elem == type_kind::CHAR ||
            elem == type_kind::SCHAR ||
            elem == type_kind::UCHAR ||
@@ -59,18 +63,16 @@ const string_literal_expr *unwrap_string_literal(expr *init) {
 
 void append_string_bytes(const string_literal_expr &str, type_ptr array_type,
                          std::vector<ir_module::global_var::init_elem> &out) {
-    int n = array_type ? array_type->size() : 0;
-    int init_bytes = static_cast<int>(str.value.size()) + 1;
-    if (n > 0 && init_bytes > n)
-        init_bytes = n;
-    for (int i = 0; i < init_bytes; ++i) {
+    const int width = array_type && array_type->base
+        ? array_type->base->size() : 1;
+    const int n = array_type ? array_type->size() : 0;
+    const int count = n > 0 ? n / width : static_cast<int>(str.value.size()) + 1;
+    for (int i = 0; i < count; ++i) {
         int ch = 0;
         if (i < static_cast<int>(str.value.size()))
             ch = static_cast<unsigned char>(str.value[i]);
-        out.push_back(init_elem(ch, 1));
+        out.push_back(init_elem(ch, width));
     }
-    for (int i = init_bytes; i < n; ++i)
-        out.push_back(init_elem(0, 1));
 }
 
 int64_t narrow_static_int(int64_t value, type_ptr ty) {
@@ -166,6 +168,91 @@ bool is_flat_aggregate_initializer(const init_list_expr &list) {
     return true;
 }
 
+// A literal-only complete initializer cannot observe the object's initial
+// zero state. Prove every representation byte overwritten; reject padding,
+// bit-fields, sparse/repeated designators and expression evaluation here.
+bool literal_initializer_covers_object(const type_ptr &target, const expr *value) {
+    if (!target || !value || target->size() <= 0)
+        return false;
+    const auto *list = dynamic_cast<const init_list_expr *>(value);
+    if (target->kind == type_kind::ARRAY) {
+        if (!list || !target->base || target->array_size <= 0 ||
+            static_cast<int64_t>(target->base->size()) * target->array_size !=
+                target->size())
+            return false;
+        if (list->elements.size() == 1 && !list->elements[0].array_index &&
+            !list->elements[0].field_name) {
+            const auto *string = dynamic_cast<const string_literal_expr *>(
+                list->elements[0].value.get());
+            if (string && is_string_array_type(target, *string))
+                return string->value.size() + 1 >=
+                       static_cast<size_t>(target->array_size);
+        }
+        if (list->elements.size() != static_cast<size_t>(target->array_size))
+            return false;
+        for (size_t i = 0; i < list->elements.size(); ++i) {
+            const auto &element = list->elements[i];
+            if (element.field_name ||
+                (element.array_index &&
+                 *element.array_index != static_cast<int64_t>(i)) ||
+                !literal_initializer_covers_object(target->base,
+                                                   element.value.get()))
+                return false;
+        }
+        return true;
+    }
+    if (target->kind == type_kind::STRUCT || target->kind == type_kind::UNION) {
+        if (!list || target->fields.empty())
+            return false;
+        if (target->kind == type_kind::UNION) {
+            if (list->elements.size() != 1)
+                return false;
+            const auto &element = list->elements[0];
+            const struct_field *field = &target->fields[0];
+            if (element.field_name) {
+                field = nullptr;
+                for (const auto &candidate : target->fields)
+                    if (candidate.name == *element.field_name) field = &candidate;
+            }
+            return field && !element.array_index && field->bit_width < 0 &&
+                   field->offset == 0 && field->type &&
+                   field->type->size() == target->size() &&
+                   literal_initializer_covers_object(field->type, element.value.get());
+        }
+        if (list->elements.size() != target->fields.size())
+            return false;
+        int covered = 0;
+        for (size_t i = 0; i < target->fields.size(); ++i) {
+            const auto &field = target->fields[i];
+            const auto &element = list->elements[i];
+            if (field.bit_width >= 0 || field.offset != covered || !field.type ||
+                field.type->size() <= 0 ||
+                field.type->size() > target->size() - covered ||
+                element.array_index ||
+                (element.field_name && *element.field_name != field.name) ||
+                !literal_initializer_covers_object(field.type, element.value.get()))
+                return false;
+            covered += field.type->size();
+        }
+        return covered == target->size();
+    }
+    if (list)
+        return list->elements.size() == 1 &&
+               !list->elements[0].field_name && !list->elements[0].array_index &&
+               literal_initializer_covers_object(target, list->elements[0].value.get());
+    if (dynamic_cast<const int_literal_expr *>(value) ||
+        dynamic_cast<const float_literal_expr *>(value) ||
+        dynamic_cast<const char_literal_expr *>(value))
+        return true;
+    if (const auto *cast = dynamic_cast<const cast_expr *>(value))
+        return literal_initializer_covers_object(target, cast->operand.get());
+    if (const auto *unary = dynamic_cast<const unary_expr *>(value))
+        return (unary->op == unary_op::NEG || unary->op == unary_op::NOT ||
+                unary->op == unary_op::BNOT) &&
+               literal_initializer_covers_object(target, unary->operand.get());
+    return false;
+}
+
 void collect_static_init(expr *init, type_ptr target, ir_module &mod,
                          int &next_lbl,
                          const std::unordered_set<std::string> &definitions,
@@ -174,15 +261,16 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
         return;
 
     if (const auto *str = unwrap_string_literal(init);
-        str && is_char_array_type(target)) {
+        str && is_string_array_type(target, *str)) {
         append_string_bytes(*str, target, out);
         return;
     }
 
     if (auto *il = dynamic_cast<init_list_expr*>(init)) {
-        if (is_char_array_type(target) && il->elements.size() == 1) {
+        if (il->elements.size() == 1) {
             if (const auto *str =
-                    unwrap_string_literal(il->elements[0].value.get())) {
+                    unwrap_string_literal(il->elements[0].value.get());
+                str && is_string_array_type(target, *str)) {
                 append_string_bytes(*str, target, out);
                 return;
             }
@@ -301,8 +389,8 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
         std::string lbl = "__xcc_str_" + std::to_string(next_lbl++);
         ir_module::global_var gv;
         gv.name       = lbl;
-        gv.type       = type::make_array(type::make_char(),
-                        static_cast<int>(str->value.size()) + 1);
+        gv.type       = str->type && str->type->is_array() ? str->type :
+            type::make_array(type::make_char(), static_cast<int>(str->value.size()) + 1);
         gv.str_init   = str->value;
         gv.char_width = str->char_width;
         gv.has_init   = true;
@@ -310,9 +398,25 @@ void collect_static_init(expr *init, type_ptr target, ir_module &mod,
         out.push_back(init_elem(0, target->size(), lbl));
     } else if (target->is_ptr()) {
         if (auto address = const_expr_evaluator::evaluate_address(init)) {
+            std::string label;
+            if (address->literal) {
+                const auto &str = *address->literal;
+                label = "__xcc_str_" + std::to_string(next_lbl++);
+                ir_module::global_var gv;
+                gv.name = label;
+                gv.type = str.type && str.type->is_array() ? str.type :
+                    type::make_array(type::make_char(),
+                                    static_cast<int>(str.value.size()) + 1);
+                gv.str_init = str.value;
+                gv.char_width = str.char_width;
+                gv.has_init = true;
+                mod.string_literals.push_back(std::move(gv));
+            } else {
+                label = model_static_address_alias(init, address->symbol,
+                                                    definitions);
+            }
             out.push_back(init_elem(
-                address->byte_offset, target->size(),
-                model_static_address_alias(init, address->symbol, definitions)));
+                address->byte_offset, target->size(), label));
         } else {
             out.push_back(init_elem(0, target->size()));
         }
@@ -372,9 +476,14 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il,
         bool same_type =
             value.type->kind == target->kind &&
             value.type->size() == target->size() &&
-            value.type->is_unsigned() == target->is_unsigned();
+            value.type->is_unsigned() == target->is_unsigned() &&
+            (target->kind != type_kind::BITINT ||
+             value.type->bitint_width == target->bitint_width);
         if (same_type) {
-            value.type = target;
+            // A SYMBOL still denotes a memory access: arithmetic/store
+            // coercion must retain the source object's volatile qualifier.
+            if (!value.is_symbol() || !value.type->is_volatile)
+                value.type = target;
             return value;
         }
         value = coerce_const_operand(value, target);
@@ -412,6 +521,36 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il,
         if (!dst_type)
             return;
         const int size = dst_type->size();
+        std::function<bool(const type_ptr &)> ordinary_object =
+            [&](const type_ptr &object) {
+                if (!object || object->is_volatile || object->is_atomic)
+                    return false;
+                if (object->kind == type_kind::ARRAY)
+                    return ordinary_object(object->base);
+                if (object->kind == type_kind::STRUCT ||
+                    object->kind == type_kind::UNION) {
+                    for (const auto &field : object->fields)
+                        if (!ordinary_object(field.type)) return false;
+                }
+                // Pointer pointees are separate objects. A pointer to volatile
+                // data remains an ordinary pointer object.
+                return true;
+            };
+        // Keep tiny objects on direct stores. Larger objects can amortize
+        // destination setup through the target's costed block-fill lowering.
+        if (size >= 4 && size <= 65535 && ordinary_object(dst_type) &&
+            dst_ptr.type && dst_ptr.type->is_ptr() &&
+            !dst_ptr.type->is_far_ptr()) {
+            if (literal_initializer_covers_object(dst_type, &il))
+                return;
+            icode fill;
+            fill.op = icode_op::BLOCK_FILL;
+            fill.result = dst_ptr;
+            fill.left = operand::make_int(0, type::make_uchar());
+            fill.right = operand::make_int(size, type::make_uint());
+            emit(fill);
+            return;
+        }
         for (int i = 0; i < size; ++i) {
             operand byte_ptr = ptr_at(dst_ptr, i, type::make_uchar());
             icode ic;
@@ -469,10 +608,11 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il,
             type_ptr elem_t  = dst_type->base;
             int      elem_sz = elem_t->size();
 
-            if (elem_sz == 1 && list.elements.size() == 1) {
+            if (list.elements.size() == 1) {
                 if (auto *str = dynamic_cast<string_literal_expr*>(
-                        list.elements[0].value.get())) {
-                    int n = dst_type->size();
+                        list.elements[0].value.get());
+                    str && is_string_array_type(dst_type, *str)) {
+                    int n = dst_type->array_size;
                     int init_bytes = static_cast<int>(str->value.size()) + 1;
                     if (init_bytes > n)
                         init_bytes = n;
@@ -480,7 +620,7 @@ void ir_gen::gen_init_list(const symbol &sym, type_ptr type, init_list_expr &il,
                         int ch = 0;
                         if (i < static_cast<int>(str->value.size()))
                             ch = static_cast<unsigned char>(str->value[i]);
-                        operand elem_ptr = ptr_at(dst_ptr, i, elem_t);
+                        operand elem_ptr = ptr_at(dst_ptr, i * elem_sz, elem_t);
                         icode ic;
                         ic.op = icode_op::SET_VALUE_AT;
                         ic.result = elem_ptr;

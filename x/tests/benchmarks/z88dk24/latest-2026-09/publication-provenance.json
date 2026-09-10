@@ -1,0 +1,77 @@
+{
+  "files": {
+    "results.csv": {
+      "sha256": "4b2b8f4e536631409f1dd9e2650f92717a760b604c0837f322cde0cc1529d25f",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/results.csv"
+    },
+    "xcc-results.csv": {
+      "sha256": "13d2af4b9c244cfd7fb03ceac6758347e345a4836e313a167668eed0775d124e",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/xcc-results.csv"
+    },
+    "toolchain-receipt.json": {
+      "sha256": "8940bee7932c8251476e4a5e9a3814cbf57ef834e53d65c1574f1e525cd4b40e",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/toolchain-receipt.json"
+    },
+    "staged-tools.json": {
+      "sha256": "9e53863f6e24cd0b1541ec39d9d38950ddc9ea4383d6c5422b8ffcf64f711996",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/staged-tools.json"
+    },
+    "merge-provenance.json": {
+      "sha256": "1909b02fc41c2233e6673f460e88327010849630c541ad1ccfe575d26eeb7dc7",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/merge-provenance.json"
+    },
+    "comparison-analysis.json": {
+      "sha256": "ae0a93c582309b30ad1c6593c1b1128fd5c003754b1f423a85f36b413a6efc73",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/comparison-analysis.json"
+    },
+    "comparison-table.md": {
+      "sha256": "45927927cd27ac32f91e004ccfd28346bde383788683e191cd49b1cf3cf07f6d",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/comparison-table.md"
+    },
+    "status-summary.json": {
+      "sha256": "1621e3439b3ccfefbccef8a133e51e29d6e5954d918088b5ed8d38b2a459cc39",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/status-summary.json"
+    },
+    "competitor-results.csv": {
+      "sha256": "de3e1038f37ff96636df867ca54573131c7613353faf93f394f57b23fed5780f",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/latest-z88dk24-competitors/results.csv"
+    },
+    "versions.txt": {
+      "sha256": "42510b8d154ea82c5025adce7e10367efbbfe5cdad1646eb9289c4bb1b883fb7",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/part0/versions.txt"
+    },
+    "xcc-source-manifest.json": {
+      "sha256": "0fdd8f5e6817e1884ac81cf8213c41eb3e39d4807de3eb11be8ea39b66435753",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/final-validation-v6/latest-z88dk24/part0/xcc-source-manifest.json"
+    },
+    "snapshot.lock": {
+      "sha256": "7773d140ed3e038023e60e996215ac6b4168d956ce3f3d068d091833ecc67f51",
+      "original": "/home/tstih/data/retro-vault/xyz/x/tests/benchmarks/z88dk24/latest.lock"
+    },
+    "competitor-versions-part0.txt": {
+      "sha256": "3520b41848eaedd84947621c04ae393cfec6a26de0a8f38c0e265c6a17daaa2c",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/latest-z88dk24-competitors/part0/versions.txt"
+    },
+    "competitor-versions-part1.txt": {
+      "sha256": "e8b3e4df2ea5f23aec760178d5958631dcdcd34b05a88baf3d0b0cad37777e82",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/latest-z88dk24-competitors/part1/versions.txt"
+    },
+    "competitor-versions-part2.txt": {
+      "sha256": "e8b3e4df2ea5f23aec760178d5958631dcdcd34b05a88baf3d0b0cad37777e82",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/latest-z88dk24-competitors/part2/versions.txt"
+    },
+    "competitor-versions-part3.txt": {
+      "sha256": "e8b3e4df2ea5f23aec760178d5958631dcdcd34b05a88baf3d0b0cad37777e82",
+      "original": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/latest-z88dk24-competitors/part3/versions.txt"
+    }
+  },
+  "all_four_xcc_partition_source_manifests_equal": true,
+  "all_four_xcc_partition_versions_equal": true,
+  "all_seven_competitor_columns_equal_original_and_v5": true,
+  "compact_xcc_source_manifest_sha256": "0fdd8f5e6817e1884ac81cf8213c41eb3e39d4807de3eb11be8ea39b66435753",
+  "full_build_source_freeze_archived_at": "/home/tstih/data/retro-vault/xyz/build/sccz80-campaign/integrated-v6/sources.json",
+  "full_build_source_freeze_sha256": "655760f4b113a041cc27cfec6c48357d8a2de6773633b1e1b24168b2105c325f",
+  "compiler_source_files_reverified": 1384,
+  "staged_files_reverified": 548,
+  "no_raw_measurements_rewritten": true
+}

@@ -11,6 +11,7 @@
 // Copyright (C) 2026 tomaz stih
 //
 #include "frontend/parser.h"
+#include "frontend/conditional_type.h"
 #include <cctype>
 #include <limits>
 
@@ -57,6 +58,26 @@ static type_ptr subscript_element_type(const type_ptr &ty) {
         return apply_array_qualifiers_to_element(unqualified->base, ty);
 
     return nullptr;
+}
+
+static type_ptr expression_value_type(type_ptr ty) {
+    if (ty && ty->is_array() && ty->base)
+        return type::make_pointer(apply_array_qualifiers_to_element(ty->base, ty));
+    if (ty && ty->is_func())
+        return type::make_pointer(ty);
+    return ty;
+}
+
+static type_ptr literal_element_type(int char_width, bool is_wchar) {
+    if (is_wchar)
+        return type::make_int();
+    if (char_width == 8)
+        return type::make_char8t();
+    if (char_width == 2)
+        return type::make_ushort();
+    if (char_width == 4)
+        return type::make_ulong();
+    return type::make_char();
 }
 
 // ----- Expressions ---------------------------------------------------
@@ -132,26 +153,9 @@ expr_ptr parser::parse_conditional_expression() {
         cond->cond      = std::move(e);
         cond->then_expr = std::move(then_e);
         cond->else_expr = std::move(else_e);
-        // Compute result type (C11 §6.5.15): arithmetic → usual_arith_conv,
-        // null-pointer-constant + pointer → pointer type, else use non-null arm.
-        {
-            type_ptr tt = cond->then_expr ? cond->then_expr->type : nullptr;
-            type_ptr et = cond->else_expr ? cond->else_expr->type : nullptr;
-            if (tt && et) {
-                if (tt->is_arith() && et->is_arith())
-                    cond->type = usual_arith_conv(tt->unqual(), et->unqual());
-                else if (tt->is_ptr() && et->is_ptr())
-                    cond->type = tt; // assume compatible
-                else if (tt->is_ptr() && et->is_integer())
-                    cond->type = tt; // null pointer constant on else side
-                else if (tt->is_integer() && et->is_ptr())
-                    cond->type = et; // null pointer constant on then side
-                else
-                    cond->type = tt ? tt : et;
-            } else {
-                cond->type = tt ? tt : et;
-            }
-        }
+        cond->type = conditional_common_type(
+            cond->then_expr ? cond->then_expr->type : nullptr,
+            cond->else_expr ? cond->else_expr->type : nullptr);
         return cond;
     }
     return e;
@@ -218,9 +222,21 @@ expr_ptr parser::parse_binary_expression(int min_prec) {
         bin->right = std::move(rhs);
         // Set result type (needed by _Generic and type propagation).
         {
-            type_ptr lt = bin->left  ? bin->left->type  : nullptr;
-            type_ptr rt = bin->right ? bin->right->type : nullptr;
-            if (lt && rt && op != bin_op::COMMA) {
+            type_ptr lt = expression_value_type(
+                bin->left ? bin->left->type : nullptr);
+            type_ptr rt = expression_value_type(
+                bin->right ? bin->right->type : nullptr);
+            if (op == bin_op::EQ || op == bin_op::NE ||
+                op == bin_op::LT || op == bin_op::LE ||
+                op == bin_op::GT || op == bin_op::GE ||
+                op == bin_op::LAND || op == bin_op::LOR) {
+                bin->type = type::make_int();
+            } else if (op == bin_op::SHL || op == bin_op::SHR) {
+                // Each shift operand is promoted independently; the right
+                // operand never changes the result type of the left operand.
+                if (lt)
+                    bin->type = integer_promote(lt->unqual());
+            } else if (lt && rt && op != bin_op::COMMA) {
                 lt = lt->unqual();
                 rt = rt->unqual();
                 if (op == bin_op::ADD && lt->is_ptr() && rt->is_integer())
@@ -329,8 +345,8 @@ expr_ptr parser::parse_unary_expression() {
         e->loc = loc; e->op = unary_op::DEREF;
         e->operand = parse_cast_expression();
         // *p has the pointee type (if we can determine it now)
-        if (e->operand && e->operand->type && e->operand->type->is_ptr())
-            e->type = e->operand->type->base;
+        if (e->operand)
+            e->type = subscript_element_type(e->operand->type);
         e->is_lvalue = true;
         return e;
     }
@@ -457,6 +473,13 @@ expr_ptr parser::parse_postfix_expression() {
             auto call = std::make_unique<call_expr>();
             call->loc    = loc;
             call->callee = std::move(e);
+            // Parent expressions (including sizeof and _Generic) need the
+            // declared return type before semantic analysis visits the call.
+            type_ptr function_type = call->callee ? call->callee->type : nullptr;
+            if (function_type && function_type->is_ptr())
+                function_type = function_type->base;
+            if (function_type && function_type->is_func())
+                call->type = function_type->ret;
             if (!check(tk::RPAREN)) {
                 do {
                     call->args.push_back(parse_assignment_expression());
@@ -638,8 +661,8 @@ expr_ptr parser::parse_primary_expression() {
         auto e = std::make_unique<char_literal_expr>();
         e->loc   = t.loc;
         e->value = t.ival;
-        e->type  = (t.char_width == 8) ? type::make_char8t()
-                                       : type::make_int(); // ordinary char constant has type int in C
+        e->type = t.char_width == 1 ? type::make_int()
+                                  : literal_element_type(t.char_width, t.is_wchar);
         return e;
     }
     if (check(tk::STR_LIT)) {
@@ -648,14 +671,24 @@ expr_ptr parser::parse_primary_expression() {
         e->loc        = t.loc;
         e->value      = t.sval;
         e->char_width = (int)t.ival;
+        e->is_wchar   = t.is_wchar;
         // Concatenate adjacent string literals
         while (check(tk::STR_LIT)) {
-            e->value += lex_.next().sval;
+            token next = consume();
+            const int width = static_cast<int>(next.ival);
+            if (width != 1) {
+                if (e->char_width != 1 &&
+                    (e->char_width != width || e->is_wchar != next.is_wchar))
+                    error(next, "incompatible string literal prefixes");
+                e->char_width = width;
+                e->is_wchar = next.is_wchar;
+            }
+            e->value += next.sval;
         }
-        type_ptr elem_type = (e->char_width == 8) ? type::make_char8t()
-                                                  : type::make_char();
-        e->type = type::make_pointer(elem_type);
-        e->type->is_const = true;
+        e->type = type::make_array(
+            literal_element_type(e->char_width, e->is_wchar),
+            static_cast<int>(e->value.size()) + 1);
+        e->is_lvalue = true;
         return e;
     }
     // C23 keyword literals
@@ -1047,8 +1080,20 @@ static bool types_compatible_impl(type_ptr a, type_ptr b, bool decay) {
         (a->kind == type_kind::UCHAR && b->kind == type_kind::CHAR8T))
         return true;
     if (a->kind != b->kind) return false;
-    if (a->kind == type_kind::POINTER)
+    if (a->kind == type_kind::BITINT)
+        return a->bitint_width == b->bitint_width &&
+               a->bitint_unsigned == b->bitint_unsigned;
+    if (a->kind == type_kind::POINTER) {
+        if (a->is_far != b->is_far)
+            return false;
+        if (a->base && b->base &&
+            (a->base->is_const != b->base->is_const ||
+             a->base->is_volatile != b->base->is_volatile ||
+             a->base->is_restrict != b->base->is_restrict ||
+             a->base->is_atomic != b->base->is_atomic))
+            return false;
         return types_compatible_impl(a->base, b->base, false);
+    }
     if (a->kind == type_kind::ARRAY)
         return a->array_size == b->array_size &&
                types_compatible_impl(a->base, b->base, false);

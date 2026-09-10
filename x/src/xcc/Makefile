@@ -16,7 +16,7 @@ XBFD_LIB := $(DIST_DIR)/lib/libxbfd.a
 XOPT_DIR := $(ROOT)/lib/xopt
 XOPT_INC := $(XOPT_DIR)/include
 XOPT_LIB := $(BUILD_DIR)/lib/libxopt.a
-XOPT_SRCS := $(wildcard $(XOPT_DIR)/src/*.cpp $(XOPT_DIR)/include/xopt/*.h)
+XOPT_SRCS := $(XOPT_DIR)/Makefile $(wildcard $(XOPT_DIR)/src/*.cpp $(XOPT_DIR)/include/xopt/*.h)
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Wpedantic -I include -I src -I$(ROOT)/lib/xbfd/include -I$(XOPT_INC)
 DBGFLAGS ?= -g3 -O0 -DDEBUG
 SANITIZE_FLAGS ?= -fsanitize=address,undefined

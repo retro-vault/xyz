@@ -1403,6 +1403,7 @@ fi
 
 cat >"$TMPDIR/page_bound_branch.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: page_bound_branch (return_regs=24)
 	ld	l,-3(ix)
 	ld	h,-2(ix)
 	ld	de,#1024
@@ -1429,6 +1430,7 @@ fi
 
 cat >"$TMPDIR/page_bound_branch_signed.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: page_bound_branch_signed (return_regs=24)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	ld	de,#256
@@ -1455,6 +1457,7 @@ fi
 
 cat >"$TMPDIR/page_bound_branch_de_return.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: page_bound_branch_de_return (return_regs=24)
 	ld	l,-3(ix)
 	ld	h,-2(ix)
 	ld	de,#1024
@@ -1534,6 +1537,7 @@ grep -Eq 'jr[[:space:]]+z,' "$TMPDIR/redundant_u8_self_mask_flags_live.out.s"
 
 cat >"$TMPDIR/hl_bc_roundtrip.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: hl_bc_roundtrip (return_regs=24)
 	ld	hl,#1234
 	ld	b,h
 	ld	c,l
@@ -1568,6 +1572,7 @@ grep -Eq 'ld[[:space:]]+a,[[:space:]]*c' "$TMPDIR/hl_bc_roundtrip_live.out.s"
 
 cat >"$TMPDIR/bc_base_add.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: _demo (return_regs=24)
 	ld	l,-1(ix)
 	ld	h,-2(ix)
 	add	hl,hl
@@ -1989,6 +1994,7 @@ fi
 
 cat >"$TMPDIR/ix_word_inc_direct.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0, return_regs=1)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	inc	hl
@@ -2008,6 +2014,7 @@ fi
 
 cat >"$TMPDIR/ix_word_inc_flags_live.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	inc	hl
@@ -2027,6 +2034,7 @@ fi
 
 cat >"$TMPDIR/ix_word_inc_hl_live.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	inc	hl
@@ -2048,6 +2056,7 @@ fi
 
 cat >"$TMPDIR/ix_word_add1_direct.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0, return_regs=24)
 	ld	l,-6(ix)
 	ld	h,-5(ix)
 	ld	de,#1
@@ -2069,6 +2078,7 @@ fi
 
 cat >"$TMPDIR/ix_word_add1_de_live.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=8, stack_params=0)
 	ld	l,-6(ix)
 	ld	h,-5(ix)
 	ld	de,#1
@@ -2452,6 +2462,7 @@ grep -Eq 'ld[[:space:]]+d,[[:space:]]*-5\(ix\)' "$TMPDIR/ix_byte_alu_forward_de_
 
 cat >"$TMPDIR/ix_byte_store_forward.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: demo (locals=0, temp_frame=5, stack_params=0)
 	ld	-5(ix),a
 	ld	e,-5(ix)
 	ret
@@ -2699,8 +2710,8 @@ ASM
 
 "$XOPT" -Os "$TMPDIR/a_local_branch_reload_live.s" -o "$TMPDIR/a_local_branch_reload_live.out.s"
 grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*a' "$TMPDIR/a_local_branch_reload_live.out.s"
-if grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/a_local_branch_reload_live.out.s"; then
-    echo "xopt smoke: A local branch reload was not forwarded through A" >&2
+if ! grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/a_local_branch_reload_live.out.s"; then
+    echo "xopt smoke: an observable source-local branch reload was removed" >&2
     exit 1
 fi
 grep -Eq 'ld[[:space:]]+l,[[:space:]]*-2\(ix\)' "$TMPDIR/a_local_branch_reload_live.out.s"
@@ -2721,8 +2732,8 @@ ASM
 
 "$XOPT" -Os "$TMPDIR/a_local_branch_reload_dead.s" -o "$TMPDIR/a_local_branch_reload_dead.out.s"
 grep -Eq 'ld[[:space:]]+-2\(ix\),[[:space:]]*a' "$TMPDIR/a_local_branch_reload_dead.out.s"
-if grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/a_local_branch_reload_dead.out.s"; then
-    echo "xopt smoke: A local branch reload was not forwarded" >&2
+if ! grep -Eq 'ld[[:space:]]+a,[[:space:]]*-2\(ix\)' "$TMPDIR/a_local_branch_reload_dead.out.s"; then
+    echo "xopt smoke: a dead value discarded an observable source-local read" >&2
     exit 1
 fi
 grep -Eq 'cp[[:space:]]+#37' "$TMPDIR/a_local_branch_reload_dead.out.s"
@@ -2855,6 +2866,7 @@ fi
 
 cat >"$TMPDIR/ix_word_zero_fallthrough_reload.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: _demo (return_regs=1)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	ld	a,h
@@ -2879,6 +2891,7 @@ fi
 
 cat >"$TMPDIR/ix_word_zero_target_reload.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: _demo (return_regs=1)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	ld	a,h
@@ -2904,6 +2917,7 @@ fi
 
 cat >"$TMPDIR/ix_word_zero_leave_ix_tail.s" <<'ASM'
 _demo:
+	; sdcccall(1) prologue: _demo (return_regs=1)
 	ld	l,-4(ix)
 	ld	h,-3(ix)
 	ld	a,h
@@ -3014,7 +3028,7 @@ fi
 
 cat >"$TMPDIR/modern_const_return.s" <<'ASM'
 _modern:
-	; sdcccall(1) prologue: modern (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: modern (locals=0, temp_frame=0, stack_params=0, return_regs=24)
 	ld	hl,#42
 	ex	de,hl
 __modern_end:
@@ -3313,6 +3327,7 @@ grep -Eq '^[[:space:]]+push[[:space:]]+hl' "$TMPDIR/dead_pair_pop_push_live.out.
 
 cat >"$TMPDIR/long_inc_sp.s" <<'ASM'
 _demo:
+	; sdcccall(0) prologue: long_inc_sp (return_regs=96)
 	inc	sp
 	inc	sp
 	inc	sp
@@ -3675,6 +3690,7 @@ grep -Eq '^__xopt_spaghetti_0:' "$TMPDIR/spaghetti_de_flag_inline_live.out.s"
 
 cat >"$TMPDIR/return_copy_direct.s" <<'ASM'
 _imm_return:
+	; sdcccall(1) prologue: _imm_return (return_regs=24)
 	ld	hl, #4660
 	ld	b, h
 	ld	c, l
@@ -3683,6 +3699,7 @@ _imm_return:
 _imm_return_end:
 	ret
 _mem_return:
+	; sdcccall(1) prologue: _mem_return (return_regs=24)
 	ld	hl, (#65296)
 	ld	b, h
 	ld	c, l
@@ -3702,6 +3719,7 @@ fi
 
 cat >"$TMPDIR/ix_return_direct.s" <<'ASM'
 _slot_return:
+	; sdcccall(1) prologue: _slot_return (return_regs=24)
 	ld	l, -8(ix)
 	ld	h, -7(ix)
 	ld	d, h
@@ -3722,6 +3740,7 @@ fi
 
 cat >"$TMPDIR/lowbyte_sum_return.s" <<'ASM'
 _byte_tail:
+	; sdcccall(1) prologue: _byte_tail (return_regs=1)
 	ld	b, #0
 	ld	hl, #305
 	add	hl, bc
@@ -4179,6 +4198,7 @@ fi
 
 cat >"$TMPDIR/lowbyte_zero_extend_to_de_hl_live.s" <<'ASM'
 _lowbyte_zero_extend_to_de_hl_live:
+	; sdcccall(1) prologue: _lowbyte_zero_extend_to_de_hl_live (return_regs=121)
 	ld	a, h
 	and	#0
 	ld	h, a
@@ -4886,7 +4906,7 @@ grep -Eq '^[[:space:]]+cp[[:space:]]+#0' "$TMPDIR/cp_zero_branch_to_or.out.s"
 cat >"$TMPDIR/modern_return_pair_exchange.s" <<'ASM'
 	.area _CODE
 _modern_return_pair_exchange:
-	; sdcccall(1) prologue: modern_return_pair_exchange (locals=0, temp_frame=0, stack_params=0)
+	; sdcccall(1) prologue: modern_return_pair_exchange (locals=0, temp_frame=0, stack_params=0, return_regs=24)
 	ld	d, h
 	ld	e, l
 	ret
@@ -5111,6 +5131,7 @@ grep -Eq 'ld[[:space:]]+a,[[:space:]]*-1\(ix\)' \
 cat >"$TMPDIR/adjacent_postinc_loop.s" <<'ASM'
 	.area	_CODE
 _adjacent_postinc_loop:
+	; sdcccall(1) prologue: _adjacent_postinc_loop (return_regs=0)
 	ld	hl, #_bytes
 	ld	e, -2(ix)
 	ld	d, -1(ix)
@@ -5351,5 +5372,26 @@ if "$XOPT" -O1 "$TMPDIR/in.s" >/dev/null 2>&1; then
     echo "xopt smoke: -O1 should be rejected" >&2
     exit 1
 fi
+
+python3 "$SCRIPT_DIR/caller_saves_test.py" "$XOPT"
+python3 "$SCRIPT_DIR/volatile_reload_test.py" "$XOPT"
+python3 "$SCRIPT_DIR/short_outline_test.py" "$XOPT" --assembly-only
+
+cat >"$TMPDIR/unconditional_jump_cost.s" <<'ASM'
+	.module unconditional_jump_cost
+	.area _CODE
+timing_loop:
+	inc hl
+	jp timing_loop
+ASM
+for profile in Of O3; do
+    "$XOPT" "-$profile" "$TMPDIR/unconditional_jump_cost.s" \
+        -o "$TMPDIR/unconditional_jump_cost.$profile.s"
+    grep -Eq 'jp[[:space:]]+timing_loop' \
+        "$TMPDIR/unconditional_jump_cost.$profile.s"
+done
+"$XOPT" -Os "$TMPDIR/unconditional_jump_cost.s" \
+    -o "$TMPDIR/unconditional_jump_cost.Os.s"
+grep -Eq 'jr[[:space:]]+timing_loop' "$TMPDIR/unconditional_jump_cost.Os.s"
 
 echo "xopt smoke: ok"

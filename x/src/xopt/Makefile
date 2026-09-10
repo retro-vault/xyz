@@ -11,7 +11,7 @@ CXXFLAGS += -DXTOOLS_VERSION=\"$(XTOOLS_VERSION)\"
 XOPT_DIR := $(ROOT)/lib/xopt
 XOPT_INC := $(XOPT_DIR)/include
 XOPT_LIB := $(BUILD_DIR)/lib/libxopt.a
-XOPT_SRCS := $(wildcard $(XOPT_DIR)/src/*.cpp $(XOPT_DIR)/include/xopt/*.h)
+XOPT_SRCS := $(XOPT_DIR)/Makefile $(wildcard $(XOPT_DIR)/src/*.cpp $(XOPT_DIR)/include/xopt/*.h)
 
 INCLUDE := -I$(XOPT_INC)
 TARGET := $(HOST_BIN_DIR)/xopt

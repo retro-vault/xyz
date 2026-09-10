@@ -27,6 +27,11 @@
 [[sdcc::sdccall(1)]] ssize_t read(int fd, void *buf, size_t count);
 [[sdcc::sdccall(1)]] ssize_t write(int fd, const void *buf, size_t count);
 [[sdcc::sdccall(1)]] int unlink(const char *path);
+/* Available on filesystem backends that supply these optional operations. */
+[[sdcc::sdccall(1)]] int fsync(int fd);
+[[sdcc::sdccall(1)]] int chdir(const char *path);
+[[sdcc::sdccall(1)]] char *getcwd(char *buf, size_t size);
+[[sdcc::sdccall(1)]] int rmdir(const char *path);
 void *sbrk(ptrdiff_t increment);
 
 #endif /* _UNISTD_H */

@@ -9,6 +9,62 @@
 
 namespace xcc {
 
+void z80_gen::emit_ordinary_ix_spans(const ir_function &fn) {
+    // The assembly optimizer cannot infer C qualifiers from an IX address.
+    // Describe only unescaped ordinary scalar storage, accounting for every
+    // typed view of each object and for overlapping frame homes.
+    struct span { int offset; int size; std::string key; bool ordinary; };
+    std::vector<span> spans;
+    std::unordered_set<std::string> excluded;
+    auto local_symbol = [](const operand &op) {
+        return op.is_symbol() && !op.is_global && !op.is_tls &&
+               !op.is_sfr && !op.is_func;
+    };
+    auto key = [](const operand &op) {
+        return op.name + "|" + std::to_string(op.stack_offset) +
+               (op.is_param ? "|p" : "|l");
+    };
+    for (const auto &ic : fn.icodes) {
+        if (ic.op == icode_op::INLINE_ASM || ic.op == icode_op::ALLOCA)
+            return;
+        if (ic.op == icode_op::ADDRESS_OF && local_symbol(ic.left))
+            excluded.insert(key(ic.left));
+        for (const operand *op : {&ic.result, &ic.left, &ic.right}) {
+            if (!local_symbol(*op))
+                continue;
+            const std::string identity = key(*op);
+            const int size = op_size(*op);
+            const bool ordinary = op->type && !op->type->is_volatile &&
+                !op->type->is_atomic &&
+                (op->type->is_integer() || op->type->is_ptr());
+            if (!ordinary)
+                excluded.insert(identity);
+            if (size > 0)
+                spans.push_back({ix_offset_of(*op), size, identity, ordinary});
+        }
+    }
+    std::unordered_set<int> denied;
+    for (const auto &s : spans) {
+        if (!s.ordinary || excluded.count(s.key))
+            for (int byte = 0; byte < s.size; ++byte)
+                denied.insert(s.offset + byte);
+    }
+    std::unordered_set<std::string> emitted;
+    for (const auto &s : spans) {
+        if (!s.ordinary || excluded.count(s.key) || s.size > 2 ||
+            !fits_ix_disp(s.offset) || !fits_ix_disp(s.offset + s.size - 1))
+            continue;
+        bool overlaps = false;
+        for (int byte = 0; byte < s.size; ++byte)
+            overlaps |= denied.count(s.offset + byte) != 0;
+        const std::string identity = std::to_string(s.offset) + ":" +
+                                     std::to_string(s.size);
+        if (!overlaps && emitted.insert(identity).second)
+            emit_comment("xopt ordinary ix span: offset=%d size=%d",
+                         s.offset, s.size);
+    }
+}
+
 static bool is_direct_abs_ptr(const operand &op) {
     return op.kind == operand_kind::INT_CONST;
 }
@@ -496,6 +552,33 @@ void z80_gen::gen_get_value_at(const icode &ic) {
                 for (int64_t step = 0; step < delta; ++step)
                     emit_line(update.op == icode_op::ADD ? "inc\t(hl)"
                                                          : "dec\t(hl)");
+            } else if (delta == 1 && update.op == icode_op::ADD &&
+                       ic.left.type && ic.left.type->is_ptr() &&
+                       ic.left.type->base &&
+                       !ic.left.type->base->is_volatile &&
+                       !ic.left.type->base->is_atomic &&
+                       (opt_settings_.level == opt_level::Os ||
+                        opt_settings_.level == opt_level::Of ||
+                        opt_settings_.level == opt_level::O3)) {
+                // The typed, adjacent read/modify/write proof above permits
+                // skipping the unchanged high byte.  The loaded and updated
+                // values are dead, and no operation intervenes at the shared
+                // address.  For HL keep the same final address (high byte) as
+                // the ordinary word store; INC HL preserves the low-byte Z.
+                const std::string done = fresh_local_label("__xcc_word_inc");
+                if (iy_indexed) {
+                    emit_line("inc\t%lld(iy)",
+                              static_cast<long long>(iy_disp));
+                    emit_line("jr\tnz, %s", done.c_str());
+                    emit_line("inc\t%lld(iy)",
+                              static_cast<long long>(iy_disp + 1));
+                } else {
+                    emit_line("inc\t(hl)");
+                    emit_line("inc\thl");
+                    emit_line("jr\tnz, %s", done.c_str());
+                    emit_line("inc\t(hl)");
+                }
+                emit_label(done);
             } else if (iy_indexed) {
                 emit_line("ld\te, %lld(iy)",
                           static_cast<long long>(iy_disp));
@@ -519,6 +602,119 @@ void z80_gen::gen_get_value_at(const icode &ic) {
                 emit_line("ld\t(hl), e");
                 emit_line("inc\thl");
                 emit_line("ld\t(hl), d");
+            }
+            skipped_icodes_.insert(cur_ic_index_ + 1);
+            skipped_icodes_.insert(cur_ic_index_ + 2);
+            return;
+        }
+    }
+
+    // Keep an ordinary word address and loaded value in HL/DE for an
+    // adjacent += whose other input is already live in BC. The full word
+    // read is followed by one write to each byte; no intermediate value or
+    // address survives the store, unless it has an unchanged IY home. This
+    // avoids spilling the sum and address merely to reconstruct them in the
+    // following instruction.
+    if (cur_fn_ && !use_pending_word_ptr && ic.result.is_temp() &&
+        ic.left.is_temp() && ic.result.byte_offset == 0 &&
+        ic.left.byte_offset == 0 && ic.right.is_none() && ic.bit_width < 0 &&
+        direct_word_result_size == 2 && ic.left.type &&
+        ic.left.type->is_ptr() && !ic.left.type->is_far_ptr() &&
+        ic.left.type->base && !ic.left.type->base->is_volatile &&
+        !ic.left.type->base->is_atomic &&
+        !(ic.result.type && (ic.result.type->is_volatile ||
+                            ic.result.type->is_atomic)) &&
+        (opt_settings_.level == opt_level::Os ||
+         opt_settings_.level == opt_level::Of ||
+         opt_settings_.level == opt_level::O3) &&
+        cur_ic_index_ + 2 < cur_fn_->icodes.size()) {
+        const icode &update = cur_fn_->icodes[cur_ic_index_ + 1];
+        const icode &store = cur_fn_->icodes[cur_ic_index_ + 2];
+        auto is_loaded = [&](const operand &op) {
+            return op.is_temp() && op.temp_id == ic.result.temp_id &&
+                   op.byte_offset == 0;
+        };
+        const operand *addend = is_loaded(update.left) ? &update.right :
+                                is_loaded(update.right) ? &update.left : nullptr;
+        auto ordinary_word = [](const operand &op) {
+            return op.type && op.type->is_integer() && op.type->size() == 2 &&
+                   op.type->kind != type_kind::BITINT &&
+                   !op.type->is_volatile && !op.type->is_atomic &&
+                   op.byte_offset == 0;
+        };
+        bool bc_addend = false;
+        if (addend && addend->is_temp() &&
+            addend->temp_id != ic.result.temp_id && ordinary_word(*addend)) {
+            auto home = temp_regs_.find(addend->temp_id);
+            bc_addend = home != temp_regs_.end() &&
+                        home->second == temp_home::main_bc;
+        }
+        // Ordinary register moves and frame reloads preserve BC. A general
+        // rematerialization can use BC as scratch while forming an address;
+        // retain the normal lowering for that unproven case.
+        auto pointer_home = temp_regs_.find(ic.left.temp_id);
+        const bool pointer_load_preserves_bc =
+            pointer_home == temp_regs_.end() ||
+            pointer_home->second != temp_home::remat_hl;
+        int64_t iy_disp = 0;
+        const bool iy_indexed = iy_pointer_displacement(ic.left, 2, iy_disp);
+        // Count across the whole function, including uses before this block:
+        // a textual "not used later" search cannot see a loop-carried use.
+        auto private_chain_temp = [&](int id, unsigned expected_uses) {
+            unsigned definitions = 0, uses = 0;
+            for (const auto &other : cur_fn_->icodes) {
+                auto is_this = [&](const operand &op) {
+                    return op.is_temp() && op.temp_id == id;
+                };
+                uses += is_this(other.left) + is_this(other.right);
+                if (is_this(other.result)) {
+                    if (other.op == icode_op::SET_VALUE_AT ||
+                        other.op == icode_op::BLOCK_FILL)
+                        ++uses;
+                    else
+                        ++definitions;
+                }
+            }
+            return definitions == 1 && uses == expected_uses;
+        };
+        if (update.op == icode_op::ADD && update.result.is_temp() &&
+            update.result.temp_id != ic.left.temp_id &&
+            update.result.temp_id != ic.result.temp_id &&
+            ic.result.temp_id != ic.left.temp_id &&
+            ordinary_word(ic.result) && ordinary_word(update.result) &&
+            bc_addend && pointer_load_preserves_bc &&
+            store.op == icode_op::SET_VALUE_AT && store.bit_width < 0 &&
+            store.result.is_temp() && store.result.temp_id == ic.left.temp_id &&
+            store.result.byte_offset == 0 && store.right.is_none() &&
+            store.result.type && store.result.type->is_ptr() &&
+            !store.result.type->is_far_ptr() && store.result.type->base &&
+            !store.result.type->base->is_volatile &&
+            !store.result.type->base->is_atomic &&
+            store.left.is_temp() && store.left.temp_id == update.result.temp_id &&
+            ordinary_word(store.left) &&
+            private_chain_temp(ic.result.temp_id, 1) &&
+            private_chain_temp(update.result.temp_id, 1) &&
+            (iy_indexed || private_chain_temp(ic.left.temp_id, 2))) {
+            if (!iy_indexed)
+                load_hl(ic.left);
+            invalidate_a_cache();
+            invalidate_pair_cache();
+            if (iy_indexed) {
+                emit_line("ld\tl, %lld(iy)", static_cast<long long>(iy_disp));
+                emit_line("ld\th, %lld(iy)", static_cast<long long>(iy_disp + 1));
+                emit_line("add\thl, bc");
+                emit_line("ld\t%lld(iy), l", static_cast<long long>(iy_disp));
+                emit_line("ld\t%lld(iy), h", static_cast<long long>(iy_disp + 1));
+            } else {
+                emit_line("ld\te, (hl)");
+                emit_line("inc\thl");
+                emit_line("ld\td, (hl)");
+                emit_line("ex\tde, hl");
+                emit_line("add\thl, bc");
+                emit_line("ex\tde, hl");
+                emit_line("ld\t(hl), d");
+                emit_line("dec\thl");
+                emit_line("ld\t(hl), e");
             }
             skipped_icodes_.insert(cur_ic_index_ + 1);
             skipped_icodes_.insert(cur_ic_index_ + 2);
@@ -602,6 +798,8 @@ void z80_gen::gen_get_value_at(const icode &ic) {
                            next.result.type->size() == 1 &&
                            next.result.type->is_integer() &&
                            next.result.type->kind != type_kind::BOOL &&
+                           (next.result.type->kind != type_kind::BITINT ||
+                            next.result.type->bitint_width == 8) &&
                            !temp_value_used_after(*cur_fn_, cur_ic_index_ + 2,
                                                   ic.result.temp_id)) {
                     narrow_to_byte = true;
@@ -1255,6 +1453,48 @@ void z80_gen::gen_block_fill(const icode &ic) {
         return;
 
     const int64_t count = ic.right.ival;
+    // Compare the actual Z80 costs of the overlapping LDIR fill, straight
+    // stores, and a partially unrolled DJNZ loop. Tiny fills need no block
+    // setup; larger constant fills can amortize DJNZ across several stores.
+    // BC was already a BLOCK_FILL clobber, and all candidates preserve IX/IY.
+    const bool speed_profile = opt_settings_.level == opt_level::Of ||
+                               opt_settings_.level == opt_level::O3;
+    const bool size_profile = opt_settings_.level == opt_level::Os;
+    int unroll = 0;
+    bool straight = count == 1;
+    int64_t best_bytes = count == 1 ? 1 : 9;
+    int64_t best_cycles = count == 1 ? 7 : count * 21 + 5;
+    auto consider = [&](int factor, bool direct, int64_t bytes,
+                        int64_t cycles) {
+        // Bound speed-profile growth by 16 bytes per fill. This admits
+        // useful loop unrolling without duplicating arbitrarily large data
+        // initializers into the Z80's small address space.
+        const bool better = speed_profile
+            ? bytes <= 25 && (cycles < best_cycles ||
+                             (cycles == best_cycles && bytes < best_bytes))
+            : size_profile && (bytes < best_bytes ||
+                               (bytes == best_bytes && cycles < best_cycles));
+        if (better) {
+            unroll = factor;
+            straight = direct;
+            best_bytes = bytes;
+            best_cycles = cycles;
+        }
+    };
+    if (speed_profile || size_profile) {
+        consider(0, true, count * 2 - 1, count * 13 - 6);
+        for (int factor = 1; factor <= 8; ++factor) {
+            const int64_t trips = count / factor;
+            const int64_t tail = count % factor;
+            if (trips < 2 || trips > 256)
+                continue;
+            const int64_t bytes = 4 + factor * 2 +
+                                  (tail != 0 ? tail * 2 - 1 : 0);
+            const int64_t cycles = 2 + trips * (factor * 13 + 13) +
+                                   (tail != 0 ? tail * 13 - 6 : 0);
+            consider(factor, false, bytes, cycles);
+        }
+    }
     load_hl(ic.result);
     if (ic.left.kind == operand_kind::INT_CONST) {
         load_a(ic.left);
@@ -1263,9 +1503,28 @@ void z80_gen::gen_block_fill(const icode &ic) {
         load_a(ic.left);
         emit_line("pop\thl");
     }
-    emit_line("ld\t(hl), a");
-
-    if (count > 1) {
+    if (straight) {
+        for (int64_t byte = 0; byte < count; ++byte) {
+            if (byte != 0)
+                emit_line("inc\thl");
+            emit_line("ld\t(hl), a");
+        }
+    } else if (unroll != 0) {
+        const std::string loop = fresh_local_label("__xcc_fill");
+        emit_line("ld\tb, %s", asm_.imm((count / unroll) & 0xff).c_str());
+        emit_label(loop, false);
+        for (int byte = 0; byte < unroll; ++byte) {
+            emit_line("ld\t(hl), a");
+            emit_line("inc\thl");
+        }
+        emit_line("djnz\t%s", loop.c_str());
+        for (int64_t byte = 0; byte < count % unroll; ++byte) {
+            if (byte != 0)
+                emit_line("inc\thl");
+            emit_line("ld\t(hl), a");
+        }
+    } else if (count > 1) {
+        emit_line("ld\t(hl), a");
         emit_line("ld\td, h");
         emit_line("ld\te, l");
         emit_line("inc\tde");

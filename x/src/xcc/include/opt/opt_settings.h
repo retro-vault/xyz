@@ -77,6 +77,7 @@ struct optimization_settings {
     bool prealloc_temp_frame = false;
     bool switch_jump_tables = false;
     bool ctype_builtins = false;
+    bool memory_builtins = false;
 
     static optimization_settings for_level(opt_level level) {
         optimization_settings s;
@@ -178,6 +179,7 @@ struct optimization_settings {
             // its ASCII ctype operations at hot parser sites; users can
             // retain interposable calls with -fno-ctype-builtins.
             s.ctype_builtins = true;
+            s.memory_builtins = true;
             break;
 
         case opt_level::O3:
@@ -207,6 +209,7 @@ struct optimization_settings {
             s.branch_bool_arithmetic = true;
             s.countdown_dead_loops = true;
             s.block_fill_loops = true;
+            s.memory_builtins = true;
             // A register-resident temp is usually smaller as well as faster
             // on the Z80 (it skips a load/store pair entirely), so the -Of
             // physical-register allocator and scalar-local promotion belong
