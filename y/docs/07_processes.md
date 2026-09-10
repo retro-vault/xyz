@@ -54,6 +54,28 @@ if (!p) {
 
 After `process_start` returns, the calling code and the new process's main thread both run concurrently (once the scheduler is active). The caller is not blocked.
 
+## Loading a Process from Disk
+
+Applications normally use the public kernel table rather than calling the
+constructor directly:
+
+```c
+yos_process_t *process = yos->load_process("editor.sys");
+if (!process) {
+    uint8_t reason = *yos->process_load_error;
+    /* report or handle reason */
+}
+```
+
+The file must be an XPRG version 1 process containing a relocatable XL image.
+The loader verifies its CRC and bounds, applies every XL relocation, uses the
+declared entry point and stack size, and gives the process ownership of the
+resident image allocation. Service-kind XPRG libraries are deliberately not
+accepted by this process operation.
+
+The ROM invokes the same loader for `shell.sys` on the current esxDOS drive
+before enabling scheduler interrupts.
+
 ## Exiting a Process
 
 ```c
@@ -84,7 +106,7 @@ All threads with `owner == process_t *` belong to that process and will be clean
 
 ## OS System Process
 
-*Yos* itself is not represented as a process. The kernel runs before the scheduler is active, using the dedicated `__sys_stack`. Once `main()` installs the thread scheduler and returns, the kernel stack is effectively abandoned and the system lives entirely in thread stacks from that point on.
+*Yos* itself is not represented as a process. The kernel loads the initial process while interrupts are disabled and uses the dedicated `__sys_stack`. It then installs the IM2 scheduler and remains in its idle `HALT` loop; runnable processes execute on their own allocated stacks.
 
 ## A Complete Example
 
@@ -113,7 +135,8 @@ void launch_counter() {
 
 ## Tips and Limitations
 
-- **Process names are at most 7 characters.** Longer strings will be silently truncated by `strcpy` with no bounds check — keep names short.
+- **Process names are at most 7 characters.** The XPRG loader bounds and
+  truncates longer descriptor names before constructing the process.
 - **There is currently no inter-process isolation.** All processes share the same flat 64 KB address space. A buggy process can overwrite the memory of any other process or the OS itself. This is inherent in the ZX Spectrum's architecture.
 - **Stack size must be sufficient for all nested calls.** Include headroom for the 22-byte context the scheduler saves on the thread's stack at every 50 Hz tick, plus all the C function frames the thread will call.
 - **`process_exit` should be called before the process's last thread returns** if the process owns non-thread resources (e.g., timers or events it created). Otherwise those resources will be cleaned up lazily the next time the OS walks the resource lists.

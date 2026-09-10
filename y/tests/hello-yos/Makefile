@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Makefile for hello-yos — RST10 service-query integration test.
+# Makefile for hello-yos — RST18 service-query integration test.
 #
 # Builds a relocatable XL user app that obtains the "yos" service and prints.
 # Uses the shared vanilla runtime in x/tests/tests/hello/crt0.s.
@@ -41,8 +41,8 @@ all: $(BIN_DIR)/hello-yos.xl
 
 XCCFLAGS := --mode=sdcc -S -Os -g -std=c11 \
            -I$(Y_ROOT)/include \
-           -I$(Y_ROOT)/src \
-           -I$(Y_ROOT)/src/include
+           -I$(Y_ROOT)/src/c \
+           -I$(Y_ROOT)/src/c/include
 XASFLAGS := --mode=sdcc -g
 XLDFLAGS := --mode=sdcc -v -m -nostdlib --no-default-runtime -e _entry
 

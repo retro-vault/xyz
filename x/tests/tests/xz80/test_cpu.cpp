@@ -29,6 +29,22 @@ struct machine {
     int step() { return cpu.step(); }
 };
 
+struct recording_ports final : xz80::IPorts {
+    uint16_t input_address = 0;
+    uint16_t output_address = 0;
+    uint8_t output_value = 0;
+
+    uint8_t in(uint16_t port) noexcept override {
+        input_address = port;
+        return 0x5a;
+    }
+
+    void out(uint16_t port, uint8_t value) noexcept override {
+        output_address = port;
+        output_value = value;
+    }
+};
+
 // ---------------------------------------------------------------------------
 // Basic execution tests
 // ---------------------------------------------------------------------------
@@ -58,6 +74,33 @@ TEST(cpu_ld_a_n)
     m.step();
     auto s = m.cpu.snapshot();
     REQUIRE_EQ(s.af >> 8, 0x42u);
+}
+
+TEST(cpu_io_reports_full_sixteen_bit_port_address)
+{
+    xz80::flat_memory mem;
+    recording_ports ports;
+    xz80::cpu cpu(mem, ports);
+    cpu.reset();
+    mem.write(0, 0x01); // LD BC, #ABCD
+    mem.write(1, 0xcd);
+    mem.write(2, 0xab);
+    mem.write(3, 0xed); // IN A, (C)
+    mem.write(4, 0x78);
+    mem.write(5, 0xed); // OUT (C), A
+    mem.write(6, 0x79);
+    mem.write(7, 0xd3); // OUT (#E7), A
+    mem.write(8, 0xe7);
+
+    cpu.step();
+    cpu.step();
+    REQUIRE_EQ(ports.input_address, 0xabcdu);
+    cpu.step();
+    REQUIRE_EQ(ports.output_address, 0xabcdu);
+    REQUIRE_EQ(ports.output_value, 0x5au);
+    cpu.step();
+    REQUIRE_EQ(ports.output_address, 0x5ae7u);
+    REQUIRE_EQ(ports.output_value, 0x5au);
 }
 
 TEST(cpu_inc_bc)

@@ -12,9 +12,5 @@
  * Query a named runtime service table.
  */
 extern void *query_service(char *name);
-/*
- * Compatibility alias for `query_service()`.
- */
-extern void *query_interface(char *name);
 
 #endif /* TESTS_HELLO_CRT0_H */

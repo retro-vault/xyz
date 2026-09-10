@@ -1,0 +1,77 @@
+        ; Minimal assembly-only YOS kernel initialization.
+        ;
+        ; MIT License (see: LICENSE)
+        ; Copyright (C) 2026 tomaz stih
+
+        .module main
+        .optsdcc -mz80 sdcccall(1)
+
+        .globl  _main
+        .globl  __sys_heap
+        .globl  __heap
+        .globl  __yos
+        .globl  _mem_init
+        .globl  _tmr_install
+        .globl  _svc_register
+        .globl  _svc_query_rst18
+        .globl  __clock_tick
+        .globl  __kbd_scan
+        .globl  __thread_robin
+        .globl  __im2_init
+        .globl  _sys_vec_set
+        .globl  __yos_name
+        .globl  __gpx_name
+        .globl  __gpx_service
+        .globl  _boot_shell
+
+        .area   _CODE
+
+        ; Initialize heaps, clock, YOS service and scheduler vector.
+_main::
+        ld      de, #1024
+        ld      hl, #__sys_heap
+        call    _mem_init
+        ld      hl, #0xffff
+        ld      de, #__heap
+        or      a
+        sbc     hl, de
+        ex      de, hl
+        ld      hl, #__heap
+        call    _mem_init
+
+        ld      bc, #0                  ; kernel-owned clock timer
+        push    bc
+        ld      de, #0
+        ld      hl, #__clock_tick
+        call    _tmr_install
+
+        ld      bc, #0                  ; kernel-owned keyboard timer
+        push    bc
+        ld      de, #0
+        ld      hl, #__kbd_scan
+        call    _tmr_install
+
+        ld      de, #__yos
+        ld      hl, #__yos_name
+        call    _svc_register
+
+        ld      de, #__gpx_service      ; publish complete graphics API
+        ld      hl, #__gpx_name
+        call    _svc_register
+
+        ; Load the disk-resident user environment before enabling preemption.
+        call    _boot_shell
+
+        ld      a, #2                   ; RST 18h service query
+        push    af
+        inc     sp
+        ld      hl, #_svc_query_rst18
+        call    _sys_vec_set
+
+        ; Arm IM2 preemption after the initial process has entered the queue.
+        call    __im2_init
+
+        ei                              ; loader and vectors are now complete
+.idle:
+        halt
+        jr      .idle

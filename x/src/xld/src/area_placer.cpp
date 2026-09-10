@@ -259,12 +259,9 @@ namespace xld {
             if (group.members.empty()) continue;
 
             auto base_it = ctx.area_bases.find(group.name);
+            const uint32_t resume_cursor = cursor;
+            const bool has_explicit_base = base_it != ctx.area_bases.end();
             if (base_it != ctx.area_bases.end()) {
-                if (base_it->second < cursor) {
-                    throw placement_error(
-                        "area base for '" + group.name
-                        + "' overlaps previous placement");
-                }
                 cursor = static_cast<uint32_t>(base_it->second);
             }
 
@@ -330,6 +327,14 @@ namespace xld {
                     cursor += a.size();
                 }
             }
+
+            // An explicit base is an independent placement request. It may
+            // describe a fixed vector below an area encountered earlier in
+            // group order. Preserve the high-water mark for later unbased
+            // areas; the complete overlap audit below still rejects actual
+            // collisions.
+            if (has_explicit_base)
+                cursor = std::max(cursor, resume_cursor);
         }
 
         struct placed_area_ref {

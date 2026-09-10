@@ -18,7 +18,6 @@
         .globl    _main
         .globl    _entry
         .globl    _query_service
-        .globl    _query_interface
         .globl    ___sdcc_call_hl
         .globl    __sdcc_call_hl
         .globl    ___sdcc_call_iy
@@ -45,7 +44,6 @@ _entry::
         ;; Returns:
         ;;   DE = service pointer (or 0), matching sdcccall(1)
 _query_service::
-_query_interface::
         rst       0x10                    ; kernel returns pointer in DE
         ret
 

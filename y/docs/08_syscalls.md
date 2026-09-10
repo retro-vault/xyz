@@ -18,7 +18,7 @@ This is the *yos* equivalent of a system call table. The OS itself registers a s
 
 ## Querying the OS API
 
-The fastest way to get the OS service pointer in C is through the `query_service` function, which is wired to `RST 0x10` (see below):
+The fastest way to get the OS service pointer in C is through the `query_service` function, which is wired to `RST 0x18` (see below):
 
 ```c
 #include <yos.h>
@@ -34,9 +34,9 @@ y->setcur(true);
 
 You only need to call `query_service` once per process. Store the pointer and reuse it — the lookup walks a linked list, so it is not free.
 
-## The `RST 0x10` Mechanism
+## The `RST 0x18` Mechanism
 
-`query_service` is made available to *every* program — including assembly programs — through `RST 0x10`. The OS installs `_svc_query` as the handler for that vector during initialisation.
+`query_service` is made available to every RAM process through `RST 0x18`. The OS installs `_svc_query` as the handler for that vector during initialisation. RST 10 remains the immediate `RET` required while esxDOS cold-boots a replacement ROM.
 
 From assembly:
 
@@ -44,16 +44,16 @@ From assembly:
         ;; Push address of the service name string
         ld      hl, #service_name
         push    hl
-        ;; RST 0x10 calls _svc_query(name)
+        ;; RST 0x18 calls _svc_query(name)
         ;; Return value: HL = pointer to function table, or 0 if not found
-        rst     0x10
+        rst     0x18
         ;; HL now holds the function table pointer
 
 service_name:
         .asciz  "yos"           ; null-terminated service name
 ```
 
-This works because `RST 0x10` is a single-byte instruction — cheap in both code size and execution time — and the vector is hooked in RAM so it can be changed if needed.
+This works because `RST 0x18` is a single-byte instruction, and its ROM entry redirects through the writable YOS vector table.
 
 ## Registering a Custom Service
 

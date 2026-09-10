@@ -48,7 +48,8 @@ struct cpu::impl {
                     static_cast<uint16_t>(port),
                     static_cast<uint8_t>(val));
             },
-            this);
+            this,
+            true);
     }
 };
 

@@ -8,7 +8,6 @@
         .globl    _main
         .globl    _entry
         .globl    _query_service
-        .globl    _query_interface
         .globl    ___sdcc_call_hl
         .globl    ___sdcc_call_iy
 
@@ -18,8 +17,7 @@ _entry::
         ret
 
 _query_service::
-_query_interface::
-        rst       0x10
+        rst       0x18
         ret
 
 ___sdcc_call_hl::

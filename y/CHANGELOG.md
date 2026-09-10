@@ -9,6 +9,59 @@ Release status:
 
 ## Unreleased
 
+- Extended the public kernel interface to ABI version 8 with an XPRG process
+  loader and its error cell. The ROM now finds `shell.sys` on the current
+  esxDOS drive, validates its 64-byte process descriptor, OS requirement,
+  payload CRC and embedded XL relocation records, allocates the declared
+  application stack plus scheduler context, starts the process, and transfers
+  ownership of the resident image. The build creates a temporary XCC-compiled
+  process image with `xprog`; the initial screen greeting/footer has been
+  removed. The complete boot loader path occupies 884 ROM bytes.
+- Extended the public kernel interface to ABI version 7 with bounded esxDOS
+  directory and disk enumeration. Applications can now use `opendir`,
+  `readdir`, `rewinddir`, and `closedir`; each returned `dirent` contains the
+  short 8.3 name, file size, native attributes, and `DT_REG` or `DT_DIR`.
+  `enumerate_disks` safely probes physical devices into a caller-sized array
+  instead of using esxDOS's unbounded whole-device-list operation. Directory
+  state is allocated from the caller heap and the ROM implementation remains
+  independent of libc and platform archives.
+- Integrated the complete ZX Spectrum libgpx v1.1.0 implementation into the
+  assembly kernel ROM and registered its 23-function direct-call table as the
+  named `"gpx"` service. The new public `gpx.h` describes the drawing context,
+  bitmap, font, sprite, geometry, constants, and complete `gpx_api_t` service
+  ABI. The vendored graphics modules have no libc or runtime dependency; their
+  eight writable bytes use the kernel's ROM-to-RAM initializer path.
+- Replaced the legacy public `yos_t` surface with ABI version 6, containing
+  only kernel services and the complete esxDOS-backed POSIX file interface.
+  Descriptive names such as `create_thread` now map directly to the existing
+  assembly implementations. Only memory allocation, memory release, and timer
+  creation retain the small adapters required to hide kernel-private owner or
+  heap arguments. The ROM owns its filesystem implementation, descriptor
+  state, error cell, and 45-byte RAM gate block; it has no dependency on a ZX
+  platform, libc, runtime, console, or font archive. The public
+  `error_number` pointer exposes the ROM's error cell without an accessor.
+- Added self-contained ZX Spectrum keyboard and Kempston mouse drivers to the
+  kernel ROM. The keyboard matrix is scanned by a 50 Hz kernel timer into a
+  transition queue, while mouse calibration and polling read the three
+  Kempston ports directly. ABI v6 exposes `read_key`, `calibrate_mouse`, and
+  `read_mouse` as direct function pointers without proxy routines. Removed
+  the redundant `query_interface` compatibility spelling; applications use
+  `query_service` for the RST 18 lookup.
+- Split the assembly-only kernel into one callable global function per source
+  module, with underscore-prefixed modules for internal helpers and shared
+  state. The production link now extracts these modules from
+  `libyos-kernel.lib`, allowing xld to omit unused kernel APIs. The emulator
+  validates every physical RST and NMI entry address. RST 38 keeps the exact
+  divIDE/esxDOS-compatible `PUSH AF`, `POP AF`, `EI`, `RETI` sequence. YOS
+  preserves its 50 Hz preemptive scheduler through a two-byte IM2 vector at
+  `0x5EFF`, installed only after the disk loader has completed.
+  Reset, RST 8 and NMI now also preserve divIDE's delayed first-opcode
+  protocol. A single readable CRT header uses ordinary origins and zero bytes
+  for all fixed vectors; no per-vector linker areas remain. YOS leaves the
+  reserved tails of RST 8 and NMI NOP-filled rather than installing handlers
+  there; the fixed esxDOS base-ROM byte reader is present at `0x007B`.
+  RST 10 remains the immediate return required by esxDOS boot text; named
+  YOS service lookup is exposed to RAM processes through RST 18.
 - Made the YOS microdrive test images depend explicitly on the staged
   `bin/y/bin/microdrive` host tool. The application and emulator test
   Makefiles now build that tool with explicit Y product paths, so an inherited

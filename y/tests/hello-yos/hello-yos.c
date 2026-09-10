@@ -1,7 +1,7 @@
 /* hello-yos.c
  *
  * Minimal user-space XL program:
- *   - fetches the "yos" service via RST10 bridge
+ *   - fetches the "yos" service via the RST18 bridge
  *   - prints hello world using yos->printf
  *
  * MIT License (see: LICENSE)

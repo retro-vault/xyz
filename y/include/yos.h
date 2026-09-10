@@ -1,90 +1,148 @@
 /*
- * Declares the yos system call table, shared constants, and
- * service entry points used by hosted applications and drivers.
+ * Public YOS kernel and filesystem interface.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih
  */
-#ifndef __YOS_H__
-#define __YOS_H__
+#ifndef _YOS_H
+#define _YOS_H
 
-#include <drivers/mdr.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-/* Current yos API version returned by the kernel interface. */
-#define YOS_VERSION 0x04
+/* ABI version returned by yos_s::version(). */
+#define YOS_VERSION 0x08
 
-/* Reset vector index for the `RST 08h` service entry. */
-#define	RST08   0
-/* Reset vector index for the `RST 10h` service entry. */
-#define	RST10   1
-/* Reset vector index for the `RST 18h` service entry. */
-#define	RST18   2
-/* Reset vector index for the `RST 20h` service entry. */
-#define	RST20   3
-/* Reset vector index for the `RST 28h` service entry. */
-#define	RST28   4
-/* Reset vector index for the `RST 30h` service entry. */
-#define	RST30   5
-/* Reset vector index for the `RST 38h` service entry. */
-#define	RST38   6
-/* Interrupt vector index for the non-maskable interrupt entry. */
-#define NMI	    7
+enum yos_process_load_error {
+    YOS_PROCESS_LOAD_OK = 0,
+    YOS_PROCESS_LOAD_NOT_FOUND = 1,
+    YOS_PROCESS_LOAD_NO_MEMORY = 2,
+    YOS_PROCESS_LOAD_READ_ERROR = 3,
+    YOS_PROCESS_LOAD_INVALID_IMAGE = 4,
+    YOS_PROCESS_LOAD_START_ERROR = 5,
+    YOS_PROCESS_LOAD_NOT_PROCESS = 6,
+    YOS_PROCESS_LOAD_REQUIRES_NEWER_OS = 7,
+    YOS_PROCESS_LOAD_BAD_CHECKSUM = 8
+};
 
-/* Default text attribute with no extra styling. */
-#define AT_NONE         0x00
-/* Text attribute flag that enables underline rendering. */
-#define AT_UNDERLINE    0x01
-/* Text attribute flag that enables inverse video rendering. */
-#define AT_INVERSE      0x02
+/* Raw keyboard-event encoding returned by read_key(). */
+#define YOS_KEY_DOWN 0x40
+#define YOS_KEY_CODE 0x3f
+
+/* Writable YOS vector-table indexes. */
+enum yos_vector {
+    YOS_VECTOR_RST18 = 2,
+    YOS_VECTOR_RST20 = 3,
+    YOS_VECTOR_RST28 = 4,
+    YOS_VECTOR_RST30 = 5,
+    YOS_VECTOR_RST38 = 6
+};
+
+/* Synchronization-event states. */
+enum yos_event_state {
+    YOS_EVENT_RESET = 0,
+    YOS_EVENT_SET = 1
+};
+
+/* Kernel objects are opaque outside YOS. */
+typedef struct yos_event yos_event_t;
+typedef struct yos_process yos_process_t;
+typedef struct yos_service yos_service_t;
+typedef struct yos_thread yos_thread_t;
+typedef struct yos_timer yos_timer_t;
+
+typedef void (*yos_entry_t)(void);
+typedef void (*yos_handler_t)(void);
+
+typedef struct yos_mouse_state {
+    uint8_t x;
+    uint8_t y;
+    uint8_t buttons;
+    uint8_t changed_buttons;
+} yos_mouse_state_t;
+
+/* One physical esxDOS block-device or partition descriptor. */
+typedef struct yos_disk_info {
+    uint8_t device;
+    uint8_t flags;
+    uint32_t blocks;
+} yos_disk_info_t;
 
 /*
- * Opaque handle returned by kernel-managed resources.
- */
-typedef void * handle;
-
-/*
- * yos kernel service table exposed through `query_interface("yos")`.
+ * Stable kernel interface returned by query_service("yos").
+ *
+ * The first group contains only public kernel operations. The final group
+ * exposes the POSIX-style filesystem supplied by esxDOS.
  */
 typedef struct yos_s {
+    uint16_t (*version)(void);
 
-    int (*ver)(void);                             /* Return the implemented yos API version. */
-    void (*enter_critical_section)(void);         /* Enter a refcounted critical section. */
-    void (*leave_critical_section)(void);         /* Leave a previously entered critical section. */
-    handle (*install_timer)(void (*handler)(void), int ticks); /* Install a timer callback. */
-    void (*uninstall_timer)(handle timer);        /* Remove a previously installed timer. */
-    void (*printf)(const char *format, ...);      /* Print formatted text to the default console. */
-    void (*puts)(const char *s);                  /* Write a string followed by a line terminator. */
-    void (*gets)(char *s);                        /* Read a line of input into the supplied buffer. */
-    void (*clrscr)(void);                         /* Clear the text screen. */
-    int (*kbhit)(void);                           /* Check whether a key is waiting without blocking. */
-    void (*setcur)(int enable);                   /* Enable or disable the text cursor. */
-    void (*setattr)(unsigned char attr);          /* Change the active text attribute bits. */
-    void *(*malloc)(unsigned int size);           /* Allocate a heap block of the requested size. */
-    void (*free)(void *p);                        /* Release a previously allocated heap block. */
-    unsigned int (*clock)(void);                  /* Return the current kernel tick count. */
-    uint8_t (*mdr_detect_drives)(void);           /* Detect attached microdrive units. */
-    uint8_t (*mdr_format)(uint8_t drive, char *cart_name); /* Format a microdrive cartridge. */
-    uint8_t (*mdr_dir)(uint8_t drive, mdr_file_t *files, uint8_t max); /* Read a cartridge directory. */
-    uint8_t (*mdr_load)(uint8_t drive, char *name, uint8_t *dest); /* Load a named microdrive file. */
-    uint8_t (*mdr_save)(uint8_t drive, char *name, uint8_t *src, uint16_t len); /* Save a named microdrive file. */
-    unsigned int (*strlen)(const char *s);        /* Compute the length of a C string. */
-    char* (*strcpy)(char *d, const char *s);      /* Copy one C string into another buffer. */
-    int (*strcmp)(const char *s1, const char *s2);/* Compare two C strings lexicographically. */
-    int (*isalpha)(int c);                        /* Test whether a character is alphabetic. */
-    int (*isspace)(int c);                        /* Test whether a character is whitespace. */
-    int (*tolower)(int c);                        /* Convert an uppercase character to lowercase. */
+    void *(*allocate_memory)(size_t size);
+    void (*free_memory)(void *memory);
 
+    uint16_t (*clock_ticks)(void);
+
+    void (*enter_critical_section)(void);
+    void (*leave_critical_section)(void);
+
+    yos_timer_t *(*create_timer)(yos_handler_t handler, uint16_t ticks);
+    void (*destroy_timer)(yos_timer_t *timer);
+
+    yos_event_t *(*create_event)(void *owner);
+    void (*destroy_event)(yos_event_t *event);
+    yos_event_t *(*set_event)(yos_event_t *event,
+                              enum yos_event_state state);
+
+    yos_thread_t *(*create_thread)(yos_entry_t entry, uint16_t stack_size,
+                                   yos_process_t *process);
+    void (*exit_thread)(yos_thread_t *thread);
+    void (*suspend_thread)(yos_thread_t *thread);
+    void (*resume_thread)(yos_thread_t *thread);
+
+    yos_process_t *(*create_process)(const char *name, yos_entry_t entry,
+                                     size_t stack_size);
+    void (*exit_process)(void);
+
+    void *(*query_service)(const char *name);
+    yos_service_t *(*register_service)(const char *name, void *interface);
+    void (*unregister_service)(yos_service_t *service);
+
+    yos_handler_t (*get_interrupt_handler)(uint8_t vector);
+    void (*set_interrupt_handler)(yos_handler_t handler, uint8_t vector);
+
+    uint8_t (*read_key)(void);
+    void (*calibrate_mouse)(uint8_t x, uint8_t y);
+    void (*read_mouse)(yos_mouse_state_t *state);
+
+    /* Kernel errno cell used by the following filesystem operations. */
+    int *error_number;
+    int (*open)(const char *path, int flags);
+    int (*close)(int fd);
+    ssize_t (*read)(int fd, void *buffer, size_t count);
+    ssize_t (*write)(int fd, const void *buffer, size_t count);
+    off_t (*lseek)(int fd, off_t offset, int whence);
+    int (*fsync)(int fd);
+    int (*unlink)(const char *path);
+    int (*rename)(const char *old_path, const char *new_path);
+    int (*chdir)(const char *path);
+    char *(*getcwd)(char *buffer, size_t size);
+    int (*mkdir)(const char *path, mode_t mode);
+    int (*rmdir)(const char *path);
+    int (*stat)(const char *path, struct stat *status);
+    int (*fstat)(int fd, struct stat *status);
+    DIR *(*opendir)(const char *path);
+    struct dirent *(*readdir)(DIR *directory);
+    void (*rewinddir)(DIR *directory);
+    int (*closedir)(DIR *directory);
+    int (*enumerate_disks)(yos_disk_info_t *disks, size_t capacity);
+    yos_process_t *(*load_process)(const char *path);
+    uint8_t *process_load_error;
 } yos_t;
 
-/*
- * Look up a named kernel interface table.
- *
- * Parameters:
- *      name        - Interface name, such as `"yos"`.
- *
- * Returns:
- *      Pointer to the requested interface table, or `NULL` if unavailable.
- */
-extern void *query_interface(char *name);
+/* Resolve a named service through the application's RST 18 stub. */
+void *query_service(const char *name);
 
-#endif /* __YOS_H__ */
+#endif /* _YOS_H */

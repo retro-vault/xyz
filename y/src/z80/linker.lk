@@ -1,0 +1,19 @@
+; YOS replacement-ROM layout with esxDOS disk-call gates initialized in RAM.
+;
+; MIT License (see: LICENSE)
+; Copyright (C) 2026 tomaz stih
+
+ENTRY _main
+FORMAT bin
+RANGE 0000-3FFF
+
+AREA _HEADER = 0000
+AREA _CODE = 0100
+AREA _DATA = 5B00
+AREA _IM2 = 5EFF
+AREA _HEAP = 5F01
+
+; divIDE automatic paging entry points and the Interface 1 trigger.
+RESERVE 04C6-04C6
+RESERVE 0562-0562
+RESERVE 3D00-3DFF

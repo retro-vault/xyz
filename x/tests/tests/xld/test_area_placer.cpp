@@ -164,6 +164,29 @@ TEST(area_placer_default_sdcc_order_keeps_heap_after_based_data) {
     ASSERT_EQ(ctx.code_size, 0x5028);
 }
 
+TEST(area_placer_allows_nonoverlapping_based_area_below_cursor) {
+    xld::link_context ctx;
+    ctx.area_bases["_CODE"] = 0x0100;
+    ctx.area_bases["_VECTOR"] = 0x0008;
+
+    auto mod = std::make_shared<xld::module>("test", "test.rel");
+    // Object-area order puts code first, although the fixed vector has the
+    // lower address. Explicit bases make both placements unambiguous.
+    mod->areas().emplace_back("_CODE", 0x10, xld::area_flags::none, 0);
+    mod->areas().emplace_back("_VECTOR", 0x03,
+                              xld::area_flags::none, 1);
+    mod->areas().emplace_back("_CONST", 0x04,
+                              xld::area_flags::none, 2);
+    ctx.modules.push_back(mod);
+
+    xld::area_placer::place(ctx);
+
+    ASSERT_EQ(mod->areas()[0].placed_addr().value(), 0x0100);
+    ASSERT_EQ(mod->areas()[1].placed_addr().value(), 0x0008);
+    ASSERT_EQ(mod->areas()[2].placed_addr().value(), 0x0110);
+    ASSERT_EQ(ctx.code_size, 0x0114);
+}
+
 TEST(area_placer_abs_overlap_error) {
     xld::link_context ctx;
 

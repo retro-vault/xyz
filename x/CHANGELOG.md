@@ -6,6 +6,13 @@ Release status:
 
 ## Unreleased
 
+- Report the complete 16-bit Z80 I/O address to `xz80::IPorts` for register
+  and immediate port instructions. This allows machines such as the ZX
+  Spectrum to decode keyboard rows and distinct Kempston mouse ports.
+- Allow independently based xld area groups to appear below groups encountered
+  earlier in object-area order. This supports small fixed ROM-vector regions
+  while preserving the high-water mark for ordinary sections and retaining
+  the final overlap and reserved-range checks.
 - Reclaimed 9,472 Spectrum RAM bytes for `zx-esxdos-rom` by placing writable
   storage at `0x5B00`. Stock esxDOS 0.8.9's supported external file calls use
   divIDE's private buffers and need no permanent Spectrum workspace after

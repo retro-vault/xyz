@@ -625,8 +625,10 @@ Example:
 -b _DATA=5B00
 ```
 
-This is applied at group placement time. If the requested base would move
-backwards over already placed content, xld reports an error.
+This is applied independently at group placement time. A pinned group may
+appear below a group encountered earlier in object-area order; xld preserves
+the placement high-water mark for later unpinned groups. The final placement
+audit still rejects any actual overlap or reserved-range collision.
 
 ### `-f <xl|bin>`
 
