@@ -2,10 +2,37 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-09-10, during Spectrum esxDOS low-RAM reclamation work
-and after the compiler/runtime optimization campaign.
+Last updated: 2026-09-11, after adding the XCC YOS application backend.
 
 ## Major Recent Work
+
+### Relocatable YOS applications from XCC
+
+`--platform=yos` now links ordinary C and the staged libc as relocatable XL
+processes. The CRT initializes BSS and copied data without relying on
+relocated section-length constants, resolves the ABI 8 `"yos"` table through
+RST 18, calls `main`, and exits through the service table. Target-private
+`yos.h`, `gpx.h`, and `dirent.h` are staged only for this platform.
+
+The platform archive keeps machine-facing libc behind YOS: malloc/free/realloc
+use the process-owned user heap, POSIX files and directories delegate to the
+kernel's esxDOS implementation and propagate its error cell, and wall-clock
+calls fail with `ENOSYS`. Standard output is intentionally invisible until
+the process installs the nonstandard character hook intended for Alto console
+windows; standard input remains EOF while raw key transitions are available
+through `yos_t`.
+
+The linker now updates its unresolved set after each extracted archive member,
+so an earlier platform override suppresses a later generic libc fallback in
+the same archive scan.
+
+The YOS build now compiles its real `shell.sys` through this backend before
+XPROG wraps it as XPRG. The relocated kernel emulator executes that exact
+image through RST 18 and the GPX table and verifies that it draws. The XPROG
+host tool also has `--esxdos`, producing a deterministic 16 MiB MBR/FAT16 IDE
+disk with one 8.3 root file. A runnable `x/examples/yos` sample and the
+step-by-step `y/docs/books/PROGRAMMING-YOS.md` application book cover the
+complete YOS and GPX call surfaces.
 
 ### ZX Spectrum disk applications booting from ROM
 

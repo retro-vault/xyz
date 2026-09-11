@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "xgdb sieve (dap)",
+      "type": "xgdb",
+      "request": "launch",
+      "program": "${workspaceFolder}/../../bin/targets/z80/apps/debug/sieve.bin",
+      "cdb": "${workspaceFolder}/../../bin/targets/z80/apps/debug/sieve.cdb",
+      "remoteTarget": "127.0.0.1:9000",
+      "debuggerPath": "${workspaceFolder}/../../bin/bin/xgdb",
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": true
+    }
+  ]
+}

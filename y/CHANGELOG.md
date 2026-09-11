@@ -9,6 +9,27 @@ Release status:
 
 ## Unreleased
 
+- Added the XCC `yos` application backend and made the assembly-kernel build
+  reproduce `shell.sys` through it: XCC emits relocatable XL and XPROG wraps
+  the process. The CRT initializes relocated C storage, obtains the ABI 8
+  table through RST 18, and terminates through `exit_process`. Standard libc
+  allocation and POSIX file/directory calls now delegate to YOS; allocations
+  are charged to the current process. Console output remains invisible unless
+  a process installs the new character hook for a future Alto console.
+  Added a complete step-by-step Programming YOS book, full YOS/GPX call
+  references, and a runnable toolchain sample. XPROG can also place `.sys`
+  files on deterministic partitioned FAT16 esxDOS IDE images.
+
+- Restructured the Y documentation. `y/docs/books/THE-BOOK-OF-YOS.md` is
+  the entry point and its chapters live in `y/docs/books/the-book-of-yos/`, the assembly
+  style guide under `y/docs/standards/`, and every chapter was rewritten
+  against the assembly kernel in `y/src/z80/` (IM2 scheduling, `__startup_init`,
+  the real memory map, the 24-byte thread and 15-byte process objects, the
+  scheduler-driven `process_reap` cleanup, the `HL`/`DE` RST 18 convention,
+  the 32-bit clock counters and the `ticks + 1` timer period, XPRG loader
+  error codes). `y/INDEX.md` and `y/README-src-yos.md` were folded into
+  `y/README.md` and a new `y/AGENTS.md`; the duplicate `y/CHANGELOG-y.md`
+  was removed. Markdown files are now named `UPPER-CASE-WITH-HYPHENS.md`.
 - Extended the public kernel interface to ABI version 8 with an XPRG process
   loader and its error cell. The ROM now finds `shell.sys` on the current
   esxDOS drive, validates its 64-byte process descriptor, OS requirement,

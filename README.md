@@ -36,12 +36,13 @@ to the specific documentation you need.
 
 - [C++ coding style](x/docs/standards/CPP-CODING-STYLE.md)
 - [General Z80 coding style](x/docs/standards/Z80-CODING-STYLE.md)
-- [YOS assembly style guide](y/docs/YOS-ASSEMBLY_STYLE_GUIDE.md)
+- [YOS assembly style guide](y/docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md)
 
 ## Core Components
 
 - [X tools overview](x/README.md)
 - [YOS overview](y/README.md)
+- [The Book of YOS](y/docs/books/THE-BOOK-OF-YOS.md)
 - [Z status](z/README.md)
 
 ## Libraries
@@ -60,6 +61,7 @@ to the specific documentation you need.
 ## Tests And Samples
 
 - [CP/M 3 example](x/examples/cpm3/README.md)
+- [YOS process example](x/examples/yos/README.md)
 - [ZX Spectrum RAM example](x/examples/zx-ram/README.md)
 - [ZX Spectrum ROM example](x/examples/zx-rom/README.md)
 - [ZX Spectrum MCP smoke test](x/tests/tests/zx48/README.md)

@@ -8,6 +8,7 @@
 
 #include <xprog/errors.h>
 #include <xprog/cpc.h>
+#include <xprog/esxdos.h>
 #include <xprog/package.h>
 #include <xprog/tape.h>
 
@@ -376,6 +377,12 @@ void run(const cli_options& options, std::ostream& out)
                              options.entry_point.value_or(
                                  options.load_address),
                              options.name));
+        return;
+    }
+    if (options.command == command_kind::esxdos) {
+        write_file(options.output_file,
+                   build_esxdos_disk(read_file(options.input_file),
+                                     options.name));
         return;
     }
     const auto image = build_image(options, read_file(options.input_file));

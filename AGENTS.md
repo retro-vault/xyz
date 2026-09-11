@@ -21,6 +21,19 @@ Canonical release notes now live with each product root:
 
 ## Build Philosophy
 
+**Non-negotiable output rule.** Every intermediate build product goes under
+`build/` at the repository root and every deliverable goes under `bin/` at the
+repository root — nowhere else. No object files, maps, archives, generated
+sources, scratch scripts, logs, screenshots, temp directories or test work
+directories may be created inside `x/`, `y/`, `z/` or any other source tree,
+and nothing may be written outside the repository. Makefiles take `BUILD_DIR`
+and `DIST_DIR` from the root and must never default to a path next to the
+sources; ad-hoc experiments and harness runs use a subdirectory of `build/`
+(for example `build/zx-esxdos/…`, `build/yos-z80/…`). If a tool insists on
+writing beside its input, copy the input into `build/` first. Leave the
+working tree exactly as `git status` found it, apart from the source changes
+you were asked to make.
+
 - The root `Makefile` is a thin orchestrator. It now delegates primarily to
   the migrated product roots `x/` and `y/`.
 - The default root `make` path builds the staged X toolchain first and then
@@ -28,7 +41,7 @@ Canonical release notes now live with each product root:
   of the default root build; use `make packages` when you explicitly want
   package artifacts.
 - Prefer building **subsets** when possible (see targets below).
-- Output goes to `bin/` (dist) and `build/`.
+- Output goes to `bin/` (dist) and `build/`; see the rule above.
 - Most components use recursive Make. Some sub-areas may use CMake (check `archive/` and vendored dirs).
 - The current staged xtools sysroot lives under `bin/x/z80/`, with related YOS
   outputs under `bin/y/` and staged target assets under `bin/z/`.
@@ -123,7 +136,7 @@ When publishing the toolchain:
 
 - Z80 assembly style: see `x/docs/standards/Z80-CODING-STYLE.md`
 - C coding style (where C is used, e.g. host tools and tests): see `x/docs/standards/CPP-CODING-STYLE.md` (mostly applicable to C too)
-- YOS (OS) specific guidance: `y/README.md` and the copied docs under `y/docs/`
+- YOS (OS) specific guidance: `y/AGENTS.md`, then `y/docs/books/THE-BOOK-OF-YOS.md` and the YOS style guide `y/docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md`
 - Keep the libc **thread-safe** — no new writable statics / `_DATA` section variables for new code. Use stack, registers, or explicit library state only.
 - New C23 functionality is implemented in assembler (in existing `.s` files) unless writing headers.
 - Tests: both "direct" (emulator symbol calls via `runtime_machine`) and "C-driven" (compile `.c` with `xcc`, run in emulator, compare behavior or output to host gcc).
@@ -141,6 +154,12 @@ When publishing the toolchain:
   `cpc-664/`, or `cpc-6128/`. The 464 must not acquire AMSDOS buffers; keep
   the mirrored disk-target sources synchronized and rerun all three MCP
   models after firmware, file, linker, or media changes.
+- The `yos` target emits relocatable XL binaries. Its hosted functionality
+  must be platform-independent or use only the public YOS service tables;
+  keep `yos.h`, `gpx.h`, and target POSIX declarations under
+  `x/platforms/yos/include/`. Console output is silent until a process installs
+  the YOS character hook. Package XL files as `.sys` with `xprog --process`
+  and use `xprog --esxdos` when an esxDOS FAT16 disk image is required.
 - Platform examples follow the same one-directory-per-target rule under
   `x/examples/` (`cpm3`, `cpc-464`, `cpc-664`, `cpc-6128`, `zx-ram`,
   `zx-rom`, and so on). Do not combine
@@ -234,5 +253,6 @@ If you're an AI agent starting fresh here, read:
 3. `x/docs/CURRENT-STATUS.md` (or `x/docs/HANDOFF.md`)
 4. The component changelogs (`x/CHANGELOG.md`, `y/CHANGELOG.md`, `z/CHANGELOG.md`)
 5. The component READMEs (`x/README.md`, `y/README.md`, `x/lib/README.md`, etc.)
+6. `y/AGENTS.md` before touching anything under `y/`
 
 Then ask the user what they want to work on.

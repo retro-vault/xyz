@@ -19,16 +19,12 @@
         .module heap_core
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  _malloc
         .globl  _allocate
+        .globl  __libc_alloc_core
         .globl  __libc_align_size
         .globl  __libc_heap_split
         .globl  __libc_heap_head_get
         .globl  __libc_active_heap
-        .globl  __libc_default_heap
-        .globl  __libc_heap_ready
-        .globl  _heap_region
-        .globl  _heap_init_arena
 
 BLOCK_FREE_HI   .equ 3
 BLOCK_FREE_LO   .equ 2
@@ -40,29 +36,14 @@ BLOCK_SIZE_LO   .equ 0
 
         .area   _CODE
 
-        ;; void *malloc(size_t n)            HL = n  ->  DE = payload | 0
-_malloc::
-        ld      a,h
-        or      l
-        jr      nz,malloc_nonzero
-        ld      de,#0
-        ret
-malloc_nonzero:
-        push    hl                      ; save size across setup
-        call    __libc_heap_setup
-        ld      hl,#__libc_default_heap
-        ld      (__libc_active_heap),hl
-        pop     hl                      ; HL = size
-        jr      __alloc_core
-
         ;; void *allocate(heap_t *h, size_t n)   HL = h, DE = n  ->  DE = ptr | 0
 _allocate::
         ld      (__libc_active_heap),hl
         ex      de,hl                   ; HL = size
-        ;; fall through to __alloc_core
+        ;; fall through to __libc_alloc_core
 
-        ;; __alloc_core: active heap already selected, HL = size -> DE = ptr | 0
-__alloc_core:
+        ;; active heap already selected, HL = size -> DE = ptr | 0
+__libc_alloc_core::
         push    ix
         ld      a,h
         or      l
@@ -117,24 +98,4 @@ alloc_next_block:
 
 alloc_return:
         pop     ix
-        ret
-
-        ;; Create the default heap over the platform region on first use.
-__libc_heap_setup:
-        ld      a,(__libc_heap_ready)
-        or      a
-        ret     nz
-        call    _heap_region      ; HL = base, DE = limit
-        ; malloc promises two-byte alignment even for an odd platform base.
-        ; A wrapped base becomes zero and heap_init_arena rejects it.
-        inc     hl
-        res     0,l
-        ld      b,d
-        ld      c,e                     ; BC = limit
-        ex      de,hl                   ; DE = base
-        ld      hl,#__libc_default_heap
-        push    bc
-        call    _heap_init_arena       ; HL = heap, DE = base, BC = limit
-        ld      a,#1
-        ld      (__libc_heap_ready),a
         ret

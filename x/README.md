@@ -95,6 +95,24 @@ The CPC 464 target is cassette-only and omits AMSDOS state. The CPC 664 and
 single input/output disk channels. See the
 [complete Amstrad CPC guide](docs/howtos/AMSTRAD-CPC.md).
 
+## YOS quick start
+
+```sh
+mkdir -p build/examples/yos
+bin/x/bin/xcc -Os --platform=yos x/examples/yos/hello.c \
+  -o build/examples/yos/hello.xl
+bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 8 \
+  build/examples/yos/hello.xl -o build/examples/yos/hello.sys
+bin/x/bin/xprog --esxdos --name HELLO.SYS build/examples/yos/hello.sys \
+  -o build/examples/yos/hello.ide
+```
+
+The backend produces relocatable XL code, obtains ABI 8 through
+`query_service("yos")`, and routes allocation and POSIX files through YOS.
+Standard console output is silent unless the process installs the
+`yos_set_putchar_hook()` extension. See the [YOS example](examples/yos/) and
+the [Programming YOS book](../y/docs/books/PROGRAMMING-YOS.md).
+
 ## Notes
 
 - `tests/tests/` is now the canonical home for non-benchmark test suites.

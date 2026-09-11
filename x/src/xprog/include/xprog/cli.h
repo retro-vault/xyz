@@ -19,7 +19,8 @@ enum class command_kind {
     tap,
     tzx,
     cdt,
-    dsk
+    dsk,
+    esxdos
 };
 
 struct cli_options {

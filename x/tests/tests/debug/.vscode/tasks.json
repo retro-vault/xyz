@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build sieve debug sample",
+      "type": "shell",
+      "command": "make -C ${workspaceFolder} all",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "run xemu sieve target",
+      "type": "process",
+      "command": "${workspaceFolder}/run_xemu.sh",
+      "dependsOn": "build sieve debug sample",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "xemu",
+        "pattern": {
+          "regexp": ".+"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".+",
+          "endsPattern": "xemu listening on .*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "stop xemu sieve target",
+      "type": "process",
+      "command": "${workspaceFolder}/stop_xemu.sh",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -9,6 +9,8 @@
         .globl  __yos_free
         .globl  __heap
         .globl  _mem_free
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
 
         .area   _CODE
 
@@ -18,5 +20,8 @@
         ; clobbers: af, bc, de, hl; preserves ix and iy
 __yos_free::
         ex      de, hl
+        call    _enter_critical_section
         ld      hl, #__heap
-        jp      _mem_free
+        call    _mem_free
+        call    _leave_critical_section
+        ret

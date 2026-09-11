@@ -1,0 +1,9 @@
+XL
+H 1 areas 3 global symbols
+M with_relocs
+A _CODE size 000A flags 00
+S _func1 Def0000
+S _func2 Def0003
+S _external Ref0000
+T 00 00 C9 00 00 CD 00 00 C9 00
+R 00 00 00 00 03 04 00 02

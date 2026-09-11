@@ -167,6 +167,13 @@ namespace xld {
                         ctx.modules.push_back(mod);
                         lm.loaded = true;
                         changed = true;
+                        // Later archive members in this same pass must see
+                        // definitions selected earlier. Without this update,
+                        // two libraries that both satisfy an initially
+                        // unresolved symbol are both extracted and fail as a
+                        // duplicate during final symbol resolution.
+                        for (const auto& provided : lm.defs)
+                            undefined.erase(provided);
                         break;
                     }
                 }

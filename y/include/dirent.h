@@ -25,4 +25,9 @@ struct dirent {
     char d_name[YOS_NAME_MAX + 1];
 };
 
+DIR *opendir(const char *path);
+struct dirent *readdir(DIR *directory);
+void rewinddir(DIR *directory);
+int closedir(DIR *directory);
+
 #endif /* _YOS_DIRENT_H */

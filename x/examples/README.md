@@ -12,5 +12,6 @@ not share source across target directories.
 | [`cpc-464/`](cpc-464/) | `cpc-464` | Firmware-hosted program packaged as CDT cassette |
 | [`cpc-664/`](cpc-664/) | `cpc-664` | Raw AMSDOS file round trip on DSK |
 | [`cpc-6128/`](cpc-6128/) | `cpc-6128` | Common libc plus raw AMSDOS file operations on DSK |
+| [`yos/`](yos/) | `yos` | Relocatable XL process using YOS services, libc, files, and GPX |
 | [`zx-ram/`](zx-ram/) | `zx-ram` | Tamsyn Lorem Ipsum demo as raw binary, TAP, and TZX |
 | [`zx-rom/`](zx-rom/) | `zx-rom` | Tamsyn Lorem Ipsum replacement ROM |

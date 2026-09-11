@@ -72,5 +72,8 @@ guides are collected under `bin/x/share/doc/`.
 - [standards/Z80-CODING-STYLE.md](standards/Z80-CODING-STYLE.md)
   General Z80 assembly style for runtime and support code.
 
-- [../../y/docs/YOS-ASSEMBLY_STYLE_GUIDE.md](../../y/docs/YOS-ASSEMBLY_STYLE_GUIDE.md)
+- [../../y/docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md](../../y/docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md)
   More specific assembly conventions for the YOS codebase.
+
+- [../../y/docs/books/THE-BOOK-OF-YOS.md](../../y/docs/books/THE-BOOK-OF-YOS.md)
+  The YOS kernel documentation: boot, memory, threads, processes, services.

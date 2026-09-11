@@ -30,9 +30,13 @@ The tool writes a `.app` file with:
 - absolute entry address
 - optional register state for snapshot imports
 
-The exact format is documented in:
+The exact format is documented in the C-era kernel's chapter:
 
-- [`src/yos/docs/11_app_format.md`](../../src/yos/docs/11_app_format.md)
+- [`src/c/docs/11_app_format.md`](../../src/c/docs/11_app_format.md)
+
+The legacy `.app` container is understood only by the C-era `yos.rom`. The
+assembly kernel loads XPRG process images instead; see
+[`docs/books/the-book-of-yos/PROGRAM-IMAGES.md`](../../docs/books/the-book-of-yos/PROGRAM-IMAGES.md).
 
 ## Usage
 

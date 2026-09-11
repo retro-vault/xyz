@@ -1,0 +1,11 @@
+XL
+H 3 areas 1 global symbols
+M multi_area
+A _CODE size 0004 flags 00
+A _DATA size 0002 flags 00
+A _BSS size 0010 flags 00
+S _start Def0000
+T 00 00 3E 01 00 00
+R 00 00 00 00
+T 00 00 AB CD
+R 00 00 01 00

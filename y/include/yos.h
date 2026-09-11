@@ -56,6 +56,7 @@ typedef struct yos_timer yos_timer_t;
 
 typedef void (*yos_entry_t)(void);
 typedef void (*yos_handler_t)(void);
+typedef void (*yos_putchar_hook_t)(char character);
 
 typedef struct yos_mouse_state {
     uint8_t x;
@@ -144,5 +145,18 @@ typedef struct yos_s {
 
 /* Resolve a named service through the application's RST 18 stub. */
 void *query_service(const char *name);
+
+/* Return the table cached by the --platform=yos startup code. */
+yos_t *yos_get_api(void);
+
+/*
+ * Install the process-local sink used by putchar/puts/printf and writes to
+ * stdout/stderr.  The default is NULL and deliberately produces no display.
+ * The previous hook is returned so a temporary sink can be restored.
+ */
+yos_putchar_hook_t yos_set_putchar_hook(yos_putchar_hook_t hook);
+
+/* POSIX-style convenience wrapper supplied by the YOS XCC backend. */
+int enumerate_disks(yos_disk_info_t *disks, size_t capacity);
 
 #endif /* _YOS_H */

@@ -14,6 +14,9 @@ For Amstrad CPC programs it creates firmware-loadable CDT cassette images or
 standard CPCEMU/AMSDOS DSK data disks. See the
 [Amstrad CPC guide](../../docs/howtos/AMSTRAD-CPC.md).
 
+For YOS and other divIDE/esxDOS workflows it can create a raw 16 MiB IDE disk
+with an MBR, one bootable FAT16 partition, and one caller-named 8.3 file.
+
 ## Usage
 
 ```sh
@@ -25,6 +28,7 @@ xprog --tap hello.bin --load-address 0x5ccb
 xprog --tzx hello.bin --load-address 0x5ccb --entry 0x5ccb
 xprog --cdt hello.bin --name HELLO
 xprog --dsk hello.bin --name HELLO.BIN
+xprog --esxdos shell.sys --name SHELL.SYS -o yos.ide
 ```
 
 The default output name replaces `.xl` with `.prc` or `.svc`. Use `-o` to
@@ -58,6 +62,15 @@ CPC media modes reject empty input, binaries that cross `0xFFFF`, entries
 outside the loaded range, malformed names, and process/service-only metadata.
 The resulting CDT and DSK images are directly boot-tested by the 464, 664,
 and 6128 MCP regression.
+
+`--esxdos` accepts any nonempty input file and writes it unchanged as the only
+root-directory entry. The default output extension is `.ide`; the default
+disk filename is the full input filename. Names are uppercased in the FAT
+directory and must be valid 8.3 names. The image is deterministic: a 16 MiB
+raw disk, 1 MiB-aligned 15 MiB FAT16 partition, 512-byte clusters, two FATs,
+and 512 root entries. Process/service and load-address options are rejected in
+this mode. Attach the resulting file as an IDE disk to divIDE/esxDOS hardware
+or an emulator.
 
 The process entry defaults to the entry offset recorded by XL. A service has
 no initializer unless `--entry` is supplied. Each `--export` appends one JP

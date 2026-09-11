@@ -8,12 +8,15 @@
 #include <gpx.h>
 #include <yos.h>
 
+static volatile unsigned char initialized_marker = 0x5a;
+static volatile unsigned char zero_marker;
+
 void main(void)
 {
-    static const char message[] = "Alto (c) 2026 Wischner Ltd.";
+    static const char message[] = "Alto (c) 2026 Wischner Labs Ltd.";
     gpx_api_t *gpx = (gpx_api_t *)query_service(GPX_SERVICE_NAME);
 
-    if (gpx) {
+    if (initialized_marker == 0x5a && zero_marker == 0 && gpx) {
         gpx_t *screen = gpx->create(GPXM_DEFAULT);
         const font_t *font = gpx->get_system_font();
 

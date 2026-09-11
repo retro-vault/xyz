@@ -4,7 +4,7 @@
  * Minimal POSIX-style file status flags for the xcc Z80 libc.
  *
  * The CP/M 3 backend currently honours the access, create, truncate, and
- * append bits below. The zx-esxdos backend also honours exclusive creation.
+ * append bits below. The zx-esxdos and YOS backends also honour exclusive creation.
  * Permission bits are accepted for source compatibility but are ignored.
  *
  * MIT License (see: LICENSE)

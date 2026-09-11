@@ -42,9 +42,6 @@ ALL_OBJECTS := $(LIB_OBJECTS) $(GPX_OBJECTS)
 ARCHIVE := $(BUILD_DIR)/libyos-kernel.lib
 ARCHIVE_MANIFEST := $(BUILD_DIR)/libyos-kernel.members
 OUTPUT := $(BIN_DIR)/$(TARGET).rom
-SHELL_ASM := $(BUILD_DIR)/apps/shell.s
-SHELL_OBJ := $(BUILD_DIR)/apps/shell.rel
-SHELL_CRT := $(BUILD_DIR)/apps/shell-crt.rel
 SHELL_XL := $(BUILD_DIR)/apps/shell.xl
 SHELL_OUTPUT := $(BIN_DIR)/shell.sys
 TEST_ROOT := $(BUILD_DIR)/test_roots.rel
@@ -98,20 +95,9 @@ $(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD)
 			exit 1; \
 		}
 
-$(SHELL_ASM): ../../tests/shell-yos/shell.c $(XCC)
+$(SHELL_XL): ../../tests/shell-yos/shell.c $(XCC) $(XLD) $(XRUNTIME)
 	mkdir -p $(dir $@)
-	$(XCC) --mode=sdcc -S -Os -std=c11 -I$(Y_ROOT)/include $< -o $@
-
-$(SHELL_OBJ): $(SHELL_ASM) $(XAS)
-	$(XAS) --mode=sdcc $< -o $@
-
-$(SHELL_CRT): ../../tests/shell-yos/crt0.s $(XAS)
-	mkdir -p $(dir $@)
-	$(XAS) --mode=sdcc $< -o $@
-
-$(SHELL_XL): $(SHELL_CRT) $(SHELL_OBJ) $(XLD) $(XRUNTIME)
-	$(XLD) --mode=sdcc -nostdlib --no-default-runtime -e _entry \
-		-o $@ $(SHELL_CRT) $(SHELL_OBJ) $(XRUNTIME)
+	$(XCC) --mode=sdcc --platform=yos -Os -std=c11 $< -o $@
 
 $(SHELL_OUTPUT): $(SHELL_XL) $(XPROG)
 	mkdir -p $(dir $@)

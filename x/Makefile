@@ -74,7 +74,7 @@ TARGET_AS8FLAGS := --mode=sdcc $(TARGET_FEATURE_DEFINES)
 
 RUNTIME_ARCHIVE_NAME := libruntime.a
 FIXED_ARCHIVE_NAME := libfixed.a
-STAGED_PLATFORMS := $(sort $(PLATFORM) cpc-464 cpc-664 cpc-6128 cpm3 emu zx-esxdos zx-esxdos-rom zx-ram zx-rom)
+STAGED_PLATFORMS := $(sort $(PLATFORM) cpc-464 cpc-664 cpc-6128 cpm3 emu yos zx-esxdos zx-esxdos-rom zx-ram zx-rom)
 TOOLCHAIN_RUNTIME_BUILD_DIR := $(BUILD_DIR)/toolchain-runtime
 TOOLCHAIN_FIXED_BUILD_DIR := $(BUILD_DIR)/toolchain-fixed
 WINDOWS_MINGW_DOCKER_SCRIPT := $(X_ROOT)/tests/tools/windows_host_preflight_docker.sh
@@ -158,7 +158,6 @@ stage-includes: check-platform-layout
 	        cp -R "$$platform_inc/." "$(TARGET_INCLUDE_DIR)/$$platform/"; \
 	    fi; \
 	done
-	cp $(Y_ROOT)/include/yos.h $(TARGET_INCLUDE_DIR)/yos.h
 
 stage-target-assets:
 	rm -rf $(Z80_DIST_DIR)
@@ -245,7 +244,8 @@ stage-xcc-support: check-platform-layout
 	        rel="$$builddir/$$stem.rel"; \
 	        case "$$src" in \
 	            *.c) asm="$$builddir/$$stem.s"; \
-	                 $(HOST_BIN_DIR)/xcc -S $(TARGET_C8FLAGS) -o "$$asm" "$$src"; \
+	                 platform_cflags="-I$$sysdir/include"; \
+	                 $(HOST_BIN_DIR)/xcc -S $(TARGET_C8FLAGS) $$platform_cflags -o "$$asm" "$$src"; \
 	                 $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$asm" -o "$$rel" ;; \
 	            *.s) $(HOST_BIN_DIR)/xas $(TARGET_AS8FLAGS) "$$src" -o "$$rel" ;; \
 	        esac; \

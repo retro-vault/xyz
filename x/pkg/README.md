@@ -27,6 +27,7 @@ cpm3
 cpc-464
 cpc-664
 cpc-6128
+yos
 zx-esxdos
 zx-esxdos-rom
 zx-ram
@@ -36,7 +37,9 @@ zx-rom
 Each target definition includes `crt0-<target>.rel`, its `crt0` assembly
 source, `linker-<target>.ld`, `linker-<target>.lk`, and
 `lib<target>.a`. The CPC package surface also includes `CPC.md` and an
-`xprog` with `--cdt` and `--dsk` modes. The esxDOS target also requires the
+`xprog` with `--cdt`, `--dsk`, and `--esxdos` modes. The YOS target includes
+its XL CRT/linker/archive and target-private `yos.h`, `gpx.h`, and `dirent.h`.
+The esxDOS target also requires the
 installed `ZX-ESXDOS.md` guide and its target-only `sys/esxdos.h` header.
 The replacement-ROM variant similarly includes `ZX-ESXDOS-ROM.md` and its
 own staged `sys/esxdos.h`.
@@ -53,7 +56,7 @@ finished archive and checks:
 - `root:root` archive ownership and normalized executable/data modes;
 - required host tools, target headers, common libraries, and manuals;
 - every packaged CRT object/source, linker script, and platform archive;
-- the installed `xprog --cdt` and `xprog --dsk` command surface.
+- the installed `xprog --cdt`, `xprog --dsk`, and `xprog --esxdos` command surface.
 
 Repeat only the Debian archive verification with:
 

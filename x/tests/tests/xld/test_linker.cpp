@@ -957,3 +957,54 @@ TEST(linker_resolves_gnu_archive_members) {
 
     std::filesystem::remove_all(dir);
 }
+
+TEST(linker_first_archive_definition_suppresses_later_fallback) {
+    auto dir = make_linker_temp_dir("/tmp/xld-archive-precedence-XXXXXX");
+    auto main_obj = dir / "main.o";
+    auto platform_malloc = dir / "platform_malloc.o";
+    auto platform_free = dir / "platform_free.o";
+    auto fallback_malloc = dir / "fallback_malloc.o";
+    auto fallback_free = dir / "fallback_free.o";
+    auto platform_archive = dir / "libplatform.a";
+    auto fallback_archive = dir / "libfallback.a";
+
+    write_simple_elf_object(main_obj, "main", "_start", {0xC9},
+                            {"_malloc", "_free"});
+    write_simple_elf_object(platform_malloc, "platform_malloc", "_malloc",
+                            {0x11, 0xC9});
+    write_simple_elf_object(platform_free, "platform_free", "_free",
+                            {0x22, 0xC9});
+    write_simple_elf_object(fallback_malloc, "fallback_malloc", "_malloc",
+                            {0x33, 0xC9});
+    write_simple_elf_object(fallback_free, "fallback_free", "_free",
+                            {0x44, 0xC9});
+
+    {
+        std::ofstream out(platform_archive, std::ios::binary);
+        out << "!<arch>\n";
+        write_linker_ar_member(out, "pmalloc.o/",
+                               read_file_bytes(platform_malloc));
+        write_linker_ar_member(out, "pfree.o/", read_file_bytes(platform_free));
+    }
+    {
+        std::ofstream out(fallback_archive, std::ios::binary);
+        out << "!<arch>\n";
+        write_linker_ar_member(out, "fmalloc.o/",
+                               read_file_bytes(fallback_malloc));
+        write_linker_ar_member(out, "ffree.o/", read_file_bytes(fallback_free));
+    }
+
+    xld::link_context ctx;
+    xld::cli_options opts;
+    opts.mode = xld::link_mode::gnu;
+    opts.input_files = {main_obj, platform_archive, fallback_archive};
+    ctx.entry_name = "_start";
+
+    xld::linker::link(ctx, opts);
+
+    ASSERT_EQ(static_cast<int>(ctx.modules.size()), 3);
+    ASSERT(ctx.global_symbols.find("_malloc") != ctx.global_symbols.end());
+    ASSERT(ctx.global_symbols.find("_free") != ctx.global_symbols.end());
+
+    std::filesystem::remove_all(dir);
+}

@@ -44,7 +44,7 @@ CONTROL_TEMPLATE := $(THIS_DIR)/control.in
 PACKAGE_MAKEFILE := $(THIS_DIR)/Makefile
 DIST_DOC_SOURCES := $(X_ROOT)/docs/dist/README.md $(wildcard $(X_ROOT)/docs/dist/man/*.md)
 DIST_DOC_STAMP := $(DIST_DIR)/.stage-dist-docs.stamp
-PACKAGED_PLATFORMS := none cpc-464 cpc-664 cpc-6128 cpm3 zx-esxdos zx-esxdos-rom zx-ram zx-rom
+PACKAGED_PLATFORMS := none cpc-464 cpc-664 cpc-6128 cpm3 yos zx-esxdos zx-esxdos-rom zx-ram zx-rom
 PACKAGED_PLATFORM_FILES := \
 	$(foreach platform,$(PACKAGED_PLATFORMS), \
 		$(DIST_DIR)/z80/lib/crt0-$(platform).rel \
@@ -95,6 +95,9 @@ PACKAGE_REQUIRED_RELATIVE_FILES := \
 	share/doc/ZX-ESXDOS-ROM.md \
 	z80/include/zx-esxdos/sys/esxdos.h \
 	z80/include/zx-esxdos-rom/sys/esxdos.h \
+	z80/include/yos/yos.h \
+	z80/include/yos/gpx.h \
+	z80/include/yos/dirent.h \
 	z80/include/stdio.h \
 	z80/lib/libc.a \
 	z80/lib/libfixed.a \
@@ -124,6 +127,10 @@ check: $(PKG_OUTPUT)
 	}; \
 	"$$prefix/bin/xprog" --help 2>&1 | grep -q -- '--dsk' || { \
 	    echo "packaged xprog is missing --dsk" >&2; \
+	    exit 1; \
+	}; \
+	"$$prefix/bin/xprog" --help 2>&1 | grep -q -- '--esxdos' || { \
+	    echo "packaged xprog is missing --esxdos" >&2; \
 	    exit 1; \
 	}; \
 	test -x "$$prefix/bin/xcc"; \

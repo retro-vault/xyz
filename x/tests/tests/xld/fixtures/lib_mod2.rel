@@ -1,0 +1,7 @@
+XL
+H 1 areas 1 global symbols
+M lib_mod2
+A _CODE size 0004 flags 00
+S _unused_func Def0000
+T 00 00 3E 00 00 C9
+R 00 00 00 00

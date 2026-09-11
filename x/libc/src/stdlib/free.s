@@ -11,8 +11,8 @@
         .module free
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  _free
         .globl  _deallocate
+        .globl  __libc_heap_coalesce
         .globl  __libc_active_heap
         .globl  __libc_heap_head_get
         .globl  __libc_heap_unwrap_user
@@ -29,7 +29,7 @@ BLOCK_SIZE_HI   .equ 1
 BLOCK_SIZE_LO   .equ 0
 
         .area   _CODE
-__libc_heap_coalesce:
+__libc_heap_coalesce::
         call    __libc_heap_head_get
 heap_coalesce_loop:
         ld      a,h
@@ -102,25 +102,6 @@ _deallocate::
         call    __libc_ptr_to_block
         push    hl
         pop     ix
-        ld      BLOCK_FREE_LO(ix),#1
-        ld      BLOCK_FREE_HI(ix),#0
-        call    __libc_heap_coalesce
-        pop     ix
-        ret
-
-        ;; void free(void *ptr)   HL = ptr  — owning heap read from the block.
-_free::
-        ld      a,h
-        or      l
-        ret     z
-        push    ix
-        call    __libc_heap_unwrap_user
-        call    __libc_ptr_to_block
-        push    hl
-        pop     ix
-        ld      l,BLOCK_HEAP_LO(ix)
-        ld      h,BLOCK_HEAP_HI(ix)
-        ld      (__libc_active_heap),hl
         ld      BLOCK_FREE_LO(ix),#1
         ld      BLOCK_FREE_HI(ix),#0
         call    __libc_heap_coalesce

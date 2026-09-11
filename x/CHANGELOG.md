@@ -6,6 +6,21 @@ Release status:
 
 ## Unreleased
 
+- Added the `--platform=yos` XCC backend for relocatable XL applications. Its
+  CRT initializes relocatable C storage, obtains ABI 8 with RST 18
+  `query_service("yos")`, and exits through the cached table. Kernel-backed
+  allocation and POSIX file/directory wrappers keep libc behind YOS services;
+  console output is silent until a process-local character hook is installed.
+  Added a YOS sample and package staging for the private YOS headers and
+  platform archive. Split default libc malloc/free entry modules from the
+  reusable custom-heap core so a platform archive can replace them cleanly.
+  Corrected iterative archive selection so an earlier platform definition
+  immediately suppresses a later libc fallback.
+- Extended XPROG with `--esxdos`, which writes a deterministic 16 MiB raw IDE
+  disk containing an MBR, a bootable FAT16 partition, and one caller-named 8.3
+  file. Unit tests validate its partition, BPB, mirrored FAT chain, directory
+  record, payload, defaults, and rejected inputs.
+
 - Report the complete 16-bit Z80 I/O address to `xz80::IPorts` for register
   and immediate port instructions. This allows machines such as the ZX
   Spectrum to decode keyboard rows and distinct Kempston mouse ports.

@@ -44,8 +44,8 @@ xyz/
 │   ├── lib/                  # host SDK libraries
 │   ├── libc/                 # target assembly libc and headers
 │   ├── runtime/              # target compiler/runtime helpers
-│   ├── platforms/            # none, emu, CP/M, CPC, and ZX targets
-│   ├── examples/             # target examples, including CPC and ZX
+│   ├── platforms/            # none, emu, YOS, CP/M, CPC, and ZX targets
+│   ├── examples/             # target examples, including YOS, CPC, and ZX
 │   ├── tests/                # canonical tests and benchmarks
 │   ├── docs/                 # architecture, manuals, how-tos, standards
 │   └── pkg/                  # X packages
@@ -136,13 +136,14 @@ When adding tests for new C23 features (or anything else):
   - `bin/x/bin/` contains the installed executables.
   - `bin/x/include/` and `bin/x/lib/` hold host SDK headers and libraries
     (`xbfd`, `rsp`, `xgdb`, `xemu`, `xz80`).
-  - `bin/x/z80/include/` stages the target libc headers and `yos.h`; its
-    `<platform>/` subdirectories contain target-private headers selected by
-    `xcc --platform`.
+  - `bin/x/z80/include/` stages the target libc headers; its `<platform>/`
+    subdirectories contain target-private headers selected by
+    `xcc --platform`. YOS's `yos.h`, `gpx.h`, and `dirent.h` are private to
+    `bin/x/z80/include/yos/`.
   - `bin/x/z80/lib/` stages `crt0`, linker scripts, `libruntime.a`, `libc.a`,
     the default `libnone.a`, and named platform payloads such as `libcpm3.a`,
     `libcpc-464.a`, `libcpc-664.a`, `libcpc-6128.a`, `libzx-esxdos.a`,
-    `libzx-esxdos-rom.a`,
+    `libzx-esxdos-rom.a`, `libyos.a`,
     `libzx-ram.a`, and `libzx-rom.a`.
   - `bin/y/` holds YOS build outputs plus YOS-adjacent host tools and support
     libraries.
@@ -152,8 +153,8 @@ When adding tests for new C23 features (or anything else):
   - `xld` probes relative to its prefix for runtime/startup libraries.
   - The common standard library and runtime stay shared under
     `bin/x/z80/lib/`.
-  - The current default staged platform payload is bare-metal `none`; CP/M 3,
-    CPC 464/664/6128, and the ZX Spectrum 48K forms are selected explicitly
+  - The current default staged platform payload is bare-metal `none`; YOS,
+    CP/M 3, CPC 464/664/6128, and the ZX Spectrum 48K forms are selected explicitly
     with `--platform=<name>`.
   - Flat ROM links support distinct virtual and load addresses. GNU scripts
     use `AT>region`; SDCC-style scripts use `COPY area`. The generated
@@ -164,6 +165,13 @@ When adding tests for new C23 features (or anything else):
     assembly console, non-blocking `<stdio.h>` `trygetchar()` scanner, blocking libc input
     derived from that scanner, and snatch-exported Tamsyn font; there is no
     non-target pseudo-platform directory.
+  - `yos` emits relocatable XL processes. Its CRT initializes process storage,
+    resolves `query_service("yos")` through RST 18, caches ABI 8, and exits via
+    the returned table. Its libc boundary is deliberately service-only:
+    allocation uses the YOS user heap, files/directories use the YOS POSIX
+    table, and console output is silent until a process installs a character
+    hook for a future Alto console window. XPROG wraps XL as XPRG and can put
+    the result on a partitioned FAT16 esxDOS IDE image.
   - `zx-esxdos` is a separate 48K RAM target for resident esxDOS on divIDE
     or compatible hardware. It loads at `0x8000`, preserving the active BASIC
     loader until entry. Its DI/own-stack/halt contract permits application
@@ -202,7 +210,7 @@ When adding tests for new C23 features (or anything else):
     `x/examples/`. A platform-specific example belongs to one target directory
     and does not share source through a cross-target common directory.
 - The resulting xtools package is independently usable with the installed
-  bare-metal, CP/M 3, CPC, and ZX sysroot payloads. Future GUI and third-party
+  bare-metal, YOS, CP/M 3, CPC, and ZX sysroot payloads. Future GUI and third-party
   targets can extend the same explicit platform manifest.
 
 ## Remaining evolution

@@ -79,6 +79,8 @@ cli_options cli::parse(int argc, char* argv[])
             select_command(command_kind::cdt, arg);
         } else if (arg == "--dsk") {
             select_command(command_kind::dsk, arg);
+        } else if (arg == "--esxdos") {
+            select_command(command_kind::esxdos, arg);
         } else if (arg == "-o") {
             options.output_file = take_value(i, argc, argv, "-o");
         } else if (arg.rfind("-o", 0) == 0 && arg.size() > 2) {
@@ -123,7 +125,7 @@ cli_options cli::parse(int argc, char* argv[])
         throw usage_error("input file is required");
     if (options.command == command_kind::none)
         throw usage_error(
-            "select --process, --service, --inspect, --tap, --tzx, --cdt, or --dsk");
+            "select --process, --service, --inspect, --tap, --tzx, --cdt, --dsk, or --esxdos");
     if (options.command == command_kind::inspect) {
         if (!options.output_file.empty())
             throw usage_error("inspect does not accept -o");
@@ -139,24 +141,39 @@ cli_options cli::parse(int argc, char* argv[])
         case command_kind::tzx: extension = ".tzx"; break;
         case command_kind::cdt: extension = ".cdt"; break;
         case command_kind::dsk: extension = ".dsk"; break;
+        case command_kind::esxdos: extension = ".ide"; break;
         default: break;
         }
         options.output_file.replace_extension(extension);
     }
     if (options.name.empty())
-        options.name = options.input_file.stem().string();
+        options.name = options.command == command_kind::esxdos
+            ? options.input_file.filename().string()
+            : options.input_file.stem().string();
     const bool spectrum_tape = options.command == command_kind::tap
                             || options.command == command_kind::tzx;
     const bool cpc_media = options.command == command_kind::cdt
                         || options.command == command_kind::dsk;
-    const bool media = spectrum_tape || cpc_media;
+    const bool esxdos_media = options.command == command_kind::esxdos;
+    const bool media = spectrum_tape || cpc_media || esxdos_media;
     const std::size_t max_name = spectrum_tape ? 10
         : options.command == command_kind::cdt ? 16
-        : options.command == command_kind::dsk ? 12 : 15;
+        : options.command == command_kind::dsk ? 12
+        : options.command == command_kind::esxdos ? 12 : 15;
     if (options.name.empty() || options.name.size() > max_name)
         throw usage_error("image name must contain 1 to "
                           + std::to_string(max_name) + " bytes");
     if (media) {
+        if (esxdos_media) {
+            if (options.load_address != 0 || options.entry_point.has_value()
+                || options.stack_size.has_value() || !options.exports.empty()
+                || options.require_fixed_load || options.image_id.has_value()
+                || options.abi_version != 1 || options.minimum_os_version != 0) {
+                throw usage_error(
+                    "load/process/service options are not valid for esxDOS disks");
+            }
+            return options;
+        }
         if (options.load_address == 0)
             options.load_address = spectrum_tape ? 0x5ccb : 0x4000;
         if (!options.entry_point.has_value())
@@ -196,9 +213,10 @@ void cli::print_usage(const char* argv0)
         << "  --tzx                     Wrap a flat binary in an auto-running .tzx\n"
         << "  --cdt                     Wrap a CPC binary in firmware .cdt records\n"
         << "  --dsk                     Put a CPC binary on an AMSDOS .dsk\n\n"
+        << "  --esxdos                  Put one file on a partitioned FAT16 .ide disk\n\n"
         << "options:\n"
         << "  -o <file>                 Output image (default: mode extension)\n"
-        << "  -n, --name <name>         Image name (Spectrum 10, CDT 16, DSK 8.3)\n"
+        << "  -n, --name <name>         Image name (Spectrum 10, CDT 16, disks 8.3)\n"
         << "  --id <n>                  Stable 32-bit image/service identifier\n"
         << "  --abi <n>                 Provided ABI version (default: 1)\n"
         << "  --min-os <n>              Minimum OS ABI version (default: 0)\n"
