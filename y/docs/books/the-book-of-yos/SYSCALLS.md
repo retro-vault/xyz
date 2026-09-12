@@ -6,13 +6,10 @@ Traditional operating systems use a privileged trap instruction (a software inte
 
 A service is a named table of function pointers. Any piece of code that wants to expose a public API registers itself as a service with a name. Any other code that wants to use that API queries the service by name to get the function table, then calls functions through it.
 
-```
-┌──────────────────────┐         ┌────────────────────────────┐
-│  user program        │ ──────► │  query_service("yos")      │
-│                      │         │  returns yos_t *           │
-│  yos->read_key()     │ ──────► │  yos_t.read_key()          │
-└──────────────────────┘         └────────────────────────────┘
-```
+| User program | | Kernel |
+|---|---|---|
+| `query_service("yos")` | → | returns `yos_t *` |
+| `yos->read_key()` | → | `yos_t.read_key()` |
 
 This is the *yos* equivalent of a system call table. The kernel registers two services at boot:
 

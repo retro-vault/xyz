@@ -373,7 +373,8 @@ if (key_event & YOS_KEY_DOWN) key_pressed(key_event & YOS_KEY_CODE);
 
 ### `void calibrate_mouse(uint8_t x, uint8_t y)`
 
-Sets the logical cursor position used for subsequent Kempston deltas.
+Sets the absolute logical cursor position and synchronizes the timer scanner's
+baseline with the current Kempston hardware counters.
 
 ```c
 yos->calibrate_mouse(128, 96);
@@ -381,7 +382,10 @@ yos->calibrate_mouse(128, 96);
 
 ### `void read_mouse(yos_mouse_state_t *state)`
 
-Polls the hardware and fills `{x, y, buttons, changed_buttons}`.
+Atomically copies the latest timer-sampled
+`{x, y, buttons, changed_buttons}`. `x` and `y` are bounded absolute screen
+coordinates, not deltas. The call does not poll hardware. It consumes the
+accumulated `changed_buttons` bits; coordinates and current buttons remain.
 
 ```c
 yos_mouse_state_t mouse;

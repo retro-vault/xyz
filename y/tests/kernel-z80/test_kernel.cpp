@@ -223,8 +223,23 @@ int main(int argc, char** argv) {
     }
     require(mem.word(sym("__svc_first")) != 0,
             "YOS service was not registered");
-    require(mem.word(sym("__tmr_first")) != 0,
-            "clock timer was not installed");
+    unsigned kernel_timers = 0;
+    bool has_clock_timer = false;
+    bool has_keyboard_timer = false;
+    bool has_mouse_timer = false;
+    for (auto timer = mem.word(sym("__tmr_first")); timer != 0;
+         timer = mem.word(timer)) {
+        require(++kernel_timers <= 3, "unexpected kernel timer chain");
+        const auto hook = mem.word(timer + 4);
+        has_clock_timer |= hook == sym("__clock_tick");
+        has_keyboard_timer |= hook == sym("__kbd_scan");
+        has_mouse_timer |= hook == sym("__mouse_scan");
+        require(mem.word(timer + 6) == 0 && mem.word(timer + 8) == 0,
+                "kernel input/clock timer is not frame-periodic");
+    }
+    require(kernel_timers == 3 && has_clock_timer && has_keyboard_timer &&
+                has_mouse_timer,
+            "clock, keyboard and mouse timers were not all installed");
 
     // Nested sections preserve every register and the incoming IFF state,
     // including callers already inside an interrupt handler (depth zero).
@@ -518,7 +533,7 @@ int main(int argc, char** argv) {
     io.mouse_x = 17;
     io.mouse_y = 31;
     call_kernel(mem.word(table + 46), 23, 0, "mouse calibration", 42);
-    call_kernel(mem.word(table + 48), mouse_state, 0, "mouse polling");
+    call_kernel(mem.word(table + 48), mouse_state, 0, "mouse snapshot");
     require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
                 mem.bytes[mouse_state + 2] == 0 &&
                 mem.bytes[mouse_state + 3] == 0,
@@ -526,7 +541,14 @@ int main(int argc, char** argv) {
     io.mouse_x = 20;
     io.mouse_y = 29;
     io.mouse_buttons = 0xfe;
-    call_kernel(mem.word(table + 48), mouse_state, 0, "moving mouse polling");
+    call_kernel(mem.word(table + 48), mouse_state, 0,
+                "mouse snapshot before timer scan");
+    require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
+                mem.bytes[mouse_state + 2] == 0 &&
+                mem.bytes[mouse_state + 3] == 0,
+            "read_mouse polled hardware instead of reading timer state");
+    call_kernel(sym("__tmr_chain"), 0, 0, "moving mouse timer-chain scan");
+    call_kernel(mem.word(table + 48), mouse_state, 0, "moving mouse snapshot");
     require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
                 mem.bytes[mouse_state + 2] == 1 &&
                 mem.bytes[mouse_state + 3] == 1,
@@ -536,11 +558,20 @@ int main(int argc, char** argv) {
                 std::to_string(mem.bytes[mouse_state + 2]) + "," +
                 std::to_string(mem.bytes[mouse_state + 3]));
     call_kernel(mem.word(table + 48), mouse_state, 0,
-                "stationary mouse repolling");
+                "stationary mouse resnapshot");
     require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
                 mem.bytes[mouse_state + 2] == 1 &&
                 mem.bytes[mouse_state + 3] == 0,
             "stationary mouse retained stale change flags");
+    io.mouse_buttons = 0xff;
+    call_kernel(sym("__mouse_scan"), 0, 0, "mouse release timer scan");
+    io.mouse_buttons = 0xfe;
+    call_kernel(sym("__mouse_scan"), 0, 0, "mouse repress timer scan");
+    call_kernel(mem.word(table + 48), mouse_state, 0,
+                "accumulated mouse transition snapshot");
+    require(mem.bytes[mouse_state + 2] == 1 &&
+                mem.bytes[mouse_state + 3] == 1,
+            "mouse timer lost an unread button transition");
 
     constexpr std::uint16_t gpx_name = 0x8240;
     mem.bytes[gpx_name] = 'g';

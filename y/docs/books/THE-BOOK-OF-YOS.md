@@ -7,8 +7,7 @@ access, and runs every process through a 50 Hz interrupt-driven round-robin
 scheduler and named service tables.
 
 This book is the entry point to the YOS documentation. Read it top to bottom
-the first time; afterwards use the chapter list to jump straight to the
-subsystem you need.
+the first time; afterwards jump to a chapter from the list beside the page.
 
 If you want to write a C application rather than change the kernel, begin
 with [Programming YOS](PROGRAMMING-YOS.md). It covers the XCC backend, libc,
@@ -42,8 +41,8 @@ for the assembly kernel alone) and run the emulated kernel tests with
 2. **RAM bring-up.** `__startup_init` zeroes BSS, copies the eight-entry
    restart-vector table and the initialized data image from ROM to RAM, and
    fills in the 96-byte public service table `__yos`.
-3. **Kernel init (`main.s`).** Two heaps are created, the clock and keyboard
-   timers are installed, the `"yos"` and `"gpx"` services are registered,
+3. **Kernel init (`main.s`).** Two heaps are created, the clock, keyboard and
+   mouse timers are installed, the `"yos"` and `"gpx"` services are registered,
    `shell.sys` is loaded from the current esxDOS drive as an XPRG process,
    RST 18 is pointed at the service lookup, and finally IM2 is armed with the
    scheduler vector at `0x5EFF`.
@@ -68,57 +67,24 @@ guarantees, including the remaining process-local libc `errno` limitation.
 
 ## Memory map
 
-```
-0x0000 ┌──────────────────────────────┐
-       │ ROM header: reset, RST/NMI   │  esxDOS-compatible, 256 bytes
-0x0100 ├──────────────────────────────┤
-       │ ROM: kernel, drivers, fs,    │  _CODE .. _GSFINAL
-       │      gpx, initializer images │  ends below 0x4000 (checked by make)
-0x4000 ├──────────────────────────────┤
-       │ screen bitmap and attributes │  ULA
-0x5B00 ├──────────────────────────────┤
-       │ _INITIALIZED                 │  esxDOS gates at 0x5B37, clock, kbd
-0x5B70 │ _BSS                         │  descriptor/error/timer state
-0x5B94 │       __yos service table    │  96 bytes
-       │       kernel stack           │  512 bytes, top at 0x5DF4
-0x5DF4 │       __sys_vec_tbl          │  eight 3-byte JP entries
-       │       list roots, mouse      │
-0x5EFF │ __im2_vector                 │  2 bytes, read via I=0x5E
-0x5F01 ├──────────────────────────────┤
-       │ __sys_heap                   │  1024 bytes, kernel objects
-0x6301 ├──────────────────────────────┤
-       │ __heap                       │  user heap to top of RAM
-0xFFFF └──────────────────────────────┘
-```
-
-## Chapters
-
-1. [The Boot Process](the-book-of-yos/BOOT.md) — reset, the esxDOS-compatible ROM
-   header, the writable restart table, IM2 scheduling, critical sections.
-2. [Resource Accounting](the-book-of-yos/RESOURCE-ACCOUNTING.md) — linked lists,
-   `sysobj` headers, ownership, `so_create` / `so_destroy`.
-3. [Memory Management](the-book-of-yos/MEMORY-MANAGEMENT.md) — the two heaps, the
-   7-byte block header, first-fit allocation, splitting, coalescing,
-   owner-based release.
-4. [Threads](the-book-of-yos/THREADS.md) — the 24-byte thread object, states and queues,
-   the startup stub, context switching, events.
-5. [Processes](the-book-of-yos/PROCESSES.md) — the process object, `process_start`,
-   loading from disk, `process_exit`.
-6. [Cleaning Up Resources](the-book-of-yos/CLEANUP-RESOURCES.md) — what the scheduler
-   reclaims when a thread or process terminates.
-7. [System Calls and Services](the-book-of-yos/SYSCALLS.md) — named services, the RST 18
-   lookup, the `yos_t` table, the `gpx` service, registering your own.
-8. [Clock and Timers](the-book-of-yos/CLOCK.md) — the 50 Hz tick, the timer chain, the
-   32-bit tick and wall-clock counters.
-9. [Program and Service Images](the-book-of-yos/PROGRAM-IMAGES.md) — the XPRG container,
-   what the loader validates, how to build `shell.sys`.
-
-10. [Loadable Libraries](the-book-of-yos/LIBRARIES.md) — shared/private images,
-    relocated self-registration, initializer ownership and reference cleanup.
+| Address | Region | Notes |
+|---|---|---|
+| `0x0000` | ROM header: reset, RST/NMI | esxDOS-compatible, 256 bytes |
+| `0x0100` | ROM: kernel, drivers, fs, gpx, initializer images | `_CODE` .. `_GSFINAL`; ends below `0x4000` |
+| `0x4000` | Screen bitmap and attributes | ULA |
+| `0x5B00` | `_INITIALIZED` | esxDOS gates at `0x5B37`, clock, kbd |
+| `0x5B70` | `_BSS` | Descriptor, error, and timer state |
+| `0x5B94` | `__yos` service table, then kernel stack | Table is 96 bytes; stack is 512 bytes, top at `0x5DF4` |
+| `0x5DF4` | `__sys_vec_tbl`, list roots, mouse | Eight 3-byte `JP` entries |
+| `0x5EFF` | `__im2_vector` | 2 bytes, read via `I=0x5E` |
+| `0x5F01` | `__sys_heap` | 1024 bytes, kernel objects |
+| `0x6301` | `__heap` | User heap to top of RAM |
+| `0xFFFF` | End of RAM | |
 
 Application authors should use the practical
-[loadable-library chapter](programming-yos/LOADABLE-LIBRARIES.md); chapter 10
-above documents the kernel implementation and object layouts.
+[loadable-library chapter](programming-yos/LOADABLE-LIBRARIES.md) in
+[Programming YOS](PROGRAMMING-YOS.md); the kernel-side layouts for those
+images are in this book's libraries chapter.
 
 ## Appendix
 
@@ -144,7 +110,7 @@ Where to look in `y/src/z80/` when a chapter mentions a routine:
 | events and timers | `kernel/evt_*.s`, `kernel/tmr_*.s`, `kernel/_tmr_chain.s` |
 | libraries | `kernel/library_load.s`, `kernel/_image_*.s`, `kernel/_library_*.s`, `kernel/_so_reap.s` |
 | services | `kernel/svc_register.s`, `kernel/svc_unregister.s`, `kernel/_svc_query.s`, `kernel/svc_query_rst18.s`, `kernel/_yos_*.s` |
-| clock, keyboard, mouse | `drivers/clock.s`, `drivers/_clock_tick.s`, `drivers/keyboard_read.s`, `drivers/_keyboard_scan.s`, `drivers/mouse_*.s` |
+| clock, keyboard, mouse | `drivers/clock.s`, `drivers/_clock_tick.s`, `drivers/keyboard_read.s`, `drivers/_keyboard_scan.s`, `drivers/*mouse*.s` |
 | esxDOS filesystem | `fs/*.s` (`open`, `read`, `write`, `lseek`, `stat`, `opendir`, `readdir`, `enumerate_disks`, ... and the `_esxdos_*` gates) |
 | graphics | `gpx/*.s` — vendored libgpx `v1.1.0-1-g0ef6f07` plus the `_gpx_name.s` / `_gpx_service.s` integration modules (see `gpx/README.md`) |
 | link layout | `linker.lk` — `_HEADER` at 0, `_CODE` at 0x0100, `_DATA` at 0x5B00, `_IM2` at 0x5EFF, `_HEAP` at 0x5F01, reserved divIDE and Interface 1 trap addresses |

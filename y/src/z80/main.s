@@ -16,6 +16,7 @@
         .globl  _svc_query_rst18
         .globl  __clock_tick
         .globl  __kbd_scan
+        .globl  __mouse_scan
         .globl  __thread_robin
         .globl  __im2_init
         .globl  _sys_vec_set
@@ -39,17 +40,14 @@ _main::
         ld      hl, #__heap
         call    _mem_init
 
-        ld      bc, #0                  ; kernel-owned clock timer
-        push    bc
-        ld      de, #0
         ld      hl, #__clock_tick
-        call    _tmr_install
+        call    .install_tick_timer
 
-        ld      bc, #0                  ; kernel-owned keyboard timer
-        push    bc
-        ld      de, #0
         ld      hl, #__kbd_scan
-        call    _tmr_install
+        call    .install_tick_timer
+
+        ld      hl, #__mouse_scan
+        call    .install_tick_timer
 
         ld      de, #__yos
         ld      hl, #__yos_name
@@ -75,3 +73,12 @@ _main::
 .idle:
         halt
         jr      .idle
+
+        ; Install one kernel-owned callback on every frame tick.
+.install_tick_timer:
+        xor     a
+        ld      d, a
+        ld      e, a
+        push    de
+        call    _tmr_install
+        ret

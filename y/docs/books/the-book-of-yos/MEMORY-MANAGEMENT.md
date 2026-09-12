@@ -37,17 +37,18 @@ typedef struct block_s {
 
 `BLK_SIZE` (7) is the size of the header; the assembly hard-codes it as the constant `7`.
 
-In memory, an allocated 20-byte block looks like:
+In memory, an allocated 20-byte block looks like this. `block_t *` points
+at the header; `mem_allocate` returns the payload (`data`):
 
-```
-block_t header (BLK_SIZE bytes)          payload (20 bytes)
-┌────────┬───────┬──────┬──────┬─────────────────────────┐
-│  next  │ owner │ stat │ size │  your data here          │
-│ 2 bytes│2 bytes│1 byte│2 byte│  20 bytes                │
-└────────┴───────┴──────┴──────┴─────────────────────────┘
-          ↑                     ↑
-       block_t *              returned pointer (data field)
-```
+![Allocated 20-byte block: 7-byte header then 20-byte payload](figures/block-header.png)
+
+| Offset | Field | Size | Notes |
+|---|---|---|---|
+| 0 | `next` | 2 bytes | Next block on the heap |
+| 2 | `owner` | 2 bytes | Owning process or thread |
+| 4 | `stat` | 1 byte | Free or allocated |
+| 5 | `size` | 2 bytes | Payload size |
+| 7 | `data` | 20 bytes | Returned pointer |
 
 `mem_allocate` returns a pointer to `data`, not to the start of the `block_t`. `mem_free` recovers the `block_t` address by subtracting `BLK_SIZE` from the pointer it receives (`__mem_payload_address` does the opposite conversion).
 
@@ -77,19 +78,7 @@ void *mem_allocate(void *heap, uint16_t size, void *owner);
 If the remainder can hold `BLK_SIZE + MIN_CHUNK_SIZE` = 11 bytes (a seven-byte
 header plus at least four payload bytes), the allocator **splits** it:
 
-```
-Before split:
-┌─────────────────────────────────────────────────┐
-│ free block, size = 100                          │
-└─────────────────────────────────────────────────┘
-
-After mem_allocate(heap, 20, owner):
-┌──────────────────────┬──────────────────────────┐
-│ allocated, size = 20 │ free, size = 100-20-BLK  │
-└──────────────────────┴──────────────────────────┘
-         ↑                        ↑
-    returned to caller       remainder stays free
-```
+![Heap split: a 100-byte free block becomes a 20-byte allocated block and a free remainder](figures/heap-split.png)
 
 The minimum chunk size (`MIN_CHUNK_SIZE = 4`) prevents creating free blocks so small they would be useless and just waste header space.
 
@@ -123,17 +112,7 @@ void *mem_free(void *heap, void *p);
 
 The coalescing logic merges up to three blocks at a time:
 
-```
-Before free of middle block:
-┌──────────────┬──────────────┬──────────────┐
-│ free block A │ allocated B  │ free block C │
-└──────────────┴──────────────┴──────────────┘
-
-After mem_free(heap, B->data):
-┌──────────────────────────────────────────────┐
-│            single merged free block          │
-└──────────────────────────────────────────────┘
-```
+![Heap coalesce: free A, allocated B, and free C merge into one free block](figures/heap-coalesce.png)
 
 Steps performed:
 1. Mark B as free (`stat = 0`, `owner = NONE`).

@@ -48,6 +48,15 @@ void test_thread_safety(Memory& mem, Cpu& cpu, Call call, Symbol sym,
     check(timer != 0, "timer allocation failed");
     call(sym("_tmr_uninstall"), timer, 0, "protected timer destroy");
     call(sym("_mouse_calibrate"), 20, 0, "protected mouse calibration", 30);
+    state = cpu.snapshot();
+    state.iff1 = state.iff2 = false;
+    cpu.restore(state);
+    call(sym("__mouse_scan"), 0, 0, "interrupt-context mouse scan");
+    check(!cpu.snapshot().iff1,
+          "mouse timer callback enabled IRQ inside the scheduler");
+    state = cpu.snapshot();
+    state.iff1 = state.iff2 = true;
+    cpu.restore(state);
     call(sym("_mouse_read"), 0xe600, 0, "protected mouse read");
     files.enabled = true;
     const std::string path = "shell.sys";

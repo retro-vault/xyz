@@ -92,7 +92,7 @@ not ASCII input.
 
 ## Kempston mouse
 
-Calibrate once, then poll:
+Calibrate once, then read the latest state:
 
 ```c
 yos_mouse_state_t mouse;
@@ -100,9 +100,12 @@ yos->calibrate_mouse(128, 96);
 yos->read_mouse(&mouse);
 ```
 
-`x` and `y` are the accumulated cursor position. `buttons` is the current
-button state and `changed_buttons` identifies buttons that changed since the
-previous poll.
+The kernel timer chain samples the Kempston counters at 50 Hz and maintains
+bounded absolute screen coordinates (`x` 0–255, `y` 0–191). `read_mouse`
+only snapshots that state; it does not access the ports. `buttons` is the
+latest button state. `changed_buttons` accumulates every transition since the
+previous `read_mouse` call and is consumed by that call, so short clicks are
+not lost when an application reads less often than 50 Hz.
 
 ## Graphics as an optional service
 

@@ -42,24 +42,6 @@ by the YOS platform archive:
 This keeps libc portable: target code either computes locally or crosses the
 published YOS ABI. It does not call Spectrum ROM routines or esxDOS directly.
 
-## Reading order
-
-1. [Your First Process](programming-yos/YOUR-FIRST-PROCESS.md) builds an XL,
-   packages a `.sys`, and creates an esxDOS IDE disk.
-2. [Services and Console Output](programming-yos/SERVICES-AND-CONSOLE.md)
-   explains `query_service`, `yos.h`, ABI checks, and the output hook.
-3. [Memory, Time, and Concurrency](programming-yos/MEMORY-TIME-AND-CONCURRENCY.md)
-   introduces allocation, critical sections, timers, events, threads, and
-   processes.
-4. [Files, Input, and Graphics](programming-yos/FILES-INPUT-AND-GRAPHICS.md)
-   covers the POSIX layer, disks, keyboard, mouse, and the `gpx` service.
-5. [Loadable Libraries](programming-yos/LOADABLE-LIBRARIES.md) shows how to
-   consume, package, initialize, share, and test an XPRG service image.
-6. [YOS API Reference](programming-yos/YOS-API-REFERENCE.md) documents every
-   member of `yos_t` and every YOS-platform helper, with a call sample.
-7. [GPX API Reference](programming-yos/GPX-API-REFERENCE.md) documents all 24
-   graphics calls and the public data formats, with a call sample.
-
 For kernel internals—boot, object layouts, scheduling, cleanup, and XPRG
 loading—read [The Book of YOS](THE-BOOK-OF-YOS.md). The runnable companion is
 [`x/examples/yos/hello.c`](../../../x/examples/yos/hello.c).

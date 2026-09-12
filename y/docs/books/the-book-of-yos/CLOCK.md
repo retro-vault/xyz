@@ -4,13 +4,22 @@
 
 ## The Hardware Source
 
-The ZX Spectrum ULA raises a maskable interrupt 50 times per second at the start of the vertical blank. *Yos* receives it through the IM2 vector at `0x5EFF` (see [The Boot Process](BOOT.md)); the scheduler `__thread_robin` calls `__tmr_chain` on every interrupt, and the clock driver's `__clock_tick` is one of the two timers installed by `main`:
+The ZX Spectrum ULA raises a maskable interrupt 50 times per second at the
+start of the vertical blank. *Yos* receives it through the IM2 vector at
+`0x5EFF` (see [The Boot Process](BOOT.md)); the scheduler `__thread_robin`
+calls `__tmr_chain` on every interrupt. `main` installs three kernel callbacks
+on that chain:
 
 ```c
 /* installed in main.s, kernel-owned, fire on every tick */
 tmr_install(__clock_tick, 0, NONE);
 tmr_install(__kbd_scan,   0, NONE);
+tmr_install(__mouse_scan, 0, NONE);
 ```
+
+The keyboard scanner queues transitions. The mouse scanner converts changes
+in the Kempston hardware counters into bounded absolute screen coordinates and
+accumulates button-change bits until `read_mouse` consumes them.
 
 ## The Clock Counters
 

@@ -105,7 +105,8 @@ the whole-load try-lock is state, not one long interrupt mask.
 `main.s` starts with interrupts disabled and performs, in order:
 
 1. `mem_init(__sys_heap, 1024)` and `mem_init(__heap, 0xFFFF - __heap)`.
-2. `tmr_install(__clock_tick, 0, NONE)` and `tmr_install(__kbd_scan, 0, NONE)` — both fire on every tick.
+2. `tmr_install` registers `__clock_tick`, `__kbd_scan`, and `__mouse_scan`
+   as kernel-owned callbacks with period zero, so all three fire on every tick.
 3. `svc_register("yos", __yos)` and `svc_register("gpx", __gpx_service)`.
 4. `boot_shell`, which calls `process_load("shell.sys")` to load, validate, relocate and start the shell as an XPRG process on the current esxDOS drive.
 5. `sys_vec_set(_svc_query_rst18, YOS_VECTOR_RST18)`.
@@ -202,30 +203,18 @@ an unadjusted caller-stack argument layout or live alternate-register state.
 
 After `_main` has armed the scheduler the address space looks like this (addresses from the current link map):
 
-```
-0x0000 ┌────────────────────────────────┐
-       │ ROM header (256 bytes)         │  reset, RST 08-38, NMI, 0x007B
-0x0100 ├────────────────────────────────┤
-       │ ROM: kernel, drivers, fs, gpx  │  _CODE, _CONST, _INITIALIZER
-       │                                │  must end below 0x4000
-0x4000 ├────────────────────────────────┤
-       │ screen bitmap + attributes     │
-0x5B00 ├────────────────────────────────┤
-       │ _INITIALIZED (copied from ROM) │  clock counters, keyboard state,
-       │                                │  esxDOS gates at 0x5B37
-0x5B70 │ _BSS                           │
-       │   fd/error/timer state         │
-0x5B94 │   __yos            96 bytes    │  public ABI 1 service table
-       │   kernel stack    512 bytes    │  grows down to here from 0x5DF4
-0x5DF4 │   __sys_vec_tbl    24 bytes    │  writable RST table
-       │   list roots, mouse state, ...   │
-0x5EFF │ __im2_vector        2 bytes    │  IM2 handler address
-0x5F01 ├────────────────────────────────┤
-       │ __sys_heap       1024 bytes    │  kernel objects
-0x6301 ├────────────────────────────────┤
-       │ __heap                         │  processes, thread stacks,
-       │                                │  application data
-0xFFFF └────────────────────────────────┘
-```
+| Address | Region | Notes |
+|---|---|---|
+| `0x0000` | ROM header (256 bytes) | Reset, RST 08–38, NMI, `0x007B` |
+| `0x0100` | ROM: kernel, drivers, fs, gpx | `_CODE`, `_CONST`, `_INITIALIZER`; must end below `0x4000` |
+| `0x4000` | Screen bitmap and attributes | ULA |
+| `0x5B00` | `_INITIALIZED` (copied from ROM) | Clock counters, keyboard state, esxDOS gates at `0x5B37` |
+| `0x5B70` | `_BSS` | File-descriptor, error, and timer state |
+| `0x5B94` | `__yos` (96 bytes), then kernel stack (512 bytes) | Public ABI 1 service table; stack grows down from `0x5DF4` |
+| `0x5DF4` | `__sys_vec_tbl` (24 bytes), list roots, mouse | Writable RST table |
+| `0x5EFF` | `__im2_vector` (2 bytes) | IM2 handler address |
+| `0x5F01` | `__sys_heap` (1024 bytes) | Kernel objects |
+| `0x6301` | `__heap` | Processes, thread stacks, application data |
+| `0xFFFF` | End of RAM | |
 
 The kernel stack is only used before the scheduler starts and inside the idle loop; every thread runs on a stack allocated from `__heap` (see [Threads](THREADS.md)).

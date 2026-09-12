@@ -137,27 +137,12 @@ The new thread's `SP` is loaded from its `thread_t.sp` field, then all registers
 
 ### Stack layout visualised
 
-```
-High address (stack bottom for this thread)
-┌──────────────────────┐  ← stack + stack_size
-│                      │
-│ thread's local data  │  (function call frames, local variables)
-│                      │
-├──────────────────────┤  ← SP at the moment of interrupt
-│ [interrupted PC]  2B │  pushed automatically by Z80
-│ AF               2B  │
-│ HL               2B  │
-│ BC               2B  │
-│ DE               2B  │
-│ IX               2B  │
-│ IY               2B  │
-│ AF'              2B  │
-│ BC'              2B  │
-│ DE'              2B  │
-│ HL'              2B  │  ← thread_t.sp saved here (22 bytes below pre-interrupt SP)
-└──────────────────────┘
-Low address (stack top)
-```
+High address is the stack bottom (`stack + stack_size`). The saved
+context occupies 22 bytes below the pre-interrupt `SP`; `thread_t.sp`
+points at `HL'`.
+
+![Thread stack layout, high address at the top, saved context at HL'](figures/thread-stack.png)
+
 
 ## Thread API
 

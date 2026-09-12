@@ -32,7 +32,8 @@ BUSY return, and resumes the first loader to successful initialization.
 
 `test_thread_safety.h` audits shared-state writes and framebuffer reads/writes
 under preemption, including descriptor reservation, append seek/write, event
-and timer publication, mouse sampling, pixels, spans, bitmaps and sprites.
+and timer publication, timer-driven mouse sampling/snapshots, pixels, spans,
+bitmaps and sprites.
 The main harness checks IFF/flag preservation with nested sections and disabled
 interrupt callers, per-thread errno/loader status, independent GPX contexts,
 and the ABI-1 ROM/image contract.

@@ -9,6 +9,11 @@ Release status:
 
 ## Unreleased
 
+- Moved Kempston hardware sampling onto the kernel's 50 Hz timer chain beside
+  clock and keyboard scanning. `read_mouse` now returns an atomic snapshot of
+  bounded absolute coordinates instead of polling ports; button transitions
+  accumulate until read. Shared setup installs all three boot timers without
+  increasing that initialization code.
 - Protected public kernel shared-state transactions: event/timer publication
   and removal, mouse state, descriptor reservation/validation/commit, append
   seek/write, and directory operations. Nestable critical sections now preserve
@@ -125,7 +130,7 @@ Release status:
   gate count and error virtualization are recorded above.
 - Added self-contained ZX Spectrum keyboard and Kempston mouse drivers to the
   kernel ROM. The keyboard matrix is scanned by a 50 Hz kernel timer into a
-  transition queue, while mouse calibration and polling read the three
+  transition queue; at this stage mouse calibration and polling read the three
   Kempston ports directly. The earlier development table exposed `read_key`, `calibrate_mouse`, and
   `read_mouse` as direct function pointers without proxy routines. Removed
   the redundant `query_interface` compatibility spelling; applications use

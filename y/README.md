@@ -57,7 +57,7 @@ Application code for ABI 1 libraries is covered in
    writable RAM table). `__startup_init` zeroes BSS, copies the vector table
    and initialized data from ROM to RAM and builds the 96-byte service table.
 2. **Kernel bring-up (`src/z80/main.s`)** — kernel and user heaps are
-   initialized, the clock and keyboard timers are installed, the `"yos"` and
+   initialized, the clock, keyboard and mouse timers are installed, the `"yos"` and
    `"gpx"` services are registered, `shell.sys` is loaded from the current
    esxDOS drive and started as a process.
 3. **Scheduler activation** — IM2 is selected with the vector word at

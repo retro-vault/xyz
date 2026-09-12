@@ -85,17 +85,14 @@ The kernel has no C headers; each assembly module spells these offsets out as `.
 
 Because `hdr` occupies offset 0, a `timer_t *` can be safely cast to a `sysobj_t *` or a `list_item_t *` and passed directly to any list or sysobj function. In object-oriented terms, `timer_t` *inherits* from `sysobj_t` which in turn *inherits* from `list_item_t`.
 
-The memory layout looks like this:
+The memory layout looks like this. List functions see the object as
+`list_item_t` from offset 0:
 
-```
-timer_t in memory:
-┌────────────────────┬──────────┬────────────────────────────────────┐
-│ next (2 bytes)     │ owner    │ hook | ticks | _tick_count | ...   │
-│ (list_item_t.next) │ (2 bytes)│ (resource-specific fields)         │
-└────────────────────┴──────────┴────────────────────────────────────┘
- ↑
- list functions see this as list_item_t
-```
+| Offset | Field | Size | Notes |
+|---|---|---|---|
+| 0 | `next` | 2 bytes | `list_item_t.next` |
+| 2 | `owner` | 2 bytes | Process or thread that owns the object |
+| 4 | resource fields | rest | `hook`, `ticks`, `_tick_count`, … |
 
 ## Allocating and Freeing System Objects
 
@@ -164,13 +161,13 @@ forgets process-owned allocations. The details are in
 
 Here is the chain of ownership when a process creates a thread:
 
-```
-process_t  (owner = NONE; no parent field)
-    ├── thread_t  (process = process_t *)
-    │       └── stack block_t  (owner = thread_t *)
-    ├── application block/service/event (owner = process_t *)
-    └── library_reference (owner = process_t *) ──► library object
-```
+| Object | Owner / link | Notes |
+|---|---|---|
+| `process_t` | `NONE` | No parent field |
+| `thread_t` | `process = process_t *` | Created by the process |
+| stack `block_t` | `owner = thread_t *` | Freed when the thread exits |
+| application block / service / event | `owner = process_t *` | Freed when the process is reaped |
+| `library_reference` | `owner = process_t *` | Points at the library object |
 
 When the thread terminates and the next tick arrives, the cleanup pass:
 1. Frees every `__heap` block whose `owner == thread_t *` (the stack) and destroys the `thread_t`.

@@ -84,11 +84,12 @@ cannot run while interrupts are masked.
 
 Heap/list mutations, event creation/set/destruction, timer publication/removal,
 service registration/lookup, vector updates, the keyboard queue and mouse
-sampling are protected. Filesystem descriptor reservation, validation, native
-I/O and commit form one critical section; append seek plus write is also one
-transaction. Native esxDOS gates remain protected because firmware maps out
-the YOS ROM. Long disk calls can therefore delay scheduling and lose clock
-ticks. File descriptors and the current directory are system-wide, not private
+timer-state snapshots are protected. Filesystem descriptor reservation,
+validation, native I/O and commit form one critical section; append seek plus
+write is also one transaction. Native esxDOS gates remain protected because
+firmware maps out the YOS ROM. Long disk calls can therefore delay scheduling
+and lose clock ticks. File descriptors and the current directory are
+system-wide, not private
 per process. A sequence such as `chdir` then `open` is not atomic as a pair.
 
 `load_process` and `load_library` complete synchronously for their caller.

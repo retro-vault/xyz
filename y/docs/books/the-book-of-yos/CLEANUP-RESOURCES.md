@@ -17,21 +17,16 @@ The cleanup model is based on **ownership** (see [Resource Accounting](RESOURCE-
 
 Nothing is freed at the moment a thread calls `thread_exit`. That routine only moves the thread to the terminated list and halts, because the thread is still running on the very stack that has to be freed. The actual reclamation runs inside the scheduler on the next 50 Hz tick, in `__thread_cleanup_terminated` (`kernel/_thread_cleanup_terminated.s`), called from `__thread_select_next` before any thread is chosen.
 
-```
-interrupt
-  └─ __thread_robin
-       ├─ save current context
-       ├─ __tmr_chain
-       ├─ __thread_select_next
-       │    ├─ __thread_cleanup_terminated      ← this chapter
-       │    │     for each terminated thread t (except thread_current):
-       │    │        mem_free_owner(__heap, t)   free the stack
-       │    │        so_destroy(terminated, t)   free the thread object
-       │    │        process_reap(t->process)
-       │    ├─ wake waiting threads
-       │    └─ pick next runnable
-       └─ restore next context
-```
+| Step | Routine | What it does |
+|---|---|---|
+| 1 | interrupt → `__thread_robin` | Scheduler tick |
+| 2 | save current context | Store the interrupted thread |
+| 3 | `__tmr_chain` | Fire due timers |
+| 4 | `__thread_select_next` | Choose who runs next |
+| 4a | `__thread_cleanup_terminated` | This chapter: for each terminated thread `t` except `thread_current`, `mem_free_owner(__heap, t)` (stack), `so_destroy(terminated, t)` (object), `process_reap(t->process)` |
+| 4b | wake waiting threads | Event/timer wakeups |
+| 4c | pick next runnable | Next `RUNNING` thread |
+| 5 | restore next context | Resume that thread |
 
 `thread_current` is skipped because the interrupt that runs the cleanup may itself be executing on that thread's stack (the thread called `thread_exit` and halted). It is collected one tick later, once another thread is current.
 
@@ -69,7 +64,8 @@ Ownership is only as good as the owner assigned:
 - `create_event(owner)` does take an owner; pass your `yos_process_t *` and the event is reaped with the process.
 - Threads created with `create_thread(entry, stack, process)` get the process as their `process` field, so they keep the process alive and are reclaimed through the thread path above; their stacks are owned by the thread, not the process.
 
-Kernel-owned objects — the clock and keyboard timers, the `yos` and `gpx` services — are `NONE`-owned by design and are never reaped.
+Kernel-owned objects — the clock, keyboard and mouse timers and the `yos` and
+`gpx` services — are `NONE`-owned by design and are never reaped.
 
 The creator of a process is not part of cleanup. A process object has
 `owner = NONE` and no parent field; only its thread membership and owned

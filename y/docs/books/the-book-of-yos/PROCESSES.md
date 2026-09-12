@@ -110,19 +110,24 @@ So `process_exit` terminates the *calling* thread only. A process with several t
 
 ## Relationship Between Processes and Threads
 
-```
-process_t "shell"
-    ├── main_thread: thread_t (entry function)          process = "shell"
-    └── [child threads created by the process]
-              ├── thread_t (worker A)                   process = "shell"
-              └── thread_t (worker B)                   process = "shell"
-```
+| Object | Role | `process` field |
+|---|---|---|
+| `process_t` `"shell"` | The process | — |
+| `thread_t` main thread | Entry function | `"shell"` |
+| `thread_t` worker A | Child thread created by the process | `"shell"` |
+| `thread_t` worker B | Child thread created by the process | `"shell"` |
 
 Threads live in the global queues (`thread_first_running`, ...) and are associated with a process through their `process` field. `_process_has_threads` scans all four lists for that field to decide whether a process can be reaped.
 
 ## The Kernel Is Not a Process
 
-*Yos* itself is not represented as a process. `main` runs on the dedicated `__sys_stack` with interrupts disabled, loads the initial process, installs the IM2 scheduler and then idles in a `HALT` loop. The first interrupt finds `thread_current == NULL`, saves nothing, and dispatches the first runnable thread; from then on the kernel stack is never used again. Kernel-owned objects (the clock and keyboard timers, the `yos` and `gpx` services) have owner `NONE` and are never reaped.
+*Yos* itself is not represented as a process. `main` runs on the dedicated
+`__sys_stack` with interrupts disabled, loads the initial process, installs the
+IM2 scheduler and then idles in a `HALT` loop. The first interrupt finds
+`thread_current == NULL`, saves nothing, and dispatches the first runnable
+thread; from then on the kernel stack is never used again. Kernel-owned objects
+(the clock, keyboard and mouse timers and the `yos` and `gpx` services) have
+owner `NONE` and are never reaped.
 
 ## A Complete Example
 

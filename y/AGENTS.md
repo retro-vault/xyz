@@ -100,7 +100,7 @@ RAM-gate esxDOS fixture also runs the actual shell and self-registering
 `shelllib.svc`, shared/private lifetime, initializer rollback and OOM cases.
 Threading regressions force a second loader through a real IM2 context switch,
 audit shared-state/framebuffer accesses, and check nested IFF preservation,
-per-thread errors and independent GPX contexts.
+per-thread errors, timer-driven mouse state and independent GPX contexts.
 Run it after any change to `src/z80/`.
 
 For a repeatable visible Fuse cold boot, run

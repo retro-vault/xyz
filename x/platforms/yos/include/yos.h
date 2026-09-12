@@ -95,7 +95,9 @@ typedef struct yos_s {
     yos_handler_t (*get_interrupt_handler)(uint8_t vector);
     void (*set_interrupt_handler)(yos_handler_t handler, uint8_t vector);
     uint8_t (*read_key)(void);
+    /* Calibrate the absolute cursor against the current hardware counters. */
     void (*calibrate_mouse)(uint8_t x, uint8_t y);
+    /* Copy timer-sampled absolute state and consume changed_buttons. */
     void (*read_mouse)(yos_mouse_state_t *state);
     /* Fixed address, but the scheduler preserves its value per thread.
      * The C library's separate errno object remains process-local. */
