@@ -6,6 +6,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _lseek
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .globl  __zx_esx_fd
         .globl  __zx_esx_errno
         .globl  __zx_esx_error
@@ -21,6 +23,7 @@
         ; outputs: HL:DE = new offset or -1; DE is the low word.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 _lseek::
+        call    _enter_critical_section
         ; HL=fd; offset and whence are stack arguments. The long return
         ; is
         ; HL:DE, with DE holding the low word, as in sdcccall(1).
@@ -112,9 +115,10 @@ _lseek::
         jr      nz,.esx_seek_overflow
         ld      h,b
         ld      l,c
+.return:
         ld      sp,ix
         pop     ix
-        ret
+        jp      _leave_critical_section
 
 .esx_seek_invalid:
         ; EINVAL: bad whence/negative result
@@ -125,11 +129,7 @@ _lseek::
         ld      a,#75
 .esx_seek_errno:
         call    __zx_esx_errno
-        ld      sp,ix
-        pop     ix
-        ret
+        jr      .return
 .esx_seek_native_error:
         call    __zx_esx_error
-        ld      sp,ix
-        pop     ix
-        ret
+        jr      .return

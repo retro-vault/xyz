@@ -2,7 +2,8 @@
 
 This document captures the state of the project as of the most recent major work session, so that future sessions (human or AI) can quickly get back up to speed.
 
-Last updated: 2026-09-11, after adding the XCC YOS application backend.
+Last updated: 2026-09-12, after the YOS ABI 1 library baseline and real-Fuse
+boot validation and kernel shared-state protection.
 
 ## Major Recent Work
 
@@ -10,7 +11,7 @@ Last updated: 2026-09-11, after adding the XCC YOS application backend.
 
 `--platform=yos` now links ordinary C and the staged libc as relocatable XL
 processes. The CRT initializes BSS and copied data without relying on
-relocated section-length constants, resolves the ABI 8 `"yos"` table through
+relocated section-length constants, resolves the ABI 1 `"yos"` table through
 RST 18, calls `main`, and exits through the service table. Target-private
 `yos.h`, `gpx.h`, and `dirent.h` are staged only for this platform.
 
@@ -32,7 +33,20 @@ image through RST 18 and the GPX table and verifies that it draws. The XPROG
 host tool also has `--esxdos`, producing a deterministic 16 MiB MBR/FAT16 IDE
 disk with one 8.3 root file. A runnable `x/examples/yos` sample and the
 step-by-step `y/docs/books/PROGRAMMING-YOS.md` application book cover the
-complete YOS and GPX call surfaces.
+complete YOS and GPX call surfaces. ABI 1 also provides threadless,
+reference-counted private/shared XPRG libraries whose initialization occurs
+after relocation. A real esxDOS/Fuse cold boot now displays the shell and
+`Library OK`; native firmware gates mask IM2 while divIDE pages out the YOS
+scheduler ROM.
+
+YOS critical sections now preserve the original IFF and flags; public shared
+state and filesystem transactions are serialized. Kernel errors are saved in
+unused thread fields, and GPX contexts are independently allocated per app.
+Tests use the exact production ROM and force concurrent loader attempts via
+IM2. ROM content ends at `0x3FF0` (16 bytes free). Linked libc `errno` is still
+process-local; raw YOS error cells are per-thread. See the YOS concurrency
+chapter for callback, object-lifetime and shared-framebuffer rules. Libxz80's
+snapshot IFF2 mask was corrected to `0x04` during validation.
 
 ### ZX Spectrum disk applications booting from ROM
 

@@ -11,6 +11,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_hide_sprite
+        .globl  __critical_call
         .globl  __gpx_sprite_blit_raw
 
         .area   _CODE
@@ -34,6 +35,7 @@
         ;; References:
         ;;   __gpx_sprite_blit_raw
 _gpx_hide_sprite::
+        call    __critical_call
         ld      a,d
         or      e
         ret     z

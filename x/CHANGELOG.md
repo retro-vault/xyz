@@ -6,12 +6,15 @@ Release status:
 
 ## Unreleased
 
-- Updated the staged YOS interface to ABI 9 (96 bytes), appending
-  `load_library` and shared/private flags without changing existing slots.
-  Updated the platform's compile-time table-size check.
+- Fixed libxz80 snapshot/restore to use the backend's IFF2 bit (`0x04`, not
+  `0x02`). Added EI/LD A,I regression coverage, including saved IFF2 with IFF1
+  disabled. This makes YOS interrupt-state and preemption tests faithful.
+- Reset the staged YOS interface to the clean ABI 1 baseline (96 bytes),
+  including `load_library` and shared/private flags. Updated the platform's
+  version constant, examples, packaging minimum, and table-size check.
 
 - Added the `--platform=yos` XCC backend for relocatable XL applications. Its
-  CRT initializes relocatable C storage, obtains ABI 8 with RST 18
+  CRT initializes relocatable C storage, obtains the current table with RST 18
   `query_service("yos")`, and exits through the cached table. Kernel-backed
   allocation and POSIX file/directory wrappers keep libc behind YOS services;
   console output is silent until a process-local character hook is installed.

@@ -26,7 +26,7 @@ _yos_get_api::
         ld      de,(_yos_api_table)
         ret
 
-        ;; _exit/exit process termination. Status is currently advisory: ABI 8
+        ;; _exit/exit process termination. Status is currently advisory: ABI 1
         ;; exposes process_exit(void), so there is no status channel yet.
 __exit::
         ld      hl,(_yos_api_table)

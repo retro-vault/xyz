@@ -7,6 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _mouse_read
+        .globl  __critical_call
         .globl  __mouse_cursor
         .globl  __mouse_hardware
         .globl  __mouse_buttons
@@ -20,6 +21,7 @@
 
         ; input: HL = four-byte output {x, y, buttons, changed}.
 _mouse_read::
+        call    __critical_call
         push    hl                      ; save pointer to mouse_info_t
         call    .kmp_scan_raw           ; scan it
         pop     hl                      ; restore pointer to mi
@@ -109,4 +111,3 @@ _mouse_read::
         ld      d,a
         ld      a,(__mouse_buttons)         ; button state to a
         ret
-

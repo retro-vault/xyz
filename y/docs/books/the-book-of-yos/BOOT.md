@@ -99,9 +99,9 @@ short object/list critical sections; only each native disk call is masked.
 6. `__im2_init`, then `EI`.
 7. The idle `HALT` loop. From now on every frame interrupt runs the scheduler.
 
-Steps 4 and 5 happen before IM2 preemption is armed. Nested critical-section
-exits can enable interrupts earlier, but the boot phase still uses the inert
-IM1 return in the fixed header. Each esxDOS call masks interrupts independently.
+Steps 4 and 5 happen before IM2 preemption is armed. Critical-section exits
+preserve the disabled interrupt state throughout boot; only the explicit
+`EI` in step 6 enables scheduling.
 
 ## RAM initialisation (`__startup_init`)
 
@@ -135,9 +135,9 @@ __startup_init::
         jp      __syscall_table_init
 ```
 
-`__syscall_table_init` copies the 94-byte `.yos_template` (the ordered list of kernel entry points that matches `yos_t` in `yos.h`) into `__yos` in BSS. Applications never see the template; they receive `__yos` from `query_service("yos")`.
+`__syscall_table_init` copies the 96-byte `.yos_template` (the ordered list of kernel entry points that matches `yos_t` in `yos.h`) into `__yos` in BSS. Applications never see the template; they receive `__yos` from `query_service("yos")`.
 
-The esxDOS RAM gates (`fs/_esxdos_gates.s`) are also `_INITIALIZED` data: nineteen three-byte `RST 08; <selector>; RET` stubs (57 bytes at `0x5B3F`) that the filesystem calls so the inline selector byte is fetched from RAM while esxDOS is paged over the ROM. This is why YOS must not touch its writable data until esxDOS has finished its own cold boot and returned through `0x0001`.
+The esxDOS RAM gates (`fs/_esxdos_gates.s`) are also `_INITIALIZED` data: nineteen three-byte `RST 08; <selector>; RET` stubs (57 bytes at `0x5B37`) that the filesystem calls so the inline selector byte is fetched from RAM while esxDOS is paged over the ROM. This is why YOS must not touch its writable data until esxDOS has finished its own cold boot and returned through `0x0001`.
 
 ## Reference-counted critical sections
 
@@ -160,44 +160,30 @@ subroutine_b:
 
 `subroutine_b` does not know it was called from inside a `di` block. When it executes `ei` on return, the code in `subroutine_a` that follows the call is no longer protected.
 
-*Yos* solves this with a reference counter, `__interrupt_refcount` in `startup/_critical_state.s`. `enter_critical_section` increments the counter and executes `di`. `leave_critical_section` decrements it and only executes `ei` when the counter reaches zero:
+YOS records nesting and the original interrupt state in one byte,
+`__interrupt_refcount`: bits 0–6 are the depth (maximum 127), and bit 7
+remembers whether the outermost caller had interrupts enabled. Entry samples
+IFF2 with `LD A,I`, disables interrupts and increments the depth. The final
+matching leave executes `EI` only if that saved bit was set. An unmatched
+leave is a no-op. Both routines preserve every register, including flags.
 
-```asm
-_enter_critical_section::
-        di
-        push    hl
-        ld      hl, #__interrupt_refcount
-        inc     (hl)                    ; one more nested disable
-        pop     hl
-        ret
-
-_leave_critical_section::
-        push    af
-        ld      a, (__interrupt_refcount)
-        or      a
-        jr      z, .enable              ; already at zero: just enable
-        dec     a
-        ld      (__interrupt_refcount), a
-        or      a
-        jr      nz, .done               ; still nested: stay disabled
-.enable:
-        ei
-.done:
-        pop     af
-        ret
-```
-
-With this scheme, the earlier example becomes safe:
+Consequently, nested syscalls are safe, and callbacks already running with
+interrupts disabled stay disabled after a protected operation. Do not call
+blocking operations or explicitly execute `EI` inside a critical section.
 
 ```c
-yos->enter_critical_section();   // refcount = 1, di executed
-yos->enter_critical_section();   // refcount = 2, di again (no-op)
-// ... protected code ...
-yos->leave_critical_section();   // refcount = 1, still disabled
-yos->leave_critical_section();   // refcount = 0, ei executed
+yos->enter_critical_section();   /* depth 1; remember caller's IFF */
+yos->enter_critical_section();   /* depth 2 */
+shared_value = 7;
+yos->leave_critical_section();   /* depth 1; still disabled */
+yos->leave_critical_section();   /* depth 0; restore caller's IFF */
 ```
 
-Both routines preserve every register, so they can be dropped into any assembly sequence.
+The ROM-saving `__critical_call` trampoline guards routines whose arguments
+are entirely in registers. It arranges for the body's ordinary return to
+leave the section and return to its caller. It adds one return word, preserves
+primary argument registers, and clobbers alternate DE/HL. Never use it with
+an unadjusted caller-stack argument layout or live alternate-register state.
 
 ## Memory layout at boot
 
@@ -212,13 +198,14 @@ After `_main` has armed the scheduler the address space looks like this (address
 0x4000 ├────────────────────────────────┤
        │ screen bitmap + attributes     │
 0x5B00 ├────────────────────────────────┤
-       │ _INITIALIZED (copied from ROM) │  clock counters, kbd/mouse state,
-       │                                │  esxDOS gates at 0x5B3F
-0x5B78 │ _BSS                           │
-       │   __yos            94 bytes    │  public service table
-       │   kernel stack    512 bytes    │  grows down to here from 0x5DD6
-0x5DD6 │   __sys_vec_tbl    24 bytes    │  writable RST table
-       │   list roots, kbd queue, ...   │
+       │ _INITIALIZED (copied from ROM) │  clock counters, keyboard state,
+       │                                │  esxDOS gates at 0x5B37
+0x5B70 │ _BSS                           │
+       │   fd/error/timer state         │
+0x5B94 │   __yos            96 bytes    │  public ABI 1 service table
+       │   kernel stack    512 bytes    │  grows down to here from 0x5DF4
+0x5DF4 │   __sys_vec_tbl    24 bytes    │  writable RST table
+       │   list roots, mouse state, ...   │
 0x5EFF │ __im2_vector        2 bytes    │  IM2 handler address
 0x5F01 ├────────────────────────────────┤
        │ __sys_heap       1024 bytes    │  kernel objects

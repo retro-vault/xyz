@@ -196,5 +196,7 @@ Use consistent naming:
 4. Register usage: When possible, use the Z80 alternate register set (EXX, EX AF,AF') to reduce memory usage.
 5. Index registers: If IX or IY are used, they must be saved and restored.
 6. No global context: Routines must be stateless and independent (except for configurable global settings). They must work correctly in a context-switching environment.
-7. Hand-written assembly only: All kernel code must be hand-written Z80 assembly. Do not use C compilers or generated assembly. (The only compiled code in the build is the placeholder `shell.sys` process, which is an application, not part of the ROM.)
+7. Hand-written assembly only: All kernel code must be hand-written Z80
+   assembly. Do not use C compilers or generated assembly. (`shell.sys` is
+   compiled from the C smoke fixture, but it is an application, not ROM.)
 8. Fixed addresses are sacred: the first 256 bytes of `crt0rom.s`, the reserved ranges in `linker.lk` (`0x04C6`, `0x0562`, `0x3D00-0x3DFF`), the IM2 word at `0x5EFF` and the ROM size limit of 16 KiB are all checked by the build or by `tests/kernel-z80`. Never move them to make room.

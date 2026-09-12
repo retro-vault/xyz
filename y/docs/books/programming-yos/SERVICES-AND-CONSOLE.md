@@ -24,8 +24,8 @@ if (!yos || yos->version() < YOS_VERSION)
     return 1;
 ```
 
-`YOS_VERSION` is the ABI required by the installed header, currently 8. XPRG's
-`--min-os 8` is the loader-side check; the runtime check above is useful for
+`YOS_VERSION` is the ABI required by the installed header, currently 1. XPRG's
+`--min-os 1` is the loader-side check; the runtime check above is useful for
 diagnostics and unusual launchers.
 
 Graphics is separate:
@@ -115,10 +115,33 @@ int main(void)
 
 The name must fit the kernel's 15-character service field. The interface and
 its functions must remain resident for the entire registration. Call
-`unregister_service` before invalidating them. ABI 9 registrations are
+`unregister_service` before invalidating them. ABI 1 registrations are
 process-owned and reclaimed on exit. Library initialization instead stages
 library-owned registrations until success; acquire these interfaces using
 `load_library`, not merely a borrowed query. See
 [Loadable Libraries](../the-book-of-yos/LIBRARIES.md).
+
+## Loading a service library
+
+Use `load_library`, rather than `query_service`, when a process needs to own
+the lifetime of disk-resident code:
+
+```c
+shelllib_api_t *library = yos->load_library(
+    "shelllib.svc", YOS_LIBRARY_SHARED);
+if (!library)
+    return *yos->process_load_error;
+if (library->probe() != SHELLLIB_RESULT)
+    return 1;
+```
+
+`YOS_LIBRARY_PRIVATE` always creates a new instance. `YOS_LIBRARY_SHARED`
+reuses a ready instance with the same full XPRG name and image ABI. Every
+successful call adds a reference owned by the calling process; its references
+are released when its last thread is reclaimed. There is no explicit unload
+call in ABI 1. A pointer returned by `query_service` is borrowed and does not
+keep a library resident. See the application-focused
+[Loadable Libraries](LOADABLE-LIBRARIES.md) chapter for packaging and
+initializer rules.
 
 Next: [Memory, Time, and Concurrency](MEMORY-TIME-AND-CONCURRENCY.md).

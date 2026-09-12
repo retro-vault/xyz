@@ -95,8 +95,7 @@ __library_initialize::
         ld      (hl), c
         inc     hl
         ld      (hl), b
-        call    _leave_critical_section
-        ret
+        jp      _leave_critical_section
 .name:
         push    ix
         pop     hl

@@ -11,7 +11,7 @@ written entirely in hand-written Z80 assembly. The 16 KiB replacement ROM
 stays compatible with esxDOS on divIDE, loads `shell.sys` from disk as an
 XPRG process, and runs everything through a 50 Hz IM2 scheduler and named
 service tables. Applications talk to it through the `yos_t` function table
-(`include/yos.h`, ABI version 9) obtained with `query_service("yos")` over
+(`include/yos.h`, ABI version 1) obtained with `query_service("yos")` over
 `RST 0x18`.
 
 ## Documents To Read
@@ -23,7 +23,7 @@ service tables. Applications talk to it through the `yos_t` function table
 | lists, `sysobj_t`, ownership, `so_create` / `so_destroy` | [docs/books/the-book-of-yos/RESOURCE-ACCOUNTING.md](docs/books/the-book-of-yos/RESOURCE-ACCOUNTING.md) |
 | heaps, block header, allocate / free / free-by-owner | [docs/books/the-book-of-yos/MEMORY-MANAGEMENT.md](docs/books/the-book-of-yos/MEMORY-MANAGEMENT.md) |
 | thread object, states, startup stub, context switch, events | [docs/books/the-book-of-yos/THREADS.md](docs/books/the-book-of-yos/THREADS.md) |
-| process object, `process_start`, `load_process`, `process_exit` | [docs/books/the-book-of-yos/PROCESSES.md](docs/books/the-book-of-yos/PROCESSES.md) |
+| process object, no-parent model, `process_start`, `load_process`, `process_exit` | [docs/books/the-book-of-yos/PROCESSES.md](docs/books/the-book-of-yos/PROCESSES.md) |
 | shared/private libraries, initializer ownership, reference cleanup | [docs/books/the-book-of-yos/LIBRARIES.md](docs/books/the-book-of-yos/LIBRARIES.md) |
 | what the scheduler reclaims and when | [docs/books/the-book-of-yos/CLEANUP-RESOURCES.md](docs/books/the-book-of-yos/CLEANUP-RESOURCES.md) |
 | services, RST 18, the `yos_t` and `gpx` tables | [docs/books/the-book-of-yos/SYSCALLS.md](docs/books/the-book-of-yos/SYSCALLS.md) |
@@ -52,7 +52,7 @@ y/
 ├── src/c/          earlier C kernel -> yos.rom (kept buildable, not the focus)
 ├── include/        public headers for applications
 ├── pkg/            host tools: appmake, microdrive, serial -> bin/y/bin
-├── tests/          kernel-z80 (emulated kernel test), shell-yos, hello-yos, mdr*-yos, mdr-emu, media
+├── tests/          kernel-z80, shell-yos, Fuse real-firmware runner, legacy apps/media
 └── docs/           books/THE-BOOK-OF-YOS.md + books/the-book-of-yos/ (chapters), standards/ (style guide)
 ```
 
@@ -77,7 +77,7 @@ files and `libyos-kernel.lib` live in `build/yos-z80/`.
 
 The kernel is linked from an archive so `xld` drops every routine the ROM does
 not reference. `src/z80/Makefile` orders the archive deliberately (kernel,
-then gpx, then the boot loader) to pack code around the fixed divIDE holes;
+then gpx, then the boot loader, with early filesystem/timer anchors) to pack code around the fixed divIDE holes;
 keep that order when adding modules.
 
 ## Test
@@ -88,9 +88,9 @@ make -C y/tests/mdr-emu test   # microdrive driver harness (targets the C-era yo
 make -C y/tests/mdr-emu stress # repeated microdrive smoke passes
 ```
 
-`tests/kernel-z80/test_kernel.cpp` loads `yos-kernel-test.rom` (the production
-link plus `test_roots.s`, which stubs `_boot_shell` because there is no esxDOS
-in the emulator), resolves symbols from the map, and verifies: the fixed RST
+`tests/kernel-z80/test_kernel.cpp` loads the exact production ROM and map.
+The emulator defers `_boot_shell` until its RAM-gate fixture is populated;
+no test-only ROM relink or ROM patch is used. It verifies: the fixed RST
 and NMI bytes, the vector table and IM2 word, heap initialization, the public
 `yos_t` wrappers, the `gpx` service, filesystem errno behaviour without a
 firmware, XPRG CRC and relocation using the built `shell.sys`, process and
@@ -98,6 +98,9 @@ thread creation, three interrupt-driven context switches, event wakeup,
 terminated-thread cleanup, and that the kernel never writes into ROM. Its
 RAM-gate esxDOS fixture also runs the actual shell and self-registering
 `shelllib.svc`, shared/private lifetime, initializer rollback and OOM cases.
+Threading regressions force a second loader through a real IM2 context switch,
+audit shared-state/framebuffer accesses, and check nested IFF preservation,
+per-thread errors and independent GPX contexts.
 Run it after any change to `src/z80/`.
 
 For a repeatable visible Fuse cold boot, run
@@ -115,7 +118,7 @@ greeting from `tests/shell-yos/shell.c`. The esxDOS harness in
 ZEsarUX from a script if you need to automate it.
 
 The `hello-yos` and `mdr*-yos` directories under `tests/` are application
-builds that produce microdrive images for the C-era ROM. They predate ABI 6
+builds that produce microdrive images for the C-era ROM. They target the historical C-era ABI
 and still call `yos->printf`, which the current `include/yos.h` no longer
 has, so they do not build against it and are not part of any default target.
 
@@ -130,8 +133,8 @@ has, so they do not build against it and are not part of any default target.
   exactly as `src/z80/Makefile` does. This is the repository-wide rule from
   the root [`AGENTS.md`](../AGENTS.md); it is repeated here because `y/`
   harnesses have drifted before.
-- **Assembly only.** No C in `src/z80/`; the placeholder `shell.sys` is the
-  only compiled code and it is an application, not part of the ROM.
+- **Assembly only.** No C in `src/z80/`; `shell.sys` is compiled from the
+  C smoke fixture under `tests/shell-yos/` and is an application, not ROM.
 - **One routine per module.** `name.s` defines `_name`; helpers and shared
   state go in `_name.s` / `_<subsystem>_state.s`. Never merge modules — the
   archive link relies on it.
@@ -166,7 +169,15 @@ has, so they do not build against it and are not part of any default target.
   `thread.process` for this: it must keep the calling process alive.
 - Keep process/library file validation, CRC and XL relocation shared through
   `_image_load.s`. Both process and service names are bounded.
-- `so_create` / `so_destroy` and the allocators do not take critical sections
-  themselves; callers that can be preempted are responsible.
+- Processes have no parent field or wait/status relation. Do not confuse a
+  system object's resource `owner` with process ancestry.
+- Raw `so_create`, list routines and allocators require caller-held critical
+  sections; `so_destroy` protects its unlink/free transaction. Public APIs
+  protect shared state through publication, not only allocation. Preserve IFF
+  and all flags in critical helpers; never use bare `EI` in a protected body.
+- GPX contexts are independent process-owned allocations, not globals. Keep
+  framebuffer read/modify/write sequences protected without locking entire
+  compound drawings. Kernel errno/loader status are scheduler-virtualized;
+  linked libc `errno` remains process-local and is a separate limitation.
 - `tests/hello-yos` and `tests/mdr*-yos` target the removed `yos->printf`
-  and the C-era microdrive driver; they need porting to ABI 8 and esxDOS.
+  and the C-era microdrive driver; they need porting to ABI 1 and esxDOS.

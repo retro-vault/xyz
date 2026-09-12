@@ -29,5 +29,4 @@ _sys_vec_get::
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
-        call    _leave_critical_section
-        ret
+        jp      _leave_critical_section

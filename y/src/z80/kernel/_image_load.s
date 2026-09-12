@@ -23,7 +23,7 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
 
-        .equ    YOS_VERSION, 9
+        .equ    YOS_VERSION, 1
         .equ    IMAGE_FD,    64
         .equ    IMAGE_DATA,  66
         .equ    IMAGE_CODE,  68

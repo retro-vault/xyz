@@ -19,24 +19,18 @@
         ; clobbers: af, bc, de, hl; preserves ix and iy
 _sys_vec_set::
         call    _enter_critical_section
-        push    iy
-        ld      iy, #4
-        add     iy, sp
-        ld      e, 0(iy)
-        push    hl
-        ld      d, #0
-        ld      hl, #__sys_vec_tbl
-        add     hl, de
-        add     hl, de
-        add     hl, de
-        inc     hl
+        ex      de,hl                   ; handler
         pop     bc
-        ld      (hl), c
+        pop     hl                      ; vector byte and untouched caller byte
+        dec     sp                      ; consume only the vector byte
+        push    bc                      ; relocate the return address
+        ld      c,l
+        ld      b,#0
+        ld      hl,#__sys_vec_tbl+1
+        add     hl,bc
+        add     hl,bc
+        add     hl,bc
+        ld      (hl), e
         inc     hl
-        ld      (hl), b
-        call    _leave_critical_section
-        pop     iy
-        pop     bc
-        inc     sp
-        push    bc
-        ret
+        ld      (hl), d
+        jp      _leave_critical_section

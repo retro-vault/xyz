@@ -7,6 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _readdir
+        .globl  __critical_call
         .globl  __directory_validate
         .globl  __directory_convert
         .globl  __zx_esx_errno
@@ -17,6 +18,7 @@
 
         ; input: HL = DIR pointer; output: DE = dirent pointer or NULL.
 _readdir::
+        call    __critical_call
         call    __directory_validate
         jr      nc,.valid
         call    __zx_esx_errno

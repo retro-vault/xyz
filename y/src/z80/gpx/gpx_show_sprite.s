@@ -19,6 +19,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_show_sprite
+        .globl  __critical_call
         .globl  __gpx_store_background
         .globl  __gpx_sprite_blit_raw
         .globl  _gpx_draw_bmp
@@ -69,6 +70,7 @@
         ;;   __gpx_store_background
         ;;   __gpx_sprite_blit_raw
 _gpx_show_sprite::
+        call    __critical_call         ; save-under and draw are one operation
         ld      a,d
         or      e
         ret     z

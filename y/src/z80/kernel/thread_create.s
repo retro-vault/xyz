@@ -69,7 +69,7 @@ _thread_create::
         ld      de, #THREAD_WAIT
         add     hl, de
         xor     a
-        ld      b, #6
+        ld      b, #6                   ; wait/count/state and saved errno at +20
 .clear:
         ld      (hl), a
         inc     hl

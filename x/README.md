@@ -101,13 +101,13 @@ single input/output disk channels. See the
 mkdir -p build/examples/yos
 bin/x/bin/xcc -Os --platform=yos x/examples/yos/hello.c \
   -o build/examples/yos/hello.xl
-bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 8 \
+bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 1 \
   build/examples/yos/hello.xl -o build/examples/yos/hello.sys
 bin/x/bin/xprog --esxdos --name HELLO.SYS build/examples/yos/hello.sys \
   -o build/examples/yos/hello.ide
 ```
 
-The backend produces relocatable XL code, obtains ABI 8 through
+The backend produces relocatable XL code, obtains ABI 1 through
 `query_service("yos")`, and routes allocation and POSIX files through YOS.
 Standard console output is silent unless the process installs the
 `yos_set_putchar_hook()` extension. See the [YOS example](examples/yos/) and

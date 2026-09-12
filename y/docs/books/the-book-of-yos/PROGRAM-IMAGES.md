@@ -53,18 +53,17 @@ The descriptor's stack size is usable application stack. YOS adds its private
 
 `yos_t::process_load_error` points at a byte containing one of the
 `YOS_PROCESS_LOAD_*` values in `yos.h`. A service image passed to
-`load_process` is rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 9 adds
+`load_process` is rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 1 includes
 `load_library(path, flags)` for service images; see [Libraries](LIBRARIES.md)
 for relocation, self-registration, sharing and automatic release.
 
 At boot the ROM opens `shell.sys` on the current esxDOS drive and directory
 (`kernel/boot_shell.s`), loads it as a process, and only then arms the
-scheduler. The build creates a placeholder `shell.sys` from
-`y/tests/shell-yos/shell.c`: it queries the `gpx` service, centres a greeting
-on the screen, and loops forever. Its `crt0.s` shows the minimum an XPRG
-process needs. The production build now gets both `_entry` and the
-`RST 0x18; RET` `query_service` stub from the XCC `--platform=yos` backend;
-the old local fixture CRT is retained only as a compact ABI illustration.
+scheduler. The build creates the current smoke-test `shell.sys` from
+`y/tests/shell-yos/shell.c`: it loads `shelllib.svc`, calls the relocated
+library interface, queries `gpx`, centres a greeting and `Library OK`, and
+loops forever. The production image gets both `_entry` and the
+`RST 0x18; RET` `query_service` stub from the XCC `--platform=yos` backend.
 
 Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
 `process_load_error` points at:
@@ -91,14 +90,19 @@ with a nonzero stack requirement and the oldest compatible YOS ABI:
 
 ```sh
 bin/x/bin/xcc -Os --platform=yos app.c -o build/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 8 \
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
   build/app.xl -o bin/y/z80/spectrum/bin/app.sys
 
-xprog --process --name shell --stack-size 256 --min-os 8 shell.xl -o shell.sys
+xprog --process --name shell --stack-size 256 --min-os 1 shell.xl -o shell.sys
 ```
+
+Both images declare ABI 1, the clean baseline for the complete current table.
+The shell also checks `yos->version() >= YOS_VERSION` before accessing
+`load_library`.
 
 `y/src/z80/Makefile` (`$(SHELL_XL)` and `$(SHELL_OUTPUT)`) is the reference
 recipe.
 
 Use `xprog --service` for a library intended to be registered as a named YOS
-service; it must describe its exported jump-table entries.
+service; it must describe its exported jump-table entries. See the practical
+[library guide](../programming-yos/LOADABLE-LIBRARIES.md).

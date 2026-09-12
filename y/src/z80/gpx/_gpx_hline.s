@@ -16,6 +16,8 @@
         ;; 2026-08-25   TS
 
         .module _gpx_hline
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __gpx_hline
@@ -330,10 +332,11 @@ __gpx_span_setup::
         ;;   many rows keeps the row pointer in HL and simply steps it.
         ;; ------------------------------------------------------------
 __gpx_span_row::
+        call    _enter_critical_section
         push    hl
         call    .sr_run
         pop     hl
-        ret
+        jp      _leave_critical_section
 
 .sr_run:
         ld      c,a                     ; C = pattern, live for the whole run
@@ -407,6 +410,7 @@ __gpx_span_row::
         ;; Clobbers: AF, BC and DE. Preserves HL, IX and IY.
         ;; ------------------------------------------------------------
 __gpx_span_row_copy::
+        call    _enter_critical_section
         push    hl
         ld      c,a                     ; desired pixels for every full byte
         ld      b,2(iy)
@@ -429,7 +433,7 @@ __gpx_span_row_copy::
 .src_finish:
         call    .src_edge
         pop     hl
-        ret
+        jp      _leave_critical_section
 .src_edge:
         ld      d,a                     ; coverage
         ld      a,c

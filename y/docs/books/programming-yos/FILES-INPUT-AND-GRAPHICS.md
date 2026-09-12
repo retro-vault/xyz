@@ -112,6 +112,13 @@ gpx->draw_line(screen, 0, 0, 255, 191,
 ```
 
 Coordinates are signed, allowing primitives to be clipped at screen edges.
+Every `create` returns independent, process-owned state; text-background
+settings never affect another app's context. Colors, modes, patterns and clips
+are already explicit call arguments. The physical framebuffer remains shared.
+Raster critical sections prevent lost updates to neighboring pixels within a
+byte, but overlapping artwork and sprite show/hide lifetimes still need
+application coordination. See [Concurrency](MEMORY-TIME-AND-CONCURRENCY.md).
+
 `CO_BACK` clears pixels and `CO_FORE` sets them. For patterned operations,
 `BM_CPY` paints both pattern values, `BM_OR` preserves pattern-zero pixels,
 and `BM_XOR` toggles pattern-one pixels. Many calls accept an optional

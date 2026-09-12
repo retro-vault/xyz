@@ -1,6 +1,10 @@
 # Processes
 
-A **process** is the OS-level container for a running program. You can think of it as a named group that owns resources and has at least one thread of execution. When you launch a program, *yos* creates a `process_t` record, allocates a main thread for it, and starts the thread running.
+A **process** is the OS-level container for a running program: a named group
+that owns resources and normally has one or more threads. When you launch a
+program, *yos* creates a `process_t`, allocates a main thread, and starts it.
+The same compact record is also reused for a library ownership object, which
+has a reference count but never a thread.
 
 ## The Process Structure
 
@@ -20,6 +24,11 @@ for debugging, not scheduling or library identity. Normal processes have
 `pflags = 0`. [Libraries](LIBRARIES.md) reuse this record without a thread:
 flags 1/3 mark private/shared libraries, bytes 5–7 hold the service pointer
 and image ABI, and the word at 13 is their reference count.
+
+There is deliberately no parent field. `hdr.owner` is `NONE` for ordinary
+process and library objects; it is generic resource ownership, not a parent
+process. Calling `create_process` or `load_process` from another process does
+not establish ancestry, a wait relationship, or an exit-status channel.
 
 ### The Main Thread
 
@@ -72,9 +81,14 @@ if (!process) {
 
 The file must be an XPRG version 1 *process* image containing a relocatable XL payload (see [Program and Service Images](PROGRAM-IMAGES.md)). `process_load` (`kernel/process_load.s`) reads the 64-byte descriptor onto its own stack, verifies the magic, version, kind, required YOS ABI, payload CRC-32, XL header bounds and entry point, allocates the image from `__heap`, applies every XL relocation in place, and calls `process_start` with the descriptor's name, entry point and `stack size + CONTEXT_SIZE`. Finally it transfers ownership of the image block to the new process so it is freed when the process is reaped. Service-kind XPRG images are rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`.
 
-`process_load_error` points at the kernel's `_process_last_error` byte; it is cleared at the start of every `load_process` call.
+`process_load_error` points at `_process_last_error`, a fixed cell whose value
+is saved/restored per thread. Every completed process/library load writes its
+result there: zero on success, otherwise an error below. Concurrent/recursive
+loads return BUSY; the initiating call completes synchronously.
 
-The ROM invokes the same loader for `shell.sys` on the current esxDOS drive (`kernel/boot_shell.s`) before enabling scheduler interrupts.
+The ROM invokes the same loader for `shell.sys` on the current esxDOS drive
+(`kernel/boot_shell.s`) before arming IM2 scheduling. Each firmware call masks
+interrupts while divIDE has the YOS ROM paged out.
 
 ## Exiting a Process
 
@@ -139,7 +153,11 @@ void launch_counter(void) {
 
 ## Tips and Limitations
 
-- **Process names are at most 7 characters.** `process_start` copies the name until the terminator without bounds checking; `process_load` truncates XPRG names (up to 15 characters) to 7 before calling it.
+- **Process names are at most 7 characters.** `process_start` uses the bounded
+  `__string_copy`; `process_load` passes an XPRG name of up to 15 characters,
+  and the process record safely retains the first seven.
 - **There is no inter-process isolation.** All processes share the same flat 64 KB address space. A buggy process can overwrite the memory of any other process or the OS itself. This is inherent in the ZX Spectrum's architecture.
 - **Stack size must be sufficient for all nested calls.** Include headroom for the 22-byte context the scheduler saves on the thread's stack at every 50 Hz tick, plus all the function frames the thread will call.
-- **Owner matters for reclamation.** Events, timers and services created with the process as owner are released when the process is reaped; memory from `allocate_memory` has no owner and is not.
+- **Owner matters for reclamation.** Process-owned events, services, library
+  references, and `allocate_memory` blocks are released when the process is
+  reaped. Public timers remain kernel-owned and must be destroyed explicitly.

@@ -10,11 +10,12 @@ Every thread is a 24-byte `thread_t` object allocated on the kernel heap (`__sys
 typedef struct thread_s {
     sysobj_t hdr;           /*  0: list link + owner (must be first) */
     uint16_t sp;            /*  4: saved stack pointer          THREAD_SP */
-    uint8_t  startup[10];   /*  6: startup stub (see below) */
+    uint8_t  startup[9];    /*  6: startup stub (see below) */
+    uint8_t  load_error;    /* 15: saved loader status      THREAD_LOAD_ERROR */
     event_t  **wait;        /* 16: array of events to wait on   THREAD_WAIT */
     uint8_t  num_events;    /* 18: entries in wait[]            THREAD_NUM_EVENTS */
     uint8_t  state;         /* 19: current thread state         THREAD_STATE */
-    thread_t **joined;      /* 20: reserved, unused */
+    int16_t  error_number;  /* 20: saved kernel errno       THREAD_ERRNO */
     void     *process;      /* 22: owning process               THREAD_PROCESS */
 } thread_t;
 ```
@@ -22,7 +23,12 @@ typedef struct thread_s {
 Key points:
 
 - **`sp`** — when a thread is not running, the CPU's stack pointer is saved here. When the scheduler switches back to this thread, it restores `SP` from this field.
-- **`startup[10]`** — a machine-code stub written into the object at creation time. It calls the thread's entry function and then jumps to `thread_exit` when the function returns.
+- **`startup[9]`** — calls the entry function and jumps to `thread_exit` on
+  return. The formerly unused tenth byte holds loader status; the formerly
+  reserved join word holds kernel errno. Both error fields start at zero.
+- **Error fields** — the scheduler saves the live public cells before timer
+  callbacks, and restores the next thread's values before returning. The
+  object stays 24 bytes and the register context stays 22 bytes.
 - **`state`** — one of the values below.
 - **`process`** — the real process membership used by cleanup.
   `hdr.owner` is normally zero. Library initialization temporarily places
@@ -80,14 +86,14 @@ yos->resume_thread(t);
 
 ## The Startup Stub
 
-`_thread_prepare_startup` writes these 10 bytes into `thread_t.startup[]`:
+`_thread_prepare_startup` writes the nine-byte stub and clears loader status:
 
 ```
 Offset  Bytes     Instruction
 0       CD lo hi  CALL entry_point     ; call the user's function
 3       21 lo hi  LD HL, <thread_t*>   ; thread pointer is the first argument
 6       C3 lo hi  JP thread_exit       ; exit the thread (never returns)
-9       00        guard byte
+9       00        initial loader status (not executed)
 ```
 
 The first time the scheduler dispatches the thread, `RETI` at the end of the context-restore path pops the stub's address as the "interrupted PC" and lands in the stub. The stub calls `entry_point`. When `entry_point` returns, the stub loads the thread pointer into `HL` (the `sdcccall(1)` first argument) and jumps to `thread_exit`. **A thread function should simply return when it is done** — there is no need to call `thread_exit` manually.
@@ -177,7 +183,11 @@ Moves thread `t` to the `TERMINATED` queue and halts forever; the thread's stack
 
 ### Not (yet) available
 
-There is no `thread_wait4events` or `thread_join`. The `WAITING` state and the event-wakeup scan in the scheduler exist, but no kernel routine currently moves a thread onto the waiting list, and the `joined` field is never used. Until that is added, a thread that needs to block should `suspend_thread` itself and have a timer hook or another thread `resume_thread` it.
+There is no `thread_wait4events` or `thread_join`. The `WAITING` state and the
+event-wakeup scan exist, but no public routine moves a thread onto that list.
+The former reserved join word now stores errno. A thread that needs to block
+can suspend itself and have another thread or a short timer hook resume it;
+arrange the signal/suspend handshake to avoid a missed wakeup.
 
 ## Events
 

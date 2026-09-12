@@ -35,3 +35,6 @@ out the ROM containing the IM2 scheduler. Leaving IM2 enabled during a
 library disk read previously jumped into firmware instead of the scheduler
 and restarted YOS before it could draw. The kernel regression suite checks
 that gates reject interrupts and preserve enclosing critical sections.
+It also runs the exact production ROM with per-thread error checks, forced
+concurrent library loads, descriptor/append transaction audits and independent
+GPX contexts. The visible smoke screen remains unchanged by synchronization.

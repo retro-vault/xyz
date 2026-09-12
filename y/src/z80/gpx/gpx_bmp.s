@@ -14,6 +14,8 @@
         ;; 2026-08-25   TS
 
         .module gpx_bmp
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_draw_bmp
@@ -500,6 +502,7 @@ _gpx_draw_bmp_clip::
         exx
 
 .gb_dst_init:
+        call    _enter_critical_section ; serialize one destination row
 
         ;; The left and right edge masks only ever apply to the first and
         ;; last byte of the span, so the run is walked in three phases and
@@ -678,6 +681,7 @@ _gpx_draw_bmp_clip::
         ret
 
 .gb_next_row:
+        call    _leave_critical_section
         dec     L_VISH(iy)
         jr      z,.gb_exit
 

@@ -13,11 +13,18 @@
 
         ; _enter_critical_section, sdcccall(1)
         ; outputs: none
-        ; preserves all registers
+        ; preserves all registers, including flags; at most 127 levels.
+        ; Bit 7 remembers the outermost caller's interrupt-enable state.
 _enter_critical_section::
-        di
+        push    af
         push    hl
+        ld      a,i
+        di
         ld      hl, #__interrupt_refcount
+        jp      po, .disabled
+        set     7,(hl)
+.disabled:
         inc     (hl)
         pop     hl
+        pop     af
         ret

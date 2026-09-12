@@ -16,6 +16,8 @@
         ;; 2026-08-25   TS
 
         .module gpx_draw_pixel
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_draw_pixel
@@ -170,6 +172,7 @@ __gpx_plot_raw:
         add     a,l
         ld      l,a
         pop     af                      ; A = packed color/mode
+        call    _enter_critical_section
 
         bit     1,a
         jr      nz,.pr_xor
@@ -181,19 +184,19 @@ __gpx_plot_raw:
         cpl
         and     (hl)
         ld      (hl),a
-        ret
+        jp      _leave_critical_section
 
 .pr_set:
         ld      a,c
         or      (hl)
         ld      (hl),a
-        ret
+        jp      _leave_critical_section
 
 .pr_xor:
         ld      a,c
         xor     (hl)
         ld      (hl),a
-        ret
+        jp      _leave_critical_section
 
 .pr_reject:
         pop     af

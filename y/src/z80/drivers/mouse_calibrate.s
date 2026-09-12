@@ -7,6 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _mouse_calibrate
+        .globl  __critical_call
         .globl  __mouse_cursor
         .globl  __mouse_hardware
 
@@ -17,6 +18,7 @@
 
         ; inputs: A = initial x, L = initial y; preserves ix and iy.
 _mouse_calibrate::
+        call    __critical_call
         ld      c,a                     ; c = x
         ld      b,l                     ; b = y
         ; calibrate
@@ -38,4 +40,3 @@ _mouse_calibrate::
         in      a,(c)                   ; y to a
         ld      (hl),a                  ; to high hw pos
         ret
-

@@ -15,9 +15,18 @@ Build and package a process with:
 
 ```sh
 bin/x/bin/xcc -Os --platform=yos app.c -o build/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 8 \
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
   build/app.xl -o bin/y/z80/spectrum/bin/app.sys
 ```
 
 The linker output must remain XL. Do not select a fixed-address or binary
 output format for a YOS process.
+
+The staged header describes the complete 96-byte ABI 1 table, including
+process loading and private/shared XPRG libraries. `load_library` returns a
+relocated direct-call interface retained until the calling process exits.
+Kernel shared-state syscalls use IFF-preserving critical sections. Raw kernel
+errno/loader status follow the running thread, but linked libc `errno` remains
+process-local. GPX contexts are independent process-owned allocations; the
+physical framebuffer is shared. See the
+[YOS concurrency contract](../../../y/docs/books/programming-yos/MEMORY-TIME-AND-CONCURRENCY.md).

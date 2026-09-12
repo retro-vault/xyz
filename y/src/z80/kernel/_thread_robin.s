@@ -14,6 +14,11 @@
         .globl  _thread_current
         .globl  __tmr_chain
         .globl  __thread_select_next
+        .globl  __errno_value
+        .globl  _process_last_error
+
+        .equ    THREAD_LOAD_ERROR, 15
+        .equ    THREAD_ERRNO,      20
 
         .area   _CODE
 
@@ -45,6 +50,14 @@ __thread_robin::
         push    de
         push    hl
         exx
+        ;; Virtualize the fixed public error cells without growing thread_t.
+        push    hl
+        pop     ix
+        ld      a,(_process_last_error)
+        ld      THREAD_LOAD_ERROR(ix),a
+        ld      de,(__errno_value)
+        ld      THREAD_ERRNO(ix),e
+        ld      THREAD_ERRNO+1(ix),d
         ;; hl alredy has current thread, skip over header
         inc     hl
         inc     hl
@@ -80,6 +93,13 @@ __thread_robin::
 .trbn_have_next:
         ex      de,hl                   ; next thread pointer into hl
         ld      (_thread_current),hl    ; store current thread
+        push    hl
+        pop     ix
+        ld      a,THREAD_LOAD_ERROR(ix)
+        ld      (_process_last_error),a
+        ld      e,THREAD_ERRNO(ix)
+        ld      d,THREAD_ERRNO+1(ix)
+        ld      (__errno_value),de
         ;; skip over header
         inc     hl
         inc     hl

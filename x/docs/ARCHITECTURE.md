@@ -166,7 +166,7 @@ When adding tests for new C23 features (or anything else):
     derived from that scanner, and snatch-exported Tamsyn font; there is no
     non-target pseudo-platform directory.
   - `yos` emits relocatable XL processes. Its CRT initializes process storage,
-    resolves `query_service("yos")` through RST 18, caches ABI 8, and exits via
+    resolves `query_service("yos")` through RST 18, caches ABI 1, and exits via
     the returned table. Its libc boundary is deliberately service-only:
     allocation uses the YOS user heap, files/directories use the YOS POSIX
     table, and console output is silent until a process installs a character
@@ -213,7 +213,7 @@ When adding tests for new C23 features (or anything else):
   bare-metal, YOS, CP/M 3, CPC, and ZX sysroot payloads. Future GUI and third-party
   targets can extend the same explicit platform manifest.
 
-YOS ABI 9 adds threadless, reference-counted XPRG libraries. Process and
+YOS ABI 1 includes threadless, reference-counted XPRG libraries. Process and
 library loading share the same file/CRC/XL relocation core; initializers run
 once after relocation, with library-owned allocations and privately staged
 service registration. Per-client references are released after the client's

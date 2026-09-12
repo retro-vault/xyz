@@ -12,7 +12,7 @@ esxDOS filesystem. The XCC platform name is `yos`:
 ```sh
 mkdir -p build/examples/yos bin/y/z80/spectrum/bin
 bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 8 \
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
   build/examples/yos/app.xl -o bin/y/z80/spectrum/bin/app.sys
 ```
 
@@ -53,9 +53,11 @@ published YOS ABI. It does not call Spectrum ROM routines or esxDOS directly.
    processes.
 4. [Files, Input, and Graphics](programming-yos/FILES-INPUT-AND-GRAPHICS.md)
    covers the POSIX layer, disks, keyboard, mouse, and the `gpx` service.
-5. [YOS API Reference](programming-yos/YOS-API-REFERENCE.md) documents every
+5. [Loadable Libraries](programming-yos/LOADABLE-LIBRARIES.md) shows how to
+   consume, package, initialize, share, and test an XPRG service image.
+6. [YOS API Reference](programming-yos/YOS-API-REFERENCE.md) documents every
    member of `yos_t` and every YOS-platform helper, with a call sample.
-6. [GPX API Reference](programming-yos/GPX-API-REFERENCE.md) documents all 23
+7. [GPX API Reference](programming-yos/GPX-API-REFERENCE.md) documents all 24
    graphics calls and the public data formats, with a call sample.
 
 For kernel internals—boot, object layouts, scheduling, cleanup, and XPRG
@@ -64,11 +66,13 @@ loading—read [The Book of YOS](THE-BOOK-OF-YOS.md). The runnable companion is
 
 ## Important limits
 
-The current public ABI is version 8. It has no blocking console input, Unix
+The current public ABI is version 1. It has no blocking console input, Unix
 wall clock, thread join, event wait call, process wait/status channel, or
-dynamic service-image loader. `exit(int)` can terminate a process, but ABI 8
-cannot pass its numeric status to a parent. The kernel can load XPRG process
-images; service images remain a packaging format for future loader work.
+explicit library unload. A process has no stored parent relationship, even
+when another process created or loaded it, and `exit(int)` cannot report its
+numeric status to the creator. ABI 1 can load relocatable XPRG service images
+as private or reference-counted shared libraries; dependencies and finalizers
+are not implemented.
 
 Paths and directory entries reflect the underlying esxDOS 8.3 filesystem.
 YOS currently targets the 48K Spectrum with divIDE/esxDOS. Code that stays on

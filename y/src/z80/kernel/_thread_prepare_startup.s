@@ -55,6 +55,6 @@ _thread_prepare_startup::
         inc     hl
         ld      (hl), d
         inc     hl
-        ld      (hl), #0
+        ld      (hl), #0                ; offset 15: initial per-thread load error
         pop     hl
         ret

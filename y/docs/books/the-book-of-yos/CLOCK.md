@@ -122,10 +122,16 @@ Because the callback fires when the countdown *reaches* zero and then reloads to
 
 - Keep callbacks **very short**. Every microsecond spent in a callback is a microsecond stolen from every thread and every other timer.
 - The hook is called with `sdcccall(1)` and no arguments; `IX` and `IY` are saved around the whole chain, everything else may be clobbered.
-- Do **not** call anything that enters a critical section — `resume_thread`, `suspend_thread`, `exit_thread`, `set_interrupt_handler`, `get_interrupt_handler`, `enter_critical_section` itself. The refcount is zero inside the interrupt, so the matching `leave_critical_section` executes `EI` and re-enables interrupts in the middle of the scheduler.
+- Critical sections preserve the incoming interrupt state. Short calls such as
+  `set_event` and `resume_thread` are safe from a timer callback; their matching
+  leave no longer enables interrupts in the middle of the scheduler.
 - Do **not** execute `EI` yourself either.
-- Do **not** allocate or free memory or create or destroy kernel objects (`allocate_memory`, `create_timer`, `destroy_timer`, `create_event`, ...) — the interrupted thread may have been in the middle of the same heap.
-- `set_event` and plain writes to flags are safe: they touch no heap and no critical section. The scheduler wakes waiting threads after the chain has run, so an event set in a callback takes effect on the same tick.
+- Do not create/destroy timers while the timer chain is running: it follows
+  live list links after each callback. Keep allocation and expensive work in a
+  thread even though public heap mutations are now protected. Never block,
+  suspend/exit the current thread, or do disk I/O from a callback.
+- `set_event` and single-byte flag writes are safe. The scheduler scans waiting
+  threads after the chain, so an event can take effect on the same tick.
 - To communicate a result back to a thread, set a flag or an event and let the thread process the result in its own context.
 
 ```c

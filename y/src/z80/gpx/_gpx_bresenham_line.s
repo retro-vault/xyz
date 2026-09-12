@@ -26,6 +26,8 @@
         ;; 2026-08-25   TS
 
         .module _gpx_bresenham_line
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __gpx_bresenham_line
@@ -98,6 +100,7 @@
         ;;   __vid_prevrow_carry
         ;;   __ret_clean11
 __gpx_bresenham_line::
+        call    _enter_critical_section
         push    ix
         ld      ix,#0
         add     ix,sp
@@ -502,6 +505,7 @@ __gpx_bresenham_line::
 .bl_retp:
         ld      a,c
 .bl_done:
+        call    _leave_critical_section
         ld      sp,ix
         pop     ix
         jp      __ret_clean11

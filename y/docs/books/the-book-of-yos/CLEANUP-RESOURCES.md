@@ -71,6 +71,10 @@ Ownership is only as good as the owner assigned:
 
 Kernel-owned objects — the clock and keyboard timers, the `yos` and `gpx` services — are `NONE`-owned by design and are never reaped.
 
+The creator of a process is not part of cleanup. A process object has
+`owner = NONE` and no parent field; only its thread membership and owned
+resources determine when it can be reaped.
+
 ## Example Timeline
 
 A process `count` with one thread returns from its entry function:

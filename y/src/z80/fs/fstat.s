@@ -6,6 +6,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _fstat
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .globl  __zx_esx_fd
         .globl  __zx_esx_buffer
         .globl  __zx_esx_errno
@@ -20,6 +22,7 @@
         ; outputs: DE = 0 or -1 with errno set.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 _fstat::
+        call    _enter_critical_section
         push    ix
         ld      ix,#0
         add     ix,sp
@@ -49,17 +52,14 @@ _fstat::
         ld      e,-2(ix)
         ld      d,-1(ix)
         call    __zx_esx_stat_convert
+.return:
         ld      sp,ix
         pop     ix
-        ret
+        jp      _leave_critical_section
 
 .esx_fstat_errno:
         call    __zx_esx_errno
-        ld      sp,ix
-        pop     ix
-        ret
+        jr      .return
 .esx_fstat_native_error:
         call    __zx_esx_error
-        ld      sp,ix
-        pop     ix
-        ret
+        jr      .return

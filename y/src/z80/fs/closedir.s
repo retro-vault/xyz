@@ -7,6 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _closedir
+        .globl  __critical_call
         .globl  __directory_validate
         .globl  __yos_free
         .globl  __zx_esx_errno
@@ -17,6 +18,7 @@
 
         ; input: HL = DIR pointer; output: DE = 0 or -1.
 _closedir::
+        call    __critical_call
         call    __directory_validate
         jp      c,__zx_esx_errno
         push    hl

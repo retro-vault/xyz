@@ -1,6 +1,6 @@
 # Loadable Libraries
 
-ABI 9 appends `load_library(path, flags)` to `yos_t`. It loads an XPRG
+ABI 1 includes `load_library(path, flags)` in `yos_t`. It loads an XPRG
 service (`xprog --service`) and returns a direct function-pointer table:
 
 ```c
@@ -117,12 +117,16 @@ service JP stubs are not this YOS binding and are rejected. Library
 dependencies, finalizers and explicit unloading are not implemented.
 A nonblocking loader lock serializes loads; competing or recursive loads
 return BUSY without disabling interrupts for the whole load or initializer.
+The fixed loader-status cell is saved/restored per thread, so a competing
+call's BUSY result cannot overwrite the initiating thread's result. Services
+are only published after initialization. Mutable state inside a shared
+library still needs its own synchronization or per-client contexts.
 Each native esxDOS call does mask interrupts until divIDE restores the ROM
 containing the scheduler; validation, CRC and relocation can be preempted.
 
 Both loading APIs report through `process_load_error`. Existing codes
 0–8 remain stable; code 6 means wrong image kind for the selected loader.
-ABI 9 adds:
+ABI 1 defines:
 
 | Code | Meaning |
 |---:|---|

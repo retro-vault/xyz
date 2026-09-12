@@ -17,6 +17,8 @@ struct mock_filesystem {
     Memory& mem;
     Cpu& cpu;
     std::uint16_t open_gate, read_gate, close_gate;
+    std::uint16_t write_gate = 0, seek_gate = 0, position_gate = 0,
+                  status_gate = 0, sync_gate = 0;
     bool enabled = false;
     std::size_t max_read = 7; // Force the exact-read helper to loop.
     std::size_t fail_after = std::numeric_limits<std::size_t>::max();
@@ -42,7 +44,9 @@ struct mock_filesystem {
         if (!enabled) return false;
         if (observe) observe();
         const auto pc = cpu.pc();
-        if (pc != open_gate && pc != read_gate && pc != close_gate)
+        if (pc != open_gate && pc != read_gate && pc != close_gate &&
+                pc != write_gate && pc != seek_gate && pc != position_gate &&
+                pc != status_gate && pc != sync_gate)
             return false;
         auto state = cpu.snapshot();
         // The real firmware maps out the ROM containing the IM2 handler.
@@ -73,6 +77,26 @@ struct mock_filesystem {
         } else if (pc == close_gate) {
             handles.erase(handle);
             ++closes;
+        } else if (pc == write_gate) {
+            auto& fd = handles.at(handle);
+            auto& data = files.at(fd.name);
+            data.resize(std::max(data.size(), fd.position + state.bc));
+            for (unsigned i = 0; i < state.bc; ++i)
+                data[fd.position + i] = mem.bytes[std::uint16_t(state.ix + i)];
+            fd.position += state.bc;
+        } else if (pc == seek_gate) {
+            if ((state.ix & 0xff) != 0)
+                throw std::runtime_error("fixture expects absolute native seek");
+            handles.at(handle).position = (std::uint32_t(state.bc) << 16) | state.de;
+        } else if (pc == status_gate) {
+            const auto size = files.at(handles.at(handle).name).size();
+            for (unsigned i = 0; i < 11; ++i)
+                mem.write(std::uint16_t(state.ix + i), 0);
+            mem.write(std::uint16_t(state.ix + 2), 0x20);
+            for (unsigned i = 0; i < 4; ++i)
+                mem.write(std::uint16_t(state.ix + 7 + i), size >> (8 * i));
+        } else if (pc == position_gate || pc == sync_gate) {
+            // Position is installed below, after hostile clobbers.
         } else {
             auto& fd = handles.at(handle);
             const auto& data = files.at(fd.name);
@@ -97,6 +121,11 @@ struct mock_filesystem {
         state.iy = 0xd00d;
         state.hl = 0xabcd;
         state.de = 0xdcba;
+        if (pc == position_gate && !error) {
+            const auto position = handles.at(handle).position;
+            state.de = std::uint16_t(position);
+            state.bc = std::uint16_t(position >> 16);
+        }
         state.af = std::uint16_t(result << 8) | (error ? 1 : 0);
         state.pc = mem.word(state.sp);
         state.sp += 2;

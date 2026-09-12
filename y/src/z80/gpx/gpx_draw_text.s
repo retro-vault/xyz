@@ -11,6 +11,8 @@
         ;; 2026-08-25   TS
 
         .module gpx_draw_text
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_draw_text
@@ -314,10 +316,12 @@ _gpx_draw_text::
         and     -12(ix)                 ; & sel_xor
         ld      e,a
 .dt_gap_byte:
+        call    _enter_critical_section
         ld      a,(hl)
         or      d
         xor     e
         ld      (hl),a
+        call    _leave_critical_section
         inc     h                       ; inlined __vid_nextrow fast path
         ld      a,h
         and     #0x07

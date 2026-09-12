@@ -16,9 +16,9 @@ service tables.
 |---|---|
 | `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `shell.sys` |
 | `src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`, with its own copy of the old chapter docs |
-| `include/` | public headers used by YOS applications: `yos.h` (kernel ABI 9), `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
+| `include/` | public headers used by YOS applications: `yos.h` (kernel ABI 1), `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
 | `pkg/` | host tools staged into `bin/y/bin/`: [`appmake`](pkg/appmake/README.md), [`microdrive`](pkg/microdrive/README.md), [`serial`](pkg/serial/README.md) |
-| `tests/` | `kernel-z80/` emulated kernel test, `shell-yos/` boot shell fixture, `hello-yos/` and `mdr*-yos/` apps, [`mdr-emu/`](tests/mdr-emu/README.md) microdrive harness, `microdrives/` and `tapes/` media |
+| `tests/` | `kernel-z80/` emulated kernel test, `shell-yos/` boot shell/library fixture, [`fuse/`](tests/fuse/README.md) real-firmware runner, `hello-yos/` and `mdr*-yos/` apps, [`mdr-emu/`](tests/mdr-emu/README.md) microdrive harness, and media |
 | `docs/books/` | [Programming YOS](docs/books/PROGRAMMING-YOS.md) for application authors and [The Book of YOS](docs/books/THE-BOOK-OF-YOS.md) for kernel internals |
 | `docs/standards/` | [YOS assembly style guide](docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md) |
 
@@ -46,6 +46,8 @@ python3 y/tests/fuse/run.py --esxdos build/yos-fuse/esxdos089
 
 Supply an extracted esxDOS distribution at that path. See the
 [Fuse runner guide](tests/fuse/README.md) for dependencies and cold-boot details.
+Application code for ABI 1 libraries is covered in
+[Loadable Libraries](docs/books/programming-yos/LOADABLE-LIBRARIES.md).
 
 ## System Overview
 
@@ -70,9 +72,17 @@ Supply an extracted esxDOS distribution at that path. See the
 ## Core Design Principles
 
 - **RAM mutability over ROM immutability**: restart vectors in ROM jump through writable RAM entries; the scheduler hooks IM2 rather than the firmware-owned RST 38.
-- **Owner-based resource model**: every kernel object and heap block carries an owner so a process's events, timers, services, image and stacks are reaped automatically.
+- **Owner-based resource model**: every kernel object and heap block carries
+  an owner so process allocations, services, images, stacks, and library
+  references can be reaped. Public timers remain explicitly managed.
+- **Independent processes**: processes share an address space but do not have
+  a parent/child relation, wait status, or exit-status channel.
 - **Separation of OS and application memory**: kernel objects come from the 1 KiB `__sys_heap`, everything else from `__heap`.
 - **Interrupt-time heartbeat**: scheduler, timers, keyboard scan and clock all derive from the 50 Hz frame interrupt.
+- **Protected shared state**: syscall transactions use IFF-preserving critical
+  sections, kernel errors follow the thread, and GPX contexts belong to apps.
+  See [Concurrency](docs/books/programming-yos/MEMORY-TIME-AND-CONCURRENCY.md)
+  for the remaining caller-owned state and libc `errno` limitations.
 - **Self-contained ROM**: no libc, no X runtime, no platform archive; applications link what they need into their own XL image.
 
 ## Documentation
@@ -88,6 +98,6 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 [language.badge]: https://img.shields.io/badge/language-z80%20asm-blue.svg
 
 [standard.url]:   https://github.com/retro-vault/xyz/blob/main/y/include/yos.h
-[standard.badge]: https://img.shields.io/badge/yos%20abi-9-blue.svg
+[standard.badge]: https://img.shields.io/badge/yos%20abi-1-blue.svg
 
 [status.badge]:  https://img.shields.io/badge/status-development-red.svg

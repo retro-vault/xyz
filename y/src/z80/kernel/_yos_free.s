@@ -23,5 +23,4 @@ __yos_free::
         call    _enter_critical_section
         ld      hl, #__heap
         call    _mem_free
-        call    _leave_critical_section
-        ret
+        jp      _leave_critical_section

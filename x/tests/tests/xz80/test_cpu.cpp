@@ -169,6 +169,30 @@ TEST(cpu_snapshot_restore_round_trip)
     REQUIRE_EQ(m.cpu.reg(xz80::reg16::BC), 0xBEEFu);
 }
 
+TEST(cpu_snapshot_preserves_iff2_for_ld_a_i)
+{
+    machine m;
+    m.load({0xfb, 0x00, 0xed, 0x57}); // EI; NOP; LD A,I
+    m.step();
+    m.step();
+    auto state = m.cpu.snapshot();
+    REQUIRE(state.iff1 && state.iff2);
+    m.cpu.restore(state);
+    m.step();
+    REQUIRE(m.cpu.snapshot().af & 4); // P/V reflects IFF2, not parity of I
+
+    state.pc = 2;
+    state.iff1 = false;
+    state.iff2 = true; // NMI-style saved interrupt enable
+    m.cpu.restore(state);
+    m.step();
+    REQUIRE(!m.cpu.snapshot().iff1 && (m.cpu.snapshot().af & 4));
+    state.iff2 = false;
+    m.cpu.restore(state);
+    m.step();
+    REQUIRE(!(m.cpu.snapshot().af & 4));
+}
+
 TEST(cpu_set_reg_pc)
 {
     machine m;

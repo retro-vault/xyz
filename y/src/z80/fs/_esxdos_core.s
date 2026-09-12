@@ -6,6 +6,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __errno_value
+        .globl  __zx_esx_files
         .globl  __zx_esx_errno
         .globl  __zx_esx_error
         .globl  __zx_esx_path
@@ -28,7 +29,8 @@ __zx_esx_errno::
         ld      h,#0
         ld      (__errno_value),hl
         ld      de,#0xffff
-        ld      hl,#0xffff
+        ld      h,d
+        ld      l,e
         ret
 
         ; Native esxDOS errors are not the libc errno numbers.
@@ -178,6 +180,7 @@ __zx_esx_buffer::
         ld      a,h
         cp      #0x40
         jr      c,.esx_buffer_bad
+.esx_span:
         push    hl
         dec     bc
         add     hl,bc                   ; last byte, not one-past
@@ -201,13 +204,7 @@ __zx_esx_source::
         ld      a,h
         or      l
         jr      z,.esx_buffer_bad
-        push    hl
-        dec     bc
-        add     hl,bc
-        inc     bc
-        pop     hl
-        ret     nc
-        jr      .esx_buffer_bad
+        jr      .esx_span
 
         ; HL = 11-byte firmware stat, DE = validated 14-byte struct
         ; stat.
@@ -284,7 +281,5 @@ __zx_esx_stat_convert::
         ; Each entry is native handle, active/access/append flags.
 
         .area   _BSS
-__errno_value::
-        .ds     2
 __zx_esx_files:
         .ds     32

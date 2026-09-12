@@ -28,5 +28,4 @@ __yos_malloc::
         push    bc
         ld      hl, #__heap
         call    _mem_allocate
-        call    _leave_critical_section
-        ret
+        jp      _leave_critical_section

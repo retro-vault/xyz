@@ -160,7 +160,7 @@ When publishing the toolchain:
   `x/platforms/yos/include/`. Console output is silent until a process installs
   the YOS character hook. Package XL files as `.sys` with `xprog --process`
   and use `xprog --esxdos` when an esxDOS FAT16 disk image is required.
-- YOS ABI 9 loads relocatable XPRG libraries as threadless, reference-counted
+- YOS ABI 1 loads relocatable XPRG libraries as threadless, reference-counted
   ownership objects. Keep process/library disk validation and XL relocation
   shared; initialization runs after relocation with library-owned allocations
   and unpublished registrations. See `y/docs/books/the-book-of-yos/LIBRARIES.md`.

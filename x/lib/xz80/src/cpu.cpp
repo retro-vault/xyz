@@ -64,6 +64,7 @@ cpu::cpu(IMemory& mem, IPorts& ports)
 cpu::~cpu() = default;
 
 static constexpr uint8_t k_iff_halt = 0x80; // Z80::IFF_HALT() bit
+static constexpr uint8_t k_iff2 = 0x04; // Z80::IFF2() bit (also the P/V mask)
 
 void cpu::reset() noexcept
 {
@@ -130,7 +131,7 @@ cpu_state cpu::snapshot() const noexcept
     s.r   = r.R;
     s.im  = r.interrupt & 0x03;
     s.iff1   = (r.IFF & 0x01) != 0;
-    s.iff2   = (r.IFF & 0x02) != 0;
+    s.iff2   = (r.IFF & k_iff2) != 0;
     s.halted = (r.IFF & k_iff_halt) != 0;
     return s;
 }
@@ -163,7 +164,7 @@ void cpu::restore(const cpu_state& s) noexcept
     r.interrupt = (r.interrupt & 0xFC) | (s.im & 0x03);
     uint8_t iff = 0;
     if (s.iff1)   iff |= 0x01;
-    if (s.iff2)   iff |= 0x02;
+    if (s.iff2)   iff |= k_iff2;
     if (s.halted) iff |= k_iff_halt;
     r.IFF = iff;
 }

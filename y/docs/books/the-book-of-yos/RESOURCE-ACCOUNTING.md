@@ -59,7 +59,13 @@ typedef struct sysobj_s {
 
 The `union` ensures that `sysobj_t` is binary-compatible with `list_item_t`. This means the list functions work unchanged on system objects — they see a valid `next` pointer at offset zero.
 
-The `owner` field holds the address of the owning `process_t` (or `NONE` / `NULL` for kernel-owned objects). When a process is destroyed, `process_reap` scans every resource list and frees anything whose `owner` matches the dying process.
+The `owner` field holds the address of the owning `process_t`, `thread_t`, or
+threadless library ownership object (or `NONE` / `NULL` for kernel-owned
+objects). When a process or library is destroyed, `process_reap` scans the
+relevant resource lists and user heap for that owner.
+
+This field is not process ancestry. Process objects themselves have owner
+`NONE`; YOS has no parent pointer, child list, wait relation, or exit status.
 
 ## Deriving Your Own Resource Type
 
@@ -111,17 +117,24 @@ A typical resource constructor (`kernel/tmr_install.s`) does the equivalent of:
 ```c
 timer_t *tmr_install(void (*hook)(), uint16_t ticks, void *owner) {
     timer_t *t;
+    enter_critical_section();
     if (t = (timer_t *)so_create(
             (void **)&_tmr_first, sizeof(timer_t), owner)) {
         t->hook = hook;
         t->ticks = ticks;
         t->_tick_count = ticks;
     }
+    leave_critical_section();
     return t;    /* NULL if allocation failed */
 }
 ```
 
-And the corresponding destructor (`kernel/tmr_uninstall.s`) is simply:
+`so_create` itself is an internal, unprotected helper: the caller must hold
+the section through full initialization, not just allocation/list insertion.
+`so_destroy` protects its complete unlink/free transaction using
+`__critical_call`; nesting inside a protected caller is safe.
+
+The corresponding destructor (`kernel/tmr_uninstall.s`) is simply:
 
 ```c
 timer_t *tmr_uninstall(timer_t *t) {
@@ -129,13 +142,21 @@ timer_t *tmr_uninstall(timer_t *t) {
 }
 ```
 
-The same pattern builds events (`evt_create` / `evt_destroy`, 5 bytes), services (`svc_register` / `svc_unregister`, 22 bytes), threads (`thread_create`, 24 bytes) and processes (`process_start`, 15 bytes).
+The same pattern builds events (`evt_create` / `evt_destroy`, 5 bytes),
+services (`svc_register` / `svc_unregister`, 22 bytes), library references
+(6 bytes), threads (`thread_create`, 24 bytes), and processes/threadless
+library owners (`process_start` or the library loader, 15 bytes).
 
 ## Ownership and Process Cleanup
 
 The `owner` field is set by `so_create` to whatever you pass as the third argument. For resources owned by a specific process, pass a pointer to its `process_t`. For OS-level resources with no specific owner, pass `NONE` (which is `0`/`NULL`).
 
-When a process has no threads left, the scheduler calls `process_reap`. Its job is to walk every resource list — events, timers, services, and the user heap — and destroy any entry whose `owner` matches the dying process. This prevents resource leaks even if user code forgets to free everything. The details are in [Cleaning Up Resources](CLEANUP-RESOURCES.md).
+When a process has no threads left, the scheduler calls `process_reap`. It
+destroys owned events, timers, services and user-heap blocks, releases the
+process's library references, then destroys the process. A library is reaped
+when its reference count reaches zero. This prevents leaks even if user code
+forgets process-owned allocations. The details are in
+[Cleaning Up Resources](CLEANUP-RESOURCES.md).
 
 > **For junior developers:** Think of ownership like borrowing a library book. Each book (resource) has a borrower's card (owner field). When someone leaves (process exits), the library automatically collects all books they borrowed, regardless of where the books currently are on the shelves.
 
@@ -144,9 +165,11 @@ When a process has no threads left, the scheduler calls `process_reap`. Its job 
 Here is the chain of ownership when a process creates a thread:
 
 ```
-process_t  (owner = NONE)
-    └── thread_t  (owner = process_t *)
-            └── stack block_t  (owner = thread_t *)
+process_t  (owner = NONE; no parent field)
+    ├── thread_t  (process = process_t *)
+    │       └── stack block_t  (owner = thread_t *)
+    ├── application block/service/event (owner = process_t *)
+    └── library_reference (owner = process_t *) ──► library object
 ```
 
 When the thread terminates and the next tick arrives, the cleanup pass:

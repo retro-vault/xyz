@@ -18,7 +18,7 @@ This is the *yos* equivalent of a system call table. The kernel registers two se
 
 | Name | Table | Header |
 |---|---|---|
-| `"yos"` | `yos_t` — kernel, drivers and filesystem, ABI version 9 | `y/include/yos.h` |
+| `"yos"` | `yos_t` — kernel, drivers and filesystem, ABI version 1 | `y/include/yos.h` |
 | `"gpx"` | `gpx_api_t` — the complete libgpx drawing API (24 entries) | `y/include/gpx.h` |
 
 ## Querying a Service
@@ -64,7 +64,12 @@ service_name:
 
 ## The `yos_t` Table
 
-`yos_t` is a 96-byte struct of 46 function pointers and two data pointers, built at boot by `__syscall_table_init` from an ordered template in ROM. The order of the members in `yos.h` **is** the ABI; `yos->version()` returns `YOS_VERSION` (currently 9) so a program can refuse to run on an older kernel. In summary:
+`yos_t` is a 96-byte struct of 46 function pointers and two data pointers,
+built at boot by `__syscall_table_init` from an ordered template in ROM. The
+order of the members in `yos.h` **is** the ABI; `yos->version()` returns
+`YOS_VERSION` (currently 1). This is a clean numbering baseline for the
+complete current table, not the earlier incremental development numbering.
+In summary:
 
 | Group | Members |
 |---|---|
@@ -74,12 +79,20 @@ service_name:
 | threads and processes | `create_thread`, `exit_thread`, `suspend_thread`, `resume_thread`, `create_process`, `exit_process` |
 | services and vectors | `query_service`, `register_service`, `unregister_service`, `get_interrupt_handler`, `set_interrupt_handler` |
 | input | `read_key`, `calibrate_mouse`, `read_mouse` |
-| esxDOS filesystem | `error_number` (pointer to the kernel errno cell), `open`, `close`, `read`, `write`, `lseek`, `fsync`, `unlink`, `rename`, `chdir`, `getcwd`, `mkdir`, `rmdir`, `stat`, `fstat`, `opendir`, `readdir`, `rewinddir`, `closedir`, `enumerate_disks` |
-| loader | `load_process`, `load_library`, `process_load_error` (shared status byte) |
+| esxDOS filesystem | `error_number` (pointer to the scheduler-virtualized per-thread errno cell), `open`, `close`, `read`, `write`, `lseek`, `fsync`, `unlink`, `rename`, `chdir`, `getcwd`, `mkdir`, `rmdir`, `stat`, `fstat`, `opendir`, `readdir`, `rewinddir`, `closedir`, `enumerate_disks` |
+| loader | `load_process`, `process_load_error` (per-thread status byte), `load_library` |
 
 Most entries map directly onto the kernel routine of the same meaning. `allocate_memory`, `free_memory` and `create_timer` go through small adapters (`kernel/_yos_malloc.s`, `_yos_free.s`, `_yos_install_timer.s`) that supply kernel-private arguments. Allocation and registration use the current process (or initialization's library owner); public timers remain kernel-owned.
 
 Kernel objects returned by the table (`yos_thread_t`, `yos_process_t`, `yos_event_t`, `yos_timer_t`, `yos_service_t`) are opaque handles; their layouts are described in the other chapters for the curious, but applications must not depend on them.
+
+Public shared-state transactions are protected, while stack-only computation
+can be preempted. Both fixed error cells are virtualized per thread by the
+scheduler. Library loads use a separate whole-load try-lock and return BUSY
+on contention. GPX returns independent process-owned contexts, with protected
+framebuffer updates rather than a global drawing context. This does not make
+caller-owned buffers, service globals, or linked libc `errno` thread-local;
+see [the application concurrency contract](../programming-yos/MEMORY-TIME-AND-CONCURRENCY.md).
 
 ## Registering a Custom Service
 
@@ -113,7 +126,10 @@ snd->click();
 
 ### Service lifetime
 
-ABI 9 registrations belong to the current process and are reclaimed when its last thread exits. During library initialization they belong to the library and remain unpublished until initialization succeeds. Unregister an ordinary service explicitly if its interface becomes invalid earlier:
+ABI 1 registrations belong to the current process and are reclaimed when its
+last thread exits. During library initialization they belong to the library
+and remain unpublished until initialization succeeds. Unregister an ordinary
+service explicitly if its interface becomes invalid earlier:
 
 ```c
 yos->unregister_service(s);
@@ -155,7 +171,9 @@ gpx->draw_text(screen, x, y, "hello", font, CO_FORE, BM_CPY, 0);
 
 **Shared hardware access.** Register a service that owns a resource (e.g., the serial port) and serialises access to it. All threads that need the port go through the service instead of accessing the hardware directly.
 
-**Plug-in APIs.** A sound driver or a file-format handler can be loaded as a process and register a service. Other programs discover it at runtime without needing to be linked against it.
+**Plug-in APIs.** A sound driver or file-format handler can be an XPRG
+library with a relocated interface and automatic reference lifetime. A
+long-running active server may instead be a process that registers a service.
 
 **Inter-process communication.** A service can expose a message queue or shared buffer with functions like `send(msg)` and `recv()`. This is a lightweight substitute for OS-level IPC.
 

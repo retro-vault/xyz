@@ -1,6 +1,7 @@
-# YOS Documentation Index
+# Historical C-era YOS Documentation Index
 
-This is the main index for `yos` documentation.
+This index describes the preserved C-era kernel, not the current ABI 1 ROM.
+Start at [current YOS documentation](../../README.md) for active development.
 
 The docs are split by subsystem so each chapter can evolve with the code.
 

@@ -7,6 +7,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _read
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .globl  __zx_esx_fd
         .globl  __zx_esx_buffer
         .globl  __zx_esx_errno
@@ -19,6 +21,7 @@
         ; output: DE = count/EOF/-1; clobbers: af, bc, de, hl.
         ; IX/IY preserved. Limit transfers to signed ssize_t's maximum.
 _read::
+        call    _enter_critical_section
         push    ix
         ld      ix,#0
         add     ix,sp
@@ -65,4 +68,4 @@ _read::
 .read_return:
         ld      sp,ix
         pop     ix
-        ret
+        jp      _leave_critical_section

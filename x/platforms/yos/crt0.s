@@ -1,7 +1,7 @@
         ;; crt0.s -- relocatable YOS XPRG process startup.
         ;;
         ;; The kernel supplies the process stack.  This startup initializes C
-        ;; storage, resolves the ABI-8 "yos" table through RST 18, calls main,
+        ;; storage, resolves the ABI-1 "yos" table through RST 18, calls main,
         ;; and terminates the current process through that table.
 
         .module crt0

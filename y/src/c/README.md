@@ -1,7 +1,11 @@
 ![status.badge] [![language.badge]][language.url] [![standard.badge]][standard.url]
 
-The YOS
-=======
+Historical C-era YOS
+====================
+
+This document describes the preserved C-and-assembly kernel only. For current
+ABI 1 applications and the active assembly ROM, use the
+[YOS documentation](../../README.md).
 
 `yos` is a preemptive ROM-based operating system for ZX Spectrum (48K target), written in C and Z80 assembly.
 
@@ -13,7 +17,7 @@ The old monolithic README was split into chapter files so each subsystem can be 
 
 Nothing was removed from documentation:
 
-- detailed chapters are in `src/yos/docs/`
+- detailed chapters are in [`docs/`](docs/)
 - a full snapshot of the original long README is preserved in:
   - [`docs/01_legacy_readme_snapshot.md`](docs/01_legacy_readme_snapshot.md)
 

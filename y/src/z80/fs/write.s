@@ -7,6 +7,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _write
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .globl  _lseek
         .globl  __zx_esx_fd
         .globl  __zx_esx_source
@@ -20,6 +22,7 @@
         ; output: DE = count/-1; clobbers: af, bc, de, hl.
         ; IX/IY preserved. Append seeks to the current end on each write.
 _write::
+        call    _enter_critical_section
         push    ix
         ld      ix,#0
         add     ix,sp
@@ -89,7 +92,7 @@ _write::
 .write_return:
         ld      sp,ix
         pop     ix
-        ret
+        jp      _leave_critical_section
 
         ; inputs: A = handle, HL = readable source, BC = nonzero count.
         ; outputs: BC = actual count, CY clear; or native A/CY error.

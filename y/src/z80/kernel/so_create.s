@@ -14,6 +14,7 @@
         ; inputs: hl = head, de = size, owner at sp+2; removes owner
         ; outputs: de = object or zero
         ; clobbers: af, bc, hl; preserves ix and iy
+        ; Caller must hold a critical section through payload initialization.
 _so_create::
         push    hl
         ld      hl, #4

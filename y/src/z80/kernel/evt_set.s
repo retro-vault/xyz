@@ -6,11 +6,14 @@
         .module evt_set
         .optsdcc -mz80 sdcccall(1)
         .globl  _evt_set
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .globl  __evt_first
         .area   _CODE
 
         ; hl = event, new state byte at sp+2; removes state argument.
 _evt_set::
+        call    _enter_critical_section
         push    ix
         ld      ix, #0
         add     ix, sp
@@ -44,6 +47,7 @@ _evt_set::
         ld      a, 4(ix)
         ld      (hl), a
 .done:
+        call    _leave_critical_section
         pop     ix
         pop     hl
         inc     sp

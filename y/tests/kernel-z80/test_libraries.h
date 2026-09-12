@@ -7,8 +7,8 @@
 #include <limits>
 #include <stdexcept>
 
-template<class Memory, class Call, class Symbol, class Files, class Put>
-void test_libraries(Memory& mem, Call call, Symbol sym, Files& files,
+template<class Memory, class Cpu, class Call, class Symbol, class Files, class Put>
+void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
                     const std::vector<std::uint8_t>& image,
                     const std::map<std::string, std::uint16_t>& exports,
                     Put put_string)
@@ -79,7 +79,53 @@ void test_libraries(Memory& mem, Call call, Symbol sym, Files& files,
     auto a = create_client("client-a");
     auto b = create_client("client-b");
     current(a);
+    // Actually preempt the first loader and have a second runnable thread
+    // attempt the same load. It must get BUSY, then the first must complete
+    // once, without inheriting that other thread's error or publishing early.
+    const auto a_thread = mem.word(a + 13);
+    const auto b_thread = mem.word(b + 13);
+    const auto older_threads = mem.word(a_thread);
+    mem.word(sym("_thread_first_running"), a_thread);
+    mem.word(a_thread, b_thread);
+    mem.word(b_thread, 0);
+    constexpr std::uint16_t busy_entry = 0xe400, busy_result = 0xe480;
+    put_string(0xe440, "shelllib.svc");
+    const std::uint8_t contender[] = {
+        0x21, 0x40, 0xe4,               // LD HL,path
+        0x11, 0x01, 0x00,               // LD DE,SHARED
+        0xcd, 0, 0,                     // CALL library_load
+        0xed, 0x53, 0x80, 0xe4,         // LD (busy_result),DE
+        0x3a, 0, 0,                     // LD A,(process_load_error)
+        0x32, 0x82, 0xe4,               // LD (busy_result+2),A
+        0x76, 0x18, 0xfd                // HALT; JR HALT
+    };
+    std::copy(std::begin(contender), std::end(contender),
+              mem.bytes.begin() + busy_entry);
+    mem.word(busy_entry + 7, sym("_library_load"));
+    mem.word(busy_entry + 14, sym("_process_last_error"));
+    mem.word(b_thread + 7, busy_entry);
+    unsigned contention_phase = 0;
+    files.observe = [&] {
+        const auto state = cpu.snapshot();
+        if (contention_phase == 0 && mem.bytes[sym("__image_busy")] &&
+                mem.word(sym("_thread_current")) == a_thread && state.iff1) {
+            check(cpu.interrupt(0xff), "could not preempt the active loader");
+            contention_phase = 1;
+        } else if (contention_phase == 1 && state.pc == busy_entry + 19) {
+            check(mem.word(busy_result) == 0 && mem.bytes[busy_result + 2] == 9 &&
+                      mem.bytes[sym("__image_busy")] == 1,
+                  "concurrent loader did not return BUSY without unlocking");
+            check(cpu.interrupt(0xff), "could not resume the original loader");
+            contention_phase = 2;
+        }
+    };
     const auto first = load();
+    files.observe = {};
+    mem.word(sym("_thread_first_running"), b_thread);
+    mem.word(b_thread, a_thread);
+    mem.word(a_thread, older_threads);
+    check(contention_phase == 2 && mem.bytes[b_thread + 15] == 9,
+          "did not exercise both loader threads and save the BUSY error");
     check(first && error() == 0, "first shared load failed");
     const auto library = service_owner(first);
     check(library && mem.bytes[library + 4] == 3 &&
@@ -178,7 +224,7 @@ void test_libraries(Memory& mem, Call call, Symbol sym, Files& files,
     };
     mutate(0, 0, "bad magic");
     mutate(5, 1, "wrong image kind", 6);
-    mutate(30, 10, "newer OS", 7);
+    mutate(30, 2, "newer OS", 7);
     mutate(14, 1, "oversized payload");
     mutate(8, 0, "bad metadata size");
     mutate(7, 7, "unsupported fixed library");

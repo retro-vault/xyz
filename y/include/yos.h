@@ -14,7 +14,7 @@
 #include <sys/types.h>
 
 /* ABI version returned by yos_s::version(). */
-#define YOS_VERSION 0x09
+#define YOS_VERSION 0x01
 
 enum yos_process_load_error {
     YOS_PROCESS_LOAD_OK = 0,
@@ -126,6 +126,8 @@ typedef struct yos_s {
     void (*read_mouse)(yos_mouse_state_t *state);
 
     /* Kernel errno cell used by the following filesystem operations. */
+    /* Fixed address, but the scheduler preserves its value per thread.
+     * The C library's separate errno object remains process-local. */
     int *error_number;
     int (*open)(const char *path, int flags);
     int (*close)(int fd);
@@ -147,8 +149,10 @@ typedef struct yos_s {
     int (*closedir)(DIR *directory);
     int (*enumerate_disks)(yos_disk_info_t *disks, size_t capacity);
     yos_process_t *(*load_process)(const char *path);
+    /* Per-thread result of the last synchronous process/library load.
+     * A competing or recursive load returns BUSY instead of waiting. */
     uint8_t *process_load_error;
-    /* ABI 9: returns a direct function-pointer table. Each successful
+    /* ABI 1: returns a direct function-pointer table. Each successful
      * acquisition is retained until the caller's last thread exits.
      * Errors use process_load_error; code 6 means the wrong image kind.
      * query_service returns borrowed pointers and does not acquire.

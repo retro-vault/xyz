@@ -1,4 +1,4 @@
-        ;; YOS ABI 8 has a 50 Hz monotonic tick counter but no Unix wall clock.
+        ;; YOS ABI 1 has a 50 Hz monotonic tick counter but no Unix wall clock.
         ;; Standard wall-clock calls therefore fail instead of inventing an
         ;; epoch value.
 

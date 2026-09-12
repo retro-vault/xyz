@@ -20,7 +20,7 @@
 _kbd_read::
         call    _enter_critical_section
         ld      a,(#__kbd_buffer+2)       ; a=count
-        cp      #0                      ; is it zero?
+        or      a                       ; is it zero?
         jr      z,.kr_empty             ; no data in buffer
         ; get the char
         ld      hl,(#__kbd_buffer)        ; l=start, h=end
@@ -46,7 +46,4 @@ _kbd_read::
 .kr_empty:
         ld      hl,#0                   ; key not found
 .kr_end:
-        push    hl                      ; preserve the public return value
-        call    _leave_critical_section
-        pop     hl
-        ret
+        jp      _leave_critical_section

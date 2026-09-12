@@ -1,6 +1,6 @@
 # YOS API Reference
 
-This is the complete ABI 9 application reference for `y/include/yos.h` and
+This is the complete ABI 1 application reference for `y/include/yos.h` and
 the YOS XCC platform helpers. All kernel calls use the `sdcccall(1)` ABI used
 by the default XCC mode. Include `<yos.h>` and obtain the cached table once:
 
@@ -131,7 +131,7 @@ yos_timer_t *timer = yos->create_timer(pulse, 49);
 
 ### `void destroy_timer(yos_timer_t *timer)`
 
-Unlinks and frees a timer. Public ABI 8 timers are kernel-owned, so explicitly
+Unlinks and frees a timer. Public ABI 1 timers are kernel-owned, so explicitly
 destroy every successful timer.
 
 ```c
@@ -166,7 +166,7 @@ registered object, otherwise `NULL`.
 if (!yos->set_event(event, YOS_EVENT_SET)) handle_stale_event();
 ```
 
-ABI 8 has no public event-wait call.
+ABI 1 has no public event-wait call.
 
 ## Threads
 
@@ -218,19 +218,21 @@ static void child(void) { yos_get_api()->exit_process(); }
 yos_process_t *process = yos->create_process("child", child, 256);
 ```
 
-The name is copied into a 15-character field.
+The process object keeps at most seven name characters plus NUL. The returned
+process has no parent/creator field, even when this call is made by a process.
 
 ### `void exit_process(void)`
 
-Terminates the process represented by the current thread. Cleanup occurs in
+Terminates the calling thread; the process survives while another member
+thread exists. Cleanup occurs in
 the scheduler and the call does not normally return.
 
 ```c
 yos->exit_process();
 ```
 
-The platform CRT uses this when `main` returns or `exit` is called. ABI 8 has
-no exit-status channel.
+The platform CRT uses this when `main` returns or `exit` is called. ABI 1 has
+no exit-status channel, process parent, or wait operation.
 
 ### `yos_process_t *load_process(const char *path)`
 
@@ -240,6 +242,9 @@ allocates and relocates it, creates its declared stack, and schedules it.
 ```c
 yos_process_t *loaded = yos->load_process("EDITOR.SYS");
 ```
+
+The caller does not become a parent. Once created, the loaded process has no
+stored relationship to the process that loaded it.
 
 ### `uint8_t *process_load_error`
 
@@ -257,8 +262,8 @@ if (!loaded) {
 Values are `YOS_PROCESS_LOAD_OK`, `NOT_FOUND`, `NO_MEMORY`, `READ_ERROR`,
 `INVALID_IMAGE`, `START_ERROR`, `NOT_PROCESS`, `REQUIRES_NEWER_OS`, and
 `BAD_CHECKSUM` (0 through 8). Code 6 means wrong image kind for the
-selected loading API. ABI 9 adds `BUSY` (9), `NO_PROCESS` (10), and
-`INIT_ERROR` (11).
+selected loading API. The current ABI also defines `BUSY` (9), `NO_PROCESS`
+(10), and `INIT_ERROR` (11).
 
 ### `void *load_library(const char *path, uint16_t flags)`
 
@@ -307,7 +312,7 @@ Removes and frees a registration; clients must no longer use its pointer.
 if (service) yos->unregister_service(service);
 ```
 
-ABI 9 records current-process ownership, so ordinary registrations are
+ABI 1 records current-process ownership, so ordinary registrations are
 reaped on process exit. During library initialization registration is
 library-owned and staged until success. Never manually unregister a
 loader-managed library service.
@@ -368,7 +373,9 @@ yos->read_mouse(&mouse);
 ### `int *error_number`
 
 Points to the kernel filesystem error cell. Direct table calls update it. The
-libc wrappers copy it into `errno` when they fail.
+libc wrappers copy it into their process-local `errno` when they fail.
+The kernel cell is saved/restored per thread, but libc's copy is not; see
+[Concurrency](MEMORY-TIME-AND-CONCURRENCY.md) before sharing libc calls.
 
 ```c
 int fd = yos->open("DATA.BIN", O_RDONLY);

@@ -52,8 +52,10 @@ descent, and encoded glyph data.
 
 ### `gpx_t *create(gmode mode)`
 
-Initializes graphics and returns the active context. Spectrum YOS supports
-`GPXM_DEFAULT`.
+Allocates an independent six-byte context, owned by the calling process (or
+library initializer), or returns `NULL` on exhaustion. Spectrum YOS supports
+`GPXM_DEFAULT`. Creation does not clear the shared screen or reset another
+context. Each context initially uses opaque text backgrounds.
 
 ```c
 gpx_t *screen = gpx->create(GPXM_DEFAULT);
@@ -61,8 +63,8 @@ gpx_t *screen = gpx->create(GPXM_DEFAULT);
 
 ### `void destroy(gpx_t *gpx)`
 
-Releases/deactivates a context. The Spectrum implementation uses a static
-context, so this is presently a lightweight lifecycle call.
+Frees the context; `NULL` is harmless. Process cleanup also reclaims forgotten
+contexts. Do not destroy a context while another thread is using it.
 
 ```c
 gpx->destroy(screen);
@@ -95,7 +97,8 @@ dim pixels_down = gpx->height();
 
 ### `void clear_screen(void)`
 
-Clears the framebuffer.
+Clears the shared physical framebuffer. It is not a per-context canvas or an
+atomic frame transaction; coordinate whole-screen ownership between apps.
 
 ```c
 gpx->clear_screen();

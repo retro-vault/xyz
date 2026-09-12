@@ -74,7 +74,8 @@ void *mem_allocate(void *heap, uint16_t size, void *owner);
 
 `mem_allocate` uses a **first-fit** strategy: it walks the linked list of blocks starting from `heap` and returns the first free block large enough to satisfy the request.
 
-If the found block is significantly larger than needed (more than `BLK_SIZE + MIN_CHUNK_SIZE` = 4 bytes larger), the allocator **splits** it:
+If the remainder can hold `BLK_SIZE + MIN_CHUNK_SIZE` = 11 bytes (a seven-byte
+header plus at least four payload bytes), the allocator **splits** it:
 
 ```
 Before split:
@@ -102,7 +103,11 @@ if (!stack) {
 }
 ```
 
-Applications do not call `mem_allocate` directly. The `yos_t` table exposes `allocate_memory(size)` and `free_memory(p)`, which are thin adapters (`kernel/_yos_malloc.s`, `kernel/_yos_free.s`) over `mem_allocate(__heap, size, NONE)` and `mem_free(__heap, p)`.
+Applications do not call `mem_allocate` directly. The `yos_t` table exposes
+`allocate_memory(size)` and `free_memory(p)`. The adapters
+(`kernel/_yos_malloc.s`, `kernel/_yos_free.s`) select `__heap` and assign the
+current process as owner. During library initialization the temporary library
+owner override is used instead; kernel-context allocations have owner `NONE`.
 
 ## Freeing Memory
 
@@ -150,7 +155,9 @@ The ZX Spectrum has 64 KB of address space. Memory is precious. Keep these guide
 - **Allocate once, keep long-lived objects alive.** Repeatedly allocating and freeing small blocks of varying sizes leads to fragmentation even with coalescing.
 - **Use the OS heap for OS objects only.** `so_create` always allocates from `__sys_heap`; thread stacks, program images and application data live in `__heap`. Never mix the two.
 - **Thread stacks are freed when a thread exits** (as part of resource accounting). Do not free a stack manually.
-- **Memory obtained through `yos->allocate_memory` has no owner.** It is not reclaimed when the process exits; free it yourself or accept the leak.
+- **Memory obtained through `yos->allocate_memory` is process-owned.** Free it
+  explicitly when its useful lifetime ends; if it leaks, process reaping frees
+  it. Library-initializer allocations follow the library's lifetime.
 - **The minimum useful allocation is `MIN_CHUNK_SIZE = 4` bytes** of payload. Smaller requests will still be granted but the block cannot be split further.
 
 ## Usage Example: Custom Heap

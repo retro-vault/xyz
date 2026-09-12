@@ -20,7 +20,7 @@ void main(void)
     shelllib_api_t *library = 0;
     const char *library_message = "Library unavailable";
 
-    if (yos && yos->version() >= 9) {
+    if (yos && yos->version() >= YOS_VERSION) {
         library = (shelllib_api_t *)yos->load_library(
             "shelllib.svc", YOS_LIBRARY_SHARED);
         if (library && library->probe() == SHELLLIB_RESULT)

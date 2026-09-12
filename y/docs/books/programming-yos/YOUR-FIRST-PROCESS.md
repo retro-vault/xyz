@@ -23,25 +23,27 @@ int main(void)
 Compile and package it:
 
 ```sh
-mkdir -p build/my-yos
+mkdir -p build/my-yos bin/y/examples
 bin/x/bin/xcc -Os --platform=yos hello.c -o build/my-yos/hello.xl
-bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 8 \
-  build/my-yos/hello.xl -o build/my-yos/hello.sys
-bin/x/bin/xprog --inspect build/my-yos/hello.sys
+bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 1 \
+  build/my-yos/hello.xl -o bin/y/examples/hello.sys
+bin/x/bin/xprog --inspect bin/y/examples/hello.sys
 ```
 
 `--name` is the process name stored in XPRG metadata. `--stack-size` includes
-the application's calls, locals, interrupt context, and compiler temporaries;
-512 bytes is a comfortable starting value for small programs. `--min-os 8`
-prevents an older kernel from starting code that assumes ABI 8.
+the application's calls, locals, compiler temporaries and library initializers;
+the loader adds the 22-byte interrupt context separately. Thus
+512 bytes is a comfortable starting value for small programs. `--min-os 1`
+requires the current ABI 1 contract.
+ABI 1 is the clean baseline; rebuild applications against the matching headers.
 
 ## Put the process on a disk
 
 XPROG can make a deterministic 16 MiB raw IDE image containing one 8.3 file:
 
 ```sh
-bin/x/bin/xprog --esxdos --name HELLO.SYS build/my-yos/hello.sys \
-  -o build/my-yos/hello.ide
+bin/x/bin/xprog --esxdos --name HELLO.SYS bin/y/examples/hello.sys \
+  -o bin/y/examples/hello.ide
 ```
 
 The image has an MBR and a bootable FAT16 partition beginning at sector 2048.
@@ -54,8 +56,8 @@ YOS boots `shell.sys`. To replace the shell for a test, use the same process
 payload but give the disk file that name:
 
 ```sh
-bin/x/bin/xprog --esxdos --name SHELL.SYS build/my-yos/hello.sys \
-  -o build/my-yos/boot.ide
+bin/x/bin/xprog --esxdos --name SHELL.SYS bin/y/examples/hello.sys \
+  -o bin/y/examples/boot.ide
 ```
 
 Boot `bin/y/z80/spectrum/bin/yos-kernel.rom` with that disk and an
@@ -76,9 +78,14 @@ code and data references when the loader chooses the process address.
 
 ## Returning from `main`
 
-Returning calls the YOS `exit_process` operation. The process's threads,
-owned heap blocks, image, stack, events, timers, and services are reclaimed by
-the scheduler where ownership is recorded. ABI 8 has no parent-visible exit
-code, so use files or a service protocol when another process needs a result.
+Returning calls the YOS `exit_process` operation. After the last thread exits,
+the scheduler reclaims the process image, stacks, process-owned heap blocks,
+events and services, and releases its library references. Public timers are
+kernel-owned and must be destroyed explicitly.
+
+YOS does not record a parent or creator in `process_t`. A process loaded by
+another process is independent after creation: there is no parent-visible
+exit code, wait, or automatic notification. Use a file, event arranged by a
+launcher, or a service protocol when another process needs a result.
 
 Next: [Services and Console Output](SERVICES-AND-CONSOLE.md).

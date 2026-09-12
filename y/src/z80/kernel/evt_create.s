@@ -6,12 +6,14 @@
         .module evt_create
         .optsdcc -mz80 sdcccall(1)
         .globl  _evt_create
+        .globl  __critical_call
         .globl  __evt_first
         .globl  _so_create
         .area   _CODE
 
         ; hl = owner; returns de = event or zero.
 _evt_create::
+        call    __critical_call
         push    hl
         ld      de, #5
         ld      hl, #__evt_first

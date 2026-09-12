@@ -6,6 +6,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _open
+        .globl  __critical_call
         .globl  __zx_esx_path
         .globl  __zx_esx_errno
         .globl  __zx_esx_error
@@ -18,6 +19,7 @@
         ; inputs: HL = path, DE = flags; output: DE = fd or -1.
         ; clobbers: af, bc, de, hl. IX/IY preserved.
 _open::
+        call    __critical_call
         call    __zx_esx_path
         jp      c,__zx_esx_errno
         ld      a,e

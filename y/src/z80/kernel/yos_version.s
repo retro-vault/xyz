@@ -9,5 +9,5 @@
         ; Four bytes fit in the five-byte gap following RST 08h.
         .area   _CODE
 _yos_version::
-        ld      de, #9
+        ld      de, #1
         ret

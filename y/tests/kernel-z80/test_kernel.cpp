@@ -1,6 +1,7 @@
 #include <xz80/xz80.h>
 #include "mock_filesystem.h"
 #include "test_libraries.h"
+#include "test_thread_safety.h"
 
 #include <array>
 #include <cstdint>
@@ -19,12 +20,15 @@ namespace {
 struct memory final : xz80::IMemory {
     std::array<std::uint8_t, 65536> bytes{};
     unsigned rom_writes = 0;
+    std::function<void(std::uint16_t, bool)> observe;
 
     std::uint8_t read(std::uint16_t address) const noexcept override {
+        if (observe) observe(address, false);
         return bytes[address];
     }
 
     void write(std::uint16_t address, std::uint8_t value) noexcept override {
+        if (observe) observe(address, true);
         if (address < 0x4000) {
             ++rom_writes;
             return;
@@ -104,10 +108,26 @@ int main(int argc, char** argv) {
     mock_filesystem files{mem, cpu, sym("__zx_esx_gate_9a"),
                           sym("__zx_esx_gate_9d"),
                           sym("__zx_esx_gate_9b")};
+    files.write_gate = sym("__zx_esx_gate_9e");
+    files.seek_gate = sym("__zx_esx_gate_9f");
+    files.position_gate = sym("__zx_esx_gate_a0");
+    files.status_gate = sym("__zx_esx_gate_a1");
+    files.sync_gate = sym("__zx_esx_gate_9c");
+    bool booting = true;
     const auto run_until = [&](auto stop, unsigned limit,
                                const std::string& operation) {
         for (unsigned step = 0; step < limit; ++step) {
             if (stop()) return;
+            // Test the exact production ROM, with disk boot deferred until
+            // the RAM-gate fixture is populated below. Never patch ROM bytes.
+            if (booting && cpu.pc() == sym("_boot_shell")) {
+                auto state = cpu.snapshot();
+                state.pc = mem.word(state.sp);
+                state.sp += 2;
+                state.de = 0;
+                cpu.restore(state);
+                continue;
+            }
             if (!files.step()) cpu.step();
         }
         throw std::runtime_error(operation + " reached emulator step limit at PC " +
@@ -120,6 +140,7 @@ int main(int argc, char** argv) {
     state.sp = 0xffff;
     cpu.restore(state);
     run_until([&] { return cpu.halted(); }, 200000, "boot");
+    booting = false;
 
     const auto vectors = sym("__sys_vec_tbl");
     constexpr std::array<std::uint16_t, 4> restart_addresses = {
@@ -205,6 +226,47 @@ int main(int argc, char** argv) {
     require(mem.word(sym("__tmr_first")) != 0,
             "clock timer was not installed");
 
+    // Nested sections preserve every register and the incoming IFF state,
+    // including callers already inside an interrupt handler (depth zero).
+    for (const bool enabled : {false, true}) {
+        auto initial = cpu.snapshot();
+        initial.halted = false;
+        initial.iff1 = initial.iff2 = enabled;
+        initial.af = 0xa5d7;
+        initial.bc = 0x2345;
+        initial.de = 0x3456;
+        initial.hl = 0x4567;
+        initial.ix = 0x5678;
+        initial.iy = 0x6789;
+        cpu.restore(initial);
+        const auto critical = [&](const char* name) {
+            auto state = cpu.snapshot();
+            state.pc = sym(name);
+            state.sp = 0xeffe;
+            mem.word(state.sp, 0x4100);
+            cpu.restore(state);
+            run_until([&] { return cpu.pc() == 0x4100; }, 200,
+                      "critical-section register preservation");
+            state = cpu.snapshot();
+            require(state.af == initial.af && state.bc == initial.bc &&
+                        state.de == initial.de && state.hl == initial.hl &&
+                        state.ix == initial.ix && state.iy == initial.iy,
+                    "critical section changed a register or flags");
+        };
+        critical("_leave_critical_section"); // unmatched leave must not EI
+        require(cpu.snapshot().iff1 == enabled, "unmatched leave changed IFF");
+        critical("_enter_critical_section");
+        critical("_enter_critical_section");
+        require(!cpu.interrupt(0xff), "nested critical section accepted IRQ");
+        critical("_leave_critical_section");
+        require(!cpu.snapshot().iff1, "inner leave enabled IRQ");
+        critical("_leave_critical_section");
+        require(cpu.snapshot().iff1 == enabled &&
+                    cpu.snapshot().iff2 == enabled &&
+                    !mem.bytes[sym("__interrupt_refcount")],
+                "outer leave did not restore IFF or nesting depth");
+    }
+
     std::uint16_t kernel_hl = 0;
     const auto call_kernel = [&](std::uint16_t function, std::uint16_t hl,
                                  std::uint16_t de,
@@ -212,7 +274,8 @@ int main(int argc, char** argv) {
                                  std::uint8_t a = 0,
                                  std::initializer_list<std::uint8_t>
                                      stack_arguments = {},
-                                 std::uint16_t bc = 0) {
+                                 std::uint16_t bc = 0,
+                                 bool caller_cleans = false) {
         constexpr std::uint16_t direct_sp = 0xf000;
         constexpr std::uint16_t direct_return = 0x4100;
         mem.word(direct_sp - 2, direct_return);
@@ -233,7 +296,8 @@ int main(int argc, char** argv) {
         run_until([&] { return cpu.pc() == direct_return; }, 500000,
                   operation);
         direct = cpu.snapshot();
-        require(direct.sp == direct_sp + stack_arguments.size() &&
+        require(direct.sp == direct_sp +
+                    (caller_cleans ? 0 : stack_arguments.size()) &&
                     direct.ix == 0xa55a &&
                     direct.iy == 0x5aa5,
                 operation + " violated its ABI");
@@ -257,6 +321,10 @@ int main(int argc, char** argv) {
     require(shell.size() >= 76 && shell[0] == 'X' && shell[1] == 'P' &&
                 shell[2] == 'R' && shell[3] == 'G',
             "dummy shell is not an XPRG image");
+    require(shell[30] == 1 && shell[31] == 0 &&
+                library_image[30] == 1 && library_image[31] == 0 &&
+                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 1,
+            "ROM and packaged images do not use ABI 1");
     const auto payload_offset = std::uint16_t(shell[10] | (shell[11] << 8));
     const auto payload_size = std::uint16_t(shell[12] | (shell[13] << 8));
     require(payload_offset + payload_size == shell.size(),
@@ -323,13 +391,16 @@ int main(int argc, char** argv) {
     call_kernel(sym("_enter_critical_section"), 0, 0, "outer disk critical section");
     const auto disk_fd = call_kernel(sym("_open"), 0xe100, 0, "nested disk open");
     require(disk_fd != 0xffff && !cpu.snapshot().iff1 &&
-                mem.bytes[sym("__interrupt_refcount")] == 1,
-            "disk open released the caller's critical section");
+                mem.bytes[sym("__interrupt_refcount")] == 0x81,
+            "disk open released the caller's critical section: fd=" +
+                std::to_string(disk_fd) + " iff=" +
+                std::to_string(cpu.snapshot().iff1) + " depth=" +
+                std::to_string(mem.bytes[sym("__interrupt_refcount")]));
     call_kernel(sym("_close"), disk_fd, 0, "nested disk close");
     put_string(0xe120, "missing.sys");
     require(call_kernel(sym("_open"), 0xe120, 0, "nested disk error") == 0xffff &&
                 !cpu.snapshot().iff1 &&
-                mem.bytes[sym("__interrupt_refcount")] == 1,
+                mem.bytes[sym("__interrupt_refcount")] == 0x81,
             "disk error released the caller's critical section");
     call_kernel(sym("_leave_critical_section"), 0, 0, "leave disk critical section");
     require(cpu.snapshot().iff1 && !mem.bytes[sym("__interrupt_refcount")],
@@ -499,8 +570,8 @@ int main(int argc, char** argv) {
 
     const auto gpx_context =
         call_kernel(mem.word(gpx_table), 0, 0, "gpx creation");
-    require(gpx_context == sym("__gpx_data"),
-            "gpx creation returned the wrong context");
+    require(gpx_context >= sym("__heap"),
+            "gpx creation did not allocate a private context");
     require(mem.word(gpx_context) == 256 &&
                 mem.word(gpx_context + 2) == 192 &&
                 mem.bytes[gpx_context + 4] == 1 &&
@@ -510,6 +581,13 @@ int main(int argc, char** argv) {
                 "gpx transparent text mode", 0, {1});
     require(mem.bytes[gpx_context + 5] == 1,
             "gpx text-background mode was not stored");
+    const auto second_context =
+        call_kernel(sym("_gpx_create"), 0, 0, "independent gpx context");
+    require(second_context && second_context != gpx_context &&
+                mem.bytes[second_context + 5] == 0 &&
+                mem.bytes[gpx_context + 5] == 1,
+            "GPX contexts share or reset drawing state");
+    call_kernel(sym("_gpx_destroy"), second_context, 0, "destroy second context");
     require(call_kernel(mem.word(gpx_table + 6), 0, 0,
                         "gpx width") == 256,
             "gpx width is wrong");
@@ -615,6 +693,8 @@ int main(int argc, char** argv) {
             "wrapped disk output buffer did not set EFAULT");
 
     const auto user_heap = sym("__heap");
+    test_thread_safety(mem, cpu, call_kernel, sym, files, gpx_context);
+    call_kernel(sym("_gpx_destroy"), gpx_context, 0, "destroy GPX context");
     require(mem.word(user_heap) == 0, "new user heap is not a single block");
     const auto expected_heap_size = std::uint16_t(0xffff - user_heap - 7);
     require(mem.word(user_heap + 5) == expected_heap_size,
@@ -717,6 +797,11 @@ int main(int argc, char** argv) {
               "first interrupt");
     require(mem.word(sym("_thread_current")) == thread2,
             "interrupt did not select the first runnable thread");
+    require(!mem.word(sym("__errno_value")) &&
+                !mem.bytes[sym("_process_last_error")],
+            "new thread inherited another thread's error values");
+    mem.word(sym("__errno_value"), 0x1234);
+    mem.bytes[sym("_process_last_error")] = 8;
 
     state = cpu.snapshot();
     const auto thread2_sp = state.sp;
@@ -739,6 +824,13 @@ int main(int argc, char** argv) {
               "second interrupt");
     require(mem.word(sym("_thread_current")) == thread,
             "round robin did not select the second runnable thread");
+    require(!mem.word(sym("__errno_value")) &&
+                !mem.bytes[sym("_process_last_error")] &&
+                mem.word(thread2 + 20) == 0x1234 &&
+                mem.bytes[thread2 + 15] == 8,
+            "thread switch did not save and isolate syscall errors");
+    mem.word(sym("__errno_value"), 0x4567);
+    mem.bytes[sym("_process_last_error")] = 9;
     // EI immediately precedes RETI in the scheduler, so a newly requested
     // interrupt is accepted after one instruction from the resumed thread.
     require(mem.word(mem.word(thread2 + 4) + 20) == entry2 + 2,
@@ -771,6 +863,10 @@ int main(int argc, char** argv) {
                 ", expected thread " + std::to_string(thread2));
     require(mem.word(sym("_thread_current")) == thread2,
             "round robin did not wrap to the queue head");
+    require(mem.word(sym("__errno_value")) == 0x1234 &&
+                mem.bytes[sym("_process_last_error")] == 8 &&
+                mem.word(thread + 20) == 0x4567 && mem.bytes[thread + 15] == 9,
+            "resumed thread did not recover its syscall errors");
     require(state.sp == thread2_sp && state.af == 0x1234 &&
                 state.bc == 0x2345 && state.de == 0x3456 &&
                 state.hl == 0x4567 && state.ix == 0x5678 &&
@@ -848,11 +944,13 @@ int main(int argc, char** argv) {
     require(state.sp == call_sp && state.ix == 0xa55a &&
                 state.iy == 0x5aa5,
             "scheduler cleanup violated its ABI");
-    test_libraries(mem, call_kernel, sym, files, library_image,
+    test_libraries(mem, cpu, call_kernel, sym, files, library_image,
                    library_symbols, put_string);
     require(mem.rom_writes == 0, "kernel attempted to write into ROM");
 
     std::cout << "PASS: boot, XPRG CRC and relocation, heaps, syscalls, "
+                 "nested interrupt-state preservation, protected shared state, "
+                 "per-thread errors and concurrent library loading, "
                  "GPX service and drawing, directory records, two-process round robin, "
                  "event wakeup, terminated-process cleanup, shell library "
                  "self-registration, shared/private lifetime and rollback\n";

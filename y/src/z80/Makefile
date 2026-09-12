@@ -25,6 +25,10 @@ XLDFLAGS := --mode=sdcc -v -m -f bin -nostdlib \
 
 CRT := $(BUILD_DIR)/startup/crt0rom.rel
 MAIN := $(BUILD_DIR)/main.rel
+# Anchor descriptor helpers and the timer dispatcher early, fitting startup
+# tightly around the fixed 04C6/0562 paging traps. Still linked only once.
+EARLY_OBJECTS := $(BUILD_DIR)/fs/_esxdos_core.rel \
+	$(BUILD_DIR)/kernel/_tmr_chain.rel
 LIB_SOURCES := $(wildcard drivers/*.s) $(wildcard fs/*.s) \
 	$(wildcard kernel/*.s) \
 	$(filter-out startup/crt0rom.s,$(wildcard startup/*.s))
@@ -55,8 +59,6 @@ SHELL_OUTPUT := $(BIN_DIR)/shell.sys
 LIBRARY_OBJECT := $(BUILD_DIR)/apps/shelllib.rel
 LIBRARY_XL := $(BUILD_DIR)/apps/shelllib.xl
 LIBRARY_OUTPUT := $(BIN_DIR)/shelllib.svc
-TEST_ROOT := $(BUILD_DIR)/test_roots.rel
-TEST_OUTPUT := $(BUILD_DIR)/$(TARGET)-test.rom
 
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
@@ -64,9 +66,9 @@ TEST_OUTPUT := $(BUILD_DIR)/$(TARGET)-test.rom
 .PHONY: all clean test
 all: $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT)
 
-test: $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) $(TEST_OUTPUT) $(BUILD_DIR)/test_kernel
-	$(BUILD_DIR)/test_kernel $(TEST_OUTPUT) \
-		$(BUILD_DIR)/$(TARGET)-test.map $(SHELL_OUTPUT) \
+test: $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) $(BUILD_DIR)/test_kernel
+	$(BUILD_DIR)/test_kernel $(OUTPUT) \
+		$(BUILD_DIR)/$(TARGET).map $(SHELL_OUTPUT) \
 		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map
 
 clean:
@@ -97,10 +99,10 @@ $(ARCHIVE_MANIFEST): $(ALL_OBJECTS)
 	printf '%s\n' $(LOADER_OBJECTS) >> $@
 	test -s $@
 
-$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD)
+$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile
 	mkdir -p $(BIN_DIR)
 	$(XLD) $(XLDFLAGS) -Map=$(BUILD_DIR)/$(TARGET).map \
-		-o $@ $(CRT) $(MAIN) $(ARCHIVE)
+		-o $@ $(CRT) $(MAIN) $(EARLY_OBJECTS) $(ARCHIVE)
 	@rom_end=$$(awk '$$2 == "s__GSFINAL" { print $$1 }' \
 		$(BUILD_DIR)/$(TARGET).map); \
 		test -n "$$rom_end" && test $$((0x$$rom_end)) -le 16384 || { \
@@ -113,9 +115,9 @@ $(SHELL_XL): ../../tests/shell-yos/shell.c ../../tests/shell-yos/shelllib.h \
 	mkdir -p $(dir $@)
 	$(XCC) --mode=sdcc --platform=yos -Os -std=c11 $< -o $@
 
-$(SHELL_OUTPUT): $(SHELL_XL) $(XPROG)
+$(SHELL_OUTPUT): $(SHELL_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name shell --stack-size 256 --min-os 8 \
+	$(XPROG) --process --name shell --stack-size 256 --min-os 1 \
 		$< -o $@
 
 $(LIBRARY_OBJECT): ../../tests/shell-yos/shelllib.s $(XAS)
@@ -127,29 +129,15 @@ $(LIBRARY_XL): $(LIBRARY_OBJECT) $(XLD)
 		-T $(REPO_ROOT)/x/platforms/yos/linker.lk \
 		-Map=$(BUILD_DIR)/apps/shelllib.map -o $@ $<
 
-$(LIBRARY_OUTPUT): $(LIBRARY_XL) $(XPROG)
+$(LIBRARY_OUTPUT): $(LIBRARY_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --service --name shelllib --abi 1 --min-os 9 \
+	$(XPROG) --service --name shelllib --abi 1 --min-os 1 \
 		--entry 0x$$(awk '$$2 == "_entry" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_probe" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_message" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_initializations" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_calls" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		$< -o $@
-
-$(TEST_ROOT): ../../tests/kernel-z80/test_roots.s $(XAS)
-	mkdir -p $(dir $@)
-	$(XAS) $(XASFLAGS) $< -o $@
-
-$(TEST_OUTPUT): $(CRT) $(MAIN) $(TEST_ROOT) $(ARCHIVE) $(XLD)
-	$(XLD) $(XLDFLAGS) -Map=$(BUILD_DIR)/$(TARGET)-test.map \
-		-o $@ $(CRT) $(MAIN) $(TEST_ROOT) $(ARCHIVE)
-	@rom_end=$$(awk '$$2 == "s__GSFINAL" { print $$1 }' \
-		$(BUILD_DIR)/$(TARGET)-test.map); \
-		test -n "$$rom_end" && test $$((0x$$rom_end)) -le 16384 || { \
-			echo "YOS test ROM content exceeds 16384 bytes (end 0x$$rom_end)" >&2; \
-			exit 1; \
-		}
 
 $(XZ80):
 	$(MAKE) -C $(REPO_ROOT)/x/lib/xz80 \
@@ -158,7 +146,8 @@ $(XZ80):
 
 $(BUILD_DIR)/test_kernel: ../../tests/kernel-z80/test_kernel.cpp \
 		../../tests/kernel-z80/mock_filesystem.h \
-		../../tests/kernel-z80/test_libraries.h $(XZ80)
+		../../tests/kernel-z80/test_libraries.h \
+		../../tests/kernel-z80/test_thread_safety.h $(XZ80)
 	mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -O2 -Wall -Wextra -pedantic \
 		-I$(REPO_ROOT)/x/lib/xz80/include $< $(XZ80) -o $@

@@ -21,7 +21,7 @@ services, files, input, graphics, packaging, and every public API call.
 | `y/src/z80/` | the assembly kernel that builds `yos-kernel.rom` (this book) |
 | `y/src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`; it keeps its own copy of the old chapters under `y/src/c/docs/` |
 | `y/include/` | public headers shared with applications: `yos.h`, `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
-| `y/tests/` | kernel emulation tests (`kernel-z80/`), the disk-resident shell fixture (`shell-yos/`), microdrive and tape harnesses |
+| `y/tests/` | kernel emulation tests (`kernel-z80/`), the disk-resident shell/library fixture (`shell-yos/`), the real-esxDOS Fuse runner (`fuse/`), microdrive and tape harnesses |
 | `y/pkg/` | host tools staged into `bin/y/bin/`: `appmake`, `microdrive`, `serial` |
 | `y/docs/books/` | this book; its chapters are in `y/docs/books/the-book-of-yos/` |
 | `y/docs/standards/` | the [YOS assembly style guide](../standards/YOS-ASSEMBLY-STYLE-GUIDE.md) |
@@ -29,7 +29,8 @@ services, files, input, graphics, packaging, and every public API call.
 Build the ROM with `make -C y` from the repository root (or `make -C y/src/z80`
 for the assembly kernel alone) and run the emulated kernel tests with
 `make -C y/src/z80 test`. Output lands in `bin/y/z80/spectrum/bin/`:
-`yos-kernel.rom` and the `shell.sys` process image it loads at boot.
+`yos-kernel.rom`, the `shell.sys` process image it loads at boot, and the
+`shelllib.svc` library used by that shell.
 
 ## The system in one page
 
@@ -53,10 +54,17 @@ for the assembly kernel alone) and run the emulated kernel tests with
    The kernel itself idles in a `HALT` loop.
 5. **Talk to the kernel.** There are no privilege levels. Applications call
    `query_service("yos")` through RST 18 and receive a `yos_t` table of
-   function pointers (ABI version 9): memory, timers, events, threads,
+   function pointers (ABI version 1): memory, timers, events, threads,
    processes, services, interrupt vectors, keyboard, mouse, a POSIX-style
    esxDOS filesystem, and the shared XPRG process/library loader. `query_service("gpx")`
    returns the complete libgpx drawing API.
+
+Public shared-state transactions use nestable, IFF-preserving critical
+sections. Kernel errno and loader status are per-thread, using spare bytes
+in the 24-byte thread object. GPX creates process-owned contexts and protects
+framebuffer updates; it does not give each app a private screen. See
+[Concurrency](programming-yos/MEMORY-TIME-AND-CONCURRENCY.md) for the precise
+guarantees, including the remaining process-local libc `errno` limitation.
 
 ## Memory map
 
@@ -107,6 +115,10 @@ for the assembly kernel alone) and run the emulated kernel tests with
 10. [Loadable Libraries](the-book-of-yos/LIBRARIES.md) — shared/private images,
     relocated self-registration, initializer ownership and reference cleanup.
 
+Application authors should use the practical
+[loadable-library chapter](programming-yos/LOADABLE-LIBRARIES.md); chapter 10
+above documents the kernel implementation and object layouts.
+
 ## Appendix
 
 - [Legacy README snapshot](the-book-of-yos/LEGACY-README-SNAPSHOT.md) — the original
@@ -147,3 +159,5 @@ Where to look in `y/src/z80/` when a chapter mentions a routine:
   public contract is `y/include/yos.h`.
 - "Owner" always means the `process_t *` (or `thread_t *`) stored in a
   system object's header, and `NONE` means a null owner, that is the kernel.
+  A process object's own null owner does not mean "parent": YOS stores no
+  parent-process relationship.
