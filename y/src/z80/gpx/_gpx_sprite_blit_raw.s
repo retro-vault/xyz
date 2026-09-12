@@ -87,20 +87,10 @@ __gpx_sprite_blit_raw:
         ld      P_XBYTE(ix),a
 
         ld      a,(hl)
-        and     #BMP_SIG_ENC_MASK
-        cp      #BMP_SIG_1BPP
-        jr      z,.gbr_std
-        cp      #BMP_SIG_1BPP_MASK
-        jr      z,.gbr_masked
-        jp      .gbr_done
-
-.gbr_std:
-        xor     a
-        ld      P_MASKED(ix),a
-        jr      .gbr_sig_done
-
-.gbr_masked:
-        ld      a,#1
+        and     #0xe0                   ; encodings 0x00 and 0x10
+        jp      nz,.gbr_done
+        ld      a,(hl)
+        and     #0x10
         ld      P_MASKED(ix),a
 
 .gbr_sig_done:
@@ -113,18 +103,18 @@ __gpx_sprite_blit_raw:
 
         inc     hl
         ld      a,(hl)
-        or      a
-        jp      z,.gbr_done
-        cp      #17
+        dec     a
+        cp      #16
         jp      nc,.gbr_done
+        inc     a
         ld      d,a
 
         inc     hl
         ld      a,(hl)
-        or      a
-        jp      z,.gbr_done
-        cp      #17
+        dec     a
+        cp      #16
         jp      nc,.gbr_done
+        inc     a
         ld      e,a
 
         ld      a,d
@@ -140,20 +130,13 @@ __gpx_sprite_blit_raw:
 .gbr_visw_done:
         ld      P_VISW(ix),a
 
-        ld      a,e
-        dec     a
-        add     a,b
-        cp      #SCRHEIGHT
-        jr      c,.gbr_no_bottom_clip
         ld      a,#SCRHEIGHT
         sub     b
-        jr      .gbr_h_done
-.gbr_no_bottom_clip:
+        cp      e
+        jr      c,.gbr_h_done
         ld      a,e
 .gbr_h_done:
         ld      P_HLEFT(ix),a
-        or      a
-        jp      z,.gbr_done
 
         ld      de,#3
         add     hl,de

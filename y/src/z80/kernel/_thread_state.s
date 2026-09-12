@@ -15,6 +15,7 @@
         .area   _BSS
 _thread_current::
         .ds     2
+        ; Keep these four roots adjacent: process_has_threads scans them.
 _thread_first_suspended::
         .ds     2
 _thread_first_running::

@@ -5,7 +5,6 @@
 
         .module process_start
         .optsdcc -mz80 sdcccall(1)
-
         .globl  _process_start
         .globl  _process_first
         .globl  _so_create
@@ -13,95 +12,70 @@
         .globl  _thread_create
         .globl  _thread_resume
         .globl  __string_copy
-
-        .equ    PROCESS_SIZE,           15
-        .equ    PROCESS_FLAGS,           4
-        .equ    PROCESS_NAME,            5
-        .equ    PROCESS_MAIN_THREAD,    13
-        .equ    THREAD_PROCESS,         22
-
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
+        .equ    PROCESS_SIZE,        15
+        .equ    PROCESS_FLAGS,        4
+        .equ    PROCESS_NAME,         5
+        .equ    PROCESS_MAIN_THREAD, 13
         .area   _CODE
 
-        ; _process_start, sdcccall(1)
         ; inputs: hl = name, de = entry, stack size at sp+2
         ; outputs: de = process or zero; removes stack-size argument
         ; clobbers: af, bc, de, hl; preserves ix and iy
-        ; frame: name -2, entry -4, process -6, stack size +4
+        ; IX holds the process. Stack saves name and entry until copied.
 _process_start::
         push    ix
-        ld      ix, #0
-        add     ix, sp
-        push    hl
         push    de
+        push    hl
+        call    _enter_critical_section
         ld      hl, #0
         push    hl
         ld      de, #PROCESS_SIZE
         ld      hl, #_process_first
         call    _so_create
+        pop     hl
+        ld      a, d
+        or      e
+        jr      z, .failed
         push    de
-        ld      a, d
-        or      e
-        jr      z, .start_return
-
-        ld      hl, #PROCESS_NAME
-        add     hl, de
-        ld      e, -2(ix)
-        ld      d, -1(ix)
-        call    __string_copy
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      de, #PROCESS_FLAGS
-        add     hl, de
-        ld      (hl), #0
-
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        push    hl                      ; thread owner process
-        ld      e, 4(ix)
-        ld      d, 5(ix)
-        ld      l, -4(ix)
-        ld      h, -3(ix)
-        call    _thread_create
-
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      bc, #PROCESS_MAIN_THREAD
+        pop     ix
+        ld      PROCESS_FLAGS(ix), #0
+        ld      bc, #PROCESS_NAME
+        ex      de, hl
         add     hl, bc
-        ld      (hl), e
+        ld      b, #7
+        call    __string_copy
+        ld      hl, #6
+        add     hl, sp
+        ld      e, (hl)
         inc     hl
-        ld      (hl), d
+        ld      d, (hl)
+        pop     hl
+        push    ix
+        call    _thread_create
+        ld      PROCESS_MAIN_THREAD(ix), e
+        ld      PROCESS_MAIN_THREAD+1(ix), d
         ld      a, d
         or      e
-        jr      nz, .start_thread_ready
-
-        ld      e, -6(ix)
-        ld      d, -5(ix)
+        jr      z, .destroy
+        ex      de, hl
+        call    _thread_resume
+        push    ix
+        pop     de
+        jr      .done
+.destroy:
+        push    ix
+        pop     de
         ld      hl, #_process_first
         call    _so_destroy
-        xor     a
-        ld      -6(ix), a
-        ld      -5(ix), a
-        jr      .start_return
-
-.start_thread_ready:
-        push    de
-        ex      de, hl
-        ld      de, #THREAD_PROCESS
-        add     hl, de
-        ld      e, -6(ix)
-        ld      d, -5(ix)
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
+        ld      de, #0
+        jr      .done
+.failed:
         pop     hl
-        call    _thread_resume
-
-.start_return:
-        ld      e, -6(ix)
-        ld      d, -5(ix)
-        ld      sp, ix
+.done:
+        call    _leave_critical_section
         pop     ix
-        pop     hl                      ; return address
-        pop     bc                      ; stack size
-        push    hl
-        ret
+        pop     hl
+        pop     bc
+        jp      (hl)

@@ -43,11 +43,8 @@
         .equ    SPR_CLIP_LO,             8
         .equ    SPR_CLIP_HI,             9
 
-        ;; Sprite fields stay in IY; only bitmap dimensions need locals.
-        .equ    S_W,                     -1
-        .equ    S_H,                     -2
-        .equ    S_VISW,                  -3
-        .equ    S_VISH,                  -4
+        ;; IY pins the sprite; BC holds dimensions until the background
+        ;; header is written, and DE carries the visible width and height.
 
         .area   _CODE
 
@@ -79,12 +76,6 @@ _gpx_show_sprite::
         push    iy
         push    de
         pop     iy                      ; sprite fields survive helper calls
-        push    ix
-        ld      ix,#0
-        add     ix,sp
-        ld      hl,#-4
-        add     hl,sp
-        ld      sp,hl
 
         ld      a,SPR_X_HI(iy)
         or      SPR_Y_HI(iy)
@@ -103,10 +94,7 @@ _gpx_show_sprite::
         jp      z,.gs_done
 
         ld      a,(hl)
-        and     #BMP_SIG_ENC_MASK
-        cp      #BMP_SIG_1BPP
-        jr      z,.gs_sig_ok
-        cp      #BMP_SIG_1BPP_MASK
+        and     #0xe0                   ; encodings 0x00 and 0x10
         jp      nz,.gs_done
 
 .gs_sig_ok:
@@ -118,74 +106,63 @@ _gpx_show_sprite::
 
         inc     hl
         ld      a,(hl)
-        ld      S_W(ix),a
-        or      a
-        jp      z,.gs_done
-        cp      #17
+        dec     a
+        cp      #16
         jp      nc,.gs_done
+        inc     a
+        ld      c,a
 
         inc     hl
         ld      a,(hl)
-        ld      S_H(ix),a
-        or      a
-        jp      z,.gs_done
-        cp      #17
+        dec     a
+        cp      #16
         jp      nc,.gs_done
+        inc     a
+        ld      b,a
 
         ;; visible width = min(w, 256 - x)
-        ld      a,S_W(ix)
+        ld      a,c
         dec     a
-        ld      b,SPR_X_LO(iy)
-        add     a,b
+        add     a,SPR_X_LO(iy)
         jr      nc,.gs_no_right_clip
         ld      a,SPR_X_LO(iy)
         cpl
         inc     a
         jr      .gs_store_visw
 .gs_no_right_clip:
-        ld      a,S_W(ix)
+        ld      a,c
 .gs_store_visw:
-        ld      S_VISW(ix),a
+        ld      d,a
 
         ;; visible height = min(h, 192 - y)
-        ld      a,S_H(ix)
-        dec     a
-        add     a,SPR_Y_LO(iy)
-        cp      #SCRHEIGHT
-        jr      c,.gs_no_bottom_clip
-        ld      b,SPR_Y_LO(iy)
         ld      a,#SCRHEIGHT
-        sub     b
-        jr      .gs_store_vish
-.gs_no_bottom_clip:
-        ld      a,S_H(ix)
+        sub     SPR_Y_LO(iy)
+        cp      b
+        jr      c,.gs_store_vish
+        ld      a,b
 .gs_store_vish:
-        ld      S_VISH(ix),a
+        ld      e,a
 
         ;; background sprite header
         ld      l,SPR_BG_LO(iy)
         ld      h,SPR_BG_HI(iy)
+        push    hl
         ld      (hl),#BMP_SIG_1BPP_STRIDE2
         inc     hl
-        ld      a,S_W(ix)
-        ld      (hl),a
+        ld      (hl),c
         inc     hl
-        ld      a,S_H(ix)
-        ld      (hl),a
+        ld      (hl),b
         inc     hl
-        ld      a,S_H(ix)
+        ld      a,b
         add     a,a
         ld      (hl),a
         inc     hl
         xor     a
         ld      (hl),a
 
-        ld      l,SPR_BG_LO(iy)
-        ld      h,SPR_BG_HI(iy)
+        pop     hl
         ld      b,SPR_Y_LO(iy)
         ld      c,SPR_X_LO(iy)
-        ld      d,S_VISW(ix)
-        ld      e,S_VISH(ix)
         call    __gpx_store_background
 
         ;; window rect set? draw through the clipping blitter instead
@@ -217,7 +194,5 @@ _gpx_show_sprite::
         call    _gpx_draw_bmp
 
 .gs_done:
-        ld      sp,ix
-        pop     ix
         pop     iy
         ret

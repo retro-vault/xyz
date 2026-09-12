@@ -6,6 +6,10 @@ Release status:
 
 ## Unreleased
 
+- Updated the staged YOS interface to ABI 9 (96 bytes), appending
+  `load_library` and shared/private flags without changing existing slots.
+  Updated the platform's compile-time table-size check.
+
 - Added the `--platform=yos` XCC backend for relocatable XL applications. Its
   CRT initializes relocatable C storage, obtains ABI 8 with RST 18
   `query_service("yos")`, and exits through the cached table. Kernel-backed

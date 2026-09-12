@@ -1,4 +1,4 @@
-/* Public YOS ABI 8 kernel and filesystem interface. */
+/* Public YOS ABI 9 kernel and filesystem interface. */
 #ifndef _YOS_H
 #define _YOS_H
 
@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define YOS_VERSION 0x08
+#define YOS_VERSION 0x09
 
 enum yos_process_load_error {
     YOS_PROCESS_LOAD_OK = 0,
@@ -19,8 +19,15 @@ enum yos_process_load_error {
     YOS_PROCESS_LOAD_START_ERROR = 5,
     YOS_PROCESS_LOAD_NOT_PROCESS = 6,
     YOS_PROCESS_LOAD_REQUIRES_NEWER_OS = 7,
-    YOS_PROCESS_LOAD_BAD_CHECKSUM = 8
+    YOS_PROCESS_LOAD_BAD_CHECKSUM = 8,
+    YOS_PROCESS_LOAD_BUSY = 9,
+    YOS_PROCESS_LOAD_NO_PROCESS = 10,
+    YOS_PROCESS_LOAD_INIT_ERROR = 11
 };
+
+/* Shared instances are keyed by full XPRG name and image ABI. */
+#define YOS_LIBRARY_PRIVATE 0
+#define YOS_LIBRARY_SHARED 1
 
 #define YOS_KEY_DOWN 0x40
 #define YOS_KEY_CODE 0x3f
@@ -112,6 +119,12 @@ typedef struct yos_s {
     int (*enumerate_disks)(yos_disk_info_t *disks, size_t capacity);
     yos_process_t *(*load_process)(const char *path);
     uint8_t *process_load_error;
+    /* ABI 9: returns a direct function-pointer table. Each successful
+     * acquisition is retained until the caller's last thread exits.
+     * Errors use process_load_error; code 6 means the wrong image kind.
+     * query_service returns borrowed pointers and does not acquire.
+     */
+    void *(*load_library)(const char *path, uint16_t flags);
 } yos_t;
 
 void *query_service(const char *name);

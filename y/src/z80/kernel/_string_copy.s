@@ -10,16 +10,19 @@
 
         .area   _CODE
 
-        ; inputs: HL = destination, DE = source.
-        ; outputs: DE = original destination; clobbers: af, hl.
+        ; inputs: hl = destination, de = source, b = capacity minus NUL
+        ; outputs: bounded, NUL-terminated copy
+        ; clobbers: af, b, de, hl; preserves c, ix and iy
 __string_copy::
-        push    hl
 .copy:
         ld      a,(de)
+        or      a
+        jr      z,.end
         ld      (hl),a
         inc     de
         inc     hl
-        or      a
-        jr      nz,.copy
-        pop     de
+        djnz    .copy
+        xor     a
+.end:
+        ld      (hl),a
         ret

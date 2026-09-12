@@ -79,9 +79,17 @@ The physical RST 38 entry must remain compatible with divIDE, so YOS does not pu
 
 This costs two fixed RAM bytes (the `_IM2` area in `linker.lk`) rather than a 257-byte vector table. `_HEAP` begins immediately after it at `0x5F01`.
 
+Every esxDOS call in `fs/_esxdos_calls.s` enters a nestable critical section
+at the common gate dispatcher and leaves it only after firmware returns
+and divIDE restores the YOS ROM. While firmware is mapped, the ROM address
+of `__thread_robin` contains unrelated firmware code: IM2 must not run then.
+This also prevents thread preemption/re-entry into esxDOS. Loader validation,
+relocation and library initialization remain preemptible outside their own
+short object/list critical sections; only each native disk call is masked.
+
 ## Kernel entry
 
-`main.s` runs with interrupts disabled and performs, in order:
+`main.s` starts with interrupts disabled and performs, in order:
 
 1. `mem_init(__sys_heap, 1024)` and `mem_init(__heap, 0xFFFF - __heap)`.
 2. `tmr_install(__clock_tick, 0, NONE)` and `tmr_install(__kbd_scan, 0, NONE)` — both fire on every tick.
@@ -91,7 +99,9 @@ This costs two fixed RAM bytes (the `_IM2` area in `linker.lk`) rather than a 25
 6. `__im2_init`, then `EI`.
 7. The idle `HALT` loop. From now on every frame interrupt runs the scheduler.
 
-Steps 4 and 5 happen before interrupts are enabled so the loader can use the esxDOS gates without being preempted.
+Steps 4 and 5 happen before IM2 preemption is armed. Nested critical-section
+exits can enable interrupts earlier, but the boot phase still uses the inert
+IM1 return in the fixed header. Each esxDOS call masks interrupts independently.
 
 ## RAM initialisation (`__startup_init`)
 

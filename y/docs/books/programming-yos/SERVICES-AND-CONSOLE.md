@@ -115,8 +115,10 @@ int main(void)
 
 The name must fit the kernel's 15-character service field. The interface and
 its functions must remain resident for the entire registration. Call
-`unregister_service` before invalidating them. ABI 8 registrations made by
-this public adapter are kernel-owned, so an orderly process should explicitly
-unregister; automatic ownership for this call is not yet exposed.
+`unregister_service` before invalidating them. ABI 9 registrations are
+process-owned and reclaimed on exit. Library initialization instead stages
+library-owned registrations until success; acquire these interfaces using
+`load_library`, not merely a borrowed query. See
+[Loadable Libraries](../the-book-of-yos/LIBRARIES.md).
 
 Next: [Memory, Time, and Concurrency](MEMORY-TIME-AND-CONCURRENCY.md).

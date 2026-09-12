@@ -9,9 +9,18 @@
 
         .globl  _process_first
         .globl  _process_last_error
+        .globl  __image_busy
+        .globl  __library_refs
+        .globl  __library_private_services
 
         .area   _BSS
 _process_first::
         .ds     2
 _process_last_error::
         .ds     1
+__image_busy::
+        .ds     1
+__library_refs::
+        .ds     2
+__library_private_services::
+        .ds     2

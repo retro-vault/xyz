@@ -24,7 +24,10 @@ Key points:
 - **`sp`** — when a thread is not running, the CPU's stack pointer is saved here. When the scheduler switches back to this thread, it restores `SP` from this field.
 - **`startup[10]`** — a machine-code stub written into the object at creation time. It calls the thread's entry function and then jumps to `thread_exit` when the function returns.
 - **`state`** — one of the values below.
-- **`process`** — the `process_t` this thread belongs to. `hdr.owner` holds the same pointer for threads created by `process_start`; the cleanup pass uses `process` to find the process to reap.
+- **`process`** — the real process membership used by cleanup.
+  `hdr.owner` is normally zero. Library initialization temporarily places
+  its library object there as an allocation/registration owner override,
+  without changing real process membership or growing the thread object.
 
 ## Thread States
 

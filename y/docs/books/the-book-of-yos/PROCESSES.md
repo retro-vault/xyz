@@ -15,7 +15,11 @@ typedef struct process_s {
 } process_t;
 ```
 
-Process names hold at most 7 characters plus the terminator. The name is for identification and debugging; it has no effect on scheduling. `pflags` is always written as `0` by `process_start`; no flag is currently defined.
+Process names are bounded to 7 characters plus the terminator. The name is
+for debugging, not scheduling or library identity. Normal processes have
+`pflags = 0`. [Libraries](LIBRARIES.md) reuse this record without a thread:
+flags 1/3 mark private/shared libraries, bytes 5–7 hold the service pointer
+and image ABI, and the word at 13 is their reference count.
 
 ### The Main Thread
 
@@ -82,7 +86,11 @@ void process_exit(void);
 
 1. `__thread_cleanup_terminated` frees the thread's stack and object.
 2. It then calls `process_reap` for the thread's process.
-3. `process_reap` checks `_process_has_threads`, which scans the suspended, running, waiting and terminated lists. If any other thread still references the process, the process survives this tick. Otherwise `process_reap` clears `main_thread`, destroys every event, timer and service owned by the process, frees every `__heap` block owned by it — including a loaded XPRG image — and removes the `process_t` from `process_first`.
+3. `process_reap` checks all four thread queues. If any thread still
+   references the process, it survives. Otherwise cleanup destroys its
+   owned events, timers and services, releases all library references,
+   frees its user-heap blocks (including the loaded image), and removes
+   the process object. Libraries reaching zero references are reaped too.
 
 So `process_exit` terminates the *calling* thread only. A process with several threads is reaped when its last thread terminates, whichever one that is. If a process's main thread function simply `return`s, the startup stub reaches `thread_exit` and the same path runs — calling `exit_process` explicitly is equivalent.
 

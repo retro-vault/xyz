@@ -7,4 +7,4 @@
         .globl  __yos
         .area   _BSS
 __yos::
-        .ds     94
+        .ds     96

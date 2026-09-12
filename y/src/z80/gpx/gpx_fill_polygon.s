@@ -36,7 +36,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_fill_polygon
-        .globl  __gpx_hline
+        .globl  _gpx_draw_line
 
         ;; Raising MAXPTS costs ERECSZ bytes of stack per point plus four
         ;; for its crossing slot. Keep it in step with GPX_MAX_POLY_PTS.
@@ -80,7 +80,7 @@
         ;;   AF, BC, DE, HL, IX, IY, and the alternate set
         ;;
         ;; References:
-        ;;   __gpx_hline
+        ;;   _gpx_draw_line
 _gpx_fill_polygon::
         push    ix
         ld      ix,#0
@@ -697,9 +697,13 @@ _gpx_fill_polygon::
         ld      l,7(ix)
         ld      h,8(ix)
         add     hl,de
-        ld      a,(hl)                  ; fpatt[patt_idx]
+        ld      a,6(ix)
         or      a
-        ret     z                       ; no spans can ink an empty row
+        ld      a,(hl)                  ; fpatt[patt_idx], preserving mode Z
+        jr      z,.rp_convert           ; only BM_CPY paints pattern zeroes
+        or      a
+        ret     z                       ; OR/XOR zero row changes nothing
+.rp_convert:
         cp      #0xFF
         jr      z,.rp_pattern_ready
         ld      b,#8
@@ -807,8 +811,8 @@ _gpx_fill_polygon::
         djnz    .sl_rotate
 
 .sl_draw:
-        ;; The private horizontal entry accepts the same stack arguments
-        ;; as gpx_draw_line, preserves IX, and does not use HL = gpx.
+        ;; The public line entry accepts these stack arguments and preserves
+        ;; IX. Horizontal backend paths do not inspect the context argument.
         ld      l,10(ix)
         ld      h,11(ix)
         push    hl                      ; clip
@@ -828,7 +832,7 @@ _gpx_fill_polygon::
         push    hl                      ; y0
         ld      e,-23(ix)
         ld      d,-24(ix)               ; DE = x0
-        call    __gpx_hline
+        call    _gpx_draw_line
 
 .rp_next:
         ld      hl,#8

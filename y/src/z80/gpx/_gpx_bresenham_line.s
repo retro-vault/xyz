@@ -330,6 +330,11 @@ __gpx_bresenham_line::
         ld      h,#0
 .bl_err_ok:
         exx
+        ld      a,A_M(ix)
+        or      a
+        jr      nz,.bl_mode_flag_ok
+        set     7,L_FLAGS(ix)           ; opaque COPY: also write pattern zeroes
+.bl_mode_flag_ok:
 
         ;; mask = 0x80 >> (x0 & 7)
         ld      a,L_X0(ix)
@@ -399,7 +404,7 @@ __gpx_bresenham_line::
         jp      .bv_loop                ; downward vertical: fast path
 .bl_go_vup:
         ex      af,af'
-        jr      .by_loop                ; upward vertical: generic loop
+        jp      .by_loop                ; upward vertical: generic loop
 
         ;; ---- x-major raster: B=steps C=patt D/E=masks HL=vram ----
         ;; alt: L'=err DE'=dx BC'=dy; H' is ignored, A' holds directions.
@@ -408,6 +413,7 @@ __gpx_bresenham_line::
         ;; direction, so the only per-pixel branch left is the y step.
 .bxr_loop:
         rrc     c                       ; carry = pattern bit, C rotated for
+        call    nc,.bl_zero
         jr      nc,.bxr_loop_np         ; the next step in the same op
         ld      a,(hl)
         or      d
@@ -446,6 +452,7 @@ __gpx_bresenham_line::
 
 .bxl_loop:
         rrc     c                       ; carry = pattern bit, C rotated for
+        call    nc,.bl_zero
         jr      nc,.bxl_loop_np         ; the next step in the same op
         ld      a,(hl)
         or      d
@@ -484,7 +491,10 @@ __gpx_bresenham_line::
         ;; ---- shared tail: final pixel + return pattern ----
 .bl_last:
         bit     0,c
-        jr      z,.bl_retp
+        jr      nz,.bl_last_one
+        call    .bl_zero
+        jr      .bl_retp
+.bl_last_one:
         ld      a,(hl)
         or      d
         xor     e
@@ -505,6 +515,7 @@ __gpx_bresenham_line::
         ;; ---- y-major raster ----
 .by_loop:
         rrc     c                       ; carry = pattern bit, C rotated for
+        call    nc,.bl_zero
         jr      nc,.by_np               ; the next step in the same op
         ld      a,(hl)
         or      d
@@ -560,7 +571,7 @@ __gpx_bresenham_line::
         call    z,__vid_prevrow_carry
 .by_rot:
         djnz    .by_loop
-        jr      .bl_last
+        jp      .bl_last
 
         ;; ---- vertical fast path: dx == 0, y increasing ----
         ;; With dx = 0 the y-major loop never steps x, so no err
@@ -568,6 +579,7 @@ __gpx_bresenham_line::
         ;; B=steps C=patt D/E=masks HL=vram. ~105 T/pixel.
 .bv_loop:
         rrc     c                       ; carry = pattern bit, C rotated for
+        call    nc,.bl_zero
         jr      nc,.bv_np               ; the next step in the same op
         ld      a,(hl)
         or      d
@@ -579,7 +591,19 @@ __gpx_bresenham_line::
         and     #0x07
         call    z,__vid_nextrow_carry
         djnz    .bv_loop
-        jr      .bl_last
+        jp      .bl_last
+
+        ;; Pattern-zero pixels are written only by opaque COPY. D/E describe
+        ;; the pattern-one operation; the extra XOR D applies its inverse.
+.bl_zero:
+        bit     7,L_FLAGS(ix)
+        ret     z
+        ld      a,(hl)
+        or      d
+        xor     e
+        xor     d
+        ld      (hl),a
+        ret
 
         ;; ---- C-S edge handlers ----
         ;; stack holds pushed BC (B = c0 = which endpoint moves)

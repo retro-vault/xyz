@@ -9,6 +9,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __zx_esx_error
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
         .globl  __zx_esx_f_open
         .globl  __zx_esx_f_close
         .globl  __zx_esx_f_sync
@@ -67,16 +69,9 @@ __zx_esx_f_open::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_close::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_9b
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_9b
+        jp      .esx_call
 
         ; __zx_esx_f_sync
         ; inputs: A = native file handle.
@@ -84,16 +79,9 @@ __zx_esx_f_close::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_sync::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_9c
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_9c
+        jp      .esx_call
 
         ; __zx_esx_f_read
         ; inputs: A = handle, HL = buffer, BC = byte count.
@@ -101,16 +89,9 @@ __zx_esx_f_sync::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_read::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_9d
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_9d
+        jp      .esx_call
 
         ; __zx_esx_f_write
         ; inputs: A = handle, HL = buffer, BC = byte count.
@@ -118,16 +99,9 @@ __zx_esx_f_read::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_write::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_9e
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_9e
+        jp      .esx_call
 
         ; __zx_esx_f_seek
         ; inputs: A = handle, BC:DE = offset, L = native seek mode.
@@ -135,16 +109,9 @@ __zx_esx_f_write::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_seek::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_9f
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_9f
+        jp      .esx_call
 
         ; __zx_esx_f_fgetpos
         ; inputs: A = native file handle.
@@ -152,16 +119,9 @@ __zx_esx_f_seek::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_fgetpos::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_a0
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_a0
+        jp      .esx_call
 
         ; __zx_esx_f_fstat
         ; inputs: A = handle, HL = native status buffer.
@@ -169,16 +129,9 @@ __zx_esx_f_fgetpos::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_fstat::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_a1
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_a1
+        jp      .esx_call
 
         ; __zx_esx_f_getcwd
         ; inputs: A = drive, HL = pathname output buffer.
@@ -186,16 +139,9 @@ __zx_esx_f_fstat::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_getcwd::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_a8
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_a8
+        jp      .esx_call
 
         ; __zx_esx_f_chdir
         ; inputs: A = drive, HL = path.
@@ -272,46 +218,37 @@ __zx_esx_f_opendir::
         ; outputs: A = nonzero for an entry, zero at end; CY reports error.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_readdir::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_a4
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_a4
+        jp      .esx_call
 
         ; __zx_esx_f_rewinddir
         ; inputs: A = directory handle; CY reports native error.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_rewinddir::
-        push    ix
         push    iy
-        push    hl
-        pop     ix
-        call    __zx_esx_gate_a7
-        push    ix
-        pop     hl
-        pop     iy
-        pop     ix
-        ret
+        ld      iy,#__zx_esx_gate_a7
+        jp      .esx_call
 
         ; __zx_esx_disk_info
         ; inputs: A = nonzero device id, HL = six-byte result buffer.
         ; outputs: native result; CY reports an unavailable device/error.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_disk_info::
-        push    ix
         push    iy
+        ld      iy,#__zx_esx_gate_84
+        jp      .esx_call
+
+        ; Shared direct-RAM call. Caller IY is already stacked.
+.esx_call:
+        push    ix
         push    hl
         pop     ix
-        call    __zx_esx_gate_84
+        call    .esx_path_gate
         push    ix
         pop     hl
-        pop     iy
         pop     ix
+        pop     iy
         ret
 
         ; .esx_path_call
@@ -395,6 +332,12 @@ __zx_esx_disk_info::
         pop     iy
         ret
 .esx_path_gate:
+        ; divIDE hides the ROM containing the IM2 scheduler. Do not
+        ; allow preemption or another firmware call until it unmaps.
+        call    _enter_critical_section
+        call    .esx_gate_invoke
+        jp      _leave_critical_section
+.esx_gate_invoke:
         jp      (iy)
 
         ; HL = validated source. Return BC = length including NUL.

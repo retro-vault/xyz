@@ -49,10 +49,10 @@ For each terminated thread:
 
 | Step | Routine | What is released |
 |---|---|---|
-| 1 | — | `main_thread` is cleared |
-| 2 | `__process_find_owned(__evt_first, p)` + `evt_destroy` | every event owned by the process |
-| 3 | `__process_find_owned(__tmr_first, p)` + `tmr_uninstall` | every timer owned by the process |
-| 4 | `__process_find_owned(__svc_first, p)` + `svc_unregister` | every service owned by the process |
+| 1 | `__so_reap` | owned events |
+| 2 | `__so_reap` | owned timers |
+| 3 | `__so_reap` | owned public and private/staged services |
+| 4 | reference-release loop | each acquisition; libraries reaching zero are reaped |
 | 5 | `mem_free_owner(__heap, p)` | every user-heap block owned by the process — the loaded XPRG image first of all |
 | 6 | `so_destroy(&process_first, p)` | the 15-byte process object itself |
 
@@ -60,10 +60,12 @@ Each "find and destroy" loop restarts from the head of its list after every hit,
 
 ## What Is *Not* Reclaimed
 
-Ownership is only as good as the owner you pass, and the public `yos_t` adapters pass `NONE`:
+Ownership is only as good as the owner assigned:
 
-- `allocate_memory(size)` allocates with owner `NONE`. Free it yourself.
-- `create_timer(hook, ticks)` and `register_service(name, table)` create kernel-owned objects. Destroy or unregister them before the process exits, or they will outlive it and point at freed memory.
+- `allocate_memory` and `register_service` use the current process, or the
+  library-owner override during initialization. Their resources are reaped.
+- `create_timer(hook, ticks)` still creates kernel-owned timers. Destroy
+  them before exit; background library callbacks are not supported.
 - `create_event(owner)` does take an owner; pass your `yos_process_t *` and the event is reaped with the process.
 - Threads created with `create_thread(entry, stack, process)` get the process as their `process` field, so they keep the process alive and are reclaimed through the thread path above; their stacks are owned by the thread, not the process.
 
@@ -85,7 +87,8 @@ If `count` had spawned a second thread that is still running, `process_reap` ret
 ## What To Keep In Mind While Developing
 
 - Always set the correct owner when creating a resource from kernel code.
-- From application code, unregister services and destroy timers explicitly before the last thread returns.
+- Destroy kernel-owned timers explicitly. Ordinary registered services are
+  process-owned; never unregister a loader-managed library service yourself.
 - Never free a thread's stack or a loaded image manually; the kernel owns both.
 - A thread that must block for another should `suspend_thread` itself; there is no join, so the exiting thread has to `resume_thread` its waiter before returning.
 

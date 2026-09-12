@@ -9,6 +9,42 @@ Release status:
 
 ## Unreleased
 
+- Fixed real-esxDOS shell/library boot: the common firmware adapter now
+  holds a nestable critical section until divIDE restores the YOS ROM.
+  Previously an IM2 interrupt during a disk call entered mapped firmware
+  instead of the ROM scheduler and restarted YOS before drawing. Added
+  interrupt-rejection/nesting regressions and a pristine Fuse boot runner
+  under `tests/fuse/`. Verified the production shell's greeting and
+  "Library OK" with Fuse 1.6.0 and esxDOS 0.8.9. ROM still ends at `0x3FBD`
+  (67 bytes free); the nine added code bytes fit existing placement slack.
+- Added ABI 9 `load_library(path, flags)`: private/shared XPRG services
+  reuse the process loader's disk, CRC and XL relocation core. Library
+  initializers run once after relocation, can self-register their relocated
+  interface, and receive library-owned allocations and staged registration.
+  Six-byte client references retain threadless library process objects until
+  the last acquiring process thread exits. Failed loads roll back resources.
+  Ordinary service registration is now process-owned and names are bounded.
+- Reduced ROM use by removing repeated scheduler/creation frames, compacting
+  heap splitting and exact reads, sharing object cleanup and eleven esxDOS
+  register adapters, and shortening descriptor validation branches. Fixed
+  the surviving-thread scan's NZ result so a sibling thread keeps its
+  process and library references alive.
+  The optimized existing routines save 439 code bytes in aggregate.
+  With library loading and the updated GPX service, the production ROM
+  ends at `0x3FBD`, leaving 67 bytes; fixed reserved addresses are unchanged.
+- Added real `shelllib.svc` packaging and a shell call/display check, plus
+  emulator coverage for relocation before self-registration, staged
+  publication, shared/private state, ABI identity, repeated acquisitions,
+  sibling-thread lifetime, malformed images, short/error reads, initializer
+  failure and image/object/reference allocation failure.
+
+- Updated the vendored ZX Spectrum libgpx to upstream commit `0ef6f070`
+  (`v1.1.0-1-g0ef6f07`). The optimized drawing core adds `BM_OR`, standard
+  line-pattern constants, a resize cursor, and the selected-edge `draw_box`
+  primitive. Its service pointer was appended as slot 24 so all existing
+  service offsets remain stable; the YOS ROM initializer adaptation remains
+  the only source-level vendor difference.
+
 - Added the XCC `yos` application backend and made the assembly-kernel build
   reproduce `shell.sys` through it: XCC emits relocatable XL and XPROG wraps
   the process. The CRT initializes relocated C storage, obtains the ABI 8

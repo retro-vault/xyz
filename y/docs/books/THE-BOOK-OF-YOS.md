@@ -40,7 +40,7 @@ for the assembly kernel alone) and run the emulated kernel tests with
    IM1 return. YOS proper begins at `0x0100`.
 2. **RAM bring-up.** `__startup_init` zeroes BSS, copies the eight-entry
    restart-vector table and the initialized data image from ROM to RAM, and
-   fills in the 94-byte public service table `__yos`.
+   fills in the 96-byte public service table `__yos`.
 3. **Kernel init (`main.s`).** Two heaps are created, the clock and keyboard
    timers are installed, the `"yos"` and `"gpx"` services are registered,
    `shell.sys` is loaded from the current esxDOS drive as an XPRG process,
@@ -53,9 +53,9 @@ for the assembly kernel alone) and run the emulated kernel tests with
    The kernel itself idles in a `HALT` loop.
 5. **Talk to the kernel.** There are no privilege levels. Applications call
    `query_service("yos")` through RST 18 and receive a `yos_t` table of
-   function pointers (ABI version 8): memory, timers, events, threads,
+   function pointers (ABI version 9): memory, timers, events, threads,
    processes, services, interrupt vectors, keyboard, mouse, a POSIX-style
-   esxDOS filesystem, and the XPRG process loader. `query_service("gpx")`
+   esxDOS filesystem, and the shared XPRG process/library loader. `query_service("gpx")`
    returns the complete libgpx drawing API.
 
 ## Memory map
@@ -70,9 +70,9 @@ for the assembly kernel alone) and run the emulated kernel tests with
        │ screen bitmap and attributes │  ULA
 0x5B00 ├──────────────────────────────┤
        │ _DATA / _INITIALIZED         │  esxDOS RAM gates, clock, kbd state
-0x5B78 │ _BSS: __yos service table    │  94 bytes
-       │       ... kernel stack       │  512 bytes, top at 0x5DD6
-0x5DD6 │       __sys_vec_tbl          │  eight 3-byte JP entries
+0x5B78 │ _BSS: __yos service table    │  96 bytes
+       │       ... kernel stack       │  512 bytes, top at 0x5DD8
+0x5DD8 │       __sys_vec_tbl          │  eight 3-byte JP entries
        │       list roots, buffers    │
 0x5EFF │ __im2_vector                 │  2 bytes, read via I=0x5E
 0x5F01 ├──────────────────────────────┤
@@ -104,6 +104,9 @@ for the assembly kernel alone) and run the emulated kernel tests with
 9. [Program and Service Images](the-book-of-yos/PROGRAM-IMAGES.md) — the XPRG container,
    what the loader validates, how to build `shell.sys`.
 
+10. [Loadable Libraries](the-book-of-yos/LIBRARIES.md) — shared/private images,
+    relocated self-registration, initializer ownership and reference cleanup.
+
 ## Appendix
 
 - [Legacy README snapshot](the-book-of-yos/LEGACY-README-SNAPSHOT.md) — the original
@@ -126,10 +129,11 @@ Where to look in `y/src/z80/` when a chapter mentions a routine:
 | threads | `kernel/thread_create.s`, `kernel/_thread_prepare_startup.s`, `kernel/thread_resume.s`, `kernel/thread_suspend.s`, `kernel/thread_exit.s`, `kernel/_thread_lswitch.s`, `kernel/_thread_robin.s`, `kernel/_thread_select_next.s`, `kernel/_thread_cleanup_terminated.s`, `kernel/_thread_state.s` |
 | processes | `kernel/process_start.s`, `kernel/process_exit.s`, `kernel/process_reap.s`, `kernel/process_load.s`, `kernel/boot_shell.s`, `kernel/_process_*.s` |
 | events and timers | `kernel/evt_*.s`, `kernel/tmr_*.s`, `kernel/_tmr_chain.s` |
+| libraries | `kernel/library_load.s`, `kernel/_image_*.s`, `kernel/_library_*.s`, `kernel/_so_reap.s` |
 | services | `kernel/svc_register.s`, `kernel/svc_unregister.s`, `kernel/_svc_query.s`, `kernel/svc_query_rst18.s`, `kernel/_yos_*.s` |
 | clock, keyboard, mouse | `drivers/clock.s`, `drivers/_clock_tick.s`, `drivers/keyboard_read.s`, `drivers/_keyboard_scan.s`, `drivers/mouse_*.s` |
 | esxDOS filesystem | `fs/*.s` (`open`, `read`, `write`, `lseek`, `stat`, `opendir`, `readdir`, `enumerate_disks`, ... and the `_esxdos_*` gates) |
-| graphics | `gpx/*.s` — vendored libgpx v1.1.0 plus the `_gpx_name.s` / `_gpx_service.s` integration modules (see `gpx/README.md`) |
+| graphics | `gpx/*.s` — vendored libgpx `v1.1.0-1-g0ef6f07` plus the `_gpx_name.s` / `_gpx_service.s` integration modules (see `gpx/README.md`) |
 | link layout | `linker.lk` — `_HEADER` at 0, `_CODE` at 0x0100, `_DATA` at 0x5B00, `_IM2` at 0x5EFF, `_HEAP` at 0x5F01, reserved divIDE and Interface 1 trap addresses |
 
 ## Conventions used in the chapters

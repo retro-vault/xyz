@@ -112,9 +112,10 @@ gpx->draw_line(screen, 0, 0, 255, 191,
 ```
 
 Coordinates are signed, allowing primitives to be clipped at screen edges.
-`CO_BACK` clears pixels and `CO_FORE` sets them. `BM_CPY` copies the selected
-colour; `BM_XOR` toggles. Many calls accept an optional clipping rectangle;
-pass `NULL` for the whole screen.
+`CO_BACK` clears pixels and `CO_FORE` sets them. For patterned operations,
+`BM_CPY` paints both pattern values, `BM_OR` preserves pattern-zero pixels,
+and `BM_XOR` toggles pattern-one pixels. Many calls accept an optional
+clipping rectangle; pass `NULL` for the whole screen.
 
 Text uses bitmap font descriptors rather than libc console output:
 

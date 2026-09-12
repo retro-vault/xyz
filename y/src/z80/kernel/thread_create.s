@@ -5,7 +5,6 @@
 
         .module thread_create
         .optsdcc -mz80 sdcccall(1)
-
         .globl  _thread_create
         .globl  __heap
         .globl  _thread_first_suspended
@@ -15,123 +14,92 @@
         .globl  _so_destroy
         .globl  _mem_allocate
         .globl  _thread_prepare_startup
-
-        .equ    THREAD_SIZE,           24
-        .equ    THREAD_SP,              4
-        .equ    THREAD_WAIT,           16
-        .equ    THREAD_NUM_EVENTS,     18
-        .equ    THREAD_STATE,          19
-        .equ    THREAD_PROCESS,        22
-        .equ    CONTEXT_SIZE,          22
-
-        .equ    STATE_SUSPENDED,        0
-        .equ    STATE_RUNNING,          1
-        .equ    STATE_TERMINATED,       4
-        .equ    EVENT_SIGNALED,         1
-
+        .equ    THREAD_SIZE,    24
+        .equ    THREAD_SP,       4
+        .equ    THREAD_WAIT,    16
+        .equ    THREAD_PROCESS, 22
+        .equ    CONTEXT_SIZE,   22
         .area   _CODE
 
-        ; _thread_create, sdcccall(1)
         ; inputs: hl = entry, de = stack size, process at sp+2
         ; outputs: de = thread or zero; removes process argument
         ; clobbers: af, bc, de, hl; preserves ix and iy
-        ; frame: entry -2, stack size -4, thread -6, process +4
+        ; IX holds the thread. Stack saves entry and size until allocated.
 _thread_create::
         push    ix
-        ld      ix, #0
-        add     ix, sp
-        push    hl
         push    de
+        push    hl
         call    _enter_critical_section
-
+        ex      de, hl
+        ld      bc, #CONTEXT_SIZE
+        or      a
+        sbc     hl, bc
+        jr      c, .failed
         ld      hl, #0
         push    hl
         ld      de, #THREAD_SIZE
         ld      hl, #_thread_first_suspended
         call    _so_create
-        push    de
         ld      a, d
         or      e
-        jp      z, .create_finish
-
-        push    de                      ; allocation owner = thread
-        ld      e, -4(ix)
-        ld      d, -3(ix)
+        jr      z, .failed
+        push    de
+        pop     ix
+        push    de
+        ld      hl, #4
+        add     hl, sp
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
         ld      hl, #__heap
         call    _mem_allocate
         ld      a, d
         or      e
-        jr      nz, .create_stack_ready
-
-        ld      e, -6(ix)
-        ld      d, -5(ix)
-        ld      hl, #_thread_first_suspended
-        call    _so_destroy
-        xor     a
-        ld      d, a
-        ld      e, a
-        ld      -6(ix), a
-        ld      -5(ix), a
-        jr      .create_finish
-
-.create_stack_ready:
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      bc, #THREAD_WAIT
-        add     hl, bc
-        xor     a
-        ld      (hl), a                 ; wait = NULL
-        inc     hl
-        ld      (hl), a
-
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      bc, #THREAD_STATE
-        add     hl, bc
-        ld      (hl), #STATE_SUSPENDED
-
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      bc, #THREAD_PROCESS
-        add     hl, bc
-        ld      a, 4(ix)
-        ld      (hl), a
-        inc     hl
-        ld      a, 5(ix)
-        ld      (hl), a
-
-        ; sp = stack + stack_size - CONTEXT_SIZE
-        ld      l, e
-        ld      h, d
-        ld      e, -4(ix)
-        ld      d, -3(ix)
+        jr      z, .destroy
+        pop     bc                     ; entry
+        pop     hl                     ; stack size
+        push    bc
         add     hl, de
         ld      de, #-CONTEXT_SIZE
         add     hl, de
-        ex      de, hl
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      bc, #THREAD_SP
-        add     hl, bc
-        ld      (hl), e
+        ld      THREAD_SP(ix), l
+        ld      THREAD_SP+1(ix), h
+        push    ix
+        pop     hl
+        ld      de, #THREAD_WAIT
+        add     hl, de
+        xor     a
+        ld      b, #6
+.clear:
+        ld      (hl), a
         inc     hl
-        ld      (hl), d
-
-        ld      l, -6(ix)
-        ld      h, -5(ix)
-        ld      e, -2(ix)
-        ld      d, -1(ix)
+        djnz    .clear
+        ld      hl, #6
+        add     hl, sp
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        ld      THREAD_PROCESS(ix), e
+        ld      THREAD_PROCESS+1(ix), d
+        pop     de
+        push    ix
+        pop     hl
         call    _thread_prepare_startup
-        ld      e, -6(ix)
-        ld      d, -5(ix)
-
-.create_finish:
+        push    ix
+        pop     de
+        jr      .done
+.destroy:
+        push    ix
+        pop     de
+        ld      hl, #_thread_first_suspended
+        call    _so_destroy
+.failed:
+        pop     hl
+        pop     hl
+        ld      de, #0
+.done:
         call    _leave_critical_section
-        ld      e, -6(ix)
-        ld      d, -5(ix)
-        ld      sp, ix
         pop     ix
-        pop     hl                      ; return address
-        pop     bc                      ; process argument
-        push    hl
-        ret
+        pop     hl
+        pop     bc
+        jp      (hl)

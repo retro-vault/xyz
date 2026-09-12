@@ -5,7 +5,8 @@
 `yos` is a preemptive, ROM-based operating system for the 48K ZX Spectrum,
 written entirely in hand-written Z80 assembly. It boots from a 16 KiB
 replacement ROM that stays compatible with esxDOS on a divIDE interface,
-loads its shell from disk as a relocatable XPRG process, and then runs
+loads its shell from disk as a relocatable XPRG process, supports reference-counted
+shared/private XPRG libraries, and then runs
 everything through a 50 Hz interrupt-driven round-robin scheduler and named
 service tables.
 
@@ -15,7 +16,7 @@ service tables.
 |---|---|
 | `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `shell.sys` |
 | `src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`, with its own copy of the old chapter docs |
-| `include/` | public headers used by YOS applications: `yos.h` (kernel ABI 8), `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
+| `include/` | public headers used by YOS applications: `yos.h` (kernel ABI 9), `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
 | `pkg/` | host tools staged into `bin/y/bin/`: [`appmake`](pkg/appmake/README.md), [`microdrive`](pkg/microdrive/README.md), [`serial`](pkg/serial/README.md) |
 | `tests/` | `kernel-z80/` emulated kernel test, `shell-yos/` boot shell fixture, `hello-yos/` and `mdr*-yos/` apps, [`mdr-emu/`](tests/mdr-emu/README.md) microdrive harness, `microdrives/` and `tapes/` media |
 | `docs/books/` | [Programming YOS](docs/books/PROGRAMMING-YOS.md) for application authors and [The Book of YOS](docs/books/THE-BOOK-OF-YOS.md) for kernel internals |
@@ -31,9 +32,20 @@ make -C y packages         # host tools -> bin/y/bin
 ```
 
 The assembly kernel is built with `xas`/`xld`/`xar` from `bin/x/bin`;
-`shell.sys` is compiled as a relocatable XL application by the XCC `yos`
+The build also emits `shelllib.svc`; copy it alongside `shell.sys` on the
+esxDOS drive. The shell calls its relocated, self-registered interface and
+shows "Library OK". `shell.sys` is compiled as a relocatable XL application by the XCC `yos`
 backend and packaged with `xprog`. Details, including how to validate the ROM against real esxDOS, are
 in [AGENTS.md](AGENTS.md).
+
+To show the shell in Fuse with real esxDOS firmware:
+
+```sh
+python3 y/tests/fuse/run.py --esxdos build/yos-fuse/esxdos089
+```
+
+Supply an extracted esxDOS distribution at that path. See the
+[Fuse runner guide](tests/fuse/README.md) for dependencies and cold-boot details.
 
 ## System Overview
 
@@ -41,7 +53,7 @@ in [AGENTS.md](AGENTS.md).
    first 256 bytes are an esxDOS-compatible header (RST 08 and NMI belong to
    the firmware, RST 10 is an immediate `RET`, RST 18-30 jump through a
    writable RAM table). `__startup_init` zeroes BSS, copies the vector table
-   and initialized data from ROM to RAM and builds the 94-byte service table.
+   and initialized data from ROM to RAM and builds the 96-byte service table.
 2. **Kernel bring-up (`src/z80/main.s`)** — kernel and user heaps are
    initialized, the clock and keyboard timers are installed, the `"yos"` and
    `"gpx"` services are registered, `shell.sys` is loaded from the current
@@ -76,6 +88,6 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 [language.badge]: https://img.shields.io/badge/language-z80%20asm-blue.svg
 
 [standard.url]:   https://github.com/retro-vault/xyz/blob/main/y/include/yos.h
-[standard.badge]: https://img.shields.io/badge/yos%20abi-8-blue.svg
+[standard.badge]: https://img.shields.io/badge/yos%20abi-9-blue.svg
 
 [status.badge]:  https://img.shields.io/badge/status-development-red.svg

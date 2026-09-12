@@ -11,14 +11,16 @@
         .globl  _list_insert
         .area   _CODE
 
-        ; hl = head address, de = size, owner at sp+2; removes owner.
+        ; inputs: hl = head, de = size, owner at sp+2; removes owner
+        ; outputs: de = object or zero
+        ; clobbers: af, bc, hl; preserves ix and iy
 _so_create::
-        push    ix
-        ld      ix, #0
-        add     ix, sp
         push    hl
-        ld      c, 4(ix)
-        ld      b, 5(ix)
+        ld      hl, #4
+        add     hl, sp
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
         push    bc
         ld      hl, #__sys_heap
         call    _mem_allocate
@@ -26,18 +28,18 @@ _so_create::
         ld      a, d
         or      e
         jr      z, .done
-        push    de
         call    _list_insert
-        pop     de
+        ld      hl, #-5                ; reuse heap header's owner
+        add     hl, de
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
         ld      hl, #2
         add     hl, de
-        ld      a, 4(ix)
-        ld      (hl), a
+        ld      (hl), c
         inc     hl
-        ld      a, 5(ix)
-        ld      (hl), a
+        ld      (hl), b
 .done:
-        pop     ix
         pop     hl
         pop     bc
         jp      (hl)

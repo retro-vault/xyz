@@ -1,4 +1,4 @@
-        ; Internal named-service lookup.
+        ; Find a named service while protecting the registration list.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2021, 2026 tomaz stih
@@ -8,45 +8,53 @@
         .globl  __svc_query
         .globl  __svc_first
         .globl  __string_compare
+        .globl  _enter_critical_section
+        .globl  _leave_critical_section
+        .equ    SERVICE_NAME,       4
+        .equ    SERVICE_INTERFACE, 20
         .area   _CODE
 
-        ; hl = name; returns de = function table or zero.
+        ; inputs: hl = name; outputs: de = borrowed table or zero
+        ; clobbers: af, bc, de, hl; preserves ix and iy
+        ; IX keeps the name; the examined service is saved on stack.
 __svc_query::
+        call    _enter_critical_section
         push    ix
-        push    iy
         push    hl
         pop     ix
-        ld      iy, (__svc_first)
+        ld      hl, (__svc_first)
         ld      b, #0
 .loop:
-        push    iy
-        pop     de
-        ld      a, d
-        or      e
-        jr      z, .done
-        inc     de
-        inc     de
-        inc     de
-        inc     de
+        ld      a, h
+        or      l
+        jr      z, .missing
+        push    hl
+        ld      de, #SERVICE_NAME
+        add     hl, de
+        ex      de, hl
         push    ix
         pop     hl
         push    bc
         call    __string_compare
         pop     bc
+        pop     hl
         ld      a, d
         or      e
         jr      z, .found
-        ld      l, 0(iy)
-        ld      h, 1(iy)
-        push    hl
-        pop     iy
+        ld      a, (hl)
+        inc     hl
+        ld      h, (hl)
+        ld      l, a
         djnz    .loop
+.missing:
         ld      de, #0
         jr      .done
 .found:
-        ld      e, 20(iy)
-        ld      d, 21(iy)
+        ld      de, #SERVICE_INTERFACE
+        add     hl, de
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
 .done:
-        pop     iy
         pop     ix
-        ret
+        jp      _leave_critical_section

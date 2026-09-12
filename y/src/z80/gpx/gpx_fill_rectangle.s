@@ -18,10 +18,10 @@
 
         .globl  _gpx_fill_rectangle
         .globl  __gpx_span_row
+        .globl  __gpx_span_row_copy
         .globl  __gpx_span_setup
         .globl  __rect_unpack_norm
         .globl  __clip_seg
-        .globl  __rect_screen
         .globl  __vid_rowaddr
         .globl  __vid_nextrow
 
@@ -47,33 +47,26 @@
         ;;   stack: c, m, fpatt, fpatt_len, clip
         ;;
         ;; Clobbers:
-        ;;   AF, BC, DE, HL, IX, IY
+        ;;   AF, BC, DE, HL. Preserves IX and IY.
         ;;
         ;; References:
         ;;   __gpx_span_setup
         ;;   __gpx_span_row
         ;;   __vid_rowaddr, __vid_nextrow
-        ;;   __rect_cmp16s_lt
+        ;;   __rect_unpack_norm, __clip_seg
 _gpx_fill_rectangle::
+        push    iy
         push    ix
         ld      ix,#0
         add     ix,sp
 
-        ;; locals (21 bytes)
-        ;; -1..-2   x0
-        ;; -3..-4   x1
-        ;; -5..-6   y0
-        ;; -7..-8   y1
-        ;; -9..-10  row pointer into pixel VRAM
-        ;; -11..-12 y0 original / ycur
-        ;; -13      fpatt idx
-        ;; -14..-15 fpatt ptr
-        ;; -16      fpatt len
-        ;; -17..-21 span descriptor for __gpx_span_row:
-        ;;          -21 mask_first, -20 mask_last, -19 count,
-        ;;          -18 sel_or,     -17 sel_xor
-        ;; -22      x phase shift (x0 original & 7)
-        ld      hl,#-22
+        ;; locals (17 bytes):
+        ;; -8..-1   normalized rect_t: x0, y0, x1, y1 (little-endian)
+        ;; -10..-9  original y0 (high, low); -9 becomes remaining row count
+        ;; -11      fill pattern index (pointer and length stay in arguments)
+        ;; -16..-12 span descriptor: first/last masks, count, OR/XOR selectors
+        ;; -17      x phase shift (original x0 & 7)
+        ld      hl,#-17
         add     hl,sp
         ld      sp,hl
 
@@ -83,117 +76,73 @@ _gpx_fill_rectangle::
         jp      z,.fr_done
 
         ;; if (fpatt_len == 0) return
-        ld      a,8(ix)
+        ld      a,10(ix)
         or      a
         jp      z,.fr_done
-
-        ;; save fpatt ptr + len
-        ld      a,6(ix)
-        ld      -14(ix),a
-        ld      a,7(ix)
-        ld      -15(ix),a
-        ld      a,8(ix)
-        ld      -16(ix),a
 
         ;; unpack + normalize rect into locals
         call    __rect_unpack_norm
 
         ;; preserve original y0 for pattern-phase alignment
-        ld      a,-5(ix)
-        ld      -11(ix),a
         ld      a,-6(ix)
-        ld      -12(ix),a
+        ld      -9(ix),a
+        ld      a,-5(ix)
+        ld      -10(ix),a
         ;; The pattern is anchored to the rectangle's own x0, and every
         ;; destination byte is 8-aligned, so one rotation by (x0 & 7) puts
         ;; the pattern on the byte grid for the whole rectangle.
-        ld      a,-1(ix)
+        ld      a,-8(ix)
         and     #0x07
-        ld      -22(ix),a
+        ld      -17(ix),a
 
-        ;; Clamp to the screen. This is the same 1-D clamp the clip rect
-        ;; needs, so it runs through the shared helper against __rect_screen
-        ;; rather than being open-coded here.
-        ld      iy,#__rect_screen
-        ld      l,-1(ix)
-        ld      h,-2(ix)
-        ld      e,-3(ix)
-        ld      d,-4(ix)
-        call    __clip_seg
+        ;; Each axis stays in registers through screen and optional clipping.
+        ;; Only visible low bytes are needed after it is accepted.
+        ld      l,-8(ix)
+        ld      h,-7(ix)
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        ld      c,11(ix)
+        ld      b,12(ix)
+        ld      a,#255
+        call    .fr_clip_axis
         jp      c,.fr_done
-        ld      -1(ix),l
-        ld      -2(ix),h
-        ld      -3(ix),e
-        ld      -4(ix),d
+        ld      -8(ix),l
+        ld      -4(ix),e
 
-        ld      iy,#__rect_screen+2
-        ld      l,-5(ix)
-        ld      h,-6(ix)
-        ld      e,-7(ix)
-        ld      d,-8(ix)
-        call    __clip_seg
+        ld      l,-6(ix)
+        ld      h,-5(ix)
+        ld      e,-2(ix)
+        ld      d,-1(ix)
+        ld      c,11(ix)
+        ld      b,12(ix)
+        ld      a,b
+        or      c
+        jr      z,.fr_y_clip
+        inc     bc
+        inc     bc
+.fr_y_clip:
+        ld      a,#191
+        call    .fr_clip_axis
         jp      c,.fr_done
-        ld      -5(ix),l
-        ld      -6(ix),h
-        ld      -7(ix),e
-        ld      -8(ix),d
-
-        ;; optional clip visible range once:
-        ;;   [x0..x1] ∩ [clip->x0..clip->x1]
-        ;;   [y0..y1] ∩ [clip->y0..clip->y1]
-        ld      a,9(ix)
-        or      10(ix)
-        jr      z,.fr_phase_setup
-
-        ;; Clip [x0..x1] and [y0..y1] against the clip rect once, via the
-        ;; shared __clip_seg helper (reject on either axis => nothing visible).
-        ;; X axis: IY = &clip->x0 (clip+0); x1 at IY+4.
-        ld      c,9(ix)
-        ld      b,10(ix)                ; BC = clip ptr
-        ld      iy,#0
-        add     iy,bc
-        ld      l,-1(ix)
-        ld      h,-2(ix)                ; HL = x0
-        ld      e,-3(ix)
-        ld      d,-4(ix)                ; DE = x1
-        call    __clip_seg
-        jp      c,.fr_done
-        ld      -1(ix),l
-        ld      -2(ix),h                ; x0 = clamped lo
-        ld      -3(ix),e
-        ld      -4(ix),d                ; x1 = clamped hi
-
-        ;; Y axis: IY = &clip->y0 (clip+2); y1 at IY+4 (clip+6).
-        ld      c,9(ix)
-        ld      b,10(ix)                ; reload BC = clip ptr
-        ld      iy,#2
-        add     iy,bc
-        ld      l,-5(ix)
-        ld      h,-6(ix)                ; HL = y0
-        ld      e,-7(ix)
-        ld      d,-8(ix)                ; DE = y1
-        call    __clip_seg
-        jp      c,.fr_done
-        ld      -5(ix),l
-        ld      -6(ix),h                ; y0 = clamped lo
-        ld      -7(ix),e
-        ld      -8(ix),d                ; y1 = clamped hi
+        ld      -6(ix),l
+        ld      -2(ix),e
 
 .fr_phase_setup:
-        ;; IY = &descriptor (ix - 21)
+        ;; IY = &descriptor (ix - 16)
         push    ix
         pop     iy
-        ld      de,#-21
+        ld      de,#-16
         add     iy,de
 
-        ld      b,-1(ix)                ; x0 (clamped to the screen)
-        ld      c,-3(ix)                ; x1
-        ld      d,4(ix)                 ; color
-        ld      e,5(ix)                 ; mode
+        ld      b,-8(ix)                ; x0 (clamped to the screen)
+        ld      c,-4(ix)                ; x1
+        ld      d,6(ix)                 ; color
+        ld      e,7(ix)                 ; mode
         call    __gpx_span_setup        ; A = byte_lo
         ld      c,a
 
         ;; row pointer for the first visible row
-        ld      b,-5(ix)                ; y0 low
+        ld      b,-6(ix)                ; y0 low
         call    __vid_rowaddr
         ld      a,c                     ; byte_lo
         add     a,l
@@ -202,16 +151,16 @@ _gpx_fill_rectangle::
 
 .fr_idx_setup:
         ;; idx = (y0_clipped - y0_original) % fpatt_len
-        ld      l,-5(ix)
-        ld      h,-6(ix)
-        ld      e,-11(ix)
-        ld      d,-12(ix)
+        ld      l,-6(ix)
+        ld      h,#0
+        ld      e,-9(ix)
+        ld      d,-10(ix)
         xor     a
         sbc     hl,de
         ;; A fixed 16-bit remainder bounds the work even when the original
         ;; y is -32768. The frequent already-in-range case still returns
         ;; immediately, before entering the bit loop.
-        ld      c,-16(ix)
+        ld      c,10(ix)
         ld      a,h
         or      a
         jr      nz,.fr_idx_div
@@ -232,25 +181,25 @@ _gpx_fill_rectangle::
 .fr_idx_next:
         djnz    .fr_idx_mod
 .fr_idx_done:
-        ld      -13(ix),a
+        ld      -11(ix),a
 
         ;; row count = y1 - y0 + 1 (both already clamped to the screen)
-        ld      a,-7(ix)
-        sub     -5(ix)
+        ld      a,-2(ix)
+        sub     -6(ix)
         inc     a
-        ld      -11(ix),a
+        ld      -9(ix),a
         pop     hl                      ; row pointer remains live through the loop
 
 .fr_row_loop:
         push    hl
         ;; pattern for this row, rotated onto the byte grid
-        ld      l,-14(ix)
-        ld      h,-15(ix)
-        ld      e,-13(ix)
+        ld      l,8(ix)
+        ld      h,9(ix)
+        ld      e,-11(ix)
         ld      d,#0x00
         add     hl,de
         ld      a,(hl)
-        ld      b,-22(ix)
+        ld      b,-17(ix)
         inc     b
         dec     b
         jr      z,.fr_patt_ready
@@ -259,25 +208,42 @@ _gpx_fill_rectangle::
         djnz    .fr_patt_rot
 .fr_patt_ready:
         pop     hl
+        ld      b,7(ix)
+        inc     b
+        dec     b                       ; test mode without disturbing pattern
+        jr      nz,.fr_row_stipple
+
+        ;; Readable framebuffer: fold CO_BACK by complementing the desired
+        ;; pattern, then replace the covered bits in one byte-span pass.
+        ld      b,6(ix)
+        bit     0,b
+        jr      nz,.fr_copy_ready
+        cpl
+.fr_copy_ready:
+        call    __gpx_span_row_copy
+        jr      .fr_row_done
+.fr_row_stipple:
         call    __gpx_span_row          ; preserves HL
-        dec     -11(ix)
+.fr_row_done:
+        dec     -9(ix)
         jr      z,.fr_done
         call    __vid_nextrow
 
         ;; idx = (idx + 1) % fpatt_len
-        ld      a,-13(ix)
+        ld      a,-11(ix)
         inc     a
-        cp      -16(ix)
+        cp      10(ix)
         jr      c,.fr_store_idx
         xor     a
 .fr_store_idx:
-        ld      -13(ix),a
+        ld      -11(ix),a
 
         jr      .fr_row_loop
 
 .fr_done:
         ld      sp,ix
         pop     ix
+        pop     iy
 
         ;; callee cleanup: c(1), m(1), fpatt(2), fpatt_len(1), clip(2) = 7
         pop     de
@@ -285,4 +251,46 @@ _gpx_fill_rectangle::
         add     hl,sp
         ld      sp,hl
         push    de
+        ret
+
+        ;; HL=lo, DE=hi, A=screen maximum, BC=optional clip axis.
+        ;; Return on-screen endpoints in HL/DE; carry rejects an empty span.
+.fr_clip_axis:
+        push    bc
+        ld      c,a
+        ld      a,h
+        or      a
+        jr      z,.fr_axis_lo
+        jp      p,.fr_axis_empty
+        ld      hl,#0
+.fr_axis_lo:
+        ld      a,c
+        cp      l
+        jr      c,.fr_axis_empty
+        ld      a,d
+        or      a
+        jr      z,.fr_axis_hi
+        jp      m,.fr_axis_empty
+        ld      e,c
+.fr_axis_hi:
+        ld      a,c
+        cp      e
+        jr      nc,.fr_axis_keep
+        ld      e,c
+.fr_axis_keep:
+        ld      h,#0
+        ld      d,h
+        ld      a,e
+        cp      l
+        jr      c,.fr_axis_empty
+        pop     bc
+        ld      a,b
+        or      c
+        ret     z
+        push    bc
+        pop     iy
+        jp      __clip_seg
+.fr_axis_empty:
+        pop     bc
+        scf
         ret

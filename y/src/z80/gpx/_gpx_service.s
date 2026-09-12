@@ -30,6 +30,7 @@
         .globl  _gpx_fill_circle
         .globl  _gpx_draw_polygon
         .globl  _gpx_fill_polygon
+        .globl  _gpx_draw_box
 
         .area   _CONST
 
@@ -58,3 +59,5 @@ __gpx_service::
         .dw     _gpx_fill_circle
         .dw     _gpx_draw_polygon
         .dw     _gpx_fill_polygon
+        ; Appended after the v1.1.0 table to preserve existing slot offsets.
+        .dw     _gpx_draw_box

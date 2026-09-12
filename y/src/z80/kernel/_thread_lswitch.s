@@ -42,22 +42,18 @@ __thread_lswitch::
 
         ld      e, 4(ix)
         ld      d, 5(ix)
-        ld      l, -2(ix)
-        ld      h, -1(ix)
+        pop     bc
+        pop     hl
+        push    bc
         call    _list_remove
+        pop     hl
         ld      a, d
         or      e
         jr      z, .lswitch_leave
 
-        ld      e, 4(ix)
-        ld      d, 5(ix)
-        ld      l, -4(ix)
-        ld      h, -3(ix)
         call    _list_insert
-        ld      l, 4(ix)
-        ld      h, 5(ix)
-        ld      bc, #THREAD_STATE
-        add     hl, bc
+        ld      hl, #THREAD_STATE
+        add     hl, de
         ld      a, 6(ix)
         ld      (hl), a
 
@@ -74,5 +70,4 @@ __thread_lswitch::
         pop     bc                      ; thread
         inc     sp                      ; state byte
         pop     bc                      ; bool
-        push    hl
-        ret
+        jp      (hl)

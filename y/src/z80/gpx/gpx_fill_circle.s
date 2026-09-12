@@ -229,9 +229,13 @@ _gpx_fill_circle::
         ld      l,10(ix)
         ld      h,11(ix)
         add     hl,de
-        ld      a,(hl)
+        ld      a,9(ix)
         or      a
-        ret     z                       ; an empty pattern row draws nothing
+        ld      a,(hl)                  ; LD preserves the mode zero flag
+        jr      z,.row_convert          ; only BM_CPY paints pattern zeroes
+        or      a
+        ret     z                       ; OR/XOR zero row changes nothing
+.row_convert:
         cp      #0xFF
         jr      z,.row_draw             ; solid rows need no phase conversion
 

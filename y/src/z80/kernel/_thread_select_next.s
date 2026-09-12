@@ -1,11 +1,10 @@
-        ; Shared selection and wakeup pass for the scheduler.
+        ; Wake signaled threads and select the next runnable thread.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2021, 2026 tomaz stih
 
         .module _thread_select_next
         .optsdcc -mz80 sdcccall(1)
-
         .globl  __thread_select_next
         .globl  __thread_cleanup_terminated
         .globl  _thread_current
@@ -13,122 +12,83 @@
         .globl  _thread_first_running
         .globl  _list_remove
         .globl  _list_insert
-
-        .equ    THREAD_SIZE,           24
-        .equ    THREAD_SP,              4
-        .equ    THREAD_WAIT,           16
-        .equ    THREAD_NUM_EVENTS,     18
-        .equ    THREAD_STATE,          19
-        .equ    THREAD_PROCESS,        22
-        .equ    CONTEXT_SIZE,          22
-
-        .equ    STATE_SUSPENDED,        0
-        .equ    STATE_RUNNING,          1
-        .equ    STATE_TERMINATED,       4
-        .equ    EVENT_SIGNALED,         1
-
+        .equ    THREAD_WAIT,       16
+        .equ    THREAD_NUM_EVENTS, 18
+        .equ    THREAD_STATE,      19
+        .equ    STATE_RUNNING,     1
+        .equ    EVENT_SIGNALED,    1
         .area   _CODE
 
-        ; __thread_select_next, sdcccall(1)
         ; outputs: de = next runnable thread or zero
         ; clobbers: af, bc, de, hl; preserves ix and iy
-        ; frame: waiting iterator -2, examined thread -4
+        ; IX is the examined thread; its next link is saved on stack.
 __thread_select_next::
         push    ix
-        ld      ix, #0
-        add     ix, sp
-        ld      hl, #-4
-        add     hl, sp
-        ld      sp, hl
         call    __thread_cleanup_terminated
-
         ld      hl, (_thread_first_waiting)
-        ld      -2(ix), l
-        ld      -1(ix), h
-.waiting_loop:
-        ld      l, -2(ix)
-        ld      h, -1(ix)
+.waiting:
         ld      a, h
         or      l
-        jr      z, .select_runnable
-        ld      -4(ix), l
-        ld      -3(ix), h
-        ld      e, (hl)                 ; save t->next before inspection
-        inc     hl
-        ld      d, (hl)
-        ld      -2(ix), e
-        ld      -1(ix), d
-
-        ld      l, -4(ix)
-        ld      h, -3(ix)
-        ld      de, #THREAD_NUM_EVENTS
-        add     hl, de
-        ld      c, (hl)
-        ld      a, c
-        or      a
-        jr      z, .waiting_loop
-        ld      l, -4(ix)
-        ld      h, -3(ix)
-        ld      de, #THREAD_WAIT
-        add     hl, de
-        ld      e, (hl)
-        inc     hl
-        ld      d, (hl)
-        ex      de, hl                  ; hl = event pointer array
-.event_loop:
+        jr      z, .select
+        push    hl
+        pop     ix
+        ld      e, 0(ix)
+        ld      d, 1(ix)
+        push    de
+        ld      b, THREAD_NUM_EVENTS(ix)
+        inc     b
+        dec     b
+        jr      z, .next
+        ld      l, THREAD_WAIT(ix)
+        ld      h, THREAD_WAIT+1(ix)
+.event:
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
         inc     hl
         push    hl
         ex      de, hl
-        ld      de, #4
-        add     hl, de
+        inc     hl
+        inc     hl
+        inc     hl
+        inc     hl
         ld      a, (hl)
         pop     hl
         cp      #EVENT_SIGNALED
-        jr      z, .wake_thread
-        dec     c
-        jr      nz, .event_loop
-        jr      .waiting_loop
-
-.wake_thread:
-        ld      l, -4(ix)
-        ld      h, -3(ix)
-        ld      de, #THREAD_STATE
-        add     hl, de
-        ld      (hl), #STATE_RUNNING
-        ld      e, -4(ix)
-        ld      d, -3(ix)
+        jr      z, .wake
+        djnz    .event
+        jr      .next
+.wake:
+        ld      THREAD_STATE(ix), #STATE_RUNNING
+        push    ix
+        pop     de
         ld      hl, #_thread_first_waiting
         call    _list_remove
-        ld      e, -4(ix)
-        ld      d, -3(ix)
+        push    ix
+        pop     de
         ld      hl, #_thread_first_running
         call    _list_insert
-        jr      .waiting_loop
-
-.select_runnable:
+.next:
+        pop     hl
+        jr      .waiting
+.select:
         ld      hl, (_thread_current)
         ld      a, h
         or      l
-        jr      z, .select_first
+        jr      z, .first
         push    hl
-        ld      de, #THREAD_STATE
-        add     hl, de
-        ld      a, (hl)
-        pop     hl
+        pop     ix
+        ld      a, THREAD_STATE(ix)
         cp      #STATE_RUNNING
-        jr      nz, .select_first
+        jr      nz, .first
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
         ld      a, d
         or      e
-        jr      nz, .select_done
-.select_first:
+        jr      nz, .done
+.first:
         ld      de, (_thread_first_running)
-.select_done:
-        ld      sp, ix
+.done:
         pop     ix
         ret

@@ -1,4 +1,4 @@
-        ; Kernel-owned malloc adapter for the public YOS service table.
+        ; Process/library-owned malloc adapter for the public YOS service table.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -9,7 +9,7 @@
         .globl  __yos_malloc
         .globl  __heap
         .globl  _mem_allocate
-        .globl  _thread_current
+        .globl  __current_process
         .globl  _enter_critical_section
         .globl  _leave_critical_section
 
@@ -24,19 +24,7 @@
 __yos_malloc::
         ex      de, hl
         call    _enter_critical_section
-        ld      bc, #0
-        ld      hl, (_thread_current)
-        ld      a, h
-        or      l
-        jr      z, .owner_ready
-        push    de
-        ld      de, #THREAD_PROCESS
-        add     hl, de
-        ld      c, (hl)
-        inc     hl
-        ld      b, (hl)
-        pop     de
-.owner_ready:
+        call    __current_process
         push    bc
         ld      hl, #__heap
         call    _mem_allocate

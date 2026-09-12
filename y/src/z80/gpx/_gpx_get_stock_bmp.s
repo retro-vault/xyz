@@ -16,12 +16,14 @@
         .globl  _gpx_cur_hourglass
         .globl  _gpx_cur_caret
         .globl  _gpx_cur_hand
+        .globl  _gpx_cur_resize
 
         .equ    GPXSB_CURSOR_CLASSIC,   0x00
         .equ    GPXSB_CURSOR_STD,       0x01
         .equ    GPXSB_CURSOR_HOURGLASS, 0x02
         .equ    GPXSB_CURSOR_CARET,     0x03
         .equ    GPXSB_CURSOR_HAND,      0x04
+        .equ    GPXSB_CURSOR_RESIZE,    0x05
 
         .area   _CODE
 
@@ -53,6 +55,8 @@ _gpx_get_stock_bmp::
         jr      z,.caret
         dec     a
         jr      z,.hand
+        dec     a
+        jr      z,.resize
 
         ld      de,#0x0000
         ret
@@ -71,4 +75,7 @@ _gpx_get_stock_bmp::
         ret
 .hand:
         ld      de,#_gpx_cur_hand
+        ret
+.resize:
+        ld      de,#_gpx_cur_resize
         ret

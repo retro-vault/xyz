@@ -1,6 +1,6 @@
 # YOS API Reference
 
-This is the complete ABI 8 application reference for `y/include/yos.h` and
+This is the complete ABI 9 application reference for `y/include/yos.h` and
 the YOS XCC platform helpers. All kernel calls use the `sdcccall(1)` ABI used
 by the default XCC mode. Include `<yos.h>` and obtain the cached table once:
 
@@ -244,7 +244,7 @@ yos_process_t *loaded = yos->load_process("EDITOR.SYS");
 ### `uint8_t *process_load_error`
 
 Points to the last loader error byte. It is data, not a function pointer.
-Read it after `load_process` returns `NULL`:
+Read it after `load_process` or `load_library` returns `NULL`:
 
 ```c
 loaded = yos->load_process("EDITOR.SYS");
@@ -256,7 +256,28 @@ if (!loaded) {
 
 Values are `YOS_PROCESS_LOAD_OK`, `NOT_FOUND`, `NO_MEMORY`, `READ_ERROR`,
 `INVALID_IMAGE`, `START_ERROR`, `NOT_PROCESS`, `REQUIRES_NEWER_OS`, and
-`BAD_CHECKSUM` (0 through 8).
+`BAD_CHECKSUM` (0 through 8). Code 6 means wrong image kind for the
+selected loading API. ABI 9 adds `BUSY` (9), `NO_PROCESS` (10), and
+`INIT_ERROR` (11).
+
+### `void *load_library(const char *path, uint16_t flags)`
+
+Loads a relocatable XPRG service and returns its relocated function-pointer
+table. `YOS_LIBRARY_PRIVATE` always creates a private instance;
+`YOS_LIBRARY_SHARED` reuses the same full name and image ABI. Initialization
+and self-registration run once, after relocation. Each successful call
+retains a reference until the acquiring process's last thread exits.
+There is no explicit unload call. `query_service` does not retain a library.
+
+```c
+shelllib_api_t *library = yos->load_library(
+    "shelllib.svc", YOS_LIBRARY_SHARED);
+if (library) library->probe();
+```
+
+See [Loadable Libraries](../the-book-of-yos/LIBRARIES.md) and the complete
+`y/tests/shell-yos/shelllib.s` / `shelllib.h` fixture for the initializer
+contract, staged registration, ownership and supported image limits.
 
 ## Named services
 
@@ -286,8 +307,10 @@ Removes and frees a registration; clients must no longer use its pointer.
 if (service) yos->unregister_service(service);
 ```
 
-The ABI 8 registration adapter records kernel ownership, so application
-services should be explicitly unregistered before their storage disappears.
+ABI 9 records current-process ownership, so ordinary registrations are
+reaped on process exit. During library initialization registration is
+library-owned and staged until success. Never manually unregister a
+loader-managed library service.
 
 ## Restart handlers
 

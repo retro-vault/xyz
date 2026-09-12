@@ -85,7 +85,7 @@ _gpx_draw_line::
         add     hl,sp                   ; HL -> lpatt
         ld      a,(hl)
         and     #0x01
-        jr      z,.gl_single_done
+        jr      z,.gl_bres              ; COPY zero-pixels handled by raster
 
         ;; The point already lives in registers. Feed the raw pixel entry
         ;; directly, keeping y while BC is loaded with the clip pointer.

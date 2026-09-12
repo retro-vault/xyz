@@ -126,70 +126,55 @@ __rect_cmp16s_lt:
         ;;
         ;; Unpack rect_t from DE directly into the caller frame at IX
         ;; using caller-local layout:
-        ;;   [-1..-2] x0, [-3..-4] x1, [-5..-6] y0, [-7..-8] y1
+        ;;   [-8..-7] x0, [-6..-5] y0, [-4..-3] x1, [-2..-1] y1
         ;; and normalize endpoints so x0<=x1 and y0<=y1.
         ;;
         ;;   DE = const rect_t *src (x0,y0,x1,y1 in struct order)
         ;;   IX = caller frame base (preserved)
         ;; ------------------------------------------------------------
 __rect_unpack_norm:
-        ;; x0
-        ld      a,(de)
-        ld      -1(ix),a
-        inc     de
-        ld      a,(de)
-        ld      -2(ix),a
-        inc     de
-
-        ;; y0 -> [-5..-6]
-        ld      a,(de)
-        ld      -5(ix),a
-        inc     de
-        ld      a,(de)
-        ld      -6(ix),a
-        inc     de
-
-        ;; x1 -> [-3..-4]
-        ld      a,(de)
-        ld      -3(ix),a
-        inc     de
-        ld      a,(de)
-        ld      -4(ix),a
-        inc     de
-
-        ;; y1 -> [-7..-8]
-        ld      a,(de)
-        ld      -7(ix),a
-        inc     de
-        ld      a,(de)
-        ld      -8(ix),a
-
-        ;; if (x1 < x0) swap
-        ld      l,-3(ix)
-        ld      h,-4(ix)
-        ld      e,-1(ix)
-        ld      d,-2(ix)
+        ;; Read each source byte once, normalize in registers, then store.
+        ;; Stack slots hold the other axis while the signed comparison runs.
+        ex      de,hl
+        ld      e,(hl)                  ; x0
+        inc     hl
+        ld      d,(hl)
+        inc     hl
+        ld      c,(hl)                  ; y0
+        inc     hl
+        ld      b,(hl)
+        inc     hl
+        push    bc
+        push    de
+        ld      c,(hl)                  ; x1
+        inc     hl
+        ld      b,(hl)
+        inc     hl
+        ld      e,(hl)                  ; y1
+        inc     hl
+        ld      d,(hl)
+        push    de
+        ld      h,b
+        ld      l,c
+        pop     bc                      ; BC = y1
+        pop     de                      ; DE = x0, HL = x1
         call    __rect_cmp16s_lt
-        jr      nc,.ru_x_ok
-
-        ld      -1(ix),l
-        ld      -2(ix),h
-        ld      -3(ix),e
-        ld      -4(ix),d
-
-.ru_x_ok:
-        ;; if (y1 < y0) swap
-        ld      l,-7(ix)
-        ld      h,-8(ix)
-        ld      e,-5(ix)
-        ld      d,-6(ix)
+        jr      nc,.ru_x
+        ex      de,hl
+.ru_x:
+        ld      -8(ix),e
+        ld      -7(ix),d
+        ld      -4(ix),l
+        ld      -3(ix),h
+        pop     de                      ; DE = y0, HL = y1
+        ld      h,b
+        ld      l,c
         call    __rect_cmp16s_lt
-        jr      nc,.ru_done
-
-        ld      -5(ix),l
-        ld      -6(ix),h
-        ld      -7(ix),e
-        ld      -8(ix),d
-
-.ru_done:
+        jr      nc,.ru_y
+        ex      de,hl
+.ru_y:
+        ld      -6(ix),e
+        ld      -5(ix),d
+        ld      -2(ix),l
+        ld      -1(ix),h
         ret

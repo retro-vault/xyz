@@ -10,7 +10,8 @@ gpx_t *screen = gpx->create(GPXM_DEFAULT);
 if (!screen) return 2;
 ```
 
-The service has 23 calls in the exact order below.
+The service has 24 calls. The first 23 retain their v1.1.0 slot offsets;
+`draw_box` is appended as slot 24. The sections below group calls by subject.
 
 ## Core types and constants
 
@@ -19,9 +20,12 @@ rectangle is `{x0,y0,x1,y1}`. Passing `NULL` for a clipping rectangle selects
 the screen bounds. At most `GPX_MAX_POLY_PTS` (12) points may be passed to a
 polygon operation.
 
-`CO_BACK` selects a clear pixel and `CO_FORE` a set pixel. `BM_CPY` writes the
-selected value; `BM_XOR` toggles it. Line and outline patterns are one-byte
-bit patterns. Filled shapes accept a byte array and its length.
+`CO_BACK` selects a clear pixel and `CO_FORE` a set pixel. For patterned
+operations, `BM_CPY` paints both pattern values, `BM_OR` paints only pattern
+one bits, and `BM_XOR` toggles only pattern one bits. Line and outline
+patterns are one-byte bit patterns; the standard values are `GPX_LP_SOLID`,
+`GPX_LP_DOTTED`, `GPX_LP_DASHED`, and `GPX_LP_DASHED_SHORT`. Filled shapes
+accept a byte array and its length.
 
 `gpx_t` reports `width`, `height`, `pages`, and the current text-background
 mode. `GPX_TEXT_BG_OPAQUE` paints the glyph background;
@@ -168,6 +172,20 @@ buffer, then show it again.
 
 ## Rectangles
 
+### `uint8_t draw_box(gpx_t *gpx, const rect_t *rectangle, uint8_t edges, color c, bmode mode, uint8_t pattern, const rect_t *clip)`
+
+Draws selected edges in top, right, bottom, left order. Combine
+`GPX_EDGE_LEFT`, `GPX_EDGE_TOP`, `GPX_EDGE_RIGHT`, and `GPX_EDGE_BOTTOM`, or
+use `GPX_EDGE_ALL`. Shared corners are drawn once, making the primitive safe
+for XOR, and the returned pattern phase can continue another outline.
+
+```c
+rect_t box = {10, 10, 100, 60};
+uint8_t phase = gpx->draw_box(screen, &box,
+                              GPX_EDGE_TOP | GPX_EDGE_BOTTOM,
+                              CO_FORE, BM_CPY, GPX_LP_DASHED, NULL);
+```
+
 ### `void draw_rectangle(gpx_t *gpx, rect_t *rectangle, color c, bmode mode, uint8_t pattern, const rect_t *clip)`
 
 Draws a patterned outline.
@@ -226,8 +244,8 @@ const font_t *tiny_font = gpx->get_tiny_font();
 ### `bmp_t *get_stock_bitmap(uint8_t which)`
 
 Returns a built-in cursor bitmap. Select `GPXSB_CURSOR_CLASSIC`,
-`GPXSB_CURSOR_STD`, `GPXSB_CURSOR_HOURGLASS`, `GPXSB_CURSOR_CARET`, or
-`GPXSB_CURSOR_HAND`.
+`GPXSB_CURSOR_STD`, `GPXSB_CURSOR_HOURGLASS`, `GPXSB_CURSOR_CARET`,
+`GPXSB_CURSOR_HAND`, or `GPXSB_CURSOR_RESIZE`.
 
 ```c
 bmp_t *hand = gpx->get_stock_bitmap(GPXSB_CURSOR_HAND);

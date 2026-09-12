@@ -1,106 +1,103 @@
-        ; Release an exited process and its owned resources.
+        ; Reclaim an exited process or an unreferenced library.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2021, 2026 tomaz stih
 
         .module process_reap
         .optsdcc -mz80 sdcccall(1)
-
         .globl  _process_reap
         .globl  __heap
         .globl  __evt_first
         .globl  __tmr_first
         .globl  __svc_first
+        .globl  __library_private_services
+        .globl  __library_refs
         .globl  _process_first
         .globl  _process_has_threads
         .globl  __process_find_owned
-        .globl  _evt_destroy
-        .globl  _tmr_uninstall
-        .globl  _svc_unregister
+        .globl  __so_reap
         .globl  _mem_free_owner
         .globl  _so_destroy
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-
-        .equ    PROCESS_MAIN_THREAD,    13
-
+        .equ    PROCESS_FLAGS,     4
+        .equ    LIBRARY_REFS,     13
+        .equ    REFERENCE_LIBRARY, 4
         .area   _CODE
 
-        ; _process_reap, sdcccall(1)
-        ; input: hl = process
-        ; output: none
+        ; inputs: hl = process/library; outputs: none
         ; clobbers: af, bc, de, hl; preserves ix and iy
+        ; IX holds the owner. Libraries use main_thread as a refcount.
 _process_reap::
         ld      a, h
         or      l
         ret     z
         push    ix
-        ld      ix, #0
-        add     ix, sp
         push    hl
+        pop     ix
         call    _enter_critical_section
-        ld      l, -2(ix)
-        ld      h, -1(ix)
+        bit     0, PROCESS_FLAGS(ix)
+        jr      z, .threads
+        ld      a, LIBRARY_REFS(ix)
+        or      LIBRARY_REFS+1(ix)
+        jr      nz, .done
+        jr      .resources
+.threads:
         call    _process_has_threads
         or      a
-        jr      nz, .reap_leave
-
-        ld      l, -2(ix)
-        ld      h, -1(ix)
-        ld      de, #PROCESS_MAIN_THREAD
+        jr      nz, .done
+.resources:
+        ld      hl, #__evt_first
+        call    .owned
+        ld      hl, #__tmr_first
+        call    .owned
+        ld      hl, #__svc_first
+        call    .owned
+        ld      hl, #__library_private_services
+        call    .owned
+.references:
+        ld      hl, (__library_refs)
+        push    ix
+        pop     de
+        call    __process_find_owned
+        ld      a, d
+        or      e
+        jr      z, .memory
+        ld      hl, #REFERENCE_LIBRARY
         add     hl, de
-        xor     a
-        ld      (hl), a
+        ld      c, (hl)
         inc     hl
-        ld      (hl), a
-
-.reap_events:
-        ld      hl, (__evt_first)
-        ld      e, -2(ix)
-        ld      d, -1(ix)
-        call    __process_find_owned
-        ld      a, d
-        or      e
-        jr      z, .reap_timers
+        ld      b, (hl)
+        push    bc
+        ld      hl, #__library_refs
+        call    _so_destroy
+        pop     de
+        ld      hl, #LIBRARY_REFS
+        add     hl, de
+        ld      a, (hl)
+        dec     (hl)
+        or      a
+        jr      nz, .release
+        inc     hl
+        dec     (hl)
+.release:
         ex      de, hl
-        call    _evt_destroy
-        jr      .reap_events
-
-.reap_timers:
-        ld      hl, (__tmr_first)
-        ld      e, -2(ix)
-        ld      d, -1(ix)
-        call    __process_find_owned
-        ld      a, d
-        or      e
-        jr      z, .reap_services
-        ex      de, hl
-        call    _tmr_uninstall
-        jr      .reap_timers
-
-.reap_services:
-        ld      hl, (__svc_first)
-        ld      e, -2(ix)
-        ld      d, -1(ix)
-        call    __process_find_owned
-        ld      a, d
-        or      e
-        jr      z, .reap_memory
-        ex      de, hl
-        call    _svc_unregister
-        jr      .reap_services
-
-.reap_memory:
-        ld      e, -2(ix)
-        ld      d, -1(ix)
+        call    _process_reap
+        jr      .references
+.memory:
+        push    ix
+        pop     de
         ld      hl, #__heap
         call    _mem_free_owner
-        ld      e, -2(ix)
-        ld      d, -1(ix)
+        push    ix
+        pop     de
         ld      hl, #_process_first
         call    _so_destroy
-.reap_leave:
+.done:
         call    _leave_critical_section
-        ld      sp, ix
         pop     ix
         ret
+.owned:
+        push    ix
+        pop     de
+        jp      __so_reap

@@ -24,6 +24,7 @@
         .globl  _gpx_cur_hourglass
         .globl  _gpx_cur_caret
         .globl  _gpx_cur_hand
+        .globl  _gpx_cur_resize
 
         .area   _CODE
 
@@ -111,3 +112,18 @@ _gpx_cur_hand::
         .db     0b10000001, 0b01000010  ; row 8: and, or
         .db     0b11000011, 0b00111100  ; row 9: and, or
         .db     0x02                    ; hotspot: y=0, x=2
+
+_gpx_cur_resize::
+        .db     0x10                    ; signature: BMP_ENC_1BPP_MASK, stride=1
+        .db     0x08                    ; width
+        .db     0x08                    ; height
+        .dw     0x0010                  ; bitmap byte size
+        .db     0b00000111, 0b11111000  ; row 0: and, or
+        .db     0b00000111, 0b10001000  ; row 1: and, or
+        .db     0b00000111, 0b10011000  ; row 2: and, or
+        .db     0b00000000, 0b10101111  ; row 3: and, or
+        .db     0b00000000, 0b11110101  ; row 4: and, or
+        .db     0b11100000, 0b00011001  ; row 5: and, or
+        .db     0b11100000, 0b00010001  ; row 6: and, or
+        .db     0b11100000, 0b00011111  ; row 7: and, or
+        .db     0x00                    ; hotspot: y=0, x=0

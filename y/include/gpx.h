@@ -1,8 +1,9 @@
 /*
  * Public YOS service interface for libgpx on the ZX Spectrum.
  *
- * The data formats and drawing semantics follow libgpx v1.1.0. Obtain the
- * table once with query_service(GPX_SERVICE_NAME), then call its members.
+ * The data formats and drawing semantics follow upstream libgpx commit
+ * 0ef6f070. Obtain the table once with query_service(GPX_SERVICE_NAME), then
+ * call its members.
  *
  * GPL-2.0 License (see: ../src/z80/gpx/LICENSE.libgpx)
  * Copyright (C) 2026 tomaz stih
@@ -28,7 +29,13 @@ typedef uint8_t color;
 
 #define BM_CPY 0x00
 #define BM_XOR 0x01
+#define BM_OR  0x02
 typedef uint8_t bmode;
+
+#define GPX_LP_SOLID        0xff
+#define GPX_LP_DOTTED       0xaa
+#define GPX_LP_DASHED       0xf0
+#define GPX_LP_DASHED_SHORT 0xcc
 
 #define GPX_TEXT_BG_OPAQUE      0x00
 #define GPX_TEXT_BG_TRANSPARENT 0x01
@@ -116,6 +123,13 @@ typedef uint8_t gmode;
 #define GPXSB_CURSOR_HOURGLASS 2
 #define GPXSB_CURSOR_CARET     3
 #define GPXSB_CURSOR_HAND      4
+#define GPXSB_CURSOR_RESIZE    5
+
+#define GPX_EDGE_LEFT   0x01
+#define GPX_EDGE_TOP    0x02
+#define GPX_EDGE_RIGHT  0x04
+#define GPX_EDGE_BOTTOM 0x08
+#define GPX_EDGE_ALL    0x0f
 
 #define GPX_MAX_POLY_PTS 12
 
@@ -167,6 +181,11 @@ typedef struct gpx_api_s {
     void (*fill_polygon)(gpx_t *gpx, point_t *points, uint8_t count,
                          color c, bmode mode, uint8_t *pattern,
                          uint8_t pattern_length, const rect_t *clip);
+
+    /* Appended after the v1.1.0 slots to preserve their ABI offsets. */
+    uint8_t (*draw_box)(gpx_t *gpx, const rect_t *rectangle,
+                        uint8_t edges, color c, bmode mode,
+                        uint8_t pattern, const rect_t *clip);
 } gpx_api_t;
 
 #ifdef __cplusplus

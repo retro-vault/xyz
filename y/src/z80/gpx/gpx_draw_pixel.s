@@ -71,12 +71,9 @@ __gpx_plot_raw:
 
         ;; x in [0,255]?  (hi byte must be 0)
         ld      a,d
-        or      a
+        or      h                       ; both coordinate high bytes must be 0
         jp      nz,.pr_reject
         ;; y in [0,191]?
-        ld      a,h
-        or      a
-        jp      nz,.pr_reject
         ld      a,l
         cp      #192
         jr      nc,.pr_reject
@@ -92,15 +89,12 @@ __gpx_plot_raw:
         ld      l,c                     ; HL = clip ptr
 
         ;; if (x < clip->x0) reject
-        ld      a,(hl)                  ; x0 lo
+        ld      c,(hl)                  ; x0 lo
         inc     hl
-        ld      b,(hl)                  ; x0 hi
+        ld      a,(hl)                  ; x0 hi
         inc     hl                      ; HL -> &y0
-        bit     7,b
-        jr      nz,.pr_cy0              ; x0 < 0 => pass
-        ld      c,a                     ; save x0 lo
-        ld      a,b
         or      a
+        jp      m,.pr_cy0               ; x0 < 0 => pass
         jr      nz,.pr_reject           ; x0 >= 256 => x < x0 => reject
         ld      a,e                     ; x
         cp      c
@@ -108,15 +102,12 @@ __gpx_plot_raw:
 
 .pr_cy0:
         ;; if (y < clip->y0) reject
-        ld      a,(hl)                  ; y0 lo
+        ld      c,(hl)                  ; y0 lo
         inc     hl
-        ld      b,(hl)                  ; y0 hi
+        ld      a,(hl)                  ; y0 hi
         inc     hl                      ; HL -> &x1
-        bit     7,b
-        jr      nz,.pr_cx1
-        ld      c,a
-        ld      a,b
         or      a
+        jp      m,.pr_cx1
         jr      nz,.pr_reject
         ld      a,d                     ; y
         cp      c
@@ -126,12 +117,10 @@ __gpx_plot_raw:
         ;; if (x > clip->x1) reject  (== clip->x1 < x)
         ld      c,(hl)                  ; x1 lo
         inc     hl
-        ld      b,(hl)                  ; x1 hi
+        ld      a,(hl)                  ; x1 hi
         inc     hl                      ; HL -> &y1
-        bit     7,b
-        jr      nz,.pr_reject           ; x1 < 0 => reject
-        ld      a,b
         or      a
+        jp      m,.pr_reject            ; x1 < 0 => reject
         jr      nz,.pr_cy1              ; x1 >= 256 => pass
         ld      a,c                     ; x1 lo
         cp      e                       ; x1 < x ?
@@ -141,11 +130,9 @@ __gpx_plot_raw:
         ;; if (y > clip->y1) reject
         ld      c,(hl)                  ; y1 lo
         inc     hl
-        ld      b,(hl)                  ; y1 hi
-        bit     7,b
-        jr      nz,.pr_reject           ; y1 < 0 => reject
-        ld      a,b
+        ld      a,(hl)                  ; y1 hi
         or      a
+        jp      m,.pr_reject            ; y1 < 0 => reject
         jr      nz,.pr_plot             ; y1 >= 256 => pass
         ld      a,c                     ; y1 lo
         cp      d                       ; y1 < y ?

@@ -39,7 +39,8 @@ entries before the XL payload.
 
 ## Process loading
 
-`yos_t::load_process(path)` (`kernel/process_load.s`) opens an XPRG file
+`yos_t::load_process(path)` (`kernel/process_load.s`, using the shared
+`kernel/_image_load.s` core) opens an XPRG file
 through the ROM's POSIX/esxDOS layer and accepts process images. It validates the descriptor, required YOS
 version, payload CRC, XL header, relocation table, code bounds, entry point,
 fixed-load requirement and stack size. It then relocates the XL code, creates
@@ -52,8 +53,9 @@ The descriptor's stack size is usable application stack. YOS adds its private
 
 `yos_t::process_load_error` points at a byte containing one of the
 `YOS_PROCESS_LOAD_*` values in `yos.h`. A service image passed to
-`load_process` is rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`; service image
-installation uses the service-loader path when that path is added.
+`load_process` is rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 9 adds
+`load_library(path, flags)` for service images; see [Libraries](LIBRARIES.md)
+for relocation, self-registration, sharing and automatic release.
 
 At boot the ROM opens `shell.sys` on the current esxDOS drive and directory
 (`kernel/boot_shell.s`), loads it as a process, and only then arms the
@@ -78,6 +80,9 @@ Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
 | 6 | `NOT_PROCESS` — the image is an XPRG service |
 | 7 | `REQUIRES_NEWER_OS` — descriptor's minimum ABI exceeds `YOS_VERSION` |
 | 8 | `BAD_CHECKSUM` — payload CRC-32 mismatch |
+| 9 | `BUSY` — a competing or recursive load |
+| 10 | `NO_PROCESS` — library load without a client process |
+| 11 | `INIT_ERROR` — library initializer returned failure |
 
 ## Building a process
 

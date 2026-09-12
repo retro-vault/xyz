@@ -49,42 +49,24 @@ _mem_allocate:
         ld      bc, #7
         add     hl, bc
         add     hl, de
-        push    hl
-
-        ; Assign next, size, owner, status in the reference order.
-        ld      e, 0(ix)
-        ld      d, 1(ix)
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
-        pop     bc
-        pop     de
-        push    bc
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
-        dec     hl
-        dec     hl
-        dec     hl
-        dec     hl
-        ld      e, 2(ix)
-        ld      d, 3(ix)
-        ld      (hl), e
-        inc     hl
-        ld      (hl), d
-        inc     hl
-        ld      a, 4(ix)
-        ld      (hl), a
+        push    hl                     ; new block address
+        ex      de, hl
+        push    ix
         pop     hl
+        ld      bc, #5                 ; next, owner, status
+        ldir
+        pop     bc
+        pop     hl                     ; new free payload size
+        ld      a, l
+        ld      (de), a
+        inc     de
+        ld      a, h
+        ld      (de), a
         pop     de
         ld      5(ix), e
         ld      6(ix), d
-        ld      0(ix), l
-        ld      1(ix), h
+        ld      0(ix), c
+        ld      1(ix), b
 .allocate_claim:
         ld      hl, #4
         add     hl, sp

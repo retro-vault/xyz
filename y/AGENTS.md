@@ -11,7 +11,7 @@ written entirely in hand-written Z80 assembly. The 16 KiB replacement ROM
 stays compatible with esxDOS on divIDE, loads `shell.sys` from disk as an
 XPRG process, and runs everything through a 50 Hz IM2 scheduler and named
 service tables. Applications talk to it through the `yos_t` function table
-(`include/yos.h`, ABI version 8) obtained with `query_service("yos")` over
+(`include/yos.h`, ABI version 9) obtained with `query_service("yos")` over
 `RST 0x18`.
 
 ## Documents To Read
@@ -24,6 +24,7 @@ service tables. Applications talk to it through the `yos_t` function table
 | heaps, block header, allocate / free / free-by-owner | [docs/books/the-book-of-yos/MEMORY-MANAGEMENT.md](docs/books/the-book-of-yos/MEMORY-MANAGEMENT.md) |
 | thread object, states, startup stub, context switch, events | [docs/books/the-book-of-yos/THREADS.md](docs/books/the-book-of-yos/THREADS.md) |
 | process object, `process_start`, `load_process`, `process_exit` | [docs/books/the-book-of-yos/PROCESSES.md](docs/books/the-book-of-yos/PROCESSES.md) |
+| shared/private libraries, initializer ownership, reference cleanup | [docs/books/the-book-of-yos/LIBRARIES.md](docs/books/the-book-of-yos/LIBRARIES.md) |
 | what the scheduler reclaims and when | [docs/books/the-book-of-yos/CLEANUP-RESOURCES.md](docs/books/the-book-of-yos/CLEANUP-RESOURCES.md) |
 | services, RST 18, the `yos_t` and `gpx` tables | [docs/books/the-book-of-yos/SYSCALLS.md](docs/books/the-book-of-yos/SYSCALLS.md) |
 | tick counters, timer chain, callback rules | [docs/books/the-book-of-yos/CLOCK.md](docs/books/the-book-of-yos/CLOCK.md) |
@@ -45,7 +46,7 @@ y/
 │   ├── kernel/     lists, heaps, threads, processes, events, timers, services, loader
 │   ├── drivers/    clock, keyboard, Kempston mouse
 │   ├── fs/         POSIX-style esxDOS filesystem and its RAM gates
-│   ├── gpx/        vendored libgpx v1.1.0 (GPL-2.0) + YOS service integration
+│   ├── gpx/        libgpx v1.1.0-1-g0ef6f07 (GPL-2.0) + YOS integration
 │   ├── main.s      kernel init sequence
 │   └── linker.lk   ROM/RAM layout, reserved divIDE and Interface 1 addresses
 ├── src/c/          earlier C kernel -> yos.rom (kept buildable, not the focus)
@@ -94,12 +95,21 @@ and NMI bytes, the vector table and IM2 word, heap initialization, the public
 `yos_t` wrappers, the `gpx` service, filesystem errno behaviour without a
 firmware, XPRG CRC and relocation using the built `shell.sys`, process and
 thread creation, three interrupt-driven context switches, event wakeup,
-terminated-thread cleanup, and that the kernel never writes into ROM. Run it
-after any change to `src/z80/`.
+terminated-thread cleanup, and that the kernel never writes into ROM. Its
+RAM-gate esxDOS fixture also runs the actual shell and self-registering
+`shelllib.svc`, shared/private lifetime, initializer rollback and OOM cases.
+Run it after any change to `src/z80/`.
 
-Real-firmware validation of the replacement ROM is manual: boot
+For a repeatable visible Fuse cold boot, run
+`python3 y/tests/fuse/run.py --esxdos build/yos-fuse/esxdos089` from the root;
+see `tests/fuse/README.md`. It creates fresh media under `build/yos-fuse/`
+from a user-supplied firmware distribution and does not modify Fuse settings.
+Every esxDOS gate must mask IM2 until divIDE restores the scheduler's ROM.
+
+Real-firmware validation of the replacement ROM is otherwise manual: boot
 `yos-kernel.rom` as the base ROM in ZEsarUX (or Fuse) with a divIDE, an esxDOS
-0.8.9 image and `shell.sys` on the mounted disk, and expect the centred
+0.8.9 image and both `shell.sys` and `shelllib.svc` on the mounted disk, and
+expect "Library OK" below the centred
 greeting from `tests/shell-yos/shell.c`. The esxDOS harness in
 `x/tests/tests/zx48/esxdos/` (`run_rom_firmware.py`) shows how to drive
 ZEsarUX from a script if you need to automate it.
@@ -135,7 +145,8 @@ has, so they do not build against it and are not part of any default target.
   of importing one.
 - **`yos_t` order is the ABI.** Append new entries at the end of both
   `include/yos.h` and the template in `kernel/_syscall_table_init.s`, bump
-  `YOS_VERSION` in `yos.h` and `kernel/process_load.s` together, and update
+  `YOS_VERSION` in both public `yos.h` headers, `kernel/yos_version.s`, and
+  `kernel/_image_load.s` together, and update
   `YOS_TABLE_SIZE` and `kernel/_yos_state.s`.
 - **Vendored gpx is upstream code.** Fix bugs in `src/z80/gpx/`, do not
   restyle; record the upstream commit in `src/z80/gpx/README.md`.
@@ -148,9 +159,13 @@ has, so they do not build against it and are not part of any default target.
 
 - No `thread_wait4events` / `thread_join`: the waiting state and the event
   wakeup scan exist, but nothing moves a thread onto the waiting list.
-- XPRG *service* images are defined but the kernel does not load them yet.
-- `process_start` does not bound-check names (7 characters); only
-  `process_load` truncates.
+- Libraries support relocatable XPRG services with 1–255 exports. Fixed JP
+  addresses, dependency chains, finalizers and explicit unloading are absent.
+- `thread.hdr.owner` is normally zero and temporarily supplies the library
+  allocation/registration owner during initialization. Never replace
+  `thread.process` for this: it must keep the calling process alive.
+- Keep process/library file validation, CRC and XL relocation shared through
+  `_image_load.s`. Both process and service names are bounded.
 - `so_create` / `so_destroy` and the allocators do not take critical sections
   themselves; callers that can be preempted are responsible.
 - `tests/hello-yos` and `tests/mdr*-yos` target the removed `yos->printf`

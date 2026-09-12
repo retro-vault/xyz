@@ -213,6 +213,14 @@ When adding tests for new C23 features (or anything else):
   bare-metal, YOS, CP/M 3, CPC, and ZX sysroot payloads. Future GUI and third-party
   targets can extend the same explicit platform manifest.
 
+YOS ABI 9 adds threadless, reference-counted XPRG libraries. Process and
+library loading share the same file/CRC/XL relocation core; initializers run
+once after relocation, with library-owned allocations and privately staged
+service registration. Per-client references are released after the client's
+last thread exits. The shell and kernel tests use a real packaged
+`y/tests/shell-yos/shelllib.s` fixture. See
+[YOS libraries](../../y/docs/books/the-book-of-yos/LIBRARIES.md).
+
 ## Remaining evolution
 
 1. Continue moving broad tests toward their owning components while keeping

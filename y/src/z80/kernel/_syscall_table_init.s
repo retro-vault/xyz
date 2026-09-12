@@ -55,8 +55,9 @@
         .globl  _enumerate_disks
         .globl  _process_load
         .globl  _process_last_error
+        .globl  _library_load
 
-        .equ    YOS_TABLE_SIZE, 94
+        .equ    YOS_TABLE_SIZE, 96
 
         .area   _CODE
 
@@ -130,3 +131,4 @@ __syscall_table_init::
         .dw     _enumerate_disks
         .dw     _process_load
         .dw     _process_last_error
+        .dw     _library_load

@@ -1,67 +1,60 @@
-        ;; _thread_prepare_startup.s
+        ; Emit the per-thread startup and exit stub.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2021, 2026 tomaz stih
-        ;;
-        ;; Compact thread startup stub emitter.
-        ;;
-        ;; Signature:
-        ;;   void thread_prepare_startup(thread_t *t,
-        ;;                               void (*entry_point)(void))
-        ;;
-        ;; Inputs (sdcccall1):
-        ;;   HL = t
-        ;;   DE = entry_point
 
         .module thread_prepare_startup
         .optsdcc -mz80 sdcccall(1)
-
         .globl  _thread_prepare_startup
         .globl  _thread_exit
-
-        .equ    THREAD_SP_OFF,      4
-        .equ    THREAD_STARTUP_OFF, 6
-        .equ    CONTEXT_RET_OFF,   20
-
         .area   _CODE
 
-_thread_prepare_startup:
-        push    ix
-
-        ld      b,h
-        ld      c,l
+        ; inputs: hl = thread, de = entry
+        ; outputs: stub and initial return PC installed
+        ; clobbers: af, bc, de, hl; preserves ix and iy
+_thread_prepare_startup::
+        ld      b, h
+        ld      c, l
         push    hl
-        pop     ix
-
-        ld      6(ix), #0xCD        ; call entry_point
-        ld      7(ix), e
-        ld      8(ix), d
-        ld      9(ix), #0x21        ; ld hl, t
-        ld      10(ix), c
-        ld      11(ix), b
-        ld      12(ix), #0xC3       ; jp thread_exit
-
-        ld      hl, #_thread_exit
-        ld      13(ix), l
-        ld      14(ix), h
-        ld      15(ix), #0x00       ; padding / guard byte
-
-        ld      l, 4(ix)
-        ld      h, 5(ix)
-        ld      de, #CONTEXT_RET_OFF
-        add     hl, de              ; HL = initial return-address slot
-        push    hl
-
-        ld      l, c
-        ld      h, b
-        ld      de, #THREAD_STARTUP_OFF
-        add     hl, de              ; HL = &t->startup[0]
-        ex      de, hl              ; DE = startup address
-        pop     hl                  ; HL = return-address slot
-
+        inc     hl
+        inc     hl
+        inc     hl
+        inc     hl
+        ld      a, (hl)
+        inc     hl
+        ld      h, (hl)
+        ld      l, a
+        push    de
+        ld      de, #20
+        add     hl, de
+        ex      de, hl
+        ld      hl, #6
+        add     hl, bc
+        ld      a, l
+        ld      (de), a
+        inc     de
+        ld      a, h
+        ld      (de), a
+        pop     de
+        ld      (hl), #0xcd
+        inc     hl
         ld      (hl), e
         inc     hl
         ld      (hl), d
-
-        pop     ix
+        inc     hl
+        ld      (hl), #0x21
+        inc     hl
+        ld      (hl), c
+        inc     hl
+        ld      (hl), b
+        inc     hl
+        ld      (hl), #0xc3
+        inc     hl
+        ld      de, #_thread_exit
+        ld      (hl), e
+        inc     hl
+        ld      (hl), d
+        inc     hl
+        ld      (hl), #0
+        pop     hl
         ret

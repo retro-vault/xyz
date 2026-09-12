@@ -7,9 +7,8 @@
         ;;  - clips x to those bounds
         ;;  - draws by bytes (start/stop masks + full middle bytes)
         ;;  - preserves pattern phase (skip + drawn span)
-        ;;  - pattern 0-bits are left alone, matching gpx_draw_pixel and the
-        ;;    Bresenham raster: CO_FORE sets pattern-1 pixels, CO_BACK clears
-        ;;    them, BM_XOR toggles them and ignores the color.
+        ;;  - BM_CPY replaces both pattern values in one span pass; BM_OR and
+        ;;    BM_XOR affect only pattern-1 pixels.
         ;;
         ;; GPL2 License (see: LICENSE)
         ;; Copyright (C) 2026 Tomaz Stih
@@ -21,6 +20,7 @@
 
         .globl  __gpx_hline
         .globl  __gpx_span_row
+        .globl  __gpx_span_row_copy
         .globl  __gpx_span_setup
         .globl  __rect_cmp16s_lt
         .globl  __ret_clean11
@@ -36,8 +36,8 @@
         ;;  - optional clip reject/clamp against clip rectangle
         ;;  - then enters shared draw core
         ;;
-        ;; Signature is identical to gpx_draw_line():
-        ;;   HL = gpx
+        ;; Private tail entry from gpx_draw_line after its signed X compare:
+        ;;   HL = x1 (already loaded by the dispatcher; context is unused)
         ;;   DE = x0
         ;;   stack: y0, x1, y1, c, m, lpatt, clip
         ;;
@@ -45,84 +45,82 @@
         ;;   A = updated lpatt, or unchanged lpatt on reject.
         ;;
         ;; Clobbers:
-        ;;   AF, BC, DE, HL, IX, IY
+        ;;   AF, BC, DE, HL. Preserves IX and IY.
         ;;
         ;; References:
         ;;   __gpx_span_setup
         ;;   __gpx_span_row
         ;;   __vid_rowaddr
 __gpx_hline::
+        push    iy
         push    ix
         ld      ix,#0
         add     ix,sp
+        push    hl                      ; x1, already loaded by the dispatcher
 
         ;; locals (13 bytes):
-        ;; -1..-2  x0
-        ;; -3..-4  x1
+        ;; -2..-1  x1 (low, high), saved by PUSH HL above
+        ;; -4..-3  x0 (low, high)
         ;; -5      x0 original low
         ;; -6      unused
         ;; -7      patt_byte
-        ;; -8      byte_lo
+        ;; -8      unused
         ;; -13..-9 span descriptor, laid out for __gpx_span_row:
         ;;         -13 mask_first, -12 mask_last, -11 count,
         ;;         -10 sel_or,     -9 sel_xor
-        ld      hl,#-13
+        ld      hl,#-11                 ; x1 already occupies two local bytes
         add     hl,sp
         ld      sp,hl
 
         ;; cache x0/x1
-        ld      -2(ix),e                ; x0 lo
-        ld      -1(ix),d                ; x0 hi
+        ld      -4(ix),e                ; x0 lo
+        ld      -3(ix),d                ; x0 hi
         ld      -5(ix),e                ; x0 original lo
-        ld      a,6(ix)
-        ld      -4(ix),a                ; x1 lo
-        ld      a,7(ix)
-        ld      -3(ix),a                ; x1 hi
 
         ;; The screen is an implicit clip, and it is applied first: a clip
         ;; rect may itself extend off-screen, and a byte-span path handed a
         ;; span the screen cannot hold would write past the display file.
-        ld      a,5(ix)                 ; y hi: nonzero => y < 0 or y > 255
+        ld      a,7(ix)                 ; y hi: nonzero => y < 0 or y > 255
         or      a
         jp      nz,.ghl_reject
-        ld      a,4(ix)
+        ld      a,6(ix)
         cp      #192
         jp      nc,.ghl_reject
 
-        ld      a,-3(ix)                ; x1 hi
+        ld      a,-1(ix)                ; x1 hi
         or      a
         jr      z,.ghl_x1_onscreen
         jp      m,.ghl_reject           ; x1 < 0: nothing visible
         ld      a,#255                  ; x1 > 255: clamp
-        ld      -4(ix),a
+        ld      -2(ix),a
         xor     a
-        ld      -3(ix),a
+        ld      -1(ix),a
 .ghl_x1_onscreen:
-        ld      a,-1(ix)                ; x0 hi
+        ld      a,-3(ix)                ; x0 hi
         or      a
         jr      z,.ghl_x0_onscreen
         jp      p,.ghl_reject           ; x0 > 255: nothing visible
         xor     a                       ; x0 < 0: clamp
-        ld      -1(ix),a
-        ld      -2(ix),a
+        ld      -3(ix),a
+        ld      -4(ix),a
 .ghl_x0_onscreen:
 
         ;; optional caller clip, on top of the screen bounds
-        ld      a,13(ix)
-        or      14(ix)
+        ld      a,15(ix)
+        or      16(ix)
         jr      z,.ghl_draw_core
 
 .ghl_clip_checks:
         ;; BC = clip pointer
-        ld      c,13(ix)
-        ld      b,14(ix)
+        ld      c,15(ix)
+        ld      b,16(ix)
 
         ;; y outside the clip's y-range? A point is a degenerate segment,
         ;; so the shared 1-D clip does the reject test (clamp is a no-op).
         ld      iy,#2
         add     iy,bc                   ; IY = &clip->y0 (y1 at IY+4)
-        ld      l,4(ix)
-        ld      h,5(ix)                 ; HL = y
+        ld      l,6(ix)
+        ld      h,7(ix)                 ; HL = y
         ld      e,l
         ld      d,h                     ; DE = y
         call    __clip_seg
@@ -131,22 +129,22 @@ __gpx_hline::
         ;; without reloading the clip pointer and rebuilding IY.
         dec     iy
         dec     iy
-        ld      l,-2(ix)
-        ld      h,-1(ix)                ; HL = x0
-        ld      e,-4(ix)
-        ld      d,-3(ix)                ; DE = x1
+        ld      l,-4(ix)
+        ld      h,-3(ix)                ; HL = x0
+        ld      e,-2(ix)
+        ld      d,-1(ix)                ; DE = x1
         call    __clip_seg
         jp      c,.ghl_reject
-        ld      -2(ix),l
-        ld      -1(ix),h                ; x0 = clamped lo
-        ld      -4(ix),e
-        ld      -3(ix),d                ; x1 = clamped hi
+        ld      -4(ix),l
+        ld      -3(ix),h                ; x0 = clamped lo
+        ld      -2(ix),e
+        ld      -1(ix),d                ; x1 = clamped hi
 
 .ghl_draw_core:
         ;; Clipping changes neither the pattern's original byte-grid phase
         ;; nor its origin. Reverse the original LSB-first line pattern,
         ;; then rotate right by original x0, independent of the clipped x0.
-        ld      a,12(ix)
+        ld      a,14(ix)
         cp      #0xFF
         jr      z,.ghl_pbyte_store      ; solid rows need no phase conversion
         ld      b,#8
@@ -172,29 +170,43 @@ __gpx_hline::
         ld      de,#-13
         add     iy,de
 
-        ld      b,-2(ix)                ; x0 (clamped to the screen)
-        ld      c,-4(ix)                ; x1
-        ld      d,10(ix)                ; color
-        ld      e,11(ix)                ; mode
+        ld      b,-4(ix)                ; x0 (clamped to the screen)
+        ld      c,-2(ix)                ; x1
+        ld      d,12(ix)                ; color
+        ld      e,13(ix)                ; mode
         call    __gpx_span_setup        ; A = byte_lo
-        ld      -8(ix),a
+        ld      c,a                     ; rowaddr preserves C
 
         ;; HL = row base + byte_lo
-        ld      b,4(ix)                 ; y low
+        ld      b,6(ix)                 ; y low
         call    __vid_rowaddr
-        ld      a,-8(ix)
+        ld      a,c
         add     a,l
         ld      l,a
         ld      a,-7(ix)                ; byte-grid aligned pattern
+        ld      b,13(ix)
+        ld      c,12(ix)
+        ld      d,a
+        ld      a,b
+        or      a
+        ld      a,d
+        jr      nz,.ghl_stencil
+        bit     0,c
+        jr      nz,.ghl_copy
+        cpl                             ; COPY background swaps 1 and 0
+.ghl_copy:
+        call    __gpx_span_row_copy
+        jr      .ghl_ret_pattern
+.ghl_stencil:
         call    __gpx_span_row
 
 .ghl_ret_pattern:
         ;; Return phase includes both clipped-away and visible pixels.
-        ld      a,-4(ix)
+        ld      a,-2(ix)
         sub     -5(ix)
         and     #0x07                   ; Z set when shift==0, A=shift
         ld      b,a                     ; B = rotate count
-        ld      a,12(ix)                ; original pattern
+        ld      a,14(ix)                ; original pattern
         jr      z,.ghl_return
 .ghl_pret_rot:
         rrca
@@ -203,11 +215,12 @@ __gpx_hline::
 
 .ghl_reject:
         ;; unchanged lpatt on reject
-        ld      a,12(ix)
+        ld      a,14(ix)
 
 .ghl_return:
         ld      sp,ix
         pop     ix
+        pop     iy
         jp      __ret_clean11
 
         ;; ------------------------------------------------------------
@@ -278,16 +291,12 @@ __gpx_span_setup::
         ;; Plot selectors: set FF/00, clear FF/FF, xor 00/FF. Pattern 0-bits
         ;; never reach the destination in any of them.
         ld      a,e                     ; mode
-        bit     0,a
-        ld      b,#0xff
-        ld      c,#0x00
-        jr      z,.ss_cpy
-        ld      b,#0x00                 ; BM_XOR ignores the color
-        ld      c,#0xff
-        jr      .ss_store
-.ss_cpy:
-        ld      a,d                     ; color
-        bit     0,a
+        rrca                            ; BM_XOR into carry
+        sbc     a,a                     ; XOR selector: FF for XOR, else 00
+        ld      c,a
+        cpl                             ; OR selector: 00 for XOR, else FF
+        ld      b,a
+        bit     0,d                     ; color
         jr      nz,.ss_store            ; CO_FORE: set
         ld      c,#0xff                 ; CO_BACK: clear
 .ss_store:
@@ -386,5 +395,46 @@ __gpx_span_row::
         ld      a,e
         and     4(iy)
         xor     d
+        ld      (hl),a
+        ret
+
+        ;; ------------------------------------------------------------
+        ;; __gpx_span_row_copy
+        ;;
+        ;; Opaque span variant. A is the desired byte-grid pattern:
+        ;; both its one and zero bits replace destination pixels inside the
+        ;; span coverage. The descriptor is the one __gpx_span_setup made.
+        ;; Clobbers: AF, BC and DE. Preserves HL, IX and IY.
+        ;; ------------------------------------------------------------
+__gpx_span_row_copy::
+        push    hl
+        ld      c,a                     ; desired pixels for every full byte
+        ld      b,2(iy)
+        ld      a,0(iy)
+        dec     b
+        jr      z,.src_single
+        call    .src_edge
+        dec     b
+        jr      z,.src_last
+.src_middle:
+        inc     hl
+        ld      (hl),c                  ; whole byte: no read or mask needed
+        djnz    .src_middle
+.src_last:
+        inc     hl
+        ld      a,1(iy)
+        jr      .src_finish
+.src_single:
+        and     1(iy)
+.src_finish:
+        call    .src_edge
+        pop     hl
+        ret
+.src_edge:
+        ld      d,a                     ; coverage
+        ld      a,c
+        xor     (hl)
+        and     d                       ; only differing covered bits toggle
+        xor     (hl)
         ld      (hl),a
         ret

@@ -35,35 +35,31 @@
         .equ    L_YHI,                3
         .equ    L_CLIP,               4
         .equ    L_BPTR,               6
-        .equ    L_BW,                 8
-        .equ    L_BH,                 9
-        .equ    L_BSTRIDE,            10
-        .equ    L_ROWSTRIDE_OR,       11
-        .equ    L_XEND,               12
-        .equ    L_YEND,               14
-        .equ    L_VISX0,              16
-        .equ    L_VISX1,              17
-        .equ    L_VISY0,              18
-        .equ    L_VISY1,              19
-        .equ    L_VISW,               20
-        .equ    L_VISH,               21
-        .equ    L_SRCX,               22
-        .equ    L_SRCY,               23
-        .equ    L_XBYTE,              24
-        .equ    L_SRCBYTE,            25
-        .equ    L_DBIT,               26
-        .equ    L_SRCBIT,             27
-        .equ    L_LCOVER,              28
-        .equ    L_RCOVER,              29
-        .equ    L_SRCSPAN,            30
-        .equ    L_DSTSPAN,            31
-        .equ    L_SRCROW_OR,          32
-        .equ    L_IS_MASKED,          34
-        .equ    L_DRAWMODE,           35
+        .equ    L_BSTRIDE,            8
+        .equ    L_ROWSTRIDE_OR,       9
+        .equ    L_VISX0,              10
+        .equ    L_VISX1,              11
+        .equ    L_VISY0,              12
+        .equ    L_VISY1,              13
+        .equ    L_VISW,               14
+        .equ    L_VISH,               15
+        .equ    L_SRCX,               16
+        .equ    L_SRCY,               17
+        .equ    L_XBYTE,              18
+        .equ    L_SRCBYTE,            19
+        .equ    L_DBIT,               20
+        .equ    L_SRCBIT,             21
+        .equ    L_LCOVER,              22
+        .equ    L_RCOVER,              23
+        .equ    L_SRCSPAN,            24
+        .equ    L_DSTSPAN,            25
+        .equ    L_SRCROW_OR,          26
+        .equ    L_IS_MASKED,          28
+        .equ    L_DRAWMODE,           29
         ;; Two-byte source windows keep previous AND/OR bytes in B':C'.
-        .equ    L_SUB,                36
-        .equ    L_SRCREMAIN,          37
-        .equ    L_SIZE,               38
+        .equ    L_SUB,                30
+        .equ    L_SRCREMAIN,          31
+        .equ    L_SIZE,               32
 
         .macro  LD16HL off
         ld      l,off(iy)
@@ -102,7 +98,7 @@
         ;;   stack: y, b, clip
         ;;
         ;; Clobbers:
-        ;;   AF, BC, DE, HL, IX, IY
+        ;;   AF, BC, DE, HL. Preserves IX and IY.
         ;;
         ;; References:
         ;;   .gb_core
@@ -124,7 +120,7 @@ _gpx_draw_bmp::
         ;;   stack: y, b, clip
         ;;
         ;; Clobbers:
-        ;;   AF, BC, DE, HL, IX, IY
+        ;;   AF, BC, DE, HL. Preserves IX and IY.
         ;;
         ;; References:
         ;;   .gb_core
@@ -199,27 +195,16 @@ _gpx_draw_bmp_clip::
         or      l
         jp      z,.gb_exit
         ld      a,(hl)
-        and     #BMP_SIG_ENC_MASK
-        cp      #BMP_SIG_1BPP
-        jr      z,.gb_sig_unmasked
-        cp      #BMP_SIG_1BPP_MASK
-        jr      z,.gb_sig_masked
-        jp      .gb_exit
-
-.gb_sig_unmasked:
-        xor     a
-        ld      L_IS_MASKED(iy),a
-        jr      .gb_sig_need_and
-
-.gb_sig_masked:
-        ld      a,#1
+        and     #0xe0                   ; only encodings 0x00 and 0x10
+        jp      nz,.gb_exit
+        ld      a,(hl)
+        and     #0x10
         ld      L_IS_MASKED(iy),a
 
 .gb_sig_need_and:
         ;; Only a masked public bitmap reads the AND plane. Every text
         ;; compositor consumes the OR plane, including custom masked fonts.
-        ld      a,L_IS_MASKED(iy)
-        or      a
+        ;; The encoding AND above already left A and Z for this test.
         jr      z,.gb_sig_mode_ready
         ld      a,L_DRAWMODE(iy)
         and     #0x80
@@ -235,99 +220,34 @@ _gpx_draw_bmp_clip::
         ld      L_BSTRIDE(iy),a
 
         inc     hl
-        ld      a,(hl)
-        ld      L_BW(iy),a
+        ld      b,(hl)                  ; width
         inc     hl
-        ld      a,(hl)
-        ld      L_BH(iy),a
-
-        ld      a,L_BW(iy)
+        ld      c,(hl)                  ; height
+        ld      a,b
         or      a
         jp      z,.gb_exit
-        ld      a,L_BH(iy)
+        ld      a,c
         or      a
         jp      z,.gb_exit
 
-        ;; draw_x1 = x + w - 1
-        ld      a,L_BW(iy)
-        dec     a
-        ld      b,a
-        ld      a,L_X(iy)
-        add     a,b
-        ld      L_XEND(iy),a
-        ld      a,L_XHI(iy)
-        adc     a,#0
-        ld      L_XEND+1(iy),a
+        ;; Compute and clip each extent in registers. Preserve the height
+        ;; across X; no serialized header or endpoint copies are needed.
+        push    bc
+        LD16HL  L_X
+        ld      c,#255
+        call    .gb_extent
+        pop     bc
+        jp      c,.gb_exit
+        ld      L_VISX0(iy),h
+        ld      L_VISX1(iy),l
 
-        ;; draw_y1 = y + h - 1
-        ld      a,L_BH(iy)
-        dec     a
-        ld      b,a
-        ld      a,L_Y(iy)
-        add     a,b
-        ld      L_YEND(iy),a
-        ld      a,L_YHI(iy)
-        adc     a,#0
-        ld      L_YEND+1(iy),a
-
-        ;; Clamp the draw rect to the screen. The screen bounds are compile
-        ;; time constants, so this is a handful of sign and range tests
-        ;; instead of copying a screen rect into the workspace and running
-        ;; four generic 16-bit clamps against it. The result is on-screen, so
-        ;; the high bytes are all zero from here on.
-
-        ;; visx0 = max(x, 0); x > 255 means the bitmap starts past the edge
-        ld      a,L_XHI(iy)
-        or      a
-        jr      z,.gb_sx0_on
-        jp      p,.gb_exit
-        xor     a                       ; x < 0: start at column 0
-        jr      .gb_sx0_store
-.gb_sx0_on:
-        ld      a,L_X(iy)
-.gb_sx0_store:
-        ld      L_VISX0(iy),a
-
-        ;; visx1 = min(xend, 255); xend < 0 means it ends before the edge
-        ld      a,L_XEND+1(iy)
-        or      a
-        jr      z,.gb_sx1_on
-        jp      m,.gb_exit
-        ld      a,#255
-        jr      .gb_sx1_store
-.gb_sx1_on:
-        ld      a,L_XEND(iy)
-.gb_sx1_store:
-        ld      L_VISX1(iy),a
-
-        ;; visy0 = max(y, 0); y past the bottom means nothing visible
-        ld      a,L_YHI(iy)
-        or      a
-        jr      z,.gb_sy0_on
-        jp      p,.gb_exit
-        xor     a
-        jr      .gb_sy0_store
-.gb_sy0_on:
-        ld      a,L_Y(iy)
-        cp      #SCRHEIGHT
-        jp      nc,.gb_exit
-.gb_sy0_store:
-        ld      L_VISY0(iy),a
-
-        ;; visy1 = min(yend, 191)
-        ld      a,L_YEND+1(iy)
-        or      a
-        jr      z,.gb_sy1_on
-        jp      m,.gb_exit
-        ld      a,#(SCRHEIGHT-1)
-        jr      .gb_sy1_store
-.gb_sy1_on:
-        ld      a,L_YEND(iy)
-        cp      #SCRHEIGHT
-        jr      c,.gb_sy1_store
-        ld      a,#(SCRHEIGHT-1)
-.gb_sy1_store:
-        ld      L_VISY1(iy),a
+        ld      b,c                     ; height
+        LD16HL  L_Y
+        ld      c,#191
+        call    .gb_extent
+        jp      c,.gb_exit
+        ld      L_VISY0(iy),h
+        ld      L_VISY1(iy),l
 
         ;; No clip rect: the on-screen rect is already the visible rect.
         ld      a,L_CLIP(iy)
@@ -429,16 +349,12 @@ _gpx_draw_bmp_clip::
         sub     L_VISX0(iy)
         inc     a
         ld      L_VISW(iy),a
-        or      a
-        jp      z,.gb_exit
 
         ;; vish = visy1 - visy0 + 1
         ld      a,L_VISY1(iy)
         sub     L_VISY0(iy)
         inc     a
         ld      L_VISH(iy),a
-        or      a
-        jp      z,.gb_exit
 
         ;; Destination x byte / bit.
         ld      a,L_VISX0(iy)
@@ -466,13 +382,9 @@ _gpx_draw_bmp_clip::
         and     #0x1f
         ld      L_SRCBYTE(iy),a
 
-        ;; rshift = (dbit - srcbit) & 7
-        ld      a,c
-        sub     e
-        and     #0x07
-
-        ;; sub = (8 - rshift) & 7  (left shift used by the 2-byte src window)
-        neg
+        ;; Left shift for the two-byte source window.
+        ld      a,e
+        sub     c
         and     #0x07
         ld      L_SUB(iy),a
 
@@ -812,4 +724,43 @@ _gpx_draw_bmp_clip::
         rrca
         rrca
         and     #0x3f
+        ret
+
+        ;; HL=origin, B=nonzero size, C=screen maximum.
+        ;; Returns H=visible first, L=visible last; carry rejects.
+.gb_extent:
+        ld      a,b
+        dec     a
+        add     a,l
+        ld      e,a
+        ld      a,h
+        adc     a,#0
+        ld      d,a                     ; inclusive endpoint
+
+        ld      a,h
+        or      a
+        jr      z,.gb_extent_lo
+        jp      p,.gb_extent_empty
+        ld      l,#0
+.gb_extent_lo:
+        ld      a,c
+        cp      l
+        jr      c,.gb_extent_empty
+        ld      a,d
+        or      a
+        jr      z,.gb_extent_hi
+        jp      m,.gb_extent_empty
+        ld      e,c
+.gb_extent_hi:
+        ld      a,c
+        cp      e
+        jr      nc,.gb_extent_keep
+        ld      e,c
+.gb_extent_keep:
+        ld      h,l
+        ld      l,e
+        or      a
+        ret
+.gb_extent_empty:
+        scf
         ret

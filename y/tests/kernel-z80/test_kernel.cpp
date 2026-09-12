@@ -1,4 +1,6 @@
 #include <xz80/xz80.h>
+#include "mock_filesystem.h"
+#include "test_libraries.h"
 
 #include <array>
 #include <cstdint>
@@ -7,7 +9,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
-#include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -62,11 +64,27 @@ void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+std::map<std::string, std::uint16_t> read_symbols(const char* path) {
+    std::ifstream input(path);
+    require(bool(input), std::string("cannot read map ") + path);
+    std::map<std::string, std::uint16_t> result;
+    std::string line;
+    while (std::getline(input, line)) {
+        std::istringstream fields(line);
+        std::string address, name;
+        if (fields >> address >> name && address.size() == 8 &&
+            address.find_first_not_of("0123456789abcdefABCDEF") ==
+                std::string::npos)
+            result[name] = std::stoul(address, nullptr, 16);
+    }
+    return result;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 4) {
-        std::cerr << "usage: test_kernel ROM MAP SHELL.SYS\n";
+    if (argc != 6) {
+        std::cerr << "usage: test_kernel ROM MAP SHELL.SYS LIB.SVC LIB.MAP\n";
         return 2;
     }
 
@@ -77,26 +95,20 @@ int main(int argc, char** argv) {
     rom.read(reinterpret_cast<char*>(mem.bytes.data()), 0x4000);
     require(rom.gcount() == 0x4000, "kernel ROM is not 16 KiB");
 
-    std::map<std::string, std::uint16_t> symbols;
-    std::ifstream map(argv[2]);
-    std::regex symbol_line("^([0-9A-Fa-f]{8}) ([^ ]+)");
-    std::smatch match;
-    std::string line;
-    while (std::getline(map, line)) {
-        if (std::regex_search(line, match, symbol_line)) {
-            symbols[match[2]] = std::stoul(match[1], nullptr, 16);
-        }
-    }
+    const auto symbols = read_symbols(argv[2]);
     const auto sym = [&](const std::string& name) {
         const auto found = symbols.find(name);
         require(found != symbols.end(), "missing symbol " + name);
         return found->second;
     };
+    mock_filesystem files{mem, cpu, sym("__zx_esx_gate_9a"),
+                          sym("__zx_esx_gate_9d"),
+                          sym("__zx_esx_gate_9b")};
     const auto run_until = [&](auto stop, unsigned limit,
                                const std::string& operation) {
         for (unsigned step = 0; step < limit; ++step) {
             if (stop()) return;
-            cpu.step();
+            if (!files.step()) cpu.step();
         }
         throw std::runtime_error(operation + " reached emulator step limit at PC " +
                                  std::to_string(cpu.pc()));
@@ -153,7 +165,7 @@ int main(int argc, char** argv) {
             "IM2 scheduler vector is wrong");
 
     const auto table = sym("__yos");
-    constexpr std::array<const char*, 47> yos_api = {
+    constexpr std::array<const char*, 48> yos_api = {
         "_yos_version", "__yos_malloc", "__yos_free", "__clock",
         "_enter_critical_section", "_leave_critical_section",
         "__yos_install_timer", "_tmr_uninstall",
@@ -168,7 +180,7 @@ int main(int argc, char** argv) {
         "_unlink", "_rename", "_chdir", "_getcwd", "_mkdir", "_rmdir",
         "_stat", "_fstat", "_opendir", "_readdir", "_rewinddir",
         "_closedir", "_enumerate_disks", "_process_load",
-        "_process_last_error"
+        "_process_last_error", "_library_load"
     };
     for (std::size_t slot = 0; slot < yos_api.size(); ++slot) {
         require(mem.word(table + 2 * slot) == sym(yos_api[slot]),
@@ -233,6 +245,15 @@ int main(int argc, char** argv) {
     const std::vector<std::uint8_t> shell{
         std::istreambuf_iterator<char>(shell_file),
         std::istreambuf_iterator<char>()};
+    std::ifstream library_file(argv[4], std::ios::binary);
+    const std::vector<std::uint8_t> library_image{
+        std::istreambuf_iterator<char>(library_file),
+        std::istreambuf_iterator<char>()};
+    const auto library_symbols = read_symbols(argv[5]);
+    require(!library_image.empty() && library_symbols.contains("_interface"),
+            "missing packaged library fixture");
+    files.files["shell.sys"] = shell;
+    files.files["shelllib.svc"] = library_image;
     require(shell.size() >= 76 && shell[0] == 'X' && shell[1] == 'P' &&
                 shell[2] == 'R' && shell[3] == 'G',
             "dummy shell is not an XPRG image");
@@ -280,23 +301,105 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Execute the actual relocated shell until it reaches its final JR loop.
-    // This proves that its RST 18 lookup and indirect GPX calls draw through
-    // the ROM service table before the real-firmware Fuse run.
+    const auto put_string = [&](std::uint16_t address, const std::string& value) {
+        for (std::size_t i = 0; i <= value.size(); ++i)
+            mem.bytes[std::uint16_t(address + i)] = value.c_str()[i];
+    };
+    const auto retire_process = [&](std::uint16_t process) {
+        const auto thread = mem.word(process + 13);
+        call_kernel(sym("_list_remove"), sym("_thread_first_running"),
+                    thread, "retire: unlink thread");
+        call_kernel(sym("_list_insert"), sym("_thread_first_terminated"),
+                    thread, "retire: terminate thread");
+        mem.bytes[thread + 19] = 4;
+        mem.word(sym("_thread_current"), 0);
+        call_kernel(sym("__thread_cleanup_terminated"), 0, 0,
+                    "retire: scheduler cleanup");
+    };
+    // Load the actual shell through the real ROM/POSIX/XL path, then let
+    // it load, initialize and call the separately packaged library.
+    files.enabled = true;
+    put_string(0xe100, "shell.sys");
+    call_kernel(sym("_enter_critical_section"), 0, 0, "outer disk critical section");
+    const auto disk_fd = call_kernel(sym("_open"), 0xe100, 0, "nested disk open");
+    require(disk_fd != 0xffff && !cpu.snapshot().iff1 &&
+                mem.bytes[sym("__interrupt_refcount")] == 1,
+            "disk open released the caller's critical section");
+    call_kernel(sym("_close"), disk_fd, 0, "nested disk close");
+    put_string(0xe120, "missing.sys");
+    require(call_kernel(sym("_open"), 0xe120, 0, "nested disk error") == 0xffff &&
+                !cpu.snapshot().iff1 &&
+                mem.bytes[sym("__interrupt_refcount")] == 1,
+            "disk error released the caller's critical section");
+    call_kernel(sym("_leave_critical_section"), 0, 0, "leave disk critical section");
+    require(cpu.snapshot().iff1 && !mem.bytes[sym("__interrupt_refcount")],
+            "disk critical section did not restore preemption");
+    const auto loaded_shell = call_kernel(sym("_process_load"), 0xe100, 0,
+                                          "load shell from mock esxDOS");
+    require(loaded_shell != 0,
+            "shell load failed: " +
+                std::to_string(mem.bytes[sym("_process_last_error")]));
+    const auto shell_thread = mem.word(loaded_shell + 13);
+    mem.word(sym("_thread_current"), shell_thread);
+    unsigned staged_registrations = 0;
+    files.observe = [&] {
+        const auto state = cpu.snapshot();
+        const auto library = mem.word(shell_thread + 2);
+        if (!library || state.ix < 0x4000 || state.ix > 0xffaf) return;
+        const auto base = mem.word(state.ix + 68);
+        if (state.pc != base + library_symbols.at("_registered")) return;
+        ++staged_registrations;
+        require(mem.word(shell_thread + 22) == loaded_shell,
+                "initializer changed the client's thread membership");
+        for (auto service = mem.word(sym("__svc_first")); service;
+             service = mem.word(service)) {
+            require(mem.word(service + 2) != library,
+                    "initializer prematurely published its service");
+        }
+        const auto staged = mem.word(sym("__library_private_services"));
+        require(staged && mem.word(staged + 2) == library,
+                "initializer registration was not staged under its library");
+    };
     auto shell_state = cpu.snapshot();
     shell_state.halted = false;
-    shell_state.pc = code_base;
-    shell_state.sp = 0xe000;
+    shell_state.pc = shell_thread + 6;
+    shell_state.sp = mem.word(shell_thread + 4) + 22;
     cpu.restore(shell_state);
     run_until([&] {
         const auto pc = cpu.pc();
         return mem.bytes[pc] == 0x18 && mem.bytes[std::uint16_t(pc + 1)] == 0xfe;
     }, 5000000, "relocated shell GPX drawing");
+    files.observe = {};
+    require(staged_registrations == 1,
+            "shell did not execute the self-registering initializer once");
     bool shell_drew_pixels = false;
     for (std::uint16_t address = 0x4000; address != 0x5800; ++address)
         shell_drew_pixels = shell_drew_pixels || mem.bytes[address] != 0;
     require(shell_drew_pixels,
             "relocated shell reached its loop without drawing text");
+    put_string(0xe100, "shelllib");
+    const auto shell_library = call_kernel(sym("__svc_query"), 0xe100, 0,
+                                           "shell's registered library");
+    require(shell_library != 0, "shell did not register shelllib: error " +
+                std::to_string(mem.bytes[sym("_process_last_error")]));
+    require(call_kernel(mem.word(shell_library + 4), 0, 0,
+                        "shell library init count") == 1,
+            "library initializer did not run exactly once");
+    require(call_kernel(mem.word(shell_library + 6), 0, 0,
+                        "shell library call count") == 1,
+            "shell did not call the library's relocated function");
+    require(mem.word(shell_thread + 2) == 0 &&
+                mem.word(shell_thread + 22) == loaded_shell,
+            "library initialization did not restore caller ownership");
+    require(files.handles.empty(), "shell/library load leaked descriptors");
+    retire_process(loaded_shell);
+    require(mem.word(sym("_process_first")) == 0 &&
+                mem.word(sym("__library_refs")) == 0,
+            "shell exit did not release its library");
+    require(call_kernel(sym("__svc_query"), 0xe100, 0,
+                        "unloaded shell library") == 0,
+            "last-client cleanup left a published service");
+    files.enabled = false;
 
     constexpr std::uint16_t native_dirent = 0x8300;
     constexpr std::uint16_t public_dirent = 0x8340;
@@ -377,7 +480,7 @@ int main(int argc, char** argv) {
         call_kernel(0x0018, gpx_name, 0, "RST 18 gpx service query");
     require(gpx_table == sym("__gpx_service"),
             "gpx service did not return its ROM table");
-    constexpr std::array<const char*, 23> gpx_api = {
+    constexpr std::array<const char*, 24> gpx_api = {
         "_gpx_create", "_gpx_destroy", "_gpx_set_page",
         "_gpx_width", "_gpx_height", "_gpx_clrscr",
         "_gpx_set_text_background", "_gpx_draw_pixel",
@@ -386,7 +489,7 @@ int main(int argc, char** argv) {
         "_gpx_fill_rectangle", "_gpx_measure_text", "_gpx_draw_text",
         "_gpx_get_system_font", "_gpx_get_tiny_font",
         "_gpx_get_stock_bmp", "_gpx_draw_circle", "_gpx_fill_circle",
-        "_gpx_draw_polygon", "_gpx_fill_polygon"
+        "_gpx_draw_polygon", "_gpx_fill_polygon", "_gpx_draw_box"
     };
     for (std::size_t slot = 0; slot < gpx_api.size(); ++slot) {
         require(mem.word(gpx_table + 2 * slot) == sym(gpx_api[slot]),
@@ -420,6 +523,9 @@ int main(int argc, char** argv) {
                 call_kernel(mem.word(gpx_table + 36), 0, 0,
                             "gpx stock bitmap", 0) != 0,
             "gpx built-in assets are unavailable");
+    require(call_kernel(mem.word(gpx_table + 36), 0, 0,
+                        "gpx resize cursor", 5) != 0,
+            "gpx resize cursor is unavailable");
     mem.bytes[0x4000] = 0xff;
     mem.bytes[0x5aff] = 0xff;
     call_kernel(mem.word(gpx_table + 10), 0, 0, "gpx screen clear");
@@ -429,6 +535,15 @@ int main(int argc, char** argv) {
                 "gpx pixel drawing", 0, {10, 0, 1, 0, 0, 0});
     require(mem.bytes[0x4221] == 0x80,
             "gpx pixel drawing wrote the wrong Spectrum byte");
+    constexpr std::uint16_t box = 0x8250;
+    mem.word(box, 8);
+    mem.word(box + 2, 10);
+    mem.word(box + 4, 15);
+    mem.word(box + 6, 10);
+    call_kernel(mem.word(gpx_table + 46), gpx_context, box,
+                "gpx selected-edge box", 0, {2, 1, 0, 0xff, 0, 0});
+    require(mem.bytes[0x4221] == 0xff,
+            "gpx selected-edge box drew the wrong Spectrum byte");
 
     call_kernel(mem.word(table + 44), 0, 0, "empty keyboard queue");
     require(kernel_hl == 0,
@@ -733,9 +848,12 @@ int main(int argc, char** argv) {
     require(state.sp == call_sp && state.ix == 0xa55a &&
                 state.iy == 0x5aa5,
             "scheduler cleanup violated its ABI");
+    test_libraries(mem, call_kernel, sym, files, library_image,
+                   library_symbols, put_string);
     require(mem.rom_writes == 0, "kernel attempted to write into ROM");
 
     std::cout << "PASS: boot, XPRG CRC and relocation, heaps, syscalls, "
                  "GPX service and drawing, directory records, two-process round robin, "
-                 "event wakeup, and terminated-process cleanup\n";
+                 "event wakeup, terminated-process cleanup, shell library "
+                 "self-registration, shared/private lifetime and rollback\n";
 }
