@@ -52,10 +52,13 @@ The descriptor's stack size is usable application stack. YOS adds its private
 15 characters; the current kernel process object retains the first seven.
 
 `yos_t::process_load_error` points at a byte containing one of the
-`YOS_PROCESS_LOAD_*` values in `yos.h`. A service image passed to
-`load_process` is rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 1 includes
-`load_library(path, flags)` for service images; see [Libraries](LIBRARIES.md)
-for relocation, self-registration, sharing and automatic release.
+`YOS_PROCESS_LOAD_*` values in `yos.h`. The synchronous loading call writes
+the current thread's value; the scheduler saves and restores it across context
+switches. A competing or recursive load returns immediately with `BUSY`. A
+service image passed to `load_process` is rejected with
+`YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 1 includes `load_library(path, flags)` for
+service images; see [Libraries](LIBRARIES.md) for relocation,
+self-registration, sharing and automatic release.
 
 At boot the ROM opens `shell.sys` on the current esxDOS drive and directory
 (`kernel/boot_shell.s`), loads it as a process, and only then arms the
@@ -89,11 +92,10 @@ Compile and link as a relocatable XL with the YOS backend, then package it
 with a nonzero stack requirement and the oldest compatible YOS ABI:
 
 ```sh
-bin/x/bin/xcc -Os --platform=yos app.c -o build/app.xl
+mkdir -p build/examples/yos bin/y/examples
+bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
 bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
-  build/app.xl -o bin/y/z80/spectrum/bin/app.sys
-
-xprog --process --name shell --stack-size 256 --min-os 1 shell.xl -o shell.sys
+  build/examples/yos/app.xl -o bin/y/examples/app.sys
 ```
 
 Both images declare ABI 1, the clean baseline for the complete current table.

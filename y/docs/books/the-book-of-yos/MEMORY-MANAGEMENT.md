@@ -108,6 +108,10 @@ Applications do not call `mem_allocate` directly. The `yos_t` table exposes
 (`kernel/_yos_malloc.s`, `kernel/_yos_free.s`) select `__heap` and assign the
 current process as owner. During library initialization the temporary library
 owner override is used instead; kernel-context allocations have owner `NONE`.
+The adapters hold an IFF-preserving critical section across the complete heap
+transaction. Raw `mem_allocate`, `mem_free`, and `mem_free_owner` are internal,
+unprotected primitives; kernel callers must already hold the section whenever
+an arena can be reached by another thread or interrupt callback.
 
 ## Freeing Memory
 

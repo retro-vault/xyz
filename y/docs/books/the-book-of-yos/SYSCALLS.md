@@ -157,7 +157,16 @@ Public services are kept in the `__svc_first` linked list (`kernel/_svc_state.s`
 
 ## The `gpx` Service
 
-The ROM vendors libgpx `v1.1.0-1-g0ef6f07` (`y/src/z80/gpx/`, GPL-2.0, see `gpx/README.md`) and registers its function table as `"gpx"`. The `gpx_api_t` in `gpx.h` covers drawing contexts, pixels, lines, rectangles and selected-edge boxes, circles, polygons, text with the system and tiny fonts, bitmaps, sprites and page selection. The `draw_box` entry is appended after the original 23 slots, preserving their ABI offsets. Its eight bytes of writable state live in `_INITIALIZED` like any other kernel data. The boot-time shell (`y/tests/shell-yos/shell.c`) is a minimal example:
+The ROM vendors libgpx `v1.1.0-1-g0ef6f07` (`y/src/z80/gpx/`, GPL-2.0,
+see `gpx/README.md`) and registers its function table as `"gpx"`. The
+`gpx_api_t` in `gpx.h` covers drawing contexts, pixels, lines, rectangles and
+selected-edge boxes, circles, polygons, text with the system and tiny fonts,
+bitmaps, sprites and page selection. The `draw_box` entry is appended after
+the original 23 slots, preserving their ABI offsets. `create` allocates an
+independent six-byte context owned by the current process (or initializing
+library); `destroy` releases it, and process cleanup catches forgotten
+contexts. Display dimensions are constants, not global context state. The
+boot-time shell (`y/tests/shell-yos/shell.c`) is a minimal example:
 
 ```c
 gpx_api_t *gpx = (gpx_api_t *)query_service(GPX_SERVICE_NAME);
@@ -166,6 +175,10 @@ const font_t *font = gpx->get_system_font();
 gpx->clear_screen();
 gpx->draw_text(screen, x, y, "hello", font, CO_FORE, BM_CPY, 0);
 ```
+
+The Spectrum framebuffer is still shared. GPX protects byte-level raster
+read/modify/write work and complete sprite save/show/hide operations, but a
+compound drawing sequence may interleave with another thread or process.
 
 ## Uses for Custom Services
 

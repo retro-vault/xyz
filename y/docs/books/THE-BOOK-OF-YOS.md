@@ -77,11 +77,12 @@ guarantees, including the remaining process-local libc `errno` limitation.
 0x4000 ├──────────────────────────────┤
        │ screen bitmap and attributes │  ULA
 0x5B00 ├──────────────────────────────┤
-       │ _DATA / _INITIALIZED         │  esxDOS RAM gates, clock, kbd state
-0x5B78 │ _BSS: __yos service table    │  96 bytes
-       │       ... kernel stack       │  512 bytes, top at 0x5DD8
-0x5DD8 │       __sys_vec_tbl          │  eight 3-byte JP entries
-       │       list roots, buffers    │
+       │ _INITIALIZED                 │  esxDOS gates at 0x5B37, clock, kbd
+0x5B70 │ _BSS                         │  descriptor/error/timer state
+0x5B94 │       __yos service table    │  96 bytes
+       │       kernel stack           │  512 bytes, top at 0x5DF4
+0x5DF4 │       __sys_vec_tbl          │  eight 3-byte JP entries
+       │       list roots, mouse      │
 0x5EFF │ __im2_vector                 │  2 bytes, read via I=0x5E
 0x5F01 ├──────────────────────────────┤
        │ __sys_heap                   │  1024 bytes, kernel objects

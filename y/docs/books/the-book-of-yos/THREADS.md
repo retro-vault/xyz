@@ -211,6 +211,10 @@ yos->destroy_event(e);
 
 ## A Complete Example
 
+Thread creation needs the process handle that will own the new threads. ABI 1
+does not expose a current-process getter, so this helper is for a launcher that
+already has that handle (for example, the code that called `create_process`):
+
 ```c
 #include <yos.h>
 
@@ -226,18 +230,16 @@ void draw_right(void) {
     for (;;) { /* draw something on the right half */ }
 }
 
-void main(void) {
+void start_workers(yos_process_t *process) {
     yos = (yos_t *)query_service("yos");
 
-    yos_thread_t *left  = yos->create_thread(draw_left,  512, NULL);
-    yos_thread_t *right = yos->create_thread(draw_right, 512, NULL);
+    yos_thread_t *left  = yos->create_thread(draw_left,  512, process);
+    yos_thread_t *right = yos->create_thread(draw_right, 512, process);
 
-    yos->resume_thread(left);
-    yos->resume_thread(right);
+    if (left)  yos->resume_thread(left);
+    if (right) yos->resume_thread(right);
 
-    /* Both threads now run concurrently. main continues here.
-       All three threads share the CPU via the 50 Hz scheduler. */
-    for (;;) { }
+    /* The workers now share this process and the 50 Hz scheduler. */
 }
 ```
 
@@ -255,6 +257,9 @@ yos->leave_critical_section();
 
 **Long interrupt latency.** Holding interrupts disabled for more than a few microseconds will starve the scheduler and all timer callbacks. Keep critical sections as short as possible.
 
-**Returning from the process's last thread.** The process itself is reaped once its last thread terminates; any memory obtained through `allocate_memory` (owner `NONE`) is not.
+**Returning from the process's last thread.** The process itself is reaped once
+its last thread terminates. `allocate_memory` records the current process and
+is reclaimed then; successful public timers remain kernel-owned and must be
+destroyed explicitly.
 
 **Do not free a thread's stack manually.** The OS frees it automatically when the thread is cleaned up via resource accounting.

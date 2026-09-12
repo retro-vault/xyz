@@ -100,7 +100,9 @@ uint16_t start = yos->clock_ticks();
 
 ### `void enter_critical_section(void)`
 
-Disables interrupts and increments a nesting count.
+On the outermost entry, records whether maskable interrupts were enabled,
+disables them, and increments the nesting depth. Nested calls are supported to
+a maximum depth of 127. Registers and flags are preserved.
 
 ```c
 yos->enter_critical_section();
@@ -108,7 +110,9 @@ yos->enter_critical_section();
 
 ### `void leave_critical_section(void)`
 
-Decrements the nesting count and enables interrupts when it reaches zero.
+Decrements the nesting depth. The final matching leave restores the outer
+caller's interrupt state; it does not blindly enable interrupts. An unmatched
+leave is a harmless no-op, but callers should still balance every path.
 
 ```c
 shared_value = 7;
@@ -122,7 +126,8 @@ Always balance the pair and keep the protected region short.
 ### `yos_timer_t *create_timer(yos_handler_t handler, uint16_t ticks)`
 
 Creates a periodic timer. The first invocation occurs after `ticks + 1`
-50 Hz frames. The callback has no arguments and runs in scheduler context.
+50 Hz frames. Publication in the timer chain is atomic. The callback has no
+arguments and runs in scheduler context.
 
 ```c
 static void pulse(void) { ++pulses; }
@@ -132,7 +137,9 @@ yos_timer_t *timer = yos->create_timer(pulse, 49);
 ### `void destroy_timer(yos_timer_t *timer)`
 
 Unlinks and frees a timer. Public ABI 1 timers are kernel-owned, so explicitly
-destroy every successful timer.
+destroy every successful timer. Removal is atomic with respect to threads,
+but do not destroy a timer from a callback while the active chain is walking
+it.
 
 ```c
 if (timer) yos->destroy_timer(timer);
@@ -157,10 +164,14 @@ Unlinks and frees a registered event.
 if (event) yos->destroy_event(event);
 ```
 
+Destruction is atomically removed from the kernel list, but the caller must
+ensure no other thread will subsequently use the handle.
+
 ### `yos_event_t *set_event(yos_event_t *event, enum yos_event_state state)`
 
 Sets `YOS_EVENT_SET` or `YOS_EVENT_RESET`. Returns `event` if it remains a
-registered object, otherwise `NULL`.
+registered object, otherwise `NULL`. The validation and state change are one
+protected operation; this short call is safe from a timer callback.
 
 ```c
 if (!yos->set_event(event, YOS_EVENT_SET)) handle_stale_event();
@@ -249,7 +260,8 @@ stored relationship to the process that loaded it.
 ### `uint8_t *process_load_error`
 
 Points to the last loader error byte. It is data, not a function pointer.
-Read it after `load_process` or `load_library` returns `NULL`:
+The scheduler saves and restores its value per thread. Loading is synchronous,
+so read it after `load_process` or `load_library` returns `NULL`:
 
 ```c
 loaded = yos->load_process("EDITOR.SYS");
@@ -265,6 +277,9 @@ Values are `YOS_PROCESS_LOAD_OK`, `NOT_FOUND`, `NO_MEMORY`, `READ_ERROR`,
 selected loading API. The current ABI also defines `BUSY` (9), `NO_PROCESS`
 (10), and `INIT_ERROR` (11).
 
+A competing or recursive loader call does not wait: it returns `NULL` with
+`BUSY`. Its status cannot overwrite the interrupted thread's saved status.
+
 ### `void *load_library(const char *path, uint16_t flags)`
 
 Loads a relocatable XPRG service and returns its relocated function-pointer
@@ -273,6 +288,9 @@ table. `YOS_LIBRARY_PRIVATE` always creates a private instance;
 and self-registration run once, after relocation. Each successful call
 retains a reference until the acquiring process's last thread exits.
 There is no explicit unload call. `query_service` does not retain a library.
+The call is synchronous and normally preemptible; only short shared-state
+commits and nested firmware/descriptor transactions mask interrupts. Do not
+asynchronously terminate a thread while it is loading or initializing code.
 
 ```c
 shelllib_api_t *library = yos->load_library(
@@ -315,7 +333,9 @@ if (service) yos->unregister_service(service);
 ABI 1 records current-process ownership, so ordinary registrations are
 reaped on process exit. During library initialization registration is
 library-owned and staged until success. Never manually unregister a
-loader-managed library service.
+loader-managed library service. Registration, lookup, and removal are atomic,
+but invoking the returned interface is not: mutable service state needs its
+own synchronization, and unregistering requires coordination with borrowers.
 
 ## Restart handlers
 
@@ -387,6 +407,14 @@ if (fd < 0) direct_error = *yos->error_number;
 The members in this section mirror the functions from `<fcntl.h>`,
 `<unistd.h>`, `<sys/stat.h>`, and `<dirent.h>`. Prefer those standard wrappers;
 the direct form is shown because every `yos_t` entry is part of the ABI.
+
+Descriptors and the esxDOS current directory are system-wide. Each descriptor
+call is serialized from validation through native I/O and state commit, so one
+call cannot corrupt kernel bookkeeping; append seek plus write is atomic.
+Sequences of calls are not transactions: coordinate `chdir` plus `open`, and
+do not close a descriptor or free a buffer while another thread uses it.
+`readdir` reuses storage in its `DIR`, so copy a record before another read on
+that stream.
 
 ### `int open(const char *path, int flags)`
 
@@ -570,6 +598,10 @@ rewinddir(d);                                        /* rewinddir */
 ok = closedir(d);                                    /* closedir */
 int disks_found = enumerate_disks(disks, capacity);  /* enumerate_disks */
 ```
+
+The kernel error cell is per-thread; linked libc `errno` is only process-local
+in ABI 1. Multithreaded code should use the raw entry plus
+`*yos->error_number`, or protect a wrapper call and its immediate `errno` read.
 
 For descriptors 1 and 2, `write` routes each byte to the installed output
 hook and succeeds even when no hook exists. Descriptor 0 reads as immediate

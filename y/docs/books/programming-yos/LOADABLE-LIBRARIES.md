@@ -38,6 +38,13 @@ A library load requires a current process because the reference needs an
 owner. It therefore returns `NULL`/`YOS_PROCESS_LOAD_NO_PROCESS` in kernel
 context.
 
+The call completes synchronously, but a single nonblocking loader lock covers
+process and library loads. A competing or recursive call returns immediately
+with `YOS_PROCESS_LOAD_BUSY`; retry later rather than waiting with interrupts
+disabled. `process_load_error` is saved/restored per thread, so another
+thread's loader result cannot overwrite yours. Do not asynchronously terminate
+a thread while it is inside a load or initializer.
+
 ## Private or shared
 
 `YOS_LIBRARY_PRIVATE` always loads and initializes a separate instance. Its

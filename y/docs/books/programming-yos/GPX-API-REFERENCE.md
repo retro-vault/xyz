@@ -298,3 +298,18 @@ gpx->fill_polygon(screen, triangle, 3, CO_FORE, BM_CPY,
 Keep the points, pattern, bitmap, sprite, background, clip, and font storage
 alive until the synchronous call returns. The current GPX functions complete
 their drawing before returning; they do not retain ordinary primitive arrays.
+
+## Concurrency contract
+
+Each `create` returns independent process-owned state, so changing the text
+background of one context does not affect another app. If multiple threads
+share one context, they must coordinate semantic changes such as
+`set_text_background` with the drawing calls that depend on them.
+
+The physical screen is shared. GPX protects byte-level framebuffer
+read/modify/write operations, bitmap/raster rows, and complete sprite
+save/show/hide calls against preemption. That prevents neighboring pixels in
+one byte from being lost, but it does not turn a line, text string, compound
+shape, or `clear_screen` into an atomic frame transaction. Coordinate
+overlapping regions between threads and apps. A sprite's background buffer
+must remain private from its `show_sprite` through matching `hide_sprite`.

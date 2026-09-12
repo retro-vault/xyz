@@ -195,7 +195,12 @@ Use consistent naming:
 3. Optimization priority: Size optimization comes first. Speed optimization is secondary, but no major speed penalties are allowed (especially when drawing to the screen).
 4. Register usage: When possible, use the Z80 alternate register set (EXX, EX AF,AF') to reduce memory usage.
 5. Index registers: If IX or IY are used, they must be saved and restored.
-6. No global context: Routines must be stateless and independent (except for configurable global settings). They must work correctly in a context-switching environment.
+6. No unprotected global context: Prefer stack/register state or explicit
+   process/library/GPX contexts. Every necessary mutable global must have a
+   documented ownership rule and IFF-preserving critical section. Keep caller
+   buffers alive for the complete protected operation. Use
+   `__critical_call` only for register-only argument layouts: its extra return
+   word changes caller-stack offsets and it clobbers alternate DE/HL.
 7. Hand-written assembly only: All kernel code must be hand-written Z80
    assembly. Do not use C compilers or generated assembly. (`shell.sys` is
    compiled from the C smoke fixture, but it is an application, not ROM.)

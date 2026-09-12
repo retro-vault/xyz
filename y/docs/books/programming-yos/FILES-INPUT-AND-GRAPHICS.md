@@ -28,6 +28,15 @@ Descriptors 0, 1, and 2 are the synthetic console. Reading 0 returns end of
 file. Writes to 1 or 2 feed the optional character hook and otherwise remain
 silent. Other descriptors belong to the YOS/esxDOS filesystem.
 
+Descriptors and the current directory are system-wide. YOS serializes each
+descriptor operation, including append seek plus write, but multi-call
+sequences such as `chdir` then `open` still require application coordination.
+Do not close a descriptor or free a buffer while another thread uses it.
+The raw kernel error cell is per-thread; libc `errno` is only process-local,
+so protect a wrapper call together with its error read or use the raw table
+entry and `*yos->error_number`. See
+[Concurrency](MEMORY-TIME-AND-CONCURRENCY.md).
+
 ## Paths, metadata, and directories
 
 The backing filesystem uses short 8.3 names. Keep components to eight base
@@ -49,7 +58,8 @@ if (dir) {
 
 `d_type` is `DT_REG` or `DT_DIR`; the native esxDOS attributes remain in
 `d_attributes`. Directory entries are owned by the directory stream and are
-reused by subsequent reads. `rewinddir` returns to the first entry.
+reused by subsequent reads. Copy an entry before another thread reads the
+same stream. `rewinddir` returns to the first entry.
 
 `stat` and `fstat` fill `st_mode` and 32-bit `st_size`; use `S_ISREG` and
 `S_ISDIR`. `mkdir` accepts a mode for source compatibility, but esxDOS does

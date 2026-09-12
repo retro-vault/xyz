@@ -55,22 +55,29 @@ yos->set_interrupt_handler(my_handler, YOS_VECTOR_RST20);
 yos_handler_t h = yos->get_interrupt_handler(YOS_VECTOR_RST20);
 ```
 
-Internally `_sys_vec_set` computes `__sys_vec_tbl + 3 * vector + 1` and stores the little-endian address there. Both routines run inside a critical section so a half-written address can never be executed.
+Internally `_sys_vec_set` computes `__sys_vec_tbl + 3 * vector + 1` and stores
+the little-endian address there. Both routines run inside a critical section
+so a half-written address can never be executed. The compact setter also
+removes its one-byte stack argument before tail-calling the matching leave:
 
 ```asm
 _sys_vec_set::
         call    _enter_critical_section
-        ;; ... vector number into E, handler into BC ...
-        ld      d, #0
-        ld      hl, #__sys_vec_tbl
-        add     hl, de
-        add     hl, de
-        add     hl, de                  ; HL = base + 3*vector
-        inc     hl                      ; skip the JP opcode
-        ld      (hl), c
+        ex      de, hl                   ; handler
+        pop     bc                       ; return address
+        pop     hl                       ; vector and untouched caller byte
+        dec     sp                       ; consume only the vector byte
+        push    bc
+        ld      c, l
+        ld      b, #0
+        ld      hl, #__sys_vec_tbl+1
+        add     hl, bc
+        add     hl, bc
+        add     hl, bc                   ; base + 1 + 3*vector
+        ld      (hl), e                 ; low byte of handler
         inc     hl
-        ld      (hl), b
-        call    _leave_critical_section
+        ld      (hl), d                 ; high byte of handler
+        jp      _leave_critical_section
 ```
 
 ## 50 Hz scheduling with IM2
@@ -80,12 +87,18 @@ The physical RST 38 entry must remain compatible with divIDE, so YOS does not pu
 This costs two fixed RAM bytes (the `_IM2` area in `linker.lk`) rather than a 257-byte vector table. `_HEAP` begins immediately after it at `0x5F01`.
 
 Every esxDOS call in `fs/_esxdos_calls.s` enters a nestable critical section
-at the common gate dispatcher and leaves it only after firmware returns
-and divIDE restores the YOS ROM. While firmware is mapped, the ROM address
-of `__thread_robin` contains unrelated firmware code: IM2 must not run then.
-This also prevents thread preemption/re-entry into esxDOS. Loader validation,
-relocation and library initialization remain preemptible outside their own
-short object/list critical sections; only each native disk call is masked.
+at the common gate dispatcher and leaves it only after firmware returns and
+divIDE restores the YOS ROM. While firmware is mapped, the ROM address of
+`__thread_robin` contains unrelated firmware code: IM2 must not run then.
+
+Descriptor-backed calls hold an outer critical section from descriptor
+validation or reservation through native I/O and the final state update.
+Thus `open`, `close`, `read`, `write`, `lseek`, `fstat`, `fsync`, and directory
+stream operations cannot race their own kernel records; append seek plus write
+is one transaction. The inner firmware gate simply nests. Path-only calls have
+no descriptor transaction, but their native gate is still protected. Loader
+validation, CRC, relocation, and library initialization remain preemptible;
+the whole-load try-lock is state, not one long interrupt mask.
 
 ## Kernel entry
 

@@ -1,15 +1,19 @@
 # Application Images (`.app`)
 
-This chapter describes how `yos` treats application files on disk today, and defines the next-step `.app` container for importing **legacy ZX Spectrum binaries**.
+This historical chapter describes how the preserved C-era `yos` treated
+application files on disk and its planned `.app` container for importing
+**legacy ZX Spectrum binaries**. It is not the active assembly-ROM XPRG
+contract.
 
-## Current State
+## Preserved State
 
-Today, the `yos` process loader in [kernel/process.c](/home/tstih/data/retro-vault/xyz/src/yos/kernel/process.c:1) supports:
+The C-era process loader in
+[kernel/process.c](../kernel/process.c) supports:
 
 - relocatable **XL** images directly
 - legacy `YAPZ` tape-code apps with absolute load and jump addresses
 
-In other words, `.app` on disk may now be either:
+In that kernel, `.app` on disk could be either:
 
 - a native `XL` image copied with an `.app` extension
 - a legacy Spectrum `YAPZ` container produced by `appmake`
@@ -189,24 +193,23 @@ When `yos` grows support for this container, the loader should:
 3. if the signature is `YAPZ`, use the legacy absolute-load path
 4. reject any `load_addr` range that collides with OS memory, data, BSS, or critical resident services
 
-The current implementation already does this for `APP_KIND_ZX_TAPE_CODE`. Snapshot-style state restore remains future work.
+That implementation already did this for `APP_KIND_ZX_TAPE_CODE`.
+Snapshot-style state restore remained future work.
 
 ## Host Tool
 
 The host-side converter for the legacy forms lives in:
 
-- [`pkg/appmake`](../../pkg/appmake)
+- [`pkg/appmake`](../../../pkg/appmake)
 
-It currently supports:
+In that tree it supports:
 
 - `.tap` `CODE` block to `APP_KIND_ZX_TAPE_CODE`
 - 48K `.sna` snapshot to `APP_KIND_ZX_SNAPSHOT_48K`
 
 ## Status
 
-This chapter defines the on-disk format and the current loader behavior.
-
-Today:
+At the point this chapter was archived:
 
 - `XL` apps are loadable as before
 - legacy `YAPZ` tape-code apps are loadable from `ysh`

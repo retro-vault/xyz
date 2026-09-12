@@ -74,6 +74,13 @@ numeric status to the creator. ABI 1 can load relocatable XPRG service images
 as private or reference-counted shared libraries; dependencies and finalizers
 are not implemented.
 
+Kernel shared-state calls are serialized and the raw filesystem and loader
+error cells follow the running thread. Linked libc `errno` remains
+process-local, GPX contexts are independently allocated and process-owned but
+the screen is shared, and caller-owned buffers and service state still need
+coordination. The precise contract is in
+[Memory, Time, and Concurrency](programming-yos/MEMORY-TIME-AND-CONCURRENCY.md).
+
 Paths and directory entries reflect the underlying esxDOS 8.3 filesystem.
 YOS currently targets the 48K Spectrum with divIDE/esxDOS. Code that stays on
 libc plus `yos.h` remains independent of those firmware details.

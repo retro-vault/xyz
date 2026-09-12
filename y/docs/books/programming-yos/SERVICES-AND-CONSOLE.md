@@ -121,6 +121,11 @@ library-owned registrations until success; acquire these interfaces using
 `load_library`, not merely a borrowed query. See
 [Loadable Libraries](../the-book-of-yos/LIBRARIES.md).
 
+Registration, query, and removal are atomic kernel-list operations. Calling
+the returned interface is ordinary shared code: protect mutable service state
+or expose per-client contexts. A query is only a borrowed pointer, so do not
+unregister an ordinary service until every borrower has stopped using it.
+
 ## Loading a service library
 
 Use `load_library`, rather than `query_service`, when a process needs to own

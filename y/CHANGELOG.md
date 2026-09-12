@@ -37,8 +37,8 @@ Release status:
   instead of the ROM scheduler and restarted YOS before drawing. Added
   interrupt-rejection/nesting regressions and a pristine Fuse boot runner
   under `tests/fuse/`. Verified the production shell's greeting and
-  "Library OK" with Fuse 1.6.0 and esxDOS 0.8.9. ROM still ends at `0x3FBD`
-  (67 bytes free); the nine added code bytes fit existing placement slack.
+  "Library OK" with Fuse 1.6.0 and esxDOS 0.8.9. At that stage the ROM ended
+  at `0x3FBD`; the current post-thread-safety margin is reported above.
 - Added ABI 1 `load_library(path, flags)`: private/shared XPRG services
   reuse the process loader's disk, CRC and XL relocation core. Library
   initializers run once after relocation, can self-register their relocated
@@ -52,8 +52,9 @@ Release status:
   the surviving-thread scan's NZ result so a sibling thread keeps its
   process and library references alive.
   The optimized existing routines save 439 code bytes in aggregate.
-  With library loading and the updated GPX service, the production ROM
-  ends at `0x3FBD`, leaving 67 bytes; fixed reserved addresses are unchanged.
+  With library loading and the updated GPX service, those changes initially
+  left 67 bytes; later thread-safety work uses part of that space and the
+  current ROM margin is reported above.
 - Added real `shelllib.svc` packaging and a shell call/display check, plus
   emulator coverage for relocation before self-registration, staged
   publication, shared/private state, ABI identity, repeated acquisitions,
@@ -109,16 +110,19 @@ Release status:
   named `"gpx"` service. The new public `gpx.h` describes the drawing context,
   bitmap, font, sprite, geometry, constants, and complete `gpx_api_t` service
   ABI. The vendored graphics modules have no libc or runtime dependency; their
-  eight writable bytes use the kernel's ROM-to-RAM initializer path.
+  first integration used an eight-byte global context in the kernel's
+  ROM-to-RAM initializer path; the current per-process contexts are described
+  in the newer entry above.
 - Replaced the legacy public `yos_t` surface with a kernel-only table containing
   only kernel services and the complete esxDOS-backed POSIX file interface.
   Descriptive names such as `create_thread` now map directly to the existing
   assembly implementations. Only memory allocation, memory release, and timer
   creation retain the small adapters required to hide kernel-private owner or
-  heap arguments. The ROM owns its filesystem implementation, descriptor
-  state, error cell, and 45-byte RAM gate block; it has no dependency on a ZX
-  platform, libc, runtime, console, or font archive. The public
-  `error_number` pointer exposes the ROM's error cell without an accessor.
+  heap arguments. The ROM owns its filesystem implementation and has no
+  dependency on a ZX platform, libc, runtime, console, or font archive. That
+  first filesystem surface used a 45-byte RAM gate block and exposed its error
+  cell through the `error_number` pointer without an accessor; the current
+  gate count and error virtualization are recorded above.
 - Added self-contained ZX Spectrum keyboard and Kempston mouse drivers to the
   kernel ROM. The keyboard matrix is scanned by a 50 Hz kernel timer into a
   transition queue, while mouse calibration and polling read the three

@@ -121,8 +121,12 @@ The fixed loader-status cell is saved/restored per thread, so a competing
 call's BUSY result cannot overwrite the initiating thread's result. Services
 are only published after initialization. Mutable state inside a shared
 library still needs its own synchronization or per-client contexts.
-Each native esxDOS call does mask interrupts until divIDE restores the ROM
-containing the scheduler; validation, CRC and relocation can be preempted.
+Descriptor-backed filesystem calls keep their complete descriptor/native I/O
+transaction protected, with the native esxDOS gate nested inside it. This can
+delay scheduling during disk work, but the loader lock itself does not disable
+interrupts: validation, CRC, relocation, and initialization can be preempted.
+Do not asynchronously terminate a thread while a load/initializer is active;
+abandoning its stack frame would also abandon the loader lock and resources.
 
 Both loading APIs report through `process_load_error`. Existing codes
 0–8 remain stable; code 6 means wrong image kind for the selected loader.
