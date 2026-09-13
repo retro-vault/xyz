@@ -100,9 +100,10 @@ int main(int argc, char* argv[]) {
         if (ctx.verbose) {
             uint32_t output_size = 0;
             if (ctx.format == xld::output_format::xl) {
+                // XL v2: header, code, then the relocation table.
                 output_size = 12
-                            + static_cast<uint32_t>(ctx.reloc_table.size()) * 4
-                            + ctx.code_size;
+                            + ctx.code_size
+                            + static_cast<uint32_t>(ctx.reloc_table.size()) * 4;
             } else if (ctx.format == xld::output_format::elf) {
                 output_size = ctx.code_size;
             } else if (ctx.output_range.has_value()) {

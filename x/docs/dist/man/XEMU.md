@@ -37,6 +37,9 @@ xemu --run --load-bin app.bin --stdin-port 0 --stdout-port 1
 | `--stdin-status-port ADDR` | Map a Z80 status port to host stdin readiness |
 | `--stdin-data-port ADDR` | Map a Z80 data port to host stdin bytes |
 | `--stdout-port ADDR` | Map Z80 port `ADDR` to host stdout |
+
+Port bindings below `0x100` decode the low address byte only, so `OUT (n),A`
+reaches them; a 16-bit `ADDR` must match the whole bus (`OUT (C),r`).
 | `--shared-pages LIST` | Compatibility banking shortcut for shared pages |
 | `--banked-pages LIST` | Compatibility banking shortcut for banked pages |
 | `--bank-count N` | Compatibility banking shortcut: number of banks |

@@ -105,7 +105,11 @@ All integers are little-endian. The fixed descriptor is 64 bytes:
 
 The ordered service table immediately follows the descriptor. Every entry is
 three bytes: Z80 opcode `0xc3` (`JP nn`) followed by a 16-bit XL code offset.
-The complete, unmodified XL file follows all metadata.
+The complete, unmodified XL file follows all metadata. `xprog` accepts only
+XL version 2, whose 12-byte header is followed by the code and then by the
+relocation table (see the [xld README](../xld/README.md)); it checks the
+version, the total length, the entry offset and every relocation record
+before packaging.
 
 If `--id` is omitted, the ID is the 32-bit FNV-1a hash of the image name. It is
 descriptive metadata in this version; xprog does not define a dynamic-linking
@@ -119,6 +123,12 @@ table at the preferred address, place and relocate the XL code after it, and
 add the actual code base to every JP target offset. Thus a service requested at
 `0xfd00` exposes slot 0 at `0xfd00`, slot 1 at `0xfd03`, and so on, while its
 implementation remains relocatable.
+
+Because the XL relocation table trails the code, a loader that reads the
+payload sequentially receives the resident code before the table. It can
+allocate the code block first, read the table into a temporary block that
+sits above it, patch, and free only the table; YOS does the equivalent in
+one read buffer by splitting the consumed table off the end of the block.
 
 That describes only how to load one service image. How a separately linked
 process discovers a service and binds calls to its slots remains intentionally

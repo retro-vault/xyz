@@ -9,7 +9,7 @@
 
 extern yos_t *yos_api_table;
 
-_Static_assert(sizeof(yos_t) == 96, "YOS ABI 1 table size changed");
+_Static_assert(sizeof(yos_t) == 98, "YOS ABI 1 table size changed");
 
 static int unavailable(void)
 {

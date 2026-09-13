@@ -8,6 +8,7 @@
 
         .globl  _enter_critical_section
         .globl  __interrupt_refcount
+        .globl  __critical_iff_sampled
 
         .area   _CODE
 
@@ -19,6 +20,8 @@ _enter_critical_section::
         push    af
         push    hl
         ld      a,i
+        ; The scheduler repairs P/V if an IRQ hits this NMOS Z80 boundary.
+__critical_iff_sampled::
         di
         ld      hl, #__interrupt_refcount
         jp      po, .disabled

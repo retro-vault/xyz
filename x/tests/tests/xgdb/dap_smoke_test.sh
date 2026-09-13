@@ -248,17 +248,17 @@ def run_case(kind):
     elif kind == "xlrel":
         src = None
         elf = tmp / "dap_reloc.xl"
-        # XL v1: header, one word relocation at payload offset 1, then
-        # "ld hl,0x0004; halt; nop". Loading at 0x0100 patches HL to 0x0104.
+        # XL v2: header, "ld hl,0x0004; halt; nop", then one word relocation
+        # at payload offset 1. Loading at 0x0100 patches HL to 0x0104.
         elf.write_bytes(
             b"XL"
-            + bytes([0x01, 0x00])
+            + bytes([0x02, 0x00])
             + bytes([0x00, 0x00])
             + bytes([0x05, 0x00])
             + bytes([0x01, 0x00])
             + bytes([0x00, 0x00])
-            + bytes([0x01, 0x00, 0x02, 0x00])
             + bytes([0x21, 0x04, 0x00, 0x76, 0x00])
+            + bytes([0x01, 0x00, 0x02, 0x00])
         )
         bp_line = None
         expected_pc = "0x0100"

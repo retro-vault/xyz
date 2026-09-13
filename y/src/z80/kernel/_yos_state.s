@@ -4,7 +4,5 @@
         ; Copyright (C) 2021, 2026 tomaz stih
 
         .module _yos_state
-        .globl  __yos
-        .area   _BSS
-__yos::
-        .ds     96
+        ; The immutable ABI table is published directly from ROM by
+        ; _syscall_table_init.s, so no writable mirror is allocated.

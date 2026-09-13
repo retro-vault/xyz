@@ -538,10 +538,12 @@ banked RAM). Contrast with `--oformat=binary`, which is fixed to `-Ttext`.
 
 **How it works:** The linker assigns tentative addresses and emits the program
 image. Every location that still contains an absolute address (jump target,
-data pointer, etc.) is recorded in the relocation table in the XL header. A
-loader copies the image to wherever RAM is free, walks the table, patches those
-words, then jumps to the entry point. Same file, different address — that is
-what *relocatable* means for XL.
+data pointer, etc.) is recorded in the relocation table that follows the code.
+A loader allocates the image, reads the code into it, reads the table into a
+temporary block, walks the table patching those words, frees the table, then
+jumps to the entry point. Same file, different address — that is what
+*relocatable* means for XL. The exact layout is in the
+[xld README](src/xld/README.md#xl-relocatable-output--f-xl-default).
 
 ```
 xcc main.c -o app.xl

@@ -32,13 +32,14 @@
         .equ    IMAGE_XL,    74
         .equ    IMAGE_ENTRY, 76
         .equ    IMAGE_OWNER, 78
+        .equ    IMAGE_TEMP,  80
 
         .area   _CODE
 
         ; inputs: hl = path, a = 0 process / 1 private / 3 shared
         ; outputs: de = process/interface or zero; error cell updated
         ; clobbers: af, bc, de, hl; preserves ix and iy
-        ; frame: IX+0..63 descriptor; +64..79 loader locals above.
+        ; frame: IX+0..63 descriptor; +64..81 loader locals above.
         ; A try-lock serializes loads; contention is BUSY. There is no
         ; load-wide critical section; native I/O gates mask separately.
 __image_load::
@@ -53,7 +54,7 @@ __image_load::
         pop     af
         push    ix
         push    iy
-        ld      ix, #-80
+        ld      ix, #-82
         add     ix, sp
         ld      sp, ix
         ld      IMAGE_MODE(ix), a
@@ -61,6 +62,8 @@ __image_load::
         xor     a
         ld      IMAGE_DATA(ix), a
         ld      IMAGE_DATA+1(ix), a
+        ld      IMAGE_TEMP(ix), a
+        ld      IMAGE_TEMP+1(ix), a
         call    __current_process
         ld      IMAGE_OWNER(ix), c
         ld      IMAGE_OWNER+1(ix), b
@@ -204,12 +207,12 @@ __image_load::
         or      e
         ld      a, #2
         jp      z, .fail
-        ld      IMAGE_DATA(ix), e
-        ld      IMAGE_DATA+1(ix), d
+        ld      IMAGE_TEMP(ix), e
+        ld      IMAGE_TEMP+1(ix), d
         call    .read
         jp      c, .read_error
-        ld      l, IMAGE_DATA(ix)
-        ld      h, IMAGE_DATA+1(ix)
+        ld      l, IMAGE_TEMP(ix)
+        ld      h, IMAGE_TEMP+1(ix)
         ld      e, IMAGE_JPS(ix)
         ld      d, IMAGE_JPS+1(ix)
         add     hl, de
@@ -218,35 +221,49 @@ __image_load::
         ld      c, 12(ix)
         ld      b, 13(ix)
         call    __crc32
-        ld      a, l
-        cp      16(ix)
-        jr      nz, .checksum
+        ld      a, l                   ; accumulate the four byte differences
+        xor     16(ix)
+        ld      c, a
         ld      a, h
-        cp      17(ix)
-        jr      nz, .checksum
+        xor     17(ix)
+        or      c
+        ld      c, a
         ld      a, e
-        cp      18(ix)
-        jr      nz, .checksum
+        xor     18(ix)
+        or      c
+        ld      c, a
         ld      a, d
-        cp      19(ix)
-        jr      nz, .checksum
-        ld      l, IMAGE_XL(ix)
-        ld      h, IMAGE_XL+1(ix)
-        ld      e, 12(ix)
-        ld      d, 13(ix)
+        xor     19(ix)
+        or      c
+        jp      nz, .checksum
+        ; Relocate in the existing buffer. Finish binds compact exports,
+        ; then splits off and frees the trailing relocation table and the
+        ; metadata prefix without allocating a second copy.
+        ld      b,#0
+        ld      c,b
+        ld      a,IMAGE_MODE(ix)
+        or      a
+        jr      z,.resident_size
+        ld      c,34(ix)
+        sla     c                      ; compact two-byte export table
+        rl      b
+.resident_size:
+        ld      l,IMAGE_XL(ix)
+        ld      h,IMAGE_XL+1(ix)
+        ld      e,12(ix)
+        ld      d,13(ix)
         call    __process_relocate
-        ld      a, d
-        or      e
-        jr      z, .invalid
+        ld      IMAGE_DATA(ix),l
+        ld      IMAGE_DATA+1(ix),h
+        or      a
+        jp      nz,.fail
         ld      IMAGE_CODE(ix), e
         ld      IMAGE_CODE+1(ix), d
-        ld      l, IMAGE_XL(ix)
-        ld      h, IMAGE_XL+1(ix)
-        ld      bc, #6
+        ld      l, e
+        ld      h, d
         add     hl, bc
-        ld      c, (hl)
-        inc     hl
-        ld      b, (hl)                 ; BC = code length
+        ld      12(ix), l              ; consumed payload size becomes the
+        ld      13(ix), h              ; relocated code end for finish/retain
         bit     1, 7(ix)
         jr      z, .no_entry
         ld      l, 26(ix)
@@ -291,6 +308,9 @@ __image_load::
         ld      l, IMAGE_DATA(ix)
         ld      h, IMAGE_DATA+1(ix)
         call    __yos_free
+        ld      l,IMAGE_TEMP(ix)
+        ld      h,IMAGE_TEMP+1(ix)
+        call    __yos_free             ; whole buffer, or the split-off prefix
         ld      a, IMAGE_FD+1(ix)
         inc     a
         jr      z, .closed
@@ -303,7 +323,7 @@ __image_load::
         pop     af
         ld      (_process_last_error), a
         pop     de
-        ld      hl, #80
+        ld      hl, #82
         add     hl, sp
         ld      sp, hl
         pop     iy

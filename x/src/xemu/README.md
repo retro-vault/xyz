@@ -85,7 +85,10 @@ mailboxes in high RAM. `--fs-root` binds those syscalls to a host directory so
 from tests or direct emulator runs without touching the real project tree.
 
 They can be overridden with `--stdin-status-port`, `--stdin-data-port`, and
-`--stdout-port`.
+`--stdout-port`. The CPU core reports the full 16-bit port bus, so `OUT (n),A`
+and `IN A,(n)` arrive with `A` on the high byte; a port bound below `0x100`
+therefore decodes the low byte only, like an ordinary Z80 peripheral, while a
+wider binding must match the whole bus (`OUT (C),r` with `B` set).
 
 ## Banked Memory
 
@@ -95,7 +98,10 @@ They can be overridden with `--stdin-status-port`, `--stdin-data-port`, and
 - `selector.<name>` defines a current bank selector
 - `window.<name>.*` maps a CPU address range onto a store
 - `port_rule.<name>.*` updates a selector from an `OUT` port write
-- `port_rule.<name>.port_mask` optionally matches only selected port bits
+- `port_rule.<name>.port_mask` optionally matches only selected port bits;
+  without it a port below `0x100` decodes the low address byte only (so
+  `OUT (n),A`, which drives `A` onto the high byte, still matches) and a
+  wider port must match the whole 16-bit bus
 
 This lets one port drive one banked window, several windows together, or
 multiple independent selectors from different bitfields in the same port.

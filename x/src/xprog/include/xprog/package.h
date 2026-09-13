@@ -18,6 +18,7 @@ struct xl_info {
     std::uint16_t code_size = 0;
     std::uint16_t relocation_count = 0;
     std::size_t code_offset = 0;
+    std::size_t relocation_offset = 0;
 };
 
 struct image_info {

@@ -28,11 +28,12 @@ void check(bool value, const char* expression, int line)
 
 #define CHECK(x) check((x), #x, __LINE__)
 
+// XL v2: header, eight code bytes, then one word relocation at offset 4.
 std::vector<std::uint8_t> sample_xl()
 {
-    return {'X', 'L', 1, 0, 2, 0, 8, 0, 1, 0, 0, 0,
-            4, 0, 2, 0,
-            0x00, 0x00, 0xc9, 0xcd, 0x00, 0x00, 0xc9, 0xc9};
+    return {'X', 'L', 2, 0, 2, 0, 8, 0, 1, 0, 0, 0,
+            0x00, 0x00, 0xc9, 0xcd, 0x00, 0x00, 0xc9, 0xc9,
+            4, 0, 2, 0};
 }
 
 xprog::cli_options parse(std::vector<std::string> args)

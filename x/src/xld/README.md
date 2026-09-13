@@ -995,23 +995,53 @@ Typical sources for that data:
 
 ### `XL` relocatable output (`-f xl`, default)
 
-All multi-byte fields are little-endian.
+All multi-byte fields are little-endian. The file is laid out as
+
+```text
++-----------------+--------------------+---------------------------+
+| header, 12 bytes | code/data payload | relocation table          |
+|                  | `code_size` bytes | `reloc_count` * 4 bytes   |
++-----------------+--------------------+---------------------------+
+```
+
+so the total file length is `12 + code_size + 4 * reloc_count`.
+
+The relocation table follows the payload (XL version 2) rather than
+preceding it. A loader can therefore read the header, allocate exactly
+`code_size` bytes for the resident image, read the payload straight into it,
+and only then allocate a second, temporary block for the relocation table.
+After patching, that second block is freed. Because the resident block was
+allocated first, the temporary block sits above it and releasing it leaves
+no hole below the code.
+
+XL version 1 placed the table between the header and the payload. Both
+layouts have the same total length, so the version byte is the only way to
+tell them apart; consumers must reject any version other than `0x02`.
 
 #### Header — 12 bytes
 
 | Offset | Size | Field | Meaning |
 |--------|------|-------|---------|
 | 0 | 2 | Magic | `'X' 'L'` |
-| 2 | 1 | Version | currently `0x01` |
+| 2 | 1 | Version | `0x02` |
 | 3 | 1 | Flags | reserved, currently `0x00` |
 | 4 | 2 | `entry_point` | linked entry address inside the emitted image |
 | 6 | 2 | `code_size` | total emitted code/data span |
 | 8 | 2 | `reloc_count` | number of relocation entries |
 | 10 | 2 | Reserved | `0x0000` |
 
+#### Code/data payload
+
+The payload immediately follows the header and is the linked image bytes.
+
+If your linked code starts at a non-zero address, bytes below that address
+still exist in the emitted payload as zero-filled space, because the image
+represents the linked address space from `0x0000` up to `code_size - 1`.
+
 #### Relocation table
 
-Each relocation entry is 4 bytes:
+The table starts at file offset `12 + code_size`. Each relocation entry is
+4 bytes:
 
 | Offset | Size | Field | Meaning |
 |--------|------|-------|---------|
@@ -1027,21 +1057,14 @@ For byte relocations:
 
 Word relocations keep `size = 2` and currently leave `pad = 0`.
 
-#### Code/data payload
-
-The payload is the linked image bytes.
-
-If your linked code starts at a non-zero address, bytes below that address
-still exist in the emitted payload as zero-filled space, because the image
-represents the linked address space from `0x0000` up to `code_size - 1`.
-
 #### Load-time idea
 
 ```text
 read XL header
-read relocation table
-load payload at chosen base
-patch each relocation by adding that base
+allocate code_size bytes at the chosen base; read the payload into it
+allocate reloc_count * 4 bytes; read the relocation table into it
+patch each relocation by adding the base
+free the relocation table block
 jump to base + entry_point
 ```
 

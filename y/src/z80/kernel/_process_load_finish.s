@@ -7,6 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  __process_load_finish
         .globl  _process_start
+        .globl  __image_retain
         .globl  __image_transfer
         .globl  _enter_critical_section
         .globl  _leave_critical_section
@@ -25,6 +26,7 @@ __process_load_finish::
         cp      25(ix)
         jr      nz, .invalid
 .stack:
+        call    __image_retain
         ld      l, 28(ix)
         ld      h, 29(ix)
         ld      bc, #22

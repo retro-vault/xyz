@@ -23,6 +23,11 @@
         .globl  __yos_name
         .globl  __gpx_name
         .globl  __gpx_service
+        ; Link roots fill otherwise unusable space before the 0562 trap.
+        .globl  __critical_iff_repair
+        .globl  _enter_critical_section
+        ; Keep the library initializer in the pre-loader packing pass.
+        .globl  __library_initialize
         .globl  _boot_shell
 
         .area   _CODE

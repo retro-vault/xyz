@@ -61,7 +61,7 @@ service_name:
 
 ## The `yos_t` Table
 
-`yos_t` is a 96-byte struct of 46 function pointers and two data pointers,
+`yos_t` is a 98-byte struct of 47 function pointers and two data pointers,
 built at boot by `__syscall_table_init` from an ordered template in ROM. The
 order of the members in `yos.h` **is** the ABI; `yos->version()` returns
 `YOS_VERSION` (currently 1). This is a clean numbering baseline for the
@@ -70,7 +70,7 @@ In summary:
 
 | Group | Members |
 |---|---|
-| identity and memory | `version`, `allocate_memory`, `free_memory` |
+| identity and memory | `version`, `allocate_memory`, `free_memory`, `shrink_memory` (appended after the ABI 1 baseline; slot 48) |
 | clock and critical sections | `clock_ticks`, `enter_critical_section`, `leave_critical_section` |
 | timers and events | `create_timer`, `destroy_timer`, `create_event`, `destroy_event`, `set_event` |
 | threads and processes | `create_thread`, `exit_thread`, `suspend_thread`, `resume_thread`, `create_process`, `exit_process` |
@@ -79,7 +79,7 @@ In summary:
 | esxDOS filesystem | `error_number` (pointer to the scheduler-virtualized per-thread errno cell), `open`, `close`, `read`, `write`, `lseek`, `fsync`, `unlink`, `rename`, `chdir`, `getcwd`, `mkdir`, `rmdir`, `stat`, `fstat`, `opendir`, `readdir`, `rewinddir`, `closedir`, `enumerate_disks` |
 | loader | `load_process`, `process_load_error` (per-thread status byte), `load_library` |
 
-Most entries map directly onto the kernel routine of the same meaning. `allocate_memory`, `free_memory` and `create_timer` go through small adapters (`kernel/_yos_malloc.s`, `_yos_free.s`, `_yos_install_timer.s`) that supply kernel-private arguments. Allocation and registration use the current process (or initialization's library owner); public timers remain kernel-owned.
+Most entries map directly onto the kernel routine of the same meaning. `allocate_memory`, `free_memory`, `shrink_memory` and `create_timer` go through small adapters (`kernel/_yos_malloc.s`, `_yos_free.s`, `_yos_shrink.s`, `_yos_install_timer.s`) that supply kernel-private arguments. `shrink_memory(memory, size)` releases the bytes of a live block beyond `size` when they can form a heap block; the block never moves, and the image loader uses the same routine to drop a consumed XL relocation table from the end of its read buffer. Allocation and registration use the current process (or initialization's library owner); public timers remain kernel-owned.
 
 Kernel objects returned by the table (`yos_thread_t`, `yos_process_t`, `yos_event_t`, `yos_timer_t`, `yos_service_t`) are opaque handles; their layouts are described in the other chapters for the curious, but applications must not depend on them.
 
@@ -90,6 +90,26 @@ on contention. GPX returns independent process-owned contexts, with protected
 framebuffer updates rather than a global drawing context. This does not make
 caller-owned buffers, service globals, or linked libc `errno` thread-local;
 see [the application concurrency contract](../programming-yos/MEMORY-TIME-AND-CONCURRENCY.md).
+
+## Filesystem drive paths
+
+The first pathname passed to a filesystem operation may use an optional `A:`
+or `B:` prefix (case insensitive). This is the YOS/application naming
+convention, not an esxDOS drive letter: the common adapter removes the prefix
+and supplies native drive `0x40` for the DivIDE master or `0x48` for the slave.
+Thus `opendir("A:/")` supplies drive `0x40` and path `/`; a later
+`load_process("B:/TOOLS/APP.SYS")` selects the slave through the same adapter.
+Unqualified paths retain the current esxDOS drive. This does not remount media
+or select additional partitions. For `rename`, the destination remains an
+unqualified path on the drive selected by the first pathname; cross-drive
+rename is not provided. No service-table entry or signature changed.
+
+`readdir` converts the native short-name record in this order: attributes
+(one byte), ASCIIZ name, packed date/time (four bytes), size (four bytes).
+The public `dirent` still contains `d_ino`, `d_size`, `d_type`, `d_attributes`,
+and its 13-byte short-name array. The returned entry is borrowed from its
+`DIR` object and is replaced by the next read; close the directory to release
+both the firmware handle and the YOS allocation.
 
 ## Registering a Custom Service
 

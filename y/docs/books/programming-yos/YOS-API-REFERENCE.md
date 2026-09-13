@@ -85,8 +85,30 @@ Returns a raw YOS allocation. Passing `NULL` is harmless.
 yos->free_memory(raw);
 ```
 
+### `void *shrink_memory(void *memory, size_t size)`
+
+Releases the bytes of a raw allocation beyond `size` back to the heap. The
+block never moves: on success the same pointer is returned and the first
+`size` bytes are unchanged. The tail is released only when it can form a heap
+block (12 bytes or more including its header); a smaller remainder, or a
+`size` that is not smaller than the block, leaves the block as it is and still
+returns `memory`. Returns `NULL` when `memory` does not address a live
+allocation, for example one already freed. Only pass pointers obtained from
+`allocate_memory`, not libc pointers.
+
+```c
+void *buffer = yos->allocate_memory(512);
+size_t used = fill(buffer, 512);
+yos->shrink_memory(buffer, used);   /* the rest is free again */
+```
+
+This is the table entry appended after the ABI 1 baseline (slot 48). The
+kernel's own image loader uses it to drop a consumed XL relocation table
+from the end of its read buffer.
+
 For normal C code prefer `malloc`, `calloc`, `realloc`, `aligned_alloc`, and
-`free`; the platform implementation builds their metadata on these two calls.
+`free`; the platform implementation builds their metadata on the allocate and
+free calls.
 
 ## Clock and critical sections
 

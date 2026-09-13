@@ -79,7 +79,7 @@ if (!process) {
 }
 ```
 
-The file must be an XPRG version 1 *process* image containing a relocatable XL payload (see [Program and Service Images](PROGRAM-IMAGES.md)). `process_load` (`kernel/process_load.s`) reads the 64-byte descriptor onto its own stack, verifies the magic, version, kind, required YOS ABI, payload CRC-32, XL header bounds and entry point, allocates the image from `__heap`, applies every XL relocation in place, and calls `process_start` with the descriptor's name, entry point and `stack size + CONTEXT_SIZE`. Finally it transfers ownership of the image block to the new process so it is freed when the process is reaped. Service-kind XPRG images are rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`.
+The file must be an XPRG version 1 *process* image containing a relocatable XL payload (see [Program and Service Images](PROGRAM-IMAGES.md)). `process_load` (`kernel/process_load.s`) reads the 64-byte descriptor onto its own stack and the XL payload into temporary loader memory, verifies the magic, version, kind, required YOS ABI, CRC-32, XL bounds and entry point, then relocates the code in the existing buffer. It splits that owned allocation twice, freeing the trailing relocation records and then the leading XL header, before creating the main thread. No second code allocation or copy is needed. `process_start` receives the descriptor's name, relocated entry and `stack size + CONTEXT_SIZE`; ownership of only the compact resident code block transfers to the process. Service-kind XPRG images are rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`.
 
 `process_load_error` points at `_process_last_error`, a fixed cell whose value
 is saved/restored per thread. Every completed process/library load writes its

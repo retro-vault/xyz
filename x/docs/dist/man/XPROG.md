@@ -12,8 +12,8 @@ xprog --cdt [options] input.bin [-o output.cdt]
 xprog --dsk [options] input.bin [-o output.dsk]
 ```
 
-`xprog` validates an XL version 1 input and prefixes it with an XPRG version 1
-descriptor. A process descriptor records its entry and required stack size. A
+`xprog` validates an XL version 2 input (header, code, then relocation table)
+and prefixes it with an XPRG version 1 descriptor. A process descriptor records its entry and required stack size. A
 service descriptor records its preferred resident address and an ordered table
 of Z80 `JP` entries. The XL payload remains relocatable.
 

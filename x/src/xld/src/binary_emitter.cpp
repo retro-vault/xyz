@@ -230,13 +230,18 @@ namespace xld {
             return;
         }
 
+        // XL version 2: header, code, then the relocation table.  The table
+        // trails the code so a loader can allocate the code block first, read
+        // the table into a second temporary block, patch, and free only the
+        // table, leaving the resident code at the lower address.
+        //
         // Header (12 bytes).
         // Magic: 'X', 'L'
         out.put(0x58);
         out.put(0x4C);
 
         // Version.
-        out.put(0x01);
+        out.put(0x02);
 
         // Flags (Z80 little-endian).
         out.put(0x00);
@@ -250,11 +255,17 @@ namespace xld {
         write_le16(out, static_cast<uint16_t>(ctx.code_size));
 
         // Reloc count.
+        if (ctx.reloc_table.size() > 0xFFFFu)
+            throw xld_error("XL relocation table exceeds 65535 entries");
         uint16_t reloc_count = static_cast<uint16_t>(ctx.reloc_table.size());
         write_le16(out, reloc_count);
 
         // Reserved.
         write_le16(out, 0x0000);
+
+        // Code data.
+        out.write(reinterpret_cast<const char*>(ctx.code_buffer.data()),
+                  ctx.code_buffer.size());
 
         // Relocation table.
         for (auto& r : ctx.reloc_table) {
@@ -262,10 +273,6 @@ namespace xld {
             out.put(static_cast<char>(r.size));
             out.put(static_cast<char>(r.pad));
         }
-
-        // Code data.
-        out.write(reinterpret_cast<const char*>(ctx.code_buffer.data()),
-                  ctx.code_buffer.size());
 
         out.close();
     }

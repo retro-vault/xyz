@@ -42,7 +42,9 @@ struct memory_window_config {
 
 struct memory_port_rule_config {
     uint16_t port = 0;
-    uint16_t port_mask = 0xFFFF;
+    // Zero selects the default decode: the low byte only when port < 0x100
+    // (so OUT (n),A reaches it), otherwise the whole 16-bit bus.
+    uint16_t port_mask = 0;
     std::string selector;
     uint16_t mask = 0x00FF;
     uint8_t shift = 0;

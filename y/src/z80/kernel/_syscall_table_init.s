@@ -6,7 +6,6 @@
         .module _syscall_table_init
         .optsdcc -mz80 sdcccall(1)
 
-        .globl  __syscall_table_init
         .globl  __yos
         .globl  _yos_version
         .globl  __yos_malloc
@@ -56,23 +55,10 @@
         .globl  _process_load
         .globl  _process_last_error
         .globl  _library_load
+        .globl  __yos_shrink
 
-        .equ    YOS_TABLE_SIZE, 96
-
-        .area   _CODE
-
-        ; __syscall_table_init, internal startup helper
-        ; outputs: initialized service table at __yos
-        ; clobbers: af, bc, de, hl; preserves ix and iy
-__syscall_table_init::
-        ld      hl, #.yos_template
-        ld      de, #__yos
-        ld      bc, #YOS_TABLE_SIZE
-        ldir
-        ret
-
-        .area   _CONST
-.yos_template:
+        .area   _HEADER_DATA
+__yos::
         ; Kernel identity, memory, clock and critical sections.
         .dw     _yos_version
         .dw     __yos_malloc
@@ -132,3 +118,6 @@ __syscall_table_init::
         .dw     _process_load
         .dw     _process_last_error
         .dw     _library_load
+
+        ; Memory extension appended after the ABI 1 baseline.
+        .dw     __yos_shrink

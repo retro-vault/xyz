@@ -10,7 +10,9 @@
         .globl  __sys_vec_tbl
         .globl  __sys_vectors_start
         .globl  __sys_vectors_end
-        .globl  __syscall_table_init
+        .globl  __esxdos_gates_init
+        .globl  __kbd_prev_scan
+        .globl  _clock_sec_countdown
 
         .area   _CODE
 
@@ -31,17 +33,20 @@ __startup_init::
         jr      z, .no_bss
         ldir
 .no_bss:
+        ld      hl,#__kbd_prev_scan
+        ld      b,#8
+        ld      a,#0x1f
+.keyboard_rows:
+        ld      (hl),a
+        inc     hl
+        djnz    .keyboard_rows
+        ld      a,#50
+        ld      (_clock_sec_countdown),a
+        call    __esxdos_gates_init
+
         ld      hl, #__sys_vectors_start
         ld      de, #__sys_vec_tbl
         ld      bc, #24                 ; eight three-byte JP vectors
         ldir
 
-        ld      de, #s__INITIALIZED
-        ld      hl, #s__INITIALIZER
-        ld      bc, #l__INITIALIZER
-        ld      a, b
-        or      c
-        jr      z, .no_initializer
-        ldir
-.no_initializer:
-        jp      __syscall_table_init
+        ret

@@ -588,7 +588,7 @@ TEST(linker_binary_output) {
     ASSERT_EQ(buf[0], 0x58);
     ASSERT_EQ(buf[1], 0x4C);
     // Version.
-    ASSERT_EQ(buf[2], 0x01);
+    ASSERT_EQ(buf[2], 0x02);
     // Entry point: 0x0000.
     ASSERT_EQ(buf[4], 0x00);
     ASSERT_EQ(buf[5], 0x00);
@@ -599,7 +599,15 @@ TEST(linker_binary_output) {
     ASSERT_EQ(buf[8], 0x01);
     ASSERT_EQ(buf[9], 0x00);
 
-    // Read reloc entry (4 bytes).
+    // The code follows the header directly.
+    uint8_t code_buf[4];
+    in.read(reinterpret_cast<char*>(code_buf), 4);
+    ASSERT_EQ(code_buf[0], 0xC9);
+    ASSERT_EQ(code_buf[1], 0x00);
+    ASSERT_EQ(code_buf[2], 0x00);
+    ASSERT_EQ(code_buf[3], 0xC9);
+
+    // Read reloc entry (4 bytes) trailing the code.
     uint8_t reloc_buf[4];
     in.read(reinterpret_cast<char*>(reloc_buf), 4);
     // Offset: 1.
@@ -608,6 +616,9 @@ TEST(linker_binary_output) {
     // Size: 2.
     ASSERT_EQ(reloc_buf[2], 0x02);
     ASSERT_EQ(reloc_buf[3], 0x00);
+
+    // Nothing follows the relocation table.
+    ASSERT_EQ(in.peek(), std::ifstream::traits_type::eof());
 
     in.close();
     std::filesystem::remove(out);
@@ -661,7 +672,8 @@ TEST(linker_binary_output_preserves_byte_reloc_flags) {
 
     std::ifstream in(out, std::ios::binary);
     ASSERT(in.is_open());
-    in.seekg(12);
+    // Header (12) + one code byte, then the relocation table.
+    in.seekg(12 + 1);
 
     uint8_t reloc_buf[4];
     in.read(reinterpret_cast<char*>(reloc_buf), 4);

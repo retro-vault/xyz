@@ -134,24 +134,28 @@ __startup_init::
         ld      bc, #l__BSS
         ...
         ldir
-        ;; 2. copy the restart-vector image into RAM
+        ;; 2. initialize nonzero keyboard/clock state and RAM esxDOS gates
+        ...
+        ;; 3. copy the restart-vector image into RAM
         ld      hl, #__sys_vectors_start
         ld      de, #__sys_vec_tbl
         ld      bc, #24                 ; eight three-byte JP vectors
         ldir
-        ;; 3. copy initialised variables from ROM to RAM
-        ld      de, #s__INITIALIZED
-        ld      hl, #s__INITIALIZER
-        ld      bc, #l__INITIALIZER
-        ...
-        ldir
-        ;; 4. build the public service table
-        jp      __syscall_table_init
+        ret
 ```
 
-`__syscall_table_init` copies the 96-byte `.yos_template` (the ordered list of kernel entry points that matches `yos_t` in `yos.h`) into `__yos` in BSS. Applications never see the template; they receive `__yos` from `query_service("yos")`.
+The immutable 98-byte `__yos` table is published directly from ROM. Its order
+matches `yos_t` in `yos.h`; applications receive it from `query_service("yos")`.
 
-The esxDOS RAM gates (`fs/_esxdos_gates.s`) are also `_INITIALIZED` data: nineteen three-byte `RST 08; <selector>; RET` stubs (57 bytes at `0x5B37`) that the filesystem calls so the inline selector byte is fetched from RAM while esxDOS is paged over the ROM. This is why YOS must not touch its writable data until esxDOS has finished its own cold boot and returned through `0x0001`.
+Startup generates nineteen three-byte `RST 08; <selector>; RET` RAM gates from
+a 19-byte selector table. Filesystem code calls these gates so the inline
+selector is fetched from RAM while esxDOS is paged over the ROM. YOS still
+waits until esxDOS finishes cold boot and returns through `0x0001` before it
+touches writable data.
+
+The syscall table and gate selectors occupy the otherwise unused replacement
+ROM header range `0x0080..0x00f4`. The conventional executable entry remains
+at `0x0100`; linked content ends at `0x3fe0`, below the `0x3fff` ROM boundary.
 
 ## Reference-counted critical sections
 
@@ -210,7 +214,7 @@ After `_main` has armed the scheduler the address space looks like this (address
 | `0x4000` | Screen bitmap and attributes | ULA |
 | `0x5B00` | `_INITIALIZED` (copied from ROM) | Clock counters, keyboard state, esxDOS gates at `0x5B37` |
 | `0x5B70` | `_BSS` | File-descriptor, error, and timer state |
-| `0x5B94` | `__yos` (96 bytes), then kernel stack (512 bytes) | Public ABI 1 service table; stack grows down from `0x5DF4` |
+| `0x5B94` | `__yos` (98 bytes), then kernel stack (512 bytes) | Public ABI 1 service table; stack grows down from `0x5DF4` |
 | `0x5DF4` | `__sys_vec_tbl` (24 bytes), list roots, mouse | Writable RST table |
 | `0x5EFF` | `__im2_vector` (2 bytes) | IM2 handler address |
 | `0x5F01` | `__sys_heap` (1024 bytes) | Kernel objects |
@@ -218,3 +222,24 @@ After `_main` has armed the scheduler the address space looks like this (address
 | `0xFFFF` | End of RAM | |
 
 The kernel stack is only used before the scheduler starts and inside the idle loop; every thread runs on a stack allocated from `__heap` (see [Threads](THREADS.md)).
+
+## NMOS IFF sample race
+
+An interrupt accepted immediately after `LD A,I` can clear P/V on an NMOS
+Z80 (also emulated by Fuse). At the critical-entry sample this incorrectly
+looks like an interrupt-disabled caller; the eventual leave would keep IM2
+disabled, stopping the clock, keyboard and mouse timers.
+
+The scheduler calls `__critical_iff_repair` after saving AF and HL and before
+switching threads. If the interrupted PC is exactly `__critical_iff_sampled`
+(the `DI` following the sample), accepted IRQ proves that IFF was enabled.
+The helper sets only P/V in that thread's saved AF. It preserves other flags,
+registers and return addresses; ordinary disabled callers and nested sections
+retain their previous behavior. No application-side interrupt workaround is
+needed. The helper uses a full word address comparison, avoiding byte-address
+relocation expressions. The kernel suite checks matching and neighboring PCs;
+ALTO's YOS integration test also forces this IRQ boundary during live input.
+
+The ROM build places the small critical entries before the `0x0562` paging
+trap and orders the small object reaper before the process/thread query to
+use the gap below `0x3D00`. The reserved ranges remain unchanged.

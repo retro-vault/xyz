@@ -7,6 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  __library_load_finish
         .globl  __library_acquire
+        .globl  __image_retain
         .globl  __image_transfer
         .globl  __library_initialize
         .globl  _process_first
@@ -25,7 +26,7 @@
         .equ    LIBRARY_REFS,   13
         .area   _CODE
 
-        ; inputs: ix = loader frame; bc = XL code size
+        ; inputs: ix = loader frame, +12 holds the relocated code end
         ; outputs: de = interface or zero, a = load error on failure
         ; clobbers: af, bc, de, hl; preserves ix and iy
         ; No thread/stack is created. The optional initializer receives
@@ -33,11 +34,11 @@
         ; Init allocations and registrations belong to the library.
 __library_load_finish::
         push    iy
-        ld      12(ix), c
-        ld      13(ix), b
-        ld      e, 66(ix)
-        ld      d, 67(ix)
-        push    de
+        ld      e, 80(ix)              ; raw JP metadata is temporary
+        ld      d, 81(ix)
+        ld      l,66(ix)               ; compact table is resident
+        ld      h,67(ix)
+        push    hl
         pop     iy
         ld      b, 34(ix)
 .export:
@@ -52,18 +53,15 @@ __library_load_finish::
         ld      h, a
         inc     de
         push    de
+        ld      e, 68(ix)
+        ld      d, 69(ix)
+        add     hl, de                 ; absolute export target
+        jr      c, .invalid_target
         ld      e, 12(ix)
         ld      d, 13(ix)
         or      a
         sbc     hl, de
-        pop     de
-        jr      nc, .invalid
-        push    de
-        ld      e, 12(ix)
-        ld      d, 13(ix)
-        add     hl, de
-        ld      e, 68(ix)
-        ld      d, 69(ix)
+        jr      nc, .invalid_target    ; at or past the relocated code end
         add     hl, de
         pop     de
         ld      0(iy), l
@@ -72,6 +70,8 @@ __library_load_finish::
         inc     iy
         djnz    .export
         jr      .create
+.invalid_target:
+        pop     de
 .invalid:
         ld      a, #4
 .failed:
@@ -79,6 +79,7 @@ __library_load_finish::
         pop     iy
         ret
 .create:
+        call    __image_retain
         call    _enter_critical_section
         ld      hl, #0
         push    hl

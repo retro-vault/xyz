@@ -48,7 +48,7 @@ done
 
 
 # Extract code bytes from an XL binary, skipping the 12-byte base header
-# and any reloc table entries (4 bytes each, count at bytes 8-9).
+# and dropping the trailing reloc table (4 bytes each, count at bytes 8-9).
 linked_code_bytes() {
     local f="$1"
     python3 - "$f" <<'EOF'
@@ -57,11 +57,10 @@ data = open(sys.argv[1], 'rb').read()
 if data[:2] == b'XL':
     if len(data) < 12:
         sys.exit(1)
-    reloc_count = struct.unpack_from('<H', data, 8)[0]
-    code_start = 12 + reloc_count * 4
-    if code_start > len(data):
+    code_size = struct.unpack_from('<H', data, 6)[0]
+    if 12 + code_size > len(data):
         sys.exit(1)
-    data = data[code_start:]
+    data = data[12:12 + code_size]
 sys.stdout.buffer.write(data)
 EOF
 }

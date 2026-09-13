@@ -16,6 +16,7 @@
         .globl  __thread_select_next
         .globl  __errno_value
         .globl  _process_last_error
+        .globl  __critical_iff_repair
 
         .equ    THREAD_LOAD_ERROR, 15
         .equ    THREAD_ERRNO,      20
@@ -32,6 +33,7 @@ __thread_robin::
         ;; we will need af and hl
         push    af
         push    hl
+        call    __critical_iff_repair
         ld      hl, (_thread_current)
         ld      a,h
         or      l

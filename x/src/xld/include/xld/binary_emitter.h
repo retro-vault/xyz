@@ -17,7 +17,7 @@ namespace xld {
 
     class binary_emitter {
     public:
-        // Write the output file: header + reloc table + code.
+        // Write the output file: header + code + reloc table.
         static void emit(const std::filesystem::path& path,
                          const link_context& ctx);
     };

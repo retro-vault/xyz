@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
             "IM2 scheduler vector is wrong");
 
     const auto table = sym("__yos");
-    constexpr std::array<const char*, 48> yos_api = {
+    constexpr std::array<const char*, 49> yos_api = {
         "_yos_version", "__yos_malloc", "__yos_free", "__clock",
         "_enter_critical_section", "_leave_critical_section",
         "__yos_install_timer", "_tmr_uninstall",
@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
         "_unlink", "_rename", "_chdir", "_getcwd", "_mkdir", "_rmdir",
         "_stat", "_fstat", "_opendir", "_readdir", "_rewinddir",
         "_closedir", "_enumerate_disks", "_process_load",
-        "_process_last_error", "_library_load"
+        "_process_last_error", "_library_load", "__yos_shrink"
     };
     for (std::size_t slot = 0; slot < yos_api.size(); ++slot) {
         require(mem.word(table + 2 * slot) == sym(yos_api[slot]),
@@ -282,6 +282,34 @@ int main(int argc, char** argv) {
                 "outer leave did not restore IFF or nesting depth");
     }
 
+    // NMOS LD A,I/IRQ boundary: the scheduler repair must change only the
+    // saved P/V bit, and only at the exact critical-entry sample address.
+    for (const int delta : {0, 1, 256, -1}) {
+        const auto pc = std::uint16_t(sym("__critical_iff_sampled") + delta);
+        auto before = cpu.snapshot();
+        before.halted = false;
+        before.pc = sym("__critical_iff_repair");
+        before.sp = 0xeff0;
+        before.bc = 0x2345;
+        before.de = 0x3456;
+        before.ix = 0x5678;
+        before.iy = 0x6789;
+        mem.word(0xeff0, 0x4100); // helper return
+        mem.word(0xeff2, 0x4567); // interrupted HL
+        mem.word(0xeff4, 0xa5d3); // interrupted AF with P/V cleared
+        mem.word(0xeff6, pc);     // interrupted PC
+        cpu.restore(before);
+        run_until([&] { return cpu.pc() == 0x4100; }, 100,
+                  "critical IFF sample repair");
+        const auto after = cpu.snapshot();
+        require(mem.word(0xeff4) == (delta == 0 ? 0xa5d7 : 0xa5d3) &&
+                    mem.word(0xeff2) == 0x4567 && mem.word(0xeff6) == pc &&
+                    after.sp == 0xeff2 && after.bc == before.bc &&
+                    after.de == before.de && after.ix == before.ix &&
+                    after.iy == before.iy,
+                "IFF repair changed unrelated state or matched wrong PC");
+    }
+
     std::uint16_t kernel_hl = 0;
     const auto call_kernel = [&](std::uint16_t function, std::uint16_t hl,
                                  std::uint16_t de,
@@ -355,22 +383,32 @@ int main(int argc, char** argv) {
     constexpr std::uint16_t relocated_image = 0x9000;
     for (std::uint16_t i = 0; i < payload_size; ++i)
         mem.bytes[relocated_image + i] = shell[payload_offset + i];
+    // XL v2: 12-byte header, code, then the relocation table.
+    require(shell[payload_offset + 2] == 2, "dummy shell is not XL version 2");
+    const auto code_size = mem.word(relocated_image + 6);
+    const auto relocation_count = mem.word(relocated_image + 8);
+    require(12 + code_size + 4 * relocation_count == payload_size,
+            "dummy shell XL layout is inconsistent");
     const auto code_base = call_kernel(sym("__process_relocate"),
                                        relocated_image, payload_size,
                                        "dummy shell relocation");
-    const auto relocation_count = mem.word(relocated_image + 8);
-    require(code_base == relocated_image + 12 + 4 * relocation_count,
+    const auto relocated_code = code_base;
+    require(code_base != 0 && kernel_hl == code_base,
             "XL relocator returned the wrong code base: " +
-                std::to_string(code_base) + " expected " +
-                std::to_string(relocated_image + 12 + 4 * relocation_count));
+                std::to_string(code_base));
+    require(code_base == relocated_image + 12,
+            "XL relocator did not reuse the existing code buffer");
+    require(cpu.snapshot().bc == code_size,
+            "XL relocator did not return the code size");
+    const auto relocation_table = std::uint16_t(relocated_image + 12 +
+                                                code_size);
     for (std::uint16_t index = 0; index < relocation_count; ++index) {
-        const auto record = std::uint16_t(relocated_image + 12 + 4 * index);
+        const auto record = std::uint16_t(relocation_table + 4 * index);
         const auto offset = mem.word(record);
         const auto width = mem.bytes[record + 2];
         const auto flags = mem.bytes[record + 3];
-        const auto source = std::uint16_t(shell_image + 12 +
-                                          4 * relocation_count + offset);
-        const auto target = std::uint16_t(code_base + offset);
+        const auto source = std::uint16_t(shell_image + 12 + offset);
+        const auto target = std::uint16_t(relocated_code + offset);
         if (width == 2) {
             require(mem.word(target) ==
                         std::uint16_t(mem.word(source) + code_base),
@@ -425,6 +463,18 @@ int main(int argc, char** argv) {
     require(loaded_shell != 0,
             "shell load failed: " +
                 std::to_string(mem.bytes[sym("_process_last_error")]));
+    // XL v2 keeps the relocation table after the code, so the retained
+    // shell block is exactly its code: the XPRG/XL metadata prefix and the
+    // consumed relocation table were split off and freed.
+    bool shell_block_is_code_only = false;
+    for (auto block = sym("__heap"), n = std::uint16_t(0); block && n < 256;
+         block = mem.word(block), ++n) {
+        if ((mem.bytes[block + 4] & 1) && mem.word(block + 2) == loaded_shell &&
+            mem.word(block + 5) == code_size)
+            shell_block_is_code_only = true;
+    }
+    require(shell_block_is_code_only,
+            "shell image block still carries metadata or its relocation table");
     const auto shell_thread = mem.word(loaded_shell + 13);
     mem.word(sym("_thread_current"), shell_thread);
     unsigned staged_registrations = 0;
@@ -487,13 +537,29 @@ int main(int argc, char** argv) {
             "last-client cleanup left a published service");
     files.enabled = false;
 
+    // Physical-drive prefixes belong to YOS, not the native firmware path.
+    for (const auto& path : {std::string("A:/"), std::string("b:/TOOLS"),
+                             std::string("ALTO.SYS"), std::string("/"),
+                             std::string("C:/")}) {
+        for (std::size_t i = 0; i <= path.size(); ++i)
+            mem.bytes[0x8300 + i] = path.c_str()[i];
+        const bool qualified = path.size() > 1 && path[1] == ':' && path[0] != 'C';
+        call_kernel(sym("__zx_esx_path_drive"), 0x8300, 0x1234,
+                    "drive pathname translation", 0x2a, {}, 0x4567);
+        const auto result = cpu.snapshot();
+        require(result.hl == 0x8300 + (qualified ? 2 : 0) &&
+                    (result.af >> 8) == (qualified ? (path[0] == 'A' ? 0x40 : 0x48) : 0x2a) &&
+                    result.de == 0x1234 && result.bc == 0x4567,
+                "drive prefix changed the pathname or firmware argument registers");
+    }
+
     constexpr std::uint16_t native_dirent = 0x8300;
     constexpr std::uint16_t public_dirent = 0x8340;
     const std::string regular_name = "FILE.TXT";
     for (std::size_t i = 0; i <= regular_name.size(); ++i)
-        mem.bytes[native_dirent + i] = regular_name.c_str()[i];
+        mem.bytes[native_dirent + 1 + i] = regular_name.c_str()[i];
     const auto native_tail = native_dirent + regular_name.size() + 1;
-    mem.bytes[native_tail] = 0x20;
+    mem.bytes[native_dirent] = 0x20;
     mem.bytes[native_tail + 5] = 0x78;
     mem.bytes[native_tail + 6] = 0x56;
     mem.bytes[native_tail + 7] = 0x34;
@@ -510,7 +576,7 @@ int main(int argc, char** argv) {
         require(mem.bytes[public_dirent + 10 + i] == regular_name.c_str()[i],
                 "regular directory entry name is wrong");
     }
-    mem.bytes[native_tail] = 0x10;
+    mem.bytes[native_dirent] = 0x10;
     call_kernel(sym("__directory_convert"), native_dirent, public_dirent,
                 "directory type conversion");
     require(mem.bytes[public_dirent + 8] == 4,
@@ -520,6 +586,45 @@ int main(int argc, char** argv) {
         call_kernel(mem.word(table + 2), 23, 0, "public allocation");
     require(public_block != 0, "public malloc wrapper failed");
     call_kernel(mem.word(table + 4), public_block, 0, "public release");
+
+    // shrink_memory releases the tail of a live block in place: the block
+    // keeps its address, its owner and the requested size, and the released
+    // bytes become a free block that later allocations can reuse.
+    const auto block_size = [&](std::uint16_t payload) {
+        return mem.word(std::uint16_t(payload - 2));
+    };
+    const auto shrink_block =
+        call_kernel(mem.word(table + 2), 200, 0, "shrinkable allocation");
+    require(shrink_block != 0 && block_size(shrink_block) == 200,
+            "shrinkable allocation is not 200 bytes");
+    const auto shrink_owner = mem.word(std::uint16_t(shrink_block - 5));
+    require(call_kernel(mem.word(table + 96), shrink_block, 100,
+                        "public shrink") == shrink_block &&
+                block_size(shrink_block) == 100 &&
+                mem.word(std::uint16_t(shrink_block - 5)) == shrink_owner,
+            "shrink_memory did not trim the block in place");
+    const auto released = std::uint16_t(shrink_block + 100);
+    require(mem.word(std::uint16_t(shrink_block - 7)) == released &&
+                (mem.bytes[released + 4] & 1) == 0,
+            "shrink_memory did not turn the tail into a free block");
+    const auto reused =
+        call_kernel(mem.word(table + 2), 60, 0, "allocation from the tail");
+    require(reused == std::uint16_t(released + 7),
+            "released tail was not reused by the next allocation");
+    call_kernel(mem.word(table + 4), reused, 0, "release the reused tail");
+    require(call_kernel(mem.word(table + 96), shrink_block, 95,
+                        "shrink below a splittable remainder") ==
+                    shrink_block &&
+                block_size(shrink_block) == 100,
+            "shrink_memory split off a remainder too small for a block");
+    require(call_kernel(mem.word(table + 96), shrink_block, 300,
+                        "shrink to a larger size") == shrink_block &&
+                block_size(shrink_block) == 100,
+            "shrink_memory changed a block for a larger size");
+    call_kernel(mem.word(table + 4), shrink_block, 0, "release shrunk block");
+    require(call_kernel(mem.word(table + 96), shrink_block, 10,
+                        "shrink a freed block") == 0,
+            "shrink_memory accepted a freed block");
     const auto public_timer =
         call_kernel(mem.word(table + 12), 0x4200, 3,
                     "public timer installation");
@@ -670,6 +775,31 @@ int main(int argc, char** argv) {
     const auto key_release = kernel_hl & 0xff;
     require(key_release == 5,
             "keyboard release event is wrong: " + std::to_string(key_release));
+
+    // Multiple transitions in one row must retain the bit countdown after
+    // queueing each event. Check both edges in every row (modifiers excluded).
+    std::uint8_t row_select = 0xf7;
+    for (unsigned row = 0; row < 8; ++row) {
+        io.keyboard_address = (std::uint16_t(row_select) << 8) | 0xfe;
+        const unsigned mask = row == 4 ? 0x1d : row == 5 ? 0x1e : 0x1f;
+        for (const bool pressed : {true, false}) {
+            io.keyboard_value = pressed ? std::uint8_t(~mask) : 0xff;
+            call_kernel(sym("__kbd_scan"), 0, 0, "keyboard chord scan");
+            for (unsigned bit = 0; bit < 5; ++bit) {
+                if (!(mask & (1u << bit))) continue;
+                call_kernel(mem.word(table + 44), 0, 0, "keyboard chord read");
+                const unsigned expected = row * 5 + 4 - bit +
+                                          (pressed ? 0x40 : 0) + 1;
+                require((kernel_hl & 0xff) == expected,
+                        "keyboard chord row " + std::to_string(row) +
+                        " bit " + std::to_string(bit) + " produced " +
+                        std::to_string(kernel_hl & 0xff));
+            }
+            call_kernel(mem.word(table + 44), 0, 0, "keyboard chord drained");
+            require((kernel_hl & 0xff) == 0, "keyboard chord queued extra keys");
+        }
+        row_select = std::uint8_t((row_select << 1) | (row_select >> 7));
+    }
 
     constexpr std::uint16_t status_buffer = 0x8200;
     constexpr std::array<std::size_t, 6> invalid_fd_slots = {

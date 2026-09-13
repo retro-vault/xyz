@@ -11,7 +11,7 @@
         .globl  __kbd_symbol
         .globl  __kbd_buffer
 
-        .area   _INITIALIZED
+        .area   _BSS
 __kbd_prev_scan::
         .ds     8
 __kbd_caps::
@@ -20,9 +20,3 @@ __kbd_symbol::
         .ds     1
 __kbd_buffer::
         .ds     35
-
-        .area   _INITIALIZER
-        .db     0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f
-        .db     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        .db     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        .db     0,0,0,0,0

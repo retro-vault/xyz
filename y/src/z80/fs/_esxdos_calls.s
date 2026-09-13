@@ -8,6 +8,7 @@
         .module esxdos_calls
         .optsdcc -mz80 sdcccall(1)
 
+        .globl  __zx_esx_path_drive
         .globl  __zx_esx_error
         .globl  _enter_critical_section
         .globl  _leave_critical_section
@@ -258,6 +259,7 @@ __zx_esx_disk_info::
         ; ROM paths use their length plus NUL in private stack storage,
         ; at most 256 bytes each. RAM paths pass directly to firmware.
 .esx_path_call:
+        call    __zx_esx_path_drive
         push    ix
         ld      ix,#0
         add     ix,sp

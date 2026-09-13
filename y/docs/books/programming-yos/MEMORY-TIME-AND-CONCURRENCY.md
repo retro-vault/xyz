@@ -20,13 +20,15 @@ records the current process as owner and can reclaim leaked blocks when the
 process is reaped. `malloc(0)` returns `NULL`; failed allocation sets `errno`
 to `ENOMEM`.
 
-The raw `allocate_memory` and `free_memory` table entries are useful for a
-custom allocator, but do not mix raw and libc pointers:
+The raw `allocate_memory`, `shrink_memory` and `free_memory` table entries
+are useful for a custom allocator, but do not mix raw and libc pointers:
 
 ```c
 void *raw = yos->allocate_memory(40);
-if (raw)
+if (raw) {
+    yos->shrink_memory(raw, 24); /* keep 24 bytes, release the rest */
     yos->free_memory(raw);       /* not free(raw) */
+}
 ```
 
 ## Time is a 50 Hz counter

@@ -37,20 +37,31 @@ GPX_SOURCES := $(wildcard gpx/*.s)
 GPX_OBJECTS := $(addprefix $(BUILD_DIR)/,$(GPX_SOURCES:.s=.rel))
 GPX_INTEGRATION_OBJECTS := $(BUILD_DIR)/gpx/_gpx_name.rel \
 	$(BUILD_DIR)/gpx/_gpx_service.rel
-LOADER_OBJECTS := $(BUILD_DIR)/kernel/boot_shell.rel \
+# Within one archive pass xld places members in this order. The two large
+# loader modules and the process finisher fill the space before the fixed
+# 3D00 hole almost exactly; the smaller helpers follow it.
+LOADER_OBJECTS := $(BUILD_DIR)/kernel/_library_initialize.rel \
+	$(BUILD_DIR)/kernel/boot_shell.rel \
 	$(BUILD_DIR)/kernel/process_load.rel \
 	$(BUILD_DIR)/kernel/library_load.rel \
 	$(BUILD_DIR)/kernel/_image_load.rel \
 	$(BUILD_DIR)/kernel/_image_transfer.rel \
+	$(BUILD_DIR)/kernel/_process_relocate.rel \
+	$(BUILD_DIR)/kernel/_library_load_finish.rel \
 	$(BUILD_DIR)/kernel/_process_load_finish.rel \
 	$(BUILD_DIR)/kernel/_library_find.rel \
 	$(BUILD_DIR)/kernel/_library_acquire.rel \
-	$(BUILD_DIR)/kernel/_library_load_finish.rel \
-	$(BUILD_DIR)/kernel/_library_initialize.rel \
 	$(BUILD_DIR)/kernel/_crc32.rel \
-	$(BUILD_DIR)/kernel/_process_read_exact.rel \
-	$(BUILD_DIR)/kernel/_process_relocate.rel
+	$(BUILD_DIR)/kernel/_process_read_exact.rel
 ALL_OBJECTS := $(LIB_OBJECTS) $(GPX_OBJECTS)
+# Main declares these roots so they fill the gap before the 0562 trap.
+CRITICAL_ENTRY_OBJECTS := $(BUILD_DIR)/startup/_critical_iff_repair.rel \
+	$(BUILD_DIR)/startup/enter_critical_section.rel
+# Reap's smaller body fits the final gap before the fixed 3D00 ROM hole.
+REAP_OBJECT := $(BUILD_DIR)/kernel/_so_reap.rel
+ORDERED_KERNEL_OBJECTS := $(foreach obj,$(sort $(filter-out $(LOADER_OBJECTS) $(CRITICAL_ENTRY_OBJECTS) $(REAP_OBJECT),$(LIB_OBJECTS))),\
+	$(if $(filter %/tmr_install.rel,$(obj)),$(CRITICAL_ENTRY_OBJECTS))\
+	$(if $(filter %/_process_has_threads.rel,$(obj)),$(REAP_OBJECT)) $(obj))
 ARCHIVE := $(BUILD_DIR)/libyos-kernel.lib
 ARCHIVE_MANIFEST := $(BUILD_DIR)/libyos-kernel.members
 OUTPUT := $(BIN_DIR)/$(TARGET).rom
@@ -86,9 +97,8 @@ $(ARCHIVE): $(ALL_OBJECTS) $(ARCHIVE_MANIFEST) $(XAR)
 	rm -f $@
 	$(XAR) rcs $@ @$(ARCHIVE_MANIFEST)
 
-$(ARCHIVE_MANIFEST): $(ALL_OBJECTS)
-	printf '%s\n' $(filter-out $(LOADER_OBJECTS),$(LIB_OBJECTS)) \
-		| LC_ALL=C sort > $@
+$(ARCHIVE_MANIFEST): $(ALL_OBJECTS) Makefile
+	printf '%s\n' $(ORDERED_KERNEL_OBJECTS) > $@
 	# Discover the GPX service roots at the end of an archive scan. This lets
 	# xld settle the kernel first and avoids wasting ROM around fixed traps.
 	printf '%s\n' $(filter-out $(GPX_INTEGRATION_OBJECTS),$(GPX_OBJECTS)) \

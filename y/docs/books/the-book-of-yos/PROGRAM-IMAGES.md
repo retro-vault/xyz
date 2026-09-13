@@ -43,9 +43,21 @@ entries before the XL payload.
 `kernel/_image_load.s` core) opens an XPRG file
 through the ROM's POSIX/esxDOS layer and accepts process images. It validates the descriptor, required YOS
 version, payload CRC, XL header, relocation table, code bounds, entry point,
-fixed-load requirement and stack size. It then relocates the XL code, creates
-the process and its main thread, and transfers ownership of the image block to
-the new process.
+fixed-load requirement and stack size. The XL payload is version 2: a 12-byte
+header, the code, and then the relocation table. The whole payload is read
+into one heap block, so the JP metadata and XL header precede the code and the
+consumed relocation records trail it. The relocator patches the code at its
+existing address, without allocating a second code copy. After metadata has
+been consumed, `__image_retain` first shrinks the owned heap block to the
+relocated code end through the public `shrink_memory` routine, freeing the
+trailing relocation table, then splits the block immediately before the
+resident code (or compact service table). The leading metadata block is freed
+by the loader's ordinary final cleanup. The code does not move. Only the
+code (plus the compact service table) stays allocated; the relocation table,
+which can be a quarter of the image, is returned to the heap, and because it
+was the top of the block its release coalesces with the free space above.
+The loader creates the process and its main thread and transfers ownership of
+only the retained block. The descriptor remains on the loader stack.
 
 The descriptor's stack size is usable application stack. YOS adds its private
 22-byte scheduler context when it creates the main thread. XPRG names can hold

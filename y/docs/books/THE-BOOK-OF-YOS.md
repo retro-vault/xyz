@@ -40,7 +40,7 @@ for the assembly kernel alone) and run the emulated kernel tests with
    IM1 return. YOS proper begins at `0x0100`.
 2. **RAM bring-up.** `__startup_init` zeroes BSS, copies the eight-entry
    restart-vector table and the initialized data image from ROM to RAM, and
-   fills in the 96-byte public service table `__yos`.
+   fills in the 98-byte public service table `__yos`.
 3. **Kernel init (`main.s`).** Two heaps are created, the clock, keyboard and
    mouse timers are installed, the `"yos"` and `"gpx"` services are registered,
    `shell.sys` is loaded from the current esxDOS drive as an XPRG process,
@@ -74,7 +74,7 @@ guarantees, including the remaining process-local libc `errno` limitation.
 | `0x4000` | Screen bitmap and attributes | ULA |
 | `0x5B00` | `_INITIALIZED` | esxDOS gates at `0x5B37`, clock, kbd |
 | `0x5B70` | `_BSS` | Descriptor, error, and timer state |
-| `0x5B94` | `__yos` service table, then kernel stack | Table is 96 bytes; stack is 512 bytes, top at `0x5DF4` |
+| `0x5B94` | `__yos` service table, then kernel stack | Table is 98 bytes; stack is 512 bytes, top at `0x5DF4` |
 | `0x5DF4` | `__sys_vec_tbl`, list roots, mouse | Eight 3-byte `JP` entries |
 | `0x5EFF` | `__im2_vector` | 2 bytes, read via `I=0x5E` |
 | `0x5F01` | `__sys_heap` | 1024 bytes, kernel objects |

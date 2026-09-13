@@ -220,19 +220,21 @@ namespace {
             return std::nullopt;
         if (bytes.size() < 12)
             throw std::runtime_error("truncated XL image: " + path.string());
-        if (bytes[2] != 0x01)
+        if (bytes[2] != 0x02)
             throw std::runtime_error("unsupported XL image version: "
                                      + path.string());
 
+        // XL v2: header, code, then the relocation table.
         xl_image image;
         image.entry = u16le(bytes, 4);
         const uint16_t code_size = u16le(bytes, 6);
         const uint16_t reloc_count = u16le(bytes, 8);
-        const std::size_t table_offset = 12;
-        const std::size_t code_offset =
-            table_offset + static_cast<std::size_t>(reloc_count) * 4u;
-        if (code_offset > bytes.size()
-            || bytes.size() - code_offset < static_cast<std::size_t>(code_size)) {
+        const std::size_t code_offset = 12;
+        const std::size_t table_offset =
+            code_offset + static_cast<std::size_t>(code_size);
+        if (table_offset > bytes.size()
+            || bytes.size() - table_offset
+                   < static_cast<std::size_t>(reloc_count) * 4u) {
             throw std::runtime_error("truncated XL image: " + path.string());
         }
 

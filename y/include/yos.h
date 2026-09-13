@@ -160,6 +160,11 @@ typedef struct yos_s {
      * query_service returns borrowed pointers and does not acquire.
      */
     void *(*load_library)(const char *path, uint16_t flags);
+    /* Release the bytes of an allocate_memory block beyond size, when they
+     * can form a heap block; the block never moves and keeps at least the
+     * smaller of size and its current length. Returns memory, or NULL when
+     * memory does not address a live allocation. */
+    void *(*shrink_memory)(void *memory, size_t size);
 } yos_t;
 
 /* Resolve a named service through the application's RST 18 stub. */

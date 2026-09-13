@@ -52,6 +52,29 @@ at the header; `mem_allocate` returns the payload (`data`):
 
 `mem_allocate` returns a pointer to `data`, not to the start of the `block_t`. `mem_free` recovers the `block_t` address by subtracting `BLK_SIZE` from the pointer it receives (`__mem_payload_address` does the opposite conversion).
 
+The internal `__mem_split` helper divides a block while preserving its owner
+and allocation flags in both fragments. It takes the retained prefix size and
+splits only when that size fits and the remainder can carry a header and
+payload (12 bytes or more); it returns carry set, with the block unchanged,
+otherwise. Normal allocation calls it after its fit check.
+
+`shrink_memory(memory, size)` in the public table (`kernel/_yos_shrink.s`)
+builds on it: under a critical section it checks that the header at
+`memory - 7` is allocated, splits the block at `size`, and frees the tail
+through the normal `mem_free` coalescing path. The block never moves, and
+when the tail is too small to form a block, or `size` is not smaller than the
+block, the payload keeps its current length. A pointer whose header does not
+read as allocated is rejected with `NULL`; there is no heap scan, so callers
+must pass live `allocate_memory` results.
+
+The image loader uses the same two operations: `__image_retain` first shrinks
+its read buffer to the relocated code end, releasing the consumed XL
+relocation table, then splits the buffer at the compact exports/code
+boundary. The original allocation now covers only the metadata prefix, and
+the loader's ordinary final cleanup frees it through the unchanged buffer
+pointer, so success and rollback share one release path. No allocator header
+layout changes.
+
 ## Initialising a Heap
 
 `mem_init` turns a raw memory region into a single large free block that the allocator can then subdivide:
@@ -93,9 +116,9 @@ if (!stack) {
 ```
 
 Applications do not call `mem_allocate` directly. The `yos_t` table exposes
-`allocate_memory(size)` and `free_memory(p)`. The adapters
-(`kernel/_yos_malloc.s`, `kernel/_yos_free.s`) select `__heap` and assign the
-current process as owner. During library initialization the temporary library
+`allocate_memory(size)`, `free_memory(p)` and `shrink_memory(p, size)`. The
+adapters (`kernel/_yos_malloc.s`, `kernel/_yos_free.s`, `kernel/_yos_shrink.s`)
+select `__heap` and assign the current process as owner. During library initialization the temporary library
 owner override is used instead; kernel-context allocations have owner `NONE`.
 The adapters hold an IFF-preserving critical section across the complete heap
 transaction. Raw `mem_allocate`, `mem_free`, and `mem_free_owner` are internal,

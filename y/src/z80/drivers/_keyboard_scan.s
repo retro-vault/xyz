@@ -140,8 +140,7 @@ __kbd_scan::
         or      b                       ; add key down bit
         call    .queue_key
 .skip_queue:
-        pop     af
-        sub     d                       ; back to a
+        pop     af                      ; restore bit countdown, before row offset
 .next_key:
         dec     a
         jr      nz,.rotate_keymsk
@@ -180,5 +179,4 @@ __kbd_scan::
         pop     de
         pop     bc
         ret
-
 

@@ -77,8 +77,9 @@
         ret
 
         ; esxDOS completes its cold boot through the conventional 0100h
-        ; base-ROM entry. Keep the compatibility header clear up to it.
-        .ds     131
+        ; base-ROM entry. The unused 0080h..00ffh half holds immutable YOS
+        ; tables; execution still begins at the conventional 0100h address.
+        .ds     3
 
         .area   _CODE
 .init:

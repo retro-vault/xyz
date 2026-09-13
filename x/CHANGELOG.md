@@ -6,6 +6,27 @@ Release status:
 
 ## Unreleased
 
+- Fixed xemu port decoding after the CPU core switched to 16-bit port
+  addresses (needed for ZX Spectrum keyboard/divIDE emulation): `OUT (n),A`
+  drives `A` onto the high address byte, so `--stdout-port`, `--stdin-port`,
+  the `platform=emu` stdio/command ports, `--bank-port` and `port_rule`
+  entries without an explicit `port_mask` silently never matched. Bindings
+  below `0x100` now decode the low byte only; wider ones still match the full
+  bus. This restores `platform=emu` program output under xemu (and thus the
+  C test runner), the xemu stdio smoke test and the xld reserved-holes test.
+  xemu now also relinks when `libxemu.a` changes.
+- The staged YOS platform header gains `shrink_memory(memory, size)` as the
+  table entry appended after the ABI 1 baseline (`yos_t` is now 98 bytes);
+  the platform size assertion follows.
+- XL image format version 2: the relocation table now follows the code
+  instead of preceding it. A loader can allocate the code block first, read
+  the table into a temporary block above it, patch, and free only the table,
+  so the resident code keeps the lower address and no hole is left beneath
+  it. `xld` emits version 2; `xprog`, `xgdb` and the test scripts read it and
+  reject other versions (a version 1 file has the same length, so the version
+  byte is the only safeguard against patching garbage). Documented in the
+  `xld` and `xprog` READMEs.
+
 - Fixed libxz80 snapshot/restore to use the backend's IFF2 bit (`0x04`, not
   `0x02`). Added EI/LD A,I regression coverage, including saved IFF2 with IFF1
   disabled. This makes YOS interrupt-state and preemption tests faithful.

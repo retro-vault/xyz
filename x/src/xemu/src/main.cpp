@@ -430,7 +430,7 @@ std::optional<xemu::memory_map_config> resolve_memory_map(const memory_map_build
 
         xemu::memory_port_rule_config cfg;
         cfg.port = rule.port.value();
-        cfg.port_mask = rule.port_mask.value_or(0xFFFF);
+        cfg.port_mask = rule.port_mask.value_or(0);   // 0: decode by port width
         cfg.selector = rule.selector.value();
         cfg.mask = rule.mask.value_or(0x00FF);
         cfg.shift = rule.shift.value_or(0);

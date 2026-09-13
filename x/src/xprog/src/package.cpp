@@ -65,7 +65,10 @@ void check_range(std::size_t offset, std::size_t length, std::size_t size,
 
 xl_info parse_xl(const std::vector<std::uint8_t>& bytes)
 {
-    if (bytes.size() < 12 || bytes[0] != 'X' || bytes[1] != 'L')
+    // XL version 2: 12-byte header, code, then the relocation table.  The
+    // table trails the code so a loader can keep the code block and free the
+    // table once it has been applied.
+    if (bytes.size() < xl_header_size || bytes[0] != 'X' || bytes[1] != 'L')
         throw error("input is not an XL image");
     xl_info info;
     info.version = bytes[2];
@@ -73,17 +76,20 @@ xl_info parse_xl(const std::vector<std::uint8_t>& bytes)
     info.entry_point = get16(bytes, 4);
     info.code_size = get16(bytes, 6);
     info.relocation_count = get16(bytes, 8);
-    if (info.version != 1)
+    if (info.version != xl_version)
         throw error("unsupported XL version " + std::to_string(info.version));
-    info.code_offset = 12U + static_cast<std::size_t>(info.relocation_count) * 4U;
-    const auto expected = info.code_offset + info.code_size;
+    info.code_offset = xl_header_size;
+    info.relocation_offset = info.code_offset + info.code_size;
+    const auto expected = info.relocation_offset
+        + static_cast<std::size_t>(info.relocation_count) * xl_relocation_size;
     if (expected != bytes.size())
         throw error("malformed XL size (expected " + std::to_string(expected)
                     + ", got " + std::to_string(bytes.size()) + ")");
     if (info.code_size == 0 || info.entry_point >= info.code_size)
         throw error("XL entry point lies outside its code");
     for (std::uint16_t i = 0; i < info.relocation_count; ++i) {
-        const auto record = 12U + static_cast<std::size_t>(i) * 4U;
+        const auto record = info.relocation_offset
+            + static_cast<std::size_t>(i) * xl_relocation_size;
         const auto offset = get16(bytes, record);
         const auto width = bytes[record + 2];
         if ((width != 1 && width != 2)

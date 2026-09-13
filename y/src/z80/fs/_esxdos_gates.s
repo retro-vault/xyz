@@ -26,10 +26,11 @@
         .globl  __zx_esx_gate_a4
         .globl  __zx_esx_gate_a7
         .globl  __zx_esx_gate_84
+        .globl  __esxdos_gates_init
 
         ; Runtime addresses. Startup copies the matching 57-byte gate image
         ; after esxDOS has finished its cold boot.
-        .area   _INITIALIZED
+        .area   _BSS
 __zx_esx_gates_start::
 __zx_esx_gate_9a::
         .ds     3
@@ -70,24 +71,28 @@ __zx_esx_gate_a7::
 __zx_esx_gate_84::
         .ds     3
 
-        ; Each gate is RST 08, inline service selector, RET.
-        .area   _INITIALIZER
-        .db     0xcf, 0x9a, 0xc9
-        .db     0xcf, 0x9b, 0xc9
-        .db     0xcf, 0x9c, 0xc9
-        .db     0xcf, 0x9d, 0xc9
-        .db     0xcf, 0x9e, 0xc9
-        .db     0xcf, 0x9f, 0xc9
-        .db     0xcf, 0xa0, 0xc9
-        .db     0xcf, 0xa1, 0xc9
-        .db     0xcf, 0xa8, 0xc9
-        .db     0xcf, 0xa9, 0xc9
-        .db     0xcf, 0xaa, 0xc9
-        .db     0xcf, 0xab, 0xc9
-        .db     0xcf, 0xac, 0xc9
-        .db     0xcf, 0xad, 0xc9
-        .db     0xcf, 0xb0, 0xc9
-        .db     0xcf, 0xa3, 0xc9
-        .db     0xcf, 0xa4, 0xc9
-        .db     0xcf, 0xa7, 0xc9
-        .db     0xcf, 0x84, 0xc9
+        ; Generate the writable gates after BSS clearing. Only their service
+        ; selectors need stored ROM bytes.
+        .area   _CODE
+__esxdos_gates_init::
+        ld      hl,#.selectors
+        ld      de,#__zx_esx_gates_start
+        ld      bc,#19
+.next:
+        ld      a,#0xcf                 ; RST 08
+        ld      (de),a
+        inc     de
+        ldi
+        ld      a,#0xc9                 ; RET
+        ld      (de),a
+        inc     de
+        ld      a,b
+        or      c
+        jr      nz,.next
+        ret
+
+        .area   _HEADER_DATA
+.selectors:
+        .db     0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,0xa0,0xa1
+        .db     0xa8,0xa9,0xaa,0xab,0xac,0xad,0xb0,0xa3
+        .db     0xa4,0xa7,0x84

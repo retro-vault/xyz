@@ -443,7 +443,9 @@ public:
 
             auto& rule = new_port_rules.emplace_back();
             rule.port = rule_cfg.port;
-            rule.port_mask = rule_cfg.port_mask;
+            rule.port_mask = rule_cfg.port_mask != 0
+                ? rule_cfg.port_mask
+                : (rule_cfg.port <= 0xFFu ? 0x00FFu : 0xFFFFu);
             rule.selector_index = selector_it->second;
             rule.mask = rule_cfg.mask;
             rule.shift = rule_cfg.shift;
@@ -704,9 +706,17 @@ struct machine::impl {
             : owner_(&owner)
         {}
 
+        // The CPU core reports the full 16-bit port bus, so OUT (n),A and
+        // IN A,(n) arrive with A on the high byte.  A binding below 0x100
+        // decodes only the low byte, like an ordinary Z80 peripheral; a
+        // wider binding must match the whole bus (OUT (C),r style).
+        static bool port_matches(uint16_t port, uint16_t bound) noexcept {
+            return bound <= 0xFFu ? (port & 0xFFu) == bound : port == bound;
+        }
+
         uint8_t in(uint16_t port) noexcept override {
             if (stdin_stream_ != nullptr && stdin_status_port_.has_value() &&
-                port == stdin_status_port_.value()) {
+                port_matches(port, stdin_status_port_.value())) {
                 const int ch = stdin_stream_->peek();
                 if (ch == std::char_traits<char>::eof()) {
                     stdin_stream_->clear();
@@ -716,7 +726,7 @@ struct machine::impl {
             }
 
             if (stdin_stream_ != nullptr && stdin_data_port_.has_value() &&
-                port == stdin_data_port_.value()) {
+                port_matches(port, stdin_data_port_.value())) {
                 const int ch = stdin_stream_->get();
                 if (ch == std::char_traits<char>::eof()) {
                     stdin_stream_->clear();
@@ -729,17 +739,18 @@ struct machine::impl {
 
         void out(uint16_t port, uint8_t value) noexcept override {
             if (stdout_stream_ != nullptr && stdout_port_.has_value() &&
-                port == stdout_port_.value()) {
+                port_matches(port, stdout_port_.value())) {
                 stdout_stream_->put(static_cast<char>(value));
                 stdout_stream_->flush();
             }
             if (owner_ != nullptr) {
                 owner_->mem.apply_port_write(port, value);
             }
-            if (bank_port_.has_value() && port == bank_port_.value() && owner_ != nullptr) {
+            if (bank_port_.has_value() && port_matches(port, bank_port_.value()) &&
+                owner_ != nullptr) {
                 owner_->mem.set_compat_active_bank(value);
             }
-            if (port == machine::emu_cmd_port && owner_ != nullptr) {
+            if (port_matches(port, machine::emu_cmd_port) && owner_ != nullptr) {
                 owner_->handle_command(value);
             }
         }

@@ -11,6 +11,11 @@ constexpr std::size_t jump_entry_size = 3;
 constexpr std::uint8_t format_version = 1;
 constexpr std::uint16_t no_entry = 0xffff;
 
+// XL payload: 12-byte header, code, then 4-byte relocation records.
+constexpr std::size_t xl_header_size = 12;
+constexpr std::size_t xl_relocation_size = 4;
+constexpr std::uint8_t xl_version = 2;
+
 enum class image_kind : std::uint8_t {
     process = 1,
     service = 2

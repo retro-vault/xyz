@@ -18,18 +18,27 @@ displays its returned "Library OK" string. Copy **both** `shell.sys` and
 ## Relocate, Initialize, Publish
 
 Process and library loading enter `kernel/_image_load.s`. They share disk
-reads, descriptor checks, image allocation, CRC checking, entry validation
-and the existing XL relocator. No second relocation implementation exists.
+reads, descriptor checks, temporary metadata allocation, CRC checking, entry
+validation and the existing XL relocator. No second relocation implementation
+exists.
 
 For a new library:
 
-1. Allocate one block containing the export metadata and complete XL.
-2. Check the XL CRC and relocate every XL relocation record in place.
+1. Allocate a temporary block containing the export metadata and complete XL
+   (version 2: header, code, then the relocation table).
+2. Check the XL CRC and relocate the code in its existing read buffer.
+   There is no second resident-code allocation or copy.
 3. Validate each three-byte XPRG `JP offset` export and compact the targets
-   into a two-byte-per-slot, absolute YOS function-pointer table. The
-   on-disk JP table is **not** itself a C function-pointer array.
-4. Create a library ownership object, without a thread or stack, and
-   transfer the image to it.
+   into a two-byte-per-slot, absolute YOS function-pointer table immediately
+   before the code, reusing consumed XL header space. The on-disk JP table
+   is **not** itself a C function-pointer array.
+4. Shrink the allocation to the code end (`shrink_memory`), freeing the
+   consumed relocation table, then split it before the compact table. Create
+   a library ownership object without a thread or stack and transfer the
+   retained table/code block to it; the leading metadata block is freed by
+   the loader's final cleanup. Splitting preserves ownership and allocation
+   flags under a critical section. Export validation finishes before any
+   metadata is released.
 5. If XPRG has an entry, call that **relocated** initializer once, using the
    loading thread's stack. Its `sdcccall(1)` contract is
    `uint16_t initialize(void *exports)`: HL receives the bound table,

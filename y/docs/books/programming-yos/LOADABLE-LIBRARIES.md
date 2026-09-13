@@ -85,16 +85,18 @@ resident.
 ## Export table and relocation
 
 The service descriptor contains one three-byte `JP offset` record for each
-export, in ABI slot order, followed by an ordinary XL payload. The YOS loader:
+export, in ABI slot order, followed by an ordinary XL payload (version 2:
+header, code, then the relocation table). The YOS loader:
 
 1. validates the descriptor, kind, YOS requirement, CRC, XL bounds, entry,
    relocation records, and every export target;
 2. allocates and relocates the XL exactly like a process image;
-3. converts the JP records in place into a compact array of absolute 16-bit
-   function pointers;
+3. allocates a resident block containing only a compact array of absolute
+   16-bit function pointers followed by relocated code/static storage;
 4. creates a threadless library owner and transfers the image to it;
 5. runs the optional relocated initializer once;
-6. publishes a successful shared registration and attaches the client
+6. frees the temporary JP/XL header prefix and the trailing relocation
+   table, publishes a successful shared registration and attaches the client
    reference.
 
 The on-disk JP records are metadata; clients receive the compact two-byte

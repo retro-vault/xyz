@@ -62,8 +62,8 @@ xld -T layout.ld main.rel -o app.xl
 
 ## Output formats
 
-- **xl** (default) — relocatable XL image with header and relocation
-  table, loadable at any address.
+- **xl** (default) — relocatable XL image (version 2: 12-byte header, code,
+  then relocation table), loadable at any address.
 - **binary** — flat memory image.
 - **ihx** — Intel HEX.
 - **gnu debug sidecar** — in `--mode=gnu`, `-g` derives an ELF + DWARF

@@ -17,6 +17,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
         if (!ok) throw std::runtime_error("library: " + what);
     };
     const auto original_thread = mem.word(sym("_thread_current"));
+    const auto payload = unsigned(image[10] | (image[11] << 8));
     const auto error = [&] { return mem.bytes[sym("_process_last_error")]; };
     const auto heap_usage = [&](std::uint16_t head) {
         std::pair<unsigned, unsigned> result{};
@@ -131,6 +132,15 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     check(library && mem.bytes[library + 4] == 3 &&
               mem.word(library + 13) == 1, "missing threadless library owner");
     const auto code = std::uint16_t(first - exports.at("_interface"));
+    // XL v2 keeps the relocation table after the code, so the library
+    // block holds exactly the compact export table and the code.
+    const auto code_size = unsigned(image[payload + 6] |
+                                    (image[payload + 7] << 8));
+    const auto library_block = std::uint16_t(code - 2 * 4 - 7);
+    check((mem.bytes[library_block + 4] & 1) &&
+              mem.word(library_block + 2) == library &&
+              mem.word(library_block + 5) == 2 * 4 + code_size,
+          "resident library block is not exactly its export table and code");
     for (const auto [slot, name] :
          {std::pair{0, "_probe"}, {1, "_message"},
           {2, "_initializations"}, {3, "_calls"}}) {
@@ -207,10 +217,9 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
         files.files["shelllib.svc"][offset] = value;
         rollback(name, expected);
     };
-    const auto payload = unsigned(image[10] | (image[11] << 8));
-    const auto relocations = unsigned(image[payload + 8] |
-                                      (image[payload + 9] << 8));
-    const auto code_offset = payload + 12 + 4 * relocations;
+    // XL v2: 12-byte header, code, then the relocation table.
+    const auto code_offset = payload + 12;
+    const auto relocation_offset = code_offset + code_size;
     const auto checksum = [&] {
         auto& data = files.files["shelllib.svc"];
         std::uint32_t crc = 0xffffffff;
@@ -235,7 +244,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     mutate(65, 0xff, "invalid export offset");
     mutate(26, 0xff, "invalid initializer offset");
     mutate(unsigned(image.size() - 1), 0xff, "bad payload CRC", 8);
-    files.files["shelllib.svc"][payload + 14] = 3;
+    files.files["shelllib.svc"][relocation_offset + 2] = 3;
     checksum();
     rollback("invalid XL relocation", 4);
     files.files["shelllib.svc"][code_offset + exports.at("_init_status")] = 1;

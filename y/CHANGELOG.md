@@ -9,6 +9,70 @@ Release status:
 
 ## Unreleased
 
+- Added `shrink_memory(memory, size)` to the public `yos_t` table (slot 48,
+  appended after the ABI 1 baseline; the table is now 98 bytes). It releases
+  the bytes of a live `allocate_memory` block beyond `size` when they can form
+  a heap block, never moves the block, and returns `NULL` for a header that
+  is not allocated. `__image_retain` now uses the same routine to drop a
+  consumed XL relocation table from its read buffer and leaves the metadata
+  prefix to the loader's ordinary final cleanup. `__mem_split` also treats a
+  retained size beyond the block as "no split". Kernel tests exercise the
+  public slot: in-place trim, tail reuse, unsplittable remainders, oversized
+  requests and freed blocks. ROM content ends at `0x3fef`, leaving 17 bytes.
+
+- Adopted XL image format version 2, in which the relocation table follows
+  the code instead of preceding it. The loader still reads one XPRG payload
+  into a single block and relocates in place, but `__image_retain` now splits
+  the consumed relocation table off the *end* of that block and frees it
+  before splitting off the metadata prefix, so only code (plus the compact
+  service table) stays allocated and the freed table coalesces with the space
+  above it. `__process_relocate` validates the version 2 layout and returns
+  the code size; `__mem_split` now owns the remainder-size threshold shared
+  by allocation and retention. Kernel tests check the exact resident block
+  for both the shell process and the library.
+
+- The shared process/library loader now relocates inside its original read
+  buffer. After validating and binding exports, it splits off and frees the
+  leading JP/XL/relocation metadata, retaining only code/static storage and
+  compact service pointers. This removes the simultaneous second code copy
+  that prevented TED's textedit service from loading alongside File Manager.
+  `_mem_split.s` is shared with normal allocation; the header/owner layout,
+  XPRG/XL format and public ABI are unchanged. Kernel validation, rollback,
+  shared-library lifetime and concurrent-loading tests pass. ROM content ends
+  at `0x3fe7`, leaving 25 bytes inside the 16 KiB limit.
+
+- Fixed real esxDOS 0.8.9 directory conversion: native records contain the
+  attributes byte before the ASCIIZ short name, followed by date/time and
+  size. Tests now reproduce the actual firmware layout.
+- Added optional `A:`/`B:` path prefixes in the shared filesystem adapter.
+  These are YOS/application conventions, translated to native drives `0x40`
+  (DivIDE master) and `0x48` (slave), with the prefix removed before firmware
+  entry. Unqualified paths retain the current-drive behavior. The same adapter
+  serves directory reads and process/library file loading. The table ABI stays
+  unchanged and the ROM content still ends at `0x3fe0`.
+
+- Fixed simultaneous keyboard transitions in a matrix row: the scan loop
+  restored its bit countdown and then subtracted the row offset a second
+  time, turning overlapping letters into unrelated key codes. The correction
+  removes one ROM byte. Tests cover press and release chords in all eight rows.
+
+- Process and library loading now retains only relocated code/static storage
+  (plus the compact two-byte export table for services). XPRG descriptors, JP
+  metadata, XL headers and relocation records live in a temporary allocation
+  that is freed after relocation. Startup now uses BSS for zero state,
+  generates the RAM esxDOS gates, and publishes the immutable YOS ABI table
+  directly from ROM. Immutable syscall/gate-selector data fills the unused
+  `0x0080..0x00f2` header region; the entry remains `0x0100` and ROM content
+  ends at `0x3fe0`, inside the 16 KiB boundary. Kernel tests cover exact
+  resident allocation and metadata cleanup.
+
+- Fixed the NMOS Z80 `LD A,I` interrupt race at critical-section entry.
+  IM2 repairs the saved parity flag at that exact instruction boundary, so
+  frequent graphics/input syscalls cannot silently disable the scheduler.
+  Added matching/nonmatching-PC flag-preservation tests. ROM link roots and
+  member order pack the repair around the existing paging holes; ABI 1 and
+  all reserved addresses are unchanged.
+
 - Moved Kempston hardware sampling onto the kernel's 50 Hz timer chain beside
   clock and keyboard scanning. `read_mouse` now returns an atomic snapshot of
   bounded absolute coordinates instead of polling ports; button transitions
