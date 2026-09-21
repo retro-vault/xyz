@@ -103,10 +103,10 @@ void cli_tests()
     CHECK(dsk.entry_point == 0x4000);
     CHECK(dsk.output_file == "hello.dsk");
 
-    auto esxdos = parse({"xprog", "--esxdos", "shell.sys"});
+    auto esxdos = parse({"xprog", "--esxdos", "op.sys"});
     CHECK(esxdos.command == xprog::command_kind::esxdos);
-    CHECK(esxdos.name == "shell.sys");
-    CHECK(esxdos.output_file == "shell.ide");
+    CHECK(esxdos.name == "op.sys");
+    CHECK(esxdos.output_file == "op.ide");
 }
 
 std::uint16_t word(const std::vector<std::uint8_t>& bytes, std::size_t offset)
@@ -124,7 +124,7 @@ std::uint32_t dword(const std::vector<std::uint8_t>& bytes, std::size_t offset)
 void esxdos_tests()
 {
     const std::vector<std::uint8_t> file = {'X', 'P', 'R', 'G', 1, 2, 3};
-    const auto disk = xprog::build_esxdos_disk(file, "shell.sys");
+    const auto disk = xprog::build_esxdos_disk(file, "op.sys");
     CHECK(disk.size() == 16u * 1024u * 1024u);
     CHECK(disk[510] == 0x55 && disk[511] == 0xaa);
     CHECK(disk[446 + 4] == 0x06);
@@ -137,7 +137,7 @@ void esxdos_tests()
     const auto fats = word(disk, boot + 22);
     const std::size_t root = (2048u + 1u + 2u * fats) * 512u;
     CHECK(std::string(disk.begin() + root,
-                      disk.begin() + root + 11) == "SHELL   SYS");
+                      disk.begin() + root + 11) == "OP      SYS");
     CHECK(word(disk, root + 16) == 0x0021);
     CHECK(word(disk, root + 18) == 0x0021);
     CHECK(word(disk, root + 24) == 0x0021);

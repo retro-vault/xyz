@@ -8,7 +8,7 @@ make -C y/src/z80 test
 
 The owning Makefile builds all artifacts under `build/yos-z80/` and
 `bin/y/z80/spectrum/bin/`. Besides kernel, graphics and scheduler tests,
-the harness executes the actual `shell.sys` and `shelllib.svc` produced
+the harness executes the actual `op.sys` and `shelllib.svc` produced
 by XCC/XAS/XLD/XPROG.
 
 The harness uses the exact production ROM and its map. During reset only,
@@ -36,7 +36,10 @@ and timer publication, timer-driven mouse sampling/snapshots, pixels, spans,
 bitmaps and sprites.
 The main harness checks IFF/flag preservation with nested sections and disabled
 interrupt callers, per-thread errno/loader status, independent GPX contexts,
-and the ABI-1 ROM/image contract.
+and the ABI 3 ROM with ABI 1 image compatibility. It executes `wait_event`
+from a real thread, with another runnable thread and with all threads blocked,
+then checks absent signals, pre-set signals and repeated timer wakeups.
+Unsignalled waiters remain off the runnable queue; consumed signals reset.
 
 This is deterministic ROM-level coverage, not real esxDOS firmware or
 hardware validation. Use the [Fuse cold-boot runner](../fuse/README.md) for

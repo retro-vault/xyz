@@ -162,7 +162,7 @@ an 8.3 filename. This follows the working recipe in `y/src/z80/Makefile`.
 
 `y/tests/shell-yos/shelllib.s` deliberately self-registers a relocated
 embedded interface, allocates library-owned storage, and records initializer
-and call counts. `shell.sys` loads it shared and draws the string returned by
+and call counts. `op.sys` loads it shared and draws the string returned by
 the relocated `message` export.
 
 Run the deterministic kernel suite with:

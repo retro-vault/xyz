@@ -13,11 +13,11 @@ esxDOS filesystem. The XCC platform name is `yos`:
 mkdir -p build/examples/yos bin/y/z80/spectrum/bin
 bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
 bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
-  build/examples/yos/app.xl -o bin/y/z80/spectrum/bin/app.sys
+  build/examples/yos/app.xl -o bin/y/z80/spectrum/bin/app.prc
 ```
 
 Keep the XL file: it is the linker's relocatable result and is useful for
-inspection. The `.sys` file is the installable YOS process. Do not ask XCC for
+inspection. The `.prc` file is the installable YOS process. Do not ask XCC for
 a flat binary when using `--platform=yos`.
 
 ## What the backend supplies
@@ -48,7 +48,7 @@ loading—read [The Book of YOS](THE-BOOK-OF-YOS.md). The runnable companion is
 
 ## Important limits
 
-The current public ABI is version 1. It has no blocking console input, Unix
+The current public ABI is version 2. It has no blocking console input, Unix
 wall clock, thread join, event wait call, process wait/status channel, or
 explicit library unload. A process has no stored parent relationship, even
 when another process created or loaded it, and `exit(int)` cannot report its

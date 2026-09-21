@@ -65,7 +65,7 @@ void delay_ticks(uint16_t ticks) {
 delay_ticks(25);
 ```
 
-> **Note:** Spin-waiting burns the thread's entire time slice. Other threads continue to run (the scheduler still fires every tick), but nothing useful happens in this one. Polling an event that a timer callback sets is no cheaper in CPU, but it lets you wait on several sources at once.
+> **Note:** Spin-waiting burns the thread's entire time slice. Other threads continue to run (the scheduler still fires every tick), but nothing useful happens in this one. Use ABI 2 `wait_event` with an event set by a timer instead: the scheduler removes the caller from the runnable queue until signalled.
 
 ## Timer API
 
@@ -144,18 +144,22 @@ Because the callback fires when the countdown *reaches* zero and then reloads to
 - To communicate a result back to a thread, set a flag or an event and let the thread process the result in its own context.
 
 ```c
-/* Good: minimal work in the callback */
-static volatile uint8_t tick_flag = 0;
+static yos_t *yos;
+static yos_event_t *tick_event;
 
 void my_tick_callback(void) {
-    tick_flag = 1;      /* just set a flag */
+    yos->set_event(tick_event, YOS_EVENT_SET);
 }
 
-/* Somewhere in a thread: */
-while (!tick_flag)
-    ;
-tick_flag = 0;
-/* now do the real work here, safely */
+/* In the process thread, after acquiring the YOS table: */
+tick_event = yos->create_event(NULL);
+yos_timer_t *timer = yos->create_timer(my_tick_callback, 4);
+while (work_remains()) {
+    yos->wait_event(tick_event);  /* no scheduled CPU time while waiting */
+    do_work();                  /* outside the interrupt handler */
+}
+yos->destroy_timer(timer);      /* stop signals before freeing the event */
+yos->destroy_event(tick_event);
 ```
 
 ## Clock Accuracy

@@ -24,7 +24,7 @@ if (!yos || yos->version() < YOS_VERSION)
     return 1;
 ```
 
-`YOS_VERSION` is the ABI required by the installed header, currently 1. XPRG's
+`YOS_VERSION` is the ABI required by the installed header, currently 2. XPRG's
 `--min-os 1` is the loader-side check; the runtime check above is useful for
 diagnostics and unusual launchers.
 

@@ -25,16 +25,16 @@ _getcwd::
         push    de                      ; IX-4: caller's buffer size
         ld      a,h
         or      l
-        jp      z,.esx_getcwd_invalid
+        jr      z,.esx_getcwd_invalid
         ld      a,d
         or      e
-        jp      z,.esx_getcwd_invalid
+        jr      z,.esx_getcwd_invalid
         ld      a,h
         cp      #0x40
-        jp      c,.esx_getcwd_fault
+        jr      c,.esx_getcwd_fault
         dec     de
         add     hl,de
-        jp      c,.esx_getcwd_fault
+        jr      c,.esx_getcwd_fault
 
         ; The 0.8.x ABI has no destination-length parameter. Reserve 256
         ; bytes (also covering z88dk's 128-byte 0.8.5 pathname limit),

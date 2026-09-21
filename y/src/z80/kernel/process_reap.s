@@ -36,15 +36,13 @@ _process_reap::
         push    hl
         pop     ix
         call    _enter_critical_section
+        call    _process_has_threads    ; hl still the process/library pointer;
+        or      a                       ; a library never owns a thread, so
+        jr      nz, .done               ; this is also the library's own check
         bit     0, PROCESS_FLAGS(ix)
-        jr      z, .threads
+        jr      z, .resources
         ld      a, LIBRARY_REFS(ix)
         or      LIBRARY_REFS+1(ix)
-        jr      nz, .done
-        jr      .resources
-.threads:
-        call    _process_has_threads
-        or      a
         jr      nz, .done
 .resources:
         ld      hl, #__evt_first

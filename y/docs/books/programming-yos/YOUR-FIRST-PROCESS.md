@@ -26,8 +26,8 @@ Compile and package it:
 mkdir -p build/my-yos bin/y/examples
 bin/x/bin/xcc -Os --platform=yos hello.c -o build/my-yos/hello.xl
 bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 1 \
-  build/my-yos/hello.xl -o bin/y/examples/hello.sys
-bin/x/bin/xprog --inspect bin/y/examples/hello.sys
+  build/my-yos/hello.xl -o bin/y/examples/hello.prc
+bin/x/bin/xprog --inspect bin/y/examples/hello.prc
 ```
 
 `--name` is the process name stored in XPRG metadata. `--stack-size` includes
@@ -42,7 +42,7 @@ ABI 1 is the clean baseline; rebuild applications against the matching headers.
 XPROG can make a deterministic 16 MiB raw IDE image containing one 8.3 file:
 
 ```sh
-bin/x/bin/xprog --esxdos --name HELLO.SYS bin/y/examples/hello.sys \
+bin/x/bin/xprog --esxdos --name HELLO.PRC bin/y/examples/hello.prc \
   -o bin/y/examples/hello.ide
 ```
 
@@ -52,11 +52,11 @@ file, so the same command can package data or several independently prepared
 test images. The current image builder intentionally creates one root file;
 use normal host FAT tools when a disk needs several files.
 
-YOS boots `shell.sys`. To replace the shell for a test, use the same process
+YOS boots `op.sys`. To replace the shell for a test, use the same process
 payload but give the disk file that name:
 
 ```sh
-bin/x/bin/xprog --esxdos --name SHELL.SYS bin/y/examples/hello.sys \
+bin/x/bin/xprog --esxdos --name OP.SYS bin/y/examples/hello.prc \
   -o bin/y/examples/boot.ide
 ```
 

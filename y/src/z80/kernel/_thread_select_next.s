@@ -53,8 +53,11 @@ __thread_select_next::
         inc     hl
         inc     hl
         ld      a, (hl)
-        pop     hl
         cp      #EVENT_SIGNALED
+        jr      nz, .not_signaled
+        ld      (hl), #0                ; one signal wakes one waiter
+.not_signaled:
+        pop     hl
         jr      z, .wake
         djnz    .event
         jr      .next

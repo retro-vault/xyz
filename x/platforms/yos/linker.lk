@@ -1,3 +1,3 @@
-; Relocatable YOS application image.  xprog wraps this XL output as a .sys.
+; Relocatable YOS application image.  xprog wraps this XL output as a .prc.
 FORMAT xl
 ENTRY _entry

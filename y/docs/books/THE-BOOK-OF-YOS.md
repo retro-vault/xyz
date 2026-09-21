@@ -28,7 +28,7 @@ services, files, input, graphics, packaging, and every public API call.
 Build the ROM with `make -C y` from the repository root (or `make -C y/src/z80`
 for the assembly kernel alone) and run the emulated kernel tests with
 `make -C y/src/z80 test`. Output lands in `bin/y/z80/spectrum/bin/`:
-`yos-kernel.rom`, the `shell.sys` process image it loads at boot, and the
+`yos-kernel.rom`, the `op.sys` process image it loads at boot, and the
 `shelllib.svc` library used by that shell.
 
 ## The system in one page
@@ -39,11 +39,11 @@ for the assembly kernel alone) and run the emulated kernel tests with
    jump through a writable RAM table, and RST 38 is the esxDOS-compatible
    IM1 return. YOS proper begins at `0x0100`.
 2. **RAM bring-up.** `__startup_init` zeroes BSS, copies the eight-entry
-   restart-vector table and the initialized data image from ROM to RAM, and
-   fills in the 98-byte public service table `__yos`.
+   restart-vector table and the initialized data image from ROM to RAM. The
+   100-byte public service table `__yos` remains immutable in ROM.
 3. **Kernel init (`main.s`).** Two heaps are created, the clock, keyboard and
    mouse timers are installed, the `"yos"` and `"gpx"` services are registered,
-   `shell.sys` is loaded from the current esxDOS drive as an XPRG process,
+   `op.sys` is loaded from the current esxDOS drive as an XPRG process,
    RST 18 is pointed at the service lookup, and finally IM2 is armed with the
    scheduler vector at `0x5EFF`.
 4. **Run.** Every 50 Hz frame interrupt enters `__thread_robin`, which saves
@@ -53,7 +53,7 @@ for the assembly kernel alone) and run the emulated kernel tests with
    The kernel itself idles in a `HALT` loop.
 5. **Talk to the kernel.** There are no privilege levels. Applications call
    `query_service("yos")` through RST 18 and receive a `yos_t` table of
-   function pointers (ABI version 1): memory, timers, events, threads,
+   function pointers (ABI version 2): memory, timers, events, threads,
    processes, services, interrupt vectors, keyboard, mouse, a POSIX-style
    esxDOS filesystem, and the shared XPRG process/library loader. `query_service("gpx")`
    returns the complete libgpx drawing API.

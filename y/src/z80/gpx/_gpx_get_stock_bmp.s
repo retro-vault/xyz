@@ -45,37 +45,24 @@
         ;; Clobbers:
         ;;   AF, DE
 _gpx_get_stock_bmp::
-        or      a
-        jr      z,.classic
-        dec     a
-        jr      z,.std
-        dec     a
-        jr      z,.hourglass
-        dec     a
-        jr      z,.caret
-        dec     a
-        jr      z,.hand
-        dec     a
-        jr      z,.resize
-
+        cp      #6
+        jr      nc,.unknown
+        ld      l,a
+        ld      h,#0
+        add     hl,hl
+        ld      de,#.table
+        add     hl,de
+        ld      e,(hl)
+        inc     hl
+        ld      d,(hl)
+        ret
+.unknown:
         ld      de,#0x0000
         ret
-
-.classic:
-        ld      de,#_gpx_cur_classic
-        ret
-.std:
-        ld      de,#_gpx_cur_std
-        ret
-.hourglass:
-        ld      de,#_gpx_cur_hourglass
-        ret
-.caret:
-        ld      de,#_gpx_cur_caret
-        ret
-.hand:
-        ld      de,#_gpx_cur_hand
-        ret
-.resize:
-        ld      de,#_gpx_cur_resize
-        ret
+.table:
+        .dw     _gpx_cur_classic
+        .dw     _gpx_cur_std
+        .dw     _gpx_cur_hourglass
+        .dw     _gpx_cur_caret
+        .dw     _gpx_cur_hand
+        .dw     _gpx_cur_resize

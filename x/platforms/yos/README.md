@@ -16,15 +16,16 @@ Build and package a process with:
 ```sh
 bin/x/bin/xcc -Os --platform=yos app.c -o build/app.xl
 bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
-  build/app.xl -o bin/y/z80/spectrum/bin/app.sys
+  build/app.xl -o bin/y/z80/spectrum/bin/app.prc
 ```
 
 The linker output must remain XL. Do not select a fixed-address or binary
 output format for a YOS process.
 
-The staged header describes the complete 98-byte ABI 1 table, including
+The staged header describes the complete 100-byte ABI 2 table, including
 process loading, private/shared XPRG libraries and the appended
-`shrink_memory` entry. `load_library` returns a
+`shrink_memory` and `wait_event` entries. Event waits block the caller in
+the scheduler until signalled; package callers with `--min-os 2`. `load_library` returns a
 relocated direct-call interface retained until the calling process exits.
 Kernel shared-state syscalls use IFF-preserving critical sections. Raw kernel
 errno/loader status follow the running thread, but linked libc `errno` remains

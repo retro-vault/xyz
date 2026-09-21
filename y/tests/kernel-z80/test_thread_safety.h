@@ -59,7 +59,7 @@ void test_thread_safety(Memory& mem, Cpu& cpu, Call call, Symbol sym,
     cpu.restore(state);
     call(sym("_mouse_read"), 0xe600, 0, "protected mouse read");
     files.enabled = true;
-    const std::string path = "shell.sys";
+    const std::string path = "op.sys";
     std::copy(path.c_str(), path.c_str() + path.size() + 1,
               mem.bytes.begin() + 0xe600);
     bool checked_slot = false;

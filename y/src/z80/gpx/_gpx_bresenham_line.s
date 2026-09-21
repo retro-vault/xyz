@@ -396,7 +396,7 @@ __gpx_bresenham_line::
         ld      b,L_DY(ix)              ; steps = dy
         ld      a,b
         or      a
-        jp      z,.bl_last              ; clipping collapsed it to one pixel
+        jr      z,.bl_last              ; clipping collapsed it to one pixel
         ld      a,L_DX(ix)
         or      a
         jp      nz,.by_loop             ; genuine diagonal
@@ -428,7 +428,7 @@ __gpx_bresenham_line::
         sub     c                       ; 8-bit err -= dy; carry means negative
         ld      l,a
         exx                             ; flags survive exx
-        jp      nc,.bxr_loop_xadv
+        jr      nc,.bxr_loop_xadv
         exx
         add     hl,de                   ; err += dx
         exx
@@ -451,7 +451,7 @@ __gpx_bresenham_line::
         inc     hl
 .bxr_loop_rot:
         djnz    .bxr_loop
-        jp      .bl_last                ; do NOT fall through into the left variant
+        jr      .bl_last                ; do NOT fall through into the left variant
 
 .bxl_loop:
         rrc     c                       ; carry = pattern bit, C rotated for
@@ -467,7 +467,7 @@ __gpx_bresenham_line::
         sub     c                       ; 8-bit err -= dy; carry means negative
         ld      l,a
         exx                             ; flags survive exx
-        jp      nc,.bxl_loop_xadv
+        jr      nc,.bxl_loop_xadv
         exx
         add     hl,de                   ; err += dx
         exx
@@ -531,7 +531,7 @@ __gpx_bresenham_line::
         sub     e                       ; deficit -= dx; equality does not step
         ld      l,a
         exx
-        jp      nc,.by_yadv
+        jr      nc,.by_yadv
         exx
         add     hl,bc                   ; deficit += dy, only the low byte is live
         exx
@@ -575,7 +575,7 @@ __gpx_bresenham_line::
         call    z,__vid_prevrow_carry
 .by_rot:
         djnz    .by_loop
-        jp      .bl_last
+        jr      .bl_last
 
         ;; ---- vertical fast path: dx == 0, y increasing ----
         ;; With dx = 0 the y-major loop never steps x, so no err

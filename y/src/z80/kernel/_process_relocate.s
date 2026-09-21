@@ -48,13 +48,13 @@ __process_relocate::
         ld      c,6(ix)
         ld      b,7(ix)                 ; BC = code size
         add     hl,bc
-        jp      c,.bad_saved
+        jr      c,.bad_saved
         ld      bc,#12
         add     hl,bc
-        jp      c,.bad_saved            ; header + code + table
+        jr      c,.bad_saved            ; header + code + table
         or      a
         sbc     hl,de
-        jp      nz,.bad_saved           ; must equal the complete XL length
+        jr      nz,.bad_saved           ; must equal the complete XL length
         push    ix
         pop     iy
         add     iy,bc                   ; IY = code base, header + 12

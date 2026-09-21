@@ -28,7 +28,7 @@ xprog --tap hello.bin --load-address 0x5ccb
 xprog --tzx hello.bin --load-address 0x5ccb --entry 0x5ccb
 xprog --cdt hello.bin --name HELLO
 xprog --dsk hello.bin --name HELLO.BIN
-xprog --esxdos shell.sys --name SHELL.SYS -o yos.ide
+xprog --esxdos op.sys --name OP.SYS -o yos.ide
 ```
 
 The default output name replaces `.xl` with `.prc` or `.svc`. Use `-o` to

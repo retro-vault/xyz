@@ -12,17 +12,12 @@
         .globl  __sys_reti
         .globl  __sys_retn
 
-        .area   _CONST
-__sys_vectors_start::
-        jp      __sys_reti
-        jp      __sys_reti
-        jp      __sys_reti
-        jp      __sys_reti
-        jp      __sys_reti
-        jp      __sys_reti
-        jp      __sys_reti
-        jp      __sys_retn
-__sys_vectors_end::
+        ; The ROM image installs these 24 template bytes in the free space
+        ; immediately before the fixed 3D00h divIDE region. See patch_rom.py.
+__sys_vectors_start = 0x3ce5
+__sys_vectors_end = 0x3cfd
+__sys_reti = 0x09f0
+__sys_retn = 0x09f2
 
         .area   _BSS
 __sys_vec_tbl::

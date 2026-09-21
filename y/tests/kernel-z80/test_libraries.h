@@ -233,7 +233,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     };
     mutate(0, 0, "bad magic");
     mutate(5, 1, "wrong image kind", 6);
-    mutate(30, 2, "newer OS", 7);
+    mutate(30, 4, "newer OS", 7);
     mutate(14, 1, "oversized payload");
     mutate(8, 0, "bad metadata size");
     mutate(7, 7, "unsupported fixed library");
@@ -313,7 +313,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     const auto full_system = usage();
     check(load() == 0 && error() == 2 && usage() == full_system,
           "library object allocation failure leaked the image");
-    put_string(0xe240, "shell.sys");
+    put_string(0xe240, "op.sys");
     check(call(sym("_process_load"), 0xe240, 0, "process allocation failure") == 0 &&
               error() == 5 && usage() == full_system,
           "process-start failure did not roll back its image");

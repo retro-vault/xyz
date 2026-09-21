@@ -27,7 +27,7 @@ The linker now updates its unresolved set after each extracted archive member,
 so an earlier platform override suppresses a later generic libc fallback in
 the same archive scan.
 
-The YOS build now compiles its real `shell.sys` through this backend before
+The YOS build now compiles its real `op.prc` through this backend before
 XPROG wraps it as XPRG. The relocated kernel emulator executes that exact
 image through RST 18 and the GPX table and verifies that it draws. The XPROG
 host tool also has `--esxdos`, producing a deterministic 16 MiB MBR/FAT16 IDE

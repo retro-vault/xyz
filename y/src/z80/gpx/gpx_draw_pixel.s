@@ -74,7 +74,7 @@ __gpx_plot_raw:
         ;; x in [0,255]?  (hi byte must be 0)
         ld      a,d
         or      h                       ; both coordinate high bytes must be 0
-        jp      nz,.pr_reject
+        jr      nz,.pr_reject
         ;; y in [0,191]?
         ld      a,l
         cp      #192

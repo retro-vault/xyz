@@ -40,33 +40,40 @@ GPX_INTEGRATION_OBJECTS := $(BUILD_DIR)/gpx/_gpx_name.rel \
 # Within one archive pass xld places members in this order. The two large
 # loader modules and the process finisher fill the space before the fixed
 # 3D00 hole almost exactly; the smaller helpers follow it.
-LOADER_OBJECTS := $(BUILD_DIR)/kernel/_library_initialize.rel \
+LOADER_OBJECTS := $(BUILD_DIR)/fs/_esx_print.rel \
+	$(BUILD_DIR)/kernel/_library_initialize.rel \
 	$(BUILD_DIR)/kernel/boot_shell.rel \
 	$(BUILD_DIR)/kernel/process_load.rel \
 	$(BUILD_DIR)/kernel/library_load.rel \
 	$(BUILD_DIR)/kernel/_image_load.rel \
-	$(BUILD_DIR)/kernel/_image_transfer.rel \
 	$(BUILD_DIR)/kernel/_process_relocate.rel \
-	$(BUILD_DIR)/kernel/_library_load_finish.rel \
 	$(BUILD_DIR)/kernel/_process_load_finish.rel \
+	$(BUILD_DIR)/kernel/_image_retain.rel \
+	$(BUILD_DIR)/kernel/_process_read_exact.rel \
 	$(BUILD_DIR)/kernel/_library_find.rel \
+	$(BUILD_DIR)/kernel/_image_transfer.rel \
+	$(BUILD_DIR)/kernel/_library_load_finish.rel \
 	$(BUILD_DIR)/kernel/_library_acquire.rel \
-	$(BUILD_DIR)/kernel/_crc32.rel \
-	$(BUILD_DIR)/kernel/_process_read_exact.rel
+	$(BUILD_DIR)/kernel/_crc32.rel
 ALL_OBJECTS := $(LIB_OBJECTS) $(GPX_OBJECTS)
 # Main declares these roots so they fill the gap before the 0562 trap.
 CRITICAL_ENTRY_OBJECTS := $(BUILD_DIR)/startup/_critical_iff_repair.rel \
-	$(BUILD_DIR)/startup/enter_critical_section.rel
+	$(BUILD_DIR)/startup/enter_critical_section.rel \
+	$(BUILD_DIR)/kernel/_yos_malloc.rel
 # Reap's smaller body fits the final gap before the fixed 3D00 ROM hole.
 REAP_OBJECT := $(BUILD_DIR)/kernel/_so_reap.rel
-ORDERED_KERNEL_OBJECTS := $(foreach obj,$(sort $(filter-out $(LOADER_OBJECTS) $(CRITICAL_ENTRY_OBJECTS) $(REAP_OBJECT),$(LIB_OBJECTS))),\
+# Place these small routines ahead of open to use the 09F4h print-entry gap.
+PRE_OPEN_OBJECTS := $(BUILD_DIR)/fs/stat.rel \
+	$(BUILD_DIR)/kernel/_yos_install_timer.rel
+ORDERED_KERNEL_OBJECTS := $(foreach obj,$(sort $(filter-out $(LOADER_OBJECTS) $(CRITICAL_ENTRY_OBJECTS) $(REAP_OBJECT) $(PRE_OPEN_OBJECTS),$(LIB_OBJECTS))),\
 	$(if $(filter %/tmr_install.rel,$(obj)),$(CRITICAL_ENTRY_OBJECTS))\
+	$(if $(filter %/fs/open.rel,$(obj)),$(PRE_OPEN_OBJECTS))\
 	$(if $(filter %/_process_has_threads.rel,$(obj)),$(REAP_OBJECT)) $(obj))
 ARCHIVE := $(BUILD_DIR)/libyos-kernel.lib
 ARCHIVE_MANIFEST := $(BUILD_DIR)/libyos-kernel.members
 OUTPUT := $(BIN_DIR)/$(TARGET).rom
-SHELL_XL := $(BUILD_DIR)/apps/shell.xl
-SHELL_OUTPUT := $(BIN_DIR)/shell.sys
+OP_XL := $(BUILD_DIR)/apps/op.xl
+OP_OUTPUT := $(BIN_DIR)/op.sys
 LIBRARY_OBJECT := $(BUILD_DIR)/apps/shelllib.rel
 LIBRARY_XL := $(BUILD_DIR)/apps/shelllib.xl
 LIBRARY_OUTPUT := $(BIN_DIR)/shelllib.svc
@@ -75,16 +82,16 @@ LIBRARY_OUTPUT := $(BIN_DIR)/shelllib.svc
 .DELETE_ON_ERROR:
 
 .PHONY: all clean test
-all: $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT)
+all: $(OUTPUT) $(OP_OUTPUT) $(LIBRARY_OUTPUT)
 
-test: $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) $(BUILD_DIR)/test_kernel
+test: $(OUTPUT) $(OP_OUTPUT) $(LIBRARY_OUTPUT) $(BUILD_DIR)/test_kernel
 	$(BUILD_DIR)/test_kernel $(OUTPUT) \
-		$(BUILD_DIR)/$(TARGET).map $(SHELL_OUTPUT) \
+		$(BUILD_DIR)/$(TARGET).map $(OP_OUTPUT) \
 		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) $(BIN_DIR)/$(TARGET).cdb
+	rm -f $(OUTPUT) $(OP_OUTPUT) $(LIBRARY_OUTPUT) $(BIN_DIR)/$(TARGET).cdb $(OUTPUT).sha256
 
 $(XAS) $(XLD) $(XAR) $(XCC) $(XPROG) $(XRUNTIME):
 	$(MAKE) -C $(REPO_ROOT) x
@@ -109,10 +116,11 @@ $(ARCHIVE_MANIFEST): $(ALL_OBJECTS) Makefile
 	printf '%s\n' $(LOADER_OBJECTS) >> $@
 	test -s $@
 
-$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile
+$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile ../../scripts/patch_rom.py
 	mkdir -p $(BIN_DIR)
 	$(XLD) $(XLDFLAGS) -Map=$(BUILD_DIR)/$(TARGET).map \
 		-o $@ $(CRT) $(MAIN) $(EARLY_OBJECTS) $(ARCHIVE)
+	python3 ../../scripts/patch_rom.py "$@" "$(BUILD_DIR)/$(TARGET).map"
 	@rom_end=$$(awk '$$2 == "s__GSFINAL" { print $$1 }' \
 		$(BUILD_DIR)/$(TARGET).map); \
 		test -n "$$rom_end" && test $$((0x$$rom_end)) -le 16384 || { \
@@ -120,14 +128,14 @@ $(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile
 			exit 1; \
 		}
 
-$(SHELL_XL): ../../tests/shell-yos/shell.c ../../tests/shell-yos/shelllib.h \
+$(OP_XL): ../../tests/shell-yos/shell.c ../../tests/shell-yos/shelllib.h \
 		$(REPO_ROOT)/x/platforms/yos/include/yos.h $(XCC) $(XLD) $(XRUNTIME)
 	mkdir -p $(dir $@)
 	$(XCC) --mode=sdcc --platform=yos -Os -std=c11 $< -o $@
 
-$(SHELL_OUTPUT): $(SHELL_XL) $(XPROG) Makefile
+$(OP_OUTPUT): $(OP_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name shell --stack-size 256 --min-os 1 \
+	$(XPROG) --process --name op --stack-size 256 --min-os 1 \
 		$< -o $@
 
 $(LIBRARY_OBJECT): ../../tests/shell-yos/shelllib.s $(XAS)

@@ -109,8 +109,7 @@ _gpx_fill_circle::
         ld      hl,#1
         ld      e,6(ix)
         ld      d,7(ix)
-        or      a
-        sbc     hl,de
+        sbc     hl,de                   ; carry already clear from xor a above
         ld      -9(ix),l
         ld      -10(ix),h
 
@@ -164,7 +163,7 @@ _gpx_fill_circle::
         jp      m,.fc_row_xn
         ld      a,h
         or      l
-        jp      nz,.fc_done
+        jr      nz,.fc_done
 .fc_row_xn:
         ld      l,-5(ix)
         ld      h,-6(ix)                ; dy = xn
@@ -195,7 +194,7 @@ _gpx_fill_circle::
         call    __gpx_neg_hl
         ld      e,-11(ix)
         ld      d,-12(ix)
-        jp      .row
+        jr      .row
 
         ;; .row
         ;; draw one row of the disc as a horizontal line

@@ -43,7 +43,7 @@ _lseek::
         jp      nz,.esx_seek_invalid
         ld      a,8(ix)
         cp      #3
-        jp      nc,.esx_seek_invalid
+        jr      nc,.esx_seek_invalid
         or      a
         jr      z,.esx_seek_from_start
         dec     a
@@ -51,7 +51,7 @@ _lseek::
 
         ld      a,-1(ix)
         call    __zx_esx_f_fgetpos
-        jp      c,.esx_seek_native_error
+        jr      c,.esx_seek_native_error
         jr      .esx_seek_check_base
 
 .esx_seek_from_end:
@@ -61,7 +61,7 @@ _lseek::
         add     hl,bc
         ld      a,-1(ix)
         call    __zx_esx_f_fstat
-        jp      c,.esx_seek_native_error
+        jr      c,.esx_seek_native_error
         ; raw status size starts at byte 7
         ld      e,-7(ix)
         ld      d,-6(ix)
@@ -69,7 +69,7 @@ _lseek::
         ld      b,-4(ix)
 .esx_seek_check_base:
         bit     7,b
-        jp      nz,.esx_seek_overflow
+        jr      nz,.esx_seek_overflow
         jr      .esx_seek_add_offset
 
 .esx_seek_from_start:
@@ -94,7 +94,7 @@ _lseek::
         ; result.
         bit     7,7(ix)
         jr      z,.esx_seek_positive_offset
-        jp      nc,.esx_seek_invalid
+        jr      nc,.esx_seek_invalid
         jr      .esx_seek_absolute
 .esx_seek_positive_offset:
         bit     7,b

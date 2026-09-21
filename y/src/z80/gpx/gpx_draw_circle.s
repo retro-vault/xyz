@@ -120,8 +120,7 @@ _gpx_draw_circle::
         ld      hl,#1
         ld      e,6(ix)
         ld      d,7(ix)
-        or      a
-        sbc     hl,de
+        sbc     hl,de                   ; carry already clear from xor a above
         ld      -9(ix),l
         ld      -10(ix),h
 
@@ -169,7 +168,7 @@ _gpx_draw_circle::
         jp      m,.dc_eight
         ld      a,h
         or      l
-        jp      nz,.dc_done
+        jr      nz,.dc_done
         ld      a,#4
         jr      .dc_emit
 .dc_eight:
@@ -186,7 +185,7 @@ _gpx_draw_circle::
         cp      -2(ix)
         jr      c,.dc_emit_loop
         cp      #8
-        jp      z,.dc_loop
+        jr      z,.dc_loop
 
 .dc_done:
         ld      sp,ix

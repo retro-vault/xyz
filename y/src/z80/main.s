@@ -26,6 +26,7 @@
         ; Link roots fill otherwise unusable space before the 0562 trap.
         .globl  __critical_iff_repair
         .globl  _enter_critical_section
+        .globl  __yos_malloc
         ; Keep the library initializer in the pre-loader packing pass.
         .globl  __library_initialize
         .globl  _boot_shell

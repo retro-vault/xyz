@@ -26,9 +26,10 @@
         .globl  __zx_esx_gate_a4
         .globl  __zx_esx_gate_a7
         .globl  __zx_esx_gate_84
+        .globl  __zx_esx_gate_8f
         .globl  __esxdos_gates_init
 
-        ; Runtime addresses. Startup copies the matching 57-byte gate image
+        ; Runtime addresses. Startup generates the matching 60-byte gate image
         ; after esxDOS has finished its cold boot.
         .area   _BSS
 __zx_esx_gates_start::
@@ -70,6 +71,8 @@ __zx_esx_gate_a7::
         .ds     3
 __zx_esx_gate_84::
         .ds     3
+__zx_esx_gate_8f::
+        .ds     3
 
         ; Generate the writable gates after BSS clearing. Only their service
         ; selectors need stored ROM bytes.
@@ -77,7 +80,7 @@ __zx_esx_gate_84::
 __esxdos_gates_init::
         ld      hl,#.selectors
         ld      de,#__zx_esx_gates_start
-        ld      bc,#19
+        ld      bc,#20
 .next:
         ld      a,#0xcf                 ; RST 08
         ld      (de),a
@@ -95,4 +98,4 @@ __esxdos_gates_init::
 .selectors:
         .db     0x9a,0x9b,0x9c,0x9d,0x9e,0x9f,0xa0,0xa1
         .db     0xa8,0xa9,0xaa,0xab,0xac,0xad,0xb0,0xa3
-        .db     0xa4,0xa7,0x84
+        .db     0xa4,0xa7,0x84,0x8f

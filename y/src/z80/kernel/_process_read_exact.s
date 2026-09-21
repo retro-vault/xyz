@@ -33,7 +33,6 @@ __process_read_exact::
         ld      a, d
         or      e
         jr      z, .bad
-        or      a
         sbc     hl, de
         jr      c, .bad
         push    hl

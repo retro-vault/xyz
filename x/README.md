@@ -102,8 +102,8 @@ mkdir -p build/examples/yos
 bin/x/bin/xcc -Os --platform=yos x/examples/yos/hello.c \
   -o build/examples/yos/hello.xl
 bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 1 \
-  build/examples/yos/hello.xl -o build/examples/yos/hello.sys
-bin/x/bin/xprog --esxdos --name HELLO.SYS build/examples/yos/hello.sys \
+  build/examples/yos/hello.xl -o build/examples/yos/hello.prc
+bin/x/bin/xprog --esxdos --name HELLO.PRC build/examples/yos/hello.prc \
   -o build/examples/yos/hello.ide
 ```
 

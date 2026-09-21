@@ -1,4 +1,4 @@
-/* Public YOS ABI 1 kernel and filesystem interface. */
+/* Public YOS ABI 3 kernel and filesystem interface. */
 #ifndef _YOS_H
 #define _YOS_H
 
@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define YOS_VERSION 0x01
+#define YOS_VERSION 0x03
 
 enum yos_process_load_error {
     YOS_PROCESS_LOAD_OK = 0,
@@ -136,6 +136,20 @@ typedef struct yos_s {
      * smaller of size and its current length. Returns memory, or NULL when
      * memory does not address a live allocation. */
     void *(*shrink_memory)(void *memory, size_t size);
+    /* ABI 2: block the calling thread until this live event is set.
+     * The scheduler consumes the binary signal when waking one waiter.
+     * Call with interrupts enabled, outside a critical section; retain the
+     * event until the wait returns. Repeated signals coalesce. */
+    void (*wait_event)(yos_event_t *event);
+    /* ABI 3: execute a NUL-terminated esxDOS dot command. Returns zero
+     * on success, or 0x100 plus the native esxDOS error code on failure.
+     */
+    int (*exec_command)(const char *commandline);
+    /* Install a RAM print sink; returns the previous one. The sink receives
+     * each character in A and must preserve firmware registers. Pass NULL
+     * to disable output capture.
+     */
+    yos_handler_t (*set_print_hook)(yos_handler_t sink);
 } yos_t;
 
 void *query_service(const char *name);

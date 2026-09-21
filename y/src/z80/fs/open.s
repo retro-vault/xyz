@@ -62,7 +62,7 @@ _open::
         ld      h,-1(ix)
         ld      a,#0x2a
         call    __zx_esx_f_stat
-        jp      c,.esx_open_native_error
+        jr      c,.esx_open_native_error
         push    ix
         pop     hl
         ld      de,#-4

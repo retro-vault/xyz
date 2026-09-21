@@ -6,6 +6,10 @@ Release status:
 
 ## Unreleased
 
+- Updated the YOS platform header to ABI 2, appending `wait_event` at byte
+  offset 98 while preserving existing slots. Callers must declare minimum
+  OS 2; the scheduler blocks them until a timer or thread signals the event.
+
 - Fixed xemu port decoding after the CPU core switched to 16-bit port
   addresses (needed for ZX Spectrum keyboard/divIDE emulation): `OUT (n),A`
   drives `A` onto the high address byte, so `--stdout-port`, `--stdin-port`,

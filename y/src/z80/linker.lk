@@ -17,4 +17,5 @@ AREA _HEAP = 5F01
 ; divIDE automatic paging entry points and the Interface 1 trigger.
 RESERVE 04C6-04C6
 RESERVE 0562-0562
+RESERVE 09F4-09F6             ; fixed 48K ROM PRINT-OUT entry
 RESERVE 3D00-3DFF

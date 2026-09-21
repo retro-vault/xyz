@@ -88,7 +88,7 @@ std::map<std::string, std::uint16_t> read_symbols(const char* path) {
 
 int main(int argc, char** argv) {
     if (argc != 6) {
-        std::cerr << "usage: test_kernel ROM MAP SHELL.SYS LIB.SVC LIB.MAP\n";
+        std::cerr << "usage: test_kernel ROM MAP OP.SYS LIB.SVC LIB.MAP\n";
         return 2;
     }
 
@@ -152,8 +152,13 @@ int main(int argc, char** argv) {
         require(mem.word(address + 1) == vectors + 3 * (index + 2),
                 "fixed RST entry targets the wrong RAM vector");
     }
-    require(mem.bytes[0x0010] == 0xc9,
-            "RST10 does not preserve esxDOS's immediate boot return");
+    require(mem.bytes[0x0010] == 0xe5 && mem.bytes[0x0011] == 0xcd &&
+                mem.word(0x0012) == sym("__esx_print") &&
+                mem.bytes[0x0014] == 0xe1 && mem.bytes[0x0015] == 0xc9,
+            "RST10 does not preserve HL around the print hook");
+    require(mem.bytes[0x09f4] == 0xc3 &&
+                mem.word(0x09f5) == 0x0010,
+            "09F4h does not route esxDOS print output");
     require(mem.bytes[0x0000] == 0xf3 && mem.bytes[0x0001] == 0xaf &&
                 mem.bytes[0x0002] == 0xc3,
             "reset does not preserve divIDE's DI/XOR A return signature");
@@ -186,7 +191,7 @@ int main(int argc, char** argv) {
             "IM2 scheduler vector is wrong");
 
     const auto table = sym("__yos");
-    constexpr std::array<const char*, 49> yos_api = {
+    constexpr std::array<const char*, 52> yos_api = {
         "_yos_version", "__yos_malloc", "__yos_free", "__clock",
         "_enter_critical_section", "_leave_critical_section",
         "__yos_install_timer", "_tmr_uninstall",
@@ -201,17 +206,18 @@ int main(int argc, char** argv) {
         "_unlink", "_rename", "_chdir", "_getcwd", "_mkdir", "_rmdir",
         "_stat", "_fstat", "_opendir", "_readdir", "_rewinddir",
         "_closedir", "_enumerate_disks", "_process_load",
-        "_process_last_error", "_library_load", "__yos_shrink"
+        "_process_last_error", "_library_load", "__yos_shrink", "_evt_wait",
+        "_exec_command", "_set_print_hook"
     };
     for (std::size_t slot = 0; slot < yos_api.size(); ++slot) {
         require(mem.word(table + 2 * slot) == sym(yos_api[slot]),
                 "YOS API slot " + std::to_string(slot) +
                     " does not match " + yos_api[slot]);
     }
-    constexpr std::array<std::uint8_t, 19> esxdos_services = {
+    constexpr std::array<std::uint8_t, 20> esxdos_services = {
         0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f, 0xa0,
         0xa1, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xb0,
-        0xa3, 0xa4, 0xa7, 0x84};
+        0xa3, 0xa4, 0xa7, 0x84, 0x8f};
     const auto gates = sym("__zx_esx_gates_start");
     for (std::size_t gate = 0; gate < esxdos_services.size(); ++gate) {
         const auto address = std::uint16_t(gates + 3 * gate);
@@ -348,6 +354,25 @@ int main(int argc, char** argv) {
         return direct.de;
     };
 
+    // The esxDOS PRINT-OUT entry must call the installed RAM sink with A.
+    constexpr std::uint16_t print_sink = 0x7100;
+    constexpr std::uint16_t print_byte = 0x7108;
+    mem.bytes[print_sink] = 0x32; // LD (print_byte),A
+    mem.word(print_sink + 1, print_byte);
+    mem.bytes[print_sink + 3] = 0xc9;
+    require(call_kernel(mem.word(table + 102), print_sink, 0,
+                        "install print hook") == 0,
+            "print hook did not return its previous sink");
+    call_kernel(0x09f4, 0x1234, 0, "esxDOS PRINT-OUT", 'Q');
+    require(mem.bytes[print_byte] == 'Q' && kernel_hl == 0x1234,
+            "esxDOS PRINT-OUT lost the byte or HL");
+    call_kernel(0x0010, 0x2345, 0, "esxDOS RST10", 'R');
+    require(mem.bytes[print_byte] == 'R' && kernel_hl == 0x2345,
+            "esxDOS RST10 lost the byte or HL");
+    require(call_kernel(mem.word(table + 102), 0, 0,
+                        "remove print hook") == print_sink,
+            "print hook did not return the installed sink");
+
     std::ifstream shell_file(argv[3], std::ios::binary);
     const std::vector<std::uint8_t> shell{
         std::istreambuf_iterator<char>(shell_file),
@@ -359,15 +384,15 @@ int main(int argc, char** argv) {
     const auto library_symbols = read_symbols(argv[5]);
     require(!library_image.empty() && library_symbols.contains("_interface"),
             "missing packaged library fixture");
-    files.files["shell.sys"] = shell;
+    files.files["op.sys"] = shell;
     files.files["shelllib.svc"] = library_image;
     require(shell.size() >= 76 && shell[0] == 'X' && shell[1] == 'P' &&
                 shell[2] == 'R' && shell[3] == 'G',
             "dummy shell is not an XPRG image");
     require(shell[30] == 1 && shell[31] == 0 &&
                 library_image[30] == 1 && library_image[31] == 0 &&
-                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 1,
-            "ROM and packaged images do not use ABI 1");
+                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 3,
+            "ABI 3 ROM must retain ABI 1 process/library compatibility");
     const auto payload_offset = std::uint16_t(shell[10] | (shell[11] << 8));
     const auto payload_size = std::uint16_t(shell[12] | (shell[13] << 8));
     require(payload_offset + payload_size == shell.size(),
@@ -440,7 +465,7 @@ int main(int argc, char** argv) {
     // Load the actual shell through the real ROM/POSIX/XL path, then let
     // it load, initialize and call the separately packaged library.
     files.enabled = true;
-    put_string(0xe100, "shell.sys");
+    put_string(0xe100, "op.sys");
     call_kernel(sym("_enter_critical_section"), 0, 0, "outer disk critical section");
     const auto disk_fd = call_kernel(sym("_open"), 0xe100, 0, "nested disk open");
     require(disk_fd != 0xffff && !cpu.snapshot().iff1 &&
@@ -450,7 +475,7 @@ int main(int argc, char** argv) {
                 std::to_string(cpu.snapshot().iff1) + " depth=" +
                 std::to_string(mem.bytes[sym("__interrupt_refcount")]));
     call_kernel(sym("_close"), disk_fd, 0, "nested disk close");
-    put_string(0xe120, "missing.sys");
+    put_string(0xe120, "missing.prc");
     require(call_kernel(sym("_open"), 0xe120, 0, "nested disk error") == 0xffff &&
                 !cpu.snapshot().iff1 &&
                 mem.bytes[sym("__interrupt_refcount")] == 0x81,
@@ -539,7 +564,7 @@ int main(int argc, char** argv) {
 
     // Physical-drive prefixes belong to YOS, not the native firmware path.
     for (const auto& path : {std::string("A:/"), std::string("b:/TOOLS"),
-                             std::string("ALTO.SYS"), std::string("/"),
+                             std::string("ALTO.PRC"), std::string("/"),
                              std::string("C:/")}) {
         for (std::size_t i = 0; i <= path.size(); ++i)
             mem.bytes[0x8300 + i] = path.c_str()[i];
@@ -1036,8 +1061,98 @@ int main(int argc, char** argv) {
                 state.hl2 == 0xabcd,
             "saved thread context was not restored exactly");
 
-    // Exercise the waiting-event path without adding a public wait API that
-    // the preserved C kernel does not implement.
+    // Execute the public wait from a real thread, with either another runnable
+    // thread or none. IRQs must leave the waiter untouched until its timer sets
+    // the event; the saved stack also retains the one-element event array.
+    {
+        const auto saved_memory = mem.bytes;
+        const auto saved_cpu = cpu.snapshot();
+        for (bool other_runnable : {false, true})
+        for (bool preset : {false, true}) {
+            mem.bytes = saved_memory;
+            cpu.restore(saved_cpu);
+            const auto ready = call_kernel(mem.word(table + 16), 0, 0,
+                                           "wait fixture event");
+            constexpr std::uint16_t waiter_code = 0x4300;
+            constexpr std::uint16_t timer_code = 0x4340;
+            constexpr std::uint16_t other_code = 0x4380;
+            constexpr std::uint16_t wakes = 0x43a0;
+            if (preset)
+                call_kernel(mem.word(table + 20), ready, 0, "signal before wait", 0, {1});
+            const auto wait = mem.word(table + 98);
+            const auto signal = mem.word(table + 20);
+            const std::array<std::uint8_t, 13> waiter = {
+                0x21, std::uint8_t(ready), std::uint8_t(ready >> 8),
+                0xcd, std::uint8_t(wait), std::uint8_t(wait >> 8),
+                0x21, std::uint8_t(wakes), std::uint8_t(wakes >> 8), 0x34,
+                0xc3, std::uint8_t(waiter_code), std::uint8_t(waiter_code >> 8)};
+            const std::array<std::uint8_t, 11> hook = {
+                0x3e, 1, 0xf5, 0x33,
+                0x21, std::uint8_t(ready), std::uint8_t(ready >> 8),
+                0xcd, std::uint8_t(signal), std::uint8_t(signal >> 8), 0xc9};
+            std::copy(waiter.begin(), waiter.end(), mem.bytes.begin() + waiter_code);
+            std::copy(hook.begin(), hook.end(), mem.bytes.begin() + timer_code);
+            mem.bytes[other_code] = 0x76; // HALT; JR back to HALT
+            mem.bytes[other_code + 1] = 0x18;
+            mem.bytes[other_code + 2] = 0xfd;
+            mem.bytes[wakes] = 0;
+            mem.word(sym("_thread_current"), thread);
+            mem.word(sym("_thread_first_running"), thread);
+            mem.word(sym("_thread_first_waiting"), 0);
+            mem.word(thread, other_runnable ? thread2 : 0);
+            mem.bytes[thread + 19] = 1;
+            mem.word(thread2, 0);
+            mem.word(thread2 + 4, 0xec00);
+            mem.word(0xec00 + 20, other_code);
+            auto running = saved_cpu;
+            running.pc = waiter_code;
+            running.sp = 0xee00;
+            running.iff1 = running.iff2 = true;
+            running.halted = false;
+            cpu.restore(running);
+            run_until([&] { return cpu.halted(); }, 10000, "enter public wait");
+            require(mem.bytes[thread + 19] == 2 && mem.bytes[wakes] == 0,
+                    "wait_event did not block the caller");
+            const auto pulse = [&] {
+                require(cpu.interrupt(255), "wait fixture IRQ rejected");
+                cpu.step(); // deliver the queued IRQ before testing HALT
+                run_until([&] { return cpu.halted(); }, 100000, "waiting IRQ");
+            };
+            for (unsigned n = 0; n < 4; ++n) pulse();
+            require(mem.bytes[wakes] == unsigned(preset) && mem.bytes[thread + 19] == 2 &&
+                        mem.word(sym("_thread_current")) ==
+                            (other_runnable ? thread2 : 0),
+                    "unsignalled waiting thread received CPU time: other=" +
+                        std::to_string(other_runnable) + " wakes=" +
+                        std::to_string(mem.bytes[wakes]) + " state=" +
+                        std::to_string(mem.bytes[thread + 19]) + " current=" +
+                        std::to_string(mem.word(sym("_thread_current"))) +
+                        " expected=" + std::to_string(other_runnable ? thread2 : 0) +
+                        " ready=" + std::to_string(ready) + " pc=" +
+                        std::to_string(cpu.pc()) + " event=" +
+                        std::to_string(mem.bytes[ready + 4]));
+            const auto idle = cpu.snapshot();
+            const auto periodic = call_kernel(mem.word(table + 12), timer_code, 1,
+                                               "event-signalling timer");
+            cpu.restore(idle);
+            for (unsigned n = 0; n < 12; ++n) pulse();
+            require(mem.bytes[wakes] >= 3 && mem.bytes[ready + 4] == 0 &&
+                        !mem.bytes[sym("__interrupt_refcount")],
+                    "timer did not wake and consume repeated event waits");
+            const auto paused = cpu.snapshot();
+            call_kernel(mem.word(table + 14), periodic, 0, "stop event timer");
+            call_kernel(mem.word(table + 20), ready, 0, "pre-set wait signal", 0, {1});
+            cpu.restore(paused);
+            const auto previous = mem.bytes[wakes];
+            for (unsigned n = 0; n < 3; ++n) pulse();
+            require(mem.bytes[wakes] == previous + 1 && !mem.bytes[ready + 4],
+                    "pre-set signal was lost or consumed more than once");
+        }
+        mem.bytes = saved_memory;
+        cpu.restore(saved_cpu);
+    }
+
+    // Retain coverage of the internal event-array wakeup scan.
     constexpr std::uint16_t waits = 0x8100;
     constexpr std::uint16_t event = 0x8120;
     mem.word(sym("_thread_first_running"), thread2);
@@ -1113,6 +1228,6 @@ int main(int argc, char** argv) {
                  "nested interrupt-state preservation, protected shared state, "
                  "per-thread errors and concurrent library loading, "
                  "GPX service and drawing, directory records, two-process round robin, "
-                 "event wakeup, terminated-process cleanup, shell library "
+                 "blocking events, timer wakes, idle scheduling, terminated-process cleanup, shell library "
                  "self-registration, shared/private lifetime and rollback\n";
 }

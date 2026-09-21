@@ -32,7 +32,7 @@ _fstat::
         ex      de,hl
         ld      bc,#14
         call    __zx_esx_buffer
-        jp      c,.esx_fstat_errno
+        jr      c,.esx_fstat_errno
         ld      l,-4(ix)
         ld      h,-3(ix)
         call    __zx_esx_fd

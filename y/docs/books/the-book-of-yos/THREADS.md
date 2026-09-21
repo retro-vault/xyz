@@ -126,10 +126,13 @@ This block is exactly `CONTEXT_SIZE = 22` bytes. The current value of `SP` (poin
 `__thread_select_next` (`kernel/_thread_select_next.s`) does three things:
 
 1. Calls `__thread_cleanup_terminated`, which frees the stack and object of every thread on the terminated list (except the one whose stack the interrupt is currently using) and reaps their processes — see [Cleaning Up Resources](CLEANUP-RESOURCES.md).
-2. Walks the waiting list. Any thread that has at least one event in its `wait[]` array in the `YOS_EVENT_SET` state is moved back to the running list.
+2. Walks the waiting list. A thread with a `YOS_EVENT_SET` event in its `wait[]` array consumes that signal (resets it to zero) and moves back to the running list. One signal wakes one waiter; repeated sets coalesce.
 3. Picks the next runnable thread: if `thread_current` is still `RUNNING` and has a successor in the running list, that successor; otherwise the head of the running list (wrap-around).
 
-If no thread is runnable, `__thread_robin` keeps the current one.
+If no thread is runnable, `__thread_robin` clears `thread_current`, switches
+to the kernel stack and idles with `EI; HALT`. The blocked context remains on
+its own stack. Subsequent interrupts still run timers and scan events, but
+never restore a waiting or suspended thread until it becomes runnable.
 
 ### Step 4 — Restore the next thread's context
 
@@ -166,13 +169,25 @@ yos->suspend_thread(me);
 
 Moves thread `t` to the `TERMINATED` queue and halts forever; the thread's stack and object are reclaimed by the scheduler on the next tick. Normally reached through the startup stub when a thread's entry function returns. You should not need to call this directly.
 
-### Not (yet) available
+### `wait_event(event)` — ABI 2
 
-There is no `thread_wait4events` or `thread_join`. The `WAITING` state and the
-event-wakeup scan exist, but no public routine moves a thread onto that list.
-The former reserved join word now stores errno. A thread that needs to block
-can suspend itself and have another thread or a short timer hook resume it;
-arrange the signal/suspend handshake to avoid a missed wakeup.
+Suspends the calling thread until the scheduler consumes a signal on `event`.
+Call through `yos->wait_event(event)` (slot 49, byte offset 98). It needs no
+thread handle and allocates nothing: the handle pushed on the caller's stack
+forms the one-entry wait array. `__thread_lswitch` publishes the `WAITING`
+state and queue under its critical section, then halts for rescheduling.
+
+A signal set before the call or during publication remains set for the next
+scheduler scan. The scheduler resets it while interrupts are disabled before
+moving one waiter to `RUNNING`. Calls to `set_event(..., YOS_EVENT_SET)` are
+binary, so repeated signals do not accumulate work. Wait returns no value.
+The saved array is only examined while the thread is `WAITING`; each new wait
+replaces it before publishing the thread on that queue.
+
+Call with interrupts enabled, from a thread, outside any critical section.
+Keep the event alive until all waiters and signal producers have finished.
+Do not call from a timer hook or destroy an event while a thread waits on it.
+There is still no public multi-event wait or `thread_join`.
 
 ## Events
 
@@ -185,7 +200,10 @@ yos_event_t *e = yos->create_event(owner);
 /* Signal it (e.g. from a timer callback or interrupt handler) */
 yos->set_event(e, YOS_EVENT_SET);
 
-/* Reset it */
+/* Block without receiving CPU time until one signal is consumed (ABI 2). */
+yos->wait_event(e);
+
+/* Explicitly cancel a pending signal if needed */
 yos->set_event(e, YOS_EVENT_RESET);
 
 /* Destroy when done */
@@ -196,7 +214,7 @@ yos->destroy_event(e);
 
 ## A Complete Example
 
-Thread creation needs the process handle that will own the new threads. ABI 1
+Thread creation needs the process handle that will own the new threads. ABI 2
 does not expose a current-process getter, so this helper is for a launcher that
 already has that handle (for example, the code that called `create_process`):
 

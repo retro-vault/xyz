@@ -72,9 +72,9 @@ service image passed to `load_process` is rejected with
 service images; see [Libraries](LIBRARIES.md) for relocation,
 self-registration, sharing and automatic release.
 
-At boot the ROM opens `shell.sys` on the current esxDOS drive and directory
+At boot the ROM opens `op.sys` on the current esxDOS drive and directory
 (`kernel/boot_shell.s`), loads it as a process, and only then arms the
-scheduler. The build creates the current smoke-test `shell.sys` from
+scheduler. The build creates the current smoke-test `op.sys` from
 `y/tests/shell-yos/shell.c`: it loads `shelllib.svc`, calls the relocated
 library interface, queries `gpx`, centres a greeting and `Library OK`, and
 loops forever. The production image gets both `_entry` and the
@@ -107,14 +107,15 @@ with a nonzero stack requirement and the oldest compatible YOS ABI:
 mkdir -p build/examples/yos bin/y/examples
 bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
 bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
-  build/examples/yos/app.xl -o bin/y/examples/app.sys
+  build/examples/yos/app.xl -o bin/y/examples/app.prc
 ```
 
-Both images declare ABI 1, the clean baseline for the complete current table.
+Both smoke images declare minimum OS ABI 1 and continue to load under ABI 2.
+An application using `wait_event` must instead pass `--min-os 2`.
 The shell also checks `yos->version() >= YOS_VERSION` before accessing
 `load_library`.
 
-`y/src/z80/Makefile` (`$(SHELL_XL)` and `$(SHELL_OUTPUT)`) is the reference
+`y/src/z80/Makefile` (`$(OP_XL)` and `$(OP_OUTPUT)`) is the reference
 recipe.
 
 Use `xprog --service` for a library intended to be registered as a named YOS

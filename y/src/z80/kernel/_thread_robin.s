@@ -17,6 +17,7 @@
         .globl  __errno_value
         .globl  _process_last_error
         .globl  __critical_iff_repair
+        .globl  __sys_stack
 
         .equ    THREAD_LOAD_ERROR, 15
         .equ    THREAD_ERRNO,      20
@@ -87,11 +88,14 @@ __thread_robin::
         ld      a,d
         or      e
         jr      nz, .trbn_have_next
-        ;; no runnable thread selected; continue current if present
-        ld      de,(_thread_current)
-        ld      a,d
-        or      e
-        jr      z, .trb_no_next_thread
+        ;; Preserve the blocked context on its stack and idle on the kernel
+        ;; stack. Never grant a waiting/suspended thread another time slice.
+        ld      (_thread_current),de    ; no runnable thread, DE is zero
+        ld      sp,#__sys_stack
+.idle:
+        ei
+        halt
+        jr      .idle
 .trbn_have_next:
         ex      de,hl                   ; next thread pointer into hl
         ld      (_thread_current),hl    ; store current thread
@@ -129,6 +133,6 @@ __thread_robin::
         pop     hl
         pop     af
 .trb_no_next_thread:
-        ;; and jump to next or idle if no next thread
+        ;; Return only into a selected runnable thread.
         ei
         reti

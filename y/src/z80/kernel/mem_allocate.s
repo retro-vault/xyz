@@ -23,7 +23,7 @@ _mem_allocate:
 .allocate_scan:
         ld      a, h
         or      l
-        jp      z, .allocate_failed
+        jr      z, .allocate_failed
         push    hl
         pop     ix
         bit     0, 4(ix)
@@ -48,7 +48,7 @@ _mem_allocate:
         ld      l, 0(ix)
         ld      h, 1(ix)
         inc     b
-        jp      nz, .allocate_scan
+        jr      nz, .allocate_scan
 .allocate_failed:
         ld      de, #0
 .allocate_return:

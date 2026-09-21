@@ -8,10 +8,10 @@ libc rules, the X test matrix) is documented there.
 
 YOS is a preemptive, ROM-based operating system for the 48K ZX Spectrum,
 written entirely in hand-written Z80 assembly. The 16 KiB replacement ROM
-stays compatible with esxDOS on divIDE, loads `shell.sys` from disk as an
+stays compatible with esxDOS on divIDE, loads `op.sys` from disk as an
 XPRG process, and runs everything through a 50 Hz IM2 scheduler and named
 service tables. Applications talk to it through the `yos_t` function table
-(`include/yos.h`, ABI version 1) obtained with `query_service("yos")` over
+(`include/yos.h`, ABI version 2) obtained with `query_service("yos")` over
 `RST 0x18`.
 
 ## Documents To Read
@@ -28,7 +28,7 @@ service tables. Applications talk to it through the `yos_t` function table
 | what the scheduler reclaims and when | [docs/books/the-book-of-yos/CLEANUP-RESOURCES.md](docs/books/the-book-of-yos/CLEANUP-RESOURCES.md) |
 | services, RST 18, the `yos_t` and `gpx` tables | [docs/books/the-book-of-yos/SYSCALLS.md](docs/books/the-book-of-yos/SYSCALLS.md) |
 | tick counters, timer chain, callback rules | [docs/books/the-book-of-yos/CLOCK.md](docs/books/the-book-of-yos/CLOCK.md) |
-| XPRG descriptor, loader checks, building `shell.sys` | [docs/books/the-book-of-yos/PROGRAM-IMAGES.md](docs/books/the-book-of-yos/PROGRAM-IMAGES.md) |
+| XPRG descriptor, loader checks, building `op.sys` | [docs/books/the-book-of-yos/PROGRAM-IMAGES.md](docs/books/the-book-of-yos/PROGRAM-IMAGES.md) |
 | how to write kernel assembly | [docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md](docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md), on top of [x/docs/standards/Z80-CODING-STYLE.md](../x/docs/standards/Z80-CODING-STYLE.md) |
 | release history | [CHANGELOG.md](CHANGELOG.md) |
 | the public ABI | [include/yos.h](include/yos.h), [include/gpx.h](include/gpx.h), [include/dirent.h](include/dirent.h) |
@@ -41,7 +41,7 @@ service tables. Applications talk to it through the `yos_t` function table
 
 ```
 y/
-├── src/z80/        assembly kernel  -> bin/y/z80/spectrum/bin/yos-kernel.rom, shell.sys
+├── src/z80/        assembly kernel  -> bin/y/z80/spectrum/bin/yos-kernel.rom, op.sys
 │   ├── startup/    crt0rom.s (fixed ROM header), RAM init, vectors, critical sections
 │   ├── kernel/     lists, heaps, threads, processes, events, timers, services, loader
 │   ├── drivers/    clock, keyboard, Kempston mouse
@@ -64,14 +64,14 @@ All builds use the staged X toolchain in `bin/x/bin` (`xas`, `xld`, `xar`,
 
 ```bash
 make -C y                      # both kernels (src/Makefile: targets c and z80)
-make -C y/src/z80              # assembly kernel + shell.sys only
+make -C y/src/z80              # assembly kernel + op.sys only
 make -C y/src/c                # C-era kernel only
 make -C y packages             # appmake, microdrive, serial -> bin/y/bin
 make -C y clean
 ```
 
 Outputs: `bin/y/z80/spectrum/bin/yos-kernel.rom` (must stay ≤ 16384 bytes —
-the Makefile fails the link if `s__GSFINAL` passes `0x4000`), `shell.sys`,
+the Makefile fails the link if `s__GSFINAL` passes `0x4000`), `op.sys`,
 and the link map under `build/yos-z80/yos-kernel.map`. Intermediate `.rel`
 files and `libyos-kernel.lib` live in `build/yos-z80/`.
 
@@ -93,7 +93,7 @@ The emulator defers `_boot_shell` until its RAM-gate fixture is populated;
 no test-only ROM relink or ROM patch is used. It verifies: the fixed RST
 and NMI bytes, the vector table and IM2 word, heap initialization, the public
 `yos_t` wrappers, the `gpx` service, filesystem errno behaviour without a
-firmware, XPRG CRC and relocation using the built `shell.sys`, process and
+firmware, XPRG CRC and relocation using the built `op.sys`, process and
 thread creation, three interrupt-driven context switches, event wakeup,
 terminated-thread cleanup, and that the kernel never writes into ROM. Its
 RAM-gate esxDOS fixture also runs the actual shell and self-registering
@@ -111,7 +111,7 @@ Every esxDOS gate must mask IM2 until divIDE restores the scheduler's ROM.
 
 Real-firmware validation of the replacement ROM is otherwise manual: boot
 `yos-kernel.rom` as the base ROM in ZEsarUX (or Fuse) with a divIDE, an esxDOS
-0.8.9 image and both `shell.sys` and `shelllib.svc` on the mounted disk, and
+0.8.9 image and both `op.sys` and `shelllib.svc` on the mounted disk, and
 expect "Library OK" below the centred
 greeting from `tests/shell-yos/shell.c`. The esxDOS harness in
 `x/tests/tests/zx48/esxdos/` (`run_rom_firmware.py`) shows how to drive
@@ -133,7 +133,7 @@ has, so they do not build against it and are not part of any default target.
   exactly as `src/z80/Makefile` does. This is the repository-wide rule from
   the root [`AGENTS.md`](../AGENTS.md); it is repeated here because `y/`
   harnesses have drifted before.
-- **Assembly only.** No C in `src/z80/`; `shell.sys` is compiled from the
+- **Assembly only.** No C in `src/z80/`; `op.sys` is compiled from the
   C smoke fixture under `tests/shell-yos/` and is an application, not ROM.
 - **One routine per module.** `name.s` defines `_name`; helpers and shared
   state go in `_name.s` / `_<subsystem>_state.s`. Never merge modules — the
@@ -150,7 +150,7 @@ has, so they do not build against it and are not part of any default target.
   `include/yos.h` and the template in `kernel/_syscall_table_init.s`, bump
   `YOS_VERSION` in both public `yos.h` headers, `kernel/yos_version.s`, and
   `kernel/_image_load.s` together, and update
-  `YOS_TABLE_SIZE` and `kernel/_yos_state.s`.
+  the immutable ROM table size. `kernel/_yos_state.s` allocates no RAM mirror.
 - **Vendored gpx is upstream code.** Fix bugs in `src/z80/gpx/`, do not
   restyle; record the upstream commit in `src/z80/gpx/README.md`.
 - **Update the book.** A change to a kernel object layout, the boot sequence,
@@ -160,8 +160,9 @@ has, so they do not build against it and are not part of any default target.
 
 ## Known Gaps
 
-- No `thread_wait4events` / `thread_join`: the waiting state and the event
-  wakeup scan exist, but nothing moves a thread onto the waiting list.
+- ABI 2 exposes single-event `wait_event`; multi-event waits and `thread_join`
+  remain unavailable. Signals are binary and consumed by one waiter. Call
+  outside critical sections, with interrupts enabled, and retain the event.
 - Libraries support relocatable XPRG services with 1–255 exports. Fixed JP
   addresses, dependency chains, finalizers and explicit unloading are absent.
 - `thread.hdr.owner` is normally zero and temporarily supplies the library

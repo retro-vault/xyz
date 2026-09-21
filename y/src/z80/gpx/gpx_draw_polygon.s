@@ -61,7 +61,7 @@ _gpx_draw_polygon::
         ;; a closed path needs two points
         ld      a,4(ix)
         cp      #2
-        jp      c,.dp_done
+        jr      c,.dp_done
 
         ;; edges left = n, &pts[0], &pts[1]
         ld      -7(ix),a
@@ -134,7 +134,7 @@ _gpx_draw_polygon::
 .dp_store_j:
         ld      -5(ix),l
         ld      -6(ix),h
-        jp      .dp_edge
+        jr      .dp_edge
 
 .dp_done:
         ld      sp,ix

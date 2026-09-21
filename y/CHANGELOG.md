@@ -9,6 +9,29 @@ Release status:
 
 ## Unreleased
 
+- Packed ABI 3 into the 16 KiB ROM using short branches and checked fixed
+  slots for the print entry, interrupt returns, service name and vector image.
+  The build validates those slots and emits a SHA-256 file for the final ROM.
+
+- Added ABI 3 `exec_command(commandline)` and `set_print_hook(sink)` at `yos_t` slots 50 and 51 (bytes 100 and 102), backed by esxDOS `M_EXECCMD` ($8F). Dot-command output through RST 10 and the fixed 09F4h print entry is routed to the temporary RAM sink while the firmware call masks scheduler interrupts. The boot-time print path remains inert until RAM gates are initialized.
+
+- Added ABI 2 `wait_event(event)` at `yos_t` slot 49 (byte 98), preserving
+  the existing 49 slots. A wait publishes the caller on the scheduler's
+  waiting queue with a stack-resident event handle and no allocation. The
+  interrupt scan atomically consumes one binary signal for one waiter;
+  repeated sets coalesce. With no runnable threads the scheduler now idles
+  on the kernel stack instead of restoring a blocked thread. Timer hooks
+  only signal; threads wake to do the work. Call waits with interrupts
+  enabled, outside critical sections, and keep the event alive. Kernel tests
+  execute the public wait with and without another runnable thread, repeated
+  timer signals and a signal set before waiting. ABI 1 images still load.
+  ROM packing uses header and pre-trap gaps; content ends at `0x3FFF`.
+
+- Renamed the boot operating-system image from `shell.sys` to `op.sys`. The
+  kernel, build, Fuse fixture and loader tests now use that boot contract.
+  Ordinary process images use the `.prc` extension; `.svc` remains reserved
+  for libraries and registered services.
+
 - Added `shrink_memory(memory, size)` to the public `yos_t` table (slot 48,
   appended after the ABI 1 baseline; the table is now 98 bytes). It releases
   the bytes of a live `allocate_memory` block beyond `size` when they can form

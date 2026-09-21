@@ -31,6 +31,7 @@
         .globl  __zx_esx_f_readdir
         .globl  __zx_esx_f_rewinddir
         .globl  __zx_esx_disk_info
+        .globl  __zx_esx_m_execcmd
 
         .globl  __zx_esx_gate_9a
         .globl  __zx_esx_gate_9b
@@ -51,6 +52,7 @@
         .globl  __zx_esx_gate_a4
         .globl  __zx_esx_gate_a7
         .globl  __zx_esx_gate_84
+        .globl  __zx_esx_gate_8f
 
         .area   _CODE
 
@@ -102,7 +104,7 @@ __zx_esx_f_read::
 __zx_esx_f_write::
         push    iy
         ld      iy,#__zx_esx_gate_9e
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_f_seek
         ; inputs: A = handle, BC:DE = offset, L = native seek mode.
@@ -112,7 +114,7 @@ __zx_esx_f_write::
 __zx_esx_f_seek::
         push    iy
         ld      iy,#__zx_esx_gate_9f
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_f_fgetpos
         ; inputs: A = native file handle.
@@ -122,7 +124,7 @@ __zx_esx_f_seek::
 __zx_esx_f_fgetpos::
         push    iy
         ld      iy,#__zx_esx_gate_a0
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_f_fstat
         ; inputs: A = handle, HL = native status buffer.
@@ -132,7 +134,7 @@ __zx_esx_f_fgetpos::
 __zx_esx_f_fstat::
         push    iy
         ld      iy,#__zx_esx_gate_a1
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_f_getcwd
         ; inputs: A = drive, HL = pathname output buffer.
@@ -142,7 +144,7 @@ __zx_esx_f_fstat::
 __zx_esx_f_getcwd::
         push    iy
         ld      iy,#__zx_esx_gate_a8
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_f_chdir
         ; inputs: A = drive, HL = path.
@@ -152,7 +154,7 @@ __zx_esx_f_getcwd::
 __zx_esx_f_chdir::
         push    iy
         ld      iy,#__zx_esx_gate_a9
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_mkdir
         ; inputs: A = drive, HL = path.
@@ -162,7 +164,7 @@ __zx_esx_f_chdir::
 __zx_esx_f_mkdir::
         push    iy
         ld      iy,#__zx_esx_gate_aa
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_rmdir
         ; inputs: A = drive, HL = path.
@@ -172,7 +174,7 @@ __zx_esx_f_mkdir::
 __zx_esx_f_rmdir::
         push    iy
         ld      iy,#__zx_esx_gate_ab
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_stat
         ; inputs: A = drive, HL = path, DE = native status buffer.
@@ -182,7 +184,7 @@ __zx_esx_f_rmdir::
 __zx_esx_f_stat::
         push    iy
         ld      iy,#__zx_esx_gate_ac
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_unlink
         ; inputs: A = drive, HL = path.
@@ -192,7 +194,7 @@ __zx_esx_f_stat::
 __zx_esx_f_unlink::
         push    iy
         ld      iy,#__zx_esx_gate_ad
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_rename
         ; inputs: A = drive, HL = old path, DE = new path.
@@ -202,7 +204,7 @@ __zx_esx_f_unlink::
 __zx_esx_f_rename::
         push    iy
         ld      iy,#__zx_esx_gate_b0
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_opendir
         ; inputs: A = drive, HL = path, B = native directory mode.
@@ -212,7 +214,7 @@ __zx_esx_f_rename::
 __zx_esx_f_opendir::
         push    iy
         ld      iy,#__zx_esx_gate_a3
-        jp      .esx_path_call
+        jr      .esx_path_call
 
         ; __zx_esx_f_readdir
         ; inputs: A = directory handle, HL = native entry buffer.
@@ -221,7 +223,7 @@ __zx_esx_f_opendir::
 __zx_esx_f_readdir::
         push    iy
         ld      iy,#__zx_esx_gate_a4
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_f_rewinddir
         ; inputs: A = directory handle; CY reports native error.
@@ -229,7 +231,7 @@ __zx_esx_f_readdir::
 __zx_esx_f_rewinddir::
         push    iy
         ld      iy,#__zx_esx_gate_a7
-        jp      .esx_call
+        jr      .esx_call
 
         ; __zx_esx_disk_info
         ; inputs: A = nonzero device id, HL = six-byte result buffer.
@@ -238,7 +240,16 @@ __zx_esx_f_rewinddir::
 __zx_esx_disk_info::
         push    iy
         ld      iy,#__zx_esx_gate_84
-        jp      .esx_call
+        jr      .esx_call
+
+        ; __zx_esx_m_execcmd
+        ; inputs: HL = NUL-terminated command line in RAM.
+        ; outputs: CY clear on success; CY set and A = esxDOS error on failure.
+        ; clobbers: af, bc, de, hl; preserves ix and iy.
+__zx_esx_m_execcmd::
+        push    iy
+        ld      iy,#__zx_esx_gate_8f
+        jr      .esx_call
 
         ; Shared direct-RAM call. Caller IY is already stacked.
 .esx_call:

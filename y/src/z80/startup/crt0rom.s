@@ -10,6 +10,7 @@
         .globl  __startup_init
         .globl  __sys_vec_tbl
         .globl  __sys_stack
+        .globl  __esx_print
 
         .area   _HEADER
 
@@ -30,9 +31,12 @@
         .db     0, 0, 0, 0, 0
 
         ; YOS restart vectors dispatch through the writable RAM jump table.
-.rst10:                                ; immediate esxDOS boot-text return
+.rst10:                                ; esxDOS character output, A = byte
+        push    hl
+        call    __esx_print              ; guarded until RAM initialization
+        pop     hl
         ret
-        .db     0, 0, 0, 0, 0, 0, 0
+        .db     0, 0
 
         ; The remaining restart vectors dispatch through writable RAM.
 .rst18:                                ; named-service lookup for RAM processes

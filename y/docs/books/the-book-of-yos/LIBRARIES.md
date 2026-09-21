@@ -11,8 +11,8 @@ if (library && library->probe() == SHELLLIB_RESULT)
 ```
 
 The complete working example is `y/tests/shell-yos/shelllib.s`, with the
-matching interface in `shelllib.h`. `shell.sys` loads this library and
-displays its returned "Library OK" string. Copy **both** `shell.sys` and
+matching interface in `shelllib.h`. `op.sys` loads this library and
+displays its returned "Library OK" string. Copy **both** `op.sys` and
 `shelllib.svc` from `bin/y/z80/spectrum/bin/` to the esxDOS drive.
 
 ## Relocate, Initialize, Publish

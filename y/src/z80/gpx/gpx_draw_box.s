@@ -49,10 +49,10 @@ _gpx_draw_box::
         ld      a,A_EDGES(ix)
         and     #EDGE_ALL
         ld      L_EDGES(ix),a
-        jp      z,.db_done
+        jr      z,.db_done
         ld      a,d
         or      e
-        jp      z,.db_done
+        jr      z,.db_done
 
         call    __rect_unpack_norm
 
@@ -165,7 +165,7 @@ _gpx_draw_box::
         ld      e,L_X1(ix)
         ld      d,L_X1+1(ix)
         exx
-        jp      .db_emit
+        jr      .db_emit
 
 .db_right:
         ld      l,L_Y0(ix)
@@ -186,7 +186,7 @@ _gpx_draw_box::
         ld      c,L_Y1(ix)
         ld      b,L_Y1+1(ix)
         exx
-        jp      .db_emit
+        jr      .db_emit
 
 .db_bottom:
         ld      l,L_X1(ix)

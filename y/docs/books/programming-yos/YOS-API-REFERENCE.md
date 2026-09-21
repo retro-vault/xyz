@@ -1,6 +1,6 @@
 # YOS API Reference
 
-This is the complete ABI 1 application reference for `y/include/yos.h` and
+This is the complete ABI 3 application reference for `y/include/yos.h` and
 the YOS XCC platform helpers. All kernel calls use the `sdcccall(1)` ABI used
 by the default XCC mode. Include `<yos.h>` and obtain the cached table once:
 
@@ -199,7 +199,22 @@ protected operation; this short call is safe from a timer callback.
 if (!yos->set_event(event, YOS_EVENT_SET)) handle_stale_event();
 ```
 
-ABI 1 has no public event-wait call.
+### `void wait_event(yos_event_t *event)` — ABI 2
+
+Blocks the calling thread until the scheduler consumes one set signal. It
+receives no CPU time while waiting; a timer or another thread calls
+`set_event` to wake it. Signals set before the wait are retained; repeated
+sets coalesce. One signal wakes one waiter and is reset by the scheduler.
+
+```c
+yos->wait_event(event);
+process_ready_work();
+```
+
+Call from a thread with interrupts enabled and outside any critical section.
+Retain the event until the wait returns and stop signal producers before
+freeing it. The call allocates nothing and returns no value. Its appended
+slot is 49 (byte offset 98); package callers with `--min-os 2`.
 
 ## Threads
 
@@ -273,7 +288,7 @@ Reads an XPRG v1 process, validates its kind, minimum OS ABI, CRC, XL records,
 allocates and relocates it, creates its declared stack, and schedules it.
 
 ```c
-yos_process_t *loaded = yos->load_process("EDITOR.SYS");
+yos_process_t *loaded = yos->load_process("EDITOR.PRC");
 ```
 
 The caller does not become a parent. Once created, the loaded process has no
@@ -286,7 +301,7 @@ The scheduler saves and restores its value per thread. Loading is synchronous,
 so read it after `load_process` or `load_library` returns `NULL`:
 
 ```c
-loaded = yos->load_process("EDITOR.SYS");
+loaded = yos->load_process("EDITOR.PRC");
 if (!loaded) {
     enum yos_process_load_error why =
         (enum yos_process_load_error)*yos->process_load_error;
@@ -632,3 +647,29 @@ in ABI 1. Multithreaded code should use the raw entry plus
 For descriptors 1 and 2, `write` routes each byte to the installed output
 hook and succeeds even when no hook exists. Descriptor 0 reads as immediate
 end of file. Closing descriptors 0–2 succeeds without a kernel call.
+
+
+## Native esxDOS commands (ABI 3)
+
+### `int exec_command(const char *commandline)`
+
+Executes `M_EXECCMD` (`0x8F`) with a NUL-terminated command line in RAM,
+without the leading dot. Absolute paths and arguments are supported. A
+return of zero means success; failure returns `0x100 + native_error`, so
+native error zero remains distinguishable from success. This call masks
+scheduler interrupts while esxDOS owns the ROM mapping. A caller must use
+an XPRG minimum OS version of 3.
+
+### `yos_handler_t set_print_hook(yos_handler_t sink)`
+
+Installs the global RAM sink used by RST 10 and the fixed `0x09F4` print
+entry, returning the previous sink. Pass NULL to disable it. The callback
+uses the firmware ABI: the character arrives in A, and the callback must
+preserve registers and flags. It requires an assembly adapter, not an
+ordinary C function taking a character argument. Both ROM entry points
+preserve HL around the adapter. Buffer output in RAM while firmware is
+mapped, and draw it after `exec_command` returns. Restore the previous sink
+before releasing the callback's process memory.
+
+This kernel hook is separate from the process-local `yos_set_putchar_hook`
+used by the C library's stdout/stderr output.

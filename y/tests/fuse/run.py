@@ -49,7 +49,7 @@ def main():
     for name in ("SYS", "BIN", "TMP"):
         subprocess.run(["hdfmonkey", "put", str(disk),
                         str(firmware / name), "/"], check=True)
-    for name in ("shell.sys", "shelllib.svc"):
+    for name in ("op.sys", "shelllib.svc"):
         subprocess.run(["hdfmonkey", "put", str(disk), str(output / name),
                         "/" + name.upper()], check=True)
     print(f"Fuse cold-boot media: {work}", flush=True)

@@ -15,7 +15,7 @@ This is the *yos* equivalent of a system call table. The kernel registers two se
 
 | Name | Table | Header |
 |---|---|---|
-| `"yos"` | `yos_t` — kernel, drivers and filesystem, ABI version 1 | `y/include/yos.h` |
+| `"yos"` | `yos_t` — kernel, drivers and filesystem, ABI version 3 | `y/include/yos.h` |
 | `"gpx"` | `gpx_api_t` — the complete libgpx drawing API (24 entries) | `y/include/gpx.h` |
 
 ## Querying a Service
@@ -35,7 +35,7 @@ You only need to call `query_service` once per service per process. Store the po
 
 ## The `RST 0x18` Mechanism
 
-The ROM entry at `0x0018` jumps through slot 2 of the writable vector table, which `main` points at `_svc_query_rst18` — a one-instruction bridge to the kernel's `__svc_query`. RST 10 is not used because it must remain the immediate `RET` required while esxDOS cold-boots a replacement ROM.
+The ROM entry at `0x0018` jumps through slot 2 of the writable vector table, which `main` points at `_svc_query_rst18` — a one-instruction bridge to the kernel's `__svc_query`. RST 10 and the fixed 48K ROM print entry at `0x09F4` share a wrapper that preserves HL and captures bytes through a temporary RAM sink. The print handler checks initialized RAM-gate bytes before using the sink.
 
 The calling convention is `sdcccall(1)`: the name pointer goes in `HL` and the table pointer (or zero) comes back in `DE`. Nothing is passed on the stack.
 
@@ -61,18 +61,20 @@ service_name:
 
 ## The `yos_t` Table
 
-`yos_t` is a 98-byte struct of 47 function pointers and two data pointers,
-built at boot by `__syscall_table_init` from an ordered template in ROM. The
-order of the members in `yos.h` **is** the ABI; `yos->version()` returns
-`YOS_VERSION` (currently 1). This is a clean numbering baseline for the
-complete current table, not the earlier incremental development numbering.
+`yos_t` is an immutable 104-byte ROM table containing function pointers and
+two data pointers, published directly at boot. The order in `yos.h` **is** the ABI;
+`yos->version()` now returns 3. ABI 2 appends `wait_event` at slot 49 (byte
+98); ABI 3 appends `exec_command` at slot 50 (byte 100) and `set_print_hook` at slot 51 (byte 102). Earlier offsets remain stable, including `shrink_memory` at slot 48.
+ABI 1 process and service images still load. Images calling `wait_event`
+must declare minimum OS version 2 in their XPRG descriptor. Images using `exec_command` or `set_print_hook` require version 3. The command line is NUL terminated, excludes the leading dot, and can contain an absolute path and arguments. A zero `exec_command` return means success; a failure is `0x100` plus the native esxDOS error code. Install a RAM sink with `set_print_hook`, save the previous sink, and restore it after command execution. The sink receives each character in A while interrupts are masked, so it should only buffer characters in RAM and preserve the firmware registers.
+
 In summary:
 
 | Group | Members |
 |---|---|
 | identity and memory | `version`, `allocate_memory`, `free_memory`, `shrink_memory` (appended after the ABI 1 baseline; slot 48) |
 | clock and critical sections | `clock_ticks`, `enter_critical_section`, `leave_critical_section` |
-| timers and events | `create_timer`, `destroy_timer`, `create_event`, `destroy_event`, `set_event` |
+| timers and events | `create_timer`, `destroy_timer`, `create_event`, `destroy_event`, `set_event`, `wait_event` |
 | threads and processes | `create_thread`, `exit_thread`, `suspend_thread`, `resume_thread`, `create_process`, `exit_process` |
 | services and vectors | `query_service`, `register_service`, `unregister_service`, `get_interrupt_handler`, `set_interrupt_handler` |
 | input | `read_key`, `calibrate_mouse`, `read_mouse` |
@@ -98,7 +100,7 @@ or `B:` prefix (case insensitive). This is the YOS/application naming
 convention, not an esxDOS drive letter: the common adapter removes the prefix
 and supplies native drive `0x40` for the DivIDE master or `0x48` for the slave.
 Thus `opendir("A:/")` supplies drive `0x40` and path `/`; a later
-`load_process("B:/TOOLS/APP.SYS")` selects the slave through the same adapter.
+`load_process("B:/TOOLS/APP.PRC")` selects the slave through the same adapter.
 Unqualified paths retain the current esxDOS drive. This does not remount media
 or select additional partitions. For `rename`, the destination remains an
 unqualified path on the drive selected by the first pathname; cross-drive

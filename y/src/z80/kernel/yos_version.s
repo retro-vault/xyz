@@ -6,8 +6,8 @@
         .module yos_version
         .optsdcc -mz80 sdcccall(1)
         .globl  _yos_version
-        ; Four bytes fit in the five-byte gap following RST 08h.
-        .area   _CODE
+        ; Use four of the free header-data bytes below the fixed 0100 entry.
+        .area   _HEADER_DATA
 _yos_version::
-        ld      de, #1
+        ld      de, #3
         ret

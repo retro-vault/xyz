@@ -158,7 +158,7 @@ When publishing the toolchain:
   must be platform-independent or use only the public YOS service tables;
   keep `yos.h`, `gpx.h`, and target POSIX declarations under
   `x/platforms/yos/include/`. Console output is silent until a process installs
-  the YOS character hook. Package XL files as `.sys` with `xprog --process`
+  the YOS character hook. Package XL files as `.prc` with `xprog --process`
   and use `xprog --esxdos` when an esxDOS FAT16 disk image is required.
 - YOS ABI 1 loads relocatable XPRG libraries as threadless, reference-counted
   ownership objects. Keep process/library disk validation and XL relocation

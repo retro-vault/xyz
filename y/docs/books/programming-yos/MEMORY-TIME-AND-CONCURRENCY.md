@@ -180,7 +180,7 @@ This allocates the process and its initial runnable thread. It does not copy
 or relocate code; the entry function must remain valid. For a disk image use:
 
 ```c
-yos_process_t *process = yos->load_process("APP.SYS");
+yos_process_t *process = yos->load_process("APP.PRC");
 if (!process)
     failure = *yos->process_load_error;
 ```

@@ -110,7 +110,7 @@ _gpx_show_sprite::
         ld      a,(hl)
         dec     a
         cp      #16
-        jp      nc,.gs_done
+        jr      nc,.gs_done
         inc     a
         ld      c,a
 
@@ -118,7 +118,7 @@ _gpx_show_sprite::
         ld      a,(hl)
         dec     a
         cp      #16
-        jp      nc,.gs_done
+        jr      nc,.gs_done
         inc     a
         ld      b,a
 

@@ -10,11 +10,11 @@ mkdir -p build/examples/yos bin/y/z80/spectrum/bin
 bin/x/bin/xcc -Os --platform=yos x/examples/yos/hello.c \
   -o build/examples/yos/hello.xl
 bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 1 \
-  build/examples/yos/hello.xl -o bin/y/z80/spectrum/bin/hello.sys
-bin/x/bin/xprog --esxdos bin/y/z80/spectrum/bin/hello.sys \
-  --name HELLO.SYS -o build/examples/yos/hello.ide
+  build/examples/yos/hello.xl -o bin/y/z80/spectrum/bin/hello.prc
+bin/x/bin/xprog --esxdos bin/y/z80/spectrum/bin/hello.prc \
+  --name HELLO.PRC -o build/examples/yos/hello.ide
 ```
 
 The final command creates a partitioned 16 MiB FAT16 IDE image with the
 process in its root directory. To make it the boot shell instead, package the
-process as `shell.sys` and place that name on the disk.
+process as `op.prc` and place that name on the disk.

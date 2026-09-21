@@ -6,6 +6,7 @@
         .module _image_load
         .optsdcc -mz80 sdcccall(1)
         .globl  __image_load
+        .globl  __image_retain
         .globl  __image_busy
         .globl  _process_last_error
         .globl  __yos_malloc
@@ -23,7 +24,7 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
 
-        .equ    YOS_VERSION, 1
+        .equ    YOS_VERSION, 3
         .equ    IMAGE_FD,    64
         .equ    IMAGE_DATA,  66
         .equ    IMAGE_CODE,  68
@@ -235,18 +236,39 @@ __image_load::
         ld      a, d
         xor     19(ix)
         or      c
-        jp      nz, .checksum
+        jr      nz, .checksum
         ; Relocate in the existing buffer. Finish binds compact exports,
         ; then splits off and frees the trailing relocation table and the
         ; metadata prefix without allocating a second copy.
-        ld      b,#0
-        ld      c,b
-        ld      a,IMAGE_MODE(ix)
-        or      a
-        jr      z,.resident_size
-        ld      c,34(ix)
-        sla     c                      ; compact two-byte export table
-        rl      b
+        ;
+        ; 34(ix) is 0 for a process (enforced above) and 1..255 for a
+        ; service. The tight two-byte-per-export reservation below matches
+        ; __library_load_finish's own compaction exactly for up to six
+        ; exports; keep that exact reservation there unchanged; on this
+        ; memory-tight platform every extra byte is felt across every
+        ; loaded service, not just ones near the boundary. Past six exports
+        ; that reservation lets the compact table (written back-to-front
+        ; from the code end) advance ahead of raw metadata records
+        ; __library_load_finish hasn't read yet, since the 12-byte XL
+        ; sub-header between the metadata and the code (IMAGE_XL =
+        ; IMAGE_TEMP + IMAGE_JPS, code = IMAGE_XL + 12) isn't part of the
+        ; reservation; reserving the metadata's full width there instead
+        ; keeps the destination at or behind every unread record, for any
+        ; export count.
+        ld      a,34(ix)
+        cp      #7
+        jr      nc,.wide_reservation
+        add     a,a                    ; a<7 always fits doubled in one byte
+        ld      c,a
+        ld      b,#0                   ; bc = 2 * exports (0 for a process)
+        jr      .resident_size
+.wide_reservation:
+        ld      c,IMAGE_JPS(ix)        ; 3 * exports
+        ld      b,IMAGE_JPS+1(ix)
+        ld      hl,#11
+        add     hl,bc                  ; 3N+11, at/behind every unread record
+        ld      c,l
+        ld      b,h
 .resident_size:
         ld      l,IMAGE_XL(ix)
         ld      h,IMAGE_XL+1(ix)
@@ -256,7 +278,7 @@ __image_load::
         ld      IMAGE_DATA(ix),l
         ld      IMAGE_DATA+1(ix),h
         or      a
-        jp      nz,.fail
+        jr      nz,.fail
         ld      IMAGE_CODE(ix), e
         ld      IMAGE_CODE+1(ix), d
         ld      l, e

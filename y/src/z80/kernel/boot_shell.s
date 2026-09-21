@@ -12,9 +12,9 @@
         .area   _CODE
 
 _boot_shell::
-        ld      hl,#.shell
+        ld      hl,#.op
         jp      _process_load
 
         .area   _CONST
-.shell:
-        .asciz  "shell.sys"
+.op:
+        .asciz  "op.sys"

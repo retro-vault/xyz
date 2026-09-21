@@ -46,13 +46,12 @@ __library_find::
         jr      nz, .next
         push    iy
         pop     de
-        jr      .done
+.done:
+        pop     iy
+        ret
 .next:
         ld      l, 0(iy)
         ld      h, 1(iy)
         push    hl
         pop     iy
         jr      .loop
-.done:
-        pop     iy
-        ret

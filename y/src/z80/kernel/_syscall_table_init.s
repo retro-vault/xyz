@@ -56,6 +56,9 @@
         .globl  _process_last_error
         .globl  _library_load
         .globl  __yos_shrink
+        .globl  _evt_wait
+        .globl  _exec_command
+        .globl  _set_print_hook
 
         .area   _HEADER_DATA
 __yos::
@@ -121,3 +124,8 @@ __yos::
 
         ; Memory extension appended after the ABI 1 baseline.
         .dw     __yos_shrink
+        ; ABI 2 appends event wait; all ABI 1 offsets remain stable.
+        .dw     _evt_wait
+        ; ABI 3 executes esxDOS dot commands with a temporary print sink.
+        .dw     _exec_command
+        .dw     _set_print_hook

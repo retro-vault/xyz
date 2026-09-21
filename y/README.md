@@ -14,7 +14,7 @@ service tables.
 
 | Path | Contents |
 |---|---|
-| `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `shell.sys` |
+| `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `op.sys` |
 | `src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`, with its own copy of the old chapter docs |
 | `include/` | public headers used by YOS applications: `yos.h` (kernel ABI 1), `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
 | `pkg/` | host tools staged into `bin/y/bin/`: [`appmake`](pkg/appmake/README.md), [`microdrive`](pkg/microdrive/README.md), [`serial`](pkg/serial/README.md) |
@@ -26,15 +26,15 @@ service tables.
 
 ```bash
 make -C y                  # both kernels; needs the staged X toolchain in bin/x
-make -C y/src/z80          # assembly kernel only -> bin/y/z80/spectrum/bin/yos-kernel.rom + shell.sys
+make -C y/src/z80          # assembly kernel only -> bin/y/z80/spectrum/bin/yos-kernel.rom + op.sys
 make -C y/src/z80 test     # boot the ROM under libxz80 and exercise the kernel
 make -C y packages         # host tools -> bin/y/bin
 ```
 
 The assembly kernel is built with `xas`/`xld`/`xar` from `bin/x/bin`;
-The build also emits `shelllib.svc`; copy it alongside `shell.sys` on the
+The build also emits `shelllib.svc`; copy it alongside `op.sys` on the
 esxDOS drive. The shell calls its relocated, self-registered interface and
-shows "Library OK". `shell.sys` is compiled as a relocatable XL application by the XCC `yos`
+shows "Library OK". `op.sys` is compiled as a relocatable XL application by the XCC `yos`
 backend and packaged with `xprog`. Details, including how to validate the ROM against real esxDOS, are
 in [AGENTS.md](AGENTS.md).
 
@@ -58,7 +58,7 @@ Application code for ABI 1 libraries is covered in
    and initialized data from ROM to RAM and builds the 96-byte service table.
 2. **Kernel bring-up (`src/z80/main.s`)** — kernel and user heaps are
    initialized, the clock, keyboard and mouse timers are installed, the `"yos"` and
-   `"gpx"` services are registered, `shell.sys` is loaded from the current
+   `"gpx"` services are registered, `op.sys` is loaded from the current
    esxDOS drive and started as a process.
 3. **Scheduler activation** — IM2 is selected with the vector word at
    `0x5EFF` pointing at `__thread_robin`; every 50 Hz tick saves the current

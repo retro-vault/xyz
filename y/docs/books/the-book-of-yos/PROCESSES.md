@@ -72,7 +72,7 @@ After `create_process` returns, the calling code and the new process's main thre
 Applications normally start programs from disk rather than from a function pointer:
 
 ```c
-yos_process_t *process = yos->load_process("editor.sys");
+yos_process_t *process = yos->load_process("editor.prc");
 if (!process) {
     uint8_t reason = *yos->process_load_error;   /* YOS_PROCESS_LOAD_* */
     /* report or handle reason */
@@ -86,7 +86,7 @@ is saved/restored per thread. Every completed process/library load writes its
 result there: zero on success, otherwise an error below. Concurrent/recursive
 loads return BUSY; the initiating call completes synchronously.
 
-The ROM invokes the same loader for `shell.sys` on the current esxDOS drive
+The ROM invokes the same loader for `op.sys` on the current esxDOS drive
 (`kernel/boot_shell.s`) before arming IM2 scheduling. Each firmware call masks
 interrupts while divIDE has the YOS ROM paged out.
 

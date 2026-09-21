@@ -136,7 +136,7 @@ __gpx_hline::
         ld      e,-2(ix)
         ld      d,-1(ix)                ; DE = x1
         call    __clip_seg
-        jp      c,.ghl_reject
+        jr      c,.ghl_reject
         ld      -4(ix),l
         ld      -3(ix),h                ; x0 = clamped lo
         ld      -2(ix),e

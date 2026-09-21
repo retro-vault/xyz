@@ -18,7 +18,7 @@ The kernel starts at `0x0000` in `y/src/z80/startup/crt0rom.s`. Its first five b
 The divIDE hardware maps esxDOS on instruction fetches at several fixed addresses. The replacement ROM therefore preserves the entry bytes required by the firmware:
 
 - RST 08 begins with `LD HL,(0x5C5D)` and belongs to esxDOS file calls.
-- RST 10 is an immediate `RET`, used by esxDOS boot text.
+- RST 10 preserves HL around the guarded character sink. The fixed 48K ROM print entry at `0x09F4` jumps to the same wrapper. Output is ignored until RAM gates and the sink are initialized.
 - RST 18 jumps to the writable YOS vector table and provides `query_service` to RAM processes.
 - RST 20, RST 28, and RST 30 jump to their writable YOS vector slots.
 - RST 38 is the exact esxDOS-compatible IM1 return sequence `PUSH AF; POP AF; EI; RETI`.
@@ -29,7 +29,7 @@ RST 08 and NMI are firmware-owned. Their remaining bytes stay zero-filled. The l
 
 ## Writable restart table
 
-The Z80 restart instructions jump to fixed ROM addresses, and ROM cannot be changed. YOS therefore makes the RST 18-30 entries jump into `__sys_vec_tbl`, a 24-byte block in RAM holding eight three-byte `JP nn` instructions. `__startup_init` copies the immutable image `__sys_vectors_start` from `_CONST` into it; the default image points every slot at `__sys_reti` (the NMI slot at `__sys_retn`).
+The Z80 restart instructions jump to fixed ROM addresses, and ROM cannot be changed. YOS therefore makes the RST 18-30 entries jump into `__sys_vec_tbl`, a 24-byte block in RAM holding eight three-byte `JP nn` instructions. `__startup_init` copies the immutable image `__sys_vectors_start` from its fixed ROM slot into it; the default image points every slot at `__sys_reti` (the NMI slot at `__sys_retn`).
 
 The public `get_interrupt_handler` and `set_interrupt_handler` entries of the `yos_t` table (kernel routines `_sys_vec_get` and `_sys_vec_set`) read and patch bytes 1 and 2 of one entry. The slot numbers are the `enum yos_vector` values in `yos.h`:
 
@@ -41,7 +41,7 @@ The public `get_interrupt_handler` and `set_interrupt_handler` entries of the `y
 | 5 | `YOS_VECTOR_RST30` | free for applications |
 | 6 | `YOS_VECTOR_RST38` | reserved; the scheduler does not use it |
 
-Slots 0, 1 and 7 (RST 08, RST 10, NMI) exist in the table for uniformity but nothing in ROM jumps through them.
+Slots 0, 1 and 7 (RST 08, RST 10, NMI) exist in the table for uniformity but nothing in ROM jumps through them. RST 10 uses its fixed print wrapper.
 
 ```c
 #include <yos.h>
@@ -108,7 +108,7 @@ the whole-load try-lock is state, not one long interrupt mask.
 2. `tmr_install` registers `__clock_tick`, `__kbd_scan`, and `__mouse_scan`
    as kernel-owned callbacks with period zero, so all three fire on every tick.
 3. `svc_register("yos", __yos)` and `svc_register("gpx", __gpx_service)`.
-4. `boot_shell`, which calls `process_load("shell.sys")` to load, validate, relocate and start the shell as an XPRG process on the current esxDOS drive.
+4. `boot_shell`, which calls `process_load("op.sys")` to load, validate, relocate and start the shell as an XPRG process on the current esxDOS drive.
 5. `sys_vec_set(_svc_query_rst18, YOS_VECTOR_RST18)`.
 6. `__im2_init`, then `EI`.
 7. The idle `HALT` loop. From now on every frame interrupt runs the scheduler.
@@ -144,18 +144,18 @@ __startup_init::
         ret
 ```
 
-The immutable 98-byte `__yos` table is published directly from ROM. Its order
+The immutable 104-byte `__yos` table is published directly from ROM. Its order
 matches `yos_t` in `yos.h`; applications receive it from `query_service("yos")`.
 
-Startup generates nineteen three-byte `RST 08; <selector>; RET` RAM gates from
-a 19-byte selector table. Filesystem code calls these gates so the inline
+Startup generates twenty three-byte `RST 08; <selector>; RET` RAM gates from
+a 20-byte selector table. Filesystem code calls these gates so the inline
 selector is fetched from RAM while esxDOS is paged over the ROM. YOS still
 waits until esxDOS finishes cold boot and returns through `0x0001` before it
 touches writable data.
 
 The syscall table and gate selectors occupy the otherwise unused replacement
-ROM header range `0x0080..0x00f4`. The conventional executable entry remains
-at `0x0100`; linked content ends at `0x3fe0`, below the `0x3fff` ROM boundary.
+ROM header range `0x0080..0x00ff`. The conventional executable entry remains
+at `0x0100`; linked content ends at `0x4000` (exclusive), filling the 16 KiB ROM.
 
 ## Reference-counted critical sections
 
@@ -209,13 +209,12 @@ After `_main` has armed the scheduler the address space looks like this (address
 
 | Address | Region | Notes |
 |---|---|---|
-| `0x0000` | ROM header (256 bytes) | Reset, RST 08–38, NMI, `0x007B` |
+| `0x0000` | ROM header (256 bytes) | Reset, RST 08–38, NMI, `0x007B`; immutable 104-byte `__yos` table at `0x0080` |
 | `0x0100` | ROM: kernel, drivers, fs, gpx | `_CODE`, `_CONST`, `_INITIALIZER`; must end below `0x4000` |
 | `0x4000` | Screen bitmap and attributes | ULA |
-| `0x5B00` | `_INITIALIZED` (copied from ROM) | Clock counters, keyboard state, esxDOS gates at `0x5B37` |
-| `0x5B70` | `_BSS` | File-descriptor, error, and timer state |
-| `0x5B94` | `__yos` (98 bytes), then kernel stack (512 bytes) | Public ABI 1 service table; stack grows down from `0x5DF4` |
-| `0x5DF4` | `__sys_vec_tbl` (24 bytes), list roots, mouse | Writable RST table |
+| `0x5B00` | Zero-filled `_BSS` | File descriptors, errno, timer root |
+| `0x5B24` | Kernel stack (512 bytes) | Grows down from `__sys_stack = 0x5D24` |
+| `0x5D24` | `__sys_vec_tbl` (24 bytes), clock, keyboard, mouse and list roots | Writable RST table; esxDOS gates start at `0x5D78` |
 | `0x5EFF` | `__im2_vector` (2 bytes) | IM2 handler address |
 | `0x5F01` | `__sys_heap` (1024 bytes) | Kernel objects |
 | `0x6301` | `__heap` | Processes, thread stacks, application data |
@@ -243,3 +242,20 @@ ALTO's YOS integration test also forces this IRQ boundary during live input.
 The ROM build places the small critical entries before the `0x0562` paging
 trap and orders the small object reaper before the process/thread query to
 use the gap below `0x3D00`. The reserved ranges remain unchanged.
+
+
+### Fixed print entry and final ROM checksum
+
+ABI 3 reserves `0x09F4..0x09F6` for the esxDOS PRINT-OUT jump. The ROM
+finishing script (`y/scripts/patch_rom.py`) validates the link map and unused
+bytes before placing this jump and the small immutable tables in linker gaps:
+`RETI` at `0x09F0`, `RETN` at `0x09F2`, the `gpx` name at `0x3CE1`, and
+the 24-byte default vector image at `0x3CE5`. The timer adapter immediately
+before the first gap returns, so its unused linker bridge can be replaced;
+the live bridge at `0x3CFD` remains intact. Unexpected layout changes fail
+the build rather than overwriting code.
+
+Short relative branches and shared lookup exits recover the required space.
+The finishing script hashes the final, patched 16384-byte image and writes
+`yos-kernel.rom.sha256` alongside it. ABI 3's table has 52 entries; the new
+`exec_command` and `set_print_hook` entries are at byte offsets 100 and 102.

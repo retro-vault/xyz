@@ -195,7 +195,7 @@ _gpx_fill_polygon::
         ld      -19(ix),a
         ld      a,-4(ix)
         ld      -20(ix),a
-        jp      .fp_build
+        jr      .fp_build
 .fp_next_j:
         ld      hl,#4
         ld      e,-19(ix)
@@ -203,12 +203,12 @@ _gpx_fill_polygon::
         add     hl,de
         ld      -19(ix),l
         ld      -20(ix),h
-        jp      .fp_build
+        jr      .fp_build
 
 .fp_built:
         ld      a,-5(ix)
         or      a
-        jp      z,.fp_done              ; every edge was horizontal
+        jr      z,.fp_done              ; every edge was horizontal
 
         ;; ---- scanlines, ymin down to ymax ----
         ld      a,-7(ix)
@@ -225,12 +225,11 @@ _gpx_fill_polygon::
         ld      h,-14(ix)
         ld      e,-9(ix)
         ld      d,-10(ix)
-        or      a
-        sbc     hl,de                   ; y - ymax
+        sbc     hl,de                   ; y - ymax; carry clear from .fp_row's own xor a
         jp      m,.fp_row_go            ; y < ymax
         ld      a,h
         or      l
-        jp      nz,.fp_done             ; y > ymax: finished
+        jr      nz,.fp_done             ; y > ymax: finished
         inc     a
         ld      -16(ix),a               ; y == ymax: the closing row
 .fp_row_go:
@@ -251,7 +250,7 @@ _gpx_fill_polygon::
         inc     hl
         ld      -13(ix),l
         ld      -14(ix),h
-        jp      .fp_row
+        jr      .fp_row
 
 .fp_done:
         ld      sp,ix

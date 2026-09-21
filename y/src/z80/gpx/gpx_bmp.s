@@ -254,7 +254,7 @@ _gpx_draw_bmp_clip::
         ;; No clip rect: the on-screen rect is already the visible rect.
         ld      a,L_CLIP(iy)
         or      L_CLIP+1(iy)
-        jp      z,.gb_skips
+        jr      z,.gb_skips
 
         ;; Narrow by the caller's clip rect, read straight through the
         ;; pointer in rect_t order (x0, y0, x1, y1) so it is walked once.
@@ -538,7 +538,7 @@ _gpx_draw_bmp_clip::
         and     L_RCOVER(iy)
         ld      c,a                     ; destination coverage mask
         call    .gb_byte
-        jp      .gb_next_row
+        jr      .gb_next_row
 
         ;; ------------------------------------------------------------
         ;; .gb_byte: compose one destination byte at (HL) and advance HL.
@@ -554,7 +554,7 @@ _gpx_draw_bmp_clip::
 .gb_byte:
         ld      a,L_DRAWMODE(iy)
         or      a
-        jp      nz,.gb_byte_masked
+        jr      nz,.gb_byte_masked
 
         ld      a,L_SRCREMAIN(iy)
         or      a
