@@ -14,6 +14,8 @@
         .globl  __crc32
         .globl  __process_read_exact
         .globl  __process_relocate
+        ; Root with the loader helpers to fit before fixed ROM data.
+        .globl  _process_has_threads
         .globl  __process_load_finish
         .globl  __library_load_finish
         .globl  __library_find

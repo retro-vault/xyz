@@ -27,6 +27,21 @@ The divIDE hardware maps esxDOS on instruction fetches at several fixed addresse
 
 RST 08 and NMI are firmware-owned. Their remaining bytes stay zero-filled. The linker script additionally reserves `0x04C6`, `0x0562` (divIDE automatic paging entry points) and `0x3D00-0x3DFF` (the Interface 1 trigger) so no kernel code is ever fetched from those addresses.
 
+The linker also reserves patch-owned bytes explicitly: `0x09F0-0x09F6`
+holds RETI, RETN and PRINT-OUT; `0x3CE1-0x3CFC` holds the GPX name and
+restart-vector image, within the reservation ending at `0x3DFF`.
+`patch_rom.py` checks these slots before installing their contents. They
+are not free space, nor are linker bridges around reserved regions.
+
+The size-optimized build ends at `s__GSFINAL = 0x3EFC`, leaving 260
+contiguous zero-filled bytes through `0x3FFF`, including the full final
+256-byte page. The build prints the current tail size and rejects nonzero
+tail bytes or any linked content entering that page. It also checks every
+linked ROM area against the fixed reservations: zero-valued live code/data
+is not free space. Use the occupied end, not `l__CODE` or runs of zeros, when
+measuring available ROM space. Shared frame helpers trade entry/exit cycles
+for size without changing IX-relative locals or the public ABI.
+
 ## Writable restart table
 
 The Z80 restart instructions jump to fixed ROM addresses, and ROM cannot be changed. YOS therefore makes the RST 18-30 entries jump into `__sys_vec_tbl`, a 24-byte block in RAM holding eight three-byte `JP nn` instructions. `__startup_init` copies the immutable image `__sys_vectors_start` from its fixed ROM slot into it; the default image points every slot at `__sys_reti` (the NMI slot at `__sys_retn`).

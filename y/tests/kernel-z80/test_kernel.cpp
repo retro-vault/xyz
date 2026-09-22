@@ -2,6 +2,7 @@
 #include "mock_filesystem.h"
 #include "test_libraries.h"
 #include "test_thread_safety.h"
+#include "test_circles.h"
 
 #include <array>
 #include <cstdint>
@@ -105,6 +106,12 @@ int main(int argc, char** argv) {
         require(found != symbols.end(), "missing symbol " + name);
         return found->second;
     };
+    const auto rom_end = sym("s__GSFINAL");
+    require(rom_end <= 0x4000, "linked content exceeds ROM");
+    require(std::all_of(mem.bytes.begin() + rom_end,
+                        mem.bytes.begin() + 0x4000,
+                        [](std::uint8_t byte) { return byte == 0; }),
+            "unused ROM tail is not zero-filled");
     mock_filesystem files{mem, cpu, sym("__zx_esx_gate_9a"),
                           sym("__zx_esx_gate_9d"),
                           sym("__zx_esx_gate_9b")};
@@ -128,7 +135,11 @@ int main(int argc, char** argv) {
                 cpu.restore(state);
                 continue;
             }
-            if (!files.step()) cpu.step();
+            try {
+                if (!files.step()) cpu.step();
+            } catch (const std::exception& error) {
+                throw std::runtime_error(operation + ": " + error.what());
+            }
         }
         throw std::runtime_error(operation + " reached emulator step limit at PC " +
                                  std::to_string(cpu.pc()));
@@ -353,6 +364,59 @@ int main(int argc, char** argv) {
         kernel_hl = direct.hl;
         return direct.de;
     };
+
+    // Failure must return a full 32-bit -1, independent of incoming DE.
+    require(call_kernel(sym("__zx_esx_errno"), 0x1234, 0x5678,
+                        "long errno result", 75) == 0xffff &&
+                kernel_hl == 0xffff && mem.word(sym("__errno_value")) == 75,
+            "errno helper did not return HL:DE = -1");
+
+    // Exercise every native attribute byte, signed-size boundaries, and
+    // directory size sentinels. Guard bytes catch short/overlong copies.
+    constexpr std::uint16_t native_stat = 0xe100, public_stat = 0xe120;
+    for (unsigned attributes = 0; attributes < 256; ++attributes) {
+        for (const std::uint32_t size : {0u, 0x12345678u, 0x7fffffffu,
+                                         0x80000000u, 0xffffffffu}) {
+            std::fill_n(mem.bytes.begin() + native_stat, 11, 0);
+            mem.word(native_stat, 0x1234);
+            mem.bytes[native_stat + 2] = attributes;
+            for (unsigned i = 0; i < 4; ++i)
+                mem.bytes[native_stat + 7 + i] = size >> (i * 8);
+            std::fill_n(mem.bytes.begin() + public_stat - 1, 16, 0xa5);
+            const bool directory = attributes & 0x10;
+            const bool overflow = !directory && size > 0x7fffffff;
+            const auto result = call_kernel(sym("__zx_esx_stat_convert"),
+                                           native_stat, public_stat,
+                                           "native status conversion");
+            require(result == (overflow ? 0xffff : 0), "stat result");
+            require(mem.bytes[public_stat - 1] == 0xa5 &&
+                        mem.bytes[public_stat + 14] == 0xa5,
+                    "stat conversion overwrote guards");
+            if (overflow) {
+                require(kernel_hl == 0xffff &&
+                            mem.word(sym("__errno_value")) == 75,
+                        "stat overflow errno");
+                require(std::all_of(mem.bytes.begin() + public_stat,
+                                    mem.bytes.begin() + public_stat + 14,
+                                    [](auto byte) { return byte == 0xa5; }),
+                        "overflow modified status output");
+                continue;
+            }
+            const auto permissions = (attributes & 1) ? 0444 : 0666;
+            const auto mode = directory ? (0x4000 | permissions | 0111)
+                                        : (0x8000 | permissions);
+            require(mem.word(public_stat) == 0x1234 &&
+                        mem.word(public_stat + 2) == 0 &&
+                        mem.word(public_stat + 4) == 0 &&
+                        mem.word(public_stat + 6) == mode &&
+                        mem.word(public_stat + 8) == 1,
+                    "stat fields");
+            for (unsigned i = 0; i < 4; ++i)
+                require(mem.bytes[public_stat + 10 + i] ==
+                            std::uint8_t((directory ? 0 : size) >> (i * 8)),
+                        "stat size field");
+        }
+    }
 
     // The esxDOS PRINT-OUT entry must call the installed RAM sink with A.
     constexpr std::uint16_t print_sink = 0x7100;
@@ -783,6 +847,8 @@ int main(int argc, char** argv) {
                 "gpx selected-edge box", 0, {2, 1, 0, 0xff, 0, 0});
     require(mem.bytes[0x4221] == 0xff,
             "gpx selected-edge box drew the wrong Spectrum byte");
+
+    test_circles(mem, call_kernel, sym, gpx_context);
 
     call_kernel(mem.word(table + 44), 0, 0, "empty keyboard queue");
     require(kernel_hl == 0,

@@ -41,6 +41,14 @@ from a real thread, with another runnable thread and with all threads blocked,
 then checks absent signals, pre-set signals and repeated timer wakeups.
 Unsignalled waiters remain off the runnable queue; consumed signals reset.
 
+`test_circles.h` compares every framebuffer byte against a host midpoint
+reference for 528 outline/fill, radius, clipping, edge-position and blit-mode
+configurations. XOR cases also draw twice and require an empty framebuffer.
+`test_rom_layout.py` verifies that the ROM patcher rejects reserved-range
+overlaps, including all-zero live data, damaged firmware slots, overlapping
+areas and occupation of the final 256-byte page. Failed checks must leave
+the input ROM untouched. Test scratch files stay under the build directory.
+
 This is deterministic ROM-level coverage, not real esxDOS firmware or
 hardware validation. Use the [Fuse cold-boot runner](../fuse/README.md) for
 visual validation with actual esxDOS. The shell should display "Library OK"

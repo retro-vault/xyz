@@ -184,18 +184,19 @@ __gpx_plot_raw:
         cpl
         and     (hl)
         ld      (hl),a
-        jp      _leave_critical_section
+        jr      .pr_leave
 
 .pr_set:
         ld      a,c
         or      (hl)
         ld      (hl),a
-        jp      _leave_critical_section
+        jr      .pr_leave
 
 .pr_xor:
         ld      a,c
         xor     (hl)
         ld      (hl),a
+.pr_leave:
         jp      _leave_critical_section
 
 .pr_reject:

@@ -25,6 +25,8 @@
         .equ    STATE_TERMINATED,       4
         .equ    EVENT_SIGNALED,         1
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; __thread_lswitch, sdcccall(1)
@@ -33,9 +35,7 @@
         ; outputs: none; removes five stack bytes
         ; clobbers: af, bc, de, hl; preserves ix and iy
 __thread_lswitch::
-        push    ix
-        ld      ix, #0
-        add     ix, sp
+        call    __frame_ix
         push    hl
         push    de
         call    _enter_critical_section

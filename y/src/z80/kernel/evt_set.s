@@ -9,14 +9,14 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
         .globl  __evt_first
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; hl = event, new state byte at sp+2; removes state argument.
 _evt_set::
         call    _enter_critical_section
-        push    ix
-        ld      ix, #0
-        add     ix, sp
+        call    __frame_ix
         ex      de, hl
         ld      hl, (__evt_first)
         ld      b, #0

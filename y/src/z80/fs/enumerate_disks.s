@@ -11,6 +11,9 @@
         .globl  __zx_esx_errno
         .globl  __zx_esx_disk_info
 
+        .globl  __frame_ix
+        .globl  __frame_return
+
         .area   _CODE
 
         ; inputs: HL = six-byte result array, DE = capacity (0..255).
@@ -36,9 +39,7 @@ _enumerate_disks::
         call    __zx_esx_buffer
         jp      c,__zx_esx_errno
 
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    hl                      ; IX-2: next output
         push    de                      ; IX-4: remaining capacity
         ld      bc,#0x0100              ; B = device, C = result count
@@ -64,9 +65,7 @@ _enumerate_disks::
 .done:
         ld      e,-6(ix)
         ld      d,#0
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return
 .invalid:
         ld      a,#22                   ; EINVAL
         jp      __zx_esx_errno

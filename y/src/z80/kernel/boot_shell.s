@@ -15,6 +15,7 @@ _boot_shell::
         ld      hl,#.op
         jp      _process_load
 
-        .area   _CONST
+        ; Keep the complete immutable name with its tail-jumping caller.
+        ; This packs ordinary ROM, not a firmware reservation.
 .op:
         .asciz  "op.sys"

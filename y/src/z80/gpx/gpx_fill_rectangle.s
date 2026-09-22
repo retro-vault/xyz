@@ -25,6 +25,8 @@
         .globl  __vid_rowaddr
         .globl  __vid_nextrow
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -56,9 +58,7 @@
         ;;   __rect_unpack_norm, __clip_seg
 _gpx_fill_rectangle::
         push    iy
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ;; locals (17 bytes):
         ;; -8..-1   normalized rect_t: x0, y0, x1, y1 (little-endian)

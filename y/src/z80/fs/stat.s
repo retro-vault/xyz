@@ -14,6 +14,9 @@
         .globl  __zx_esx_stat_convert
         .globl  __zx_esx_f_stat
 
+        .globl  __frame_ix
+        .globl  __frame_return
+
         .area   _CODE
 
         ; _stat
@@ -32,9 +35,7 @@ _stat::
         pop     hl
         jp      c,__zx_esx_errno
 
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    de                      ; IX-2: public status pointer
         push    hl                      ; IX-4: path
         ld      hl,#-12
@@ -55,9 +56,7 @@ _stat::
         ld      d,-1(ix)
         call    __zx_esx_stat_convert
 .return:
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return
 .esx_stat_native_error:
         call    __zx_esx_error
         jr      .return

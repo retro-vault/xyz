@@ -14,6 +14,9 @@
         .globl  __zx_esx_f_open
         .globl  __zx_esx_f_stat
 
+        .globl  __frame_ix
+        .globl  __frame_return
+
         .area   _CODE
 
         ; inputs: HL = path, DE = flags; output: DE = fd or -1.
@@ -42,9 +45,7 @@ _open::
         or      a
         jp      z,.esx_open_invalid
 .esx_open_flags_ok:
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    hl                      ; -2: path
         push    de                      ; -4: flags
 
@@ -116,18 +117,14 @@ _open::
         ld      (hl),a
         ld      e,-8(ix)
         ld      d,-7(ix)
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return
 .esx_open_native_error:
         call    __zx_esx_error
         jr      .esx_open_return
 .esx_open_errno:
         call    __zx_esx_errno
 .esx_open_return:
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return
 .esx_open_invalid:
         ld      a,#22
         jp      __zx_esx_errno

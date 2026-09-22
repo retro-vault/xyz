@@ -10,14 +10,14 @@
         .globl  _leave_critical_section
         .globl  __tmr_first
         .globl  _so_create
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; hl = hook, de = period, owner at sp+2; removes owner.
 _tmr_install::
         call    _enter_critical_section
-        push    ix
-        ld      ix, #0
-        add     ix, sp
+        call    __frame_ix
         push    hl
         push    de
         ld      l, 4(ix)

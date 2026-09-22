@@ -17,6 +17,9 @@
         .equ    DIRECTORY_MAGIC, 0xd1
         .equ    DIRECTORY_SIZE,  47
 
+        .globl  __frame_ix
+        .globl  __frame_return
+
         .area   _CODE
 
         ; input: HL = path; output: DE = DIR pointer or NULL.
@@ -27,9 +30,7 @@ _opendir::
         ld      de,#0
         ret
 .path_ok:
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    hl                      ; IX-2: path
         ld      hl,#DIRECTORY_SIZE
         call    __yos_malloc
@@ -50,9 +51,7 @@ _opendir::
         ld      (hl),#DIRECTORY_MAGIC
         ld      e,-4(ix)
         ld      d,-3(ix)
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return
 .native_error:
         push    af
         ld      l,-4(ix)
@@ -66,6 +65,4 @@ _opendir::
         call    __zx_esx_errno
 .null:
         ld      de,#0
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return

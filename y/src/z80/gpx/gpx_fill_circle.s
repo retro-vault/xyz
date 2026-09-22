@@ -33,9 +33,14 @@
         .globl  _gpx_fill_circle
         .globl  _gpx_draw_line
 
+        .globl  __gpx_circle_init
+        .globl  __gpx_circle_step_x
+        .globl  __gpx_circle_step_y
         .globl  __gpx_circle_cmp
         .globl  __ret_clean11
         .globl  __gpx_neg_hl
+
+        .globl  __frame_ix
 
         .area   _CODE
 
@@ -60,9 +65,7 @@
         ;; References:
         ;;   _gpx_draw_line
 _gpx_fill_circle::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ;; locals (12 bytes)
         ;; -1..-2   dy of the row being drawn
@@ -96,40 +99,12 @@ _gpx_fill_circle::
         or      7(ix)
         jp      z,.fc_done
 
-        ;; xn = 0, yn = r
-        xor     a
-        ld      -5(ix),a
-        ld      -6(ix),a
-        ld      a,6(ix)
-        ld      -7(ix),a
-        ld      a,7(ix)
-        ld      -8(ix),a
-
-        ;; f = 1 - r
-        ld      hl,#1
-        ld      e,6(ix)
-        ld      d,7(ix)
-        sbc     hl,de                   ; carry already clear from xor a above
-        ld      -9(ix),l
-        ld      -10(ix),h
+        call    __gpx_circle_init
 
 .fc_loop:
         ;; The positive radius and the previous step establish xn < yn.
         ;; xn++, f += 2*xn + 1
-        ld      l,-5(ix)
-        ld      h,-6(ix)
-        inc     hl
-        ld      -5(ix),l
-        ld      -6(ix),h
-        ;; ddx = 2*xn + 1; xn is already in HL.
-        add     hl,hl
-        inc     hl
-        ex      de,hl
-        ld      l,-9(ix)
-        ld      h,-10(ix)
-        add     hl,de
-        ld      -9(ix),l
-        ld      -10(ix),h
+        call    __gpx_circle_step_x
 
         ;; f >= 0 finishes the pair of rows at +/-yn: they are as wide as
         ;; they will get, which is the xn from before this step
@@ -141,20 +116,7 @@ _gpx_fill_circle::
         ld      d,-6(ix)
         dec     de                      ; w = xn - 1
         call    .row_pair
-        ld      l,-7(ix)
-        ld      h,-8(ix)
-        dec     hl
-        ld      -7(ix),l
-        ld      -8(ix),h                ; yn--
-        ;; f -= 2*yn; yn is already in HL.
-        add     hl,hl
-        ex      de,hl
-        ld      l,-9(ix)
-        ld      h,-10(ix)
-        or      a
-        sbc     hl,de
-        ld      -9(ix),l
-        ld      -10(ix),h               ; f -= 2*yn
+        call    __gpx_circle_step_y
 
 .fc_stepped:
         ;; the pair of rows at +/-xn is final as soon as xn is, as long as

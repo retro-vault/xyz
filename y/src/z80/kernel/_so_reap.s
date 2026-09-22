@@ -14,17 +14,13 @@
         ; outputs: none; caller holds a critical section
         ; clobbers: af, bc, de, hl; preserves ix and iy
 __so_reap::
-        push    ix
         push    iy
         push    hl
         pop     iy
-        push    de
-        pop     ix
 .loop:
+        push    de                      ; retain owner across lookup/destruction
         ld      l, 0(iy)
         ld      h, 1(iy)
-        push    ix
-        pop     de
         call    __process_find_owned
         ld      a, d
         or      e
@@ -32,8 +28,9 @@ __so_reap::
         push    iy
         pop     hl
         call    _so_destroy
+        pop     de
         jr      .loop
 .done:
+        pop     de
         pop     iy
-        pop     ix
         ret

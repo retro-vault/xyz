@@ -34,44 +34,45 @@
         ; Init allocations and registrations belong to the library.
 __library_load_finish::
         push    iy
-        ld      e, 80(ix)              ; raw JP metadata is temporary
-        ld      d, 81(ix)
-        ld      l,66(ix)               ; compact table is resident
-        ld      h,67(ix)
-        push    hl
-        pop     iy
+        ld      l, 80(ix)              ; raw JP metadata is temporary
+        ld      h, 81(ix)
+        ld      e, 66(ix)              ; compact table is resident
+        ld      d, 67(ix)
         ld      b, 34(ix)
 .export:
-        ld      a, (de)
+        ld      a, (hl)
         cp      #0xc3
         jr      nz, .invalid
-        inc     de
-        ld      a, (de)
-        ld      l, a
-        inc     de
-        ld      a, (de)
-        ld      h, a
-        inc     de
-        push    de
-        ld      e, 68(ix)
-        ld      d, 69(ix)
-        add     hl, de                 ; absolute export target
+        inc     hl
+        push    bc                      ; export count
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
+        inc     hl
+        push    hl                      ; next raw JP
+        ld      l, 68(ix)
+        ld      h, 69(ix)
+        add     hl, bc                 ; absolute export target
         jr      c, .invalid_target
-        ld      e, 12(ix)
-        ld      d, 13(ix)
+        ld      c, 12(ix)
+        ld      b, 13(ix)
         or      a
-        sbc     hl, de
+        sbc     hl, bc
         jr      nc, .invalid_target    ; at or past the relocated code end
-        add     hl, de
-        pop     de
-        ld      0(iy), l
-        ld      1(iy), h
-        inc     iy
-        inc     iy
+        add     hl, bc
+        ex      de, hl
+        ld      (hl), e
+        inc     hl
+        ld      (hl), d
+        inc     hl
+        ex      de, hl
+        pop     hl
+        pop     bc
         djnz    .export
         jr      .create
 .invalid_target:
-        pop     de
+        pop     hl
+        pop     bc
 .invalid:
         ld      a, #4
 .failed:
@@ -98,11 +99,9 @@ __library_load_finish::
         xor     a
         ld      LIBRARY_REFS(iy), a
         ld      LIBRARY_REFS+1(iy), a
-        ld      l, 66(ix)
-        ld      h, 67(ix)
-        ld      74(ix), l              ; retain table across transfer
-        ld      75(ix), h
         call    __image_transfer
+        ld      74(ix), l              ; transfer returns resident table
+        ld      75(ix), h
         call    _leave_critical_section
         call    __library_initialize
         call    _enter_critical_section
@@ -136,11 +135,11 @@ __library_load_finish::
         pop     hl
         call    _process_reap
         pop     af
-        ld      de, #0
-        jr      .done
+        jr      .zero_result
 .no_object:
-        ld      de, #0
         ld      a, #2
+.zero_result:
+        ld      de, #0
 .done:
         call    _leave_critical_section
         pop     iy

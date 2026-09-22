@@ -29,6 +29,8 @@
         .globl  __clip_seg
         .globl  __vid_rowaddr
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -55,9 +57,7 @@
         ;;   __vid_rowaddr
 __gpx_hline::
         push    iy
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    hl                      ; x1, already loaded by the dispatcher
 
         ;; locals (13 bytes):

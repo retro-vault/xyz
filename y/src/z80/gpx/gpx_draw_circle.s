@@ -21,8 +21,13 @@
         .globl  _gpx_draw_circle
         .globl  __gpx_plot_raw
 
+        .globl  __gpx_circle_init
+        .globl  __gpx_circle_step_x
+        .globl  __gpx_circle_step_y
         .globl  __gpx_circle_cmp
         .globl  __gpx_neg_hl
+
+        .globl  __frame_ix
 
         .area   _CODE
 
@@ -47,9 +52,7 @@
         ;; References:
         ;;   __gpx_plot_raw
 _gpx_draw_circle::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ;; locals (10 bytes); xn/yn retain the shared comparison offsets
         ;; -1       octant selector: bit0 negates dx, bit1 dy, bit2 swaps
@@ -107,59 +110,18 @@ _gpx_draw_circle::
         ex      de,hl
         call    .plot_dxdy              ; (x-r, y)
 
-        ;; xn = 0, yn = r
-        xor     a
-        ld      -5(ix),a
-        ld      -6(ix),a
-        ld      a,6(ix)
-        ld      -7(ix),a
-        ld      a,7(ix)
-        ld      -8(ix),a
-
-        ;; f = 1 - r
-        ld      hl,#1
-        ld      e,6(ix)
-        ld      d,7(ix)
-        sbc     hl,de                   ; carry already clear from xor a above
-        ld      -9(ix),l
-        ld      -10(ix),h
+        call    __gpx_circle_init
 
 .dc_loop:
         ;; xn < yn on entry: positive radius initially, then only the
         ;; eight-point case loops back. Do not compare twice per step.
         ;; xn++, f += 2*xn + 1
-        ld      l,-5(ix)
-        ld      h,-6(ix)
-        inc     hl
-        ld      -5(ix),l
-        ld      -6(ix),h
-        ;; ddx = 2*xn + 1; xn is already in HL.
-        add     hl,hl
-        inc     hl
-        ex      de,hl
-        ld      l,-9(ix)
-        ld      h,-10(ix)
-        add     hl,de
-        ld      -9(ix),l
-        ld      -10(ix),h
+        call    __gpx_circle_step_x
 
         ;; if (f >= 0) { yn--; f -= 2*yn; }
         bit     7,h
         jr      nz,.dc_stepped
-        ld      l,-7(ix)
-        ld      h,-8(ix)
-        dec     hl
-        ld      -7(ix),l
-        ld      -8(ix),h
-        ;; f -= 2*yn; yn is already in HL.
-        add     hl,hl
-        ex      de,hl
-        ld      l,-9(ix)
-        ld      h,-10(ix)
-        or      a
-        sbc     hl,de
-        ld      -9(ix),l
-        ld      -10(ix),h
+        call    __gpx_circle_step_y
 
 .dc_stepped:
         ;; xn < yn emits all eight octant points, xn == yn only the four

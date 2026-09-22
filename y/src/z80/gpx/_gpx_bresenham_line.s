@@ -71,6 +71,8 @@
         .equ    A_LP,   12              ; lpatt (skip-rotated in place)
         .equ    A_CLIP, 13
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -101,9 +103,7 @@
         ;;   __ret_clean11
 __gpx_bresenham_line::
         call    _enter_critical_section
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         ld      hl,#-L_SIZE
         add     hl,sp
         ld      sp,hl

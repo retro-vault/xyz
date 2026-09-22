@@ -28,9 +28,9 @@ __zx_esx_errno::
         ld      l,a
         ld      h,#0
         ld      (__errno_value),hl
-        ld      de,#0xffff
-        ld      h,d
-        ld      l,e
+        ld      hl,#0xffff
+        ld      d,h
+        ld      e,l
         ret
 
         ; Native esxDOS errors are not the libc errno numbers.
@@ -47,10 +47,11 @@ __zx_esx_error::
         ld      hl,#.esx_errors
         add     hl,de
         ld      a,(hl)
+.set_errno:
         jp      __zx_esx_errno
 .esx_unknown_error:
         ld      a,#5                    ; EIO
-        jp      __zx_esx_errno
+        jr      .set_errno
 .esx_errors:
         .db     5,5,22,22,22,2,5,22
         .db     13,28,6,19,24,9,19,75
@@ -216,63 +217,68 @@ __zx_esx_source::
         ; outputs: DE = 0 or -1 with errno set.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_stat_convert::
-        push    ix
-        push    iy
         push    hl
-        pop     ix
         push    de
-        pop     iy
+        inc     hl
+        inc     hl
+        ld      a,(hl)                  ; native attributes
         ; Directories report 0xffffffff as a size sentinel in 0.8.9.
         ; They have no byte-stream length; expose st_size = 0.
-        bit     4,2(ix)
+        bit     4,a
         jr      nz,.esx_stat_valid
-        bit     7,10(ix)
+        ld      bc,#8
+        add     hl,bc
+        bit     7,(hl)
         jr      nz,.esx_stat_overflow
 .esx_stat_valid:
+        pop     de
+        pop     hl
+        ldi                             ; device identifier
+        ldi
+        push    hl                      ; native attributes address
+        ld      c,a
         xor     a
-        ld      b,#14
+        ld      b,#12
 .esx_stat_clear:
         ld      (de),a
         inc     de
         djnz    .esx_stat_clear
-        ld      a,0(ix)
-        ld      0(iy),a
-        ld      a,1(ix)
-        ld      1(iy),a
-        ld      8(iy),#1
-        ld      a,2(ix)
-        ld      hl,#0x8124              ; S_IFREG | 0444
-        bit     0,a
+        ex      de,hl                   ; public status + 14
+        ld      de,#-8
+        add     hl,de                   ; st_mode at +6
+        ld      de,#0x8124              ; S_IFREG | 0444
+        bit     0,c
         jr      nz,.esx_stat_permissions
-        ld      l,#0xb6                 ; 0666
+        ld      e,#0xb6                 ; 0666
 .esx_stat_permissions:
-        bit     4,a
+        bit     4,c
         jr      z,.esx_stat_mode
-        ld      h,#0x41                 ; S_IFDIR
-        ld      a,l
+        ld      d,#0x41                 ; S_IFDIR
+        ld      a,e
         or      #0x49                   ; add 0111 for traversal
-        ld      l,a
+        ld      e,a
 .esx_stat_mode:
-        ld      6(iy),l
-        ld      7(iy),h
-        bit     4,2(ix)
+        ld      (hl),e
+        inc     hl
+        ld      (hl),d
+        inc     hl
+        ld      (hl),#1                 ; st_nlink
+        inc     hl
+        inc     hl                      ; st_size at +10
+        ex      de,hl
+        pop     hl                      ; native status +2
+        bit     4,c
         jr      nz,.esx_stat_done
-        ld      a,7(ix)
-        ld      10(iy),a
-        ld      a,8(ix)
-        ld      11(iy),a
-        ld      a,9(ix)
-        ld      12(iy),a
-        ld      a,10(ix)
-        ld      13(iy),a
+        ld      bc,#5
+        add     hl,bc                   ; native size at +7
+        ld      bc,#4
+        ldir
 .esx_stat_done:
         ld      de,#0
-        pop     iy
-        pop     ix
         ret
 .esx_stat_overflow:
-        pop     iy
-        pop     ix
+        pop     de
+        pop     hl
         ld      a,#75
         jp      __zx_esx_errno
 

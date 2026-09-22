@@ -15,6 +15,8 @@
         .globl  __zx_esx_error
         .globl  __zx_esx_f_read
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; inputs: HL = fd, DE = buffer, count at 4(ix) after PUSH IX.
@@ -22,9 +24,7 @@
         ; IX/IY preserved. Limit transfers to signed ssize_t's maximum.
 _read::
         call    _enter_critical_section
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    de                      ; -2: buffer
         push    hl                      ; -4: fd
         call    __zx_esx_fd

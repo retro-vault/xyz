@@ -27,6 +27,7 @@
         .globl  __critical_iff_repair
         .globl  _enter_critical_section
         .globl  __yos_malloc
+        .globl  __image_transfer         ; pack helper before 0562h trap
         ; Keep the library initializer in the pre-loader packing pass.
         .globl  __library_initialize
         .globl  _boot_shell

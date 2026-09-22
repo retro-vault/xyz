@@ -15,6 +15,8 @@
         .globl  __zx_esx_stat_convert
         .globl  __zx_esx_f_fstat
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; _fstat
@@ -23,9 +25,7 @@
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 _fstat::
         call    _enter_critical_section
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         ; IX-2: 14-byte public status pointer
         push    de
         push    hl                      ; IX-4: descriptor

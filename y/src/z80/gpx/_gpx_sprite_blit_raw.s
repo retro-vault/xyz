@@ -54,6 +54,8 @@
         .equ    P_AND1,                  -15
         .equ    P_AND2,                  -16
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; Clobbers:
@@ -62,9 +64,7 @@ __gpx_sprite_blit_raw:
         ld      d,h
         ld      e,l
         push    iy                      ; preserve caller IY (pinned OR src ptr)
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ld      hl,#-16
         add     hl,sp

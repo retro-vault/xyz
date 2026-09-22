@@ -16,8 +16,9 @@ __crc32::
         push    ix
         push    hl
         pop     ix
-        ld      de,#0xffff
         ld      hl,#0xffff
+        push    hl
+        pop     de
 .byte:
         ld      a,b
         or      c

@@ -15,6 +15,8 @@
         .globl  __zx_esx_f_fgetpos
         .globl  __zx_esx_f_seek
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; _lseek
@@ -27,9 +29,7 @@ _lseek::
         ; HL=fd; offset and whence are stack arguments. The long return
         ; is
         ; HL:DE, with DE holding the low word, as in sdcccall(1).
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         call    __zx_esx_fd
         jp      c,.esx_seek_errno
         push    af                      ; IX-1: native handle
@@ -73,8 +73,11 @@ _lseek::
         jr      .esx_seek_add_offset
 
 .esx_seek_from_start:
-        ld      bc,#0
-        ld      de,#0
+        xor     a
+        ld      b,a
+        ld      c,a
+        ld      d,a
+        ld      e,a
 .esx_seek_add_offset:
         ld      a,e
         add     a,4(ix)

@@ -33,6 +33,8 @@
         .equ    CO_FORE,              0x01
         .equ    BM_CPY,               0x00
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -62,9 +64,7 @@
         ;;   __gpx_span_setup, __gpx_span_row
 _gpx_draw_text::
         push    iy
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ;; text == NULL ?
         ld      a,8(ix)

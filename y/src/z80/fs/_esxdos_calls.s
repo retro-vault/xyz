@@ -54,6 +54,8 @@
         .globl  __zx_esx_gate_84
         .globl  __zx_esx_gate_8f
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ; __zx_esx_f_open
@@ -62,9 +64,8 @@
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_open::
-        push    iy
-        ld      iy,#__zx_esx_gate_9a
-        jp      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_9a
 
         ; __zx_esx_f_close
         ; inputs: A = native file handle.
@@ -72,9 +73,8 @@ __zx_esx_f_open::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_close::
-        push    iy
-        ld      iy,#__zx_esx_gate_9b
-        jp      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_9b
 
         ; __zx_esx_f_sync
         ; inputs: A = native file handle.
@@ -82,9 +82,8 @@ __zx_esx_f_close::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_sync::
-        push    iy
-        ld      iy,#__zx_esx_gate_9c
-        jp      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_9c
 
         ; __zx_esx_f_read
         ; inputs: A = handle, HL = buffer, BC = byte count.
@@ -92,9 +91,8 @@ __zx_esx_f_sync::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_read::
-        push    iy
-        ld      iy,#__zx_esx_gate_9d
-        jp      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_9d
 
         ; __zx_esx_f_write
         ; inputs: A = handle, HL = buffer, BC = byte count.
@@ -102,9 +100,8 @@ __zx_esx_f_read::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_write::
-        push    iy
-        ld      iy,#__zx_esx_gate_9e
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_9e
 
         ; __zx_esx_f_seek
         ; inputs: A = handle, BC:DE = offset, L = native seek mode.
@@ -112,9 +109,8 @@ __zx_esx_f_write::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_seek::
-        push    iy
-        ld      iy,#__zx_esx_gate_9f
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_9f
 
         ; __zx_esx_f_fgetpos
         ; inputs: A = native file handle.
@@ -122,9 +118,8 @@ __zx_esx_f_seek::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_fgetpos::
-        push    iy
-        ld      iy,#__zx_esx_gate_a0
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_a0
 
         ; __zx_esx_f_fstat
         ; inputs: A = handle, HL = native status buffer.
@@ -132,9 +127,8 @@ __zx_esx_f_fgetpos::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_fstat::
-        push    iy
-        ld      iy,#__zx_esx_gate_a1
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_a1
 
         ; __zx_esx_f_getcwd
         ; inputs: A = drive, HL = pathname output buffer.
@@ -142,9 +136,8 @@ __zx_esx_f_fstat::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_getcwd::
-        push    iy
-        ld      iy,#__zx_esx_gate_a8
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_a8
 
         ; __zx_esx_f_chdir
         ; inputs: A = drive, HL = path.
@@ -152,9 +145,8 @@ __zx_esx_f_getcwd::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_chdir::
-        push    iy
-        ld      iy,#__zx_esx_gate_a9
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_a9
 
         ; __zx_esx_f_mkdir
         ; inputs: A = drive, HL = path.
@@ -162,9 +154,8 @@ __zx_esx_f_chdir::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_mkdir::
-        push    iy
-        ld      iy,#__zx_esx_gate_aa
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_aa
 
         ; __zx_esx_f_rmdir
         ; inputs: A = drive, HL = path.
@@ -172,9 +163,8 @@ __zx_esx_f_mkdir::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_rmdir::
-        push    iy
-        ld      iy,#__zx_esx_gate_ab
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_ab
 
         ; __zx_esx_f_stat
         ; inputs: A = drive, HL = path, DE = native status buffer.
@@ -182,9 +172,8 @@ __zx_esx_f_rmdir::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_stat::
-        push    iy
-        ld      iy,#__zx_esx_gate_ac
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_ac
 
         ; __zx_esx_f_unlink
         ; inputs: A = drive, HL = path.
@@ -192,9 +181,8 @@ __zx_esx_f_stat::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_unlink::
-        push    iy
-        ld      iy,#__zx_esx_gate_ad
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_ad
 
         ; __zx_esx_f_rename
         ; inputs: A = drive, HL = old path, DE = new path.
@@ -202,9 +190,8 @@ __zx_esx_f_unlink::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_rename::
-        push    iy
-        ld      iy,#__zx_esx_gate_b0
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_b0
 
         ; __zx_esx_f_opendir
         ; inputs: A = drive, HL = path, B = native directory mode.
@@ -212,46 +199,50 @@ __zx_esx_f_rename::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_opendir::
-        push    iy
-        ld      iy,#__zx_esx_gate_a3
-        jr      .esx_path_call
+        call    .select_path
+        .dw     __zx_esx_gate_a3
 
         ; __zx_esx_f_readdir
         ; inputs: A = directory handle, HL = native entry buffer.
         ; outputs: A = nonzero for an entry, zero at end; CY reports error.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_readdir::
-        push    iy
-        ld      iy,#__zx_esx_gate_a4
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_a4
 
         ; __zx_esx_f_rewinddir
         ; inputs: A = directory handle; CY reports native error.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_rewinddir::
-        push    iy
-        ld      iy,#__zx_esx_gate_a7
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_a7
 
         ; __zx_esx_disk_info
         ; inputs: A = nonzero device id, HL = six-byte result buffer.
         ; outputs: native result; CY reports an unavailable device/error.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_disk_info::
-        push    iy
-        ld      iy,#__zx_esx_gate_84
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_84
 
         ; __zx_esx_m_execcmd
         ; inputs: HL = NUL-terminated command line in RAM.
         ; outputs: CY clear on success; CY set and A = esxDOS error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_m_execcmd::
-        push    iy
-        ld      iy,#__zx_esx_gate_8f
-        jr      .esx_call
+        call    .select_direct
+        .dw     __zx_esx_gate_8f
 
         ; Shared direct-RAM call. Caller IY is already stacked.
+        ; Consume inline gate address; retain caller IY on stack.
+.select_direct:
+        .db     0xfd,0xe3               ; EX (SP),IY; explicit prefix for xas sizing
+        push    hl
+        ld      l,0(iy)
+        ld      h,1(iy)
+        push    hl
+        pop     iy
+        pop     hl
 .esx_call:
         push    ix
         push    hl
@@ -269,11 +260,18 @@ __zx_esx_m_execcmd::
         ; outputs: native AF/BC/DE/HL results; preserves caller IX/IY.
         ; ROM paths use their length plus NUL in private stack storage,
         ; at most 256 bytes each. RAM paths pass directly to firmware.
+        ; Consume inline gate address; retain caller IY on stack.
+.select_path:
+        .db     0xfd,0xe3               ; EX (SP),IY; explicit prefix for xas sizing
+        push    hl
+        ld      l,0(iy)
+        ld      h,1(iy)
+        push    hl
+        pop     iy
+        pop     hl
 .esx_path_call:
         call    __zx_esx_path_drive
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    af                      ; IX-2: drive and flags
         push    bc                      ; IX-4: native mode
         push    de                      ; IX-6: second pointer

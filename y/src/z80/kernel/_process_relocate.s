@@ -141,8 +141,11 @@ __process_relocate::
         pop     bc
 .bad_saved:
         pop     hl                      ; prefix size or future resident
-        ld      hl,#0
-        ld      de,#0
+        xor     a
+        ld      h,a
+        ld      l,a
+        ld      d,a
+        ld      e,a
         ld      a,#4
         pop     iy
         pop     ix

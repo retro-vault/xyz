@@ -11,6 +11,9 @@
         .globl  __zx_esx_error
         .globl  __zx_esx_f_getcwd
 
+        .globl  __frame_ix
+        .globl  __frame_return
+
         .area   _CODE
 
         ; _getcwd
@@ -18,9 +21,7 @@
         ; outputs: DE = buffer or NULL with errno set.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 _getcwd::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         push    hl                      ; IX-2: caller's output buffer
         push    de                      ; IX-4: caller's buffer size
         ld      a,h
@@ -90,9 +91,7 @@ _getcwd::
         ldir
         ld      e,-2(ix)
         ld      d,-1(ix)
-        ld      sp,ix
-        pop     ix
-        ret
+        jp      __frame_return
 
 .esx_getcwd_invalid:
         ld      a,#22                   ; EINVAL
@@ -109,8 +108,9 @@ _getcwd::
 .esx_getcwd_native_error:
         call    __zx_esx_error
 .esx_getcwd_null:
-        ld      de,#0
-        ld      hl,#0
-        ld      sp,ix
-        pop     ix
-        ret
+        xor     a
+        ld      d,a
+        ld      e,a
+        ld      h,a
+        ld      l,a
+        jp      __frame_return

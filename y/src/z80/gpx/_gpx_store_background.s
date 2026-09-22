@@ -35,15 +35,15 @@
         .equ    B_XBYTE,                 -4
         .equ    B_SRCSPAN,               -5
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; Clobbers:
         ;;   AF, BC, DE, BC', DE', HL'. Preserves HL, IX and IY.
 __gpx_store_background:
         push    hl
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ld      hl,#-5
         add     hl,sp

@@ -58,6 +58,8 @@
 
         .globl  __gpx_neg_hl
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -82,9 +84,7 @@
         ;; References:
         ;;   _gpx_draw_line
 _gpx_fill_polygon::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ;; locals. The scalars stay inside IX's one-byte reach; the two
         ;; tables below them are walked with cursors instead.

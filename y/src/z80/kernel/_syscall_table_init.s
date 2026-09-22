@@ -46,6 +46,7 @@
         .globl  _mkdir
         .globl  _rmdir
         .globl  _stat
+        .globl  __so_reap                ; pack helper before 09F0h fixed slots
         .globl  _fstat
         .globl  _opendir
         .globl  _readdir

@@ -33,6 +33,8 @@
         .equ    L_EDGES, -9
         .equ    L_SIZE,  9
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -40,9 +42,7 @@
         ;;     color c, bmode m, uint8_t lpatt, const rect_t *clip)
         ;; Clobbers: AF, BC, DE, HL and the alternate set. Preserves IX/IY.
 _gpx_draw_box::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
         ld      hl,#-L_SIZE
         add     hl,sp
         ld      sp,hl

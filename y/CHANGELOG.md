@@ -9,6 +9,26 @@ Release status:
 
 ## Unreleased
 
+- Second ROM-size pass removes another 87 linked code/data bytes and
+  recovers 73 usable tail bytes: content now ends at `0x3EFC`, leaving
+  **260 contiguous zero-filled bytes**, including the complete final page.
+  Outline/fill circles share midpoint arithmetic; library export binding
+  uses register pointers and ownership transfer returns its resident pointer.
+  The complete `op.sys` string is packed beside its caller, not removed.
+  Fonts/cursors, service slots, RAM addresses and esxDOS reservations remain
+  intact. Map-based build checks reject any code/data overlapping fixed slots
+  (even zero-valued data) or entering the last page. Regression tests cover
+  those rejection paths and 528 clipped/unclipped circle configurations.
+
+- Reduced linked ROM code/data by 201 bytes against the pre-pass build,
+  sharing IX-frame entry/return sequences and esxDOS gate selection,
+  replacing indexed status copies with pointer walks, and simplifying owned
+  object cleanup. Repacking around fixed slots moves the occupied end from
+  `0x3FFF` to `0x3F45`: 187 contiguous zero-filled bytes, 186 newly recovered.
+  Hardware traps, print/interrupt slots, vector image and RAM layout remain
+  intact; no banking is implemented. Builds and tests check the zero-filled
+  tail. Status tests cover all 256 attribute bytes and signed-size limits.
+
 - Packed ABI 3 into the 16 KiB ROM using short branches and checked fixed
   slots for the print entry, interrupt returns, service name and vector image.
   The build validates those slots and emits a SHA-256 file for the final ROM.

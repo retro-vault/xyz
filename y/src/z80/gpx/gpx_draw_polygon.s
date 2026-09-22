@@ -20,6 +20,8 @@
         .globl  _gpx_draw_polygon
         .globl  _gpx_draw_line
 
+        .globl  __frame_ix
+
         .area   _CODE
 
         ;; ------------------------------------------------------------
@@ -42,9 +44,7 @@
         ;; References:
         ;;   _gpx_draw_line
 _gpx_draw_polygon::
-        push    ix
-        ld      ix,#0
-        add     ix,sp
+        call    __frame_ix
 
         ;; locals (8 bytes)
         ;; -1..-2   pts

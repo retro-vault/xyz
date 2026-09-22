@@ -15,3 +15,11 @@ with the kernel's IFF-preserving critical sections. Creation does not clear
 the shared display. Compound drawings can interleave between primitives;
 callers coordinate overlapping regions and sprite lifetimes. The vendored
 library remains GPL-2.0 licensed; see `LICENSE.libgpx`.
+
+The YOS copy also shares the kernel's IX-frame entry routine to reduce ROM
+size. Frame offsets and argument cleanup are unchanged; entry trades extra
+cycles and two transient stack bytes for smaller call sites.
+Outline and filled circles additionally share initialization and midpoint
+X/Y updates, retaining their separate pixel/span emission and frame layouts.
+The additional helper calls use two transient stack bytes. Font and cursor
+payloads are unchanged.
