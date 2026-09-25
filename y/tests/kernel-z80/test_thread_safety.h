@@ -18,7 +18,8 @@ void test_thread_safety(Memory& mem, Cpu& cpu, Call call, Symbol sym,
     const auto fd_table = sym("__zx_esx_files");
     const auto mouse = sym("__mouse_cursor");
     const auto events = sym("__evt_first"), timers = sym("__tmr_first");
-    const auto heap = sym("__sys_heap"), heap_end = sym("__heap");
+    const auto heap = sym("__sys_heap");
+    constexpr std::uint16_t heap_end = 0xc000;
     mem.observe = [&](std::uint16_t address, bool write) {
         if (write && ((address >= fd_table && address < fd_table + 32) ||
                 (address >= mouse && address < mouse + 6) ||
@@ -59,7 +60,7 @@ void test_thread_safety(Memory& mem, Cpu& cpu, Call call, Symbol sym,
     cpu.restore(state);
     call(sym("_mouse_read"), 0xe600, 0, "protected mouse read");
     files.enabled = true;
-    const std::string path = "op.sys";
+    const std::string path = "shell.sys";
     std::copy(path.c_str(), path.c_str() + path.size() + 1,
               mem.bytes.begin() + 0xe600);
     bool checked_slot = false;

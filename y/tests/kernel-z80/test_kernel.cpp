@@ -14,14 +14,27 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
 
 struct memory final : xz80::IMemory {
     std::array<std::uint8_t, 65536> bytes{};
+    std::array<std::array<std::uint8_t, 0x4000>, 128> banks{};
+    std::uint8_t mapped_page = 0;
+    bool banked = false;
     unsigned rom_writes = 0;
     std::function<void(std::uint16_t, bool)> observe;
+
+    void map_page(std::uint8_t page) {
+        if (!banked || page == mapped_page) return;
+        std::copy(bytes.begin() + 0xc000, bytes.end(),
+                  banks[mapped_page].begin());
+        std::copy(banks[page].begin(), banks[page].end(),
+                  bytes.begin() + 0xc000);
+        mapped_page = page;
+    }
 
     std::uint8_t read(std::uint16_t address) const noexcept override {
         if (observe) observe(address, false);
@@ -49,20 +62,44 @@ struct memory final : xz80::IMemory {
 };
 
 struct ports final : xz80::IPorts {
+    memory* mem = nullptr;
+    std::string backend = "48";
+    std::uint8_t next_register = 0;
+    std::uint8_t next_mmu6 = 0;
+    std::uint8_t next_mmu7 = 1;
     std::uint8_t mouse_buttons = 0xff;
     std::uint8_t mouse_x = 0;
     std::uint8_t mouse_y = 0;
     std::uint16_t keyboard_address = 0;
     std::uint8_t keyboard_value = 0xff;
+    std::vector<std::pair<std::uint16_t, std::uint8_t>> writes;
 
     std::uint8_t in(std::uint16_t address) noexcept override {
         if (address == 0xfadf) return mouse_buttons;
         if (address == 0xfbdf) return mouse_x;
         if (address == 0xffdf) return mouse_y;
         if (address == keyboard_address) return keyboard_value;
+        if (backend == "next" && address == 0x253b) {
+            if (next_register == 0x00) return 0x0a;
+            if (next_register == 0x56) return next_mmu6;
+            if (next_register == 0x57) return next_mmu7;
+        }
         return 0xff;
     }
-    void out(std::uint16_t, std::uint8_t) noexcept override {}
+    void out(std::uint16_t address, std::uint8_t value) noexcept override {
+        writes.emplace_back(address, value);
+        if (!mem) return;
+        if (backend == "128" && address == 0x7ffd) {
+            mem->map_page(value & 7);
+        } else if (backend == "next" && address == 0x243b) {
+            next_register = value;
+        } else if (backend == "next" && address == 0x253b &&
+                   (next_register == 0x56 || next_register == 0x57)) {
+            if (next_register == 0x56) next_mmu6 = value;
+            else next_mmu7 = value;
+            mem->map_page(value >> 1);
+        }
+    }
 };
 
 void require(bool condition, const std::string& message) {
@@ -88,13 +125,18 @@ std::map<std::string, std::uint16_t> read_symbols(const char* path) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 6) {
-        std::cerr << "usage: test_kernel ROM MAP OP.SYS LIB.SVC LIB.MAP\n";
+    if (argc != 8) {
+        std::cerr << "usage: test_kernel ROM MAP SHELL.SYS LIB.SVC LIB.MAP "
+                     "BANK-BACKEND BANK-COUNT\n";
         return 2;
     }
 
     memory mem;
     ports io;
+    io.mem = &mem;
+    io.backend = argv[6];
+    const auto bank_count = unsigned(std::stoul(argv[7]));
+    mem.banked = io.backend != "48";
     xz80::cpu cpu(mem, io);
     std::ifstream rom(argv[1], std::ios::binary);
     rom.read(reinterpret_cast<char*>(mem.bytes.data()), 0x4000);
@@ -141,8 +183,14 @@ int main(int argc, char** argv) {
                 throw std::runtime_error(operation + ": " + error.what());
             }
         }
-        throw std::runtime_error(operation + " reached emulator step limit at PC " +
-                                 std::to_string(cpu.pc()));
+        const auto timed_out = cpu.snapshot();
+        std::ostringstream detail;
+        detail << operation << " reached emulator step limit at PC "
+               << timed_out.pc << " SP " << timed_out.sp << " AF "
+               << timed_out.af << " BC " << timed_out.bc << " DE "
+               << timed_out.de << " HL " << timed_out.hl << " mapped "
+               << unsigned(mem.mapped_page);
+        throw std::runtime_error(detail.str());
     };
 
     cpu.reset();
@@ -152,6 +200,178 @@ int main(int argc, char** argv) {
     cpu.restore(state);
     run_until([&] { return cpu.halted(); }, 200000, "boot");
     booting = false;
+    io.writes.clear();                 // exclude one-time hardware probes
+    const auto boot_font = mem.word(sym("_gpx_font_envy"));
+    require(boot_font && mem.bytes[boot_font] == 1 &&
+                mem.bytes[boot_font + 1] == 0x20 &&
+                mem.bytes[boot_font + 2] == 0x7f,
+            "boot did not expand the system font into common RAM");
+
+    if (mem.banked) {
+        require(bank_count >= 2, "banked allocator test needs two banks");
+        const auto physical_page = [&](unsigned logical) {
+            if (io.backend == "128") {
+                constexpr std::array<unsigned, 6> pages = {0, 1, 3, 4, 6, 7};
+                return pages.at(logical);
+            }
+            return logical + (logical >= 2) + (logical >= 4);
+        };
+        for (unsigned bank = 0; bank != bank_count; ++bank) {
+            const auto& arena = mem.banks[physical_page(bank)];
+            require(arena[0] == 0 && arena[1] == 0 && arena[4] == 0 &&
+                        arena[5] == 0xf9 && arena[6] == 0x3f,
+                    "boot did not initialize user heap bank " +
+                        std::to_string(bank));
+        }
+
+        const auto invoke = [&](std::uint16_t function, std::uint16_t hl,
+                                std::initializer_list<std::uint8_t> args = {},
+                                std::uint8_t a = 0) {
+            constexpr std::uint16_t returned = 0x4100;
+            const auto stack = std::uint16_t(sym("__sys_stack") - 64);
+            mem.word(stack - 2, returned);
+            auto argument = stack;
+            for (const auto byte : args) mem.bytes[argument++] = byte;
+            auto call = cpu.snapshot();
+            call.halted = false;
+            call.pc = function;
+            call.sp = stack - 2;
+            call.hl = hl;
+            call.de = 0;
+            call.bc = 0;
+            call.af = std::uint16_t(a) << 8;
+            call.ix = 0xa55a;
+            call.iy = 0x5aa5;
+            cpu.restore(call);
+            run_until([&] { return cpu.pc() == returned; }, 500000,
+                      "multi-bank user allocation");
+            call = cpu.snapshot();
+            require(call.ix == 0xa55a && call.iy == 0x5aa5,
+                    "bank allocator changed a preserved register");
+            return call;
+        };
+
+        const auto os_heap = sym("__sys_heap");
+        const std::vector<std::uint8_t> os_before(
+            mem.bytes.begin() + os_heap, mem.bytes.begin() + 0xc000);
+
+        invoke(sym("__bank_map"), 0, {}, 1);
+        const auto near = invoke(sym("__yos_malloc"), 0x8010);
+        require(near.hl == 0xc007 && std::uint8_t(near.de) == 1 &&
+                    mem.bytes[sym("__bank_current")] == 1,
+                "current-bank near allocation escaped bank one");
+        invoke(sym("__yos_free"), 0, {0x01, 0x07, 0xc0});
+        invoke(sym("__bank_map"), 0, {}, 0);
+
+        const auto first = invoke(sym("__yos_malloc"), 0x3ff9);
+        require(first.hl == 0xc007 && std::uint8_t(first.de) == 0,
+                "first user allocation did not fill bank zero");
+        const auto second = invoke(sym("__yos_malloc"), 16);
+        require(second.hl == 0xc007 && std::uint8_t(second.de) == 1,
+                "user allocator did not continue into bank one");
+        require(mem.bytes[sym("__bank_current")] == 0,
+                "public allocation did not restore the execution bank");
+        require(std::equal(os_before.begin(), os_before.end(),
+                           mem.bytes.begin() + os_heap),
+                "banked user allocation modified the fixed OS heap");
+
+        invoke(sym("__yos_free"), 0,
+               {0x00, 0x07, 0xc0});
+        invoke(sym("__yos_free"), 0,
+               {0x01, 0x07, 0xc0});
+        for (unsigned bank = 0; bank != 2; ++bank) {
+            const auto& arena = mem.banks[physical_page(bank)];
+            require(arena[0] == 0 && arena[1] == 0 && arena[4] == 0 &&
+                        arena[5] == 0xf9 && arena[6] == 0x3f,
+                    "free did not restore user heap bank " +
+                        std::to_string(bank));
+        }
+
+        // Execute code that exists only in physical bank one. Bank zero has
+        // HALT at the same address, so a mapper failure cannot pass by using
+        // an accidentally identical upper window.
+        constexpr std::uint16_t gate = 0x4000;
+        constexpr std::uint16_t target = 0xc100;
+        constexpr std::uint16_t done = 0x4100;
+        const auto fixed_sp = std::uint16_t(sym("__sys_stack") - 64);
+        mem.bytes[target] = 0x76;
+        auto& bank_one = mem.banks[physical_page(1)];
+        bank_one[target - 0xc000] = 0x11;       // LD DE,600dh
+        bank_one[target - 0xc000 + 1] = 0x0d;
+        bank_one[target - 0xc000 + 2] = 0x60;
+        bank_one[target - 0xc000 + 3] = 0xc9;  // RET
+        mem.bytes[gate] = 0xe7;                 // RST 20h
+        mem.bytes[gate + 1] = 1;
+        mem.word(gate + 2, target);
+        mem.bytes[gate + 4] = 0xc3;             // JP done
+        mem.word(gate + 5, done);
+        auto cross = cpu.snapshot();
+        cross.halted = false;
+        cross.pc = gate;
+        cross.sp = fixed_sp;
+        cross.de = 0;
+        cpu.restore(cross);
+        run_until([&] { return cpu.pc() == done; }, 1000,
+                  "physical cross-bank RST20 call");
+        cross = cpu.snapshot();
+        require(cross.de == 0x600d &&
+                    mem.bytes[sym("__bank_current")] == 0 &&
+                    mem.mapped_page == physical_page(0) &&
+                    mem.bytes[target] == 0x76,
+                "RST20 did not execute bank-one code and restore bank zero");
+
+        // Read a byte that differs at the same virtual address in both banks.
+        constexpr std::uint16_t far_byte = 0xc120;
+        constexpr std::uint16_t marker = 0x4200;
+        mem.bytes[far_byte] = 0xa5;
+        bank_one[far_byte - 0xc000] = 0x5a;
+        auto cursor = gate;
+        mem.bytes[cursor++] = 0x21;             // LD HL,far_byte
+        mem.word(cursor, far_byte);
+        cursor += 2;
+        mem.bytes[cursor++] = 0x0e;             // LD C,1
+        mem.bytes[cursor++] = 1;
+        mem.bytes[cursor++] = 0xb7;             // OR A: clear carry
+        mem.bytes[cursor++] = 0xf7;             // RST 30h read
+        mem.bytes[cursor++] = 0x32;             // LD (marker),A
+        mem.word(cursor, marker);
+        cursor += 2;
+        mem.bytes[cursor++] = 0xc3;
+        mem.word(cursor, done);
+        cross.halted = false;
+        cross.pc = gate;
+        cross.sp = fixed_sp;
+        cpu.restore(cross);
+        run_until([&] { return cpu.pc() == done; }, 1000,
+                  "physical cross-bank RST30 read");
+        require(mem.bytes[marker] == 0x5a && mem.bytes[far_byte] == 0xa5 &&
+                    mem.bytes[sym("__bank_current")] == 0 &&
+                    mem.mapped_page == physical_page(0),
+                "RST30 did not read bank one and restore bank zero");
+
+        if (io.backend == "128") {
+            const auto paging_write = [](const auto& write) {
+                return write.first == 0x7ffd;
+            };
+            require(std::any_of(io.writes.begin(), io.writes.end(),
+                                paging_write),
+                    "128K backend did not perform paging I/O");
+            require(std::all_of(
+                        io.writes.begin(), io.writes.end(),
+                        [&](const auto& write) {
+                            return !paging_write(write) ||
+                                   (write.second & 0xf8) == 0x10;
+                        }),
+                    "128K backend did not retain the YOS ROM slot");
+        }
+
+        std::cout << "PASS: " << io.backend << " backend initialized "
+                  << bank_count << " banked user heaps, spilled allocation "
+                     "from bank 0 to bank 1, executed and read bank-one "
+                     "memory, restored bank zero, and left the fixed OS "
+                     "heap unchanged\n";
+        return 0;
+    }
 
     const auto vectors = sym("__sys_vec_tbl");
     constexpr std::array<std::uint16_t, 4> restart_addresses = {
@@ -195,6 +415,15 @@ int main(int argc, char** argv) {
     require(mem.bytes[vectors + 6] == 0xc3, "RST18 vector is not JP");
     require(mem.word(vectors + 7) == sym("_svc_query_rst18"),
             "RST18 service vector is wrong");
+    require(mem.bytes[vectors + 9] == 0xc3, "RST20 vector is not JP");
+    require(mem.word(vectors + 10) == sym("__bank_call_rst20"),
+            "RST20 far-call vector is wrong");
+    require(mem.bytes[vectors + 12] == 0xc3, "RST28 vector is not JP");
+    require(mem.word(vectors + 13) == sym("__bank_call_rst28"),
+            "RST28 dynamic-call vector is wrong");
+    require(mem.bytes[vectors + 15] == 0xc3, "RST30 vector is not JP");
+    require(mem.word(vectors + 16) == sym("__bank_data_rst30"),
+            "RST30 far-data vector is wrong");
     require(mem.bytes[vectors + 18] == 0xc3, "RST38 vector is not JP");
     require(mem.word(vectors + 19) == sym("__sys_reti"),
             "unused RST38 RAM vector is not the default return");
@@ -202,13 +431,15 @@ int main(int argc, char** argv) {
             "IM2 scheduler vector is wrong");
 
     const auto table = sym("__yos");
-    constexpr std::array<const char*, 52> yos_api = {
-        "_yos_version", "__yos_malloc", "__yos_free", "__clock",
-        "_enter_critical_section", "_leave_critical_section",
+    constexpr std::array<const char*, 53> yos_api = {
+        "_yos_version", "_yos_rom_model", "_set_print_hook",
+        "__yos_malloc", "__yos_free", "__yos_shrink",
+        "__clock", "_enter_critical_section", "_leave_critical_section",
         "__yos_install_timer", "_tmr_uninstall",
-        "_evt_create", "_evt_destroy", "_evt_set",
+        "_evt_create", "_evt_destroy", "_evt_set", "_evt_wait",
         "_thread_create", "_thread_exit", "_thread_suspend",
-        "_thread_resume", "_process_start", "_process_exit",
+        "_thread_resume", "_process_start", "_process_load", "_process_exit",
+        "_library_load", "_process_last_error",
         "__svc_query", "_svc_register", "_svc_unregister",
         "_sys_vec_get", "_sys_vec_set",
         "_kbd_read", "_mouse_calibrate", "_mouse_read",
@@ -216,9 +447,7 @@ int main(int argc, char** argv) {
         "_open", "_close", "_read", "_write", "_lseek", "_fsync",
         "_unlink", "_rename", "_chdir", "_getcwd", "_mkdir", "_rmdir",
         "_stat", "_fstat", "_opendir", "_readdir", "_rewinddir",
-        "_closedir", "_enumerate_disks", "_process_load",
-        "_process_last_error", "_library_load", "__yos_shrink", "_evt_wait",
-        "_exec_command", "_set_print_hook"
+        "_closedir", "_enumerate_disks", "_exec_command"
     };
     for (std::size_t slot = 0; slot < yos_api.size(); ++slot) {
         require(mem.word(table + 2 * slot) == sym(yos_api[slot]),
@@ -328,6 +557,7 @@ int main(int argc, char** argv) {
     }
 
     std::uint16_t kernel_hl = 0;
+    std::uint8_t kernel_a = 0;
     const auto call_kernel = [&](std::uint16_t function, std::uint16_t hl,
                                  std::uint16_t de,
                                  const std::string& operation,
@@ -335,7 +565,8 @@ int main(int argc, char** argv) {
                                  std::initializer_list<std::uint8_t>
                                      stack_arguments = {},
                                  std::uint16_t bc = 0,
-                                 bool caller_cleans = false) {
+                                 bool caller_cleans = false,
+                                 unsigned step_limit = 2000000) {
         constexpr std::uint16_t direct_sp = 0xf000;
         constexpr std::uint16_t direct_return = 0x4100;
         mem.word(direct_sp - 2, direct_return);
@@ -353,7 +584,7 @@ int main(int argc, char** argv) {
         direct.ix = 0xa55a;
         direct.iy = 0x5aa5;
         cpu.restore(direct);
-        run_until([&] { return cpu.pc() == direct_return; }, 500000,
+        run_until([&] { return cpu.pc() == direct_return; }, step_limit,
                   operation);
         direct = cpu.snapshot();
         require(direct.sp == direct_sp +
@@ -362,7 +593,218 @@ int main(int argc, char** argv) {
                     direct.iy == 0x5aa5,
                 operation + " violated its ABI");
         kernel_hl = direct.hl;
+        kernel_a = direct.af >> 8;
         return direct.de;
+    };
+
+    const auto exercise_far_gate = [&](bool dynamic) {
+        constexpr std::uint16_t gate = 0x4000;
+        constexpr std::uint16_t target = 0x4020;
+        constexpr std::uint16_t done = 0x4100;
+        auto cursor = gate;
+        if (dynamic) {
+            for (const auto opcode : {0xf5, 0xc5, 0xd5, 0xe5})
+                mem.bytes[cursor++] = opcode; // save AF, BC, DE, HL
+            mem.bytes[cursor++] = 0x21;       // LD HL,target
+            mem.word(cursor, target);
+            cursor += 2;
+            mem.bytes[cursor++] = 0x0e;       // LD C,bank
+            mem.bytes[cursor++] = 1;
+            mem.bytes[cursor++] = 0xe5;       // PUSH HL
+            mem.bytes[cursor++] = 0xc5;       // PUSH BC
+            mem.bytes[cursor++] = 0xef;       // RST 28h
+        } else {
+            mem.bytes[cursor++] = 0xe7;       // RST 20h
+            mem.bytes[cursor++] = 1;          // cross-bank call
+            mem.word(cursor, target);
+            cursor += 2;
+        }
+        mem.bytes[cursor++] = 0xc3;           // JP done
+        mem.word(cursor, done);
+        mem.bytes[target] = 0xfd;              // LD IY,0
+        mem.bytes[target + 1] = 0x21;
+        mem.word(target + 2, 0);
+        mem.bytes[target + 4] = 0xfd;          // ADD IY,SP
+        mem.bytes[target + 5] = 0x39;
+        mem.bytes[target + 6] = 0xfd;          // LD E,2(IY)
+        mem.bytes[target + 7] = 0x5e;
+        mem.bytes[target + 8] = 2;
+        mem.bytes[target + 9] = 0xfd;          // LD D,3(IY)
+        mem.bytes[target + 10] = 0x56;
+        mem.bytes[target + 11] = 3;
+        mem.bytes[target + 12] = 0xc9;
+        mem.word(0xf000, 0x600d);              // first stack argument
+
+        auto before = cpu.snapshot();
+        before.halted = false;
+        before.pc = gate;
+        before.sp = 0xf000;
+        before.af = 0x1234;
+        before.bc = 0x2345;
+        before.de = 0x3456;
+        before.hl = 0x4567;
+        before.ix = 0x5678;
+        before.iy = 0x6789;
+        cpu.restore(before);
+        run_until([&] { return cpu.pc() == done; }, 500,
+                  dynamic ? "RST28 far call" : "RST20 far call");
+        const auto after = cpu.snapshot();
+        if (!(after.de == 0x600d && after.sp == before.sp &&
+              after.bc == before.bc && after.hl == before.hl &&
+              after.ix == before.ix &&
+              mem.bytes[sym("__bank_current")] == 0)) {
+            std::ostringstream detail;
+            detail << (dynamic ? "RST28" : "RST20")
+                   << " far-call gate changed registers or stack"
+                   << " (DE=" << after.de << ", SP=" << after.sp
+                   << ", BC=" << after.bc << ", HL=" << after.hl
+                   << ", IX=" << after.ix
+                   << ", bank="
+                   << unsigned(mem.bytes[sym("__bank_current")]) << ')';
+            require(false, detail.str());
+        }
+    };
+    exercise_far_gate(false);
+    exercise_far_gate(true);
+    {
+        // Four nested cross-bank frames are accepted. The fifth fails safely
+        // to its continuation and must not enter its target.
+        constexpr std::uint16_t gate = 0x4000;
+        constexpr std::uint16_t done = 0x4100;
+        constexpr std::uint16_t marker = 0x4300;
+        constexpr std::array<std::uint16_t, 5> targets = {
+            0x4020, 0x4040, 0x4060, 0x4080, 0x40a0};
+        mem.bytes[marker] = 0;
+        mem.bytes[gate] = 0xe7;
+        mem.bytes[gate + 1] = 1;
+        mem.word(gate + 2, targets[0]);
+        mem.bytes[gate + 4] = 0xc3;
+        mem.word(gate + 5, done);
+        for (unsigned level = 0; level != 4; ++level) {
+            const auto target = targets[level];
+            mem.bytes[target] = 0xe7;
+            mem.bytes[target + 1] = std::uint8_t(level + 2);
+            mem.word(target + 2, targets[level + 1]);
+            mem.bytes[target + 4] = 0xc9;
+        }
+        mem.bytes[targets[4]] = 0x3e;       // LD A,1 (must not execute)
+        mem.bytes[targets[4] + 1] = 1;
+        mem.bytes[targets[4] + 2] = 0x32;   // LD (marker),A
+        mem.word(targets[4] + 3, marker);
+        mem.bytes[targets[4] + 5] = 0xc9;
+
+        auto before = cpu.snapshot();
+        before.halted = false;
+        before.pc = gate;
+        before.sp = 0xf000;
+        before.af = 0x1234;
+        before.bc = 0x2345;
+        before.de = 0x3456;
+        before.hl = 0x4567;
+        before.ix = 0x5678;
+        before.iy = 0x6789;
+        cpu.restore(before);
+        run_until([&] { return cpu.pc() == done; }, 2000,
+                  "nested RST20 far calls");
+        const auto after = cpu.snapshot();
+        require(!mem.bytes[marker] && after.sp == before.sp &&
+                    after.bc == before.bc && after.de == before.de &&
+                    after.hl == before.hl && after.ix == before.ix &&
+                    mem.bytes[sym("__bank_current")] == 0,
+                "nested far-call limit or unwind is incorrect");
+    }
+    {
+        constexpr std::uint16_t gate = 0x4000;
+        constexpr std::uint16_t target = 0x4020;
+        constexpr std::uint16_t done = 0x4100;
+        mem.bytes[gate] = 0xe7;          // RST 20h
+        mem.bytes[gate + 1] = 0x80;      // far jump, bank zero
+        mem.word(gate + 2, target);
+        mem.bytes[target] = 0x11;        // LD DE,600dh
+        mem.word(target + 1, 0x600d);
+        mem.bytes[target + 3] = 0xc3;    // JP done (no return)
+        mem.word(target + 4, done);
+
+        auto before = cpu.snapshot();
+        before.halted = false;
+        before.pc = gate;
+        before.sp = 0xf000;
+        before.af = 0x1234;
+        before.bc = 0x2345;
+        before.de = 0x3456;
+        before.hl = 0x4567;
+        before.ix = 0x5678;
+        before.iy = 0x6789;
+        cpu.restore(before);
+        run_until([&] { return cpu.pc() == done; }, 500,
+                  "RST20 far jump");
+        const auto after = cpu.snapshot();
+        require(after.de == 0x600d && after.sp == before.sp &&
+                    after.bc == before.bc && after.hl == before.hl &&
+                    after.ix == before.ix,
+                "RST20 far-jump gate changed registers or stack");
+    }
+    std::uint16_t far_hl = 0;
+    std::uint8_t far_bank = 0;
+    const auto call_far = [&](std::uint16_t entry,
+                              const std::string& operation,
+                              std::uint16_t argument_hl = 0,
+                              std::uint16_t argument_de = 0,
+                              std::uint32_t stack_argument = 0x10000) {
+        constexpr std::uint16_t gate = 0x4000;
+        constexpr std::uint16_t done = 0x4100;
+        auto cursor = gate;
+        if (stack_argument <= 0xffff) {
+            mem.bytes[cursor++] = 0x01;      // LD BC,third argument
+            mem.word(cursor, std::uint16_t(stack_argument));
+            cursor += 2;
+            mem.bytes[cursor++] = 0xc5;      // PUSH BC
+        }
+        mem.bytes[cursor++] = 0x21;          // LD HL,first argument
+        mem.word(cursor, argument_hl);
+        cursor += 2;
+        mem.bytes[cursor++] = 0x11;          // LD DE,second argument
+        mem.word(cursor, argument_de);
+        cursor += 2;
+        for (const auto opcode : {0xf5, 0xc5, 0xd5, 0xe5})
+            mem.bytes[cursor++] = opcode;
+        mem.bytes[cursor++] = 0x21;
+        mem.word(cursor, mem.word(entry + 1));
+        cursor += 2;
+        mem.bytes[cursor++] = 0x0e;
+        mem.bytes[cursor++] = mem.bytes[entry];
+        mem.bytes[cursor++] = 0xe5;
+        mem.bytes[cursor++] = 0xc5;
+        mem.bytes[cursor++] = 0xef;
+        mem.bytes[cursor++] = 0xc3;
+        mem.word(cursor, done);
+        auto state = cpu.snapshot();
+        state.halted = false;
+        state.pc = gate;
+        state.sp = 0xf000;
+        state.af = state.bc = state.de = state.hl = 0;
+        state.ix = 0xa55a;
+        state.iy = 0x5aa5;
+        cpu.restore(state);
+        run_until([&] { return cpu.pc() == done; }, 500000,
+                  operation + " (bank " +
+                      std::to_string(mem.bytes[entry]) + ", target " +
+                      std::to_string(mem.word(entry + 1)) + ")");
+        state = cpu.snapshot();
+        require(state.sp == 0xf000 && state.ix == 0xa55a,
+                operation + " violated the far-call ABI");
+        far_hl = state.hl;
+        far_bank = std::uint8_t(state.de);
+        return state.de;
+    };
+    const auto call_far_pointer = [&](std::uint16_t entry,
+                                      const std::string& operation) {
+        call_far(entry, operation);
+        return std::pair{far_bank, far_hl};
+    };
+    const auto read_far_byte = [&](std::uint8_t bank, std::uint16_t address) {
+        call_kernel(0x0030, address, 0, "RST30 far-byte read", 0, {}, bank);
+        return kernel_a;
     };
 
     // Failure must return a full 32-bit -1, independent of incoming DE.
@@ -424,7 +866,7 @@ int main(int argc, char** argv) {
     mem.bytes[print_sink] = 0x32; // LD (print_byte),A
     mem.word(print_sink + 1, print_byte);
     mem.bytes[print_sink + 3] = 0xc9;
-    require(call_kernel(mem.word(table + 102), print_sink, 0,
+    require(call_kernel(mem.word(table + 4), print_sink, 0,
                         "install print hook") == 0,
             "print hook did not return its previous sink");
     call_kernel(0x09f4, 0x1234, 0, "esxDOS PRINT-OUT", 'Q');
@@ -433,7 +875,7 @@ int main(int argc, char** argv) {
     call_kernel(0x0010, 0x2345, 0, "esxDOS RST10", 'R');
     require(mem.bytes[print_byte] == 'R' && kernel_hl == 0x2345,
             "esxDOS RST10 lost the byte or HL");
-    require(call_kernel(mem.word(table + 102), 0, 0,
+    require(call_kernel(mem.word(table + 4), 0, 0,
                         "remove print hook") == print_sink,
             "print hook did not return the installed sink");
 
@@ -448,15 +890,24 @@ int main(int argc, char** argv) {
     const auto library_symbols = read_symbols(argv[5]);
     require(!library_image.empty() && library_symbols.contains("_interface"),
             "missing packaged library fixture");
-    files.files["op.sys"] = shell;
+    files.files["shell.sys"] = shell;
     files.files["shelllib.svc"] = library_image;
     require(shell.size() >= 76 && shell[0] == 'X' && shell[1] == 'P' &&
                 shell[2] == 'R' && shell[3] == 'G',
             "dummy shell is not an XPRG image");
-    require(shell[30] == 1 && shell[31] == 0 &&
-                library_image[30] == 1 && library_image[31] == 0 &&
-                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 3,
-            "ABI 3 ROM must retain ABI 1 process/library compatibility");
+    require(shell[30] == 6 && shell[31] == 0 &&
+                library_image[30] == 6 && library_image[31] == 0 &&
+                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 6,
+            "fixtures or ROM do not require grouped YOS ABI 6");
+    const auto expected_model =
+        io.backend == "next" ? 2u : io.backend == "128" ? 1u : 0u;
+    require(call_kernel(mem.word(table + 2), 0, 0, "ROM model") ==
+                expected_model,
+            "ROM reported the wrong detected Spectrum model");
+    require(mem.bytes[sym("__bank_model")] == expected_model,
+            "boot did not retain the detected Spectrum model");
+    require(mem.bytes[sym("__bank_count")] == bank_count,
+            "boot did not retain the configured usable bank count");
     const auto payload_offset = std::uint16_t(shell[10] | (shell[11] << 8));
     const auto payload_size = std::uint16_t(shell[12] | (shell[13] << 8));
     require(payload_offset + payload_size == shell.size(),
@@ -465,7 +916,8 @@ int main(int argc, char** argv) {
     for (std::uint16_t i = 0; i < payload_size; ++i)
         mem.bytes[shell_image + i] = shell[payload_offset + i];
     const auto crc_high = call_kernel(sym("__crc32"), shell_image, 0,
-                                      "XPRG payload CRC", 0, {}, payload_size);
+                                      "XPRG payload CRC", 0, {}, payload_size,
+                                      false, unsigned(payload_size) * 200u);
     require(kernel_hl == std::uint16_t(shell[16] | (shell[17] << 8)) &&
                 crc_high == std::uint16_t(shell[18] | (shell[19] << 8)),
             "ROM CRC-32 disagrees with xprog");
@@ -526,65 +978,63 @@ int main(int argc, char** argv) {
         call_kernel(sym("__thread_cleanup_terminated"), 0, 0,
                     "retire: scheduler cleanup");
     };
-    // Load the actual shell through the real ROM/POSIX/XL path, then let
-    // it load, initialize and call the separately packaged library.
+    // Load the actual allocation-free Hello World shell through the real
+    // ROM/POSIX/XL path and execute it until its final endless loop.
     files.enabled = true;
-    put_string(0xe100, "op.sys");
-    call_kernel(sym("_enter_critical_section"), 0, 0, "outer disk critical section");
-    const auto disk_fd = call_kernel(sym("_open"), 0xe100, 0, "nested disk open");
+    put_string(0xe100, "shell.sys");
+    call_kernel(sym("_enter_critical_section"), 0, 0,
+                "outer disk critical section");
+    const auto disk_fd = call_kernel(sym("_open"), 0xe100, 0,
+                                     "nested disk open");
     require(disk_fd != 0xffff && !cpu.snapshot().iff1 &&
                 mem.bytes[sym("__interrupt_refcount")] == 0x81,
-            "disk open released the caller's critical section: fd=" +
-                std::to_string(disk_fd) + " iff=" +
-                std::to_string(cpu.snapshot().iff1) + " depth=" +
-                std::to_string(mem.bytes[sym("__interrupt_refcount")]));
+            "disk open released the outer critical section");
     call_kernel(sym("_close"), disk_fd, 0, "nested disk close");
     put_string(0xe120, "missing.prc");
-    require(call_kernel(sym("_open"), 0xe120, 0, "nested disk error") == 0xffff &&
+    require(call_kernel(sym("_open"), 0xe120, 0,
+                        "nested disk error") == 0xffff &&
                 !cpu.snapshot().iff1 &&
                 mem.bytes[sym("__interrupt_refcount")] == 0x81,
-            "disk error released the caller's critical section");
-    call_kernel(sym("_leave_critical_section"), 0, 0, "leave disk critical section");
-    require(cpu.snapshot().iff1 && !mem.bytes[sym("__interrupt_refcount")],
+            "disk error released the outer critical section");
+    call_kernel(sym("_leave_critical_section"), 0, 0,
+                "leave disk critical section");
+    require(cpu.snapshot().iff1 &&
+                !mem.bytes[sym("__interrupt_refcount")],
             "disk critical section did not restore preemption");
-    const auto loaded_shell = call_kernel(sym("_process_load"), 0xe100, 0,
-                                          "load shell from mock esxDOS");
+
+    const auto loaded_shell = call_kernel(
+        sym("_process_load"), 0xe100, 0, "load Hello World shell",
+        0, {}, 0, false, unsigned(shell.size()) * 300u);
     require(loaded_shell != 0,
             "shell load failed: " +
                 std::to_string(mem.bytes[sym("_process_last_error")]));
-    // XL v2 keeps the relocation table after the code, so the retained
-    // shell block is exactly its code: the XPRG/XL metadata prefix and the
-    // consumed relocation table were split off and freed.
+
     bool shell_block_is_code_only = false;
-    for (auto block = sym("__heap"), n = std::uint16_t(0); block && n < 256;
-         block = mem.word(block), ++n) {
-        if ((mem.bytes[block + 4] & 1) && mem.word(block + 2) == loaded_shell &&
-            mem.word(block + 5) == code_size)
+    for (auto block = std::uint16_t(0xc000), n = std::uint16_t(0);
+         block && n < 256; block = mem.word(block), ++n) {
+        if ((mem.bytes[block + 4] & 1) &&
+                mem.word(block + 2) == loaded_shell &&
+                mem.word(block + 5) == code_size)
             shell_block_is_code_only = true;
     }
     require(shell_block_is_code_only,
-            "shell image block still carries metadata or its relocation table");
+            "shell image retained metadata or its relocation table");
+
+    const auto heap_usage = [&](std::uint16_t head) {
+        std::pair<unsigned, unsigned> result{};
+        for (unsigned n = 0; head && n < 256;
+             ++n, head = mem.word(head)) {
+            if (mem.bytes[head + 4] & 1) {
+                ++result.first;
+                result.second += 7 + mem.word(head + 5);
+            }
+        }
+        return result;
+    };
+    const auto before_shell = std::pair{
+        heap_usage(sym("__sys_heap")), heap_usage(0xc000)};
     const auto shell_thread = mem.word(loaded_shell + 13);
     mem.word(sym("_thread_current"), shell_thread);
-    unsigned staged_registrations = 0;
-    files.observe = [&] {
-        const auto state = cpu.snapshot();
-        const auto library = mem.word(shell_thread + 2);
-        if (!library || state.ix < 0x4000 || state.ix > 0xffaf) return;
-        const auto base = mem.word(state.ix + 68);
-        if (state.pc != base + library_symbols.at("_registered")) return;
-        ++staged_registrations;
-        require(mem.word(shell_thread + 22) == loaded_shell,
-                "initializer changed the client's thread membership");
-        for (auto service = mem.word(sym("__svc_first")); service;
-             service = mem.word(service)) {
-            require(mem.word(service + 2) != library,
-                    "initializer prematurely published its service");
-        }
-        const auto staged = mem.word(sym("__library_private_services"));
-        require(staged && mem.word(staged + 2) == library,
-                "initializer registration was not staged under its library");
-    };
     auto shell_state = cpu.snapshot();
     shell_state.halted = false;
     shell_state.pc = shell_thread + 6;
@@ -592,38 +1042,46 @@ int main(int argc, char** argv) {
     cpu.restore(shell_state);
     run_until([&] {
         const auto pc = cpu.pc();
-        return mem.bytes[pc] == 0x18 && mem.bytes[std::uint16_t(pc + 1)] == 0xfe;
-    }, 5000000, "relocated shell GPX drawing");
-    files.observe = {};
-    require(staged_registrations == 1,
-            "shell did not execute the self-registering initializer once");
+        return mem.bytes[pc] == 0x18 &&
+               mem.bytes[std::uint16_t(pc + 1)] == 0xfe;
+    }, 5000000, "allocation-free Hello World shell");
+    const auto after_shell = std::pair{
+        heap_usage(sym("__sys_heap")), heap_usage(0xc000)};
+    require(after_shell == before_shell,
+            "Hello World shell allocated memory while running");
+
+    constexpr std::uint16_t message_address = 0x8300;
+    const std::string hello = "Hello World!";
+    put_string(message_address, hello);
+    const auto text_width = call_kernel(
+        sym("_gpx_measure_text"), message_address, boot_font,
+        "Hello World width");
+    const auto expected_x = unsigned((256 - text_width) / 2);
+    const auto expected_y = unsigned((192 - mem.bytes[boot_font + 5]) / 2);
     bool shell_drew_pixels = false;
-    for (std::uint16_t address = 0x4000; address != 0x5800; ++address)
-        shell_drew_pixels = shell_drew_pixels || mem.bytes[address] != 0;
-    require(shell_drew_pixels,
-            "relocated shell reached its loop without drawing text");
-    put_string(0xe100, "shelllib");
-    const auto shell_library = call_kernel(sym("__svc_query"), 0xe100, 0,
-                                           "shell's registered library");
-    require(shell_library != 0, "shell did not register shelllib: error " +
-                std::to_string(mem.bytes[sym("_process_last_error")]));
-    require(call_kernel(mem.word(shell_library + 4), 0, 0,
-                        "shell library init count") == 1,
-            "library initializer did not run exactly once");
-    require(call_kernel(mem.word(shell_library + 6), 0, 0,
-                        "shell library call count") == 1,
-            "shell did not call the library's relocated function");
+    for (unsigned y = 0; y != 192; ++y) {
+        const auto row = std::uint16_t(
+            0x4000 | ((y & 0xc0) << 5) | ((y & 0x07) << 8) |
+            ((y & 0x38) << 2));
+        for (unsigned x = 0; x != 256; ++x) {
+            if (!(mem.bytes[row + x / 8] & (0x80 >> (x & 7))))
+                continue;
+            shell_drew_pixels = true;
+            require(x >= expected_x && x < expected_x + text_width &&
+                        y >= expected_y &&
+                        y < expected_y + mem.bytes[boot_font + 5],
+                    "Hello World pixels are outside the centred text box");
+        }
+    }
+    require(shell_drew_pixels, "Hello World shell drew no text");
     require(mem.word(shell_thread + 2) == 0 &&
                 mem.word(shell_thread + 22) == loaded_shell,
-            "library initialization did not restore caller ownership");
-    require(files.handles.empty(), "shell/library load leaked descriptors");
+            "Hello World shell acquired a library owner");
+    require(files.handles.empty(), "Hello World shell leaked a descriptor");
     retire_process(loaded_shell);
     require(mem.word(sym("_process_first")) == 0 &&
                 mem.word(sym("__library_refs")) == 0,
-            "shell exit did not release its library");
-    require(call_kernel(sym("__svc_query"), 0xe100, 0,
-                        "unloaded shell library") == 0,
-            "last-client cleanup left a published service");
+            "Hello World shell cleanup left a process or library reference");
     files.enabled = false;
 
     // Physical-drive prefixes belong to YOS, not the native firmware path.
@@ -671,10 +1129,18 @@ int main(int argc, char** argv) {
     require(mem.bytes[public_dirent + 8] == 4,
             "directory entry was not reported as DT_DIR");
 
-    const auto public_block =
-        call_kernel(mem.word(table + 2), 23, 0, "public allocation");
-    require(public_block != 0, "public malloc wrapper failed");
-    call_kernel(mem.word(table + 4), public_block, 0, "public release");
+    call_kernel(mem.word(table + 6), 0x4000, 0,
+                "oversized public allocation");
+    require(kernel_hl == 0 && std::uint8_t(cpu.snapshot().de) == 0,
+            "public allocator accepted a request larger than one bank");
+    call_kernel(mem.word(table + 6), 23, 0, "public allocation");
+    const auto public_block = kernel_hl;
+    const auto public_bank = std::uint8_t(cpu.snapshot().de);
+    require(public_block >= 0xc007 && public_bank == 0,
+            "public allocator did not return a banked user pointer");
+    call_kernel(mem.word(table + 8), 0, 0, "public release", 0,
+                {public_bank, std::uint8_t(public_block),
+                 std::uint8_t(public_block >> 8)});
 
     // shrink_memory releases the tail of a live block in place: the block
     // keeps its address, its owner and the requested size, and the released
@@ -682,13 +1148,17 @@ int main(int argc, char** argv) {
     const auto block_size = [&](std::uint16_t payload) {
         return mem.word(std::uint16_t(payload - 2));
     };
-    const auto shrink_block =
-        call_kernel(mem.word(table + 2), 200, 0, "shrinkable allocation");
+    call_kernel(mem.word(table + 6), 200, 0, "shrinkable allocation");
+    const auto shrink_block = kernel_hl;
+    const auto shrink_bank = std::uint8_t(cpu.snapshot().de);
     require(shrink_block != 0 && block_size(shrink_block) == 200,
             "shrinkable allocation is not 200 bytes");
     const auto shrink_owner = mem.word(std::uint16_t(shrink_block - 5));
-    require(call_kernel(mem.word(table + 96), shrink_block, 100,
-                        "public shrink") == shrink_block &&
+    call_kernel(mem.word(table + 10), 0, 0, "public shrink", 0,
+                {shrink_bank, std::uint8_t(shrink_block),
+                 std::uint8_t(shrink_block >> 8), 100, 0}, 0, true);
+    require(kernel_hl == shrink_block &&
+                std::uint8_t(cpu.snapshot().de) == shrink_bank &&
                 block_size(shrink_block) == 100 &&
                 mem.word(std::uint16_t(shrink_block - 5)) == shrink_owner,
             "shrink_memory did not trim the block in place");
@@ -696,38 +1166,49 @@ int main(int argc, char** argv) {
     require(mem.word(std::uint16_t(shrink_block - 7)) == released &&
                 (mem.bytes[released + 4] & 1) == 0,
             "shrink_memory did not turn the tail into a free block");
-    const auto reused =
-        call_kernel(mem.word(table + 2), 60, 0, "allocation from the tail");
+    call_kernel(mem.word(table + 6), 60, 0, "allocation from the tail");
+    const auto reused = kernel_hl;
+    const auto reused_bank = std::uint8_t(cpu.snapshot().de);
     require(reused == std::uint16_t(released + 7),
             "released tail was not reused by the next allocation");
-    call_kernel(mem.word(table + 4), reused, 0, "release the reused tail");
-    require(call_kernel(mem.word(table + 96), shrink_block, 95,
-                        "shrink below a splittable remainder") ==
-                    shrink_block &&
+    call_kernel(mem.word(table + 8), 0, 0, "release the reused tail", 0,
+                {reused_bank, std::uint8_t(reused),
+                 std::uint8_t(reused >> 8)});
+    call_kernel(mem.word(table + 10), 0, 0,
+                "shrink below a splittable remainder", 0,
+                {shrink_bank, std::uint8_t(shrink_block),
+                 std::uint8_t(shrink_block >> 8), 95, 0}, 0, true);
+    require(kernel_hl == shrink_block &&
                 block_size(shrink_block) == 100,
             "shrink_memory split off a remainder too small for a block");
-    require(call_kernel(mem.word(table + 96), shrink_block, 300,
-                        "shrink to a larger size") == shrink_block &&
+    call_kernel(mem.word(table + 10), 0, 0, "shrink to a larger size", 0,
+                {shrink_bank, std::uint8_t(shrink_block),
+                 std::uint8_t(shrink_block >> 8), 0x2c, 0x01}, 0, true);
+    require(kernel_hl == shrink_block &&
                 block_size(shrink_block) == 100,
             "shrink_memory changed a block for a larger size");
-    call_kernel(mem.word(table + 4), shrink_block, 0, "release shrunk block");
-    require(call_kernel(mem.word(table + 96), shrink_block, 10,
-                        "shrink a freed block") == 0,
+    call_kernel(mem.word(table + 8), 0, 0, "release shrunk block", 0,
+                {shrink_bank, std::uint8_t(shrink_block),
+                 std::uint8_t(shrink_block >> 8)});
+    call_kernel(mem.word(table + 10), 0, 0, "shrink a freed block", 0,
+                {shrink_bank, std::uint8_t(shrink_block),
+                 std::uint8_t(shrink_block >> 8), 10, 0}, 0, true);
+    require(kernel_hl == 0 && std::uint8_t(cpu.snapshot().de) == 0,
             "shrink_memory accepted a freed block");
     const auto public_timer =
-        call_kernel(mem.word(table + 12), 0x4200, 3,
+        call_kernel(mem.word(table + 18), 0x4200, 3,
                     "public timer installation");
     require(public_timer != 0, "public timer wrapper failed");
-    call_kernel(mem.word(table + 14), public_timer, 0,
+    call_kernel(mem.word(table + 20), public_timer, 0,
                 "public timer removal");
-    require(call_kernel(mem.word(table + 6), 0, 0, "public clock") == 0,
+    require(call_kernel(mem.word(table + 12), 0, 0, "public clock") == 0,
             "clock advanced before an interrupt");
 
     constexpr std::uint16_t mouse_state = 0x8210;
     io.mouse_x = 17;
     io.mouse_y = 31;
-    call_kernel(mem.word(table + 46), 23, 0, "mouse calibration", 42);
-    call_kernel(mem.word(table + 48), mouse_state, 0, "mouse snapshot");
+    call_kernel(mem.word(table + 60), 23, 0, "mouse calibration", 42);
+    call_kernel(mem.word(table + 62), mouse_state, 0, "mouse snapshot");
     require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
                 mem.bytes[mouse_state + 2] == 0 &&
                 mem.bytes[mouse_state + 3] == 0,
@@ -735,14 +1216,14 @@ int main(int argc, char** argv) {
     io.mouse_x = 20;
     io.mouse_y = 29;
     io.mouse_buttons = 0xfe;
-    call_kernel(mem.word(table + 48), mouse_state, 0,
+    call_kernel(mem.word(table + 62), mouse_state, 0,
                 "mouse snapshot before timer scan");
     require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
                 mem.bytes[mouse_state + 2] == 0 &&
                 mem.bytes[mouse_state + 3] == 0,
             "read_mouse polled hardware instead of reading timer state");
     call_kernel(sym("__tmr_chain"), 0, 0, "moving mouse timer-chain scan");
-    call_kernel(mem.word(table + 48), mouse_state, 0, "moving mouse snapshot");
+    call_kernel(mem.word(table + 62), mouse_state, 0, "moving mouse snapshot");
     require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
                 mem.bytes[mouse_state + 2] == 1 &&
                 mem.bytes[mouse_state + 3] == 1,
@@ -751,7 +1232,7 @@ int main(int argc, char** argv) {
                 std::to_string(mem.bytes[mouse_state + 1]) + "," +
                 std::to_string(mem.bytes[mouse_state + 2]) + "," +
                 std::to_string(mem.bytes[mouse_state + 3]));
-    call_kernel(mem.word(table + 48), mouse_state, 0,
+    call_kernel(mem.word(table + 62), mouse_state, 0,
                 "stationary mouse resnapshot");
     require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
                 mem.bytes[mouse_state + 2] == 1 &&
@@ -761,21 +1242,13 @@ int main(int argc, char** argv) {
     call_kernel(sym("__mouse_scan"), 0, 0, "mouse release timer scan");
     io.mouse_buttons = 0xfe;
     call_kernel(sym("__mouse_scan"), 0, 0, "mouse repress timer scan");
-    call_kernel(mem.word(table + 48), mouse_state, 0,
+    call_kernel(mem.word(table + 62), mouse_state, 0,
                 "accumulated mouse transition snapshot");
     require(mem.bytes[mouse_state + 2] == 1 &&
                 mem.bytes[mouse_state + 3] == 1,
             "mouse timer lost an unread button transition");
 
-    constexpr std::uint16_t gpx_name = 0x8240;
-    mem.bytes[gpx_name] = 'g';
-    mem.bytes[gpx_name + 1] = 'p';
-    mem.bytes[gpx_name + 2] = 'x';
-    mem.bytes[gpx_name + 3] = 0;
-    const auto gpx_table =
-        call_kernel(0x0018, gpx_name, 0, "RST 18 gpx service query");
-    require(gpx_table == sym("__gpx_service"),
-            "gpx service did not return its ROM table");
+    const std::uint16_t gpx_table = table + 106;
     constexpr std::array<const char*, 24> gpx_api = {
         "_gpx_create", "_gpx_destroy", "_gpx_set_page",
         "_gpx_width", "_gpx_height", "_gpx_clrscr",
@@ -819,13 +1292,27 @@ int main(int argc, char** argv) {
     require(call_kernel(mem.word(gpx_table + 8), 0, 0,
                         "gpx height") == 192,
             "gpx height is wrong");
-    require(call_kernel(mem.word(gpx_table + 32), 0, 0,
-                        "gpx system font") != 0 &&
+    const auto system_font = call_kernel(mem.word(gpx_table + 32), 0, 0,
+                                         "gpx system font");
+    require(system_font != 0 &&
                 call_kernel(mem.word(gpx_table + 34), 0, 0,
                             "gpx tiny font") != 0 &&
                 call_kernel(mem.word(gpx_table + 36), 0, 0,
                             "gpx stock bitmap", 0) != 0,
             "gpx built-in assets are unavailable");
+    require(mem.bytes[system_font] == 1 &&
+                mem.bytes[system_font + 1] == 0x20 &&
+                mem.bytes[system_font + 2] == 0x7f &&
+                mem.bytes[system_font + 5] == 8,
+            "expanded system font header is malformed");
+    const auto glyph_a = std::uint16_t(
+        system_font + mem.word(system_font + 8 + 2 * ('A' - 0x20)));
+    require(mem.bytes[glyph_a + 1] == 5 &&
+                mem.bytes[glyph_a + 2] == 8 &&
+                mem.word(glyph_a + 3) == 8 &&
+                mem.bytes[glyph_a + 5] == 0x70 &&
+                mem.bytes[glyph_a + 8] == 0xf8,
+            "expanded system font changed the A glyph");
     require(call_kernel(mem.word(gpx_table + 36), 0, 0,
                         "gpx resize cursor", 5) != 0,
             "gpx resize cursor is unavailable");
@@ -834,6 +1321,20 @@ int main(int argc, char** argv) {
     call_kernel(mem.word(gpx_table + 10), 0, 0, "gpx screen clear");
     require(mem.bytes[0x4000] == 0 && mem.bytes[0x5aff] == 0x38,
             "gpx clear did not cover the Spectrum framebuffer");
+    mem.bytes[0x8300] = 'A';
+    mem.bytes[0x8301] = 0;
+    call_kernel(mem.word(gpx_table + 30), gpx_context, 8,
+                "expanded-font text drawing", 0,
+                {10, 0, 0x00, 0x83,
+                 std::uint8_t(system_font), std::uint8_t(system_font >> 8),
+                 1, 0, 0, 0});
+    bool expanded_font_drew_pixels = false;
+    for (std::uint16_t address = 0x4000; address != 0x5800; ++address)
+        expanded_font_drew_pixels |= mem.bytes[address] != 0;
+    require(expanded_font_drew_pixels,
+            "expanded system font did not render through gpx_draw_text");
+    call_kernel(mem.word(gpx_table + 10), 0, 0,
+                "screen clear after expanded-font test");
     call_kernel(mem.word(gpx_table + 14), gpx_context, 8,
                 "gpx pixel drawing", 0, {10, 0, 1, 0, 0, 0});
     require(mem.bytes[0x4221] == 0x80,
@@ -850,19 +1351,19 @@ int main(int argc, char** argv) {
 
     test_circles(mem, call_kernel, sym, gpx_context);
 
-    call_kernel(mem.word(table + 44), 0, 0, "empty keyboard queue");
+    call_kernel(mem.word(table + 58), 0, 0, "empty keyboard queue");
     require(kernel_hl == 0,
             "keyboard queue was not empty after boot");
     io.keyboard_address = 0xf7fe;
     io.keyboard_value = 0xfe;
     call_kernel(sym("__kbd_scan"), 0, 0, "keyboard press scan");
-    call_kernel(mem.word(table + 44), 0, 0, "keyboard press read");
+    call_kernel(mem.word(table + 58), 0, 0, "keyboard press read");
     const auto key_press = kernel_hl & 0xff;
     require(key_press == 0x45,
             "keyboard press event is wrong: " + std::to_string(key_press));
     io.keyboard_value = 0xff;
     call_kernel(sym("__kbd_scan"), 0, 0, "keyboard release scan");
-    call_kernel(mem.word(table + 44), 0, 0, "keyboard release read");
+    call_kernel(mem.word(table + 58), 0, 0, "keyboard release read");
     const auto key_release = kernel_hl & 0xff;
     require(key_release == 5,
             "keyboard release event is wrong: " + std::to_string(key_release));
@@ -878,7 +1379,7 @@ int main(int argc, char** argv) {
             call_kernel(sym("__kbd_scan"), 0, 0, "keyboard chord scan");
             for (unsigned bit = 0; bit < 5; ++bit) {
                 if (!(mask & (1u << bit))) continue;
-                call_kernel(mem.word(table + 44), 0, 0, "keyboard chord read");
+                call_kernel(mem.word(table + 58), 0, 0, "keyboard chord read");
                 const unsigned expected = row * 5 + 4 - bit +
                                           (pressed ? 0x40 : 0) + 1;
                 require((kernel_hl & 0xff) == expected,
@@ -886,7 +1387,7 @@ int main(int argc, char** argv) {
                         " bit " + std::to_string(bit) + " produced " +
                         std::to_string(kernel_hl & 0xff));
             }
-            call_kernel(mem.word(table + 44), 0, 0, "keyboard chord drained");
+            call_kernel(mem.word(table + 58), 0, 0, "keyboard chord drained");
             require((kernel_hl & 0xff) == 0, "keyboard chord queued extra keys");
         }
         row_select = std::uint8_t((row_select << 1) | (row_select >> 7));
@@ -894,7 +1395,7 @@ int main(int argc, char** argv) {
 
     constexpr std::uint16_t status_buffer = 0x8200;
     constexpr std::array<std::size_t, 6> invalid_fd_slots = {
-        27, 28, 29, 31, 30, 39};
+        34, 35, 36, 38, 37, 46};
     for (const auto slot : invalid_fd_slots) {
         require(call_kernel(mem.word(table + 2 * slot), 0, status_buffer,
                             "filesystem rejects unopened descriptor") == 0xffff,
@@ -903,7 +1404,7 @@ int main(int argc, char** argv) {
                 "unopened descriptor did not set EBADF");
     }
     constexpr std::array<std::size_t, 7> invalid_path_slots = {
-        26, 32, 33, 34, 36, 37, 38};
+        33, 39, 40, 41, 43, 44, 45};
     for (const auto slot : invalid_path_slots) {
         require(call_kernel(mem.word(table + 2 * slot), 0, status_buffer,
                             "filesystem rejects null path") == 0xffff,
@@ -911,47 +1412,76 @@ int main(int argc, char** argv) {
         require(mem.word(sym("__errno_value")) == 14,
                 "null path did not set EFAULT");
     }
-    require(call_kernel(mem.word(table + 80), 0, 0,
+    require(call_kernel(mem.word(table + 94), 0, 0,
                         "opendir rejects null path") == 0,
             "opendir accepted a null path");
     require(mem.word(sym("__errno_value")) == 14,
             "null directory path did not set EFAULT");
-    require(call_kernel(mem.word(table + 82), 0, 0,
+    require(call_kernel(mem.word(table + 96), 0, 0,
                         "readdir rejects null directory") == 0,
             "readdir accepted a null directory");
     require(mem.word(sym("__errno_value")) == 9,
             "null directory did not set EBADF");
-    require(call_kernel(mem.word(table + 86), 0, 0,
+    require(call_kernel(mem.word(table + 100), 0, 0,
                         "closedir rejects null directory") == 0xffff,
             "closedir accepted a null directory");
-    require(call_kernel(mem.word(table + 88), 0, 1,
+    require(call_kernel(mem.word(table + 102), 0, 1,
                         "disk enumeration rejects null buffer") == 0xffff,
             "disk enumeration accepted a null output buffer");
     require(mem.word(sym("__errno_value")) == 14,
             "null disk output buffer did not set EFAULT");
-    require(call_kernel(mem.word(table + 88), 0, 0,
+    require(call_kernel(mem.word(table + 102), 0, 0,
                         "empty disk enumeration") == 0,
             "zero-capacity disk enumeration failed");
-    require(call_kernel(mem.word(table + 88), status_buffer, 0x0100,
+    require(call_kernel(mem.word(table + 102), status_buffer, 0x0100,
                         "disk enumeration rejects oversized capacity") ==
                 0xffff,
             "disk enumeration accepted capacity above 255");
     require(mem.word(sym("__errno_value")) == 22,
             "oversized disk capacity did not set EINVAL");
-    require(call_kernel(mem.word(table + 88), 0xfffc, 1,
+    require(call_kernel(mem.word(table + 102), 0xfffc, 1,
                         "disk enumeration rejects wrapped buffer") == 0xffff,
             "disk enumeration accepted a wrapping output buffer");
     require(mem.word(sym("__errno_value")) == 14,
             "wrapped disk output buffer did not set EFAULT");
 
-    const auto user_heap = sym("__heap");
+    const auto os_heap = sym("__heap");
+    require(os_heap == sym("__sys_heap"),
+            "OS heap compatibility symbols do not share one fixed arena");
     test_thread_safety(mem, cpu, call_kernel, sym, files, gpx_context);
     call_kernel(sym("_gpx_destroy"), gpx_context, 0, "destroy GPX context");
-    require(mem.word(user_heap) == 0, "new user heap is not a single block");
-    const auto expected_heap_size = std::uint16_t(0xffff - user_heap - 7);
-    require(mem.word(user_heap + 5) == expected_heap_size,
-            "user heap size is wrong: got " +
-                std::to_string(mem.word(user_heap + 5)) + " expected " +
+    constexpr std::array<std::uint16_t, 5> boot_object_sizes = {
+        1440, 10, 10, 10, 22
+    };
+    auto block = os_heap;
+    bool boot_heap_ok = boot_font == os_heap + 7;
+    for (const auto size : boot_object_sizes) {
+        boot_heap_ok = boot_heap_ok && block && block < 0xc000 &&
+            (mem.bytes[block + 4] & 1) && mem.word(block + 2) == 0 &&
+            mem.word(block + 5) == size;
+        block = block ? mem.word(block) : 0;
+    }
+    const auto free_common = block;
+    boot_heap_ok = boot_heap_ok && free_common && free_common < 0xc000 &&
+        mem.word(free_common) == 0 && !(mem.bytes[free_common + 4] & 1);
+    if (!boot_heap_ok) {
+        std::ostringstream detail;
+        detail << "OS heap did not retain exactly its boot-owned objects:";
+        for (auto entry = os_heap, n = std::uint16_t(0);
+             entry && entry < 0xc000 && n != 32;
+             entry = mem.word(entry), ++n) {
+            detail << " [" << entry << " next=" << mem.word(entry)
+                   << " owner=" << mem.word(entry + 2)
+                   << " used=" << unsigned(mem.bytes[entry + 4] & 1)
+                   << " size=" << mem.word(entry + 5) << ']';
+        }
+        require(false, detail.str());
+    }
+    const auto expected_heap_size =
+        std::uint16_t(0xc000 - free_common - 7);
+    require(mem.word(free_common + 5) == expected_heap_size,
+            "fixed OS heap tail size is wrong: got " +
+                std::to_string(mem.word(free_common + 5)) + " expected " +
                 std::to_string(expected_heap_size));
 
     constexpr std::uint16_t name = 0x8000;
@@ -1034,6 +1564,12 @@ int main(int argc, char** argv) {
     require(mem.word(sym("_thread_first_running")) == thread2 &&
                 mem.word(thread2) == thread,
             "two-thread runnable queue is malformed");
+    if (mem.banked) {
+        // Exercise exact scheduler restoration independently of the entry
+        // address: thread 2 starts in logical bank 0, thread 1 in bank 1.
+        mem.bytes[thread2 + 24] = 0;
+        mem.bytes[thread + 24] = 1;
+    }
 
     state = cpu.snapshot();
     state.halted = false;
@@ -1049,6 +1585,10 @@ int main(int argc, char** argv) {
               "first interrupt");
     require(mem.word(sym("_thread_current")) == thread2,
             "interrupt did not select the first runnable thread");
+    if (mem.banked)
+        require(mem.bytes[sym("__bank_current")] == 0 &&
+                    mem.mapped_page == 0,
+                "scheduler incremented logical bank zero while restoring it");
     require(!mem.word(sym("__errno_value")) &&
                 !mem.bytes[sym("_process_last_error")],
             "new thread inherited another thread's error values");
@@ -1076,6 +1616,10 @@ int main(int argc, char** argv) {
               "second interrupt");
     require(mem.word(sym("_thread_current")) == thread,
             "round robin did not select the second runnable thread");
+    if (mem.banked)
+        require(mem.bytes[sym("__bank_current")] == 1 &&
+                    mem.mapped_page == 1,
+                "scheduler incremented logical bank one while restoring it");
     require(!mem.word(sym("__errno_value")) &&
                 !mem.bytes[sym("_process_last_error")] &&
                 mem.word(thread2 + 20) == 0x1234 &&
@@ -1137,16 +1681,16 @@ int main(int argc, char** argv) {
         for (bool preset : {false, true}) {
             mem.bytes = saved_memory;
             cpu.restore(saved_cpu);
-            const auto ready = call_kernel(mem.word(table + 16), 0, 0,
+            const auto ready = call_kernel(mem.word(table + 22), 0, 0,
                                            "wait fixture event");
             constexpr std::uint16_t waiter_code = 0x4300;
             constexpr std::uint16_t timer_code = 0x4340;
             constexpr std::uint16_t other_code = 0x4380;
             constexpr std::uint16_t wakes = 0x43a0;
             if (preset)
-                call_kernel(mem.word(table + 20), ready, 0, "signal before wait", 0, {1});
-            const auto wait = mem.word(table + 98);
-            const auto signal = mem.word(table + 20);
+                call_kernel(mem.word(table + 26), ready, 0, "signal before wait", 0, {1});
+            const auto wait = mem.word(table + 28);
+            const auto signal = mem.word(table + 26);
             const std::array<std::uint8_t, 13> waiter = {
                 0x21, std::uint8_t(ready), std::uint8_t(ready >> 8),
                 0xcd, std::uint8_t(wait), std::uint8_t(wait >> 8),
@@ -1198,7 +1742,7 @@ int main(int argc, char** argv) {
                         std::to_string(cpu.pc()) + " event=" +
                         std::to_string(mem.bytes[ready + 4]));
             const auto idle = cpu.snapshot();
-            const auto periodic = call_kernel(mem.word(table + 12), timer_code, 1,
+            const auto periodic = call_kernel(mem.word(table + 18), timer_code, 1,
                                                "event-signalling timer");
             cpu.restore(idle);
             for (unsigned n = 0; n < 12; ++n) pulse();
@@ -1206,8 +1750,8 @@ int main(int argc, char** argv) {
                         !mem.bytes[sym("__interrupt_refcount")],
                     "timer did not wake and consume repeated event waits");
             const auto paused = cpu.snapshot();
-            call_kernel(mem.word(table + 14), periodic, 0, "stop event timer");
-            call_kernel(mem.word(table + 20), ready, 0, "pre-set wait signal", 0, {1});
+            call_kernel(mem.word(table + 20), periodic, 0, "stop event timer");
+            call_kernel(mem.word(table + 26), ready, 0, "pre-set wait signal", 0, {1});
             cpu.restore(paused);
             const auto previous = mem.bytes[wakes];
             for (unsigned n = 0; n < 3; ++n) pulse();
@@ -1287,13 +1831,21 @@ int main(int argc, char** argv) {
                 state.iy == 0x5aa5,
             "scheduler cleanup violated its ABI");
     test_libraries(mem, cpu, call_kernel, sym, files, library_image,
-                   library_symbols, put_string);
+                   library_symbols, put_string, call_far, call_far_pointer,
+                   read_far_byte);
     require(mem.rom_writes == 0, "kernel attempted to write into ROM");
+    require(std::none_of(io.writes.begin(), io.writes.end(),
+                        [](const auto& write) {
+                            return write.first == 0x7ffd ||
+                                   write.first == 0x243b ||
+                                   write.first == 0x253b;
+                        }),
+            "48K bank backend unexpectedly performed paging I/O");
 
     std::cout << "PASS: boot, XPRG CRC and relocation, heaps, syscalls, "
                  "nested interrupt-state preservation, protected shared state, "
                  "per-thread errors and concurrent library loading, "
-                 "GPX service and drawing, directory records, two-process round robin, "
+                 "unified yos_t graphics and drawing, directory records, two-process round robin, "
                  "blocking events, timer wakes, idle scheduling, terminated-process cleanup, shell library "
                  "self-registration, shared/private lifetime and rollback\n";
 }

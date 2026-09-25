@@ -9493,6 +9493,11 @@ bool z80_peep::rule_ix_postinc_local_immediate_store(size_t i) {
                 current_delta -= 1;
                 continue;
             }
+            // RST is target-defined: it may behave like a returning call, or
+            // (as with YOS RST28) consume an inline/pushed call envelope.
+            // Do not derive an SP-relative IX address across it.
+            if (line.mnemonic == "rst")
+                return false;
             if (line.mnemonic == "ld") {
                 std::string dst;
                 std::string src;
@@ -10243,6 +10248,11 @@ bool z80_peep::rule_ix_addr_materialize_sp_relative(size_t i) {
                 current_delta -= 1;
                 continue;
             }
+            // RST is target-defined: it may behave like a returning call, or
+            // (as with YOS RST28) consume an inline/pushed call envelope.
+            // Do not derive an SP-relative IX address across it.
+            if (line.mnemonic == "rst")
+                return false;
             if (line.mnemonic == "ld") {
                 std::string dst;
                 std::string src;

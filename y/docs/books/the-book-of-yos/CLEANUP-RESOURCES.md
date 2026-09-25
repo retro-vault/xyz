@@ -23,7 +23,7 @@ Nothing is freed at the moment a thread calls `thread_exit`. That routine only m
 | 2 | save current context | Store the interrupted thread |
 | 3 | `__tmr_chain` | Fire due timers |
 | 4 | `__thread_select_next` | Choose who runs next |
-| 4a | `__thread_cleanup_terminated` | This chapter: for each terminated thread `t` except `thread_current`, `mem_free_owner(__heap, t)` (stack), `so_destroy(terminated, t)` (object), `process_reap(t->process)` |
+| 4a | `__thread_cleanup_terminated` | This chapter: for each terminated thread `t` except `thread_current`, `mem_free_owner(__sys_heap, t)` (stack), `so_destroy(terminated, t)` (object), `process_reap(t->process)` |
 | 4b | wake waiting threads | Event/timer wakeups |
 | 4c | pick next runnable | Next `RUNNING` thread |
 | 5 | restore next context | Resume that thread |
@@ -34,8 +34,8 @@ Nothing is freed at the moment a thread calls `thread_exit`. That routine only m
 
 For each terminated thread:
 
-1. `mem_free_owner(__heap, thread)` frees every user-heap block whose owner is the thread. `thread_create` allocates the stack with the thread as owner, so this releases the stack (and any other block the thread was made owner of).
-2. `so_destroy(&thread_first_terminated, thread)` unlinks the 24-byte object and returns it to `__sys_heap`.
+1. `mem_free_owner(__sys_heap, thread)` frees every fixed OS-heap block whose owner is the thread. `thread_create` allocates the stack with the thread as owner, so this releases the stack (and any other OS block the thread was made owner of).
+2. `so_destroy(&thread_first_terminated, thread)` unlinks the 38-byte object and returns it to `__sys_heap`.
 3. `process_reap(thread->process)` is called, which may or may not do anything (next section).
 
 ## Process Reaping
@@ -48,8 +48,9 @@ For each terminated thread:
 | 2 | `__so_reap` | owned timers |
 | 3 | `__so_reap` | owned public and private/staged services |
 | 4 | reference-release loop | each acquisition; libraries reaching zero are reaped |
-| 5 | `mem_free_owner(__heap, p)` | every user-heap block owned by the process — the loaded XPRG image first of all |
-| 6 | `so_destroy(&process_first, p)` | the 15-byte process object itself |
+| 5 | `mem_free_owner(__sys_heap, p)` | every fixed OS-heap block owned by the process |
+| 6 | `__bank_free_owner(p)` | every bank-arena block owned by the process, including its XPRG image |
+| 7 | `so_destroy(&process_first, p)` | the 16-byte process object itself |
 
 Each "find and destroy" loop restarts from the head of its list after every hit, so it is safe against the list being relinked underneath it.
 

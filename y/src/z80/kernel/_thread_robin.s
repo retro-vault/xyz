@@ -18,9 +18,12 @@
         .globl  _process_last_error
         .globl  __critical_iff_repair
         .globl  __sys_stack
+        .globl  __bank_map
+        .globl  __bank_current
 
         .equ    THREAD_LOAD_ERROR, 15
         .equ    THREAD_ERRNO,      20
+        .equ    THREAD_BANK,       24
 
         .area   _CODE
 
@@ -61,6 +64,8 @@ __thread_robin::
         ld      de,(__errno_value)
         ld      THREAD_ERRNO(ix),e
         ld      THREAD_ERRNO+1(ix),d
+        ld      a,(__bank_current)
+        ld      THREAD_BANK(ix),a
         ;; hl alredy has current thread, skip over header
         inc     hl
         inc     hl
@@ -106,6 +111,14 @@ __thread_robin::
         ld      e,THREAD_ERRNO(ix)
         ld      d,THREAD_ERRNO+1(ix)
         ld      (__errno_value),de
+        ; Restore the exact bank in which this thread was interrupted. This
+        ; can be a library bank rather than its owning process bank.
+        ld      a,THREAD_BANK(ix)
+        cp      #0xff
+        call    nz,__bank_map
+.bank_ready:
+        push    ix
+        pop     hl
         ;; skip over header
         inc     hl
         inc     hl

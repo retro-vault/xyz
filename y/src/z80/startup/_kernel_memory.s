@@ -9,6 +9,7 @@
         .globl  __sys_stack
         .globl  __sys_heap
         .globl  __heap
+        .globl  __common_end
 
         .area   _BSS
         .ds     512
@@ -16,5 +17,6 @@ __sys_stack::
 
         .area   _HEAP
 __sys_heap::
-        .ds     1024
 __heap::
+
+__common_end = 0xc000

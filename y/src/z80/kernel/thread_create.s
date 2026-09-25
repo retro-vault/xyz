@@ -6,7 +6,7 @@
         .module thread_create
         .optsdcc -mz80 sdcccall(1)
         .globl  _thread_create
-        .globl  __heap
+        .globl  __sys_heap
         .globl  _thread_first_suspended
         .globl  _enter_critical_section
         .globl  _leave_critical_section
@@ -14,10 +14,13 @@
         .globl  _so_destroy
         .globl  _mem_allocate
         .globl  _thread_prepare_startup
-        .equ    THREAD_SIZE,    24
+        .equ    THREAD_SIZE,    38
         .equ    THREAD_SP,       4
         .equ    THREAD_WAIT,    16
         .equ    THREAD_PROCESS, 22
+        .equ    THREAD_BANK,    24
+        .equ    THREAD_CALL_DEPTH, 25
+        .equ    PROCESS_BANK,   15
         .equ    CONTEXT_SIZE,   22
         .area   _CODE
 
@@ -51,7 +54,7 @@ _thread_create::
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
-        ld      hl, #__heap
+        ld      hl, #__sys_heap
         call    _mem_allocate
         ld      a, d
         or      e
@@ -81,6 +84,19 @@ _thread_create::
         ld      d, (hl)
         ld      THREAD_PROCESS(ix), e
         ld      THREAD_PROCESS+1(ix), d
+        ld      a, #0xff
+        ld      THREAD_BANK(ix), a
+        xor     a
+        ld      THREAD_CALL_DEPTH(ix), a
+        ld      a, d
+        or      e
+        jr      z, .bank_ready
+        ex      de, hl
+        ld      bc, #PROCESS_BANK
+        add     hl, bc
+        ld      a, (hl)
+        ld      THREAD_BANK(ix), a
+.bank_ready:
         pop     de
         push    ix
         pop     hl

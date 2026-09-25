@@ -43,11 +43,10 @@ with tempfile.TemporaryDirectory(prefix="layout-", dir=work) as directory:
     damaged = bytearray(raw)
     damaged[0x3fff] = 1
     check(damaged, mapping, "tail is not zero-filled")
-    tail_data = mapping + "  _CONST            3F00   0001   REL CON\n"
-    tail_data = re.sub(r"[0-9A-F]{8} s__GSFINAL", "00003F01 s__GSFINAL",
-                       tail_data)
-    check(raw, tail_data, "last 256 ROM bytes")
+    oversized = re.sub(r"[0-9A-F]{8} s__GSFINAL",
+                       "00004001 s__GSFINAL", mapping)
+    check(raw, oversized, "exceeds 16 KiB")
     check(raw, mapping + "  _CONST            0100   0001   REL CON\n",
           "areas overlap")
 print("PASS: reserved ROM ownership, zero-valued live data, "
-      "last-page protection and non-destructive validation failures")
+      "16 KiB boundary protection and non-destructive validation failures")

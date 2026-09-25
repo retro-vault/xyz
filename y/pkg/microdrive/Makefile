@@ -6,7 +6,7 @@
 _THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 Y_ROOT     ?= $(abspath $(_THIS_DIR)/../..)
 ROOT       ?= $(abspath $(_THIS_DIR)/../../..)
-DIST_DIR   ?= $(ROOT)/bin/y
+DIST_DIR   ?= $(ROOT)/build/y-tools/stage
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
 PUBLIC_INCLUDE_DIR ?= $(DIST_DIR)/include
@@ -18,7 +18,7 @@ LIB_DIR   :=  $(PUBLIC_LIB_DIR)
 INCLUDE_DIR := $(PUBLIC_INCLUDE_DIR)
 
 CXX       :=  g++
-CXXFLAGS  :=  -std=c++20 -O2 -Wall -Wextra -I$(Y_ROOT)/include
+CXXFLAGS  :=  -std=c++20 -O2 -Wall -Wextra -I$(_THIS_DIR)/include
 
 LIB_TARGET    := $(LIB_DIR)/libmicrodrive.a
 CLI_TARGET    := $(BIN_DIR)/microdrive
@@ -29,6 +29,7 @@ LIB_OBJ := $(MICRODRIVE_BUILD_DIR)/libmicrodrive.o
 CLI_OBJ := $(MICRODRIVE_BUILD_DIR)/microdrive.o
 
 HDR_TARGET    := $(INCLUDE_DIR)/microdrive/microdrive.h
+PUBLIC_HEADER := $(_THIS_DIR)/include/microdrive/microdrive.h
 
 .PHONY: all
 all: mkdirs $(LIB_TARGET) $(CLI_TARGET) $(HDR_TARGET)
@@ -37,13 +38,13 @@ all: mkdirs $(LIB_TARGET) $(CLI_TARGET) $(HDR_TARGET)
 mkdirs:
 	@mkdir -p $(MICRODRIVE_BUILD_DIR) $(BIN_DIR) $(LIB_DIR) $(INCLUDE_DIR)/microdrive
 
-$(HDR_TARGET): $(Y_ROOT)/include/microdrive/microdrive.h
+$(HDR_TARGET): $(PUBLIC_HEADER)
 	cp $< $@
 
-$(LIB_OBJ): $(LIB_SRC) $(Y_ROOT)/include/microdrive/microdrive.h
+$(LIB_OBJ): $(LIB_SRC) $(PUBLIC_HEADER)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(CLI_OBJ): $(CLI_SRC) $(Y_ROOT)/include/microdrive/microdrive.h
+$(CLI_OBJ): $(CLI_SRC) $(PUBLIC_HEADER)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(LIB_TARGET): $(LIB_OBJ)

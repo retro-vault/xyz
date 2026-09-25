@@ -9,7 +9,7 @@
         .globl  _closedir
         .globl  __critical_call
         .globl  __directory_validate
-        .globl  __yos_free
+        .globl  __os_free
         .globl  __zx_esx_errno
         .globl  __zx_esx_error
         .globl  __zx_esx_f_close
@@ -29,6 +29,6 @@ _closedir::
         inc     hl
         ld      (hl),#0
         pop     hl
-        call    __yos_free
+        call    __os_free
         ld      de,#0
         ret

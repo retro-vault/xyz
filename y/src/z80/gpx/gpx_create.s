@@ -5,7 +5,7 @@
         .module gpx_create
         .optsdcc -mz80 sdcccall(1)
         .globl  _gpx_create
-        .globl  __yos_malloc
+        .globl  __os_malloc
         .area   _CODE
 
         ;; A = mode (ignored); DE = fresh context or NULL on exhaustion.
@@ -13,7 +13,7 @@
         ;; Each context belongs to the caller's process/library for cleanup.
 _gpx_create::
         ld      hl,#6
-        call    __yos_malloc
+        call    __os_malloc
         ld      a,d
         or      e
         ret     z

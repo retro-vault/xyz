@@ -141,18 +141,18 @@ timer_t *tmr_uninstall(timer_t *t) {
 
 The same pattern builds events (`evt_create` / `evt_destroy`, 5 bytes),
 services (`svc_register` / `svc_unregister`, 22 bytes), library references
-(6 bytes), threads (`thread_create`, 24 bytes), and processes/threadless
-library owners (`process_start` or the library loader, 15 bytes).
+(6 bytes), threads (`thread_create`, 38 bytes), and processes/threadless
+library owners (`process_start` or the library loader, 16 bytes).
 
 ## Ownership and Process Cleanup
 
 The `owner` field is set by `so_create` to whatever you pass as the third argument. For resources owned by a specific process, pass a pointer to its `process_t`. For OS-level resources with no specific owner, pass `NONE` (which is `0`/`NULL`).
 
 When a process has no threads left, the scheduler calls `process_reap`. It
-destroys owned events, timers, services and user-heap blocks, releases the
-process's library references, then destroys the process. A library is reaped
-when its reference count reaches zero. This prevents leaks even if user code
-forgets process-owned allocations. The details are in
+destroys owned events, timers, services and fixed OS-heap blocks, releases
+library references and allocations from every executable bank, then destroys
+the process. A library is reaped when its reference count reaches zero. This
+prevents leaks even if user code forgets process-owned allocations. The details are in
 [Cleaning Up Resources](CLEANUP-RESOURCES.md).
 
 > **For junior developers:** Think of ownership like borrowing a library book. Each book (resource) has a borrower's card (owner field). When someone leaves (process exits), the library automatically collects all books they borrowed, regardless of where the books currently are on the shelves.
@@ -170,7 +170,11 @@ Here is the chain of ownership when a process creates a thread:
 | `library_reference` | `owner = process_t *` | Points at the library object |
 
 When the thread terminates and the next tick arrives, the cleanup pass:
-1. Frees every `__heap` block whose `owner == thread_t *` (the stack) and destroys the `thread_t`.
-2. Calls `process_reap` for the thread's process. If no other thread of that process is still alive it destroys the process's events, timers and services, frees every `__heap` block whose `owner == process_t *` (including the loaded XPRG image), and finally removes the `process_t` itself from the process list.
+1. Frees every fixed OS-heap block whose `owner == thread_t *` (the stack) and destroys the `thread_t`.
+2. Calls `process_reap` for the process. If no other thread of that process is
+   still alive it destroys the owned events, timers and services, frees every
+   fixed OS-heap block and every banked user-heap block whose
+   `owner == process_t *` (including the loaded XPRG image), and finally
+   removes the `process_t` itself from the process list.
 
 This cascading cleanup is why correctly setting the `owner` field when calling `so_create` or `mem_allocate` is essential.

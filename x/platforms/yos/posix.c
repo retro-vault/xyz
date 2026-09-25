@@ -9,7 +9,9 @@
 
 extern yos_t *yos_api_table;
 
-_Static_assert(sizeof(yos_t) == 98, "YOS ABI 1 table size changed");
+_Static_assert(sizeof(yos_t) == 154, "YOS ABI 6 table size changed");
+_Static_assert(sizeof(struct dirent) == sizeof(yos_directory_entry_t),
+               "POSIX and YOS directory entries differ");
 
 static int unavailable(void)
 {
@@ -189,7 +191,7 @@ struct dirent *readdir(DIR *directory)
         unavailable();
         return NULL;
     }
-    result = yos_api_table->readdir(directory);
+    result = (struct dirent *)yos_api_table->readdir(directory);
     if (!result) copy_yos_errno();
     return result;
 }
@@ -207,16 +209,6 @@ int closedir(DIR *directory)
     int result;
     if (!yos_api_table || !yos_api_table->closedir) return unavailable();
     result = yos_api_table->closedir(directory);
-    if (result < 0) copy_yos_errno();
-    return result;
-}
-
-int enumerate_disks(yos_disk_info_t *disks, size_t capacity)
-{
-    int result;
-    if (!yos_api_table || !yos_api_table->enumerate_disks)
-        return unavailable();
-    result = yos_api_table->enumerate_disks(disks, capacity);
     if (result < 0) copy_yos_errno();
     return result;
 }

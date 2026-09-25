@@ -3,7 +3,7 @@ Y_ROOT    ?= $(realpath ../..)
 THIS_DIR  := $(realpath .)
 BUILD_DIR := $(REPO_ROOT)/build/mdr-emu
 DIST_DIR  ?= $(REPO_ROOT)/bin/x
-TOOL_DIST_DIR ?= $(REPO_ROOT)/bin/y
+TOOL_DIST_DIR ?= $(REPO_ROOT)/build/y-tools/stage
 PUBLIC_LIB_DIR ?= $(TOOL_DIST_DIR)/lib
 BIN_DIR   := $(BUILD_DIR)
 
@@ -14,8 +14,8 @@ CFLAGS   ?= -O2 -Wall -Wextra -pedantic
 
 Z80_DIR := $(THIS_DIR)/vendor/superzazu-z80
 MDR_LIB := $(TOOL_DIST_DIR)/lib/libmicrodrive.a
-YOS_ROM := $(REPO_ROOT)/bin/y/z80/spectrum/bin/yos.rom
-YOS_CDB := $(REPO_ROOT)/bin/y/z80/spectrum/bin/yos.cdb
+YOS_ROM := $(REPO_ROOT)/build/yos/legacy-dist/yos.rom
+YOS_CDB := $(REPO_ROOT)/build/yos/legacy-dist/yos.cdb
 MDRSTEP_IMAGE := $(REPO_ROOT)/bin/z/z80/spectrum/bin/mdr/mdrstep.mdr
 
 .DEFAULT_GOAL := all
@@ -34,7 +34,10 @@ $(MDR_LIB):
 		PUBLIC_LIB_DIR=$(TOOL_DIST_DIR)/lib PUBLIC_INCLUDE_DIR=$(TOOL_DIST_DIR)/include
 
 $(YOS_ROM) $(YOS_CDB):
-	$(MAKE) -C $(Y_ROOT)/src ROOT=$(REPO_ROOT) REPO_ROOT=$(REPO_ROOT) Y_ROOT=$(Y_ROOT) X_ROOT=$(REPO_ROOT)/x BUILD_DIR=$(REPO_ROOT)/build/yos DIST_DIR=$(REPO_ROOT)/bin/y ZX_ROMS_DIR=$(REPO_ROOT)/bin/y/z80/spectrum/bin YOS_DEBUG=1
+	$(MAKE) -C $(Y_ROOT)/src/c ROOT=$(REPO_ROOT) REPO_ROOT=$(REPO_ROOT) \
+		Y_ROOT=$(Y_ROOT) X_ROOT=$(REPO_ROOT)/x \
+		BUILD_DIR=$(REPO_ROOT)/build/yos DIST_DIR=$(REPO_ROOT)/bin/y \
+		YOS_DEBUG=1
 
 $(MDRSTEP_IMAGE):
 	$(MAKE) -C $(Y_ROOT)/tests/mdrstep-yos image REPO_ROOT=$(REPO_ROOT)
@@ -45,7 +48,7 @@ $(BIN_DIR)/mdr_emu: $(BUILD_DIR)/mdr_emu.o $(BUILD_DIR)/z80.o $(MDR_LIB)
 
 $(BUILD_DIR)/mdr_emu.o: mdr_emu.cpp
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(THIS_DIR) -I$(Z80_DIR) -I$(Y_ROOT)/include -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -I$(THIS_DIR) -I$(Z80_DIR) -I$(Y_ROOT)/pkg/microdrive/include -c -o $@ $<
 
 $(BUILD_DIR)/z80.o: $(Z80_DIR)/z80.c
 	@mkdir -p $(BUILD_DIR)

@@ -8,7 +8,7 @@ has a reference count but never a thread.
 
 ## The Process Structure
 
-The process object is 15 bytes on the kernel heap:
+The process object is 16 bytes on the kernel heap:
 
 ```c
 typedef struct process_s {
@@ -16,6 +16,7 @@ typedef struct process_s {
     uint8_t  pflags;            /*  4: process flags        PROCESS_FLAGS */
     char     pname[8];          /*  5: name, 7 chars + NUL  PROCESS_NAME */
     thread_t *main_thread;      /* 13: thread created at launch  PROCESS_MAIN_THREAD */
+    uint8_t bank;               // 15: image bank, FF for common entry
 } process_t;
 ```
 
@@ -23,7 +24,8 @@ Process names are bounded to 7 characters plus the terminator. The name is
 for debugging, not scheduling or library identity. Normal processes have
 `pflags = 0`. [Libraries](LIBRARIES.md) reuse this record without a thread:
 flags 1/3 mark private/shared libraries, bytes 5–7 hold the service pointer
-and image ABI, and the word at 13 is their reference count.
+and image ABI, the word at 13 is their reference count, and byte 15 is the
+resident image bank.
 
 There is deliberately no parent field. `hdr.owner` is `NONE` for ordinary
 process and library objects; it is generic resource ownership, not a parent
@@ -81,12 +83,15 @@ if (!process) {
 
 The file must be an XPRG version 1 *process* image containing a relocatable XL payload (see [Program and Service Images](PROGRAM-IMAGES.md)). `process_load` (`kernel/process_load.s`) reads the 64-byte descriptor onto its own stack and the XL payload into temporary loader memory, verifies the magic, version, kind, required YOS ABI, CRC-32, XL bounds and entry point, then relocates the code in the existing buffer. It splits that owned allocation twice, freeing the trailing relocation records and then the leading XL header, before creating the main thread. No second code allocation or copy is needed. `process_start` receives the descriptor's name, relocated entry and `stack size + CONTEXT_SIZE`; ownership of only the compact resident code block transfers to the process. Service-kind XPRG images are rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`.
 
+The retained block is selected from the configured `0xC000-0xFFFF` bank
+arenas, and the process and its threads record that logical bank.
+
 `process_load_error` points at `_process_last_error`, a fixed cell whose value
 is saved/restored per thread. Every completed process/library load writes its
 result there: zero on success, otherwise an error below. Concurrent/recursive
 loads return BUSY; the initiating call completes synchronously.
 
-The ROM invokes the same loader for `op.sys` on the current esxDOS drive
+The ROM invokes the same loader for `shell.sys` on the current esxDOS drive
 (`kernel/boot_shell.s`) before arming IM2 scheduling. Each firmware call masks
 interrupts while divIDE has the YOS ROM paged out.
 
@@ -161,7 +166,9 @@ void launch_counter(void) {
 - **Process names are at most 7 characters.** `process_start` uses the bounded
   `__string_copy`; `process_load` passes an XPRG name of up to 15 characters,
   and the process record safely retains the first seven.
-- **There is no inter-process isolation.** All processes share the same flat 64 KB address space. A buggy process can overwrite the memory of any other process or the OS itself. This is inherent in the ZX Spectrum's architecture.
+- **There is no protection boundary.** Banking isolates visibility, not
+  privilege: a buggy process can overwrite common memory or its selected
+  16 KiB bank.
 - **Stack size must be sufficient for all nested calls.** Include headroom for the 22-byte context the scheduler saves on the thread's stack at every 50 Hz tick, plus all the function frames the thread will call.
 - **Owner matters for reclamation.** Process-owned events, services, library
   references, and `allocate_memory` blocks are released when the process is

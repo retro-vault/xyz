@@ -6,7 +6,7 @@
 _THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 Y_ROOT     ?= $(abspath $(_THIS_DIR)/../..)
 ROOT       ?= $(abspath $(_THIS_DIR)/../../..)
-DIST_DIR   ?= $(ROOT)/bin/y
+DIST_DIR   ?= $(ROOT)/build/y-tools/stage
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 BUILD_ROOT := $(if $(BUILD_DIR),$(BUILD_DIR),$(ROOT)/build)
@@ -14,7 +14,7 @@ APPMAKE_BUILD_DIR := $(BUILD_ROOT)/y/pkg/appmake
 BIN_DIR   := $(HOST_BIN_DIR)
 
 CXX       := g++
-CXXFLAGS  := -std=c++20 -O2 -Wall -Wextra -Iinclude -I$(Y_ROOT)/include
+CXXFLAGS  := -std=c++20 -O2 -Wall -Wextra -Iinclude -I$(Y_ROOT)/pkg/microdrive/include
 
 TARGET    := $(BIN_DIR)/appmake
 APPMAKE_SRC := main.cpp util.cpp tape.cpp basic.cpp analysis.cpp app_image.cpp cli.cpp zx_reference.cpp

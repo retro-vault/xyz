@@ -1,6 +1,7 @@
 # The Book of YOS
 
-*yos* is a preemptive, ROM-based operating system for the 48K ZX Spectrum.
+*yos* is a preemptive, ROM-based operating system for the ZX Spectrum 48K,
+128K, and Spectrum Next.
 It is written entirely in hand-written Z80 assembly, boots from a 16 KB
 replacement ROM, cooperates with esxDOS on a divIDE interface for disk
 access, and runs every process through a 50 Hz interrupt-driven round-robin
@@ -19,17 +20,17 @@ services, files, input, graphics, packaging, and every public API call.
 |---|---|
 | `y/src/z80/` | the assembly kernel that builds `yos-kernel.rom` (this book) |
 | `y/src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`; it keeps its own copy of the old chapters under `y/src/c/docs/` |
-| `y/include/` | public headers shared with applications: `yos.h`, `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
+| `y/include/` | `yos.h` and `yos.inc` define the public OS ABI; other headers describe separate services or legacy components |
 | `y/tests/` | kernel emulation tests (`kernel-z80/`), the disk-resident shell/library fixture (`shell-yos/`), the real-esxDOS Fuse runner (`fuse/`), microdrive and tape harnesses |
-| `y/pkg/` | host tools staged into `bin/y/bin/`: `appmake`, `microdrive`, `serial` |
+| `y/pkg/` | optional host-tool sources (`appmake`, `microdrive`, `serial`), not part of the YOS distribution |
 | `y/docs/books/` | this book; its chapters are in `y/docs/books/the-book-of-yos/` |
 | `y/docs/standards/` | the [YOS assembly style guide](../standards/YOS-ASSEMBLY-STYLE-GUIDE.md) |
 
 Build the ROM with `make -C y` from the repository root (or `make -C y/src/z80`
 for the assembly kernel alone) and run the emulated kernel tests with
-`make -C y/src/z80 test`. Output lands in `bin/y/z80/spectrum/bin/`:
-`yos-kernel.rom`, the `op.sys` process image it loads at boot, and the
-`shelllib.svc` library used by that shell.
+`make -C y/src/z80 test`. Model-labelled binaries land in `bin/y/arch/48/`,
+`bin/y/arch/128/`, and `bin/y/arch/next/`; shared headers, firmware, scripts, and source
+samples occur once directly under `bin/y/`.
 
 ## The system in one page
 
@@ -40,27 +41,29 @@ for the assembly kernel alone) and run the emulated kernel tests with
    IM1 return. YOS proper begins at `0x0100`.
 2. **RAM bring-up.** `__startup_init` zeroes BSS, copies the eight-entry
    restart-vector table and the initialized data image from ROM to RAM. The
-   100-byte public service table `__yos` remains immutable in ROM.
-3. **Kernel init (`main.s`).** Two heaps are created, the clock, keyboard and
-   mouse timers are installed, the `"yos"` and `"gpx"` services are registered,
-   `op.sys` is loaded from the current esxDOS drive as an XPRG process,
+   154-byte public service table `__yos` remains immutable in ROM.
+3. **Kernel init (`main.s`).** The fixed OS heap and every configured
+   16 KiB bank arena are created, the packed system font is expanded into
+   common RAM, the clock, keyboard and
+   mouse timers are installed, the `"yos"` service is registered,
+   `shell.sys` is loaded from the current esxDOS drive as an XPRG process,
    RST 18 is pointed at the service lookup, and finally IM2 is armed with the
    scheduler vector at `0x5EFF`.
 4. **Run.** Every 50 Hz frame interrupt enters `__thread_robin`, which saves
-   the current thread's 22-byte register context on its own stack, reclaims
+   the current thread's 22-byte register context and mapped bank, reclaims
    terminated threads and processes, chains timers, wakes threads whose
    events fired, selects the next runnable thread and restores its context.
    The kernel itself idles in a `HALT` loop.
 5. **Talk to the kernel.** There are no privilege levels. Applications call
    `query_service("yos")` through RST 18 and receive a `yos_t` table of
-   function pointers (ABI version 2): memory, timers, events, threads,
+   function pointers (ABI version 6): memory, timers, events, threads,
    processes, services, interrupt vectors, keyboard, mouse, a POSIX-style
-   esxDOS filesystem, and the shared XPRG process/library loader. `query_service("gpx")`
-   returns the complete libgpx drawing API.
+   esxDOS filesystem, the shared XPRG process/library loader, and the complete
+   libgpx drawing API.
 
 Public shared-state transactions use nestable, IFF-preserving critical
 sections. Kernel errno and loader status are per-thread, using spare bytes
-in the 24-byte thread object. GPX creates process-owned contexts and protects
+in the 38-byte thread object. GPX creates process-owned contexts and protects
 framebuffer updates; it does not give each app a private screen. See
 [Concurrency](programming-yos/MEMORY-TIME-AND-CONCURRENCY.md) for the precise
 guarantees, including the remaining process-local libc `errno` limitation.
@@ -72,19 +75,20 @@ guarantees, including the remaining process-local libc `errno` limitation.
 | `0x0000` | ROM header: reset, RST/NMI | esxDOS-compatible, 256 bytes |
 | `0x0100` | ROM: kernel, drivers, fs, gpx, initializer images | `_CODE` .. `_GSFINAL`; ends below `0x4000` |
 | `0x4000` | Screen bitmap and attributes | ULA |
-| `0x5B00` | `_INITIALIZED` | esxDOS gates at `0x5B37`, clock, kbd |
-| `0x5B70` | `_BSS` | Descriptor, error, and timer state |
-| `0x5B94` | `__yos` service table, then kernel stack | Table is 98 bytes; stack is 512 bytes, top at `0x5DF4` |
-| `0x5DF4` | `__sys_vec_tbl`, list roots, mouse | Eight 3-byte `JP` entries |
+| `0x5B00` | Writable kernel state | esxDOS descriptors/gates, clock, input, bank state |
+| `0x5B31` | Kernel stack | 512 bytes, grows down from `0x5D31` |
+| `0x5D31` | `__sys_vec_tbl`, list roots, mouse | Eight 3-byte `JP` entries |
 | `0x5EFF` | `__im2_vector` | 2 bytes, read via `I=0x5E` |
-| `0x5F01` | `__sys_heap` | 1024 bytes, kernel objects |
-| `0x6301` | `__heap` | User heap to top of RAM |
-| `0xFFFF` | End of RAM | |
+| `0x5F01` | `__sys_heap` / `__heap` | One fixed OS heap, ending at `0xBFFF` |
+| `0xC000` | Selected user heap | Banked XPRG processes, libraries and user allocations |
+| `0xFFFF` | End of selected bank | |
 
 Application authors should use the practical
 [loadable-library chapter](programming-yos/LOADABLE-LIBRARIES.md) in
 [Programming YOS](PROGRAMMING-YOS.md); the kernel-side layouts for those
 images are in this book's libraries chapter.
+The complete mapping, allocator, gate, and compiler contract is in
+[Banked Processes and Libraries](the-book-of-yos/BANKING.md).
 
 ## Appendix
 
@@ -104,7 +108,7 @@ Where to look in `y/src/z80/` when a chapter mentions a routine:
 | critical sections | `startup/enter_critical_section.s`, `startup/leave_critical_section.s`, `startup/_critical_state.s` |
 | kernel init | `main.s`, `startup/_kernel_memory.s`, `kernel/_syscall_table_init.s`, `kernel/_yos_state.s` |
 | lists and objects | `kernel/list_*.s`, `kernel/so_create.s`, `kernel/so_destroy.s` |
-| memory | `kernel/mem_init.s`, `kernel/mem_allocate.s`, `kernel/mem_free.s`, `kernel/mem_free_owner.s`, `kernel/_mem_payload_address.s` |
+| memory and banking | `kernel/mem_*.s`, `bank/common/*.s`, `bank/{48,128,next}/_bank_map.s` |
 | threads | `kernel/thread_create.s`, `kernel/_thread_prepare_startup.s`, `kernel/thread_resume.s`, `kernel/thread_suspend.s`, `kernel/thread_exit.s`, `kernel/_thread_lswitch.s`, `kernel/_thread_robin.s`, `kernel/_thread_select_next.s`, `kernel/_thread_cleanup_terminated.s`, `kernel/_thread_state.s` |
 | processes | `kernel/process_start.s`, `kernel/process_exit.s`, `kernel/process_reap.s`, `kernel/process_load.s`, `kernel/boot_shell.s`, `kernel/_process_*.s` |
 | events and timers | `kernel/evt_*.s`, `kernel/tmr_*.s`, `kernel/_tmr_chain.s` |

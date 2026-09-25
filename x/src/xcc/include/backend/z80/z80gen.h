@@ -120,6 +120,9 @@ public:
         z88dk_classic_runtime_ = enabled;
     }
 
+    // YOS reserves RST 28h for dynamic calls through bank,address pointers.
+    void set_yos_far_calls(bool enabled) { yos_far_calls_ = enabled; }
+
     //
     // Attach a debug info emitter (DWARF or SDCC-style).
     // Must be called before emit_module().  When not called, no debug
@@ -157,6 +160,7 @@ private:
         optimization_settings::for_level(opt_level::O0);
     bool standalone_asm_output_ = false;
     bool z88dk_classic_runtime_ = false;
+    bool yos_far_calls_ = false;
     bool size_shared_ix_helpers_ = false;
     bool compact_codegen_ = false;
     // A bounded dry emission may establish that __mul16 is already required
@@ -556,9 +560,8 @@ private:
 
     // ----- far (24-bit banked) pointer support -----------------------
     //
-    // Load / store the bank byte (byte 2) of a far pointer operand into A.
-    // Unlike load_a/store_a these honour the byte offset for global
-    // symbols, where the bank lives at (sym+2).
+    // Load / store the bank byte (byte 0) of a far pointer operand into A.
+    // The bank is byte zero of the packed bank,address far-pointer ABI.
     //
     void load_far_bank (const operand &ptr);
     void store_far_bank(const operand &dst);
@@ -578,7 +581,7 @@ private:
 
     // 24-bit far pointer ± integer arithmetic.  Returns true when the
     // result is a far pointer and the far path was emitted.  is_add
-    // selects addition (carry into bank) vs subtraction (borrow).
+    // selects addition vs subtraction; the bank remains unchanged.
     bool gen_far_ptr_arith(const icode &ic, bool is_add);
 
     //

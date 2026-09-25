@@ -45,7 +45,8 @@ through the ROM's POSIX/esxDOS layer and accepts process images. It validates th
 version, payload CRC, XL header, relocation table, code bounds, entry point,
 fixed-load requirement and stack size. The XL payload is version 2: a 12-byte
 header, the code, and then the relocation table. The whole payload is read
-into one heap block, so the JP metadata and XL header precede the code and the
+into one selected-bank heap block, so the JP metadata and XL header precede
+the code and the
 consumed relocation records trail it. The relocator patches the code at its
 existing address, without allocating a second code copy. After metadata has
 been consumed, `__image_retain` first shrinks the owned heap block to the
@@ -53,7 +54,8 @@ relocated code end through the public `shrink_memory` routine, freeing the
 trailing relocation table, then splits the block immediately before the
 resident code (or compact service table). The leading metadata block is freed
 by the loader's ordinary final cleanup. The code does not move. Only the
-code (plus the compact service table) stays allocated; the relocation table,
+banked code stays in that arena; a library's packed far export table is
+retained separately in common memory. The relocation table,
 which can be a quarter of the image, is returned to the heap, and because it
 was the top of the block its release coalesces with the free space above.
 The loader creates the process and its main thread and transfers ownership of
@@ -72,12 +74,11 @@ service image passed to `load_process` is rejected with
 service images; see [Libraries](LIBRARIES.md) for relocation,
 self-registration, sharing and automatic release.
 
-At boot the ROM opens `op.sys` on the current esxDOS drive and directory
+At boot the ROM opens `shell.sys` on the current esxDOS drive and directory
 (`kernel/boot_shell.s`), loads it as a process, and only then arms the
-scheduler. The build creates the current smoke-test `op.sys` from
-`y/tests/shell-yos/shell.c`: it loads `shelllib.svc`, calls the relocated
-library interface, queries `gpx`, centres a greeting and `Library OK`, and
-loops forever. The production image gets both `_entry` and the
+scheduler. The build creates `shell.sys` from `y/samples/shell-c/shell.c`. It obtains
+the unified `yos_t` interface, centres `Hello World!` with the system font
+without loading a library or allocating heap memory, and loops forever. The production image gets both `_entry` and the
 `RST 0x18; RET` `query_service` stub from the XCC `--platform=yos` backend.
 
 Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
@@ -87,7 +88,7 @@ Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
 |---:|---|
 | 0 | `OK` |
 | 1 | `NOT_FOUND` — `open` failed |
-| 2 | `NO_MEMORY` — image does not fit in `__heap` |
+| 2 | `NO_MEMORY` — image does not fit any configured bank extent |
 | 3 | `READ_ERROR` — short read |
 | 4 | `INVALID_IMAGE` — bad magic, version, flags, XL header, relocation or bounds |
 | 5 | `START_ERROR` — `process_start` failed (`__sys_heap` or stack allocation) |
@@ -106,16 +107,18 @@ with a nonzero stack requirement and the oldest compatible YOS ABI:
 ```sh
 mkdir -p build/examples/yos bin/y/examples
 bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 6 \
   build/examples/yos/app.xl -o bin/y/examples/app.prc
 ```
 
-Both smoke images declare minimum OS ABI 1 and continue to load under ABI 2.
-An application using `wait_event` must instead pass `--min-os 2`.
+Both smoke images declare minimum OS ABI 6. ABI 5 introduced the grouped
+core layout; ABI 6 appends graphics to `yos_t` and removes the separate GPX
+service. The loader rejects any other declared ABI, so rebuild older processes
+and libraries against the unified header and package them with `--min-os 6`.
 The shell also checks `yos->version() >= YOS_VERSION` before accessing
 `load_library`.
 
-`y/src/z80/Makefile` (`$(OP_XL)` and `$(OP_OUTPUT)`) is the reference
+`y/src/z80/Makefile` (`$(SHELL_XL)` and `$(SHELL_OUTPUT)`) is the reference
 recipe.
 
 Use `xprog --service` for a library intended to be registered as a named YOS

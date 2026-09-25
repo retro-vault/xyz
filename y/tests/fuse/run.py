@@ -14,12 +14,13 @@ import tempfile
 def main():
     root = Path(__file__).resolve().parents[3]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--esxdos", required=True, type=Path,
-                        help="extracted esxDOS 0.8.9 distribution directory")
+    parser.add_argument("--esxdos", type=Path,
+                        help="override the vendored esxDOS 0.8.9 runtime")
     parser.add_argument("--prepare-only", action="store_true",
                         help="build media and print its directory without launching")
     args = parser.parse_args()
-    firmware = args.esxdos.resolve()
+    firmware = (args.esxdos or
+                root / "y/third_party/esxdos089").resolve()
     for name in ("ESXIDE.BIN", "SYS", "BIN", "TMP"):
         if not (firmware / name).exists():
             parser.error(f"missing esxDOS distribution entry: {firmware / name}")
@@ -38,7 +39,7 @@ def main():
     subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
                     str(Path(__file__).with_name("cold_snapshot.c")),
                     "-lspectrum", "-o", str(snapshot_tool)], check=True)
-    output = root / "bin/y/z80/spectrum/bin"
+    output = root / "bin/y/arch/48"
     rom = output / "yos-kernel.rom"
     snapshot = work / "yos.szx"
     subprocess.run([str(snapshot_tool), str(firmware / "ESXIDE.BIN"),
@@ -49,7 +50,7 @@ def main():
     for name in ("SYS", "BIN", "TMP"):
         subprocess.run(["hdfmonkey", "put", str(disk),
                         str(firmware / name), "/"], check=True)
-    for name in ("op.sys", "shelllib.svc"):
+    for name in ("shell.sys",):
         subprocess.run(["hdfmonkey", "put", str(disk), str(output / name),
                         "/" + name.upper()], check=True)
     print(f"Fuse cold-boot media: {work}", flush=True)

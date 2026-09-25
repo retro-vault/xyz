@@ -409,8 +409,10 @@ void abi_convention::emit_bc_indirect_call(z80_gen &g, const operand &target,
 
 void abi_convention::emit_far_ptr_to_regs(z80_gen &g, const operand &value)
 {
-    // HL = address (bytes 0..1), E = bank (byte 2), D = 0.
-    g.load_hl(value);
+    // HL = address (bytes 1..2), E = bank (byte 0), D = 0.
+    operand address = value;
+    address.byte_offset += 1;
+    g.load_hl(address);
     g.load_far_bank(value);
     g.emit_line("ld\te, a");
     g.emit_line("ld\td, %s", g.asm_.imm(0).c_str());
@@ -418,8 +420,10 @@ void abi_convention::emit_far_ptr_to_regs(z80_gen &g, const operand &value)
 
 void abi_convention::emit_far_ptr_from_regs(z80_gen &g, const operand &result)
 {
-    // Store HL -> address (bytes 0..1), E -> bank (byte 2).
-    g.store_hl(result);
+    // Store HL -> address (bytes 1..2), E -> bank (byte 0).
+    operand address = result;
+    address.byte_offset += 1;
+    g.store_hl(address);
     g.emit_line("ld\ta, e");
     g.store_far_bank(result);
 }

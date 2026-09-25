@@ -6,7 +6,7 @@
         .module process_reap
         .optsdcc -mz80 sdcccall(1)
         .globl  _process_reap
-        .globl  __heap
+        .globl  __sys_heap
         .globl  __evt_first
         .globl  __tmr_first
         .globl  __svc_first
@@ -17,6 +17,7 @@
         .globl  __process_find_owned
         .globl  __so_reap
         .globl  _mem_free_owner
+        .globl  __bank_free_owner
         .globl  _so_destroy
         .globl  _enter_critical_section
         .globl  _leave_critical_section
@@ -85,8 +86,11 @@ _process_reap::
 .memory:
         push    ix
         pop     de
-        ld      hl, #__heap
+        ld      hl, #__sys_heap
         call    _mem_free_owner
+        push    ix
+        pop     de
+        call    __bank_free_owner
         push    ix
         pop     de
         ld      hl, #_process_first

@@ -4,7 +4,7 @@ A **thread** is an independent flow of execution. Multiple threads share the sam
 
 ## The Thread Structure
 
-Every thread is a 24-byte `thread_t` object allocated on the kernel heap (`__sys_heap`). The assembly modules address its fields through the `.equ` offsets shown here:
+Every thread is a 38-byte `thread_t` object allocated on the kernel heap (`__sys_heap`). The assembly modules address its fields through the `.equ` offsets shown here:
 
 ```c
 typedef struct thread_s {
@@ -17,6 +17,9 @@ typedef struct thread_s {
     uint8_t  state;         /* 19: current thread state         THREAD_STATE */
     int16_t  error_number;  /* 20: saved kernel errno       THREAD_ERRNO */
     void     *process;      /* 22: owning process               THREAD_PROCESS */
+    uint8_t  bank;          // 24: exact mapped bank, FF = common thread
+    uint8_t  call_depth;    // 25: active cross-bank call frames
+    uint8_t  calls[12];     // 26: four bank/continuation frames
 } thread_t;
 ```
 
@@ -28,12 +31,15 @@ Key points:
   reserved join word holds kernel errno. Both error fields start at zero.
 - **Error fields** — the scheduler saves the live public cells before timer
   callbacks, and restores the next thread's values before returning. The
-  object stays 24 bytes and the register context stays 22 bytes.
+  register context stays 22 bytes.
+- **Bank state** — the scheduler saves the exact mapped bank at preemption
+  and restores it before the context. Four fixed-memory far-call frames make
+  nested library calls safe without shifting stack arguments.
 - **`state`** — one of the values below.
 - **`process`** — the real process membership used by cleanup.
   `hdr.owner` is normally zero. Library initialization temporarily places
   its library object there as an allocation/registration owner override,
-  without changing real process membership or growing the thread object.
+  without changing real process membership.
 
 ## Thread States
 
@@ -69,7 +75,13 @@ thread_t *thread_create(
 );
 ```
 
-`thread_create` (`kernel/thread_create.s`) allocates a `thread_t` from `__sys_heap` and a stack of `stack_size` bytes from `__heap`, with the *thread* as the stack block's owner. It sets `sp = stack + stack_size - CONTEXT_SIZE`, writes the startup stub, and places the stub's address in the return-address slot of that initial context. The thread is created in the `SUSPENDED` state — it does not run until you call `thread_resume`. If either allocation fails, everything is rolled back and `NULL` is returned.
+`thread_create` (`kernel/thread_create.s`) allocates both its `thread_t` and a
+`stack_size` stack from the fixed OS heap (`__sys_heap`, also named `__heap`),
+with the *thread* as the stack block's owner. It sets
+`sp = stack + stack_size - CONTEXT_SIZE`, writes the startup stub, and places
+the stub's address in the return-address slot of that initial context. The
+thread is created in the `SUSPENDED` state—it does not run until
+`thread_resume`. If either allocation fails, everything is rolled back.
 
 ```c
 yos_t *yos = (yos_t *)query_service("yos");
@@ -137,6 +149,9 @@ never restore a waiting or suspended thread until it becomes runnable.
 ### Step 4 — Restore the next thread's context
 
 The new thread's `SP` is loaded from its `thread_t.sp` field, then all registers are popped in reverse order. `EI; RETI` pops the PC and re-enables interrupts. The new thread resumes exactly where it was interrupted (or at its startup stub, the first time).
+Before loading SP, the scheduler maps the thread's saved logical bank unless
+it is `0xFF`. A thread interrupted inside a far library therefore resumes
+with that library still visible.
 
 ### Stack layout visualised
 
@@ -172,7 +187,7 @@ Moves thread `t` to the `TERMINATED` queue and halts forever; the thread's stack
 ### `wait_event(event)` — ABI 2
 
 Suspends the calling thread until the scheduler consumes a signal on `event`.
-Call through `yos->wait_event(event)` (slot 49, byte offset 98). It needs no
+Call through `yos->wait_event(event)` (slot 12, byte offset 24). It needs no
 thread handle and allocates nothing: the handle pushed on the caller's stack
 forms the one-entry wait array. `__thread_lswitch` publishes the `WAITING`
 state and queue under its critical section, then halts for rescheduling.

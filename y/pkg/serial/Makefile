@@ -5,7 +5,7 @@
 
 _THIS_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT       ?= $(abspath $(_THIS_DIR)/../../..)
-DIST_DIR   ?= $(ROOT)/bin/y
+DIST_DIR   ?= $(ROOT)/build/y-tools/stage
 HOST_BIN_DIR ?= $(DIST_DIR)/bin
 
 BUILD_ROOT := $(if $(BUILD_DIR),$(BUILD_DIR),$(ROOT)/build)

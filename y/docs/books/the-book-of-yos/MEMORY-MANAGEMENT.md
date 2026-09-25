@@ -8,17 +8,21 @@
 
 | Symbol | Address | Size | Purpose |
 |---|---|---|---|
-| `__sys_heap` | `0x5F01` | 1024 bytes | kernel objects: threads, processes, timers, events, services |
-| `__heap` | `0x6301` | to `0xFFFF` | loaded program images, thread stacks, application data |
+| OS heap (`__sys_heap`, alias `__heap`) | `0x5F01` | to `0xBFFF` | every OS object, including threads, processes, stacks, timers, events, services, library tables and GPX state |
+| user heap | `0xC000` | 16384 bytes in every configured bank | process/library images and public user allocations |
 
 Both are declared in `startup/_kernel_memory.s` and initialised at the top of `main.s`:
 
 ```c
-mem_init(__sys_heap, 1024);
-mem_init(__heap, 0xffff - (uint16_t)__heap);
+mem_init(__sys_heap, 0xc000 - (uint16_t)__sys_heap);
+bank_init();
 ```
 
-The second call hands everything from the end of the system heap to the top of the 64 KB address space to the user heap — about 40 KB on a 48K ZX Spectrum.
+`__heap` is retained as a compatibility name for the same OS-heap root; it is
+not a second common arena. The OS heap stops at the fixed banking boundary and
+remains visible while any process or library bank is selected. Each bank is a
+separate user heap using the same allocator and block format; see
+[Banking](BANKING.md).
 
 Having two separate heaps means OS allocations and user allocations never interfere with each other. A runaway user program that exhausts the user heap will not crash the kernel.
 
@@ -67,7 +71,8 @@ block, the payload keeps its current length. A pointer whose header does not
 read as allocated is rejected with `NULL`; there is no heap scan, so callers
 must pass live `allocate_memory` results.
 
-The image loader uses the same two operations: `__image_retain` first shrinks
+The image loader uses bank-selected equivalents of the same two operations:
+`__image_retain` first shrinks
 its read buffer to the relocated code end, releasing the consumed XL
 relocation table, then splits the buffer at the compact exports/code
 boundary. The original allocation now covers only the metadata prefix, and
@@ -108,18 +113,20 @@ The minimum chunk size (`MIN_CHUNK_SIZE = 4`) prevents creating free blocks so s
 On success, `mem_allocate` returns a pointer to the payload. On failure (no block large enough), it returns `NULL`. **Always check the return value.**
 
 ```c
-/* Allocate a 512-byte thread stack from the user heap, owned by the thread */
-void *stack = mem_allocate(__heap, 512, (void *)owner_thread);
+/* Allocate a 512-byte thread stack from the fixed OS heap. */
+void *stack = mem_allocate(__sys_heap, 512, (void *)owner_thread);
 if (!stack) {
     /* handle allocation failure */
 }
 ```
 
 Applications do not call `mem_allocate` directly. The `yos_t` table exposes
-`allocate_memory(size)`, `free_memory(p)` and `shrink_memory(p, size)`. The
+`allocate_memory(size)`, `free_memory(p)` and `shrink_memory(p, size)`. These
+entries use three-byte `yos_user_ptr_t` far pointers. The
 adapters (`kernel/_yos_malloc.s`, `kernel/_yos_free.s`, `kernel/_yos_shrink.s`)
-select `__heap` and assign the current process as owner. During library initialization the temporary library
-owner override is used instead; kernel-context allocations have owner `NONE`.
+scan the configured bank heaps in logical-bank order and assign the current
+process as owner. During library initialization the temporary library owner
+override is used instead; kernel-context allocations have owner `NONE`.
 The adapters hold an IFF-preserving critical section across the complete heap
 transaction. Raw `mem_allocate`, `mem_free`, and `mem_free_owner` are internal,
 unprotected primitives; kernel callers must already hold the section whenever
@@ -159,11 +166,17 @@ uint8_t mem_free_owner(void *heap, void *owner);
 The ZX Spectrum has 64 KB of address space. Memory is precious. Keep these guidelines in mind:
 
 - **Allocate once, keep long-lived objects alive.** Repeatedly allocating and freeing small blocks of varying sizes leads to fragmentation even with coalescing.
-- **Use the OS heap for OS objects only.** `so_create` always allocates from `__sys_heap`; thread stacks, program images and application data live in `__heap`. Never mix the two.
+- **Use the OS heap for OS objects only.** `so_create`, thread stacks, service
+  tables and other kernel-managed state allocate from the fixed
+  `__sys_heap`/`__heap` arena. Program images and public application data use
+  the banked user heaps. Never mix the two domains.
 - **Thread stacks are freed when a thread exits** (as part of resource accounting). Do not free a stack manually.
 - **Memory obtained through `yos->allocate_memory` is process-owned.** Free it
   explicitly when its useful lifetime ends; if it leaks, process reaping frees
   it. Library-initializer allocations follow the library's lifetime.
+- **Loaded image code is bank-owned.** The loader scans the configured
+  `0xC000-0xFFFF` arenas; process reaping releases an owner's blocks from
+  every bank.
 - **The minimum useful allocation is `MIN_CHUNK_SIZE = 4` bytes** of payload. Smaller requests will still be granted but the block cannot be split further.
 
 ## Usage Example: Custom Heap

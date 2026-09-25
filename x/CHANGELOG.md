@@ -6,6 +6,27 @@ Release status:
 
 ## Unreleased
 
+- Updated the YOS platform to the grouped ABI 5 table. The fully documented
+  `yos.h` keeps related memory, synchronization, process/library, service,
+  input, filesystem, and console entries contiguous. The identity prefix is
+  `version`, `rom_model`, `set_print_hook`, and the model query distinguishes
+  48K, 128K, and Next. Added staged and packaged `yos.inc` with named byte
+  offsets for all 53 table slots, and
+  replaced platform assembly's hard-coded process-exit offset with the
+  shared definition.
+
+- The YOS XCC target now lowers indirect calls through three-byte far
+  function pointers (`bank,lo,hi`) to the YOS RST 28 banking gate while
+  preserving register and stack arguments. Far data access uses the YOS RST
+  30 gate. Far-pointer casts, return values, stack arguments, truth tests,
+  equality and arithmetic use the same packed layout; arithmetic changes
+  the 16-bit address while retaining the bank. The optimizer now treats every
+  RST as a call barrier, and the RST 28 lowering snapshots the pre-call stack
+  delta before pushing its private target bytes. The ABI 4 platform header
+  exposes far user-memory allocation across all banks, while libc `malloc`
+  requests the current execution bank so its near pointer stays valid. Added
+  all-profile execution coverage for the representation and semantics.
+
 - Updated the YOS platform header to ABI 2, appending `wait_event` at byte
   offset 98 while preserving existing slots. Callers must declare minimum
   OS 2; the scheduler blocks them until a timer or thread signals the event.

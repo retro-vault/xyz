@@ -1902,8 +1902,8 @@ _get_wide:
 ## 39. `[[xcc::far]]` 24-Bit Pointers
 
 A `[[xcc::far]]` attribute placed **after the `*`** makes a pointer 24 bits
-wide instead of 16: the low 16 bits are the address, the high 8 bits are a
-**bank** selector. This is the standards-conforming attribute slot (C23
+wide instead of 16. Its memory representation is one **bank** byte followed
+by the little-endian 16-bit address. This is the standards-conforming attribute slot (C23
 §6.7.6.1 puts an `attribute-specifier-sequence` right after the `*`, where it
 appertains to the pointer — exactly like `const` in `char * const p`).
 
@@ -1920,12 +1920,13 @@ make a far pointer.
 
 | Aspect | Behavior |
 |---|---|
-| `sizeof` | **3 bytes** (`addr16` + `bank`) vs 2 for a near pointer |
+| `sizeof` | **3 bytes** (`bank` + little-endian `addr16`) vs 2 for a near pointer |
 | Dereference | Routed through the per-target trampoline `__far_getb` / `__far_putb` (in `C` = bank, `HL` = address) |
-| Arithmetic | Full **24-bit** add/sub: carrying/borrowing into the bank byte, so `p+n`, `p[i]`, `p++`, `p-n` behave like a flat pointer |
+| Arithmetic | 16-bit address add/sub within the selected bank; crossing the pointed-to banked object is undefined |
 | `near → far` cast | Zero-extends: bank byte = 0 |
 | `far → near` cast | Truncates to the low 16 bits |
 | Return-by-value / args | Returned in `HL` (address) + `E` (bank); passed as 3 stack bytes |
+| YOS indirect call | Saves argument registers and uses the YOS `RST 28h` far-call gate; other targets retain their target-specific indirect-call behavior |
 
 A far pointer is a **distinct type** from a near pointer: assigning one to the
 other requires a cast, and it has its own runtime, its own arithmetic, and its
@@ -1944,12 +1945,14 @@ implementations shipped for the `none` and `cpm3` targets ignore the bank and do
 a plain `(hl)` access — so on an unbanked target a far pointer behaves exactly
 like a near one. A banked target overrides `__far_getb` / `__far_putb` (linking
 its own module ahead of the runtime library) to program the paging hardware from
-the bank byte.
+the bank byte. The YOS target implements these hooks with its RST 30 data gate,
+which maps the requested bank for one byte and restores the caller's bank.
 
-**Current limitations:** far−far pointer difference and far/far relational
-comparisons compare only the low 16 bits (bank ignored); a full 24-bit
+**Current limitations:** far−far pointer difference is the low 16-bit address
+difference and is only meaningful within one bank; a full 24-bit
 `memcpy`/`strcpy` family (`_fmemcpy`, …) and `intptr_t` widening to hold a far
-pointer are not yet provided.
+pointer are not yet provided. Equality includes the bank byte; relational
+comparisons use the 16-bit address and are meaningful only within one bank.
 
 ---
 

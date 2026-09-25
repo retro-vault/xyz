@@ -537,6 +537,8 @@ static int compile_source_to_text(const std::string &input_path,
         codegen.set_z88dk_classic_runtime(
             opts.runtime == runtime_profile::Z88DK_CLASSIC &&
             opts.zcc_opt_file.empty());
+        codegen.set_yos_far_calls(opts.platform_name == "z80-yos" ||
+                                  opts.platform_name == "yos");
         if (opts.debug) {
             std::string base = out_path;
             auto dot = base.rfind('.');

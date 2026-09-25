@@ -1,18 +1,19 @@
 # YOS API Reference
 
-This is the complete ABI 3 application reference for `y/include/yos.h` and
+This is the complete ABI 6 application reference for `y/include/yos.h` and
 the YOS XCC platform helpers. All kernel calls use the `sdcccall(1)` ABI used
-by the default XCC mode. Include `<yos.h>` and obtain the cached table once:
+by the default XCC mode. Include `<yos.h>` and query the table once:
 
 ```c
-yos_t *yos = yos_get_api();
+yos_t *yos = (yos_t *)query_service("yos");
 if (!yos || yos->version() < YOS_VERSION)
     return 1;
 ```
 
 Opaque handles (`yos_timer_t`, `yos_event_t`, `yos_thread_t`,
-`yos_process_t`, and `yos_service_t`) must only be passed back to the API that
-created them. A returned null pointer means failure unless stated otherwise.
+`yos_process_t`, `yos_service_t`, and `yos_directory_t`) must only be passed
+back to the API that created them. A returned null pointer means failure
+unless stated otherwise.
 
 ## Service bootstrap and platform helpers
 
@@ -24,37 +25,6 @@ to `yos.h` tables.
 
 ```c
 yos_t *direct = (yos_t *)query_service("yos");
-gpx_api_t *graphics = (gpx_api_t *)query_service("gpx");
-```
-
-### `yos_t *yos_get_api(void)`
-
-Returns the `"yos"` table cached by the YOS CRT during startup.
-
-```c
-yos_t *yos = yos_get_api();
-```
-
-### `yos_putchar_hook_t yos_set_putchar_hook(yos_putchar_hook_t hook)`
-
-Installs the process-local sink used by standard character output and returns
-the previous hook. `NULL` restores silent output.
-
-```c
-static void sink(char ch) { queue_for_alto(ch); }
-yos_putchar_hook_t old = yos_set_putchar_hook(sink);
-puts("sent through sink");
-yos_set_putchar_hook(old);
-```
-
-### `int enumerate_disks(yos_disk_info_t *disks, size_t capacity)`
-
-POSIX-style convenience wrapper for the table member. It returns the number
-of records written, or `-1` and sets `errno`.
-
-```c
-yos_disk_info_t disks[4];
-int count = enumerate_disks(disks, 4);
 ```
 
 ## Identity and memory
@@ -67,17 +37,30 @@ Returns the kernel ABI version.
 if (yos->version() < YOS_VERSION) return 1;
 ```
 
-### `void *allocate_memory(size_t size)`
+### `enum yos_rom_model rom_model(void)`
 
-Allocates a raw block from the user heap. The public adapter records the
-current process as owner when one is running. Use `free_memory`, not `free`,
-for this pointer.
+Returns the hardware model detected during boot. The result is one of
+`YOS_ROM_MODEL_48K`, `YOS_ROM_MODEL_128K`, or `YOS_ROM_MODEL_NEXT`. Detection
+checks exact Next machine IDs before testing 128K paging, so a Next running a
+48K or 128K timing personality is still reported as a Next.
 
 ```c
-void *raw = yos->allocate_memory(64);
+if (yos->rom_model() == YOS_ROM_MODEL_NEXT)
+    enable_next_ui_features();
 ```
 
-### `void free_memory(void *memory)`
+### `yos_user_ptr_t allocate_memory(size_t size)`
+
+Scans every configured banked user heap and allocates from the first fitting
+extent. The public adapter records the current process as owner when one is
+running. The result is a three-byte far pointer; use `free_memory`, not `free`,
+for it.
+
+```c
+yos_user_ptr_t raw = yos->allocate_memory(64);
+```
+
+### `void free_memory(yos_user_ptr_t memory)`
 
 Returns a raw YOS allocation. Passing `NULL` is harmless.
 
@@ -85,7 +68,7 @@ Returns a raw YOS allocation. Passing `NULL` is harmless.
 yos->free_memory(raw);
 ```
 
-### `void *shrink_memory(void *memory, size_t size)`
+### `yos_user_ptr_t shrink_memory(yos_user_ptr_t memory, size_t size)`
 
 Releases the bytes of a raw allocation beyond `size` back to the heap. The
 block never moves: on success the same pointer is returned and the first
@@ -97,18 +80,19 @@ allocation, for example one already freed. Only pass pointers obtained from
 `allocate_memory`, not libc pointers.
 
 ```c
-void *buffer = yos->allocate_memory(512);
-size_t used = fill(buffer, 512);
+yos_user_ptr_t buffer = yos->allocate_memory(512);
+/* Fill through a typed [[xcc::far]] pointer or a far-aware helper. */
+size_t used = 128;
 yos->shrink_memory(buffer, used);   /* the rest is free again */
 ```
 
-This is the table entry appended after the ABI 1 baseline (slot 48). The
+This is table slot 3 (byte offset 6) in the grouped ABI 6 layout. The
 kernel's own image loader uses it to drop a consumed XL relocation table
 from the end of its read buffer.
 
-For normal C code prefer `malloc`, `calloc`, `realloc`, `aligned_alloc`, and
-`free`; the platform implementation builds their metadata on the allocate and
-free calls.
+For ordinary near data in the current execution bank, use `malloc`, `calloc`,
+`realloc`, `aligned_alloc`, and `free`. Use the raw far calls when an allocation
+must search beyond that bank.
 
 ## Clock and critical sections
 
@@ -213,8 +197,8 @@ process_ready_work();
 
 Call from a thread with interrupts enabled and outside any critical section.
 Retain the event until the wait returns and stop signal producers before
-freeing it. The call allocates nothing and returns no value. Its appended
-slot is 49 (byte offset 98); package callers with `--min-os 2`.
+freeing it. The call allocates nothing and returns no value. It is slot 12
+(byte offset 24); package ABI 6 callers with `--min-os 6`.
 
 ## Threads
 
@@ -262,7 +246,11 @@ Creates a process and a runnable initial thread around code that is already
 resident.
 
 ```c
-static void child(void) { yos_get_api()->exit_process(); }
+static void child(void)
+{
+    yos_t *child_yos = (yos_t *)query_service("yos");
+    child_yos->exit_process();
+}
 yos_process_t *process = yos->create_process("child", child, 256);
 ```
 
@@ -309,7 +297,7 @@ if (!loaded) {
 ```
 
 Values are `YOS_PROCESS_LOAD_OK`, `NOT_FOUND`, `NO_MEMORY`, `READ_ERROR`,
-`INVALID_IMAGE`, `START_ERROR`, `NOT_PROCESS`, `REQUIRES_NEWER_OS`, and
+`INVALID_IMAGE`, `START_ERROR`, `NOT_PROCESS`, `INCOMPATIBLE_OS`, and
 `BAD_CHECKSUM` (0 through 8). Code 6 means wrong image kind for the
 selected loading API. The current ABI also defines `BUSY` (9), `NO_PROCESS`
 (10), and `INIT_ERROR` (11).
@@ -336,7 +324,7 @@ if (library) library->probe();
 ```
 
 See [Loadable Libraries](../the-book-of-yos/LIBRARIES.md) and the complete
-`y/tests/shell-yos/shelllib.s` / `shelllib.h` fixture for the initializer
+the build-only `y/tests/shell-yos/shelllib.s` fixture for the initializer
 contract, staged registration, ownership and supported image limits.
 
 ## Named services
@@ -446,16 +434,17 @@ if (fd < 0) direct_error = *yos->error_number;
 ## Raw file calls
 
 The members in this section mirror the functions from `<fcntl.h>`,
-`<unistd.h>`, `<sys/stat.h>`, and `<dirent.h>`. Prefer those standard wrappers;
-the direct form is shown because every `yos_t` entry is part of the ABI.
+`<unistd.h>`, and `<sys/stat.h>`. The directory ABI types are declared in
+`<yos.h>`. The direct form is shown because every operation is a `yos_t`
+entry.
 
 Descriptors and the esxDOS current directory are system-wide. Each descriptor
 call is serialized from validation through native I/O and state commit, so one
 call cannot corrupt kernel bookkeeping; append seek plus write is atomic.
 Sequences of calls are not transactions: coordinate `chdir` plus `open`, and
 do not close a descriptor or free a buffer while another thread uses it.
-`readdir` reuses storage in its `DIR`, so copy a record before another read on
-that stream.
+`readdir` reuses storage in its `yos_directory_t`, so copy a record before
+another read on that stream.
 
 ### `int open(const char *path, int flags)`
 
@@ -571,23 +560,23 @@ Reads metadata for an open descriptor.
 if (yos->fstat(fd, &status) == 0 && S_ISREG(status.st_mode)) use_file();
 ```
 
-### `DIR *opendir(const char *path)`
+### `yos_directory_t *opendir(const char *path)`
 
 Allocates and opens a directory stream.
 
 ```c
-DIR *directory = yos->opendir(".");
+yos_directory_t *directory = yos->opendir(".");
 ```
 
-### `struct dirent *readdir(DIR *directory)`
+### `yos_directory_entry_t *readdir(yos_directory_t *directory)`
 
 Returns the next reused directory record, or `NULL` at end/error.
 
 ```c
-struct dirent *entry = yos->readdir(directory);
+yos_directory_entry_t *entry = yos->readdir(directory);
 ```
 
-### `void rewinddir(DIR *directory)`
+### `void rewinddir(yos_directory_t *directory)`
 
 Returns a stream to its first entry.
 
@@ -595,7 +584,7 @@ Returns a stream to its first entry.
 yos->rewinddir(directory);
 ```
 
-### `int closedir(DIR *directory)`
+### `int closedir(yos_directory_t *directory)`
 
 Closes and frees a directory stream.
 
@@ -637,7 +626,6 @@ DIR *d = opendir(".");                              /* opendir */
 struct dirent *e = readdir(d);                       /* readdir */
 rewinddir(d);                                        /* rewinddir */
 ok = closedir(d);                                    /* closedir */
-int disks_found = enumerate_disks(disks, capacity);  /* enumerate_disks */
 ```
 
 The kernel error cell is per-thread; linked libc `errno` is only process-local
@@ -649,7 +637,7 @@ hook and succeeds even when no hook exists. Descriptor 0 reads as immediate
 end of file. Closing descriptors 0–2 succeeds without a kernel call.
 
 
-## Native esxDOS commands (ABI 3)
+## Native esxDOS commands and firmware output (ABI 3)
 
 ### `int exec_command(const char *commandline)`
 
@@ -657,19 +645,17 @@ Executes `M_EXECCMD` (`0x8F`) with a NUL-terminated command line in RAM,
 without the leading dot. Absolute paths and arguments are supported. A
 return of zero means success; failure returns `0x100 + native_error`, so
 native error zero remains distinguishable from success. This call masks
-scheduler interrupts while esxDOS owns the ROM mapping. A caller must use
-an XPRG minimum OS version of 3.
+scheduler interrupts while esxDOS owns the ROM mapping. Current callers use
+an XPRG minimum OS version of 6.
 
 ### `yos_handler_t set_print_hook(yos_handler_t sink)`
 
 Installs the global RAM sink used by RST 10 and the fixed `0x09F4` print
-entry, returning the previous sink. Pass NULL to disable it. The callback
+entry, returning the previous sink. This function occupies the third ABI 6
+identity-prefix slot, immediately after `rom_model`. Pass NULL to disable it. The callback
 uses the firmware ABI: the character arrives in A, and the callback must
 preserve registers and flags. It requires an assembly adapter, not an
 ordinary C function taking a character argument. Both ROM entry points
 preserve HL around the adapter. Buffer output in RAM while firmware is
 mapped, and draw it after `exec_command` returns. Restore the previous sink
 before releasing the callback's process memory.
-
-This kernel hook is separate from the process-local `yos_set_putchar_hook`
-used by the C library's stdout/stderr output.

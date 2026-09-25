@@ -6,7 +6,7 @@
         .module _thread_cleanup_terminated
         .optsdcc -mz80 sdcccall(1)
         .globl  __thread_cleanup_terminated
-        .globl  __heap
+        .globl  __sys_heap
         .globl  _thread_current
         .globl  _thread_first_terminated
         .globl  _mem_free_owner
@@ -39,7 +39,7 @@ __thread_cleanup_terminated::
         push    hl
         push    ix
         pop     de
-        ld      hl, #__heap
+        ld      hl, #__sys_heap
         call    _mem_free_owner
         push    ix
         pop     de

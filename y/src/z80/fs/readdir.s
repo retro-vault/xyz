@@ -43,7 +43,7 @@ _readdir::
         ld      bc,#24
         ex      de,hl
         add     hl,bc
-        ex      de,hl                   ; public struct dirent
+        ex      de,hl                   ; public yos_directory_entry_t
         call    __directory_convert
         pop     ix
         ret

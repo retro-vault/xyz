@@ -7,8 +7,8 @@ upstream `main` snapshot, commit
 https://github.com/retro-vault/libgpx
 
 The sources are included in the YOS ROM archive so the ROM is self-contained
-and reproducible. `_gpx_name.s` and `_gpx_service.s` are YOS integration
-modules. YOS adaptations allocate/free independent, process-owned six-byte
+and reproducible. YOS exposes the public drawing entry points at the end of its single
+`yos_t` table; the remaining modules are the internal implementation. YOS adaptations allocate/free independent, process-owned six-byte
 contexts, report the constant Spectrum dimensions without a global context,
 and protect framebuffer read/modify/write spans, rows and sprite operations
 with the kernel's IFF-preserving critical sections. Creation does not clear

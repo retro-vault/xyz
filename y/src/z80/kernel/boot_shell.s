@@ -12,10 +12,10 @@
         .area   _CODE
 
 _boot_shell::
-        ld      hl,#.op
+        ld      hl,#.shell
         jp      _process_load
 
         ; Keep the complete immutable name with its tail-jumping caller.
         ; This packs ordinary ROM, not a firmware reservation.
-.op:
-        .asciz  "op.sys"
+.shell:
+        .asciz  "shell.sys"

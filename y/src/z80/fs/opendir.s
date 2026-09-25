@@ -7,8 +7,8 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _opendir
-        .globl  __yos_malloc
-        .globl  __yos_free
+        .globl  __os_malloc
+        .globl  __os_free
         .globl  __zx_esx_path
         .globl  __zx_esx_errno
         .globl  __zx_esx_error
@@ -33,7 +33,7 @@ _opendir::
         call    __frame_ix
         push    hl                      ; IX-2: path
         ld      hl,#DIRECTORY_SIZE
-        call    __yos_malloc
+        call    __os_malloc
         ld      a,d
         or      e
         jr      z,.no_memory
@@ -56,7 +56,7 @@ _opendir::
         push    af
         ld      l,-4(ix)
         ld      h,-3(ix)
-        call    __yos_free
+        call    __os_free
         pop     af
         call    __zx_esx_error
         jr      .null

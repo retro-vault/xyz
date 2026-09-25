@@ -9,12 +9,98 @@ Release status:
 
 ## Unreleased
 
+- Reworked the deployed C and assembly shells into allocation-free, library-free
+  `Hello World!` samples centred through the unified `yos_t` graphics API.
+  The library image remains a build-only regression fixture.
+
+- Merged all GPX types, constants, and 24 drawing calls into the end of the
+  single `yos_t` ABI 6 table; removed the separate `gpx` service and header.
+
+- Flattened the deployable release from `bin/y/z80/spectrum/` to `bin/y/`.
+  Shared headers, firmware, scripts, notices, and sample source now occur
+  once; `arch/48/`, `arch/128/`, and `arch/next/` contain only model-labelled
+  binary payloads. The layout audit rejects obsolete trees and binaries
+  outside those three directories.
+
+- Consolidated the core interface around `yos.h`/`yos.inc`: directory handles,
+  entries, limits, and entry-kind constants now live in `yos.h`, and disk
+  enumeration is exposed only through `yos_t`. Removed the duplicate global
+  `enumerate_disks` wrapper and the XCC-only `yos_set_putchar_hook` adapter
+  from the public API, and stopped shipping the POSIX adapter header and
+  separate GPX service header in the core YOS distribution.
+
+- Restored `shell.sys` as the boot-process contract throughout the kernel,
+  build, tests and documentation. The default C shell and a minimal assembly
+  shell are now shipped as source and built XPRG samples. `bin/y` stages a
+  self-contained Spectrum release with ABI 6 C/assembly headers and 48K,
+  128K, and native Next ZEsarUX launchers. The matching esxDOS 0.8.9 DivIDE
+  and DivMMC runtime is bundled with its original notices, so no external
+  firmware path is required. Build audits and other test-only artifacts
+  remain under `build/`.
+
+- Added a ZEsarUX TBBlue banking runner using the production universal ROM.
+  Its headless mode combines the all-126-bank libxz80 backend test with a real
+  NextReg/MMU probe in ZEsarUX that far-calls from bank 0 to bank 125 and
+  verifies restoration. It clones its private FAT16 HDF to raw IDE media, then
+  verifies real 48K and 128K divIDE/esxDOS cold boots through the resident
+  process, library reference, and rendered shell. The 128K run also requires
+  model detection and all six user banks.
+- Fixed the 128K mapper to retain the 48-BASIC ROM slot from which ESXIDE
+  boots YOS. Fixed the scheduler restoring saved logical bank `n` as `n+1`;
+  an interrupt-driven regression now checks exact restoration of banks 0 and
+  1, and the real 128K test exercises the fix through banked process/library
+  execution.
+
+- Reorganized the 53-entry `yos_t` service table into contiguous ABI 5
+  categories: identity, banked memory, time/critical sections, timers/events,
+  threads, processes/libraries, services, vectors, input, filesystem, and
+  commands/console. Every entry in both public `yos.h` copies now has a
+  concise contract comment. Added matching `yos.inc` files with named byte
+  offsets for all functions and data-pointer slots, converted assembly
+  consumers from magic offsets, and added a build-time checker that compares
+  both C headers, both assembly includes, and the ROM table. Because regrouping changed pre-ABI-5 offsets, ABI 5 rejected older images.
+  ABI 6 now appends graphics to that grouped core; current examples and
+  fixtures use `--min-os 6`. Identity starts with `version`, `rom_model`, and
+  `set_print_hook`; `rom_model` reports 48K, 128K, or Next. The unified table
+  is 154 bytes.
+
+- Added banked YOS process and library images. One fixed OS heap contains all
+  kernel objects and stacks below `0xC000`; every detected logical bank has
+  an independent packed 16 KiB user heap at
+  `0xC000-0xFFFF`. Boot probes exact NextReg 0 machine IDs first, then
+  performs a reversible 7FFD page test, and otherwise selects 48K. It records
+  the model and installs a three-byte JP to the matching mapper in fixed RAM.
+  A 48K machine uses one logical no-op bank, Spectrum 128K uses at most six
+  safe 7FFD pages, and Spectrum Next uses the configured count of paired-MMU
+  banks while excluding the two fixed lower-RAM pages.
+  Process/library ownership, loader rollback,
+  shrinking, reference counting, and reaping now include bank extents.
+  Public allocation scans all user banks and returns a packed far pointer;
+  standard libc `malloc` deliberately allocates only from the caller's
+  execution bank so a near pointer remains valid. Library interfaces are
+  stable fixed-memory `{bank,address}` tables.
+  RST20 implements inline far call and bit-7 far jump, RST28 implements XCC
+  indirect far calls, RST30 implements compiler far-data reads and writes,
+  and the scheduler saves the exact interrupted bank. Four checked
+  fixed-memory call frames per thread preserve nested calls and
+  callee-cleaned stack arguments. XCC far pointers now use the shared packed
+  `bank,lo,hi` ABI and keep the bank invariant under arithmetic.
+  The full 48K emulator suite covers calls, jumps, register/stack behavior,
+  allocation/rollback/lifetime, standard `malloc`, and a real three-argument
+  XCC library call. Hardware-modelled maximum-count 128K and Next variants
+  exercise every configured bank. The universal ROM ends at `0x3F75`, leaving
+  139 contiguous bytes; the layout guard reserves the final 128 bytes.
+
+- Repacked the built-in proportional system font without removing it. The ROM
+  stores 21 exceptional width records plus the packed raster, and boot expands
+  the exact original 1,440-byte representation into the fixed OS heap.
+
 - Second ROM-size pass removes another 87 linked code/data bytes and
   recovers 73 usable tail bytes: content now ends at `0x3EFC`, leaving
   **260 contiguous zero-filled bytes**, including the complete final page.
   Outline/fill circles share midpoint arithmetic; library export binding
   uses register pointers and ownership transfer returns its resident pointer.
-  The complete `op.sys` string is packed beside its caller, not removed.
+  The complete boot filename is packed beside its caller, not removed.
   Fonts/cursors, service slots, RAM addresses and esxDOS reservations remain
   intact. Map-based build checks reject any code/data overlapping fixed slots
   (even zero-valued data) or entering the last page. Regression tests cover
@@ -47,10 +133,10 @@ Release status:
   timer signals and a signal set before waiting. ABI 1 images still load.
   ROM packing uses header and pre-trap gaps; content ends at `0x3FFF`.
 
-- Renamed the boot operating-system image from `shell.sys` to `op.sys`. The
-  kernel, build, Fuse fixture and loader tests now use that boot contract.
-  Ordinary process images use the `.prc` extension; `.svc` remains reserved
-  for libraries and registered services.
+- An earlier unreleased iteration temporarily changed the boot-process
+  filename. The public contract is now `shell.sys`. Ordinary process images
+  use the `.prc` extension; `.svc` remains reserved for libraries and
+  registered services.
 
 - Added `shrink_memory(memory, size)` to the public `yos_t` table (slot 48,
   appended after the ABI 1 baseline; the table is now 98 bytes). It releases
@@ -219,9 +305,9 @@ Release status:
   independent of libc and platform archives.
 - Integrated the complete ZX Spectrum libgpx v1.1.0 implementation into the
   assembly kernel ROM and registered its 23-function direct-call table as the
-  named `"gpx"` service. The new public `gpx.h` describes the drawing context,
-  bitmap, font, sprite, geometry, constants, and complete `gpx_api_t` service
-  ABI. The vendored graphics modules have no libc or runtime dependency; their
+  named `"gpx"` service. The initial public `gpx.h` described the drawing context and the then-separate
+  graphics service ABI; ABI 6 later moved all of those definitions and calls
+  into `yos.h` and `yos_t`. The vendored graphics modules have no libc or runtime dependency; their
   first integration used an eight-byte global context in the kernel's
   ROM-to-RAM initializer path; the current per-process contexts are described
   in the newer entry above.

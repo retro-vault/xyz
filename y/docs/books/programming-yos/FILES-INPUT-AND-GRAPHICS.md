@@ -25,8 +25,8 @@ end-of-file translation occurs. `lseek` accepts `SEEK_SET`, `SEEK_CUR`, and
 `SEEK_END` with a signed 32-bit `off_t`.
 
 Descriptors 0, 1, and 2 are the synthetic console. Reading 0 returns end of
-file. Writes to 1 or 2 feed the optional character hook and otherwise remain
-silent. Other descriptors belong to the YOS/esxDOS filesystem.
+file. Writes to 1 or 2 remain silent. Other descriptors belong to the
+YOS/esxDOS filesystem.
 
 Descriptors and the current directory are system-wide. YOS serializes each
 descriptor operation, including append seek plus write, but multi-call
@@ -43,23 +43,24 @@ The backing filesystem uses short 8.3 names. Keep components to eight base
 characters plus a three-character extension.
 
 ```c
-#include <dirent.h>
 #include <sys/stat.h>
+#include <yos.h>
 
-DIR *dir = opendir(".");
+yos_directory_t *dir = yos->opendir(".");
 if (dir) {
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
+    yos_directory_entry_t *entry;
+    while ((entry = yos->readdir(dir)) != NULL) {
         /* entry->d_name, d_size, d_type, d_attributes */
     }
-    closedir(dir);
+    yos->closedir(dir);
 }
 ```
 
-`d_type` is `DT_REG` or `DT_DIR`; the native esxDOS attributes remain in
-`d_attributes`. Directory entries are owned by the directory stream and are
-reused by subsequent reads. Copy an entry before another thread reads the
-same stream. `rewinddir` returns to the first entry.
+`d_type` is `YOS_DIRECTORY_TYPE_REG` or `YOS_DIRECTORY_TYPE_DIR`; the native
+esxDOS attributes remain in `d_attributes`. Directory entries are owned by
+the directory stream and are reused by subsequent reads. Copy an entry before
+another thread reads the same stream. `yos->rewinddir` returns to the first
+entry.
 
 `stat` and `fstat` fill `st_mode` and 32-bit `st_size`; use `S_ISREG` and
 `S_ISDIR`. `mkdir` accepts a mode for source compatibility, but esxDOS does
@@ -69,7 +70,7 @@ Enumerate physical block devices safely into caller storage:
 
 ```c
 yos_disk_info_t disks[4];
-int count = enumerate_disks(disks, 4);
+int count = yos->enumerate_disks(disks, 4);
 ```
 
 Each record has the esxDOS device byte, flags, and a 32-bit block count.
@@ -107,20 +108,21 @@ latest button state. `changed_buttons` accumulates every transition since the
 previous `read_mouse` call and is consumed by that call, so short clicks are
 not lost when an application reads less often than 50 Hz.
 
-## Graphics as an optional service
+## Graphics
+
+GPX types, constants, and calls are part of the single `yos_t` interface in
+`yos.h`.
 
 ```c
-#include <gpx.h>
-
-gpx_api_t *gpx = (gpx_api_t *)query_service(GPX_SERVICE_NAME);
-if (!gpx)
+yos_t *yos = (yos_t *)query_service("yos");
+if (!yos)
     return 1;
-gpx_t *screen = gpx->create(GPXM_DEFAULT);
+gpx_t *screen = yos->gpx_create(GPXM_DEFAULT);
 if (!screen)
     return 2;
 
-gpx->clear_screen();
-gpx->draw_line(screen, 0, 0, 255, 191,
+yos->gpx_clear_screen();
+yos->gpx_draw_line(screen, 0, 0, 255, 191,
                CO_FORE, BM_CPY, 0xff, NULL);
 ```
 
@@ -140,9 +142,9 @@ clipping rectangle; pass `NULL` for the whole screen.
 Text uses bitmap font descriptors rather than libc console output:
 
 ```c
-const font_t *font = gpx->get_system_font();
-gpx->set_text_background(screen, GPX_TEXT_BG_TRANSPARENT);
-gpx->draw_text(screen, 8, 8, "Hello", font,
+const font_t *font = yos->gpx_get_system_font();
+yos->gpx_set_text_background(screen, GPX_TEXT_BG_TRANSPARENT);
+yos->gpx_draw_text(screen, 8, 8, "Hello", font,
                CO_FORE, BM_CPY, NULL);
 ```
 

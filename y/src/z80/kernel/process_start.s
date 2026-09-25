@@ -14,10 +14,12 @@
         .globl  __string_copy
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-        .equ    PROCESS_SIZE,        15
+        .globl  __bank_current
+        .equ    PROCESS_SIZE,        16
         .equ    PROCESS_FLAGS,        4
         .equ    PROCESS_NAME,         5
         .equ    PROCESS_MAIN_THREAD, 13
+        .equ    PROCESS_BANK,        15
         .area   _CODE
 
         ; inputs: hl = name, de = entry, stack size at sp+2
@@ -46,11 +48,19 @@ _process_start::
         add     hl, bc
         ld      b, #7
         call    __string_copy
+        ; Common-memory entries are unbanked (FFh); an entry in the upper
+        ; window belongs to whichever logical bank the loader selected.
+        ld      PROCESS_BANK(ix), #0xff
         ld      hl, #6
         add     hl, sp
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
+        bit     7, d
+        jr      z, .entry_ready
+        ld      a, (__bank_current)
+        ld      PROCESS_BANK(ix), a
+.entry_ready:
         pop     hl
         push    ix
         call    _thread_create

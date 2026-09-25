@@ -349,10 +349,9 @@ static bool is_straight_line_helper_codegen_fn(const ir_function *fn) {
 
 // ----- far (24-bit banked) pointer arithmetic ------------------------
 //
-// result(far,3) = farptr(3) +/- index(int,16).  The index is treated as
-// a signed 16-bit value sign-extended to 24 bits, so the bank byte gets
-// the carry/borrow and crossing a 64K boundary works like a flat 24-bit
-// pointer.  (The target's trampoline decides how a bank maps to memory.)
+// result(far,3) = farptr(3) +/- index(int,16). The bank identifies a 16 KiB
+// window and is invariant under address arithmetic; crossing its boundary is
+// outside the pointed-to object and therefore already undefined in C.
 bool z80_gen::gen_far_ptr_arith(const icode &ic, bool is_add) {
     if (!ic.result.type || !ic.result.type->is_far_ptr())
         return false;
@@ -370,33 +369,27 @@ bool z80_gen::gen_far_ptr_arith(const icode &ic, bool is_add) {
 
     // DE = index, HL = address, A = bank (push/pop to survive helper clobbers).
     load_de(*idx);
-    load_hl_word(*ptr, 0);
+    operand address = *ptr;
+    address.byte_offset += 1;
+    load_hl_word(address, 0);
     emit_line("push\thl");
     emit_line("push\tde");
     load_far_bank(*ptr);
     emit_line("pop\tde");
     emit_line("pop\thl");
 
-    std::string nofix = fresh_local_label("__far_nofix");
     if (is_add) {
-        emit_line("add\thl, de");     // HL = addr + index ; CF = carry
-        emit_line("adc\ta, %s", asm_.imm(0).c_str());
-        emit_line("bit\t7, d");       // index negative? -> subtract 1 (sign-extend)
-        emit_line("jr\tz, %s", nofix.c_str());
-        emit_line("dec\ta");
+        emit_line("add\thl, de");
     } else {
-        emit_line("or\ta, a");        // clear carry
-        emit_line("sbc\thl, de");     // HL = addr - index ; CF = borrow
-        emit_line("sbc\ta, %s", asm_.imm(0).c_str());
-        emit_line("bit\t7, d");       // index negative? subtracting it adds 1
-        emit_line("jr\tz, %s", nofix.c_str());
-        emit_line("inc\ta");
+        emit_line("or\ta, a");
+        emit_line("sbc\thl, de");
     }
-    emit_label(nofix, false);
 
     // Store bank (A) then address (HL) into the 3-byte far result.
     store_far_bank(ic.result);
-    store_hl_word(ic.result, 0);
+    operand result_address = ic.result;
+    result_address.byte_offset += 1;
+    store_hl_word(result_address, 0);
     invalidate_a_cache();
     invalidate_pair_cache();
     return true;
@@ -6167,9 +6160,55 @@ void z80_gen::emit_compare_branch(const icode &ic, icode_op cmp,
         return;
     }
 
-    load_hl(ic.left);
+    const bool far_equality =
+        (cmp == icode_op::EQ || cmp == icode_op::NE) &&
+        ((ic.left.type && ic.left.type->is_far_ptr()) ||
+         (ic.right.type && ic.right.type->is_far_ptr()));
+    if (far_equality) {
+        auto load_far_or_near = [this](const operand &value) {
+            if (value.type && value.type->is_far_ptr()) {
+                emit_load_far_ptr(value);
+            } else {
+                load_hl(value);
+                emit_line("ld\tc, %s", asm_.imm(0).c_str());
+            }
+        };
+        // Compare all three packed bytes. On entry to the byte fold HL/C
+        // hold the right address/bank, DE/C-after-pop the left address/bank,
+        // and A retains the right bank.
+        load_far_or_near(ic.left);
+        emit_line("push\tbc");
+        emit_line("push\thl");
+        load_far_or_near(ic.right);
+        emit_line("ld\ta, c");
+        emit_line("pop\tde");
+        emit_line("pop\tbc");
+        emit_line("xor\tc");
+        emit_line("ld\tb, a");
+        emit_line("ld\ta, h");
+        emit_line("xor\td");
+        emit_line("or\tb");
+        emit_line("ld\tb, a");
+        emit_line("ld\ta, l");
+        emit_line("xor\te");
+        emit_line("or\tb");
+        if (!true_lbl.empty())
+            emit_line(cmp == icode_op::EQ ? "jp\tz, %s" : "jp\tnz, %s",
+                      true_lbl.c_str());
+        if (!false_lbl.empty())
+            emit_line("jp\t%s", false_lbl.c_str());
+        return;
+    }
+
+    operand compare_left = ic.left;
+    operand compare_right = ic.right;
+    if (compare_left.type && compare_left.type->is_far_ptr())
+        ++compare_left.byte_offset;
+    if (compare_right.type && compare_right.type->is_far_ptr())
+        ++compare_right.byte_offset;
+    load_hl(compare_left);
     emit_line("push\thl");
-    load_hl(ic.right);
+    load_hl(compare_right);
     emit_line("pop\tde");  // DE = left, HL = right
     const bool is_unsigned =
         ic.left.type &&
@@ -7302,7 +7341,9 @@ void z80_gen::gen_cast(const icode &ic) {
                 }
             }
             normalize_hl(bits - 16);
-            store_hl_word(ic.result, 1);
+            operand address = ic.result;
+            address.byte_offset += 1;
+            store_hl_word(address, 0);
         }
         return;
     }
@@ -7470,17 +7511,16 @@ void z80_gen::gen_cast(const icode &ic) {
     }
 
     // ----- far (24-bit banked) pointer conversions -------------------
-    // A far pointer is 3 bytes (addr16 + bank).  Convert by adjusting
-    // only the bank byte; the 16-bit address is preserved.
+    // A far pointer is 3 bytes (bank + addr16).
     {
         const bool dst_far = ic.result.type->is_far_ptr();
         const bool src_far = ic.left.type && ic.left.type->is_far_ptr();
         if (dst_far && !src_far) {
-            // Widen near pointer / integer -> far: low 16 bits = source,
+            // Widen near pointer / integer -> far: address = source,
             // bank = 0 (current bank is the target's concern at deref time).
             invalidate_pair_cache();
             load_hl(ic.left);
-            store_hl_word(ic.result, 0);
+            store_hl_word(ic.result, 1);
             emit_line("xor\ta");
             store_far_bank(ic.result);
             return;
@@ -7488,7 +7528,9 @@ void z80_gen::gen_cast(const icode &ic) {
         if (src_far && !dst_far) {
             // Narrow far -> near pointer / integer: keep low 16 bits.
             invalidate_pair_cache();
-            load_hl_word(ic.left, 0);
+            operand address = ic.left;
+            address.byte_offset += 1;
+            load_hl_word(address, 0);
             if (op_size(ic.result) == 1) {
                 emit_line("ld\ta, l");
                 store_a(ic.result);

@@ -1,60 +1,32 @@
-#include <fcntl.h>
-#include <gpx.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <yos.h>
 
-static volatile unsigned console_characters;
-
-static void count_console_character(char character)
+void main(void)
 {
-    (void)character;
-    ++console_characters;
-}
-
-int main(void)
-{
-    static const char payload[] = "Hello from an XCC YOS process!\n";
-    char *copy;
-    yos_t *yos = yos_get_api();
-    gpx_api_t *gpx;
-    int fd;
+    static const char message[] = "Hello World!";
+    yos_t *yos = (yos_t *)query_service("yos");
+    gpx_t screen;
+    const font_t *font;
+    coord text_width;
 
     if (!yos || yos->version() < YOS_VERSION)
-        return 1;
+        for (;;) {}
 
-    /* Standard output is silent until a process installs its own sink. */
-    yos_set_putchar_hook(count_console_character);
-    puts("This is delivered to the hook, not directly to the display.");
+    screen.width = yos->gpx_width();
+    screen.height = yos->gpx_height();
+    screen.pages = 1;
+    screen.text_background = GPX_TEXT_BG_OPAQUE;
 
-    copy = (char *)malloc(sizeof payload);
-    if (!copy)
-        return 2;
+    font = yos->gpx_get_system_font();
+    if (!font)
+        for (;;) {}
 
-    fd = open("HELLO.TXT", O_RDWR | O_CREAT | O_TRUNC);
-    if (fd < 0) {
-        free(copy);
-        return 3;
-    }
-    if (write(fd, payload, sizeof payload) != sizeof payload
-        || lseek(fd, 0L, SEEK_SET) < 0
-        || read(fd, copy, sizeof copy) != sizeof copy
-        || close(fd) < 0
-        || memcmp(copy, payload, sizeof payload) != 0) {
-        close(fd);
-        free(copy);
-        return 4;
-    }
-    free(copy);
+    text_width = yos->gpx_measure_text(message, font);
+    yos->gpx_clear_screen();
+    yos->gpx_draw_text(
+        &screen,
+        (coord)((screen.width - text_width) / 2),
+        (coord)((screen.height - font->glyph_height) / 2),
+        message, font, CO_FORE, BM_CPY, 0);
 
-    gpx = (gpx_api_t *)query_service(GPX_SERVICE_NAME);
-    if (gpx) {
-        gpx_t *screen = gpx->create(GPXM_DEFAULT);
-        if (screen)
-            gpx->draw_pixel(screen, 128, 96, CO_FORE, BM_CPY, NULL);
-    }
-
-    return console_characters ? 0 : 5;
+    for (;;) {}
 }

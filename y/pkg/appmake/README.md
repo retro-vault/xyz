@@ -10,7 +10,7 @@ make -C y/pkg/appmake
 
 The binary is staged at:
 
-- `bin/y/bin/appmake`
+- `build/y-tools/stage/bin/appmake` (direct host-tool builds only)
 
 ## Commands
 

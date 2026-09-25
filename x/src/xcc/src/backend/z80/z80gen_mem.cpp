@@ -248,7 +248,7 @@ void z80_gen::gen_address_of(const icode &ic) {
 
 // ----- far (24-bit banked) pointer support ---------------------------
 //
-// Representation: 3 bytes — bytes 0..1 = 16-bit address, byte 2 = bank.
+// Representation: 3 bytes — byte 0 = bank, bytes 1..2 = 16-bit address.
 // Dereference goes through the per-target trampoline:
 //   __far_getb : in  HL = address, C = bank        -> out A = byte
 //   __far_putb : in  HL = address, C = bank, A = byte
@@ -258,17 +258,13 @@ void z80_gen::gen_address_of(const icode &ic) {
 // (hl) access — see lib/runtime/far/.
 
 void z80_gen::load_far_bank(const operand &ptr) {
-    // Bank byte lives at offset 2; load_a/store_a now honour byte_offset
-    // for globals (sym+2) as well as frame/param slots.
     operand bank = ptr;
-    bank.byte_offset += 2;
     bank.type = type::make_uchar();
     load_a(bank);
 }
 
 void z80_gen::store_far_bank(const operand &dst) {
     operand bank = dst;
-    bank.byte_offset += 2;
     bank.type = type::make_uchar();
     store_a(bank);
 }
@@ -276,7 +272,9 @@ void z80_gen::store_far_bank(const operand &dst) {
 void z80_gen::emit_load_far_ptr(const operand &ptr) {
     // HL = address (low 16 bits).  Load first, then protect across the
     // bank load (load_a may clobber HL/BC for deep frame or TLS sources).
-    load_hl_word(ptr, 0);
+    operand address = ptr;
+    address.byte_offset += 1;
+    load_hl_word(address, 0);
     emit_line("push\thl");
     load_far_bank(ptr);
     emit_line("ld\tc, a");   // C = bank

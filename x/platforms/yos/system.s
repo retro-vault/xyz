@@ -2,9 +2,9 @@
 
         .module yos_system
         .optsdcc -mz80 sdcccall(1)
+        .include "include/yos.inc"
 
         .globl  _query_service
-        .globl  _yos_get_api
         .globl  _yos_api_table
         .globl  __exit
         .globl  ___sdcc_call_bc
@@ -21,11 +21,6 @@ _query_service::
         rst     0x18
         ret
 
-        ;; yos_t *yos_get_api(void)
-_yos_get_api::
-        ld      de,(_yos_api_table)
-        ret
-
         ;; _exit/exit process termination. Status is currently advisory: ABI 1
         ;; exposes process_exit(void), so there is no status channel yet.
 __exit::
@@ -33,7 +28,7 @@ __exit::
         ld      a,h
         or      l
         jr      z,.halt
-        ld      de,#32                 ; yos_t.exit_process
+        ld      de,#YOS_OFFSET_EXIT_PROCESS
         add     hl,de
         ld      c,(hl)
         inc     hl

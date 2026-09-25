@@ -1,4 +1,4 @@
-        ; Release the tail of a kernel-heap block for the public YOS table.
+        ; Release the tail of a banked-user-heap block for the public table.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -7,37 +7,46 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __yos_shrink
-        .globl  __mem_split
-        .globl  __yos_free
-        .globl  _enter_critical_section
-        .globl  _leave_critical_section
+        .globl  __bank_shrink
+        .globl  __bank_current
+        .globl  __bank_map
 
         .area   _CODE
 
-        ; __yos_shrink, internal service-table adapter
-        ; inputs: hl = payload of a live allocation, de = bytes to keep
-        ; outputs: de = payload, or zero when the header is not allocated
-        ; clobbers: af, bc, de, hl; preserves ix and iy
-        ; The block never moves. The bytes past DE are split off and freed
-        ; when they can form a heap block; otherwise, or when DE is not
-        ; smaller than the block, the payload keeps its current size.
+        ; Stack on entry: return, bank, address-low, address-high, size word.
+        ; output: HL = payload address, E = logical bank, D = zero; null is
+        ;         HL=0000h, E=0. The far return makes this caller-clean.
+        ; The caller's execution bank is restored before returning.
+        ; Clobbers AF/BC/DE/HL; preserves IX/IY.
 __yos_shrink::
         push    ix
-        push    hl                      ; payload, returned on success
-        ld      bc, #-7
-        add     hl, bc
-        push    hl
-        pop     ix                      ; block header
-        call    _enter_critical_section
-        bit     0, 4(ix)
-        jr      z, .failed              ; free or foreign header
-        call    __mem_split             ; carry: nothing to release
-        call    nc, __yos_free          ; coalesce the released tail
-        pop     de
-.leave:
+        ld      ix,#0
+        add     ix,sp
+        ld      a,(__bank_current)
+        push    af
+        ld      l,5(ix)
+        ld      h,6(ix)
+        ld      a,h
+        or      l
+        jr      z,.null
+        ld      e,7(ix)
+        ld      d,8(ix)
+        ld      a,4(ix)
+        push    af
+        call    __bank_shrink
+        ex      de,hl
+        pop     af
+        ld      e,a
+        ld      d,#0
+        jr      .restore
+.null:
+        ld      e,#0
+.restore:
+        pop     af
+        call    __bank_map
         pop     ix
-        jp      _leave_critical_section
-.failed:
-        pop     hl
-        ld      de, #0
-        jr      .leave
+        ld      a,h
+        or      l
+        ret     nz
+        ld      e,#0
+        ret

@@ -30,7 +30,8 @@ From the repository root:
 make -C y/pkg/serial
 ```
 
-The binary is staged at `bin/y/bin/serial`.
+Direct host-tool builds stage the binary at
+`build/y-tools/stage/bin/serial`; it is not part of the YOS distribution.
 
 ## Usage
 

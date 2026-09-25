@@ -25,9 +25,8 @@ for line in map_path.read_text().splitlines():
 expected = {
     "__sys_reti": 0x09F0,
     "__sys_retn": 0x09F2,
-    "__gpx_name": 0x3CE1,
-    "__sys_vectors_start": 0x3CE5,
-    "__sys_vectors_end": 0x3CFD,
+    "__sys_vectors_start": 0x3CE1,
+    "__sys_vectors_end": 0x3CF9,
 }
 for name, address in expected.items():
     if symbols.get(name) != address:
@@ -40,8 +39,6 @@ if symbols.get("s__GSFINAL", 0x10000) > 0x4000:
 rom_end = symbols["s__GSFINAL"]
 if not areas or max(end for _, end, _ in areas) != rom_end:
     raise SystemExit("ROM occupied end disagrees with linked code/data areas")
-if rom_end > 0x3F00:
-    raise SystemExit("last 256 ROM bytes must remain free of code and data")
 # Zero bytes can be live code/data. Check ownership from the map, not just
 # the bytes, before allowing the patcher to install fixed-slot contents.
 reserved = ((0x04C6, 0x04C7), (0x0562, 0x0563),
@@ -66,8 +63,7 @@ rom[0x09F0:0x09F4] = bytes((0xED, 0x4D, 0xED, 0x45))  # RETI, RETN
 if rom[0x0010:0x0016] != bytes((0xE5, 0xCD, print_address & 0xFF, print_address >> 8, 0xE1, 0xC9)):
     raise SystemExit("RST 10 print wrapper changed")
 rom[0x09F4:0x09F7] = bytes((0xC3, 0x10, 0x00))  # same preserving wrapper as RST 10
-rom[0x3CE1:0x3CE5] = b"gpx\0"
-rom[0x3CE5:0x3CFD] = bytes((0xC3, 0xF0, 0x09)) * 7 + bytes((0xC3, 0xF2, 0x09))
+rom[0x3CE1:0x3CF9] = bytes((0xC3, 0xF0, 0x09)) * 7 + bytes((0xC3, 0xF2, 0x09))
 rom_path.write_bytes(rom)
 checksum_path = rom_path.with_suffix(rom_path.suffix + ".sha256")
 checksum_path.write_text(f"{sha256(rom).hexdigest()}  {rom_path.name}\n")

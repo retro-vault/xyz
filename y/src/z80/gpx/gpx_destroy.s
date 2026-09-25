@@ -4,11 +4,10 @@
 
         .module gpx_destroy
         .optsdcc -mz80 sdcccall(1)
-        .globl  _gpx_destroy
-        .globl  __yos_free
-        .area   _CODE
-
-        ;; HL = context (NULL permitted); no result.
-        ;; Clobbers AF, BC, DE, HL; preserves IX/IY.
+	.globl  _gpx_destroy
+	.globl  __os_free
+	.area   _CODE
+	;; HL = context (NULL permitted); no result.
+	;; Clobbers AF, BC, DE, HL; preserves IX/IY.
 _gpx_destroy::
-        jp      __yos_free
+	jp      __os_free

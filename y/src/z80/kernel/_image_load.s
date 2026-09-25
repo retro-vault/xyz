@@ -9,8 +9,11 @@
         .globl  __image_retain
         .globl  __image_busy
         .globl  _process_last_error
-        .globl  __yos_malloc
-        .globl  __yos_free
+        .globl  __bank_allocate
+        .globl  __bank_free
+        .globl  __bank_map
+        .globl  __bank_current
+        .globl  __os_free
         .globl  __crc32
         .globl  __process_read_exact
         .globl  __process_relocate
@@ -26,7 +29,7 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
 
-        .equ    YOS_VERSION, 3
+        .equ    YOS_VERSION, 6
         .equ    IMAGE_FD,    64
         .equ    IMAGE_DATA,  66
         .equ    IMAGE_CODE,  68
@@ -36,13 +39,16 @@
         .equ    IMAGE_ENTRY, 76
         .equ    IMAGE_OWNER, 78
         .equ    IMAGE_TEMP,  80
+        .equ    IMAGE_BANK,  82
+        .equ    IMAGE_OLD_BANK, 83
+        .equ    IMAGE_TABLE, 84
 
         .area   _CODE
 
         ; inputs: hl = path, a = 0 process / 1 private / 3 shared
         ; outputs: de = process/interface or zero; error cell updated
         ; clobbers: af, bc, de, hl; preserves ix and iy
-        ; frame: IX+0..63 descriptor; +64..81 loader locals above.
+        ; frame: IX+0..63 descriptor; +64..85 loader locals above.
         ; A try-lock serializes loads; contention is BUSY. There is no
         ; load-wide critical section; native I/O gates mask separately.
 __image_load::
@@ -57,7 +63,7 @@ __image_load::
         pop     af
         push    ix
         push    iy
-        ld      ix, #-82
+        ld      ix, #-86
         add     ix, sp
         ld      sp, ix
         ld      IMAGE_MODE(ix), a
@@ -67,6 +73,12 @@ __image_load::
         ld      IMAGE_DATA+1(ix), a
         ld      IMAGE_TEMP(ix), a
         ld      IMAGE_TEMP+1(ix), a
+        ld      IMAGE_TABLE(ix), a
+        ld      IMAGE_TABLE+1(ix), a
+        dec     a
+        ld      IMAGE_BANK(ix), a
+        ld      a, (__bank_current)
+        ld      IMAGE_OLD_BANK(ix), a
         call    __current_process
         ld      IMAGE_OWNER(ix), c
         ld      IMAGE_OWNER+1(ix), b
@@ -113,9 +125,10 @@ __image_load::
         or      15(ix)
         jr      nz, .bad_header
         ld      a, 30(ix)
-        cp      #YOS_VERSION+1
+        ; ABI 6 extends the unified table, so older layouts are not compatible.
+        cp      #YOS_VERSION
         ld      a, #7
-        jp      nc, .fail
+        jp      nz, .fail
         ld      a, 31(ix)
         or      a
         ld      a, #7
@@ -204,7 +217,8 @@ __image_load::
         add     hl, de
         jp      c, .invalid
         push    hl
-        call    __yos_malloc
+        call    __bank_allocate
+        ld      IMAGE_BANK(ix), a
         pop     bc
         ld      a, d
         or      e
@@ -243,35 +257,9 @@ __image_load::
         ; then splits off and frees the trailing relocation table and the
         ; metadata prefix without allocating a second copy.
         ;
-        ; 34(ix) is 0 for a process (enforced above) and 1..255 for a
-        ; service. The tight two-byte-per-export reservation below matches
-        ; __library_load_finish's own compaction exactly for up to six
-        ; exports; keep that exact reservation there unchanged; on this
-        ; memory-tight platform every extra byte is felt across every
-        ; loaded service, not just ones near the boundary. Past six exports
-        ; that reservation lets the compact table (written back-to-front
-        ; from the code end) advance ahead of raw metadata records
-        ; __library_load_finish hasn't read yet, since the 12-byte XL
-        ; sub-header between the metadata and the code (IMAGE_XL =
-        ; IMAGE_TEMP + IMAGE_JPS, code = IMAGE_XL + 12) isn't part of the
-        ; reservation; reserving the metadata's full width there instead
-        ; keeps the destination at or behind every unread record, for any
-        ; export count.
-        ld      a,34(ix)
-        cp      #7
-        jr      nc,.wide_reservation
-        add     a,a                    ; a<7 always fits doubled in one byte
-        ld      c,a
-        ld      b,#0                   ; bc = 2 * exports (0 for a process)
-        jr      .resident_size
-.wide_reservation:
-        ld      c,IMAGE_JPS(ix)        ; 3 * exports
-        ld      b,IMAGE_JPS+1(ix)
-        ld      hl,#11
-        add     hl,bc                  ; 3N+11, at/behind every unread record
-        ld      c,l
-        ld      b,h
-.resident_size:
+        ; Export tables live in common memory; only code/data is retained in
+        ; the bank arena, so no prefix is reserved before the code.
+        ld      bc, #0
         ld      l,IMAGE_XL(ix)
         ld      h,IMAGE_XL+1(ix)
         ld      e,12(ix)
@@ -331,10 +319,15 @@ __image_load::
         push    af
         ld      l, IMAGE_DATA(ix)
         ld      h, IMAGE_DATA+1(ix)
-        call    __yos_free
+        ld      a, IMAGE_BANK(ix)
+        call    __bank_free
         ld      l,IMAGE_TEMP(ix)
         ld      h,IMAGE_TEMP+1(ix)
-        call    __yos_free             ; whole buffer, or the split-off prefix
+        ld      a, IMAGE_BANK(ix)
+        call    __bank_free            ; whole buffer, or split-off prefix
+        ld      l, IMAGE_TABLE(ix)
+        ld      h, IMAGE_TABLE+1(ix)
+        call    __os_free
         ld      a, IMAGE_FD+1(ix)
         inc     a
         jr      z, .closed
@@ -342,12 +335,14 @@ __image_load::
         ld      h, IMAGE_FD+1(ix)
         call    _close
 .closed:
+        ld      a, IMAGE_OLD_BANK(ix)
+        call    __bank_map
         xor     a
         ld      (__image_busy), a
         pop     af
         ld      (_process_last_error), a
         pop     de
-        ld      hl, #82
+        ld      hl, #86
         add     hl, sp
         ld      sp, hl
         pop     iy

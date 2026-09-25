@@ -13,15 +13,15 @@ and library:
 #include <stdint.h>
 
 typedef struct codec_api {
-    uint16_t (*version)(void);
-    int (*decode)(void *output, const void *input);
+    uint16_t (* [[xcc::far]] version)(void);
+    int (* [[xcc::far]] decode)(void *output, const void *input);
 } codec_api_t;
 ```
 
 Load it from a running process before calling an export:
 
 ```c
-yos_t *yos = yos_get_api();
+yos_t *yos = (yos_t *)query_service("yos");
 codec_api_t *codec = (codec_api_t *)yos->load_library(
     "codec.svc", YOS_LIBRARY_SHARED);
 if (!codec) {
@@ -91,17 +91,18 @@ header, code, then the relocation table). The YOS loader:
 1. validates the descriptor, kind, YOS requirement, CRC, XL bounds, entry,
    relocation records, and every export target;
 2. allocates and relocates the XL exactly like a process image;
-3. allocates a resident block containing only a compact array of absolute
-   16-bit function pointers followed by relocated code/static storage;
+3. retains the relocated code/static storage in its selected bank and
+   allocates a common table of packed `{bank,address}` far function pointers;
 4. creates a threadless library owner and transfers the image to it;
 5. runs the optional relocated initializer once;
 6. frees the temporary JP/XL header prefix and the trailing relocation
    table, publishes a successful shared registration and attaches the client
    reference.
 
-The on-disk JP records are metadata; clients receive the compact two-byte
-function-pointer table. YOS supports 1–255 exports. Fixed-load service images
-are rejected.
+The on-disk JP records are metadata; clients receive the compact three-byte
+far-function table. YOS supports 1–255 exports. Fixed-load service images are
+rejected. Declare every slot with `[[xcc::far]]`; XCC's YOS target invokes it
+through the RST28 gate.
 
 ## Initializer contract
 
@@ -145,7 +146,7 @@ bin/x/bin/xas --mode=sdcc y/tests/shell-yos/shelllib.s \
 bin/x/bin/xld --mode=sdcc -f xl -nostdlib --no-default-runtime \
   -T bin/x/z80/lib/linker-yos.lk -Map=build/my-yos/shelllib.map \
   -o build/my-yos/shelllib.xl build/my-yos/shelllib.rel
-bin/x/bin/xprog --service --name shelllib --abi 1 --min-os 1 \
+bin/x/bin/xprog --service --name shelllib --abi 1 --min-os 6 \
   --entry 0x$(awk '$2 == "_entry" {print $1}' build/my-yos/shelllib.map) \
   --export 0x$(awk '$2 == "_probe" {print $1}' build/my-yos/shelllib.map) \
   --export 0x$(awk '$2 == "_message" {print $1}' build/my-yos/shelllib.map) \
@@ -162,8 +163,8 @@ an 8.3 filename. This follows the working recipe in `y/src/z80/Makefile`.
 
 `y/tests/shell-yos/shelllib.s` deliberately self-registers a relocated
 embedded interface, allocates library-owned storage, and records initializer
-and call counts. `op.sys` loads it shared and draws the string returned by
-the relocated `message` export.
+and call counts. It is a build-only regression fixture, independent of the
+minimal deployable shell.
 
 Run the deterministic kernel suite with:
 
@@ -177,7 +178,7 @@ For a visible cold boot through real esxDOS firmware:
 python3 y/tests/fuse/run.py --esxdos build/yos-fuse/esxdos089
 ```
 
-The expected screen is the centred Alto greeting with `Library OK` below it.
+The expected screen is the centred `Hello World!` greeting.
 See the [Fuse runner guide](../../../tests/fuse/README.md) and the kernel-side
 [Loadable Libraries](../the-book-of-yos/LIBRARIES.md) chapter for object
 layouts, rollback order, and implementation details.

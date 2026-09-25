@@ -4,8 +4,17 @@ REPO_ROOT ?= $(realpath ../../..)
 Y_ROOT ?= $(realpath ../..)
 BUILD_DIR ?= $(REPO_ROOT)/build/yos-z80
 DIST_DIR ?= $(REPO_ROOT)/bin/y
-ZX_ROMS_DIR ?= $(DIST_DIR)/z80/spectrum/bin
-BIN_DIR := $(ZX_ROMS_DIR)
+RELEASE_DIR := $(DIST_DIR)
+ARCH_DIR := $(RELEASE_DIR)/arch
+BIN_48_DIR := $(ARCH_DIR)/48
+BIN_128_DIR := $(ARCH_DIR)/128
+BIN_NEXT_DIR := $(ARCH_DIR)/next
+BIN_DIR := $(BIN_48_DIR)
+RELEASE_INCLUDE_DIR := $(RELEASE_DIR)/include
+RELEASE_SCRIPT_DIR := $(RELEASE_DIR)/scripts
+RELEASE_SAMPLE_DIR := $(RELEASE_DIR)/samples
+RELEASE_FIRMWARE_DIR := $(RELEASE_DIR)/firmware/esxdos089
+ESXDOS_SOURCE_DIR := ../../third_party/esxdos089
 TARGET := yos-kernel
 
 X_DIST_DIR ?= $(REPO_ROOT)/bin/x
@@ -19,7 +28,21 @@ XZ80 := $(X_DIST_DIR)/lib/libxz80.a
 XRUNTIME := $(X_DIST_DIR)/z80/lib/libruntime.a
 CXX ?= c++
 
-XASFLAGS := --mode=sdcc
+YOS_BANK_BACKEND ?= 48
+YOS_BANK_COUNT ?= 126
+
+ifeq ($(filter $(YOS_BANK_BACKEND),48 128 next),)
+$(error YOS_BANK_BACKEND must be 48, 128, or next)
+endif
+ifeq ($(shell test $(YOS_BANK_COUNT) -ge 1 -a $(YOS_BANK_COUNT) -le 126 && echo yes),)
+$(error YOS_BANK_COUNT must be in the range 1..126)
+endif
+
+YOS_BANK_COUNT_128 := $(if $(filter 1 2 3 4 5 6,$(YOS_BANK_COUNT)),$(YOS_BANK_COUNT),6)
+YOS_TEST_BANK_COUNT := $(if $(filter 48,$(YOS_BANK_BACKEND)),1,$(if \
+	$(filter 128,$(YOS_BANK_BACKEND)),$(YOS_BANK_COUNT_128),$(YOS_BANK_COUNT)))
+XASFLAGS := --mode=sdcc -DYOS_BANK_COUNT=$(YOS_BANK_COUNT) \
+	-DYOS_BANK_COUNT_128=$(YOS_BANK_COUNT_128)
 XLDFLAGS := --mode=sdcc -v -m -f bin -nostdlib \
 	--no-default-runtime -T linker.lk
 
@@ -28,22 +51,37 @@ MAIN := $(BUILD_DIR)/main.rel
 # Anchor descriptor helpers and the timer dispatcher early, fitting startup
 # tightly around the fixed 04C6/0562 paging traps. Still linked only once.
 EARLY_OBJECTS := $(BUILD_DIR)/fs/_esxdos_core.rel \
-	$(BUILD_DIR)/kernel/_tmr_chain.rel
+	$(BUILD_DIR)/kernel/_tmr_chain.rel \
+	$(BUILD_DIR)/bank/common/_bank_data_rst30.rel \
+	$(BUILD_DIR)/kernel/_yos_malloc.rel \
+	$(BUILD_DIR)/kernel/_yos_free.rel \
+	$(BUILD_DIR)/kernel/_yos_shrink.rel \
+	$(BUILD_DIR)/kernel/_os_malloc.rel \
+	$(BUILD_DIR)/kernel/_os_free.rel
 LIB_SOURCES := $(wildcard drivers/*.s) $(wildcard fs/*.s) \
+	$(wildcard bank/common/*.s) $(wildcard bank/48/*.s) \
+	$(wildcard bank/128/*.s) $(wildcard bank/next/*.s) \
 	$(wildcard kernel/*.s) \
 	$(filter-out startup/crt0rom.s,$(wildcard startup/*.s))
 LIB_OBJECTS := $(addprefix $(BUILD_DIR)/,$(LIB_SOURCES:.s=.rel))
-GPX_SOURCES := $(wildcard gpx/*.s)
-GPX_OBJECTS := $(addprefix $(BUILD_DIR)/,$(GPX_SOURCES:.s=.rel))
-GPX_INTEGRATION_OBJECTS := $(BUILD_DIR)/gpx/_gpx_name.rel \
-	$(BUILD_DIR)/gpx/_gpx_service.rel
+BANK_MAP_OBJECTS := $(BUILD_DIR)/bank/48/_bank_map.rel \
+	$(BUILD_DIR)/bank/128/_bank_map.rel \
+	$(BUILD_DIR)/bank/next/_bank_map.rel
+FONT_SOURCE := gpx/_gpx_font_envy.s
+FONT_PACKED_ASM := $(BUILD_DIR)/generated/_gpx_font_packed.s
+FONT_PACKED_OBJECT := $(BUILD_DIR)/gpx/_gpx_font_packed.rel
+GPX_SOURCES := $(filter-out $(FONT_SOURCE),$(wildcard gpx/*.s))
+GPX_OBJECTS := $(addprefix $(BUILD_DIR)/,$(GPX_SOURCES:.s=.rel)) \
+	$(FONT_PACKED_OBJECT)
 # Within one archive pass xld places members in this order. The two large
 # loader modules and smaller helpers fill the space before the fixed
-# 3CE1 vector/name reservation; the library finisher follows the 3D00 hole.
+# 3CE1 vector/name reservation. Keep the relatively large library finisher
+# ahead of the two small lookup helpers so every bank backend packs it below
+# that reservation instead of spilling it into the final ROM page.
 LOADER_OBJECTS := $(BUILD_DIR)/fs/_esx_print.rel \
+	$(BUILD_DIR)/bank/common/_bank_allocate_current.rel \
 	$(BUILD_DIR)/kernel/_library_initialize.rel \
 	$(BUILD_DIR)/kernel/boot_shell.rel \
-	$(BUILD_DIR)/kernel/process_load.rel \
 	$(BUILD_DIR)/kernel/library_load.rel \
 	$(BUILD_DIR)/kernel/_image_load.rel \
 	$(BUILD_DIR)/kernel/_process_relocate.rel \
@@ -52,9 +90,9 @@ LOADER_OBJECTS := $(BUILD_DIR)/fs/_esx_print.rel \
 	$(BUILD_DIR)/kernel/_process_read_exact.rel \
 	$(BUILD_DIR)/kernel/_library_find.rel \
 	$(BUILD_DIR)/kernel/_crc32.rel \
+	$(BUILD_DIR)/kernel/_library_load_finish.rel \
 	$(BUILD_DIR)/kernel/_library_acquire.rel \
-	$(BUILD_DIR)/kernel/_process_has_threads.rel \
-	$(BUILD_DIR)/kernel/_library_load_finish.rel
+	$(BUILD_DIR)/kernel/_process_has_threads.rel
 ALL_OBJECTS := $(LIB_OBJECTS) $(GPX_OBJECTS)
 # Main declares these roots so they fill the gap before the 0562 trap.
 CRITICAL_ENTRY_OBJECTS := $(BUILD_DIR)/startup/_critical_iff_repair.rel \
@@ -66,42 +104,106 @@ CRITICAL_ENTRY_OBJECTS := $(BUILD_DIR)/startup/_critical_iff_repair.rel \
 PRE_OPEN_OBJECTS := $(BUILD_DIR)/fs/stat.rel \
 	$(BUILD_DIR)/kernel/_yos_install_timer.rel \
 	$(BUILD_DIR)/kernel/_so_reap.rel
-ORDERED_KERNEL_OBJECTS := $(foreach obj,$(sort $(filter-out $(LOADER_OBJECTS) $(CRITICAL_ENTRY_OBJECTS) $(PRE_OPEN_OBJECTS),$(LIB_OBJECTS))),\
-	$(if $(filter %/tmr_install.rel,$(obj)),$(CRITICAL_ENTRY_OBJECTS))\
-	$(if $(filter %/fs/open.rel,$(obj)),$(PRE_OPEN_OBJECTS))\
-	$(obj))
+PRE_09F0_OBJECTS := $(BUILD_DIR)/kernel/_current_process.rel \
+	$(BUILD_DIR)/fs/_directory_convert.rel \
+	$(BUILD_DIR)/fs/_directory_validate.rel \
+	$(BUILD_DIR)/kernel/thread_exit.rel \
+	$(BUILD_DIR)/kernel/tmr_uninstall.rel \
+	$(BUILD_DIR)/kernel/_yos_name.rel \
+	$(BUILD_DIR)/kernel/process_load.rel
+ORDERED_KERNEL_OBJECTS := $(BANK_MAP_OBJECTS) \
+	$(foreach obj,$(sort $(filter-out $(BANK_MAP_OBJECTS) $(LOADER_OBJECTS) $(CRITICAL_ENTRY_OBJECTS) $(PRE_OPEN_OBJECTS) $(PRE_09F0_OBJECTS),$(LIB_OBJECTS))), \
+	$(if $(filter %/tmr_install.rel,$(obj)),$(CRITICAL_ENTRY_OBJECTS)) \
+	$(if $(filter %/fs/open.rel,$(obj)),$(PRE_OPEN_OBJECTS)) \
+	$(obj)) \
+	$(PRE_09F0_OBJECTS)
 ARCHIVE := $(BUILD_DIR)/libyos-kernel.lib
 ARCHIVE_MANIFEST := $(BUILD_DIR)/libyos-kernel.members
 OUTPUT := $(BIN_DIR)/$(TARGET).rom
-OP_XL := $(BUILD_DIR)/apps/op.xl
-OP_OUTPUT := $(BIN_DIR)/op.sys
+SHELL_XL := $(BUILD_DIR)/apps/shell.xl
+SHELL_OUTPUT := $(BIN_DIR)/shell.sys
+SHELL_ASM_OBJECT := $(BUILD_DIR)/apps/shell-asm.rel
+SHELL_ASM_XL := $(BUILD_DIR)/apps/shell-asm.xl
+SHELL_ASM_MAP := $(BUILD_DIR)/apps/shell-asm.map
+SHELL_ASM_OUTPUT := $(BIN_DIR)/shell-asm.sys
 LIBRARY_OBJECT := $(BUILD_DIR)/apps/shelllib.rel
 LIBRARY_XL := $(BUILD_DIR)/apps/shelllib.xl
-LIBRARY_OUTPUT := $(BIN_DIR)/shelllib.svc
+LIBRARY_OUTPUT := $(BUILD_DIR)/apps/shelllib.svc
+DIST_HEADERS := $(addprefix $(RELEASE_INCLUDE_DIR)/,yos.h yos.inc)
+DIST_SCRIPTS := $(addprefix $(RELEASE_DIR)/,run-48.sh run-128.sh run-next.sh) \
+	$(RELEASE_SCRIPT_DIR)/run-yos.py
+DIST_SOURCES := $(RELEASE_SAMPLE_DIR)/c/shell.c \
+	$(RELEASE_SAMPLE_DIR)/c/Makefile \
+	$(RELEASE_SAMPLE_DIR)/asm/shell.s \
+	$(RELEASE_SAMPLE_DIR)/asm/linker.lk \
+	$(RELEASE_SAMPLE_DIR)/asm/Makefile
+ESXDOS_RELATIVE_FILES := $(shell cd $(ESXDOS_SOURCE_DIR) && \
+	find . -type f -print | sed 's|^./||' | LC_ALL=C sort)
+DIST_FIRMWARE := $(addprefix $(RELEASE_FIRMWARE_DIR)/,$(ESXDOS_RELATIVE_FILES))
+DIST_FIRMWARE_DIRS := $(RELEASE_FIRMWARE_DIR)/TMP
+DIST_README := $(RELEASE_DIR)/README.md
+MODEL_BINARY_NAMES := $(TARGET).rom $(TARGET).rom.sha256 shell.sys \
+	shell-asm.sys
+DIST_MODEL_BINARIES := $(addprefix $(BIN_128_DIR)/,$(MODEL_BINARY_NAMES)) \
+	$(addprefix $(BIN_NEXT_DIR)/,$(MODEL_BINARY_NAMES))
 
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
 
-.PHONY: all clean test
-all: $(OUTPUT) $(OP_OUTPUT) $(LIBRARY_OUTPUT)
+.PHONY: all clean test check-yos-abi distribution
+all: $(OUTPUT) $(SHELL_OUTPUT) distribution
 
-test: $(OUTPUT) $(OP_OUTPUT) $(LIBRARY_OUTPUT) $(BUILD_DIR)/test_kernel
+distribution: $(DIST_HEADERS) $(DIST_SCRIPTS) $(DIST_SOURCES) \
+	$(DIST_FIRMWARE) $(DIST_FIRMWARE_DIRS) $(DIST_README) \
+	$(OUTPUT).sha256 $(SHELL_ASM_OUTPUT) $(DIST_MODEL_BINARIES)
+	rm -rf $(DIST_DIR)/z80 $(DIST_DIR)/bin $(DIST_DIR)/lib \
+		$(DIST_DIR)/48 $(DIST_DIR)/128 $(DIST_DIR)/next \
+		$(RELEASE_SAMPLE_DIR)/library
+	rm -f $(RELEASE_INCLUDE_DIR)/dirent.h \
+		$(RELEASE_SAMPLE_DIR)/c/shelllib.h \
+		$(BIN_48_DIR)/shelllib.svc $(BIN_128_DIR)/shelllib.svc \
+		$(BIN_NEXT_DIR)/shelllib.svc \
+		$(RELEASE_SAMPLE_DIR)/c/shell.sys \
+		$(RELEASE_SAMPLE_DIR)/asm/shell.sys
+
+test: check-yos-abi $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) distribution \
+		$(BUILD_DIR)/test_kernel
 	python3 ../../tests/kernel-z80/test_rom_layout.py $(OUTPUT) \
 		$(BUILD_DIR)/$(TARGET).map $(BUILD_DIR)/layout-tests
 	$(BUILD_DIR)/test_kernel $(OUTPUT) \
-		$(BUILD_DIR)/$(TARGET).map $(OP_OUTPUT) \
-		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map
+		$(BUILD_DIR)/$(TARGET).map $(SHELL_OUTPUT) \
+		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map \
+		$(YOS_BANK_BACKEND) $(YOS_TEST_BANK_COUNT)
+	$(BUILD_DIR)/test_kernel $(OUTPUT) \
+		$(BUILD_DIR)/$(TARGET).map $(SHELL_ASM_OUTPUT) \
+		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map \
+		$(YOS_BANK_BACKEND) $(YOS_TEST_BANK_COUNT)
+	python3 ../../tests/distribution/test_layout.py $(RELEASE_DIR)
+
+check-yos-abi:
+	python3 ../../scripts/check_yos_abi.py
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f $(OUTPUT) $(OP_OUTPUT) $(LIBRARY_OUTPUT) $(BIN_DIR)/$(TARGET).cdb $(OUTPUT).sha256
+	rm -rf $(BIN_48_DIR) $(BIN_128_DIR) $(BIN_NEXT_DIR)
+	rm -rf $(RELEASE_INCLUDE_DIR) $(RELEASE_SCRIPT_DIR) \
+		$(RELEASE_SAMPLE_DIR) $(RELEASE_DIR)/firmware
+	rm -f $(DIST_README) $(addprefix $(RELEASE_DIR)/,run-48.sh run-128.sh run-next.sh)
 
 $(XAS) $(XLD) $(XAR) $(XCC) $(XPROG) $(XRUNTIME):
 	$(MAKE) -C $(REPO_ROOT) x
 
 $(BUILD_DIR)/%.rel: %.s $(XAS)
 	mkdir -p $(dir $@)
-	$(XAS) $(XASFLAGS) $< -o $@
+	$(XAS) $(XASFLAGS) -I../../include $< -o $@
+
+$(FONT_PACKED_ASM): $(FONT_SOURCE) ../../scripts/pack_font.py
+	mkdir -p $(dir $@)
+	python3 ../../scripts/pack_font.py $< $@
+
+$(FONT_PACKED_OBJECT): $(FONT_PACKED_ASM) $(XAS)
+	mkdir -p $(dir $@)
+	$(XAS) $(XASFLAGS) -I../../include $< -o $@
 
 $(ARCHIVE): $(ALL_OBJECTS) $(ARCHIVE_MANIFEST) $(XAR)
 	rm -f $@
@@ -109,11 +211,10 @@ $(ARCHIVE): $(ALL_OBJECTS) $(ARCHIVE_MANIFEST) $(XAR)
 
 $(ARCHIVE_MANIFEST): $(ALL_OBJECTS) Makefile
 	printf '%s\n' $(ORDERED_KERNEL_OBJECTS) > $@
-	# Discover the GPX service roots at the end of an archive scan. This lets
+	# Discover the graphics implementation roots at the end of an archive scan. This lets
 	# xld settle the kernel first and avoids wasting ROM around fixed traps.
-	printf '%s\n' $(filter-out $(GPX_INTEGRATION_OBJECTS),$(GPX_OBJECTS)) \
+	printf '%s\n' $(GPX_OBJECTS) \
 		| LC_ALL=C sort >> $@
-	printf '%s\n' $(GPX_INTEGRATION_OBJECTS) >> $@
 	# Keep the boot loader after GPX so large graphics modules retain their
 	# packing around the fixed divIDE/esxDOS ROM holes.
 	printf '%s\n' $(LOADER_OBJECTS) >> $@
@@ -131,19 +232,33 @@ $(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile ../../scripts/patch_rom.py
 			exit 1; \
 		}
 
-$(OP_XL): ../../tests/shell-yos/shell.c ../../tests/shell-yos/shelllib.h \
+$(SHELL_XL): ../../samples/shell-c/shell.c \
 		$(REPO_ROOT)/x/platforms/yos/include/yos.h $(XCC) $(XLD) $(XRUNTIME)
 	mkdir -p $(dir $@)
 	$(XCC) --mode=sdcc --platform=yos -Os -std=c11 $< -o $@
 
-$(OP_OUTPUT): $(OP_XL) $(XPROG) Makefile
+$(SHELL_OUTPUT): $(SHELL_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name op --stack-size 256 --min-os 1 \
+	$(XPROG) --process --name shell --stack-size 512 --min-os 6 \
+		$< -o $@
+
+$(SHELL_ASM_OBJECT): ../../samples/shell-asm/shell.s $(XAS)
+	mkdir -p $(dir $@)
+	$(XAS) $(XASFLAGS) -I../../include $< -o $@
+
+$(SHELL_ASM_XL): $(SHELL_ASM_OBJECT) $(XLD)
+	$(XLD) --mode=sdcc -f xl -nostdlib --no-default-runtime \
+		-T ../../samples/shell-asm/linker.lk -Map=$(SHELL_ASM_MAP) \
+		-o $@ $<
+
+$(SHELL_ASM_OUTPUT): $(SHELL_ASM_XL) $(XPROG) Makefile
+	mkdir -p $(dir $@)
+	$(XPROG) --process --name shell --stack-size 512 --min-os 6 \
 		$< -o $@
 
 $(LIBRARY_OBJECT): ../../tests/shell-yos/shelllib.s $(XAS)
 	mkdir -p $(dir $@)
-	$(XAS) $(XASFLAGS) $< -o $@
+	$(XAS) $(XASFLAGS) -I../../include $< -o $@
 
 $(LIBRARY_XL): $(LIBRARY_OBJECT) $(XLD)
 	$(XLD) --mode=sdcc -f xl -nostdlib --no-default-runtime \
@@ -152,13 +267,56 @@ $(LIBRARY_XL): $(LIBRARY_OBJECT) $(XLD)
 
 $(LIBRARY_OUTPUT): $(LIBRARY_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --service --name shelllib --abi 1 --min-os 1 \
+	$(XPROG) --service --name shelllib --abi 1 --min-os 6 \
 		--entry 0x$$(awk '$$2 == "_entry" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_probe" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_message" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_initializations" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_calls" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
+		--export 0x$$(awk '$$2 == "_sum3" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		$< -o $@
+
+$(OUTPUT).sha256: $(OUTPUT)
+	test -f $@
+
+$(BIN_128_DIR)/%: $(BIN_48_DIR)/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+$(BIN_NEXT_DIR)/%: $(BIN_48_DIR)/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+$(RELEASE_INCLUDE_DIR)/%: ../../include/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+$(RELEASE_SCRIPT_DIR)/run-yos.py: ../../scripts/run_yos.py
+	mkdir -p $(dir $@)
+	install -m 755 $< $@
+
+$(RELEASE_DIR)/run-%.sh: ../../scripts/run-%.sh
+	mkdir -p $(dir $@)
+	install -m 755 $< $@
+
+$(RELEASE_SAMPLE_DIR)/c/%: ../../samples/shell-c/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+$(RELEASE_SAMPLE_DIR)/asm/%: ../../samples/shell-asm/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+$(RELEASE_FIRMWARE_DIR)/%: $(ESXDOS_SOURCE_DIR)/%
+	mkdir -p $(dir $@)
+	cp $< $@
+
+$(RELEASE_FIRMWARE_DIR)/TMP:
+	mkdir -p $@
+
+$(DIST_README): ../../distribution/SPECTRUM.md
+	mkdir -p $(dir $@)
+	cp $< $@
 
 $(XZ80):
 	$(MAKE) -C $(REPO_ROOT)/x/lib/xz80 \

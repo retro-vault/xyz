@@ -6,8 +6,7 @@
         .module yos_version
         .optsdcc -mz80 sdcccall(1)
         .globl  _yos_version
-        ; Use four of the free header-data bytes below the fixed 0100 entry.
-        .area   _HEADER_DATA
+        .area   _CODE
 _yos_version::
-        ld      de, #3
+        ld      de, #6
         ret

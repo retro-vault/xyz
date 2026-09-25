@@ -16,7 +16,7 @@
         .globl  _gpx_get_tiny_font
         .globl  _gpx_font_envy
 
-        .area   _CODE
+	.area   _CODE
 
         ;; ------------------------------------------------------------
         ;; _gpx_get_tiny_font
@@ -36,5 +36,5 @@
         ;; References:
         ;;   _gpx_font_envy
 _gpx_get_tiny_font::
-        ld      de,#_gpx_font_envy
-        ret
+	ld      de,(_gpx_font_envy)
+	ret

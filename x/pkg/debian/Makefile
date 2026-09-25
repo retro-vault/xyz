@@ -96,7 +96,7 @@ PACKAGE_REQUIRED_RELATIVE_FILES := \
 	z80/include/zx-esxdos/sys/esxdos.h \
 	z80/include/zx-esxdos-rom/sys/esxdos.h \
 	z80/include/yos/yos.h \
-	z80/include/yos/gpx.h \
+	z80/include/yos/yos.inc \
 	z80/include/yos/dirent.h \
 	z80/include/stdio.h \
 	z80/lib/libc.a \

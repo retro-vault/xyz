@@ -10,10 +10,10 @@ YOS applications are ordinary C programs linked as relocatable **XL** files.
 esxDOS filesystem. The XCC platform name is `yos`:
 
 ```sh
-mkdir -p build/examples/yos bin/y/z80/spectrum/bin
+mkdir -p build/examples/yos bin/y/arch/48
 bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
-  build/examples/yos/app.xl -o bin/y/z80/spectrum/bin/app.prc
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 6 \
+  build/examples/yos/app.xl -o bin/y/arch/48/app.prc
 ```
 
 Keep the XL file: it is the linker's relocatable result and is useful for
@@ -30,10 +30,11 @@ there is no fixed application address or private static heap.
 The normal C library remains available. Its machine-facing parts are replaced
 by the YOS platform archive:
 
-- `malloc`, `free`, and `realloc` use YOS-owned process memory.
+- `malloc`, `free`, and `realloc` use YOS-owned memory in the currently
+  executing bank. Raw `yos_user_ptr_t` allocation scans every configured bank.
 - POSIX file and directory calls use the YOS esxDOS service table.
 - `putchar`, `puts`, `printf`, and writes to file descriptors 1 and 2 are
-  deliberately silent until a process installs a character hook.
+  deliberately silent; applications query an explicit console service.
 - `getchar` reports `EOF` and `trygetchar` reports no character. Use the raw
   keyboard service until Alto supplies a console window.
 - Unix wall-clock calls fail with `ENOSYS`; use `clock_ticks()` for monotonic
@@ -48,8 +49,8 @@ loading—read [The Book of YOS](THE-BOOK-OF-YOS.md). The runnable companion is
 
 ## Important limits
 
-The current public ABI is version 2. It has no blocking console input, Unix
-wall clock, thread join, event wait call, process wait/status channel, or
+The current public ABI is version 6. It has no blocking console input, Unix
+wall clock, thread join, process wait/status channel, or
 explicit library unload. A process has no stored parent relationship, even
 when another process created or loaded it, and `exit(int)` cannot report its
 numeric status to the creator. ABI 1 can load relocatable XPRG service images
@@ -64,5 +65,6 @@ coordination. The precise contract is in
 [Memory, Time, and Concurrency](programming-yos/MEMORY-TIME-AND-CONCURRENCY.md).
 
 Paths and directory entries reflect the underlying esxDOS 8.3 filesystem.
-YOS currently targets the 48K Spectrum with divIDE/esxDOS. Code that stays on
-libc plus `yos.h` remains independent of those firmware details.
+YOS supplies 48K, Spectrum 128K and Spectrum Next bank mappers while retaining
+the divIDE/esxDOS filesystem contract. Code that stays on libc plus `yos.h`
+remains independent of those hardware details.

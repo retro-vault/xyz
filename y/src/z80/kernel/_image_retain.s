@@ -2,7 +2,7 @@
         ; MIT License (see: LICENSE), Copyright (C) 2026 tomaz stih
         .module _image_retain
         .optsdcc -mz80 sdcccall(1)
-        .globl __image_retain, __mem_split, __yos_shrink
+        .globl __image_retain, __mem_split, __bank_shrink
         .globl _enter_critical_section, _leave_critical_section
         .area _CODE
         ; IX=loader frame: +12 relocated code end, +66 future resident,
@@ -32,7 +32,8 @@ __image_retain::
         or a
         sbc hl,de                       ; payload retained through the code
         ex de,hl                        ; HL = original payload, DE = retained size
-        call __yos_shrink               ; release the consumed relocation table
+        ld a,82(ix)
+        call __bank_shrink              ; release consumed relocation table
         ex de,hl                        ; DE = payload again: the block is live
         ld bc,#-7
         add hl,bc                       ; original allocation header

@@ -14,8 +14,8 @@
 
         ; The ROM image installs these 24 template bytes in the free space
         ; immediately before the fixed 3D00h divIDE region. See patch_rom.py.
-__sys_vectors_start = 0x3ce5
-__sys_vectors_end = 0x3cfd
+__sys_vectors_start = 0x3ce1
+__sys_vectors_end = 0x3cf9
 __sys_reti = 0x09f0
 __sys_retn = 0x09f2
 

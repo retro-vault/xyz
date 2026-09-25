@@ -2,21 +2,20 @@
 #ifndef _YOS_DIRENT_H
 #define _YOS_DIRENT_H
 
-#include <sys/types.h>
+#include <yos.h>
 
-#define DT_UNKNOWN 0
-#define DT_DIR     4
-#define DT_REG     8
-#define YOS_NAME_MAX 12
+#define DT_UNKNOWN YOS_DIRECTORY_TYPE_UNKNOWN
+#define DT_DIR     YOS_DIRECTORY_TYPE_DIR
+#define DT_REG     YOS_DIRECTORY_TYPE_REG
 
-typedef struct yos_directory DIR;
+typedef yos_directory_t DIR;
 
 struct dirent {
     ino_t d_ino;
     off_t d_size;
     unsigned char d_type;
     unsigned char d_attributes;
-    char d_name[YOS_NAME_MAX + 1];
+    char d_name[YOS_DIRECTORY_NAME_MAX + 1];
 };
 
 DIR *opendir(const char *path);

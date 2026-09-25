@@ -10,6 +10,10 @@
 
 typedef char * [[xcc::far]] fcharp;
 typedef int  * [[xcc::far]] fintp;
+union far_bytes {
+    fcharp pointer;
+    unsigned char bytes[3];
+};
 
 static char buf[8] = { 10, 20, 30, 40, 50, 60, 70, 80 };
 static int  iarr[4] = { 1000, 2000, 3000, 4000 };
@@ -23,7 +27,7 @@ int main(void) {
     fcharp fp = (fcharp)&buf[0];
     XCC_CHECK_EQ_INT_ID(3, *fp, 10);
 
-    // Far indexing (byte) with 24-bit arithmetic.
+    // Far indexing (byte) keeps the bank and adjusts the 16-bit address.
     XCC_CHECK_EQ_INT_ID(4, fp[3], 40);
     XCC_CHECK_EQ_INT_ID(5, fp[7], 80);
 
@@ -54,6 +58,29 @@ int main(void) {
     char *back = (char *)ff;
     XCC_CHECK_EQ_INT_ID(14, *back, 50);
     XCC_CHECK_ID(15, back == np);
+
+    // Packed ABI: bank first, then little-endian address.
+    union far_bytes layout = { .pointer = (fcharp)&buf[0] };
+    unsigned near_address = (unsigned)(char *)&buf[0];
+    XCC_CHECK_EQ_INT_ID(16, layout.bytes[0], 0);
+    XCC_CHECK_EQ_INT_ID(17, layout.bytes[1], near_address & 0xff);
+    XCC_CHECK_EQ_INT_ID(18, layout.bytes[2], near_address >> 8);
+
+    // Address arithmetic never carries into the logical bank byte.
+    layout.bytes[0] = 7;
+    union far_bytes advanced = { .pointer = layout.pointer + 3 };
+    XCC_CHECK_EQ_INT_ID(19, advanced.bytes[0], 7);
+    XCC_CHECK_EQ_INT_ID(20, *advanced.pointer, 40);
+
+    // Truth/comparison use the address lane correctly when its low byte is 0.
+    union far_bytes address_0100 = { .bytes = { 0, 0, 1 } };
+    XCC_CHECK_ID(21, address_0100.pointer != (fcharp)0);
+    XCC_CHECK_ID(22, !!address_0100.pointer);
+
+    // Equality includes the bank even when the address lane is zero.
+    union far_bytes bank_only = { .bytes = { 7, 0, 0 } };
+    XCC_CHECK_ID(23, bank_only.pointer != (fcharp)0);
+    XCC_CHECK_ID(24, bank_only.pointer != address_0100.pointer);
 
     return 0;
 }

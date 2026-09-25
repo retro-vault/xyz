@@ -15,7 +15,7 @@ The compiler is `bin/x/bin/xcc`; the operating-system platform is selected by
 
 int main(void)
 {
-    yos_t *yos = yos_get_api();
+    yos_t *yos = (yos_t *)query_service("yos");
     return (!yos || yos->version() < YOS_VERSION) ? 1 : 0;
 }
 ```
@@ -25,7 +25,7 @@ Compile and package it:
 ```sh
 mkdir -p build/my-yos bin/y/examples
 bin/x/bin/xcc -Os --platform=yos hello.c -o build/my-yos/hello.xl
-bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 1 \
+bin/x/bin/xprog --process --name hello --stack-size 512 --min-os 6 \
   build/my-yos/hello.xl -o bin/y/examples/hello.prc
 bin/x/bin/xprog --inspect bin/y/examples/hello.prc
 ```
@@ -33,9 +33,10 @@ bin/x/bin/xprog --inspect bin/y/examples/hello.prc
 `--name` is the process name stored in XPRG metadata. `--stack-size` includes
 the application's calls, locals, compiler temporaries and library initializers;
 the loader adds the 22-byte interrupt context separately. Thus
-512 bytes is a comfortable starting value for small programs. `--min-os 1`
-requires the current ABI 1 contract.
-ABI 1 is the clean baseline; rebuild applications against the matching headers.
+512 bytes is a comfortable starting value for small programs. `--min-os 6`
+selects the unified table layout. ABI 6 deliberately rejects older images
+whose table offsets are incompatible; rebuild applications against the
+matching headers.
 
 ## Put the process on a disk
 
@@ -52,15 +53,15 @@ file, so the same command can package data or several independently prepared
 test images. The current image builder intentionally creates one root file;
 use normal host FAT tools when a disk needs several files.
 
-YOS boots `op.sys`. To replace the shell for a test, use the same process
+YOS boots `shell.sys`. To replace the shell for a test, use the same process
 payload but give the disk file that name:
 
 ```sh
-bin/x/bin/xprog --esxdos --name OP.SYS bin/y/examples/hello.prc \
+bin/x/bin/xprog --esxdos --name SHELL.SYS bin/y/examples/hello.prc \
   -o bin/y/examples/boot.ide
 ```
 
-Boot `bin/y/z80/spectrum/bin/yos-kernel.rom` with that disk and an
+Boot `bin/y/arch/48/yos-kernel.rom` with that disk and an
 esxDOS-compatible divIDE configuration.
 
 ## Global and static objects

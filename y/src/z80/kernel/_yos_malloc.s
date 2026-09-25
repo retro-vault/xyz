@@ -1,4 +1,4 @@
-        ; Process/library-owned malloc adapter for the public YOS service table.
+        ; Process/library-owned banked allocator for the public YOS table.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -7,25 +7,24 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __yos_malloc
-        .globl  __heap
-        .globl  _mem_allocate
-        .globl  __current_process
-        .globl  _enter_critical_section
-        .globl  _leave_critical_section
-
-        .equ    THREAD_PROCESS, 22
+        .globl  __bank_allocate_dispatch
+        .globl  __bank_current
+        .globl  __bank_map
 
         .area   _CODE
 
-        ; __yos_malloc, internal service-table adapter
-        ; inputs: hl = requested byte count
-        ; outputs: de = payload or zero
-        ; clobbers: af, bc, de, hl; preserves ix and iy
+        ; input: HL = requested byte count
+        ; output: HL = payload address, E = logical bank, D = zero.
+        ;         A null result is HL=0000h, E=0.
+        ; The caller's execution bank is restored before returning.
+        ; Clobbers AF/BC/DE/HL; preserves IX/IY.
 __yos_malloc::
-        ex      de, hl
-        call    _enter_critical_section
-        call    __current_process
-        push    bc
-        ld      hl, #__heap
-        call    _mem_allocate
-        jp      _leave_critical_section
+        ld      a,(__bank_current)
+        push    af
+        call    __bank_allocate_dispatch
+        ex      de,hl
+        ld      e,a
+        ld      d,#0
+        pop     af
+        call    __bank_map
+        ret

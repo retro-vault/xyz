@@ -15,8 +15,7 @@ This is the *yos* equivalent of a system call table. The kernel registers two se
 
 | Name | Table | Header |
 |---|---|---|
-| `"yos"` | `yos_t` — kernel, drivers and filesystem, ABI version 3 | `y/include/yos.h` |
-| `"gpx"` | `gpx_api_t` — the complete libgpx drawing API (24 entries) | `y/include/gpx.h` |
+| `"yos"` | `yos_t` — kernel, drivers, filesystem, loader, and graphics, ABI version 6 | `y/include/yos.h` |
 
 ## Querying a Service
 
@@ -61,27 +60,64 @@ service_name:
 
 ## The `yos_t` Table
 
-`yos_t` is an immutable 104-byte ROM table containing function pointers and
-two data pointers, published directly at boot. The order in `yos.h` **is** the ABI;
-`yos->version()` now returns 3. ABI 2 appends `wait_event` at slot 49 (byte
-98); ABI 3 appends `exec_command` at slot 50 (byte 100) and `set_print_hook` at slot 51 (byte 102). Earlier offsets remain stable, including `shrink_memory` at slot 48.
-ABI 1 process and service images still load. Images calling `wait_event`
-must declare minimum OS version 2 in their XPRG descriptor. Images using `exec_command` or `set_print_hook` require version 3. The command line is NUL terminated, excludes the leading dot, and can contain an absolute path and arguments. A zero `exec_command` return means success; a failure is `0x100` plus the native esxDOS error code. Install a RAM sink with `set_print_hook`, save the previous sink, and restore it after command execution. The sink receives each character in A while interrupts are masked, so it should only buffer characters in RAM and preserve the firmware registers.
+`yos_t` is an immutable 154-byte ROM table containing function pointers and
+two data pointers, published directly at boot. The order in `yos.h` **is**
+the ABI, and `yos.inc` gives assembly callers the same named byte offsets.
+`yos->version()` returns 6. `yos->rom_model()` returns
+`YOS_ROM_MODEL_48K`, `YOS_ROM_MODEL_128K`, or `YOS_ROM_MODEL_NEXT` from the
+model detected during boot. ABI 6 retains the grouped ABI 5 core and appends
+the complete graphics API. The loader accepts only images declaring minimum
+OS version 6; rebuild older applications and libraries.
+
+The three memory calls use packed far pointers (`bank,lo,hi`). The command
+line passed to `exec_command` is NUL terminated, excludes the leading dot,
+and may contain an absolute path and arguments. A zero return means success;
+failure is `0x100` plus the native esxDOS error code. A print sink receives
+each character in A while interrupts are masked, so it should only buffer
+characters in RAM and preserve firmware registers.
 
 In summary:
 
 | Group | Members |
 |---|---|
-| identity and memory | `version`, `allocate_memory`, `free_memory`, `shrink_memory` (appended after the ABI 1 baseline; slot 48) |
+| identity | `version`, `rom_model`, `set_print_hook` |
+| memory | `allocate_memory`, `free_memory`, `shrink_memory` |
 | clock and critical sections | `clock_ticks`, `enter_critical_section`, `leave_critical_section` |
 | timers and events | `create_timer`, `destroy_timer`, `create_event`, `destroy_event`, `set_event`, `wait_event` |
-| threads and processes | `create_thread`, `exit_thread`, `suspend_thread`, `resume_thread`, `create_process`, `exit_process` |
-| services and vectors | `query_service`, `register_service`, `unregister_service`, `get_interrupt_handler`, `set_interrupt_handler` |
+| threads | `create_thread`, `exit_thread`, `suspend_thread`, `resume_thread` |
+| processes and libraries | `create_process`, `load_process`, `exit_process`, `load_library`, `process_load_error` |
+| services | `query_service`, `register_service`, `unregister_service` |
+| vectors | `get_interrupt_handler`, `set_interrupt_handler` |
 | input | `read_key`, `calibrate_mouse`, `read_mouse` |
 | esxDOS filesystem | `error_number` (pointer to the scheduler-virtualized per-thread errno cell), `open`, `close`, `read`, `write`, `lseek`, `fsync`, `unlink`, `rename`, `chdir`, `getcwd`, `mkdir`, `rmdir`, `stat`, `fstat`, `opendir`, `readdir`, `rewinddir`, `closedir`, `enumerate_disks` |
-| loader | `load_process`, `process_load_error` (per-thread status byte), `load_library` |
+| commands | `exec_command` |
+| graphics | `gpx_create`, `gpx_destroy`, `gpx_set_page`, `gpx_width`, `gpx_height`, `gpx_clear_screen`, `gpx_set_text_background`, `gpx_draw_pixel`, `gpx_draw_line`, `gpx_draw_bitmap`, `gpx_show_sprite`, `gpx_hide_sprite`, `gpx_draw_rectangle`, `gpx_fill_rectangle`, `gpx_measure_text`, `gpx_draw_text`, `gpx_get_system_font`, `gpx_get_tiny_font`, `gpx_get_stock_bitmap`, `gpx_draw_circle`, `gpx_fill_circle`, `gpx_draw_polygon`, `gpx_fill_polygon`, `gpx_draw_box` |
 
-Most entries map directly onto the kernel routine of the same meaning. `allocate_memory`, `free_memory`, `shrink_memory` and `create_timer` go through small adapters (`kernel/_yos_malloc.s`, `_yos_free.s`, `_yos_shrink.s`, `_yos_install_timer.s`) that supply kernel-private arguments. `shrink_memory(memory, size)` releases the bytes of a live block beyond `size` when they can form a heap block; the block never moves, and the image loader uses the same routine to drop a consumed XL relocation table from the end of its read buffer. Allocation and registration use the current process (or initialization's library owner); public timers remain kernel-owned.
+Assembly programs include `yos.inc` and use its byte offsets instead of
+embedding slot numbers:
+
+```asm
+        .include "yos.inc"
+        ld      hl,(_yos_table)
+        ld      de,#YOS_OFFSET_REGISTER_SERVICE
+        add     hl,de
+        ld      c,(hl)
+        inc     hl
+        ld      b,(hl)
+        call    ___sdcc_call_bc
+```
+
+Most entries map directly onto the kernel routine of the same meaning.
+`allocate_memory`, `free_memory`, `shrink_memory` and `create_timer` go through
+small adapters (`kernel/_yos_malloc.s`, `_yos_free.s`, `_yos_shrink.s`,
+`_yos_install_timer.s`) that supply kernel-private arguments. Public
+allocation searches every configured banked user heap and returns a
+`yos_user_ptr_t`; free and shrink use the bank stored in that pointer.
+`shrink_memory(memory, size)` releases the bytes of a live block beyond `size`
+when they can form a heap block; the block never moves. Standard C `malloc`
+uses a private current-bank request so its result remains a valid 16-bit near
+pointer. Allocation and registration use the current process (or
+initialization's library owner); public timers remain kernel-owned.
 
 Kernel objects returned by the table (`yos_thread_t`, `yos_process_t`, `yos_event_t`, `yos_timer_t`, `yos_service_t`) are opaque handles; their layouts are described in the other chapters for the curious, but applications must not depend on them.
 
@@ -108,9 +144,9 @@ rename is not provided. No service-table entry or signature changed.
 
 `readdir` converts the native short-name record in this order: attributes
 (one byte), ASCIIZ name, packed date/time (four bytes), size (four bytes).
-The public `dirent` still contains `d_ino`, `d_size`, `d_type`, `d_attributes`,
+The public `yos_directory_entry_t` contains `d_ino`, `d_size`, `d_type`, `d_attributes`,
 and its 13-byte short-name array. The returned entry is borrowed from its
-`DIR` object and is replaced by the next read; close the directory to release
+`yos_directory_t` object and is replaced by the next read; close the directory to release
 both the firmware handle and the YOS allocation.
 
 ## Registering a Custom Service
@@ -167,32 +203,28 @@ Internally, each service is a 22-byte `service_t` system object on `__sys_heap`:
 ```c
 typedef struct service_s {
     sysobj_t hdr;               /*  0: list link + owner */
-    char     name[16];          /*  4: "yos", "gpx", ... */
+    char     name[16];          /*  4: "yos", "audio", ... */
     void    *fntable;           /* 20: pointer to your struct of fn ptrs */
 } service_t;
 ```
 
 Public services are kept in the `__svc_first` linked list (`kernel/_svc_state.s`), newest first. `__svc_query` does a linear search by name with `__string_compare`.
 
-## The `gpx` Service
+## Graphics in `yos_t`
 
 The ROM vendors libgpx `v1.1.0-1-g0ef6f07` (`y/src/z80/gpx/`, GPL-2.0,
-see `gpx/README.md`) and registers its function table as `"gpx"`. The
-`gpx_api_t` in `gpx.h` covers drawing contexts, pixels, lines, rectangles and
-selected-edge boxes, circles, polygons, text with the system and tiny fonts,
-bitmaps, sprites and page selection. The `draw_box` entry is appended after
-the original 23 slots, preserving their ABI offsets. `create` allocates an
-independent six-byte context owned by the current process (or initializing
-library); `destroy` releases it, and process cleanup catches forgotten
-contexts. Display dimensions are constants, not global context state. The
-boot-time shell (`y/tests/shell-yos/shell.c`) is a minimal example:
+see `gpx/README.md`). Its types, constants, and 24 entry points are appended
+to the single ABI 6 `yos_t` table. There is no separate `gpx` service or
+`gpx.h`. `gpx_create` allocates an independent six-byte context owned by the
+current process (or initializing library); `gpx_destroy` releases it, and
+process cleanup catches forgotten contexts.
 
 ```c
-gpx_api_t *gpx = (gpx_api_t *)query_service(GPX_SERVICE_NAME);
-gpx_t *screen = gpx->create(GPXM_DEFAULT);
-const font_t *font = gpx->get_system_font();
-gpx->clear_screen();
-gpx->draw_text(screen, x, y, "hello", font, CO_FORE, BM_CPY, 0);
+yos_t *yos = (yos_t *)query_service("yos");
+gpx_t *screen = yos->gpx_create(GPXM_DEFAULT);
+const font_t *font = yos->gpx_get_system_font();
+yos->gpx_clear_screen();
+yos->gpx_draw_text(screen, x, y, "hello", font, CO_FORE, BM_CPY, 0);
 ```
 
 The Spectrum framebuffer is still shared. GPX protects byte-level raster

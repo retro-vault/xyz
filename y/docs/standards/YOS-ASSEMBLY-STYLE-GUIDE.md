@@ -202,6 +202,6 @@ Use consistent naming:
    `__critical_call` only for register-only argument layouts: its extra return
    word changes caller-stack offsets and it clobbers alternate DE/HL.
 7. Hand-written assembly only: All kernel code must be hand-written Z80
-   assembly. Do not use C compilers or generated assembly. (`op.sys` is
+   assembly. Do not use C compilers or generated assembly. (`shell.sys` is
    compiled from the C smoke fixture, but it is an application, not ROM.)
 8. Fixed addresses are sacred: the first 256 bytes of `crt0rom.s`, the reserved ranges in `linker.lk` (`0x04C6`, `0x0562`, `0x3D00-0x3DFF`), the IM2 word at `0x5EFF` and the ROM size limit of 16 KiB are all checked by the build or by `tests/kernel-z80`. Never move them to make room.

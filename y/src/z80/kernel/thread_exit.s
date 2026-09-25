@@ -11,7 +11,7 @@
         .globl  _thread_first_running
         .globl  _thread_first_terminated
 
-        .equ    THREAD_SIZE,           24
+        .equ    THREAD_SIZE,           38
         .equ    THREAD_SP,              4
         .equ    THREAD_WAIT,           16
         .equ    THREAD_NUM_EVENTS,     18

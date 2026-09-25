@@ -6,12 +6,13 @@ libc rules, the X test matrix) is documented there.
 
 ## What YOS Is
 
-YOS is a preemptive, ROM-based operating system for the 48K ZX Spectrum,
+YOS is a preemptive, ROM-based operating system for the ZX Spectrum 48K,
+128K, and Spectrum Next,
 written entirely in hand-written Z80 assembly. The 16 KiB replacement ROM
-stays compatible with esxDOS on divIDE, loads `op.sys` from disk as an
+stays compatible with esxDOS on divIDE, loads `shell.sys` from disk as an
 XPRG process, and runs everything through a 50 Hz IM2 scheduler and named
 service tables. Applications talk to it through the `yos_t` function table
-(`include/yos.h`, ABI version 2) obtained with `query_service("yos")` over
+(`include/yos.h`, ABI version 6) obtained with `query_service("yos")` over
 `RST 0x18`.
 
 ## Documents To Read
@@ -22,16 +23,17 @@ service tables. Applications talk to it through the `yos_t` function table
 | reset, ROM header, vector table, IM2, critical sections | [docs/books/the-book-of-yos/BOOT.md](docs/books/the-book-of-yos/BOOT.md) |
 | lists, `sysobj_t`, ownership, `so_create` / `so_destroy` | [docs/books/the-book-of-yos/RESOURCE-ACCOUNTING.md](docs/books/the-book-of-yos/RESOURCE-ACCOUNTING.md) |
 | heaps, block header, allocate / free / free-by-owner | [docs/books/the-book-of-yos/MEMORY-MANAGEMENT.md](docs/books/the-book-of-yos/MEMORY-MANAGEMENT.md) |
+| logical banks, far calls, backend mapping | [docs/books/the-book-of-yos/BANKING.md](docs/books/the-book-of-yos/BANKING.md) |
 | thread object, states, startup stub, context switch, events | [docs/books/the-book-of-yos/THREADS.md](docs/books/the-book-of-yos/THREADS.md) |
 | process object, no-parent model, `process_start`, `load_process`, `process_exit` | [docs/books/the-book-of-yos/PROCESSES.md](docs/books/the-book-of-yos/PROCESSES.md) |
 | shared/private libraries, initializer ownership, reference cleanup | [docs/books/the-book-of-yos/LIBRARIES.md](docs/books/the-book-of-yos/LIBRARIES.md) |
 | what the scheduler reclaims and when | [docs/books/the-book-of-yos/CLEANUP-RESOURCES.md](docs/books/the-book-of-yos/CLEANUP-RESOURCES.md) |
-| services, RST 18, the `yos_t` and `gpx` tables | [docs/books/the-book-of-yos/SYSCALLS.md](docs/books/the-book-of-yos/SYSCALLS.md) |
+| services, RST 18, the unified `yos_t` table | [docs/books/the-book-of-yos/SYSCALLS.md](docs/books/the-book-of-yos/SYSCALLS.md) |
 | tick counters, timer chain, callback rules | [docs/books/the-book-of-yos/CLOCK.md](docs/books/the-book-of-yos/CLOCK.md) |
-| XPRG descriptor, loader checks, building `op.sys` | [docs/books/the-book-of-yos/PROGRAM-IMAGES.md](docs/books/the-book-of-yos/PROGRAM-IMAGES.md) |
+| XPRG descriptor, loader checks, building `shell.sys` | [docs/books/the-book-of-yos/PROGRAM-IMAGES.md](docs/books/the-book-of-yos/PROGRAM-IMAGES.md) |
 | how to write kernel assembly | [docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md](docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md), on top of [x/docs/standards/Z80-CODING-STYLE.md](../x/docs/standards/Z80-CODING-STYLE.md) |
 | release history | [CHANGELOG.md](CHANGELOG.md) |
-| the public ABI | [include/yos.h](include/yos.h), [include/gpx.h](include/gpx.h), [include/dirent.h](include/dirent.h) |
+| the public OS ABI | [include/yos.h](include/yos.h), [include/yos.inc](include/yos.inc) |
 | XPRG format reference | [x/src/xprog/README.md](../x/src/xprog/README.md) |
 | host tools | [pkg/appmake/README.md](pkg/appmake/README.md), [pkg/microdrive/README.md](pkg/microdrive/README.md), [pkg/serial/README.md](pkg/serial/README.md) |
 | microdrive driver harness | [tests/mdr-emu/README.md](tests/mdr-emu/README.md) |
@@ -41,9 +43,10 @@ service tables. Applications talk to it through the `yos_t` function table
 
 ```
 y/
-├── src/z80/        assembly kernel  -> bin/y/z80/spectrum/bin/yos-kernel.rom, op.sys
+├── src/z80/        assembly kernel -> bin/y/arch/{48,128,next}/ binaries
 │   ├── startup/    crt0rom.s (fixed ROM header), RAM init, vectors, critical sections
 │   ├── kernel/     lists, heaps, threads, processes, events, timers, services, loader
+│   ├── bank/       common allocator/gates plus 48K, 128K, Next mappers
 │   ├── drivers/    clock, keyboard, Kempston mouse
 │   ├── fs/         POSIX-style esxDOS filesystem and its RAM gates
 │   ├── gpx/        libgpx v1.1.0-1-g0ef6f07 (GPL-2.0) + YOS integration
@@ -51,7 +54,7 @@ y/
 │   └── linker.lk   ROM/RAM layout, reserved divIDE and Interface 1 addresses
 ├── src/c/          earlier C kernel -> yos.rom (kept buildable, not the focus)
 ├── include/        public headers for applications
-├── pkg/            host tools: appmake, microdrive, serial -> bin/y/bin
+├── pkg/            optional host-tool sources; not part of the YOS distribution
 ├── tests/          kernel-z80, shell-yos, Fuse real-firmware runner, legacy apps/media
 └── docs/           books/THE-BOOK-OF-YOS.md + books/the-book-of-yos/ (chapters), standards/ (style guide)
 ```
@@ -63,17 +66,26 @@ All builds use the staged X toolchain in `bin/x/bin` (`xas`, `xld`, `xar`,
 `make -C .. x`.
 
 ```bash
-make -C y                      # both kernels (src/Makefile: targets c and z80)
-make -C y/src/z80              # assembly kernel + op.sys only
+make -C y                      # current universal Z80 kernel and distribution
+make -C y/src/z80              # assembly kernel + shell.sys only
+make -C y/src/z80 YOS_BANK_BACKEND=128 YOS_BANK_COUNT=6
+make -C y/src/z80 YOS_BANK_BACKEND=next YOS_BANK_COUNT=126
 make -C y/src/c                # C-era kernel only
-make -C y packages             # appmake, microdrive, serial -> bin/y/bin
 make -C y clean
 ```
 
-Outputs: `bin/y/z80/spectrum/bin/yos-kernel.rom` (must stay ≤ 16384 bytes —
-the Makefile fails the link if `s__GSFINAL` passes `0x4000`), `op.sys`,
-and the link map under `build/yos-z80/yos-kernel.map`. Intermediate `.rel`
-files and `libyos-kernel.lib` live in `build/yos-z80/`.
+Outputs: model-labelled copies under `bin/y/arch/48/`, `bin/y/arch/128/`, and
+`bin/y/arch/next/`. Their universal `yos-kernel.rom` must stay ≤ 16384 bytes; the
+Makefile fails the link if `s__GSFINAL` passes `0x4000`. Shared headers,
+firmware, scripts, and source samples live once directly under `bin/y/`.
+The link map and every intermediate remain under `build/yos-z80/`.
+
+Every ROM includes the 48K, 128K, and Next mappers and detects the model at
+runtime. `YOS_BANK_COUNT` sets compiled user-bank capacity and defaults to the
+maximum 126; a 48K machine uses one bank, a 128K machine caps it at six, and a
+Next uses the configured count.
+`YOS_BANK_BACKEND` selects the hardware model expected by the emulator test
+fixture rather than selecting which mapper is linked.
 
 The kernel is linked from an archive so `xld` drops every routine the ROM does
 not reference. `src/z80/Makefile` orders the archive deliberately (kernel,
@@ -84,6 +96,7 @@ keep that order when adding modules.
 
 ```bash
 make -C y/src/z80 test         # kernel-z80: boot the ROM under libxz80
+python3 y/tests/zesarux-next/run.py --headless
 make -C y/tests/mdr-emu test   # microdrive driver harness (targets the C-era yos.rom)
 make -C y/tests/mdr-emu stress # repeated microdrive smoke passes
 ```
@@ -92,30 +105,27 @@ make -C y/tests/mdr-emu stress # repeated microdrive smoke passes
 The emulator defers `_boot_shell` until its RAM-gate fixture is populated;
 no test-only ROM relink or ROM patch is used. It verifies: the fixed RST
 and NMI bytes, the vector table and IM2 word, heap initialization, the public
-`yos_t` wrappers, the `gpx` service, filesystem errno behaviour without a
-firmware, XPRG CRC and relocation using the built `op.sys`, process and
+`yos_t` wrappers and graphics entries, filesystem errno behaviour without a
+firmware, XPRG CRC and relocation using the built `shell.sys`, process and
 thread creation, three interrupt-driven context switches, event wakeup,
-terminated-thread cleanup, and that the kernel never writes into ROM. Its
-RAM-gate esxDOS fixture also runs the actual shell and self-registering
-`shelllib.svc`, shared/private lifetime, initializer rollback and OOM cases.
+terminated-thread cleanup, and that the kernel never writes into ROM. Its RAM-gate esxDOS fixture runs the actual allocation-free Hello World shell;
+a separate build-only `shelllib.svc` fixture covers shared/private lifetime,
+initializer rollback and OOM cases.
 Threading regressions force a second loader through a real IM2 context switch,
 audit shared-state/framebuffer accesses, and check nested IFF preservation,
 per-thread errors, timer-driven mouse state and independent GPX contexts.
 Run it after any change to `src/z80/`.
 
 For a repeatable visible Fuse cold boot, run
-`python3 y/tests/fuse/run.py --esxdos build/yos-fuse/esxdos089` from the root;
-see `tests/fuse/README.md`. It creates fresh media under `build/yos-fuse/`
-from a user-supplied firmware distribution and does not modify Fuse settings.
+`python3 y/tests/fuse/run.py` from the root; see `tests/fuse/README.md`. It
+creates fresh media under `build/yos-fuse/` from the vendored esxDOS 0.8.9
+runtime and does not modify Fuse settings. `--esxdos DIR` overrides it.
 Every esxDOS gate must mask IM2 until divIDE restores the scheduler's ROM.
 
-Real-firmware validation of the replacement ROM is otherwise manual: boot
-`yos-kernel.rom` as the base ROM in ZEsarUX (or Fuse) with a divIDE, an esxDOS
-0.8.9 image and both `op.sys` and `shelllib.svc` on the mounted disk, and
-expect "Library OK" below the centred
-greeting from `tests/shell-yos/shell.c`. The esxDOS harness in
-`x/tests/tests/zx48/esxdos/` (`run_rom_firmware.py`) shows how to drive
-ZEsarUX from a script if you need to automate it.
+The `tests/zesarux-next/run.py --headless` real-firmware validation boots the
+replacement ROM in separate 48K and 128K ZEsarUX machines with divIDE and
+esxDOS 0.8.9. It requires `shell.sys` and a rendered shell; the
+128K phase additionally requires model detection and all six user banks.
 
 The `hello-yos` and `mdr*-yos` directories under `tests/` are application
 builds that produce microdrive images for the C-era ROM. They target the historical C-era ABI
@@ -133,8 +143,8 @@ has, so they do not build against it and are not part of any default target.
   exactly as `src/z80/Makefile` does. This is the repository-wide rule from
   the root [`AGENTS.md`](../AGENTS.md); it is repeated here because `y/`
   harnesses have drifted before.
-- **Assembly only.** No C in `src/z80/`; `op.sys` is compiled from the
-  C smoke fixture under `tests/shell-yos/` and is an application, not ROM.
+- **Assembly only.** No C in `src/z80/`; the default `shell.sys` is compiled
+  from `samples/shell-c/` and is an application, not ROM.
 - **One routine per module.** `name.s` defines `_name`; helpers and shared
   state go in `_name.s` / `_<subsystem>_state.s`. Never merge modules — the
   archive link relies on it.
@@ -146,8 +156,17 @@ has, so they do not build against it and are not part of any default target.
   `0x5B00` and the 16 KiB ROM limit are all checked by the build or the test.
 - **The ROM links no libc and no X runtime.** Add a tiny `__helper` instead
   of importing one.
-- **`yos_t` order is the ABI.** Append new entries at the end of both
-  `include/yos.h` and the template in `kernel/_syscall_table_init.s`, bump
+- **Bank ABI is shared with XCC.** Keep far pointers and library exports in
+  packed `bank,address-low,address-high` order. RST20 is the inline call/jump
+  gate, RST28 is the dynamic compiler gate, and RST30 accesses far data.
+  Preserve stack argument adjacency and the per-thread nested-call frames.
+  Keep runtime detection ordered NextReg ID, reversible 7FFD paging test,
+  then 48K fallback; restore probed RAM, leave logical bank zero mapped, and
+  retain the 128K 48-BASIC/YOS ROM slot on every 7FFD write.
+- **`yos_t` order is the ABI.** ABI 6 is the grouped, unified baseline and rejects
+  older images whose offsets are incompatible. Append new entries at the end
+  of both `include/yos.h` and the template in
+  `kernel/_syscall_table_init.s`, update both copies of `yos.inc`, bump
   `YOS_VERSION` in both public `yos.h` headers, `kernel/yos_version.s`, and
   `kernel/_image_load.s` together, and update
   the immutable ROM table size. `kernel/_yos_state.s` allocates no RAM mirror.
@@ -160,7 +179,7 @@ has, so they do not build against it and are not part of any default target.
 
 ## Known Gaps
 
-- ABI 2 exposes single-event `wait_event`; multi-event waits and `thread_join`
+- ABI 6 exposes single-event `wait_event`; multi-event waits and `thread_join`
   remain unavailable. Signals are binary and consumed by one waiter. Call
   outside critical sections, with interrupts enabled, and retain the event.
 - Libraries support relocatable XPRG services with 1–255 exports. Fixed JP

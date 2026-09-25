@@ -14,39 +14,46 @@ service tables.
 
 | Path | Contents |
 |---|---|
-| `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `op.sys` |
+| `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `shell.sys` |
 | `src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`, with its own copy of the old chapter docs |
-| `include/` | public headers used by YOS applications: `yos.h` (kernel ABI 1), `gpx.h`, `dirent.h`, `microdrive/microdrive.h` |
-| `pkg/` | host tools staged into `bin/y/bin/`: [`appmake`](pkg/appmake/README.md), [`microdrive`](pkg/microdrive/README.md), [`serial`](pkg/serial/README.md) |
-| `tests/` | `kernel-z80/` emulated kernel test, `shell-yos/` boot shell/library fixture, [`fuse/`](tests/fuse/README.md) real-firmware runner, `hello-yos/` and `mdr*-yos/` apps, [`mdr-emu/`](tests/mdr-emu/README.md) microdrive harness, and media |
+| `include/` | `yos.h` and `yos.inc` define the complete unified kernel ABI 6 |
+| `samples/` | C and assembly `shell.sys` examples staged with source and binaries into the release tree |
+| `third_party/esxdos089/` | esxDOS 0.8.9 DivIDE/DivMMC runtime and original notices staged into the Spectrum release |
+| `pkg/` | optional host-tool sources: [`appmake`](pkg/appmake/README.md), [`microdrive`](pkg/microdrive/README.md), [`serial`](pkg/serial/README.md); they are not part of the YOS distribution |
+| `tests/` | `kernel-z80/` emulated kernel test, `shell-yos/` library fixture, [`fuse/`](tests/fuse/README.md) real-firmware runner, `hello-yos/` and `mdr*-yos/` apps, [`mdr-emu/`](tests/mdr-emu/README.md) microdrive harness, and media |
 | `docs/books/` | [Programming YOS](docs/books/PROGRAMMING-YOS.md) for application authors and [The Book of YOS](docs/books/THE-BOOK-OF-YOS.md) for kernel internals |
 | `docs/standards/` | [YOS assembly style guide](docs/standards/YOS-ASSEMBLY-STYLE-GUIDE.md) |
 
 ## Build and Test
 
 ```bash
-make -C y                  # both kernels; needs the staged X toolchain in bin/x
-make -C y/src/z80          # assembly kernel only -> bin/y/z80/spectrum/bin/yos-kernel.rom + op.sys
+make -C y                  # current universal kernel and distribution
+make -C y/src/z80          # same focused build -> bin/y/
+make -C y/src/c            # historical C-era kernel, when explicitly needed
 make -C y/src/z80 test     # boot the ROM under libxz80 and exercise the kernel
-make -C y packages         # host tools -> bin/y/bin
+python3 y/tests/zesarux-next/run.py --headless
 ```
 
 The assembly kernel is built with `xas`/`xld`/`xar` from `bin/x/bin`;
-The build also emits `shelllib.svc`; copy it alongside `op.sys` on the
-esxDOS drive. The shell calls its relocated, self-registered interface and
-shows "Library OK". `op.sys` is compiled as a relocatable XL application by the XCC `yos`
-backend and packaged with `xprog`. Details, including how to validate the ROM against real esxDOS, are
-in [AGENTS.md](AGENTS.md).
+`shell.sys` is the minimal C sample: it draws `Hello World!` at screen centre
+without loading a library or allocating heap memory, then loops forever. It is compiled as a relocatable XL application by the XCC `yos`
+backend and packaged with `xprog`. The distribution at `bin/y/` includes the
+matching esxDOS runtime; run its
+`run-48.sh`, `run-128.sh`, or `run-next.sh` directly. Details, including how
+to validate the ROM against real esxDOS, are in [AGENTS.md](AGENTS.md).
 
 To show the shell in Fuse with real esxDOS firmware:
 
 ```sh
-python3 y/tests/fuse/run.py --esxdos build/yos-fuse/esxdos089
+python3 y/tests/fuse/run.py
 ```
 
-Supply an extracted esxDOS distribution at that path. See the
-[Fuse runner guide](tests/fuse/README.md) for dependencies and cold-boot details.
-Application code for ABI 1 libraries is covered in
+The runner uses `y/third_party/esxdos089/` by default; `--esxdos` remains an
+override. See the [Fuse runner guide](tests/fuse/README.md) for dependencies
+and cold-boot details.
+For Spectrum Next/TBBlue validation with ZEsarUX, use the
+[Next runner](tests/zesarux-next/README.md).
+Application code for loadable libraries is covered in
 [Loadable Libraries](docs/books/programming-yos/LOADABLE-LIBRARIES.md).
 
 ## System Overview
@@ -55,10 +62,9 @@ Application code for ABI 1 libraries is covered in
    first 256 bytes are an esxDOS-compatible header (RST 08 and NMI belong to
    the firmware, RST 10 is an immediate `RET`, RST 18-30 jump through a
    writable RAM table). `__startup_init` zeroes BSS, copies the vector table
-   and initialized data from ROM to RAM and builds the 96-byte service table.
+   and initialized data from ROM to RAM; the 154-byte `yos_t` table remains immutable in ROM.
 2. **Kernel bring-up (`src/z80/main.s`)** — kernel and user heaps are
-   initialized, the clock, keyboard and mouse timers are installed, the `"yos"` and
-   `"gpx"` services are registered, `op.sys` is loaded from the current
+   initialized, the clock, keyboard and mouse timers are installed, the single `"yos"` interface is registered, `shell.sys` is loaded from the current
    esxDOS drive and started as a process.
 3. **Scheduler activation** — IM2 is selected with the vector word at
    `0x5EFF` pointing at `__thread_robin`; every 50 Hz tick saves the current
@@ -66,8 +72,8 @@ Application code for ABI 1 libraries is covered in
    waiting threads, selects the next runnable thread and restores its context.
 4. **Runtime API** — there are no privilege levels; applications obtain the
    `yos_t` function table with `query_service("yos")` through `RST 0x18` and
-   call the kernel, drivers, POSIX-style esxDOS filesystem and XPRG loader
-   through pointers. `query_service("gpx")` returns the libgpx drawing API.
+   call the kernel, drivers, POSIX-style esxDOS filesystem, XPRG loader, and
+   graphics implementation through that one table.
 
 ## Core Design Principles
 

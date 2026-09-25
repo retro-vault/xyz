@@ -15,29 +15,18 @@ The function executes `RST 0x18` with the service name and returns the table,
 or `NULL` when no service has that name. The comparison is case-sensitive.
 Always test an optional service before dereferencing it.
 
-The YOS CRT already performs that query. Prefer the cached spelling for the
-kernel table:
+`YOS_VERSION` is the ABI required by the installed header, currently 6. XPRG's
+`--min-os 6` is the loader-side check. An application can additionally check
+the returned table's `version()` for diagnostics and unusual launchers.
+
+Graphics is part of the same `yos_t` table:
 
 ```c
-yos_t *yos = yos_get_api();
-if (!yos || yos->version() < YOS_VERSION)
-    return 1;
-```
-
-`YOS_VERSION` is the ABI required by the installed header, currently 2. XPRG's
-`--min-os 1` is the loader-side check; the runtime check above is useful for
-diagnostics and unusual launchers.
-
-Graphics is separate:
-
-```c
-#include <gpx.h>
-
-gpx_api_t *gpx = (gpx_api_t *)query_service(GPX_SERVICE_NAME);
-if (gpx) {
-    gpx_t *screen = gpx->create(GPXM_DEFAULT);
+yos_t *yos = (yos_t *)query_service("yos");
+if (yos) {
+    gpx_t *screen = yos->gpx_create(GPXM_DEFAULT);
     if (screen)
-        gpx->draw_pixel(screen, 20, 20, CO_FORE, BM_CPY, 0);
+        yos->gpx_draw_pixel(screen, 20, 20, CO_FORE, BM_CPY, 0);
 }
 ```
 
@@ -54,30 +43,9 @@ printf("value=%u\n", value);
 write(STDOUT_FILENO, "ok\n", 3);
 ```
 
-They still report successful output. A process may install the nonstandard,
-process-local character sink from `yos.h`:
-
-```c
-#include <stdio.h>
-#include <yos.h>
-
-static void alto_character(char ch)
-{
-    /* Send ch to an Alto console service here. */
-}
-
-int main(void)
-{
-    yos_putchar_hook_t old = yos_set_putchar_hook(alto_character);
-    printf("Now every character reaches alto_character.\n");
-    yos_set_putchar_hook(old);
-    return 0;
-}
-```
-
-The hook is called once for every character. It must avoid recursively calling
-`putchar`, `puts`, `printf`, or `write(1, ...)`. Keep it short or buffer the
-characters for another subsystem.
+They still report successful output. Applications that need a console must
+query a console service explicitly; the YOS ABI does not manufacture a libc
+adapter for one.
 
 `getchar()` returns `EOF`, and `trygetchar()` returns zero. For current raw
 input use `yos->read_key()`; a later console service can translate editing,
@@ -103,7 +71,7 @@ static counter_api_t counter = { next_value };
 
 int main(void)
 {
-    yos_t *yos = yos_get_api();
+    yos_t *yos = (yos_t *)query_service("yos");
     yos_service_t *registration =
         yos->register_service("counter", &counter);
     if (!registration)

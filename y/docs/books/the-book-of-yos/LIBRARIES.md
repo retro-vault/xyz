@@ -1,7 +1,8 @@
 # Loadable Libraries
 
 ABI 1 includes `load_library(path, flags)` in `yos_t`. It loads an XPRG
-service (`xprog --service`) and returns a direct function-pointer table:
+service (`xprog --service`) and returns a fixed-memory table of far
+function pointers:
 
 ```c
 shelllib_api_t *library = yos->load_library(
@@ -10,10 +11,9 @@ if (library && library->probe() == SHELLLIB_RESULT)
     /* the relocated export was called successfully */;
 ```
 
-The complete working example is `y/tests/shell-yos/shelllib.s`, with the
-matching interface in `shelllib.h`. `op.sys` loads this library and
-displays its returned "Library OK" string. Copy **both** `op.sys` and
-`shelllib.svc` from `bin/y/z80/spectrum/bin/` to the esxDOS drive.
+The complete regression fixture is `y/tests/shell-yos/shelllib.s`. It is
+built only under `build/yos-z80/apps/` by the test target; the deployable
+Hello World shell deliberately has no library dependency.
 
 ## Relocate, Initialize, Publish
 
@@ -29,13 +29,13 @@ For a new library:
 2. Check the XL CRC and relocate the code in its existing read buffer.
    There is no second resident-code allocation or copy.
 3. Validate each three-byte XPRG `JP offset` export and compact the targets
-   into a two-byte-per-slot, absolute YOS function-pointer table immediately
-   before the code, reusing consumed XL header space. The on-disk JP table
+   into a three-byte-per-slot `{bank,address}` YOS far-function table in
+   common memory. The on-disk JP table
    is **not** itself a C function-pointer array.
-4. Shrink the allocation to the code end (`shrink_memory`), freeing the
-   consumed relocation table, then split it before the compact table. Create
-   a library ownership object without a thread or stack and transfer the
-   retained table/code block to it; the leading metadata block is freed by
+4. Shrink the bank allocation to the code end, freeing the consumed
+   relocation table. Create a library ownership object without a thread or
+   stack and transfer the retained code and separate common table to it; the
+   leading metadata block is freed by
    the loader's final cleanup. Splitting preserves ownership and allocation
    flags under a critical section. Export validation finishes before any
    metadata is released.
@@ -95,7 +95,7 @@ before allocator slack. Repeated loads by one process count separately.
 There is no manual unload API in this first version: all references are
 released when the client's **last** thread is reclaimed.
 
-The library reuses the 15-byte process object:
+The library reuses the 16-byte process object:
 
 | Offset | Library meaning |
 |---:|---|
@@ -106,11 +106,12 @@ The library reuses the 15-byte process object:
 | 7 | image ABI |
 | 8–12 | unused |
 | 13 | 16-bit reference count, instead of main-thread pointer |
+| 15 | logical bank containing the resident code |
 
 The service holds the full name and interface pointer. At zero references,
 `process_reap` unregisters owned services and frees library-owned memory
 and the object. A nonzero count protects threadless libraries from reaping.
-Ordinary process objects and thread objects have not grown.
+The stable common export table and banked image are both library-owned.
 
 `query_service` returns a **borrowed** pointer and does not acquire a
 reference. Load a dynamic library before using it, and never manually free
@@ -152,4 +153,6 @@ the ROM filesystem and loader, with short reads and deliberately clobbered
 firmware registers. It checks self-registration after relocation, staged
 publication, shared/private state, distinct ABIs, surviving sibling threads,
 last-reference cleanup, malformed metadata/XL/exports, CRC/read errors,
-initializer rollback, and exhausted image/object/reference heaps.
+initializer rollback, exhausted image/object/reference heaps, RST20/RST28
+register and stack behavior, and a compiler-generated far call with a
+callee-cleaned stack argument.

@@ -12,7 +12,7 @@
         .globl  _list_remove
         .globl  _list_insert
 
-        .equ    THREAD_SIZE,           24
+        .equ    THREAD_SIZE,           38
         .equ    THREAD_SP,              4
         .equ    THREAD_WAIT,           16
         .equ    THREAD_NUM_EVENTS,     18

@@ -369,6 +369,12 @@ void z80_gen::gen_ifx(const icode &ic) {
                 direct_word_value_ = ic.left;
             }
         }
+    } else if (ic.left.type && ic.left.type->is_far_ptr()) {
+        // A far pointer is null only when both its bank and address are zero.
+        emit_load_far_ptr(ic.left);
+        emit_line("ld\ta, h");
+        emit_line("or\tl");
+        emit_line("or\tc");
     } else if (ic.left.type && ic.left.type->is_integer() &&
                ic.left.type->size() > 2) {
         // A nonzero high word is sufficient for truth. Still read every
@@ -682,6 +688,26 @@ void z80_gen::gen_call(const icode &ic) {
             emit_direct_callee_decl(ic.func_name);
             emit_line("call\t%s", callee.c_str());
         }
+    } else if (yos_far_calls_ && ic.left.type && ic.left.type->is_far_ptr()) {
+        // YOS dynamic far-call envelope. RST 28h consumes bank/address plus
+        // these saved argument registers, maps the target bank, and restores
+        // the caller bank after the callee returns.
+        const bool saved_sp_delta_known = has_known_sp_ix_delta();
+        const int saved_sp_delta = current_sp_ix_delta();
+        emit_line("push\taf");
+        emit_line("push\tbc");
+        emit_line("push\tde");
+        emit_line("push\thl");
+        emit_load_far_ptr(ic.left);
+        emit_line("push\thl");
+        emit_line("push\tbc");
+        emit_line("rst\t0x28");
+        // Unlike an ordinary CALL, RST28 consumes its entire six-word
+        // metadata/save envelope before entering the target. Restore the
+        // pre-envelope SP-vs-IX fact at the continuation; operand loading may
+        // itself have invalidated that fact while materializing the target.
+        if (saved_sp_delta_known)
+            set_known_sp_ix_delta(saved_sp_delta);
     } else {
         conv.emit_indirect_call(*this, ic);
     }

@@ -9,6 +9,7 @@
         .globl  __library_acquire
         .globl  __image_retain
         .globl  __image_transfer
+        .globl  __os_malloc
         .globl  __library_initialize
         .globl  _process_first
         .globl  __svc_first
@@ -19,11 +20,13 @@
         .globl  _process_reap
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-        .equ    LIBRARY_SIZE,   15
+        .equ    LIBRARY_SIZE,   16
         .equ    LIBRARY_FLAGS,   4
         .equ    LIBRARY_SERVICE, 5
         .equ    LIBRARY_ABI,     7
         .equ    LIBRARY_REFS,   13
+        .equ    IMAGE_BANK,     82
+        .equ    IMAGE_TABLE,    84
         .area   _CODE
 
         ; inputs: ix = loader frame, +12 holds the relocated code end
@@ -34,10 +37,17 @@
         ; Init allocations and registrations belong to the library.
 __library_load_finish::
         push    iy
+        ld      l, 72(ix)              ; three bytes per export
+        ld      h, 73(ix)
+        call    __os_malloc
+        ld      a, d
+        or      e
+        ld      a, #2
+        jr      z, .failed
+        ld      IMAGE_TABLE(ix), e
+        ld      IMAGE_TABLE+1(ix), d
         ld      l, 80(ix)              ; raw JP metadata is temporary
         ld      h, 81(ix)
-        ld      e, 66(ix)              ; compact table is resident
-        ld      d, 67(ix)
         ld      b, 34(ix)
 .export:
         ld      a, (hl)
@@ -60,7 +70,10 @@ __library_load_finish::
         sbc     hl, bc
         jr      nc, .invalid_target    ; at or past the relocated code end
         add     hl, bc
-        ex      de, hl
+        ex      de, hl                  ; DE target, HL common table cursor
+        ld      a, IMAGE_BANK(ix)
+        ld      (hl), a
+        inc     hl
         ld      (hl), e
         inc     hl
         ld      (hl), d
@@ -100,8 +113,19 @@ __library_load_finish::
         ld      LIBRARY_REFS(iy), a
         ld      LIBRARY_REFS+1(iy), a
         call    __image_transfer
-        ld      74(ix), l              ; transfer returns resident table
+        ; Transfer the common far table to the library owner too.
+        ld      l, IMAGE_TABLE(ix)
+        ld      h, IMAGE_TABLE+1(ix)
+        ld      74(ix), l
         ld      75(ix), h
+        ld      bc, #-5
+        add     hl, bc
+        ld      (hl), e
+        inc     hl
+        ld      (hl), d
+        xor     a
+        ld      IMAGE_TABLE(ix), a
+        ld      IMAGE_TABLE+1(ix), a
         call    _leave_critical_section
         call    __library_initialize
         call    _enter_critical_section

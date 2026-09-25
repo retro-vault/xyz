@@ -1,4 +1,4 @@
-        ; Convert one short-name esxDOS directory record to struct dirent.
+        ; Convert one short-name esxDOS record to yos_directory_entry_t.
         ;
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
@@ -10,8 +10,8 @@
 
         .area   _CODE
 
-        ; input: HL = native record, DE = struct dirent.
-        ; output: DE = struct dirent; preserves IX and IY.
+        ; input: HL = native record, DE = yos_directory_entry_t.
+        ; output: DE = yos_directory_entry_t; preserves IX and IY.
 __directory_convert::
         push    iy
         push    de

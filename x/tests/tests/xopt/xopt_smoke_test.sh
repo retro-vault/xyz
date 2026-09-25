@@ -5394,4 +5394,42 @@ done
     -o "$TMPDIR/unconditional_jump_cost.Os.s"
 grep -Eq 'jr[[:space:]]+timing_loop' "$TMPDIR/unconditional_jump_cost.Os.s"
 
+# RST handlers have target-specific stack semantics. In particular, the YOS
+# RST28 far-call gate consumes all six pushed envelope words. IX address
+# materialization must therefore remain IX-relative across an RST.
+cat >"$TMPDIR/rst_stack_barrier.s" <<'ASM'
+	.module rst_stack_barrier
+	.area _CODE
+_rst_stack_barrier:
+	; sdcccall(1) prologue: rst_stack_barrier (locals=32, temp_frame=0, stack_params=0)
+	push	ix
+	ld	ix, #0
+	add	ix, sp
+	ld	hl, #-32
+	add	hl, sp
+	ld	sp, hl
+	push	af
+	push	bc
+	push	de
+	push	hl
+	push	hl
+	push	bc
+	rst	0x28
+	push	ix
+	pop	hl
+	ld	bc, #-16
+	add	hl, bc
+	ld	a, (hl)
+	ld	sp, ix
+	pop	ix
+	ret
+ASM
+"$XOPT" -Os "$TMPDIR/rst_stack_barrier.s" \
+    -o "$TMPDIR/rst_stack_barrier.out.s"
+if [[ "$(grep -Ec '^[[:space:]]+push[[:space:]]+ix' \
+        "$TMPDIR/rst_stack_barrier.out.s")" -lt 2 ]]; then
+    echo "xopt smoke: IX address was unsafely made SP-relative across RST" >&2
+    exit 1
+fi
+
 echo "xopt smoke: ok"

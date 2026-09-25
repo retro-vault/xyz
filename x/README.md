@@ -109,9 +109,9 @@ bin/x/bin/xprog --esxdos --name HELLO.PRC build/examples/yos/hello.prc \
 
 The backend produces relocatable XL code, obtains ABI 1 through
 `query_service("yos")`, and routes allocation and POSIX files through YOS.
-Standard console output is silent unless the process installs the
-`yos_set_putchar_hook()` extension. See the [YOS example](examples/yos/) and
-the [Programming YOS book](../y/docs/books/PROGRAMMING-YOS.md).
+Standard console output is silent; applications query an explicit console
+service when one is available. See the [YOS example](examples/yos/) and the
+[Programming YOS book](../y/docs/books/PROGRAMMING-YOS.md).
 
 ## Notes
 

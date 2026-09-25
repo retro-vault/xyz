@@ -18,18 +18,26 @@ free(bytes);
 allocation has a private size word so `realloc` can preserve data. The kernel
 records the current process as owner and can reclaim leaked blocks when the
 process is reaped. `malloc(0)` returns `NULL`; failed allocation sets `errno`
-to `ENOMEM`.
+to `ENOMEM`. Because a standard C pointer is 16 bits, these calls allocate
+only in the bank currently executing the process or library and never return a
+near pointer into a different bank.
 
 The raw `allocate_memory`, `shrink_memory` and `free_memory` table entries
 are useful for a custom allocator, but do not mix raw and libc pointers:
 
 ```c
-void *raw = yos->allocate_memory(40);
+yos_user_ptr_t raw = yos->allocate_memory(40);
 if (raw) {
     yos->shrink_memory(raw, 24); /* keep 24 bytes, release the rest */
     yos->free_memory(raw);       /* not free(raw) */
 }
 ```
+
+Raw allocation searches all configured user-heap banks and returns a
+three-byte far pointer. XCC dereferences typed `[[xcc::far]]` pointers through
+the YOS RST 30 data gate. Keep the far type; casting it to `void *` discards the
+bank and is valid only when the caller has separately proved it is the current
+bank.
 
 ## Time is a 50 Hz counter
 
@@ -120,7 +128,7 @@ screen regions or application synchronization for overlapping artwork.
 Caller-owned buffers, mutable service state, sprite lifetimes and multi-call
 operations remain the caller's responsibility. Never free a buffer/context,
 close a handle, or unregister code while another thread still intends to use
-it. `readdir` returns storage within its `DIR`; copy it before another thread
+it. `readdir` returns storage within its `yos_directory_t`; copy it before another thread
 reads the same directory. Thread-safe kernel calls are not universally safe
 from interrupt callbacks: callbacks may set events or resume a suspended
 thread, but must not block, do disk I/O, remove timers from the active chain,

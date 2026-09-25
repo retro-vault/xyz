@@ -13,6 +13,7 @@
         .globl  _svc_register
         .globl  _enter_critical_section
         .globl  _leave_critical_section
+        .globl  __bank_call_iy
         .area   _CODE
 
         ; inputs: ix = loader frame, iy = library process
@@ -78,11 +79,13 @@ __library_initialize::
         jr      nz, .invalid
         ld      hl, #20
         add     hl, de
-        ld      a, (hl)
+        ld      a, 74(ix)
+        ld      (hl), a
         inc     hl
-        or      (hl)
-        ld      a, #4
-        jr      nz, .restore
+        ld      a, 75(ix)
+        ld      (hl), a
+        xor     a
+        jr      .restore
 .invalid:
         ld      de, #0
         jr      .restore
@@ -104,8 +107,21 @@ __library_initialize::
         ret
         ; Invoke the relocated initializer, retaining its HL argument.
 .initialize:
+        push    iy                      ; keep the library object live in IY
         push    hl
         ld      l, 76(ix)
         ld      h, 77(ix)
-        ex      (sp), hl
+        push    hl
+        pop     iy
+        xor     a
+        ld      d, a
+        ld      e, a
+        ex      af,af'                  ; initializer A argument is zero
+        ld      a, 82(ix)
+        pop     hl                      ; common far-interface argument
+        exx                            ; protect initializer registers
+        ld      de, #.initialized
+        jp      __bank_call_iy
+.initialized:
+        pop     iy
         ret

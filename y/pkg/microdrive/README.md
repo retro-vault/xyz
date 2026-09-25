@@ -13,8 +13,8 @@ make -C y/pkg/microdrive
 
 The binaries are placed at:
 
-- `bin/y/bin/microdrive`
-- `bin/y/lib/libmicrodrive.a`
+- `build/y-tools/stage/bin/microdrive`
+- `build/y-tools/stage/lib/libmicrodrive.a`
 
 ## Usage
 

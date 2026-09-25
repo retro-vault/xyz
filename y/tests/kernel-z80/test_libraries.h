@@ -7,11 +7,14 @@
 #include <limits>
 #include <stdexcept>
 
-template<class Memory, class Cpu, class Call, class Symbol, class Files, class Put>
+template<class Memory, class Cpu, class Call, class FarCall,
+         class FarPointerCall, class FarRead, class Symbol, class Files,
+         class Put>
 void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
                     const std::vector<std::uint8_t>& image,
                     const std::map<std::string, std::uint16_t>& exports,
-                    Put put_string)
+                    Put put_string, FarCall far_call,
+                    FarPointerCall far_pointer_call, FarRead far_read)
 {
     const auto check = [](bool ok, const std::string& what) {
         if (!ok) throw std::runtime_error("library: " + what);
@@ -29,11 +32,11 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
         }
         return result;
     };
-    const auto clean_usage = std::make_pair(heap_usage(sym("__heap")),
-                                            heap_usage(sym("__sys_heap")));
+    const auto clean_usage = std::make_pair(heap_usage(sym("__sys_heap")),
+                                            heap_usage(0xc000));
     const auto usage = [&] {
-        return std::make_pair(heap_usage(sym("__heap")),
-                              heap_usage(sym("__sys_heap")));
+        return std::make_pair(heap_usage(sym("__sys_heap")),
+                              heap_usage(0xc000));
     };
     const auto create_client = [&](const std::string& name) {
         put_string(0xe200, name);
@@ -74,7 +77,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
         return std::uint16_t(0);
     };
     const auto invoke = [&](std::uint16_t table, unsigned slot) {
-        return call(mem.word(table + 2 * slot), 0, 0, "library export");
+        return far_call(std::uint16_t(table + 3 * slot), "library export");
     };
     files.enabled = true;
     auto a = create_client("client-a");
@@ -131,41 +134,57 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     const auto library = service_owner(first);
     check(library && mem.bytes[library + 4] == 3 &&
               mem.word(library + 13) == 1, "missing threadless library owner");
-    const auto code = std::uint16_t(first - exports.at("_interface"));
-    // XL v2 keeps the relocation table after the code, so the library
-    // block holds exactly the compact export table and the code.
+    const auto code = std::uint16_t(mem.word(first + 1) - exports.at("_probe"));
+    // The callable table is common memory; executable code is retained in
+    // its selected bank as a separate owner block.
     const auto code_size = unsigned(image[payload + 6] |
                                     (image[payload + 7] << 8));
-    const auto library_block = std::uint16_t(code - 2 * 4 - 7);
-    check((mem.bytes[library_block + 4] & 1) &&
-              mem.word(library_block + 2) == library &&
-              mem.word(library_block + 5) == 2 * 4 + code_size,
-          "resident library block is not exactly its export table and code");
+    const auto table_block = std::uint16_t(first - 7);
+    const auto code_block = std::uint16_t(code - 7);
+    check((mem.bytes[table_block + 4] & 1) &&
+              mem.word(table_block + 2) == library &&
+              mem.word(table_block + 5) == 3 * 5,
+          "resident library far table is not a common owner block");
+    check((mem.bytes[code_block + 4] & 1) &&
+              mem.word(code_block + 2) == library &&
+              mem.word(code_block + 5) == code_size,
+          "resident library code is not exactly one bank owner block");
     for (const auto [slot, name] :
          {std::pair{0, "_probe"}, {1, "_message"},
-          {2, "_initializations"}, {3, "_calls"}}) {
-        check(mem.word(first + 2 * slot) == code + exports.at(name),
-              "self-registered interface contains an unrelocated pointer");
+          {2, "_initializations"}, {3, "_calls"}, {4, "_sum3"}}) {
+        const auto entry = std::uint16_t(first + 3 * slot);
+        check(mem.bytes[entry] == mem.bytes[library + 15] &&
+                  mem.word(entry + 1) == code + exports.at(name),
+              "self-registered interface contains an invalid far pointer");
     }
     const auto storage = mem.word(code + exports.at("_storage"));
     check(storage && mem.word(storage - 5) == library,
           "initializer allocation belongs to the client instead of library");
     check(invoke(first, 2) == 1 && invoke(first, 3) == 0,
           "initializer/export counters are wrong");
-    const auto message = invoke(first, 1);
+    check(far_call(std::uint16_t(first + 12),
+                   "three-argument far library call",
+                   0x1000, 0x0200, 0x0034) == 0x1234,
+          "three-argument far call returned the wrong sum");
+    const auto message = far_pointer_call(std::uint16_t(first + 3),
+                                          "library far-data export");
     const std::string expected_message = "Library OK";
     for (std::size_t i = 0; i <= expected_message.size(); ++i)
-        check(mem.bytes[std::uint16_t(message + i)] ==
+        check(far_read(message.first, std::uint16_t(message.second + i)) ==
                   std::uint8_t(expected_message.c_str()[i]),
-              "library returned an unrelocated string pointer");
-    const auto resident_usage = heap_usage(sym("__heap"));
+              "library returned an invalid far string pointer");
+    const auto resident_usage = heap_usage(sym("__sys_heap"));
     current(b);
     check(load() == first && mem.word(library + 13) == 2,
           "second process did not share the same image");
     check(load() == first && mem.word(library + 13) == 3,
           "repeated acquisition was not counted");
-    check(heap_usage(sym("__heap")) == resident_usage && invoke(first, 2) == 1,
-          "shared reuse allocated or initialized another image");
+    const auto reused_usage = heap_usage(sym("__sys_heap"));
+    check(reused_usage.first == resident_usage.first + 2 &&
+              reused_usage.second == resident_usage.second + 2 * (7 + 6) &&
+              invoke(first, 2) == 1,
+          "shared reuse did not allocate exactly its two reference records, "
+          "or initialized another image");
     retire_thread(mem.word(a + 13));
     check(mem.word(library + 13) == 2 && query() == first,
           "first client exit prematurely unloaded shared code");
@@ -233,7 +252,8 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     };
     mutate(0, 0, "bad magic");
     mutate(5, 1, "wrong image kind", 6);
-    mutate(30, 4, "newer OS", 7);
+    mutate(30, 4, "incompatible older ABI", 7);
+    mutate(30, 7, "newer OS", 7);
     mutate(14, 1, "oversized payload");
     mutate(8, 0, "bad metadata size");
     mutate(7, 7, "unsupported fixed library");
@@ -305,15 +325,15 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     };
     a = create_client("oom");
     current(a);
-    auto occupied = fill_heap(sym("__heap"));
+    auto occupied = fill_heap(0xc000);
     check(load() == 0 && error() == 2 && files.handles.empty(),
           "image allocation failure did not close its descriptor");
-    empty_heap(sym("__heap"), occupied);
+    empty_heap(0xc000, occupied);
     occupied = fill_heap(sym("__sys_heap"));
     const auto full_system = usage();
     check(load() == 0 && error() == 2 && usage() == full_system,
           "library object allocation failure leaked the image");
-    put_string(0xe240, "op.sys");
+    put_string(0xe240, "shell.sys");
     check(call(sym("_process_load"), 0xe240, 0, "process allocation failure") == 0 &&
               error() == 5 && usage() == full_system,
           "process-start failure did not roll back its image");

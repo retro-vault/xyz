@@ -3,12 +3,8 @@ Y_ROOT := $(abspath .)
 X_ROOT ?= $(REPO_ROOT)/x
 BUILD_DIR ?= $(REPO_ROOT)/build
 DIST_DIR ?= $(REPO_ROOT)/bin/y
-HOST_BIN_DIR ?= $(DIST_DIR)/bin
-PUBLIC_LIB_DIR ?= $(DIST_DIR)/lib
-PUBLIC_INCLUDE_DIR ?= $(DIST_DIR)/include
-ZX_ROMS_DIR ?= $(DIST_DIR)/z80/spectrum/bin
 
-.PHONY: all packages clean
+.PHONY: all clean
 
 all:
 	@$(MAKE) -C src \
@@ -17,18 +13,7 @@ all:
 		X_ROOT=$(X_ROOT) \
 		Y_ROOT=$(Y_ROOT) \
 		BUILD_DIR=$(BUILD_DIR)/yos \
-		DIST_DIR=$(DIST_DIR) \
-		ZX_ROMS_DIR=$(ZX_ROMS_DIR)
-
-packages:
-	@$(MAKE) -C pkg \
-		REPO_ROOT=$(REPO_ROOT) \
-		Y_ROOT=$(Y_ROOT) \
-		BUILD_DIR=$(BUILD_DIR) \
-		DIST_DIR=$(DIST_DIR) \
-		HOST_BIN_DIR=$(HOST_BIN_DIR) \
-		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
-		PUBLIC_INCLUDE_DIR=$(PUBLIC_INCLUDE_DIR)
+		DIST_DIR=$(DIST_DIR)
 
 clean:
 	@$(MAKE) -C src clean \
@@ -37,13 +22,4 @@ clean:
 		X_ROOT=$(X_ROOT) \
 		Y_ROOT=$(Y_ROOT) \
 		BUILD_DIR=$(BUILD_DIR)/yos \
-		DIST_DIR=$(DIST_DIR) \
-		ZX_ROMS_DIR=$(ZX_ROMS_DIR)
-	@$(MAKE) -C pkg clean \
-		REPO_ROOT=$(REPO_ROOT) \
-		Y_ROOT=$(Y_ROOT) \
-		BUILD_DIR=$(BUILD_DIR) \
-		DIST_DIR=$(DIST_DIR) \
-		HOST_BIN_DIR=$(HOST_BIN_DIR) \
-		PUBLIC_LIB_DIR=$(PUBLIC_LIB_DIR) \
-		PUBLIC_INCLUDE_DIR=$(PUBLIC_INCLUDE_DIR)
+		DIST_DIR=$(DIST_DIR)
