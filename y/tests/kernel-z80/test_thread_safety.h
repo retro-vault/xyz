@@ -33,12 +33,12 @@ void test_thread_safety(Memory& mem, Cpu& cpu, Call call, Symbol sym,
     const auto event = call(sym("_evt_create"), 0, 0, "protected event create");
     check(event != 0, "event allocation failed");
     call(sym("_evt_set"), event, 0, "protected event set", 0, {1});
-    check(mem.bytes[event + 4] == 1, "event was not signalled");
+    check(mem.bytes[event + 5] == 1, "event was not signalled");
     auto state = cpu.snapshot();
     state.iff1 = state.iff2 = false;
     cpu.restore(state);
     call(sym("_evt_set"), event, 0, "interrupt-context event set", 0, {0});
-    check(!cpu.snapshot().iff1 && !mem.bytes[event + 4],
+    check(!cpu.snapshot().iff1 && !mem.bytes[event + 5],
           "event callback enabled IRQ inside the scheduler");
     state = cpu.snapshot();
     state.iff1 = state.iff2 = true;

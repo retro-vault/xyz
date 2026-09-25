@@ -8,8 +8,8 @@
         .globl  _thread_first_running
         .globl  _thread_first_waiting
         .globl  __thread_lswitch
-        .equ    THREAD_WAIT,       16
-        .equ    THREAD_NUM_EVENTS, 18
+        .equ    THREAD_WAIT,       17
+        .equ    THREAD_NUM_EVENTS, 19
         .equ    STATE_WAITING,      2
         .area   _CODE
 

@@ -15,11 +15,11 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
         .globl  __bank_current
-        .equ    PROCESS_SIZE,        16
-        .equ    PROCESS_FLAGS,        4
-        .equ    PROCESS_NAME,         5
-        .equ    PROCESS_MAIN_THREAD, 13
-        .equ    PROCESS_BANK,        15
+        .equ    PROCESS_SIZE,        17
+        .equ    PROCESS_FLAGS,        5
+        .equ    PROCESS_NAME,         6
+        .equ    PROCESS_MAIN_THREAD, 14
+        .equ    PROCESS_BANK,        16
         .area   _CODE
 
         ; inputs: hl = name, de = entry, stack size at sp+2
@@ -56,8 +56,9 @@ _process_start::
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
-        bit     7, d
-        jr      z, .entry_ready
+        ld      a, d
+        cp      #0xc0
+        jr      c, .entry_ready
         ld      a, (__bank_current)
         ld      PROCESS_BANK(ix), a
 .entry_ready:

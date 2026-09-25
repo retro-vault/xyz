@@ -1,4 +1,4 @@
-        ; Minimal relocatable assembly shell for YOS ABI 6.
+        ; Minimal relocatable assembly shell for YOS ABI 1.
         ;
         ; It resolves the single yos_t interface, draws Hello World! in the
         ; centre of the screen without allocating memory, and loops forever.

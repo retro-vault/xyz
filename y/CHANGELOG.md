@@ -9,12 +9,28 @@ Release status:
 
 ## Unreleased
 
+- Kept YOS at pre-release ABI 1 and regrouped its compact 76-entry,
+  152-byte `yos_t` table. `get_sys_info` now sits with `version` and
+  `rom_model` and exposes live heap, process, thread, timer, event, service,
+  and library-reference roots through public read-only layouts. System-list
+  object owners are packed far pointers rather than address-only IDs.
+
+- Load final `.sys` paths case-insensitively into the fixed OS heap with bank
+  `FFh`; ordinary processes and libraries remain banked. The loader shrinks
+  XL metadata and relocation records before allocating process/thread state.
+  Regression coverage loads a 19 KiB system image that compacts to 14 KiB
+  without changing any banked heap. With the system font restored to ROM, the
+  clean-boot staging ceiling is 24,804 bytes on disk, or 24,193 bytes for a
+  512-byte-stack image that reclaims no
+  relocation tail.
+
 - Reworked the deployed C and assembly shells into allocation-free, library-free
   `Hello World!` samples centred through the unified `yos_t` graphics API.
   The library image remains a build-only regression fixture.
 
-- Merged all GPX types, constants, and 24 drawing calls into the end of the
-  single `yos_t` ABI 6 table; removed the separate `gpx` service and header.
+- Merged the retained GPX types, constants, and 22 drawing calls into the end
+  of the single `yos_t` ABI 1 table; removed polygon drawing/filling and the
+  separate `gpx` service and header.
 
 - Flattened the deployable release from `bin/y/z80/spectrum/` to `bin/y/`.
   Shared headers, firmware, scripts, notices, and sample source now occur
@@ -32,7 +48,7 @@ Release status:
 - Restored `shell.sys` as the boot-process contract throughout the kernel,
   build, tests and documentation. The default C shell and a minimal assembly
   shell are now shipped as source and built XPRG samples. `bin/y` stages a
-  self-contained Spectrum release with ABI 6 C/assembly headers and 48K,
+  self-contained Spectrum release with ABI 1 C/assembly headers and 48K,
   128K, and native Next ZEsarUX launchers. The matching esxDOS 0.8.9 DivIDE
   and DivMMC runtime is bundled with its original notices, so no external
   firmware path is required. Build audits and other test-only artifacts
@@ -51,18 +67,17 @@ Release status:
   1, and the real 128K test exercises the fix through banked process/library
   execution.
 
-- Reorganized the 53-entry `yos_t` service table into contiguous ABI 5
+- Reorganized the `yos_t` service table into contiguous ABI 1
   categories: identity, banked memory, time/critical sections, timers/events,
   threads, processes/libraries, services, vectors, input, filesystem, and
   commands/console. Every entry in both public `yos.h` copies now has a
   concise contract comment. Added matching `yos.inc` files with named byte
   offsets for all functions and data-pointer slots, converted assembly
   consumers from magic offsets, and added a build-time checker that compares
-  both C headers, both assembly includes, and the ROM table. Because regrouping changed pre-ABI-5 offsets, ABI 5 rejected older images.
-  ABI 6 now appends graphics to that grouped core; current examples and
-  fixtures use `--min-os 6`. Identity starts with `version`, `rom_model`, and
-  `set_print_hook`; `rom_model` reports 48K, 128K, or Next. The unified table
-  is 154 bytes.
+  both C headers, both assembly includes, and the ROM table. Current examples
+  and fixtures use `--min-os 1`. Identity starts with `version`, `rom_model`,
+  `get_sys_info`, and `set_print_hook`; `rom_model` reports 48K, 128K, or
+  Next. The unified table is 152 bytes.
 
 - Added banked YOS process and library images. One fixed OS heap contains all
   kernel objects and stacks below `0xC000`; every detected logical bank has
@@ -91,9 +106,10 @@ Release status:
   exercise every configured bank. The universal ROM ends at `0x3F75`, leaving
   139 contiguous bytes; the layout guard reserves the final 128 bytes.
 
-- Repacked the built-in proportional system font without removing it. The ROM
-  stores 21 exceptional width records plus the packed raster, and boot expands
-  the exact original 1,440-byte representation into the fixed OS heap.
+- Restored the immutable 1,440-byte proportional system font directly to ROM.
+  GPX returns its ROM address without a boot-time expansion or fixed-heap
+  allocation, recovering 1,447 usable OS-heap bytes including allocator
+  overhead.
 
 - Second ROM-size pass removes another 87 linked code/data bytes and
   recovers 73 usable tail bytes: content now ends at `0x3EFC`, leaving

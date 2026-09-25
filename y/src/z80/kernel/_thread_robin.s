@@ -21,9 +21,9 @@
         .globl  __bank_map
         .globl  __bank_current
 
-        .equ    THREAD_LOAD_ERROR, 15
-        .equ    THREAD_ERRNO,      20
-        .equ    THREAD_BANK,       24
+        .equ    THREAD_LOAD_ERROR, 16
+        .equ    THREAD_ERRNO,      21
+        .equ    THREAD_BANK,       25
 
         .area   _CODE
 
@@ -66,11 +66,9 @@ __thread_robin::
         ld      THREAD_ERRNO+1(ix),d
         ld      a,(__bank_current)
         ld      THREAD_BANK(ix),a
-        ;; hl alredy has current thread, skip over header
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
+        ;; hl already has current thread; skip the five-byte header
+        ld      de,#5
+        add     hl,de
         ;; hl now points to stack pointer of thread_t
         ;; store register sp into it
         ld      de,#0                   ; 0 to de
@@ -120,10 +118,8 @@ __thread_robin::
         push    ix
         pop     hl
         ;; skip over header
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
+        ld      de,#5
+        add     hl,de
         ;; and restore stack
         ld      e,(hl)
         inc     hl

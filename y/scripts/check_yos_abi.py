@@ -9,10 +9,11 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = 6
+VERSION = 1
 ENTRIES = [
     ("VERSION", "version", "_yos_version"),
     ("ROM_MODEL", "rom_model", "_yos_rom_model"),
+    ("GET_SYS_INFO", "get_sys_info", "_yos_get_sys_info"),
     ("SET_PRINT_HOOK", "set_print_hook", "_set_print_hook"),
     ("ALLOCATE_MEMORY", "allocate_memory", "__yos_malloc"),
     ("FREE_MEMORY", "free_memory", "__yos_free"),
@@ -85,8 +86,6 @@ ENTRIES = [
     ("GPX_GET_STOCK_BITMAP", "gpx_get_stock_bitmap", "_gpx_get_stock_bmp"),
     ("GPX_DRAW_CIRCLE", "gpx_draw_circle", "_gpx_draw_circle"),
     ("GPX_FILL_CIRCLE", "gpx_fill_circle", "_gpx_fill_circle"),
-    ("GPX_DRAW_POLYGON", "gpx_draw_polygon", "_gpx_draw_polygon"),
-    ("GPX_FILL_POLYGON", "gpx_fill_polygon", "_gpx_fill_polygon"),
     ("GPX_DRAW_BOX", "gpx_draw_box", "_gpx_draw_box"),
 ]
 

@@ -1,11 +1,13 @@
 # Program and Service Images (`XPRG`)
 
-YOS uses the X tools `XPRG` version 1 container for disk-resident programs and
-libraries. A program is an XPRG **process** image. A loadable library is an
-XPRG **service** image. Both contain an ordinary relocatable XL payload.
+YOS uses the X tools `XPRG` version 1 container for disk-resident programs
+and libraries. A program is an XPRG **process** image. A loadable library
+is an XPRG **service** image. Both contain an ordinary relocatable XL
+payload underneath.
 
-`xprog` is the canonical packager and format validator. Its complete format
-reference is in [`x/src/xprog/README.md`](../../../../x/src/xprog/README.md).
+`xprog` is the canonical packager and format validator. Its complete
+format reference lives in
+[`x/src/xprog/README.md`](../../../../x/src/xprog/README.md).
 
 ## Descriptor
 
@@ -33,53 +35,70 @@ Every image starts with a 64-byte little-endian descriptor:
 | 40 | 16 | NUL-padded image name |
 | 56 | 8 | reserved, zero |
 
-Process metadata ends at byte 64 and is followed immediately by the XL file.
-Service metadata can also contain an ordered table of three-byte `JP nn`
-entries before the XL payload.
+Process metadata ends at byte 64 and is immediately followed by the XL
+file. Service metadata can additionally carry an ordered table of
+three-byte `JP nn` entries before the XL payload.
 
 ## Process loading
 
-`yos_t::load_process(path)` (`kernel/process_load.s`, using the shared
-`kernel/_image_load.s` core) opens an XPRG file
-through the ROM's POSIX/esxDOS layer and accepts process images. It validates the descriptor, required YOS
-version, payload CRC, XL header, relocation table, code bounds, entry point,
-fixed-load requirement and stack size. The XL payload is version 2: a 12-byte
-header, the code, and then the relocation table. The whole payload is read
-into one selected-bank heap block, so the JP metadata and XL header precede
-the code and the
-consumed relocation records trail it. The relocator patches the code at its
-existing address, without allocating a second code copy. After metadata has
-been consumed, `__image_retain` first shrinks the owned heap block to the
-relocated code end through the public `shrink_memory` routine, freeing the
-trailing relocation table, then splits the block immediately before the
-resident code (or compact service table). The leading metadata block is freed
-by the loader's ordinary final cleanup. The code does not move. Only the
-banked code stays in that arena; a library's packed far export table is
-retained separately in common memory. The relocation table,
-which can be a quarter of the image, is returned to the heap, and because it
-was the top of the block its release coalesces with the free space above.
-The loader creates the process and its main thread and transfers ownership of
-only the retained block. The descriptor remains on the loader stack.
+`yos_t::load_process(path)` (`kernel/process_load.s`, built on the shared
+`kernel/_image_load.s` core) opens an XPRG file through the ROM's
+POSIX/esxDOS layer and accepts process images. It validates the
+descriptor, the required YOS version, the payload CRC, the XL header, the
+relocation table, code bounds, the entry point, the fixed-load
+requirement, and the stack size. A final `.sys` suffix, matched without
+case sensitivity, selects the fixed OS heap and bank `FFh`; other process
+suffixes and all libraries select a banked user heap. The XL payload is
+version 2: a 12-byte header, the code, and then the relocation table. The
+whole payload is read into one selected heap block, so the JP metadata and XL header
+precede the code, and the consumed relocation records trail it. The
+relocator patches the code at its existing address, without ever
+allocating a second code copy. Once metadata has been consumed,
+`__image_retain` first shrinks the owned heap block down to the relocated
+code end through the public `shrink_memory` routine, freeing the trailing
+relocation table, then splits the block immediately before the resident
+code (or compact service table). The leading metadata block is freed by
+the loader's ordinary final cleanup, and the code itself never moves.
+Only the relocated code stays in that arena — a library's packed far export
+table is retained separately, in common memory. The relocation table,
+which can be a quarter of the whole image, goes back to the heap, and
+because it sat at the top of the block, its release coalesces neatly with
+the free space above it. The loader creates the process and its main
+thread, and transfers ownership of only the retained block. The
+descriptor itself stays on the loader's own stack throughout.
 
-The descriptor's stack size is usable application stack. YOS adds its private
-22-byte scheduler context when it creates the main thread. XPRG names can hold
-15 characters; the current kernel process object retains the first seven.
+On a clean boot the fixed arena has 24,740 payload bytes free after the
+timers and `yos` service exist; the immutable system font remains in ROM.
+Consequently the absolute `.sys` staging ceiling is 24,804 bytes on disk: a
+64-byte descriptor plus a 24,740-byte XL payload. The relocation tail must then release enough room
+for the process, thread, and declared stack. With the standard 512-byte
+stack and no relocation bytes to reclaim, the conservative startable ceiling
+is 24,193 bytes on disk. A 19,456-byte image that compacts to 14,336 bytes
+fits comfortably and leaves every banked heap unchanged.
 
-`yos_t::process_load_error` points at a byte containing one of the
-`YOS_PROCESS_LOAD_*` values in `yos.h`. The synchronous loading call writes
-the current thread's value; the scheduler saves and restores it across context
-switches. A competing or recursive load returns immediately with `BUSY`. A
-service image passed to `load_process` is rejected with
-`YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 1 includes `load_library(path, flags)` for
-service images; see [Libraries](LIBRARIES.md) for relocation,
-self-registration, sharing and automatic release.
+The descriptor's stack size is usable application stack. YOS adds its own
+private 22-byte scheduler context on top of it when it creates the main
+thread. XPRG names can hold 15 characters; the current kernel process
+object keeps only the first seven.
 
-At boot the ROM opens `shell.sys` on the current esxDOS drive and directory
-(`kernel/boot_shell.s`), loads it as a process, and only then arms the
-scheduler. The build creates `shell.sys` from `y/samples/shell-c/shell.c`. It obtains
-the unified `yos_t` interface, centres `Hello World!` with the system font
-without loading a library or allocating heap memory, and loops forever. The production image gets both `_entry` and the
-`RST 0x18; RET` `query_service` stub from the XCC `--platform=yos` backend.
+`yos_t::process_load_error` points at a byte holding one of the
+`YOS_PROCESS_LOAD_*` values in `yos.h`. The synchronous loading call
+writes the current thread's value, and the scheduler saves and restores
+it across context switches. A competing or recursive load returns
+immediately with `BUSY`. A service image passed to `load_process` is
+rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 1 adds
+`load_library(path, flags)` for service images — see
+[Libraries](LIBRARIES.md) for relocation, self-registration, sharing, and
+automatic release.
+
+At boot, the ROM opens `shell.sys` on the current esxDOS drive and
+directory (`kernel/boot_shell.s`), loads it as a process, and only then
+arms the scheduler. The build creates `shell.sys` from
+`y/samples/shell-c/shell.c`: it obtains the unified `yos_t` interface,
+centres `Hello World!` with the system font without loading a library or
+allocating heap memory, and loops forever. The production image gets both
+`_entry` and the `RST 0x18; RET` `query_service` stub from the XCC
+`--platform=yos` backend.
 
 Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
 `process_load_error` points at:
@@ -88,7 +107,7 @@ Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
 |---:|---|
 | 0 | `OK` |
 | 1 | `NOT_FOUND` — `open` failed |
-| 2 | `NO_MEMORY` — image does not fit any configured bank extent |
+| 2 | `NO_MEMORY` — image does not fit its selected fixed or banked heap |
 | 3 | `READ_ERROR` — short read |
 | 4 | `INVALID_IMAGE` — bad magic, version, flags, XL header, relocation or bounds |
 | 5 | `START_ERROR` — `process_start` failed (`__sys_heap` or stack allocation) |
@@ -101,26 +120,25 @@ Every load error leaves one of the `YOS_PROCESS_LOAD_*` codes in the byte
 
 ## Building a process
 
-Compile and link as a relocatable XL with the YOS backend, then package it
-with a nonzero stack requirement and the oldest compatible YOS ABI:
+Compile and link as a relocatable XL with the YOS backend, then package
+it with a nonzero stack requirement and the oldest compatible YOS ABI:
 
 ```sh
 mkdir -p build/examples/yos bin/y/examples
 bin/x/bin/xcc -Os --platform=yos app.c -o build/examples/yos/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 6 \
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
   build/examples/yos/app.xl -o bin/y/examples/app.prc
 ```
 
-Both smoke images declare minimum OS ABI 6. ABI 5 introduced the grouped
-core layout; ABI 6 appends graphics to `yos_t` and removes the separate GPX
-service. The loader rejects any other declared ABI, so rebuild older processes
-and libraries against the unified header and package them with `--min-os 6`.
-The shell also checks `yos->version() >= YOS_VERSION` before accessing
-`load_library`.
+Both smoke images declare minimum OS ABI 1. YOS is pre-release and the
+current grouped table is ABI 1, so package processes and libraries with
+`--min-os 1`. The shell also checks
+`yos->version() >= YOS_VERSION` before it ever touches `load_library`.
 
-`y/src/z80/Makefile` (`$(SHELL_XL)` and `$(SHELL_OUTPUT)`) is the reference
-recipe.
+`y/src/z80/Makefile` (`$(SHELL_XL)` and `$(SHELL_OUTPUT)`) is the
+reference recipe.
 
-Use `xprog --service` for a library intended to be registered as a named YOS
-service; it must describe its exported jump-table entries. See the practical
-[library guide](../programming-yos/LOADABLE-LIBRARIES.md).
+Use `xprog --service` for a library meant to be registered as a named YOS
+service — it must describe its exported jump-table entries. See the
+practical [library guide](../programming-yos/LOADABLE-LIBRARIES.md) for
+the application-facing view of the same mechanism.

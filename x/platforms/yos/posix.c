@@ -9,7 +9,19 @@
 
 extern yos_t *yos_api_table;
 
-_Static_assert(sizeof(yos_t) == 154, "YOS ABI 6 table size changed");
+_Static_assert(sizeof(yos_t) == 152, "YOS ABI 1 table size changed");
+_Static_assert(sizeof(yos_far_owner_t) == 3, "YOS far owner layout changed");
+_Static_assert(sizeof(yos_system_object_t) == 5,
+               "YOS system-object header layout changed");
+_Static_assert(sizeof(yos_memory_block_t) == 7,
+               "YOS memory-block layout changed");
+_Static_assert(sizeof(yos_process_t) == 17, "YOS process layout changed");
+_Static_assert(sizeof(yos_thread_t) == 39, "YOS thread layout changed");
+_Static_assert(sizeof(yos_timer_t) == 11, "YOS timer layout changed");
+_Static_assert(sizeof(yos_event_t) == 6, "YOS event layout changed");
+_Static_assert(sizeof(yos_service_t) == 23, "YOS service layout changed");
+_Static_assert(sizeof(yos_library_reference_t) == 7,
+               "YOS library-reference layout changed");
 _Static_assert(sizeof(struct dirent) == sizeof(yos_directory_entry_t),
                "POSIX and YOS directory entries differ");
 

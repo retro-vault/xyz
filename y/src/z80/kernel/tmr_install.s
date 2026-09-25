@@ -23,7 +23,7 @@ _tmr_install::
         ld      l, 4(ix)
         ld      h, 5(ix)
         push    hl
-        ld      de, #10
+        ld      de, #11
         ld      hl, #__tmr_first
         call    _so_create
         pop     bc
@@ -33,6 +33,7 @@ _tmr_install::
         jr      z, .done
         push    de
         ex      de, hl
+        inc     hl
         inc     hl
         inc     hl
         inc     hl

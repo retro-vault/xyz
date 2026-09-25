@@ -33,5 +33,5 @@
         ;; References:
         ;;   _gpx_font_envy
 _gpx_get_system_font::
-        ld      de,(_gpx_font_envy)
+        ld      de,#_gpx_font_envy
         ret

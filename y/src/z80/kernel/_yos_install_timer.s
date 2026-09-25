@@ -8,6 +8,7 @@
 
         .globl  __yos_install_timer
         .globl  _tmr_install
+        .globl  __current_process
 
         .area   _CODE
 
@@ -16,7 +17,7 @@
         ; outputs: de = timer or zero
         ; clobbers: af, bc, de, hl; preserves ix and iy
 __yos_install_timer::
-        ld      bc, #0
+        call    __current_process
         push    bc
         call    _tmr_install
         ret

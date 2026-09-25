@@ -20,6 +20,7 @@ _thread_prepare_startup::
         inc     hl
         inc     hl
         inc     hl
+        inc     hl
         ld      a, (hl)
         inc     hl
         ld      h, (hl)
@@ -28,7 +29,7 @@ _thread_prepare_startup::
         ld      de, #20
         add     hl, de
         ex      de, hl
-        ld      hl, #6
+        ld      hl, #7
         add     hl, bc
         ld      a, l
         ld      (de), a
@@ -55,6 +56,6 @@ _thread_prepare_startup::
         inc     hl
         ld      (hl), d
         inc     hl
-        ld      (hl), #0                ; offset 15: initial per-thread load error
+        ld      (hl), #0                ; offset 16: initial per-thread load error
         pop     hl
         ret

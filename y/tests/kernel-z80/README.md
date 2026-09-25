@@ -36,7 +36,7 @@ and timer publication, timer-driven mouse sampling/snapshots, pixels, spans,
 bitmaps and sprites.
 The main harness checks IFF/flag preservation with nested sections and disabled
 interrupt callers, per-thread errno/loader status, independent GPX contexts,
-and the grouped ABI 6 ROM, including rejection of incompatible older images.
+and the grouped ABI 1 ROM, including rejection of incompatible images.
 It executes `wait_event`
 from a real thread, with another runnable thread and with all threads blocked,
 then checks absent signals, pre-set signals and repeated timer wakeups.
@@ -52,8 +52,8 @@ the dedicated library fixture performs a real three-argument far call and exerci
 Next test variants emulate their physical banking hardware and inspect every
 configured bank. Interrupt-driven round-robin coverage also requires the
 scheduler to restore saved logical banks 0 and 1 exactly. Boot verifies that
-the ROM-packed system font expands
-byte-accurately into fixed RAM and still renders through GPX.
+the serialized system font remains in ROM and renders through GPX without a
+fixed-RAM copy.
 
 `test_circles.h` compares every framebuffer byte against a host midpoint
 reference for 528 outline/fill, radius, clipping, edge-position and blit-mode

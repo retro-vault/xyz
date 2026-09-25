@@ -13,12 +13,14 @@
         .globl  __bank_free
         .globl  __bank_map
         .globl  __bank_current
+        .globl  __os_malloc
         .globl  __os_free
         .globl  __crc32
         .globl  __process_read_exact
         .globl  __process_relocate
         ; Root with the loader helpers to fit before fixed ROM data.
         .globl  _process_has_threads
+        .globl  _mem_free_owner
         .globl  __process_load_finish
         .globl  __library_load_finish
         .globl  __library_find
@@ -29,7 +31,7 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
 
-        .equ    YOS_VERSION, 6
+        .equ    YOS_VERSION, 1
         .equ    IMAGE_FD,    64
         .equ    IMAGE_DATA,  66
         .equ    IMAGE_CODE,  68
@@ -45,7 +47,8 @@
 
         .area   _CODE
 
-        ; inputs: hl = path, a = 0 process / 1 private / 3 shared
+        ; inputs: hl = path, a = 0 user process / 1 private library /
+        ;         3 shared library / 4 system process
         ; outputs: de = process/interface or zero; error cell updated
         ; clobbers: af, bc, de, hl; preserves ix and iy
         ; frame: IX+0..63 descriptor; +64..85 loader locals above.
@@ -83,7 +86,7 @@ __image_load::
         ld      IMAGE_OWNER(ix), c
         ld      IMAGE_OWNER+1(ix), b
         ld      a, IMAGE_MODE(ix)
-        or      a
+        and     #1
         jr      z, .open
         ld      a, b
         or      c
@@ -125,7 +128,6 @@ __image_load::
         or      15(ix)
         jr      nz, .bad_header
         ld      a, 30(ix)
-        ; ABI 6 extends the unified table, so older layouts are not compatible.
         cp      #YOS_VERSION
         ld      a, #7
         jp      nz, .fail
@@ -137,7 +139,7 @@ __image_load::
         or      35(ix)
         jr      nz, .bad_header
         ld      a, IMAGE_MODE(ix)
-        or      a
+        and     #1
         jr      nz, .service
         ld      a, 7(ix)
         and     #0xfe
@@ -217,8 +219,14 @@ __image_load::
         add     hl, de
         jp      c, .invalid
         push    hl
+        bit     2, IMAGE_MODE(ix)
+        jr      z, .bank_allocate
+        call    __os_malloc
+        jr      .allocated
+.bank_allocate:
         call    __bank_allocate
         ld      IMAGE_BANK(ix), a
+.allocated:
         pop     bc
         ld      a, d
         or      e
@@ -290,7 +298,7 @@ __image_load::
         ld      IMAGE_ENTRY+1(ix), h
 .no_entry:
         ld      a, IMAGE_MODE(ix)
-        or      a
+        and     #1
         jr      nz, .library
         call    __process_load_finish
         jr      .result
@@ -320,11 +328,11 @@ __image_load::
         ld      l, IMAGE_DATA(ix)
         ld      h, IMAGE_DATA+1(ix)
         ld      a, IMAGE_BANK(ix)
-        call    __bank_free
+        call    .free
         ld      l,IMAGE_TEMP(ix)
         ld      h,IMAGE_TEMP+1(ix)
         ld      a, IMAGE_BANK(ix)
-        call    __bank_free            ; whole buffer, or split-off prefix
+        call    .free                   ; whole buffer, or split-off prefix
         ld      l, IMAGE_TABLE(ix)
         ld      h, IMAGE_TABLE+1(ix)
         call    __os_free
@@ -360,6 +368,12 @@ __image_load::
         ld      l, IMAGE_FD(ix)
         ld      h, IMAGE_FD+1(ix)
         jp      __process_read_exact
+        ; HL = image payload, A = logical bank or FFh for the OS heap.
+.free:
+        inc     a
+        jp      z, __os_free
+        dec     a
+        jp      __bank_free
 .magic:
         .ascii  "XPRG"
         .db     1

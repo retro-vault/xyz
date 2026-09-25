@@ -21,22 +21,28 @@
         ; clobbers: af, bc, de, hl; preserves ix and iy
         ; Temporarily overrides thread.owner, never thread.process:
         ; the client's actual thread remains alive throughout init.
-        ; Stack saves the override's address and its previous value.
+        ; Stack saves the override's address and previous far-owner value.
 __library_initialize::
         call    _enter_critical_section
         ld      hl, (_thread_current)
         inc     hl
         inc     hl
         push    hl
+        ld      a, (hl)
+        push    af
+        inc     hl
         ld      c, (hl)
         inc     hl
         ld      b, (hl)
         push    bc
         push    iy
         pop     de
+        ld      a, 16(iy)
         ld      (hl), d
         dec     hl
         ld      (hl), e
+        dec     hl
+        ld      (hl), a
         call    _leave_critical_section
         bit     1, 7(ix)
         jr      z, .register
@@ -66,10 +72,9 @@ __library_initialize::
         jr      z, .restore
 .validate:
         push    de
-        inc     de
-        inc     de
-        inc     de
-        inc     de
+        ld      hl, #5
+        add     hl, de
+        ex      de, hl
         call    .name
         call    __string_compare
         ld      a, d
@@ -77,7 +82,7 @@ __library_initialize::
         pop     de
         ld      a, #4
         jr      nz, .invalid
-        ld      hl, #20
+        ld      hl, #21
         add     hl, de
         ld      a, 74(ix)
         ld      (hl), a
@@ -93,11 +98,16 @@ __library_initialize::
         ld      de, #0
         call    _enter_critical_section
 .restore:
+        ex      af, af'                ; preserve init/validation status
         pop     bc
+        pop     af
         pop     hl
+        ld      (hl), a
+        inc     hl
         ld      (hl), c
         inc     hl
         ld      (hl), b
+        ex      af, af'
         jp      _leave_critical_section
 .name:
         push    ix

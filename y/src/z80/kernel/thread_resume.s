@@ -11,12 +11,12 @@
         .globl  _thread_first_running
         .globl  _thread_first_suspended
 
-        .equ    THREAD_SIZE,           38
-        .equ    THREAD_SP,              4
-        .equ    THREAD_WAIT,           16
-        .equ    THREAD_NUM_EVENTS,     18
-        .equ    THREAD_STATE,          19
-        .equ    THREAD_PROCESS,        22
+        .equ    THREAD_SIZE,           39
+        .equ    THREAD_SP,              5
+        .equ    THREAD_WAIT,           17
+        .equ    THREAD_NUM_EVENTS,     19
+        .equ    THREAD_STATE,          20
+        .equ    THREAD_PROCESS,        23
         .equ    CONTEXT_SIZE,          22
 
         .equ    STATE_SUSPENDED,        0

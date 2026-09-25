@@ -1,5 +1,5 @@
 /*
- * Minimal disk-resident C shell for YOS ABI 6.
+ * Minimal disk-resident C shell for YOS ABI 1.
  *
  * MIT License (see: LICENSE)
  * Copyright (C) 2026 tomaz stih

@@ -8,5 +8,5 @@
         .globl  _yos_version
         .area   _CODE
 _yos_version::
-        ld      de, #6
+        ld      de, #1
         ret

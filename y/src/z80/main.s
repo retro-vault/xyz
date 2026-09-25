@@ -16,7 +16,6 @@
         .globl  __bank_call_rst20
         .globl  __bank_call_rst28
         .globl  __bank_data_rst30
-        .globl  __gpx_font_init
         .globl  _tmr_install
         .globl  _svc_register
         .globl  _svc_query_rst18
@@ -55,8 +54,6 @@ _main::
         call    _mem_init
         call    __bank_detect
         call    __bank_init
-        call    __gpx_font_init
-
         ld      hl, #__clock_tick
         call    .install_tick_timer
 

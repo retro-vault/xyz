@@ -10,12 +10,20 @@
 
         .area   _CODE
 
-        ; Find the first system object owned by de.
+        ; Find the first system object owned by the process/library at DE.
         ; inputs: hl = first, de = owner
         ; outputs: de = matching object or zero
         ; clobbers: af, bc, hl
         ; A wrapping eight-bit guard permits 256 examined objects.
 __process_find_owned::
+        push    hl
+        push    de
+        ex      de, hl
+        ld      bc, #16
+        add     hl, bc
+        ld      b, (hl)                ; owner's execution bank
+        pop     de
+        pop     hl
         ld      c, #0
 .find_loop:
         ld      a, h
@@ -23,6 +31,10 @@ __process_find_owned::
         jr      z, .find_missing
         push    hl
         inc     hl
+        inc     hl
+        ld      a, (hl)
+        cp      b
+        jr      nz, .find_next
         inc     hl
         ld      a, (hl)
         cp      e

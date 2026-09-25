@@ -15,13 +15,13 @@
 _evt_create::
         call    __critical_call
         push    hl
-        ld      de, #5
+        ld      de, #6
         ld      hl, #__evt_first
         call    _so_create
         ld      a, d
         or      e
         ret     z
-        ld      hl, #4
+        ld      hl, #5
         add     hl, de
         ld      (hl), #0
         ret

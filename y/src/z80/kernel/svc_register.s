@@ -27,17 +27,15 @@ _svc_register::
         ld      a, h
         or      l
         jr      z, .public
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
+        ld      de, #5
+        add     hl, de
         bit     0, (hl)
         ld      hl, #__library_private_services
         jr      nz, .create
 .public:
         ld      hl, #__svc_first
 .create:
-        ld      de, #22
+        ld      de, #23
         call    _so_create
         pop     bc
         pop     hl
@@ -47,15 +45,13 @@ _svc_register::
         push    de
         push    bc
         ex      de, hl
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
+        ld      bc, #5
+        add     hl, bc
         ld      b, #15
         call    __string_copy
         pop     bc
         pop     de
-        ld      hl, #20
+        ld      hl, #21
         add     hl, de
         ld      (hl), c
         inc     hl

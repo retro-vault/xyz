@@ -8,9 +8,9 @@
         .globl  __library_find
         .globl  _process_first
         .globl  __string_compare
-        .equ    LIBRARY_FLAGS,   4
-        .equ    LIBRARY_SERVICE, 5
-        .equ    LIBRARY_ABI,     7
+        .equ    LIBRARY_FLAGS,   5
+        .equ    LIBRARY_SERVICE, 6
+        .equ    LIBRARY_ABI,     8
         .area   _CODE
 
         ; inputs: ix = loader frame; caller holds critical section
@@ -33,7 +33,7 @@ __library_find::
         jr      nz, .next
         ld      l, LIBRARY_SERVICE(iy)
         ld      h, LIBRARY_SERVICE+1(iy)
-        ld      de, #4
+        ld      de, #5
         add     hl, de
         ex      de, hl
         push    ix

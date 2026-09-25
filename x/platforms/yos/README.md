@@ -16,14 +16,14 @@ Build and package a process with:
 
 ```sh
 bin/x/bin/xcc -Os --platform=yos app.c -o build/app.xl
-bin/x/bin/xprog --process --name app --stack-size 512 --min-os 6 \
+bin/x/bin/xprog --process --name app --stack-size 512 --min-os 1 \
   build/app.xl -o bin/y/arch/48/app.prc
 ```
 
 The linker output must remain XL. Do not select a fixed-address or binary
 output format for a YOS process.
 
-The staged `yos.h` describes the complete grouped 154-byte ABI 6 table and
+The staged `yos.h` describes the complete grouped 152-byte ABI 1 table and
 its filesystem data structures;
 `yos.inc` publishes every byte offset for assembly callers. The table includes
 the detected ROM model, banked allocation, process loading, private/shared

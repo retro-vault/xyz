@@ -9,6 +9,7 @@
         .globl  __yos
         .globl  _yos_version
         .globl  _yos_rom_model
+        .globl  _yos_get_sys_info
         .globl  __yos_malloc
         .globl  __yos_free
         .globl  __clock
@@ -82,8 +83,6 @@
         .globl  _gpx_get_stock_bmp
         .globl  _gpx_draw_circle
         .globl  _gpx_fill_circle
-        .globl  _gpx_draw_polygon
-        .globl  _gpx_fill_polygon
         .globl  _gpx_draw_box
 
         .area   _CONST
@@ -91,6 +90,7 @@ __yos::
         ; Kernel identity and the global firmware-print hook.
         .dw     _yos_version
         .dw     _yos_rom_model
+        .dw     _yos_get_sys_info
         .dw     _set_print_hook
 
         ; Banked user memory.
@@ -185,6 +185,4 @@ __yos::
         .dw     _gpx_get_stock_bmp
         .dw     _gpx_draw_circle
         .dw     _gpx_fill_circle
-        .dw     _gpx_draw_polygon
-        .dw     _gpx_fill_polygon
         .dw     _gpx_draw_box

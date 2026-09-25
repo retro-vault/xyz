@@ -37,8 +37,6 @@ if len(rom) != 16384:
 if symbols.get("s__GSFINAL", 0x10000) > 0x4000:
     raise SystemExit("YOS ROM content exceeds 16 KiB")
 rom_end = symbols["s__GSFINAL"]
-if not areas or max(end for _, end, _ in areas) != rom_end:
-    raise SystemExit("ROM occupied end disagrees with linked code/data areas")
 # Zero bytes can be live code/data. Check ownership from the map, not just
 # the bytes, before allowing the patcher to install fixed-slot contents.
 reserved = ((0x04C6, 0x04C7), (0x0562, 0x0563),
@@ -48,14 +46,26 @@ for start, end, name in areas:
         if start < hi and end > lo:
             raise SystemExit(f"{name} {start:04x}h..{end-1:04x}h "
                              f"overlaps reserved {lo:04x}h..{hi-1:04x}h")
+if not areas or max(end for _, end, _ in areas) != rom_end:
+    raise SystemExit("ROM occupied end disagrees with linked code/data areas")
 for previous, following in zip(sorted(areas), sorted(areas)[1:]):
     if previous[1] > following[0]:
         raise SystemExit("linked ROM code/data areas overlap")
-if any(rom[rom_end:]):
-    raise SystemExit("unused ROM tail is not zero-filled")
 for start, end in reserved:
     if any(rom[start:end]):
         raise SystemExit(f"fixed ROM slot {start:04x}h..{end-1:04x}h is not empty")
+# When all linked content ends before the 3CE1h reservation, xld emits its
+# three-byte jump-over-reservation trampoline at 3CDEh. It is linker-owned
+# content even though no relocatable area covers it.
+tail_start = rom_end
+if rom_end <= 0x3CDE:
+    if rom[0x3CDE:0x3CE1] != bytes((0xC3, 0x00, 0x3E)):
+        raise SystemExit("missing linker reservation trampoline")
+    if any(rom[rom_end:0x3CDE]) or any(rom[0x3CE1:]):
+        raise SystemExit("unused ROM tail is not zero-filled")
+    tail_start = 0x3CF9
+elif any(rom[rom_end:]):
+    raise SystemExit("unused ROM tail is not zero-filled")
 print_address = symbols["__esx_print"]
 if not 0x0100 <= print_address < 0x4000:
     raise SystemExit("print handler is outside ROM")
@@ -67,5 +77,5 @@ rom[0x3CE1:0x3CF9] = bytes((0xC3, 0xF0, 0x09)) * 7 + bytes((0xC3, 0xF2, 0x09))
 rom_path.write_bytes(rom)
 checksum_path = rom_path.with_suffix(rom_path.suffix + ".sha256")
 checksum_path.write_text(f"{sha256(rom).hexdigest()}  {rom_path.name}\n")
-print(f"YOS ROM: content ends at {rom_end:04X}h; "
-      f"{0x4000 - rom_end} contiguous zero-filled bytes free")
+print(f"YOS ROM: linked content ends at {rom_end:04X}h; "
+      f"{0x4000 - max(rom_end, tail_start)} contiguous zero-filled bytes free")

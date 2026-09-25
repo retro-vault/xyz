@@ -40,9 +40,9 @@ clean:
 all: $(BIN_DIR)/hello-yos.xl
 
 XCCFLAGS := --mode=sdcc -S -Os -g -std=c11 \
-           -I$(Y_ROOT)/include \
-           -I$(Y_ROOT)/src/c \
-           -I$(Y_ROOT)/src/c/include
+	       -I$(Y_ROOT)/src/c \
+	       -I$(Y_ROOT)/src/c/include \
+           -I$(Y_ROOT)/include
 XASFLAGS := --mode=sdcc -g
 XLDFLAGS := --mode=sdcc -v -m -nostdlib --no-default-runtime -e _entry
 

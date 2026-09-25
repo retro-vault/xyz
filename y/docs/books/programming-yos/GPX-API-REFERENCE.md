@@ -10,25 +10,25 @@ gpx_t *screen = yos->gpx_create(GPXM_DEFAULT);
 if (!screen) return 2;
 ```
 
-The graphics section has 24 calls. The first 23 retain their v1.1.0 slot offsets;
-`draw_box` is appended as slot 24. The sections below group calls by subject.
+The graphics section has 24 calls. The first 23 keep their v1.1.0 slot
+offsets; `draw_box` was appended later as slot 24. The sections below
+group calls by subject.
 
 ## Core types and constants
 
-`coord` is signed 16-bit; `dim` is unsigned 16-bit. A point is `{x,y}` and a
-rectangle is `{x0,y0,x1,y1}`. Passing `NULL` for a clipping rectangle selects
-the screen bounds. At most `GPX_MAX_POLY_PTS` (12) points may be passed to a
-polygon operation.
+`coord` is signed 16-bit; `dim` is unsigned 16-bit. A point is `{x,y}`
+and a rectangle is `{x0,y0,x1,y1}`. Passing `NULL` for a clipping
+rectangle selects the screen bounds.
 
 `CO_BACK` selects a clear pixel and `CO_FORE` a set pixel. For patterned
-operations, `BM_CPY` paints both pattern values, `BM_OR` paints only pattern
-one bits, and `BM_XOR` toggles only pattern one bits. Line and outline
-patterns are one-byte bit patterns; the standard values are `GPX_LP_SOLID`,
-`GPX_LP_DOTTED`, `GPX_LP_DASHED`, and `GPX_LP_DASHED_SHORT`. Filled shapes
-accept a byte array and its length.
+operations, `BM_CPY` paints both pattern values, `BM_OR` paints only
+pattern-one bits, and `BM_XOR` toggles only pattern-one bits. Line and
+outline patterns are one-byte bit patterns; the standard values are
+`GPX_LP_SOLID`, `GPX_LP_DOTTED`, `GPX_LP_DASHED`, and
+`GPX_LP_DASHED_SHORT`. Filled shapes accept a byte array and its length.
 
-`gpx_t` reports `width`, `height`, `pages`, and the current text-background
-mode. `GPX_TEXT_BG_OPAQUE` paints the glyph background;
+`gpx_t` reports `width`, `height`, `pages`, and the current
+text-background mode. `GPX_TEXT_BG_OPAQUE` paints the glyph background;
 `GPX_TEXT_BG_TRANSPARENT` leaves it untouched.
 
 A bitmap begins with:
@@ -43,19 +43,20 @@ typedef struct bmp_s {
 } bmp_t;
 ```
 
-Use `BMP_SIG_STRIDE(BMP_ENC_1BPP, stride)` for ordinary 1-bit data. Masked
-and tiny encodings are `BMP_ENC_1BPP_MASK` and `BMP_ENC_TINY` (with their
-masked variants). A font exposes flags, ASCII range, widths, height, advance,
-descent, and encoded glyph data.
+Use `BMP_SIG_STRIDE(BMP_ENC_1BPP, stride)` for ordinary 1-bit data.
+Masked and tiny encodings are `BMP_ENC_1BPP_MASK` and `BMP_ENC_TINY`
+(with their own masked variants). A font descriptor exposes flags, ASCII
+range, widths, height, advance, descent, and encoded glyph data.
 
 ## Lifecycle and screen information
 
 ### `gpx_t *gpx_create(gmode mode)`
 
-Allocates an independent six-byte context, owned by the calling process (or
-library initializer), or returns `NULL` on exhaustion. Spectrum YOS supports
-`GPXM_DEFAULT`. Creation does not clear the shared screen or reset another
-context. Each context initially uses opaque text backgrounds.
+Allocates an independent six-byte context, owned by the calling process
+(or the library initializer), or returns `NULL` on exhaustion. Spectrum
+YOS supports `GPXM_DEFAULT`. Creation neither clears the shared screen
+nor resets another context; every new context starts out with an opaque
+text background.
 
 ```c
 gpx_t *screen = yos->gpx_create(GPXM_DEFAULT);
@@ -63,17 +64,54 @@ gpx_t *screen = yos->gpx_create(GPXM_DEFAULT);
 
 ### `void gpx_destroy(gpx_t *gpx)`
 
-Frees the context; `NULL` is harmless. Process cleanup also reclaims forgotten
-contexts. Do not destroy a context while another thread is using it.
+Frees the context; `NULL` is harmless. Process cleanup also reclaims any
+context an application forgot to free. Never destroy a context while
+another thread is still using it.
 
 ```c
 yos->gpx_destroy(screen);
 ```
 
+### Zero-allocation contexts
+
+`gpx_t` is only six bytes (`width`, `height`, `pages`,
+`text_background`, all shown above), and every drawing call only reads
+its fields — none of them retain the pointer. A program that draws once
+and exits, or that would rather not touch the heap at all, can fill a
+stack-local `gpx_t` instead of calling `gpx_create`/`gpx_destroy`:
+
+```c
+gpx_t screen;
+screen.width = yos->gpx_width();
+screen.height = yos->gpx_height();
+screen.pages = 1;
+screen.text_background = GPX_TEXT_BG_OPAQUE;
+
+yos->gpx_draw_text(&screen, 8, 8, "Hello", font, CO_FORE, BM_CPY, NULL);
+```
+
+This is exactly what the shipped `shell.c`/`shell.s` samples do — it
+avoids touching the heap in a program that has no other reason to
+allocate. Passing a `NULL` context pointer is also legal on every
+drawing call: it is treated as an opaque-background context the same
+size as the screen, so a one-off draw can skip the local struct
+entirely:
+
+```c
+yos->gpx_draw_text(NULL, 8, 8, "Hello", font, CO_FORE, BM_CPY, NULL);
+```
+
+Prefer `gpx_create`/`gpx_destroy` when a context outlives one function,
+is shared by several drawing calls that must agree on a non-default
+`text_background`, or should have its lifetime tracked and reclaimed by
+process cleanup automatically. Prefer a stack-local or `NULL` context for
+a short-lived program, or for a single draw where allocation would be
+pure overhead.
+
 ### `void gpx_set_page(uint8_t operation, uint8_t page)`
 
-Selects display and/or write page using `PG_DISPLAY`, `PG_WRITE`, or both.
-The 48K Spectrum exposes page 0.
+Selects the display and/or write page using `PG_DISPLAY`, `PG_WRITE`, or
+both together. The 48K Spectrum exposes only page 0.
 
 ```c
 yos->gpx_set_page(PG_DISPLAY | PG_WRITE, 0);
@@ -97,8 +135,9 @@ dim pixels_down = yos->gpx_height();
 
 ### `void gpx_clear_screen(void)`
 
-Clears the shared physical framebuffer. It is not a per-context canvas or an
-atomic frame transaction; coordinate whole-screen ownership between apps.
+Clears the shared physical framebuffer. It is neither a per-context
+canvas nor an atomic frame transaction, so coordinate whole-screen
+ownership between apps yourself.
 
 ```c
 yos->gpx_clear_screen();
@@ -116,7 +155,7 @@ yos->gpx_set_text_background(screen, GPX_TEXT_BG_TRANSPARENT);
 
 ### `void gpx_draw_pixel(gpx_t *gpx, coord x, coord y, color c, bmode mode, const rect_t *clip)`
 
-Draws one pixel when it lies inside the display and optional clip.
+Draws one pixel, when it lies inside the display and any optional clip.
 
 ```c
 yos->gpx_draw_pixel(screen, 128, 96, CO_FORE, BM_CPY, NULL);
@@ -124,8 +163,8 @@ yos->gpx_draw_pixel(screen, 128, 96, CO_FORE, BM_CPY, NULL);
 
 ### `uint8_t gpx_draw_line(gpx_t *gpx, coord x0, coord y0, coord x1, coord y1, color c, bmode mode, uint8_t pattern, const rect_t *clip)`
 
-Draws a clipped, patterned line and returns the rotated pattern phase so
-connected segments can continue it.
+Draws a clipped, patterned line and returns the rotated pattern phase,
+so connected segments can continue it seamlessly.
 
 ```c
 uint8_t phase = yos->gpx_draw_line(screen, 0, 0, 255, 191,
@@ -134,8 +173,8 @@ uint8_t phase = yos->gpx_draw_line(screen, 0, 0, 255, 191,
 
 ### `void gpx_draw_bitmap(gpx_t *gpx, coord x, coord y, bmp_t *bitmap, const rect_t *clip)`
 
-Draws an encoded bitmap. A small raw 8×8 1-bpp bitmap can be represented as
-bytes and cast because the five-byte header is packed:
+Draws an encoded bitmap. A small raw 8×8 1-bpp bitmap can be represented
+as plain bytes and cast directly, since the five-byte header is packed:
 
 ```c
 static uint8_t icon_bytes[] = {
@@ -147,8 +186,8 @@ yos->gpx_draw_bitmap(screen, 20, 20, (bmp_t *)icon_bytes, NULL);
 
 ## Sprites
 
-A `sprite_t` contains position, bitmap, caller-provided background storage,
-and an optional clip. The background buffer must hold at least
+A `sprite_t` contains position, bitmap, caller-provided background
+storage, and an optional clip. The background buffer must hold at least
 `GPX_SPRITE_BG_SIZE` bytes for the current stock cursor format.
 
 ### `void gpx_show_sprite(gpx_t *gpx, sprite_t *sprite)`
@@ -170,17 +209,18 @@ Restores the pixels saved by the matching `show_sprite`.
 yos->gpx_hide_sprite(screen, &cursor);
 ```
 
-Hide a visible sprite before changing its position or reusing its background
-buffer, then show it again.
+Hide a visible sprite before changing its position or reusing its
+background buffer, then show it again.
 
 ## Rectangles
 
 ### `uint8_t gpx_draw_box(gpx_t *gpx, const rect_t *rectangle, uint8_t edges, color c, bmode mode, uint8_t pattern, const rect_t *clip)`
 
 Draws selected edges in top, right, bottom, left order. Combine
-`GPX_EDGE_LEFT`, `GPX_EDGE_TOP`, `GPX_EDGE_RIGHT`, and `GPX_EDGE_BOTTOM`, or
-use `GPX_EDGE_ALL`. Shared corners are drawn once, making the primitive safe
-for XOR, and the returned pattern phase can continue another outline.
+`GPX_EDGE_LEFT`, `GPX_EDGE_TOP`, `GPX_EDGE_RIGHT`, and
+`GPX_EDGE_BOTTOM`, or just use `GPX_EDGE_ALL`. Shared corners are drawn
+once, which keeps the primitive safe under XOR, and the returned pattern
+phase can continue another outline.
 
 ```c
 rect_t box = {10, 10, 100, 60};
@@ -274,42 +314,81 @@ yos->gpx_fill_circle(screen, 128, 96, 20, CO_FORE, BM_CPY,
                  solid, sizeof solid, NULL);
 ```
 
-## Polygons
+Keep pattern, bitmap, sprite, background, clip, and font
+storage alive until the synchronous call returns. GPX functions complete
+their drawing before returning, so they never retain an ordinary
+primitive array beyond the call itself.
 
-### `void gpx_draw_polygon(gpx_t *gpx, point_t *points, uint8_t count, color c, bmode mode, uint8_t pattern, const rect_t *clip)`
+## A complete program
 
-Draws the closed outline through `count` points.
-
-```c
-point_t triangle[] = {{128, 20}, {40, 160}, {216, 160}};
-yos->gpx_draw_polygon(screen, triangle, 3, CO_FORE, BM_CPY, 0xff, NULL);
-```
-
-### `void gpx_fill_polygon(gpx_t *gpx, point_t *points, uint8_t count, color c, bmode mode, uint8_t *pattern, uint8_t pattern_length, const rect_t *clip)`
-
-Fills a polygon of no more than 12 points.
+The snippets above each show one call at a time. This program uses the
+full `gpx_create`/`gpx_destroy` lifecycle — from a cold `query_service`
+all the way to a clean exit — to draw a titled, outlined panel with a
+filled circle and centred text:
 
 ```c
-uint8_t dots[] = {0x88, 0x22};
-yos->gpx_fill_polygon(screen, triangle, 3, CO_FORE, BM_CPY,
-                  dots, sizeof dots, NULL);
+#include <yos.h>
+
+void main(void)
+{
+    static const char title[] = "YOS Graphics";
+    yos_t *yos = (yos_t *)query_service("yos");
+    gpx_t *screen;
+    const font_t *font;
+    rect_t panel = {20, 20, 235, 171};
+    coord title_width;
+    uint8_t hatch[] = {0xaa, 0x55};
+
+    if (!yos || yos->version() < YOS_VERSION)
+        for (;;) {}
+
+    screen = yos->gpx_create(GPXM_DEFAULT);
+    if (!screen)
+        for (;;) {}
+
+    font = yos->gpx_get_system_font();
+    title_width = yos->gpx_measure_text(title, font);
+
+    yos->gpx_clear_screen();
+    yos->gpx_draw_rectangle(screen, &panel, CO_FORE, BM_CPY,
+                             GPX_LP_SOLID, NULL);
+    yos->gpx_fill_circle(screen, 128, 110, 30, CO_FORE, BM_CPY,
+                          hatch, sizeof hatch, NULL);
+    yos->gpx_set_text_background(screen, GPX_TEXT_BG_OPAQUE);
+    yos->gpx_draw_text(screen, (coord)((256 - title_width) / 2), 30,
+                        title, font, CO_FORE, BM_CPY, NULL);
+
+    yos->gpx_destroy(screen);
+
+    for (;;) {}
+}
 ```
 
-Keep the points, pattern, bitmap, sprite, background, clip, and font storage
-alive until the synchronous call returns. The current GPX functions complete
-their drawing before returning; they do not retain ordinary primitive arrays.
+Build and package it exactly as in
+[Your First Process](YOUR-FIRST-PROCESS.md):
+
+```sh
+mkdir -p build/examples/yos bin/y/arch/48
+bin/x/bin/xcc -Os --platform=yos gfxdemo.c -o build/examples/yos/gfxdemo.xl
+bin/x/bin/xprog --process --name gfxdemo --stack-size 512 --min-os 1 \
+  build/examples/yos/gfxdemo.xl -o bin/y/arch/48/gfxdemo.prc
+```
+
+Then boot it the same way as any other process — see
+[Running your program](YOUR-FIRST-PROCESS.md#running-your-program).
 
 ## Concurrency contract
 
-Each `create` returns independent process-owned state, so changing the text
-background of one context does not affect another app. If multiple threads
-share one context, they must coordinate semantic changes such as
+Each `create` returns independent, process-owned state, so changing the
+text background of one context never affects another app's. If multiple
+threads share one context, they must coordinate semantic changes such as
 `set_text_background` with the drawing calls that depend on them.
 
-The physical screen is shared. GPX protects byte-level framebuffer
-read/modify/write operations, bitmap/raster rows, and complete sprite
-save/show/hide calls against preemption. That prevents neighboring pixels in
-one byte from being lost, but it does not turn a line, text string, compound
-shape, or `clear_screen` into an atomic frame transaction. Coordinate
-overlapping regions between threads and apps. A sprite's background buffer
-must remain private from its `show_sprite` through matching `hide_sprite`.
+The physical screen, however, is shared. GPX protects byte-level
+framebuffer read/modify/write operations, bitmap/raster rows, and
+complete sprite save/show/hide calls against preemption — enough to stop
+neighboring pixels in one byte from being lost, but not enough to turn a
+line, a text string, a compound shape, or `clear_screen` into an atomic
+frame transaction. Coordinate overlapping regions between threads and
+apps yourself. A sprite's background buffer must stay private from its
+`show_sprite` call through the matching `hide_sprite`.

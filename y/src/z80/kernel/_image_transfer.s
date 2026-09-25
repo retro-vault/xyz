@@ -6,7 +6,7 @@
         .module _image_transfer
         .optsdcc -mz80 sdcccall(1)
         .globl  __image_transfer
-        .equ    PROCESS_BANK, 15
+        .equ    PROCESS_BANK, 16
         .area   _CODE
 
         ; inputs: ix = loader frame, de = new image owner

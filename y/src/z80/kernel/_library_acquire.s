@@ -8,10 +8,10 @@
         .globl  __library_acquire
         .globl  __library_refs
         .globl  _so_create
-        .equ    LIBRARY_SERVICE,   5
-        .equ    LIBRARY_REFS,     13
-        .equ    REFERENCE_LIBRARY, 4
-        .equ    SERVICE_INTERFACE, 20
+        .equ    LIBRARY_SERVICE,   6
+        .equ    LIBRARY_REFS,     14
+        .equ    REFERENCE_LIBRARY, 5
+        .equ    SERVICE_INTERFACE, 21
         .area   _CODE
 
         ; inputs: hl = library, de = client; critical section held
@@ -24,7 +24,7 @@ __library_acquire::
         pop     ix
         push    de
         ld      hl, #__library_refs
-        ld      de, #6
+        ld      de, #7
         call    _so_create
         ld      a, d
         or      e

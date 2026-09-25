@@ -163,13 +163,12 @@ has, so they do not build against it and are not part of any default target.
   Keep runtime detection ordered NextReg ID, reversible 7FFD paging test,
   then 48K fallback; restore probed RAM, leave logical bank zero mapped, and
   retain the 128K 48-BASIC/YOS ROM slot on every 7FFD write.
-- **`yos_t` order is the ABI.** ABI 6 is the grouped, unified baseline and rejects
-  older images whose offsets are incompatible. Append new entries at the end
-  of both `include/yos.h` and the template in
-  `kernel/_syscall_table_init.s`, update both copies of `yos.inc`, bump
-  `YOS_VERSION` in both public `yos.h` headers, `kernel/yos_version.s`, and
-  `kernel/_image_load.s` together, and update
-  the immutable ROM table size. `kernel/_yos_state.s` allocates no RAM mirror.
+- **`yos_t` order is the ABI.** YOS is pre-release: the complete grouped table
+  is ABI 1, and it may be regrouped without compatibility padding until the
+  first stable release. Keep `include/yos.h`, `kernel/_syscall_table_init.s`,
+  both copies of `yos.inc`, the ABI checker, and the immutable ROM table size
+  synchronized. Keep `YOS_VERSION` equal to 1 in both public headers,
+  `kernel/yos_version.s`, and `kernel/_image_load.s`.
 - **Vendored gpx is upstream code.** Fix bugs in `src/z80/gpx/`, do not
   restyle; record the upstream commit in `src/z80/gpx/README.md`.
 - **Update the book.** A change to a kernel object layout, the boot sequence,
@@ -179,12 +178,13 @@ has, so they do not build against it and are not part of any default target.
 
 ## Known Gaps
 
-- ABI 6 exposes single-event `wait_event`; multi-event waits and `thread_join`
+- ABI 1 exposes single-event `wait_event`; multi-event waits and `thread_join`
   remain unavailable. Signals are binary and consumed by one waiter. Call
   outside critical sections, with interrupts enabled, and retain the event.
 - Libraries support relocatable XPRG services with 1–255 exports. Fixed JP
   addresses, dependency chains, finalizers and explicit unloading are absent.
-- `thread.hdr.owner` is normally zero and temporarily supplies the library
+- `thread.hdr.owner` is normally the null far pointer `FFh:0000h` and
+  temporarily supplies the library
   allocation/registration owner during initialization. Never replace
   `thread.process` for this: it must keep the calling process alive.
 - Keep process/library file validation, CRC and XL relocation shared through

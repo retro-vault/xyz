@@ -14,13 +14,13 @@
         .globl  _so_destroy
         .globl  _mem_allocate
         .globl  _thread_prepare_startup
-        .equ    THREAD_SIZE,    38
-        .equ    THREAD_SP,       4
-        .equ    THREAD_WAIT,    16
-        .equ    THREAD_PROCESS, 22
-        .equ    THREAD_BANK,    24
-        .equ    THREAD_CALL_DEPTH, 25
-        .equ    PROCESS_BANK,   15
+        .equ    THREAD_SIZE,    39
+        .equ    THREAD_SP,       5
+        .equ    THREAD_WAIT,    17
+        .equ    THREAD_PROCESS, 23
+        .equ    THREAD_BANK,    25
+        .equ    THREAD_CALL_DEPTH, 26
+        .equ    PROCESS_BANK,   16
         .equ    CONTEXT_SIZE,   22
         .area   _CODE
 
@@ -72,7 +72,7 @@ _thread_create::
         ld      de, #THREAD_WAIT
         add     hl, de
         xor     a
-        ld      b, #6                   ; wait/count/state and saved errno at +20
+        ld      b, #6                   ; wait/count/state and saved errno at +21
 .clear:
         ld      (hl), a
         inc     hl

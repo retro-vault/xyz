@@ -13,8 +13,8 @@
         .globl  __bank_current
         .globl  _thread_current
 
-        .equ    THREAD_CALL_DEPTH, 25
-        .equ    THREAD_CALL_STACK, 26
+        .equ    THREAD_CALL_DEPTH, 26
+        .equ    THREAD_CALL_STACK, 27
         .equ    BANK_CALL_LIMIT,    4
         .equ    BANK_CALL_SIZE,     3
 

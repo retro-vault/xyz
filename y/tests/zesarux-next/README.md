@@ -17,9 +17,9 @@ mapper preserves that slot on every `0x7FFD` paging write. If the ROM is not
 installed in ZEsarUX's normal data directory, pass its path with `--rom128`.
 
 Headless mode first runs the libxz80 Next backend test, which initializes and
-checks all 126 user heaps. It then starts the exact ROM in ZEsarUX, stops at
-`_boot_shell` before disk I/O, and runs a fixed-RAM hardware probe through the
-YOS mapper and RST20 far-call gate from logical bank 0 to bank 125. Finally it
+checks all 126 user heaps. It then starts the exact ROM in ZEsarUX without
+storage attached and runs a fixed-RAM hardware probe through the YOS mapper
+and RST20 far-call gate from logical bank 0 to bank 125. Finally it
 cold-boots separate real 48K and 128K machines through divIDE and the ESXIDE
 firmware. Both must load `shell.sys` and render the shell; the
 128K run must additionally identify model 128 and expose all six user banks.

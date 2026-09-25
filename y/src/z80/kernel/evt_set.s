@@ -40,10 +40,8 @@ _evt_set::
         ld      de, #0
         jr      .done
 .found:
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
+        ld      bc, #5
+        add     hl, bc
         ld      a, 4(ix)
         ld      (hl), a
 .done:

@@ -20,11 +20,11 @@
         .globl  _process_reap
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-        .equ    LIBRARY_SIZE,   16
-        .equ    LIBRARY_FLAGS,   4
-        .equ    LIBRARY_SERVICE, 5
-        .equ    LIBRARY_ABI,     7
-        .equ    LIBRARY_REFS,   13
+        .equ    LIBRARY_SIZE,   17
+        .equ    LIBRARY_FLAGS,   5
+        .equ    LIBRARY_SERVICE, 6
+        .equ    LIBRARY_ABI,     8
+        .equ    LIBRARY_REFS,   14
         .equ    IMAGE_BANK,     82
         .equ    IMAGE_TABLE,    84
         .area   _CODE
@@ -118,7 +118,7 @@ __library_load_finish::
         ld      h, IMAGE_TABLE+1(ix)
         ld      74(ix), l
         ld      75(ix), h
-        ld      bc, #-5
+        ld      bc, #-5                 ; heap-block owner remains a near ID
         add     hl, bc
         ld      (hl), e
         inc     hl

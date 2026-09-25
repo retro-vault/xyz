@@ -17,7 +17,7 @@ $(XL): shell.c
 
 $(OUTPUT): $(XL)
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name shell --stack-size 512 --min-os 6 $< -o $@
+	$(XPROG) --process --name shell --stack-size 512 --min-os 1 $< -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -9,7 +9,7 @@
         .globl  _thread_current
         .area   _CODE
 
-        ; outputs: bc = effective resource owner, zero in kernel context
+        ; outputs: bc = effective resource-owner address, zero in kernel context
         ; clobbers: af, bc; preserves de, hl, ix and iy
 __current_process::
         push    hl
@@ -21,6 +21,7 @@ __current_process::
         jr      z, .done
         inc     hl
         inc     hl
+        inc     hl                      ; skip owner bank
         ld      c, (hl)
         inc     hl
         ld      b, (hl)

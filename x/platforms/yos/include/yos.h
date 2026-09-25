@@ -13,7 +13,7 @@
 #include <sys/types.h>
 
 /* ABI version returned by yos_s::version(). */
-#define YOS_VERSION 0x06
+#define YOS_VERSION 0x01
 
 enum yos_process_load_error {
     YOS_PROCESS_LOAD_OK = 0,
@@ -64,13 +64,107 @@ enum yos_rom_model {
 /* Kernel objects are opaque outside YOS. */
 typedef struct yos_event yos_event_t;
 typedef struct yos_directory yos_directory_t;
+typedef struct yos_library_reference yos_library_reference_t;
+typedef struct yos_memory_block yos_memory_block_t;
 typedef struct yos_process yos_process_t;
 typedef struct yos_service yos_service_t;
 typedef struct yos_thread yos_thread_t;
 typedef struct yos_timer yos_timer_t;
 
+/* Read-only kernel topology returned by get_sys_info(). List fields point to
+ * live fixed-memory head variables; dereference each field to obtain the
+ * current first object. Banked heaps all begin at banked_heap_address. */
+typedef struct yos_sys_info {
+    const yos_memory_block_t *os_heap;
+    uint16_t banked_heap_address;
+    const uint8_t *bank_count;
+    yos_process_t *volatile *processes;
+    yos_thread_t *volatile *current_thread;
+    yos_thread_t *volatile *suspended_threads;
+    yos_thread_t *volatile *running_threads;
+    yos_thread_t *volatile *waiting_threads;
+    yos_thread_t *volatile *terminated_threads;
+    yos_timer_t *volatile *timers;
+    yos_event_t *volatile *events;
+    yos_service_t *volatile *services;
+    yos_service_t *volatile *private_services;
+    yos_library_reference_t *volatile *library_references;
+} yos_sys_info_t;
+
 typedef void (*yos_entry_t)(void);
 typedef void (*yos_handler_t)(void);
+
+/* Read-only views of live kernel objects. System-list owners are packed far
+ * pointers in bank,address-low,address-high order. Heap-block owners remain
+ * fixed-memory process/thread addresses. */
+typedef struct yos_far_owner {
+    uint8_t bank;
+    uint16_t address;
+} yos_far_owner_t;
+
+typedef struct yos_system_object {
+    void *next;
+    yos_far_owner_t owner;
+} yos_system_object_t;
+
+struct yos_memory_block {
+    yos_memory_block_t *next;
+    void *owner;
+    uint8_t allocated;
+    uint16_t size;
+};
+
+struct yos_process {
+    yos_process_t *next;
+    yos_far_owner_t owner;
+    uint8_t flags;
+    char name[8];
+    yos_thread_t *main_thread;
+    uint8_t bank;
+};
+
+struct yos_thread {
+    yos_thread_t *next;
+    yos_far_owner_t owner;
+    uint16_t stack_pointer;
+    uint8_t startup[9];
+    uint8_t load_error;
+    yos_event_t **wait;
+    uint8_t wait_count;
+    uint8_t state;
+    int16_t error_number;
+    yos_process_t *process;
+    uint8_t bank;
+    uint8_t call_depth;
+    uint8_t call_frames[12];
+};
+
+struct yos_timer {
+    yos_timer_t *next;
+    yos_far_owner_t owner;
+    yos_handler_t handler;
+    uint16_t period;
+    uint16_t remaining;
+};
+
+struct yos_event {
+    yos_event_t *next;
+    yos_far_owner_t owner;
+    uint8_t state;
+};
+
+struct yos_service {
+    yos_service_t *next;
+    yos_far_owner_t owner;
+    char name[16];
+    void *interface;
+};
+
+struct yos_library_reference {
+    yos_library_reference_t *next;
+    yos_far_owner_t owner;
+    yos_process_t *library;
+};
 /* Raw user allocations live in 0xC000-0xFFFF of one bank. A nonzero request
  * must not exceed 16377 bytes. Public allocation searches every configured
  * bank; preserve this packed far pointer when passing the block to
@@ -129,11 +223,6 @@ typedef uint8_t bmode;
 #define GPX_TEXT_BG_OPAQUE      0x00
 #define GPX_TEXT_BG_TRANSPARENT 0x01
 typedef uint8_t textbg;
-
-typedef struct point_s {
-    coord x;
-    coord y;
-} point_t;
 
 typedef struct rect_s {
     coord x0;
@@ -220,12 +309,10 @@ typedef uint8_t gmode;
 #define GPX_EDGE_BOTTOM 0x08
 #define GPX_EDGE_ALL    0x0f
 
-#define GPX_MAX_POLY_PTS 12
-
 /*
- * Stable kernel interface returned by query_service("yos").
+ * Kernel interface returned by query_service("yos").
  *
- * ABI 6 groups related entries. Every entry occupies one 16-bit table slot;
+ * ABI 1 groups related entries. Every entry occupies one 16-bit table slot;
  * yos.inc publishes the matching byte offsets for assembly code.
  */
 typedef struct yos_s {
@@ -234,6 +321,8 @@ typedef struct yos_s {
     uint16_t (*version)(void);
     /* Return the Spectrum model detected while this ROM started. */
     enum yos_rom_model (*rom_model)(void);
+    /* Inspect live kernel lists and heap roots. */
+    const yos_sys_info_t *(*get_sys_info)(void);
     /* Install a RAM print sink and return the previously installed handler. */
     yos_handler_t (*set_print_hook)(yos_handler_t sink);
 
@@ -417,16 +506,7 @@ typedef struct yos_s {
     void (*gpx_fill_circle)(gpx_t *gpx, coord x, coord y, coord radius,
                         color c, bmode mode, uint8_t *pattern,
                         uint8_t pattern_length, const rect_t *clip);
-    /* Draw a clipped polygon outline. */
-    void (*gpx_draw_polygon)(gpx_t *gpx, point_t *points, uint8_t count,
-                         color c, bmode mode, uint8_t pattern,
-                         const rect_t *clip);
-    /* Fill a clipped polygon with a repeating pattern. */
-    void (*gpx_fill_polygon)(gpx_t *gpx, point_t *points, uint8_t count,
-                         color c, bmode mode, uint8_t *pattern,
-                         uint8_t pattern_length, const rect_t *clip);
-
-    /* Appended after the v1.1.0 slots to preserve their ABI offsets. */
+    /* Draw selected edges of a clipped box. */
     uint8_t (*gpx_draw_box)(gpx_t *gpx, const rect_t *rectangle,
                         uint8_t edges, color c, bmode mode,
                         uint8_t pattern, const rect_t *clip);

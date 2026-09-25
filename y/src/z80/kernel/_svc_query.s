@@ -10,8 +10,8 @@
         .globl  __string_compare
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-        .equ    SERVICE_NAME,       4
-        .equ    SERVICE_INTERFACE, 20
+        .equ    SERVICE_NAME,       5
+        .equ    SERVICE_INTERFACE, 21
         .area   _CODE
 
         ; inputs: hl = name; outputs: de = borrowed table or zero

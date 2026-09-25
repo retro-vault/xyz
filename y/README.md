@@ -2,8 +2,8 @@
 
 # YOS
 
-`yos` is a preemptive, ROM-based operating system for the 48K ZX Spectrum,
-written entirely in hand-written Z80 assembly. It boots from a 16 KiB
+`yos` is a preemptive, ROM-based operating system for the ZX Spectrum 48K,
+128K, and Spectrum Next, written entirely in hand-written Z80 assembly. It boots from a 16 KiB
 replacement ROM that stays compatible with esxDOS on a divIDE interface,
 loads its shell from disk as a relocatable XPRG process, supports reference-counted
 shared/private XPRG libraries, and then runs
@@ -16,7 +16,7 @@ service tables.
 |---|---|
 | `src/z80/` | the assembly kernel: `startup/`, `kernel/`, `drivers/`, `fs/` (esxDOS), `gpx/` (vendored libgpx), `main.s`, `linker.lk`; builds `yos-kernel.rom` and `shell.sys` |
 | `src/c/` | the earlier C-and-assembly kernel, still buildable as `yos.rom`, with its own copy of the old chapter docs |
-| `include/` | `yos.h` and `yos.inc` define the complete unified kernel ABI 6 |
+| `include/` | `yos.h` and `yos.inc` define the complete unified kernel ABI 1 |
 | `samples/` | C and assembly `shell.sys` examples staged with source and binaries into the release tree |
 | `third_party/esxdos089/` | esxDOS 0.8.9 DivIDE/DivMMC runtime and original notices staged into the Spectrum release |
 | `pkg/` | optional host-tool sources: [`appmake`](pkg/appmake/README.md), [`microdrive`](pkg/microdrive/README.md), [`serial`](pkg/serial/README.md); they are not part of the YOS distribution |
@@ -62,7 +62,7 @@ Application code for loadable libraries is covered in
    first 256 bytes are an esxDOS-compatible header (RST 08 and NMI belong to
    the firmware, RST 10 is an immediate `RET`, RST 18-30 jump through a
    writable RAM table). `__startup_init` zeroes BSS, copies the vector table
-   and initialized data from ROM to RAM; the 154-byte `yos_t` table remains immutable in ROM.
+   and initialized data from ROM to RAM; the 152-byte `yos_t` table remains immutable in ROM.
 2. **Kernel bring-up (`src/z80/main.s`)** — kernel and user heaps are
    initialized, the clock, keyboard and mouse timers are installed, the single `"yos"` interface is registered, `shell.sys` is loaded from the current
    esxDOS drive and started as a process.
@@ -83,7 +83,7 @@ Application code for loadable libraries is covered in
   references can be reaped. Public timers remain explicitly managed.
 - **Independent processes**: processes share an address space but do not have
   a parent/child relation, wait status, or exit-status channel.
-- **Separation of OS and application memory**: kernel objects come from the 1 KiB `__sys_heap`, everything else from `__heap`.
+- **Separation of OS and application memory**: kernel objects come from the one fixed OS heap (`__sys_heap`, aliased as `__heap`, spanning `0x5F01`-`0xBFFF`); process, library and application memory comes from a separate packed heap per logical bank at `0xC000`-`0xFFFF`.
 - **Interrupt-time heartbeat**: scheduler, timers, keyboard scan and clock all derive from the 50 Hz frame interrupt.
 - **Protected shared state**: syscall transactions use IFF-preserving critical
   sections, kernel errors follow the thread, and GPX contexts belong to apps.
@@ -104,6 +104,6 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 [language.badge]: https://img.shields.io/badge/language-z80%20asm-blue.svg
 
 [standard.url]:   https://github.com/retro-vault/xyz/blob/main/y/include/yos.h
-[standard.badge]: https://img.shields.io/badge/yos%20abi-1-blue.svg
+[standard.badge]: https://img.shields.io/badge/yos%20abi-6-blue.svg
 
 [status.badge]:  https://img.shields.io/badge/status-development-red.svg

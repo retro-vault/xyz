@@ -122,6 +122,16 @@ std::map<std::string, std::uint16_t> read_symbols(const char* path) {
     return result;
 }
 
+std::uint32_t crc32(const std::uint8_t* data, std::size_t size) {
+    std::uint32_t crc = 0xffffffffu;
+    while (size--) {
+        crc ^= *data++;
+        for (unsigned bit = 0; bit != 8; ++bit)
+            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+    }
+    return crc ^ 0xffffffffu;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -150,7 +160,8 @@ int main(int argc, char** argv) {
     };
     const auto rom_end = sym("s__GSFINAL");
     require(rom_end <= 0x4000, "linked content exceeds ROM");
-    require(std::all_of(mem.bytes.begin() + rom_end,
+    const auto rom_tail = std::max<std::uint16_t>(rom_end, 0x3cf9);
+    require(std::all_of(mem.bytes.begin() + rom_tail,
                         mem.bytes.begin() + 0x4000,
                         [](std::uint8_t byte) { return byte == 0; }),
             "unused ROM tail is not zero-filled");
@@ -201,11 +212,11 @@ int main(int argc, char** argv) {
     run_until([&] { return cpu.halted(); }, 200000, "boot");
     booting = false;
     io.writes.clear();                 // exclude one-time hardware probes
-    const auto boot_font = mem.word(sym("_gpx_font_envy"));
+    const auto boot_font = sym("_gpx_font_envy");
     require(boot_font && mem.bytes[boot_font] == 1 &&
                 mem.bytes[boot_font + 1] == 0x20 &&
                 mem.bytes[boot_font + 2] == 0x7f,
-            "boot did not expand the system font into common RAM");
+            "boot did not expose the system font from ROM");
 
     if (mem.banked) {
         require(bank_count >= 2, "banked allocator test needs two banks");
@@ -431,8 +442,9 @@ int main(int argc, char** argv) {
             "IM2 scheduler vector is wrong");
 
     const auto table = sym("__yos");
-    constexpr std::array<const char*, 53> yos_api = {
-        "_yos_version", "_yos_rom_model", "_set_print_hook",
+    constexpr std::array<const char*, 54> yos_api = {
+        "_yos_version", "_yos_rom_model", "_yos_get_sys_info",
+        "_set_print_hook",
         "__yos_malloc", "__yos_free", "__yos_shrink",
         "__clock", "_enter_critical_section", "_leave_critical_section",
         "__yos_install_timer", "_tmr_uninstall",
@@ -476,11 +488,13 @@ int main(int argc, char** argv) {
     for (auto timer = mem.word(sym("__tmr_first")); timer != 0;
          timer = mem.word(timer)) {
         require(++kernel_timers <= 3, "unexpected kernel timer chain");
-        const auto hook = mem.word(timer + 4);
+        require(mem.bytes[timer + 2] == 0xff && mem.word(timer + 3) == 0,
+                "kernel timer does not have a common far owner");
+        const auto hook = mem.word(timer + 5);
         has_clock_timer |= hook == sym("__clock_tick");
         has_keyboard_timer |= hook == sym("__kbd_scan");
         has_mouse_timer |= hook == sym("__mouse_scan");
-        require(mem.word(timer + 6) == 0 && mem.word(timer + 8) == 0,
+        require(mem.word(timer + 7) == 0 && mem.word(timer + 9) == 0,
                 "kernel input/clock timer is not frame-periodic");
     }
     require(kernel_timers == 3 && has_clock_timer && has_keyboard_timer &&
@@ -596,6 +610,26 @@ int main(int argc, char** argv) {
         kernel_a = direct.af >> 8;
         return direct.de;
     };
+
+    const auto sys_info = call_kernel(mem.word(table + 4), 0, 0,
+                                      "get system info");
+    require(sys_info == sym("__yos_sys_info") &&
+                mem.word(sys_info) == sym("__sys_heap") &&
+                mem.word(sys_info + 2) == 0xc000 &&
+                mem.word(sys_info + 4) == sym("__bank_count") &&
+                mem.word(sys_info + 6) == sym("_process_first") &&
+                mem.word(sys_info + 8) == sym("_thread_current") &&
+                mem.word(sys_info + 10) == sym("_thread_first_suspended") &&
+                mem.word(sys_info + 12) == sym("_thread_first_running") &&
+                mem.word(sys_info + 14) == sym("_thread_first_waiting") &&
+                mem.word(sys_info + 16) == sym("_thread_first_terminated") &&
+                mem.word(sys_info + 18) == sym("__tmr_first") &&
+                mem.word(sys_info + 20) == sym("__evt_first") &&
+                mem.word(sys_info + 22) == sym("__svc_first") &&
+                mem.word(sys_info + 24) ==
+                    sym("__library_private_services") &&
+                mem.word(sys_info + 26) == sym("__library_refs"),
+            "get_sys_info descriptor does not expose the live kernel roots");
 
     const auto exercise_far_gate = [&](bool dynamic) {
         constexpr std::uint16_t gate = 0x4000;
@@ -866,7 +900,7 @@ int main(int argc, char** argv) {
     mem.bytes[print_sink] = 0x32; // LD (print_byte),A
     mem.word(print_sink + 1, print_byte);
     mem.bytes[print_sink + 3] = 0xc9;
-    require(call_kernel(mem.word(table + 4), print_sink, 0,
+    require(call_kernel(mem.word(table + 6), print_sink, 0,
                         "install print hook") == 0,
             "print hook did not return its previous sink");
     call_kernel(0x09f4, 0x1234, 0, "esxDOS PRINT-OUT", 'Q');
@@ -875,7 +909,7 @@ int main(int argc, char** argv) {
     call_kernel(0x0010, 0x2345, 0, "esxDOS RST10", 'R');
     require(mem.bytes[print_byte] == 'R' && kernel_hl == 0x2345,
             "esxDOS RST10 lost the byte or HL");
-    require(call_kernel(mem.word(table + 4), 0, 0,
+    require(call_kernel(mem.word(table + 6), 0, 0,
                         "remove print hook") == print_sink,
             "print hook did not return the installed sink");
 
@@ -891,14 +925,15 @@ int main(int argc, char** argv) {
     require(!library_image.empty() && library_symbols.contains("_interface"),
             "missing packaged library fixture");
     files.files["shell.sys"] = shell;
+    files.files["SHELL.SYS"] = shell;
     files.files["shelllib.svc"] = library_image;
     require(shell.size() >= 76 && shell[0] == 'X' && shell[1] == 'P' &&
                 shell[2] == 'R' && shell[3] == 'G',
             "dummy shell is not an XPRG image");
-    require(shell[30] == 6 && shell[31] == 0 &&
-                library_image[30] == 6 && library_image[31] == 0 &&
-                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 6,
-            "fixtures or ROM do not require grouped YOS ABI 6");
+    require(shell[30] == 1 && shell[31] == 0 &&
+                library_image[30] == 1 && library_image[31] == 0 &&
+                call_kernel(sym("_yos_version"), 0, 0, "ABI version") == 1,
+            "fixtures or ROM do not require grouped YOS ABI 1");
     const auto expected_model =
         io.backend == "next" ? 2u : io.backend == "128" ? 1u : 0u;
     require(call_kernel(mem.word(table + 2), 0, 0, "ROM model") ==
@@ -968,12 +1003,12 @@ int main(int argc, char** argv) {
             mem.bytes[std::uint16_t(address + i)] = value.c_str()[i];
     };
     const auto retire_process = [&](std::uint16_t process) {
-        const auto thread = mem.word(process + 13);
+        const auto thread = mem.word(process + 14);
         call_kernel(sym("_list_remove"), sym("_thread_first_running"),
                     thread, "retire: unlink thread");
         call_kernel(sym("_list_insert"), sym("_thread_first_terminated"),
                     thread, "retire: terminate thread");
-        mem.bytes[thread + 19] = 4;
+        mem.bytes[thread + 20] = 4;
         mem.word(sym("_thread_current"), 0);
         call_kernel(sym("__thread_cleanup_terminated"), 0, 0,
                     "retire: scheduler cleanup");
@@ -981,7 +1016,7 @@ int main(int argc, char** argv) {
     // Load the actual allocation-free Hello World shell through the real
     // ROM/POSIX/XL path and execute it until its final endless loop.
     files.enabled = true;
-    put_string(0xe100, "shell.sys");
+    put_string(0xe100, "SHELL.SYS");
     call_kernel(sym("_enter_critical_section"), 0, 0,
                 "outer disk critical section");
     const auto disk_fd = call_kernel(sym("_open"), 0xe100, 0,
@@ -1002,24 +1037,6 @@ int main(int argc, char** argv) {
                 !mem.bytes[sym("__interrupt_refcount")],
             "disk critical section did not restore preemption");
 
-    const auto loaded_shell = call_kernel(
-        sym("_process_load"), 0xe100, 0, "load Hello World shell",
-        0, {}, 0, false, unsigned(shell.size()) * 300u);
-    require(loaded_shell != 0,
-            "shell load failed: " +
-                std::to_string(mem.bytes[sym("_process_last_error")]));
-
-    bool shell_block_is_code_only = false;
-    for (auto block = std::uint16_t(0xc000), n = std::uint16_t(0);
-         block && n < 256; block = mem.word(block), ++n) {
-        if ((mem.bytes[block + 4] & 1) &&
-                mem.word(block + 2) == loaded_shell &&
-                mem.word(block + 5) == code_size)
-            shell_block_is_code_only = true;
-    }
-    require(shell_block_is_code_only,
-            "shell image retained metadata or its relocation table");
-
     const auto heap_usage = [&](std::uint16_t head) {
         std::pair<unsigned, unsigned> result{};
         for (unsigned n = 0; head && n < 256;
@@ -1031,14 +1048,40 @@ int main(int argc, char** argv) {
         }
         return result;
     };
+    const auto before_system_load = std::pair{
+        heap_usage(sym("__sys_heap")), heap_usage(0xc000)};
+    const auto banked_before_system_load = mem.banks;
+    const auto loaded_shell = call_kernel(
+        sym("_process_load"), 0xe100, 0, "load Hello World shell",
+        0, {}, 0, false, unsigned(shell.size()) * 300u);
+    require(loaded_shell != 0,
+            "shell load failed: " +
+                std::to_string(mem.bytes[sym("_process_last_error")]));
+
+    bool shell_block_is_code_only = false;
+    for (auto block = sym("__sys_heap"), n = std::uint16_t(0);
+         block && n < 256; block = mem.word(block), ++n) {
+        if ((mem.bytes[block + 4] & 1) &&
+                mem.word(block + 2) == loaded_shell &&
+                mem.word(block + 5) == code_size)
+            shell_block_is_code_only = true;
+    }
+    require(shell_block_is_code_only,
+            "shell image retained metadata or its relocation table");
+    require(mem.bytes[loaded_shell + 16] == 0xff &&
+                mem.bytes[mem.word(loaded_shell + 14) + 25] == 0xff,
+            ".sys process or main thread retained a bank selector");
+    require(mem.banks == banked_before_system_load &&
+                heap_usage(0xc000) == before_system_load.second,
+            ".sys load modified the banked user heap");
     const auto before_shell = std::pair{
         heap_usage(sym("__sys_heap")), heap_usage(0xc000)};
-    const auto shell_thread = mem.word(loaded_shell + 13);
+    const auto shell_thread = mem.word(loaded_shell + 14);
     mem.word(sym("_thread_current"), shell_thread);
     auto shell_state = cpu.snapshot();
     shell_state.halted = false;
-    shell_state.pc = shell_thread + 6;
-    shell_state.sp = mem.word(shell_thread + 4) + 22;
+    shell_state.pc = shell_thread + 7;
+    shell_state.sp = mem.word(shell_thread + 5) + 22;
     cpu.restore(shell_state);
     run_until([&] {
         const auto pc = cpu.pc();
@@ -1074,14 +1117,127 @@ int main(int argc, char** argv) {
         }
     }
     require(shell_drew_pixels, "Hello World shell drew no text");
-    require(mem.word(shell_thread + 2) == 0 &&
-                mem.word(shell_thread + 22) == loaded_shell,
+    require(mem.bytes[shell_thread + 2] == 0xff &&
+                mem.word(shell_thread + 3) == 0 &&
+                mem.word(shell_thread + 23) == loaded_shell,
             "Hello World shell acquired a library owner");
     require(files.handles.empty(), "Hello World shell leaked a descriptor");
     retire_process(loaded_shell);
     require(mem.word(sym("_process_first")) == 0 &&
                 mem.word(sym("__library_refs")) == 0,
             "Hello World shell cleanup left a process or library reference");
+    require(std::pair{heap_usage(sym("__sys_heap")), heap_usage(0xc000)} ==
+                before_system_load,
+            "Hello World .sys cleanup did not restore both heaps");
+
+    // A 19 KiB .sys image stages wholly in the fixed heap, then releases a
+    // 5 KiB relocation tail and retains exactly 14 KiB of resident code.
+    constexpr std::size_t large_file_size = 19 * 1024;
+    constexpr std::uint16_t large_code_size = 14 * 1024;
+    require(payload_offset == 64 && large_file_size > payload_offset,
+            "large-image fixture requires the canonical descriptor size");
+    const auto large_payload_size =
+        std::uint16_t(large_file_size - payload_offset);
+    const auto large_relocation_bytes =
+        std::uint16_t(large_payload_size - 12 - large_code_size);
+    require((large_relocation_bytes & 3) == 0 &&
+                large_code_size > code_size,
+            "19 KiB/14 KiB fixture has an invalid XL layout");
+    const auto large_relocation_count =
+        std::uint16_t(large_relocation_bytes / 4);
+    require(large_relocation_count >= relocation_count,
+            "large fixture cannot retain the original relocations");
+    std::vector<std::uint8_t> large_shell(large_file_size, 0);
+    std::copy(shell.begin(), shell.begin() + payload_offset,
+              large_shell.begin());
+    std::copy(shell.begin() + payload_offset,
+              shell.begin() + payload_offset + 12 + code_size,
+              large_shell.begin() + payload_offset);
+    large_shell[payload_offset + 6] = large_code_size & 0xff;
+    large_shell[payload_offset + 7] = large_code_size >> 8;
+    large_shell[payload_offset + 8] = large_relocation_count & 0xff;
+    large_shell[payload_offset + 9] = large_relocation_count >> 8;
+    const auto large_table = payload_offset + 12 + large_code_size;
+    const auto original_table = payload_offset + 12 + code_size;
+    std::copy(shell.begin() + original_table,
+              shell.begin() + original_table + 4 * relocation_count,
+              large_shell.begin() + large_table);
+    for (std::uint16_t index = relocation_count;
+         index < large_relocation_count; ++index) {
+        const auto record = large_table + 4 * index;
+        const auto offset = std::uint16_t(
+            code_size + (index - relocation_count) %
+                            (large_code_size - code_size));
+        large_shell[record] = offset & 0xff;
+        large_shell[record + 1] = offset >> 8;
+        large_shell[record + 2] = 1;
+        large_shell[record + 3] = 0;
+    }
+    for (unsigned byte = 0; byte != 4; ++byte)
+        large_shell[12 + byte] =
+            std::uint8_t(std::uint32_t(large_payload_size) >> (8 * byte));
+    const auto large_crc = crc32(large_shell.data() + payload_offset,
+                                 large_payload_size);
+    for (unsigned byte = 0; byte != 4; ++byte)
+        large_shell[16 + byte] =
+            std::uint8_t(large_crc >> (8 * byte));
+    files.files["large.sys"] = large_shell;
+    put_string(0xe100, "large.sys");
+    const auto before_large = std::pair{
+        heap_usage(sym("__sys_heap")), heap_usage(0xc000)};
+    const auto banks_before_large = mem.banks;
+    const auto large_process = call_kernel(
+        sym("_process_load"), 0xe100, 0, "load 19 KiB system image",
+        0, {}, 0, false, unsigned(large_shell.size()) * 300u);
+    require(large_process != 0,
+            "19 KiB .sys load failed: " +
+                std::to_string(mem.bytes[sym("_process_last_error")]));
+    bool large_block_is_code_only = false;
+    for (auto block = sym("__sys_heap"), n = std::uint16_t(0);
+         block && n < 256; block = mem.word(block), ++n) {
+        if ((mem.bytes[block + 4] & 1) &&
+                mem.word(block + 2) == large_process &&
+                mem.word(block + 5) == large_code_size)
+            large_block_is_code_only = true;
+    }
+    require(large_block_is_code_only &&
+                mem.bytes[large_process + 16] == 0xff &&
+                mem.banks == banks_before_large &&
+                heap_usage(0xc000) == before_large.second,
+            "19 KiB .sys did not shrink to 14 KiB without touching banks");
+    retire_process(large_process);
+    require(std::pair{heap_usage(sym("__sys_heap")), heap_usage(0xc000)} ==
+                before_large,
+            "19 KiB .sys cleanup did not restore both heaps");
+
+    // The same executable under a normal process suffix remains banked.
+    files.files["shell.prc"] = shell;
+    put_string(0xe100, "shell.prc");
+    const auto before_prc = std::pair{
+        heap_usage(sym("__sys_heap")), heap_usage(0xc000)};
+    const auto prc_process = call_kernel(
+        sym("_process_load"), 0xe100, 0, "load ordinary banked process",
+        0, {}, 0, false, unsigned(shell.size()) * 300u);
+    require(prc_process != 0 && mem.bytes[prc_process + 16] != 0xff,
+            "ordinary .prc was not assigned a user-heap bank");
+    const auto old_bank = mem.bytes[sym("__bank_current")];
+    const auto prc_bank = mem.bytes[prc_process + 16];
+    call_kernel(sym("__bank_map"), 0, 0, "inspect process bank", prc_bank);
+    bool prc_block_is_code_only = false;
+    for (auto block = std::uint16_t(0xc000), n = std::uint16_t(0);
+         block && n < 256; block = mem.word(block), ++n) {
+        if ((mem.bytes[block + 4] & 1) &&
+                mem.word(block + 2) == prc_process &&
+                mem.word(block + 5) == code_size)
+            prc_block_is_code_only = true;
+    }
+    require(prc_block_is_code_only,
+            "ordinary .prc did not retain code in its user bank");
+    retire_process(prc_process);
+    call_kernel(sym("__bank_map"), 0, 0, "restore inspected bank", old_bank);
+    require(std::pair{heap_usage(sym("__sys_heap")), heap_usage(0xc000)} ==
+                before_prc,
+            "ordinary .prc cleanup did not restore both heaps");
     files.enabled = false;
 
     // Physical-drive prefixes belong to YOS, not the native firmware path.
@@ -1129,16 +1285,16 @@ int main(int argc, char** argv) {
     require(mem.bytes[public_dirent + 8] == 4,
             "directory entry was not reported as DT_DIR");
 
-    call_kernel(mem.word(table + 6), 0x4000, 0,
+    call_kernel(mem.word(table + 8), 0x4000, 0,
                 "oversized public allocation");
     require(kernel_hl == 0 && std::uint8_t(cpu.snapshot().de) == 0,
             "public allocator accepted a request larger than one bank");
-    call_kernel(mem.word(table + 6), 23, 0, "public allocation");
+    call_kernel(mem.word(table + 8), 23, 0, "public allocation");
     const auto public_block = kernel_hl;
     const auto public_bank = std::uint8_t(cpu.snapshot().de);
     require(public_block >= 0xc007 && public_bank == 0,
             "public allocator did not return a banked user pointer");
-    call_kernel(mem.word(table + 8), 0, 0, "public release", 0,
+    call_kernel(mem.word(table + 10), 0, 0, "public release", 0,
                 {public_bank, std::uint8_t(public_block),
                  std::uint8_t(public_block >> 8)});
 
@@ -1148,13 +1304,13 @@ int main(int argc, char** argv) {
     const auto block_size = [&](std::uint16_t payload) {
         return mem.word(std::uint16_t(payload - 2));
     };
-    call_kernel(mem.word(table + 6), 200, 0, "shrinkable allocation");
+    call_kernel(mem.word(table + 8), 200, 0, "shrinkable allocation");
     const auto shrink_block = kernel_hl;
     const auto shrink_bank = std::uint8_t(cpu.snapshot().de);
     require(shrink_block != 0 && block_size(shrink_block) == 200,
             "shrinkable allocation is not 200 bytes");
     const auto shrink_owner = mem.word(std::uint16_t(shrink_block - 5));
-    call_kernel(mem.word(table + 10), 0, 0, "public shrink", 0,
+    call_kernel(mem.word(table + 12), 0, 0, "public shrink", 0,
                 {shrink_bank, std::uint8_t(shrink_block),
                  std::uint8_t(shrink_block >> 8), 100, 0}, 0, true);
     require(kernel_hl == shrink_block &&
@@ -1166,49 +1322,49 @@ int main(int argc, char** argv) {
     require(mem.word(std::uint16_t(shrink_block - 7)) == released &&
                 (mem.bytes[released + 4] & 1) == 0,
             "shrink_memory did not turn the tail into a free block");
-    call_kernel(mem.word(table + 6), 60, 0, "allocation from the tail");
+    call_kernel(mem.word(table + 8), 60, 0, "allocation from the tail");
     const auto reused = kernel_hl;
     const auto reused_bank = std::uint8_t(cpu.snapshot().de);
     require(reused == std::uint16_t(released + 7),
             "released tail was not reused by the next allocation");
-    call_kernel(mem.word(table + 8), 0, 0, "release the reused tail", 0,
+    call_kernel(mem.word(table + 10), 0, 0, "release the reused tail", 0,
                 {reused_bank, std::uint8_t(reused),
                  std::uint8_t(reused >> 8)});
-    call_kernel(mem.word(table + 10), 0, 0,
+    call_kernel(mem.word(table + 12), 0, 0,
                 "shrink below a splittable remainder", 0,
                 {shrink_bank, std::uint8_t(shrink_block),
                  std::uint8_t(shrink_block >> 8), 95, 0}, 0, true);
     require(kernel_hl == shrink_block &&
                 block_size(shrink_block) == 100,
             "shrink_memory split off a remainder too small for a block");
-    call_kernel(mem.word(table + 10), 0, 0, "shrink to a larger size", 0,
+    call_kernel(mem.word(table + 12), 0, 0, "shrink to a larger size", 0,
                 {shrink_bank, std::uint8_t(shrink_block),
                  std::uint8_t(shrink_block >> 8), 0x2c, 0x01}, 0, true);
     require(kernel_hl == shrink_block &&
                 block_size(shrink_block) == 100,
             "shrink_memory changed a block for a larger size");
-    call_kernel(mem.word(table + 8), 0, 0, "release shrunk block", 0,
+    call_kernel(mem.word(table + 10), 0, 0, "release shrunk block", 0,
                 {shrink_bank, std::uint8_t(shrink_block),
                  std::uint8_t(shrink_block >> 8)});
-    call_kernel(mem.word(table + 10), 0, 0, "shrink a freed block", 0,
+    call_kernel(mem.word(table + 12), 0, 0, "shrink a freed block", 0,
                 {shrink_bank, std::uint8_t(shrink_block),
                  std::uint8_t(shrink_block >> 8), 10, 0}, 0, true);
     require(kernel_hl == 0 && std::uint8_t(cpu.snapshot().de) == 0,
             "shrink_memory accepted a freed block");
     const auto public_timer =
-        call_kernel(mem.word(table + 18), 0x4200, 3,
+        call_kernel(mem.word(table + 20), 0x4200, 3,
                     "public timer installation");
     require(public_timer != 0, "public timer wrapper failed");
-    call_kernel(mem.word(table + 20), public_timer, 0,
+    call_kernel(mem.word(table + 22), public_timer, 0,
                 "public timer removal");
-    require(call_kernel(mem.word(table + 12), 0, 0, "public clock") == 0,
+    require(call_kernel(mem.word(table + 14), 0, 0, "public clock") == 0,
             "clock advanced before an interrupt");
 
     constexpr std::uint16_t mouse_state = 0x8210;
     io.mouse_x = 17;
     io.mouse_y = 31;
-    call_kernel(mem.word(table + 60), 23, 0, "mouse calibration", 42);
-    call_kernel(mem.word(table + 62), mouse_state, 0, "mouse snapshot");
+    call_kernel(mem.word(table + 62), 23, 0, "mouse calibration", 42);
+    call_kernel(mem.word(table + 64), mouse_state, 0, "mouse snapshot");
     require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
                 mem.bytes[mouse_state + 2] == 0 &&
                 mem.bytes[mouse_state + 3] == 0,
@@ -1216,14 +1372,14 @@ int main(int argc, char** argv) {
     io.mouse_x = 20;
     io.mouse_y = 29;
     io.mouse_buttons = 0xfe;
-    call_kernel(mem.word(table + 62), mouse_state, 0,
+    call_kernel(mem.word(table + 64), mouse_state, 0,
                 "mouse snapshot before timer scan");
     require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
                 mem.bytes[mouse_state + 2] == 0 &&
                 mem.bytes[mouse_state + 3] == 0,
             "read_mouse polled hardware instead of reading timer state");
     call_kernel(sym("__tmr_chain"), 0, 0, "moving mouse timer-chain scan");
-    call_kernel(mem.word(table + 62), mouse_state, 0, "moving mouse snapshot");
+    call_kernel(mem.word(table + 64), mouse_state, 0, "moving mouse snapshot");
     require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
                 mem.bytes[mouse_state + 2] == 1 &&
                 mem.bytes[mouse_state + 3] == 1,
@@ -1232,7 +1388,7 @@ int main(int argc, char** argv) {
                 std::to_string(mem.bytes[mouse_state + 1]) + "," +
                 std::to_string(mem.bytes[mouse_state + 2]) + "," +
                 std::to_string(mem.bytes[mouse_state + 3]));
-    call_kernel(mem.word(table + 62), mouse_state, 0,
+    call_kernel(mem.word(table + 64), mouse_state, 0,
                 "stationary mouse resnapshot");
     require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
                 mem.bytes[mouse_state + 2] == 1 &&
@@ -1242,14 +1398,14 @@ int main(int argc, char** argv) {
     call_kernel(sym("__mouse_scan"), 0, 0, "mouse release timer scan");
     io.mouse_buttons = 0xfe;
     call_kernel(sym("__mouse_scan"), 0, 0, "mouse repress timer scan");
-    call_kernel(mem.word(table + 62), mouse_state, 0,
+    call_kernel(mem.word(table + 64), mouse_state, 0,
                 "accumulated mouse transition snapshot");
     require(mem.bytes[mouse_state + 2] == 1 &&
                 mem.bytes[mouse_state + 3] == 1,
             "mouse timer lost an unread button transition");
 
-    const std::uint16_t gpx_table = table + 106;
-    constexpr std::array<const char*, 24> gpx_api = {
+    const std::uint16_t gpx_table = table + 108;
+    constexpr std::array<const char*, 22> gpx_api = {
         "_gpx_create", "_gpx_destroy", "_gpx_set_page",
         "_gpx_width", "_gpx_height", "_gpx_clrscr",
         "_gpx_set_text_background", "_gpx_draw_pixel",
@@ -1258,12 +1414,13 @@ int main(int argc, char** argv) {
         "_gpx_fill_rectangle", "_gpx_measure_text", "_gpx_draw_text",
         "_gpx_get_system_font", "_gpx_get_tiny_font",
         "_gpx_get_stock_bmp", "_gpx_draw_circle", "_gpx_fill_circle",
-        "_gpx_draw_polygon", "_gpx_fill_polygon", "_gpx_draw_box"
+        "_gpx_draw_box"
     };
     for (std::size_t slot = 0; slot < gpx_api.size(); ++slot) {
-        require(mem.word(gpx_table + 2 * slot) == sym(gpx_api[slot]),
+        const auto expected = gpx_api[slot] ? sym(gpx_api[slot]) : 0;
+        require(mem.word(gpx_table + 2 * slot) == expected,
                 "GPX API slot " + std::to_string(slot) +
-                    " does not match " + gpx_api[slot]);
+                    " has an unexpected implementation");
     }
 
     const auto gpx_context =
@@ -1304,7 +1461,7 @@ int main(int argc, char** argv) {
                 mem.bytes[system_font + 1] == 0x20 &&
                 mem.bytes[system_font + 2] == 0x7f &&
                 mem.bytes[system_font + 5] == 8,
-            "expanded system font header is malformed");
+            "ROM system font header is malformed");
     const auto glyph_a = std::uint16_t(
         system_font + mem.word(system_font + 8 + 2 * ('A' - 0x20)));
     require(mem.bytes[glyph_a + 1] == 5 &&
@@ -1312,7 +1469,7 @@ int main(int argc, char** argv) {
                 mem.word(glyph_a + 3) == 8 &&
                 mem.bytes[glyph_a + 5] == 0x70 &&
                 mem.bytes[glyph_a + 8] == 0xf8,
-            "expanded system font changed the A glyph");
+            "ROM system font changed the A glyph");
     require(call_kernel(mem.word(gpx_table + 36), 0, 0,
                         "gpx resize cursor", 5) != 0,
             "gpx resize cursor is unavailable");
@@ -1324,17 +1481,17 @@ int main(int argc, char** argv) {
     mem.bytes[0x8300] = 'A';
     mem.bytes[0x8301] = 0;
     call_kernel(mem.word(gpx_table + 30), gpx_context, 8,
-                "expanded-font text drawing", 0,
+                "ROM-font text drawing", 0,
                 {10, 0, 0x00, 0x83,
                  std::uint8_t(system_font), std::uint8_t(system_font >> 8),
                  1, 0, 0, 0});
-    bool expanded_font_drew_pixels = false;
+    bool rom_font_drew_pixels = false;
     for (std::uint16_t address = 0x4000; address != 0x5800; ++address)
-        expanded_font_drew_pixels |= mem.bytes[address] != 0;
-    require(expanded_font_drew_pixels,
-            "expanded system font did not render through gpx_draw_text");
+        rom_font_drew_pixels |= mem.bytes[address] != 0;
+    require(rom_font_drew_pixels,
+            "ROM system font did not render through gpx_draw_text");
     call_kernel(mem.word(gpx_table + 10), 0, 0,
-                "screen clear after expanded-font test");
+                "screen clear after ROM-font test");
     call_kernel(mem.word(gpx_table + 14), gpx_context, 8,
                 "gpx pixel drawing", 0, {10, 0, 1, 0, 0, 0});
     require(mem.bytes[0x4221] == 0x80,
@@ -1344,26 +1501,26 @@ int main(int argc, char** argv) {
     mem.word(box + 2, 10);
     mem.word(box + 4, 15);
     mem.word(box + 6, 10);
-    call_kernel(mem.word(gpx_table + 46), gpx_context, box,
+    call_kernel(mem.word(gpx_table + 42), gpx_context, box,
                 "gpx selected-edge box", 0, {2, 1, 0, 0xff, 0, 0});
     require(mem.bytes[0x4221] == 0xff,
             "gpx selected-edge box drew the wrong Spectrum byte");
 
     test_circles(mem, call_kernel, sym, gpx_context);
 
-    call_kernel(mem.word(table + 58), 0, 0, "empty keyboard queue");
+    call_kernel(mem.word(table + 60), 0, 0, "empty keyboard queue");
     require(kernel_hl == 0,
             "keyboard queue was not empty after boot");
     io.keyboard_address = 0xf7fe;
     io.keyboard_value = 0xfe;
     call_kernel(sym("__kbd_scan"), 0, 0, "keyboard press scan");
-    call_kernel(mem.word(table + 58), 0, 0, "keyboard press read");
+    call_kernel(mem.word(table + 60), 0, 0, "keyboard press read");
     const auto key_press = kernel_hl & 0xff;
     require(key_press == 0x45,
             "keyboard press event is wrong: " + std::to_string(key_press));
     io.keyboard_value = 0xff;
     call_kernel(sym("__kbd_scan"), 0, 0, "keyboard release scan");
-    call_kernel(mem.word(table + 58), 0, 0, "keyboard release read");
+    call_kernel(mem.word(table + 60), 0, 0, "keyboard release read");
     const auto key_release = kernel_hl & 0xff;
     require(key_release == 5,
             "keyboard release event is wrong: " + std::to_string(key_release));
@@ -1379,7 +1536,7 @@ int main(int argc, char** argv) {
             call_kernel(sym("__kbd_scan"), 0, 0, "keyboard chord scan");
             for (unsigned bit = 0; bit < 5; ++bit) {
                 if (!(mask & (1u << bit))) continue;
-                call_kernel(mem.word(table + 58), 0, 0, "keyboard chord read");
+                call_kernel(mem.word(table + 60), 0, 0, "keyboard chord read");
                 const unsigned expected = row * 5 + 4 - bit +
                                           (pressed ? 0x40 : 0) + 1;
                 require((kernel_hl & 0xff) == expected,
@@ -1387,7 +1544,7 @@ int main(int argc, char** argv) {
                         " bit " + std::to_string(bit) + " produced " +
                         std::to_string(kernel_hl & 0xff));
             }
-            call_kernel(mem.word(table + 58), 0, 0, "keyboard chord drained");
+            call_kernel(mem.word(table + 60), 0, 0, "keyboard chord drained");
             require((kernel_hl & 0xff) == 0, "keyboard chord queued extra keys");
         }
         row_select = std::uint8_t((row_select << 1) | (row_select >> 7));
@@ -1395,7 +1552,7 @@ int main(int argc, char** argv) {
 
     constexpr std::uint16_t status_buffer = 0x8200;
     constexpr std::array<std::size_t, 6> invalid_fd_slots = {
-        34, 35, 36, 38, 37, 46};
+        35, 36, 37, 39, 38, 47};
     for (const auto slot : invalid_fd_slots) {
         require(call_kernel(mem.word(table + 2 * slot), 0, status_buffer,
                             "filesystem rejects unopened descriptor") == 0xffff,
@@ -1404,7 +1561,7 @@ int main(int argc, char** argv) {
                 "unopened descriptor did not set EBADF");
     }
     constexpr std::array<std::size_t, 7> invalid_path_slots = {
-        33, 39, 40, 41, 43, 44, 45};
+        34, 40, 41, 42, 44, 45, 46};
     for (const auto slot : invalid_path_slots) {
         require(call_kernel(mem.word(table + 2 * slot), 0, status_buffer,
                             "filesystem rejects null path") == 0xffff,
@@ -1412,34 +1569,34 @@ int main(int argc, char** argv) {
         require(mem.word(sym("__errno_value")) == 14,
                 "null path did not set EFAULT");
     }
-    require(call_kernel(mem.word(table + 94), 0, 0,
+    require(call_kernel(mem.word(table + 96), 0, 0,
                         "opendir rejects null path") == 0,
             "opendir accepted a null path");
     require(mem.word(sym("__errno_value")) == 14,
             "null directory path did not set EFAULT");
-    require(call_kernel(mem.word(table + 96), 0, 0,
+    require(call_kernel(mem.word(table + 98), 0, 0,
                         "readdir rejects null directory") == 0,
             "readdir accepted a null directory");
     require(mem.word(sym("__errno_value")) == 9,
             "null directory did not set EBADF");
-    require(call_kernel(mem.word(table + 100), 0, 0,
+    require(call_kernel(mem.word(table + 102), 0, 0,
                         "closedir rejects null directory") == 0xffff,
             "closedir accepted a null directory");
-    require(call_kernel(mem.word(table + 102), 0, 1,
+    require(call_kernel(mem.word(table + 104), 0, 1,
                         "disk enumeration rejects null buffer") == 0xffff,
             "disk enumeration accepted a null output buffer");
     require(mem.word(sym("__errno_value")) == 14,
             "null disk output buffer did not set EFAULT");
-    require(call_kernel(mem.word(table + 102), 0, 0,
+    require(call_kernel(mem.word(table + 104), 0, 0,
                         "empty disk enumeration") == 0,
             "zero-capacity disk enumeration failed");
-    require(call_kernel(mem.word(table + 102), status_buffer, 0x0100,
+    require(call_kernel(mem.word(table + 104), status_buffer, 0x0100,
                         "disk enumeration rejects oversized capacity") ==
                 0xffff,
             "disk enumeration accepted capacity above 255");
     require(mem.word(sym("__errno_value")) == 22,
             "oversized disk capacity did not set EINVAL");
-    require(call_kernel(mem.word(table + 102), 0xfffc, 1,
+    require(call_kernel(mem.word(table + 104), 0xfffc, 1,
                         "disk enumeration rejects wrapped buffer") == 0xffff,
             "disk enumeration accepted a wrapping output buffer");
     require(mem.word(sym("__errno_value")) == 14,
@@ -1450,11 +1607,11 @@ int main(int argc, char** argv) {
             "OS heap compatibility symbols do not share one fixed arena");
     test_thread_safety(mem, cpu, call_kernel, sym, files, gpx_context);
     call_kernel(sym("_gpx_destroy"), gpx_context, 0, "destroy GPX context");
-    constexpr std::array<std::uint16_t, 5> boot_object_sizes = {
-        1440, 10, 10, 10, 22
+    constexpr std::array<std::uint16_t, 4> boot_object_sizes = {
+        11, 11, 11, 23
     };
     auto block = os_heap;
-    bool boot_heap_ok = boot_font == os_heap + 7;
+    bool boot_heap_ok = boot_font < 0x4000;
     for (const auto size : boot_object_sizes) {
         boot_heap_ok = boot_heap_ok && block && block < 0xc000 &&
             (mem.bytes[block + 4] & 1) && mem.word(block + 2) == 0 &&
@@ -1515,28 +1672,28 @@ int main(int argc, char** argv) {
             "process_start changed a preserved index register");
     require(mem.word(sym("_process_first")) == process,
             "process was not linked");
-    require(mem.bytes[process + 5] == 't' &&
-                mem.bytes[process + 6] == '0' &&
-                mem.bytes[process + 7] == 0,
+    require(mem.bytes[process + 6] == 't' &&
+                mem.bytes[process + 7] == '0' &&
+                mem.bytes[process + 8] == 0,
             "process name was not copied");
 
-    const auto thread = mem.word(process + 13);
+    const auto thread = mem.word(process + 14);
     require(thread != 0, "main thread was not created");
-    require(mem.word(thread + 22) == process, "thread owner is wrong");
-    require(mem.bytes[thread + 19] == 1, "thread is not runnable");
+    require(mem.word(thread + 23) == process, "thread process is wrong");
+    require(mem.bytes[thread + 20] == 1, "thread is not runnable");
     require(mem.word(sym("_thread_first_running")) == thread,
             "thread was not linked into the runnable queue");
     require(mem.word(sym("_thread_first_suspended")) == 0,
             "thread remained suspended");
-    require(mem.bytes[thread + 6] == 0xcd &&
-                mem.word(thread + 7) == entry &&
-                mem.bytes[thread + 9] == 0x21 &&
-                mem.word(thread + 10) == thread &&
-                mem.bytes[thread + 12] == 0xc3 &&
-                mem.word(thread + 13) == sym("_thread_exit"),
+    require(mem.bytes[thread + 7] == 0xcd &&
+                mem.word(thread + 8) == entry &&
+                mem.bytes[thread + 10] == 0x21 &&
+                mem.word(thread + 11) == thread &&
+                mem.bytes[thread + 13] == 0xc3 &&
+                mem.word(thread + 14) == sym("_thread_exit"),
             "thread startup program is malformed");
-    const auto thread_sp = mem.word(thread + 4);
-    require(mem.word(thread_sp + 20) == thread + 6,
+    const auto thread_sp = mem.word(thread + 5);
+    require(mem.word(thread_sp + 20) == thread + 7,
             "thread initial return address is wrong");
 
     constexpr std::uint16_t name2 = 0x8020;
@@ -1559,7 +1716,7 @@ int main(int argc, char** argv) {
               "second process_start");
     state = cpu.snapshot();
     const auto process2 = state.de;
-    const auto thread2 = mem.word(process2 + 13);
+    const auto thread2 = mem.word(process2 + 14);
     require(process2 != 0 && thread2 != 0, "second process failed");
     require(mem.word(sym("_thread_first_running")) == thread2 &&
                 mem.word(thread2) == thread,
@@ -1567,8 +1724,8 @@ int main(int argc, char** argv) {
     if (mem.banked) {
         // Exercise exact scheduler restoration independently of the entry
         // address: thread 2 starts in logical bank 0, thread 1 in bank 1.
-        mem.bytes[thread2 + 24] = 0;
-        mem.bytes[thread + 24] = 1;
+        mem.bytes[thread2 + 25] = 0;
+        mem.bytes[thread + 25] = 1;
     }
 
     state = cpu.snapshot();
@@ -1622,16 +1779,16 @@ int main(int argc, char** argv) {
                 "scheduler incremented logical bank one while restoring it");
     require(!mem.word(sym("__errno_value")) &&
                 !mem.bytes[sym("_process_last_error")] &&
-                mem.word(thread2 + 20) == 0x1234 &&
-                mem.bytes[thread2 + 15] == 8,
+                mem.word(thread2 + 21) == 0x1234 &&
+                mem.bytes[thread2 + 16] == 8,
             "thread switch did not save and isolate syscall errors");
     mem.word(sym("__errno_value"), 0x4567);
     mem.bytes[sym("_process_last_error")] = 9;
     // EI immediately precedes RETI in the scheduler, so a newly requested
     // interrupt is accepted after one instruction from the resumed thread.
-    require(mem.word(mem.word(thread2 + 4) + 20) == entry2 + 2,
+    require(mem.word(mem.word(thread2 + 5) + 20) == entry2 + 2,
             "saved thread return PC is wrong: got " +
-                std::to_string(mem.word(mem.word(thread2 + 4) + 20)));
+                std::to_string(mem.word(mem.word(thread2 + 5) + 20)));
 
     state = cpu.snapshot();
     state.pc = entry + 1;
@@ -1661,7 +1818,7 @@ int main(int argc, char** argv) {
             "round robin did not wrap to the queue head");
     require(mem.word(sym("__errno_value")) == 0x1234 &&
                 mem.bytes[sym("_process_last_error")] == 8 &&
-                mem.word(thread + 20) == 0x4567 && mem.bytes[thread + 15] == 9,
+                mem.word(thread + 21) == 0x4567 && mem.bytes[thread + 16] == 9,
             "resumed thread did not recover its syscall errors");
     require(state.sp == thread2_sp && state.af == 0x1234 &&
                 state.bc == 0x2345 && state.de == 0x3456 &&
@@ -1681,16 +1838,16 @@ int main(int argc, char** argv) {
         for (bool preset : {false, true}) {
             mem.bytes = saved_memory;
             cpu.restore(saved_cpu);
-            const auto ready = call_kernel(mem.word(table + 22), 0, 0,
+            const auto ready = call_kernel(mem.word(table + 24), 0, 0,
                                            "wait fixture event");
             constexpr std::uint16_t waiter_code = 0x4300;
             constexpr std::uint16_t timer_code = 0x4340;
             constexpr std::uint16_t other_code = 0x4380;
             constexpr std::uint16_t wakes = 0x43a0;
             if (preset)
-                call_kernel(mem.word(table + 26), ready, 0, "signal before wait", 0, {1});
-            const auto wait = mem.word(table + 28);
-            const auto signal = mem.word(table + 26);
+                call_kernel(mem.word(table + 28), ready, 0, "signal before wait", 0, {1});
+            const auto wait = mem.word(table + 30);
+            const auto signal = mem.word(table + 28);
             const std::array<std::uint8_t, 13> waiter = {
                 0x21, std::uint8_t(ready), std::uint8_t(ready >> 8),
                 0xcd, std::uint8_t(wait), std::uint8_t(wait >> 8),
@@ -1710,9 +1867,9 @@ int main(int argc, char** argv) {
             mem.word(sym("_thread_first_running"), thread);
             mem.word(sym("_thread_first_waiting"), 0);
             mem.word(thread, other_runnable ? thread2 : 0);
-            mem.bytes[thread + 19] = 1;
+            mem.bytes[thread + 20] = 1;
             mem.word(thread2, 0);
-            mem.word(thread2 + 4, 0xec00);
+            mem.word(thread2 + 5, 0xec00);
             mem.word(0xec00 + 20, other_code);
             auto running = saved_cpu;
             running.pc = waiter_code;
@@ -1721,7 +1878,7 @@ int main(int argc, char** argv) {
             running.halted = false;
             cpu.restore(running);
             run_until([&] { return cpu.halted(); }, 10000, "enter public wait");
-            require(mem.bytes[thread + 19] == 2 && mem.bytes[wakes] == 0,
+            require(mem.bytes[thread + 20] == 2 && mem.bytes[wakes] == 0,
                     "wait_event did not block the caller");
             const auto pulse = [&] {
                 require(cpu.interrupt(255), "wait fixture IRQ rejected");
@@ -1729,33 +1886,33 @@ int main(int argc, char** argv) {
                 run_until([&] { return cpu.halted(); }, 100000, "waiting IRQ");
             };
             for (unsigned n = 0; n < 4; ++n) pulse();
-            require(mem.bytes[wakes] == unsigned(preset) && mem.bytes[thread + 19] == 2 &&
+            require(mem.bytes[wakes] == unsigned(preset) && mem.bytes[thread + 20] == 2 &&
                         mem.word(sym("_thread_current")) ==
                             (other_runnable ? thread2 : 0),
                     "unsignalled waiting thread received CPU time: other=" +
                         std::to_string(other_runnable) + " wakes=" +
                         std::to_string(mem.bytes[wakes]) + " state=" +
-                        std::to_string(mem.bytes[thread + 19]) + " current=" +
+                        std::to_string(mem.bytes[thread + 20]) + " current=" +
                         std::to_string(mem.word(sym("_thread_current"))) +
                         " expected=" + std::to_string(other_runnable ? thread2 : 0) +
                         " ready=" + std::to_string(ready) + " pc=" +
                         std::to_string(cpu.pc()) + " event=" +
-                        std::to_string(mem.bytes[ready + 4]));
+                        std::to_string(mem.bytes[ready + 5]));
             const auto idle = cpu.snapshot();
-            const auto periodic = call_kernel(mem.word(table + 18), timer_code, 1,
+            const auto periodic = call_kernel(mem.word(table + 20), timer_code, 1,
                                                "event-signalling timer");
             cpu.restore(idle);
             for (unsigned n = 0; n < 12; ++n) pulse();
-            require(mem.bytes[wakes] >= 3 && mem.bytes[ready + 4] == 0 &&
+            require(mem.bytes[wakes] >= 3 && mem.bytes[ready + 5] == 0 &&
                         !mem.bytes[sym("__interrupt_refcount")],
                     "timer did not wake and consume repeated event waits");
             const auto paused = cpu.snapshot();
-            call_kernel(mem.word(table + 20), periodic, 0, "stop event timer");
-            call_kernel(mem.word(table + 26), ready, 0, "pre-set wait signal", 0, {1});
+            call_kernel(mem.word(table + 22), periodic, 0, "stop event timer");
+            call_kernel(mem.word(table + 28), ready, 0, "pre-set wait signal", 0, {1});
             cpu.restore(paused);
             const auto previous = mem.bytes[wakes];
             for (unsigned n = 0; n < 3; ++n) pulse();
-            require(mem.bytes[wakes] == previous + 1 && !mem.bytes[ready + 4],
+            require(mem.bytes[wakes] == previous + 1 && !mem.bytes[ready + 5],
                     "pre-set signal was lost or consumed more than once");
         }
         mem.bytes = saved_memory;
@@ -1769,11 +1926,11 @@ int main(int argc, char** argv) {
     mem.word(thread2, 0);
     mem.word(sym("_thread_first_waiting"), thread);
     mem.word(thread, 0);
-    mem.word(thread + 16, waits);
-    mem.bytes[thread + 18] = 1;
-    mem.bytes[thread + 19] = 2;
+    mem.word(thread + 17, waits);
+    mem.bytes[thread + 19] = 1;
+    mem.bytes[thread + 20] = 2;
     mem.word(waits, event);
-    mem.bytes[event + 4] = 1;
+    mem.bytes[event + 5] = 1;
     mem.word(call_sp - 2, return_pc);
     state = cpu.snapshot();
     state.halted = false;
@@ -1792,14 +1949,14 @@ int main(int argc, char** argv) {
                 std::to_string(mem.word(sym("_thread_first_waiting"))) +
                 ", running " +
                 std::to_string(mem.word(sym("_thread_first_running"))) +
-                ", count " + std::to_string(mem.bytes[thread + 18]) +
-                ", state " + std::to_string(mem.bytes[thread + 19]) +
-                ", waits " + std::to_string(mem.word(thread + 16)) +
+                ", count " + std::to_string(mem.bytes[thread + 19]) +
+                ", state " + std::to_string(mem.bytes[thread + 20]) +
+                ", waits " + std::to_string(mem.word(thread + 17)) +
                 ", event " + std::to_string(mem.word(waits)) +
-                ", event state " + std::to_string(mem.bytes[event + 4]));
+                ", event state " + std::to_string(mem.bytes[event + 5]));
     require(mem.word(sym("_thread_first_waiting")) == 0 &&
                 mem.word(sym("_thread_first_running")) == thread &&
-                mem.word(thread) == thread2 && mem.bytes[thread + 19] == 1,
+                mem.word(thread) == thread2 && mem.bytes[thread + 20] == 1,
             "signaled thread was not moved to the runnable queue");
 
     // Simulate the state seen after a terminated thread has switched away.
@@ -1808,7 +1965,7 @@ int main(int argc, char** argv) {
     mem.word(thread2, 0);
     mem.word(sym("_thread_first_terminated"), thread);
     mem.word(thread, 0);
-    mem.bytes[thread + 19] = 4;
+    mem.bytes[thread + 20] = 4;
     mem.word(sym("_thread_current"), thread2);
     mem.word(call_sp - 2, return_pc);
     state = cpu.snapshot();

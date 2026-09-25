@@ -30,13 +30,27 @@ _so_create::
         or      e
         jr      z, .done
         call    _list_insert
-        ld      hl, #-5                ; reuse heap header's owner
+        ld      hl, #-5                ; heap header retains near owner ID
         add     hl, de
         ld      c, (hl)
         inc     hl
         ld      b, (hl)
+        ld      a, b
+        or      c
+        ld      a, #0xff               ; kernel-owned/common by default
+        jr      z, .owner_ready
+        push    de
+        ld      h, b
+        ld      l, c
+        ld      de, #16                ; process/library execution bank
+        add     hl, de
+        ld      a, (hl)
+        pop     de
+.owner_ready:
         ld      hl, #2
         add     hl, de
+        ld      (hl), a                ; packed far owner: bank, low, high
+        inc     hl
         ld      (hl), c
         inc     hl
         ld      (hl), b

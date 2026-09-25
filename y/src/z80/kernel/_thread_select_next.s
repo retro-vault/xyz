@@ -12,9 +12,9 @@
         .globl  _thread_first_running
         .globl  _list_remove
         .globl  _list_insert
-        .equ    THREAD_WAIT,       16
-        .equ    THREAD_NUM_EVENTS, 18
-        .equ    THREAD_STATE,      19
+        .equ    THREAD_WAIT,       17
+        .equ    THREAD_NUM_EVENTS, 19
+        .equ    THREAD_STATE,      20
         .equ    STATE_RUNNING,     1
         .equ    EVENT_SIGNALED,    1
         .area   _CODE
@@ -48,6 +48,7 @@ __thread_select_next::
         inc     hl
         push    hl
         ex      de, hl
+        inc     hl
         inc     hl
         inc     hl
         inc     hl

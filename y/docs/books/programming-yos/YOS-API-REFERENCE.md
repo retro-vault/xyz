@@ -1,8 +1,9 @@
 # YOS API Reference
 
-This is the complete ABI 6 application reference for `y/include/yos.h` and
-the YOS XCC platform helpers. All kernel calls use the `sdcccall(1)` ABI used
-by the default XCC mode. Include `<yos.h>` and query the table once:
+This is the complete ABI 1 application reference for `y/include/yos.h` and
+the YOS XCC platform helpers. Every kernel call uses the `sdcccall(1)` ABI
+that the default XCC mode expects. Include `<yos.h>` and query the table
+once:
 
 ```c
 yos_t *yos = (yos_t *)query_service("yos");
@@ -10,18 +11,17 @@ if (!yos || yos->version() < YOS_VERSION)
     return 1;
 ```
 
-Opaque handles (`yos_timer_t`, `yos_event_t`, `yos_thread_t`,
-`yos_process_t`, `yos_service_t`, and `yos_directory_t`) must only be passed
-back to the API that created them. A returned null pointer means failure
-unless stated otherwise.
+Kernel object handles must only be passed back to the API that created them.
+Their public structures are read-only views intended for `get_sys_info`
+inspectors. A returned null pointer means failure unless stated otherwise.
 
 ## Service bootstrap and platform helpers
 
 ### `void *query_service(const char *name)`
 
-Executes the RST `0x18` named-service lookup. It returns the service interface
-or `NULL`. This is the fundamental operation that gives an application access
-to `yos.h` tables.
+Executes the RST `0x18` named-service lookup and returns the service
+interface, or `NULL`. This is the fundamental operation that gives an
+application access to any `yos.h` table.
 
 ```c
 yos_t *direct = (yos_t *)query_service("yos");
@@ -39,22 +39,31 @@ if (yos->version() < YOS_VERSION) return 1;
 
 ### `enum yos_rom_model rom_model(void)`
 
-Returns the hardware model detected during boot. The result is one of
-`YOS_ROM_MODEL_48K`, `YOS_ROM_MODEL_128K`, or `YOS_ROM_MODEL_NEXT`. Detection
-checks exact Next machine IDs before testing 128K paging, so a Next running a
-48K or 128K timing personality is still reported as a Next.
+Returns the hardware model detected during boot: one of
+`YOS_ROM_MODEL_48K`, `YOS_ROM_MODEL_128K`, or `YOS_ROM_MODEL_NEXT`.
+Detection checks the exact Next machine IDs before testing 128K paging,
+so a Next running a 48K or 128K timing personality is still reported as
+a Next.
 
 ```c
 if (yos->rom_model() == YOS_ROM_MODEL_NEXT)
     enable_next_ui_features();
 ```
 
+### `const yos_sys_info_t *get_sys_info(void)`
+
+Returns a ROM descriptor containing the fixed and banked heap roots and
+pointers to the live process, thread, timer, event, service, private-service,
+and library-reference list heads. System-list objects expose a packed
+`yos_far_owner_t`; treat all returned objects as read-only and take a brief
+critical-section snapshot before presenting a process view.
+
 ### `yos_user_ptr_t allocate_memory(size_t size)`
 
-Scans every configured banked user heap and allocates from the first fitting
-extent. The public adapter records the current process as owner when one is
-running. The result is a three-byte far pointer; use `free_memory`, not `free`,
-for it.
+Scans every configured banked user heap and allocates from the first
+extent that fits. The public adapter records the current process as
+owner whenever one is running. The result is a three-byte far pointer —
+free it with `free_memory`, not `free`.
 
 ```c
 yos_user_ptr_t raw = yos->allocate_memory(64);
@@ -62,7 +71,7 @@ yos_user_ptr_t raw = yos->allocate_memory(64);
 
 ### `void free_memory(yos_user_ptr_t memory)`
 
-Returns a raw YOS allocation. Passing `NULL` is harmless.
+Returns a raw YOS allocation to its heap. Passing `NULL` is harmless.
 
 ```c
 yos->free_memory(raw);
@@ -70,14 +79,15 @@ yos->free_memory(raw);
 
 ### `yos_user_ptr_t shrink_memory(yos_user_ptr_t memory, size_t size)`
 
-Releases the bytes of a raw allocation beyond `size` back to the heap. The
-block never moves: on success the same pointer is returned and the first
-`size` bytes are unchanged. The tail is released only when it can form a heap
-block (12 bytes or more including its header); a smaller remainder, or a
-`size` that is not smaller than the block, leaves the block as it is and still
-returns `memory`. Returns `NULL` when `memory` does not address a live
-allocation, for example one already freed. Only pass pointers obtained from
-`allocate_memory`, not libc pointers.
+Releases the bytes of a raw allocation beyond `size` back to the heap.
+The block never moves — on success, the same pointer comes back and the
+first `size` bytes are unchanged. The tail is only released when it can
+form a heap block on its own (12 bytes or more, including its header); a
+smaller remainder, or a `size` that is not smaller than the block, leaves
+the block untouched and still returns `memory`. Returns `NULL` when
+`memory` does not address a live allocation — for example, one that was
+already freed. Only pass pointers obtained from `allocate_memory`, never
+libc pointers.
 
 ```c
 yos_user_ptr_t buffer = yos->allocate_memory(512);
@@ -86,13 +96,13 @@ size_t used = 128;
 yos->shrink_memory(buffer, used);   /* the rest is free again */
 ```
 
-This is table slot 3 (byte offset 6) in the grouped ABI 6 layout. The
+This is table slot 6 (byte offset 12) in the grouped ABI 1 layout. The
 kernel's own image loader uses it to drop a consumed XL relocation table
 from the end of its read buffer.
 
-For ordinary near data in the current execution bank, use `malloc`, `calloc`,
-`realloc`, `aligned_alloc`, and `free`. Use the raw far calls when an allocation
-must search beyond that bank.
+For ordinary near data in the current execution bank, use `malloc`,
+`calloc`, `realloc`, `aligned_alloc`, and `free` instead. Reach for the
+raw far calls only when an allocation needs to search beyond that bank.
 
 ## Clock and critical sections
 
@@ -106,9 +116,10 @@ uint16_t start = yos->clock_ticks();
 
 ### `void enter_critical_section(void)`
 
-On the outermost entry, records whether maskable interrupts were enabled,
-disables them, and increments the nesting depth. Nested calls are supported to
-a maximum depth of 127. Registers and flags are preserved.
+On the outermost entry, records whether maskable interrupts were
+enabled, disables them, and increments the nesting depth. Nested calls
+are supported up to a maximum depth of 127. Registers and flags are
+preserved throughout.
 
 ```c
 yos->enter_critical_section();
@@ -116,24 +127,26 @@ yos->enter_critical_section();
 
 ### `void leave_critical_section(void)`
 
-Decrements the nesting depth. The final matching leave restores the outer
-caller's interrupt state; it does not blindly enable interrupts. An unmatched
-leave is a harmless no-op, but callers should still balance every path.
+Decrements the nesting depth. The final matching leave restores the
+outer caller's interrupt state — it does not blindly enable interrupts.
+An unmatched leave is a harmless no-op, but callers should still balance
+every path.
 
 ```c
 shared_value = 7;
 yos->leave_critical_section();
 ```
 
-Always balance the pair and keep the protected region short.
+Always balance the pair, and keep the protected region as short as
+possible.
 
 ## Timers
 
 ### `yos_timer_t *create_timer(yos_handler_t handler, uint16_t ticks)`
 
-Creates a periodic timer. The first invocation occurs after `ticks + 1`
-50 Hz frames. Publication in the timer chain is atomic. The callback has no
-arguments and runs in scheduler context.
+Creates a periodic timer. The first invocation happens after `ticks + 1`
+50 Hz frames. Publication in the timer chain is atomic. The callback
+takes no arguments and runs in scheduler context.
 
 ```c
 static void pulse(void) { ++pulses; }
@@ -142,10 +155,10 @@ yos_timer_t *timer = yos->create_timer(pulse, 49);
 
 ### `void destroy_timer(yos_timer_t *timer)`
 
-Unlinks and frees a timer. Public ABI 1 timers are kernel-owned, so explicitly
-destroy every successful timer. Removal is atomic with respect to threads,
-but do not destroy a timer from a callback while the active chain is walking
-it.
+Unlinks and frees a timer. Public ABI 1 timers are kernel-owned, so
+explicitly destroy every timer you successfully create. Removal is
+atomic with respect to other threads, but never destroy a timer from a
+callback while the active chain is still walking it.
 
 ```c
 if (timer) yos->destroy_timer(timer);
@@ -155,8 +168,8 @@ if (timer) yos->destroy_timer(timer);
 
 ### `yos_event_t *create_event(void *owner)`
 
-Creates a reset event. Application code normally passes `NULL`; kernel-aware
-launchers may pass a valid owner object.
+Creates a reset event. Application code normally passes `NULL`;
+kernel-aware launchers may pass a valid owner object instead.
 
 ```c
 yos_event_t *event = yos->create_event(NULL);
@@ -170,41 +183,43 @@ Unlinks and frees a registered event.
 if (event) yos->destroy_event(event);
 ```
 
-Destruction is atomically removed from the kernel list, but the caller must
-ensure no other thread will subsequently use the handle.
+Destruction is removed from the kernel list atomically, but the caller
+still has to make sure no other thread will use the handle afterward.
 
 ### `yos_event_t *set_event(yos_event_t *event, enum yos_event_state state)`
 
-Sets `YOS_EVENT_SET` or `YOS_EVENT_RESET`. Returns `event` if it remains a
-registered object, otherwise `NULL`. The validation and state change are one
-protected operation; this short call is safe from a timer callback.
+Sets `YOS_EVENT_SET` or `YOS_EVENT_RESET`. Returns `event` if it is
+still a registered object, or `NULL` otherwise. Validation and the state
+change are one protected operation, so this short call is safe to make
+from a timer callback.
 
 ```c
 if (!yos->set_event(event, YOS_EVENT_SET)) handle_stale_event();
 ```
 
-### `void wait_event(yos_event_t *event)` — ABI 2
+### `void wait_event(yos_event_t *event)`
 
-Blocks the calling thread until the scheduler consumes one set signal. It
-receives no CPU time while waiting; a timer or another thread calls
-`set_event` to wake it. Signals set before the wait are retained; repeated
-sets coalesce. One signal wakes one waiter and is reset by the scheduler.
+Blocks the calling thread until the scheduler consumes one set signal.
+It receives no CPU time while waiting; a timer or another thread wakes
+it by calling `set_event`. A signal set before the wait is retained, and
+repeated sets coalesce rather than stack up. One signal wakes exactly one
+waiter, and the scheduler resets it.
 
 ```c
 yos->wait_event(event);
 process_ready_work();
 ```
 
-Call from a thread with interrupts enabled and outside any critical section.
-Retain the event until the wait returns and stop signal producers before
-freeing it. The call allocates nothing and returns no value. It is slot 12
-(byte offset 24); package ABI 6 callers with `--min-os 6`.
+Call it from a thread with interrupts enabled, outside any critical
+section. Keep the event alive until the wait returns, and stop signal
+producers before freeing it. The call allocates nothing and returns no
+value. It is slot 15 (byte offset 30); package callers with `--min-os 1`.
 
 ## Threads
 
 ### `yos_thread_t *create_thread(yos_entry_t entry, uint16_t stack_size, yos_process_t *process)`
 
-Creates a suspended thread owned by `process` with its own stack.
+Creates a suspended thread, owned by `process`, with its own stack.
 
 ```c
 static void worker(void) { for (;;) { } }
@@ -221,8 +236,8 @@ yos->exit_thread(thread);
 
 ### `void suspend_thread(yos_thread_t *thread)`
 
-Moves a runnable thread to the suspended queue. Suspending the current thread
-yields to another runnable thread.
+Moves a runnable thread to the suspended queue. Suspending the current
+thread yields to another runnable one.
 
 ```c
 yos->suspend_thread(thread);
@@ -236,14 +251,15 @@ Moves a suspended thread to the runnable queue.
 yos->resume_thread(thread);
 ```
 
-There is no join operation or public current-thread/current-process getter.
+There is no join operation, and no public current-thread or
+current-process getter.
 
 ## Processes and XPRG loading
 
 ### `yos_process_t *create_process(const char *name, yos_entry_t entry, size_t stack_size)`
 
-Creates a process and a runnable initial thread around code that is already
-resident.
+Creates a process and a runnable initial thread around code that is
+already resident.
 
 ```c
 static void child(void)
@@ -254,39 +270,43 @@ static void child(void)
 yos_process_t *process = yos->create_process("child", child, 256);
 ```
 
-The process object keeps at most seven name characters plus NUL. The returned
-process has no parent/creator field, even when this call is made by a process.
+The process object keeps at most seven name characters plus a NUL
+terminator. The returned process has no parent or creator field, even
+when this call is made from inside another process.
 
 ### `void exit_process(void)`
 
-Terminates the calling thread; the process survives while another member
-thread exists. Cleanup occurs in
-the scheduler and the call does not normally return.
+Terminates the calling thread; the process survives as long as another
+member thread exists. Cleanup happens inside the scheduler, and the call
+does not normally return.
 
 ```c
 yos->exit_process();
 ```
 
-The platform CRT uses this when `main` returns or `exit` is called. ABI 1 has
-no exit-status channel, process parent, or wait operation.
+The platform CRT calls this whenever `main` returns or `exit` is called.
+ABI 1 has no exit-status channel, no process parent, and no wait
+operation.
 
 ### `yos_process_t *load_process(const char *path)`
 
-Reads an XPRG v1 process, validates its kind, minimum OS ABI, CRC, XL records,
-allocates and relocates it, creates its declared stack, and schedules it.
+Reads an XPRG v1 process, validates its kind, minimum OS ABI, CRC, and
+XL records, allocates and relocates it, creates its declared stack, and
+schedules it.
 
 ```c
 yos_process_t *loaded = yos->load_process("EDITOR.PRC");
 ```
 
-The caller does not become a parent. Once created, the loaded process has no
-stored relationship to the process that loaded it.
+The caller never becomes a parent. Once created, the loaded process has
+no stored relationship to the process that loaded it.
 
 ### `uint8_t *process_load_error`
 
 Points to the last loader error byte. It is data, not a function pointer.
-The scheduler saves and restores its value per thread. Loading is synchronous,
-so read it after `load_process` or `load_library` returns `NULL`:
+The scheduler saves and restores its value per thread. Loading is
+synchronous, so read it right after `load_process` or `load_library`
+returns `NULL`:
 
 ```c
 loaded = yos->load_process("EDITOR.PRC");
@@ -296,26 +316,29 @@ if (!loaded) {
 }
 ```
 
-Values are `YOS_PROCESS_LOAD_OK`, `NOT_FOUND`, `NO_MEMORY`, `READ_ERROR`,
-`INVALID_IMAGE`, `START_ERROR`, `NOT_PROCESS`, `INCOMPATIBLE_OS`, and
-`BAD_CHECKSUM` (0 through 8). Code 6 means wrong image kind for the
-selected loading API. The current ABI also defines `BUSY` (9), `NO_PROCESS`
-(10), and `INIT_ERROR` (11).
+Values are `YOS_PROCESS_LOAD_OK`, `NOT_FOUND`, `NO_MEMORY`,
+`READ_ERROR`, `INVALID_IMAGE`, `START_ERROR`, `NOT_PROCESS`,
+`INCOMPATIBLE_OS`, and `BAD_CHECKSUM` (0 through 8). Code 6 means the
+wrong image kind was handed to the selected loading API. The current ABI
+also defines `BUSY` (9), `NO_PROCESS` (10), and `INIT_ERROR` (11).
 
-A competing or recursive loader call does not wait: it returns `NULL` with
-`BUSY`. Its status cannot overwrite the interrupted thread's saved status.
+A competing or recursive loader call does not wait — it returns `NULL`
+with `BUSY` immediately. Its status can never overwrite the interrupted
+thread's own saved status.
 
 ### `void *load_library(const char *path, uint16_t flags)`
 
-Loads a relocatable XPRG service and returns its relocated function-pointer
-table. `YOS_LIBRARY_PRIVATE` always creates a private instance;
-`YOS_LIBRARY_SHARED` reuses the same full name and image ABI. Initialization
-and self-registration run once, after relocation. Each successful call
-retains a reference until the acquiring process's last thread exits.
-There is no explicit unload call. `query_service` does not retain a library.
-The call is synchronous and normally preemptible; only short shared-state
-commits and nested firmware/descriptor transactions mask interrupts. Do not
-asynchronously terminate a thread while it is loading or initializing code.
+Loads a relocatable XPRG service and returns its relocated
+function-pointer table. `YOS_LIBRARY_PRIVATE` always creates a private
+instance; `YOS_LIBRARY_SHARED` reuses one with the same full name and
+image ABI. Initialization and self-registration run once, right after
+relocation. Every successful call retains a reference until the
+acquiring process's last thread exits, and there is no explicit unload
+call. `query_service` does not retain a library on its own. The call is
+synchronous and normally preemptible — only short shared-state commits
+and nested firmware/descriptor transactions mask interrupts. Never
+asynchronously terminate a thread while it is loading or initializing
+code.
 
 ```c
 shelllib_api_t *library = yos->load_library(
@@ -323,16 +346,17 @@ shelllib_api_t *library = yos->load_library(
 if (library) library->probe();
 ```
 
-See [Loadable Libraries](../the-book-of-yos/LIBRARIES.md) and the complete
-the build-only `y/tests/shell-yos/shelllib.s` fixture for the initializer
-contract, staged registration, ownership and supported image limits.
+See [Loadable Libraries](../the-book-of-yos/LIBRARIES.md) and the
+complete build-only `y/tests/shell-yos/shelllib.s` fixture for the
+initializer contract, staged registration, ownership, and supported
+image limits.
 
 ## Named services
 
 ### `void *query_service(const char *name)` table member
 
-Performs the same lookup as the global RST stub. Use the global spelling for
-bootstrap and either spelling afterwards.
+Performs the same lookup as the global RST stub. Use the global spelling
+for bootstrap, and either spelling afterward.
 
 ```c
 void *interface = yos->query_service("counter");
@@ -340,8 +364,9 @@ void *interface = yos->query_service("counter");
 
 ### `yos_service_t *register_service(const char *name, void *interface)`
 
-Copies a case-sensitive name and publishes the resident interface pointer.
-Keep names to 15 characters and keep the table alive while registered.
+Copies a case-sensitive name and publishes the resident interface
+pointer. Keep names to 15 characters, and keep the table itself alive for
+as long as it stays registered.
 
 ```c
 yos_service_t *service = yos->register_service("counter", &counter_api);
@@ -349,25 +374,28 @@ yos_service_t *service = yos->register_service("counter", &counter_api);
 
 ### `void unregister_service(yos_service_t *service)`
 
-Removes and frees a registration; clients must no longer use its pointer.
+Removes and frees a registration; clients must stop using its pointer
+immediately afterward.
 
 ```c
 if (service) yos->unregister_service(service);
 ```
 
 ABI 1 records current-process ownership, so ordinary registrations are
-reaped on process exit. During library initialization registration is
-library-owned and staged until success. Never manually unregister a
-loader-managed library service. Registration, lookup, and removal are atomic,
-but invoking the returned interface is not: mutable service state needs its
-own synchronization, and unregistering requires coordination with borrowers.
+reaped on process exit. During library initialization, registration is
+library-owned instead and stays staged until it succeeds. Never manually
+unregister a loader-managed library service. Registration, lookup, and
+removal are all atomic, but invoking the returned interface is not:
+mutable service state needs its own synchronization, and unregistering
+requires coordination with whatever still borrows it.
 
 ## Restart handlers
 
 ### `yos_handler_t get_interrupt_handler(uint8_t vector)`
 
-Returns the handler currently installed in a writable restart slot. Valid
-public indexes are `YOS_VECTOR_RST18`, `RST20`, `RST28`, `RST30`, and `RST38`.
+Returns the handler currently installed in a writable restart slot.
+Valid public indexes are `YOS_VECTOR_RST18`, `RST20`, `RST28`, `RST30`,
+and `RST38`.
 
 ```c
 yos_handler_t old = yos->get_interrupt_handler(YOS_VECTOR_RST20);
@@ -381,15 +409,17 @@ Atomically replaces a writable restart slot.
 yos->set_interrupt_handler(my_rst20, YOS_VECTOR_RST20);
 ```
 
-Do not replace RST 18 unless you also preserve named-service lookup. Handlers
-must obey the register/return contract of their restart and remain resident.
+Do not replace RST 18 unless you also preserve named-service lookup.
+Handlers must honor the register/return contract of their restart and
+must remain resident for as long as they are installed.
 
 ## Keyboard and mouse
 
 ### `uint8_t read_key(void)`
 
-Returns zero when the transition queue is empty. Otherwise bits 0–5 contain a
-one-based raw matrix key and `YOS_KEY_DOWN` distinguishes press from release.
+Returns zero when the transition queue is empty. Otherwise, bits 0–5
+carry a one-based raw matrix key, and `YOS_KEY_DOWN` distinguishes press
+from release.
 
 ```c
 uint8_t key_event = yos->read_key();
@@ -398,8 +428,8 @@ if (key_event & YOS_KEY_DOWN) key_pressed(key_event & YOS_KEY_CODE);
 
 ### `void calibrate_mouse(uint8_t x, uint8_t y)`
 
-Sets the absolute logical cursor position and synchronizes the timer scanner's
-baseline with the current Kempston hardware counters.
+Sets the absolute logical cursor position and synchronizes the timer
+scanner's baseline with the current Kempston hardware counters.
 
 ```c
 yos->calibrate_mouse(128, 96);
@@ -408,9 +438,10 @@ yos->calibrate_mouse(128, 96);
 ### `void read_mouse(yos_mouse_state_t *state)`
 
 Atomically copies the latest timer-sampled
-`{x, y, buttons, changed_buttons}`. `x` and `y` are bounded absolute screen
-coordinates, not deltas. The call does not poll hardware. It consumes the
-accumulated `changed_buttons` bits; coordinates and current buttons remain.
+`{x, y, buttons, changed_buttons}`. `x` and `y` are bounded absolute
+screen coordinates, not deltas, and the call never polls hardware
+directly. It consumes the accumulated `changed_buttons` bits, while
+coordinates and current buttons remain unchanged.
 
 ```c
 yos_mouse_state_t mouse;
@@ -421,10 +452,11 @@ yos->read_mouse(&mouse);
 
 ### `int *error_number`
 
-Points to the kernel filesystem error cell. Direct table calls update it. The
-libc wrappers copy it into their process-local `errno` when they fail.
-The kernel cell is saved/restored per thread, but libc's copy is not; see
-[Concurrency](MEMORY-TIME-AND-CONCURRENCY.md) before sharing libc calls.
+Points to the kernel filesystem error cell. Direct table calls update
+it, and the libc wrappers copy it into their process-local `errno`
+whenever they fail. The kernel cell is saved and restored per thread, but
+libc's copy is not — see [Concurrency](MEMORY-TIME-AND-CONCURRENCY.md)
+before sharing libc calls between threads.
 
 ```c
 int fd = yos->open("DATA.BIN", O_RDONLY);
@@ -435,20 +467,21 @@ if (fd < 0) direct_error = *yos->error_number;
 
 The members in this section mirror the functions from `<fcntl.h>`,
 `<unistd.h>`, and `<sys/stat.h>`. The directory ABI types are declared in
-`<yos.h>`. The direct form is shown because every operation is a `yos_t`
-entry.
+`<yos.h>`. The direct form is shown here because every operation is
+ultimately a `yos_t` entry.
 
-Descriptors and the esxDOS current directory are system-wide. Each descriptor
-call is serialized from validation through native I/O and state commit, so one
-call cannot corrupt kernel bookkeeping; append seek plus write is atomic.
-Sequences of calls are not transactions: coordinate `chdir` plus `open`, and
-do not close a descriptor or free a buffer while another thread uses it.
-`readdir` reuses storage in its `yos_directory_t`, so copy a record before
-another read on that stream.
+Descriptors and the esxDOS current directory are system-wide. Each
+descriptor call is serialized from validation through native I/O and
+state commit, so no single call can corrupt kernel bookkeeping — an
+append seek plus write is atomic as a pair. Sequences of calls are not
+transactions, though: coordinate `chdir` plus `open` yourself, and never
+close a descriptor or free a buffer while another thread is using it.
+`readdir` reuses storage inside its `yos_directory_t`, so copy a record
+before the next read on that same stream.
 
 ### `int open(const char *path, int flags)`
 
-Opens an 8.3 path and returns a descriptor or `-1`.
+Opens an 8.3 path and returns a descriptor, or `-1`.
 
 ```c
 int fd = yos->open("DATA.BIN", O_RDWR | O_CREAT);
@@ -464,7 +497,7 @@ if (fd >= 0) yos->close(fd);
 
 ### `ssize_t read(int fd, void *buffer, size_t count)`
 
-Reads up to `count` raw bytes; zero is end of file.
+Reads up to `count` raw bytes; zero means end of file.
 
 ```c
 ssize_t got = yos->read(fd, buffer, sizeof buffer);
@@ -472,7 +505,7 @@ ssize_t got = yos->read(fd, buffer, sizeof buffer);
 
 ### `ssize_t write(int fd, const void *buffer, size_t count)`
 
-Writes raw bytes and returns the count written.
+Writes raw bytes and returns the count actually written.
 
 ```c
 ssize_t put = yos->write(fd, buffer, length);
@@ -512,7 +545,7 @@ yos->rename("DRAFT.TXT", "FINAL.TXT");
 
 ### `int chdir(const char *path)`
 
-Changes the process-visible current directory maintained by esxDOS.
+Changes the process-visible current directory that esxDOS maintains.
 
 ```c
 yos->chdir("/APPS");
@@ -529,7 +562,7 @@ if (yos->getcwd(cwd, sizeof cwd)) use_path(cwd);
 
 ### `int mkdir(const char *path, mode_t mode)`
 
-Creates a directory. The Unix permission bits are accepted but ignored.
+Creates a directory. The Unix permission bits are accepted, but ignored.
 
 ```c
 yos->mkdir("SAVES", S_IRUSR | S_IWUSR);
@@ -570,7 +603,8 @@ yos_directory_t *directory = yos->opendir(".");
 
 ### `yos_directory_entry_t *readdir(yos_directory_t *directory)`
 
-Returns the next reused directory record, or `NULL` at end/error.
+Returns the next reused directory record, or `NULL` at end of stream or
+on error.
 
 ```c
 yos_directory_entry_t *entry = yos->readdir(directory);
@@ -594,7 +628,8 @@ if (directory) yos->closedir(directory);
 
 ### `int enumerate_disks(yos_disk_info_t *disks, size_t capacity)`
 
-Writes at most `capacity` records and returns the number written or `-1`.
+Writes at most `capacity` records and returns the number written, or
+`-1`.
 
 ```c
 yos_disk_info_t disk[2];
@@ -603,9 +638,9 @@ int present = yos->enumerate_disks(disk, 2);
 
 ## POSIX wrapper reference
 
-The YOS backend exports the standard spellings below. Each delegates to the
-corresponding raw member, copies kernel errors to `errno`, and returns the
-usual success/failure result:
+The YOS backend also exports the standard spellings below. Each one
+delegates to the corresponding raw member, copies kernel errors into
+`errno`, and returns the usual success/failure result:
 
 ```c
 int fd = open("DATA.BIN", O_RDONLY);                /* open */
@@ -628,34 +663,39 @@ rewinddir(d);                                        /* rewinddir */
 ok = closedir(d);                                    /* closedir */
 ```
 
-The kernel error cell is per-thread; linked libc `errno` is only process-local
-in ABI 1. Multithreaded code should use the raw entry plus
-`*yos->error_number`, or protect a wrapper call and its immediate `errno` read.
+The kernel error cell is per-thread; linked libc `errno` is only
+process-local in ABI 1. Multithreaded code should use the raw entry plus
+`*yos->error_number`, or protect a wrapper call together with its
+immediate `errno` read.
 
-For descriptors 1 and 2, `write` routes each byte to the installed output
-hook and succeeds even when no hook exists. Descriptor 0 reads as immediate
-end of file. Closing descriptors 0–2 succeeds without a kernel call.
+For descriptors 1 and 2, `write` routes each byte to the installed
+output hook and succeeds even when no hook exists. Descriptor 0 always
+reads as immediate end of file. Closing descriptors 0–2 succeeds without
+a kernel call.
 
-
-## Native esxDOS commands and firmware output (ABI 3)
+## Native esxDOS commands and firmware output
 
 ### `int exec_command(const char *commandline)`
 
 Executes `M_EXECCMD` (`0x8F`) with a NUL-terminated command line in RAM,
-without the leading dot. Absolute paths and arguments are supported. A
-return of zero means success; failure returns `0x100 + native_error`, so
-native error zero remains distinguishable from success. This call masks
-scheduler interrupts while esxDOS owns the ROM mapping. Current callers use
-an XPRG minimum OS version of 6.
+without the leading dot. Absolute paths and arguments are both
+supported. A return of zero means success; failure returns
+`0x100 + native_error`, so native error zero stays distinguishable from
+success. This call masks scheduler interrupts while esxDOS owns the ROM
+mapping. Current callers use an XPRG minimum OS version of 1.
 
 ### `yos_handler_t set_print_hook(yos_handler_t sink)`
 
 Installs the global RAM sink used by RST 10 and the fixed `0x09F4` print
-entry, returning the previous sink. This function occupies the third ABI 6
-identity-prefix slot, immediately after `rom_model`. Pass NULL to disable it. The callback
-uses the firmware ABI: the character arrives in A, and the callback must
-preserve registers and flags. It requires an assembly adapter, not an
-ordinary C function taking a character argument. Both ROM entry points
-preserve HL around the adapter. Buffer output in RAM while firmware is
-mapped, and draw it after `exec_command` returns. Restore the previous sink
-before releasing the callback's process memory.
+entry, returning the previous sink. This function occupies the fourth
+ABI 1 identity-prefix slot, immediately after `get_sys_info`. Pass NULL to
+disable it. The callback uses the firmware ABI: the character arrives in
+A, and the callback must preserve registers and flags. It needs an
+assembly adapter, not an ordinary C function taking a character
+argument. Both ROM entry points preserve HL around the adapter. Buffer
+output in RAM while firmware is mapped, and draw it once `exec_command`
+returns. Restore the previous sink before releasing the callback's
+process memory.
+
+Next: [GPX API Reference](GPX-API-REFERENCE.md), which covers the
+remaining 22 graphics calls.

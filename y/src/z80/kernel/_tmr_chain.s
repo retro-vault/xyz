@@ -18,7 +18,7 @@ __tmr_chain::
         or      l
         jr      z, .done
         push    hl
-        ld      de, #8
+        ld      de, #9
         add     hl, de
         ld      e, (hl)
         inc     hl

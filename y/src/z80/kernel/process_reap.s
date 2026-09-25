@@ -21,9 +21,9 @@
         .globl  _so_destroy
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-        .equ    PROCESS_FLAGS,     4
-        .equ    LIBRARY_REFS,     13
-        .equ    REFERENCE_LIBRARY, 4
+        .equ    PROCESS_FLAGS,     5
+        .equ    LIBRARY_REFS,     14
+        .equ    REFERENCE_LIBRARY, 5
         .area   _CODE
 
         ; inputs: hl = process/library; outputs: none

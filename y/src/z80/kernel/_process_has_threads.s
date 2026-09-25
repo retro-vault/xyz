@@ -7,7 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  _process_has_threads
         .globl  _thread_first_suspended
-        .equ    THREAD_PROCESS, 22
+        .equ    THREAD_PROCESS, 23
         .area   _CODE
 
         ; inputs: hl = process

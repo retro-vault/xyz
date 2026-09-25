@@ -12,7 +12,7 @@
         .globl  _mem_free_owner
         .globl  _so_destroy
         .globl  _process_reap
-        .equ    THREAD_PROCESS, 22
+        .equ    THREAD_PROCESS, 23
         .area   _CODE
 
         ; inputs: none; outputs: none

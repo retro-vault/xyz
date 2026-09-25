@@ -67,17 +67,13 @@ LIB_OBJECTS := $(addprefix $(BUILD_DIR)/,$(LIB_SOURCES:.s=.rel))
 BANK_MAP_OBJECTS := $(BUILD_DIR)/bank/48/_bank_map.rel \
 	$(BUILD_DIR)/bank/128/_bank_map.rel \
 	$(BUILD_DIR)/bank/next/_bank_map.rel
-FONT_SOURCE := gpx/_gpx_font_envy.s
-FONT_PACKED_ASM := $(BUILD_DIR)/generated/_gpx_font_packed.s
-FONT_PACKED_OBJECT := $(BUILD_DIR)/gpx/_gpx_font_packed.rel
-GPX_SOURCES := $(filter-out $(FONT_SOURCE),$(wildcard gpx/*.s))
-GPX_OBJECTS := $(addprefix $(BUILD_DIR)/,$(GPX_SOURCES:.s=.rel)) \
-	$(FONT_PACKED_OBJECT)
+POLYGON_SOURCES := gpx/gpx_draw_polygon.s gpx/gpx_fill_polygon.s
+GPX_SOURCES := $(filter-out $(POLYGON_SOURCES),$(wildcard gpx/*.s))
+GPX_OBJECTS := $(addprefix $(BUILD_DIR)/,$(GPX_SOURCES:.s=.rel))
 # Within one archive pass xld places members in this order. The two large
 # loader modules and smaller helpers fill the space before the fixed
-# 3CE1 vector/name reservation. Keep the relatively large library finisher
-# ahead of the two small lookup helpers so every bank backend packs it below
-# that reservation instead of spilling it into the final ROM page.
+# 3CE1 vector/name reservation. Keep the cleanup and lookup helpers before
+# the relatively large library finisher so they occupy the remaining gap.
 LOADER_OBJECTS := $(BUILD_DIR)/fs/_esx_print.rel \
 	$(BUILD_DIR)/bank/common/_bank_allocate_current.rel \
 	$(BUILD_DIR)/kernel/_library_initialize.rel \
@@ -90,9 +86,10 @@ LOADER_OBJECTS := $(BUILD_DIR)/fs/_esx_print.rel \
 	$(BUILD_DIR)/kernel/_process_read_exact.rel \
 	$(BUILD_DIR)/kernel/_library_find.rel \
 	$(BUILD_DIR)/kernel/_crc32.rel \
-	$(BUILD_DIR)/kernel/_library_load_finish.rel \
+	$(BUILD_DIR)/kernel/_process_has_threads.rel \
 	$(BUILD_DIR)/kernel/_library_acquire.rel \
-	$(BUILD_DIR)/kernel/_process_has_threads.rel
+	$(BUILD_DIR)/kernel/_library_load_finish.rel
+
 ALL_OBJECTS := $(LIB_OBJECTS) $(GPX_OBJECTS)
 # Main declares these roots so they fill the gap before the 0562 trap.
 CRITICAL_ENTRY_OBJECTS := $(BUILD_DIR)/startup/_critical_iff_repair.rel \
@@ -197,14 +194,6 @@ $(BUILD_DIR)/%.rel: %.s $(XAS)
 	mkdir -p $(dir $@)
 	$(XAS) $(XASFLAGS) -I../../include $< -o $@
 
-$(FONT_PACKED_ASM): $(FONT_SOURCE) ../../scripts/pack_font.py
-	mkdir -p $(dir $@)
-	python3 ../../scripts/pack_font.py $< $@
-
-$(FONT_PACKED_OBJECT): $(FONT_PACKED_ASM) $(XAS)
-	mkdir -p $(dir $@)
-	$(XAS) $(XASFLAGS) -I../../include $< -o $@
-
 $(ARCHIVE): $(ALL_OBJECTS) $(ARCHIVE_MANIFEST) $(XAR)
 	rm -f $@
 	$(XAR) rcs $@ @$(ARCHIVE_MANIFEST)
@@ -222,6 +211,7 @@ $(ARCHIVE_MANIFEST): $(ALL_OBJECTS) Makefile
 
 $(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile ../../scripts/patch_rom.py
 	mkdir -p $(BIN_DIR)
+	rm -f $@
 	$(XLD) $(XLDFLAGS) -Map=$(BUILD_DIR)/$(TARGET).map \
 		-o $@ $(CRT) $(MAIN) $(EARLY_OBJECTS) $(ARCHIVE)
 	python3 ../../scripts/patch_rom.py "$@" "$(BUILD_DIR)/$(TARGET).map"
@@ -239,10 +229,10 @@ $(SHELL_XL): ../../samples/shell-c/shell.c \
 
 $(SHELL_OUTPUT): $(SHELL_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name shell --stack-size 512 --min-os 6 \
+	$(XPROG) --process --name shell --stack-size 512 --min-os 1 \
 		$< -o $@
 
-$(SHELL_ASM_OBJECT): ../../samples/shell-asm/shell.s $(XAS)
+$(SHELL_ASM_OBJECT): ../../samples/shell-asm/shell.s ../../include/yos.inc $(XAS)
 	mkdir -p $(dir $@)
 	$(XAS) $(XASFLAGS) -I../../include $< -o $@
 
@@ -253,10 +243,10 @@ $(SHELL_ASM_XL): $(SHELL_ASM_OBJECT) $(XLD)
 
 $(SHELL_ASM_OUTPUT): $(SHELL_ASM_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name shell --stack-size 512 --min-os 6 \
+	$(XPROG) --process --name shell --stack-size 512 --min-os 1 \
 		$< -o $@
 
-$(LIBRARY_OBJECT): ../../tests/shell-yos/shelllib.s $(XAS)
+$(LIBRARY_OBJECT): ../../tests/shell-yos/shelllib.s ../../include/yos.inc $(XAS)
 	mkdir -p $(dir $@)
 	$(XAS) $(XASFLAGS) -I../../include $< -o $@
 
@@ -267,7 +257,7 @@ $(LIBRARY_XL): $(LIBRARY_OBJECT) $(XLD)
 
 $(LIBRARY_OUTPUT): $(LIBRARY_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --service --name shelllib --abi 1 --min-os 6 \
+	$(XPROG) --service --name shelllib --abi 1 --min-os 1 \
 		--entry 0x$$(awk '$$2 == "_entry" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_probe" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
 		--export 0x$$(awk '$$2 == "_message" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \

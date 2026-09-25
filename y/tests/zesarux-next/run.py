@@ -211,11 +211,14 @@ def main() -> int:
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
-    command = base_command + [
+    # The native Next banking probe does not need storage. In particular, do
+    # not attach divIDE here: a fast boot can enter _boot_shell before ZRCP
+    # connects, allowing the disk firmware to page the YOS ROM out. The real
+    # divIDE path is exercised separately on 48K and 128K below.
+    command = core_command + [
+        "--nowelcomemessage", "--no-saveconf-on-exit", "--ao", "null",
         "--vo", "null", "--enable-remoteprotocol",
-        "--remoteprotocol-port", str(port), "--enable-breakpoints",
-        "--set-breakpoint", "1", f"PC={syms['_boot_shell']:04X}H",
-        "--set-breakpointaction", "1", "break"]
+        "--remoteprotocol-port", str(port), "--enable-breakpoints"]
 
     machine = None
     observation = {}
@@ -330,10 +333,10 @@ def main() -> int:
                     while (0x5f01 <= node < 0xc000 and node not in visited and
                            len(visited) < 16):
                         visited.add(node)
-                        record = guest.bytes(node, 16)
-                        if not record[4] & 0x02:
+                        record = guest.bytes(node, 17)
+                        if not record[5] & 0x02:
                             process_seen = node
-                            name = record[5:13].split(b"\0", 1)[0]
+                            name = record[6:14].split(b"\0", 1)[0]
                             if name == b"shell":
                                 break
                         node = int.from_bytes(record[:2], "little")

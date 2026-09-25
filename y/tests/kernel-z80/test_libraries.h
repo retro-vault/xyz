@@ -50,12 +50,12 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
              "unlink library client thread");
         call(sym("_list_insert"), sym("_thread_first_terminated"), thread,
              "terminate library client thread");
-        mem.bytes[thread + 19] = 4;
+        mem.bytes[thread + 20] = 4;
         mem.word(sym("_thread_current"), original_thread);
         call(sym("__thread_cleanup_terminated"), 0, 0, "reap library client");
     };
     const auto current = [&](std::uint16_t p) {
-        mem.word(sym("_thread_current"), mem.word(p + 13));
+        mem.word(sym("_thread_current"), mem.word(p + 14));
     };
     const auto load = [&](std::uint16_t flags = 1) {
         put_string(0xe240, "shelllib.svc");
@@ -69,8 +69,8 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
         for (const auto root : {"__svc_first", "__library_private_services"}) {
             auto service = mem.word(sym(root));
             while (service) {
-                if (mem.word(service + 20) == table)
-                    return mem.word(service + 2);
+                if (mem.word(service + 21) == table)
+                    return mem.word(service + 3);
                 service = mem.word(service);
             }
         }
@@ -86,8 +86,8 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     // Actually preempt the first loader and have a second runnable thread
     // attempt the same load. It must get BUSY, then the first must complete
     // once, without inheriting that other thread's error or publishing early.
-    const auto a_thread = mem.word(a + 13);
-    const auto b_thread = mem.word(b + 13);
+    const auto a_thread = mem.word(a + 14);
+    const auto b_thread = mem.word(b + 14);
     const auto older_threads = mem.word(a_thread);
     mem.word(sym("_thread_first_running"), a_thread);
     mem.word(a_thread, b_thread);
@@ -107,7 +107,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
               mem.bytes.begin() + busy_entry);
     mem.word(busy_entry + 7, sym("_library_load"));
     mem.word(busy_entry + 14, sym("_process_last_error"));
-    mem.word(b_thread + 7, busy_entry);
+    mem.word(b_thread + 8, busy_entry);
     unsigned contention_phase = 0;
     files.observe = [&] {
         const auto state = cpu.snapshot();
@@ -128,12 +128,14 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     mem.word(sym("_thread_first_running"), b_thread);
     mem.word(b_thread, a_thread);
     mem.word(a_thread, older_threads);
-    check(contention_phase == 2 && mem.bytes[b_thread + 15] == 9,
+    check(contention_phase == 2 && mem.bytes[b_thread + 16] == 9,
           "did not exercise both loader threads and save the BUSY error");
-    check(first && error() == 0, "first shared load failed");
+    check(first && error() == 0,
+          "first shared load returned " + std::to_string(first) +
+              " with error " + std::to_string(error()));
     const auto library = service_owner(first);
-    check(library && mem.bytes[library + 4] == 3 &&
-              mem.word(library + 13) == 1, "missing threadless library owner");
+    check(library && mem.bytes[library + 5] == 3 &&
+              mem.word(library + 14) == 1, "missing threadless library owner");
     const auto code = std::uint16_t(mem.word(first + 1) - exports.at("_probe"));
     // The callable table is common memory; executable code is retained in
     // its selected bank as a separate owner block.
@@ -153,7 +155,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
          {std::pair{0, "_probe"}, {1, "_message"},
           {2, "_initializations"}, {3, "_calls"}, {4, "_sum3"}}) {
         const auto entry = std::uint16_t(first + 3 * slot);
-        check(mem.bytes[entry] == mem.bytes[library + 15] &&
+        check(mem.bytes[entry] == mem.bytes[library + 16] &&
                   mem.word(entry + 1) == code + exports.at(name),
               "self-registered interface contains an invalid far pointer");
     }
@@ -175,18 +177,18 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
               "library returned an invalid far string pointer");
     const auto resident_usage = heap_usage(sym("__sys_heap"));
     current(b);
-    check(load() == first && mem.word(library + 13) == 2,
+    check(load() == first && mem.word(library + 14) == 2,
           "second process did not share the same image");
-    check(load() == first && mem.word(library + 13) == 3,
+    check(load() == first && mem.word(library + 14) == 3,
           "repeated acquisition was not counted");
     const auto reused_usage = heap_usage(sym("__sys_heap"));
     check(reused_usage.first == resident_usage.first + 2 &&
-              reused_usage.second == resident_usage.second + 2 * (7 + 6) &&
+              reused_usage.second == resident_usage.second + 2 * (7 + 7) &&
               invoke(first, 2) == 1,
           "shared reuse did not allocate exactly its two reference records, "
           "or initialized another image");
-    retire_thread(mem.word(a + 13));
-    check(mem.word(library + 13) == 2 && query() == first,
+    retire_thread(mem.word(a + 14));
+    check(mem.word(library + 14) == 2 && query() == first,
           "first client exit prematurely unloaded shared code");
     current(b);
     const auto private_table = load(0);
@@ -206,8 +208,8 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
                               {std::uint8_t(b), std::uint8_t(b >> 8)});
     check(sibling != 0, "sibling allocation failed");
     call(sym("_thread_resume"), sibling, 0, "resume client sibling");
-    retire_thread(mem.word(b + 13));
-    check(mem.word(library + 13) == 2,
+    retire_thread(mem.word(b + 14));
+    check(mem.word(library + 14) == 2,
           "main-thread exit released a still-live process's references");
     retire_thread(sibling);
     check(query() == 0 && mem.word(sym("__library_refs")) == 0 &&
@@ -225,7 +227,8 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
         check(usage() == baseline && files.handles.empty() &&
                   mem.word(sym("__library_refs")) == 0 &&
                   mem.word(sym("__library_private_services")) == 0 &&
-                  mem.word(mem.word(a + 13) + 2) == 0,
+                  mem.bytes[mem.word(a + 14) + 2] == 0xff &&
+                  mem.word(mem.word(a + 14) + 3) == 0,
               name + ": failed load leaked resources or owner override");
         check(mem.bytes[sym("__image_busy")] == 0,
               name + ": failed load retained the loader lock");
@@ -299,7 +302,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
               invoke(automatic, 0) == 0x600d && query() == 0,
           "initializer-free private library did not bind its exports");
     files.files["shelllib.svc"] = image;
-    retire_thread(mem.word(a + 13));
+    retire_thread(mem.word(a + 14));
     check(usage() == clean_usage, "rollback tests leaked storage");
 
     // Exhaust each heap without relying on allocator block sizes.
@@ -335,8 +338,8 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
           "library object allocation failure leaked the image");
     put_string(0xe240, "shell.sys");
     check(call(sym("_process_load"), 0xe240, 0, "process allocation failure") == 0 &&
-              error() == 5 && usage() == full_system,
-          "process-start failure did not roll back its image");
+              error() == 2 && usage() == full_system,
+          "fixed-heap system-image allocation failure changed heap state");
     empty_heap(sym("__sys_heap"), occupied);
     const auto pinned = load();
     const auto pinned_owner = service_owner(pinned);
@@ -344,11 +347,11 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     occupied = fill_heap(sym("__sys_heap"));
     const auto before_reference_failure = usage();
     check(load() == 0 && error() == 2 &&
-              mem.word(pinned_owner + 13) == 1 &&
+              mem.word(pinned_owner + 14) == 1 &&
               usage() == before_reference_failure,
           "reference allocation failure changed the resident library");
     empty_heap(sym("__sys_heap"), occupied);
-    retire_thread(mem.word(a + 13));
+    retire_thread(mem.word(a + 14));
     check(usage() == clean_usage, "out-of-memory paths leaked storage");
     check(files.opens == files.closes && files.handles.empty(),
           "a load path leaked file descriptors");
