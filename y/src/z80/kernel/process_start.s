@@ -56,13 +56,13 @@ _process_start::
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
-        ld      a, d
+        pop     hl                      ; entry, DE retains stack size
+        ld      a, h
         cp      #0xc0
         jr      c, .entry_ready
         ld      a, (__bank_current)
         ld      PROCESS_BANK(ix), a
 .entry_ready:
-        pop     hl
         push    ix
         call    _thread_create
         ld      PROCESS_MAIN_THREAD(ix), e

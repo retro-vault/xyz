@@ -237,7 +237,7 @@ int main(int argc, char** argv) {
 
         const auto invoke = [&](std::uint16_t function, std::uint16_t hl,
                                 std::initializer_list<std::uint8_t> args = {},
-                                std::uint8_t a = 0) {
+                                std::uint8_t a = 0, std::uint16_t de = 0) {
             constexpr std::uint16_t returned = 0x4100;
             const auto stack = std::uint16_t(sym("__sys_stack") - 64);
             mem.word(stack - 2, returned);
@@ -248,11 +248,12 @@ int main(int argc, char** argv) {
             call.pc = function;
             call.sp = stack - 2;
             call.hl = hl;
-            call.de = 0;
+            call.de = de;
             call.bc = 0;
             call.af = std::uint16_t(a) << 8;
             call.ix = 0xa55a;
             call.iy = 0x5aa5;
+            call.iff1 = call.iff2 = false;
             cpu.restore(call);
             run_until([&] { return cpu.pc() == returned; }, 500000,
                       "multi-bank user allocation");
@@ -376,11 +377,102 @@ int main(int argc, char** argv) {
                     "128K backend did not retain the YOS ROM slot");
         }
 
+        // Timers capture execution bank, not their owner's home bank.
+        // Both banked hooks use the same near address but different markers.
+        constexpr std::uint16_t timer_hook = 0xc180;
+        constexpr std::uint16_t common_hook = 0x4300;
+        constexpr std::uint16_t timer_markers = 0x4204;
+        const auto put_timer_hook = [&](std::uint16_t address,
+                                        std::uint16_t marker_address) {
+            const std::array<std::uint8_t, 8> code = {
+                0x3a, std::uint8_t(marker_address),
+                std::uint8_t(marker_address >> 8), 0x3c,
+                0x32, std::uint8_t(marker_address),
+                std::uint8_t(marker_address >> 8), 0xc9
+            };
+            std::copy(code.begin(), code.end(), mem.bytes.begin() + address);
+        };
+        put_timer_hook(timer_hook, timer_markers);
+        const auto timer0 = invoke(sym("__yos_install_timer"), timer_hook,
+                                   {}, 0, 1).de;
+        invoke(sym("__bank_map"), 0, {}, 1);
+        put_timer_hook(timer_hook, timer_markers + 1);
+        const auto timer1 = invoke(sym("__yos_install_timer"), timer_hook,
+                                   {}, 0, 1).de;
+        put_timer_hook(common_hook, timer_markers + 2);
+        const auto common_timer = invoke(sym("__yos_install_timer"), common_hook).de;
+        require(timer0 && timer1 && common_timer &&
+                    mem.bytes[timer0 + 11] == 0 &&
+                    mem.bytes[timer1 + 11] == 1 &&
+                    mem.bytes[timer1 + 2] == 0xff &&
+                    mem.bytes[common_timer + 11] == 0xff,
+                "mixed timers did not capture callback banks independently");
+        for (unsigned tick = 1; tick <= 4; ++tick) {
+            const auto interrupted_bank = std::uint8_t(tick > 2);
+            invoke(sym("__bank_map"), 0, {}, interrupted_bank);
+            const auto after = invoke(sym("__tmr_chain"), 0);
+            require(mem.bytes[sym("__bank_current")] == interrupted_bank &&
+                        mem.mapped_page == physical_page(interrupted_bank) &&
+                        mem.bytes[timer_markers] == tick / 2 &&
+                        mem.bytes[timer_markers + 1] == tick / 2 &&
+                        mem.bytes[timer_markers + 2] == tick &&
+                        !after.iff1 && !after.iff2,
+                    "mixed callbacks changed bank, cadence or IRQ state");
+        }
+        for (const auto timer : {common_timer, timer1, timer0})
+            invoke(sym("_tmr_uninstall"), timer);
+        unsigned timers_left = 0;
+        for (auto timer = mem.word(sym("__tmr_first")); timer; timer = mem.word(timer))
+            require(++timers_left <= 3, "mixed timers leaked a timer object");
+        require(timers_left == 3, "mixed timers damaged the kernel timer chain");
+
+        // Classify the actual entry address, not the small stack argument.
+        mem.bytes[0x8300] = 'b';
+        mem.bytes[0x8301] = 0;
+        const auto banked_process = invoke(sym("_process_start"), 0x8300,
+                                           {128, 0}, 0, timer_hook).de;
+        require(banked_process && mem.bytes[banked_process + 16] == 1 &&
+                    mem.bytes[mem.word(banked_process + 14) + 25] == 1,
+                "bank-one process/thread startup classified the stack size");
+        const auto fixed_process = invoke(sym("_process_start"), 0x8300,
+                                          {128, 0}, 0, common_hook).de;
+        require(fixed_process && mem.bytes[fixed_process + 16] == 0xff &&
+                    mem.bytes[mem.word(fixed_process + 14) + 25] == 0xff,
+                "fixed-memory process/thread startup captured a user bank");
+
+        // Start both freshly created threads through real IM2 dispatch.
+        // The banked thread must execute in bank one without test RAM repair.
+        const auto fixed_thread = mem.word(fixed_process + 14);
+        const auto banked_thread = mem.word(banked_process + 14);
+        invoke(sym("__bank_map"), 0, {}, 0);
+        auto scheduled = cpu.snapshot();
+        scheduled.pc = done;
+        scheduled.sp = sym("__sys_stack");
+        scheduled.im = 2;
+        scheduled.i = 0x5e;
+        scheduled.iff1 = scheduled.iff2 = true;
+        cpu.restore(scheduled);
+        require(cpu.interrupt(0xff), "fixed startup IRQ was rejected");
+        run_until([&] { return cpu.pc() == common_hook &&
+                              mem.word(sym("_thread_current")) == fixed_thread; },
+                  500000, "fixed-memory startup through IM2");
+        scheduled = cpu.snapshot();
+        scheduled.iff1 = scheduled.iff2 = true;
+        cpu.restore(scheduled);
+        require(cpu.interrupt(0xff), "banked startup IRQ was rejected");
+        run_until([&] { return cpu.pc() == timer_hook &&
+                              mem.word(sym("_thread_current")) == banked_thread; },
+                  500000, "banked startup through IM2");
+        require(mem.bytes[sym("__bank_current")] == 1 &&
+                    mem.mapped_page == physical_page(1),
+                "IM2 startup did not restore the new thread's image bank");
+
         std::cout << "PASS: " << io.backend << " backend initialized "
                   << bank_count << " banked user heaps, spilled allocation "
                      "from bank 0 to bank 1, executed and read bank-one "
                      "memory, restored bank zero, and left the fixed OS "
-                     "heap unchanged\n";
+                     "heap unchanged; mixed-bank timer callbacks restored "
+                     "IRQ bank/state and fixed/banked process startup passed\n";
         return 0;
     }
 
@@ -496,6 +588,8 @@ int main(int argc, char** argv) {
         has_mouse_timer |= hook == sym("__mouse_scan");
         require(mem.word(timer + 7) == 0 && mem.word(timer + 9) == 0,
                 "kernel input/clock timer is not frame-periodic");
+        require(mem.bytes[timer + 11] == 0xff,
+                "kernel callback was not classified as fixed memory");
     }
     require(kernel_timers == 3 && has_clock_timer && has_keyboard_timer &&
                 has_mouse_timer,
@@ -701,31 +795,32 @@ int main(int argc, char** argv) {
     exercise_far_gate(false);
     exercise_far_gate(true);
     {
-        // Four nested cross-bank frames are accepted. The fifth fails safely
+        // Eight nested cross-bank frames are accepted. The ninth fails safely
         // to its continuation and must not enter its target.
         constexpr std::uint16_t gate = 0x4000;
-        constexpr std::uint16_t done = 0x4100;
-        constexpr std::uint16_t marker = 0x4300;
-        constexpr std::array<std::uint16_t, 5> targets = {
-            0x4020, 0x4040, 0x4060, 0x4080, 0x40a0};
+        constexpr std::uint16_t done = 0x4300;
+        constexpr std::uint16_t marker = 0x4500;
+        constexpr std::array<std::uint16_t, 9> targets = {
+            0x4020, 0x4040, 0x4060, 0x4080, 0x40a0,
+            0x40c0, 0x40e0, 0x4100, 0x4120};
         mem.bytes[marker] = 0;
         mem.bytes[gate] = 0xe7;
         mem.bytes[gate + 1] = 1;
         mem.word(gate + 2, targets[0]);
         mem.bytes[gate + 4] = 0xc3;
         mem.word(gate + 5, done);
-        for (unsigned level = 0; level != 4; ++level) {
+        for (unsigned level = 0; level != 8; ++level) {
             const auto target = targets[level];
             mem.bytes[target] = 0xe7;
             mem.bytes[target + 1] = std::uint8_t(level + 2);
             mem.word(target + 2, targets[level + 1]);
             mem.bytes[target + 4] = 0xc9;
         }
-        mem.bytes[targets[4]] = 0x3e;       // LD A,1 (must not execute)
-        mem.bytes[targets[4] + 1] = 1;
-        mem.bytes[targets[4] + 2] = 0x32;   // LD (marker),A
-        mem.word(targets[4] + 3, marker);
-        mem.bytes[targets[4] + 5] = 0xc9;
+        mem.bytes[targets[8]] = 0x3e;       // LD A,1 (must not execute)
+        mem.bytes[targets[8] + 1] = 1;
+        mem.bytes[targets[8] + 2] = 0x32;   // LD (marker),A
+        mem.word(targets[8] + 3, marker);
+        mem.bytes[targets[8] + 5] = 0xc9;
 
         auto before = cpu.snapshot();
         before.halted = false;
@@ -738,7 +833,7 @@ int main(int argc, char** argv) {
         before.ix = 0x5678;
         before.iy = 0x6789;
         cpu.restore(before);
-        run_until([&] { return cpu.pc() == done; }, 2000,
+        run_until([&] { return cpu.pc() == done; }, 4000,
                   "nested RST20 far calls");
         const auto after = cpu.snapshot();
         require(!mem.bytes[marker] && after.sp == before.sp &&
@@ -1220,6 +1315,10 @@ int main(int argc, char** argv) {
         0, {}, 0, false, unsigned(shell.size()) * 300u);
     require(prc_process != 0 && mem.bytes[prc_process + 16] != 0xff,
             "ordinary .prc was not assigned a user-heap bank");
+    const auto prc_thread = mem.word(prc_process + 14);
+    require(prc_thread != 0 && mem.bytes[prc_thread + 25] ==
+                mem.bytes[prc_process + 16],
+            "banked process main thread did not inherit its startup bank");
     const auto old_bank = mem.bytes[sym("__bank_current")];
     const auto prc_bank = mem.bytes[prc_process + 16];
     call_kernel(sym("__bank_map"), 0, 0, "inspect process bank", prc_bank);
@@ -1359,6 +1458,82 @@ int main(int argc, char** argv) {
                 "public timer removal");
     require(call_kernel(mem.word(table + 14), 0, 0, "public clock") == 0,
             "clock advanced before an interrupt");
+
+    // IRQ callbacks use fixed stacks, even when their code changes banks.
+    // Distinct hooks at the same near address detect accidental near calls.
+    {
+        constexpr std::uint16_t hook_address = 0xc100;
+        constexpr std::uint16_t fixed_hook = 0x4380;
+        constexpr std::uint16_t markers = 0x43a0;
+        const auto timer_call = [&](std::uint16_t function,
+                                    std::uint16_t hl, std::uint16_t de,
+                                    std::uint8_t a = 0) {
+            auto context = cpu.snapshot();
+            context.halted = false;
+            context.pc = function;
+            context.sp = 0x44fe;
+            context.hl = hl;
+            context.de = de;
+            context.af = std::uint16_t(a) << 8;
+            context.ix = 0xa55a;
+            context.iy = 0x5aa5;
+            context.iff1 = context.iff2 = false;
+            mem.word(context.sp, 0x4100);
+            cpu.restore(context);
+            run_until([&] { return cpu.pc() == 0x4100; }, 200000,
+                      "mixed-bank timer call");
+            const auto result = cpu.snapshot();
+            require(result.sp == 0x4500 && result.ix == 0xa55a &&
+                        result.iy == 0x5aa5 && !result.iff1 && !result.iff2,
+                    "timer dispatch changed fixed stack, indices or IFF");
+            return result.de;
+        };
+        const auto put_hook = [&](std::uint16_t address, std::uint16_t marker) {
+            const std::array<std::uint8_t, 8> code = {
+                0x3a, std::uint8_t(marker), std::uint8_t(marker >> 8),
+                0x3c, 0x32, std::uint8_t(marker),
+                std::uint8_t(marker >> 8), 0xc9
+            };
+            std::copy(code.begin(), code.end(), mem.bytes.begin() + address);
+        };
+        const auto original_bank = mem.bytes[sym("__bank_current")];
+        const auto before_timers = heap_usage(sym("__sys_heap"));
+        mem.bytes[markers] = mem.bytes[markers + 1] = mem.bytes[markers + 2] = 0;
+        timer_call(sym("__bank_map"), 0, 0, 0);
+        put_hook(hook_address, markers);
+        const auto timer0 = timer_call(mem.word(table + 20), hook_address, 1);
+        require(timer0 && mem.bytes[timer0 + 11] == 0,
+                "bank-zero timer did not capture its callback bank");
+        std::uint16_t timer1 = 0;
+        if (mem.banked) {
+            timer_call(sym("__bank_map"), 0, 0, 1);
+            put_hook(hook_address, markers + 1);
+            timer1 = timer_call(mem.word(table + 20), hook_address, 1);
+            require(timer1 && mem.bytes[timer1 + 11] == 1 &&
+                        mem.bytes[timer1 + 2] == 0xff,
+                    "callback bank was confused with the timer owner bank");
+        }
+        put_hook(fixed_hook, markers + 2);
+        const auto common_timer = timer_call(mem.word(table + 20), fixed_hook, 0);
+        require(common_timer && mem.bytes[common_timer + 11] == 0xff,
+                "fixed callback captured a banked registration context");
+        for (unsigned tick = 1; tick <= 4; ++tick) {
+            const auto interrupted_bank = std::uint8_t(mem.banked && tick > 2);
+            timer_call(sym("__bank_map"), 0, 0, interrupted_bank);
+            timer_call(sym("__tmr_chain"), 0, 0);
+            require(mem.bytes[sym("__bank_current")] == interrupted_bank &&
+                        mem.bytes[markers] == tick / 2 &&
+                        mem.bytes[markers + 1] == (mem.banked ? tick / 2 : 0) &&
+                        mem.bytes[markers + 2] == tick,
+                    "mixed-bank timer dispatch changed bank or timer cadence");
+        }
+        timer_call(mem.word(table + 22), common_timer, 0);
+        if (timer1) timer_call(mem.word(table + 22), timer1, 0);
+        timer_call(mem.word(table + 22), timer0, 0);
+        timer_call(sym("__bank_map"), 0, 0, original_bank);
+        require(heap_usage(sym("__sys_heap")) == before_timers,
+                "mixed-bank timers leaked fixed OS heap memory");
+    }
 
     constexpr std::uint16_t mouse_state = 0x8210;
     io.mouse_x = 17;
@@ -1608,7 +1783,7 @@ int main(int argc, char** argv) {
     test_thread_safety(mem, cpu, call_kernel, sym, files, gpx_context);
     call_kernel(sym("_gpx_destroy"), gpx_context, 0, "destroy GPX context");
     constexpr std::array<std::uint16_t, 4> boot_object_sizes = {
-        11, 11, 11, 23
+        12, 12, 12, 23
     };
     auto block = os_heap;
     bool boot_heap_ok = boot_font < 0x4000;
@@ -1679,6 +1854,9 @@ int main(int argc, char** argv) {
 
     const auto thread = mem.word(process + 14);
     require(thread != 0, "main thread was not created");
+    require(mem.bytes[process + 16] == 0xff &&
+                mem.bytes[thread + 25] == 0xff,
+            "common-memory process/thread was assigned a user bank");
     require(mem.word(thread + 23) == process, "thread process is wrong");
     require(mem.bytes[thread + 20] == 1, "thread is not runnable");
     require(mem.word(sym("_thread_first_running")) == thread,

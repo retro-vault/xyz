@@ -15,7 +15,7 @@
 
         .equ    THREAD_CALL_DEPTH, 26
         .equ    THREAD_CALL_STACK, 27
-        .equ    BANK_CALL_LIMIT,    4
+        .equ    BANK_CALL_LIMIT,    8
         .equ    BANK_CALL_SIZE,     3
 
         .area   _BSS

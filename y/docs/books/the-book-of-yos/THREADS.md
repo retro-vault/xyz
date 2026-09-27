@@ -8,7 +8,7 @@ automatically, with no cooperation required from the threads themselves.
 
 ## The thread structure
 
-Every thread is a 39-byte `thread_t` object allocated on the kernel heap
+Every thread is a 51-byte `thread_t` object allocated on the kernel heap
 (`__sys_heap`). The assembly modules address its fields through the
 `.equ` offsets shown here:
 
@@ -25,7 +25,7 @@ typedef struct thread_s {
     void     *process;      /* 23: owning process               THREAD_PROCESS */
     uint8_t  bank;          // 25: exact mapped bank, FF = common thread
     uint8_t  call_depth;    // 26: active cross-bank call frames
-    uint8_t  calls[12];     // 27: four bank/continuation frames
+    uint8_t  calls[24];     // 27: eight bank/continuation frames
 } thread_t;
 ```
 

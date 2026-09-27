@@ -92,14 +92,15 @@ measured in 50 Hz ticks. The kernel routines are `tmr_install` and
 
 ### The timer object
 
-A timer is a 10-byte system object on `__sys_heap`:
+A timer is a 12-byte system object on `__sys_heap`:
 
 ```c
 typedef struct timer_s {
     sysobj_t hdr;           /* 0: list link + owner */
-    void (*hook)(void);     /* 4: callback */
-    uint16_t ticks;         /* 6: reload value */
-    uint16_t _tick_count;   /* 8: countdown */
+    void (*hook)(void);     /* 5: callback address */
+    uint16_t ticks;         /* 7: reload value */
+    uint16_t _tick_count;   /* 9: countdown */
+    uint8_t bank;           /* 11: callback bank, FFh for fixed memory */
 } timer_t;
 ```
 
@@ -113,11 +114,19 @@ yos_timer_t *t = yos->create_timer(my_callback, 9);
 yos_timer_t *t = yos->create_timer(my_callback, 0);
 ```
 
-`create_timer` registers the timer with owner `NONE`. Kernel code that
-calls `tmr_install` directly can instead pass a process as the owner, in
-which case the timer is destroyed automatically when that process is
-reaped. The return value is a handle you can use to remove the timer
+`create_timer` registers the timer with the current process as owner,
+so it is destroyed automatically when that process is reaped. Kernel
+code that calls `tmr_install` directly can specify an owner or `NONE`.
+The return value is a handle you can use to remove the timer
 later, or `NULL` if `__sys_heap` is exhausted.
+
+Callbacks below `0xC000` are fixed-memory callbacks (`bank = FFh`). For
+callbacks in `0xC000`–`0xFFFF`, installation captures the currently mapped
+logical bank, independently of the owner's home bank. Register a banked
+callback while its own bank is mapped, and keep its code alive until the
+timer is removed. Dispatch maps that bank only for the callback, then
+restores the interrupted bank before walking the next timer. No thread
+far-call frame is consumed by this interrupt-context mapping.
 
 ### Removing a timer
 

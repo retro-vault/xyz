@@ -136,7 +136,7 @@ struct yos_thread {
     yos_process_t *process;
     uint8_t bank;
     uint8_t call_depth;
-    uint8_t call_frames[12];
+    uint8_t call_frames[24];
 };
 
 struct yos_timer {
@@ -145,6 +145,7 @@ struct yos_timer {
     yos_handler_t handler;
     uint16_t period;
     uint16_t remaining;
+    uint8_t bank; /* Callback execution bank; FFh for fixed-memory code. */
 };
 
 struct yos_event {
@@ -343,7 +344,7 @@ typedef struct yos_s {
     void (*leave_critical_section)(void);
 
     /* Timers and synchronization events. */
-    /* Create a periodic timer that invokes handler every ticks + 1 ticks. */
+    /* Fire every ticks + 1 ticks; banked handlers use the registration bank. */
     yos_timer_t *(*create_timer)(yos_handler_t handler, uint16_t ticks);
     /* Destroy a timer and stop future callbacks. */
     void (*destroy_timer)(yos_timer_t *timer);

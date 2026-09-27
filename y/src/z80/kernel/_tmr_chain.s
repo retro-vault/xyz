@@ -7,8 +7,14 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  __tmr_chain
         .globl  __tmr_first
+        .globl  __bank_current
+        .globl  __bank_map
+        .equ    TIMER_BANK, 11
         .area   _CODE
 
+        ; inputs: none; called with interrupts disabled
+        ; outputs: none; restores the interrupted execution bank
+        ; clobbers: af, bc, de, hl; preserves ix and iy
 __tmr_chain::
         push    ix
         push    iy
@@ -60,4 +66,28 @@ __tmr_chain::
         pop     ix
         ret
 .invoke:
-        jp      (hl)
+        push    hl
+        pop     iy                      ; callback address
+        ld      hl, #2
+        add     hl, sp                  ; timer saved by the list walk
+        ld      e, (hl)
+        inc     hl
+        ld      d, (hl)
+        ex      de, hl
+        ld      de, #TIMER_BANK
+        add     hl, de
+        ld      a, (hl)
+        cp      #0xff
+        jr      z, .invoke_iy
+        ld      c, a
+        ld      a, (__bank_current)
+        cp      c
+        jr      z, .invoke_iy
+        push    af                      ; interrupted bank, fixed stack
+        ld      a, c
+        call    __bank_map
+        call    .invoke_iy
+        pop     af
+        jp      __bank_map              ; restore before the next timer
+.invoke_iy:
+        jp      (iy)

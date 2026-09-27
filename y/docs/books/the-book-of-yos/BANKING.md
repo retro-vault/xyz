@@ -54,7 +54,7 @@ transfer, rollback, and final owner release all use the same seven-byte
 block format as the fixed OS heap.
 
 The shared image loader reads and relocates the XL payload in the selected
-bank. A process or library object records its selected bank at byte 15.
+bank. A process or library object records its selected bank at byte 16.
 Process reaping scans every bank and releases all blocks owned by that
 object. An image must fit within one free extent — it can never cross the
 16 KiB window boundary.
@@ -90,11 +90,11 @@ stack arguments. The common return gate then preserves the result
 registers, restores the caller's bank, and jumps to the saved
 continuation.
 
-Every thread carries four checked bank-call frames, each three bytes
+Every thread carries eight checked bank-call frames, each three bytes
 (`caller bank, continuation-low, continuation-high`). A fifth nested
 cross-bank call is refused rather than entered — the gate resumes its
 continuation with carry set instead. Kernel context has an equivalent
-four-frame fallback. Same-bank calls consume no frame at all.
+eight-frame fallback. Same-bank calls consume no frame at all.
 
 XCC's `--platform=yos` backend uses RST 28h for calls through
 `[[xcc::far]]` function pointers. It saves the argument registers, passes
@@ -136,5 +136,9 @@ needs to span the full bank set.
 
 RST 30h supplies byte loads and stores for XCC far-data dereferences,
 temporarily mapping the requested bank and restoring the execution bank
-afterward. The public timer and print-hook callback APIs still carry near
-pointers, so they must only ever be given fixed-memory callbacks.
+afterward. Timer callbacks retain a near address plus a captured execution
+bank in their fixed-memory timer object. Both fixed-memory and banked timer
+callbacks are supported; a banked callback must be registered while its
+bank is mapped. The dispatcher restores the interrupted bank on return.
+Print-hook callbacks still carry only near pointers and must be in fixed
+memory.

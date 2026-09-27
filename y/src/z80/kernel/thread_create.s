@@ -14,7 +14,7 @@
         .globl  _so_destroy
         .globl  _mem_allocate
         .globl  _thread_prepare_startup
-        .equ    THREAD_SIZE,    39
+        .equ    THREAD_SIZE,    51
         .equ    THREAD_SP,       5
         .equ    THREAD_WAIT,    17
         .equ    THREAD_PROCESS, 23

@@ -9,6 +9,22 @@ Release status:
 
 ## Unreleased
 
+- Increase checked returning far-call capacity from four to eight frames per
+  thread and in boot context. Nested cross-bank UI dispatch can legitimately
+  exceed four levels; thread records grow from 39 to 51 bytes without changing
+  existing field offsets. Tests cover the new bound and complete unwind.
+
+- Timers now support fixed-memory and banked callbacks. Each 12-byte timer
+  captures the callback's execution bank at installation independently of
+  its resource owner; IRQ dispatch restores the interrupted bank afterward
+  without using thread far-call frames. The public read-only timer layout
+  and banking/timer documentation describe the added bank byte.
+
+- Fixed `process_start` classifying the stack-size argument as the entry
+  address. Banked processes now initialize their main thread with the
+  mapped image bank before publication; fixed-memory entries retain `FFh`.
+  Production-ROM regressions check both startup-bank cases.
+
 - Kept YOS at pre-release ABI 1 and regrouped its compact 76-entry,
   152-byte `yos_t` table. `get_sys_info` now sits with `version` and
   `rom_model` and exposes live heap, process, thread, timer, event, service,

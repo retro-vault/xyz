@@ -94,12 +94,13 @@ Every concrete resource type — `thread_t`, `block_t`, `timer_t`, `event_t`,
 bytes. This is the *yos* convention for resource derivation:
 
 ```c
-/* Example: a timer is a system object (11 bytes) */
+/* Example: a timer is a system object (12 bytes) */
 typedef struct timer_s {
     sysobj_t hdr;           /* offset 0: MUST be first */
     void (*hook)();         /* offset 5: timer callback */
     uint16_t ticks;         /* offset 7: fire interval in 50 Hz ticks */
     uint16_t _tick_count;   /* offset 9: countdown (internal use) */
+    uint8_t bank;           /* offset 11: callback bank, FFh for common */
 } timer_t;
 ```
 
@@ -172,7 +173,7 @@ timer_t *tmr_uninstall(timer_t *t) {
 
 The same pattern builds events (`evt_create`/`evt_destroy`, 6 bytes),
 services (`svc_register`/`svc_unregister`, 23 bytes), library references
-(7 bytes), threads (`thread_create`, 39 bytes), and processes or
+(7 bytes), threads (`thread_create`, 51 bytes), and processes or
 threadless library owners (`process_start`, or the library loader, 17
 bytes).
 

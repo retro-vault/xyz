@@ -57,7 +57,10 @@ process_t *process_start(
 1. Allocates a `process_t` from `__sys_heap` through `so_create`,
    inserting it at the head of the global `process_first` list with owner
    `NONE`.
-2. Copies `pname` into `pname` and clears `pflags`.
+2. Copies `pname` into `pname` and clears `pflags`. Before creating the
+   thread, classifies the entry address: below `0xC000` uses bank `FFh`,
+   otherwise the currently mapped logical bank. The stack-size argument
+   does not determine the process bank.
 3. Calls `thread_create(entry_point, stack_size, p)` to allocate the main
    thread and its stack, then stores the thread in `main_thread` and the
    process in the thread's own `process` field.
