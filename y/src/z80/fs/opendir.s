@@ -15,7 +15,7 @@
         .globl  __zx_esx_f_opendir
 
         .equ    DIRECTORY_MAGIC, 0xd1
-        .equ    DIRECTORY_SIZE,  47
+        .equ    DIRECTORY_SIZE,  303
 
         .globl  __frame_ix
         .globl  __frame_return

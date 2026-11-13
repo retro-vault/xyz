@@ -19,6 +19,7 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  _gpx_draw_bmp
+        .globl  __frame_ix
         .globl  _gpx_draw_bmp_clip
         .globl  __gpx_ffshr
         .globl  __rect_cmp16s_lt
@@ -108,7 +109,7 @@ _gpx_draw_bmp::
         ;; Public API semantics:
         ;; - unmasked: draw 1 bits, skip 0 bits
         ;; - masked:   apply AND/OR pair
-        ld      b,#0x80                 ; internal mode tag: keep legacy semantics
+        ld      bc,#0x8001              ; public bitmap: copy with native ink
 
         ;; ------------------------------------------------------------
         ;; _gpx_draw_bmp_clip
@@ -138,15 +139,11 @@ _gpx_draw_bmp_clip::
         pop     de                      ; DE' = bitmap ptr
         push    bc                      ; return address back (clip below it)
         exx
-        push    ix
         push    iy
-        ld      ix,#0
-        add     ix,sp
-        ld      hl,#-L_SIZE
-        add     hl,sp
-        ld      sp,hl
-        ld      iy,#0
+        call    __frame_ix
+        ld      iy,#-L_SIZE
         add     iy,sp
+        ld      sp,iy
 
         ;; Preserve the arguments before IX becomes the compositor address.
         ld      L_X(iy),e
@@ -159,7 +156,6 @@ _gpx_draw_bmp_clip::
         ;; reading the stack arguments; the saved caller IX remains on the
         ;; stack above the IY-relative workspace. Bit 7 of the incoming mode
         ;; marks public bitmap semantics and is resolved after the header.
-        ld      L_DRAWMODE(iy),b
         ld      ix,#.gb_mode_trans_fore
         bit     7,b
         jr      nz,.gb_mode_done
@@ -203,15 +199,20 @@ _gpx_draw_bmp_clip::
         and     #0x10
         ld      L_IS_MASKED(iy),a
 
+        ;; Masked copy text uses both planes, just like a cursor. The ink
+        ;; colour swaps glyph/paper within the mask; outside it stays intact.
+        ;; XOR still toggles only glyph ink and never paints a paper halo.
 .gb_sig_need_and:
-        ;; Only a masked public bitmap reads the AND plane. Every text
-        ;; compositor consumes the OR plane, including custom masked fonts.
-        ;; The encoding AND above already left A and Z for this test.
         jr      z,.gb_sig_mode_ready
-        ld      a,L_DRAWMODE(iy)
-        and     #0x80
-        jr      z,.gb_sig_mode_ready
+        bit     0,b
+        jr      z,.gb_sig_mask_copy
+        xor     a                       ; XOR does not consume the AND plane
+        jr      .gb_sig_mode_ready
+.gb_sig_mask_copy:
         ld      ix,#.gb_mode_masked
+        bit     0,c
+        jr      nz,.gb_sig_mode_ready
+        ld      ix,#.gb_mode_masked_back
 .gb_sig_mode_ready:
         ld      L_DRAWMODE(iy),a        ; nonzero only when AND is live
 
@@ -340,7 +341,7 @@ _gpx_draw_bmp_clip::
         ;; Source skip is the clipped-away left/top part.
         ld      a,L_VISX0(iy)           ; srcx = visx0 - x
         sub     L_X(iy)
-        ld      L_SRCX(iy),a
+        ld      e,a                     ; retain clipped source X until bit setup
 
         ld      a,L_VISY0(iy)           ; srcy = visy0 - y
         sub     L_Y(iy)
@@ -372,7 +373,7 @@ _gpx_draw_bmp_clip::
         ld      L_XBYTE(iy),a
 
         ;; Source x byte / bit.
-        ld      a,L_SRCX(iy)
+        ld      a,e                     ; clipped source X remains live
         ld      b,a
         and     #0x07
         ld      L_SRCBIT(iy),a
@@ -538,7 +539,7 @@ _gpx_draw_bmp_clip::
         and     L_RCOVER(iy)
         ld      c,a                     ; destination coverage mask
         call    .gb_byte
-        jr      .gb_next_row
+        jp      .gb_next_row
 
         ;; ------------------------------------------------------------
         ;; .gb_byte: compose one destination byte at (HL) and advance HL.
@@ -546,9 +547,8 @@ _gpx_draw_bmp_clip::
         ;; re-entrant. C supplies coverage; BC is preserved. Clobbers A, DE
         ;; and the alternate bank.
         ;;
-        ;; The AND plane is live only for a masked bitmap drawn with the
-        ;; default public semantics. Every other draw leaves HL' free, so the
-        ;; two-byte source window can shift there with add hl,hl and the
+        ;; The AND plane is live for masked copy bitmaps and text. Every
+        ;; unmasked or XOR draw can shift its source window in HL'; the
         ;; previous source byte can stay in C' instead of the workspace.
         ;; ------------------------------------------------------------
 .gb_byte:
@@ -634,8 +634,18 @@ _gpx_draw_bmp_clip::
         ld      a,e
         jr      .gb_store_out
 
+        ;; Swap ink and paper, with OR ink taking precedence over AND even
+        ;; when a supplied bitmap has both bits set at the same pixel.
+.gb_mode_masked_back:
+        ld      a,(hl)
+        cpl
+        and     d
+        or      e
+        cpl
+        jr      .gb_store_out
+
 .gb_mode_masked:
-        ;; Masked source, public semantics: draw = (old & AND) | OR.
+        ;; Masked copy: draw = (old & AND) | OR.
         ld      a,d
         and     (hl)
         or      e
@@ -705,16 +715,15 @@ _gpx_draw_bmp_clip::
 
 .gb_exit:
         ;; y and b were popped at entry; drop the remaining clip word.
-        ld      sp,iy
+        ;; All core paths balance pushes: SP still addresses the workspace.
         ld      hl,#L_SIZE
         add     hl,sp
         ld      sp,hl
-        pop     iy
         pop     ix
-        pop     de                      ; return address
-        pop     hl                      ; discard clip
-        push    de
-        ret
+        pop     iy
+        pop     hl                      ; return address
+        pop     de                      ; discard clip
+        jp      (hl)
 
         ;; Row address (y in B -> HL) is shared with _video.s (__vid_rowaddr).
 

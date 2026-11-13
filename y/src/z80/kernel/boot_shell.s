@@ -9,7 +9,7 @@
         .globl  _boot_shell
         .globl  _process_load
 
-        .area   _CODE
+        .area   _HEADER_DATA
 
 _boot_shell::
         ld      hl,#.shell
@@ -17,5 +17,10 @@ _boot_shell::
 
         ; Keep the complete immutable name with its tail-jumping caller.
         ; This packs ordinary ROM, not a firmware reservation.
+        .area _CODE
 .shell:
+        .if YOS_BOOT_ALTO
+        .asciz  "/ALTO/shell.sys"
+        .else
         .asciz  "shell.sys"
+        .endif

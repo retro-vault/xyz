@@ -12,11 +12,16 @@
         .globl  __bank_map
         .globl  _mem_free_owner
 
-        .area   _CODE
+        .area   _HEADER_DATA
 
         ; input: DE = fixed-memory owner. Caller holds a critical section.
         ; Restores the bank which was mapped on entry. Preserves IX/IY.
 __bank_free_owner::
+        .if YOS_UNIFIED_48K
+        ld a,(__bank_count)
+        or a
+        ret z
+        .endif
         push    iy
         push    de
         pop     iy

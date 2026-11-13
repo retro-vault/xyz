@@ -14,15 +14,15 @@
         .area   _CODE
 
         ; _mouse_read, sdcccall(1)
-        ; input: hl = four-byte output {x, y, buttons, changed}
+        ; input: hl = six-byte output {x16, y16, buttons, changed}
         ; outputs: none; consumes accumulated button-change bits
         ; clobbers: af, bc, de, hl; preserves ix and iy
 _mouse_read::
         call    __critical_call
         ex      de, hl                  ; destination
         ld      hl, #__mouse_cursor     ; contiguous public snapshot
-        ld      bc, #4
+        ld      bc, #6
         ldir
-        xor     a
-        ld      (__mouse_changes), a
+        dec     hl                      ; copied changes is the final byte
+        ld      (hl),#0
         ret

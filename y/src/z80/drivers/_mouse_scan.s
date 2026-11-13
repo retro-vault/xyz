@@ -36,6 +36,8 @@ __mouse_scan::
         ld      (__mouse_buttons), a
 
         ld      hl, (__mouse_cursor)
+        ld      a, (__mouse_cursor+2)
+        ld      h,a
         ld      de, (__mouse_hardware)
         ld      bc, #KMP_X_PORT
         in      a, (c)
@@ -80,5 +82,9 @@ __mouse_scan::
 .y_max:
         ld      h, #0xbf
 .y_done:
-        ld      (__mouse_cursor), hl
+        ld      a,h
+        ld      h,#0
+        ld      (__mouse_cursor),hl
+        ld      l,a
+        ld      (__mouse_cursor+2),hl
         ret

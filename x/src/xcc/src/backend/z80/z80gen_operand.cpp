@@ -125,8 +125,13 @@ void z80_gen::load_ix_addr_hl(int off) {
         return;
     }
 
+    // Match the SP-relative and small-displacement paths: materializing
+    // an address must not destroy a live BC value (for example the other
+    // operand of a pointer comparison after a callee-popped byte argument).
+    emit_line("push\tbc");
     emit_line("ld\tbc, %s", asm_.imm(off).c_str());
     emit_line("add\thl, bc");
+    emit_line("pop\tbc");
     set_pair_cache(reg_pair{"hl", 'l', 'h', false},
                    pair_ix_addr_cache_key(off));
 }

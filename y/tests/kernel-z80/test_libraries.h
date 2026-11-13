@@ -179,16 +179,17 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     current(b);
     check(load() == first && mem.word(library + 14) == 2,
           "second process did not share the same image");
-    check(load() == first && mem.word(library + 14) == 3,
-          "repeated acquisition was not counted");
+    for (unsigned repeat = 0; repeat < 100; ++repeat)
+        check(load() == first && mem.word(library + 14) == 2,
+              "repeated acquisition consumed another owner reference");
     const auto reused_usage = heap_usage(sym("__sys_heap"));
-    check(reused_usage.first == resident_usage.first + 2 &&
-              reused_usage.second == resident_usage.second + 2 * (7 + 7) &&
+    check(reused_usage.first == resident_usage.first + 1 &&
+              reused_usage.second == resident_usage.second + (7 + 7) &&
               invoke(first, 2) == 1,
-          "shared reuse did not allocate exactly its two reference records, "
+          "shared reuse did not allocate exactly one new owner reference, "
           "or initialized another image");
     retire_thread(mem.word(a + 14));
-    check(mem.word(library + 14) == 2 && query() == first,
+    check(mem.word(library + 14) == 1 && query() == first,
           "first client exit prematurely unloaded shared code");
     current(b);
     const auto private_table = load(0);
@@ -209,7 +210,7 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     check(sibling != 0, "sibling allocation failed");
     call(sym("_thread_resume"), sibling, 0, "resume client sibling");
     retire_thread(mem.word(b + 14));
-    check(mem.word(library + 14) == 2,
+    check(mem.word(library + 14) == 1,
           "main-thread exit released a still-live process's references");
     retire_thread(sibling);
     check(query() == 0 && mem.word(sym("__library_refs")) == 0 &&
@@ -344,13 +345,19 @@ void test_libraries(Memory& mem, Cpu& cpu, Call call, Symbol sym, Files& files,
     const auto pinned = load();
     const auto pinned_owner = service_owner(pinned);
     check(pinned && pinned_owner, "could not prepare reference OOM test");
+    const auto new_client = create_client("oom-peer");
+    current(a);
     occupied = fill_heap(sym("__sys_heap"));
     const auto before_reference_failure = usage();
+    check(load() == pinned && usage() == before_reference_failure,
+          "existing owner could not reacquire without free heap");
+    current(new_client);
     check(load() == 0 && error() == 2 &&
               mem.word(pinned_owner + 14) == 1 &&
               usage() == before_reference_failure,
           "reference allocation failure changed the resident library");
     empty_heap(sym("__sys_heap"), occupied);
+    retire_thread(mem.word(new_client + 14));
     retire_thread(mem.word(a + 14));
     check(usage() == clean_usage, "out-of-memory paths leaked storage");
     check(files.opens == files.closes && files.handles.empty(),

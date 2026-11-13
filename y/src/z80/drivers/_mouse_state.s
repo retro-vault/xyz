@@ -13,7 +13,7 @@
 
         .area   _BSS
 __mouse_cursor::
-        .ds     2
+        .ds     4
 __mouse_buttons::
         .ds     1
 __mouse_changes::

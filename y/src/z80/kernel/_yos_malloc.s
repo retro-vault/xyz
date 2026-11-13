@@ -26,5 +26,4 @@ __yos_malloc::
         ld      e,a
         ld      d,#0
         pop     af
-        call    __bank_map
-        ret
+        jp      __bank_map              ; no local stack state remains

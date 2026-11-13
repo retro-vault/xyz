@@ -501,6 +501,11 @@ void options::usage(const char *argv0) {
         "  -std=c11          Language standard (only c11 supported)\n"
         "  -masm <dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
         "  -masm=<dialect>   Assembler dialect: sdasz80 (default) or gnuas\n"
+        "  --prc, --svc     Compile a relocatable YOS process or service\n"
+        "  --stack-size N   Required process stack size\n"
+        "  --export SYMBOL  Service export; repeat in ABI slot order\n"
+        "  --entry SYMBOL   Optional service initializer (returns status)\n"
+        "  --name, --id, --abi, --min-os  XPRG metadata\n"
         "  --platform <name> Select target platform include defaults\n"
         "  --platform=<name> Select target platform include defaults\n"
         "  --runtime <name>  C runtime integration: x (default) or z88dk-classic\n"
@@ -558,7 +563,33 @@ options options::parse(int argc, char **argv) {
             fprintf(stdout, "xcc %s (X Tools C Compiler for Z80)\n", XCC_VERSION);
             exit(0);
         }
-        if (strcmp(a, "-S") == 0) {
+        const std::string image_option(a);
+        const auto equals = image_option.find('=');
+        const auto image_key = image_option.substr(0, equals);
+        if (image_option == "--prc" || image_option == "--svc") {
+            const std::string mode = image_option == "--prc"
+                ? "--process" : "--service";
+            if (!opts.image_mode.empty() && opts.image_mode != mode) {
+                fprintf(stderr, "xcc: error: --prc and --svc conflict\n");
+                exit(1);
+            }
+            opts.image_mode = mode;
+        } else if (image_key == "--stack-size" || image_key == "--name"
+                   || image_key == "--abi" || image_key == "--min-os"
+                   || image_key == "--id" || image_key == "--entry"
+                   || image_key == "--export") {
+            std::string value;
+            if (equals != std::string::npos)
+                value = image_option.substr(equals + 1);
+            else if (i + 1 < argc)
+                value = argv[++i];
+            if (value.empty()) {
+                fprintf(stderr, "xcc: error: %s requires a value\n", a);
+                exit(1);
+            }
+            opts.image_args.push_back(image_key);
+            opts.image_args.push_back(value);
+        } else if (strcmp(a, "-S") == 0) {
             opts.mode = output_mode::ASSEMBLY;
         } else if (strcmp(a, "-c") == 0) {
             opts.mode = output_mode::OBJECT;
@@ -778,6 +809,35 @@ options options::parse(int argc, char **argv) {
 
     if (opts.input_files.empty() && !opts.c1_mode) {
         fprintf(stderr, "xcc: error: no input files\n");
+        exit(1);
+    }
+
+    if (!opts.image_mode.empty()) {
+        if (opts.mode != output_mode::LINK || opts.c1_mode
+            || (opts.platform_name != "yos" && opts.platform_name != "z80-yos"
+                && !opts.platform_name.empty())
+            || opts.default_call_abi != call_abi::SDCCCALL1
+            || opts.dialect != asm_dialect::SDASZ80
+            || opts.runtime != runtime_profile::X) {
+            fprintf(stderr, "xcc: error: PRC/SVC requires linking with the "
+                    "YOS sdcccall(1) runtime and SDAS dialect\n");
+            exit(1);
+        }
+        for (const auto& arg : opts.linker_args) {
+            if (arg == "-b" || arg.rfind("-T", 0) == 0 || arg.rfind("--script", 0) == 0
+                || arg.rfind("--section-start", 0) == 0
+                || arg.rfind("--binary-range", 0) == 0) {
+                fprintf(stderr, "xcc: error: PRC/SVC requires the relocatable YOS layout\n");
+                exit(1);
+            }
+            if (arg.rfind("--oformat=", 0) == 0 && arg != "--oformat=xl") {
+                fprintf(stderr, "xcc: error: PRC/SVC requires XL format\n");
+                exit(1);
+            }
+        }
+        opts.platform_name = "yos";
+    } else if (!opts.image_args.empty()) {
+        fprintf(stderr, "xcc: error: image metadata requires --prc or --svc\n");
         exit(1);
     }
 

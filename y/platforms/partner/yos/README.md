@@ -1,0 +1,383 @@
+# ROM-booted Partner YOS
+
+This variant uses [iskra-delta/baremetal](https://github.com/iskra-delta/baremetal)
+under ALTO's YOS ABI-1 implementation. It boots from the standard Partner ROM,
+loads one resident kernel into hardware bank 1, and runs without
+CP/M BDOS or BIOS. All target additions are Z80 assembly. Host build and MCP
+regression scripts are Python. Graphics use the existing libgpx GDP backend.
+
+## Build and exercise
+
+```
+make iskra-delta-partner-baremetal
+make check-partner-baremetal
+make run-iskra-delta-partner-baremetal
+```
+
+The build uses the pinned XYZ tools and shared application assembly sources.
+It builds Partner PRCs/services with embedded Tiny assets under
+`build/iskra-delta-partner/apps/` inside the compiler container. Target sources
+are assembly, including the [compact helper counterparts](../apps/README.md).
+See [Tiny artwork and regeneration](../assets/README.md). Bootable output is
+under `build/iskra-delta-partner/baremetal/`:
+
+- `boot.img`: ROM-bootable floppy with `SYSTEM.BIN` and PRCs/services; no `BANK2.BIN`.
+- `harddisk.img`: standard Partner CP/M-format hard disk with the same PRCs/services.
+- `alto.bin`, `alto.map`: resident image and linked addresses.
+- `package.json`: memory boundaries and hashes of the nine Partner PRCs and eleven services.
+- `mcp-*`: disposable test disks, screenshots, and successful-test reports.
+
+`make -C platform/iskra-delta-partner yos-substrate-test` independently boots
+an assembly storage/banking fixture using both CRT and GDP ROMs. The graphical
+ALTO test uses GDP. No test writes the packaged images or a user's UAT disks.
+Only `boot.img` and a run guide are published under `bin/iskra-delta-partner/baremetal/`.
+The hard disk and manifests above are development fixtures, not duplicate
+release payloads.
+
+Build and emulator execution use `wischner/xcc-z80-idp:latest`, tested at digest
+`sha256:d57c5abb76446b5601b1e6c4c3564560bd9b952e761c84a85dc72cd9dd238394`.
+It includes XAS/XCC/XLD, libgpx, the Partner SDK, `idp-mcp`, `idp-emu`, and ROMs.
+The image's bundled linker emits XL v1, so applications and services use the
+repository's pinned XYZ XL-v2 tools **inside that container**. Kernel assembly
+and raw-binary linking use the bundled tools. Partner builds embed converted
+Tiny artwork at assembly time; there is no load-time asset patching.
+
+## Interactive UAT
+
+In VS Code's **Run and Debug** menu, select
+**Run ALTO/YOS (Iskra Delta Partner, baremetal)**. The configuration invokes
+the build-and-run target below, including emulator preparation when needed.
+
+`make run-iskra-delta-partner-baremetal` opens a graphical Partner G with private
+floppy/HDD copies. Its session-local GDP ROM copy changes only the two automatic
+boot branches from HDD to floppy; the installed ROM is untouched. This makes
+Reset followed by Run boot ALTO again, with the HDD still connected. Hardware
+initialization, disk loading and the Ctrl-C A/F boot menu remain firmware-driven.
+DAP verifies that ALTO reaches its message loop before leaving the emulator
+running; it no longer redirects the CPU to select a boot device.
+`mcp_reset_boot.py` checks cold boot, repeated warm resets and RAM-clearing reset
+with applications running, then launches PRCs from both disks after each boot.
+Double-click **A:** or **B:**, then a program's text row.
+Sessions and logs remain under `build/iskra-delta-partner/uat-baremetal/`.
+`python3 scripts/run/run-partner-baremetal-uat.py --detach` leaves it running
+without holding the terminal. The launcher selects the staged emulator 1.3.0
+when available, otherwise the emulator extracted from Wischner's image.
+
+## Memory strategy
+
+The resident ALTO/YOS, filesystem, libgpx and SDK code has **one copy**. Hardware
+bank 1 contains the resident kernel and its private state. Hardware bank 2 is
+an application arena. Common entry veneers select the kernel and restore the
+caller's bank, including callee-clean arguments, IX/IY and nested callbacks.
+Pointer adapters copy borrowed paths, buffers, rectangles, regions, bitmap
+payloads and font glyphs while the caller's memory is mapped. The executable
+loader streams and relocates images through common far-byte routines while
+remaining in the kernel bank.
+
+| Address | Hardware bank 1 | Hardware bank 2 |
+| --- | --- | --- |
+| `0000–00FF` | RST gates and heap snapshot | Same low-page ABI reservation |
+| `0100–8EC7` | Resident code | Application arena |
+| `8EC8–9B7F` | Kernel-private state | Application arena |
+| `9B80–BFFF` | Additional application arena | Application arena |
+| `C000–C04F`, shared | Allocator/driver state and public filesystem errno | Same physical memory |
+| `C050–E08D`, shared | Gates, adapters, scheduler transition code, common API/data/font storage | Same physical memory |
+| `E08E–FEFF`, shared | System heap: near objects, stacks, filesystem buffers, window objects and service tables | Same physical memory |
+| `FF00–FFFF`, shared | IM2 table | Same physical memory |
+
+These boundaries are generated by the linker and recorded in `package.json`.
+Every public YOS/ALTO table entry is checked to be in common RAM.
+The build rejects a shared heap below **7,680 allocatable bytes**, a kernel with
+no remaining private arena, or a bank-transition routine outside common RAM.
+The current budget is:
+
+| Arena | Allocatable payload before desktop startup | Free after desktop startup |
+| --- | ---: | ---: |
+| Resident-bank remainder | 9,338 bytes | 9,338 bytes |
+| Application bank | 48,890 bytes | 48,890 bytes |
+| Shared system heap | 7,788 bytes | 6,190 bytes |
+
+The whole second **48 KiB physical bank** is dedicated to applications, with
+256 bytes reserved for the unchanged low-page ABI and six bytes for its heap
+header. It therefore cannot expose a literal 49,152-byte allocation under that
+ABI. Combined private payload is 58,228 bytes, up from 31,560 in the duplicated
+layout. Public API offsets are unchanged; Partner application builds embed Tiny artwork.
+
+`scripts/build/partner-layout.py` places code/state and rewrites relocatable
+object references to generated five-byte entry veneers before linking. It
+retains the compact serialized Tiny font, the borrowed foreground message, and
+the cursor-query message/result in common RAM. Filesystem scratch and its block
+allocation map live in the kernel bank. Process records store a pointer to an
+optional, length-sized command-line allocation rather than four permanent
+128-byte argument buffers; the public argument-string API is unchanged.
+Startup copies the packed common initializer from bank 1, then reclaims its
+source space. The boot loader's far-byte runtime, temporary stacks and handoff
+area are reclaimed too; only the IM2 table remains reserved at the top of RAM.
+Interrupt entries in common memory map the single resident handler and restore
+the interrupted bank. Keyboard reception runs entirely in common memory.
+
+The image allocator alternates banks and falls back to the other bank if needed.
+Public YOS banks **0 and 1** map to hardware banks **1 and 2**; `FF` means
+common/current. Eight cooperative processes use shared stacks and save their
+actual execution bank on yield. Each process and the UI thread have separate,
+bounded far-call continuation frames in kernel-private RAM. Gateways map bank 1
+before touching these frames and restore the target mapping before execution.
+The foreground resumes in hardware bank 1.
+Processes and services may share a bank: the allocator uses available space,
+not a one-process-per-bank restriction. Process stacks allocate the PRC's
+requested size plus 256 bytes for Partner API adapters, with a 512-byte minimum,
+instead of reserving at least 1 KiB each. They remain common because deferred
+callbacks can retain pointers into suspended stacks. Unused stack bytes carry
+an `A5` watermark for emulator headroom checks. The UI retains its 1 KiB stack.
+`mcp_capacity.py` checks eight concurrent Eyes instances, five mixed programs,
+all eight SysInfo process/thread records, stack headroom and complete reclamation.
+
+Keyboard reception uses an interrupt-driven 64-byte shared ring, with 63 usable
+slots, so GDP drawing cannot overrun the hardware's three-byte FIFO during
+normal typing. The consumer retains the common ANSI arrow/Escape handling and
+leaves characters in the receive ring until the message queue can accept both
+key edges, preventing loss while banked drawing is busy.
+The serial mouse keeps its separate interrupt-driven packet decoder. Its ISR
+drains queued bytes, and the native event loop also drains pending reception
+under the same interrupt lock. This recovers a byte left unread after disk/DMA
+activity without relying on a further receive interrupt; movement and button
+edges use the same decoder in both paths.
+
+Executable images remain relocatable XL-v2 XPRGs. The YOS/ALTO pointer tables,
+window ABI, and PRC format remain the shared ones. Export tables are copied into
+common RAM; window procedures, UI hooks and deferred callbacks retain their
+bank. Cleanup frees image storage in the owning bank, shared stacks, file handles,
+owned allocations and unused services. Fileman remains running when it launches
+another PRC; its completion callback returns through the bank gate. The shared
+Fileman and SysInfo run concurrently in opposite banks, including their services.
+Classic Fileman still honors explicit retirement requests in either bank and
+exits after its last window closes; the same source and resulting PRC are used
+on the other classic ports.
+
+SysInfo reports **System 16 KiB, Banked 96 KiB, Banks 2** through the existing
+introspection API. Free bytes come from the real allocator chains; used bytes
+include resident code, reserved areas and allocator overhead. These are aggregate
+snapshots, so individual process rows do not yet account for every owned byte.
+With Fileman and SysInfo together, the tested layout has about 34 KiB private
+and 1.7 KiB shared free, including their loaded services. Larger combinations can still exhaust either arena;
+banking does not make the whole 112 KiB available for application images.
+
+## Storage and paging
+
+`A:` is floppy 0 and `B:` is hard disk 0. YOS paths such as
+`A:/ALTO/SCROLL.SVC` flatten to the CP/M user-area-0 filename. Numeric paths
+`A:/1/FILE.TXT` and `B:/15/FILE.TXT` select explicit user areas instead. Native
+`fdN:/area/FILE.EXT` syntax remains available to the filesystem adapter.
+The user areas are CP/M numeric areas, not hierarchical directories.
+
+Floppy uses i8272 DMA with 77 cylinders, two sides, eighteen 256-byte sectors
+per track, 2 KiB blocks and 128 directory entries. The SASI/Xebec driver uses
+bounded programmed-I/O transactions. HDD filesystem geometry is the standard
+10,027,008-byte Partner image: 4 KiB blocks, 1024 directory entries and EXM=1.
+Only HDD 0 is exposed as a filesystem device; other disk geometries are not
+auto-detected. Both drivers return errors rather than waiting indefinitely.
+
+YOS provides tracked file/directory handles, read/write, seek, stat/fstat,
+exclusive creation, rename and deletion. The adapter preserves YOS's
+caller-owned read/write count argument. CP/M multi-extent files and CP/M 3
+exact final-byte counts are supported. Existing files without the exact-byte
+marker retain CP/M's 128-byte record granularity.
+
+The same `_page_init`, `_page_read`, `_page_write` interface supplies 192 logical
+256-byte data pages using `AP00.SWP` through `APBF.SWP` on the default filesystem
+device. Directory capacity and disk space can limit how many page files exist;
+in particular, a floppy's 128 directory slots cannot hold all 192 page files.
+Failures propagate to the caller. This is explicit data paging, not automatic
+swapping of running executable images. Near UI allocations remain shared and
+must fit the shared heap; a shrink request currently retains its allocation.
+
+## Pinned dependency and fixes
+
+`scripts/deps/partner-baremetal.json` pins baremetal commit
+`5fb38c9e135820a4feae7bc2e99b907333716d8f`. The builder exports that exact Git tree
+and applies `scripts/deps/patches/partner-baremetal.patch`; it does not build local
+edits from the dependency checkout. The upstream MIT license remains in the
+exported source tree.
+
+The patch generalizes CP/M allocation/extent handling for HDD geometry, adds
+shared driver state, corrects the floppy DMA length and write direction, adds
+bounded completion polling, and fixes a two-byte loss on every heap split.
+The local SASI driver, geometry adapter and YOS frontends are in this directory.
+
+The standalone substrate MCP suite checks ROM loading of both fixture banks, nested bank calls with stack
+arguments, private allocations, floppy/HDD multi-extent round trips, bank-2 HDD
+access, page 191 and invalid page 192, and controller/range errors. An independent
+host CP/M reader checks every written byte and preservation of pre-existing
+files. Desktop tests check both allocation orders, Calculator arithmetic, Eyes
+with serial mouse input, file ABI/CRC rollback, text-list Fileman, serial PRC
+launch and complete heap restoration. They also keep Fileman and SysInfo alive
+in opposite banks, check the PRC's own 112 KiB totals, drag its window, select
+Fileman rows while SysInfo's timer continues, then close both independently.
+A second desktop pass opens, paints,
+closes and reclaims Deminer, Tetris, TED, Paint, SysInfo and Terminal, covering
+all nine Partner PRCs. It also checks Tetris keys/arrows, TED text input through
+the banked textedit service, and persistence of Paint artwork after repaint.
+
+
+`mcp_baremetal_desktop.py --mouse-only` sends 500 serial motion events while
+Fileman loads, then checks cursor visibility and pixels, client-area movement,
+row selection and memory reclamation. `--mcp` and `--rom` select an installed
+emulator so the same regression can exercise the graphical launcher's version.
+`--banks-only` exercises Fileman/SysInfo immediately after boot, covering the
+opposite allocation order from the full integration sequence.
+
+`mcp_baremetal_desktop.py --memory-only` allocates all 48,890 application-bank
+bytes in one block, writes/reads every byte, verifies kernel-code isolation,
+then allocates the entire resident-bank remainder simultaneously. It exercises
+filesystem reads/stat and window/region/popup APIs with private-bank buffers,
+frees both arenas, and checks complete reclamation. This test also checks the
+7.5 KiB system-heap requirement and is included in `make check-partner-baremetal`.
+
+
+### Tall Fileman windows
+
+Partner builds use a 64-entry directory cache (1,152 bytes) in Fileman's private
+application bank. This covers a full-height 512-pixel viewport without adding
+system-heap allocations. The compact profile keeps its ten-entry default.
+Larger directories still page through the fixed cache; a missing provider row
+returns NULL and paints only its background, never a fabricated document.
+Directories that fit the cache release their filesystem handle after reading.
+
+`mcp_fileman_rows.py` verifies every visible filename in a tall window, checks
+NULL for an out-of-range row, then creates 70 extra files on disposable media
+and verifies the first and last pages of a directory larger than the cache.
+Closing each browser must restore all three heaps.
+
+### File Manager drive names
+
+Partner's File Manager titles and path footers use `A:` for the floppy and
+`B:` for the hard disk, matching the desktop and terminal. The packaged disks
+both contain the ALTO applications and services; that common software is
+expected to appear on both drives. They remain separate filesystems.
+`mcp_fileman_drives.py` opens both desktop icons on disposable media, checks
+all displayed names and sizes against each disk, verifies different sizes
+under the same filename, and switches the shared row cache between browsers.
+
+### Window moves, resizing and mouse releases
+
+Partner repaints completed window moves and resizes through ALTO's normal
+rectangle invalidation path. The damaged area is painted in one operation;
+there is no deferred scanline repaint queue.
+
+`mcp_terminal_drag.py` opens File Manager, SysInfo and Terminal in that order,
+checks repeated dragging and mouse recovery, resizes Terminal, types a command,
+and verifies memory recovery after closing the windows.
+
+The mouse adapter reserves space for an entire input snapshot before consuming
+the serial driver's button-edge latches. A full message queue therefore delays
+a release instead of losing it and leaving a drag captured indefinitely.
+`mcp_mouse_queue.py` checks this with a real serial release into a full FIFO.
+
+Terminal keeps window dimensions in 16-bit coordinates, including the black
+client background and text-row positions. Its fixed-width Tiny terminal font
+uses five-pixel cells. The viewport grows up to 55 rows to cover the Partner's
+512-pixel screen; the 43-column text buffer occupies private application RAM,
+including the additional 1,672 bytes for rows beyond the former limit of 17.
+System fonts retain their proportional metrics.
+`mcp_terminal_resize.py` fills the terminal with `dir`, grows it beyond 256 and
+512 pixels, shrinks and grows it again, checks the framebuffer for unpainted
+areas, fills every visible row with file output, verifies fixed glyph cells below
+pixel 255, and checks scrolling, commands, mouse input and memory recovery.
+
+### Terminal and TED clipboard
+
+Partner's terminal includes Z80 assembly counterparts of the Next terminal's
+YOS filesystem commands: `dir`/`ls` (names and sizes), `pwd`, `cd`, `type`/`cat`,
+`copy`, `rename`, and `del`/`rm`. It also provides `help`, `drives`, `echo`,
+`cls`/`clear`, and `exit`. Copy uses exclusive creation and never overwrites an
+existing destination. Terminal starts at `A:>`; selecting the hard disk changes
+the prompt to `B:>`. `cd 1` selects user area 1 on the current drive and shows
+`A:/1>` (or `B:/1>`); `cd 0` or `cd /` returns to area 0. `cd B:/15` selects
+a drive and area together. `cd A:`/`cd fd0:` and `cd B:`/`cd hd0:` select
+the corresponding drive at area 0. Bare `a:` and `b:` do the same. The title
+tracks the selected root, for example `Term - B:/15`. Areas must be 0..15;
+invalid selections leave the current path unchanged. Each terminal retains its own selection,
+used by relative file operations, directory listings and PRC launches. Explicit
+drive paths select their stated area (area 0 when omitted). Fileman still
+opens area 0; no synthetic area folders or nested directories are provided.
+No Spectrum firmware calls or C code are used by the Partner command dispatcher.
+
+`mcp_user_areas.py` checks area isolation, explicit and native paths, terminal
+selection, file operations and application launch from a nonzero area.
+
+Launch applications with `calc`, `calc.prc`, or `run calc.prc`; explicit drive
+prefixes and application arguments are passed to the existing ALTO launcher.
+The terminal remains open while the application runs. `dir` runs as deferred
+steps through the same public YOS and ALTO APIs. It yields between directory
+entries, so the desktop can handle input during listing. While rows remain,
+only newly appended output is repainted. There are no full-viewport sweeps
+before or after a listing. Once scrolling starts, eight entries are collected
+before one rectangle repaint; GDP has no pixel-copy scroll. Other synchronous
+commands repaint only their command/output rectangle on completion, expanding
+to the viewport only after scrolling or `cls`.
+
+`dir` pads the filename to 16 columns and right-aligns the size in a ten-column
+field. All output paths expand horizontal tabs to eight-column stops, including
+file contents and `echo`; the Tab key uses the same stops when editing input.
+Transparent empty Tiny glyphs advance the cursor without allocation or drawing.
+`mcp_terminal_output.py` checks aligned directory fields, tab expansion, editing,
+and actual row-paint counts in a tall window with unused space below its output.
+
+YOS obtains directory sizes with one extent scan per group of eight directory
+slots, rather than opening and rescanning for every file. Each open directory
+uses 36 extra bytes for cached sizes and a sector/mutation key. A single
+256-byte scan buffer lives in the resident kernel bank. Writes, file opens,
+closes, renames and deletions invalidate cached sizes. Sparse extents and
+CP/M byte counts remain part of the size calculation; the public ABI is
+unchanged.
+
+TED's caret and selection draws save cursor visibility on their own stacks
+and restore it before returning. A selection drag no longer holds the cursor
+hidden until release, and nested painting cannot overwrite a shared restore
+flag. `mcp_ted_clipboard.py` checks selection, repaint during a drag, actual
+Edit-menu Copy, Cut/Paste, cursor pixels, and heap recovery with Fileman and
+SysInfo running. `mcp_terminal.py` exercises the commands, both disks, exclusive
+copy, PRC launch/return, and complete heap recovery on disposable media.
+`mcp_terminal_dir.py` types `dir` from the initial prompt, tests both disks,
+routes mouse input during listing, and closes with a pending callback.
+`mcp_directory_sizes.py` independently checks all directory lengths, sparse
+files above 64 KB and 1 MB, cache reuse, mutation invalidation and heap recovery.
+
+### Font and cursor regression
+
+The old Partner face was Unscii-8 in Tiny format. The compact system face is now
+Px437 Portfolio 6×8; GNU Unifont 8×16 is available through
+the large-font API. Both are proportional with one-pixel spacing, native-sized,
+plot-once Tiny streams. Portfolio is resident in common RAM; Unifont is loaded
+from `UNIFONT.FNT` on first use into one stable common allocation. It has no
+private-bank duplicate. The loader tries the floppy, then the hard disk; a
+failed read or allocation returns Portfolio and allows a later retry. See
+[fonts/README.md](../fonts/README.md) for licenses, source hashes and regeneration.
+The system-font renderer copies only the character onto the common stack when
+called from an application bank; it does not allocate/copy a font per glyph.
+
+`mcp_fonts_cursor.py` tests a cursor-query callback executing in the other bank,
+compares every ASCII glyph to the reference pixels, draws again from the other
+bank to check XOR restoration, and exercises FileMan during serial mouse input.
+The cursor-query message and its writable result must both be common: a near
+pointer into private kernel BSS is invalid when the window callback selects the
+application bank. MCP breakpoints also verify the active bank before accepting
+a private kernel PC as the UI message boundary.
+
+`mcp_ui.py` verifies complete primary/alternate Z80 register, stack, interrupt
+state and mapping preservation across real mouse interrupts in both banks.
+The shared interrupt entry maps the kernel and calls the register-saving
+dispatcher directly; an ordinary banking veneer would destroy alternate
+registers before the ISR could save them. Common-bank calls also bypass the
+far-frame stack when no mapping change is needed.
+
+The same test compares private-bank fill-pattern pixels against a common-RAM
+reference, then drags FileMan using serial input while repainting and checks
+cursor pixels, row clicks, scrolling, closing and memory reclamation. Use
+`--drag-count 24` for the sustained drag regression. Portable graphics copy a
+private fill pattern and borrowed box rectangle before entering the resident
+drawing bank. Short-list tests check solid gaps and an opaque empty area with
+3, 1 and 0 Fileman rows. The standard Tiny pointer retains the arrowhead’s long
+left edge and sloping underside without its stem. Both arrow IDs use the same
+size and hotspot; the pixel-exact/XOR regression uses the reproducible artwork
+in `scripts/assets/partner-cursors.py`.

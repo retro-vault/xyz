@@ -9,6 +9,27 @@ Release status:
 
 ## Unreleased
 
+- Own Next, Partner and CPC platform sources through explicit staging manifests.
+  Share the cooperative loader, libraries, memory, lists and CP/M filesystem;
+  express AMSDOS and common-memory fast paths in maintained assembly.
+- Give each cooperative directory stream its full 279-byte public record,
+  including an empty optional long name. Keep records independent across streams.
+- Share ABI-correct optional-operation return helpers and own the Partner mouse
+  driver and disk extent packaging helper.
+- Invalidate assembly objects when boot, heap or bank configuration changes;
+  validate staging paths and preserve unrelated generated files.
+
+- Unify the public YOS table with ALTO: 82 slots, process arguments,
+  event timers, owned allocation and bulk copy. Correct event-state C
+  argument width and use word mouse coordinates on every Spectrum model.
+- Share the streaming XPRG loader, fair event wakeup order and one retained
+  shared-library reference per owner. Add repeated-load and OOM tests.
+- Preserve the default split heap and expose the resident ALTO 48K heap
+  policy as `YOS_UNIFIED_48K=1`, with checked 16 KiB ROM layouts.
+- Reduce mouse snapshot and allocator adapter code using existing pointers
+  and tail calls; retain compiled-C and production-ROM ABI regression tests.
+
+
 - Increase checked returning far-call capacity from four to eight frames per
   thread and in boot context. Nested cross-bank UI dispatch can legitimately
   exceed four levels; thread records grow from 39 to 51 bytes without changing

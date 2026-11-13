@@ -10,7 +10,7 @@
         .globl  _so_destroy
         .globl  _enter_critical_section
         .globl  _leave_critical_section
-        .area   _CODE
+        .area   _ROM_TINY
 
 _svc_unregister::
         call    _enter_critical_section

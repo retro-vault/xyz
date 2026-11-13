@@ -8,7 +8,7 @@
 
         .globl  _list_insert
 
-        .area   _CODE
+        .area   _ROM_TINY
 
         ; list_insert, sdcccall(1)
         ; inputs: HL = head address, DE = element

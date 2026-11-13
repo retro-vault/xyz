@@ -1,0 +1,179 @@
+{
+  "runtime/crc32.s": {
+    "source": "src/z80/cooperative/crc32.s"
+  },
+  "runtime/loader.s": {
+    "source": "src/z80/cooperative/loader.s"
+  },
+  "runtime/libraries.s": {
+    "source": "src/z80/cooperative/libraries.s"
+  },
+  "runtime/memory.s": {
+    "source": "src/z80/cooperative/memory.s"
+  },
+  "runtime/process.s": {
+    "source": "src/z80/cooperative/process.s"
+  },
+  "runtime/native.inc": {
+    "source": "src/z80/cooperative/native.inc"
+  },
+  "yos/far.s": {
+    "source": "platforms/partner/yos/far.s"
+  },
+  "yos/files.s": {
+    "source": "platforms/partner/yos/files.s"
+  },
+  "yos/start.s": {
+    "source": "platforms/partner/yos/start.s"
+  },
+  "yos/sasi.s": {
+    "source": "platforms/partner/yos/sasi.s"
+  },
+  "yos/heap.s": {
+    "source": "platforms/partner/yos/heap.s"
+  },
+  "yos/geometry.s": {
+    "source": "platforms/partner/yos/geometry.s"
+  },
+  "yos/bridge.s": {
+    "source": "platforms/partner/yos/bridge.s"
+  },
+  "yos/kernel-call.s": {
+    "source": "platforms/partner/yos/kernel-call.s"
+  },
+  "yos/bank.s": {
+    "source": "platforms/partner/yos/bank.s"
+  },
+  "yos/irq.s": {
+    "source": "platforms/partner/yos/irq.s"
+  },
+  "yos/README.md": {
+    "source": "platforms/partner/yos/README.md"
+  },
+  "yos/disk.s": {
+    "source": "platforms/partner/yos/disk.s"
+  },
+  "yos/path.s": {
+    "source": "platforms/partner/yos/path.s"
+  },
+  "runtime/page.s": {
+    "source": "platforms/partner/runtime/page.s"
+  },
+  "runtime/return_null11.s": {
+    "source": "src/z80/cooperative/return_null11.s"
+  },
+  "runtime/return_null2.s": {
+    "source": "src/z80/cooperative/return_null2.s"
+  },
+  "runtime/return_null10.s": {
+    "source": "src/z80/cooperative/return_null10.s"
+  },
+  "runtime/return_null6.s": {
+    "source": "src/z80/cooperative/return_null6.s"
+  },
+  "runtime/return_null5.s": {
+    "source": "src/z80/cooperative/return_null5.s"
+  },
+  "runtime/return_null_stack.s": {
+    "source": "src/z80/cooperative/return_null_stack.s"
+  },
+  "runtime/return_null.s": {
+    "source": "src/z80/cooperative/return_null.s"
+  },
+  "runtime/return_null8.s": {
+    "source": "src/z80/cooperative/return_null8.s"
+  },
+  "runtime/return_null1.s": {
+    "source": "src/z80/cooperative/return_null1.s"
+  },
+  "runtime/return_null7.s": {
+    "source": "src/z80/cooperative/return_null7.s"
+  },
+  "substrate/runtime/lib/cpmfs/cpmfs_core.s": {
+    "source": "src/z80/cooperative/cpmfs/cpmfs_core.s"
+  },
+  "substrate/runtime/lib/cpmfs/cpmfs_dir.s": {
+    "source": "src/z80/cooperative/cpmfs/cpmfs_dir.s"
+  },
+  "substrate/runtime/lib/cpmfs/cpmfs.inc": {
+    "source": "src/z80/cooperative/cpmfs/cpmfs.inc"
+  },
+  "substrate/runtime/lib/cpmfs/cpmfs_namespace.s": {
+    "source": "src/z80/cooperative/cpmfs/cpmfs_namespace.s"
+  },
+  "substrate/runtime/lib/cpmfs/cpmfs_file.s": {
+    "source": "src/z80/cooperative/cpmfs/cpmfs_file.s"
+  },
+  "substrate/runtime/lib/cpmfs/cpmfs_disk.s": {
+    "source": "src/z80/cooperative/cpmfs/cpmfs_disk.s"
+  },
+  "substrate/runtime/lib/list/list.s": {
+    "source": "src/z80/cooperative/list/list.s"
+  },
+  "substrate/runtime/lib/list/list.inc": {
+    "source": "src/z80/cooperative/list/list.inc"
+  },
+  "substrate/runtime/lib/memory/memory.s": {
+    "source": "src/z80/cooperative/farheap/memory.s"
+  },
+  "substrate/runtime/lib/floppy/floppy.s": {
+    "source": "platforms/partner/floppy/floppy.s"
+  },
+  "substrate/runtime/lib/floppy/floppy.inc": {
+    "source": "platforms/partner/floppy/floppy.inc"
+  },
+  "substrate/boot/src/loader/loader.s": {
+    "source": "platforms/partner/boot/loader.s"
+  },
+  "substrate/runtime/src/loader/loader.s": {
+    "source": "platforms/partner/boot/loader.s"
+  },
+  "substrate/boot/src/loader/interrupts.s": {
+    "source": "platforms/partner/boot/interrupts.s"
+  },
+  "substrate/runtime/src/loader/interrupts.s": {
+    "source": "platforms/partner/boot/interrupts.s"
+  },
+  "substrate/boot/src/loader/cpm_load.inc": {
+    "source": "platforms/partner/boot/cpm_load.inc"
+  },
+  "substrate/runtime/src/loader/cpm_load.inc": {
+    "source": "platforms/partner/boot/cpm_load.inc"
+  },
+  "substrate/boot/src/loader/cpm_load.s": {
+    "source": "platforms/partner/boot/cpm_load.s"
+  },
+  "substrate/runtime/src/loader/cpm_load.s": {
+    "source": "platforms/partner/boot/cpm_load.s"
+  },
+  "substrate/boot/src/loader/manifest.inc": {
+    "source": "platforms/partner/boot/manifest.inc"
+  },
+  "substrate/runtime/src/loader/manifest.inc": {
+    "source": "platforms/partner/boot/manifest.inc"
+  },
+  "substrate/boot/src/partner.inc": {
+    "source": "platforms/partner/partner.inc"
+  },
+  "substrate/runtime/src/partner.inc": {
+    "source": "platforms/partner/partner.inc"
+  },
+  "substrate/boot/tools/mkpartnerdisk.py": {
+    "source": "scripts/mkpartnerdisk.py"
+  },
+  "substrate/LICENSE": {
+    "source": "src/z80/cooperative/LICENSE"
+  },
+  "substrate/boot-floppy.s": {
+    "source": "platforms/partner/boot/floppy.s"
+  },
+  "runtime/calloc.s": {
+    "source": "src/z80/cooperative/calloc.s"
+  },
+  "hid/mouse.s": {
+    "source": "platforms/partner/drivers/mouse.s"
+  },
+  "substrate/boot/tools/fix-partner-extents.py": {
+    "source": "scripts/fix-partner-extents.py"
+  }
+}

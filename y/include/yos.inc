@@ -9,6 +9,7 @@
         .equ    YOS_ROM_MODEL_48K,             0
         .equ    YOS_ROM_MODEL_128K,            1
         .equ    YOS_ROM_MODEL_NEXT,            2
+        .equ    YOS_ROM_MODEL_SPECTRANET,      4
 
         ; Kernel identity and global firmware-print hook.
         .equ    YOS_OFFSET_VERSION,           0
@@ -61,7 +62,7 @@
         .equ    YOS_OFFSET_CALIBRATE_MOUSE,  62
         .equ    YOS_OFFSET_READ_MOUSE,       64
 
-        ; POSIX-style esxDOS filesystem.
+        ; POSIX-style native filesystem filesystem.
         .equ    YOS_OFFSET_ERROR_NUMBER,     66
         .equ    YOS_OFFSET_OPEN,             68
         .equ    YOS_OFFSET_CLOSE,            70
@@ -83,7 +84,7 @@
         .equ    YOS_OFFSET_CLOSEDIR,         102
         .equ    YOS_OFFSET_ENUMERATE_DISKS, 104
 
-        ; Native esxDOS commands.
+        ; Native native filesystem commands.
         .equ    YOS_OFFSET_EXEC_COMMAND,    106
 
         ; Graphics.
@@ -110,4 +111,11 @@
         .equ    YOS_OFFSET_GPX_FILL_CIRCLE, 148
         .equ    YOS_OFFSET_GPX_DRAW_BOX, 150
 
-        .equ    YOS_TABLE_SIZE,             152
+        .equ    YOS_TABLE_SIZE,             164
+
+        .equ YOS_OFFSET_LOAD_PROCESS_ARGS,152
+        .equ YOS_OFFSET_PROCESS_ARGUMENTS,154
+        .equ YOS_OFFSET_CREATE_EVENT_TIMER,156
+        .equ YOS_OFFSET_ALLOCATE_OWNED_MEMORY,158
+        .equ YOS_OFFSET_ALLOCATE_OWNED_COMMON_MEMORY,160
+        .equ YOS_OFFSET_COPY_MEMORY,162

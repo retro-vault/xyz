@@ -302,3 +302,15 @@ The assembly kernel has no dependency on libc or the X runtime, and it
 exports none either. A program built with `xcc` links whatever it needs
 from `libc.a` and `libruntime.a` into its own XL image; the only things
 it ever gets from the ROM are the tables returned by `query_service`.
+
+## Portable ALTO contract
+
+ABI 1 now has 82 pointer slots (164 bytes on Z80). The final six slots are
+`load_process_args`, `process_arguments`, `create_event_timer`,
+`allocate_owned_memory`, `allocate_owned_common_memory`, and `copy_memory`.
+All application/compiler headers are checked against the same declaration
+order and exact parameter types. `set_event` takes a `uint8_t`, since an
+enum-sized argument does not match its packed-byte assembly convention.
+Mouse calibration takes two words; the snapshot is `{x16,y16,buttons,changed}`.
+Directory records retain the DOS alias and add a 256-byte display-name tail;
+short-name filesystems return an empty display name.

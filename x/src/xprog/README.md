@@ -133,3 +133,28 @@ one read buffer by splitting the consumed table off the end of the block.
 That describes only how to load one service image. How a separately linked
 process discovers a service and binds calls to its slots remains intentionally
 unspecified.
+
+## Compile relocatable YOS images
+
+`xcc --prc app.c --stack-size 512 -o app.prc` compiles, links XL and
+packages it without discarding relocations. `--prc` and `--svc` select the
+YOS target, default to minimum OS ABI 1, and require its `sdcccall(1)` ABI. Metadata switches accept a
+separate value or `=value`: `--name`, `--id`, `--abi`, and `--min-os`.
+
+`xcc --svc service.c --entry init --export function -o service.svc`
+initializes C storage and the YOS libc binding before calling `init`.
+The optional initializer receives the bound export table in HL and returns
+zero on success in DE. Omit `--entry` for a service needing only C storage
+initialization. Repeat `--export` in stable ABI slot order. Use
+`-nostartfiles` only when supplying the complete assembly startup yourself;
+then `--entry` addresses that startup directly.
+
+`xprog --map app.map` resolves `--entry` and `--export` symbols from an xld
+map; existing numeric offsets remain supported. Names match exactly first,
+then with the C leading underscore. Unknown, ambiguous and out-of-range
+symbols fail. A caller's `-Map=file` is retained by `xcc`.
+
+Run `make -C x/src/xprog test-images` with the staged compiler available for
+C/assembly compilation, metadata, rejection, CRC, relocation and execution
+checks. One service image executes at three load addresses, with poisoned
+BSS and stack-balance assertions.

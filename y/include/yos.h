@@ -58,7 +58,9 @@ enum yos_event_state {
 enum yos_rom_model {
     YOS_ROM_MODEL_48K = 0,
     YOS_ROM_MODEL_128K = 1,
-    YOS_ROM_MODEL_NEXT = 2
+    YOS_ROM_MODEL_NEXT = 2,
+    YOS_ROM_MODEL_NATIVE = 3,
+    YOS_ROM_MODEL_SPECTRANET = 4
 };
 
 /* Kernel objects are opaque outside YOS. */
@@ -93,13 +95,16 @@ typedef struct yos_sys_info {
 
 typedef void (*yos_entry_t)(void);
 typedef void (*yos_handler_t)(void);
+/* Firmware print byte: A under the Z80 C ABI, first argument on native hosts. */
+typedef void (*yos_print_handler_t)(uint8_t character);
 
 /* Read-only views of live kernel objects. System-list owners are packed far
- * pointers in bank,address-low,address-high order. Heap-block owners remain
- * fixed-memory process/thread addresses. */
+ * pointers in bank,address-low,address-high order on Z80. Native builds use
+ * pointer-width addresses with bank zero. Heap-block owners remain
+ * process/thread addresses. */
 typedef struct yos_far_owner {
     uint8_t bank;
-    uint16_t address;
+    uintptr_t address;
 } yos_far_owner_t;
 
 typedef struct yos_system_object {
@@ -121,6 +126,9 @@ struct yos_process {
     char name[8];
     yos_thread_t *main_thread;
     uint8_t bank;
+    /* Variable tail: one NUL for an ordinary launch, or the exact argument
+     * length plus NUL. Use process_arguments() to read the current process. */
+    char arguments[1];
 };
 
 struct yos_thread {
@@ -145,7 +153,7 @@ struct yos_timer {
     yos_handler_t handler;
     uint16_t period;
     uint16_t remaining;
-    uint8_t bank; /* Callback execution bank; FFh for fixed-memory code. */
+    uint8_t bank; /* FFh: fixed callback; FEh: handler slot holds an event. */
 };
 
 struct yos_event {
@@ -170,16 +178,20 @@ struct yos_library_reference {
  * must not exceed 16377 bytes. Public allocation searches every configured
  * bank; preserve this packed far pointer when passing the block to
  * free_memory or shrink_memory. */
+#if !defined(__XCC_MODEL__)
+typedef void *yos_user_ptr_t;
+#else
 typedef void * [[xcc::far]] yos_user_ptr_t;
+#endif
 
 typedef struct yos_mouse_state {
-    uint8_t x;
-    uint8_t y;
+    uint16_t x;
+    uint16_t y;
     uint8_t buttons;
     uint8_t changed_buttons;
 } yos_mouse_state_t;
 
-/* One physical esxDOS block-device or partition descriptor. */
+/* One physical native filesystem block-device or partition descriptor. */
 typedef struct yos_disk_info {
     uint8_t device;
     uint8_t flags;
@@ -199,122 +211,16 @@ typedef struct yos_directory_entry {
     uint8_t d_type;
     uint8_t d_attributes;
     char d_name[YOS_DIRECTORY_NAME_MAX + 1];
+    char d_long_name[256]; /* Display name; d_name remains the DOS alias. */
 } yos_directory_entry_t;
 
-/* libgpx public formats and constants, from upstream commit 0ef6f070.
- * GPL-2.0, Copyright (C) 2026 tomaz stih. */
-/* Signed screen coordinate and unsigned screen dimension. */
-typedef int16_t coord;
-typedef uint16_t dim;
-
-#define CO_BACK 0x00
-#define CO_FORE 0x01
-typedef uint8_t color;
-
-#define BM_CPY 0x00
-#define BM_XOR 0x01
-#define BM_OR  0x02
-typedef uint8_t bmode;
-
-#define GPX_LP_SOLID        0xff
-#define GPX_LP_DOTTED       0xaa
-#define GPX_LP_DASHED       0xf0
-#define GPX_LP_DASHED_SHORT 0xcc
-
-#define GPX_TEXT_BG_OPAQUE      0x00
-#define GPX_TEXT_BG_TRANSPARENT 0x01
-typedef uint8_t textbg;
-
-typedef struct rect_s {
-    coord x0;
-    coord y0;
-    coord x1;
-    coord y1;
-} rect_t;
-
-#define BMP_ENC_1BPP      0x0
-#define BMP_ENC_1BPP_MASK 0x1
-#define BMP_ENC_TINY      0x2
-#define BMP_ENC_TINY_MASK 0x3
-#define BMP_SIG(enc) ((uint8_t)(((enc) & 0x0f) << 4))
-#define BMP_ENC(sig) ((uint8_t)(((sig) >> 4) & 0x0f))
-#define BMP_STRIDE_ENC(stride) ((uint8_t)(((stride) - 1) & 0x0f))
-#define BMP_STRIDE(sig) ((uint8_t)(((sig) & 0x0f) + 1))
-#define BMP_SIG_STRIDE(enc, stride) \
-    ((uint8_t)(BMP_SIG(enc) | BMP_STRIDE_ENC(stride)))
-#define S_BMP BMP_SIG(BMP_ENC_1BPP)
-
-typedef struct bmp_s {
-    uint8_t signature;
-    uint8_t w;
-    uint8_t h;
-    uint16_t size;
-    uint8_t bitmap[];
-} bmp_t;
-
-typedef struct font_s {
-    uint8_t flags;
-    uint8_t first_ascii;
-    uint8_t last_ascii;
-    uint8_t empty_width;
-    uint8_t max_glyph_width;
-    uint8_t glyph_height;
-    uint8_t advance;
-    uint8_t descent;
-    uint8_t data[];
-} font_t;
-
-#define FONT_FLAG_PROPORTIONAL 0x01
-#define FONT_FLAG_OFFSETS_BE   0x02
-#define FONT_FLAG_VECTOR       0x04
-
-typedef struct gpx_s {
-    dim width;
-    dim height;
-    uint8_t pages;
-    textbg text_background;
-} gpx_t;
-
-#define GPX_SPRITE_BG_HEADER_SIZE  5
-#define GPX_SPRITE_BG_PAYLOAD_SIZE 32
-#define GPX_SPRITE_BG_SIZE \
-    (GPX_SPRITE_BG_HEADER_SIZE + GPX_SPRITE_BG_PAYLOAD_SIZE)
-
-typedef struct sprite_s {
-    coord x;
-    coord y;
-    bmp_t *bitmap;
-    bmp_t *background;
-    const rect_t *clip;
-} sprite_t;
-
-#define GPXM_DEFAULT        0
-#define GPXM_CPC_640X200    0
-#define GPXM_CPC_320X200    1
-#define GPXM_RASTA_1920X1080 0
-typedef uint8_t gmode;
-
-#define PG_DISPLAY 0x01
-#define PG_WRITE   0x02
-
-#define GPXSB_CURSOR_CLASSIC   0
-#define GPXSB_CURSOR_STD       1
-#define GPXSB_CURSOR_HOURGLASS 2
-#define GPXSB_CURSOR_CARET     3
-#define GPXSB_CURSOR_HAND      4
-#define GPXSB_CURSOR_RESIZE    5
-
-#define GPX_EDGE_LEFT   0x01
-#define GPX_EDGE_TOP    0x02
-#define GPX_EDGE_RIGHT  0x04
-#define GPX_EDGE_BOTTOM 0x08
-#define GPX_EDGE_ALL    0x0f
+#include "yos_gpx.h"
 
 /*
  * Kernel interface returned by query_service("yos").
  *
- * ABI 1 groups related entries. Every entry occupies one 16-bit table slot;
- * yos.inc publishes the matching byte offsets for assembly code.
+ * ABI 1 groups related entries. Every entry occupies one pointer-sized slot
+ * (16 bits on Z80). yos.inc publishes the hardware offsets for assembly code.
  */
 typedef struct yos_s {
     /* Kernel identity and the global firmware-print hook. */
@@ -325,7 +231,7 @@ typedef struct yos_s {
     /* Inspect live kernel lists and heap roots. */
     const yos_sys_info_t *(*get_sys_info)(void);
     /* Install a RAM print sink and return the previously installed handler. */
-    yos_handler_t (*set_print_hook)(yos_handler_t sink);
+    yos_print_handler_t (*set_print_hook)(yos_print_handler_t sink);
 
     /* Banked user memory. Kernel objects use the private fixed OS heap. */
     /* Allocate a process-owned block from any configured user bank. */
@@ -348,12 +254,14 @@ typedef struct yos_s {
     yos_timer_t *(*create_timer)(yos_handler_t handler, uint16_t ticks);
     /* Destroy a timer and stop future callbacks. */
     void (*destroy_timer)(yos_timer_t *timer);
-    /* Create a binary synchronization event owned by owner. */
+    /* Create a binary synchronization event owned by owner. Linux and the Z80
+       kernel preserve NULL as a null owner; pass the process explicitly for
+       process-owned cleanup. */
     yos_event_t *(*create_event)(void *owner);
     /* Destroy a synchronization event. */
     void (*destroy_event)(yos_event_t *event);
     /* Set or reset an event and return the same event on success. */
-    yos_event_t *(*set_event)(yos_event_t *event, enum yos_event_state state);
+    yos_event_t *(*set_event)(yos_event_t *event, uint8_t state);
     /* Block the calling thread until the event is set and consumed. */
     void (*wait_event)(yos_event_t *event);
 
@@ -374,7 +282,8 @@ typedef struct yos_s {
     yos_process_t *(*load_process)(const char *path);
     /* Terminate the current process. */
     void (*exit_process)(void);
-    /* Load or acquire an XPRG library and return its export table. */
+    /* Load or acquire an XPRG library and return its export table. Repeated
+     * shared acquisitions retain one reference per owner/library until exit. */
     void *(*load_library)(const char *path, uint16_t flags);
     /* Point to the calling thread's most recent process/library load status. */
     uint8_t *process_load_error;
@@ -397,11 +306,11 @@ typedef struct yos_s {
     /* Return one encoded keyboard transition, or zero when none is queued. */
     uint8_t (*read_key)(void);
     /* Calibrate the absolute mouse cursor against current hardware counters. */
-    void (*calibrate_mouse)(uint8_t x, uint8_t y);
+    void (*calibrate_mouse)(uint16_t x, uint16_t y);
     /* Copy sampled mouse state and consume its changed-buttons mask. */
     void (*read_mouse)(yos_mouse_state_t *state);
 
-    /* POSIX-style esxDOS filesystem. */
+    /* POSIX-style native filesystem filesystem. */
     /* Point to the scheduler-virtualized kernel errno cell. */
     int *error_number;
     /* Open a file and return its descriptor, or -1 on error. */
@@ -443,8 +352,8 @@ typedef struct yos_s {
     /* Enumerate at most capacity available disks or partitions. */
     int (*enumerate_disks)(yos_disk_info_t *disks, size_t capacity);
 
-    /* Native esxDOS commands. */
-    /* Execute an esxDOS dot command and return zero or 0x100 + native error. */
+    /* Native native filesystem commands. */
+    /* Execute an external terminal command and return zero or 0x100 + native error. */
     int (*exec_command)(const char *commandline);
 
     /* Graphics. */
@@ -511,9 +420,24 @@ typedef struct yos_s {
     uint8_t (*gpx_draw_box)(gpx_t *gpx, const rect_t *rectangle,
                         uint8_t edges, color c, bmode mode,
                         uint8_t pattern, const rect_t *clip);
+    /* One verbatim argument (up to 127 bytes), copied before the child runs. */
+    yos_process_t *(*load_process_args)(const char *path, const char *arguments);
+    /* The calling process owns this stable string; no argument is "". */
+    const char *(*process_arguments)(void);
+    /* Signal a live event every ticks+1 frames; no application IRQ callback.
+     * Destroy the timer before destroying the event it borrows. */
+    yos_timer_t *(*create_event_timer)(yos_event_t *event, uint16_t ticks);
+    /* Allocate near bytes owned by a live process/library descriptor. Library
+     * services use this for retained data that must survive a client's exit. */
+    yos_user_ptr_t (*allocate_owned_memory)(size_t size, yos_process_t *owner);
+    /* Allocate fixed bytes with the same owner-based reclamation contract. */
+    yos_user_ptr_t (*allocate_owned_common_memory)(size_t size, yos_process_t *owner);
+    /* Standard non-overlapping libc copy, also callable through the far gate
+     * when one operand is fixed and the other is in the selected bank. */
+    void *(*copy_memory)(void *destination, const void *source, size_t size);
 } yos_t;
 
-/* Resolve a named service through the application's RST 18 stub. */
+/* Resolve a named service (RST 18 on Z80, the loader symbol on native hosts). */
 void *query_service(const char *name);
 
 #endif /* _YOS_H */

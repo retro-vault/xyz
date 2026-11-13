@@ -349,3 +349,11 @@ writes `yos-kernel.rom.sha256` alongside it. ABI 1's table has 76 grouped
 entries and occupies 152 bytes: `version`, `rom_model`, `get_sys_info`, and
 `set_print_hook` sit at byte offsets 0, 2, 4, and 6; `exec_command` is at byte
 offset 106, and the 22 graphics entries occupy byte offsets 108 through 150.
+
+## ALTO boot policy
+
+`YOS_BOOT_ALTO=1` selects the ALTO shell path; zero retains `shell.sys`.
+`YOS_UNIFIED_48K=1` selects the resident ALTO heap and its linker script.
+Both layouts retain the fixed divIDE entry points and a 16 KiB ROM limit.
+The build configuration stamp includes all assembly flags and linker policy,
+so changing either option rebuilds existing objects in the same build tree.

@@ -87,6 +87,12 @@ ENTRIES = [
     ("GPX_DRAW_CIRCLE", "gpx_draw_circle", "_gpx_draw_circle"),
     ("GPX_FILL_CIRCLE", "gpx_fill_circle", "_gpx_fill_circle"),
     ("GPX_DRAW_BOX", "gpx_draw_box", "_gpx_draw_box"),
+    ("LOAD_PROCESS_ARGS", "load_process_args", "_process_load_args"),
+    ("PROCESS_ARGUMENTS", "process_arguments", "_process_arguments"),
+    ("CREATE_EVENT_TIMER", "create_event_timer", "_tmr_event"),
+    ("ALLOCATE_OWNED_MEMORY", "allocate_owned_memory", "_yos_owned_malloc"),
+    ("ALLOCATE_OWNED_COMMON_MEMORY", "allocate_owned_common_memory", "_yos_owned_common_malloc"),
+    ("COPY_MEMORY", "copy_memory", "_memcpy"),
 ]
 
 
@@ -121,15 +127,15 @@ def check_header(path: Path) -> None:
 
 def check_inc(path: Path) -> None:
     source = path.read_text()
-    abi = re.search(r"\.equ\s+YOS_ABI_VERSION,\s+0x([0-9a-fA-F]+)", source)
+    abi = re.search(r"\.equ\s+YOS_ABI_VERSION,\s*0x([0-9a-fA-F]+)", source)
     if not abi or int(abi.group(1), 16) != VERSION:
         fail(f"{path}: wrong YOS_ABI_VERSION")
     for slot, (name, _, _) in enumerate(ENTRIES):
         match = re.search(
-            rf"\.equ\s+YOS_OFFSET_{name},\s+([0-9]+)", source)
-        if not match or int(match.group(1)) != slot * 2:
+            rf"\.equ\s+YOS_OFFSET_{name},\s*(0x[0-9a-fA-F]+|[0-9]+)", source)
+        if not match or int(match.group(1), 0) != slot * 2:
             fail(f"{path}: wrong YOS_OFFSET_{name}")
-    size = re.search(r"\.equ\s+YOS_TABLE_SIZE,\s+([0-9]+)", source)
+    size = re.search(r"\.equ\s+YOS_TABLE_SIZE,\s*(0x[0-9a-fA-F]+|[0-9]+)", source)
     if not size or int(size.group(1)) != len(ENTRIES) * 2:
         fail(f"{path}: wrong YOS_TABLE_SIZE")
 

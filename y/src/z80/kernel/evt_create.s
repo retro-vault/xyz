@@ -9,7 +9,7 @@
         .globl  __critical_call
         .globl  __evt_first
         .globl  _so_create
-        .area   _CODE
+        .area   _ROM_EVT
 
         ; hl = owner; returns de = event or zero.
 _evt_create::

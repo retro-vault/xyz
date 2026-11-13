@@ -44,3 +44,7 @@ test: dirs $(TEST_SRCS)
 clean:
 	rm -rf $(OBJDIR)
 	rm -f $(TEST_BIN) $(TARGET)
+
+.PHONY: test-images
+test-images: all
+	XTOOLS_BIN=$(abspath $(HOST_BIN_DIR)) python3 $(TEST_DIR)/test_images.py

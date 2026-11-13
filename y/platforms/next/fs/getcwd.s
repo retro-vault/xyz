@@ -1,0 +1,116 @@
+        ; POSIX getcwd over resident native filesystem firmware.
+        ;
+        ; MIT License (see: LICENSE)
+        ; Copyright (C) 2026 tomaz stih
+
+        .module getcwd
+        .optsdcc -mz80 sdcccall(1)
+
+        .globl  _getcwd
+        .globl  __next_fs_errno
+        .globl  __next_fs_error
+        .globl  __next_fs_f_getcwd
+
+        .globl  __frame_ix
+        .globl  __frame_return
+
+        .area   _CODE
+
+        ; _getcwd
+        ; inputs: HL = buffer, DE = buffer size (sdcccall(1)).
+        ; outputs: DE = buffer or NULL with errno set.
+        ; clobbers: af, bc, de, hl; preserves ix and iy.
+_getcwd::
+        call    __frame_ix
+        push    hl                      ; IX-2: caller's output buffer
+        push    de                      ; IX-4: caller's buffer size
+        ld      a,h
+        or      l
+        jr      z,.native_getcwd_invalid
+        ld      a,d
+        or      e
+        jr      z,.native_getcwd_invalid
+        ld      a,h
+        cp      #0x40
+        jr      c,.native_getcwd_fault
+        dec     de
+        add     hl,de
+        jr      c,.native_getcwd_fault
+
+        ; The 0.8.x ABI has no destination-length parameter. Reserve 256
+        ; bytes (also covering z88dk's 128-byte 0.8.5 pathname limit),
+        ; then
+        ; check the returned string before touching the caller's buffer.
+        ld      hl,#-256
+        add     hl,sp
+        ; IX-260: private pathname buffer
+        ld      sp,hl
+        ld      d,h
+        ld      e,l
+        inc     de
+        ld      (hl),#0xff
+        ld      bc,#255
+        ldir
+        push    ix
+        pop     hl
+        ld      bc,#-260
+        add     hl,bc
+        ld      a,#0x2a
+        call    __next_fs_f_getcwd
+        jr      c,.native_getcwd_native_error
+
+        push    ix
+        pop     hl
+        ld      bc,#-260
+        add     hl,bc
+        ld      bc,#256
+        xor     a
+        cpir
+        jr      nz,.native_getcwd_range
+        ld      hl,#256
+        or      a
+        ; count includes the terminating NUL
+        sbc     hl,bc
+        push    hl
+        ld      e,-4(ix)
+        ld      d,-3(ix)
+        or      a
+        sbc     hl,de
+        pop     bc                      ; complete copy length
+        jr      c,.native_getcwd_copy
+        jr      nz,.native_getcwd_range
+.native_getcwd_copy:
+        push    bc
+        push    ix
+        pop     hl
+        ld      bc,#-260
+        add     hl,bc
+        pop     bc
+        ld      e,-2(ix)
+        ld      d,-1(ix)
+        ldir
+        ld      e,-2(ix)
+        ld      d,-1(ix)
+        jp      __frame_return
+
+.native_getcwd_invalid:
+        ld      a,#22                   ; EINVAL
+        jr      .native_getcwd_errno
+.native_getcwd_fault:
+        ld      a,#14                   ; EFAULT
+        jr      .native_getcwd_errno
+.native_getcwd_range:
+        ; ERANGE: caller buffer too small
+        ld      a,#34
+.native_getcwd_errno:
+        call    __next_fs_errno
+        jr      .native_getcwd_null
+.native_getcwd_native_error:
+        call    __next_fs_error
+.native_getcwd_null:
+        xor     a
+        ld      d,a
+        ld      e,a
+        ld      h,a
+        ld      l,a
+        jp      __frame_return

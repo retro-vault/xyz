@@ -15,7 +15,9 @@
         .globl  _enter_critical_section
         .globl  _leave_critical_section
         .globl  __bank_current
-        .equ    PROCESS_SIZE,        17
+        .globl  __process_argument_length
+        .globl  __process_descriptor_size
+        .equ    PROCESS_SIZE,         18
         .equ    PROCESS_FLAGS,        5
         .equ    PROCESS_NAME,         6
         .equ    PROCESS_MAIN_THREAD, 14
@@ -33,7 +35,7 @@ _process_start::
         call    _enter_critical_section
         ld      hl, #0
         push    hl
-        ld      de, #PROCESS_SIZE
+        call    __process_descriptor_size
         ld      hl, #_process_first
         call    _so_create
         pop     hl
@@ -43,6 +45,7 @@ _process_start::
         push    de
         pop     ix
         ld      PROCESS_FLAGS(ix), #0
+        ld      17(ix), #0
         ld      bc, #PROCESS_NAME
         ex      de, hl
         add     hl, bc

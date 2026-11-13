@@ -1,0 +1,20 @@
+{
+  "fdc.s": {
+    "source": "platforms/cpc/fdc.s"
+  },
+  "bank.s": {
+    "source": "platforms/cpc/bank.s"
+  },
+  "boot.s": {
+    "source": "platforms/cpc/boot.s"
+  },
+  "start.s": {
+    "source": "platforms/cpc/start.s"
+  },
+  "runtime/calloc.s": {
+    "source": "src/z80/cooperative/calloc.s"
+  },
+  "substrate/boot/tools/fix-partner-extents.py": {
+    "source": "scripts/fix-partner-extents.py"
+  }
+}

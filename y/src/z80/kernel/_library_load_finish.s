@@ -7,9 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  __library_load_finish
         .globl  __library_acquire
-        .globl  __image_retain
         .globl  __image_transfer
-        .globl  __os_malloc
         .globl  __library_initialize
         .globl  _process_first
         .globl  __svc_first
@@ -37,40 +35,31 @@
         ; Init allocations and registrations belong to the library.
 __library_load_finish::
         push    iy
-        ld      l, 72(ix)              ; three bytes per export
-        ld      h, 73(ix)
-        call    __os_malloc
-        ld      a, d
-        or      e
-        ld      a, #2
-        jr      z, .failed
-        ld      IMAGE_TABLE(ix), e
-        ld      IMAGE_TABLE+1(ix), d
-        ld      l, 80(ix)              ; raw JP metadata is temporary
-        ld      h, 81(ix)
+        ld      l, IMAGE_TABLE(ix)     ; raw JP metadata becomes far entries
+        ld      h, IMAGE_TABLE+1(ix)
         ld      b, 34(ix)
 .export:
         ld      a, (hl)
         cp      #0xc3
         jr      nz, .invalid
-        inc     hl
         push    bc                      ; export count
+        push    hl                      ; current table entry
+        inc     hl
         ld      c, (hl)
         inc     hl
         ld      b, (hl)
-        inc     hl
-        push    hl                      ; next raw JP
         ld      l, 68(ix)
         ld      h, 69(ix)
         add     hl, bc                 ; absolute export target
         jr      c, .invalid_target
-        ld      c, 12(ix)
+        ld      c, 12(ix)              ; exclusive code end
         ld      b, 13(ix)
         or      a
         sbc     hl, bc
         jr      nc, .invalid_target    ; at or past the relocated code end
         add     hl, bc
-        ex      de, hl                  ; DE target, HL common table cursor
+        ex      de, hl
+        pop     hl                      ; current table entry
         ld      a, IMAGE_BANK(ix)
         ld      (hl), a
         inc     hl
@@ -78,9 +67,7 @@ __library_load_finish::
         inc     hl
         ld      (hl), d
         inc     hl
-        ex      de, hl
-        pop     hl
-        pop     bc
+        pop     bc                      ; export count
         djnz    .export
         jr      .create
 .invalid_target:
@@ -93,7 +80,6 @@ __library_load_finish::
         pop     iy
         ret
 .create:
-        call    __image_retain
         call    _enter_critical_section
         ld      hl, #0
         push    hl

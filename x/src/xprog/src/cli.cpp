@@ -1,4 +1,7 @@
 #include <charconv>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
 #include <iostream>
 #include <limits>
 #include <string_view>
@@ -43,6 +46,8 @@ std::string take_value(int& i, int argc, char* argv[], const std::string& opt)
 cli_options cli::parse(int argc, char* argv[])
 {
     cli_options options;
+    std::string map_file, entry;
+    std::vector<std::string> exports;
     if (argc < 2) {
         options.show_help = true;
         return options;
@@ -101,15 +106,15 @@ cli_options cli::parse(int argc, char* argv[])
                 take_value(i, argc, argv, arg), UINT16_MAX, arg));
         } else if (arg == "--fixed-load") {
             options.require_fixed_load = true;
+        } else if (arg == "--map") {
+            map_file = take_value(i, argc, argv, arg);
         } else if (arg == "--entry") {
-            options.entry_point = static_cast<std::uint16_t>(number(
-                take_value(i, argc, argv, arg), UINT16_MAX, arg));
+            entry = take_value(i, argc, argv, arg);
         } else if (arg == "--stack-size") {
             options.stack_size = static_cast<std::uint16_t>(number(
                 take_value(i, argc, argv, arg), UINT16_MAX, arg));
         } else if (arg == "--export") {
-            options.exports.push_back(static_cast<std::uint16_t>(number(
-                take_value(i, argc, argv, arg), UINT16_MAX, arg)));
+            exports.push_back(take_value(i, argc, argv, arg));
         } else if (!arg.empty() && arg[0] == '-') {
             throw usage_error("unknown option: " + arg);
         } else if (options.input_file.empty()) {
@@ -118,6 +123,51 @@ cli_options cli::parse(int argc, char* argv[])
             throw usage_error("too many positional arguments");
         }
     }
+
+    // Resolve after parsing so --map may precede or follow its users.
+    std::unordered_map<std::string, std::uint32_t> symbols;
+    if (!map_file.empty()) {
+        if (options.command != command_kind::process
+            && options.command != command_kind::service)
+            throw usage_error("--map requires process or service mode");
+        std::ifstream map(map_file);
+        if (!map) throw usage_error("cannot open map: " + map_file);
+        std::string line;
+        bool in_symbols = false;
+        while (std::getline(map, line)) {
+            if (line == "Symbols:") { in_symbols = true; continue; }
+            // Accept a standalone symbol list as well as a complete xld map.
+            if (!in_symbols && line.find(":") != std::string::npos)
+                continue;
+            std::istringstream row(line);
+            std::string address, name, trailing;
+            if (!(row >> address >> name) || address.size() != 8)
+                continue;
+            std::uint32_t value;
+            auto result = std::from_chars(address.data(),
+                address.data() + address.size(), value, 16);
+            if (result.ec != std::errc()
+                || result.ptr != address.data() + address.size()) continue;
+            if ((row >> trailing) && trailing[0] != ';') continue;
+            if (!symbols.emplace(name, value).second)
+                throw usage_error("ambiguous map symbol: " + name);
+        }
+    }
+    const auto resolve = [&](const std::string& value,
+                             const std::string& option) {
+        if (!value.empty() && (value[0] >= '0' && value[0] <= '9'))
+            return static_cast<std::uint16_t>(number(value, UINT16_MAX, option));
+        auto found = symbols.find(value);
+        if (found == symbols.end()) found = symbols.find("_" + value);
+        if (found == symbols.end())
+            throw usage_error("unresolved " + option + " symbol: " + value);
+        if (found->second > UINT16_MAX)
+            throw usage_error("symbol exceeds Z80 address space: " + value);
+        return static_cast<std::uint16_t>(found->second);
+    };
+    if (!entry.empty()) options.entry_point = resolve(entry, "--entry");
+    for (const auto& value : exports)
+        options.exports.push_back(resolve(value, "--export"));
 
     if (options.show_help)
         return options;
@@ -222,13 +272,14 @@ void cli::print_usage(const char* argv0)
         << "  --min-os <n>              Minimum OS ABI version (default: 0)\n"
         << "  --load-address <n>        Load address (Spectrum 0x5CCB, CPC 0x4000)\n"
         << "  --fixed-load              Require the preferred address\n"
-        << "  --entry <n>               XL entry override or absolute media entry\n"
+        << "  --map <file>              Resolve entry/export symbols from xld map\n"
+        << "  --entry <n|symbol>        XL entry override or absolute media entry\n"
         << "  --version                 Show version\n"
         << "  -h, --help                Show this help\n\n"
         << "process options:\n"
         << "  --stack-size <n>          Required stack size in bytes\n\n"
         << "service options:\n"
-        << "  --export <offset>         Add a JP slot targeting an XL code offset;\n"
+        << "  --export <offset|symbol>         Add a JP slot targeting an XL code offset;\n"
         << "                            repeat in stable ABI slot order\n\n"
         << "Numbers may be decimal or hexadecimal (0x...).\n";
 }

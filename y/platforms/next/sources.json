@@ -1,0 +1,643 @@
+{
+  "bank/128/_bank_map.s": {
+    "source": "src/z80/bank/128/_bank_map.s"
+  },
+  "bank/48/_bank_map.s": {
+    "source": "src/z80/bank/48/_bank_map.s"
+  },
+  "bank/common/_bank_allocate.s": {
+    "source": "platforms/next/bank/common/_bank_allocate.s"
+  },
+  "bank/common/_bank_allocate_current.s": {
+    "source": "platforms/next/bank/common/_bank_allocate_current.s"
+  },
+  "bank/common/_bank_call.s": {
+    "source": "src/z80/bank/common/_bank_call.s"
+  },
+  "bank/common/_bank_data_rst30.s": {
+    "source": "src/z80/bank/common/_bank_data_rst30.s"
+  },
+  "bank/common/_bank_detect.s": {
+    "source": "platforms/next/bank/common/_bank_detect.s"
+  },
+  "bank/common/_bank_free.s": {
+    "source": "platforms/next/bank/common/_bank_free.s"
+  },
+  "bank/common/_bank_free_owner.s": {
+    "source": "platforms/next/bank/common/_bank_free_owner.s"
+  },
+  "bank/common/_bank_init.s": {
+    "source": "platforms/next/bank/common/_bank_init.s"
+  },
+  "bank/common/_bank_probe.s": {
+    "source": "platforms/next/bank/common/_bank_probe.s"
+  },
+  "bank/common/_bank_shrink.s": {
+    "source": "src/z80/bank/common/_bank_shrink.s"
+  },
+  "bank/common/_bank_state.s": {
+    "source": "src/z80/bank/common/_bank_state.s"
+  },
+  "bank/next/_bank_map.s": {
+    "source": "platforms/next/bank/next/_bank_map.s"
+  },
+  "drivers/_clock_state.s": {
+    "source": "src/z80/drivers/_clock_state.s"
+  },
+  "drivers/_clock_tick.s": {
+    "source": "src/z80/drivers/_clock_tick.s"
+  },
+  "drivers/_keyboard_scan.s": {
+    "source": "src/z80/drivers/_keyboard_scan.s"
+  },
+  "drivers/_keyboard_state.s": {
+    "source": "src/z80/drivers/_keyboard_state.s"
+  },
+  "drivers/_mouse_scan.s": {
+    "source": "platforms/next/drivers/_mouse_scan.s"
+  },
+  "drivers/_mouse_state.s": {
+    "source": "src/z80/drivers/_mouse_state.s"
+  },
+  "drivers/clock.s": {
+    "source": "src/z80/drivers/clock.s"
+  },
+  "drivers/keyboard_read.s": {
+    "source": "src/z80/drivers/keyboard_read.s"
+  },
+  "drivers/mouse_calibrate.s": {
+    "source": "src/z80/drivers/mouse_calibrate.s"
+  },
+  "drivers/mouse_read.s": {
+    "source": "src/z80/drivers/mouse_read.s"
+  },
+  "drivers/next_hwfront.s": {
+    "source": "platforms/next/drivers/next_hwfront.s"
+  },
+  "drivers/next_hwsprite.s": {
+    "source": "platforms/next/drivers/next_hwsprite.s"
+  },
+  "fs/_directory_convert.s": {
+    "source": "platforms/next/fs/_directory_convert.s"
+  },
+  "fs/_directory_validate.s": {
+    "source": "platforms/next/fs/_directory_validate.s"
+  },
+  "fs/_errno_state.s": {
+    "source": "src/z80/fs/_errno_state.s"
+  },
+  "fs/_exec_command.s": {
+    "source": "platforms/next/fs/_exec_command.s"
+  },
+  "fs/_set_print_hook.s": {
+    "source": "platforms/next/fs/_set_print_hook.s"
+  },
+  "fs/chdir.s": {
+    "source": "platforms/next/fs/chdir.s"
+  },
+  "fs/close.s": {
+    "source": "platforms/next/fs/close.s"
+  },
+  "fs/closedir.s": {
+    "source": "platforms/next/fs/closedir.s"
+  },
+  "fs/console_print.s": {
+    "source": "platforms/next/fs/console_print.s"
+  },
+  "fs/enumerate_disks.s": {
+    "source": "platforms/next/fs/enumerate_disks.s"
+  },
+  "fs/fs_core.s": {
+    "source": "platforms/next/fs/fs_core.s"
+  },
+  "fs/fs_path_drive.s": {
+    "source": "platforms/next/fs/fs_path_drive.s"
+  },
+  "fs/fstat.s": {
+    "source": "platforms/next/fs/fstat.s"
+  },
+  "fs/fsync.s": {
+    "source": "platforms/next/fs/fsync.s"
+  },
+  "fs/getcwd.s": {
+    "source": "platforms/next/fs/getcwd.s"
+  },
+  "fs/lseek.s": {
+    "source": "platforms/next/fs/lseek.s"
+  },
+  "fs/mkdir.s": {
+    "source": "platforms/next/fs/mkdir.s"
+  },
+  "fs/next_calls.s": {
+    "source": "platforms/next/fs/next_calls.s"
+  },
+  "fs/next_fs.c": {
+    "source": "platforms/next/fs/next_fs.c"
+  },
+  "fs/open.s": {
+    "source": "platforms/next/fs/open.s"
+  },
+  "fs/opendir.s": {
+    "source": "platforms/next/fs/opendir.s"
+  },
+  "fs/p3dos/native_calls.s": {
+    "source": "platforms/next/fs/p3dos/native_calls.s"
+  },
+  "fs/p3dos/p3dos_core.s": {
+    "source": "platforms/next/fs/p3dos/p3dos_core.s"
+  },
+  "fs/read.s": {
+    "source": "platforms/next/fs/read.s"
+  },
+  "fs/readdir.s": {
+    "source": "platforms/next/fs/readdir.s"
+  },
+  "fs/rename.s": {
+    "source": "platforms/next/fs/rename.s"
+  },
+  "fs/rewinddir.s": {
+    "source": "platforms/next/fs/rewinddir.s"
+  },
+  "fs/rmdir.s": {
+    "source": "platforms/next/fs/rmdir.s"
+  },
+  "fs/stat.s": {
+    "source": "platforms/next/fs/stat.s"
+  },
+  "fs/unlink.s": {
+    "source": "platforms/next/fs/unlink.s"
+  },
+  "fs/write.s": {
+    "source": "platforms/next/fs/write.s"
+  },
+  "gpx/LICENSE.libgpx": {
+    "source": "src/z80/gpx/LICENSE.libgpx"
+  },
+  "gpx/_gpx_circle_cmp.s": {
+    "source": "src/z80/gpx/_gpx_circle_cmp.s"
+  },
+  "gpx/_gpx_cursors.s": {
+    "source": "src/z80/gpx/_gpx_cursors.s"
+  },
+  "gpx/_gpx_ffshr.s": {
+    "source": "src/z80/gpx/_gpx_ffshr.s"
+  },
+  "gpx/_gpx_font_envy.s": {
+    "source": "platforms/next/gpx/_gpx_font_envy.s"
+  },
+  "gpx/_gpx_get_stock_bmp.s": {
+    "source": "platforms/next/gpx/_gpx_get_stock_bmp.s"
+  },
+  "gpx/_gpx_get_system_font.s": {
+    "source": "src/z80/gpx/_gpx_get_system_font.s"
+  },
+  "gpx/_gpx_get_tiny_font.s": {
+    "source": "platforms/next/gpx/_gpx_get_tiny_font.s"
+  },
+  "gpx/_gpx_hline.s": {
+    "source": "platforms/next/gpx/_gpx_hline.s"
+  },
+  "gpx/_gpx_neg_hl.s": {
+    "source": "src/z80/gpx/_gpx_neg_hl.s"
+  },
+  "gpx/_rect_helpers.s": {
+    "source": "src/z80/gpx/_rect_helpers.s"
+  },
+  "gpx/_video.s": {
+    "source": "platforms/next/gpx/_video.s"
+  },
+  "gpx/_zxnext-l2-defs.inc": {
+    "source": "platforms/next/gpx/_zxnext-l2-defs.inc"
+  },
+  "gpx/gpx_bmp.s": {
+    "source": "platforms/next/gpx/gpx_bmp.s"
+  },
+  "gpx/gpx_clrscr.s": {
+    "source": "platforms/next/gpx/gpx_clrscr.s"
+  },
+  "gpx/gpx_create.s": {
+    "source": "platforms/next/gpx/gpx_create.s"
+  },
+  "gpx/gpx_destroy.s": {
+    "source": "platforms/next/gpx/gpx_destroy.s"
+  },
+  "gpx/gpx_draw_box.s": {
+    "source": "platforms/next/gpx/gpx_draw_box.s"
+  },
+  "gpx/gpx_draw_circle.s": {
+    "source": "platforms/next/gpx/gpx_draw_circle.s"
+  },
+  "gpx/gpx_draw_line.s": {
+    "source": "platforms/next/gpx/gpx_draw_line.s"
+  },
+  "gpx/gpx_draw_pixel.s": {
+    "source": "platforms/next/gpx/gpx_draw_pixel.s"
+  },
+  "gpx/gpx_draw_rectangle.s": {
+    "source": "src/z80/gpx/gpx_draw_rectangle.s"
+  },
+  "gpx/gpx_draw_text.s": {
+    "source": "platforms/next/gpx/gpx_draw_text.s"
+  },
+  "gpx/gpx_fill_circle.s": {
+    "source": "platforms/next/gpx/gpx_fill_circle.s"
+  },
+  "gpx/gpx_fill_rectangle.s": {
+    "source": "platforms/next/gpx/gpx_fill_rectangle.s"
+  },
+  "gpx/gpx_height.s": {
+    "source": "platforms/next/gpx/gpx_height.s"
+  },
+  "gpx/gpx_hide_sprite.s": {
+    "source": "platforms/next/gpx/gpx_hide_sprite.s"
+  },
+  "gpx/gpx_measure_text.s": {
+    "source": "src/z80/gpx/gpx_measure_text.s"
+  },
+  "gpx/gpx_set_page.s": {
+    "source": "platforms/next/gpx/gpx_set_page.s"
+  },
+  "gpx/gpx_set_text_background.s": {
+    "source": "src/z80/gpx/gpx_set_text_background.s"
+  },
+  "gpx/gpx_show_sprite.s": {
+    "source": "platforms/next/gpx/gpx_show_sprite.s"
+  },
+  "gpx/gpx_width.s": {
+    "source": "platforms/next/gpx/gpx_width.s"
+  },
+  "gpx/next_blit.s": {
+    "source": "platforms/next/gpx/next_blit.s"
+  },
+  "gpx/next_blit_ops.s": {
+    "source": "platforms/next/gpx/next_blit_ops.s"
+  },
+  "gpx/next_fill.s": {
+    "source": "platforms/next/gpx/next_fill.s"
+  },
+  "gpx/next_fill_setup.s": {
+    "source": "platforms/next/gpx/next_fill_setup.s"
+  },
+  "gpx/next_gfx.s": {
+    "source": "platforms/next/gpx/next_gfx.s"
+  },
+  "gpx/next_sample.s": {
+    "source": "platforms/next/gpx/next_sample.s"
+  },
+  "gpx/next_video.s": {
+    "source": "platforms/next/gpx/next_video.s"
+  },
+  "kernel/_crc32.s": {
+    "source": "src/z80/kernel/_crc32.s"
+  },
+  "kernel/_crc32_finish.s": {
+    "source": "src/z80/kernel/_crc32_finish.s"
+  },
+  "kernel/_crc32_reset.s": {
+    "source": "src/z80/kernel/_crc32_reset.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/_crc32_state.s": {
+    "source": "src/z80/kernel/_crc32_state.s"
+  },
+  "kernel/_crc32_update.s": {
+    "source": "src/z80/kernel/_crc32_update.s"
+  },
+  "kernel/_current_process.s": {
+    "source": "src/z80/kernel/_current_process.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/_evt_state.s": {
+    "source": "src/z80/kernel/_evt_state.s"
+  },
+  "kernel/_frame_ix.s": {
+    "source": "src/z80/kernel/_frame_ix.s"
+  },
+  "kernel/_frame_return.s": {
+    "source": "src/z80/kernel/_frame_return.s"
+  },
+  "kernel/_image_load.s": {
+    "source": "platforms/next/kernel/_image_load.s"
+  },
+  "kernel/_image_retain.s": {
+    "source": "platforms/next/kernel/_image_retain.s"
+  },
+  "kernel/_image_transfer.s": {
+    "source": "src/z80/kernel/_image_transfer.s"
+  },
+  "kernel/_library_acquire.s": {
+    "source": "src/z80/kernel/_library_acquire.s",
+    "areas": [
+      "_KEXT"
+    ]
+  },
+  "kernel/_library_find.s": {
+    "source": "src/z80/kernel/_library_find.s"
+  },
+  "kernel/_library_initialize.s": {
+    "source": "src/z80/kernel/_library_initialize.s"
+  },
+  "kernel/_library_load_finish.s": {
+    "source": "src/z80/kernel/_library_load_finish.s"
+  },
+  "kernel/_mem_payload_address.s": {
+    "source": "src/z80/kernel/_mem_payload_address.s"
+  },
+  "kernel/_mem_split.s": {
+    "source": "src/z80/kernel/_mem_split.s"
+  },
+  "kernel/_near_free.s": {
+    "source": "src/z80/kernel/_near_free.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/_near_malloc.s": {
+    "source": "src/z80/kernel/_near_malloc.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/_os_free.s": {
+    "source": "src/z80/kernel/_os_free.s"
+  },
+  "kernel/_os_malloc.s": {
+    "source": "src/z80/kernel/_os_malloc.s"
+  },
+  "kernel/_process_find_owned.s": {
+    "source": "src/z80/kernel/_process_find_owned.s"
+  },
+  "kernel/_process_has_threads.s": {
+    "source": "src/z80/kernel/_process_has_threads.s"
+  },
+  "kernel/_process_load_finish.s": {
+    "source": "src/z80/kernel/_process_load_finish.s"
+  },
+  "kernel/_process_read_exact.s": {
+    "source": "src/z80/kernel/_process_read_exact.s"
+  },
+  "kernel/_process_relocate_chunk.s": {
+    "source": "src/z80/kernel/_process_relocate_chunk.s"
+  },
+  "kernel/_process_state.s": {
+    "source": "src/z80/kernel/_process_state.s"
+  },
+  "kernel/_so_reap.s": {
+    "source": "src/z80/kernel/_so_reap.s"
+  },
+  "kernel/_string_compare.s": {
+    "source": "src/z80/kernel/_string_compare.s"
+  },
+  "kernel/_string_copy.s": {
+    "source": "src/z80/kernel/_string_copy.s"
+  },
+  "kernel/_svc_query.s": {
+    "source": "src/z80/kernel/_svc_query.s"
+  },
+  "kernel/_svc_state.s": {
+    "source": "src/z80/kernel/_svc_state.s"
+  },
+  "kernel/_syscall_table_init.s": {
+    "source": "platforms/next/kernel/_syscall_table_init.s"
+  },
+  "kernel/_thread_cleanup_terminated.s": {
+    "source": "src/z80/kernel/_thread_cleanup_terminated.s"
+  },
+  "kernel/_thread_lswitch.s": {
+    "source": "src/z80/kernel/_thread_lswitch.s"
+  },
+  "kernel/_thread_prepare_startup.s": {
+    "source": "src/z80/kernel/_thread_prepare_startup.s"
+  },
+  "kernel/_thread_robin.s": {
+    "source": "src/z80/kernel/_thread_robin.s"
+  },
+  "kernel/_thread_select_next.s": {
+    "source": "src/z80/kernel/_thread_select_next.s"
+  },
+  "kernel/_thread_state.s": {
+    "source": "src/z80/kernel/_thread_state.s"
+  },
+  "kernel/_tmr_chain.s": {
+    "source": "src/z80/kernel/_tmr_chain.s"
+  },
+  "kernel/_tmr_state.s": {
+    "source": "src/z80/kernel/_tmr_state.s"
+  },
+  "kernel/_yos_free.s": {
+    "source": "src/z80/kernel/_yos_free.s"
+  },
+  "kernel/_yos_install_timer.s": {
+    "source": "src/z80/kernel/_yos_install_timer.s"
+  },
+  "kernel/_yos_isalpha.s": {
+    "source": "src/z80/kernel/_yos_isalpha.s"
+  },
+  "kernel/_yos_isspace.s": {
+    "source": "src/z80/kernel/_yos_isspace.s"
+  },
+  "kernel/_yos_malloc.s": {
+    "source": "src/z80/kernel/_yos_malloc.s"
+  },
+  "kernel/_yos_name.s": {
+    "source": "src/z80/kernel/_yos_name.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/_yos_shrink.s": {
+    "source": "src/z80/kernel/_yos_shrink.s"
+  },
+  "kernel/_yos_state.s": {
+    "source": "src/z80/kernel/_yos_state.s"
+  },
+  "kernel/boot_shell.s": {
+    "source": "platforms/next/kernel/boot_shell.s"
+  },
+  "kernel/evt_create.s": {
+    "source": "src/z80/kernel/evt_create.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/evt_destroy.s": {
+    "source": "src/z80/kernel/evt_destroy.s"
+  },
+  "kernel/evt_set.s": {
+    "source": "src/z80/kernel/evt_set.s"
+  },
+  "kernel/evt_wait.s": {
+    "source": "src/z80/kernel/evt_wait.s"
+  },
+  "kernel/library_load.s": {
+    "source": "src/z80/kernel/library_load.s"
+  },
+  "kernel/list_append.s": {
+    "source": "src/z80/kernel/list_append.s"
+  },
+  "kernel/list_find.s": {
+    "source": "src/z80/kernel/list_find.s"
+  },
+  "kernel/list_insert.s": {
+    "source": "src/z80/kernel/list_insert.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/list_iterate.s": {
+    "source": "src/z80/kernel/list_iterate.s"
+  },
+  "kernel/list_match_eq.s": {
+    "source": "src/z80/kernel/list_match_eq.s"
+  },
+  "kernel/list_remove.s": {
+    "source": "src/z80/kernel/list_remove.s"
+  },
+  "kernel/list_remove_first.s": {
+    "source": "src/z80/kernel/list_remove_first.s"
+  },
+  "kernel/mem_allocate.s": {
+    "source": "src/z80/kernel/mem_allocate.s"
+  },
+  "kernel/mem_free.s": {
+    "source": "src/z80/kernel/mem_free.s"
+  },
+  "kernel/mem_free_owner.s": {
+    "source": "src/z80/kernel/mem_free_owner.s"
+  },
+  "kernel/mem_init.s": {
+    "source": "src/z80/kernel/mem_init.s"
+  },
+  "kernel/owned_malloc.s": {
+    "source": "platforms/next/kernel/owned_malloc.s"
+  },
+  "kernel/process_arguments.s": {
+    "source": "src/z80/kernel/process_arguments.s",
+    "areas": [
+      "_EXTRA",
+      "_CODE",
+      "_EXTRA"
+    ]
+  },
+  "kernel/process_exit.s": {
+    "source": "src/z80/kernel/process_exit.s"
+  },
+  "kernel/process_load.s": {
+    "source": "src/z80/kernel/process_load.s",
+    "areas": [
+      "_EXTRA"
+    ]
+  },
+  "kernel/process_reap.s": {
+    "source": "src/z80/kernel/process_reap.s"
+  },
+  "kernel/process_start.s": {
+    "source": "src/z80/kernel/process_start.s"
+  },
+  "kernel/so_create.s": {
+    "source": "src/z80/kernel/so_create.s"
+  },
+  "kernel/so_destroy.s": {
+    "source": "src/z80/kernel/so_destroy.s"
+  },
+  "kernel/svc_query_rst18.s": {
+    "source": "src/z80/kernel/svc_query_rst18.s"
+  },
+  "kernel/svc_register.s": {
+    "source": "src/z80/kernel/svc_register.s"
+  },
+  "kernel/svc_unregister.s": {
+    "source": "src/z80/kernel/svc_unregister.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/thread_create.s": {
+    "source": "src/z80/kernel/thread_create.s"
+  },
+  "kernel/thread_exit.s": {
+    "source": "src/z80/kernel/thread_exit.s"
+  },
+  "kernel/thread_resume.s": {
+    "source": "src/z80/kernel/thread_resume.s"
+  },
+  "kernel/thread_suspend.s": {
+    "source": "src/z80/kernel/thread_suspend.s"
+  },
+  "kernel/tmr_event.s": {
+    "source": "src/z80/kernel/tmr_event.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "kernel/tmr_install.s": {
+    "source": "src/z80/kernel/tmr_install.s"
+  },
+  "kernel/tmr_uninstall.s": {
+    "source": "src/z80/kernel/tmr_uninstall.s"
+  },
+  "kernel/yos_get_sys_info.s": {
+    "source": "src/z80/kernel/yos_get_sys_info.s"
+  },
+  "kernel/yos_rom_model.s": {
+    "source": "src/z80/kernel/yos_rom_model.s"
+  },
+  "kernel/yos_version.s": {
+    "source": "src/z80/kernel/yos_version.s",
+    "areas": [
+      "_CODE"
+    ]
+  },
+  "linker.lk": {
+    "source": "platforms/next/linker.lk"
+  },
+  "main.s": {
+    "source": "platforms/next/main.s"
+  },
+  "startup/_critical_call.s": {
+    "source": "src/z80/startup/_critical_call.s"
+  },
+  "startup/_critical_iff_repair.s": {
+    "source": "src/z80/startup/_critical_iff_repair.s"
+  },
+  "startup/_critical_state.s": {
+    "source": "src/z80/startup/_critical_state.s"
+  },
+  "startup/_im2_init.s": {
+    "source": "platforms/next/startup/_im2_init.s"
+  },
+  "startup/_kernel_memory.s": {
+    "source": "platforms/next/startup/_kernel_memory.s"
+  },
+  "startup/_startup_init.s": {
+    "source": "platforms/next/startup/_startup_init.s"
+  },
+  "startup/_sys_reti.s": {
+    "source": "src/z80/startup/_sys_reti.s"
+  },
+  "startup/_sys_retn.s": {
+    "source": "src/z80/startup/_sys_retn.s"
+  },
+  "startup/_sys_vectors.s": {
+    "source": "platforms/next/startup/_sys_vectors.s"
+  },
+  "startup/crt0rom.s": {
+    "source": "platforms/next/startup/crt0rom.s"
+  },
+  "startup/enter_critical_section.s": {
+    "source": "src/z80/startup/enter_critical_section.s"
+  },
+  "startup/leave_critical_section.s": {
+    "source": "src/z80/startup/leave_critical_section.s"
+  },
+  "startup/sys_vec_get.s": {
+    "source": "src/z80/startup/sys_vec_get.s"
+  },
+  "startup/sys_vec_set.s": {
+    "source": "src/z80/startup/sys_vec_set.s"
+  }
+}

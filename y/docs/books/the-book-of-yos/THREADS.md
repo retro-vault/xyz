@@ -358,3 +358,15 @@ however, remain kernel-owned and must still be destroyed explicitly.
 
 **Do not free a thread's stack manually.** The OS frees it automatically
 once the thread is cleaned up through ordinary resource accounting.
+
+## Fair event wakeups
+
+When selecting another ready thread, the scheduler starts after the current
+thread and wraps through the list. Repeated timer wakes therefore cannot
+starve another ready process. Event state is a byte in the C ABI; callers pass
+`uint8_t` even though named state constants are declared in an enum. The
+production-ROM regression alternates two ready processes and checks timer wakes.
+
+These preemptive rules describe the ROM and Next kernels. Partner/CPC retain
+their cooperative callback runtime; source/API compatibility does not introduce
+preemptive threads there.

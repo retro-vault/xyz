@@ -10399,8 +10399,11 @@ bool z80_peep::rule_adjacent_byte_arg_push_pair(size_t i) {
                 return false;
             if (overwrites_pair_without_reading_it(lines_, k, "bc", 'c', 'b'))
                 return true;
+            // A call is not proof that BC is dead: indirect-call trampolines
+            // read the callee address from BC, and outlined setup helpers can
+            // preserve it for a later call. Require an explicit overwrite.
             if (line.mnemonic == "call")
-                return true;
+                return false;
             if (line.mnemonic == "ret" && trim(line.operands).empty())
                 return registers_dead_at_return(lines_, start, "bc");
             const std::string &m = line.mnemonic;

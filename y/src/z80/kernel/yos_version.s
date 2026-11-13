@@ -6,7 +6,7 @@
         .module yos_version
         .optsdcc -mz80 sdcccall(1)
         .globl  _yos_version
-        .area   _CODE
+        .area   _ROM_LAST
 _yos_version::
         ld      de, #1
         ret

@@ -30,6 +30,7 @@ __directory_convert::
         ld      1(iy),a
         ld      2(iy),a
         ld      3(iy),a
+        ld      23(iy),a                ; no long name on this filesystem
 
         push    iy
         pop     de

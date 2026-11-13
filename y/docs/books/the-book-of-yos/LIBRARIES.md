@@ -167,3 +167,12 @@ surviving sibling threads, last-reference cleanup, malformed
 metadata/XL/exports, CRC/read errors, initializer rollback, exhausted
 image/object/reference heaps, RST20/RST28 register and stack behavior, and
 a compiler-generated far call with a callee-cleaned stack argument.
+
+## Repeated acquisition
+
+Shared acquisition retains one reference per owner and library. Repeating
+`load_library` from the same owner returns the same table without another
+heap allocation, including when the heap is full. A different owner still
+needs a reference record; allocation failure leaves the resident library
+unchanged. References remain attached to the process until its final thread
+exits. There is no individual public release operation.

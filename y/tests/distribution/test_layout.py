@@ -13,6 +13,7 @@ firmware_source = source_root / "third_party/esxdos089"
 required = {
     "README.md",
     "include/yos.h",
+    "include/yos_gpx.h",
     "include/yos.inc",
     "run-48.sh",
     "run-128.sh",

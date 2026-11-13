@@ -10,6 +10,11 @@ shared/private XPRG libraries, and then runs
 everything through a 50 Hz interrupt-driven round-robin scheduler and named
 service tables.
 
+YOS also owns the cooperative Partner/CPC runtime used by ALTO and the
+standalone Next kernel variants. Those hosts share the public ABI while keeping
+their existing scheduling and hardware policies. See
+[platform source ownership](platforms/README.md).
+
 ## Layout
 
 | Path | Contents |

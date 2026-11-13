@@ -10,6 +10,7 @@
         .globl  __bank_free
         .globl  __bank_current
         .globl  __bank_map
+        .globl  __os_free
 
         .area   _CODE
 
@@ -26,7 +27,14 @@ __yos_free::
         ld      l,5(ix)
         ld      h,6(ix)
         ld      a,4(ix)
+        inc     a
+        jr      z,.common
+        dec     a
         call    __bank_free
+        jr      .restore
+.common:
+        call    __os_free
+.restore:
         pop     af
         call    __bank_map
         pop     ix

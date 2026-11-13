@@ -1,3 +1,4 @@
+        .globl __bank_model, __sys_heap, __os_malloc, __os_free
 	; Initialize every logical 16 KiB executable-bank arena.
 	;
 	; MIT License (see: LICENSE)
@@ -16,6 +17,18 @@
 	; Initializes C000h..FFFFh in every configured bank as one heap.
 	; The routine restores logical bank zero. Clobbers AF/DE/HL.
 __bank_init::
+        .if YOS_UNIFIED_48K
+        ld a,(__bank_model)
+        or a
+        jr nz,.banked
+        ld (__bank_count),a
+        ld hl,#0xfff7
+        ld de,#__sys_heap
+        sbc hl,de
+        ld (__sys_heap+5),hl
+        ret
+.banked:
+        .endif
 	xor     a
 .next:
 	push    af

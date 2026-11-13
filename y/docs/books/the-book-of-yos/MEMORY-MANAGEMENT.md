@@ -250,3 +250,16 @@ every `mem_allocate` and `mem_free` call that belongs to that heap. Mixing
 up heap pointers will corrupt both heaps involved. The public `yos_t`
 table does not expose `mem_init`; custom heaps are a kernel-internal
 facility only.
+
+## Host allocation policy
+
+The default ROM retains separate system and user heaps. The ALTO 48K profile
+uses `YOS_UNIFIED_48K=1`; near allocations and process-owned common allocations
+remain distinct public operations. `copy_memory` preserves the public packed
+argument convention. These choices do not change the 82-slot table.
+
+Partner/CPC use the cooperative allocator's six-byte headers and shared/common
+arena, separate from Spectrum's kernel block layout. Directory streams allocate
+595 bytes: 316 bytes of private CP/M state and a 279-byte public record at offset
+316. Each returned record lives until that stream's next read or close; reads
+on another stream cannot overwrite it. CP/M leaves the long name empty.

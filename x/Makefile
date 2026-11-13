@@ -255,6 +255,7 @@ stage-xcc-support: check-platform-layout
 	    test -s "$$manifest" || { echo "no platform objects for $$platform"; exit 1; }; \
 	    $(HOST_BIN_DIR)/xar --mode=gnu rcs "$(TARGET_LIB_DIR)/lib$$platform.a" "@$$manifest"; \
 	done
+	cp $(X_ROOT)/platforms/yos/startup/service.s $(TARGET_LIB_DIR)/crt0-yos-service.s
 	$(MAKE) -C $(X_ROOT)/libc \
 	    ROOT=$(X_ROOT) \
 	    BUILD_DIR=$(BUILD_DIR) \

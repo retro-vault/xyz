@@ -7,7 +7,7 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  __current_process
         .globl  _thread_current
-        .area   _CODE
+        .area   _HEADER_DATA
 
         ; outputs: bc = effective resource-owner address, zero in kernel context
         ; clobbers: af, bc; preserves de, hl, ix and iy

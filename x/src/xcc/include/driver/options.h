@@ -57,6 +57,10 @@ struct options {
     std::string              output_file;
     output_mode              mode      = output_mode::LINK;
 
+    // Relocatable YOS images: empty, "--process", or "--service".
+    std::string              image_mode;
+    std::vector<std::string> image_args;
+
     // Optimization
     opt_level                opt       = opt_level::O0;
     optimization_settings    opt_settings = optimization_settings::for_level(opt_level::O0);

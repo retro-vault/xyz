@@ -1,3 +1,4 @@
+        .globl __bank_model, __sys_heap, __os_malloc, __os_free
         ; Free one allocation in a selected logical bank.
         ;
         ; MIT License (see: LICENSE)
@@ -17,6 +18,13 @@
         ; inputs: HL = payload (zero is accepted), A = logical bank
         ; output: DE = merged payload or zero. Selected bank remains mapped.
 __bank_free::
+        .if YOS_UNIFIED_48K
+        ld b,a
+        ld a,(__bank_model)
+        or a
+        jp z,__os_free
+        ld a,b
+        .endif
         ld      b,a
         ld      a,h
         or      l

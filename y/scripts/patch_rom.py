@@ -36,7 +36,9 @@ if len(rom) != 16384:
     raise SystemExit(f"YOS ROM must be exactly 16384 bytes, got {len(rom)}")
 if symbols.get("s__GSFINAL", 0x10000) > 0x4000:
     raise SystemExit("YOS ROM content exceeds 16 KiB")
-rom_end = symbols["s__GSFINAL"]
+rom_end = max([symbols["s__GSFINAL"], *[end for _, end, _ in areas]])
+if rom_end > 0x4000:
+    raise SystemExit("YOS ROM areas exceed 16 KiB")
 # Zero bytes can be live code/data. Check ownership from the map, not just
 # the bytes, before allowing the patcher to install fixed-slot contents.
 reserved = ((0x04C6, 0x04C7), (0x0562, 0x0563),

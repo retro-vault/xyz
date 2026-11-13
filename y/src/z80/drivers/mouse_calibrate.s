@@ -15,12 +15,11 @@
 
         .area   _CODE
 
-        ; inputs: A = initial x, L = initial y; preserves ix and iy.
+        ; inputs: HL = initial x, DE = initial y; preserves ix and iy.
 _mouse_calibrate::
         call    __critical_call
-        ld      c,a                     ; c = x
-        ld      b,l                     ; b = y
-        ld      (__mouse_cursor), bc
+        ld      (__mouse_cursor),hl
+        ld      (__mouse_cursor+2),de
         ld      bc, #KMP_X_PORT
         in      a, (c)
         ld      (__mouse_hardware), a

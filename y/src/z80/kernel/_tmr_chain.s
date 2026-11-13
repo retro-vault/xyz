@@ -79,6 +79,8 @@ __tmr_chain::
         ld      a, (hl)
         cp      #0xff
         jr      z, .invoke_iy
+        cp      #0xfe
+        jr      z, .signal_event
         ld      c, a
         ld      a, (__bank_current)
         cp      c
@@ -91,3 +93,6 @@ __tmr_chain::
         jp      __bank_map              ; restore before the next timer
 .invoke_iy:
         jp      (iy)
+.signal_event:
+        ld      5(iy), #1               ; handler slot contains a fixed event
+        ret

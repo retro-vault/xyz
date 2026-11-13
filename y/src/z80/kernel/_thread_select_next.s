@@ -20,10 +20,11 @@
         .area   _CODE
 
         ; outputs: de = next runnable thread or zero
-        ; clobbers: af, bc, de, hl; preserves ix and iy
+        ; clobbers: af, bc, de, hl, ix; preserves iy
         ; IX is the examined thread; its next link is saved on stack.
+        ; Only __thread_robin calls this private routine. It restores IX from
+        ; the selected context, so saving the interrupted IX again is wasted.
 __thread_select_next::
-        push    ix
         call    __thread_cleanup_terminated
         ld      hl, (_thread_first_waiting)
 .waiting:
@@ -48,15 +49,12 @@ __thread_select_next::
         inc     hl
         push    hl
         ex      de, hl
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
-        inc     hl
+        ld      de, #5                 ; event state follows its object header
+        add     hl, de
         ld      a, (hl)
-        cp      #EVENT_SIGNALED
+        dec     a                      ; EVENT_SIGNALED = 1
         jr      nz, .not_signaled
-        ld      (hl), #0                ; one signal wakes one waiter
+        ld      (hl), a                 ; A=0: one signal wakes one waiter
 .not_signaled:
         pop     hl
         jr      z, .wake
@@ -68,9 +66,23 @@ __thread_select_next::
         pop     de
         ld      hl, #_thread_first_waiting
         call    _list_remove
-        push    ix
-        pop     de
+        ; DE is the removed thread. Insert through the null tail link using
+        ; the ordinary list primitive, leaving existing runnable peers first.
+        ; Head insertion lets two every-tick event waiters alternate forever:
+        ; each wakes ahead of its peer and .select never reaches the UI.
         ld      hl, #_thread_first_running
+.tail:
+        ld      c, (hl)
+        inc     hl
+        ld      b, (hl)
+        dec     hl
+        ld      a, b
+        or      c
+        jr      z, .append
+        ld      h, b
+        ld      l, c
+        jr      .tail
+.append:
         call    _list_insert
 .next:
         pop     hl
@@ -83,16 +95,15 @@ __thread_select_next::
         push    hl
         pop     ix
         ld      a, THREAD_STATE(ix)
-        cp      #STATE_RUNNING
+        dec     a                      ; STATE_RUNNING = 1
         jr      nz, .first
         ld      e, (hl)
         inc     hl
         ld      d, (hl)
         ld      a, d
         or      e
-        jr      nz, .done
+        ret     nz
 .first:
         ld      de, (_thread_first_running)
 .done:
-        pop     ix
         ret

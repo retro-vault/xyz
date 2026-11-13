@@ -1027,6 +1027,77 @@ int main(int argc, char **argv) {
     }
 
     const std::string xld = find_tool(opts, "xld");
-    std::string out = opts.output_file.empty() ? "a.out" : opts.output_file;
-    return link_files(opts, xld, link_inputs, out);
+    if (opts.image_mode.empty()) {
+        const auto out = opts.output_file.empty() ? "a.out" : opts.output_file;
+        return link_files(opts, xld, link_inputs, out);
+    }
+    if (!scratch.valid && !scratch.create()) return 1;
+    options image_opts = opts;
+    std::vector<std::string> package_args = {find_tool(opts, "xprog"),
+                                          opts.image_mode};
+    auto metadata = opts.image_args;
+    if (opts.image_mode == "--service"
+        && !linker_args_contain(opts, "-nostartfiles")) {
+        // The target owns its bootstrap; the driver supplies only the optional
+        // initializer jump. Keep C storage initialization before that jump.
+        const auto template_path = std::filesystem::path(opts.driver_dir)
+            / "../z80/lib/crt0-yos-service.s";
+        std::ifstream source(template_path);
+        std::ostringstream buffer;
+        buffer << source.rdbuf();
+        std::string startup = buffer.str();
+        const auto marker = startup.find("@INITIALIZER@");
+        if (!source || marker == std::string::npos) {
+            fprintf(stderr, "xcc: error: missing YOS service startup: %s\n",
+                    template_path.string().c_str());
+            return 1;
+        }
+        std::string invoke = "ld de,#0\n        ret";
+        for (std::size_t i = 0; i < metadata.size(); i += 2) {
+            if (metadata[i] != "--entry") continue;
+            std::string symbol = metadata[i + 1];
+            if (symbol.empty() || (!std::isalpha(static_cast<unsigned char>(symbol[0]))
+                                  && symbol[0] != '_')
+                || !std::all_of(symbol.begin(), symbol.end(), [](unsigned char ch) {
+                    return std::isalnum(ch) || ch == '_';
+                })) {
+                fprintf(stderr, "xcc: error: service initializer must be a symbol\n");
+                return 1;
+            }
+            if (symbol[0] != '_') symbol.insert(0, "_");
+            invoke = ".globl " + symbol + "\n        jp " + symbol;
+            metadata[i + 1] = "_entry";
+        }
+        startup.replace(marker, 13, invoke);
+        const auto assembly = (scratch.path / "service.s").string();
+        const auto object = (scratch.path / "service.rel").string();
+        std::ofstream file(assembly);
+        file << startup;
+        file.close();
+        if (!file) return 1;
+        const auto status = assemble_file(opts, xas, assembly, object);
+        if (status != 0) return status;
+        link_inputs.insert(link_inputs.begin(), object);
+        image_opts.linker_args.push_back("-nostartfiles");
+        // Even a service without a user initializer needs C storage setup.
+        metadata.push_back("--entry");
+        metadata.push_back("_entry");
+    }
+    std::string map = (scratch.path / "image.map").string();
+    for (const auto& arg : opts.linker_args)
+        if (arg.rfind("-Map=", 0) == 0) map = arg.substr(5);
+    image_opts.linker_args.push_back("-Map=" + map);
+    image_opts.linker_args.push_back("--oformat=xl");
+    const auto xl = (scratch.path / "image.xl").string();
+    const int status = link_files(image_opts, xld, link_inputs, xl);
+    if (status != 0) return status;
+    const auto out = opts.output_file.empty()
+        ? (opts.image_mode == "--process" ? "a.prc" : "a.svc")
+        : opts.output_file;
+    // Use the final output stem for the default name, not scratch/image.xl.
+    package_args.insert(package_args.end(), {xl, "--map", map, "--min-os", "1", "--name",
+        std::filesystem::path(out).stem().string()});
+    package_args.insert(package_args.end(), metadata.begin(), metadata.end());
+    package_args.insert(package_args.end(), {"-o", out});
+    return run_tool(package_args, opts.verbose);
 }

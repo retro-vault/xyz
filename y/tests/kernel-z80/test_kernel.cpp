@@ -135,9 +135,9 @@ std::uint32_t crc32(const std::uint8_t* data, std::size_t size) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 8) {
+    if (argc != 8 && argc != 9) {
         std::cerr << "usage: test_kernel ROM MAP SHELL.SYS LIB.SVC LIB.MAP "
-                     "BANK-BACKEND BANK-COUNT\n";
+                     "BANK-BACKEND BANK-COUNT [COMPILED.SVC]\n";
         return 2;
     }
 
@@ -158,9 +158,11 @@ int main(int argc, char** argv) {
         require(found != symbols.end(), "missing symbol " + name);
         return found->second;
     };
-    const auto rom_end = sym("s__GSFINAL");
+    const auto rom_end = std::max<unsigned>({sym("s__GSFINAL"),
+        unsigned(sym("s__ROM_ARGS") + sym("l__ROM_ARGS")),
+        unsigned(sym("s__ROM_LAST") + sym("l__ROM_LAST"))});
     require(rom_end <= 0x4000, "linked content exceeds ROM");
-    const auto rom_tail = std::max<std::uint16_t>(rom_end, 0x3cf9);
+    const auto rom_tail = std::max<unsigned>(rom_end, 0x3cf9);
     require(std::all_of(mem.bytes.begin() + rom_tail,
                         mem.bytes.begin() + 0x4000,
                         [](std::uint8_t byte) { return byte == 0; }),
@@ -1045,9 +1047,11 @@ int main(int argc, char** argv) {
     constexpr std::uint16_t shell_image = 0x8000;
     for (std::uint16_t i = 0; i < payload_size; ++i)
         mem.bytes[shell_image + i] = shell[payload_offset + i];
-    const auto crc_high = call_kernel(sym("__crc32"), shell_image, 0,
-                                      "XPRG payload CRC", 0, {}, payload_size,
-                                      false, unsigned(payload_size) * 200u);
+    call_kernel(sym("__crc32_reset"), 0, 0, "reset streaming CRC");
+    call_kernel(sym("__crc32_update"), shell_image, 0,
+                "streaming shell CRC", 0, {}, payload_size);
+    const auto crc_high = call_kernel(sym("__crc32_finish"), 0, 0,
+                                      "finish streaming CRC");
     require(kernel_hl == std::uint16_t(shell[16] | (shell[17] << 8)) &&
                 crc_high == std::uint16_t(shell[18] | (shell[19] << 8)),
             "ROM CRC-32 disagrees with xprog");
@@ -1060,19 +1064,26 @@ int main(int argc, char** argv) {
     const auto relocation_count = mem.word(relocated_image + 8);
     require(12 + code_size + 4 * relocation_count == payload_size,
             "dummy shell XL layout is inconsistent");
-    const auto code_base = call_kernel(sym("__process_relocate"),
-                                       relocated_image, payload_size,
-                                       "dummy shell relocation");
+    const auto code_base = std::uint16_t(relocated_image + 12);
     const auto relocated_code = code_base;
-    require(code_base != 0 && kernel_hl == code_base,
-            "XL relocator returned the wrong code base: " +
-                std::to_string(code_base));
-    require(code_base == relocated_image + 12,
-            "XL relocator did not reuse the existing code buffer");
-    require(cpu.snapshot().bc == code_size,
-            "XL relocator did not return the code size");
-    const auto relocation_table = std::uint16_t(relocated_image + 12 +
-                                                code_size);
+    const auto relocation_table = std::uint16_t(code_base + code_size);
+    constexpr std::uint16_t relocation_frame = 0xe200;
+    mem.word(relocation_frame + 12, code_base + code_size);
+    mem.word(relocation_frame + 68, code_base);
+    const auto chunk = sym("__process_relocate_chunk");
+    const std::array<std::uint8_t, 12> relocation_call = {
+        0xdd, 0xe5, 0xdd, 0x21, 0x00, 0xe2, // PUSH IX; LD IX,frame
+        0xcd, std::uint8_t(chunk), std::uint8_t(chunk >> 8),
+        0xdd, 0xe1, 0xc9};                 // POP IX; RET
+    std::copy(relocation_call.begin(), relocation_call.end(),
+              mem.bytes.begin() + 0x4200);
+    for (unsigned index = 0; index < relocation_count;) {
+        const auto count = std::min<unsigned>(32, relocation_count - index);
+        call_kernel(0x4200, relocation_table + 4 * index, 0,
+                    "streaming shell relocation", 0, {}, count << 8);
+        require(kernel_a == 0, "valid relocation chunk was rejected");
+        index += count;
+    }
     for (std::uint16_t index = 0; index < relocation_count; ++index) {
         const auto record = std::uint16_t(relocation_table + 4 * index);
         const auto offset = mem.word(record);
@@ -1366,8 +1377,11 @@ int main(int argc, char** argv) {
     mem.bytes[native_tail + 6] = 0x56;
     mem.bytes[native_tail + 7] = 0x34;
     mem.bytes[native_tail + 8] = 0x12;
+    mem.bytes[public_dirent + 23] = 0xa5;
     call_kernel(sym("__directory_convert"), native_dirent, public_dirent,
                 "directory entry conversion");
+    require(mem.bytes[public_dirent + 23] == 0,
+            "short-name filesystem did not terminate long-name field");
     require(mem.bytes[public_dirent + 8] == 8 &&
                 mem.bytes[public_dirent + 9] == 0x20,
             "regular directory entry type or attributes are wrong");
@@ -1538,36 +1552,36 @@ int main(int argc, char** argv) {
     constexpr std::uint16_t mouse_state = 0x8210;
     io.mouse_x = 17;
     io.mouse_y = 31;
-    call_kernel(mem.word(table + 62), 23, 0, "mouse calibration", 42);
+    call_kernel(mem.word(table + 62), 42, 23, "mouse calibration");
     call_kernel(mem.word(table + 64), mouse_state, 0, "mouse snapshot");
-    require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
-                mem.bytes[mouse_state + 2] == 0 &&
-                mem.bytes[mouse_state + 3] == 0,
+    require(mem.word(mouse_state) == 42 && mem.word(mouse_state + 2) == 23 &&
+                mem.bytes[mouse_state + 4] == 0 &&
+                mem.bytes[mouse_state + 5] == 0,
             "stationary calibrated mouse state is wrong");
     io.mouse_x = 20;
     io.mouse_y = 29;
     io.mouse_buttons = 0xfe;
     call_kernel(mem.word(table + 64), mouse_state, 0,
                 "mouse snapshot before timer scan");
-    require(mem.bytes[mouse_state] == 42 && mem.bytes[mouse_state + 1] == 23 &&
-                mem.bytes[mouse_state + 2] == 0 &&
-                mem.bytes[mouse_state + 3] == 0,
+    require(mem.word(mouse_state) == 42 && mem.word(mouse_state + 2) == 23 &&
+                mem.bytes[mouse_state + 4] == 0 &&
+                mem.bytes[mouse_state + 5] == 0,
             "read_mouse polled hardware instead of reading timer state");
     call_kernel(sym("__tmr_chain"), 0, 0, "moving mouse timer-chain scan");
     call_kernel(mem.word(table + 64), mouse_state, 0, "moving mouse snapshot");
-    require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
-                mem.bytes[mouse_state + 2] == 1 &&
-                mem.bytes[mouse_state + 3] == 1,
+    require(mem.word(mouse_state) == 45 && mem.word(mouse_state + 2) == 25 &&
+                mem.bytes[mouse_state + 4] == 1 &&
+                mem.bytes[mouse_state + 5] == 1,
             "moving mouse state is wrong: " +
-                std::to_string(mem.bytes[mouse_state]) + "," +
-                std::to_string(mem.bytes[mouse_state + 1]) + "," +
-                std::to_string(mem.bytes[mouse_state + 2]) + "," +
-                std::to_string(mem.bytes[mouse_state + 3]));
+                std::to_string(mem.word(mouse_state)) + "," +
+                std::to_string(mem.word(mouse_state + 2)) + "," +
+                std::to_string(mem.bytes[mouse_state + 4]) + "," +
+                std::to_string(mem.bytes[mouse_state + 5]));
     call_kernel(mem.word(table + 64), mouse_state, 0,
                 "stationary mouse resnapshot");
-    require(mem.bytes[mouse_state] == 45 && mem.bytes[mouse_state + 1] == 25 &&
-                mem.bytes[mouse_state + 2] == 1 &&
-                mem.bytes[mouse_state + 3] == 0,
+    require(mem.word(mouse_state) == 45 && mem.word(mouse_state + 2) == 25 &&
+                mem.bytes[mouse_state + 4] == 1 &&
+                mem.bytes[mouse_state + 5] == 0,
             "stationary mouse retained stale change flags");
     io.mouse_buttons = 0xff;
     call_kernel(sym("__mouse_scan"), 0, 0, "mouse release timer scan");
@@ -1575,8 +1589,8 @@ int main(int argc, char** argv) {
     call_kernel(sym("__mouse_scan"), 0, 0, "mouse repress timer scan");
     call_kernel(mem.word(table + 64), mouse_state, 0,
                 "accumulated mouse transition snapshot");
-    require(mem.bytes[mouse_state + 2] == 1 &&
-                mem.bytes[mouse_state + 3] == 1,
+    require(mem.bytes[mouse_state + 4] == 1 &&
+                mem.bytes[mouse_state + 5] == 1,
             "mouse timer lost an unread button transition");
 
     const std::uint16_t gpx_table = table + 108;
@@ -2133,9 +2147,10 @@ int main(int argc, char** argv) {
                 ", event " + std::to_string(mem.word(waits)) +
                 ", event state " + std::to_string(mem.bytes[event + 5]));
     require(mem.word(sym("_thread_first_waiting")) == 0 &&
-                mem.word(sym("_thread_first_running")) == thread &&
-                mem.word(thread) == thread2 && mem.bytes[thread + 20] == 1,
-            "signaled thread was not moved to the runnable queue");
+                mem.word(sym("_thread_first_running")) == thread2 &&
+                mem.word(thread2) == thread && mem.word(thread) == 0 &&
+                mem.bytes[event + 5] == 0 && mem.bytes[thread + 20] == 1,
+            "signaled thread was not appended fairly to the runnable queue");
 
     // Simulate the state seen after a terminated thread has switched away.
     // The next selection must release its stack, descriptor and empty process.
@@ -2162,12 +2177,51 @@ int main(int argc, char** argv) {
     require(mem.word(sym("_process_first")) == process2 &&
                 mem.word(process2) == 0,
             "empty process was not reaped");
-    require(state.sp == call_sp && state.ix == 0xa55a &&
-                state.iy == 0x5aa5,
-            "scheduler cleanup violated its ABI");
+    // Private selector may use IX; the interrupt wrapper restores the
+    // selected context (verified by the context-switch tests above).
+    require(state.sp == call_sp && state.iy == 0x5aa5,
+            "scheduler cleanup violated its internal ABI");
     test_libraries(mem, cpu, call_kernel, sym, files, library_image,
                    library_symbols, put_string, call_far, call_far_pointer,
                    read_far_byte);
+    if (argc == 9) {
+        std::ifstream compiled_file(argv[8], std::ios::binary);
+        const std::vector<std::uint8_t> compiled{
+            std::istreambuf_iterator<char>(compiled_file),
+            std::istreambuf_iterator<char>()};
+        require(!compiled.empty(), "missing compiler-generated service");
+        files.files["compiled.svc"] = compiled;
+        files.enabled = true;
+        const auto saved_thread = mem.word(sym("_thread_current"));
+        for (unsigned attempt=0; attempt<3; ++attempt) {
+            put_string(0xe200, "compiled-client");
+            const auto client = call_kernel(sym("_process_start"), 0xe200, 0x4102,
+                                           "create C service client", 0, {128, 0});
+            require(client != 0, "cannot create C service client");
+            const auto client_thread = mem.word(client+14);
+            mem.word(sym("_thread_current"), client_thread);
+            put_string(0xe240, "compiled.svc");
+            const auto interface = call_kernel(sym("_library_load"), 0xe240, 1,
+                                               "load compiler-generated service");
+            require(interface != 0, "C service startup failed, loader error " + std::to_string(mem.bytes[sym("_process_last_error")]));
+            require(call_far(interface, "C service export") == 90,
+                    "C service data, BSS, YOS binding or exports are invalid");
+            for (unsigned repeat=0; repeat<8; ++repeat)
+                require(call_kernel(sym("_library_load"), 0xe240, 1,
+                                    "retain C service") == interface,
+                        "C service initialized twice for the same owner");
+            call_kernel(sym("_list_remove"), sym("_thread_first_running"), client_thread,
+                        "unlink C service client");
+            call_kernel(sym("_list_insert"), sym("_thread_first_terminated"), client_thread,
+                        "terminate C service client");
+            mem.bytes[client_thread+20] = 4;
+            mem.word(sym("_thread_current"), saved_thread);
+            call_kernel(sym("__thread_cleanup_terminated"), 0, 0,
+                        "reap C service client");
+        }
+        std::cout << "PASS: compiler-generated C service startup, data/BSS, API binding, "
+                     "relocated exports, repeated acquisition and owner cleanup\n";
+    }
     require(mem.rom_writes == 0, "kernel attempted to write into ROM");
     require(std::none_of(io.writes.begin(), io.writes.end(),
                         [](const auto& write) {

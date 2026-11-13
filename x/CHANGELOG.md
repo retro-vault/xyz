@@ -6,6 +6,21 @@ Release status:
 
 ## Unreleased
 
+- Fix packed-byte argument optimization around indirect calls: BC cannot be
+  reused until an explicit overwrite proves the function pointer dead. Execute
+  the regression at all six optimization levels. Preserve BC while forming
+  an IX-relative stack address after calls with packed byte arguments.
+- Reject fixed-address layout overrides with `--prc` and `--svc`; test complete
+  image metadata and relocation at multiple load addresses.
+
+- Default compiler-generated images to minimum YOS ABI 1; verify C PRC startup
+  and a C SVC through the production ROM loader, including repeated owner cleanup.
+- Add `xcc --prc` / `--svc`, a YOS C service bootstrap, and symbolic
+  `xprog --map` entry/export resolution. Preserve XL relocation records.
+- Align YOS headers with the 82-slot ALTO contract, word mouse coordinates,
+  byte event-state arguments and long-name directory records.
+
+
 - Updated the YOS platform to the grouped ABI 5 table. The fully documented
   `yos.h` keeps related memory, synchronization, process/library, service,
   input, filesystem, and console entries contiguous. The identity prefix is

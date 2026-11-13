@@ -22,6 +22,45 @@ __library_acquire::
         push    ix
         push    hl
         pop     ix
+        ; One owned reference per client/library: repeated load_library does
+        ; not consume more OS heap. There is no public individual release API.
+        push    de
+        ld      hl, (__library_refs)
+.find:
+        ld      a, h
+        or      l
+        jr      z, .new_reference
+        push    hl
+        inc     hl
+        inc     hl
+        inc     hl                      ; owner address, after packed bank
+        ld      a, (hl)
+        cp      e
+        jr      nz, .next_reference
+        inc     hl
+        ld      a, (hl)
+        cp      d
+        jr      nz, .next_reference
+        inc     hl
+        ld      a, (hl)
+        cp      ixl
+        jr      nz, .next_reference
+        inc     hl
+        ld      a, (hl)
+        cp      ixh
+        jr      nz, .next_reference
+        pop     hl
+        pop     de
+        jr      .table
+.next_reference:
+        pop     hl
+        ld      a, (hl)
+        inc     hl
+        ld      h, (hl)
+        ld      l, a
+        jr      .find
+.new_reference:
+        pop     de
         push    de
         ld      hl, #__library_refs
         ld      de, #7

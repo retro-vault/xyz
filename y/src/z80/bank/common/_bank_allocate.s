@@ -1,3 +1,4 @@
+        .globl __bank_model, __sys_heap, __os_malloc, __os_free
         ; Allocate an image buffer from any logical bank.
         ;
         ; MIT License (see: LICENSE)
@@ -21,6 +22,15 @@
         ; output: DE = payload and A = bank; both zero on failure
         ; The selected bank remains mapped on success. Preserves IX/IY.
 __bank_allocate::
+        .if YOS_UNIFIED_48K
+        ld a,(__bank_model)
+        or a
+        jr nz,.banked
+        call __os_malloc
+        ld a,#0xff
+        ret
+.banked:
+        .endif
         push    ix
         push    iy
         push    hl

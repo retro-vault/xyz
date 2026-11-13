@@ -4,7 +4,7 @@
         .module _esxdos_path_drive
         .optsdcc -mz80 sdcccall(1)
         .globl __zx_esx_path_drive
-        .area _CODE
+        .area _HEADER_DATA
         ; Input: HL = validated path, A = fallback native drive.
         ; Output: HL skips A:/B: prefix, A = 0x40/0x48; otherwise unchanged.
         ; Clobbers flags; preserves BC, DE, IX, IY. No stack arguments.

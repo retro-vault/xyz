@@ -12,7 +12,7 @@ written entirely in hand-written Z80 assembly. The 16 KiB replacement ROM
 stays compatible with esxDOS on divIDE, loads `shell.sys` from disk as an
 XPRG process, and runs everything through a 50 Hz IM2 scheduler and named
 service tables. Applications talk to it through the `yos_t` function table
-(`include/yos.h`, ABI version 6) obtained with `query_service("yos")` over
+(`include/yos.h`, ABI version 1) obtained with `query_service("yos")` over
 `RST 0x18`.
 
 ## Documents To Read
@@ -38,6 +38,11 @@ service tables. Applications talk to it through the `yos_t` function table
 | host tools | [pkg/appmake/README.md](pkg/appmake/README.md), [pkg/microdrive/README.md](pkg/microdrive/README.md), [pkg/serial/README.md](pkg/serial/README.md) |
 | microdrive driver harness | [tests/mdr-emu/README.md](tests/mdr-emu/README.md) |
 | the old C-era kernel | `src/c/README.md` and `src/c/docs/`; [docs/books/the-book-of-yos/LEGACY-README-SNAPSHOT.md](docs/books/the-book-of-yos/LEGACY-README-SNAPSHOT.md) is its original README |
+
+The maintained cooperative Partner/CPC runtime and Next variants now live in
+`platforms/` and `src/z80/cooperative/`; see `platforms/README.md`. Keep shared
+instructions there and hardware policy in explicit platform code/conditionals.
+Downstream ALTO staging may select sections but must not patch function bodies.
 
 ## Layout
 

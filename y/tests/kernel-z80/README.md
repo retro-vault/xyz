@@ -67,3 +67,9 @@ This is deterministic ROM-level coverage, not real esxDOS firmware or
 hardware validation. Use the [Fuse cold-boot runner](../fuse/README.md) for
 visual validation with actual esxDOS. The shell should display centred `Hello World!`
 below its greeting.
+
+The test target also builds the C shell with `xcc --prc` and a C service with
+`xcc --svc`. The production loader validates the latter's initialized data,
+zeroed BSS, YOS API binding, bound exports, repeated acquisitions, and three
+owner teardown/reload cycles. `test_kernel` accepts its path as an optional
+ninth argument so existing standalone harness invocations remain compatible.

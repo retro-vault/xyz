@@ -142,3 +142,17 @@ Use `xprog --service` for a library meant to be registered as a named YOS
 service — it must describe its exported jump-table entries. See the
 practical [library guide](../programming-yos/LOADABLE-LIBRARIES.md) for
 the application-facing view of the same mechanism.
+
+## Direct compiler packaging
+
+`xcc --prc --stack-size 256 app.c -o app.prc` builds a relocatable process.
+`xcc --svc --export service_api service.c -o service.svc` builds a C service;
+`--entry init` optionally selects its initializer. The service startup initializes
+C data/BSS and binds libc to YOS before calling the optional initializer with
+the relocated export table. Assembly
+services may supply their own startup with `-nostartfiles`.
+
+Both modes preserve XL relocations and reject fixed-address linker layouts.
+For a separate packaging step, `xprog --map image.map` accepts symbolic entry
+and export names. Loader CRC verification and relocation use the shared streaming
+image routines; errors roll back unpublished allocations and registrations.

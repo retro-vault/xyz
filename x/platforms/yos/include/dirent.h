@@ -16,6 +16,7 @@ struct dirent {
     unsigned char d_type;
     unsigned char d_attributes;
     char d_name[YOS_DIRECTORY_NAME_MAX + 1];
+    char d_long_name[256];
 };
 
 DIR *opendir(const char *path);

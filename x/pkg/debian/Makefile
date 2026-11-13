@@ -99,6 +99,7 @@ PACKAGE_REQUIRED_RELATIVE_FILES := \
 	z80/include/yos/yos.inc \
 	z80/include/yos/dirent.h \
 	z80/include/stdio.h \
+	z80/lib/crt0-yos-service.s \
 	z80/lib/libc.a \
 	z80/lib/libfixed.a \
 	z80/lib/libruntime.a \

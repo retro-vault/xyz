@@ -28,6 +28,8 @@ XZ80 := $(X_DIST_DIR)/lib/libxz80.a
 XRUNTIME := $(X_DIST_DIR)/z80/lib/libruntime.a
 CXX ?= c++
 
+YOS_BOOT_ALTO ?= 0
+YOS_UNIFIED_48K ?= 0
 YOS_BANK_BACKEND ?= 48
 YOS_BANK_COUNT ?= 126
 
@@ -41,10 +43,11 @@ endif
 YOS_BANK_COUNT_128 := $(if $(filter 1 2 3 4 5 6,$(YOS_BANK_COUNT)),$(YOS_BANK_COUNT),6)
 YOS_TEST_BANK_COUNT := $(if $(filter 48,$(YOS_BANK_BACKEND)),1,$(if \
 	$(filter 128,$(YOS_BANK_BACKEND)),$(YOS_BANK_COUNT_128),$(YOS_BANK_COUNT)))
-XASFLAGS := --mode=sdcc -DYOS_BANK_COUNT=$(YOS_BANK_COUNT) \
+XASFLAGS := --mode=sdcc -DYOS_BOOT_ALTO=$(YOS_BOOT_ALTO) -DYOS_UNIFIED_48K=$(YOS_UNIFIED_48K) -DYOS_BANK_COUNT=$(YOS_BANK_COUNT) \
 	-DYOS_BANK_COUNT_128=$(YOS_BANK_COUNT_128)
+LINKER_SCRIPT := $(if $(filter 1,$(YOS_UNIFIED_48K)),linker-unified.lk,linker.lk)
 XLDFLAGS := --mode=sdcc -v -m -f bin -nostdlib \
-	--no-default-runtime -T linker.lk
+	--no-default-runtime -T $(LINKER_SCRIPT)
 
 CRT := $(BUILD_DIR)/startup/crt0rom.rel
 MAIN := $(BUILD_DIR)/main.rel
@@ -126,7 +129,7 @@ SHELL_ASM_OUTPUT := $(BIN_DIR)/shell-asm.sys
 LIBRARY_OBJECT := $(BUILD_DIR)/apps/shelllib.rel
 LIBRARY_XL := $(BUILD_DIR)/apps/shelllib.xl
 LIBRARY_OUTPUT := $(BUILD_DIR)/apps/shelllib.svc
-DIST_HEADERS := $(addprefix $(RELEASE_INCLUDE_DIR)/,yos.h yos.inc)
+DIST_HEADERS := $(addprefix $(RELEASE_INCLUDE_DIR)/,yos.h yos_gpx.h yos.inc)
 DIST_SCRIPTS := $(addprefix $(RELEASE_DIR)/,run-48.sh run-128.sh run-next.sh) \
 	$(RELEASE_SCRIPT_DIR)/run-yos.py
 DIST_SOURCES := $(RELEASE_SAMPLE_DIR)/c/shell.c \
@@ -163,18 +166,18 @@ distribution: $(DIST_HEADERS) $(DIST_SCRIPTS) $(DIST_SOURCES) \
 		$(RELEASE_SAMPLE_DIR)/c/shell.sys \
 		$(RELEASE_SAMPLE_DIR)/asm/shell.sys
 
-test: check-yos-abi $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) distribution \
+test: $(BUILD_DIR)/apps/compiled-service.svc test-platform-sources check-yos-abi $(OUTPUT) $(SHELL_OUTPUT) $(LIBRARY_OUTPUT) distribution \
 		$(BUILD_DIR)/test_kernel
 	python3 ../../tests/kernel-z80/test_rom_layout.py $(OUTPUT) \
 		$(BUILD_DIR)/$(TARGET).map $(BUILD_DIR)/layout-tests
 	$(BUILD_DIR)/test_kernel $(OUTPUT) \
 		$(BUILD_DIR)/$(TARGET).map $(SHELL_OUTPUT) \
 		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map \
-		$(YOS_BANK_BACKEND) $(YOS_TEST_BANK_COUNT)
+		$(YOS_BANK_BACKEND) $(YOS_TEST_BANK_COUNT) $(BUILD_DIR)/apps/compiled-service.svc
 	$(BUILD_DIR)/test_kernel $(OUTPUT) \
 		$(BUILD_DIR)/$(TARGET).map $(SHELL_ASM_OUTPUT) \
 		$(LIBRARY_OUTPUT) $(BUILD_DIR)/apps/shelllib.map \
-		$(YOS_BANK_BACKEND) $(YOS_TEST_BANK_COUNT)
+		$(YOS_BANK_BACKEND) $(YOS_TEST_BANK_COUNT) $(BUILD_DIR)/apps/compiled-service.svc
 	python3 ../../tests/distribution/test_layout.py $(RELEASE_DIR)
 
 check-yos-abi:
@@ -190,7 +193,13 @@ clean:
 $(XAS) $(XLD) $(XAR) $(XCC) $(XPROG) $(XRUNTIME):
 	$(MAKE) -C $(REPO_ROOT) x
 
-$(BUILD_DIR)/%.rel: %.s $(XAS)
+CONFIG_STAMP := $(BUILD_DIR)/assembly-config.txt
+.PHONY: FORCE_CONFIG
+FORCE_CONFIG:
+$(CONFIG_STAMP): FORCE_CONFIG
+	@python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); data="\n".join(sys.argv[2:])+"\n"; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(data) if not p.exists() or p.read_text()!=data else None' "$@" "$(XASFLAGS)" "$(LINKER_SCRIPT)"
+
+$(BUILD_DIR)/%.rel: %.s $(wildcard ../../include/*.inc) $(XAS) $(CONFIG_STAMP)
 	mkdir -p $(dir $@)
 	$(XAS) $(XASFLAGS) -I../../include $< -o $@
 
@@ -209,7 +218,7 @@ $(ARCHIVE_MANIFEST): $(ALL_OBJECTS) Makefile
 	printf '%s\n' $(LOADER_OBJECTS) >> $@
 	test -s $@
 
-$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile ../../scripts/patch_rom.py
+$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile $(LINKER_SCRIPT) ../../scripts/patch_rom.py
 	mkdir -p $(BIN_DIR)
 	rm -f $@
 	$(XLD) $(XLDFLAGS) -Map=$(BUILD_DIR)/$(TARGET).map \
@@ -227,10 +236,9 @@ $(SHELL_XL): ../../samples/shell-c/shell.c \
 	mkdir -p $(dir $@)
 	$(XCC) --mode=sdcc --platform=yos -Os -std=c11 $< -o $@
 
-$(SHELL_OUTPUT): $(SHELL_XL) $(XPROG) Makefile
+$(SHELL_OUTPUT): ../../samples/shell-c/shell.c $(XCC) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --process --name shell --stack-size 512 --min-os 1 \
-		$< -o $@
+	$(XCC) --prc -Os --name shell --stack-size 512 $< -o $@
 
 $(SHELL_ASM_OBJECT): ../../samples/shell-asm/shell.s ../../include/yos.inc $(XAS)
 	mkdir -p $(dir $@)
@@ -257,13 +265,13 @@ $(LIBRARY_XL): $(LIBRARY_OBJECT) $(XLD)
 
 $(LIBRARY_OUTPUT): $(LIBRARY_XL) $(XPROG) Makefile
 	mkdir -p $(dir $@)
-	$(XPROG) --service --name shelllib --abi 1 --min-os 1 \
-		--entry 0x$$(awk '$$2 == "_entry" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
-		--export 0x$$(awk '$$2 == "_probe" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
-		--export 0x$$(awk '$$2 == "_message" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
-		--export 0x$$(awk '$$2 == "_initializations" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
-		--export 0x$$(awk '$$2 == "_calls" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
-		--export 0x$$(awk '$$2 == "_sum3" {print $$1}' $(BUILD_DIR)/apps/shelllib.map) \
+	$(XPROG) --service --name shelllib --abi 1 --min-os 1 --map $(BUILD_DIR)/apps/shelllib.map \
+		--entry _entry \
+		--export _probe \
+		--export _message \
+		--export _initializations \
+		--export _calls \
+		--export _sum3 \
 		$< -o $@
 
 $(OUTPUT).sha256: $(OUTPUT)
@@ -321,3 +329,13 @@ $(BUILD_DIR)/test_kernel: ../../tests/kernel-z80/test_kernel.cpp \
 	mkdir -p $(BUILD_DIR)
 	$(CXX) -std=c++20 -O2 -Wall -Wextra -pedantic \
 		-I$(REPO_ROOT)/x/lib/xz80/include $< $(XZ80) -o $@
+
+.PHONY: test-platform-sources
+test-platform-sources:
+	python3 ../../tests/test_materialize_platform.py
+	python3 ../../tests/test_cooperative_memory.py
+	python3 ../../tests/test_build_configuration.py
+
+$(BUILD_DIR)/apps/compiled-service.svc: ../../tests/shell-yos/compiled-service.c $(XCC) $(XPROG) $(X_DIST_DIR)/z80/lib/crt0-yos-service.s
+	mkdir -p $(dir $@)
+	$(XCC) --svc -Os --name compiled --entry initialize --export probe $< -o $@
