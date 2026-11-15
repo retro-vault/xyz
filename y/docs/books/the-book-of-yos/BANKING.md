@@ -1,6 +1,6 @@
 # Banked Processes and Libraries
 
-YOS keeps the complete kernel and all shared runtime state below `0xC000`.
+The standard 128K/Next ROM profiles keep the kernel and shared runtime state below `0xC000`.
 The upper 16 KiB, `0xC000`–`0xFFFF`, is a logical executable-bank window.
 Process and library XPRG images, along with public user allocations, are
 packed into independent user-heap arenas behind that window. Every OS
@@ -142,3 +142,49 @@ callbacks are supported; a banked callback must be registered while its
 bank is mapped. The dispatcher restores the interrupted bank on return.
 Print-hook callbacks still carry only near pointers and must be in fixed
 memory.
+
+## 48K divMMC paging
+
+The optional `YOS_DIVMMC=1` profile implements the same allocator, packed far
+pointers, returning calls and preemptive scheduler through divMMC's **8 KiB
+2000h–3FFFh window**. It keeps the kernel in C000h–FFFFh RAM, with stacks,
+windows and OS objects in the fixed heap 5F01h–BFFFh. It does not emulate a
+16 KiB window by copying banks. Applications must use `get_sys_info()` bank
+base/size and the existing far-memory API, rather than infer a bank from
+an address being at least C000h. FFh remains the fixed-memory bank tag.
+
+The boot selector probes SRAM with reversible alias tests at physical pages
+4, 8, 16 and 32, restoring the probed byte. Port E3h uses six page bits;
+logical user bank N maps physical page N+5. Pages 0–4 remain firmware-owned
+(including the MAPRAM ROM shadow in page 3 and native command workspace).
+
+| Installed SRAM | User banks | User arena capacity |
+|---:|---:|---:|
+| 32 KiB | 0 | falls back to the unexpanded profile |
+| 64 KiB | 3 | 24 KiB |
+| 128 KiB | 11 | 88 KiB |
+| 256 KiB | 27 | 216 KiB |
+| 512 KiB | 59 | 472 KiB |
+
+Each arena has a seven-byte heap header, so its largest allocation is 8185
+bytes. Images, near resources and allocation headers consume this capacity;
+free bytes in separate arenas cannot satisfy a larger contiguous allocation.
+The image loader prefers a fresh 8 KiB page, then packs remaining extents
+when no fresh page remains. Standard 16 KiB profiles prefer image size plus
+4352 bytes, then shrink to the image before initialization; this leaves room
+for near fonts without permanently reserving it. Both paths fall back to the
+ordinary allocator and preserve ownership and failure cleanup.
+
+While YOS runs, MAPRAM supplies the esxDOS shadow with the YOS RST gates.
+A protected firmware call restores the original 106 restart bytes, lets
+esxDOS use its SRAM, patches the YOS gates back and restores the caller's
+logical page. Reads into the lower window use a 128-byte fixed bounce area;
+writes use the existing ROM-source bounce path. Native commands copy banked
+command text to common RAM and capture the newest 1024 output bytes before
+calling a print sink with its code page restored. Print sinks must not execute
+another native command. IM2 is masked throughout firmware ownership.
+
+The first implementation targets esxDOS 0.8.9's documented automatic paging
+and its 1FF8h page-out return. NMI preserves the running system; warm reset
+restores the complete firmware shadow before the normal boot sequence.
+The 128K and Next profiles continue using their native hardware paging.

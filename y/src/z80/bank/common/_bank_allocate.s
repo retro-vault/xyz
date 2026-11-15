@@ -46,7 +46,7 @@ __bank_allocate::
         push    ix
         push    iy
         pop     de
-        ld      hl,#0xc000
+        ld      hl,#YOS_BANK_BASE
         call    _mem_allocate
         pop     af
         ld      c,a

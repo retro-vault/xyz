@@ -20,8 +20,9 @@ RESERVE 0562-0562
 RESERVE 09F0-09F6             ; fixed interrupt returns and PRINT-OUT
 RESERVE 3CE1-3DFF             ; vector image/name, then Interface 1 trap
 
-AREA _ROM_AUX = 3C5C
-AREA _ROM_EVT = 3C8A
+AREA _ROM_AUX = 09B8
+AREA _ROM_EVT = 3CA0
 AREA _ROM_ARGS = 3F48
-AREA _ROM_TINY = 3CA1
+AREA _ROM_NAME = 09E6
+AREA _ROM_TINY = 3CB7
 AREA _ROM_LAST = 3FFA

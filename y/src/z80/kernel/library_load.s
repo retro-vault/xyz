@@ -8,6 +8,7 @@
         .globl  _library_load
         .globl  __image_load
         .globl  _process_last_error
+        .globl __return_zero
         .area   _CODE
 
         ; inputs: hl = path, de = flags (0 private, 1 shared)
@@ -26,5 +27,4 @@ _library_load::
 .invalid:
         ld      a, #4
         ld      (_process_last_error), a
-        ld      de, #0
-        ret
+        jp __return_zero

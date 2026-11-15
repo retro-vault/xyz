@@ -31,7 +31,7 @@ _yos_owned_common_malloc::
         ld hl,#__sys_heap
         inc a
         jr z,.allocate
-        ld hl,#0xc000
+        ld hl,#YOS_BANK_BASE
 .allocate:
         call _mem_allocate
         pop bc

@@ -23,3 +23,7 @@ Outline and filled circles additionally share initialization and midpoint
 X/Y updates, retaining their separate pixel/span emission and frame layouts.
 The additional helper calls use two transient stack bytes. Font and cursor
 payloads are unchanged.
+
+The local libgpx `gpx_clrscr` fix keeps the border black while retaining
+white paper and black ink. Synchronized with the maintained libgpx workspace
+(the change is not committed upstream yet).

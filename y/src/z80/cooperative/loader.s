@@ -8,7 +8,7 @@
         .globl __native_load_process, __native_load_library, __native_load_error
         .globl __native_processes, __native_start, __native_current
         .globl __native_query, __native_load_name, __native_trim
-        .globl __native_library_begin, __native_library_abort
+        .globl __native_library_begin, __native_library_abort, __native_library_private
         .globl __native_adapt_exports
         .globl _disk_open, _disk_close, _disk_read, _malloc, _free
         .globl __crc32_begin, __crc32_update, __crc32_end, ___sdcc_call_bc
@@ -17,6 +17,7 @@
         .globl __partner_image_alloc, __partner_image_free, __partner_image_bank, __partner_bank_select
         .area _BSS
 .caller_bank: .ds 1
+.library_flags: .ds 1
 .export_copy: .ds 2
 
 __native_load_error:: .ds 1
@@ -60,6 +61,19 @@ __native_load_library::
         jp nz,.failed
         ld a,b
         ld (.kind),a
+        cp #2
+        jr nz,.flags_ready
+        ld a,d
+        or a
+        ld a,#4
+        jp nz,.failed
+        ld a,e
+        cp #2
+        ld a,#4
+        jp nc,.failed
+        ld a,e
+        ld (.library_flags),a
+.flags_ready:
         ld a,#1
         ld (.busy),a
         ld a,(0xc002)
@@ -145,6 +159,9 @@ __native_load_library::
 .service_end:
         xor a
         ld (de),a
+        ld a,(.library_flags)
+        or a
+        jp z,.open                      ; private instances never reuse a name
         ld hl,#.service_name
         call __native_query
         ld a,d
@@ -634,7 +651,18 @@ __native_load_library::
         ld hl,(.export_copy)
         ld 2(ix),l
         ld 3(ix),h
+        ld hl,#0
+        ld 4(ix),l
+        ld 5(ix),h
+        ld a,(.library_flags)
+        xor #1
+        ld (__native_library_private),a
         ld hl,(__native_current)
+        or a
+        jr z,.library_owner_ready
+        ld 4(ix),l                     ; private library's acquiring process
+        ld 5(ix),h
+.library_owner_ready:
         push hl
         ld (__native_current),de
         ld hl,(.exports)
@@ -643,6 +671,8 @@ __native_load_library::
         call __alto_call_banked
         pop hl
         ld (__native_current),hl
+        xor a
+        ld (__native_library_private),a
         ld a,d
         or e
         jp nz,.invalid_closed

@@ -6,6 +6,10 @@ Release status:
 
 ## Unreleased
 
+- Reserve sdcccall(1) stack frames before spilling incoming arguments. Test
+  interrupt-sized stack use at argument stores at all six optimization levels;
+  prevents intermittent corruption in YOS C processes and services.
+
 - Fix packed-byte argument optimization around indirect calls: BC cannot be
   reused until an explicit overwrite proves the function pointer dead. Execute
   the regression at all six optimization levels. Preserve BC while forming

@@ -32,7 +32,7 @@ __bank_shrink::
         jr      z,.os_heap
         dec     a
         call    __bank_map
-        ld      bc,#0xc000
+        ld      bc,#YOS_BANK_BASE
         jr      .heap_ready
 .os_heap:
         ld      bc,#__sys_heap

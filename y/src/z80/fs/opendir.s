@@ -20,6 +20,7 @@
         .globl  __frame_ix
         .globl  __frame_return
 
+        .globl __return_zero
         .area   _CODE
 
         ; input: HL = path; output: DE = DIR pointer or NULL.
@@ -27,8 +28,7 @@ _opendir::
         call    __zx_esx_path
         jr      nc,.path_ok
         call    __zx_esx_errno
-        ld      de,#0
-        ret
+        jp __return_zero
 .path_ok:
         call    __frame_ix
         push    hl                      ; IX-2: path

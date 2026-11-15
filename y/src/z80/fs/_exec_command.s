@@ -14,7 +14,12 @@
         ; outputs: DE = zero on success, 0x100 + native esxDOS error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 _exec_command::
+        .if YOS_DIVMMC
+        .globl __divmmc_exec
+        call    __divmmc_exec
+        .else
         call    __zx_esx_m_execcmd
+        .endif
         ld      de,#0
         ret     nc
         ld      e,a

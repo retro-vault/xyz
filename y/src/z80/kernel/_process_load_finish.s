@@ -10,12 +10,16 @@
         .globl  __image_transfer
         .globl  _enter_critical_section
         .globl  _leave_critical_section
+        .globl __return_zero
         .area   _CODE
 
         ; inputs: ix = shared loader frame
         ; outputs: de = process or zero; preserves ix and iy
         ; clobbers: af, bc, de, hl
 __process_load_finish::
+        ; Keep publication protected until the loader clears its busy flag.
+        ; __image_load releases this critical section after final cleanup.
+        call    _enter_critical_section
         bit     0, 7(ix)
         jr      z, .stack
         ld      a, 68(ix)
@@ -37,15 +41,12 @@ __process_load_finish::
         add     hl, bc
         ld      e, 76(ix)
         ld      d, 77(ix)
-        call    _enter_critical_section
         call    _process_start
         ld      a, d
         or      e
         call    nz, __image_transfer
-        call    _leave_critical_section
         ld      a, #5
         ret
 .invalid:
         ld      a, #4
-        ld      de, #0
-        ret
+        jp __return_zero

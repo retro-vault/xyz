@@ -24,8 +24,9 @@ __string_compare::
         inc     hl
         jr      .compare
 .different:
-        ld      de,#1
+        ld      e,#1
         ret
 .equal:
-        ld      de,#0
+        ld      d,a
+        ld      e,a
         ret

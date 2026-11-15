@@ -15,13 +15,13 @@
         ; output: de = one for ASCII whitespace, otherwise zero
         ; clobbers: af, de; preserves bc, hl, ix and iy
 __yos_isspace::
+        ld      de, #0
         ld      a, l
         cp      #' '
         jr      z, .space_true
         sub     #9
         cp      #5
-        ld      de, #0
         ret     nc
 .space_true:
-        ld      de, #1
+        inc     e
         ret

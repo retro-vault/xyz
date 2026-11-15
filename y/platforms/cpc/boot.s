@@ -11,21 +11,21 @@ _boot::
         ld hl,#.common
         ld b,#10
         call .open
-        jr nc,.error
+        jp nc,.error
         ld hl,#0xc050
         rst 0x18
         .dw .direct_far                   ; CAS IN DIRECT
-        jr nc,.error
+        jp nc,.error
         rst 0x18
         .dw .close_far
         ld hl,#.kernel
         ld b,#10
         call .open
-        jr nc,.error
+        jp nc,.error
         ld hl,#0x0100
         rst 0x18
         .dw .direct_far
-        jr nc,.error
+        jp nc,.error
         rst 0x18
         .dw .close_far
         di
@@ -38,46 +38,75 @@ _boot::
         ld sp,#0xfe00
         jp 0xff00
 .decompress:
+        ;; Stage the packed common image away from its output before expanding.
+        ;; Kernel input ends below 8000, and both streams reuse one decoder.
+        ld hl,#0xc050
+        ld de,#0x8000
+        ld bc,#COMMON_PACKED_SIZE
+        ldir
+        ld hl,#0x8000+COMMON_PACKED_SIZE-1
+        ld de,#COMMON_LAST
+        ld ix,#0xc04f
+        call 0xff00+.unpack-.decompress
         ld hl,#PACKED_LAST
         ld de,#KERNEL_LAST
+        ld ix,#0x00ff
+        call 0xff00+.unpack-.decompress
+        jp 0x4000
 .unpack:
-        ld a,(hl)
+        ld a,(hl)                       ; eight-token flag byte
         dec hl
-        bit 7,a
-        jr nz,.match
-        inc a
-        ld b,a
-.literal:
+        ld iyl,a
+        ld iyh,#8
+.token:
+        ld a,iyl
+        srl a
+        ld iyl,a
+        jr c,.match
         ld a,(hl)
         dec hl
         ld (de),a
         dec de
-        djnz .literal
         jr .next
 .match:
-        and #127
-        add a,#3
-        push af
         ld c,(hl)
         dec hl
         ld b,(hl)
         dec hl
-        push hl
+        ld a,b
+        and #0xf0
+        rrca
+        rrca
+        rrca
+        rrca
+        add a,#3                        ; match length 3..18
+        push hl                         ; compressed input cursor
+        push af
+        ld a,b
+        and #0x0f
+        ld b,a
+        inc bc                          ; encoded distance minus one
         ld h,d
         ld l,e
         add hl,bc
-        pop bc                         ; compressed input pointer
         pop af
-        push bc
         ld c,a
         ld b,#0
         lddr
         pop hl
 .next:
-        ld a,h
-        or a
-        jr nz,.unpack
-        jp 0x4000
+        ld a,d
+        cp ixh
+        jr nz,.more
+        ld a,e
+        cp ixl
+        ret z
+.more:
+        ld a,iyh
+        dec a
+        ld iyh,a
+        jr nz,.token
+        jr .unpack
 .decompress_end:
 .open:
         ld de,#0x8000                 ; AMSDOS 2K input buffer

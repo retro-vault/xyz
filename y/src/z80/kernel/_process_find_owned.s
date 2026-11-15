@@ -8,6 +8,7 @@
 
         .globl  __process_find_owned
 
+        .globl __return_zero
         .area   _CODE
 
         ; Find the first system object owned by the process/library at DE.
@@ -56,5 +57,4 @@ __process_find_owned::
         pop     de
         ret
 .find_missing:
-        ld      de, #0
-        ret
+        jp __return_zero

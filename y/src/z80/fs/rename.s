@@ -12,6 +12,8 @@
         .globl  __zx_esx_error
         .globl  __zx_esx_f_rename
 
+        .globl __zx_esx_path_drive
+        .globl __zx_esx_result
         .area   _CODE
 
         ; _rename
@@ -25,11 +27,15 @@ _rename::
         call    __zx_esx_path
         ex      de,hl
         jp      c,__zx_esx_errno
-        ; Preserve the firmware's rename semantics. In particular, never
-        ; delete the destination in advance to emulate POSIX
-        ; replacement.
         ld      a,#0x2a
+        call    __zx_esx_path_drive
+        ld      c,a                     ; source device; default for new path
+        ex      de,hl
+        call    __zx_esx_path_drive
+        ex      de,hl
+        cp      c
+        ld      a,#18                   ; EXDEV: never rename on another drive
+        jp      nz,__zx_esx_errno
+        ld      a,c
         call    __zx_esx_f_rename
-        jp      c,__zx_esx_error
-        ld      de,#0
-        ret
+        jp      __zx_esx_result

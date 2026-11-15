@@ -33,8 +33,8 @@ __bank_init::
 .next:
 	push    af
 	call    __bank_map
-	ld      de,#0x4000
-	ld      hl,#0xc000
+	ld      de,#YOS_BANK_SIZE
+	ld      hl,#YOS_BANK_BASE
 	call    _mem_init
 	pop     af
 	inc     a

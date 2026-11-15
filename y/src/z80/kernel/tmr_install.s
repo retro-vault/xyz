@@ -55,9 +55,15 @@ _tmr_install::
         ld      (hl), b
         inc     hl
         ld      a, d                    ; hook high byte
+        .if YOS_DIVMMC
+        cp      #0x40
+        ld      a, #0xff
+        jr      nc, .bank_ready
+        .else
         cp      #0xc0
         ld      a, #0xff
         jr      c, .bank_ready
+        .endif
         ld      a, (__bank_current)
 .bank_ready:
         ld      (hl), a

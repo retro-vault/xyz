@@ -36,6 +36,6 @@ __bank_free::
         call    _enter_critical_section
         call    __bank_map
         ex      de,hl
-        ld      hl,#0xc000
+        ld      hl,#YOS_BANK_BASE
         call    _mem_free
         jp      _leave_critical_section

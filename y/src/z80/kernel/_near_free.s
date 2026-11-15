@@ -11,7 +11,12 @@
         ; input: HL = live near pointer or zero; output as selected free path.
 __near_free::
         ld      a, h
+        .if YOS_DIVMMC
+        cp      #0x40
+        jp      nc, __os_free
+        .else
         cp      #0xc0
         jp      c, __os_free
+        .endif
         ld      a, (__bank_current)
         jp      __bank_free

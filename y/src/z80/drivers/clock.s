@@ -7,8 +7,12 @@
         .optsdcc -mz80 sdcccall(1)
         .globl  __clock
         .globl  _clock_ticks
-        ; Five bytes exactly fill the gap following RST 10h.
-        .area   _CODE
+        ; Pack this five-byte accessor into a fixed ROM gap.
+        .if YOS_UNIFIED_48K
+        .area _ROM_CLOCK
+        .else
+        .area _ROM_TINY
+        .endif
 __clock::
         ld      de, (_clock_ticks)
         ret

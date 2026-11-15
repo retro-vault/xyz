@@ -16,6 +16,13 @@
         .globl  __zx_esx_free_fd
         .globl  __zx_esx_stat_convert
 
+        .globl __return_zero
+        .if YOS_DIVMMC
+        .equ YOS_RAM_MIN_HIGH,0x20
+        .else
+        .equ YOS_RAM_MIN_HIGH,0x40
+        .endif
+
         .area   _CODE
 
         ; A = POSIX errno. Both word and long failure results are -1.
@@ -179,7 +186,7 @@ __zx_esx_buffer::
         or      c
         ret     z
         ld      a,h
-        cp      #0x40
+        cp      #YOS_RAM_MIN_HIGH
         jr      c,.esx_buffer_bad
 .esx_span:
         push    hl
@@ -274,8 +281,7 @@ __zx_esx_stat_convert::
         ld      bc,#4
         ldir
 .esx_stat_done:
-        ld      de,#0
-        ret
+        jp __return_zero
 .esx_stat_overflow:
         pop     de
         pop     hl

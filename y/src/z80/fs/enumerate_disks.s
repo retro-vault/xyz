@@ -14,6 +14,7 @@
         .globl  __frame_ix
         .globl  __frame_return
 
+        .globl __return_zero
         .area   _CODE
 
         ; inputs: HL = six-byte result array, DE = capacity (0..255).
@@ -70,5 +71,4 @@ _enumerate_disks::
         ld      a,#22                   ; EINVAL
         jp      __zx_esx_errno
 .empty:
-        ld      de,#0
-        ret
+        jp __return_zero

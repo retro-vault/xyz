@@ -8,6 +8,6 @@
 
         .globl  __yos_name
 
-        .area   _ROM_TINY
+        .area   _ROM_NAME
 __yos_name::
         .asciz  "yos"

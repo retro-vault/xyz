@@ -579,6 +579,11 @@ __native_enum_disks::
         .if YOS_CPC_AMSDOS
         .else
         ret z
+        ;; An unattached SASI controller reads FFh. Do not invent a B: disk
+        ;; when the machine booted only from its floppy.
+        in a,(0x10)
+        cp #255
+        ret z
         ld (hl),#0x48                 ; B: hard disk
         call .descriptor
         ld de,#2

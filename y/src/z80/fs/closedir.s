@@ -14,6 +14,7 @@
         .globl  __zx_esx_error
         .globl  __zx_esx_f_close
 
+        .globl __return_zero
         .area   _CODE
 
         ; input: HL = DIR pointer; output: DE = 0 or -1.
@@ -25,10 +26,8 @@ _closedir::
         call    __zx_esx_f_close
         pop     hl
         jp      c,__zx_esx_error
-        push    hl
         inc     hl
         ld      (hl),#0
-        pop     hl
+        dec     hl
         call    __os_free
-        ld      de,#0
-        ret
+        jp __return_zero

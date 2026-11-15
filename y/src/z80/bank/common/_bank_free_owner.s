@@ -33,7 +33,7 @@ __bank_free_owner::
         call    __bank_map
         push    iy
         pop     de
-        ld      hl,#0xc000
+        ld      hl,#YOS_BANK_BASE
         call    _mem_free_owner
         pop     af
         inc     a

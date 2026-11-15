@@ -1306,6 +1306,17 @@ struct cc_sdcccall1 final : abi_convention {
                 g.emit_line("add\tix, sp");
             }
             g.set_known_sp_ix_delta(0);
+            // Interrupts use the current stack. Reserve every local/spill
+            // byte before RECEIVE stores anything below IX. EXX preserves
+            // all incoming register arguments while HL adjusts SP.
+            if (g.total_frame_bytes() > 0) {
+                g.emit_line("exx");
+                g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
+                g.emit_line("add\thl, sp");
+                g.emit_line("ld\tsp, hl");
+                g.emit_line("exx");
+                g.set_known_sp_ix_delta(-g.total_frame_bytes());
+            }
             const bool retain_incoming_regs = g.opt_settings_.regalloc;
             std::unordered_map<size_t, temp_home> retained;
             bool retain_hl_like = false;
@@ -1356,11 +1367,8 @@ struct cc_sdcccall1 final : abi_convention {
                     retain_hl_like = false;
                 }
             }
-            // Materializing an incoming pointer directly in IY uses
-            // push rr/pop iy.  Do that before spilling any other incoming
-            // register to an IX-relative slot: the frame has not been
-            // allocated yet, so a later push would overwrite slots just
-            // written below SP (notably HL followed by DE->IY).
+            // Materialize IY homes before assigning other retained registers.
+            // All frame slots are already reserved, including across pushes.
             std::unordered_set<size_t> early_materialized;
             for (size_t i = 1; i < fn.icodes.size(); ++i) {
                 const auto &ic = fn.icodes[i];
@@ -1433,21 +1441,7 @@ struct cc_sdcccall1 final : abi_convention {
                 }
                 materialize_modern_receive(g, ic);
             }
-            if (g.total_frame_bytes() > 0) {
-                if (retain_hl_like) {
-                    g.emit_line("ex\tde, hl");
-                    g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
-                    g.emit_line("add\thl, sp");
-                    g.emit_line("ld\tsp, hl");
-                    g.set_known_sp_ix_delta(-g.total_frame_bytes());
-                    g.emit_line("ex\tde, hl");
-                } else {
-                    g.emit_line("ld\thl, %s", g.asm_.imm(-g.total_frame_bytes()).c_str());
-                    g.emit_line("add\thl, sp");
-                    g.emit_line("ld\tsp, hl");
-                    g.set_known_sp_ix_delta(-g.total_frame_bytes());
-                }
-            }
+
         }
     }
 

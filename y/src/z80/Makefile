@@ -28,6 +28,8 @@ XZ80 := $(X_DIST_DIR)/lib/libxz80.a
 XRUNTIME := $(X_DIST_DIR)/z80/lib/libruntime.a
 CXX ?= c++
 
+YOS_DIVMMC ?= 0
+YOS_BOOT_DIVMMC ?= 0
 YOS_BOOT_ALTO ?= 0
 YOS_UNIFIED_48K ?= 0
 YOS_BANK_BACKEND ?= 48
@@ -43,13 +45,13 @@ endif
 YOS_BANK_COUNT_128 := $(if $(filter 1 2 3 4 5 6,$(YOS_BANK_COUNT)),$(YOS_BANK_COUNT),6)
 YOS_TEST_BANK_COUNT := $(if $(filter 48,$(YOS_BANK_BACKEND)),1,$(if \
 	$(filter 128,$(YOS_BANK_BACKEND)),$(YOS_BANK_COUNT_128),$(YOS_BANK_COUNT)))
-XASFLAGS := --mode=sdcc -DYOS_BOOT_ALTO=$(YOS_BOOT_ALTO) -DYOS_UNIFIED_48K=$(YOS_UNIFIED_48K) -DYOS_BANK_COUNT=$(YOS_BANK_COUNT) \
+XASFLAGS := --mode=sdcc -DYOS_DIVMMC=$(YOS_DIVMMC) -DYOS_BOOT_DIVMMC=$(YOS_BOOT_DIVMMC) -DYOS_BANK_BASE=$(if $(filter 1,$(YOS_DIVMMC)),8192,49152) -DYOS_BANK_SIZE=$(if $(filter 1,$(YOS_DIVMMC)),8192,16384) -DYOS_BOOT_ALTO=$(YOS_BOOT_ALTO) -DYOS_UNIFIED_48K=$(YOS_UNIFIED_48K) -DYOS_BANK_COUNT=$(YOS_BANK_COUNT) \
 	-DYOS_BANK_COUNT_128=$(YOS_BANK_COUNT_128)
-LINKER_SCRIPT := $(if $(filter 1,$(YOS_UNIFIED_48K)),linker-unified.lk,linker.lk)
+LINKER_SCRIPT := $(if $(filter 1,$(YOS_DIVMMC)),linker-divmmc.lk,$(if $(filter 1,$(YOS_UNIFIED_48K)),linker-unified.lk,linker.lk))
 XLDFLAGS := --mode=sdcc -v -m -f bin -nostdlib \
 	--no-default-runtime -T $(LINKER_SCRIPT)
 
-CRT := $(BUILD_DIR)/startup/crt0rom.rel
+CRT := $(BUILD_DIR)/startup/$(if $(filter 1,$(YOS_DIVMMC)),crt0divmmc,crt0rom).rel
 MAIN := $(BUILD_DIR)/main.rel
 # Anchor descriptor helpers and the timer dispatcher early, fitting startup
 # tightly around the fixed 04C6/0562 paging traps. Still linked only once.
@@ -62,10 +64,10 @@ EARLY_OBJECTS := $(BUILD_DIR)/fs/_esxdos_core.rel \
 	$(BUILD_DIR)/kernel/_os_malloc.rel \
 	$(BUILD_DIR)/kernel/_os_free.rel
 LIB_SOURCES := $(wildcard drivers/*.s) $(wildcard fs/*.s) \
-	$(wildcard bank/common/*.s) $(wildcard bank/48/*.s) \
+	$(wildcard bank/divmmc/*.s) $(wildcard bank/common/*.s) $(wildcard bank/48/*.s) \
 	$(wildcard bank/128/*.s) $(wildcard bank/next/*.s) \
 	$(wildcard kernel/*.s) \
-	$(filter-out startup/crt0rom.s,$(wildcard startup/*.s))
+	$(filter-out startup/crt0rom.s startup/crt0divmmc.s,$(wildcard startup/*.s))
 LIB_OBJECTS := $(addprefix $(BUILD_DIR)/,$(LIB_SOURCES:.s=.rel))
 BANK_MAP_OBJECTS := $(BUILD_DIR)/bank/48/_bank_map.rel \
 	$(BUILD_DIR)/bank/128/_bank_map.rel \
@@ -218,11 +220,12 @@ $(ARCHIVE_MANIFEST): $(ALL_OBJECTS) Makefile
 	printf '%s\n' $(LOADER_OBJECTS) >> $@
 	test -s $@
 
-$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile $(LINKER_SCRIPT) ../../scripts/patch_rom.py
+$(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile $(LINKER_SCRIPT) ../../scripts/patch_rom.py ../../scripts/check_divmmc_layout.py
 	mkdir -p $(BIN_DIR)
 	rm -f $@
 	$(XLD) $(XLDFLAGS) -Map=$(BUILD_DIR)/$(TARGET).map \
 		-o $@ $(CRT) $(MAIN) $(EARLY_OBJECTS) $(ARCHIVE)
+ifeq ($(YOS_DIVMMC),0)
 	python3 ../../scripts/patch_rom.py "$@" "$(BUILD_DIR)/$(TARGET).map"
 	@rom_end=$$(awk '$$2 == "s__GSFINAL" { print $$1 }' \
 		$(BUILD_DIR)/$(TARGET).map); \
@@ -230,6 +233,9 @@ $(OUTPUT): $(CRT) $(MAIN) $(ARCHIVE) $(XLD) Makefile $(LINKER_SCRIPT) ../../scri
 			echo "YOS ROM content exceeds 16384 bytes (end 0x$$rom_end)" >&2; \
 			exit 1; \
 		}
+else
+	python3 ../../scripts/check_divmmc_layout.py "$@" "$(BUILD_DIR)/$(TARGET).map"
+endif
 
 $(SHELL_XL): ../../samples/shell-c/shell.c \
 		$(REPO_ROOT)/x/platforms/yos/include/yos.h $(XCC) $(XLD) $(XRUNTIME)
@@ -339,3 +345,30 @@ test-platform-sources:
 $(BUILD_DIR)/apps/compiled-service.svc: ../../tests/shell-yos/compiled-service.c $(XCC) $(XPROG) $(X_DIST_DIR)/z80/lib/crt0-yos-service.s
 	mkdir -p $(dir $@)
 	$(XCC) --svc -Os --name compiled --entry initialize --export probe $< -o $@
+
+# Boot carriers are ordinary CRC-checked XPRG system processes. The ROM
+# selector is built in the normal profile; the carrier in YOS_DIVMMC=1.
+.PHONY: divmmc-boot
+ifeq ($(YOS_DIVMMC),1)
+divmmc-boot: $(BIN_48_DIR)/divmmc.sys
+else
+divmmc-boot: $(BIN_48_DIR)/start.sys
+endif
+
+$(BUILD_DIR)/boot/divmmc_kernel.inc: $(OUTPUT) ../../scripts/embed_divmmc.py
+	python3 ../../scripts/embed_divmmc.py $< $@
+
+$(BUILD_DIR)/boot/divmmc_image.rel: boot/divmmc_image.s $(BUILD_DIR)/boot/divmmc_kernel.inc $(XAS)
+	$(XAS) $(XASFLAGS) -I$(BUILD_DIR)/boot $< -o $@
+
+$(BUILD_DIR)/boot/%.xl: $(BUILD_DIR)/boot/%.rel $(BUILD_DIR)/bank/divmmc/_divmmc_probe.rel boot/linker.lk $(XLD)
+	$(XLD) --mode=sdcc -f xl -nostdlib --no-default-runtime -T boot/linker.lk \
+		-Map=$(@:.xl=.map) -o $@ $< $(BUILD_DIR)/bank/divmmc/_divmmc_probe.rel
+
+$(BIN_48_DIR)/start.sys: $(BUILD_DIR)/boot/divmmc_start.xl $(XPROG)
+	mkdir -p $(dir $@)
+	$(XPROG) --process --name start --stack-size 512 --min-os 1 $< -o $@
+
+$(BIN_48_DIR)/divmmc.sys: $(BUILD_DIR)/boot/divmmc_image.xl $(XPROG)
+	mkdir -p $(dir $@)
+	$(XPROG) --process --name divmmc --stack-size 128 --min-os 1 $< -o $@

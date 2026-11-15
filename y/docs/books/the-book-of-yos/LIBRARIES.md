@@ -176,3 +176,13 @@ heap allocation, including when the heap is full. A different owner still
 needs a reference record; allocation failure leaves the resident library
 unchanged. References remain attached to the process until its final thread
 exits. There is no individual public release operation.
+
+## Cooperative CPC and Partner ownership
+
+The native cooperative loaders honor flags 0 (private) and 1 (shared).
+Private registrations remain invisible to global query; use the export table
+returned by `load_library`. Each private instance records its acquiring
+process and is reclaimed with that process, including owned allocations.
+A transient desktop worker can therefore load configuration/artwork support,
+use it and exit without leaving its service resident. Shared libraries remain
+queryable and use the existing reference/lifetime rules.

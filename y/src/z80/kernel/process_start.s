@@ -61,8 +61,13 @@ _process_start::
         ld      d, (hl)
         pop     hl                      ; entry, DE retains stack size
         ld      a, h
+        .if YOS_DIVMMC
+        cp      #0x40
+        jr      nc, .entry_ready
+        .else
         cp      #0xc0
         jr      c, .entry_ready
+        .endif
         ld      a, (__bank_current)
         ld      PROCESS_BANK(ix), a
 .entry_ready:

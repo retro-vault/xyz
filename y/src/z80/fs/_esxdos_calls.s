@@ -91,6 +91,17 @@ __zx_esx_f_sync::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_read::
+        .if YOS_DIVMMC
+        .globl __divmmc_read
+        push af
+        ld a,h
+        cp #0x40
+        jr nc,.fixed_read
+        pop af
+        jp __divmmc_read
+.fixed_read:
+        pop af
+        .endif
         call    .select_direct
         .dw     __zx_esx_gate_9d
 
@@ -230,7 +241,11 @@ __zx_esx_disk_info::
         ; outputs: CY clear on success; CY set and A = esxDOS error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_m_execcmd::
+        .if YOS_DIVMMC
+        call    .select_path
+        .else
         call    .select_direct
+        .endif
         .dw     __zx_esx_gate_8f
 
         ; Shared direct-RAM call. Caller IY is already stacked.
@@ -346,7 +361,14 @@ __zx_esx_m_execcmd::
         ; divIDE hides the ROM containing the IM2 scheduler. Do not
         ; allow preemption or another firmware call until it unmaps.
         call    _enter_critical_section
+        .if YOS_DIVMMC
+        .globl __divmmc_firmware, __divmmc_resume
+        call    __divmmc_firmware
+        .endif
         call    .esx_gate_invoke
+        .if YOS_DIVMMC
+        call    __divmmc_resume
+        .endif
         jp      _leave_critical_section
 .esx_gate_invoke:
         jp      (iy)

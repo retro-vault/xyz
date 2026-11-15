@@ -31,7 +31,11 @@ _getcwd::
         or      e
         jr      z,.esx_getcwd_invalid
         ld      a,h
+        .if YOS_DIVMMC
+        cp      #0x20
+        .else
         cp      #0x40
+        .endif
         jr      c,.esx_getcwd_fault
         dec     de
         add     hl,de

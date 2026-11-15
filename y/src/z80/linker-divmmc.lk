@@ -1,0 +1,10 @@
+; RAM-resident 48K kernel. divMMC owns 2000-3FFF; common RAM stays below C000.
+ENTRY __divmmc_entry
+FORMAT bin
+RANGE C000-FFFF
+AREA _CODE = C000
+AREA _DATA = 5B00
+AREA _BSS = 5B00
+AREA _IM2 = 5EFF
+AREA _HEAP = 5F01
+AREA _DIVMMC_STATE = 5E00

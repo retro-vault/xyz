@@ -263,3 +263,21 @@ arena, separate from Spectrum's kernel block layout. Directory streams allocate
 595 bytes: 316 bytes of private CP/M state and a 279-byte public record at offset
 316. Each returned record lives until that stream's next read or close; reads
 on another stream cannot overwrite it. CP/M leaves the long name empty.
+
+### Cooperative configuration lifetime
+
+Partner and CPC collect transient libraries when no application remains active.
+The registered `config` service is retained for the resident desktop: its export
+table and owned configuration cache survive application exits and idle collection.
+This makes repeated configuration reads consistent throughout a desktop session.
+
+## DivMMC geometry
+
+The optional expanded 48K profile has 8192-byte arenas at 2000h, with the
+kernel occupying fixed upper RAM. Use the public bank base, arena size and
+bank count when walking heaps. Common memory is still tagged FFh; a pointer
+below 4000h may now name writable user SRAM. Ordinary allocation, shrink,
+owner cleanup and process/library lifetime use this geometry. A bank's largest
+payload is 8185 bytes. SRAM capacity cannot increase the fixed heap required
+by thread stacks, cross-bank message buffers and shared OS objects; consumers
+must handle allocation failure in both heaps independently.

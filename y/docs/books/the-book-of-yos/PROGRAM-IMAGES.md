@@ -84,7 +84,11 @@ object keeps only the first seven.
 `yos_t::process_load_error` points at a byte holding one of the
 `YOS_PROCESS_LOAD_*` values in `yos.h`. The synchronous loading call
 writes the current thread's value, and the scheduler saves and restores
-it across context switches. A competing or recursive load returns
+it across context switches. Process publication stays inside a critical section through final loader cleanup
+and release of the busy flag. Its first instruction therefore cannot race the
+load that created it when acquiring its initial libraries.
+
+A competing or recursive load returns
 immediately with `BUSY`. A service image passed to `load_process` is
 rejected with `YOS_PROCESS_LOAD_NOT_PROCESS`. ABI 1 adds
 `load_library(path, flags)` for service images — see
@@ -156,3 +160,14 @@ Both modes preserve XL relocations and reject fixed-address linker layouts.
 For a separate packaging step, `xprog --map image.map` accepts symbolic entry
 and export names. Loader CRC verification and relocation use the shared streaming
 image routines; errors roll back unpublished allocations and registrations.
+
+## Placement and 8 KiB images
+
+Image placement is a preference, not a permanent reservation: the loader
+tries a larger extent for local initialization data, immediately shrinks it
+to the XL loaded size, and falls back to ordinary packing under pressure.
+The divMMC backend prefers an empty 8185-byte arena. Standard banks prefer
+4352 additional bytes. File size includes relocation records and does not
+measure the loaded image. On divMMC, loaded code plus static data must fit
+8185 bytes; near runtime resources must fit the same arena. Shared/common
+allocations and additional far banks remain separately accounted.

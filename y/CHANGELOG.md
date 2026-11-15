@@ -9,6 +9,39 @@ Release status:
 
 ## Unreleased
 
+- Add optional 48K divMMC paging through the native 8 KiB SRAM window, with
+  reversible capacity detection, 0–4 firmware-page reservation, automatic
+  validated boot carrier and fixed-RAM kernel. Keep the existing application
+  ABI, far calls, allocator ownership and scheduler; protect firmware I/O,
+  banked reads/commands, NMI and warm-reset transitions.
+- Prefer image placement with local initialization room, shrinking immediately
+  and falling back to packed allocation; preserve common/kernel ROM layouts.
+- Keep Next image finalization under the same scheduler publication lock as
+  the shared loader. Explicitly place split ROM helpers in Next code sections;
+  reject downstream orphan sections instead of overlapping the common heap.
+
+- Keep newly loaded process threads unpublished to the scheduler until image
+  cleanup and loader-busy release finish. Startup library acquisition no longer
+  races its own parent load and fails with BUSY.
+
+- Honor private-library acquisition in the cooperative CPC/Partner loader.
+  Keep private registrations out of global lookup, retain their acquiring
+  process in the library record, and reclaim them when that process exits.
+
+- Retain the registered configuration service and its owned cache across idle
+  cooperative collection. Partner disk discovery omits an absent SASI controller.
+
+- Accept qualified destination paths in rename and return EXDEV before any
+  firmware call for different devices. Share checked filesystem operations
+  and the kernel zero-result epilogue; keep both ROM profiles within 16 KiB.
+- Shorten CPC FDC not-ready polling to meet the sector-byte deadline, including
+  the wait path. Expose the controller result bytes for emulator diagnostics.
+
+- Keep the Spectrum border black on clear-screen. Accept `hd0:/` and
+  `hd1:/` in the esxDOS backend without rewriting caller buffers.
+- CPC boot uses a shared backward LZSS decoder for kernel and common RAM
+  images, leaving disk space for editable ALTO configuration.
+
 - Own Next, Partner and CPC platform sources through explicit staging manifests.
   Share the cooperative loader, libraries, memory, lists and CP/M filesystem;
   express AMSDOS and common-memory fast paths in maintained assembly.

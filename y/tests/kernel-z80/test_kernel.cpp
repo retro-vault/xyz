@@ -16,6 +16,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <tuple>
 
 namespace {
 
@@ -706,6 +707,23 @@ int main(int argc, char** argv) {
         kernel_a = direct.af >> 8;
         return direct.de;
     };
+
+    // Configured drive spellings belong to the filesystem backend, not PRCs.
+    for (const auto& [path, skip, device] :
+         std::vector<std::tuple<std::string, unsigned, unsigned>>{
+             {"A:/file", 2, 0x40}, {"b:/file", 2, 0x48},
+             {"hd0:/file", 4, 0x40}, {"HD1:/file", 4, 0x48},
+             {"/file", 0, 0x2a}, {"hd2:/file", 0, 0x2a},
+             {"hello", 0, 0x2a}, {"hd0file", 0, 0x2a}}) {
+        std::copy(path.begin(), path.end(), mem.bytes.begin()+0x4200);
+        mem.bytes[0x4200+path.size()] = 0;
+        call_kernel(sym("__zx_esx_path_drive"), 0x4200, 0x1234,
+                    "filesystem drive aliases", 0x2a);
+        require(kernel_hl == 0x4200+skip && kernel_a == device,
+                "filesystem drive alias mismatch: " + path);
+        require(std::equal(path.begin(), path.end(), mem.bytes.begin()+0x4200),
+                "filesystem drive selection mutated caller path");
+    }
 
     const auto sys_info = call_kernel(mem.word(table + 4), 0, 0,
                                       "get system info");
@@ -1612,6 +1630,15 @@ int main(int argc, char** argv) {
                     " has an unexpected implementation");
     }
 
+    io.writes.clear();
+    call_kernel(sym("_gpx_clrscr"), 0, 0, "clear screen and border");
+    require(std::any_of(io.writes.begin(), io.writes.end(), [](const auto& out) {
+                return (out.first & 255) == 0xfe && (out.second & 7) == 0;
+            }), "screen clear did not set a black border");
+    require(std::all_of(mem.bytes.begin()+0x5800, mem.bytes.begin()+0x5b00,
+                        [](auto byte) { return byte == 0x38; }),
+            "black border changed white paper/black ink attributes");
+
     const auto gpx_context =
         call_kernel(mem.word(gpx_table), 0, 0, "gpx creation");
     require(gpx_context >= sym("__heap"),
@@ -1748,6 +1775,14 @@ int main(int argc, char** argv) {
                 "filesystem accepted unopened descriptor zero");
         require(mem.word(sym("__errno_value")) == 9,
                 "unopened descriptor did not set EBADF");
+    }
+    for (const auto& paths : std::vector<std::pair<std::string,std::string>>{
+             {"A:/OLD", "B:/NEW"}, {"hd0:/OLD", "hd1:/NEW"}}) {
+        for (size_t i=0; i<=paths.first.size(); ++i) mem.bytes[0x8300+i]=paths.first.c_str()[i];
+        for (size_t i=0; i<=paths.second.size(); ++i) mem.bytes[0x8340+i]=paths.second.c_str()[i];
+        require(call_kernel(sym("_rename"),0x8300,0x8340,"cross-device rename") == 0xffff &&
+                    mem.word(sym("__errno_value")) == 18,
+                "cross-device rename must return EXDEV before invoking firmware");
     }
     constexpr std::array<std::size_t, 7> invalid_path_slots = {
         34, 40, 41, 42, 44, 45, 46};

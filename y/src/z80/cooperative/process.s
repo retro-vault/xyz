@@ -14,7 +14,7 @@
         .globl __native_event_wait, __native_timer_create, __native_timer_destroy
         .globl __native_ted_poll
         .globl __native_sys_snapshot
-        .globl __native_fs_reap, __native_memory_reap, __native_library_gc
+        .globl __native_fs_reap, __native_memory_reap, __native_library_gc, __native_library_reap
         .globl _free, __yos_clock, ___sdcc_call_bc
         .globl __partner_bank_select, __partner_image_free, __far_putb
         .area _BSS
@@ -172,6 +172,7 @@ __native_poll::
         ld a,P_STATE(ix)
         cp #2
         jr nz,.advance
+        call __native_library_reap
         call __native_fs_reap
         call __native_service_reap
         call __native_memory_reap

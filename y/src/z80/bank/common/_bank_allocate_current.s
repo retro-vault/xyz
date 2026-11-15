@@ -40,6 +40,16 @@ __bank_allocate_dispatch::
         ; output: DE = payload (zero on failure), A = current bank
         ; The routine never changes the mapped bank. Preserves IX/IY.
 __bank_allocate_current::
+        .if YOS_DIVMMC
+        ld a,(__bank_current)
+        inc a
+        jr nz,.divmmc_private
+        res 7,h
+        call __os_malloc
+        ld a,#0xff
+        ret
+.divmmc_private:
+        .endif
         .if YOS_UNIFIED_48K
         ld a,(__bank_model)
         or a
@@ -55,7 +65,7 @@ __bank_allocate_current::
         call    _enter_critical_section
         call    __current_process
         push    bc                      ; allocation owner
-        ld      hl,#0xc000
+        ld      hl,#YOS_BANK_BASE
         call    _mem_allocate
         ld      a,(__bank_current)
         jp      _leave_critical_section

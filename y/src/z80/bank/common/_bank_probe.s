@@ -7,9 +7,11 @@
         .optsdcc -mz80 sdcccall(1)
 
         .globl  __bank_probe
+        .if (1-YOS_DIVMMC)
         .globl  __bank_map_48
         .globl  __bank_map_128
         .globl  __bank_map_next
+        .endif
 
         .equ    YOS_ROM_MODEL_48K,       0
         .equ    YOS_ROM_MODEL_128K,      1
@@ -22,6 +24,14 @@
         ; in 7FFD pages 0 and 1; both bytes and bank zero are restored. All
         ; 128K writes retain ROM-select bit 4 because ESXIDE boots YOS there.
 __bank_probe::
+        .if YOS_DIVMMC
+        .globl __divmmc_map
+        ld a,(0x5efd)                   ; bootstrap detected usable SRAM pages
+        ld b,a
+        ld hl,#__divmmc_map
+        xor a
+        ret
+        .else
         ld      bc,#0x243b
         xor     a
         out     (c),a                   ; select NextReg machine ID
@@ -81,3 +91,5 @@ __bank_probe::
         ld      (hl),d
         pop     af
         ret
+
+        .endif

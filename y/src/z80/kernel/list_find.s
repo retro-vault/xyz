@@ -86,6 +86,12 @@ _list_find:
         ret
 
         ; Indirect callback; neither arguments nor return A are changed.
+        ; Two-byte indirect gate fills a spare ROM gap.
+        .if YOS_UNIFIED_48K
+        .area _ROM_NAME
+        .else
+        .area _ROM_TINY
+        .endif
 .call_bc:
         push    bc
         ret

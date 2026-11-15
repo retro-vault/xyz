@@ -14,6 +14,7 @@
         .globl  __zx_esx_error
         .globl  __zx_esx_f_readdir
 
+        .globl __return_zero
         .area   _CODE
 
         ; input: HL = DIR pointer; output: DE = dirent pointer or NULL.
@@ -22,8 +23,7 @@ _readdir::
         call    __directory_validate
         jr      nc,.valid
         call    __zx_esx_errno
-        ld      de,#0
-        ret
+        jp __return_zero
 .valid:
         push    ix
         push    hl
@@ -51,8 +51,7 @@ _readdir::
         pop     ix
         call    __zx_esx_error
 .end:
-        ld      de,#0
-        ret
+        jp __return_zero
 .end_with_frame:
         pop     ix
         jr      .end

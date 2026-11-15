@@ -41,3 +41,14 @@ all combinations and verifies that exactly the selected owner defines the gates.
 common-memory floppy interrupt wrapper. The default keeps the standalone boot
 fixture. Both configurations are assembled by the cooperative source tests;
 downstream builders select the option instead of replacing function bodies.
+
+Cooperative `load_library(path, 0)` now creates a private instance instead of
+reusing a globally named service. Its library record retains the acquiring
+process at bytes 4–5 (zero for shared libraries); private initializer
+registrations have visibility 2, while public registrations use 1. Queries
+skip private registrations. Process reaping frees each of its private library
+images, export tables, registrations and owned memory before reclaiming the
+process itself. Shared idle collection and the retained configuration cache
+keep their existing policy. ALTO's `check-terminal-instances.py` exercises two
+independent command services, closing during a directory scan, reopening and
+complete memory reclamation on real native emulators.

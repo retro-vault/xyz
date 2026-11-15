@@ -22,7 +22,7 @@
         ;; ------------------------------------------------------------
         ;; _gpx_clrscr
         ;; Clear the screen: blank the 6K pixel area, set every attribute
-        ;; cell to black ink on white paper, and match the border to it.
+        ;; cell to black ink on white paper, and set a black border.
         ;;
         ;; Signature:
         ;;   void gpx_clrscr(void)
@@ -45,8 +45,8 @@ _gpx_clrscr::
         ld      a,#0x38
         call    .cls_pages
 
-        ;; border = white (same tone family as paper)
-        ld      a,#0x07
+        ;; border = black
+        xor     a
         out     (#BDRPORT),a
         ret
 

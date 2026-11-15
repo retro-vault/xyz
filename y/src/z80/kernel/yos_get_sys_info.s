@@ -33,7 +33,7 @@ _yos_get_sys_info::
         .area   _CONST
 __yos_sys_info::
         .dw     __sys_heap
-        .dw     0xc000                  ; banked heap address in every bank
+        .dw     YOS_BANK_BASE                  ; banked heap address in every bank
         .dw     __bank_count
         .dw     _process_first
         .dw     _thread_current

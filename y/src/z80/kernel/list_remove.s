@@ -8,6 +8,7 @@
 
         .globl  _list_remove
 
+        .globl __return_zero
         .area   _CODE
 
         ; list_remove, sdcccall(1)
@@ -34,11 +35,12 @@ _list_remove:
 .remove_next:
         pop     af
         djnz    .remove_loop
-        ld      de, #0
-        ret
+        jr __return_zero
 .remove_missing:
         pop     af
-        ld      de, #0
+        ;; Shared null/zero result for kernel and filesystem entry points.
+__return_zero::
+        ld de,#0
         ret
 .remove_found:
         pop     bc

@@ -132,6 +132,12 @@ __library_initialize::
         exx                            ; protect initializer registers
         ld      de, #.initialized
         jp      __bank_call_iy
+        ; Three-byte return gate occupies the spare pre-trap gap.
+        .if YOS_UNIFIED_48K
+        .area _ROM_AUX
+        .else
+        .area _ROM_TINY
+        .endif
 .initialized:
         pop     iy
         ret

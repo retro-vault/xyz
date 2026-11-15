@@ -169,8 +169,8 @@ for the slave. So `opendir("A:/")` supplies drive `0x40` and path `/`,
 and a later `load_process("B:/TOOLS/APP.PRC")` selects the slave through
 that same adapter. Unqualified paths keep the current esxDOS drive; none
 of this remounts media or selects additional partitions. For `rename`,
-the destination stays an unqualified path on the drive selected by the
-first pathname — cross-drive rename is not provided. No service-table
+an unqualified destination uses the source drive. A qualified destination must
+select that same device; a different device returns `EXDEV` before firmware I/O. No service-table
 entry or signature changes as a result of any of this.
 
 `readdir` converts the native short-name record in this order:
@@ -314,3 +314,9 @@ enum-sized argument does not match its packed-byte assembly convention.
 Mouse calibration takes two words; the snapshot is `{x16,y16,buttons,changed}`.
 Directory records retain the DOS alias and add a 256-byte display-name tail;
 short-name filesystems return an empty display name.
+
+Filesystem drive spelling is resolved by the backend. On esxDOS, `A:/` and
+`hd0:/` select IDE master, while `B:/` and `hd1:/` select IDE slave. Bare
+absolute paths keep the current device. The selector preserves the caller
+string; applications can use configured paths directly. Partner retains
+its native `fd0:/` floppy and `hd0:/` hard-disk meanings.

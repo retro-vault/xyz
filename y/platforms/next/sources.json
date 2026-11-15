@@ -60,7 +60,11 @@
     "source": "src/z80/drivers/_mouse_state.s"
   },
   "drivers/clock.s": {
-    "source": "src/z80/drivers/clock.s"
+    "source": "src/z80/drivers/clock.s",
+    "areas": [
+      "_CODE",
+      "_CODE"
+    ]
   },
   "drivers/keyboard_read.s": {
     "source": "src/z80/drivers/keyboard_read.s"
@@ -339,7 +343,12 @@
     "source": "src/z80/kernel/_library_find.s"
   },
   "kernel/_library_initialize.s": {
-    "source": "src/z80/kernel/_library_initialize.s"
+    "source": "src/z80/kernel/_library_initialize.s",
+    "areas": [
+      "_CODE",
+      "_CODE",
+      "_CODE"
+    ]
   },
   "kernel/_library_load_finish.s": {
     "source": "src/z80/kernel/_library_load_finish.s"
@@ -480,7 +489,12 @@
     "source": "src/z80/kernel/list_append.s"
   },
   "kernel/list_find.s": {
-    "source": "src/z80/kernel/list_find.s"
+    "source": "src/z80/kernel/list_find.s",
+    "areas": [
+      "_CODE",
+      "_CODE",
+      "_CODE"
+    ]
   },
   "kernel/list_insert.s": {
     "source": "src/z80/kernel/list_insert.s",
@@ -489,7 +503,12 @@
     ]
   },
   "kernel/list_iterate.s": {
-    "source": "src/z80/kernel/list_iterate.s"
+    "source": "src/z80/kernel/list_iterate.s",
+    "areas": [
+      "_CODE",
+      "_CODE",
+      "_CODE"
+    ]
   },
   "kernel/list_match_eq.s": {
     "source": "src/z80/kernel/list_match_eq.s"

@@ -174,6 +174,7 @@ phase_xcc() {
 # Phase: xcc execution tests
 # ---------------------------------------------------------------------------
 phase_xcc_exec() {
+    python3 "$X_ROOT/tests/tests/xcc/interrupt_frame_test.py" "$XCC"
     bash "$X_ROOT/tests/run_tests.sh" "$XCC" \
         --kind run --abi 0 --filter model-l \
         --work "$ROOT/build/tests/e2e/xcc-run-abi0"

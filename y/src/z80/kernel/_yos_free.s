@@ -26,10 +26,24 @@ __yos_free::
         push    af
         ld      l,5(ix)
         ld      h,6(ix)
+        .if YOS_DIVMMC
+        ld      a,h
+        cp      #0x40
+        jr      nc,.common
+        ld      a,4(ix)
+        inc     a
+        jr      nz,.tagged
+        ld      a,(__bank_current)
+        jr      .banked
+.tagged:
+        dec     a
+.banked:
+        .else
         ld      a,4(ix)
         inc     a
         jr      z,.common
         dec     a
+        .endif
         call    __bank_free
         jr      .restore
 .common:

@@ -15,6 +15,8 @@
 .lba: .ds 2
 .write: .ds 1
 .command: .ds 9
+.globl __cpc_fdc_result
+__cpc_fdc_result::
 .result: .ds 7
         .area _CODE
 floppy_init::
@@ -227,6 +229,8 @@ floppy_write_sector::
         jr nz,.send
         ;; Keep the data-register loop below the 128-T byte interval.
         ;; INI/OUTI change B, so restore it before polling FB7E again.
+        ;; The not-ready path must also poll within that interval: testing
+        ;; IX halves inline avoids a 125-T wait loop plus data-read latency.
         push ix
         ld ix,#0xffff
         ld hl,#.cache
@@ -266,24 +270,19 @@ floppy_write_sector::
         pop ix
         jr .results
 .read_wait:
-        call .data_timeout
+        dec ix
+        .db 0xdd,0x7c                  ; LD A,IXH
+        .db 0xdd,0xb5                  ; OR IXL
         jr nz,.read_bytes
         jr .data_error
 .write_wait:
-        call .data_timeout
+        dec ix
+        .db 0xdd,0x7c                  ; LD A,IXH
+        .db 0xdd,0xb5                  ; OR IXL
         jr nz,.write_bytes
 .data_error:
         pop ix
         scf
-        ret
-.data_timeout:
-        dec ix
-        push hl
-        push ix
-        pop hl
-        ld a,h
-        or l
-        pop hl
         ret
 .results:
         ld hl,#.result

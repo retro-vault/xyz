@@ -215,7 +215,6 @@ __image_load::
         ld      e, IMAGE_OWNER(ix)
         ld      d, IMAGE_OWNER+1(ix)
         call    __library_acquire
-        call    _leave_critical_section
         jp      .result
 .missing:
         call    _leave_critical_section
@@ -466,14 +465,15 @@ __image_load::
         jr      .result
 .library:
         call    __library_load_finish
+        call    _enter_critical_section
 .result:
         ld      b, a
         ld      a, d
         or      e
         ld      a, b
-        jr      z, .fail
+        jr      z, .finish_locked
         xor     a
-        jr      .finish
+        jr      .finish_locked
 .read_error:
         ld      a, #3
         jr      .fail
@@ -485,6 +485,8 @@ __image_load::
 .fail:
         ld      de, #0
 .finish:
+        call    _enter_critical_section
+.finish_locked:
         push    de
         push    af
         ld      l, IMAGE_RELOC(ix)
@@ -516,7 +518,7 @@ __image_load::
         ld      sp, hl
         pop     iy
         pop     ix
-        ret
+        jp      _leave_critical_section
 .busy:
         call    _leave_critical_section
         pop     af

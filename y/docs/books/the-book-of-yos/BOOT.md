@@ -357,3 +357,27 @@ offset 106, and the 22 graphics entries occupy byte offsets 108 through 150.
 Both layouts retain the fixed divIDE entry points and a 16 KiB ROM limit.
 The build configuration stamp includes all assembly flags and linker policy,
 so changing either option rebuilds existing objects in the same build tree.
+
+## Optional 48K SRAM bootstrap
+
+With `YOS_BOOT_DIVMMC=1`, the base ROM loads `/ALTO/start.sys`. This first-stage
+file is required on the boot disk; a missing/invalid START leaves the kernel
+idle with its normal process-load error. START is a small
+ordinary XPRG process: it queries the detected machine model, probes divMMC
+only on 48K, and chooses `/ALTO/divmmc.sys` when usable SRAM exists. A missing
+or invalid carrier falls back to `/ALTO/shell.sys`. Native 128K/Next boot does
+not enable the divMMC paging backend.
+
+The carrier is validated by the normal XPRG CRC/relocation loader. With
+interrupts disabled it repeats the capacity probe, records the usable count
+at 5EFDh, copies the 16 KiB RAM kernel to C000h and enters it. No application
+is live during this transition. The RAM kernel rebuilds its queues/heaps and
+boots the same SHELL.SYS and programs through the unchanged ABI.
+
+`src/z80/boot/` owns the selector and carrier; `embed_divmmc.py` embeds the
+linked image. Build the base profile's `divmmc-boot` and the
+`YOS_DIVMMC=1` profile's `divmmc-boot` in separate output directories.
+The ALTO classic build stages both maintained profiles and packages both
+files. `check_divmmc_layout.py` checks kernel, bootstrap-stack, BSS and
+firmware-bounce reservations. The base/RAM gate addresses used by esxDOS
+must agree; ALTO's build verifies them before packaging.

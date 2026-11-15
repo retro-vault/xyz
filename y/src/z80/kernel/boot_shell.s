@@ -20,7 +20,11 @@ _boot_shell::
         .area _CODE
 .shell:
         .if YOS_BOOT_ALTO
+        .if YOS_BOOT_DIVMMC
+        .asciz  "/ALTO/start.sys"
+        .else
         .asciz  "/ALTO/shell.sys"
+        .endif
         .else
         .asciz  "shell.sys"
         .endif

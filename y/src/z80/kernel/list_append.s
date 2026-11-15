@@ -40,7 +40,8 @@ _list_append:
         ld      h, (hl)
         ld      l, c
         djnz    .append_loop
-        ld      de, #0
+        ld      d,b
+        ld      e,b
         ret
 .append_tail:
         ld      (hl), d

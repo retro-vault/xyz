@@ -52,6 +52,7 @@
         .equ    RELOCATION_CHUNK, 128
         .equ    RELOCATIONS_PER_CHUNK, 32
 
+        .globl __return_zero
         .area   _CODE
 
         ; inputs: hl = path, a = 0 user process / 1 private library /
@@ -136,11 +137,8 @@ __image_load::
         or      15(ix)
         jr      nz, .bad_header
         ld      a, 30(ix)
-        cp      #YOS_VERSION
-        ld      a, #7
-        jp      nz, .fail
-        ld      a, 31(ix)
-        or      a
+        dec     a                      ; ABI version 1
+        or      31(ix)
         ld      a, #7
         jp      nz, .fail
         ld      a, 33(ix)
@@ -214,7 +212,7 @@ __image_load::
         ld      e, IMAGE_OWNER(ix)
         ld      d, IMAGE_OWNER+1(ix)
         call    __library_acquire
-        call    _leave_critical_section
+        ; Keep publication and loader cleanup in the same critical section.
         jp      .result
 .missing:
         call    _leave_critical_section
@@ -292,14 +290,35 @@ __image_load::
         ld      a, #0xff
         jr      .allocated
 .bank_allocate:
-        bit     0, IMAGE_MODE(ix)
-        jr      z, .process_bank
+        ; Prefer an extent with room for near fonts and initialization data.
+        ; Release this placement allowance immediately; it is not a permanent
+        ; reservation. Fall back to ordinary packing when capacity is tight.
+        .globl __bank_shrink
+        push    hl
+        .if YOS_DIVMMC
+        ; An 8 KiB page leaves little near space once dependencies load.
+        ; Prefer a fresh page; pack remaining extents only under pressure.
+        ld      hl,#YOS_BANK_SIZE-7
+        .else
+        ld      de,#4352
+        add     hl,de
+        jr      c,.unreserve
+        .endif
         call    __bank_allocate
+        pop     hl
+        ld      c,a
+        ld      a,d
+        or      e
+        ld      a,c
+        jr      z,.ordinary_image
+        push    af
+        ex      de,hl
+        call    __bank_shrink
+        pop     af
         jr      .allocated
-.process_bank:
-        ; A near-pointer program needs room for its runtime allocations too.
-        ; Filling a service's tail with TERM left no space for even opendir.
-        ; Give each process an empty bank, as we already do for libraries.
+.unreserve:
+        pop     hl
+.ordinary_image:
         call    __bank_allocate
 .allocated:
         ld      IMAGE_BANK(ix), a
@@ -465,14 +484,15 @@ __image_load::
         jr      .result
 .library:
         call    __library_load_finish
+        call    _enter_critical_section
 .result:
         ld      b, a
         ld      a, d
         or      e
         ld      a, b
-        jr      z, .fail
+        jr      z, .finish_locked
         xor     a
-        jr      .finish
+        jr      .finish_locked
 .read_error:
         ld      a, #3
         jr      .fail
@@ -484,6 +504,8 @@ __image_load::
 .fail:
         ld      de, #0
 .finish:
+        call    _enter_critical_section
+.finish_locked:
         push    de
         push    af
         ld      l, IMAGE_RELOC(ix)
@@ -515,15 +537,13 @@ __image_load::
         ld      sp, hl
         pop     iy
         pop     ix
-        ret
+        jp      _leave_critical_section
 .busy:
         call    _leave_critical_section
         pop     af
         ld      a, #9
         ld      (_process_last_error), a
-        ld      de, #0
-        ret
-
+        jp __return_zero
 .read:
         ld      l, IMAGE_FD(ix)
         ld      h, IMAGE_FD+1(ix)
@@ -531,8 +551,13 @@ __image_load::
 
 .free_reloc:
         ld      a, h
+        .if YOS_DIVMMC
+        cp      #0x40
+        jp      nc, __os_free
+        .else
         cp      #0xc0                   ; below the banked window: common heap
         jp      c, __os_free
+        .endif
         ld      a, IMAGE_BANK(ix)
 .free:
         inc     a

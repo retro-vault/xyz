@@ -21,7 +21,11 @@ RESERVE 09F0-09F6             ; fixed interrupt returns and PRINT-OUT
 RESERVE 3CE1-3DFF             ; vector image/name, then Interface 1 trap
 
 AREA _ROM_AUX = 052F
-AREA _ROM_EVT = 09D3
+AREA _ROM_EVT = 3CAD
+AREA _ROM_NAME = 09E8
 AREA _ROM_ARGS = 3F48
-AREA _ROM_TINY = 3CC0
+AREA _ROM_TINY = 3CC4
 AREA _ROM_LAST = 3FFA
+
+; Clock accessor occupies the five bytes before the 04C6 trap bridge.
+AREA _ROM_CLOCK = 04BF
