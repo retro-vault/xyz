@@ -52,5 +52,5 @@ _entry::
         push bc
         ret
 .yos_name: .asciz "yos"
-.expanded: .asciz "/ALTO/divmmc.sys"
-.shell_name: .asciz "/ALTO/shell.sys"
+.expanded: .asciz "/ALTO/SYS/divmmc.sys"
+.shell_name: .asciz "/ALTO/SYS/shell.sys"

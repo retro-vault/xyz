@@ -54,6 +54,6 @@ _process_has_threads::
         ld      l, a
         jr      .scan
 .found:
-        ld      a, #1
-        or      a
+        xor     a
+        inc     a
         ret

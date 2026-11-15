@@ -3,6 +3,9 @@
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2026 tomaz stih
 
+        .ifndef YOS_SOFT_BANKS
+        .equ YOS_SOFT_BANKS,0
+        .endif
         .module _image_load
         .optsdcc -mz80 sdcccall(1)
         .globl  __image_load
@@ -290,12 +293,17 @@ __image_load::
         ld      a, #0xff
         jr      .allocated
 .bank_allocate:
+        .if YOS_SOFT_BANKS
+        .globl __bank_allocate_image
+        ld      a, IMAGE_MODE(ix)
+        call    __bank_allocate_image
+        .else
         ; Prefer an extent with room for near fonts and initialization data.
         ; Release this placement allowance immediately; it is not a permanent
         ; reservation. Fall back to ordinary packing when capacity is tight.
         .globl __bank_shrink
         push    hl
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         ; An 8 KiB page leaves little near space once dependencies load.
         ; Prefer a fresh page; pack remaining extents only under pressure.
         ld      hl,#YOS_BANK_SIZE-7
@@ -320,6 +328,7 @@ __image_load::
         pop     hl
 .ordinary_image:
         call    __bank_allocate
+        .endif
 .allocated:
         ld      IMAGE_BANK(ix), a
         ld      a, d
@@ -460,6 +469,12 @@ __image_load::
         jp      nz, .fail
 
 
+        .if YOS_BIND_GATES
+        .globl __image_bind_gates
+        call __image_bind_gates
+        or a
+        jp nz,.fail
+        .endif
         bit     1, 7(ix)
         jr      z, .no_entry
         ld      l, 26(ix)
@@ -551,7 +566,7 @@ __image_load::
 
 .free_reloc:
         ld      a, h
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         cp      #0x40
         jp      nc, __os_free
         .else

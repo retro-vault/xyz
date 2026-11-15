@@ -46,7 +46,7 @@ std::string take_value(int& i, int argc, char* argv[], const std::string& opt)
 cli_options cli::parse(int argc, char* argv[])
 {
     cli_options options;
-    std::string map_file, entry;
+    std::string map_file, entry, runtime_gates;
     std::vector<std::string> exports;
     if (argc < 2) {
         options.show_help = true;
@@ -108,6 +108,8 @@ cli_options cli::parse(int argc, char* argv[])
             options.require_fixed_load = true;
         } else if (arg == "--map") {
             map_file = take_value(i, argc, argv, arg);
+        } else if (arg == "--runtime-gates") {
+            runtime_gates = take_value(i, argc, argv, arg);
         } else if (arg == "--entry") {
             entry = take_value(i, argc, argv, arg);
         } else if (arg == "--stack-size") {
@@ -165,6 +167,7 @@ cli_options cli::parse(int argc, char* argv[])
             throw usage_error("symbol exceeds Z80 address space: " + value);
         return static_cast<std::uint16_t>(found->second);
     };
+    if (!runtime_gates.empty()) options.runtime_gates = resolve(runtime_gates, "--runtime-gates");
     if (!entry.empty()) options.entry_point = resolve(entry, "--entry");
     for (const auto& value : exports)
         options.exports.push_back(resolve(value, "--export"));
@@ -273,6 +276,7 @@ void cli::print_usage(const char* argv0)
         << "  --load-address <n>        Load address (Spectrum 0x5CCB, CPC 0x4000)\n"
         << "  --fixed-load              Require the preferred address\n"
         << "  --map <file>              Resolve entry/export symbols from xld map\n"
+        << "  --runtime-gates <entry>   Describe four loader-bindable YOS JP stubs\n"
         << "  --entry <n|symbol>        XL entry override or absolute media entry\n"
         << "  --version                 Show version\n"
         << "  -h, --help                Show this help\n\n"

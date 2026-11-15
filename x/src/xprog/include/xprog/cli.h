@@ -34,6 +34,7 @@ struct cli_options {
     std::uint16_t load_address = 0;
     std::optional<std::uint16_t> entry_point;
     std::optional<std::uint16_t> stack_size;
+    std::optional<std::uint16_t> runtime_gates;
     bool require_fixed_load = false;
     std::vector<std::uint16_t> exports;
     bool show_help = false;

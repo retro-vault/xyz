@@ -171,3 +171,22 @@ The divMMC backend prefers an empty 8185-byte arena. Standard banks prefer
 measure the loaded image. On divMMC, loaded code plus static data must fit
 8185 bytes; near runtime resources must fit the same arena. Shared/common
 allocations and additional far banks remain separately accounted.
+
+### Copy-backed bank placement
+
+Platforms selecting `YOS_SOFT_BANKS=1` provide the private
+`__bank_allocate_image` hook (HL=image bytes, A=image mode; DE=payload,
+A=logical bank, IX/IY preserved). Spectranet puts a process in an empty
+16 KiB arena when one is available and first tries the caller's arena for
+its libraries. Both paths fall back to the ordinary allocator. This avoids
+repeated full-bank copies between a process and its controls without changing
+XPRG files, ownership, relocation, or the public allocation ABI. Other builds
+keep the standard placement path.
+
+Optional runtime binding uses XPRG header words at offsets 36 (code offset)
+and 38 (four JP entries). The packager verifies default targets 18h, 20h, 28h,
+30h; see `x/src/xprog/README.md`. A loader built with `YOS_BIND_GATES=1` rejects
+unmarked images and binds the validated table to fixed-RAM YOS gates. Normal
+ROM builds keep the default targets. Include the shared gate table and call
+its entries rather than literal RST instructions for portable overlay-safe
+modules.

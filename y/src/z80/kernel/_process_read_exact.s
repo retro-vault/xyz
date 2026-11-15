@@ -35,10 +35,9 @@ __process_read_exact::
         jr      z, .bad
         sbc     hl, de
         jr      c, .bad
-        push    hl
-        ld      h, b
-        ld      l, c
-        add     hl, de
+        push    hl                      ; remaining count
+        ex      de, hl                  ; bytes read
+        add     hl, bc                  ; advance destination
         ex      de, hl
         pop     bc
         jr      nc, .loop

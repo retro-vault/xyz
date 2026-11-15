@@ -40,7 +40,7 @@ __bank_allocate_dispatch::
         ; output: DE = payload (zero on failure), A = current bank
         ; The routine never changes the mapped bank. Preserves IX/IY.
 __bank_allocate_current::
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         ld a,(__bank_current)
         inc a
         jr nz,.divmmc_private

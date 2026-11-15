@@ -1,3 +1,4 @@
+#include "xopt/z80peep.h"
 //
 // main.cpp — xcc compiler driver.
 //
@@ -594,6 +595,25 @@ static int compile_source_to_text(const std::string &input_path,
         asm_text = xopt::optimize_assembly(asm_text, xopt_opts);
     }
 
+    // The dynamic YOS ABI consumes a six-word argument envelope. Preserve its
+    // RST semantics through peephole optimization: ordinary CALL rules assume
+    // a conventional SP and may turn a CALL/RET into an invalid tail jump.
+    // Lower only compiler-marked YOS calls to the loader-bound stub afterward.
+    if (opts.platform_name == "yos" || opts.platform_name == "z80-yos") {
+        std::istringstream input(asm_text);
+        std::ostringstream output;
+        for (std::string raw; std::getline(input, raw);) {
+            auto line = xopt::asm_line::parse(raw);
+            if (line.mnemonic == "rst" && line.comment == "xcc-yos-far-call") {
+                line.mnemonic = "call";
+                line.operands = "__yos_gate28";
+                line.comment.clear();
+                output << line.to_string();
+            } else output << raw << '\n';
+        }
+        asm_text = output.str();
+    }
+
     return 0;
 }
 
@@ -1097,6 +1117,17 @@ int main(int argc, char **argv) {
     // Use the final output stem for the default name, not scratch/image.xl.
     package_args.insert(package_args.end(), {xl, "--map", map, "--min-os", "1", "--name",
         std::filesystem::path(out).stem().string()});
+    // Mark the linked platform ABI table when present. Ordinary YOS kernels
+    // retain its RST defaults; overlay kernels bind it to fixed RAM.
+    std::ifstream linked_map(map);
+    for (std::string line; std::getline(linked_map, line);) {
+        std::istringstream fields(line);
+        std::string address, symbol;
+        if (fields >> address >> symbol && symbol == "__yos_gate18") {
+            package_args.insert(package_args.end(), {"--runtime-gates", symbol});
+            break;
+        }
+    }
     package_args.insert(package_args.end(), metadata.begin(), metadata.end());
     package_args.insert(package_args.end(), {"-o", out});
     return run_tool(package_args, opts.verbose);

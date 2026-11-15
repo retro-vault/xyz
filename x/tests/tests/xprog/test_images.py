@@ -58,6 +58,26 @@ class Images(unittest.TestCase):
         self.assertEqual(data[64:73], bytes([195, 6, 0, 195, 2, 0, 195, 6, 0]))
         self.assertEqual(word(data, 26), 2)
 
+    def test_runtime_gate_validation(self):
+        source = WORK/'gates.s'
+        source.write_text('.module gates\n.area _CODE\n'
+                          '.globl _entry, __yos_gate18\n_entry:: ret\n'
+                          '__yos_gate18:: jp 0x18\njp 0x20\njp 0x28\njp 0x30\n')
+        self.success('xas', '--mode=sdcc', '-o', 'gates.rel', source)
+        self.success('xcc', '--platform=yos', '-nostartfiles', '-Map=gates.map',
+                     '-o', 'gates.xl', 'gates.rel')
+        self.success('xprog', '--service', 'gates.xl', '--map', 'gates.map',
+                     '--entry', '_entry', '--export', '_entry', '--runtime-gates', '__yos_gate18')
+        data, _ = self.image('gates.svc', 2)
+        self.assertEqual(word(data, 38), 4)
+        for field, value in ((36, 65535), (38, 3), (38, 256)):
+            broken=bytearray(data)
+            struct.pack_into('<H', broken, field, value)
+            (WORK/'invalid.svc').write_bytes(broken)
+            self.assertNotEqual(run('xprog', '--inspect', 'invalid.svc').returncode, 0)
+        self.assertNotEqual(run('xprog', '--service', 'gates.xl',
+            '--runtime-gates', '0').returncode, 0)
+
     def test_numeric_exports_stay_compatible(self):
         self.success('xprog', '--service', 'tiny.xl', '--export', '2', '--export', '0x6')
         data, _ = self.image('tiny.svc', 2)

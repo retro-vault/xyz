@@ -99,7 +99,8 @@ All integers are little-endian. The fixed descriptor is 64 bytes:
 | 30 | 2 | minimum OS ABI version |
 | 32 | 2 | service JP-table file offset, or zero |
 | 34 | 2 | service JP-table entry count |
-| 36 | 4 | reserved, zero |
+| 36 | 2 | optional runtime JP-table code offset |
+| 38 | 2 | runtime JP count: zero or four |
 | 40 | 16 | NUL-padded image name (15 data bytes maximum) |
 | 56 | 8 | reserved, zero |
 
@@ -158,3 +159,17 @@ Run `make -C x/src/xprog test-images` with the staged compiler available for
 C/assembly compilation, metadata, rejection, CRC, relocation and execution
 checks. One service image executes at three load addresses, with poisoned
 BSS and stack-balance assertions.
+
+## Loader-bound YOS call stubs
+
+`--runtime-gates __yos_gate18 --map app.map` marks four consecutive JP
+instructions whose default targets are 0018h, 0020h, 0028h and 0030h. The tool
+validates all twelve bytes and records their code offset in header bytes 36–37
+and the count (four) in bytes 38–39. Zero in all four header bytes means the
+older unbound ABI. These entries must not be XL-relocated. Ordinary kernels
+retain their defaults; a fixed-RAM kernel hidden by an expansion ROM can bind
+them to equivalent always-visible service/far-call/far-data entries.
+
+The YOS platform runtime and compiler use the shared `__yos_gate18/20/28/30`
+stubs. Rebuild old objects that directly execute the restart instructions
+before targeting an expansion that owns those vectors.

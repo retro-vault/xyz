@@ -355,17 +355,20 @@ offset 106, and the 22 graphics entries occupy byte offsets 108 through 150.
 `YOS_BOOT_ALTO=1` selects the ALTO shell path; zero retains `shell.sys`.
 `YOS_UNIFIED_48K=1` selects the resident ALTO heap and its linker script.
 Both layouts retain the fixed divIDE entry points and a 16 KiB ROM limit.
+ALTO support files live below `/ALTO/SYS/`; four bytes of equivalent stack/
+register simplifications in the loader keep the longer path within the ROM
+packing boundary without changing firmware reservations.
 The build configuration stamp includes all assembly flags and linker policy,
 so changing either option rebuilds existing objects in the same build tree.
 
 ## Optional 48K SRAM bootstrap
 
-With `YOS_BOOT_DIVMMC=1`, the base ROM loads `/ALTO/start.sys`. This first-stage
+With `YOS_BOOT_DIVMMC=1`, the base ROM loads `/ALTO/SYS/start.sys`. This first-stage
 file is required on the boot disk; a missing/invalid START leaves the kernel
 idle with its normal process-load error. START is a small
 ordinary XPRG process: it queries the detected machine model, probes divMMC
-only on 48K, and chooses `/ALTO/divmmc.sys` when usable SRAM exists. A missing
-or invalid carrier falls back to `/ALTO/shell.sys`. Native 128K/Next boot does
+only on 48K, and chooses `/ALTO/SYS/divmmc.sys` when usable SRAM exists. A missing
+or invalid carrier falls back to `/ALTO/SYS/shell.sys`. Native 128K/Next boot does
 not enable the divMMC paging backend.
 
 The carrier is validated by the normal XPRG CRC/relocation loader. With
@@ -381,3 +384,49 @@ The ALTO classic build stages both maintained profiles and packages both
 files. `check_divmmc_layout.py` checks kernel, bootstrap-stack, BSS and
 firmware-bounce reservations. The base/RAM gate addresses used by esxDOS
 must agree; ALTO's build verifies them before packaging.
+
+
+## Cooperative CP/M boot media
+
+CPC and Partner share the cooperative loader and CP/M path resolver. Their
+ALTO disk layout uses areas 0–4 for programs, libraries, configuration,
+documents and system data. CPC starts `ALTO.BIN` from area 0, then loads
+`4:COMMON.BIN` and `4:KERNEL.BIN`. Partner's ROM descriptor identifies both
+the name and user area of `SYSTEM.BIN`; `mkpartnerdisk.py --user 4` selects
+that layout without changing the disk geometry or the default fixture area.
+
+The loader normalizes the complete requested pathname before extracting its
+short display/service name. It retains that physical name separately until
+the disk is opened, so loading a library from area 1 cannot fall back to an
+unrelated area-zero file. The resolver's common entry adapters copy banked
+strings before entering resident code. See the [platform ownership notes](../../../platforms/README.md#cpm-user-area-folders)
+for the folder aliases and the `cpm.dirs` configuration service.
+
+The cooperative loader shares the ROM loader's 4352-byte startup allowance
+when choosing a process bank. Its allocator probes image size plus allowance,
+releases the probe, and allocates the exact image in that bank; it retains no
+extra reservation. Tight-memory fallback uses the original packing policy.
+
+The CP/M popup-mouse adapter is common code. Its generated veneer calls the
+resident coordinate calculation, then restores the caller's bank before writing
+the output point. Passing a private application pointer directly to the resident
+implementation would overwrite the kernel at the same numerical address.
+
+
+### Optional queued mouse scans
+
+`YOS_QUEUED_MOUSE=1` lets a platform provide `__mouse_queue_push`, called after
+`__mouse_scan` has published a complete cursor/button snapshot. It runs with
+interrupts excluded and may clobber ordinary registers. Spectranet supplies a
+fixed-RAM FIFO and a compatible `mouse_read` entry, preserving ordered button
+edges while software-bank copies delay the UI. Its mapper also scans between
+4 KiB transfer chunks. Other builds retain the ordinary snapshot reader and
+compile out this hook; public mouse records and syscall offsets are unchanged.
+
+Spectranet 48K is a downstream fixed-RAM configuration: a 16 KiB base-ROM
+bootstrap loads `ALTO/SYS/YOS.BIN` from mounted TNFS into BF00h–FFFFh. Startup
+then initializes fixed state and an IM2 vector at BFFFh, reserves firmware SRAM
+page pairs and runs normal YOS/ALTO initialization. Its low Spectranet window
+remains visible while applications run. The native 128K configuration retains
+its existing ROM kernel. The bootstrap and hardware policy live in ALTO's
+Spectranet custom backend; shared loader/allocation policy remains in YOS.

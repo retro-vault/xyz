@@ -91,7 +91,7 @@ __zx_esx_f_sync::
         ; CY set and A = native error on failure.
         ; clobbers: af, bc, de, hl; preserves ix and iy.
 __zx_esx_f_read::
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         .globl __divmmc_read
         push af
         ld a,h

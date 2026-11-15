@@ -9,7 +9,7 @@ _boot::
         rst 0x18
         .dw .close_far                   ; close RUN's input
         ld hl,#.common
-        ld b,#10
+        ld b,#12
         call .open
         jp nc,.error
         ld hl,#0xc050
@@ -19,7 +19,7 @@ _boot::
         rst 0x18
         .dw .close_far
         ld hl,#.kernel
-        ld b,#10
+        ld b,#12
         call .open
         jp nc,.error
         ld hl,#0x0100
@@ -117,8 +117,8 @@ _boot::
         ld a,#69
         call 0xbb5a
         jr .error
-.common: .ascii "COMMON.BIN"
-.kernel: .ascii "KERNEL.BIN"
+.common: .ascii "4:COMMON.BIN"
+.kernel: .ascii "4:KERNEL.BIN"
 
 .in_open:
         ld iy,(0xbe7d)

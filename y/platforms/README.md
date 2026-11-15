@@ -52,3 +52,52 @@ process itself. Shared idle collection and the retained configuration cache
 keep their existing policy. ALTO's `check-terminal-instances.py` exercises two
 independent command services, closing during a directory scan, reopening and
 complete memory reclamation on real native emulators.
+
+### CP/M user-area folders
+
+The shared CPC/Partner adapter exposes a folders-only root. Areas 0–4 default
+to `bin`, `lib`, `etc`, `var`, `sys`; unmapped areas are hidden by default.
+Numeric components remain synonyms after renaming. `A:/` enumerates mapped
+folders (optionally all 16 areas), whereas `A:/0/` enumerates only area-zero files. Bare file paths retain
+area-zero compatibility. `rewinddir` resets the root cursor in DIR byte 23;
+`stat` reports both roots and area paths as directories. The raw libcpmfs DIR
+ABI and physical formats are unchanged.
+
+The host publishes a `cpm.dirs` named-service table containing one near entry:
+`HL=name, E=area`, returning A=0 on success or FF on invalid input. The adapter
+copies at most 12 characters plus NUL to common stack storage before entering
+the resident resolver. Names are folded to lowercase, must be unique, and
+cannot begin with a dot/digit, contain separators/whitespace, or equal `alto`.
+An empty name removes the mapping. E=255 selects the visibility setting: HL
+points to exactly `0` (hide unmapped) or `1` (show numeric names). Invalid
+values are rejected. Startup defaults to hidden; hiding never disables numeric
+paths. The host config key is `[directories] show_unmapped=0`. The 16 × 13-byte
+cache and one visibility byte live in the writable resident image, not common RAM. No new `yos_t` slot is needed.
+
+The application configuration worker feeds `[directories]` entries at startup;
+all filesystem calls then resolve aliases centrally. Stable installation paths
+`A:/ALTO/bin`, `lib`, `etc`, `var`, `sys`, and `usr/share/...` select their
+physical roles independently of display aliases. Common adapters (`path.s`)
+and private parsing (`path-resolve.s`) are separate objects: their external
+references receive kernel veneers before any access to private state. Input
+strings are copied before switching banks. Native `fd0:`/`hd0:` prefixes never
+read beyond the input terminator.
+
+The cooperative image loader retains a separate 32-byte normalized physical
+pathname. Deriving a short process/service name never strips the user area
+from the name passed to the disk layer. CPC's AMSDOS entry remains in area 0
+and opens `4:COMMON.BIN` / `4:KERNEL.BIN`. Partner's disk builder accepts
+`--user 4` to put `SYSTEM.BIN` in the system area and records that area in its
+ROM boot descriptor; the default remains area 0 for existing fixtures.
+
+Cooperative process placement first probes for image bytes plus 4352 bytes of local
+startup space, releases the probe, and allocates just the image in that same
+bank. The loader does not yield between these operations. It falls back to
+ordinary packed placement if neither bank has that margin. Libraries retain
+the existing policy. This keeps dynamic fonts/data from exhausting a small
+resident-bank tail while the application bank is still mostly empty.
+
+The common `__partner_popup_mouse` adapter returns window-relative pointer
+coordinates into the caller's bank. The downstream public popup API must select
+this adapter; the internal coordinate calculator returns values in registers
+and is reached through a kernel veneer.

@@ -60,8 +60,7 @@ __library_acquire::
         ld      l, a
         jr      .find
 .new_reference:
-        pop     de
-        push    de
+        ; The client owner is already on the stack for so_create.
         ld      hl, #__library_refs
         ld      de, #7
         call    _so_create

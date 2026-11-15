@@ -17,8 +17,8 @@
         .globl  __zx_esx_stat_convert
 
         .globl __return_zero
-        .if YOS_DIVMMC
-        .equ YOS_RAM_MIN_HIGH,0x20
+        .if YOS_LOW_BANKS
+        .equ YOS_RAM_MIN_HIGH,(YOS_BANK_BASE/256)
         .else
         .equ YOS_RAM_MIN_HIGH,0x40
         .endif

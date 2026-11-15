@@ -21,9 +21,9 @@ _boot_shell::
 .shell:
         .if YOS_BOOT_ALTO
         .if YOS_BOOT_DIVMMC
-        .asciz  "/ALTO/start.sys"
+        .asciz  "/ALTO/SYS/start.sys"
         .else
-        .asciz  "/ALTO/shell.sys"
+        .asciz  "/ALTO/SYS/shell.sys"
         .endif
         .else
         .asciz  "shell.sys"

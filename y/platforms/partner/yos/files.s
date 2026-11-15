@@ -18,6 +18,9 @@
         .equ __native_fs_errno,CPMFS_STATE_ERRNO
         ;; Partner extends libcpmfs DIR by 36 bytes: eight 32-bit sizes,
         ;; the cached sector, and a filesystem mutation epoch.
+        ;; Unused byte before the DMA: 0..16 = root enumeration, FF = area.
+        .globl __cpm_directory_name, __cpm_directory_visible
+        .equ DIRECTORY_USER_CURSOR,23
         .equ DIRECTORY_SIZES,280
         .equ DIRECTORY_SIZE_SECTOR,312
         .area _BSS
@@ -65,10 +68,37 @@ __native_opendir::
         call __partner_path
         or a
         jr nz,.null
+        push hl
+        ;; Normalized device roots end in :/ (or :). Explicit /0/ is an
+        ;; area, so it must not enumerate another set of virtual folders.
+.root_scan:
+        ld a,(hl)
+        inc hl
+        or a
+        jr z,.root_area
+        cp #58
+        jr nz,.root_scan
+        ld a,(hl)
+        cp #47
+        jr nz,.root_end
+        inc hl
+.root_end:
+        ld a,(hl)
+        or a
+        jr z,.root_marker
+.root_area:
+        ld a,#255
+.root_marker:
+        pop hl
+        push af
         call _opendir
+        pop bc
         ld a,d
         or e
         ret z
+        ld hl,#DIRECTORY_USER_CURSOR
+        add hl,de
+        ld (hl),b
         ld a,#1
         jp __partner_fs_track
 .null:
@@ -265,8 +295,114 @@ __native_fs_unlink::
         pop hl
         ret
 __native_rewinddir::
-        jp _rewinddir
+        push hl
+        call _rewinddir
+        pop hl
+        ld de,(__native_fs_errno)
+        ld a,d
+        or e
+        ret nz
+        push de                         ; successful rewind returns zero
+        ld de,#DIRECTORY_USER_CURSOR
+        add hl,de
+        ld a,(hl)
+        cp #17
+        jr nc,.rewind_done
+        ld (hl),#0
+.rewind_done:
+        pop de
+        ret
 __native_readdir::
+        ;; Validate before looking at the stream-owned root cursor. Delegate
+        ;; invalid handles to libcpmfs for its normal errno/result contract.
+        ld a,h
+        or l
+        jp z,.read_files
+        push hl
+        ld a,(hl)
+        cp #(DIRECTORY_MAGIC_VALUE & 255)
+        jp nz,.read_restore
+        inc hl
+        ld a,(hl)
+        cp #(DIRECTORY_MAGIC_VALUE >> 8)
+        jp nz,.read_restore
+        ld de,#DIRECTORY_USER_CURSOR-1
+        add hl,de
+.root_cursor:
+        ld a,(hl)
+        cp #16
+        jp z,.root_eof
+        jp nc,.read_restore
+        inc (hl)
+        push hl
+        call __cpm_directory_visible
+        pop hl
+        jr z,.root_cursor
+        ld a,(hl)
+        dec a
+        pop hl
+        push ix
+        push iy
+        push af
+        ld de,#DIRECTORY_PUBLIC_ENTRY
+        add hl,de
+        push hl
+        pop iy
+        push hl
+        pop de
+        inc de
+        ld bc,#23
+        ld (hl),#0
+        ldir
+        ld 8(iy),#4                     ; DT_DIR
+        ld 9(iy),#16                    ; FAT directory attribute
+        pop af
+        call __cpm_directory_name
+        ld c,a
+        ld a,(hl)
+        or a
+        jr z,.numeric_area
+        push iy
+        pop de
+        ld bc,#10
+        ex de,hl
+        add hl,bc
+        ex de,hl
+.alias_name:
+        ld a,(hl)
+        inc hl
+        ld (de),a
+        inc de
+        or a
+        jr nz,.alias_name
+        jr .area_ready
+.numeric_area:
+        ld a,c
+        ld hl,#10
+        push iy
+        pop de
+        add hl,de
+        cp #10
+        jr c,.area_digit
+        ld (hl),#49
+        inc hl
+        sub #10
+.area_digit:
+        add a,#48
+        ld (hl),a
+.area_ready:
+        xor a
+        call __cpmfs_set_error
+        jp .dir_result
+.root_eof:
+        pop hl
+        xor a
+        call __cpmfs_set_error
+        ld de,#0
+        ret
+.read_restore:
+        pop hl
+.read_files:
         call _readdir
         ld a,d
         or e

@@ -3,6 +3,9 @@
         ; MIT License (see: LICENSE)
         ; Copyright (C) 2021, 2026 tomaz stih
 
+        .ifndef YOS_QUEUED_MOUSE
+        .equ YOS_QUEUED_MOUSE,0
+        .endif
         .module _mouse_scan
         .optsdcc -mz80 sdcccall(1)
 
@@ -87,4 +90,9 @@ __mouse_scan::
         ld      (__mouse_cursor),hl
         ld      l,a
         ld      (__mouse_cursor+2),hl
+        .if YOS_QUEUED_MOUSE
+        .globl __mouse_queue_push
+        jp      __mouse_queue_push
+        .else
         ret
+        .endif

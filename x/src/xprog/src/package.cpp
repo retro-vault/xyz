@@ -187,6 +187,20 @@ std::vector<std::uint8_t> build_image(
             cursor += jump_entry_size;
         }
     }
+    // Optional four JP gates: service lookup, inline far call, dynamic far
+    // call and far data. Old loaders use their default restart targets.
+    if (options.runtime_gates) {
+        const auto gate = *options.runtime_gates;
+        check_range(gate, 12, xl.code_size, "runtime gates");
+        constexpr unsigned vectors[] = {0x18, 0x20, 0x28, 0x30};
+        for (unsigned i = 0; i < 4; ++i) {
+            const auto p = xl_header_size + gate + 3*i;
+            if (xl_bytes[p] != 0xc3 || get16(xl_bytes, p+1) != vectors[i])
+                throw error("invalid default runtime gate");
+        }
+        put16(image, 36, gate);
+        put16(image, 38, 4);
+    }
     std::copy(options.name.begin(), options.name.end(), image.begin() + 40);
     std::copy(xl_bytes.begin(), xl_bytes.end(), image.begin() + metadata);
     return image;
@@ -257,8 +271,8 @@ image_info parse_image(const std::vector<std::uint8_t>& bytes)
         throw error("XPRG jump-table flag does not match its count");
     if ((info.entry_point != no_entry) != ((info.flags & has_entry) != 0))
         throw error("XPRG entry flag does not match its value");
-    if (!std::all_of(bytes.begin() + 36, bytes.begin() + 40,
-                     [](std::uint8_t byte) { return byte == 0; })
+    if ((get16(bytes,38) != 0 && get16(bytes,38) != 4)
+        || (get16(bytes,38) == 0 && get16(bytes,36) != 0)
         || !std::all_of(bytes.begin() + 56, bytes.begin() + 64,
                         [](std::uint8_t byte) { return byte == 0; })) {
         throw error("nonzero reserved bytes in XPRG header");
@@ -267,6 +281,16 @@ image_info parse_image(const std::vector<std::uint8_t>& bytes)
     if (crc32(info.payload) != info.payload_crc32)
         throw error("XPRG payload checksum mismatch");
     info.xl = parse_xl(info.payload);
+    if (get16(bytes,38)) {
+        const auto gate = get16(bytes,36);
+        check_range(gate, 12, info.xl.code_size, "runtime gates");
+        constexpr unsigned vectors[] = {0x18,0x20,0x28,0x30};
+        for (unsigned i=0;i<4;++i) {
+            const auto p=xl_header_size+gate+3*i;
+            if (info.payload[p]!=0xc3 || get16(info.payload,p+1)!=vectors[i])
+                throw error("invalid default runtime gate");
+        }
+    }
     if (info.entry_point != no_entry && info.entry_point >= info.xl.code_size)
         throw error("XPRG entry lies outside XL code");
     for (const auto target : info.exports)

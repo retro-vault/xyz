@@ -175,5 +175,8 @@
   },
   "substrate/boot/tools/fix-partner-extents.py": {
     "source": "scripts/fix-partner-extents.py"
+  },
+  "yos/path-resolve.s": {
+    "source": "platforms/partner/yos/path-resolve.s"
   }
 }

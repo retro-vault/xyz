@@ -55,7 +55,7 @@ _tmr_install::
         ld      (hl), b
         inc     hl
         ld      a, d                    ; hook high byte
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         cp      #0x40
         ld      a, #0xff
         jr      nc, .bank_ready

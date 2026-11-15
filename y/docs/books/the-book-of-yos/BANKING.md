@@ -188,3 +188,20 @@ The first implementation targets esxDOS 0.8.9's documented automatic paging
 and its 1FF8h page-out return. NMI preserves the running system; warm reset
 restores the complete firmware shadow before the normal boot sequence.
 The 128K and Next profiles continue using their native hardware paging.
+
+## Direct expansion windows and fixed-RAM kernels
+
+`YOS_LOW_BANKS=1` enables the common low-address allocation and filesystem
+buffering policy without selecting divMMC hardware. Spectranet 48K uses two
+4 KiB pages at 1000h–2FFFh as an 8 KiB window. Its backend owns page reservation,
+selection, firmware preservation and boot. The fixed execution kernel occupies
+BF00h–FFFFh; `YOS_COMMON_END=48896` sets the matching common-heap boundary.
+
+`YOS_BIND_GATES=1` requires explicit XPRG metadata in bytes 36–39. After CRC
+validation and relocation, the loader verifies four consecutive JP stubs with
+default targets 18h/20h/28h/30h and binds them to `__sys_vec_tbl+6/+9/+12/+15`.
+The entry order and far-call stack envelope do not change. Malformed, out-of-
+range and unmarked images fail before their initializer or entry point runs.
+With this option disabled, the classic ROM and cooperative backends retain
+the stubs' restart targets. This keeps application sources and packaged images
+common while Spectranet firmware owns the low restart vectors.

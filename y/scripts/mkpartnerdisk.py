@@ -83,6 +83,7 @@ def build_manifest(
     bank2_load_address: int = 0,
     bank2_entry_address: int = 0,
     start_bank: int = 1,
+    user: int = 0,
 ) -> bytes:
     """Create the sector-zero record checked by the ROM and loader."""
     record = bytearray(SECTOR_SIZE)
@@ -101,6 +102,7 @@ def build_manifest(
         payload_sectors,
         load_address,
         entry_address,
+        user,
     )
     if bank2_name is not None:
         write_manifest_descriptor(
@@ -110,6 +112,7 @@ def build_manifest(
             bank2_sectors,
             bank2_load_address,
             bank2_entry_address,
+            user,
         )
     record[MANIFEST_CHECKSUM_OFFSET] = (
         -sum(record[3:MANIFEST_CHECKSUM_OFFSET])
@@ -124,10 +127,11 @@ def write_manifest_descriptor(
     sectors: int,
     load_address: int,
     entry_address: int,
+    user: int = 0,
 ) -> None:
     """Write one packed user/name/size/load/entry descriptor."""
     descriptor = bytearray(MANIFEST_DESCRIPTOR_SIZE)
-    descriptor[0] = 0  # CP/M user area
+    descriptor[0] = user  # CP/M user area
     descriptor[1:12] = name
     descriptor[12] = sectors
     descriptor[13:15] = load_address.to_bytes(2, "little")
@@ -191,6 +195,7 @@ def main() -> int:
     parser.add_argument("--bank2-load-address", type=parse_u16, default=0x0100)
     parser.add_argument("--bank2-entry-address", type=parse_u16)
     parser.add_argument("--start-bank", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--user", type=int, choices=range(16), default=0)
     args = parser.parse_args()
 
     loader = args.loader.read_bytes()
@@ -283,13 +288,13 @@ def main() -> int:
         )
         run_cpmdisk(
             args.cpmdisk,
-            "add", str(staged_image), "-u", "0", str(staged_payload),
+            "add", str(staged_image), "-u", str(args.user), str(staged_payload),
             *CPMDISK_GEOMETRY,
         )
         if staged_bank2 is not None:
             run_cpmdisk(
                 args.cpmdisk,
-                "add", str(staged_image), "-u", "0", str(staged_bank2),
+                "add", str(staged_image), "-u", str(args.user), str(staged_bank2),
                 *CPMDISK_GEOMETRY,
             )
         for source in args.extra_file:
@@ -329,6 +334,7 @@ def main() -> int:
             args.bank2_load_address,
             bank2_entry_address,
             args.start_bank,
+            args.user,
         )
         loader_offset = LOADER_LBA * SECTOR_SIZE
         image[loader_offset : loader_offset + LOADER_SLOT_SIZE] = loader
@@ -337,7 +343,7 @@ def main() -> int:
     bank2_summary = ""
     if bank2_display is not None:
         bank2_summary = (
-            f"; bank2=0:{bank2_display} ({bank2_sectors} sectors), "
+            f"; bank2={args.user}:{bank2_display} ({bank2_sectors} sectors), "
             f"load=0x{args.bank2_load_address:04x}, "
             f"entry=0x{bank2_entry_address:04x}"
         )
@@ -345,7 +351,7 @@ def main() -> int:
         f"{args.output}: {len(image)} bytes; CP/M 3 Partner P; "
         f"ROM preload=LBAs 0..{ROM_PRELOAD_SECTORS - 1}; "
         f"loader=LBA {LOADER_LBA} ({LOADER_SLOT_SECTORS} sectors); "
-        f"payload=0:{payload_display} ({payload_sectors} sectors), "
+        f"payload={args.user}:{payload_display} ({payload_sectors} sectors), "
         f"load=0x{args.load_address:04x}, entry=0x{entry_address:04x}"
         f"{bank2_summary}; start=bank{args.start_bank}"
     )

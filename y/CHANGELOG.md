@@ -4,10 +4,44 @@ This changelog is reconstructed from the tagged source trees and build layout
 for `y`, the YOS operating system.
 
 Release status:
+- Protect banked popup-mouse output pointers on CPC/Partner: compute coordinates
+  in the resident kernel, restore the client bank, then write the four-byte point.
+  This prevents mouse movement over a banked editor from corrupting kernel code.
+
 - `v1.0.0` through `v1.7.0` are Alpha releases.
 - `v1.7.1` is the first Beta release for the repository as a whole.
 
 ## Unreleased
+
+- Add optional fixed-RAM binding of validated XPRG restart stubs for
+  Spectranet 48K direct SRAM execution. Share low-window allocation and
+  file-read buffering with divMMC through `YOS_LOW_BANKS`; retain platform
+  hardware policy and make the common-heap upper bound configurable.
+
+- Hide unmapped CP/M user-area folders by default. The private `cpm.dirs`
+  setter accepts E=255 with a `0`/`1` string to control numeric enumeration;
+  numeric paths always remain usable. Both cooperative targets share the rule.
+- Add optional `YOS_SOFT_BANKS` image placement and `YOS_QUEUED_MOUSE` scan
+  hooks for copy-backed banking. The platform owns placement and edge storage;
+  the normal loader validation, public mouse ABI and other backends are unchanged.
+
+- Prefer cooperative process placement with 4352 bytes of local startup space for
+  external fonts and working data, immediately releasing the probe. Fall back
+  to packed placement under pressure; shared libraries retain their ordinary
+  allocator policy. This prevents Tetris failing in a small resident-bank tail
+  while the other bank still has ample space.
+
+- Recover four bytes through equivalent loader register/stack operations so
+  the longer ALTO boot path fits the fixed classic ROM layout.
+- ALTO boot paths now resolve `START.SYS`, `DIVMMC.SYS` and `SHELL.SYS`
+  below `/ALTO/SYS/`, including the Next shell loader.
+- CPC/Partner now expose a folders-only root with configurable CP/M user-area
+  names, numeric synonyms, directory stat and rewind. Keep the alias cache in
+  resident private RAM and use common adapters for banked caller strings.
+- Preserve complete physical user-area paths in the cooperative process and
+  library loader. Package system boot data in area 4 while retaining CPC's
+  area-zero AMSDOS entry and Partner's compatible boot descriptor.
+
 
 - Add optional 48K divMMC paging through the native 8 KiB SRAM window, with
   reversible capacity detection, 0–4 firmware-page reservation, automatic

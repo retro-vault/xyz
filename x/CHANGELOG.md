@@ -6,6 +6,10 @@ Release status:
 
 ## Unreleased
 
+- Add explicit XPRG runtime-gate metadata and loader-safe YOS call stubs. YOS
+  far calls emitted by XCC use the shared stub; automatic PRC/SVC packaging
+  records the table when linked. Other target conventions are unchanged.
+
 - Reserve sdcccall(1) stack frames before spilling incoming arguments. Test
   interrupt-sized stack use at argument stores at all six optimization levels;
   prevents intermittent corruption in YOS C processes and services.

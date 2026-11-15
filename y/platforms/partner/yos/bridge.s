@@ -780,3 +780,18 @@ __partner_visible_region::
         pop hl                          ; consume out
         push bc
         ret
+
+        ;; popup_mouse(window, out): the kernel returns coordinates in registers.
+        ;; Store them only after its veneer restores the caller's data bank.
+        .globl __partner_popup_mouse, __kernel__popup_mouse
+__partner_popup_mouse::
+        push iy
+        push de
+        call __kernel__popup_mouse
+        pop iy
+        ld 0(iy),l
+        ld 1(iy),h
+        ld 2(iy),e
+        ld 3(iy),d
+        pop iy
+        ret

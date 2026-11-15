@@ -61,7 +61,7 @@ _process_start::
         ld      d, (hl)
         pop     hl                      ; entry, DE retains stack size
         ld      a, h
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         cp      #0x40
         jr      nc, .entry_ready
         .else

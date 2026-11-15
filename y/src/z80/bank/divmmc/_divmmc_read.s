@@ -8,7 +8,11 @@
         .module divmmc_read
         .optsdcc -mz80 sdcccall(1)
         .globl __divmmc_read, __zx_esx_f_read
+        .if YOS_DIVMMC
         .area _DIVMMC_STATE
+        .else
+        .area _BSS
+        .endif
 .buffer: .ds 128
         .area _CODE
 __divmmc_read::

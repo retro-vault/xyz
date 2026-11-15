@@ -1034,7 +1034,45 @@ _chdir::
 _stat::
         ld      a,d
         or      e
-        jr      z,.cpmfs_stat_argument
+        jp      z,.cpmfs_stat_argument
+        push hl
+        push de
+        call __cpmfs_parse_directory
+        or a
+        jr nz,.stat_file
+        ld a,b
+        cp #5
+        jr nc,.stat_file
+        pop hl                          ; caller's 14-byte stat
+        pop de                          ; discard saved path
+        push bc                         ; device / user area
+        push hl
+        ld b,#14
+        xor a
+.stat_zero:
+        ld (hl),a
+        inc hl
+        djnz .stat_zero
+        pop hl
+        pop bc
+        ld (hl),b                       ; st_dev
+        inc hl
+        inc hl
+        ld (hl),c                       ; st_ino = user area
+        ld de,#4
+        add hl,de
+        ld (hl),#0xed                   ; st_mode = S_IFDIR | 0755
+        inc hl
+        ld (hl),#0x41
+        inc hl
+        ld (hl),#1                      ; st_nlink
+        xor a
+        call __cpmfs_set_error
+        ld de,#0
+        ret
+.stat_file:
+        pop de
+        pop hl
         push    ix
         push    iy
         push    de

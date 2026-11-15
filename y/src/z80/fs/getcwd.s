@@ -31,8 +31,8 @@ _getcwd::
         or      e
         jr      z,.esx_getcwd_invalid
         ld      a,h
-        .if YOS_DIVMMC
-        cp      #0x20
+        .if YOS_LOW_BANKS
+        cp      #(YOS_BANK_BASE/256)
         .else
         cp      #0x40
         .endif

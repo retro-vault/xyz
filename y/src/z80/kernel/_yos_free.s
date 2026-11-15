@@ -26,7 +26,7 @@ __yos_free::
         push    af
         ld      l,5(ix)
         ld      h,6(ix)
-        .if YOS_DIVMMC
+        .if YOS_LOW_BANKS
         ld      a,h
         cp      #0x40
         jr      nc,.common

@@ -19,4 +19,4 @@ __sys_stack::
 __sys_heap::
 __heap::
 
-__common_end = 0xc000
+__common_end = YOS_COMMON_END

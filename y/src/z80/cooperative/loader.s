@@ -10,11 +10,13 @@
         .globl __native_query, __native_load_name, __native_trim
         .globl __native_library_begin, __native_library_abort, __native_library_private
         .globl __native_adapt_exports
+        .globl __partner_path
         .globl _disk_open, _disk_close, _disk_read, _malloc, _free
         .globl __crc32_begin, __crc32_update, __crc32_end, ___sdcc_call_bc
         .globl __alto_call_banked
         .globl __partner_image_get, __partner_image_put, __partner_image_in, __partner_image_out
         .globl __partner_image_alloc, __partner_image_free, __partner_image_bank, __partner_bank_select
+        .globl __partner_process_image_alloc
         .area _BSS
 .caller_bank: .ds 1
 .library_flags: .ds 1
@@ -42,6 +44,7 @@ __native_load_name:: .ds 17
 .reloc: .ds 4
 .remaining: .ds 2
 .basename: .ds 2
+.load_path: .ds 32
         .area _CODE
 __native_load_process::
         ld de,#0
@@ -91,7 +94,20 @@ __native_load_library::
         ld (.raw_exports),hl
         pop hl
 .path_ready:
-        ;; Flatten YOS directories while retaining an explicit CP/M drive.
+        push hl
+        call __partner_path
+        or a
+        jr z,.normalized
+        pop hl
+        ld a,#4
+        jp .rollback
+.normalized:
+        ld de,#.load_path
+        ld bc,#32
+        ldir
+        pop hl
+        ;; Keep a short display/service name separately from the full physical
+        ;; pathname. Stripping folders here must never change the load area.
         ld de,#__native_load_name
         inc hl
         ld a,(hl)
@@ -183,7 +199,7 @@ __native_load_library::
 .slot_found:
         ld (.slot),ix
 .open:
-        ld hl,#__native_load_name
+        ld hl,#.load_path
         xor a
         call _disk_open
         or a
@@ -328,7 +344,14 @@ __native_load_library::
         ld de,#12
         add hl,de
         jp c,.invalid
+        ld a,(.kind)
+        cp #1
+        jr nz,.allocate_library_image
+        call __partner_process_image_alloc
+        jr .allocated_image
+.allocate_library_image:
         call __partner_image_alloc
+.allocated_image:
         ld a,d
         or e
         jp z,.no_memory

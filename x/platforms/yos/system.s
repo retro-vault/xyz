@@ -1,3 +1,4 @@
+        .globl __yos_gate18
         ;; Core YOS process bindings.
 
         .module yos_system
@@ -18,7 +19,7 @@ _yos_api_table::
         ;; void *query_service(const char *name)
         ;;   HL = name, DE = interface or NULL.
 _query_service::
-        rst     0x18
+        call    __yos_gate18
         ret
 
         ;; _exit/exit process termination. Status is currently advisory: ABI 1
